@@ -126,20 +126,7 @@ const (
 	FactDocumentCollectionRemoved    = "document.collection.removed"
 	FactDocumentCollectionRedeclared = "document.collection.redeclared"
 
-	FactGardenPlanted               = "garden.planted"
-	FactGardenBodyEdited            = "garden.body_edited"
-	FactGardenResumeIdentityChanged = "garden.resume_identity_changed"
-	FactGardenTended                = "garden.tended"
-	FactGardenParked                = "garden.parked"
-	FactGardenHarvested             = "garden.harvested"
-	FactGardenWithered              = "garden.withered"
-	FactGardenReplanted             = "garden.replanted"
-	FactGardenNoted                 = "garden.noted"
-	FactGardenArtifactChanged       = "garden.artifact.changed"
-	FactGardenLinked                = "garden.linked"
-	FactGardenUnlinked              = "garden.unlinked"
-	FactGardenReviewChanged         = "garden.review.changed"
-	FactGardenHarvestWhenChanged    = "garden.harvest_when.changed"
+	FactGardenReviewChanged = "garden.review.changed"
 
 	FactCrewRegistered = "crew.registered"
 	FactCrewBound      = "crew.bound"
@@ -297,13 +284,8 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
 		},
 		{
-			filter: bus.Filter{
-				FactGardenPlanted, FactGardenBodyEdited, FactGardenResumeIdentityChanged,
-				FactGardenTended, FactGardenParked, FactGardenHarvested, FactGardenWithered,
-				FactGardenReplanted, FactGardenNoted, FactGardenArtifactChanged,
-				FactGardenLinked, FactGardenUnlinked, FactGardenHarvestWhenChanged,
-			},
-			apply: func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
+			filter: bus.Filter{"garden.seed.*"},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectGardenSeeds() },
 		},
 		{
 			filter: bus.Filter{FactGardenReviewChanged},
@@ -464,11 +446,22 @@ func (d *Daemon) ensureEventBus() {
 	d.subscribeDocumentFacts()
 	d.subscribeAgentConversationFacts()
 	d.subscribeSessionPullRequestFacts()
+	d.gardenSeedEventConsumerErr = d.registerGardenSeedEventConsumer()
 }
 
 func (d *Daemon) startEventBus() error {
 	d.ensureEventBus()
-	return d.eventBus.Start()
+	if d.gardenSeedEventConsumerErr != nil {
+		return d.gardenSeedEventConsumerErr
+	}
+	if err := d.validatePendingGardenSeedBells(); err != nil {
+		return err
+	}
+	if err := d.eventBus.Start(); err != nil {
+		return err
+	}
+	d.gardenSeedEventConsumerStarted = true
+	return nil
 }
 
 func (d *Daemon) stopEventBus() {
@@ -482,6 +475,7 @@ func (d *Daemon) stopEventBus() {
 	if d.eventBus != nil {
 		d.eventBus.Stop()
 	}
+	d.gardenSeedEventConsumerStarted = false
 }
 
 func (d *Daemon) projectToClients(ev bus.Event) {

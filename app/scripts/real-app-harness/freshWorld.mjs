@@ -1,8 +1,11 @@
 import { execFileSync, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   bundleIdentifierForProfile,
   currentHarnessProfile,
+  dataDirForProfile,
   defaultAppPathForProfile,
   isProductionHarnessTarget,
   profileCliEnv,
@@ -36,6 +39,10 @@ export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
 // profile's cleanup can never touch another profile's or production's workers.
 function attnBinaryPath(appPath) {
   return appDaemonInTree(appPath);
+}
+
+function ptyHostBinaryPath(appPath) {
+  return path.join(path.dirname(attnBinaryPath(appPath)), 'attn-pty-host');
 }
 
 function requestAppQuit({ profile, appPath, bundleId }) {
@@ -76,6 +83,33 @@ function findLeakedWorkerPids(appPath) {
   return pgrepFullCommand(binPath).filter((pid) => commandLineForPid(pid).includes('pty-worker'));
 }
 
+export function commandRunsExecutable(command, executablePath) {
+  return command === executablePath || command.startsWith(`${executablePath} `);
+}
+
+export function registeredPtyHostPids({ dataDir, executablePath, commandLineFor = commandLineForPid }) {
+  const hostsRoot = path.join(dataDir, 'pty-hosts');
+  if (!fs.existsSync(hostsRoot)) return [];
+  const pids = new Set();
+  for (const instance of fs.readdirSync(hostsRoot)) {
+    const hostsDir = path.join(hostsRoot, instance, 'hosts');
+    if (!fs.existsSync(hostsDir)) continue;
+    for (const name of fs.readdirSync(hostsDir)) {
+      if (!name.endsWith('.json')) continue;
+      let entry;
+      try {
+        entry = JSON.parse(fs.readFileSync(path.join(hostsDir, name), 'utf8'));
+      } catch {
+        continue;
+      }
+      const pid = Number(entry.host_pid);
+      if (!Number.isInteger(pid) || pid <= 1) continue;
+      if (commandRunsExecutable(commandLineFor(pid), executablePath)) pids.add(pid);
+    }
+  }
+  return [...pids];
+}
+
 function findAnySurvivingPids(appPath) {
   return pgrepFullCommand(attnBinaryPath(appPath));
 }
@@ -84,9 +118,34 @@ async function sleep(ms) {
   return new Promise((resolve) => { setTimeout(resolve, ms); });
 }
 
+async function terminateProcesses({ pids, name, log }) {
+  if (pids.length === 0) {
+    log(`no leaked ${name} processes found`);
+    return;
+  }
+
+  log(`leaked ${name} pids=[${pids.join(', ')}] from a previous run — killing`);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+    }
+  }
+  await sleep(2_000);
+  for (const pid of pids) {
+    try {
+      process.kill(pid, 0);
+      log(`${name} pid=${pid} survived SIGTERM — sending SIGKILL`);
+      process.kill(pid, 'SIGKILL');
+    } catch {
+    }
+  }
+}
+
 export async function ensureFreshWorld({
   profile = currentHarnessProfile(),
   appPath = defaultAppPathForProfile(profile),
+  dataDir = dataDirForProfile(profile),
   log = (m) => console.log(`[fresh-world] ${m}`),
   timeoutMs = 20_000,
 } = {}) {
@@ -113,26 +172,9 @@ export async function ensureFreshWorld({
   }
 
   const leakedPids = findLeakedWorkerPids(appPath);
-  if (leakedPids.length > 0) {
-    log(`leaked pty-worker pids=[${leakedPids.join(', ')}] from a previous run — killing`);
-    for (const pid of leakedPids) {
-      try {
-        process.kill(pid, 'SIGTERM');
-      } catch {
-      }
-    }
-    await sleep(2_000);
-    for (const pid of leakedPids) {
-      try {
-        process.kill(pid, 0);
-        log(`pty-worker pid=${pid} survived SIGTERM — sending SIGKILL`);
-        process.kill(pid, 'SIGKILL');
-      } catch {
-      }
-    }
-  } else {
-    log('no leaked pty-worker processes found');
-  }
+  const leakedPtyHostPids = registeredPtyHostPids({ dataDir, executablePath: ptyHostBinaryPath(appPath) });
+  await terminateProcesses({ pids: leakedPids, name: 'pty-worker', log });
+  await terminateProcesses({ pids: leakedPtyHostPids, name: 'attn-pty-host', log });
 
   const deadline = Date.now() + timeoutMs;
   let survivors = findAnySurvivingPids(appPath);
@@ -149,7 +191,8 @@ export async function ensureFreshWorld({
     appWasRunning,
     daemonStopped,
     leakedWorkersKilled: leakedPids.length,
+    leakedPtyHostsKilled: leakedPtyHostPids.length,
   };
-  log(`fresh world ready: appWasRunning=${summary.appWasRunning} daemonStopped=${summary.daemonStopped} leakedWorkersKilled=${summary.leakedWorkersKilled}`);
+  log(`fresh world ready: appWasRunning=${summary.appWasRunning} daemonStopped=${summary.daemonStopped} leakedWorkersKilled=${summary.leakedWorkersKilled} leakedPtyHostsKilled=${summary.leakedPtyHostsKilled}`);
   return summary;
 }

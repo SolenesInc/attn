@@ -1,0 +1,10 @@
+kind: added
+area: pi
+change: >-
+  `/permissions` in a pi session shows and switches the approval policy and
+  sandbox mode, for bash and the native file tools, with the Read Only, Default,
+  Full Access and Untrusted presets; the switch lasts for that session, and a
+  relaunch returns to the launch choice.
+notes: >-
+  The security footer no longer reports the file-tool toggle as "sandbox:
+  on|off", since the bash sandbox mode is what the auto footer shows.

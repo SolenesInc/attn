@@ -71,6 +71,9 @@ func (d *Daemon) sessionExists(sessionID string) bool {
 	if d.store != nil && d.store.Get(sessionID) != nil {
 		return true
 	}
+	if d.store != nil && d.store.DelegationSessionReserved(sessionID) {
+		return true
+	}
 	return d.hubManager != nil && d.hubManager.RemoteSession(sessionID) != nil
 }
 

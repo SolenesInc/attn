@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: The Worktrees tab counts down to a scheduled sweep ("removing in 4d") instead of reading "removing in now".
+symptom: Every merged worktree waiting out its idle window looked like it was about to be removed, even with days left.

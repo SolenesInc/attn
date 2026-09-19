@@ -335,11 +335,11 @@ describe('AutomationsPanel', () => {
     await waitFor(() => expect(screen.getAllByTestId('automation-run-row')).toHaveLength(2));
   });
 
-  it('navigates to the session even when the run also carries a ticket_id', async () => {
+  it('navigates to the session even when the run also carries a seed_id', async () => {
     const user = userEvent.setup();
     const props = baseProps();
     props.fetchDefinitions.mockResolvedValue([makeDefinition({ id: 'd1' })]);
-    props.fetchRuns.mockResolvedValue([makeRun({ id: 'r1', ticket_id: 't1', session_id: 's1' })]);
+    props.fetchRuns.mockResolvedValue([makeRun({ id: 'r1', seed_id: 's-seed01', session_id: 's1' })]);
     render(<AutomationsPanel {...props} />);
 
     await user.click(await screen.findByText('PR reviewer'));

@@ -5,17 +5,21 @@ import { Input, SelectList, sliceByColumn, truncateToWidth, visibleWidth, wrapTe
 import { cachePath } from "./caches";
 import { credentials } from "./filter";
 import { expand, type SecurityConfig, type SecurityPolicy } from "./policy";
+import type { GuardianSettings } from "../approval/guardian-selection";
 
 export type SecuritySnapshot = {
+  guardian?: GuardianSettings;
   config: SecurityConfig;
   policy?: SecurityPolicy;
   problem?: string;
   configPath: string;
   cwd: string;
-  reviewAvailable: boolean;
+  /** False in standalone pi, where no /permissions command and no session
+   * sandbox mode exist and this toggle is the only thing guarding bash. */
+  approvals: boolean;
 };
 type PathGroup = "caches" | "allowWrite" | "denyRead" | "denyWrite";
-type Page = { kind: "main" } | { kind: "paths"; group: PathGroup } |
+type Page = { kind: "main" } | { kind: "guardian" } | { kind: "guardian-providers" } | { kind: "guardian-models"; provider: string } | { kind: "guardian-effort" } | { kind: "paths"; group: PathGroup } |
   { kind: "path"; group: PathGroup; path: string; fixed: boolean } |
   { kind: "input"; group: PathGroup; previous?: string } |
   { kind: "effective" } | { kind: "info"; title: string; text: string } | { kind: "reset" };
@@ -60,22 +64,29 @@ export class SecurityPanel implements Component, Focusable {
   render(width: number): string[] {
     const inner = Math.max(1, Math.min(92, width - 4));
     if (this.visibleRows !== this.rowLimit()) this.rebuild(this.list.getSelectedItem()?.value);
-    const { config, problem, reviewAvailable } = this.snapshot;
+    const { config, problem } = this.snapshot;
     const title = this.page.kind === "main" ? "Security" : `Security / ${this.title()}`;
-    const state = problem ? "Tools blocked by a settings error" : `Sandbox ${config.enabled ? "on" : "off"} · Credentials filtered`;
+    const state = problem ? "Tools blocked by a settings error"
+      : this.snapshot.approvals
+        ? `File tools ${config.enabled ? "guarded" : "unguarded"} · Credentials filtered`
+        : `Sandbox ${config.enabled ? "on" : "off"} · Credentials filtered`;
     const lines = [this.theme.fg("border", "─".repeat(inner)), this.theme.fg("accent", this.theme.bold(title)),
       this.theme.fg(problem || !config.enabled ? "warning" : "muted", state), ""];
     if (this.input) {
       lines.push(this.theme.fg("muted", "Absolute path, ~/path, or relative to this session:"), ...this.input.render(inner));
     } else lines.push(...this.list.render(inner));
     const help = this.input ? `Session directory: ${this.snapshot.cwd}` : this.rows.find((row) => row.id === this.list.getSelectedItem()?.value)?.help ?? "";
-    const reviewLine = this.page.kind === "main" && this.height() >= 24;
+    const noteLine = this.page.kind === "main" && this.height() >= 24;
     const message = wrapTextWithAnsi(clean(this.busy ? "Applying settings…" : this.snapshot.problem ?? this.message), inner).slice(0, 2);
-    const helpLines = Math.max(1, this.height() - 2 - lines.length - message.length - 5 - Number(reviewLine));
+    const helpLines = Math.max(1, this.height() - 2 - lines.length - message.length - 5 - Number(noteLine));
     lines.push("", ...wrapTextWithAnsi(clean(help), inner).slice(0, Math.min(4, helpLines)).map((line) => this.theme.fg("muted", line)));
-    if (reviewLine) lines.push(this.theme.fg("dim", reviewAvailable && config.enabled
-      ? "Extra access: auto mode reviews each requested command."
-      : `Extra access: ${config.enabled ? "enable auto mode with a reviewer" : "sandbox is off"}.`));
+    if (noteLine) lines.push(this.theme.fg("dim", this.snapshot.approvals
+      ? (config.enabled
+        ? "Bash commands run under this session's sandbox mode; /permissions shows it."
+        : "Extra access: the file tools and !/!! commands run unconfined.")
+      : (config.enabled
+        ? "Bash commands also pass the approval policy; /auto status shows it."
+        : "Extra access: the sandbox is off, so commands run unconfined.")));
     lines.push("", ...message.map((line) => this.theme.fg(this.error || this.snapshot.problem ? "error" : "dim", line)),
       this.theme.fg("muted", this.input ? "Enter save · Esc cancel" : `↑↓ · Enter · Esc ${this.parents.length ? "back" : "close"}`),
       this.theme.fg("border", "─".repeat(inner)));
@@ -89,6 +100,7 @@ export class SecurityPanel implements Component, Focusable {
     if (page.kind === "input") return `${page.previous ? "Edit" : "Add"} path`;
     if (page.kind === "info") return page.title;
     if (page.kind === "reset") return "Restore cache preset";
+    if (page.kind.startsWith("guardian")) return "Guardian";
     return "Effective access";
   }
 
@@ -185,15 +197,31 @@ export class SecurityPanel implements Component, Focusable {
     const groupRow = (group: PathGroup): Row => ({ id: group, label: `${groups[group].title} · ${this.paths(group).length}${group === "denyWrite" ? " + built-in" : ""} ›`,
       help: groups[group].help, action: () => this.open({ kind: "paths", group }) });
     if (page.kind === "main") return [
+      ...(this.snapshot.guardian ? [{ id: "guardian", label: "Guardian ›", help: `${this.snapshot.guardian.source}: ${this.snapshot.guardian.problem ?? this.snapshot.guardian.effective}`, action: () => this.open({ kind: "guardian" } as Page) }] : []),
       { id: "sandbox", label: `OS sandbox · ${config.enabled ? "on" : "off"}`, help: "Contains built-in tools and !/!! commands. Turning it off removes filesystem and network restrictions; credential filtering stays on.", action: () => this.save([config.enabled ? "off" : "on"]) },
-      { id: "network", label: `Tool network · ${config.network === "allow" ? "allowed" : "blocked"}${config.enabled ? "" : " (inactive)"}`, help: "Blocks tool connections, including localhost. Pi can still reach your model provider. Auto mode can review network access for one command.", action: () => this.save([`network ${config.network === "allow" ? "deny" : "allow"}`]) },
-      { id: "cacheAccess", label: `Build-cache access · ${config.buildCaches.enabled ? "on" : "off"}${config.enabled ? "" : " (inactive)"}`, help: "Lets build tools write configured caches without requesting extra access. Turning this off preserves cached files and other write grants.", action: () => this.save([`caches ${config.buildCaches.enabled ? "off" : "on"}`]) },
+      { id: "network", label: `Tool network · ${config.network === "allow" ? "allowed" : "blocked"}${config.enabled ? "" : " (inactive)"}`, help: "Blocks tool connections, including localhost. Pi can still reach your model provider. A sandboxed command reaches allowed hosts through attn's proxy.", action: () => this.save([`network ${config.network === "allow" ? "deny" : "allow"}`]) },
+      { id: "cacheAccess", label: `Build-cache access · ${config.buildCaches.enabled ? "on" : "off"}${config.enabled ? "" : " (inactive)"}`, help: "Lets build tools write configured caches. Turning this off preserves cached files and other write grants.", action: () => this.save([`caches ${config.buildCaches.enabled ? "off" : "on"}`]) },
       groupRow("caches"), groupRow("allowWrite"), groupRow("denyRead"), groupRow("denyWrite"),
       { id: "effective", label: "Effective access ›", help: "Inspect current write grants, protected paths and unavailable caches.", action: () => this.open({ kind: "effective" }) },
       { id: "filter", label: "Credential filtering · always on", help: "Filters sensitive environment variables and recognized secrets in tool output and model requests. It stays on when the sandbox or auto mode is off.", action: () => info("Credential filtering", "Credential filtering is always on. It removes sensitive environment variables from tools and redacts recognized secrets in text output and model requests. Images, encoded data and unrecognized secrets are not detected.") },
-      { id: "review", label: `Extra access review · ${config.enabled && this.snapshot.reviewAvailable ? "available" : "unavailable"}`, help: "Auto mode reviews the command and requested access together. Approval lasts for one execution and never overrides protected paths.", action: () => info("Extra access review", config.enabled && this.snapshot.reviewAvailable ? "Auto mode can approve temporary write or network access for one command. It uses your existing auto-mode policy and classifier. A refusal tells the agent why and how to ask you for approval." : "Extra access review requires the sandbox and auto mode with a configured reviewer. /auto on enables auto mode; /auto status shows its configuration. Persistent grants can be managed in Extra writable directories.") },
       { id: "file", label: "Settings file ›", help: this.snapshot.configPath, action: () => info("Settings file", `${this.snapshot.configPath}\nSettings apply immediately here and are loaded by future sessions. Other running sessions keep their current policy. Extensions and MCP servers remain trusted code outside this sandbox.`) },
       { id: "close", label: "Close", help: "All changes are already saved.", action: () => this.done() },
+    ];
+    const guardian = this.snapshot.guardian;
+    if (guardian && page.kind === "guardian") return [
+      { id: "guardian-model", label: `Model · ${guardian.selection.provider ? `${guardian.selection.provider}/${guardian.selection.model}` : "Follow session model"} ›`, help: `${guardian.source}: ${guardian.problem ?? guardian.effective}. Changes affect this session until the agent reloads.`, action: () => this.open({ kind: "guardian-providers" }) },
+      { id: "guardian-effort", label: `Reasoning · ${guardian.selection.effort ?? "Default"} ›`, help: "Default uses low reasoning when supported, otherwise the provider default.", action: () => this.open({ kind: "guardian-effort" }) },
+      { id: "guardian-reset", label: "Use attn default", help: "Remove this session override and restore the default captured at launch.", action: () => this.save(["guardian reset"]) }, back,
+    ];
+    if (guardian && page.kind === "guardian-providers") return [
+      { id: "guardian-session", label: "Follow session model", help: "Use the coding model, including later model changes.", action: () => this.save(["guardian model session"], () => this.back()) },
+      ...[...new Set(guardian.models.map(model => model.provider))].sort().map((provider): Row => ({ id: `guardian-provider-${provider}`, label: `${provider} ›`, help: "Choose a model from this configured provider.", action: () => this.open({ kind: "guardian-models", provider }) })), back,
+    ];
+    if (guardian && page.kind === "guardian-models") return [
+      ...guardian.models.filter(model => model.provider === page.provider).map((model): Row => ({ id: `guardian-${model.provider}/${model.id}`, label: `${model.provider}/${model.id}`, help: "Use this model independently of the coding model, for this session only.", action: () => this.save([`guardian model ${model.provider} ${model.id}`], () => { this.back(); this.back(); }) })), back,
+    ];
+    if (guardian && page.kind === "guardian-effort") return [
+      ...["default", ...guardian.efforts].map((effort): Row => ({ id: `guardian-effort-${effort}`, label: effort, help: "Set guardian reasoning for this session only.", action: () => this.save([`guardian effort ${effort}`], () => this.back()) })), back,
     ];
     if (page.kind === "paths") {
       const fixed = page.group === "denyWrite" ? this.fixedPaths() : [];

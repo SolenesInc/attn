@@ -1269,14 +1269,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleAutoModeEnvSlotWS(client, msg.(*protocol.AutoModeEnvSlotMessage))
 	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
 		d.handleAutoModeEnvNotesWS(client, msg.(*protocol.AutoModeEnvNotesMessage))
-	case protocol.CmdAutoModePatternAdd: // wire: automode_pattern_add
-		d.handleAutoModePatternAdd(client, msg.(*protocol.AutoModePatternAddMessage))
-	case protocol.CmdAutoModePatternRemove: // wire: automode_pattern_remove
-		d.handleAutoModePatternRemove(client, msg.(*protocol.AutoModePatternRemoveMessage))
-	case protocol.CmdAutoModeModelSet: // wire: automode_model_set
-		d.handleAutoModeModelSet(client, msg.(*protocol.AutoModeModelSetMessage))
-	case protocol.CmdAutoModeModels: // wire: automode_models
-		d.handleAutoModeModels(client, msg.(*protocol.AutoModeModelsMessage))
+	case protocol.CmdAutoModeRuleAdd: // wire: automode_rule_add
+		d.handleAutoModeRuleAdd(client, msg.(*protocol.AutoModeRuleAddMessage))
+	case protocol.CmdAutoModeRuleRemove: // wire: automode_rule_remove
+		d.handleAutoModeRuleRemoveWS(client, msg.(*protocol.AutoModeRuleRemoveMessage))
+	case protocol.CmdAutoModeHostAdd: // wire: automode_host_add
+		d.handleAutoModeHostAdd(client, msg.(*protocol.AutoModeHostAddMessage))
+	case protocol.CmdAutoModeHostRemove: // wire: automode_host_remove
+		d.handleAutoModeHostRemoveWS(client, msg.(*protocol.AutoModeHostRemoveMessage))
+	case protocol.CmdAutoModePolicySet: // wire: automode_policy_set
+		d.handleAutoModePolicySetWS(client, msg.(*protocol.AutoModePolicySetMessage))
+	case protocol.CmdAutoModeLegacyDismiss: // wire: automode_legacy_dismiss
+		d.handleAutoModeLegacyDismissWS(client, msg.(*protocol.AutoModeLegacyDismissMessage))
 	case protocol.CmdPtyResize: // wire: pty_resize
 		d.handlePtyResize(client, msg.(*protocol.PtyResizeMessage))
 	case protocol.CmdKillSession: // wire: kill_session
@@ -1829,7 +1833,7 @@ func (d *Daemon) broadcastRawWSMessage(payload []byte) {
 			return client.resolvePendingRemoteAttach(envelope.ID, envelope.Success)
 		})
 		return
-	case protocol.EventPtyOutput, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
+	case protocol.EventPtyOutput, protocol.EventPtyResized, protocol.EventPtyInputProbeResult, protocol.EventPtyDesync, protocol.EventKittyPlacements, protocol.EventKittyImageResult:
 		if strings.TrimSpace(envelope.ID) == "" {
 			d.wsHub.BroadcastRawText(payload)
 			return

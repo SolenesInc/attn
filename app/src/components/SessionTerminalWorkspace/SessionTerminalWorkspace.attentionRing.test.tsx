@@ -538,6 +538,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     const firstDocument = container.querySelector<HTMLElement>('[data-pane-id="document"]')!;
     fireEvent.click(within(firstDocument).getByRole('button', { name: 'Focus document' }));
     expect(container.querySelector('.session-terminal-workspace')).toHaveClass('focus-mode');
+    expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('agent-focus-mode');
     expect(screen.getByRole('tab', { name: 'review.md' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'second.md' })).toBeInTheDocument();
 

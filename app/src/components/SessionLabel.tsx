@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useDelegationChainControl, useDelegationChainTrigger } from './delegationChainContext';
+import { hasDelegationChain, type DelegationSession } from '../utils/delegationLinks';
 import './SessionLabel.css';
 
 // Load-bearing: the panel starts at the rail's right edge and never re-enters it,
@@ -22,11 +24,27 @@ type RevealStyle = {
   color: string;
 };
 
-export function SessionLabel({ label }: { label: string }) {
+export function SessionLabel({ label, session, hasDelegates = false }: {
+  label: string;
+  session?: DelegationSession;
+  hasDelegates?: boolean;
+}) {
+  const controller = useDelegationChainControl();
+  if (session && controller && hasDelegationChain(session, hasDelegates)) {
+    return <DelegationChainLabel label={label} sessionId={session.id} />;
+  }
+  return <OverflowSessionLabel label={label} />;
+}
+
+function DelegationChainLabel({ label, sessionId }: { label: string; sessionId: string }) {
+  const trigger = useDelegationChainTrigger(sessionId, 'row');
+  return <span className="session-label" ref={trigger.ref}>{label}</span>;
+}
+
+function OverflowSessionLabel({ label }: { label: string }) {
   const spanRef = useRef<HTMLSpanElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [reveal, setReveal] = useState<RevealStyle | null>(null);
-
   const hide = useCallback(() => setReveal(null), []);
 
   const show = useCallback(() => {

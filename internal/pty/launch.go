@@ -61,15 +61,11 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 			cmd = buildSpawnCommand(opts, agent, shellPath, attnPath, cmdEnv)
 		}
 
-		dir := opts.CWD
-		if strings.TrimSpace(opts.ExternalCWD) != "" {
-			dir = opts.ExternalCWD
-		}
 		prepared.Attempts = append(prepared.Attempts, PreparedLaunchAttempt{
 			Executable: cmd.Path,
 			Args:       append([]string(nil), cmd.Args...),
 			Env:        append([]string(nil), attemptEnv...),
-			CWD:        dir,
+			CWD:        opts.WorkingDirectory(),
 			CleanupDir: cleanupDir,
 			ShellPath:  shellPath,
 		})

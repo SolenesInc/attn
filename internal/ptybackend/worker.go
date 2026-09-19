@@ -557,7 +557,7 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	if b.kind == workerRuntimeSharedHost {
 		return b.spawnShared(ctx, opts)
 	}
-	if err := validateUnattendedSpawnOptions(opts); err != nil {
+	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
 	if err := validateSessionID(opts.ID); err != nil {
@@ -590,12 +590,13 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	b.mu.Unlock()
 	spawnReady := false
 	var workerProc *os.Process
+	var workerWait <-chan error
 	defer func() {
 		if spawnReady {
 			return
 		}
 		if workerProc != nil {
-			b.stopSpawnedWorkerProcess(workerProc, sessionID)
+			b.stopSpawnedWorkerProcess(workerProc, workerWait, sessionID)
 		}
 		b.mu.Lock()
 		delete(b.sessions, sessionID)
@@ -688,6 +689,11 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 	}
 	workerProc = cmd.Process
 	session.WorkerPID = workerProc.Pid
+	waitCh := make(chan error, 1)
+	workerWait = waitCh
+	go func() {
+		waitCh <- cmd.Wait()
+	}()
 
 	deadline := time.Now().Add(spawnReadyTimeout)
 	var lastErr error
@@ -695,21 +701,18 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if workerProc != nil && !pidAlive(workerProc.Pid) {
-			waitErr := cmd.Wait()
+		select {
+		case waitErr := <-workerWait:
 			workerProc = nil
 			if waitErr != nil {
 				return fmt.Errorf("worker exited before ready: %w", waitErr)
 			}
 			return errors.New("worker exited before ready")
+		default:
 		}
 		_, err := b.callInfo(ctx, session)
 		if err == nil {
 			spawnReady = true
-			if workerProc != nil {
-				b.reapWorkerProcess(cmd, sessionID)
-				workerProc = nil
-			}
 			b.startPoller(session)
 			b.startMonitor(session)
 			b.cfg.Logf("worker backend spawn ready: session=%s socket=%s", sessionID, session.SocketPath)
@@ -718,13 +721,14 @@ func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
 		lastErr = err
 		time.Sleep(spawnReadyPollInterval)
 	}
-	if workerProc != nil && !pidAlive(workerProc.Pid) {
-		waitErr := cmd.Wait()
+	select {
+	case waitErr := <-workerWait:
 		workerProc = nil
 		if waitErr != nil {
 			return fmt.Errorf("worker exited before ready: %w", waitErr)
 		}
 		return errors.New("worker exited before ready")
+	default:
 	}
 	return fmt.Errorf("worker did not become ready: %w", lastErr)
 }
@@ -883,24 +887,25 @@ func (b *WorkerBackend) Input(ctx context.Context, sessionID string, data []byte
 	return err
 }
 
-func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (bool, error) {
+func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
-		return false, err
+		return ResizeResult{}, err
 	}
 	var result ptyworker.ResizeResult
 	retried, err := b.callResultPersistent(ctx, session, ptyworker.MethodResize, ptyworker.ResizeParams{
 		Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel,
 	}, &result)
 	if err != nil {
-		return false, err
+		return ResizeResult{}, err
 	}
+	streamOrdered := result.StreamOrdered != nil && *result.StreamOrdered
 	// The first request may have applied before its connection failed; preserve
 	// the broadcast after any retry even when that retry reports a no-op.
 	if retried {
-		return true, nil
+		return ResizeResult{Changed: true, StreamOrdered: streamOrdered}, nil
 	}
-	return resizeResultChanged(result), nil
+	return ResizeResult{Changed: resizeResultChanged(result), StreamOrdered: streamOrdered}, nil
 }
 
 func resizeResultChanged(result ptyworker.ResizeResult) bool {
@@ -2081,7 +2086,7 @@ func (b *WorkerBackend) canReclaimOwnershipMismatch(entry ptyworker.RegistryEntr
 	return !pidAlive(entry.OwnerPID)
 }
 
-func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, sessionID string) {
+func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, wait <-chan error, sessionID string) {
 	if proc == nil {
 		return
 	}
@@ -2098,24 +2103,11 @@ func (b *WorkerBackend) stopSpawnedWorkerProcess(proc *os.Process, sessionID str
 			_ = proc.Kill()
 		}
 	}
-	waitDone := make(chan struct{})
-	go func() {
-		_, _ = proc.Wait()
-		close(waitDone)
-	}()
 	select {
-	case <-waitDone:
+	case <-wait:
 	case <-time.After(spawnWaitTimeout):
-		_ = proc.Release()
 	}
 	b.cfg.Logf("worker backend spawn cleanup: terminated unready worker: session=%s pid=%d", sessionID, proc.Pid)
-}
-
-func (b *WorkerBackend) reapWorkerProcess(cmd *exec.Cmd, sessionID string) {
-	if cmd == nil || cmd.Process == nil {
-		return
-	}
-	b.reapWorkerPID(cmd.Process.Pid, sessionID)
 }
 
 func (b *WorkerBackend) workerPIDForSession(session *workerSession) int {
@@ -2675,6 +2667,22 @@ func convertWorkerEvent(evt ptyworker.EventEnvelope) (OutputEvent, bool) {
 			reason = *evt.Reason
 		}
 		return OutputEvent{Kind: OutputEventKindDesync, Reason: reason}, true
+	case ptyworker.EventResize:
+		if evt.Cols == nil || evt.Rows == nil {
+			return OutputEvent{}, false
+		}
+		var xpixel, ypixel uint16
+		if evt.XPixel != nil {
+			xpixel = *evt.XPixel
+		}
+		if evt.YPixel != nil {
+			ypixel = *evt.YPixel
+		}
+		return OutputEvent{
+			Kind: OutputEventKindResize,
+			Cols: *evt.Cols, Rows: *evt.Rows,
+			XPixel: xpixel, YPixel: ypixel,
+		}, true
 	case ptyworker.EventKittyPlacements:
 		seq := uint32(0)
 		if evt.Seq != nil {

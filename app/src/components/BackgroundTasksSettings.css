@@ -126,3 +126,27 @@
   color: color-mix(in srgb, #e26565 80%, var(--color-text-secondary));
   font-size: 10px;
 }
+
+.background-task-diagnostic {
+	margin-top: 7px;
+	color: var(--color-text-muted);
+	font-size: 10px;
+}
+
+.background-task-diagnostic summary {
+	cursor: pointer;
+}
+
+.background-task-diagnostic pre {
+	margin: 6px 0 0;
+	max-height: 180px;
+	overflow: auto;
+	padding: 8px;
+	color: var(--color-text-secondary);
+	background: var(--color-bg-base, var(--color-bg-elevated));
+	border: 1px solid var(--color-border-subtle);
+	border-radius: 6px;
+	font: 10px/1.45 ui-monospace, 'SFMono-Regular', monospace;
+	white-space: pre-wrap;
+	word-break: break-word;
+}

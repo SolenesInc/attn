@@ -86,7 +86,7 @@ async function main() {
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
   let primaryPane = null;
   let utilityPane = null;

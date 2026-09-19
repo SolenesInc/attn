@@ -1,3 +1,4 @@
+use crate::boundary::safe_boundary;
 use crate::ghostty::{Terminal, Theme};
 
 const DEFAULT_FOREGROUND: &str = "#d4d4d4";
@@ -16,6 +17,21 @@ pub struct TerminalQueries {
     osc_order: Vec<u8>,
     color_scheme: usize,
     da1_before_cpr: bool,
+}
+
+#[derive(Default)]
+pub struct TerminalQueryStream {
+    pending: Vec<u8>,
+}
+
+impl TerminalQueryStream {
+    pub fn scan(&mut self, data: &[u8]) -> (TerminalQueries, Vec<u8>) {
+        self.pending.extend_from_slice(data);
+        let boundary = safe_boundary(&self.pending);
+        let suffix = self.pending.split_off(boundary);
+        let complete = std::mem::replace(&mut self.pending, suffix);
+        (TerminalQueries::detect(&complete), complete)
+    }
 }
 
 impl TerminalQueries {
@@ -247,7 +263,10 @@ fn count(haystack: &[u8], needle: &[u8]) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use super::{ColorScheme, TerminalQueries, theme_color_scheme, track_color_scheme_reports};
+    use super::{
+        ColorScheme, TerminalQueries, TerminalQueryStream, theme_color_scheme,
+        track_color_scheme_reports,
+    };
     use crate::ghostty::{Terminal, Theme};
 
     #[test]
@@ -294,6 +313,25 @@ mod tests {
         assert_eq!(
             queries.replies_after_feed(&terminal, &[]),
             b"\x1b[?1;2c\x1b[1;1R"
+        );
+    }
+
+    #[test]
+    fn scans_a_query_split_across_output_chunks() {
+        let mut stream = TerminalQueryStream::default();
+        let (queries, complete) = stream.scan(b"\x1b[6");
+        assert!(complete.is_empty());
+        assert!(
+            queries
+                .replies_after_feed(&Terminal::new(80, 24).unwrap(), &[])
+                .is_empty()
+        );
+
+        let (queries, complete) = stream.scan(b"n");
+        assert_eq!(complete, b"\x1b[6n");
+        assert_eq!(
+            queries.replies_after_feed(&Terminal::new(80, 24).unwrap(), &[]),
+            b"\x1b[1;1R"
         );
     }
 }

@@ -1,0 +1,4 @@
+kind: fixed
+area: pi
+change: A pi approval answered with "allow this host in the future" or "don't ask again for commands that start with ..." now reaches attn and shows up in `attn automode show`.
+symptom: Both amendments were dropped between the pi session and the daemon, so the rule never existed and the next identical approval asked again.

@@ -1,0 +1,3 @@
+kind: internal
+area: protocol
+change: Remove approval_policy and sandbox_mode from the delegate message; no client sent them, and spawn_session still carries the per-session pair.

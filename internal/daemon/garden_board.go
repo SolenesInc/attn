@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"strings"
+
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -23,9 +25,9 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		fail(err)
 		return
 	}
-	ask := garden.Ask{Reason: protocol.Deref(msg.Reason), Force: protocol.Deref(msg.Force)}
+	ask, sessionID := d.seedTransitionAsk(msg)
 	if harvestWhenRequested(msg) {
-		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, "")
+		seed, doc, err := d.applyHarvestWhenRequest(msg, verb, ask, sessionID)
 		if err != nil {
 			fail(err)
 			return
@@ -55,11 +57,10 @@ func (d *Daemon) handleSeedTransitionWS(client *wsClient, msg *protocol.SeedTran
 		d.logf("Garden review: settle %s after %s: %v", msg.SeedID, verb, err)
 	}
 	for _, note := range notes.all() {
-		d.mirrorSeedNoteOntoTicket("", seed.ID, note.Body)
+		d.mirrorSeedNoteOntoTicket(sessionID, seed.ID, note.Body)
 	}
 	wire := d.seedTransitionWire(seed, doc)
-	d.mirrorSeedMoveOntoTicket("", seed.ID, verb, protocol.Deref(msg.Reason))
-	d.ringSeedActivity(seed.ID, gardenRingEvents[verb], "")
+	d.mirrorSeedMoveOntoTicket(sessionID, seed.ID, verb, protocol.Deref(msg.Reason))
 	result.Seed = &wire
 	result.Success = true
 	d.sendToClient(client, result)
@@ -78,22 +79,22 @@ func (d *Daemon) handleSeedNoteWS(client *wsClient, msg *protocol.SeedNoteMessag
 		fail(err)
 		return
 	}
+	authorSession := strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	note, err := d.appendSeedNote(
 		msg.SeedID,
 		msg.Body,
-		"",
+		authorSession,
 		protocol.Deref(msg.Member),
 		protocol.Deref(msg.Kind),
 		artifactFromProtocol(msg.Artifact),
+		protocol.Deref(msg.Ring),
+		authorSession,
 	)
 	if err != nil {
 		fail(err)
 		return
 	}
-	d.mirrorSeedNoteOntoTicket("", msg.SeedID, note.Body)
-	if protocol.Deref(msg.Ring) {
-		d.ringSeedActivity(msg.SeedID, "note", "")
-	}
+	d.mirrorSeedNoteOntoTicket(authorSession, msg.SeedID, note.Body)
 	result.Note = &note
 	result.Success = true
 	d.sendToClient(client, result)

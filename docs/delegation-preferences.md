@@ -1,54 +1,82 @@
 # Delegation preferences
 
-Settings > Delegation is an optional, daemon-local configuration for choosing how
-to carry out authorized delegations. It starts off. Turning it off retains saved
-roles and stops making them available to new role-based requests. Direct
-`attn delegate` commands and custom routing skills keep their existing behavior.
+Settings > Delegation is a routing table: one row per role, and the model each
+role runs on. Agents that delegate read the table and pick the row that fits
+the work. The switch in the section head turns the table on and off; off keeps
+every row and lets agents choose harness and model themselves.
 
-Start with the editable Scout, Design, Build, Ship, and Review roles, or create
-custom roles. Each role separates when to choose it from the instructions and
-stopping point for the delegated agent. A default choice specifies a harness,
-provider, model, and effort; alternatives add conditions such as ambiguous
-requirements or difficult verification. The fallback applies only to unmatched
-work. Blank model or effort fields use the harness default.
+Every edit saves as it happens. There is no Save button and no draft: a change
+is live for the next `attn delegate roles` call as soon as the row settles. A
+save that collides with a change made elsewhere reloads the table and shows the
+daemon's reason; make the edit again on the fresh table. Deleting a role offers
+Undo until the next edit, or until a change made elsewhere reloads the table.
 
-Discovery is explicit and does not send a model prompt:
+## Rows
 
-- Claude uses the stream-JSON initialization response, the same source as the
-  Agent SDK's `supportedModels()`.
-- Codex uses app-server `model/list`, including pagination and supported effort
-  levels.
-- Pi queries its live model registry, including extension providers, using its
-  existing offline RPC discovery path.
-- Other harnesses may expose the plugin `model_discovery` capability and
-  `driver.models` RPC. Without discovery, use exact native identifiers or the
-  harness default where supported. Copilot currently uses its own selected model.
+A role row shows its icon, name, the first line of its description, and its
+model. Click the name or the details button to open the row. A custom role
+edits its name, icon, "When to choose this role", instructions and stopping
+point in place. A maintained role (tagged Attn) shows the same guidance
+read-only; Attn keeps it current with releases. **Make an editable copy**
+turns a maintained role into a custom one with the same guidance. A role can
+be turned off without deleting it; an off row stays in the table and is hidden
+from agents.
 
-Catalog membership does not prove account access. Missing effort metadata stays
-unknown; known unsupported choices are rejected when launching. Refresh models
-after changing accounts, providers, or harness configuration. Discovery runs only
-on request and deduplicates concurrent queries; there is no background polling.
+**Add Attn roles** installs the `attn-workflow` skill and adds Attn's
+maintained Pathfinder, Builder, Reviewer and Orchestrator. When a custom role
+already carries a maintained role's name, a panel asks whether to add the
+maintained role beside it or replace it; replacing keeps the custom row's model
+choices. A failed installation leaves the saved roles unchanged and reports
+the paths involved. Removing a role or turning the table off does not
+uninstall the skill. Skill files update through Attn's settings and launch
+synchronization; manual edits may be overwritten.
 
-Agents receive a short capability hint at launch. After deciding to delegate,
-they read the skill's delegation reference and call `attn delegate roles`. That
-single response contains the active roles, all choices, fallback, and current
-revision. It contains no roles while preferences are off. Incomplete roles,
-choices, and fallbacks remain saved but do not appear in agent discovery.
-Configuration failures are errors, not empty catalogs.
+**Anything else** is the last row: the model agents use when no role fits.
+Its instructions are optional.
 
-If that response is nonempty while another instruction set defines its own
-delegation router, role catalog, or model policy, the agent stops before
-delegating. It tells the user both systems are active and recommends disabling
-attn preferences or removing the other instructions.
+## Models
 
-Use `--role <id> [--choice <id>]` or `--fallback` when launching, and pass
-`--preferences-revision <revision>` to reject stale choices. Explicit model and
-effort flags affect only that request. An effort-only override preserves the
-model; changing model clears inherited effort unless effort is also explicit.
-Changing harness clears the inherited provider, model, and effort. The selected
-role's instructions and stopping point remain in force within the task's scope.
+Click a row's model to open the model picker. Pick a harness on the left; the
+harness lists its models on the right as soon as it is chosen, and the list is
+kept for the rest of the app's run (refresh asks again). Picking a model saves
+it. Effort appears once a model is chosen, as the levels the harness reported
+or as a free field when it reported none. "Enter a model ID" saves an exact ID
+the harness did not list. A harness that pins no model runs whatever its own
+settings select; choosing it saves the harness alone.
 
-Accepted operations persist their resolved selection and guidance. Retrying an
-accepted request therefore uses the original choice, even after settings change.
-The delegated agent receives the task brief and selected guidance, not the full
-routing catalog. These preferences never authorize delegation or expand scope.
+Discovery never sends a model prompt. Being listed does not prove the account
+can use a model; known unsupported model and effort choices are rejected at
+launch. Blank model or effort fields use the harness default.
+
+A role whose default model is not chosen yet is tagged **Needs a model** and is
+not offered to agents. The foot of the table says how many roles agents see.
+
+## Alternatives
+
+A role can carry alternative models for conditions the default should not
+cover. **+ Alternative model** adds one below the role's guidance, starting
+from the default model. Each alternative has a name and a prose condition,
+"When to use this instead of the default", which can run to several
+paragraphs; the agent reads it to decide. An alternative without a condition
+is saved but never picked. A collapsed row shows how many alternatives it
+carries.
+
+## Agents
+
+Agents call `attn delegate roles` after delegation is authorized. It returns
+only enabled roles with a complete default model, with their alternatives and
+the fallback. If another instruction set also defines a delegation router,
+role catalog or model policy, the agent stops and asks the user which system
+should own the choice.
+
+Launch with `--role <id> [--choice <id>]` or `--fallback`. Explicit model and
+effort flags affect only that request. Changing a model clears inherited effort
+unless effort is also supplied. Accepted operations keep the resolved role,
+guidance and model snapshot, so retrying the same request remains stable after a
+settings change. Preferences never authorize delegation or expand task scope.
+
+Use `attn delegate --help` for the complete assignment, cwd and checkout
+contract. Every launch has one seed; the opening names it instead of copying its
+mutable body.
+
+Durable multi-agent workflows have their own section, Settings > Workflows.

@@ -79,6 +79,49 @@ func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	}
 }
 
+func TestWorkspaceLayoutCloseFinalPanePreservesPinnedWorkspace(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-pinned"
+	sessionID := "session-pinned"
+	paneID := "pane-pinned"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Pinned", Directory: cwd,
+	})
+	if _, errMsg := d.setWorkspacePinned(workspaceID, true); errMsg != "" {
+		t.Fatalf("pin workspace: %s", errMsg)
+	}
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, Agent: protocol.AgentShellValue,
+		WorkspaceID: workspaceID, Cols: 80, Rows: 24,
+	})
+	expectSpawnResult(t, client, sessionID, true)
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+
+	if session := d.store.Get(sessionID); session != nil {
+		t.Fatalf("session still registered after closing its pane: %+v", session)
+	}
+	if layout := d.store.GetWorkspaceLayout(workspaceID); layout != nil {
+		t.Fatalf("empty workspace layout survived close: %+v", layout)
+	}
+	workspace := d.store.GetWorkspace(workspaceID)
+	if workspace == nil || !workspace.Pinned {
+		t.Fatalf("pinned workspace was removed after closing its final pane: %+v", workspace)
+	}
+}
+
 func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -122,6 +165,40 @@ func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t
 	defer backend.mu.Unlock()
 	if len(backend.killed) != 0 {
 		t.Fatalf("failed close killed sessions: %v", backend.killed)
+	}
+}
+
+func TestWorkspaceLayoutCloseFailedPlaceholderDoesNotCreateTeardown(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	workspaceID := "workspace-failed-placeholder"
+	sessionID := "session-failed-placeholder"
+	paneID := "pane-failed-placeholder"
+	cwd := t.TempDir()
+
+	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "Failed placeholder", Directory: cwd,
+	})
+	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID,
+		PaneID: protocol.Ptr(paneID), SessionID: sessionID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
+	d.setWorkspacePaneStatusForSession(sessionID, workspacelayout.PaneStatusFailed, "launch failed")
+
+	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	})
+	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
+		t.Fatalf("failed placeholder layout survived close: %+v", snapshot)
+	}
+	if workspace := d.store.GetWorkspace(workspaceID); workspace != nil {
+		t.Fatalf("empty workspace survived failed placeholder close: %+v", workspace)
+	}
+	if err := d.store.AddCheckedUnlessTeardown(&protocol.Session{ID: sessionID, Label: "retry"}); err != nil {
+		t.Fatalf("closing failed placeholder blocked session retry: %v", err)
 	}
 }
 
@@ -418,7 +495,7 @@ func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *t
 
 	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{
 		ID: sessionID, CWD: cwd, Agent: "probe-close", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/bash", "-c", `trap '' TERM HUP; printf '__CLOSE_READY__\n'; while :; do read -r -t 1 _ || :; done`},
+		ExternalCommand: []string{"/bin/bash", "-c", `trap '' TERM HUP; read -r _; printf '__CLOSE_READY__\n'; while :; do read -r -t 1 _ || :; done`},
 	}); err != nil {
 		t.Fatalf("spawn stubborn PTY: %v", err)
 	}
@@ -427,6 +504,9 @@ func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *t
 		t.Fatalf("attach stubborn PTY: %v", err)
 	}
 	defer stream.Close()
+	if err := backend.Input(context.Background(), sessionID, []byte("\n")); err != nil {
+		t.Fatalf("release stubborn PTY readiness gate: %v", err)
+	}
 	waitForPTYOutput(t, stream, "__CLOSE_READY__")
 
 	layoutBroadcast := make(chan *protocol.WorkspaceLayout, 1)
@@ -482,7 +562,7 @@ func waitForPTYOutput(t *testing.T, stream ptybackend.Stream, marker string) {
 	}
 }
 
-func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *testing.T) {
+func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsUnresolvedPanes(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	client := newWorkspaceProtocolTestClient()
@@ -495,6 +575,7 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *tes
 	}{
 		{workspaceID: "workspace-orphan", sessionID: "session-gone", status: workspacelayout.PaneStatusReady},
 		{workspaceID: "workspace-pending", sessionID: "session-pending", status: workspacelayout.PaneStatusSpawning},
+		{workspaceID: "workspace-failed", sessionID: "session-failed", status: workspacelayout.PaneStatusFailed},
 	} {
 		d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 			Cmd: protocol.CmdRegisterWorkspace, ID: fixture.workspaceID, Title: fixture.workspaceID, Directory: cwd,
@@ -518,6 +599,9 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsPendingSpawn(t *tes
 	}
 	if pending := d.store.GetWorkspaceLayout("workspace-pending"); pending == nil || !workspacelayout.HasPane(pending.Layout, "pane-session-pending") {
 		t.Fatalf("valid pending spawn was removed: %+v", pending)
+	}
+	if failed := d.store.GetWorkspaceLayout("workspace-failed"); failed == nil || !workspacelayout.HasPane(failed.Layout, "pane-session-failed") {
+		t.Fatalf("failed pane was removed: %+v", failed)
 	}
 }
 
@@ -841,14 +925,14 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("seedsCollection: %v", err)
 	}
 	for _, seed := range []garden.Seed{
-		{ID: "s-old001", Title: "Original seed", Status: garden.StatusPlanted},
+		{ID: "s-0jd001", Title: "Original seed", Status: garden.StatusPlanted},
 		{ID: "s-new002", Title: "Child seed", Status: garden.StatusPlanted},
 	} {
 		if _, err := d.plantSeed(*seedSchema, seed); err != nil {
 			t.Fatalf("plant seed %s: %v", seed.ID, err)
 		}
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-old001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
+	if err := d.dockTile(workspaceID, "pane-1", "tile-seed", string(workspacelayout.TileKindSeed), "s-0jd001", "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
 		t.Fatalf("dock seed tile: %v", err)
 	}
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
@@ -1196,8 +1280,8 @@ func (b *failingSpawnBackend) Attach(context.Context, string, string, ...ptyback
 	return ptybackend.AttachInfo{}, nil, errors.New("attach unsupported")
 }
 func (b *failingSpawnBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *failingSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *failingSpawnBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil

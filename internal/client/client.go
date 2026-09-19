@@ -606,122 +606,13 @@ func (c *Client) ForgetSessionPullRequest(id, url string) error {
 	return err
 }
 
-type DelegateOptions struct {
-	Role                string
-	Choice              string
-	Fallback            bool
-	PreferencesRevision *int
-	Provider            *string
-	ModelOverride       *string
-	EffortOverride      *string
-	RequestID           string
-	TicketID            string
-	Confirm             bool
-	Agent               string
-	Model               string
-	Effort              string
-	Label               string
-	Yolo                bool
-	Placement           string
-	Plot                string
-	WorkspaceID         string
-	CWD                 string
-	WorktreeRepo        string
-	Worktree            string
-	WorktreePath        string
-	StartingFrom        string
-	NoWorktree          bool
-	AllowWorktreeReuse  bool
-	Handover            *protocol.SeedHandoverRequest
-}
-
-func (c *Client) StartDelegation(sourceSessionID, brief string, opts DelegateOptions) (*protocol.DelegationOperation, error) {
-	requestID := strings.TrimSpace(opts.RequestID)
+func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
+	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
 		requestID = uuid.NewString()
 	}
-	msg := protocol.DelegateMessage{
-		Cmd:             protocol.CmdDelegate,
-		RequestID:       requestID,
-		SourceSessionID: sourceSessionID,
-		Brief:           strings.TrimSpace(brief),
-		Handover:        opts.Handover,
-	}
-	if value := strings.TrimSpace(opts.TicketID); value != "" {
-		msg.TicketID = protocol.Ptr(value)
-	}
-	if opts.Confirm {
-		msg.Confirm = protocol.Ptr(true)
-	}
-	if value := strings.TrimSpace(opts.Agent); value != "" {
-		msg.Agent = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(opts.Model); value != "" {
-		msg.Model = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(opts.Effort); value != "" {
-		msg.Effort = protocol.Ptr(value)
-	}
-	if opts.Role != "" {
-		msg.Role = protocol.Ptr(opts.Role)
-	}
-	if opts.Choice != "" {
-		msg.Choice = protocol.Ptr(opts.Choice)
-	}
-	if opts.Fallback {
-		msg.Fallback = protocol.Ptr(true)
-	}
-	msg.PreferencesRevision = opts.PreferencesRevision
-	msg.Provider = opts.Provider
-	if opts.ModelOverride != nil {
-		msg.Model = opts.ModelOverride
-	}
-	if opts.EffortOverride != nil {
-		msg.Effort = opts.EffortOverride
-	}
-	if value := strings.TrimSpace(opts.Label); value != "" {
-		msg.Label = protocol.Ptr(value)
-	}
-	if opts.Yolo {
-		msg.YoloMode = protocol.Ptr(true)
-	}
-	if opts.AllowWorktreeReuse {
-		msg.AllowWorktreeReuse = protocol.Ptr(true)
-	}
-	if value := strings.TrimSpace(opts.Placement); value != "" {
-		msg.Placement = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(opts.Plot); value != "" {
-		msg.Plot = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(opts.WorkspaceID); value != "" {
-		msg.WorkspaceID = protocol.Ptr(value)
-	}
-	if value := strings.TrimSpace(opts.CWD); value != "" {
-		msg.Cwd = protocol.Ptr(value)
-	}
-	branch := strings.TrimSpace(opts.Worktree)
-	worktreeRepo := strings.TrimSpace(opts.WorktreeRepo)
-	worktreePath := strings.TrimSpace(opts.WorktreePath)
-	startingFrom := strings.TrimSpace(opts.StartingFrom)
-	worktreeConfigured := branch != "" || worktreeRepo != "" || worktreePath != "" || startingFrom != ""
-	if opts.NoWorktree && worktreeConfigured {
-		return nil, errors.New("no worktree cannot be combined with worktree options")
-	}
-	if !opts.NoWorktree && opts.Handover == nil {
-		msg.Worktree = &protocol.DelegateWorktreeRequest{
-			Branch: branch,
-		}
-		if worktreeRepo != "" {
-			msg.Worktree.Repo = protocol.Ptr(worktreeRepo)
-		}
-		if worktreePath != "" {
-			msg.Worktree.Path = protocol.Ptr(worktreePath)
-		}
-		if startingFrom != "" {
-			msg.Worktree.StartingFrom = protocol.Ptr(startingFrom)
-		}
-	}
+	msg.Cmd = protocol.CmdDelegate
+	msg.RequestID = requestID
 	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
@@ -743,8 +634,8 @@ func (c *Client) DelegationStatus(id string) (*protocol.DelegationOperation, err
 	return resp.DelegationOperation, nil
 }
 
-func (c *Client) Delegate(sourceSessionID, brief string, opts DelegateOptions) (*protocol.DelegateResult, error) {
-	op, err := c.StartDelegation(sourceSessionID, brief, opts)
+func (c *Client) Delegate(request protocol.DelegateMessage) (*protocol.DelegateResult, error) {
+	op, err := c.StartDelegation(request)
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +647,11 @@ func (c *Client) Delegate(sourceSessionID, brief string, opts DelegateOptions) (
 		}
 	}
 	if op.State == protocol.DelegationOperationStateFailed {
-		return nil, fmt.Errorf("delegation failed: %s", protocol.Deref(op.Error))
+		message := "unknown failure"
+		if op.Failure != nil {
+			message = op.Failure.Message
+		}
+		return nil, fmt.Errorf("delegation failed: %s", message)
 	}
 	if op.Result == nil {
 		return nil, errors.New("completed delegation has no result")

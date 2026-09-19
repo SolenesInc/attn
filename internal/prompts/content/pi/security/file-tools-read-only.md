@@ -1,0 +1,1 @@
+This session's permissions are read-only: the write and edit tools refuse every change, so ask the user to change `/permissions`, or run the change as a bash command with `sandbox_permissions=require_escalated` so a reviewer can approve it.

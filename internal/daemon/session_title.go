@@ -288,7 +288,7 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 
 	result, err := provider.RunHeadlessTask(ctx, request)
 	if err != nil {
-		return "", fmt.Errorf("%s title run failed: %w\n%s", agent, err, result.FailureOutput)
+		return "", jobs.WithDiagnostic(fmt.Errorf("%s title run failed: %w", agent, err), result.FailureOutput)
 	}
 	return result.Text, nil
 }

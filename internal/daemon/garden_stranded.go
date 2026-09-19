@@ -115,8 +115,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		seed := garden.Seed{
 			ID: seedID, Title: title, Body: body, Status: garden.StatusWithered,
 			StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{},
-			Reason:          "recovered from legacy ticket " + ticket.ID,
-			ResumeSessionID: ticket.ResumeSessionID, ResumeCwd: ticket.Cwd, ResumeAgent: ticket.LastAgentID,
+			Reason: "recovered from legacy ticket " + ticket.ID,
 		}
 		seedBody, err := seed.Encode()
 		if err != nil {
@@ -124,6 +123,10 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 		}
 		note := garden.Note{ID: noteID, Seed: seedID, Kind: garden.NoteKindNote, Body: strandedProvenanceNote(ticket)}
 		noteBody, err := note.Encode()
+		if err != nil {
+			return "", err
+		}
+		semanticEvents, err := recoveredGardenSeedEvents(seed, []garden.Note{note})
 		if err != nil {
 			return "", err
 		}
@@ -136,7 +139,7 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 				Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
 			}}, SessionIDs: []string{ticket.Assignee, ticket.ResumeSessionID},
 			HandoverKind: "stranded", EvidenceFingerprint: legacyTicketSeedFingerprint(ticket, "stranded"),
-			OriginalTicketStatus: ticket.Status, CreatedAt: now,
+			OriginalTicketStatus: ticket.Status, CreatedAt: now, Events: semanticEvents,
 		}
 		linked, err = d.store.EnsureTicketSeedHandover(handover)
 		if err != nil && docstore.IsConflict(err) {
@@ -152,10 +155,6 @@ func (d *Daemon) replantStrandedTicket(ticket *store.Ticket) (string, error) {
 	}
 	if linked.SeedID == "" {
 		return "", fmt.Errorf("ticket %s has no safe one-to-one seed: %s", ticket.ID, linked.Result)
-	}
-	if linked.Result == "created" {
-		d.publishFact(FactGardenPlanted, linked.SeedID, nil)
-		d.publishFact(FactGardenNoted, linked.SeedID, nil)
 	}
 	return linked.SeedID, nil
 }

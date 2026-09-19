@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
 import type { SessionPullRequest } from '../../types/generated';
+import { BuiltinDelegationRole } from '../../types/generated';
+import { DelegationChainProvider, type ChainSession } from '../DelegationChain';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
 
@@ -27,16 +29,11 @@ function loneAgentWorkspace(): TerminalWorkspaceState {
 
 function renderPane(
   pullRequests: SessionPullRequest[],
-  delegationSessions: Array<{
-    id: string;
-    label: string;
-    agent: 'claude' | 'codex' | 'shell';
-    state: 'working' | 'idle';
-    dispatcher_session_id?: string;
-  }> = [],
+  delegationSessions: ChainSession[] = [],
   onSelectSession = vi.fn(),
 ) {
-  return render(
+  const view = (currentDelegationSessions: ChainSession[]) => (
+    <DelegationChainProvider sessions={currentDelegationSessions} onSelectSession={onSelectSession}>
     <SessionTerminalWorkspace
       workspaceId="workspace-1"
       workspaceSessions={[{
@@ -46,7 +43,7 @@ function renderPane(
         cwd: '/tmp/project',
         pullRequests,
       }]}
-      delegationSessions={delegationSessions}
+      delegationSessions={currentDelegationSessions}
       workspace={loneAgentWorkspace()}
       activePaneId="pane-1"
       fontSize={13}
@@ -58,12 +55,22 @@ function renderPane(
       onFocusPane={vi.fn()}
       onSelectSession={onSelectSession}
       onNavigateOutOfSession={vi.fn()}
-    />,
+    />
+    </DelegationChainProvider>
   );
+  const rendered = render(view(delegationSessions));
+  return { ...rendered, updateDelegation: (next: ChainSession[]) => rendered.rerender(view(next)) };
 }
 
 describe('SessionTerminalWorkspace provenance line', () => {
-  it('passes the pane delegation links through the header', () => {
+  it('refreshes a mounted header when delegation metadata arrives', () => {
+    const session: ChainSession = { id: 'sess-1', label: 'ledger sweep', agent: 'codex', state: 'idle' };
+    const { updateDelegation } = renderPane([], [session]);
+    expect(screen.queryByTestId('delegation-chain-trigger-sess-1')).not.toBeInTheDocument();
+    updateDelegation([{ ...session, delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } }]);
+    expect(screen.getByTestId('delegation-chain-trigger-sess-1')).toHaveTextContent('Orchestrator');
+  });
+  it('passes the pane delegation links through the header', async () => {
     const onSelectSession = vi.fn();
     renderPane([], [
       { id: 'dispatcher', label: 'docs sweep', agent: 'claude', state: 'idle' },
@@ -73,6 +80,7 @@ describe('SessionTerminalWorkspace provenance line', () => {
         agent: 'shell',
         state: 'working',
         dispatcher_session_id: 'dispatcher',
+        delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator },
       },
       {
         id: 'delegate',
@@ -83,14 +91,16 @@ describe('SessionTerminalWorkspace provenance line', () => {
       },
     ], onSelectSession);
 
-    const dispatcher = screen.getByRole('button', { name: /delegated by docs sweep/i });
-    expect(dispatcher.closest('.workspace-pane-identity-main')).not.toBeNull();
-    fireEvent.click(dispatcher);
-    expect(onSelectSession).toHaveBeenCalledWith('dispatcher');
+    const trigger = screen.getByRole('button', { name: /Orchestrator · Show delegation chain/ });
+    expect(trigger.closest('.workspace-pane-identity-main')).not.toBeNull();
+    expect(trigger).toHaveTextContent('Orchestrator');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: /docs sweep/ }));
+    await waitFor(() => expect(onSelectSession).toHaveBeenCalledExactlyOnceWith('dispatcher'));
 
-    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
-    fireEvent.click(screen.getByRole('button', { name: 'glossary rework codex' }));
-    expect(onSelectSession).toHaveBeenLastCalledWith('delegate');
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('button', { name: /glossary rework/ }));
+    await waitFor(() => expect(onSelectSession).toHaveBeenLastCalledWith('delegate'));
   });
 
   it('carries the session PR on the pane header', () => {
@@ -142,15 +152,18 @@ describe('SessionTerminalWorkspace provenance line', () => {
       },
     ]);
 
-    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
-    expect(screen.getByTestId('session-delegates-popover')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Show delegation chain for ledger sweep' }));
+    expect(screen.getByTestId('delegation-chain-popover')).toBeInTheDocument();
 
     fireEvent.pointerEnter(screen.getByTestId('session-provenance-pr'));
-    expect(screen.queryByTestId('session-delegates-popover')).not.toBeInTheDocument();
+    expect(screen.getByTestId('delegation-chain-popover')).toBeInTheDocument();
+    expect(screen.queryByTestId('session-pr-popover')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('session-provenance-pr'));
+    expect(screen.queryByTestId('delegation-chain-popover')).not.toBeInTheDocument();
     expect(screen.getByTestId('session-pr-popover')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: '1 delegate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Show delegation chain for ledger sweep' }));
     expect(screen.queryByTestId('session-pr-popover')).not.toBeInTheDocument();
-    expect(screen.getByTestId('session-delegates-popover')).toBeInTheDocument();
+    expect(screen.getByTestId('delegation-chain-popover')).toBeInTheDocument();
   });
 });

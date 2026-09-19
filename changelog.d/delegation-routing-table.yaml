@@ -1,0 +1,4 @@
+kind: changed
+area: delegation
+change: Settings > Delegation is a routing table. Every edit saves as it happens, the model picker lists a harness's models as soon as it is chosen, alternatives carry a name and a prose condition, and Workflows has its own section.
+symptom: The old tab needed a Save round trip for every change, hid model discovery behind a button that refused while preferences were off, and mixed workflow settings into the delegation form.

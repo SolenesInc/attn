@@ -647,8 +647,9 @@ func TestForwardsRawEventIncludesPickerResults(t *testing.T) {
 	}
 }
 
-func TestForwardsRawEventIncludesKittyRelayTraffic(t *testing.T) {
+func TestForwardsRawEventIncludesOrderedPTYRelayTraffic(t *testing.T) {
 	for _, event := range []string{
+		protocol.EventPtyResized,
 		protocol.EventKittyPlacements,
 		protocol.EventKittyImageResult,
 	} {

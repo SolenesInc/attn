@@ -152,9 +152,8 @@ func (d *Daemon) noteDelegatedExitOnSeed(seedID, agent, sessionID string, exit *
 			b.WriteString("    " + line + "\n")
 		}
 	}
-	if _, err := d.appendSeedNote(seedID, strings.TrimRight(b.String(), "\n"), sessionID, "", garden.NoteKindNote, nil); err != nil {
+	if _, err := d.appendSeedNote(seedID, strings.TrimRight(b.String(), "\n"), sessionID, "", garden.NoteKindNote, nil, true, sessionID); err != nil {
 		d.logf("delegation exit not noted on %s: %v", seedID, err)
 		return
 	}
-	d.ringSeedActivity(seedID, "note", sessionID)
 }

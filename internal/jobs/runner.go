@@ -320,6 +320,7 @@ func (r *Runner) Enqueue(kind string, opts EnqueueOptions) (*Job, error) {
 		existing.State = StateQueued
 		existing.Attempts = 0
 		existing.LastError = ""
+		existing.LastDiagnostic = ""
 		existing.Result = nil
 		existing.Requeued = false
 		existing.ScheduledAt = scheduled
@@ -368,6 +369,7 @@ func (r *Runner) Retry(id string) (*Job, error) {
 	existing.State = StateQueued
 	existing.Attempts = 0
 	existing.LastError = ""
+	existing.LastDiagnostic = ""
 	existing.Requeued = false
 	existing.ScheduledAt = now
 	existing.UpdatedAt = now
@@ -691,6 +693,7 @@ func (r *Runner) finish(id string, result json.RawMessage, runErr error) {
 			cur.Requeued = false
 			cur.Attempts = 0
 			cur.LastError = runErr.Error()
+			cur.LastDiagnostic = DiagnosticOutput(runErr)
 			cur.UpdatedAt = now
 			if err := r.store.Save(cur); err != nil {
 				r.ioMu.Unlock()
@@ -704,6 +707,7 @@ func (r *Runner) finish(id string, result json.RawMessage, runErr error) {
 	} else {
 		now := r.now()
 		cur.LastError = ""
+		cur.LastDiagnostic = ""
 		cur.Result = result
 		cur.UpdatedAt = now
 		if cur.Requeued {
@@ -737,6 +741,7 @@ func (r *Runner) recordFailureLocked(j *Job, cause error) (wentDead bool) {
 	now := r.now()
 	limit := r.attemptCap(j)
 	j.LastError = cause.Error()
+	j.LastDiagnostic = DiagnosticOutput(cause)
 	j.UpdatedAt = now
 	if j.Attempts >= limit {
 		j.State = StateDead
@@ -761,6 +766,7 @@ func (r *Runner) recordPermanentFailureLocked(j *Job, cause error) {
 	now := r.now()
 	j.State = StateDead
 	j.LastError = cause.Error()
+	j.LastDiagnostic = DiagnosticOutput(cause)
 	j.ScheduledAt = now
 	j.UpdatedAt = now
 	r.log("jobs: %s (%s) dead, cannot be retried: %v", j.ID, j.Kind, cause)

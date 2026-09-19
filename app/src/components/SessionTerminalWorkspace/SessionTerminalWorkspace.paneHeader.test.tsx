@@ -30,6 +30,7 @@ function renderLonePane(props: Partial<React.ComponentProps<typeof SessionTermin
       workspaceSessions={[{ id: 'sess-1', label: GENERATED_NAME, agent: 'claude', cwd: '/tmp/project' }]}
       workspace={loneAgentWorkspace()}
       activePaneId="pane-1"
+      selectedSessionId="sess-1"
       fontSize={13}
       enabled
       isActiveSession
@@ -50,6 +51,7 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
     has_unpriced_usage: hasUnpricedUsage,
     models: [{
       model: 'claude-opus-5',
+      purpose: 'agent',
       input_tokens: 4,
       output_tokens: totalTokens - 4,
       cache_read_tokens: 0,
@@ -64,6 +66,19 @@ function usage(costUsd?: number, hasUnpricedUsage = false, totalTokens = 3_550):
 }
 
 describe('SessionTerminalWorkspace pane header', () => {
+  it('focuses the agent from its header until exit', () => {
+    const { container } = renderLonePane();
+
+    fireEvent.click(screen.getByRole('button', { name: `Focus agent ${GENERATED_NAME}` }));
+
+    expect(container.querySelector('.session-terminal-workspace')).toHaveClass('focus-mode', 'agent-focus-mode');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Return to split' }));
+
+    expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('focus-mode');
+    expect(container.querySelector('.session-terminal-workspace')).not.toHaveClass('agent-focus-mode');
+  });
+
   it('names the session on a lone tile with nothing else to show', () => {
     const { container } = renderLonePane();
 
@@ -159,6 +174,7 @@ describe('SessionTerminalWorkspace pane header', () => {
           agent: 'claude',
           state: 'working',
           dispatcher_session_id: 'dispatcher',
+          delegation_role: { name: 'Builder' },
         },
       ],
       onSelectSession: vi.fn(),
@@ -167,8 +183,8 @@ describe('SessionTerminalWorkspace pane header', () => {
     const headline = container.querySelector('.workspace-pane-identity-main');
     expect(headline).not.toBeNull();
     expect(headline).toContainElement(screen.getByLabelText('Session usage $2.61'));
-    expect(headline).toContainElement(screen.getByRole('button', { name: /delegated by chief/i }));
-    expect(headline?.textContent).toMatch(/\$2\.61.*delegated by chief/i);
+    expect(headline).toContainElement(screen.getByRole('button', { name: /Builder · Show delegation chain/i }));
+    expect(headline?.textContent).toMatch(/\$2\.61.*Builder/i);
   });
 
   it('does not round real sub-cent usage down to free', () => {

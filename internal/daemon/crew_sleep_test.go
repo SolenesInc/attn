@@ -114,12 +114,7 @@ func TestCrewSleep_QueuesWhileWakingAndWakesOnIdleWithoutPromptHook(t *testing.T
 		t.Fatalf("sleep request reached startup before the first prompt: %q", beforePrompt)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(sessionID string, delivered int) {
-		if sessionID == woken.SessionID {
-			drained <- delivered
-		}
-	}
+	drains := observeAgentMailboxDrainsFor(t, d, woken.SessionID)
 	if !d.applyState(sessionStateChange{
 		sessionID: woken.SessionID,
 		state:     protocol.StateIdle,
@@ -127,7 +122,7 @@ func TestCrewSleep_QueuesWhileWakingAndWakesOnIdleWithoutPromptHook(t *testing.T
 	}) {
 		t.Fatal("idle state did not apply")
 	}
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("idle drain delivered %d messages, want 1", delivered)
 	}
 	mu.Lock()

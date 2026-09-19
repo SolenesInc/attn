@@ -89,6 +89,33 @@ func TestAWriteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	}
 }
 
+func TestAWriteAndItsDocumentFactDoNotSurviveARequiredSemanticEventFailure(t *testing.T) {
+	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
+	schema := requestsDecl(t, s)
+	if _, err := s.db.Exec(`CREATE TRIGGER refuse_semantic_event BEFORE INSERT ON bus_events
+		WHEN NEW.name = 'garden.seed.note.added'
+		BEGIN SELECT RAISE(ABORT, 'semantic event failed'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := s.CommitDocumentWriteWithEvents(
+		DocumentWrite{Schema: schema, ID: "a", Body: []byte(`{"status":"approved"}`)},
+		changeFact("a", false),
+		[]BusEvent{{Name: "garden.seed.note.added", Subject: "s-one", Payload: `{"note_id":"n-one","attention_requested":false}`}},
+		base.Add(time.Second),
+	)
+	if err == nil || !strings.Contains(err.Error(), "semantic event failed") {
+		t.Fatalf("commit error = %v, want semantic append failure", err)
+	}
+	doc, found, err := s.GetDocument(schema, "a")
+	if err != nil || !found || string(doc.Body) != `{"status":"pending"}` || doc.Rev != docstore.FirstRev {
+		t.Fatalf("document after failed semantic event = %#v found=%v err=%v", doc, found, err)
+	}
+	if events := factsOnLog(t, s); len(events) != 0 {
+		t.Fatalf("failed semantic event left %d event(s) on the log", len(events))
+	}
+}
+
 func TestDocumentWriteBatchDoesNotSurviveItsSecondFactFailure(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{})
 	schema := requestsDecl(t, s)

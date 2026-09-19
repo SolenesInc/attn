@@ -124,9 +124,10 @@ describe('GardenPanel continuation actions', () => {
 
     await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
       seedId: 's-hand11',
-      expectedRev: 7,
-      expectedTenderSession: 'sess-a',
-      expectedTenderMember: '',
+      requestId: expect.any(String),
+      cwd: '/tmp/work',
+      checkout: undefined,
+      agent: 'codex',
       handoff: 'The parser is done; verify the renderer.',
     }));
   });
@@ -171,11 +172,41 @@ describe('GardenPanel continuation actions', () => {
     fireEvent.click(await screen.findByTestId('seed-handover-s-fresh11'));
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
-    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({ expectedRev: 2 })));
+    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
+      seedId: 's-fresh11',
+      cwd: '/tmp/work',
+    })));
   });
 
-  it('offers Chief instead of a manual placement override', async () => {
+  it('reuses the durable request identity after a handover timeout', async () => {
+    const value = seed({ id: 's-timeout11', title: 'retry this handover', tender_session: 'sess-a' });
+    const onHandoverSeed = vi.fn()
+      .mockRejectedValueOnce(new Error('Handover timed out'))
+      .mockResolvedValueOnce({ session_id: 'sess-b' });
+    render(
+      <GardenPanel
+        isOpen
+        onClose={vi.fn()}
+        seedsTotal={1}
+        seeds={[value]}
+        fetchSeedDocument={vi.fn().mockResolvedValue(document(value, continuation()))}
+        onHandoverSeed={onHandoverSeed}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('retry this handover'));
+    fireEvent.click(await screen.findByTestId('seed-handover-s-timeout11'));
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Handover timed out');
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledTimes(2));
+    expect(onHandoverSeed.mock.calls[1][0].requestId).toBe(onHandoverSeed.mock.calls[0][0].requestId);
+  });
+
+  it('offers manual handover placement and Chief as separate paths', async () => {
     const value = seed({ id: 's-place11', title: 'place this handover', tender_session: 'sess-a' });
+    const onHandoverSeed = vi.fn().mockResolvedValue({ session_id: 'sess-b' });
     const onSendSeedToChief = vi.fn().mockResolvedValue({ chief_session_id: 'chief' });
     render(
       <GardenPanel
@@ -187,15 +218,37 @@ describe('GardenPanel continuation actions', () => {
           resume_available: false,
           handover_placement: 'placement_required',
           placement_reason: 'the old directory is unavailable',
+          repository_root: '/tmp/repo',
+          branch: 'old-branch',
         })))}
-        onHandoverSeed={vi.fn()}
+        onHandoverSeed={onHandoverSeed}
         onSendSeedToChief={onSendSeedToChief}
         chiefAvailable
       />,
     );
 
     fireEvent.click(screen.getByText('place this handover'));
-    expect(screen.queryByTestId('seed-handover-s-place11')).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByTestId('seed-handover-s-place11'));
+
+    expect(screen.getByLabelText('Working folder')).toHaveValue('');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('none');
+    fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/new-home' } });
+    fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'new_worktree' } });
+    fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/new-home' } });
+    fireEvent.change(screen.getByLabelText('Start from'), { target: { value: 'origin/next' } });
+    fireEvent.click(screen.getByLabelText('Allow sharing an occupied checkout'));
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    await waitFor(() => expect(onHandoverSeed).toHaveBeenCalledWith({
+      seedId: 's-place11',
+      requestId: expect.any(String),
+      cwd: '/tmp/new-home',
+      checkout: { kind: 'new_worktree', branch: 'feature/new-home', from: 'origin/next' },
+      allowWorktreeReuse: true,
+      agent: 'codex',
+      handoff: '',
+    }));
+
     fireEvent.click(await screen.findByTestId('seed-send-to-chief-s-place11'));
     const guidance = screen.getByLabelText(/What should Chief know/);
     expect(guidance).toHaveValue('');
@@ -209,5 +262,33 @@ describe('GardenPanel continuation actions', () => {
       expectedTenderMember: '',
       guidance: 'Use feature/special in /tmp/new-home.',
     }));
+  });
+
+  it('recreates a missing branch checkout from its repository context', async () => {
+    const value = seed({ id: 's-recreate11', title: 'recreate this checkout', tender_session: 'sess-a' });
+    render(
+      <GardenPanel
+        isOpen
+        onClose={vi.fn()}
+        seedsTotal={1}
+        seeds={[value]}
+        fetchSeedDocument={vi.fn().mockResolvedValue(document(value, continuation({
+          cwd: '/tmp/missing-worktree/subdir',
+          directory_state: 'missing',
+          handover_placement: 'recreate_branch',
+          repository_root: '/tmp/repo',
+          repository_subdir: 'subdir',
+          branch: 'feature/recreate',
+        })))}
+        onHandoverSeed={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByText('recreate this checkout'));
+    fireEvent.click(await screen.findByTestId('seed-handover-s-recreate11'));
+
+    expect(screen.getByLabelText('Working folder')).toHaveValue('/tmp/repo/subdir');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('existing_branch_worktree');
+    expect(screen.getByLabelText('Branch')).toHaveValue('feature/recreate');
   });
 });

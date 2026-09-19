@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	agentdriver "github.com/victorarias/attn/internal/agent"
+	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -41,6 +42,7 @@ type spawnRequest struct {
 	driver          agentdriver.Driver
 	resumeSessionID string
 	parentSessionID string
+	autoModeDriver  bool
 }
 
 type spawnPlan struct {
@@ -127,6 +129,16 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 			}
 		}
 	}
+	autoModeDriver := hasPluginDriver && pluginDriver.Capabilities["auto_mode"]
+	if policy, sandbox := requestedSpawnPolicyPair(msg); policy != "" || sandbox != "" {
+		if err := automode.ValidatePolicyPair(policy, sandbox); err != nil {
+			return nil, &spawnRejection{err: err}
+		}
+		if !autoModeDriver {
+			return nil, &spawnRejection{err: fmt.Errorf(
+				"agent %q does not support a per-session approval policy or sandbox mode", agent)}
+		}
+	}
 	workspaceID := strings.TrimSpace(msg.WorkspaceID)
 	if workspaceID == "" {
 		return nil, &spawnRejection{commandError: "missing workspace_id"}
@@ -135,7 +147,7 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		d.setWorkspacePaneStatusForSession(msg.ID, workspacelayout.PaneStatusFailed, "unknown workspace")
 		return nil, &spawnRejection{commandError: "unknown workspace"}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID}, nil
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID, autoModeDriver: autoModeDriver}, nil
 }
 
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
@@ -180,20 +192,6 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		if req.resumeSessionID == msg.ID && !agentdriver.ResumeAvailable(req.driver, req.resumeSessionID) {
 			d.logf("spawn: self-resume target %s has no transcript yet; fresh-spawning instead", msg.ID)
 			req.resumeSessionID = ""
-		}
-	} else if !req.hasPluginDriver && req.resumeSessionID == "" && protocol.Deref(msg.ResumePicker) {
-		mirroredResumeID := d.gardenDispatchResume(msg.ID)
-		if mirroredResumeID == "" {
-			mirroredResumeID = d.store.GetTicketResumeSessionID(msg.ID)
-		}
-		if ticketResumeID := mirroredResumeID; ticketResumeID != "" {
-			// Claude writes its transcript lazily, so a mirrored id can point at a
-			// transcript that does not exist and `claude -r <dead-id>` would exit non-zero.
-			if agentdriver.ResumeAvailable(req.driver, ticketResumeID) {
-				req.resumeSessionID = ticketResumeID
-			} else {
-				d.logf("spawn: resume target %s for session %s is not resumable (no transcript yet); using resume picker", ticketResumeID, msg.ID)
-			}
 		}
 	}
 	configuredExecutable := strings.TrimSpace(protocol.Deref(msg.Executable))
@@ -309,7 +307,14 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			if msg.AutoMode != nil {
 				cfg.EnabledDefault = *msg.AutoMode
 			}
-			cfg = d.autoModeConfigForSession(cfg, params.CWD)
+			policy, sandbox := effectiveSpawnPolicyPair(msg)
+			cfg = applySessionPolicyPair(cfg, policy, sandbox)
+			cfg, _, err = d.autoModeConfigForSession(cfg, params.CWD)
+			if err != nil {
+				d.finishPluginSessionLaunch(msg.ID, false)
+				plan.rollback(d, msg.ID)
+				return &spawnOutcome{err: err}
+			}
 			params.AutoMode = &cfg
 		}
 		// A relaunch of a known session or an explicit conversation id resumes; a
@@ -358,6 +363,9 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
 	intent.AutoMode = msg.AutoMode
+	if req.autoModeDriver {
+		intent.ApprovalPolicy, intent.SandboxMode = effectiveSpawnPolicyPair(msg)
+	}
 	d.store.SetLaunchIntent(session.ID, intent)
 	// After the already-live no-op returns, before the runtime whose first
 	// UserPromptSubmit can beat commitSpawn.
@@ -516,6 +524,15 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
+	var result *spawnRejection
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
+		result = d.runSpawnPipelineForeground(msg, policy)
+		return nil
+	})
+	return result
+}
+
+func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
 		return rejection

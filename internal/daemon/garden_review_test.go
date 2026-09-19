@@ -14,6 +14,7 @@ import (
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T) {
@@ -82,9 +83,10 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentCopilot, State: protocol.SessionStateIdle,
 	})
 	d.store.SetResumeSessionID("sess-a", "native-1")
+	d.store.SetLaunchIntent("sess-a", store.LaunchIntent{})
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Resumable old work"})
 	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-	d.store.Remove("sess-a")
+	d.closeSession("sess-a", store.SessionClose{By: store.SessionClosedByUser})
 	d.gardenNow = func() time.Time { return now }
 
 	capture, err := d.captureGardenReview()

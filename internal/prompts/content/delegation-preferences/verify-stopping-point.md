@@ -1,1 +1,0 @@
-Deliver the verification report and artifacts, with failures, coverage gaps, and environmental limits stated explicitly. Give the orchestrator enough evidence to judge completion without repeating the run.

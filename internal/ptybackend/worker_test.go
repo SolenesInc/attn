@@ -642,11 +642,11 @@ func TestWorkerBackend_PersistentControl_RetriesAfterConnectionDrops(t *testing.
 	if err := backend.Input(context.Background(), sessionID, []byte("x")); err != nil {
 		t.Fatalf("Input() error: %v", err)
 	}
-	changed, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0)
+	result, err := backend.Resize(context.Background(), sessionID, 120, 40, 0, 0)
 	if err != nil {
 		t.Fatalf("Resize() after dropped control connection error: %v", err)
 	}
-	if !changed {
+	if !result.Changed {
 		t.Fatal("a retried resize was suppressed even though the lost attempt may have applied")
 	}
 
@@ -1432,6 +1432,46 @@ func TestWorkerBackend_Spawn_CleansUpUnreadyWorkerProcess(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	t.Fatalf("worker pid %d still alive after spawn failure cleanup", pid)
+}
+
+func TestWorkerBackend_Spawn_ReturnsWhenWorkerExitsBeforeReady(t *testing.T) {
+	root := newWorkerBackendTestRoot(t)
+	scriptPath := filepath.Join(root, "exiting-worker.sh")
+	if err := os.WriteFile(scriptPath, []byte("#!/bin/sh\nexit 17\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	backend, err := NewWorker(WorkerBackendConfig{
+		DataRoot:         root,
+		DaemonInstanceID: "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		BinaryPath:       scriptPath,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- backend.Spawn(ctx, SpawnOptions{
+			ID:    "sess-exits-before-ready",
+			Agent: "codex",
+			CWD:   root,
+			Cols:  80,
+			Rows:  24,
+		})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "worker exited before ready") {
+			t.Fatalf("Spawn() error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		cancel()
+		<-done
+		t.Fatal("Spawn() waited for the readiness timeout after the worker exited")
+	}
 }
 
 func TestWorkerBackend_Spawn_PassesThemeFlagsOnlyWhenSet(t *testing.T) {

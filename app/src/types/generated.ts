@@ -1,6 +1,6 @@
 // To parse this data:
 //
-//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeCatalogModel, AutoModeConfigInfo, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeModelProvider, AutoModeModelSetMessage, AutoModeModelSetResultMessage, AutoModeModelsMessage, AutoModeModelsResultMessage, AutoModePatternAddMessage, AutoModePatternRemoveMessage, AutoModePatternResultMessage, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffMessage, CrewHandoffResult, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesGetMessage, DelegationPreferencesResultMessage, DelegationPreferencesSaveMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedSetResumeMessage, SeedSetResumeResult, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenRefreshedMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
+//   import { Convert, ActivityStatusMessage, ActivityStatusResult, ActivityStatusSession, AddEndpointMessage, AgentCloseMessage, AgentCloseResult, AgentCloseRule, AgentInboxBatchResult, AgentInboxItem, AgentInboxMessage, AgentMessageState, AgentMsgMessage, AgentMsgResult, AgentMsgStatus, AgentMsgStatusMessage, AgentPeekExit, AgentPeekMessage, AgentPeekResult, AgentPeekScreen, AgentPeerMessage, AppApplyMessage, AppApplyResult, AppCommandInfo, AppCommandMessage, AppCommandResultMessage, AppConsumerInfo, AppInvocationInfo, AppListMessage, AppListResult, AppLogsMessage, AppLogsResult, AppReconcileGapInfo, AppReconcileReasonInfo, AppReconcileStatus, AppRegistryEntry, AppRemoveMessage, AppRemoveResult, AppRollbackMessage, AppRollbackResult, AppRuntimeInfo, AppRuntimeRestartMessage, AppRuntimeRestartResult, AppRuntimeStatusMessage, AppRuntimeStatusResult, AppSetEnabledMessage, AppSetEnabledResult, AppStallInfo, AppStatusMessage, AppStatusResult, AppSummary, AppVersionInfo, AppViewCrashMessage, AppViewInfo, AppWatchMessage, AppWatchResult, ApprovePRMessage, AppsUpdatedMessage, AttachBlock, AttachPolicy, AttachResultMessage, AttachSessionMessage, AttachSnapshot, AuthorState, AuthorsUpdatedMessage, AutoModeConfigInfo, AutoModeConfigResult, AutoModeConfigResultMessage, AutoModeDenialInfo, AutoModeDenialsMessage, AutoModeDenialsResult, AutoModeDiscardMessage, AutoModeDiscardResultMessage, AutoModeEnvNotesMessage, AutoModeEnvResult, AutoModeEnvSetResultMessage, AutoModeEnvSlotMessage, AutoModeEnvironmentInfo, AutoModeEnvironmentSlot, AutoModeEnvironmentSlotValue, AutoModeGetMessage, AutoModeHostAddMessage, AutoModeHostRemoveMessage, AutoModeLegacyDismissMessage, AutoModeNetworkInfo, AutoModePolicySetMessage, AutoModePresetInfo, AutoModePromoteMessage, AutoModePromoteResultMessage, AutoModeProposalInfo, AutoModeProposeMessage, AutoModeProposeResult, AutoModeRuleAddMessage, AutoModeRuleInfo, AutoModeRuleRemoveMessage, AutoModeShowMessage, AutoModeShowResult, AutoModeStateChangedMessage, AutoModeStateResultMessage, AutomationApplyMessage, AutomationApplyResultMessage, AutomationCleanupMessage, AutomationCleanupResultMessage, AutomationDefinitionGetMessage, AutomationDefinitionResultMessage, AutomationDefinitionSummary, AutomationDefinitionsGetMessage, AutomationDefinitionsResultMessage, AutomationDeleteMessage, AutomationDeleteResultMessage, AutomationProvenance, AutomationRunMessage, AutomationRunResultMessage, AutomationRunSummary, AutomationRunsGetMessage, AutomationRunsResultMessage, AutomationSetEnabledMessage, AutomationSetEnabledResultMessage, AutomationValidateMessage, AutomationValidateResultMessage, AutomationsChangedMessage, BootstrapEndpointMessage, Branch, BranchChangedMessage, BranchesResultMessage, BrowseDirectoryMessage, BrowseDirectoryResultMessage, BrowserControlMessage, BrowserControlRequestMessage, BrowserControlResponseMessage, BrowserControlResultMessage, BuiltinDelegationRole, BusConsumerStatus, BusHealthEntry, BusProducerStatus, BusSetConsumerEnabledMessage, BusSetConsumerEnabledResultMessage, BusStatusGetMessage, BusStatusResultMessage, CancelCountdownMessage, ChiefOfStaffResultMessage, ClearSessionActivityMessage, ClearSessionsMessage, ClearWarningsMessage, ClientEvictionNoticeMessage, ClientHelloMessage, CollapseRepoMessage, CommandErrorMessage, CreateWorktreeFromBranchMessage, CreateWorktreeMessage, CreateWorktreeResultMessage, CrewCharterDocument, CrewCharterGetMessage, CrewCharterGetResult, CrewCharterGetResultMessage, CrewCharterSetMessage, CrewCharterSetResult, CrewCharterSetResultMessage, CrewDayClose, CrewHandoffDocument, CrewHandoffMessage, CrewHandoffResult, CrewHandoffsGetMessage, CrewHandoffsGetResult, CrewHandoffsGetResultMessage, CrewListMessage, CrewListResult, CrewMember, CrewPrimeMessage, CrewPrimeResult, CrewRestart, CrewRestartMessage, CrewRestartResult, CrewRestartResultMessage, CrewRestartState, CrewSetMessage, CrewSetResult, CrewSetResultMessage, CrewSleepMessage, CrewSleepResult, CrewSleepResultMessage, CrewUpdatedMessage, CrewWakeMessage, CrewWakeResult, CrewWakeResultMessage, DaemonWarning, DelegateAssignment, DelegateAssignmentKind, DelegateCheckout, DelegateCheckoutKind, DelegateHandover, DelegateMessage, DelegateResult, DelegateResultMessage, DelegateStatusMessage, DelegateWorktreeRequest, DelegationChoice, DelegationFailure, DelegationFallback, DelegationHarness, DelegationModel, DelegationModelsMessage, DelegationModelsResultMessage, DelegationOperation, DelegationOperationMessage, DelegationOperationState, DelegationPreferences, DelegationPreferencesChangedMessage, DelegationPreferencesGetMessage, DelegationPreferencesResultMessage, DelegationPreferencesSaveMessage, DelegationRole, DelegationRolesMessage, DelegationRolesResult, DelegationSelection, DeleteWorktreeMessage, DeleteWorktreeResultMessage, DetachSessionMessage, DirectoryEntry, DispatchWorkState, DocCollectionsMessage, DocCollectionsResult, DocCountMessage, DocCountResult, DocDefineMessage, DocDefineResult, DocDeleteMessage, DocDeleteResult, DocGetMessage, DocGetResult, DocPutMessage, DocPutResult, DocQueryMessage, DocQueryResult, DocSubscribeMessage, DocSubscribeResult, DocSubscriptionDeliveryMessage, DocSubscriptionEndedMessage, DocUndefineMessage, DocUndefineResult, DocUnsubscribeMessage, DocumentCollectionSchema, DocumentConflict, DocumentFieldSpec, DocumentFilter, DocumentQuery, DocumentRevision, DocumentSort, EndpointActionResultMessage, EndpointCapabilities, EndpointInfo, EndpointStatusChangedMessage, EndpointsUpdatedMessage, EnsureRepoMessage, EnsureRepoResultMessage, EvidenceExcerpt, FetchPRDetailsMessage, FetchPRDetailsResultMessage, FetchRemotesMessage, FetchRemotesResultMessage, FileActivity, FileDiffResultMessage, FilesEditedMessage, FSChangedMessage, FSDeleteMessage, FSDeleteResult, FSDeleteResultMessage, FSEntry, FSExistsMessage, FSExistsResult, FSExistsResultMessage, FSIndexMessage, FSIndexResultMessage, FSListMessage, FSListResultMessage, FSReadAssetMessage, FSReadAssetResult, FSReadAssetResultMessage, FSReadMessage, FSReadResult, FSReadResultMessage, FSRenameMessage, FSRenameResult, FSRenameResultMessage, FSUnwatchMessage, FSUnwatchResultMessage, FSWatchMessage, FSWatchResultMessage, FSWriteMessage, FSWriteResult, FSWriteResultMessage, GardenReview, GardenReviewEvidence, GardenReviewItem, GardenReviewRecipe, GardenReviewRun, GardenReviewUpdatedMessage, GardenSeedsUpdatedMessage, GetDefaultBranchMessage, GetDefaultBranchResultMessage, GetFileDiffMessage, GetKittyImageMessage, GetPresentationRoundMessage, GetPresentationRoundResultMessage, GetPresentationsMessage, GetPresentationsResultMessage, GetRecentLocationsMessage, GetRepoInfoMessage, GetRepoInfoResultMessage, GetScreenSnapshotMessage, GetScreenSnapshotResultMessage, GetSettingsMessage, GitFileChange, GitHubHostsUpdatedMessage, GitOperation, GitOperationFinishedMessage, GitOperationKind, GitOperationStartedMessage, GitOperationStatus, GitStatusUpdateMessage, GuardianSelection, HeartbeatMessage, HeatState, HookCompactionMessage, HookNotificationMessage, HookStopFailureMessage, InitialStateMessage, InjectTestPRMessage, InjectTestSessionMessage, InspectPathMessage, InspectPathResultMessage, InstallBundledPluginMessage, InstallPluginMessage, JournalAppendMessage, JournalAppendResult, KillSessionMessage, KittyImageResultMessage, KittyPlacement, KittyPlacementsMessage, ListBranchesMessage, ListEndpointsMessage, ListPluginsMessage, ListRemoteBranchesMessage, ListRemoteBranchesResultMessage, ListWorktreesMessage, MarkdownAnnotation, MarkdownAnnotationAnchor, MarkdownAnnotationsClearMessage, MarkdownAnnotationsClearResultMessage, MarkdownAnnotationsGetMessage, MarkdownAnnotationsGetResultMessage, MarkdownAnnotationsSaveMessage, MarkdownAnnotationsSaveResultMessage, MarkdownAnnotationsSubmitMessage, MarkdownAnnotationsSubmitResultMessage, MergePRMessage, ModelCapabilitySupport, MuteAuthorMessage, MutePRMessage, MuteRepoMessage, MuteWorkspaceMessage, NotebookBacklinksMessage, NotebookBacklinksResultMessage, NotebookChangedMessage, NotebookEntry, NotebookGuideMessage, NotebookGuideResult, NotebookListMessage, NotebookListResultMessage, NotebookReadMessage, NotebookReadResult, NotebookReadResultMessage, NotebookSendToChiefMessage, NotebookSendToChiefResult, NotebookSendToChiefResultMessage, NotebookWriteMessage, NotebookWriteResult, NotebookWriteResultMessage, Notification, NotificationAction, NotificationListMessage, NotificationListResultMessage, NotificationMarkReadMessage, NotificationMarkReadResultMessage, NotificationSeverity, NotificationsUpdatedMessage, OpenBrowserMessage, OpenMarkdownMessage, OpenMarkdownResultMessage, OpenSeedMessage, OpenSeedResultMessage, OpenSentFilesMessage, PR, PRActionResultMessage, PRRole, PRVisitedMessage, PRsUpdatedMessage, PathInspection, PinSessionMessage, PinWorkspaceMessage, PluginActionResultMessage, PluginInfo, PluginIssue, PluginsUpdatedMessage, PresentAnnotation, PresentCloseMessage, PresentCloseResultMessage, PresentCommentInput, PresentFeedbackMessage, PresentFeedbackResult, PresentFile, PresentManifestView, PresentOpenMessage, PresentOpenResult, PresentSubmitRoundMessage, PresentSubmitRoundResultMessage, Presentation, PresentationAddedMessage, PresentationComment, PresentationRound, PresentationUpdatedMessage, PtyDesyncMessage, PtyInputMessage, PtyInputProbeResultMessage, PtyOutputMessage, PtyResizeMessage, PtyResizedMessage, PullRequestCreatedMessage, PullRequestForgetMessage, PullRequestProvenance, QueryAuthorsMessage, QueryMessage, QueryPRsMessage, QueryReposMessage, RateLimitedMessage, RecentFilesMessage, RecentFilesResultMessage, RecentLocation, RecentLocationsResultMessage, RefreshPRsMessage, RefreshPRsResultMessage, RegisterMessage, RegisterWorkspaceMessage, ReloadSessionMessage, ReloadSessionResultMessage, RemoveEndpointMessage, RemovePluginMessage, RenameResultMessage, RenameSessionMessage, RenameWorkspaceMessage, RepoInfo, RepoState, ReposUpdatedMessage, Response, ReviewComment, RuntimeRespawnedMessage, Seed, SeedArtifact, SeedArtifactReference, SeedArtifactTargetMessage, SeedArtifactTargetResult, SeedArtifactTargetResultMessage, SeedArtifactTransferMessage, SeedArtifactTransferResult, SeedArtifactTransferResultMessage, SeedContinuation, SeedDocument, SeedDocumentGetMessage, SeedDocumentGetResultMessage, SeedEdge, SeedEditMessage, SeedEditResult, SeedHandoverRequest, SeedHarvestCondition, SeedHarvestWhenMerged, SeedLinkMessage, SeedLinkResult, SeedListMessage, SeedListResult, SeedNote, SeedNoteMessage, SeedNoteResult, SeedNoteResultMessage, SeedNotesMessage, SeedNotesResult, SeedPlantMessage, SeedPlantResult, SeedPlotChild, SeedPlotMessage, SeedPlotProgress, SeedPlotResult, SeedReadyMessage, SeedReadyResult, SeedRelation, SeedResumeMessage, SeedResumeResultMessage, SeedReviewActionContext, SeedReviewCancelMessage, SeedReviewDraftMessage, SeedReviewDraftResultMessage, SeedReviewKeepMessage, SeedReviewResult, SeedReviewResultMessage, SeedReviewRetryMessage, SeedReviewShowMessage, SeedReviewStartMessage, SeedSearchHit, SeedSearchMessage, SeedSearchResult, SeedSendToChiefMessage, SeedSendToChiefResult, SeedSendToChiefResultMessage, SeedShowMessage, SeedShowResult, SeedTransitionMessage, SeedTransitionResult, SeedTransitionResultMessage, SeedVar, SeedWatchMessage, SeedWatchResult, Session, SessionAnnotation, SessionAnnotationsClearMessage, SessionAnnotationsClearResultMessage, SessionAnnotationsGetMessage, SessionAnnotationsGetResultMessage, SessionAnnotationsSaveMessage, SessionAnnotationsSaveResultMessage, SessionAnnotationsSubmitMessage, SessionAnnotationsSubmitResultMessage, SessionCloseResultMessage, SessionClosedMessage, SessionContextWindowCapResultMessage, SessionDelegationRole, SessionExitedMessage, SessionInstructionsMessage, SessionInstructionsResult, SessionLedgerEntry, SessionLedgerFacet, SessionLedgerFacets, SessionListMessage, SessionListResult, SessionListResultMessage, SessionMessage, SessionMessageWindowStatus, SessionMessagesChangedMessage, SessionMessagesGetMessage, SessionMessagesGetResultMessage, SessionPullRequest, SessionRegisteredMessage, SessionReopen, SessionReopenAction, SessionReopenEntry, SessionReopenMessage, SessionReopenRefreshedMessage, SessionReopenResult, SessionReopenResultMessage, SessionSelectedMessage, SessionShowMessage, SessionShowResult, SessionShowResultMessage, SessionState, SessionStateChangedMessage, SessionTodosUpdatedMessage, SessionTranscriptEvent, SessionTranscriptMessage, SessionTranscriptResult, SessionUnregisteredMessage, SessionUsage, SessionUsageModel, SessionsUpdatedMessage, SetChiefOfStaffMessage, SetClientPresenceMessage, SetEndpointRemoteWebMessage, SetPluginPriorityMessage, SetSessionContextWindowCapMessage, SetSessionResumeIDMessage, SetSettingMessage, SetTerminalThemeMessage, SetTicketStatusMessage, SetWorkspaceRankMessage, SettingsUpdatedMessage, SettleTurnMessage, SnoozeTurnMessage, SpawnResultMessage, SpawnSessionMessage, StateExplainEntry, StateExplainMessage, StateExplainResult, StateMessage, StopBackgroundTask, StopMessage, StoredDocument, SubscribeGitStatusMessage, SupportInputTrace, SupportRuntimeEvidence, SupportSnapshotMessage, SupportSnapshotResultMessage, Task, TaskListMessage, TaskListResultMessage, TaskRetryMessage, TaskRetryResultMessage, TasksChangedMessage, TerminalPointerActivityMessage, Ticket, TicketActivity, TicketActivityKind, TicketArtifact, TicketAttachFile, TicketAttachMessage, TicketAttachResult, TicketAttachResultMessage, TicketCommentMessage, TicketCommentResult, TicketCreateMessage, TicketCreateResult, TicketEvent, TicketEventBundle, TicketEventKind, TicketInboxMessage, TicketInboxMode, TicketInboxResult, TicketListMessage, TicketListResult, TicketShowMessage, TicketShowResult, TicketStatus, TicketStatusResult, TicketSubscribeMessage, TicketSubscribeResult, TicketTakeMessage, TicketTakeResult, TicketUnsubscribeMessage, TicketUnsubscribeResult, TodosMessage, TriggerNudgeMessage, UninstallPluginMessage, UnregisterMessage, UnregisterWorkspaceMessage, UnsubscribeGitStatusMessage, UpdateEndpointMessage, WakeTurnMessage, WebSocketEvent, WorkflowActionResultMessage, WorkflowAgentCall, WorkflowAgentCallStatus, WorkflowCallUpsertMessage, WorkflowRun, WorkflowRunCancelMessage, WorkflowRunGetMessage, WorkflowRunListMessage, WorkflowRunStatus, WorkflowRunUpdatedMessage, WorkflowRunUpsertMessage, Workspace, WorkspaceLayout, WorkspaceLayoutActionResultMessage, WorkspaceLayoutAddSessionPaneMessage, WorkspaceLayoutClosePaneMessage, WorkspaceLayoutDockEdge, WorkspaceLayoutDockTileMessage, WorkspaceLayoutFocusPaneMessage, WorkspaceLayoutGetMessage, WorkspaceLayoutMessage, WorkspaceLayoutMoveLeafMessage, WorkspaceLayoutMoveLeafToNewWorkspaceMessage, WorkspaceLayoutMoveLeafToWorkspaceMessage, WorkspaceLayoutPane, WorkspaceLayoutPaneKind, WorkspaceLayoutPaneStatus, WorkspaceLayoutRenamePaneMessage, WorkspaceLayoutSetSplitRatioMessage, WorkspaceLayoutSplitDirection, WorkspaceLayoutUndockTileMessage, WorkspaceLayoutUpdateTileMessage, WorkspaceLayoutUpdatedMessage, WorkspaceRegisteredMessage, WorkspaceSelectedMessage, WorkspaceStateChangedMessage, WorkspaceStatus, WorkspaceTileContentGetMessage, WorkspaceTileContentMessage, WorkspaceUnregisteredMessage, Worktree, WorktreeCreatedEvent, WorktreeDeletedEvent, WorktreeKeepMessage, WorktreeKeepResult, WorktreeKeepResultEvent, WorktreeListMessage, WorktreeListResult, WorktreeListResultEvent, WorktreeRefreshMessage, WorktreeRefreshResult, WorktreeRefreshResultEvent, WorktreeRepository, WorktreeStateChangedEvent, WorktreeSweepEntry, WorktreeSweepLogMessage, WorktreeSweepLogResult, WorktreeSweepLogResultEvent, WorktreeSweptEvent, WorktreesUpdatedMessage } from "./generated";
 //
 //   const activityStatusMessage = Convert.toActivityStatusMessage(json);
 //   const activityStatusResult = Convert.toActivityStatusResult(json);
@@ -66,8 +66,9 @@
 //   const attachSnapshot = Convert.toAttachSnapshot(json);
 //   const authorState = Convert.toAuthorState(json);
 //   const authorsUpdatedMessage = Convert.toAuthorsUpdatedMessage(json);
-//   const autoModeCatalogModel = Convert.toAutoModeCatalogModel(json);
 //   const autoModeConfigInfo = Convert.toAutoModeConfigInfo(json);
+//   const autoModeConfigResult = Convert.toAutoModeConfigResult(json);
+//   const autoModeConfigResultMessage = Convert.toAutoModeConfigResultMessage(json);
 //   const autoModeDenialInfo = Convert.toAutoModeDenialInfo(json);
 //   const autoModeDenialsMessage = Convert.toAutoModeDenialsMessage(json);
 //   const autoModeDenialsResult = Convert.toAutoModeDenialsResult(json);
@@ -81,19 +82,20 @@
 //   const autoModeEnvironmentSlot = Convert.toAutoModeEnvironmentSlot(json);
 //   const autoModeEnvironmentSlotValue = Convert.toAutoModeEnvironmentSlotValue(json);
 //   const autoModeGetMessage = Convert.toAutoModeGetMessage(json);
-//   const autoModeModelProvider = Convert.toAutoModeModelProvider(json);
-//   const autoModeModelSetMessage = Convert.toAutoModeModelSetMessage(json);
-//   const autoModeModelSetResultMessage = Convert.toAutoModeModelSetResultMessage(json);
-//   const autoModeModelsMessage = Convert.toAutoModeModelsMessage(json);
-//   const autoModeModelsResultMessage = Convert.toAutoModeModelsResultMessage(json);
-//   const autoModePatternAddMessage = Convert.toAutoModePatternAddMessage(json);
-//   const autoModePatternRemoveMessage = Convert.toAutoModePatternRemoveMessage(json);
-//   const autoModePatternResultMessage = Convert.toAutoModePatternResultMessage(json);
+//   const autoModeHostAddMessage = Convert.toAutoModeHostAddMessage(json);
+//   const autoModeHostRemoveMessage = Convert.toAutoModeHostRemoveMessage(json);
+//   const autoModeLegacyDismissMessage = Convert.toAutoModeLegacyDismissMessage(json);
+//   const autoModeNetworkInfo = Convert.toAutoModeNetworkInfo(json);
+//   const autoModePolicySetMessage = Convert.toAutoModePolicySetMessage(json);
+//   const autoModePresetInfo = Convert.toAutoModePresetInfo(json);
 //   const autoModePromoteMessage = Convert.toAutoModePromoteMessage(json);
 //   const autoModePromoteResultMessage = Convert.toAutoModePromoteResultMessage(json);
 //   const autoModeProposalInfo = Convert.toAutoModeProposalInfo(json);
 //   const autoModeProposeMessage = Convert.toAutoModeProposeMessage(json);
 //   const autoModeProposeResult = Convert.toAutoModeProposeResult(json);
+//   const autoModeRuleAddMessage = Convert.toAutoModeRuleAddMessage(json);
+//   const autoModeRuleInfo = Convert.toAutoModeRuleInfo(json);
+//   const autoModeRuleRemoveMessage = Convert.toAutoModeRuleRemoveMessage(json);
 //   const autoModeShowMessage = Convert.toAutoModeShowMessage(json);
 //   const autoModeShowResult = Convert.toAutoModeShowResult(json);
 //   const autoModeStateChangedMessage = Convert.toAutoModeStateChangedMessage(json);
@@ -130,6 +132,7 @@
 //   const browserControlRequestMessage = Convert.toBrowserControlRequestMessage(json);
 //   const browserControlResponseMessage = Convert.toBrowserControlResponseMessage(json);
 //   const browserControlResultMessage = Convert.toBrowserControlResultMessage(json);
+//   const builtinDelegationRole = Convert.toBuiltinDelegationRole(json);
 //   const busConsumerStatus = Convert.toBusConsumerStatus(json);
 //   const busHealthEntry = Convert.toBusHealthEntry(json);
 //   const busProducerStatus = Convert.toBusProducerStatus(json);
@@ -184,12 +187,18 @@
 //   const crewWakeResult = Convert.toCrewWakeResult(json);
 //   const crewWakeResultMessage = Convert.toCrewWakeResultMessage(json);
 //   const daemonWarning = Convert.toDaemonWarning(json);
+//   const delegateAssignment = Convert.toDelegateAssignment(json);
+//   const delegateAssignmentKind = Convert.toDelegateAssignmentKind(json);
+//   const delegateCheckout = Convert.toDelegateCheckout(json);
+//   const delegateCheckoutKind = Convert.toDelegateCheckoutKind(json);
+//   const delegateHandover = Convert.toDelegateHandover(json);
 //   const delegateMessage = Convert.toDelegateMessage(json);
 //   const delegateResult = Convert.toDelegateResult(json);
 //   const delegateResultMessage = Convert.toDelegateResultMessage(json);
 //   const delegateStatusMessage = Convert.toDelegateStatusMessage(json);
 //   const delegateWorktreeRequest = Convert.toDelegateWorktreeRequest(json);
 //   const delegationChoice = Convert.toDelegationChoice(json);
+//   const delegationFailure = Convert.toDelegationFailure(json);
 //   const delegationFallback = Convert.toDelegationFallback(json);
 //   const delegationHarness = Convert.toDelegationHarness(json);
 //   const delegationModel = Convert.toDelegationModel(json);
@@ -312,6 +321,7 @@
 //   const gitOperationStartedMessage = Convert.toGitOperationStartedMessage(json);
 //   const gitOperationStatus = Convert.toGitOperationStatus(json);
 //   const gitStatusUpdateMessage = Convert.toGitStatusUpdateMessage(json);
+//   const guardianSelection = Convert.toGuardianSelection(json);
 //   const heartbeatMessage = Convert.toHeartbeatMessage(json);
 //   const heatState = Convert.toHeatState(json);
 //   const hookCompactionMessage = Convert.toHookCompactionMessage(json);
@@ -370,6 +380,7 @@
 //   const notebookWriteResult = Convert.toNotebookWriteResult(json);
 //   const notebookWriteResultMessage = Convert.toNotebookWriteResultMessage(json);
 //   const notification = Convert.toNotification(json);
+//   const notificationAction = Convert.toNotificationAction(json);
 //   const notificationListMessage = Convert.toNotificationListMessage(json);
 //   const notificationListResultMessage = Convert.toNotificationListResultMessage(json);
 //   const notificationMarkReadMessage = Convert.toNotificationMarkReadMessage(json);
@@ -502,8 +513,6 @@
 //   const seedSendToChiefMessage = Convert.toSeedSendToChiefMessage(json);
 //   const seedSendToChiefResult = Convert.toSeedSendToChiefResult(json);
 //   const seedSendToChiefResultMessage = Convert.toSeedSendToChiefResultMessage(json);
-//   const seedSetResumeMessage = Convert.toSeedSetResumeMessage(json);
-//   const seedSetResumeResult = Convert.toSeedSetResumeResult(json);
 //   const seedShowMessage = Convert.toSeedShowMessage(json);
 //   const seedShowResult = Convert.toSeedShowResult(json);
 //   const seedTransitionMessage = Convert.toSeedTransitionMessage(json);
@@ -525,6 +534,7 @@
 //   const sessionCloseResultMessage = Convert.toSessionCloseResultMessage(json);
 //   const sessionClosedMessage = Convert.toSessionClosedMessage(json);
 //   const sessionContextWindowCapResultMessage = Convert.toSessionContextWindowCapResultMessage(json);
+//   const sessionDelegationRole = Convert.toSessionDelegationRole(json);
 //   const sessionExitedMessage = Convert.toSessionExitedMessage(json);
 //   const sessionInstructionsMessage = Convert.toSessionInstructionsMessage(json);
 //   const sessionInstructionsResult = Convert.toSessionInstructionsResult(json);
@@ -1557,20 +1567,18 @@ export enum AuthorsUpdatedMessageEvent {
     AuthorsUpdated = "authors_updated",
 }
 
-export interface AutoModeCatalogModel {
-    context_window?: number;
-    id:              string;
-    name?:           string;
-    [property: string]: any;
-}
-
 export interface AutoModeConfigInfo {
-    allow:             string[];
-    enabled_default:   boolean;
-    environment:       Environment;
-    hard_deny:         string[];
-    models:            string[];
-    shipped_hard_deny: string[];
+    approval_policy:        string;
+    enabled_default:        boolean;
+    environment:            Environment;
+    guardian?:              Guardian;
+    legacy_patterns:        string[];
+    network:                Network;
+    presets:                PresetElement[];
+    rules:                  RuleElement[];
+    sandbox_mode:           string;
+    shipped_denied_domains: string[];
+    shipped_rules:          RuleElement[];
     [property: string]: any;
 }
 
@@ -1584,6 +1592,73 @@ export interface SlotElement {
     id:     string;
     values: string[];
     [property: string]: any;
+}
+
+export interface Guardian {
+    effort?:   string;
+    model?:    string;
+    provider?: string;
+    [property: string]: any;
+}
+
+export interface Network {
+    allow_local_binding: boolean;
+    allowed_domains:     string[];
+    denied_domains:      string[];
+    enabled:             boolean;
+    [property: string]: any;
+}
+
+export interface PresetElement {
+    approval_policy: string;
+    description:     string;
+    id:              string;
+    label:           string;
+    sandbox_mode:    string;
+    [property: string]: any;
+}
+
+export interface RuleElement {
+    decision:      string;
+    justification: string;
+    match:         Array<string[]>;
+    not_match:     Array<string[]>;
+    pattern:       Array<string[]>;
+    sandbox:       string;
+    [property: string]: any;
+}
+
+export interface AutoModeConfigResult {
+    config: Config;
+    [property: string]: any;
+}
+
+export interface Config {
+    approval_policy:        string;
+    enabled_default:        boolean;
+    environment:            Environment;
+    guardian?:              Guardian;
+    legacy_patterns:        string[];
+    network:                Network;
+    presets:                PresetElement[];
+    rules:                  RuleElement[];
+    sandbox_mode:           string;
+    shipped_denied_domains: string[];
+    shipped_rules:          RuleElement[];
+    [property: string]: any;
+}
+
+export interface AutoModeConfigResultMessage {
+    config?:    Config;
+    error?:     string;
+    event:      AutoModeConfigResultMessageEvent;
+    request_id: string;
+    success:    boolean;
+    [property: string]: any;
+}
+
+export enum AutoModeConfigResultMessageEvent {
+    AutomodeConfigResult = "automode_config_result",
 }
 
 export interface AutoModeDenialInfo {
@@ -1655,6 +1730,7 @@ export interface Proposal {
     proposed_by: string;
     resolved_at: string;
     state:       string;
+    summary:     string;
     target:      string;
     value:       string;
     [property: string]: any;
@@ -1682,16 +1758,6 @@ export interface AutoModeEnvSetResultMessage {
     event:      AutoModeEnvSetResultMessageEvent;
     request_id: string;
     success:    boolean;
-    [property: string]: any;
-}
-
-export interface Config {
-    allow:             string[];
-    enabled_default:   boolean;
-    environment:       Environment;
-    hard_deny:         string[];
-    models:            string[];
-    shipped_hard_deny: string[];
     [property: string]: any;
 }
 
@@ -1745,114 +1811,70 @@ export enum AutoModeGetMessageCmd {
     AutomodeGet = "automode_get",
 }
 
-export interface AutoModeModelProvider {
-    checked_at?: number;
-    detail?:     string;
-    models:      ModelElement[];
-    provider:    string;
-    ready:       boolean;
+export interface AutoModeHostAddMessage {
+    cmd:        AutoModeHostAddMessageCmd;
+    decision:   string;
+    host:       string;
+    request_id: string;
     [property: string]: any;
 }
 
-export interface ModelElement {
-    context_window?: number;
+export enum AutoModeHostAddMessageCmd {
+    AutomodeHostAdd = "automode_host_add",
+}
+
+export interface AutoModeHostRemoveMessage {
+    cmd:         AutoModeHostRemoveMessageCmd;
+    decision:    string;
+    host:        string;
+    request_id?: string;
+    [property: string]: any;
+}
+
+export enum AutoModeHostRemoveMessageCmd {
+    AutomodeHostRemove = "automode_host_remove",
+}
+
+export interface AutoModeLegacyDismissMessage {
+    cmd:         AutoModeLegacyDismissMessageCmd;
+    pattern:     string;
+    request_id?: string;
+    [property: string]: any;
+}
+
+export enum AutoModeLegacyDismissMessageCmd {
+    AutomodeLegacyDismiss = "automode_legacy_dismiss",
+}
+
+export interface AutoModeNetworkInfo {
+    allow_local_binding: boolean;
+    allowed_domains:     string[];
+    denied_domains:      string[];
+    enabled:             boolean;
+    [property: string]: any;
+}
+
+export interface AutoModePolicySetMessage {
+    allow_local_binding?: boolean;
+    approval_policy?:     string;
+    cmd:                  AutoModePolicySetMessageCmd;
+    guardian?:            Guardian;
+    request_id?:          string;
+    sandbox_mode?:        string;
+    [property: string]: any;
+}
+
+export enum AutoModePolicySetMessageCmd {
+    AutomodePolicySet = "automode_policy_set",
+}
+
+export interface AutoModePresetInfo {
+    approval_policy: string;
+    description:     string;
     id:              string;
-    name?:           string;
+    label:           string;
+    sandbox_mode:    string;
     [property: string]: any;
-}
-
-export interface AutoModeModelSetMessage {
-    cmd:        AutoModeModelSetMessageCmd;
-    models:     string[];
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModeModelSetMessageCmd {
-    AutomodeModelSet = "automode_model_set",
-}
-
-export interface AutoModeModelSetResultMessage {
-    config?:    Config;
-    error?:     string;
-    event:      AutoModeModelSetResultMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum AutoModeModelSetResultMessageEvent {
-    AutomodeModelSetResult = "automode_model_set_result",
-}
-
-export interface AutoModeModelsMessage {
-    cmd:        AutoModeModelsMessageCmd;
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModeModelsMessageCmd {
-    AutomodeModels = "automode_models",
-}
-
-export interface AutoModeModelsResultMessage {
-    error?:     string;
-    event:      AutoModeModelsResultMessageEvent;
-    problem?:   string;
-    providers?: ProviderElement[];
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum AutoModeModelsResultMessageEvent {
-    AutomodeModelsResult = "automode_models_result",
-}
-
-export interface ProviderElement {
-    checked_at?: number;
-    detail?:     string;
-    models:      ModelElement[];
-    provider:    string;
-    ready:       boolean;
-    [property: string]: any;
-}
-
-export interface AutoModePatternAddMessage {
-    cmd:        AutoModePatternAddMessageCmd;
-    list:       string;
-    pattern:    string;
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModePatternAddMessageCmd {
-    AutomodePatternAdd = "automode_pattern_add",
-}
-
-export interface AutoModePatternRemoveMessage {
-    cmd:        AutoModePatternRemoveMessageCmd;
-    list:       string;
-    pattern:    string;
-    request_id: string;
-    [property: string]: any;
-}
-
-export enum AutoModePatternRemoveMessageCmd {
-    AutomodePatternRemove = "automode_pattern_remove",
-}
-
-export interface AutoModePatternResultMessage {
-    config?:    Config;
-    error?:     string;
-    event:      AutoModePatternResultMessageEvent;
-    request_id: string;
-    success:    boolean;
-    [property: string]: any;
-}
-
-export enum AutoModePatternResultMessageEvent {
-    AutomodePatternResult = "automode_pattern_result",
 }
 
 export interface AutoModePromoteMessage {
@@ -1887,6 +1909,7 @@ export interface AutoModeProposalInfo {
     proposed_by: string;
     resolved_at: string;
     state:       string;
+    summary:     string;
     target:      string;
     value:       string;
     [property: string]: any;
@@ -1910,8 +1933,44 @@ export interface AutoModeProposeResult {
     [property: string]: any;
 }
 
+export interface AutoModeRuleAddMessage {
+    cmd:            AutoModeRuleAddMessageCmd;
+    decision?:      string;
+    justification?: string;
+    pattern:        string[];
+    request_id:     string;
+    sandbox?:       string;
+    [property: string]: any;
+}
+
+export enum AutoModeRuleAddMessageCmd {
+    AutomodeRuleAdd = "automode_rule_add",
+}
+
+export interface AutoModeRuleInfo {
+    decision:      string;
+    justification: string;
+    match:         Array<string[]>;
+    not_match:     Array<string[]>;
+    pattern:       Array<string[]>;
+    sandbox:       string;
+    [property: string]: any;
+}
+
+export interface AutoModeRuleRemoveMessage {
+    cmd:         AutoModeRuleRemoveMessageCmd;
+    pattern:     Array<string[]>;
+    request_id?: string;
+    [property: string]: any;
+}
+
+export enum AutoModeRuleRemoveMessageCmd {
+    AutomodeRuleRemove = "automode_rule_remove",
+}
+
 export interface AutoModeShowMessage {
-    cmd: AutoModeShowMessageCmd;
+    cmd:  AutoModeShowMessageCmd;
+    cwd?: string;
     [property: string]: any;
 }
 
@@ -1920,8 +1979,11 @@ export enum AutoModeShowMessageCmd {
 }
 
 export interface AutoModeShowResult {
-    config:    Config;
-    proposals: Proposal[];
+    config:                 Config;
+    global_rules:           RuleElement[];
+    proposals:              Proposal[];
+    repository_rules:       RuleElement[];
+    repository_rules_path?: string;
     [property: string]: any;
 }
 
@@ -2013,9 +2075,9 @@ export interface LastRun {
     last_error?:     string;
     occurrence_key?: string;
     pane_id?:        string;
+    seed_id?:        string;
     session_id?:     string;
     state:           string;
-    ticket_id?:      string;
     updated_at:      string;
     [property: string]: any;
 }
@@ -2198,9 +2260,9 @@ export interface AutomationRunSummary {
     last_error?:     string;
     occurrence_key?: string;
     pane_id?:        string;
+    seed_id?:        string;
     session_id?:     string;
     state:           string;
-    ticket_id?:      string;
     updated_at:      string;
     [property: string]: any;
 }
@@ -2330,6 +2392,7 @@ export interface SessionObject {
     context_window_cap?:        number;
     crew_member?:               string;
     delegated_from_chief?:      boolean;
+    delegation_role?:           DelegationRoleObject;
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
@@ -2362,6 +2425,20 @@ export interface SessionObject {
     [property: string]: any;
 }
 
+export interface DelegationRoleObject {
+    builtin?: BuiltinDelegationRole;
+    icon?:    string;
+    name:     string;
+    [property: string]: any;
+}
+
+export enum BuiltinDelegationRole {
+    Builder = "builder",
+    Orchestrator = "orchestrator",
+    Pathfinder = "pathfinder",
+    Reviewer = "reviewer",
+}
+
 export interface PullRequestElement {
     ci_status?:         string;
     created_at:         string;
@@ -2391,12 +2468,12 @@ export interface Usage {
     cost_usd?:               number;
     has_unpriced_usage:      boolean;
     measurement_incomplete?: boolean;
-    models:                  ModelObject[];
+    models:                  ModelElement[];
     total_tokens:            number;
     [property: string]: any;
 }
 
-export interface ModelObject {
+export interface ModelElement {
     cache_read_tokens:               number;
     cache_write_1h_tokens:           number;
     cache_write_5m_tokens:           number;
@@ -2406,6 +2483,7 @@ export interface ModelObject {
     input_tokens:                    number;
     model:                           string;
     output_tokens:                   number;
+    purpose:                         string;
     total_tokens:                    number;
     unpriced_reason?:                string;
     [property: string]: any;
@@ -3220,30 +3298,77 @@ export interface DaemonWarning {
     [property: string]: any;
 }
 
+export interface DelegateAssignment {
+    brief?:    string;
+    handover?: Handover;
+    kind:      DelegateAssignmentKind;
+    seed_id?:  string;
+    [property: string]: any;
+}
+
+export interface Handover {
+    note?: string;
+    [property: string]: any;
+}
+
+export enum DelegateAssignmentKind {
+    New = "new",
+    Seed = "seed",
+}
+
+export interface DelegateCheckout {
+    branch: string;
+    from?:  string;
+    kind:   DelegateCheckoutKind;
+    path?:  string;
+    [property: string]: any;
+}
+
+export enum DelegateCheckoutKind {
+    ExistingBranchWorktree = "existing_branch_worktree",
+    NewWorktree = "new_worktree",
+    Reuse = "reuse",
+}
+
+export interface DelegateHandover {
+    note?: string;
+    [property: string]: any;
+}
+
 export interface DelegateMessage {
     agent?:                string;
     allow_worktree_reuse?: boolean;
-    brief:                 string;
+    assignment:            Assignment;
+    checkout?:             Checkout;
     choice?:               string;
     cmd:                   DelegateMessageCmd;
-    confirm?:              boolean;
-    cwd?:                  string;
+    cwd:                   string;
     effort?:               string;
     fallback?:             boolean;
-    handover?:             Handover;
     label?:                string;
     model?:                string;
-    placement?:            string;
-    plot?:                 string;
-    preferences_revision?: number;
     provider?:             string;
     request_id:            string;
+    review?:               DelegateMessageReview;
     role?:                 string;
-    source_session_id:     string;
-    ticket_id?:            string;
-    workspace_id?:         string;
-    worktree?:             DelegateMessageWorktree;
+    source_session_id?:    string;
     yolo_mode?:            boolean;
+    [property: string]: any;
+}
+
+export interface Assignment {
+    brief?:    string;
+    handover?: Handover;
+    kind:      DelegateAssignmentKind;
+    seed_id?:  string;
+    [property: string]: any;
+}
+
+export interface Checkout {
+    branch: string;
+    from?:  string;
+    kind:   DelegateCheckoutKind;
+    path?:  string;
     [property: string]: any;
 }
 
@@ -3251,39 +3376,26 @@ export enum DelegateMessageCmd {
     Delegate = "delegate",
 }
 
-export interface Handover {
-    expected_rev:            number;
-    expected_tender_member:  string;
-    expected_tender_session: string;
-    handoff?:                string;
-    review?:                 HandoverReview;
-    seed_id:                 string;
-    [property: string]: any;
-}
-
-export interface HandoverReview {
+export interface DelegateMessageReview {
     evidence_version: string;
     review_id:        string;
     [property: string]: any;
 }
 
-export interface DelegateMessageWorktree {
-    branch:           string;
-    existing_branch?: boolean;
-    path?:            string;
-    repo?:            string;
-    starting_from?:   string;
-    [property: string]: any;
-}
-
 export interface DelegateResult {
+    agent:                   string;
     branch?:                 string;
+    checkout:                string;
     directory:               string;
+    effort:                  string;
     first_turn_at?:          string;
     first_turn_unconfirmed?: string;
-    placement:               string;
+    model:                   string;
+    predecessor_session_id?: string;
+    role?:                   string;
+    seed_id:                 string;
     session_id:              string;
-    workspace_id:            string;
+    workspace_id?:           string;
     worktree_created?:       boolean;
     [property: string]: any;
 }
@@ -3302,13 +3414,19 @@ export enum DelegateResultMessageEvent {
 }
 
 export interface DelegateResultObject {
+    agent:                   string;
     branch?:                 string;
+    checkout:                string;
     directory:               string;
+    effort:                  string;
     first_turn_at?:          string;
     first_turn_unconfirmed?: string;
-    placement:               string;
+    model:                   string;
+    predecessor_session_id?: string;
+    role?:                   string;
+    seed_id:                 string;
     session_id:              string;
-    workspace_id:            string;
+    workspace_id?:           string;
     worktree_created?:       boolean;
     [property: string]: any;
 }
@@ -3345,6 +3463,12 @@ export interface Selection {
     harness:  string;
     model:    string;
     provider: string;
+    [property: string]: any;
+}
+
+export interface DelegationFailure {
+    code:    string;
+    message: string;
     [property: string]: any;
 }
 
@@ -3398,7 +3522,7 @@ export interface DelegationModelsResultMessage {
     detail:     string;
     error?:     string;
     event:      DelegationModelsResultMessageEvent;
-    models:     DelegationModelsResultMessageModel[];
+    models:     ModelObject[];
     request_id: string;
     success:    boolean;
     [property: string]: any;
@@ -3408,7 +3532,7 @@ export enum DelegationModelsResultMessageEvent {
     DelegationModelsResult = "delegation_models_result",
 }
 
-export interface DelegationModelsResultMessageModel {
+export interface ModelObject {
     access:         ModelCapabilitySupport;
     description:    string;
     detail:         string;
@@ -3422,18 +3546,28 @@ export interface DelegationModelsResultMessageModel {
 }
 
 export interface DelegationOperation {
+    branch?:        string;
     created_at:     string;
+    directory?:     string;
     error?:         string;
+    failure?:       Failure;
     operation_id:   string;
     progress:       string;
     request_id:     string;
     result?:        DelegateResultObject;
+    seed_id?:       string;
     session_id:     string;
     state:          DelegationOperationState;
     ticket_id?:     string;
     updated_at:     string;
     workspace_id?:  string;
     worktree_path?: string;
+    [property: string]: any;
+}
+
+export interface Failure {
+    code:    string;
+    message: string;
     [property: string]: any;
 }
 
@@ -3457,12 +3591,16 @@ export enum DelegationOperationMessageEvent {
 }
 
 export interface DelegationOperationObject {
+    branch?:        string;
     created_at:     string;
+    directory?:     string;
     error?:         string;
+    failure?:       Failure;
     operation_id:   string;
     progress:       string;
     request_id:     string;
     result?:        DelegateResultObject;
+    seed_id?:       string;
     session_id:     string;
     state:          DelegationOperationState;
     ticket_id?:     string;
@@ -3473,10 +3611,11 @@ export interface DelegationOperationObject {
 }
 
 export interface DelegationPreferences {
-    enabled:  boolean;
-    fallback: Fallback;
-    revision: number;
-    roles:    RoleElement[];
+    enabled:                boolean;
+    fallback:               Fallback;
+    revision:               number;
+    roles:                  RoleElement[];
+    workflow_skill_enabled: boolean;
     [property: string]: any;
 }
 
@@ -3487,6 +3626,7 @@ export interface Fallback {
 }
 
 export interface RoleElement {
+    builtin?:          BuiltinDelegationRole;
     choices:           ChoiceElement[];
     default_choice_id: string;
     description:       string;
@@ -3528,13 +3668,15 @@ export enum DelegationPreferencesGetMessageCmd {
 }
 
 export interface DelegationPreferencesResultMessage {
-    error?:       string;
-    event:        DelegationPreferencesResultMessageEvent;
-    harnesses?:   HarnessElement[];
-    preferences?: Preferences;
-    request_id:   string;
-    success:      boolean;
-    templates?:   RoleElement[];
+    error?:                string;
+    event:                 DelegationPreferencesResultMessageEvent;
+    expanded_roles?:       RoleElement[];
+    harnesses?:            HarnessElement[];
+    preferences?:          Preferences;
+    request_id:            string;
+    success:               boolean;
+    templates?:            RoleElement[];
+    workflow_skill_paths?: string[];
     [property: string]: any;
 }
 
@@ -3553,17 +3695,19 @@ export interface HarnessElement {
 }
 
 export interface Preferences {
-    enabled:  boolean;
-    fallback: Fallback;
-    revision: number;
-    roles:    RoleElement[];
+    enabled:                boolean;
+    fallback:               Fallback;
+    revision:               number;
+    roles:                  RoleElement[];
+    workflow_skill_enabled: boolean;
     [property: string]: any;
 }
 
 export interface DelegationPreferencesSaveMessage {
-    cmd:         DelegationPreferencesSaveMessageCmd;
-    preferences: Preferences;
-    request_id:  string;
+    cmd:                     DelegationPreferencesSaveMessageCmd;
+    install_workflow_skill?: boolean;
+    preferences:             Preferences;
+    request_id:              string;
     [property: string]: any;
 }
 
@@ -3572,6 +3716,7 @@ export enum DelegationPreferencesSaveMessageCmd {
 }
 
 export interface DelegationRole {
+    builtin?:          BuiltinDelegationRole;
     choices:           ChoiceElement[];
     default_choice_id: string;
     description:       string;
@@ -4716,9 +4861,6 @@ export interface SeedElement {
     plot_progress?:         PlotProgress;
     ready:                  boolean;
     reason?:                string;
-    resume_agent?:          string;
-    resume_cwd?:            string;
-    resume_session_id?:     string;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
@@ -4760,6 +4902,7 @@ export interface EdgeElement {
 }
 
 export interface HarvestWhen {
+    checked_at?:     string;
     pull_request:    string;
     set_at:          string;
     set_by_member?:  string;
@@ -5163,6 +5306,13 @@ export interface StagedElement {
     old_path?:  string;
     path:       string;
     status:     string;
+    [property: string]: any;
+}
+
+export interface GuardianSelection {
+    effort?:   string;
+    model?:    string;
+    provider?: string;
     [property: string]: any;
 }
 
@@ -5986,16 +6136,28 @@ export interface NotebookWriteObject {
 }
 
 export interface Notification {
+    actions?:    ActionElement[];
     body:        string;
+    cause:       string;
     created_at:  string;
     detail:      string;
+    diagnostic:  string;
     id:          string;
+    impact:      string;
     kind:        string;
     read_at:     string;
     severity:    NotificationSeverity;
     source_id:   string;
     source_kind: string;
     title:       string;
+    trigger:     string;
+    [property: string]: any;
+}
+
+export interface ActionElement {
+    kind:      string;
+    label:     string;
+    target_id: string;
     [property: string]: any;
 }
 
@@ -6003,6 +6165,13 @@ export enum NotificationSeverity {
     Critical = "critical",
     Info = "info",
     Warning = "warning",
+}
+
+export interface NotificationAction {
+    kind:      string;
+    label:     string;
+    target_id: string;
+    [property: string]: any;
 }
 
 export interface NotificationListMessage {
@@ -6032,16 +6201,21 @@ export enum NotificationListResultMessageEvent {
 }
 
 export interface NotificationElement {
+    actions?:    ActionElement[];
     body:        string;
+    cause:       string;
     created_at:  string;
     detail:      string;
+    diagnostic:  string;
     id:          string;
+    impact:      string;
     kind:        string;
     read_at:     string;
     severity:    NotificationSeverity;
     source_id:   string;
     source_kind: string;
     title:       string;
+    trigger:     string;
     [property: string]: any;
 }
 
@@ -6928,6 +7102,7 @@ export interface Response {
     app_status_result?:             AppStatusResultObject;
     app_watch_result?:              AppWatchResultObject;
     authors?:                       AuthorElement[];
+    automode_config_result?:        AutomodeConfigResult;
     automode_denials_result?:       AutomodeDenialsResult;
     automode_env_result?:           AutomodeEnvResult;
     automode_propose_result?:       AutomodeProposeResult;
@@ -6980,7 +7155,6 @@ export interface Response {
     seed_review_result?:            SeedReviewResultObject;
     seed_search_result?:            SeedSearchResultObject;
     seed_send_to_chief_result?:     SeedSendToChiefResultObject;
-    seed_set_resume_result?:        SeedSetResumeResultObject;
     seed_show_result?:              SeedShowResultObject;
     seed_transition_result?:        SeedTransitionResultObject;
     seed_watch_result?:             SeedWatchResultObject;
@@ -7155,6 +7329,11 @@ export interface AppWatchResultObject {
     [property: string]: any;
 }
 
+export interface AutomodeConfigResult {
+    config: Config;
+    [property: string]: any;
+}
+
 export interface AutomodeDenialsResult {
     denials:      DenialElement[];
     ledger_note?: string;
@@ -7172,8 +7351,11 @@ export interface AutomodeProposeResult {
 }
 
 export interface AutomodeShowResult {
-    config:    Config;
-    proposals: Proposal[];
+    config:                 Config;
+    global_rules:           RuleElement[];
+    proposals:              Proposal[];
+    repository_rules:       RuleElement[];
+    repository_rules_path?: string;
     [property: string]: any;
 }
 
@@ -7481,11 +7663,6 @@ export interface SeedSendToChiefResultObject {
     [property: string]: any;
 }
 
-export interface SeedSetResumeResultObject {
-    seed: SeedElement;
-    [property: string]: any;
-}
-
 export interface SeedShowResultObject {
     artifacts:    SeedArtifactTransferResultArtifact[];
     handoff?:     Note;
@@ -7508,8 +7685,9 @@ export interface RelationElement {
 }
 
 export interface SeedTransitionResultObject {
-    handoff?: Note;
-    seed:     SeedElement;
+    handoff?:   Note;
+    seed:       SeedElement;
+    unblocked?: SeedElement[];
     [property: string]: any;
 }
 
@@ -7898,9 +8076,6 @@ export interface Seed {
     plot_progress?:         PlotProgress;
     ready:                  boolean;
     reason?:                string;
-    resume_agent?:          string;
-    resume_cwd?:            string;
-    resume_session_id?:     string;
     rev:                    number;
     state_changed_at:       string;
     state_changed_at_exact: boolean;
@@ -8109,12 +8284,14 @@ export interface SeedHandoverRequest {
     expected_tender_member:  string;
     expected_tender_session: string;
     handoff?:                string;
-    review?:                 HandoverReview;
+    note_id?:                string;
+    review?:                 DelegateMessageReview;
     seed_id:                 string;
     [property: string]: any;
 }
 
 export interface SeedHarvestCondition {
+    checked_at?:     string;
     pull_request:    string;
     set_at:          string;
     set_by_member?:  string;
@@ -8237,9 +8414,6 @@ export interface SeedPlantMessage {
     discovered_from?:   string;
     member?:            string;
     part_of?:           string;
-    resume_agent?:      string;
-    resume_cwd?:        string;
-    resume_session_id?: string;
     source_session_id?: string;
     title:              string;
     [property: string]: any;
@@ -8332,7 +8506,7 @@ export interface SeedRelation {
 export interface SeedResumeMessage {
     cmd:         SeedResumeMessageCmd;
     request_id?: string;
-    review?:     HandoverReview;
+    review?:     DelegateMessageReview;
     seed_id:     string;
     [property: string]: any;
 }
@@ -8376,7 +8550,7 @@ export enum SeedReviewCancelMessageCmd {
 export interface SeedReviewDraftMessage {
     cmd:        SeedReviewDraftMessageCmd;
     request_id: string;
-    review:     HandoverReview;
+    review:     DelegateMessageReview;
     seed_id:    string;
     [property: string]: any;
 }
@@ -8401,7 +8575,7 @@ export enum SeedReviewDraftResultMessageEvent {
 export interface SeedReviewKeepMessage {
     cmd:         SeedReviewKeepMessageCmd;
     request_id?: string;
-    review:      HandoverReview;
+    review:      DelegateMessageReview;
     seed_id:     string;
     [property: string]: any;
 }
@@ -8498,7 +8672,7 @@ export interface SeedSendToChiefMessage {
     expected_tender_session: string;
     guidance?:               string;
     request_id?:             string;
-    review?:                 HandoverReview;
+    review?:                 DelegateMessageReview;
     seed_id:                 string;
     source_session_id?:      string;
     [property: string]: any;
@@ -8527,25 +8701,6 @@ export interface SeedSendToChiefResultMessage {
 
 export enum SeedSendToChiefResultMessageEvent {
     SeedSendToChiefResult = "seed_send_to_chief_result",
-}
-
-export interface SeedSetResumeMessage {
-    clear?:             boolean;
-    cmd:                SeedSetResumeMessageCmd;
-    resume_agent?:      string;
-    resume_cwd?:        string;
-    resume_session_id?: string;
-    seed_id:            string;
-    [property: string]: any;
-}
-
-export enum SeedSetResumeMessageCmd {
-    SeedSetResume = "seed_set_resume",
-}
-
-export interface SeedSetResumeResult {
-    seed: SeedElement;
-    [property: string]: any;
 }
 
 export interface SeedShowMessage {
@@ -8580,7 +8735,7 @@ export interface SeedTransitionMessage {
     member?:             string;
     reason?:             string;
     request_id?:         string;
-    review?:             HandoverReview;
+    review?:             DelegateMessageReview;
     seed_id:             string;
     source_session_id?:  string;
     verb:                string;
@@ -8598,8 +8753,9 @@ export interface WhenMerged {
 }
 
 export interface SeedTransitionResult {
-    handoff?: Note;
-    seed:     SeedElement;
+    handoff?:   Note;
+    seed:       SeedElement;
+    unblocked?: SeedElement[];
     [property: string]: any;
 }
 
@@ -8659,6 +8815,7 @@ export interface Session {
     context_window_cap?:        number;
     crew_member?:               string;
     delegated_from_chief?:      boolean;
+    delegation_role?:           DelegationRoleObject;
     directory:                  string;
     dispatcher_member?:         string;
     dispatcher_session_id?:     string;
@@ -8857,6 +9014,13 @@ export interface SessionContextWindowCapResultMessage {
 
 export enum SessionContextWindowCapResultMessageEvent {
     SessionContextWindowCapResult = "session_context_window_cap_result",
+}
+
+export interface SessionDelegationRole {
+    builtin?: BuiltinDelegationRole;
+    icon?:    string;
+    name:     string;
+    [property: string]: any;
 }
 
 export interface SessionExitedMessage {
@@ -9216,7 +9380,7 @@ export interface SessionUsage {
     cost_usd?:               number;
     has_unpriced_usage:      boolean;
     measurement_incomplete?: boolean;
-    models:                  ModelObject[];
+    models:                  ModelElement[];
     total_tokens:            number;
     [property: string]: any;
 }
@@ -9231,6 +9395,7 @@ export interface SessionUsageModel {
     input_tokens:                    number;
     model:                           string;
     output_tokens:                   number;
+    purpose:                         string;
     total_tokens:                    number;
     unpriced_reason?:                string;
     [property: string]: any;
@@ -9421,6 +9586,7 @@ export enum SpawnResultMessageEvent {
 
 export interface SpawnSessionMessage {
     agent:               string;
+    approval_policy?:    string;
     auto_mode?:          boolean;
     chief_of_staff?:     boolean;
     claude_executable?:  string;
@@ -9439,6 +9605,7 @@ export interface SpawnSessionMessage {
     resume_picker?:      boolean;
     resume_session_id?:  string;
     rows:                number;
+    sandbox_mode?:       string;
     spawned_from?:       string;
     workspace_id:        string;
     yolo_mode?:          boolean;
@@ -9635,15 +9802,16 @@ export interface RuntimeElement {
 }
 
 export interface Task {
-    attempts:        number;
-    created_at:      string;
-    id:              string;
-    kind:            string;
-    last_error?:     string;
-    next_attempt_at: string;
-    state:           string;
-    subject:         string;
-    updated_at:      string;
+    attempts:         number;
+    created_at:       string;
+    id:               string;
+    kind:             string;
+    last_diagnostic?: string;
+    last_error?:      string;
+    next_attempt_at:  string;
+    state:            string;
+    subject:          string;
+    updated_at:       string;
     [property: string]: any;
 }
 
@@ -9671,15 +9839,16 @@ export enum TaskListResultMessageEvent {
 }
 
 export interface TaskElement {
-    attempts:        number;
-    created_at:      string;
-    id:              string;
-    kind:            string;
-    last_error?:     string;
-    next_attempt_at: string;
-    state:           string;
-    subject:         string;
-    updated_at:      string;
+    attempts:         number;
+    created_at:       string;
+    id:               string;
+    kind:             string;
+    last_diagnostic?: string;
+    last_error?:      string;
+    next_attempt_at:  string;
+    state:            string;
+    subject:          string;
+    updated_at:       string;
     [property: string]: any;
 }
 
@@ -11364,20 +11533,28 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AuthorsUpdatedMessage")), null, 2);
     }
 
-    public static toAutoModeCatalogModel(json: string): AutoModeCatalogModel {
-        return cast(JSON.parse(json), r("AutoModeCatalogModel"));
-    }
-
-    public static autoModeCatalogModelToJson(value: AutoModeCatalogModel): string {
-        return JSON.stringify(uncast(value, r("AutoModeCatalogModel")), null, 2);
-    }
-
     public static toAutoModeConfigInfo(json: string): AutoModeConfigInfo {
         return cast(JSON.parse(json), r("AutoModeConfigInfo"));
     }
 
     public static autoModeConfigInfoToJson(value: AutoModeConfigInfo): string {
         return JSON.stringify(uncast(value, r("AutoModeConfigInfo")), null, 2);
+    }
+
+    public static toAutoModeConfigResult(json: string): AutoModeConfigResult {
+        return cast(JSON.parse(json), r("AutoModeConfigResult"));
+    }
+
+    public static autoModeConfigResultToJson(value: AutoModeConfigResult): string {
+        return JSON.stringify(uncast(value, r("AutoModeConfigResult")), null, 2);
+    }
+
+    public static toAutoModeConfigResultMessage(json: string): AutoModeConfigResultMessage {
+        return cast(JSON.parse(json), r("AutoModeConfigResultMessage"));
+    }
+
+    public static autoModeConfigResultMessageToJson(value: AutoModeConfigResultMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeConfigResultMessage")), null, 2);
     }
 
     public static toAutoModeDenialInfo(json: string): AutoModeDenialInfo {
@@ -11484,68 +11661,52 @@ export class Convert {
         return JSON.stringify(uncast(value, r("AutoModeGetMessage")), null, 2);
     }
 
-    public static toAutoModeModelProvider(json: string): AutoModeModelProvider {
-        return cast(JSON.parse(json), r("AutoModeModelProvider"));
+    public static toAutoModeHostAddMessage(json: string): AutoModeHostAddMessage {
+        return cast(JSON.parse(json), r("AutoModeHostAddMessage"));
     }
 
-    public static autoModeModelProviderToJson(value: AutoModeModelProvider): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelProvider")), null, 2);
+    public static autoModeHostAddMessageToJson(value: AutoModeHostAddMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeHostAddMessage")), null, 2);
     }
 
-    public static toAutoModeModelSetMessage(json: string): AutoModeModelSetMessage {
-        return cast(JSON.parse(json), r("AutoModeModelSetMessage"));
+    public static toAutoModeHostRemoveMessage(json: string): AutoModeHostRemoveMessage {
+        return cast(JSON.parse(json), r("AutoModeHostRemoveMessage"));
     }
 
-    public static autoModeModelSetMessageToJson(value: AutoModeModelSetMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelSetMessage")), null, 2);
+    public static autoModeHostRemoveMessageToJson(value: AutoModeHostRemoveMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeHostRemoveMessage")), null, 2);
     }
 
-    public static toAutoModeModelSetResultMessage(json: string): AutoModeModelSetResultMessage {
-        return cast(JSON.parse(json), r("AutoModeModelSetResultMessage"));
+    public static toAutoModeLegacyDismissMessage(json: string): AutoModeLegacyDismissMessage {
+        return cast(JSON.parse(json), r("AutoModeLegacyDismissMessage"));
     }
 
-    public static autoModeModelSetResultMessageToJson(value: AutoModeModelSetResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelSetResultMessage")), null, 2);
+    public static autoModeLegacyDismissMessageToJson(value: AutoModeLegacyDismissMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeLegacyDismissMessage")), null, 2);
     }
 
-    public static toAutoModeModelsMessage(json: string): AutoModeModelsMessage {
-        return cast(JSON.parse(json), r("AutoModeModelsMessage"));
+    public static toAutoModeNetworkInfo(json: string): AutoModeNetworkInfo {
+        return cast(JSON.parse(json), r("AutoModeNetworkInfo"));
     }
 
-    public static autoModeModelsMessageToJson(value: AutoModeModelsMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelsMessage")), null, 2);
+    public static autoModeNetworkInfoToJson(value: AutoModeNetworkInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModeNetworkInfo")), null, 2);
     }
 
-    public static toAutoModeModelsResultMessage(json: string): AutoModeModelsResultMessage {
-        return cast(JSON.parse(json), r("AutoModeModelsResultMessage"));
+    public static toAutoModePolicySetMessage(json: string): AutoModePolicySetMessage {
+        return cast(JSON.parse(json), r("AutoModePolicySetMessage"));
     }
 
-    public static autoModeModelsResultMessageToJson(value: AutoModeModelsResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModeModelsResultMessage")), null, 2);
+    public static autoModePolicySetMessageToJson(value: AutoModePolicySetMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModePolicySetMessage")), null, 2);
     }
 
-    public static toAutoModePatternAddMessage(json: string): AutoModePatternAddMessage {
-        return cast(JSON.parse(json), r("AutoModePatternAddMessage"));
+    public static toAutoModePresetInfo(json: string): AutoModePresetInfo {
+        return cast(JSON.parse(json), r("AutoModePresetInfo"));
     }
 
-    public static autoModePatternAddMessageToJson(value: AutoModePatternAddMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternAddMessage")), null, 2);
-    }
-
-    public static toAutoModePatternRemoveMessage(json: string): AutoModePatternRemoveMessage {
-        return cast(JSON.parse(json), r("AutoModePatternRemoveMessage"));
-    }
-
-    public static autoModePatternRemoveMessageToJson(value: AutoModePatternRemoveMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternRemoveMessage")), null, 2);
-    }
-
-    public static toAutoModePatternResultMessage(json: string): AutoModePatternResultMessage {
-        return cast(JSON.parse(json), r("AutoModePatternResultMessage"));
-    }
-
-    public static autoModePatternResultMessageToJson(value: AutoModePatternResultMessage): string {
-        return JSON.stringify(uncast(value, r("AutoModePatternResultMessage")), null, 2);
+    public static autoModePresetInfoToJson(value: AutoModePresetInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModePresetInfo")), null, 2);
     }
 
     public static toAutoModePromoteMessage(json: string): AutoModePromoteMessage {
@@ -11586,6 +11747,30 @@ export class Convert {
 
     public static autoModeProposeResultToJson(value: AutoModeProposeResult): string {
         return JSON.stringify(uncast(value, r("AutoModeProposeResult")), null, 2);
+    }
+
+    public static toAutoModeRuleAddMessage(json: string): AutoModeRuleAddMessage {
+        return cast(JSON.parse(json), r("AutoModeRuleAddMessage"));
+    }
+
+    public static autoModeRuleAddMessageToJson(value: AutoModeRuleAddMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleAddMessage")), null, 2);
+    }
+
+    public static toAutoModeRuleInfo(json: string): AutoModeRuleInfo {
+        return cast(JSON.parse(json), r("AutoModeRuleInfo"));
+    }
+
+    public static autoModeRuleInfoToJson(value: AutoModeRuleInfo): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleInfo")), null, 2);
+    }
+
+    public static toAutoModeRuleRemoveMessage(json: string): AutoModeRuleRemoveMessage {
+        return cast(JSON.parse(json), r("AutoModeRuleRemoveMessage"));
+    }
+
+    public static autoModeRuleRemoveMessageToJson(value: AutoModeRuleRemoveMessage): string {
+        return JSON.stringify(uncast(value, r("AutoModeRuleRemoveMessage")), null, 2);
     }
 
     public static toAutoModeShowMessage(json: string): AutoModeShowMessage {
@@ -11874,6 +12059,14 @@ export class Convert {
 
     public static browserControlResultMessageToJson(value: BrowserControlResultMessage): string {
         return JSON.stringify(uncast(value, r("BrowserControlResultMessage")), null, 2);
+    }
+
+    public static toBuiltinDelegationRole(json: string): BuiltinDelegationRole {
+        return cast(JSON.parse(json), r("BuiltinDelegationRole"));
+    }
+
+    public static builtinDelegationRoleToJson(value: BuiltinDelegationRole): string {
+        return JSON.stringify(uncast(value, r("BuiltinDelegationRole")), null, 2);
     }
 
     public static toBusConsumerStatus(json: string): BusConsumerStatus {
@@ -12308,6 +12501,46 @@ export class Convert {
         return JSON.stringify(uncast(value, r("DaemonWarning")), null, 2);
     }
 
+    public static toDelegateAssignment(json: string): DelegateAssignment {
+        return cast(JSON.parse(json), r("DelegateAssignment"));
+    }
+
+    public static delegateAssignmentToJson(value: DelegateAssignment): string {
+        return JSON.stringify(uncast(value, r("DelegateAssignment")), null, 2);
+    }
+
+    public static toDelegateAssignmentKind(json: string): DelegateAssignmentKind {
+        return cast(JSON.parse(json), r("DelegateAssignmentKind"));
+    }
+
+    public static delegateAssignmentKindToJson(value: DelegateAssignmentKind): string {
+        return JSON.stringify(uncast(value, r("DelegateAssignmentKind")), null, 2);
+    }
+
+    public static toDelegateCheckout(json: string): DelegateCheckout {
+        return cast(JSON.parse(json), r("DelegateCheckout"));
+    }
+
+    public static delegateCheckoutToJson(value: DelegateCheckout): string {
+        return JSON.stringify(uncast(value, r("DelegateCheckout")), null, 2);
+    }
+
+    public static toDelegateCheckoutKind(json: string): DelegateCheckoutKind {
+        return cast(JSON.parse(json), r("DelegateCheckoutKind"));
+    }
+
+    public static delegateCheckoutKindToJson(value: DelegateCheckoutKind): string {
+        return JSON.stringify(uncast(value, r("DelegateCheckoutKind")), null, 2);
+    }
+
+    public static toDelegateHandover(json: string): DelegateHandover {
+        return cast(JSON.parse(json), r("DelegateHandover"));
+    }
+
+    public static delegateHandoverToJson(value: DelegateHandover): string {
+        return JSON.stringify(uncast(value, r("DelegateHandover")), null, 2);
+    }
+
     public static toDelegateMessage(json: string): DelegateMessage {
         return cast(JSON.parse(json), r("DelegateMessage"));
     }
@@ -12354,6 +12587,14 @@ export class Convert {
 
     public static delegationChoiceToJson(value: DelegationChoice): string {
         return JSON.stringify(uncast(value, r("DelegationChoice")), null, 2);
+    }
+
+    public static toDelegationFailure(json: string): DelegationFailure {
+        return cast(JSON.parse(json), r("DelegationFailure"));
+    }
+
+    public static delegationFailureToJson(value: DelegationFailure): string {
+        return JSON.stringify(uncast(value, r("DelegationFailure")), null, 2);
     }
 
     public static toDelegationFallback(json: string): DelegationFallback {
@@ -13332,6 +13573,14 @@ export class Convert {
         return JSON.stringify(uncast(value, r("GitStatusUpdateMessage")), null, 2);
     }
 
+    public static toGuardianSelection(json: string): GuardianSelection {
+        return cast(JSON.parse(json), r("GuardianSelection"));
+    }
+
+    public static guardianSelectionToJson(value: GuardianSelection): string {
+        return JSON.stringify(uncast(value, r("GuardianSelection")), null, 2);
+    }
+
     public static toHeartbeatMessage(json: string): HeartbeatMessage {
         return cast(JSON.parse(json), r("HeartbeatMessage"));
     }
@@ -13794,6 +14043,14 @@ export class Convert {
 
     public static notificationToJson(value: Notification): string {
         return JSON.stringify(uncast(value, r("Notification")), null, 2);
+    }
+
+    public static toNotificationAction(json: string): NotificationAction {
+        return cast(JSON.parse(json), r("NotificationAction"));
+    }
+
+    public static notificationActionToJson(value: NotificationAction): string {
+        return JSON.stringify(uncast(value, r("NotificationAction")), null, 2);
     }
 
     public static toNotificationListMessage(json: string): NotificationListMessage {
@@ -14852,22 +15109,6 @@ export class Convert {
         return JSON.stringify(uncast(value, r("SeedSendToChiefResultMessage")), null, 2);
     }
 
-    public static toSeedSetResumeMessage(json: string): SeedSetResumeMessage {
-        return cast(JSON.parse(json), r("SeedSetResumeMessage"));
-    }
-
-    public static seedSetResumeMessageToJson(value: SeedSetResumeMessage): string {
-        return JSON.stringify(uncast(value, r("SeedSetResumeMessage")), null, 2);
-    }
-
-    public static toSeedSetResumeResult(json: string): SeedSetResumeResult {
-        return cast(JSON.parse(json), r("SeedSetResumeResult"));
-    }
-
-    public static seedSetResumeResultToJson(value: SeedSetResumeResult): string {
-        return JSON.stringify(uncast(value, r("SeedSetResumeResult")), null, 2);
-    }
-
     public static toSeedShowMessage(json: string): SeedShowMessage {
         return cast(JSON.parse(json), r("SeedShowMessage"));
     }
@@ -15034,6 +15275,14 @@ export class Convert {
 
     public static sessionContextWindowCapResultMessageToJson(value: SessionContextWindowCapResultMessage): string {
         return JSON.stringify(uncast(value, r("SessionContextWindowCapResultMessage")), null, 2);
+    }
+
+    public static toSessionDelegationRole(json: string): SessionDelegationRole {
+        return cast(JSON.parse(json), r("SessionDelegationRole"));
+    }
+
+    public static sessionDelegationRoleToJson(value: SessionDelegationRole): string {
+        return JSON.stringify(uncast(value, r("SessionDelegationRole")), null, 2);
     }
 
     public static toSessionExitedMessage(json: string): SessionExitedMessage {
@@ -17123,18 +17372,18 @@ const typeMap: any = {
         { json: "author", js: "author", typ: "" },
         { json: "muted", js: "muted", typ: true },
     ], "any"),
-    "AutoModeCatalogModel": o([
-        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
-        { json: "id", js: "id", typ: "" },
-        { json: "name", js: "name", typ: u(undefined, "") },
-    ], "any"),
     "AutoModeConfigInfo": o([
-        { json: "allow", js: "allow", typ: a("") },
+        { json: "approval_policy", js: "approval_policy", typ: "" },
         { json: "enabled_default", js: "enabled_default", typ: true },
         { json: "environment", js: "environment", typ: r("Environment") },
-        { json: "hard_deny", js: "hard_deny", typ: a("") },
-        { json: "models", js: "models", typ: a("") },
-        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
+        { json: "guardian", js: "guardian", typ: u(undefined, r("Guardian")) },
+        { json: "legacy_patterns", js: "legacy_patterns", typ: a("") },
+        { json: "network", js: "network", typ: r("Network") },
+        { json: "presets", js: "presets", typ: a(r("PresetElement")) },
+        { json: "rules", js: "rules", typ: a(r("RuleElement")) },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
+        { json: "shipped_denied_domains", js: "shipped_denied_domains", typ: a("") },
+        { json: "shipped_rules", js: "shipped_rules", typ: a(r("RuleElement")) },
     ], "any"),
     "Environment": o([
         { json: "notes", js: "notes", typ: a("") },
@@ -17143,6 +17392,55 @@ const typeMap: any = {
     "SlotElement": o([
         { json: "id", js: "id", typ: "" },
         { json: "values", js: "values", typ: a("") },
+    ], "any"),
+    "Guardian": o([
+        { json: "effort", js: "effort", typ: u(undefined, "") },
+        { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "provider", js: "provider", typ: u(undefined, "") },
+    ], "any"),
+    "Network": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: true },
+        { json: "allowed_domains", js: "allowed_domains", typ: a("") },
+        { json: "denied_domains", js: "denied_domains", typ: a("") },
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
+    "PresetElement": o([
+        { json: "approval_policy", js: "approval_policy", typ: "" },
+        { json: "description", js: "description", typ: "" },
+        { json: "id", js: "id", typ: "" },
+        { json: "label", js: "label", typ: "" },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
+    ], "any"),
+    "RuleElement": o([
+        { json: "decision", js: "decision", typ: "" },
+        { json: "justification", js: "justification", typ: "" },
+        { json: "match", js: "match", typ: a(a("")) },
+        { json: "not_match", js: "not_match", typ: a(a("")) },
+        { json: "pattern", js: "pattern", typ: a(a("")) },
+        { json: "sandbox", js: "sandbox", typ: "" },
+    ], "any"),
+    "AutoModeConfigResult": o([
+        { json: "config", js: "config", typ: r("Config") },
+    ], "any"),
+    "Config": o([
+        { json: "approval_policy", js: "approval_policy", typ: "" },
+        { json: "enabled_default", js: "enabled_default", typ: true },
+        { json: "environment", js: "environment", typ: r("Environment") },
+        { json: "guardian", js: "guardian", typ: u(undefined, r("Guardian")) },
+        { json: "legacy_patterns", js: "legacy_patterns", typ: a("") },
+        { json: "network", js: "network", typ: r("Network") },
+        { json: "presets", js: "presets", typ: a(r("PresetElement")) },
+        { json: "rules", js: "rules", typ: a(r("RuleElement")) },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
+        { json: "shipped_denied_domains", js: "shipped_denied_domains", typ: a("") },
+        { json: "shipped_rules", js: "shipped_rules", typ: a(r("RuleElement")) },
+    ], "any"),
+    "AutoModeConfigResultMessage": o([
+        { json: "config", js: "config", typ: u(undefined, r("Config")) },
+        { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "event", js: "event", typ: r("AutoModeConfigResultMessageEvent") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "success", js: "success", typ: true },
     ], "any"),
     "AutoModeDenialInfo": o([
         { json: "created_at", js: "created_at", typ: "" },
@@ -17189,6 +17487,7 @@ const typeMap: any = {
         { json: "proposed_by", js: "proposed_by", typ: "" },
         { json: "resolved_at", js: "resolved_at", typ: "" },
         { json: "state", js: "state", typ: "" },
+        { json: "summary", js: "summary", typ: "" },
         { json: "target", js: "target", typ: "" },
         { json: "value", js: "value", typ: "" },
     ], "any"),
@@ -17206,14 +17505,6 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("AutoModeEnvSetResultMessageEvent") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
-    ], "any"),
-    "Config": o([
-        { json: "allow", js: "allow", typ: a("") },
-        { json: "enabled_default", js: "enabled_default", typ: true },
-        { json: "environment", js: "environment", typ: r("Environment") },
-        { json: "hard_deny", js: "hard_deny", typ: a("") },
-        { json: "models", js: "models", typ: a("") },
-        { json: "shipped_hard_deny", js: "shipped_hard_deny", typ: a("") },
     ], "any"),
     "AutoModeEnvSlotMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeEnvSlotMessageCmd") },
@@ -17243,67 +17534,43 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("AutoModeGetMessageCmd") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "AutoModeModelProvider": o([
-        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "models", js: "models", typ: a(r("ModelElement")) },
-        { json: "provider", js: "provider", typ: "" },
-        { json: "ready", js: "ready", typ: true },
+    "AutoModeHostAddMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeHostAddMessageCmd") },
+        { json: "decision", js: "decision", typ: "" },
+        { json: "host", js: "host", typ: "" },
+        { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
-    "ModelElement": o([
-        { json: "context_window", js: "context_window", typ: u(undefined, 0) },
+    "AutoModeHostRemoveMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeHostRemoveMessageCmd") },
+        { json: "decision", js: "decision", typ: "" },
+        { json: "host", js: "host", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+    ], "any"),
+    "AutoModeLegacyDismissMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeLegacyDismissMessageCmd") },
+        { json: "pattern", js: "pattern", typ: "" },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+    ], "any"),
+    "AutoModeNetworkInfo": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: true },
+        { json: "allowed_domains", js: "allowed_domains", typ: a("") },
+        { json: "denied_domains", js: "denied_domains", typ: a("") },
+        { json: "enabled", js: "enabled", typ: true },
+    ], "any"),
+    "AutoModePolicySetMessage": o([
+        { json: "allow_local_binding", js: "allow_local_binding", typ: u(undefined, true) },
+        { json: "approval_policy", js: "approval_policy", typ: u(undefined, "") },
+        { json: "cmd", js: "cmd", typ: r("AutoModePolicySetMessageCmd") },
+        { json: "guardian", js: "guardian", typ: u(undefined, r("Guardian")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: u(undefined, "") },
+    ], "any"),
+    "AutoModePresetInfo": o([
+        { json: "approval_policy", js: "approval_policy", typ: "" },
+        { json: "description", js: "description", typ: "" },
         { json: "id", js: "id", typ: "" },
-        { json: "name", js: "name", typ: u(undefined, "") },
-    ], "any"),
-    "AutoModeModelSetMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeModelSetMessageCmd") },
-        { json: "models", js: "models", typ: a("") },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModeModelSetResultMessage": o([
-        { json: "config", js: "config", typ: u(undefined, r("Config")) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModeModelSetResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "AutoModeModelsMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModeModelsMessageCmd") },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModeModelsResultMessage": o([
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModeModelsResultMessageEvent") },
-        { json: "problem", js: "problem", typ: u(undefined, "") },
-        { json: "providers", js: "providers", typ: u(undefined, a(r("ProviderElement"))) },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
-    ], "any"),
-    "ProviderElement": o([
-        { json: "checked_at", js: "checked_at", typ: u(undefined, 0) },
-        { json: "detail", js: "detail", typ: u(undefined, "") },
-        { json: "models", js: "models", typ: a(r("ModelElement")) },
-        { json: "provider", js: "provider", typ: "" },
-        { json: "ready", js: "ready", typ: true },
-    ], "any"),
-    "AutoModePatternAddMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModePatternAddMessageCmd") },
-        { json: "list", js: "list", typ: "" },
-        { json: "pattern", js: "pattern", typ: "" },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModePatternRemoveMessage": o([
-        { json: "cmd", js: "cmd", typ: r("AutoModePatternRemoveMessageCmd") },
-        { json: "list", js: "list", typ: "" },
-        { json: "pattern", js: "pattern", typ: "" },
-        { json: "request_id", js: "request_id", typ: "" },
-    ], "any"),
-    "AutoModePatternResultMessage": o([
-        { json: "config", js: "config", typ: u(undefined, r("Config")) },
-        { json: "error", js: "error", typ: u(undefined, "") },
-        { json: "event", js: "event", typ: r("AutoModePatternResultMessageEvent") },
-        { json: "request_id", js: "request_id", typ: "" },
-        { json: "success", js: "success", typ: true },
+        { json: "label", js: "label", typ: "" },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: "" },
     ], "any"),
     "AutoModePromoteMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModePromoteMessageCmd") },
@@ -17325,6 +17592,7 @@ const typeMap: any = {
         { json: "proposed_by", js: "proposed_by", typ: "" },
         { json: "resolved_at", js: "resolved_at", typ: "" },
         { json: "state", js: "state", typ: "" },
+        { json: "summary", js: "summary", typ: "" },
         { json: "target", js: "target", typ: "" },
         { json: "value", js: "value", typ: "" },
     ], "any"),
@@ -17338,12 +17606,37 @@ const typeMap: any = {
     "AutoModeProposeResult": o([
         { json: "proposal", js: "proposal", typ: r("Proposal") },
     ], "any"),
+    "AutoModeRuleAddMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeRuleAddMessageCmd") },
+        { json: "decision", js: "decision", typ: u(undefined, "") },
+        { json: "justification", js: "justification", typ: u(undefined, "") },
+        { json: "pattern", js: "pattern", typ: a("") },
+        { json: "request_id", js: "request_id", typ: "" },
+        { json: "sandbox", js: "sandbox", typ: u(undefined, "") },
+    ], "any"),
+    "AutoModeRuleInfo": o([
+        { json: "decision", js: "decision", typ: "" },
+        { json: "justification", js: "justification", typ: "" },
+        { json: "match", js: "match", typ: a(a("")) },
+        { json: "not_match", js: "not_match", typ: a(a("")) },
+        { json: "pattern", js: "pattern", typ: a(a("")) },
+        { json: "sandbox", js: "sandbox", typ: "" },
+    ], "any"),
+    "AutoModeRuleRemoveMessage": o([
+        { json: "cmd", js: "cmd", typ: r("AutoModeRuleRemoveMessageCmd") },
+        { json: "pattern", js: "pattern", typ: a(a("")) },
+        { json: "request_id", js: "request_id", typ: u(undefined, "") },
+    ], "any"),
     "AutoModeShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("AutoModeShowMessageCmd") },
+        { json: "cwd", js: "cwd", typ: u(undefined, "") },
     ], "any"),
     "AutoModeShowResult": o([
         { json: "config", js: "config", typ: r("Config") },
+        { json: "global_rules", js: "global_rules", typ: a(r("RuleElement")) },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
+        { json: "repository_rules", js: "repository_rules", typ: a(r("RuleElement")) },
+        { json: "repository_rules_path", js: "repository_rules_path", typ: u(undefined, "") },
     ], "any"),
     "AutoModeStateChangedMessage": o([
         { json: "config", js: "config", typ: r("Config") },
@@ -17409,9 +17702,9 @@ const typeMap: any = {
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "occurrence_key", js: "occurrence_key", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
     ], "any"),
     "Automation": o([
@@ -17520,9 +17813,9 @@ const typeMap: any = {
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "occurrence_key", js: "occurrence_key", typ: u(undefined, "") },
         { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
         { json: "state", js: "state", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
     ], "any"),
     "AutomationRunsGetMessage": o([
@@ -17594,6 +17887,7 @@ const typeMap: any = {
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
+        { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
@@ -17624,6 +17918,11 @@ const typeMap: any = {
         { json: "workspace_id", js: "workspace_id", typ: "" },
         { json: "workspace_muted", js: "workspace_muted", typ: u(undefined, true) },
     ], "any"),
+    "DelegationRoleObject": o([
+        { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
+        { json: "icon", js: "icon", typ: u(undefined, "") },
+        { json: "name", js: "name", typ: "" },
+    ], "any"),
     "PullRequestElement": o([
         { json: "ci_status", js: "ci_status", typ: u(undefined, "") },
         { json: "created_at", js: "created_at", typ: "" },
@@ -17640,10 +17939,10 @@ const typeMap: any = {
         { json: "cost_usd", js: "cost_usd", typ: u(undefined, 3.14) },
         { json: "has_unpriced_usage", js: "has_unpriced_usage", typ: true },
         { json: "measurement_incomplete", js: "measurement_incomplete", typ: u(undefined, true) },
-        { json: "models", js: "models", typ: a(r("ModelObject")) },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
     ], "any"),
-    "ModelObject": o([
+    "ModelElement": o([
         { json: "cache_read_tokens", js: "cache_read_tokens", typ: 0 },
         { json: "cache_write_1h_tokens", js: "cache_write_1h_tokens", typ: 0 },
         { json: "cache_write_5m_tokens", js: "cache_write_5m_tokens", typ: 0 },
@@ -17653,6 +17952,7 @@ const typeMap: any = {
         { json: "input_tokens", js: "input_tokens", typ: 0 },
         { json: "model", js: "model", typ: "" },
         { json: "output_tokens", js: "output_tokens", typ: 0 },
+        { json: "purpose", js: "purpose", typ: "" },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
         { json: "unpriced_reason", js: "unpriced_reason", typ: u(undefined, "") },
     ], "any"),
@@ -18153,58 +18453,73 @@ const typeMap: any = {
         { json: "code", js: "code", typ: "" },
         { json: "message", js: "message", typ: "" },
     ], "any"),
+    "DelegateAssignment": o([
+        { json: "brief", js: "brief", typ: u(undefined, "") },
+        { json: "handover", js: "handover", typ: u(undefined, r("Handover")) },
+        { json: "kind", js: "kind", typ: r("DelegateAssignmentKind") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
+    ], "any"),
+    "Handover": o([
+        { json: "note", js: "note", typ: u(undefined, "") },
+    ], "any"),
+    "DelegateCheckout": o([
+        { json: "branch", js: "branch", typ: "" },
+        { json: "from", js: "from", typ: u(undefined, "") },
+        { json: "kind", js: "kind", typ: r("DelegateCheckoutKind") },
+        { json: "path", js: "path", typ: u(undefined, "") },
+    ], "any"),
+    "DelegateHandover": o([
+        { json: "note", js: "note", typ: u(undefined, "") },
+    ], "any"),
     "DelegateMessage": o([
         { json: "agent", js: "agent", typ: u(undefined, "") },
         { json: "allow_worktree_reuse", js: "allow_worktree_reuse", typ: u(undefined, true) },
-        { json: "brief", js: "brief", typ: "" },
+        { json: "assignment", js: "assignment", typ: r("Assignment") },
+        { json: "checkout", js: "checkout", typ: u(undefined, r("Checkout")) },
         { json: "choice", js: "choice", typ: u(undefined, "") },
         { json: "cmd", js: "cmd", typ: r("DelegateMessageCmd") },
-        { json: "confirm", js: "confirm", typ: u(undefined, true) },
-        { json: "cwd", js: "cwd", typ: u(undefined, "") },
+        { json: "cwd", js: "cwd", typ: "" },
         { json: "effort", js: "effort", typ: u(undefined, "") },
         { json: "fallback", js: "fallback", typ: u(undefined, true) },
-        { json: "handover", js: "handover", typ: u(undefined, r("Handover")) },
         { json: "label", js: "label", typ: u(undefined, "") },
         { json: "model", js: "model", typ: u(undefined, "") },
-        { json: "placement", js: "placement", typ: u(undefined, "") },
-        { json: "plot", js: "plot", typ: u(undefined, "") },
-        { json: "preferences_revision", js: "preferences_revision", typ: u(undefined, 0) },
         { json: "provider", js: "provider", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
+        { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "role", js: "role", typ: u(undefined, "") },
-        { json: "source_session_id", js: "source_session_id", typ: "" },
-        { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
-        { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
-        { json: "worktree", js: "worktree", typ: u(undefined, r("DelegateMessageWorktree")) },
+        { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "yolo_mode", js: "yolo_mode", typ: u(undefined, true) },
     ], "any"),
-    "Handover": o([
-        { json: "expected_rev", js: "expected_rev", typ: 0 },
-        { json: "expected_tender_member", js: "expected_tender_member", typ: "" },
-        { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
-        { json: "handoff", js: "handoff", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: u(undefined, r("HandoverReview")) },
-        { json: "seed_id", js: "seed_id", typ: "" },
+    "Assignment": o([
+        { json: "brief", js: "brief", typ: u(undefined, "") },
+        { json: "handover", js: "handover", typ: u(undefined, r("Handover")) },
+        { json: "kind", js: "kind", typ: r("DelegateAssignmentKind") },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
     ], "any"),
-    "HandoverReview": o([
+    "Checkout": o([
+        { json: "branch", js: "branch", typ: "" },
+        { json: "from", js: "from", typ: u(undefined, "") },
+        { json: "kind", js: "kind", typ: r("DelegateCheckoutKind") },
+        { json: "path", js: "path", typ: u(undefined, "") },
+    ], "any"),
+    "DelegateMessageReview": o([
         { json: "evidence_version", js: "evidence_version", typ: "" },
         { json: "review_id", js: "review_id", typ: "" },
     ], "any"),
-    "DelegateMessageWorktree": o([
-        { json: "branch", js: "branch", typ: "" },
-        { json: "existing_branch", js: "existing_branch", typ: u(undefined, true) },
-        { json: "path", js: "path", typ: u(undefined, "") },
-        { json: "repo", js: "repo", typ: u(undefined, "") },
-        { json: "starting_from", js: "starting_from", typ: u(undefined, "") },
-    ], "any"),
     "DelegateResult": o([
+        { json: "agent", js: "agent", typ: "" },
         { json: "branch", js: "branch", typ: u(undefined, "") },
+        { json: "checkout", js: "checkout", typ: "" },
         { json: "directory", js: "directory", typ: "" },
+        { json: "effort", js: "effort", typ: "" },
         { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
         { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
-        { json: "placement", js: "placement", typ: "" },
+        { json: "model", js: "model", typ: "" },
+        { json: "predecessor_session_id", js: "predecessor_session_id", typ: u(undefined, "") },
+        { json: "role", js: "role", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
-        { json: "workspace_id", js: "workspace_id", typ: "" },
+        { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
         { json: "worktree_created", js: "worktree_created", typ: u(undefined, true) },
     ], "any"),
     "DelegateResultMessage": o([
@@ -18215,13 +18530,19 @@ const typeMap: any = {
         { json: "success", js: "success", typ: true },
     ], "any"),
     "DelegateResultObject": o([
+        { json: "agent", js: "agent", typ: "" },
         { json: "branch", js: "branch", typ: u(undefined, "") },
+        { json: "checkout", js: "checkout", typ: "" },
         { json: "directory", js: "directory", typ: "" },
+        { json: "effort", js: "effort", typ: "" },
         { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
         { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
-        { json: "placement", js: "placement", typ: "" },
+        { json: "model", js: "model", typ: "" },
+        { json: "predecessor_session_id", js: "predecessor_session_id", typ: u(undefined, "") },
+        { json: "role", js: "role", typ: u(undefined, "") },
+        { json: "seed_id", js: "seed_id", typ: "" },
         { json: "session_id", js: "session_id", typ: "" },
-        { json: "workspace_id", js: "workspace_id", typ: "" },
+        { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
         { json: "worktree_created", js: "worktree_created", typ: u(undefined, true) },
     ], "any"),
     "DelegateStatusMessage": o([
@@ -18246,6 +18567,10 @@ const typeMap: any = {
         { json: "harness", js: "harness", typ: "" },
         { json: "model", js: "model", typ: "" },
         { json: "provider", js: "provider", typ: "" },
+    ], "any"),
+    "DelegationFailure": o([
+        { json: "code", js: "code", typ: "" },
+        { json: "message", js: "message", typ: "" },
     ], "any"),
     "DelegationFallback": o([
         { json: "instructions", js: "instructions", typ: "" },
@@ -18279,11 +18604,11 @@ const typeMap: any = {
         { json: "detail", js: "detail", typ: "" },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("DelegationModelsResultMessageEvent") },
-        { json: "models", js: "models", typ: a(r("DelegationModelsResultMessageModel")) },
+        { json: "models", js: "models", typ: a(r("ModelObject")) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
     ], "any"),
-    "DelegationModelsResultMessageModel": o([
+    "ModelObject": o([
         { json: "access", js: "access", typ: r("ModelCapabilitySupport") },
         { json: "description", js: "description", typ: "" },
         { json: "detail", js: "detail", typ: "" },
@@ -18295,18 +18620,26 @@ const typeMap: any = {
         { json: "provider", js: "provider", typ: "" },
     ], "any"),
     "DelegationOperation": o([
+        { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "created_at", js: "created_at", typ: "" },
+        { json: "directory", js: "directory", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "failure", js: "failure", typ: u(undefined, r("Failure")) },
         { json: "operation_id", js: "operation_id", typ: "" },
         { json: "progress", js: "progress", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "result", js: "result", typ: u(undefined, r("DelegateResultObject")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: r("DelegationOperationState") },
         { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
         { json: "updated_at", js: "updated_at", typ: "" },
         { json: "workspace_id", js: "workspace_id", typ: u(undefined, "") },
         { json: "worktree_path", js: "worktree_path", typ: u(undefined, "") },
+    ], "any"),
+    "Failure": o([
+        { json: "code", js: "code", typ: "" },
+        { json: "message", js: "message", typ: "" },
     ], "any"),
     "DelegationOperationMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -18315,12 +18648,16 @@ const typeMap: any = {
         { json: "success", js: "success", typ: true },
     ], "any"),
     "DelegationOperationObject": o([
+        { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "created_at", js: "created_at", typ: "" },
+        { json: "directory", js: "directory", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
+        { json: "failure", js: "failure", typ: u(undefined, r("Failure")) },
         { json: "operation_id", js: "operation_id", typ: "" },
         { json: "progress", js: "progress", typ: "" },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "result", js: "result", typ: u(undefined, r("DelegateResultObject")) },
+        { json: "seed_id", js: "seed_id", typ: u(undefined, "") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "state", js: "state", typ: r("DelegationOperationState") },
         { json: "ticket_id", js: "ticket_id", typ: u(undefined, "") },
@@ -18333,12 +18670,14 @@ const typeMap: any = {
         { json: "fallback", js: "fallback", typ: r("Fallback") },
         { json: "revision", js: "revision", typ: 0 },
         { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "workflow_skill_enabled", js: "workflow_skill_enabled", typ: true },
     ], "any"),
     "Fallback": o([
         { json: "instructions", js: "instructions", typ: "" },
         { json: "selection", js: "selection", typ: r("Selection") },
     ], "any"),
     "RoleElement": o([
+        { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "default_choice_id", js: "default_choice_id", typ: "" },
         { json: "description", js: "description", typ: "" },
@@ -18366,11 +18705,13 @@ const typeMap: any = {
     "DelegationPreferencesResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("DelegationPreferencesResultMessageEvent") },
+        { json: "expanded_roles", js: "expanded_roles", typ: u(undefined, a(r("RoleElement"))) },
         { json: "harnesses", js: "harnesses", typ: u(undefined, a(r("HarnessElement"))) },
         { json: "preferences", js: "preferences", typ: u(undefined, r("Preferences")) },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },
         { json: "templates", js: "templates", typ: u(undefined, a(r("RoleElement"))) },
+        { json: "workflow_skill_paths", js: "workflow_skill_paths", typ: u(undefined, a("")) },
     ], "any"),
     "HarnessElement": o([
         { json: "available", js: "available", typ: true },
@@ -18385,13 +18726,16 @@ const typeMap: any = {
         { json: "fallback", js: "fallback", typ: r("Fallback") },
         { json: "revision", js: "revision", typ: 0 },
         { json: "roles", js: "roles", typ: a(r("RoleElement")) },
+        { json: "workflow_skill_enabled", js: "workflow_skill_enabled", typ: true },
     ], "any"),
     "DelegationPreferencesSaveMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesSaveMessageCmd") },
+        { json: "install_workflow_skill", js: "install_workflow_skill", typ: u(undefined, true) },
         { json: "preferences", js: "preferences", typ: r("Preferences") },
         { json: "request_id", js: "request_id", typ: "" },
     ], "any"),
     "DelegationRole": o([
+        { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
         { json: "choices", js: "choices", typ: a(r("ChoiceElement")) },
         { json: "default_choice_id", js: "default_choice_id", typ: "" },
         { json: "description", js: "description", typ: "" },
@@ -19102,9 +19446,6 @@ const typeMap: any = {
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
-        { json: "resume_agent", js: "resume_agent", typ: u(undefined, "") },
-        { json: "resume_cwd", js: "resume_cwd", typ: u(undefined, "") },
-        { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
@@ -19140,6 +19481,7 @@ const typeMap: any = {
         { json: "to", js: "to", typ: "" },
     ], "any"),
     "HarvestWhen": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
@@ -19394,6 +19736,11 @@ const typeMap: any = {
         { json: "old_path", js: "old_path", typ: u(undefined, "") },
         { json: "path", js: "path", typ: "" },
         { json: "status", js: "status", typ: "" },
+    ], "any"),
+    "GuardianSelection": o([
+        { json: "effort", js: "effort", typ: u(undefined, "") },
+        { json: "model", js: "model", typ: u(undefined, "") },
+        { json: "provider", js: "provider", typ: u(undefined, "") },
     ], "any"),
     "HeartbeatMessage": o([
         { json: "cmd", js: "cmd", typ: r("HeartbeatMessageCmd") },
@@ -19872,16 +20219,31 @@ const typeMap: any = {
         { json: "path", js: "path", typ: "" },
     ], "any"),
     "Notification": o([
+        { json: "actions", js: "actions", typ: u(undefined, a(r("ActionElement"))) },
         { json: "body", js: "body", typ: "" },
+        { json: "cause", js: "cause", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "detail", js: "detail", typ: "" },
+        { json: "diagnostic", js: "diagnostic", typ: "" },
         { json: "id", js: "id", typ: "" },
+        { json: "impact", js: "impact", typ: "" },
         { json: "kind", js: "kind", typ: "" },
         { json: "read_at", js: "read_at", typ: "" },
         { json: "severity", js: "severity", typ: r("NotificationSeverity") },
         { json: "source_id", js: "source_id", typ: "" },
         { json: "source_kind", js: "source_kind", typ: "" },
         { json: "title", js: "title", typ: "" },
+        { json: "trigger", js: "trigger", typ: "" },
+    ], "any"),
+    "ActionElement": o([
+        { json: "kind", js: "kind", typ: "" },
+        { json: "label", js: "label", typ: "" },
+        { json: "target_id", js: "target_id", typ: "" },
+    ], "any"),
+    "NotificationAction": o([
+        { json: "kind", js: "kind", typ: "" },
+        { json: "label", js: "label", typ: "" },
+        { json: "target_id", js: "target_id", typ: "" },
     ], "any"),
     "NotificationListMessage": o([
         { json: "cmd", js: "cmd", typ: r("NotificationListMessageCmd") },
@@ -19898,16 +20260,21 @@ const typeMap: any = {
         { json: "unread_critical_count", js: "unread_critical_count", typ: 0 },
     ], "any"),
     "NotificationElement": o([
+        { json: "actions", js: "actions", typ: u(undefined, a(r("ActionElement"))) },
         { json: "body", js: "body", typ: "" },
+        { json: "cause", js: "cause", typ: "" },
         { json: "created_at", js: "created_at", typ: "" },
         { json: "detail", js: "detail", typ: "" },
+        { json: "diagnostic", js: "diagnostic", typ: "" },
         { json: "id", js: "id", typ: "" },
+        { json: "impact", js: "impact", typ: "" },
         { json: "kind", js: "kind", typ: "" },
         { json: "read_at", js: "read_at", typ: "" },
         { json: "severity", js: "severity", typ: r("NotificationSeverity") },
         { json: "source_id", js: "source_id", typ: "" },
         { json: "source_kind", js: "source_kind", typ: "" },
         { json: "title", js: "title", typ: "" },
+        { json: "trigger", js: "trigger", typ: "" },
     ], "any"),
     "NotificationMarkReadMessage": o([
         { json: "cmd", js: "cmd", typ: r("NotificationMarkReadMessageCmd") },
@@ -20436,6 +20803,7 @@ const typeMap: any = {
         { json: "app_status_result", js: "app_status_result", typ: u(undefined, r("AppStatusResultObject")) },
         { json: "app_watch_result", js: "app_watch_result", typ: u(undefined, r("AppWatchResultObject")) },
         { json: "authors", js: "authors", typ: u(undefined, a(r("AuthorElement"))) },
+        { json: "automode_config_result", js: "automode_config_result", typ: u(undefined, r("AutomodeConfigResult")) },
         { json: "automode_denials_result", js: "automode_denials_result", typ: u(undefined, r("AutomodeDenialsResult")) },
         { json: "automode_env_result", js: "automode_env_result", typ: u(undefined, r("AutomodeEnvResult")) },
         { json: "automode_propose_result", js: "automode_propose_result", typ: u(undefined, r("AutomodeProposeResult")) },
@@ -20488,7 +20856,6 @@ const typeMap: any = {
         { json: "seed_review_result", js: "seed_review_result", typ: u(undefined, r("SeedReviewResultObject")) },
         { json: "seed_search_result", js: "seed_search_result", typ: u(undefined, r("SeedSearchResultObject")) },
         { json: "seed_send_to_chief_result", js: "seed_send_to_chief_result", typ: u(undefined, r("SeedSendToChiefResultObject")) },
-        { json: "seed_set_resume_result", js: "seed_set_resume_result", typ: u(undefined, r("SeedSetResumeResultObject")) },
         { json: "seed_show_result", js: "seed_show_result", typ: u(undefined, r("SeedShowResultObject")) },
         { json: "seed_transition_result", js: "seed_transition_result", typ: u(undefined, r("SeedTransitionResultObject")) },
         { json: "seed_watch_result", js: "seed_watch_result", typ: u(undefined, r("SeedWatchResultObject")) },
@@ -20629,6 +20996,9 @@ const typeMap: any = {
     "AppWatchResultObject": o([
         { json: "invocation", js: "invocation", typ: r("CurrentAttempt") },
     ], "any"),
+    "AutomodeConfigResult": o([
+        { json: "config", js: "config", typ: r("Config") },
+    ], "any"),
     "AutomodeDenialsResult": o([
         { json: "denials", js: "denials", typ: a(r("DenialElement")) },
         { json: "ledger_note", js: "ledger_note", typ: u(undefined, "") },
@@ -20641,7 +21011,10 @@ const typeMap: any = {
     ], "any"),
     "AutomodeShowResult": o([
         { json: "config", js: "config", typ: r("Config") },
+        { json: "global_rules", js: "global_rules", typ: a(r("RuleElement")) },
         { json: "proposals", js: "proposals", typ: a(r("Proposal")) },
+        { json: "repository_rules", js: "repository_rules", typ: a(r("RuleElement")) },
+        { json: "repository_rules_path", js: "repository_rules_path", typ: u(undefined, "") },
     ], "any"),
     "CrewCharterGetResultObject": o([
         { json: "charter", js: "charter", typ: r("Charter") },
@@ -20865,9 +21238,6 @@ const typeMap: any = {
         { json: "detail", js: "detail", typ: "" },
         { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
-    "SeedSetResumeResultObject": o([
-        { json: "seed", js: "seed", typ: r("SeedElement") },
-    ], "any"),
     "SeedShowResultObject": o([
         { json: "artifacts", js: "artifacts", typ: a(r("SeedArtifactTransferResultArtifact")) },
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
@@ -20888,6 +21258,7 @@ const typeMap: any = {
     "SeedTransitionResultObject": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
+        { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),
     "SeedWatchResultObject": o([
         { json: "changed", js: "changed", typ: true },
@@ -21160,9 +21531,6 @@ const typeMap: any = {
         { json: "plot_progress", js: "plot_progress", typ: u(undefined, r("PlotProgress")) },
         { json: "ready", js: "ready", typ: true },
         { json: "reason", js: "reason", typ: u(undefined, "") },
-        { json: "resume_agent", js: "resume_agent", typ: u(undefined, "") },
-        { json: "resume_cwd", js: "resume_cwd", typ: u(undefined, "") },
-        { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },
         { json: "rev", js: "rev", typ: 0 },
         { json: "state_changed_at", js: "state_changed_at", typ: "" },
         { json: "state_changed_at_exact", js: "state_changed_at_exact", typ: true },
@@ -21307,10 +21675,12 @@ const typeMap: any = {
         { json: "expected_tender_member", js: "expected_tender_member", typ: "" },
         { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
         { json: "handoff", js: "handoff", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: u(undefined, r("HandoverReview")) },
+        { json: "note_id", js: "note_id", typ: u(undefined, "") },
+        { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedHarvestCondition": o([
+        { json: "checked_at", js: "checked_at", typ: u(undefined, "") },
         { json: "pull_request", js: "pull_request", typ: "" },
         { json: "set_at", js: "set_at", typ: "" },
         { json: "set_by_member", js: "set_by_member", typ: u(undefined, "") },
@@ -21389,9 +21759,6 @@ const typeMap: any = {
         { json: "discovered_from", js: "discovered_from", typ: u(undefined, "") },
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "part_of", js: "part_of", typ: u(undefined, "") },
-        { json: "resume_agent", js: "resume_agent", typ: u(undefined, "") },
-        { json: "resume_cwd", js: "resume_cwd", typ: u(undefined, "") },
-        { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "title", js: "title", typ: "" },
     ], "any"),
@@ -21452,7 +21819,7 @@ const typeMap: any = {
     "SeedResumeMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedResumeMessageCmd") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: u(undefined, r("HandoverReview")) },
+        { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedResumeResultMessage": o([
@@ -21476,7 +21843,7 @@ const typeMap: any = {
     "SeedReviewDraftMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewDraftMessageCmd") },
         { json: "request_id", js: "request_id", typ: "" },
-        { json: "review", js: "review", typ: r("HandoverReview") },
+        { json: "review", js: "review", typ: r("DelegateMessageReview") },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedReviewDraftResultMessage": o([
@@ -21489,7 +21856,7 @@ const typeMap: any = {
     "SeedReviewKeepMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedReviewKeepMessageCmd") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: r("HandoverReview") },
+        { json: "review", js: "review", typ: r("DelegateMessageReview") },
         { json: "seed_id", js: "seed_id", typ: "" },
     ], "any"),
     "SeedReviewResult": o([
@@ -21544,7 +21911,7 @@ const typeMap: any = {
         { json: "expected_tender_session", js: "expected_tender_session", typ: "" },
         { json: "guidance", js: "guidance", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: u(undefined, r("HandoverReview")) },
+        { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
     ], "any"),
@@ -21560,17 +21927,6 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: "" },
         { json: "result", js: "result", typ: u(undefined, r("SeedSendToChiefResultObject")) },
         { json: "success", js: "success", typ: true },
-    ], "any"),
-    "SeedSetResumeMessage": o([
-        { json: "clear", js: "clear", typ: u(undefined, true) },
-        { json: "cmd", js: "cmd", typ: r("SeedSetResumeMessageCmd") },
-        { json: "resume_agent", js: "resume_agent", typ: u(undefined, "") },
-        { json: "resume_cwd", js: "resume_cwd", typ: u(undefined, "") },
-        { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },
-        { json: "seed_id", js: "seed_id", typ: "" },
-    ], "any"),
-    "SeedSetResumeResult": o([
-        { json: "seed", js: "seed", typ: r("SeedElement") },
     ], "any"),
     "SeedShowMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedShowMessageCmd") },
@@ -21596,7 +21952,7 @@ const typeMap: any = {
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "reason", js: "reason", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
-        { json: "review", js: "review", typ: u(undefined, r("HandoverReview")) },
+        { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "source_session_id", js: "source_session_id", typ: u(undefined, "") },
         { json: "verb", js: "verb", typ: "" },
@@ -21608,6 +21964,7 @@ const typeMap: any = {
     "SeedTransitionResult": o([
         { json: "handoff", js: "handoff", typ: u(undefined, r("Note")) },
         { json: "seed", js: "seed", typ: r("SeedElement") },
+        { json: "unblocked", js: "unblocked", typ: u(undefined, a(r("SeedElement"))) },
     ], "any"),
     "SeedTransitionResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -21649,6 +22006,7 @@ const typeMap: any = {
         { json: "context_window_cap", js: "context_window_cap", typ: u(undefined, 0) },
         { json: "crew_member", js: "crew_member", typ: u(undefined, "") },
         { json: "delegated_from_chief", js: "delegated_from_chief", typ: u(undefined, true) },
+        { json: "delegation_role", js: "delegation_role", typ: u(undefined, r("DelegationRoleObject")) },
         { json: "directory", js: "directory", typ: "" },
         { json: "dispatcher_member", js: "dispatcher_member", typ: u(undefined, "") },
         { json: "dispatcher_session_id", js: "dispatcher_session_id", typ: u(undefined, "") },
@@ -21776,6 +22134,11 @@ const typeMap: any = {
         { json: "event", js: "event", typ: r("SessionContextWindowCapResultMessageEvent") },
         { json: "session_id", js: "session_id", typ: "" },
         { json: "success", js: "success", typ: true },
+    ], "any"),
+    "SessionDelegationRole": o([
+        { json: "builtin", js: "builtin", typ: u(undefined, r("BuiltinDelegationRole")) },
+        { json: "icon", js: "icon", typ: u(undefined, "") },
+        { json: "name", js: "name", typ: "" },
     ], "any"),
     "SessionExitedMessage": o([
         { json: "event", js: "event", typ: r("SessionExitedMessageEvent") },
@@ -21992,7 +22355,7 @@ const typeMap: any = {
         { json: "cost_usd", js: "cost_usd", typ: u(undefined, 3.14) },
         { json: "has_unpriced_usage", js: "has_unpriced_usage", typ: true },
         { json: "measurement_incomplete", js: "measurement_incomplete", typ: u(undefined, true) },
-        { json: "models", js: "models", typ: a(r("ModelObject")) },
+        { json: "models", js: "models", typ: a(r("ModelElement")) },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
     ], "any"),
     "SessionUsageModel": o([
@@ -22005,6 +22368,7 @@ const typeMap: any = {
         { json: "input_tokens", js: "input_tokens", typ: 0 },
         { json: "model", js: "model", typ: "" },
         { json: "output_tokens", js: "output_tokens", typ: 0 },
+        { json: "purpose", js: "purpose", typ: "" },
         { json: "total_tokens", js: "total_tokens", typ: 0 },
         { json: "unpriced_reason", js: "unpriced_reason", typ: u(undefined, "") },
     ], "any"),
@@ -22095,6 +22459,7 @@ const typeMap: any = {
     ], "any"),
     "SpawnSessionMessage": o([
         { json: "agent", js: "agent", typ: "" },
+        { json: "approval_policy", js: "approval_policy", typ: u(undefined, "") },
         { json: "auto_mode", js: "auto_mode", typ: u(undefined, true) },
         { json: "chief_of_staff", js: "chief_of_staff", typ: u(undefined, true) },
         { json: "claude_executable", js: "claude_executable", typ: u(undefined, "") },
@@ -22113,6 +22478,7 @@ const typeMap: any = {
         { json: "resume_picker", js: "resume_picker", typ: u(undefined, true) },
         { json: "resume_session_id", js: "resume_session_id", typ: u(undefined, "") },
         { json: "rows", js: "rows", typ: 0 },
+        { json: "sandbox_mode", js: "sandbox_mode", typ: u(undefined, "") },
         { json: "spawned_from", js: "spawned_from", typ: u(undefined, "") },
         { json: "workspace_id", js: "workspace_id", typ: "" },
         { json: "yolo_mode", js: "yolo_mode", typ: u(undefined, true) },
@@ -22253,6 +22619,7 @@ const typeMap: any = {
         { json: "created_at", js: "created_at", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "kind", js: "kind", typ: "" },
+        { json: "last_diagnostic", js: "last_diagnostic", typ: u(undefined, "") },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "next_attempt_at", js: "next_attempt_at", typ: "" },
         { json: "state", js: "state", typ: "" },
@@ -22275,6 +22642,7 @@ const typeMap: any = {
         { json: "created_at", js: "created_at", typ: "" },
         { json: "id", js: "id", typ: "" },
         { json: "kind", js: "kind", typ: "" },
+        { json: "last_diagnostic", js: "last_diagnostic", typ: u(undefined, "") },
         { json: "last_error", js: "last_error", typ: u(undefined, "") },
         { json: "next_attempt_at", js: "next_attempt_at", typ: "" },
         { json: "state", js: "state", typ: "" },
@@ -23070,6 +23438,9 @@ const typeMap: any = {
     "AuthorsUpdatedMessageEvent": [
         "authors_updated",
     ],
+    "AutoModeConfigResultMessageEvent": [
+        "automode_config_result",
+    ],
     "AutoModeDenialsMessageCmd": [
         "automode_denials",
     ],
@@ -23091,26 +23462,17 @@ const typeMap: any = {
     "AutoModeGetMessageCmd": [
         "automode_get",
     ],
-    "AutoModeModelSetMessageCmd": [
-        "automode_model_set",
+    "AutoModeHostAddMessageCmd": [
+        "automode_host_add",
     ],
-    "AutoModeModelSetResultMessageEvent": [
-        "automode_model_set_result",
+    "AutoModeHostRemoveMessageCmd": [
+        "automode_host_remove",
     ],
-    "AutoModeModelsMessageCmd": [
-        "automode_models",
+    "AutoModeLegacyDismissMessageCmd": [
+        "automode_legacy_dismiss",
     ],
-    "AutoModeModelsResultMessageEvent": [
-        "automode_models_result",
-    ],
-    "AutoModePatternAddMessageCmd": [
-        "automode_pattern_add",
-    ],
-    "AutoModePatternRemoveMessageCmd": [
-        "automode_pattern_remove",
-    ],
-    "AutoModePatternResultMessageEvent": [
-        "automode_pattern_result",
+    "AutoModePolicySetMessageCmd": [
+        "automode_policy_set",
     ],
     "AutoModePromoteMessageCmd": [
         "automode_promote",
@@ -23120,6 +23482,12 @@ const typeMap: any = {
     ],
     "AutoModeProposeMessageCmd": [
         "automode_propose",
+    ],
+    "AutoModeRuleAddMessageCmd": [
+        "automode_rule_add",
+    ],
+    "AutoModeRuleRemoveMessageCmd": [
+        "automode_rule_remove",
     ],
     "AutoModeShowMessageCmd": [
         "automode_show",
@@ -23192,6 +23560,12 @@ const typeMap: any = {
     ],
     "BranchChangedMessageEvent": [
         "branch_changed",
+    ],
+    "BuiltinDelegationRole": [
+        "builder",
+        "orchestrator",
+        "pathfinder",
+        "reviewer",
     ],
     "SessionState": [
         "idle",
@@ -23335,6 +23709,15 @@ const typeMap: any = {
     ],
     "CrewWakeResultMessageEvent": [
         "crew_wake_result",
+    ],
+    "DelegateAssignmentKind": [
+        "new",
+        "seed",
+    ],
+    "DelegateCheckoutKind": [
+        "existing_branch_worktree",
+        "new_worktree",
+        "reuse",
     ],
     "DelegateMessageCmd": [
         "delegate",
@@ -24045,9 +24428,6 @@ const typeMap: any = {
     ],
     "SeedSendToChiefResultMessageEvent": [
         "seed_send_to_chief_result",
-    ],
-    "SeedSetResumeMessageCmd": [
-        "seed_set_resume",
     ],
     "SeedShowMessageCmd": [
         "seed_show",

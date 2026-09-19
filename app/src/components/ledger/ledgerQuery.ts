@@ -19,6 +19,7 @@ export function parseQuery(
   text: string,
   facets: SessionLedgerFacets | null,
   workspaceLabel: (id: string) => string,
+  preferredRepository = '',
 ): ParsedQuery {
   const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' };
   const words: string[] = [];
@@ -34,10 +35,22 @@ export function parseQuery(
     } else if (key === 'from' || key === 'to') {
       filters.range = 'custom';
       if (key === 'from') filters.customFrom = value; else filters.customTo = value;
-    } else if (key === 'repo') {
-      const match = (facets?.repositories ?? []).find((facet) =>
-        facet.value === value || baseName(facet.value).toLowerCase() === value.toLowerCase());
-      if (match) filters.repository = match.value; else unresolved.push(token);
+    } else if (key === 'repo' || key === 'repo-path') {
+      const repository = key === 'repo-path' ? repositoryTokenValue(value) : value;
+      if (key === 'repo-path') {
+        filters.repository = repository;
+        continue;
+      }
+      const repositories = facets?.repositories ?? [];
+      const exact = repositories.find((facet) => facet.value === repository)?.value;
+      const preferred = baseName(preferredRepository).toLowerCase() === repository.toLowerCase()
+        ? preferredRepository
+        : '';
+      const named = repositories.filter((facet) => baseName(facet.value).toLowerCase() === repository.toLowerCase());
+      const match = exact
+        || preferred
+        || (named.length === 1 ? named[0].value : '');
+      if (match) filters.repository = match; else unresolved.push(token);
     } else if (key === 'ws') {
       const match = (facets?.workspaces ?? []).find((facet) =>
         facet.value === value || wsToken(workspaceLabel(facet.value)) === value.toLowerCase());
@@ -77,6 +90,14 @@ export function baseName(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
   const cut = trimmed.lastIndexOf('/');
   return cut < 0 ? trimmed : trimmed.slice(cut + 1);
+}
+
+export function repositoryQueryToken(repository: string): string {
+  return `repo-path:${encodeURIComponent(repository)}`;
+}
+
+function repositoryTokenValue(value: string): string {
+  return new URLSearchParams(`repository=${value}`).get('repository') ?? '';
 }
 
 export function matchesWords(haystack: string[], words: string[]): boolean {

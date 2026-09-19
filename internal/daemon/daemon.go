@@ -95,6 +95,8 @@ const (
 	warnGHVersionTooOld           = "gh_version_too_old"
 )
 
+var ErrAlreadyRunning = errors.New("daemon already running")
+
 type Daemon struct {
 	socketPath                  string
 	pidPath                     string
@@ -141,6 +143,10 @@ type Daemon struct {
 	sessionPaneAddMu                  sync.Mutex
 	gitCoordMu                        sync.Mutex
 	gitCoord                          *gitCoordinator
+	worktreeMaintenance               worktreeMaintenanceCoordinator
+	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
+	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
+	worktreeObserveCandidate          func(context.Context, *repositoryFacts, git.WorktreeState, time.Time) (store.WorktreeObservation, error)
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
@@ -154,6 +160,7 @@ type Daemon struct {
 	upgradingWorkers                  map[string]bool
 	watchersMu                        sync.Mutex
 	transcriptWatch                   map[string]*transcriptWatcher
+	pluginUsageWatch                  map[string]*pluginUsageWatcher
 	transcriptWatcherSessionLookup    func(string) *protocol.Session
 	transcriptResumeLookup            func(protocol.SessionAgent, string) string
 	classifiedMu                      sync.Mutex
@@ -178,6 +185,7 @@ type Daemon struct {
 	delegationModelQueries            singleflight.Group
 	delegationMu                      sync.Mutex
 	delegationRunning                 map[string]bool
+	delegationCheckoutMu              sync.Mutex
 	delegationWorktreePrepareHook     func(path string)
 	delegationFinalizeHook            func() error
 	delegationWaitsForFirstTurn       bool
@@ -188,8 +196,8 @@ type Daemon struct {
 	prepareSessionTeardownHook        func(string) error
 	teardownMu                        sync.Mutex
 	tearingDown                       map[string]chan struct{}
-	reloadLocksMu                     sync.Mutex
-	reloadLocks                       map[string]*sync.Mutex
+	sessionLifecycleLocksMu           sync.Mutex
+	sessionLifecycleLocks             map[string]*sessionLifecycleLockEntry
 	spawnLocksMu                      sync.Mutex
 	spawnLocks                        map[string]*spawnLock
 	sessionInputOnce                  sync.Once
@@ -363,8 +371,10 @@ type Daemon struct {
 
 	automationsBroadcastHook func(*protocol.AutomationsChangedMessage)
 
-	eventBus       *bus.Bus
-	busUnsubscribe func()
+	eventBus                       *bus.Bus
+	busUnsubscribe                 func()
+	gardenSeedEventConsumerErr     error
+	gardenSeedEventConsumerStarted bool
 
 	docSubsMu              sync.Mutex
 	docSubs                map[string]*docSubscription
@@ -391,6 +401,7 @@ type Daemon struct {
 	// in Start); read via jobQueueRef(), write via setJobQueue().
 	jobQueueMu               sync.RWMutex
 	jobQueue                 *jobs.Runner
+	taskFailureRenderers     map[string]taskFailureRenderer
 	sessionActivityExecution func(
 		ctx context.Context,
 		provider agentdriver.HeadlessTaskProvider,
@@ -566,6 +577,10 @@ func (d *Daemon) waitStarted(timeout time.Duration) bool {
 	case <-time.After(timeout):
 		return false
 	}
+}
+
+func (d *Daemon) Started() <-chan struct{} {
+	return d.startedCh
 }
 
 func New(socketPath string) *Daemon {
@@ -1036,13 +1051,25 @@ func (d *Daemon) Start() error {
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
 		d.reconcileCrewRestarts()
-		d.seedQueuedAgentMailboxItems()
+		d.gardenWatchMu.Lock()
+		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
+		d.gardenWatchMu.Unlock()
+		if gardenBellErr != nil {
+			d.logf("Garden seed mailbox startup reconciliation failed; queued updates remain undelivered: %v", gardenBellErr)
+		} else {
+			d.seedQueuedAgentMailboxItems()
+		}
 		recoverAutomationsAfterGitHubReady(githubHostsReady, d.recoverAutomations)
 		d.setRecovering(false)
 		d.resumePendingDelegations()
 	}()
 
 	d.signalStarted()
+	go func() {
+		if err := d.reconcileSeedArtifactObservations(); err != nil {
+			d.logf("Garden seed artifact startup reconciliation incomplete: %v", err)
+		}
+	}()
 	startSucceeded = true
 
 	for {
@@ -1388,7 +1415,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				state = protocol.SessionStateLaunching
 			}
 
-			d.store.Add(&protocol.Session{
+			recoveredSession := &protocol.Session{
 				ID:             sessionID,
 				Label:          label,
 				Agent:          normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex),
@@ -1397,6 +1424,10 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateSince:     now,
 				StateUpdatedAt: now,
 				LastSeen:       now,
+			}
+			_ = d.worktreeMaintenance.RunForeground(context.Background(), "register recovered session", func(context.Context) error {
+				d.store.Add(recoveredSession)
+				return nil
 			})
 			report.Created++
 			report.markChanged(sessionID)
@@ -1792,8 +1823,17 @@ func (d *Daemon) removePTYSession(sessionID string) error {
 }
 
 type sessionTeardown struct {
-	session   *protocol.Session
-	driverRun store.AgentDriverReportCursor
+	session          *protocol.Session
+	driverRun        store.AgentDriverReportCursor
+	lifecycleLock    *sessionLifecycleLockLease
+	lifecycleRelease sync.Once
+}
+
+func (t *sessionTeardown) releaseLifecycle() {
+	if t == nil || t.lifecycleLock == nil {
+		return
+	}
+	t.lifecycleRelease.Do(t.lifecycleLock.Unlock)
 }
 
 func (d *Daemon) terminateSession(sessionID string, sig syscall.Signal) {
@@ -1871,6 +1911,8 @@ func (d *Daemon) unregisterSession(sessionID string, sig syscall.Signal) *protoc
 }
 
 func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, error) {
+	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
+	lifecycleLock.Lock()
 	session := d.store.Get(sessionID)
 	if session == nil && d.hubManager != nil {
 		session = d.hubManager.RemoteSession(sessionID)
@@ -1884,22 +1926,25 @@ func (d *Daemon) prepareSessionTeardown(sessionID string) (*sessionTeardown, err
 	if d.prepareSessionTeardownHook != nil {
 		if err := d.prepareSessionTeardownHook(sessionID); err != nil {
 			d.clearForcedStopClassification(sessionID)
+			lifecycleLock.Unlock()
 			return nil, err
 		}
 	}
 	driverRun, err := d.store.PrepareSessionTeardown(sessionID, time.Now())
 	if err != nil {
 		d.clearForcedStopClassification(sessionID)
+		lifecycleLock.Unlock()
 		return nil, err
 	}
-	return &sessionTeardown{session: session, driverRun: driverRun}, nil
+	return &sessionTeardown{session: session, driverRun: driverRun, lifecycleLock: lifecycleLock}, nil
 }
 
 func (d *Daemon) commitSessionUnregister(sessionID string, closed store.SessionClose) {
 	d.closeSession(sessionID, closed)
 }
 
-func (d *Daemon) cancelSessionTeardown(sessionID string) {
+func (d *Daemon) cancelSessionTeardown(sessionID string, teardown *sessionTeardown) {
+	defer teardown.releaseLifecycle()
 	d.clearForcedStopClassification(sessionID)
 	if err := d.store.CancelSessionTeardown(sessionID); err != nil {
 		d.logf("cancel session teardown failed for %s: %v", sessionID, err)
@@ -1957,11 +2002,13 @@ func (d *Daemon) terminateSessionAsync(sessionID string, sig syscall.Signal, tea
 	}
 	if done := d.tearingDown[sessionID]; done != nil {
 		d.teardownMu.Unlock()
+		teardown.releaseLifecycle()
 		return done
 	}
 	done := make(chan struct{})
 	d.tearingDown[sessionID] = done
 	d.teardownMu.Unlock()
+	teardown.releaseLifecycle()
 
 	go func() {
 		defer func() {
@@ -2009,6 +2056,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	}
 	d.forgetSessionTrace(sessionID)
 	if recorded {
+		d.invalidateGardenSeedParties("session close")
 		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
@@ -2428,7 +2476,7 @@ func (d *Daemon) acquirePIDLock() error {
 			}
 		}
 		f.Close()
-		return fmt.Errorf("daemon already running (pid %s)", existingPID)
+		return fmt.Errorf("%w (pid %s)", ErrAlreadyRunning, existingPID)
 	}
 
 	f.Truncate(0)
@@ -2640,8 +2688,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
 	case protocol.CmdSeedEdit: // wire: seed_edit
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
-	case protocol.CmdSeedSetResume: // wire: seed_set_resume
-		d.handleSeedSetResume(conn, msg.(*protocol.SeedSetResumeMessage))
 	case protocol.CmdSeedTransition: // wire: seed_transition
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
 	case protocol.CmdSeedNote: // wire: seed_note
@@ -2785,6 +2831,13 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
+		d.handleRegisterForeground(conn, msg)
+		return nil
+	})
+}
+
+func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
@@ -2900,6 +2953,7 @@ func (d *Daemon) publishSessionUnregistered(session *protocol.Session) {
 	if session == nil {
 		return
 	}
+	d.invalidateGardenSeedParties("session unregister")
 	d.publishFact(FactSessionUnregistered, session.ID, d.sessionForBroadcast(session))
 }
 
@@ -3192,6 +3246,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 		d.gardenDispatchersBySession(),
 	)
 	if decorated != nil {
+		decorated.DelegationRole = d.sessionDelegationRoles()[decorated.ID]
 		decorated.Automation = d.automationProvenanceForSession(decorated.ID)
 		decorated.PullRequests = d.sessionPullRequestsForSession(decorated.ID)
 	}
@@ -3236,17 +3291,27 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
 	dispatcherBySession := d.gardenDispatchersBySession()
+	rolesBySession := d.sessionDelegationRoles()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
 		}
 	}
 	return out
+}
+
+func (d *Daemon) sessionDelegationRoles() map[string]*protocol.SessionDelegationRole {
+	roles, err := d.store.SessionDelegationRoles()
+	if err != nil {
+		d.logf("session delegation roles: %v", err)
+	}
+	return roles
 }
 
 func (d *Daemon) mergedSessionsForBroadcast() []protocol.Session {

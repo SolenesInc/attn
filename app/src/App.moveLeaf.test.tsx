@@ -97,6 +97,37 @@ function lonePaneWorkspace(id: string, title: string, paneId: string, sessionId:
   };
 }
 
+type PaneRef = { paneId: string; sessionId: string };
+
+function nestedSplits(id: string, panes: PaneRef[]): unknown {
+  if (panes.length === 1) {
+    return { type: 'pane', pane_id: panes[0].paneId };
+  }
+  return {
+    type: 'split',
+    split_id: `${id}-split-${panes.length}`,
+    direction: 'horizontal',
+    ratio: 0.5,
+    children: [{ type: 'pane', pane_id: panes[0].paneId }, nestedSplits(id, panes.slice(1))],
+  };
+}
+
+function workspaceWithPanes(id: string, title: string, panes: PaneRef[]) {
+  return {
+    id,
+    title,
+    directory: '/tmp/repo',
+    status: 'idle',
+    muted: false,
+    layout: {
+      workspace_id: id,
+      active_pane_id: panes[0].paneId,
+      layout_json: JSON.stringify(nestedSplits(id, panes)),
+      panes: panes.map((entry) => pane(entry.paneId, entry.sessionId, id, entry.sessionId)),
+    },
+  };
+}
+
 function paneSessionIds(root: ParentNode): string[] {
   return Array.from(root.querySelectorAll('[data-pane-kind="agent"]'))
     .map((node) => node.getAttribute('data-pane-session-id') || '')
@@ -203,6 +234,79 @@ describe('a pane moved to another workspace', () => {
     // absence here is the move landing rather than a workspace that never mounted.
     expect(renderedWorkspaceIds()).toEqual([TARGET]);
     expect(paneSessionIds(document)).toEqual(['s-source', 's-target']);
+
+    unmount();
+  });
+
+  it('gives a moved session the target layout when its new owner arrives after the layouts', async () => {
+    const stay = { paneId: 'pane-stay', sessionId: 's-stay' };
+    const stayToo = { paneId: 'pane-stay-too', sessionId: 's-stay-too' };
+    const moved = { paneId: 'pane-moved', sessionId: 's-moved' };
+    const target = { paneId: 'pane-target', sessionId: 's-target' };
+    const { unmount } = render(<App />);
+
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    await waitFor(() => {
+      expect(ws.readyState).toBe(FakeWebSocket.OPEN);
+    });
+
+    act(() => {
+      ws.emit({
+        event: 'initial_state',
+        protocol_version: PROTOCOL_VERSION,
+        sessions: [
+          session(stay.sessionId, 'staying agent', SOURCE),
+          session(stayToo.sessionId, 'other staying agent', SOURCE),
+          session(moved.sessionId, 'moved agent', SOURCE),
+          session(target.sessionId, 'target agent', TARGET),
+        ],
+        workspaces: [
+          workspaceWithPanes(SOURCE, 'Source', [stay, stayToo, moved]),
+          workspaceWithPanes(TARGET, 'Target', [target]),
+        ],
+        prs: [],
+        repos: [],
+        authors: [],
+        settings: {},
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderedPanes(SOURCE)).toEqual(['s-moved', 's-stay', 's-stay-too']);
+    });
+    expect(renderedPanes(TARGET)).toEqual(['s-target']);
+
+    act(() => {
+      ws.emit({
+        event: 'workspace_layout_updated',
+        workspace_layout: workspaceWithPanes(SOURCE, 'Source', [stay, stayToo]).layout,
+      });
+      ws.emit({
+        event: 'workspace_layout_updated',
+        workspace_layout: workspaceWithPanes(TARGET, 'Target', [target, moved]).layout,
+      });
+    });
+
+    await waitFor(() => {
+      expect(renderedPanes(SOURCE)).toEqual(['s-stay', 's-stay-too']);
+    });
+    expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
+
+    act(() => {
+      ws.emit({
+        event: 'session_state_changed',
+        session: session(moved.sessionId, 'moved agent', TARGET),
+      });
+    });
+
+    await waitFor(() => {
+      expect(paneSessionIds(document)).toEqual(['s-moved', 's-stay', 's-stay-too', 's-target']);
+    });
+    expect(renderedPanes(SOURCE)).toEqual(['s-stay', 's-stay-too']);
+    expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
 
     unmount();
   });

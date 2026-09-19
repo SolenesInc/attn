@@ -290,7 +290,7 @@ type DocumentCommit struct {
 }
 
 func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Time) (DocumentWriteResult, error) {
-	results, err := s.commitDocumentWrites([]DocumentCommit{{Write: w, Fact: fact}}, now, true, nil)
+	results, _, err := s.commitDocumentWrites([]DocumentCommit{{Write: w, Fact: fact}}, nil, now, true, nil)
 	if err != nil {
 		return DocumentWriteResult{}, err
 	}
@@ -298,24 +298,52 @@ func (s *Store) CommitDocumentWrite(w DocumentWrite, fact BusEvent, now time.Tim
 }
 
 func (s *Store) CommitDocumentWrites(commits []DocumentCommit, now time.Time) ([]DocumentWriteResult, error) {
-	return s.commitDocumentWrites(commits, now, false, nil)
+	results, _, err := s.commitDocumentWrites(commits, nil, now, false, nil)
+	return results, err
+}
+
+func (s *Store) CommitDocumentWriteWithEvents(
+	w DocumentWrite, fact BusEvent, events []BusEvent, now time.Time,
+) (DocumentWriteResult, []int64, error) {
+	results, eventSeqs, err := s.commitDocumentWrites(
+		[]DocumentCommit{{Write: w, Fact: fact}}, events, now, true, nil,
+	)
+	if err != nil {
+		return DocumentWriteResult{}, nil, err
+	}
+	return results[0], eventSeqs, nil
+}
+
+func (s *Store) CommitDocumentWritesWithEvents(
+	commits []DocumentCommit, events []BusEvent, now time.Time,
+) ([]DocumentWriteResult, []int64, error) {
+	return s.commitDocumentWrites(commits, events, now, false, nil)
 }
 
 // CommitGardenDispatchWrites persists a new binding and its ordinary watch together.
 // Callers use the committed binding as the receipt and skip this on replay.
 func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
-	return s.commitDocumentWrites(commits, now, false, &watch)
+	results, _, err := s.commitDocumentWrites(commits, nil, now, false, &watch)
+	return results, err
 }
 
-func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, single bool, watch *GardenSeedWatch) ([]DocumentWriteResult, error) {
+func (s *Store) CommitGardenDispatchWritesWithEvents(
+	commits []DocumentCommit, watch GardenSeedWatch, events []BusEvent, now time.Time,
+) ([]DocumentWriteResult, []int64, error) {
+	return s.commitDocumentWrites(commits, events, now, false, &watch)
+}
+
+func (s *Store) commitDocumentWrites(
+	commits []DocumentCommit, events []BusEvent, now time.Time, single bool, watch *GardenSeedWatch,
+) ([]DocumentWriteResult, []int64, error) {
 	if len(commits) == 0 {
-		return []DocumentWriteResult{}, nil
+		return []DocumentWriteResult{}, nil, nil
 	}
 	tables := make([]string, len(commits))
 	for i, commit := range commits {
 		table, err := s.documentTable(commit.Write.Schema)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		tables[i] = table
 	}
@@ -326,34 +354,42 @@ func (s *Store) commitDocumentWrites(commits []DocumentCommit, now time.Time, si
 	tx, err := s.db.Begin()
 	if err != nil {
 		w := commits[0].Write
-		return nil, fmt.Errorf("store: writing %s/%s/%s: %w",
+		return nil, nil, fmt.Errorf("store: writing %s/%s/%s: %w",
 			w.Schema.Namespace, w.Schema.Collection, w.ID, err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	results, changed, err := commitDocumentWritesWith(tx, commits, tables, now)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if watch != nil && watch.WatcherSessionID != "" && watch.SeedID != "" {
 		if _, err := tx.Exec(`INSERT OR IGNORE INTO garden_seed_watches(watcher_session_id, seed_id, created_at) VALUES (?, ?, ?)`, watch.WatcherSessionID, watch.SeedID, now.UTC().Format(sortableTimeFormat)); err != nil {
-			return nil, fmt.Errorf("subscribe delegation dispatcher: %w", err)
+			return nil, nil, fmt.Errorf("subscribe delegation dispatcher: %w", err)
 		}
 		changed = true
 	}
 	if !changed {
-		return results, nil
+		return results, nil, nil
+	}
+	eventSeqs := make([]int64, len(events))
+	for i, event := range events {
+		seq, err := appendBusEventWith(tx, event, now)
+		if err != nil {
+			return nil, nil, fmt.Errorf("store: appending semantic event %s for %s: %w", event.Name, event.Subject, err)
+		}
+		eventSeqs[i] = seq
 	}
 
 	if err := tx.Commit(); err != nil {
 		if single {
 			w := commits[0].Write
-			return nil, fmt.Errorf("store: committing the write to %s/%s/%s: %w",
+			return nil, nil, fmt.Errorf("store: committing the write to %s/%s/%s: %w",
 				w.Schema.Namespace, w.Schema.Collection, w.ID, err)
 		}
-		return nil, fmt.Errorf("store: committing %d document writes: %w", len(commits), err)
+		return nil, nil, fmt.Errorf("store: committing %d document writes: %w", len(commits), err)
 	}
-	return results, nil
+	return results, eventSeqs, nil
 }
 
 func commitDocumentWritesWith(tx *sql.Tx, commits []DocumentCommit, tables []string, now time.Time) ([]DocumentWriteResult, bool, error) {

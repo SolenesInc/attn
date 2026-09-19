@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: Session filters keep the selected repository when another checkout has the same folder name.
+symptom: Reopening Sessions could silently switch its repository filter to an older same-named checkout.

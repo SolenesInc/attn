@@ -16,8 +16,11 @@ import { PresentTourHarness } from './PresentTourHarness';
 import { TileHeaderHarness } from './TileHeaderHarness';
 import { SeedHeaderHarness } from './SeedHeaderHarness';
 import { TerminalAnnotationsHarness } from './TerminalAnnotationsHarness';
+import { DelegationChainHarness } from './DelegationChainHarness';
+import { AgentHeaderHarness } from './AgentHeaderHarness';
 
 export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
+  AgentHeader: AgentHeaderHarness,
   BridgeSettledRead: BridgeSettledReadHarness,
   BrokenLinks: BrokenLinksHarness,
   DashboardPRs: DashboardPRsHarness,
@@ -35,4 +38,5 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   TileHeader: TileHeaderHarness,
   SeedHeader: SeedHeaderHarness,
   TerminalAnnotations: TerminalAnnotationsHarness,
+  DelegationChain: DelegationChainHarness,
 };

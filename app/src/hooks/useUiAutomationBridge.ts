@@ -19,6 +19,7 @@ import {
 } from '../components/MarkdownReader/annotations/annotationsAutomation';
 import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../components/settingsAutomation';
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
+import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
 import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
@@ -29,18 +30,18 @@ import type { TerminalVisibleContentSnapshot } from '../utils/terminalVisibleCon
 import type { TerminalVisibleStyleSnapshot } from '../utils/terminalStyleSummary';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import { isPresentWindowAction } from './usePresentAutomationBridge';
+import { waitForAutomationDom } from './uiAutomationDom';
+import {
+  armNativePointerWitness,
+  disarmNativePointerWitness,
+  waitForNativePointerWitness,
+} from './nativePointerWitness';
 import {
   afterFramePaints,
   nextAnimationFrame,
   settleBeforeBridgeRequest,
   settleUi,
 } from './uiAutomationSettle';
-import {
-  armRefreshWitness,
-  disarmRefreshWitness,
-  readRefreshWitness,
-} from './worktreesRefreshWitness';
-import { armNativePointerWitness, disarmNativePointerWitness, waitForNativePointerWitness } from './nativePointerWitness';
 
 const UI_AUTOMATION_REQUEST_EVENT = 'attn://ui-automation/request';
 const UI_AUTOMATION_RESPONSE_EVENT = 'attn://ui-automation/response';
@@ -406,15 +407,19 @@ async function captureDomScreenshotData(selector?: string) {
   document.head.appendChild(freeze);
   void document.body.offsetHeight;
 
+  const options = {
+    cacheBust: true,
+    pixelRatio: 1,
+    backgroundColor,
+    // Embedding @font-face resources fetches each font and can hang indefinitely.
+    skipFonts: true,
+    filter: isScreenshotNode,
+  };
   let dataUrl: string;
   try {
-    dataUrl = await toPng(target, {
-      cacheBust: true,
-      pixelRatio: 1,
-      backgroundColor,
-      // Embedding @font-face resources fetches each font and can hang indefinitely.
-      skipFonts: true,
-    });
+    dataUrl = await toPng(target, options);
+  } catch (error) {
+    throw new Error(await describeScreenshotFailure(target, selector ?? '#root', options, error));
   } finally {
     freeze.remove();
   }
@@ -423,6 +428,79 @@ async function captureDomScreenshotData(selector?: string) {
     bounds: rectSnapshot(target),
     pngBase64: dataUrl.replace(/^data:image\/png;base64,/, ''),
   };
+}
+
+export function isScreenshotNode(node: HTMLElement): boolean {
+  return !(node instanceof HTMLImageElement && !node.getAttribute('src'));
+}
+
+export async function describeScreenshotFailure(
+  target: HTMLElement,
+  label: string,
+  options: Parameters<typeof import('html-to-image').toSvg>[1],
+  error: unknown,
+): Promise<string> {
+  const bounds = target.getBoundingClientRect();
+  const canvases = Array.from(target.querySelectorAll('canvas'));
+  const where = `Screenshot of ${label} (${Math.round(bounds.width)}x${Math.round(bounds.height)}, ${canvases.length} canvases, visibility ${document.visibilityState})`;
+  for (const canvas of canvases) {
+    const canvasDataUrl = canvas.toDataURL();
+    if (canvasDataUrl !== 'data:,' && !(await imageLoads(canvasDataUrl))) {
+      return `${where}: the ${canvas.width}x${canvas.height} canvas image (${canvasDataUrl.length} chars) does not load`;
+    }
+  }
+  const { toSvg } = await import('html-to-image');
+  let svgDataUrl: string;
+  try {
+    svgDataUrl = await toSvg(target, options);
+  } catch (svgError) {
+    return `${where}: serializing the subtree failed: ${failureText(svgError)}; embedded images: ${describeEmbeddedImages(target)}`;
+  }
+  const xml = decodeURIComponent(svgDataUrl.slice(svgDataUrl.indexOf(',') + 1));
+  const parserError = new DOMParser()
+    .parseFromString(xml, 'image/svg+xml')
+    .querySelector('parsererror')
+    ?.textContent?.trim();
+  if (parserError) {
+    return `${where}: the serialized SVG (${xml.length} chars) does not parse: ${parserError}`;
+  }
+  return `${where}: the serialized SVG (${xml.length} chars) parses but loading it as an image failed: ${failureText(error)}`;
+}
+
+function describeEmbeddedImages(target: HTMLElement): string {
+  const images = Array.from(target.querySelectorAll('img, image')).map((element) => {
+    if (element instanceof HTMLImageElement) {
+      const state = element.complete ? `${element.naturalWidth}x${element.naturalHeight}` : 'loading';
+      const source = element.currentSrc || element.src || `(no src) ${element.outerHTML.slice(0, 160)}`;
+      return `img ${source} ${state} in ${ancestorPath(element)}`;
+    }
+    return `image ${(element as SVGImageElement).href?.baseVal || '(no href)'} in ${ancestorPath(element)}`;
+  });
+  return images.length === 0 ? 'none' : images.join(', ');
+}
+
+function ancestorPath(element: Element): string {
+  const names: string[] = [];
+  for (let node = element.parentElement; node && names.length < 5; node = node.parentElement) {
+    const className = typeof node.className === 'string' ? node.className.trim().split(/\s+/)[0] : '';
+    names.push(className ? `${node.tagName.toLowerCase()}.${className}` : node.tagName.toLowerCase());
+  }
+  return names.join(' < ');
+}
+
+function imageLoads(src: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => resolve(true);
+    image.onerror = () => resolve(false);
+    image.src = src;
+  });
+}
+
+function failureText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (error instanceof Event) return `${error.type} event`;
+  return String(error);
 }
 
 function collectVisualSnapshot(
@@ -1523,8 +1601,6 @@ function requireWorktreePath(payload: Record<string, unknown>): string {
 }
 
 const VERB_SEPARATOR = '\u001f';
-const LEDGER_REFRESHING = '.ledger-glyph.is-refreshing, .ledger-checking';
-
 function ledgerRoot(tab: 'Sessions' | 'Worktrees'): HTMLElement | null {
   const panel = document.querySelector('.ledger-panel');
   if (!(panel instanceof HTMLElement)) return null;
@@ -1598,7 +1674,6 @@ function collectWorktreesUiState() {
       refreshing: Boolean(header.querySelector('.ledger-checking')),
     })),
     error: panel.querySelector('.ledger-status-error')?.textContent?.trim() ?? '',
-    refreshWitness: readRefreshWitness(),
   };
 }
 
@@ -2213,6 +2288,7 @@ export function useUiAutomationBridge({
         const field = active instanceof HTMLInputElement || active instanceof HTMLTextAreaElement ? active : null;
         return {
           tag: active.tagName,
+          ...(typeof payload.selector === 'string' ? { matches: active.matches(payload.selector) } : {}),
           className: active.className,
           testId: active.getAttribute('data-testid'),
           selectionStart: field?.selectionStart ?? null,
@@ -2305,15 +2381,13 @@ export function useUiAutomationBridge({
         await settleUi(2);
         return { composed: true, text };
       }
-      case 'dom_text': {
-        const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        if (!selector) throw new Error('dom_text requires selector');
-        const element = document.querySelector(selector);
-        if (!(element instanceof HTMLElement)) {
-          throw new Error(`dom_text selector not found in DOM: ${selector}`);
-        }
-        return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
-      }
+      case 'dom_wait':
+        return waitForAutomationDom({
+          selector: typeof payload.selector === 'string' ? payload.selector : '',
+          absent: payload.absent === true,
+          textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+          timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
+        });
       case 'dom_bounds': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
         if (!selector) throw new Error('dom_bounds requires selector');
@@ -2323,50 +2397,23 @@ export function useUiAutomationBridge({
         }
         return { bounds: rectSnapshot(element) };
       }
-      case 'dom_wait': {
+      case 'dom_text': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
-        const includes = typeof payload.includes === 'string' ? payload.includes : null;
-        const focused = payload.focused === true;
-        const timeoutMs = typeof payload.timeoutMs === 'number' ? payload.timeoutMs : 0;
-        if (!selector) throw new Error('dom_wait requires selector');
-        if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw new Error('dom_wait requires a positive timeoutMs');
-
-        const readMatch = () => {
-          const element = document.querySelector(selector);
-          if (!(element instanceof HTMLElement)) return null;
-          const text = (element.textContent ?? '').replace(/\s+/g, ' ').trim();
-          if (includes !== null && !text.includes(includes)) return null;
-          if (focused && document.activeElement !== element) return null;
-          return { text, focused: document.activeElement === element };
-        };
-        const immediate = readMatch();
-        if (immediate) return immediate;
-
-        return new Promise((resolve, reject) => {
-          const finish = () => {
-            const match = readMatch();
-            if (!match) return;
-            window.clearTimeout(timer);
-            observer.disconnect();
-            document.removeEventListener('focusin', finish);
-            resolve(match);
-          };
-          const observer = new MutationObserver(finish);
-          const timer = window.setTimeout(() => {
-            observer.disconnect();
-            document.removeEventListener('focusin', finish);
-            reject(new Error(
-              `dom_wait timed out after ${timeoutMs}ms: selector=${selector}, includes=${includes ?? '*'}, focused=${focused}`,
-            ));
-          }, timeoutMs);
-          observer.observe(document.documentElement, {
-            attributes: true,
-            childList: true,
-            subtree: true,
-            characterData: true,
-          });
-          document.addEventListener('focusin', finish);
-        });
+        if (!selector) throw new Error('dom_text requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLElement)) {
+          throw new Error(`dom_text selector not found in DOM: ${selector}`);
+        }
+        return { text: (element.textContent ?? '').replace(/\s+/g, ' ').trim() };
+      }
+      case 'dom_value': {
+        const selector = typeof payload.selector === 'string' ? payload.selector : null;
+        if (!selector) throw new Error('dom_value requires selector');
+        const element = document.querySelector(selector);
+        if (!(element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement)) {
+          throw new Error(`dom_value target is not a form control: ${selector}`);
+        }
+        return { value: element.value };
       }
       case 'dom_scroll_into_view': {
         const selector = typeof payload.selector === 'string' ? payload.selector : null;
@@ -2946,7 +2993,6 @@ export function useUiAutomationBridge({
           await settleUi(2);
         }
         // The typed query is the filter: rewrite its tokens rather than drive controls.
-        const baseName = (value: string) => value.replace(/\/+$/, '').split('/').pop() || value;
         setSessionsQuery(root, (tokens) => {
           let next = tokens;
           if (range !== undefined) {
@@ -2963,8 +3009,8 @@ export function useUiAutomationBridge({
             if (workspace) next.push(`ws:${workspace}`);
           }
           if (repository !== undefined) {
-            next = next.filter((token) => !/^repo:/i.test(token));
-            if (repository) next.push(`repo:${baseName(repository)}`);
+            next = next.filter((token) => !/^repo(?:-path)?:/i.test(token));
+            if (repository) next.push(repositoryQueryToken(repository));
           }
           return next;
         });
@@ -3717,7 +3763,6 @@ export function useUiAutomationBridge({
         const root = worktreesRoot();
         const link = ledgerStatusLink(root, 'refresh');
         if (!link) throw new Error('no refresh link');
-        armRefreshWitness(root, LEDGER_REFRESHING);
         clickElement(link);
         await settleUi(3);
         return collectWorktreesUiState();
@@ -4160,28 +4205,39 @@ export function useUiAutomationBridge({
   }, [
     activeSessionId,
     closePane,
+    connectionError,
     createSession,
     closeSession,
+    daemonReady,
     fitSessionActivePane,
     focusPane,
     injectSessionPaneBase64,
     injectSessionPaneBytes,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
+    isRuntimeAttached,
     getActivePaneIdForSession,
     getPaneSize,
     getPaneText,
     getPaneBlockState,
     getPanePlacementState,
+    getPaneVisibleContent,
+    getPaneVisibleStyleSummary,
+    moveWorkspaceLeafToWorkspace,
+    openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
+    openWorktreesPanel,
     presentationNotices,
+    reloadSession,
     resetSessionPaneTerminal,
     drainSessionPaneTerminal,
+    scrollSessionPaneToTop,
     selectSession,
     selectWorkspace,
     sendRuntimeInput,
     sessions,
+    setSetting,
     splitPane,
   ]);
 
@@ -4231,9 +4287,8 @@ export function useUiAutomationBridge({
     });
 
     return () => {
-      void unlistenPromise.then((unlisten) => unlisten());
-      disarmRefreshWitness();
       disarmNativePointerWitness();
+      void unlistenPromise.then((unlisten) => unlisten());
     };
   }, []);
 }

@@ -264,7 +264,7 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 			deadState.Store(string(j.State))
 		})
 		mustRegister(t, r, "flaky", func(context.Context, *Job) (any, error) {
-			return nil, errors.New("boom")
+			return nil, WithDiagnostic(errors.New("boom"), "stderr: auth failed")
 		})
 		mustStart(t, r)
 
@@ -303,6 +303,9 @@ func TestFailuresBackOffThenGoDeadOnce(t *testing.T) {
 		}
 		if dead.LastError != "boom" {
 			t.Errorf("last error = %q, want boom", dead.LastError)
+		}
+		if dead.LastDiagnostic != "stderr: auth failed" {
+			t.Errorf("last diagnostic = %q", dead.LastDiagnostic)
 		}
 
 		if got := deadCalls.Load(); got != 1 {
@@ -357,7 +360,7 @@ func TestRetryRevivesADeadJob(t *testing.T) {
 		fail.Store(true)
 		mustRegister(t, r, "flaky", func(context.Context, *Job) (any, error) {
 			if fail.Load() {
-				return nil, errors.New("boom")
+				return nil, WithDiagnostic(errors.New("boom"), "stderr: auth failed")
 			}
 			return nil, nil
 		})
@@ -382,6 +385,37 @@ func TestRetryRevivesADeadJob(t *testing.T) {
 		}
 		if got := mustGet(t, r, job.ID).LastError; got != "" {
 			t.Errorf("last error = %q, want it cleared by the successful retry", got)
+		}
+		if got := mustGet(t, r, job.ID).LastDiagnostic; got != "" {
+			t.Errorf("last diagnostic = %q, want it cleared by the successful retry", got)
+		}
+	})
+}
+
+func TestRetryThatDiesAgainIsANewTerminalFailure(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		r, _ := newBubbleRunner(t, func(o *Options) { o.MaxAttempts = 1 })
+		var terminalCalls atomic.Int32
+		r.OnTerminalFailure(func(*Job) { terminalCalls.Add(1) })
+		mustRegister(t, r, "always-fails", func(context.Context, *Job) (any, error) {
+			return nil, errors.New("boom")
+		})
+		mustStart(t, r)
+
+		job, err := r.Enqueue("always-fails", EnqueueOptions{})
+		if err != nil {
+			t.Fatalf("enqueue: %v", err)
+		}
+		synctest.Wait()
+		if got := terminalCalls.Load(); got != 1 {
+			t.Fatalf("first run cycle fired %d terminal failures, want 1", got)
+		}
+		if _, err := r.Retry(job.ID); err != nil {
+			t.Fatalf("retry: %v", err)
+		}
+		synctest.Wait()
+		if got := terminalCalls.Load(); got != 2 {
+			t.Fatalf("second run cycle brought total terminal failures to %d, want 2", got)
 		}
 	})
 }

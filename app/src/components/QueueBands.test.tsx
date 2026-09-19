@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
+import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';
 import { buildWorkspaceViewModels } from '../utils/workspaceViewModels';
@@ -20,6 +21,7 @@ interface TestSession {
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
+  delegation_role?: SessionDelegationRole;
 }
 
 const baseProps = {
@@ -78,10 +80,10 @@ const sessions: TestSession[] = [
 ];
 
 describe('the queue arrangement', () => {
-  it('names a live dispatcher, jumps to it directly, and counts its delegates', () => {
+  it('offers the delegation chain without repeating the dispatcher below the title', () => {
     const onSelectSession = vi.fn();
     const linked: TestSession[] = [
-      { id: 'root', label: 'root session', state: 'idle', workspaceId: 'ws-a' },
+      { id: 'root', label: 'root session', state: 'idle', workspaceId: 'ws-a', delegation_role: { name: 'Orchestrator', builtin: BuiltinDelegationRole.Orchestrator } },
       {
         id: 'child',
         label: 'child',
@@ -94,16 +96,15 @@ describe('the queue arrangement', () => {
     renderSidebar(linked, true, { onSelectSession });
 
     const child = screen.getByTestId('queue-settled-child');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
-    fireEvent.click(within(child).getByRole('button', { name: 'Open dispatcher Alder' }));
-    expect(onSelectSession).toHaveBeenCalledTimes(1);
-    expect(onSelectSession).toHaveBeenCalledWith('root');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
+    expect(onSelectSession).not.toHaveBeenCalled();
 
     const root = screen.getByTestId('queue-settled-root');
-    expect(within(root).getByLabelText('1 live delegate: child')).toHaveTextContent('1');
+    expect(within(root).getByRole('button', { name: 'Orchestrator · Show delegation chain for root session' })).toHaveAttribute('data-role', 'orchestrator');
   });
 
-  it('shows the dispatcher member without a link after its session ended', () => {
+  it('keeps navigation available after the dispatcher session ended without adding a subtitle', () => {
     const linked: TestSession[] = [{
       id: 'child',
       label: 'child',
@@ -115,11 +116,12 @@ describe('the queue arrangement', () => {
     renderSidebar(linked, true);
 
     const child = screen.getByTestId('queue-settled-child');
-    expect(within(child).getByTestId('sidebar-dispatcher')).toHaveTextContent('↳Alder');
+    expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
+    expect(within(child).getByRole('button', { name: 'Show delegation chain for child' })).toBeInTheDocument();
     expect(within(child).queryByRole('button', { name: 'Open dispatcher Alder' })).toBeNull();
   });
 
-  it('lights one dispatcher up and direct delegates down only while hovering', () => {
+  it('keeps hover local to the pointed row', () => {
     const chain: TestSession[] = [
       { id: 'root', label: 'root', state: 'idle', workspaceId: 'ws-a' },
       { id: 'middle', label: 'middle', state: 'idle', workspaceId: 'ws-a', dispatcher_session_id: 'root' },
@@ -137,8 +139,8 @@ describe('the queue arrangement', () => {
     expect(leaf).not.toHaveClass('kin-down');
 
     fireEvent.pointerEnter(middle);
-    expect(root).toHaveClass('kin-up');
-    expect(leaf).toHaveClass('kin-down');
+    expect(root).not.toHaveClass('kin-up');
+    expect(leaf).not.toHaveClass('kin-down');
     expect(middle).not.toHaveClass('kin-up', 'kin-down');
     expect(grandchild).not.toHaveClass('kin-down');
 

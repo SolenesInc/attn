@@ -123,6 +123,9 @@ func readLegacyDelegationOperations(db *sql.DB) ([]LegacyDelegationOperation, er
 		); err != nil {
 			return nil, err
 		}
+		if delegationRequestUsesSeed(operation.RequestJSON) {
+			continue
+		}
 		out = append(out, operation)
 	}
 	return out, rows.Err()

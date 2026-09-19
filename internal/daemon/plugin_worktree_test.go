@@ -144,6 +144,44 @@ func TestDoCreateWorktree_AfterCreateHookErrorReturnsCreatedPath(t *testing.T) {
 	}
 }
 
+func TestDelegationOperationRecordsProviderPathAfterCreateHookFailure(t *testing.T) {
+	tmpDir, mainDir := initProviderTestRepo(t)
+	d := newDelegationDaemon(t)
+	backend := &fakeSpawnBackend{}
+	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainDir)
+
+	providerClient, providerDone := startPluginPipe(t, d, "delegation-path-provider", []string{worktreeCreateProviderSurface})
+	defer providerClient.Close()
+	hookClient, hookDone := startPluginPipe(t, d, "delegation-after-hook", []string{worktreeAfterCreateSurface})
+	defer hookClient.Close()
+	providerPath := filepath.Join(tmpDir, "provider-actual")
+	providerResponse := respondToCreateProviderCall(t, providerClient, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
+		runGitDaemon(t, mainDir, "worktree", "add", "-b", params.Branch, providerPath)
+		return worktreeCreateProviderResult{Status: providerStatusHandled, Path: providerPath, Branch: params.Branch}
+	})
+	hookResponse := respondToAfterCreateHookCall(t, hookClient, func(worktreeAfterCreateHookParams) error {
+		return errors.New("dependency bootstrap failed")
+	})
+
+	msg := explicitOperationMessage(d, "provider-path-failure", sourceID, "Use the provider path.", "provider-path")
+	msg.Cwd = mainDir
+	msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/provider-path", From: protocol.Ptr("HEAD")}
+	op, err := d.startDelegation(&msg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := waitDelegationOperation(t, d, op.OperationID)
+	if done.State != protocol.DelegationOperationStateFailed || protocol.Deref(done.WorktreePath) != git.CanonicalizePath(providerPath) {
+		t.Fatalf("operation = %+v, want actual provider path %s", done, providerPath)
+	}
+	waitForProviderResponse(t, providerResponse)
+	waitForProviderResponse(t, hookResponse)
+	_ = providerClient.Close()
+	_ = hookClient.Close()
+	<-providerDone
+	<-hookDone
+}
+
 func TestDoCreateWorktree_ProviderDeclineFallsBackToBuiltInGit(t *testing.T) {
 	tmpDir, mainDir := initProviderTestRepo(t)
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
@@ -655,6 +693,44 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("failing delete provider connection did not close")
+	}
+}
+
+func TestDoDeleteWorktree_ProviderDeleteBeforeErrorFinalizesOnce(t *testing.T) {
+	tmpDir, mainDir := initProviderTestRepo(t)
+	worktreePath := filepath.Join(tmpDir, "provider-delete-before-error")
+	runGitDaemon(t, mainDir, "worktree", "add", "-b", "feat/provider-delete-before-error", worktreePath)
+	worktreePath = git.CanonicalizePath(worktreePath)
+
+	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete-before-error")
+	client, done := startPluginPipe(t, d, "delete-before-error-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+
+	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := git.DeleteWorktree(mainDir, worktreePath, true); err != nil {
+			t.Fatalf("provider delete worktree: %v", err)
+		}
+		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "connection lost after delete"}
+	})
+
+	if err := d.doDeleteWorktree(worktreePath, nil, deleteWorktreeOptions{Force: true}); err != nil {
+		t.Fatalf("delete-before-error returned %v", err)
+	}
+	waitForProviderResponse(t, responseDone)
+	if wt := d.store.GetWorktree(worktreePath); wt != nil {
+		t.Fatalf("deleted worktree remains in store: %+v", wt)
+	}
+	entries, _ := d.store.WorktreeSweepLog(mainDir, 10)
+	if len(entries) != 1 {
+		t.Fatalf("deletion finalized %d times, want once", len(entries))
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("delete-before-error provider connection did not close")
 	}
 }
 

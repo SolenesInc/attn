@@ -68,4 +68,41 @@ describe('useEscapeStack', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(count).toBe(1); // called exactly once, not three times
   });
+
+  it('dismisses a passive preview without consuming the focused element key', () => {
+    const handler = vi.fn();
+    const target = document.createElement('input');
+    const receiveKey = vi.fn();
+    document.body.append(target);
+    target.addEventListener('keydown', receiveKey);
+    renderHook(() => useEscapeStack(handler, true, { consume: false }));
+
+    expect(fireEvent.keyDown(target, { key: 'Escape' })).toBe(true);
+    expect(handler).toHaveBeenCalledOnce();
+    expect(receiveKey).toHaveBeenCalledOnce();
+    expect(receiveKey.mock.calls[0][0].defaultPrevented).toBe(false);
+    target.remove();
+  });
+
+  it('passes through passive previews to only the top consuming handler', () => {
+    const calls: string[] = [];
+    renderHook(() => useEscapeStack(() => calls.push('underlying'), true));
+    renderHook(() => useEscapeStack(() => calls.push('dialog'), true));
+    renderHook(() => useEscapeStack(() => calls.push('preview'), true, { consume: false }));
+
+    expect(fireEvent.keyDown(window, { key: 'Escape' })).toBe(false);
+    expect(calls).toEqual(['preview', 'dialog']);
+  });
+
+  it('uses the latest consume mode without reordering the stack', () => {
+    const calls: string[] = [];
+    const { rerender } = renderHook(({ consume }) => useEscapeStack(() => calls.push('preview'), true, { consume }), {
+      initialProps: { consume: false },
+    });
+    renderHook(() => useEscapeStack(() => calls.push('dialog'), true));
+    rerender({ consume: true });
+
+    expect(fireEvent.keyDown(window, { key: 'Escape' })).toBe(false);
+    expect(calls).toEqual(['dialog']);
+  });
 });

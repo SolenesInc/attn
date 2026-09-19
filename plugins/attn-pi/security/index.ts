@@ -6,23 +6,41 @@ import {
   createLsToolDefinition, createReadToolDefinition, createWriteToolDefinition, getAgentDir,
   type ExtensionAPI, type ExtensionContext, type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
+import type { SandboxMode } from "../sandbox/spec";
 import { credentials } from "./filter";
 import { SandboxedFilesystem } from "./filesystem";
 import { loadSecurityConfig, resolveSecurityPolicy, saveSecurityConfig, type SecurityPolicy } from "./policy";
 import { protectedBash, protectedTools } from "./tools";
-import { reviewUnavailable, type SandboxReview } from "./recovery";
+import type { BashApproval } from "../approval/index";
+import type { GuardianControl } from "../approval/guardian-selection";
 import { changeSecurityConfig } from "./settings";
 import { SecurityPanel, type SecuritySnapshot } from "./ui";
 import { securityInstructions, securityPrompt } from "./guidance";
-import type { ToolExecutionCheck } from "../automode/index";
-import { dimmed, problem, statusTheme } from "../automode/ui";
+import { dimmed, problem, statusTheme } from "./status";
 
 export class PiSecurity {
   private fs: SandboxedFilesystem | undefined;
   private temp: string | undefined;
   private policy: SecurityPolicy | undefined;
   private problem: string | undefined;
-  constructor(private readonly configPath = join(getAgentDir(), "attn-security.json"), private readonly review?: SandboxReview, private readonly reviewAvailable = () => !!review, private readonly checkExecution?: ToolExecutionCheck) {}
+  private last: { pi: ExtensionAPI; ctx: ExtensionContext } | undefined;
+  constructor(
+    private readonly configPath = join(getAgentDir(), "attn-security.json"),
+    private readonly approval?: BashApproval,
+    /** Called with the policy every time security reconfigures, so the approval
+     * orchestrator wraps commands with the paths this session actually has. */
+    private readonly onPolicy?: (policy: SecurityPolicy | undefined) => void,
+    private readonly attnNetwork?: "proxy" | "missing",
+    /** The session's sandbox mode, which /permissions owns. Absent in standalone pi,
+     * where there is no approval config and workspace-write is the only behaviour. */
+    private readonly sandboxMode?: () => SandboxMode,
+    private readonly guardian?: GuardianControl,
+  ) {}
+
+  /** Rebuilds the tools against the current sandbox mode; a no-op until a session starts. */
+  async refresh(): Promise<void> {
+    if (this.last) await this.configure(this.last.pi, this.last.ctx);
+  }
 
   cacheWritePaths(): readonly string[] { return this.problem ? [] : this.policy?.cacheWritePaths ?? []; }
 
@@ -32,7 +50,9 @@ export class PiSecurity {
     pi.on("session_shutdown", () => this.close());
     pi.on("before_agent_start", (event) => ({ systemPrompt: event.systemPrompt + "\n\n" + credentials.text(
       this.problem ? securityPrompt("configuration-error", { problem: this.problem })
-        : this.policy ? securityInstructions(this.policy, this.reviewAvailable()) : securityPrompt("not-initialized"),
+        : this.policy ? securityInstructions(this.policy, {
+          attnNetwork: this.attnNetwork, sandboxMode: this.sandboxMode?.() ?? "workspace-write",
+        }) : securityPrompt("not-initialized"),
     ) }));
     pi.on("tool_result", (event) => {
       try { return credentials.value({ content: event.content, details: event.details }); }
@@ -42,7 +62,7 @@ export class PiSecurity {
     pi.on("before_provider_request", (event) => credentials.request(event.payload));
     pi.on("user_bash", () => {
       if (!this.policy || this.problem) return { result: { output: this.problem ?? "Security is not initialized", exitCode: 1, cancelled: false, truncated: false } };
-      return { operations: protectedBash(this.policy, credentials, this.reviewAvailable) };
+      return { operations: protectedBash(this.policy, credentials) };
     });
     pi.registerCommand("security", {
       description: "Open security settings; status, on, off, caches, allow-write, revoke-write, network",
@@ -51,9 +71,15 @@ export class PiSecurity {
           const command = args.trim();
           const snapshot = (): SecuritySnapshot => ({
             config: loadSecurityConfig(this.configPath), policy: this.policy, problem: this.problem,
-            configPath: this.configPath, cwd: ctx.cwd, reviewAvailable: this.reviewAvailable(),
+            configPath: this.configPath, cwd: ctx.cwd, approvals: this.approval !== undefined,
+            guardian: this.guardian?.snapshot(ctx),
           });
           const apply = async (commands: string[]) => {
+            if (commands.every((command) => command.startsWith("guardian "))) {
+              if (!this.guardian) throw new Error("Guardian settings require a Pi session launched by attn.");
+              for (const command of commands) await this.guardian.change(command.slice("guardian ".length), ctx);
+              return snapshot();
+            }
             const config = loadSecurityConfig(this.configPath);
             for (const command of commands) changeSecurityConfig(config, command, ctx.cwd);
             saveSecurityConfig(this.configPath, config);
@@ -67,8 +93,10 @@ export class PiSecurity {
             ));
             return;
           }
-          if (command && command !== "status") await apply([command]);
-          ctx.ui.notify(this.status(), this.problem ? "error" : "info");
+          if (command && command !== "status" && command !== "guardian status") await apply([command]);
+          const guardian = this.guardian?.snapshot(ctx);
+          const guardianStatus = guardian ? `\nGuardian (${guardian.source}): ${guardian.problem ?? guardian.effective}. Overrides last until the agent reloads.` : "";
+          ctx.ui.notify(this.status() + guardianStatus, this.problem || guardian?.problem ? "error" : "info");
         } catch (error) {
           ctx.ui.notify(credentials.text(error instanceof Error ? error.message : String(error)), "error");
         }
@@ -78,21 +106,16 @@ export class PiSecurity {
 
   private async configure(pi: ExtensionAPI, ctx: ExtensionContext): Promise<void> {
     await this.close();
+    this.last = { pi, ctx };
     try {
       const config = loadSecurityConfig(this.configPath);
       this.temp = mkdtempSync(join(tmpdir(), "attn-pi-tools-"));
       this.policy = resolveSecurityPolicy(config, ctx.cwd, this.configPath, this.temp);
-      this.fs = new SandboxedFilesystem(this.policy, credentials, this.reviewAvailable);
+      this.fs = new SandboxedFilesystem(this.policy, credentials, this.sandboxMode?.() ?? "workspace-write");
       this.problem = undefined;
       const policy = this.policy;
-      const review: SandboxReview = async (event, context) => {
-        if (!this.review) return { block: true, reason: reviewUnavailable };
-        if (this.policy !== policy) throw new Error("Security settings or session changed; submit the request again.");
-        const result = await this.review(event, context);
-        if (this.policy !== policy) throw new Error("Security settings or session changed during review; command was not run. Submit the request again.");
-        return result;
-      };
-      for (const tool of protectedTools(policy, credentials, this.fs, review, this.reviewAvailable, this.checkExecution)) pi.registerTool(tool);
+      this.onPolicy?.(policy);
+      for (const tool of protectedTools(policy, credentials, this.fs, this.approval)) pi.registerTool(tool);
     } catch (error) {
       this.problem = credentials.text(error instanceof Error ? error.message : String(error));
       for (const make of [createBashToolDefinition, createReadToolDefinition, createWriteToolDefinition, createEditToolDefinition, createLsToolDefinition, createFindToolDefinition, createGrepToolDefinition]) {
@@ -103,9 +126,15 @@ export class PiSecurity {
         });
       }
     }
+    // Under attn, never "sandbox": bash runs under the session's sandbox mode, which
+    // /permissions owns. Standalone pi has neither, and this toggle is bash's only guard.
     ctx.ui.setStatus("attn-security", this.problem
       ? problem(statusTheme(ctx), "security: blocked")
-      : dimmed(statusTheme(ctx), `sandbox: ${this.policy?.enabled ? "on" : "off"} · credential filtering: on`));
+      : dimmed(statusTheme(ctx), !this.approval
+        ? `sandbox: ${this.policy?.enabled ? "on" : "off"} · credential filtering: on`
+        : this.policy?.enabled === false
+          ? "file tools: unguarded · credential filtering: on"
+          : "credential filtering: on"));
     if (this.problem) ctx.ui.notify(`Pi tools are blocked: ${this.problem}`, "error");
     else if (this.policy?.unavailableCaches.length) ctx.ui.notify(`Some build caches are unavailable. /security status shows the paths and reasons.`, "warning");
   }
@@ -115,11 +144,14 @@ export class PiSecurity {
     const policy = this.policy;
     if (!policy) return "Security is not initialized";
     return credentials.text([
-      `Sandbox: ${policy.enabled ? "on" : "off"}; network: ${policy.enabled ? policy.network : "unrestricted (sandbox off)"}; credential filtering: on`,
+      this.approval
+        ? `Built-in file tools and !/!! commands: ${policy.enabled ? "guarded" : "unguarded"}; ` +
+          `network: ${policy.enabled ? policy.network : "unrestricted (guards off)"}; credential filtering: on`
+        : `Sandbox: ${policy.enabled ? "on" : "off"}; network: ${policy.enabled ? policy.network : "unrestricted (sandbox off)"}; credential filtering: on`,
+      ...(this.approval ? ["The agent's bash tool runs under this session's sandbox mode instead; /permissions shows it."] : []),
       `Build caches: ${policy.buildCaches.enabled ? "on" : "off"}. Configured paths: ${policy.buildCaches.paths.join(", ")}`,
       `Active cache grants: ${policy.cacheWritePaths.join(", ") || "none"}`,
       ...policy.unavailableCaches.map((problem) => `Unavailable cache: ${problem}`),
-      `Extra access review: ${policy.enabled && this.reviewAvailable() ? "available" : "unavailable"}`,
       `Write grants: ${policy.allowWrite.join(", ")}`, `Read denies: ${policy.denyRead.join(", ")}`,
       `Write denies: ${policy.denyWrite.join(", ")}`, `Settings: ${this.configPath}`,
       "Applies to built-in tools and !/!! commands. Extensions and MCP servers remain trusted.",
@@ -127,6 +159,7 @@ export class PiSecurity {
   }
 
   private async close(): Promise<void> {
+    this.onPolicy?.(undefined);
     const fs = this.fs;
     const temp = this.temp;
     this.fs = undefined;

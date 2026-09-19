@@ -7,16 +7,31 @@ the code carries only the number and a pointer here.
 Everything below was measured on 2026-09-04 against two real repositories,
 147 worktrees in total (`attn`: 141, `mrpebbles`: 6).
 
-## Two halves that never mix
+## Inventory, observation and deletion
 
-A **refresh** runs git and writes observed state onto registry rows. A **sweep**
-reads those rows and decides. They are deliberately separate:
+A pass has three boundaries:
 
-- git never runs on a request path. `attn worktree list` and the Worktrees list of
-  the ledger surface read the registry, so a slow or network-bound repository can never make the
-  surface wait.
+1. One `git worktree list --porcelain` inventory per distinct repository updates
+   identity only: branch, HEAD, detached and prunable state.
+2. Cheap protection and age gates select candidates. Only candidates pay for
+   repository facts, status, ancestry, commit counting and tree walking. A
+   complete observation replaces the trusted deep facts; a failure preserves
+   them and records only the error.
+3. Automatic deletion uses a non-blocking exclusive gate. After it wins, attn
+   rechecks identity and protection and finishes deletion, durable state, logs
+   and events before releasing the gate.
+
+These boundaries keep request paths and stored facts honest:
+
+- `attn worktree list` and the Worktrees list of the ledger surface read the
+  registry, so those surfaces never wait for a slow or network-bound repository.
 - every decision is explainable from the row the surface is showing. If the panel
   says "kept: 3 uncommitted files", that is the same field the gate read.
+- foreground Git and writes that establish protection cancel candidate
+  observation before taking the shared deletion gate. They wait only when a
+  deletion already passed its exclusive commit point.
+- cancellation stores no partial observation and completes the pass normally;
+  the cron re-arms on its ordinary hourly cadence.
 
 Every git call in a refresh is a tracked `GitOperation`, so the app can show a
 per-row "refreshing…" while a repository is slow.
@@ -95,15 +110,47 @@ ever reaches 14 days idle means this number is wrong and gets remeasured.
 
 Override with `ATTN_WORKTREE_SWEEP_IDLE_DAYS` while testing.
 
-## Cost
+## Cost and regression receipt
 
-A full pass is about 12 s of git for 147 worktrees, 3 s of which is network. One
-merged-pull-request API call per repository, measured at 899 ms. The cron runs
-hourly, which is far off any request path and far under the window it watches.
+The original receipt was about 12 seconds for 147 worktrees. It did not survive
+the larger services-pilot repository. On 2026-09-08 one production pass ran 142
+Git operations for 1,418.4 serial seconds. Its 84 services-pilot-family
+worktrees consumed 1,279.9 seconds; six passes lasted 22.4–30.7 minutes and
+reclaimed nothing. Cached daemon requests still completed in 20–40 ms, which
+isolated the regression to exhaustive background observation competing with
+interactive Git.
+
+Steady-state cost now follows repositories plus actual candidates:
+
+| Work | Scope |
+| --- | --- |
+| Worktree inventory | exactly once per distinct stored repository |
+| Filesystem repository discovery | legacy sessions only; `main_repo` is backfilled |
+| Merged pull requests, integration SHA, history trees and stashes | repositories with candidates only |
+| Status, ancestry, commit counts and newest mtime | candidates only |
+| Final identity/protection check | candidates that reached automatic deletion only |
+
+Synthetic blocking tests hold each production boundary until a foreground
+operation arrives. They verify that Git subprocesses, GitHub HTTP requests and
+tree walks observe the cancellation cause, shared protection makes deletion
+yield without queueing, and a deletion that won the exclusive gate blocks new
+foreground work through finalization. The cron still runs hourly; there is no
+one-minute retry.
+
+A named-profile run on 2026-09-16 held `git rev-list --format=%T` in a shim for
+18.291 seconds. A shell-session launch then canceled that probe and completed in
+0.83 seconds wall time, including compilation of the WebSocket driver. Branch
+listing, session reopen and worktree keep all completed afterward. The same
+pass's job row had `attempts=0`, `requeued=0`, and a next schedule exactly one
+hour after its update time. Deterministic coordinator tests cover the two commit
+gate outcomes without timing thresholds: a held shared gate makes deletion yield
+immediately, while a deletion holding the exclusive gate keeps foreground work
+out until finalization releases it.
 
 Override with `ATTN_WORKTREE_SWEEP_INTERVAL`.
 
-What the pass is made of, measured on the same machine:
+The original per-operation measurements remain useful for estimating candidate
+cost:
 
 | Work | Cost | Scope |
 | --- | --- | --- |
@@ -121,9 +168,10 @@ Two page sizes come out of these numbers. The merged-pull-request query asks for
 refuses above 5000 rows, a tripwire rather than a budget: the largest registry
 measured is 147 rows across two repositories.
 
-`real-app:scenario-worktree-surface` builds a deliberately slow repository to
-watch the surface stay answering: 40,000 files, measured at 6.5 s of
-`git status --untracked-files=all` and 1.9 s of tree walking on macOS/APFS.
+`real-app:scenario-worktree-surface` builds a deliberately slow repository and
+keeps querying the surface until every fixture row has a verdict and the refresh
+is idle: 40,000 files, measured at 6.5 s of `git status --untracked-files=all`
+and 1.9 s of tree walking on macOS/APFS.
 
 ## Reversal and inspection
 

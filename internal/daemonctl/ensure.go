@@ -1,9 +1,12 @@
 package daemonctl
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -19,9 +22,23 @@ import (
 )
 
 const (
-	defaultEnsureTimeout = 10 * time.Second
-	stopTimeout          = 5 * time.Second
+	stopTimeout = 5 * time.Second
+	readyFDEnv  = "ATTN_DAEMON_READY_FD"
+	// Runs 34526737207 and 34537529658 took 13s on github-hosted 4vcpu/16GB; 60s is the startup tripwire.
+	startupTimeout = 60 * time.Second
 )
+
+var errDaemonAlreadyRunning = errors.New("daemon already running")
+var errDaemonLockReleased = errors.New("daemon lock released without a live daemon")
+var errDaemonStartupTimeout = errors.New("daemon startup tripwire expired")
+
+type StartupSignal struct {
+	writer *os.File
+}
+
+type daemonProcess struct {
+	ready io.ReadCloser
+}
 
 type EnsureResult struct {
 	Status string `json:"status"`
@@ -43,22 +60,34 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx, cancel := context.WithTimeoutCause(ctx, startupTimeout, errDaemonStartupTimeout)
+	defer cancel()
+	return ensureWithTripwire(ctx, binaryPath, ensure, matchingDaemonIsLive)
+}
+
+func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	if strings.TrimSpace(binaryPath) == "" {
 		return EnsureResult{}, fmt.Errorf("missing binary path")
 	}
 	if err := config.ValidateDaemonIsolation(config.SocketPath()); err != nil {
 		return EnsureResult{}, err
 	}
+	release, err := acquireEnsureLock(ctx)
+	if err != nil {
+		return EnsureResult{}, err
+	}
+	defer release()
 
 	if !isSocketLive(config.SocketPath()) {
 		if err := removeStaleSocketFiles(); err != nil {
 			return EnsureResult{}, err
 		}
-		if err := spawnDaemon(binaryPath); err != nil {
+		contended, err := startDaemon(ctx, binaryPath)
+		if err != nil {
 			return EnsureResult{}, err
 		}
-		if err := waitForReady(ctx); err != nil {
-			return EnsureResult{}, err
+		if contended {
+			return EnsureResult{Status: "already_running"}, nil
 		}
 		return EnsureResult{Status: "started"}, nil
 	}
@@ -75,13 +104,64 @@ func Ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 	if err := removeStaleSocketFiles(); err != nil {
 		return EnsureResult{}, err
 	}
-	if err := spawnDaemon(binaryPath); err != nil {
+	contended, err := startDaemon(ctx, binaryPath)
+	if err != nil {
 		return EnsureResult{}, err
 	}
-	if err := waitForReady(ctx); err != nil {
-		return EnsureResult{}, err
+	if contended {
+		return EnsureResult{Status: "already_running"}, nil
 	}
 	return EnsureResult{Status: "restarted", Reason: reason}, nil
+}
+
+func ensureWithTripwire(
+	ctx context.Context,
+	binaryPath string,
+	run func(context.Context, string) (EnsureResult, error),
+	reconcile func(context.Context) bool,
+) (EnsureResult, error) {
+	result, err := run(ctx, binaryPath)
+	if err == nil || !errors.Is(context.Cause(ctx), errDaemonStartupTimeout) {
+		return result, err
+	}
+	if reconcile(context.Background()) {
+		return EnsureResult{Status: "already_running"}, nil
+	}
+	return EnsureResult{}, fmt.Errorf("daemon startup wait exceeded %s; inspect %s", startupTimeout, config.LogPath())
+}
+
+func acquireEnsureLock(ctx context.Context) (func(), error) {
+	lockPath := config.PIDPath() + ".ensure"
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0700); err != nil {
+		return nil, fmt.Errorf("create daemon data directory: %w", err)
+	}
+	lockFile, err := os.OpenFile(lockPath, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("open daemon ensure lock: %w", err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX)
+	}()
+	select {
+	case err := <-result:
+		if err != nil {
+			lockFile.Close()
+			return nil, fmt.Errorf("acquire daemon ensure lock: %w", err)
+		}
+		return func() {
+			_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+			_ = lockFile.Close()
+		}, nil
+	case <-ctx.Done():
+		go func() {
+			if <-result == nil {
+				_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+			}
+			_ = lockFile.Close()
+		}()
+		return nil, ctx.Err()
+	}
 }
 
 func daemonMatchesCurrentBinary(health healthResponse) bool {
@@ -133,13 +213,176 @@ func normalizedFingerprint(value string) string {
 	return trimmed
 }
 
-func spawnDaemon(binaryPath string) error {
-	cmd := exec.Command(binaryPath, "daemon")
-	cmd.Env = append(os.Environ(), "ATTN_WRAPPER_PATH="+binaryPath)
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start daemon: %w", err)
+func spawnDaemon(binaryPath string) (daemonProcess, error) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		return daemonProcess{}, fmt.Errorf("create daemon readiness pipe: %w", err)
 	}
-	return nil
+	cmd := exec.Command(binaryPath, "daemon")
+	cmd.Env = append(os.Environ(),
+		"ATTN_WRAPPER_PATH="+binaryPath,
+		fmt.Sprintf("%s=%d", readyFDEnv, 3),
+	)
+	cmd.ExtraFiles = []*os.File{writer}
+	if err := cmd.Start(); err != nil {
+		reader.Close()
+		writer.Close()
+		return daemonProcess{}, fmt.Errorf("start daemon: %w", err)
+	}
+	writer.Close()
+	go cmd.Wait()
+	return daemonProcess{ready: reader}, nil
+}
+
+func TakeStartupSignal() (StartupSignal, error) {
+	raw := strings.TrimSpace(os.Getenv(readyFDEnv))
+	if raw == "" {
+		return StartupSignal{}, nil
+	}
+	os.Unsetenv(readyFDEnv)
+	fd, err := strconvAtoi(raw)
+	if err != nil || fd < 3 {
+		return StartupSignal{}, fmt.Errorf("invalid daemon readiness fd %q", raw)
+	}
+	syscall.CloseOnExec(fd)
+	return StartupSignal{writer: os.NewFile(uintptr(fd), "daemon-ready")}, nil
+}
+
+func (s StartupSignal) Ready() error {
+	return s.finish("ready\n")
+}
+
+func (s StartupSignal) Failed(err error) {
+	if err != nil {
+		_ = s.finish("error:" + err.Error() + "\n")
+	}
+}
+
+func (s StartupSignal) AlreadyRunning() {
+	_ = s.finish("already-running\n")
+}
+
+func (s StartupSignal) finish(message string) error {
+	if s.writer == nil {
+		return nil
+	}
+	defer s.writer.Close()
+	_, err := io.WriteString(s.writer, message)
+	return err
+}
+
+func (p daemonProcess) waitForReady(ctx context.Context) error {
+	result := make(chan error, 1)
+	go func() {
+		message, err := bufio.NewReader(p.ready).ReadString('\n')
+		if err == nil {
+			switch text := strings.TrimSuffix(message, "\n"); {
+			case text == "ready":
+			case text == "already-running":
+				err = errDaemonAlreadyRunning
+			case strings.HasPrefix(text, "error:"):
+				err = fmt.Errorf("daemon startup failed: %s", strings.TrimPrefix(text, "error:"))
+			default:
+				err = fmt.Errorf("daemon exited before signaling readiness")
+			}
+		}
+		result <- err
+	}()
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		p.ready.Close()
+		return fmt.Errorf("wait for daemon readiness: %w", ctx.Err())
+	}
+}
+
+func waitForSpawnedDaemon(ctx context.Context, process daemonProcess) (bool, error) {
+	err := process.waitForReady(ctx)
+	if !errors.Is(err, errDaemonAlreadyRunning) {
+		return false, err
+	}
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	if err := waitForMatchingDaemon(ctx, ticker.C, fetchHealth, func() bool {
+		return isSocketLive(config.SocketPath())
+	}, pidLockAvailable); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func startDaemon(ctx context.Context, binaryPath string) (bool, error) {
+	for {
+		process, err := spawnDaemon(binaryPath)
+		if err != nil {
+			return false, err
+		}
+		contended, err := waitForSpawnedDaemon(ctx, process)
+		if !errors.Is(err, errDaemonLockReleased) {
+			return contended, err
+		}
+		if matchingDaemonIsLive(ctx) {
+			return true, nil
+		}
+	}
+}
+
+func pidLockAvailable() (bool, error) {
+	lockFile, err := os.OpenFile(config.PIDPath(), os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return false, fmt.Errorf("open daemon pid lock: %w", err)
+	}
+	defer lockFile.Close()
+	if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			return false, nil
+		}
+		return false, fmt.Errorf("probe daemon pid lock: %w", err)
+	}
+	_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
+	return true, nil
+}
+
+func waitForMatchingDaemon(
+	ctx context.Context,
+	retry <-chan time.Time,
+	fetch func(context.Context) (healthResponse, error),
+	socketLive func() bool,
+	lockAvailable func() (bool, error),
+) error {
+	for {
+		health, err := fetch(ctx)
+		if err == nil {
+			if daemonMatchesCurrentBinary(health) && socketLive() {
+				return nil
+			}
+			if daemonMatchesCurrentBinary(health) {
+				return fmt.Errorf("competing daemon is missing its Unix listener")
+			}
+			return fmt.Errorf("competing daemon does not match current binary")
+		}
+		available, lockErr := lockAvailable()
+		if lockErr != nil {
+			return lockErr
+		}
+		if available {
+			return errDaemonLockReleased
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("wait for competing daemon readiness: %w", ctx.Err())
+		case <-retry:
+		}
+	}
+}
+
+func matchingDaemonIsLive(ctx context.Context) bool {
+	if !isSocketLive(config.SocketPath()) {
+		return false
+	}
+	health, err := fetchHealth(ctx)
+	return err == nil && daemonMatchesCurrentBinary(health) && isSocketLive(config.SocketPath())
 }
 
 // removeStaleSocketFiles unlinks the listening socket only. The PID file must
@@ -182,26 +425,6 @@ func stopRunningDaemon(ctx context.Context) error {
 		select {
 		case <-waitCtx.Done():
 			return fmt.Errorf("timed out waiting for daemon to stop")
-		case <-ticker.C:
-		}
-	}
-}
-
-func waitForReady(ctx context.Context) error {
-	waitCtx, cancel := context.WithTimeout(ctx, defaultEnsureTimeout)
-	defer cancel()
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		if isSocketLive(config.SocketPath()) {
-			health, err := fetchHealth(waitCtx)
-			if err == nil && strings.TrimSpace(health.Status) == "ok" {
-				return nil
-			}
-		}
-		select {
-		case <-waitCtx.Done():
-			return fmt.Errorf("daemon did not become ready before timeout")
 		case <-ticker.C:
 		}
 	}

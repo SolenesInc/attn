@@ -194,8 +194,10 @@ func TestDiscardGardenUpdatesPreservesOtherRecipientsAndPeerMessages(t *testing.
 	s := newAgentMailboxStore(t)
 	now := time.Now()
 	enqueuePeer(t, s, "peer", "sender", "planner", "keep this message", now)
-	for _, item := range []struct{ session, seed, id string }{{"planner", "plot", "a"}, {"planner", "child", "b"}, {"other", "plot", "c"}} {
-		if _, err := s.ClaimGardenSeedMailboxItem(item.session, item.seed, "note", item.id, now); err != nil {
+	for i, item := range []struct{ session, seed, id string }{{"planner", "plot", "a"}, {"planner", "child", "b"}, {"other", "plot", "c"}} {
+		if _, _, err := s.HandleGardenSeedEvent(int64(i+1), item.seed, "event", "seed activity", []GardenSeedBellDelivery{{
+			RecipientSessionID: item.session, ItemID: item.id,
+		}}, now); err != nil {
 			t.Fatal(err)
 		}
 	}

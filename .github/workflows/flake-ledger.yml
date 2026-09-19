@@ -28,7 +28,11 @@ jobs:
     name: Update flake ledger
     runs-on: ubuntu-latest
     steps:
+      # The schedule runs this file from main, whose ci-flake-report.sh lags
+      # next by a release; the ledger must use the script next actually runs.
       - uses: actions/checkout@v4
+        with:
+          ref: next
 
       # Job logs and finished attempts are immutable, so the report's on-disk
       # cache carries across days and only new runs cost API calls.

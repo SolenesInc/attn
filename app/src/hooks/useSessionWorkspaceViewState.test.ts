@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
-import type { Session } from '../store/sessions';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { useSessionStore, type Session } from '../store/sessions';
+import { reconcileSessionNavigation } from '../store/sessionNavigationSlice';
 import type { TerminalWorkspaceState } from '../types/workspace';
 const SESSION_PANE_ID = 'pane-session';
 import { useSessionWorkspaceViewState } from './useSessionWorkspaceViewState';
@@ -21,6 +22,15 @@ function buildSession(overrides?: Partial<Session>): Session {
     daemonActivePaneId: SESSION_PANE_ID,
     ...overrides,
   };
+}
+
+beforeEach(() => useSessionStore.setState(useSessionStore.getInitialState(), true));
+
+function renderPaneSelection(sessions: Session[]) {
+  const update = (sessions: Session[]) => useSessionStore.setState(state => reconcileSessionNavigation(state, { sessions }));
+  update(sessions);
+  const hook = renderHook(() => useSessionWorkspaceViewState());
+  return { ...hook, rerender: ({ sessions }: { sessions: Session[] }) => act(() => update(sessions)) };
 }
 
 describe('useSessionWorkspaceViewState', () => {
@@ -54,9 +64,7 @@ describe('useSessionWorkspaceViewState', () => {
       daemonActivePaneId: 'pane-agent',
     });
 
-    const { result } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [agentSession, shellSession] },
-    });
+    const { result } = renderPaneSelection([agentSession, shellSession]);
 
     act(() => {
       result.current.setActivePane(shellSession.id, 'pane-shell');
@@ -84,9 +92,7 @@ describe('useSessionWorkspaceViewState', () => {
       daemonActivePaneId: 'pane-a',
     });
 
-    const { result } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [session] },
-    });
+    const { result } = renderPaneSelection([session]);
 
     act(() => {
       result.current.setActivePane(session.id, SESSION_PANE_ID);
@@ -112,9 +118,7 @@ describe('useSessionWorkspaceViewState', () => {
     });
     const initial = buildSession({ workspace: layout(0.5), daemonActivePaneId: 'pane-a' });
 
-    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [initial] },
-    });
+    const { result, rerender } = renderPaneSelection([initial]);
 
     act(() => {
       result.current.setActivePane(initial.id, SESSION_PANE_ID);
@@ -144,9 +148,7 @@ describe('useSessionWorkspaceViewState', () => {
       daemonActivePaneId: 'pane-a',
     });
 
-    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [initial] },
-    });
+    const { result, rerender } = renderPaneSelection([initial]);
 
     act(() => {
       result.current.setActivePane(initial.id, SESSION_PANE_ID);
@@ -205,9 +207,7 @@ describe('useSessionWorkspaceViewState', () => {
       daemonActivePaneId: 'pane-b',
     });
 
-    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [initial] },
-    });
+    const { result, rerender } = renderPaneSelection([initial]);
 
     act(() => {
       result.current.setActivePane(initial.id, 'pane-a');
@@ -256,9 +256,7 @@ describe('useSessionWorkspaceViewState', () => {
       daemonActivePaneId: 'pane-b',
     });
 
-    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [initial] },
-    });
+    const { result, rerender } = renderPaneSelection([initial]);
 
     act(() => {
       result.current.prepareClosePaneFocus(initial, 'pane-b');
@@ -280,9 +278,7 @@ describe('useSessionWorkspaceViewState', () => {
 
   it('does not create pane state under a stale session id when session ownership is unknown', () => {
     const session = buildSession();
-    const { result, rerender } = renderHook(({ sessions }) => useSessionWorkspaceViewState(sessions), {
-      initialProps: { sessions: [session] },
-    });
+    const { result, rerender } = renderPaneSelection([session]);
 
     rerender({ sessions: [] });
 

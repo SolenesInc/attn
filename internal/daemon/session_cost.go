@@ -36,6 +36,7 @@ func (d *Daemon) decorateSessionWithCost(session *protocol.Session) {
 	for _, row := range summary.Models {
 		model := protocol.SessionUsageModel{
 			Model:                        row.Model,
+			Purpose:                      row.Purpose,
 			InputTokens:                  int(row.Usage.InputTokens),
 			OutputTokens:                 int(row.Usage.OutputTokens),
 			CacheReadTokens:              int(row.Usage.CacheReadInputTokens),

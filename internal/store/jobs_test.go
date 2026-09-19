@@ -20,20 +20,21 @@ func TestJobs_UpsertGetDelete(t *testing.T) {
 	s := New()
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	rec := JobRecord{
-		ID:          "job-1",
-		Kind:        "session_activity",
-		UniqueKey:   "ws-1",
-		Priority:    7,
-		Payload:     `{"workspace_id":"ws-1"}`,
-		Result:      `{"bytes":42}`,
-		State:       "failed",
-		Attempts:    2,
-		MaxAttempts: 3,
-		ScheduledAt: now.Add(30 * time.Second),
-		LastError:   "boom",
-		Requeued:    true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:             "job-1",
+		Kind:           "session_activity",
+		UniqueKey:      "ws-1",
+		Priority:       7,
+		Payload:        `{"workspace_id":"ws-1"}`,
+		Result:         `{"bytes":42}`,
+		State:          "failed",
+		Attempts:       2,
+		MaxAttempts:    3,
+		ScheduledAt:    now.Add(30 * time.Second),
+		LastError:      "boom",
+		LastDiagnostic: "stderr: auth failed",
+		Requeued:       true,
+		CreatedAt:      now,
+		UpdatedAt:      now,
 	}
 	if err := s.UpsertJob(rec); err != nil {
 		t.Fatalf("upsert: %v", err)
@@ -49,7 +50,8 @@ func TestJobs_UpsertGetDelete(t *testing.T) {
 	if got.Priority != 7 || got.Attempts != 2 || got.MaxAttempts != 3 {
 		t.Fatalf("numeric fields mismatch: %+v", got)
 	}
-	if got.Payload != rec.Payload || got.Result != rec.Result || got.LastError != "boom" || !got.Requeued {
+	if got.Payload != rec.Payload || got.Result != rec.Result || got.LastError != "boom" ||
+		got.LastDiagnostic != "stderr: auth failed" || !got.Requeued {
 		t.Fatalf("opaque fields mismatch: %+v", got)
 	}
 	if !got.ScheduledAt.Equal(rec.ScheduledAt) {

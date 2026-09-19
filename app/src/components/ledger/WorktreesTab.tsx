@@ -9,7 +9,7 @@ import type {
   WorktreeSweepLogResult,
 } from '../../types/generated';
 import { useWorktreeStore } from '../../store/worktrees';
-import { fullStamp, nameIds, relativeStamp, tildePath } from './ledgerTime';
+import { fullStamp, nameIds, relativeStamp, tildePath, untilStamp } from './ledgerTime';
 import { baseName, matchesWords } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
@@ -368,7 +368,7 @@ function sweepWord(worktree: Worktree, now: Date): ReactNode {
   if (!status) return <span className="ledger-muted">not decided</span>;
   if (status !== 'scheduled') return status.replace(/_/g, ' ');
   if (!worktree.sweep_at) return 'scheduled';
-  return <span className="is-warn" title={fullStamp(worktree.sweep_at)}>removing in {relativeStamp(worktree.sweep_at, now).replace(/^-/, '')}</span>;
+  return <span className="is-warn" title={fullStamp(worktree.sweep_at)}>removing in {untilStamp(worktree.sweep_at, now)}</span>;
 }
 
 function worktreeRow(worktree: Worktree, context: WorktreeRowContext): RowModel {

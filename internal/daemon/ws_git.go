@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"path/filepath"
 	"strings"
 	"time"
@@ -107,6 +108,14 @@ func (d *Daemon) runGitStatusScheduler(client *wsClient, dir string, stop <-chan
 }
 
 func (d *Daemon) sendGitStatusUpdate(client *wsClient, dir string, mode gitStatusMode) gitStatusRefreshResult {
+	var result gitStatusRefreshResult
+	d.runWorktreeForeground("git status", func(context.Context) {
+		result = d.sendGitStatusUpdateForeground(client, dir, mode)
+	})
+	return result
+}
+
+func (d *Daemon) sendGitStatusUpdateForeground(client *wsClient, dir string, mode gitStatusMode) gitStatusRefreshResult {
 	client.gitStatusMu.Lock()
 	currentDir := client.gitStatusDir
 	lastHash := client.gitStatusHash
@@ -178,6 +187,12 @@ func (d *Daemon) handleGetFileDiffWS(client *wsClient, msg *protocol.GetFileDiff
 }
 
 func (d *Daemon) handleGetFileDiff(client *wsClient, msg *protocol.GetFileDiffMessage) {
+	d.runWorktreeForeground("git diff", func(context.Context) {
+		d.handleGetFileDiffForeground(client, msg)
+	})
+}
+
+func (d *Daemon) handleGetFileDiffForeground(client *wsClient, msg *protocol.GetFileDiffMessage) {
 	result := protocol.FileDiffResultMessage{
 		Event:     protocol.EventFileDiffResult,
 		Directory: msg.Directory,

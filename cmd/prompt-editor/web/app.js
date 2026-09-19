@@ -22,6 +22,44 @@ const state = {
 let previewTimer;
 let previewAbort;
 const bytes = (text) => new TextEncoder().encode(text).length;
+const work = (() => {
+  const workspace = document.querySelector(".workspace");
+  let pending = 0;
+  const begin = () => {
+    pending++;
+    if (pending === 1) workspace.setAttribute("aria-busy", "true");
+    let active = true;
+    return () => {
+      if (!active) return;
+      active = false;
+      pending--;
+      if (pending === 0) workspace.removeAttribute("aria-busy");
+    };
+  };
+  return {
+    begin,
+    schedule(callback, delay) {
+      const done = begin();
+      let active = true;
+      const timer = setTimeout(() => {
+        if (!active) return;
+        active = false;
+        try {
+          Promise.resolve(callback()).finally(done);
+        } catch (error) {
+          done();
+          throw error;
+        }
+      }, delay);
+      return () => {
+        if (!active) return;
+        active = false;
+        clearTimeout(timer);
+        done();
+      };
+    },
+  };
+})();
 function element(tag, text, className) {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
@@ -35,23 +73,28 @@ function button(text, action, className) {
   return node;
 }
 async function api(path, body) {
-  const response = await fetch(
-    `/api/${path}`,
-    body === undefined
-      ? {}
-      : {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Prompt-Editor": "1",
+  const done = work.begin();
+  try {
+    const response = await fetch(
+      `/api/${path}`,
+      body === undefined
+        ? {}
+        : {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Prompt-Editor": "1",
+            },
+            body: JSON.stringify(body),
           },
-          body: JSON.stringify(body),
-        },
-  );
-  const data = await response.json();
-  if (!response.ok)
-    throw Object.assign(new Error(data.error || `Request failed (${response.status})`), data);
-  return data;
+    );
+    const data = await response.json();
+    if (!response.ok)
+      throw Object.assign(new Error(data.error || `Request failed (${response.status})`), data);
+    return data;
+  } finally {
+    done();
+  }
 }
 function current() {
   const [recipient, event] = state.key.split("/");
@@ -453,16 +496,20 @@ function closeComparison() {
   $(target === "prompt" ? "prompt-compare" : "source-compare").focus({ preventScroll: true });
 }
 function schedulePreview() {
-  clearTimeout(previewTimer);
+  previewTimer?.();
   previewAbort?.abort();
   const version = ++state.previewVersion;
   state.comparison = null;
   $("output-size").textContent = "Updating…";
   $("copy").disabled = true;
   renderViews();
-  previewTimer = setTimeout(() => preview(version), 180);
+  previewTimer = work.schedule(() => {
+    previewTimer = undefined;
+    return preview(version);
+  }, 180);
 }
 async function preview(version) {
+  const done = work.begin();
   previewAbort = new AbortController();
   try {
     const { recipient, event } = current();
@@ -511,6 +558,8 @@ async function preview(version) {
     renderViews();
     collaboration?.contextLabel();
     if (state.base) renderDiff($("source-diff"), "", error.message, state.base.commit.slice(0, 8));
+  } finally {
+    done();
   }
 }
 function refreshSelection() {
@@ -703,7 +752,7 @@ try {
   const requestedKey = location.hash.slice(1) || "session/launch";
   selectEvent(requestedKey);
   if (!state.key) selectEvent("session/launch");
-  collaboration = collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status });
+  collaboration = collaborate({ state, $, api, selectEvent, selectSource, renderNavigation, schedulePreview, status, work });
   await collaboration.init();
   document.body.inert = false;
   await loadRefs();

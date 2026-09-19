@@ -23,6 +23,9 @@ func taskToProtocol(t *jobs.Job) protocol.Task {
 	if t.LastError != "" {
 		pt.LastError = protocol.Ptr(t.LastError)
 	}
+	if t.LastDiagnostic != "" {
+		pt.LastDiagnostic = protocol.Ptr(t.LastDiagnostic)
+	}
 	return pt
 }
 

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -112,6 +113,7 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "plugin work"})
 	move(t, d, "sess-snipe", seed.ID, garden.VerbTend, "", "")
 	d.persistResumeSessionID("sess-snipe", "snipe-conv-3")
+	d.store.SetLaunchIntent("sess-snipe", store.LaunchIntent{})
 	d.closeSession("sess-snipe", store.SessionClose{By: store.SessionClosedByUser})
 
 	tended, _, err := d.readSeed(seed.ID)
@@ -121,5 +123,49 @@ func TestSeedContinuationResumesAPluginTenderByCapability(t *testing.T) {
 	continuation := d.continuationForSeed(tended)
 	if continuation == nil || !continuation.ResumeAvailable || continuation.Execution.Resume != "snipe-conv-3" {
 		t.Fatalf("continuation = %+v, want a resumable snipe-conv-3", continuation)
+	}
+}
+
+func TestSeedContinuationDoesNotAdvertiseWorkerlessSessionWithoutLaunchContract(t *testing.T) {
+	d := newGardenDaemon(t)
+	cwd := t.TempDir()
+	d.store.Remove("sess-a")
+	d.store.Add(&protocol.Session{
+		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentClaude,
+		State: protocol.SessionStateIdle,
+	})
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Legacy work"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+
+	tended, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	continuation := d.continuationForSeed(tended)
+	if continuation == nil || continuation.SessionLive || continuation.ResumeAvailable {
+		t.Fatalf("continuation = %+v, want unavailable workerless session", continuation)
+	}
+	if !strings.Contains(continuation.ResumeReason, "no saved launch contract") {
+		t.Fatalf("resume reason = %q, want missing launch contract", continuation.ResumeReason)
+	}
+}
+
+func TestSeedContinuationPreservesRemoteSessionWithoutLocalWorker(t *testing.T) {
+	d := newGardenDaemon(t)
+	d.store.Remove("sess-a")
+	d.store.Add(&protocol.Session{
+		ID: "sess-a", Directory: "/srv/work", Agent: protocol.SessionAgentClaude,
+		EndpointID: protocol.Ptr("outpost-a"), State: protocol.SessionStateIdle,
+	})
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Remote work"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+
+	tended, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	continuation := d.continuationForSeed(tended)
+	if continuation == nil || !continuation.SessionLive || !continuation.ResumeAvailable {
+		t.Fatalf("continuation = %+v, want live remote session", continuation)
 	}
 }

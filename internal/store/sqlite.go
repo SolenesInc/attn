@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/url"
@@ -1239,6 +1240,16 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{137, "name the repository a session ran in so the ledger can filter by it", ""},
 	{138, "persist delegation preferences", `CREATE TABLE IF NOT EXISTS delegation_preferences (id INTEGER PRIMARY KEY CHECK (id = 1), config TEXT NOT NULL);`},
 	{139, "convert dispatch notifications to Garden subscriptions", ""},
+	{140, "auto mode globs become prefix rules, hosts and an approval policy", ``},
+	{141, "record where a plugin session's harness writes its transcript", ""},
+	{142, "add explicit delegation recovery facts", ""},
+	{143, "snapshot accepted delegation handovers", ""},
+	{144, "snapshot accepted delegation parents", ""},
+	{145, "move automation continuity from tickets to Garden seeds", ""},
+	{146, "guardian model selection", ""},
+	{147, "record structured task failure diagnostics", ""},
+	{148, "durable Garden seed event handling", ``},
+	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 }
 
 const migration99SQL = `
@@ -1372,7 +1383,12 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
-		if m.version == 137 {
+		if m.version == 141 {
+			if err := applyMigration141(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 137 {
 			if err := applyMigration137(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
@@ -1696,6 +1712,41 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 142 {
+			if err := applyMigration142(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 143 {
+			if err := applyMigration143(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 144 {
+			if err := applyMigration144(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 145 {
+			if err := applyMigration145(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 146 {
+			if err := applyMigration146(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 147 {
+			if err := applyMigration147(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 148 {
+			if err := applyMigration148(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1716,6 +1767,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 136 {
 			if err := applyMigration136(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 140 {
+			if err := applyMigration140(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1740,6 +1796,242 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	}
 
 	return nil
+}
+
+func applyMigration146(tx *sql.Tx) error {
+	has, err := columnExists(tx, "automode_config", "guardian")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec(`ALTER TABLE automode_config ADD COLUMN guardian TEXT NOT NULL DEFAULT '{}';`)
+	return err
+}
+
+func applyMigration147(tx *sql.Tx) error {
+	for _, change := range []struct {
+		table, column, sql string
+	}{
+		{"jobs", "last_diagnostic", `ALTER TABLE jobs ADD COLUMN last_diagnostic TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "trigger", `ALTER TABLE notifications ADD COLUMN trigger TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "impact", `ALTER TABLE notifications ADD COLUMN impact TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "cause", `ALTER TABLE notifications ADD COLUMN cause TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "diagnostic", `ALTER TABLE notifications ADD COLUMN diagnostic TEXT NOT NULL DEFAULT ''`},
+		{"notifications", "actions_json", `ALTER TABLE notifications ADD COLUMN actions_json TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := columnExists(tx, change.table, change.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(change.sql); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func applyMigration148(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS garden_seed_event_receipts (
+			event_seq  INTEGER PRIMARY KEY,
+			handled_at TEXT NOT NULL
+		);
+		CREATE TABLE IF NOT EXISTS garden_seed_event_sources (
+			source_kind TEXT NOT NULL,
+			source_id   TEXT NOT NULL,
+			event_name  TEXT NOT NULL,
+			event_seq   INTEGER NOT NULL UNIQUE,
+			PRIMARY KEY (source_kind, source_id, event_name)
+		);
+		CREATE TABLE IF NOT EXISTS garden_seed_artifact_observations (
+			seed_id     TEXT PRIMARY KEY,
+			checksum    TEXT NOT NULL,
+			event_seq   INTEGER NOT NULL UNIQUE,
+			observed_at TEXT NOT NULL
+		);
+	`); err != nil {
+		return err
+	}
+	hasBellName, err := columnExists(tx, "agent_mailbox_items", "bell_name")
+	if err != nil {
+		return err
+	}
+	if !hasBellName {
+		if _, err := tx.Exec(`ALTER TABLE agent_mailbox_items ADD COLUMN bell_name TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	_, err = tx.Exec(`
+		UPDATE agent_mailbox_items
+		SET bell_name = 'seed activity'
+		WHERE kind = 'garden_seed' AND read_at = '' AND bell_name = ''
+	`)
+	return err
+}
+
+func applyMigration145(tx *sql.Tx) error {
+	runsExist, err := tableExists(tx, "automation_runs")
+	if err != nil || !runsExist {
+		return err
+	}
+	for _, change := range []struct {
+		table, column, sql string
+	}{
+		{"automation_runs", "seed_id", `ALTER TABLE automation_runs ADD COLUMN seed_id TEXT NOT NULL DEFAULT ''`},
+		{"automation_continuity_bindings", "seed_id", `ALTER TABLE automation_continuity_bindings ADD COLUMN seed_id TEXT NOT NULL DEFAULT ''`},
+		{"automation_continuity_bindings", "origin_run_id", `ALTER TABLE automation_continuity_bindings ADD COLUMN origin_run_id TEXT NOT NULL DEFAULT ''`},
+	} {
+		has, err := columnExists(tx, change.table, change.column)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(change.sql); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := tx.Exec(`
+		CREATE INDEX IF NOT EXISTS idx_automation_runs_seed_created
+			ON automation_runs(seed_id,created_at DESC,id DESC) WHERE seed_id<>'';
+		CREATE INDEX IF NOT EXISTS idx_automation_bindings_seed_active
+			ON automation_continuity_bindings(definition_id,seed_id) WHERE status='active' AND seed_id<>'';
+	`); err != nil {
+		return err
+	}
+
+	var dispatchCollectionID int64
+	err = tx.QueryRow(`SELECT id FROM document_collections WHERE namespace=? AND collection=?`, garden.Namespace, garden.CollectionDispatches).Scan(&dispatchCollectionID)
+	if err != nil && err != sql.ErrNoRows {
+		return err
+	}
+	if err == nil {
+		table := docstore.TableName(dispatchCollectionID)
+		for _, stmt := range []string{
+			fmt.Sprintf(`UPDATE automation_runs SET seed_id=COALESCE((SELECT json_extract(body,'$.crown') FROM %s WHERE id=automation_runs.session_id),'') WHERE seed_id=''`, table),
+			fmt.Sprintf(`UPDATE automation_continuity_bindings SET seed_id=COALESCE((SELECT json_extract(body,'$.crown') FROM %s WHERE id=automation_continuity_bindings.session_id),'') WHERE seed_id=''`, table),
+		} {
+			if _, err := tx.Exec(stmt); err != nil {
+				return err
+			}
+		}
+	}
+
+	if _, err := tx.Exec(`
+		UPDATE automation_continuity_bindings AS binding
+		SET origin_run_id=COALESCE(
+			(SELECT COALESCE(ticket.automation_run_id,'') FROM tickets AS ticket WHERE ticket.id=binding.ticket_id),
+			(SELECT run.id FROM automation_runs AS run WHERE run.ticket_id=binding.ticket_id ORDER BY run.created_at,run.id LIMIT 1),
+			''
+		)
+		WHERE origin_run_id=''
+	`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		UPDATE automation_runs AS run
+		SET seed_id=COALESCE((
+			SELECT binding.seed_id FROM automation_continuity_bindings AS binding
+			WHERE binding.ticket_id=run.ticket_id AND binding.seed_id<>''
+			ORDER BY binding.created_at LIMIT 1
+		),'')
+		WHERE seed_id=''
+	`); err != nil {
+		return err
+	}
+
+	rows, err := tx.Query(`SELECT id,ticket_id FROM automation_continuity_bindings WHERE seed_id='' ORDER BY created_at,id`)
+	if err != nil {
+		return err
+	}
+	type emptyBinding struct{ id, ticketID string }
+	var bindings []emptyBinding
+	for rows.Next() {
+		var binding emptyBinding
+		if err := rows.Scan(&binding.id, &binding.ticketID); err != nil {
+			rows.Close()
+			return err
+		}
+		bindings = append(bindings, binding)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, binding := range bindings {
+		seedID, err := mintAutomationMigrationSeedID(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET seed_id=? WHERE id=?`, seedID, binding.id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_runs SET seed_id=? WHERE seed_id='' AND ticket_id=?`, seedID, binding.ticketID); err != nil {
+			return err
+		}
+	}
+
+	rows, err = tx.Query(`SELECT id FROM automation_runs WHERE seed_id='' ORDER BY created_at,id`)
+	if err != nil {
+		return err
+	}
+	var runIDs []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		runIDs = append(runIDs, id)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, runID := range runIDs {
+		seedID, err := mintAutomationMigrationSeedID(tx)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE automation_runs SET seed_id=? WHERE id=?`, seedID, runID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func mintAutomationMigrationSeedID(tx *sql.Tx) (string, error) {
+	for range 10 {
+		seedID, err := garden.NewID()
+		if err != nil {
+			return "", err
+		}
+		var used int
+		if err := tx.QueryRow(`SELECT EXISTS(
+			SELECT 1 FROM automation_runs WHERE seed_id=?
+			UNION ALL SELECT 1 FROM automation_continuity_bindings WHERE seed_id=?
+		)`, seedID, seedID).Scan(&used); err != nil {
+			return "", err
+		}
+		if used == 0 {
+			var collectionID int64
+			err := tx.QueryRow(`SELECT id FROM document_collections WHERE namespace=? AND collection=?`, garden.Namespace, garden.CollectionSeeds).Scan(&collectionID)
+			switch err {
+			case sql.ErrNoRows:
+				return seedID, nil
+			case nil:
+				var planted int
+				if err := tx.QueryRow(`SELECT EXISTS(SELECT 1 FROM `+docstore.TableName(collectionID)+` WHERE id=?)`, seedID).Scan(&planted); err != nil {
+					return "", err
+				}
+				if planted == 0 {
+					return seedID, nil
+				}
+			default:
+				return "", err
+			}
+		}
+	}
+	return "", errors.New("could not mint an unused automation seed id")
 }
 
 func applyMigration121(tx *sql.Tx) error {
@@ -1816,6 +2108,15 @@ func applyMigration136(tx *sql.Tx, schema string) error {
 		}
 	}
 	_, err := tx.Exec(schema)
+	return err
+}
+
+func applyMigration141(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "agent_driver_transcript_path")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE sessions ADD COLUMN agent_driver_transcript_path TEXT NOT NULL DEFAULT ''")
 	return err
 }
 
@@ -3042,7 +3343,7 @@ func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	var count int
 	if err := tx.QueryRow(
 		"SELECT COUNT(*) FROM automode_proposals WHERE kind = ? AND state = ?",
-		automode.KindModel, automode.StatePromoted).Scan(&count); err != nil {
+		"model", automode.StatePromoted).Scan(&count); err != nil {
 		return false, err
 	}
 	return count > 0, nil
@@ -3081,6 +3382,117 @@ func applyMigration125(tx *sql.Tx) error {
 		return err
 	}
 	_, err = tx.Exec("UPDATE automode_config SET environment = ? WHERE id = 1", string(encoded))
+	return err
+}
+
+// A shell glob that cannot become a command-token prefix rule stays in legacy_patterns instead.
+func applyMigration140(tx *sql.Tx) error {
+	has, err := tableExists(tx, "automode_config")
+	if err != nil || !has {
+		return err
+	}
+	for _, column := range []struct{ name, ddl string }{
+		{"approval_policy", "TEXT NOT NULL DEFAULT '" + automode.PolicyOnRequest + "'"},
+		{"sandbox_mode", "TEXT NOT NULL DEFAULT '" + automode.SandboxWorkspaceWrite + "'"},
+		{"rules", "TEXT NOT NULL DEFAULT '[]'"},
+		{"network", "TEXT NOT NULL DEFAULT ''"},
+		{"legacy_patterns", "TEXT NOT NULL DEFAULT '[]'"},
+	} {
+		exists, err := columnExists(tx, "automode_config", column.name)
+		if err != nil {
+			return err
+		}
+		if exists {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf(
+			"ALTER TABLE automode_config ADD COLUMN %s %s", column.name, column.ddl)); err != nil {
+			return err
+		}
+	}
+	if err := convertAutoModeGlobs(tx); err != nil {
+		return err
+	}
+	for _, column := range []string{"allow_patterns", "hard_deny", "models"} {
+		exists, err := columnExists(tx, "automode_config", column)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			continue
+		}
+		if _, err := tx.Exec(fmt.Sprintf(
+			"ALTER TABLE automode_config DROP COLUMN %s", column)); err != nil {
+			return err
+		}
+	}
+	// allow, deny and model proposals name lists that are gone; nothing could promote them.
+	_, err = tx.Exec(`UPDATE automode_proposals SET state = ?, resolved_at = ?
+		WHERE state = ? AND kind NOT IN (?, ?)`,
+		automode.StateDiscarded, time.Now().UTC().Format(sortableTimeFormat),
+		automode.StatePending, automode.KindRule, automode.KindHost)
+	return err
+}
+
+const migratedForbiddenJustification = "carried over from the old hard deny list"
+
+func convertAutoModeGlobs(tx *sql.Tx) error {
+	hasAllow, err := columnExists(tx, "automode_config", "allow_patterns")
+	if err != nil {
+		return err
+	}
+	hasDeny, err := columnExists(tx, "automode_config", "hard_deny")
+	if err != nil || (!hasAllow && !hasDeny) {
+		return err
+	}
+	var allowRaw, denyRaw, rulesRaw string
+	err = tx.QueryRow(
+		"SELECT allow_patterns, hard_deny, rules FROM automode_config WHERE id = 1").
+		Scan(&allowRaw, &denyRaw, &rulesRaw)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(rulesRaw) != "" && strings.TrimSpace(rulesRaw) != "[]" {
+		return nil
+	}
+	rules := []automode.Rule{}
+	legacy := []string{}
+	for _, list := range []struct {
+		raw      string
+		decision string
+	}{
+		{allowRaw, automode.DecisionAllow},
+		{denyRaw, automode.DecisionForbidden},
+	} {
+		globs, err := decodeStringList(list.raw, "patterns")
+		if err != nil {
+			return err
+		}
+		for _, glob := range globs {
+			rule, ok := automode.ConvertGlob(glob, list.decision, migratedForbiddenJustification)
+			if !ok {
+				legacy = append(legacy, glob)
+				continue
+			}
+			rules = append(rules, rule)
+		}
+	}
+	// The shipped denies were resolved in at read, never stored, so nothing carries them here.
+	rules = automode.StripShippedRules(rules)
+	encodedRules, err := json.Marshal(rules)
+	if err != nil {
+		return err
+	}
+	encodedLegacy, err := json.Marshal(legacy)
+	if err != nil {
+		return err
+	}
+	_, err = tx.Exec(
+		"UPDATE automode_config SET rules = ?, legacy_patterns = ? WHERE id = 1",
+		string(encodedRules), string(encodedLegacy))
 	return err
 }
 
@@ -3478,6 +3890,56 @@ func carryV88Collection(tx *sql.Tx, c v88Collection) (int, error) {
 	}
 	n, err := moved.RowsAffected()
 	return int(n), err
+}
+
+func applyMigration142(tx *sql.Tx) error {
+	columns := []string{"directory", "branch", "base_commit", "handoff_note_id", "failure_code"}
+	for _, column := range columns {
+		has, err := columnExists(tx, "delegation_operations", column)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.Exec("ALTER TABLE delegation_operations ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyMigration143(tx *sql.Tx) error {
+	columns := []struct {
+		name       string
+		definition string
+	}{
+		{"handover_seed_rev", "INTEGER NOT NULL DEFAULT 0"},
+		{"handover_tender_session", "TEXT NOT NULL DEFAULT ''"},
+		{"handover_tender_member", "TEXT NOT NULL DEFAULT ''"},
+	}
+	for _, column := range columns {
+		has, err := columnExists(tx, "delegation_operations", column.name)
+		if err != nil {
+			return err
+		}
+		if has {
+			continue
+		}
+		if _, err := tx.Exec("ALTER TABLE delegation_operations ADD COLUMN " + column.name + " " + column.definition); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyMigration144(tx *sql.Tx) error {
+	has, err := columnExists(tx, "delegation_operations", "parent_seed_id")
+	if err != nil || has {
+		return err
+	}
+	_, err = tx.Exec("ALTER TABLE delegation_operations ADD COLUMN parent_seed_id TEXT NOT NULL DEFAULT ''")
+	return err
 }
 
 func columnExists(tx *sql.Tx, table, column string) (bool, error) {

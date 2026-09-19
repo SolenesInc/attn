@@ -54,6 +54,57 @@ func TestFprintTransitionStaysQuietWhenNothingIsStranded(t *testing.T) {
 	}
 }
 
+func TestFprintTransitionNamesWhatTheCloseFreed(t *testing.T) {
+	var buf bytes.Buffer
+	fprintTransition(&buf, &protocol.SeedTransitionResult{
+		Seed: protocol.Seed{ID: "s-7k3f9m", StepSlug: "lay-the-pipe", Status: "harvested"},
+		Unblocked: []protocol.Seed{
+			{ID: "s-2p4qxv", StepSlug: "run-water-through", Title: "Run water through it"},
+			{ID: "s-8h1kdd", StepSlug: "paint-the-wall", Title: "Paint the wall", TenderMember: "trellis"},
+		},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "this unblocked 2 seed(s):") {
+		t.Fatalf("the ripple is not announced:\n%s", out)
+	}
+	for _, want := range []string{"s-2p4qxv", "Run water through it", "s-8h1kdd", "Paint the wall"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("the freed seeds do not name %q:\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, "tended by Trellis") {
+		t.Fatalf("a freed seed somebody already holds reads as free:\n%s", out)
+	}
+	if !strings.Contains(out, "`attn seed tend <id>` claims one") {
+		t.Fatalf("a freed seed nobody holds says nothing about picking it up:\n%s", out)
+	}
+}
+
+func TestFprintTransitionIsQuietAboutARippleThatFreedNobody(t *testing.T) {
+	var buf bytes.Buffer
+	fprintTransition(&buf, &protocol.SeedTransitionResult{
+		Seed: protocol.Seed{ID: "s-7k3f9m", Status: "harvested"},
+	})
+	if strings.Contains(buf.String(), "unblocked") {
+		t.Fatalf("a close that freed nothing still talked about it:\n%s", buf.String())
+	}
+}
+
+func TestFprintTransitionOffersNoClaimWhenEveryFreedSeedIsHeld(t *testing.T) {
+	var buf bytes.Buffer
+	fprintTransition(&buf, &protocol.SeedTransitionResult{
+		Seed:      protocol.Seed{ID: "s-7k3f9m", Status: "withered"},
+		Unblocked: []protocol.Seed{{ID: "s-2p4qxv", Title: "Run water through it", TenderSession: "sess-c"}},
+	})
+	out := buf.String()
+	if !strings.Contains(out, "this unblocked 1 seed(s):") {
+		t.Fatalf("wither says nothing about what it freed:\n%s", out)
+	}
+	if strings.Contains(out, "claims one") {
+		t.Fatalf("offered a claim on a seed somebody holds:\n%s", out)
+	}
+}
+
 func TestFprintTransitionSaysWhatTheSeedWaitsOn(t *testing.T) {
 	var buf bytes.Buffer
 	fprintTransition(&buf, &protocol.SeedTransitionResult{
@@ -92,10 +143,14 @@ func TestFprintSeedShowsTheHarvestCondition(t *testing.T) {
 		HarvestWhen: &protocol.SeedHarvestCondition{
 			PullRequest: "github.com:victorarias/attn#118",
 			URL:         "https://github.com/victorarias/attn/pull/118",
+			CheckedAt:   protocol.Ptr("2026-09-12T11:42:00Z"),
 		},
 	})
 	if !strings.Contains(buf.String(), "harvests when") || !strings.Contains(buf.String(), "victorarias/attn#118 merges") {
 		t.Fatalf("show never says the seed is armed:\n%s", buf.String())
+	}
+	if !strings.Contains(buf.String(), "PR last checked") || !strings.Contains(buf.String(), "2026-09-12") {
+		t.Fatalf("show hides when the pull request was last checked:\n%s", buf.String())
 	}
 }
 

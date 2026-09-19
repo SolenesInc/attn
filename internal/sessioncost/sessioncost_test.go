@@ -7,21 +7,21 @@ import (
 
 func TestLedgerAdd(t *testing.T) {
 	ledger := Ledger{}
-	if !ledger.Add(" gpt-5.5 ", Usage{InputTokens: 10, CacheReadInputTokens: 20}) {
+	if !ledger.Add(AgentKey(" gpt-5.5 "), Usage{InputTokens: 10, CacheReadInputTokens: 20}) {
 		t.Fatal("first usage was not added")
 	}
-	if !ledger.Add("gpt-5.5", Usage{OutputTokens: 3, CacheWrite5mInputTokens: 4}) {
+	if !ledger.Add(AgentKey("gpt-5.5"), Usage{OutputTokens: 3, CacheWrite5mInputTokens: 4}) {
 		t.Fatal("second usage was not added")
 	}
-	if got := ledger["gpt-5.5"]; got != (Usage{
+	if got := ledger[AgentKey("gpt-5.5")]; got != (Usage{
 		InputTokens: 10, OutputTokens: 3, CacheReadInputTokens: 20, CacheWrite5mInputTokens: 4,
 	}) {
 		t.Fatalf("usage = %+v", got)
 	}
-	if ledger.Add("gpt-5.5", Usage{}) {
+	if ledger.Add(AgentKey("gpt-5.5"), Usage{}) {
 		t.Fatal("empty usage reported a change")
 	}
-	if ledger.Add("gpt-5.5", Usage{InputTokens: -1}) {
+	if ledger.Add(AgentKey("gpt-5.5"), Usage{InputTokens: -1}) {
 		t.Fatal("negative usage was accepted")
 	}
 }
@@ -31,9 +31,9 @@ func TestSummarizeKeepsPartialCostAndPerModelReceipts(t *testing.T) {
 		SessionCostPricePrefix + "broken": `{"input_usd_per_mtok":`,
 	}
 	summary := Summarize(Ledger{
-		"claude-opus-5": {InputTokens: 1_000_000, UnclassifiedCacheWriteTokens: 17},
-		"future-model":  {OutputTokens: 42},
-		"broken":        {InputTokens: 9},
+		AgentKey("claude-opus-5"): {InputTokens: 1_000_000, UnclassifiedCacheWriteTokens: 17},
+		AgentKey("future-model"):  {OutputTokens: 42},
+		AgentKey("broken"):        {InputTokens: 9},
 	}, settings)
 	if !summary.Valid || !summary.HasUsage || summary.CostUSD == nil || *summary.CostUSD == 0 {
 		t.Fatalf("partial summary = %+v", summary)
@@ -53,31 +53,31 @@ func TestSummarizeKeepsPartialCostAndPerModelReceipts(t *testing.T) {
 }
 
 func TestSummarizeReturnsTokenOnlyAndRecognizesAZeroRate(t *testing.T) {
-	tokenOnly := Summarize(Ledger{"future-model": {InputTokens: 184_000}}, nil)
+	tokenOnly := Summarize(Ledger{AgentKey("future-model"): {InputTokens: 184_000}}, nil)
 	if tokenOnly.CostUSD != nil || tokenOnly.TotalTokens != 184_000 || !tokenOnly.HasUnpricedUsage {
 		t.Fatalf("token-only summary = %+v", tokenOnly)
 	}
 
 	zero := `{"input_usd_per_mtok":0,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`
-	free := Summarize(Ledger{"free-model": {InputTokens: 1}}, map[string]string{SessionCostPricePrefix + "free-model": zero})
+	free := Summarize(Ledger{AgentKey("free-model"): {InputTokens: 1}}, map[string]string{SessionCostPricePrefix + "free-model": zero})
 	if free.CostUSD == nil || *free.CostUSD != 0 || free.HasUnpricedUsage {
 		t.Fatalf("zero-rate summary = %+v", free)
 	}
 }
 
 func TestSummarizeRejectsATotalTokenOverflow(t *testing.T) {
-	summary := Summarize(Ledger{"overflow": {InputTokens: math.MaxInt64, OutputTokens: 1}}, nil)
+	summary := Summarize(Ledger{AgentKey("overflow"): {InputTokens: math.MaxInt64, OutputTokens: 1}}, nil)
 	if summary.Valid {
 		t.Fatalf("overflow summary = %+v", summary)
 	}
 }
 
 func TestLedgerAddRejectsOverflowAtomically(t *testing.T) {
-	ledger := Ledger{"model": {InputTokens: math.MaxInt64, OutputTokens: 7}}
-	if ledger.Add("model", Usage{InputTokens: 1, OutputTokens: 2}) {
+	ledger := Ledger{AgentKey("model"): {InputTokens: math.MaxInt64, OutputTokens: 7}}
+	if ledger.Add(AgentKey("model"), Usage{InputTokens: 1, OutputTokens: 2}) {
 		t.Fatal("overflowing usage was accepted")
 	}
-	if got := ledger["model"]; got.InputTokens != math.MaxInt64 || got.OutputTokens != 7 {
+	if got := ledger[AgentKey("model")]; got.InputTokens != math.MaxInt64 || got.OutputTokens != 7 {
 		t.Fatalf("overflow partially changed usage: %+v", got)
 	}
 }
@@ -126,7 +126,7 @@ func TestUsageValueArithmeticMarksImpossibleResultsInvalid(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			usd, known, hasUsage := Price(Ledger{"model": tt.got}, map[string]string{
+			usd, known, hasUsage := Price(Ledger{AgentKey("model"): tt.got}, map[string]string{
 				SessionCostPricePrefix + "model": `{"input_usd_per_mtok":1,"output_usd_per_mtok":1,"cache_read_usd_per_mtok":1,"cache_write_5m_usd_per_mtok":1,"cache_write_1h_usd_per_mtok":1}`,
 			})
 			if usd != 0 || known || !hasUsage {
@@ -138,7 +138,7 @@ func TestUsageValueArithmeticMarksImpossibleResultsInvalid(t *testing.T) {
 
 func TestPriceUsesEveryRateAndSeparatesCacheWrites(t *testing.T) {
 	ledger := Ledger{
-		"custom-model": {
+		AgentKey("custom-model"): {
 			InputTokens:             1_000_000,
 			OutputTokens:            1_000_000,
 			CacheReadInputTokens:    1_000_000,
@@ -171,7 +171,7 @@ func TestPriceOverflowIsUnknown(t *testing.T) {
 			"cache_write_1h_usd_per_mtok":0
 		}`,
 	}
-	usd, known, hasUsage := Price(Ledger{"huge-model": {InputTokens: 2}}, settings)
+	usd, known, hasUsage := Price(Ledger{AgentKey("huge-model"): {InputTokens: 2}}, settings)
 	if usd != 0 || known || !hasUsage {
 		t.Fatalf("Price() = %v, %v, %v; want 0, false, true", usd, known, hasUsage)
 	}
@@ -211,7 +211,7 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			usd, known, hasUsage := Price(Ledger{tt.model: tt.usage}, nil)
+			usd, known, hasUsage := Price(Ledger{AgentKey(tt.model): tt.usage}, nil)
 			if !known || !hasUsage || math.Abs(usd-tt.want) > 1e-12 {
 				t.Fatalf("Price() = %.12f, %v, %v; want %.12f, true, true", usd, known, hasUsage, tt.want)
 			}
@@ -238,7 +238,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 	}
 	for _, model := range priced {
 		t.Run(model, func(t *testing.T) {
-			_, known, hasUsage := Price(Ledger{model: {InputTokens: 1}}, nil)
+			_, known, hasUsage := Price(Ledger{AgentKey(model): {InputTokens: 1}}, nil)
 			if !known || !hasUsage {
 				t.Fatalf("Price(%q) known, hasUsage = %v, %v; want true, true", model, known, hasUsage)
 			}
@@ -247,7 +247,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 
 	for _, model := range []string{"<synthetic>", "codex-auto-review"} {
 		t.Run(model+" remains unpriced", func(t *testing.T) {
-			usd, known, hasUsage := Price(Ledger{model: {InputTokens: 1}}, nil)
+			usd, known, hasUsage := Price(Ledger{AgentKey(model): {InputTokens: 1}}, nil)
 			if usd != 0 || known || !hasUsage {
 				t.Fatalf("Price(%q) = %v, %v, %v; want 0, false, true", model, usd, known, hasUsage)
 			}
@@ -265,8 +265,8 @@ func TestPriceStatesAndOverrides(t *testing.T) {
 
 	t.Run("unknown model poisons partial total", func(t *testing.T) {
 		ledger := Ledger{
-			"gpt-5.5":      {InputTokens: 1_000_000},
-			"future-model": {OutputTokens: 1},
+			AgentKey("gpt-5.5"):      {InputTokens: 1_000_000},
+			AgentKey("future-model"): {OutputTokens: 1},
 		}
 		usd, known, hasUsage := Price(ledger, nil)
 		if usd != 0 || known || !hasUsage {
@@ -276,7 +276,7 @@ func TestPriceStatesAndOverrides(t *testing.T) {
 
 	t.Run("unclassified cache write stays unknown", func(t *testing.T) {
 		usd, known, hasUsage := Price(Ledger{
-			"claude-opus-5": {UnclassifiedCacheWriteTokens: 1},
+			AgentKey("claude-opus-5"): {UnclassifiedCacheWriteTokens: 1},
 		}, nil)
 		if usd != 0 || known || !hasUsage {
 			t.Fatalf("Price() = %v, %v, %v", usd, known, hasUsage)
@@ -287,7 +287,7 @@ func TestPriceStatesAndOverrides(t *testing.T) {
 		settings := map[string]string{
 			SessionCostPricePrefix + "gpt-5.5": `{"input_usd_per_mtok":1,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`,
 		}
-		usd, known, hasUsage := Price(Ledger{"gpt-5.5": {InputTokens: 1_000_000}}, settings)
+		usd, known, hasUsage := Price(Ledger{AgentKey("gpt-5.5"): {InputTokens: 1_000_000}}, settings)
 		if usd != 1 || !known || !hasUsage {
 			t.Fatalf("Price() = %v, %v, %v", usd, known, hasUsage)
 		}
@@ -297,7 +297,7 @@ func TestPriceStatesAndOverrides(t *testing.T) {
 		settings := map[string]string{
 			SessionCostPricePrefix + "codex-auto-review": `{"input_usd_per_mtok":0,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`,
 		}
-		usd, known, hasUsage := Price(Ledger{"codex-auto-review": {InputTokens: 1}}, settings)
+		usd, known, hasUsage := Price(Ledger{AgentKey("codex-auto-review"): {InputTokens: 1}}, settings)
 		if usd != 0 || !known || !hasUsage {
 			t.Fatalf("Price() = %v, %v, %v", usd, known, hasUsage)
 		}
@@ -330,5 +330,68 @@ func TestParseOverridesIsCompleteAndStrict(t *testing.T) {
 				t.Fatalf("ParseOverrides(%s) succeeded", raw)
 			}
 		})
+	}
+}
+func TestHarnessReportedCostPricesModelsAttnHasNoCardFor(t *testing.T) {
+	ledger := Ledger{
+		AgentKey("deepseek-v4-flash"):    {InputTokens: 5379, OutputTokens: 232, ReportedCostUSD: 0.0013365},
+		GuardianKey("deepseek-v4-flash"): {InputTokens: 812, OutputTokens: 64, ReportedCostUSD: 0.00022088},
+		AgentKey("silent-model"):         {InputTokens: 100, OutputTokens: 10},
+	}
+	summary := Summarize(ledger, nil)
+	if !summary.Valid || len(summary.Models) != 3 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	if summary.Models[0].Purpose != PurposeAgent || summary.Models[2].Purpose != PurposeGuardian {
+		t.Fatalf("agent rows must sort before guardian rows: %+v", summary.Models)
+	}
+	priced := summary.Models[0]
+	if priced.Model != "deepseek-v4-flash" || priced.CostUSD == nil || *priced.CostUSD != 0.0013365 || priced.HasUnpricedUsage {
+		t.Fatalf("agent row = %+v", priced)
+	}
+	guardian := summary.Models[2]
+	if guardian.CostUSD == nil || *guardian.CostUSD != 0.00022088 || guardian.HasUnpricedUsage {
+		t.Fatalf("guardian row = %+v", guardian)
+	}
+	silent := summary.Models[1]
+	if silent.Model != "silent-model" || silent.CostUSD != nil || !silent.HasUnpricedUsage {
+		t.Fatalf("row with neither a card nor a reported cost = %+v", silent)
+	}
+	if !summary.HasUnpricedUsage {
+		t.Fatal("one unpriced row must mark the whole summary unpriced")
+	}
+	if summary.CostUSD == nil || math.Abs(*summary.CostUSD-0.00155738) > 1e-12 {
+		t.Fatalf("total = %v, want the agent and guardian rows summed", summary.CostUSD)
+	}
+}
+
+func TestRateCardWinsOverTheHarnessReportedCost(t *testing.T) {
+	ledger := Ledger{AgentKey("priced-model"): {InputTokens: 1_000_000, ReportedCostUSD: 99}}
+	settings := map[string]string{
+		SessionCostPricePrefix + "priced-model": `{"input_usd_per_mtok":2,"output_usd_per_mtok":0,"cache_read_usd_per_mtok":0,"cache_write_5m_usd_per_mtok":0,"cache_write_1h_usd_per_mtok":0}`,
+	}
+	summary := Summarize(ledger, settings)
+	if len(summary.Models) != 1 || summary.Models[0].CostUSD == nil || *summary.Models[0].CostUSD != 2 {
+		t.Fatalf("summary = %+v, want the configured card, not the harness price", summary)
+	}
+	if summary.HasUnpricedUsage {
+		t.Fatalf("priced row reported unpriced usage: %+v", summary.Models[0])
+	}
+}
+func TestInvalidPriceOverrideIsReportedRatherThanBilledAtTheHarnessPrice(t *testing.T) {
+	ledger := Ledger{AgentKey("priced-model"): {
+		InputTokens: 1_000, UnclassifiedCacheWriteTokens: 400, ReportedCostUSD: 99,
+	}}
+	settings := map[string]string{SessionCostPricePrefix + "priced-model": `{"input_usd_per_mtok":`}
+	summary := Summarize(ledger, settings)
+	if len(summary.Models) != 1 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	row := summary.Models[0]
+	if row.CostUSD != nil {
+		t.Fatalf("row = %+v, want no price while the override is broken", row)
+	}
+	if !row.HasUnpricedUsage || row.UnpricedReason != "Price override is invalid." {
+		t.Fatalf("row = %+v, want the broken override surfaced", row)
 	}
 }

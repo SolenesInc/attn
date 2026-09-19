@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -65,57 +66,212 @@ func (d *Daemon) registerWorktreeSweepCron(runner *jobs.Runner) {
 	}
 }
 
-func (d *Daemon) worktreeSweepHandler(_ context.Context, _ *jobs.Job) (any, error) {
-	refreshed, removed, kept := d.worktreeSweepPass(time.Now())
-	return map[string]any{"refreshed": refreshed, "removed": removed, "kept": kept}, nil
+func (d *Daemon) worktreeSweepHandler(ctx context.Context, _ *jobs.Job) (any, error) {
+	refreshed, removed, kept, err := d.runWorktreeSweep(ctx, time.Now())
+	if errors.Is(err, errWorktreeSweepPreempted) {
+		err = nil
+	}
+	return map[string]any{"refreshed": refreshed, "removed": removed, "kept": kept}, err
 }
 
 func (d *Daemon) worktreeSweepPass(now time.Time) (refreshed, removed, kept int) {
+	refreshed, removed, kept, _ = d.runWorktreeSweep(context.Background(), now)
+	return refreshed, removed, kept
+}
+
+type worktreeSweepCandidate struct {
+	repo  string
+	state attngit.WorktreeState
+}
+
+func (d *Daemon) runWorktreeSweep(ctx context.Context, now time.Time) (refreshed, removed, kept int, err error) {
+	err = d.worktreeMaintenance.RunSweep(ctx, func(lease *worktreeSweepLease) error {
+		refreshed, removed, kept, err = d.worktreeSweepPassWithLease(lease, now)
+		return err
+	})
+	return refreshed, removed, kept, err
+}
+
+func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.Time) (refreshed, removed, kept int, err error) {
 	if d.store == nil {
-		return 0, 0, 0
+		return 0, 0, 0, nil
 	}
 
-	repos := d.trackedRepositories()
-	current := make(map[string]bool, len(repos))
+	ctx := lease.Context()
+	repos, err := d.trackedRepositoriesContext(ctx)
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	candidatesByRepo := make(map[string][]worktreeSweepCandidate)
 	for _, repo := range repos {
-		current[repo] = d.refreshRepositoryWorktrees(repo, now)
-		if current[repo] {
-			refreshed++
+		if cause := context.Cause(ctx); cause != nil {
+			return refreshed, removed, kept, cause
 		}
-	}
-
-	sweeping := d.worktreeSweepEnabled()
-	for _, repo := range repos {
-		facts := d.sweepContext(repo)
-		for _, wt := range d.store.ListWorktreesByRepo(repo) {
-			// State from a pass that failed removes live work.
-			if !current[repo] {
+		states, listErr := d.reconcileWorktreeRegistryContext(ctx, repo, now)
+		if listErr != nil {
+			if context.Cause(ctx) != nil {
+				return refreshed, removed, kept, context.Cause(ctx)
+			}
+			for _, wt := range d.store.ListWorktreesByRepo(repo) {
 				d.store.SetWorktreeSweep(wt.Path, store.WorktreeSweepUnknown,
 					"the repository could not be refreshed, so nothing here is decided", now)
 				kept++
+			}
+			continue
+		}
+		refreshed++
+		facts := d.sweepContext(repo)
+		for _, state := range states {
+			if state.Path == repo {
 				continue
 			}
-			verdict := worktreeSweepVerdict(wt, facts, now, worktreeSweepIdle())
+			wt := d.store.GetWorktree(state.Path)
+			if wt == nil {
+				continue
+			}
+			if verdict, cheap := cheapWorktreeSweepVerdict(wt, state, facts, now, worktreeSweepIdle()); cheap {
+				d.recordSweepVerdict(wt, verdict, now)
+				kept++
+				continue
+			}
+			candidatesByRepo[repo] = append(candidatesByRepo[repo], worktreeSweepCandidate{repo: repo, state: state})
+		}
+	}
+
+	for _, repo := range repos {
+		candidates := candidatesByRepo[repo]
+		if len(candidates) == 0 {
+			continue
+		}
+		facts, factsErr := d.repositoryFactsContext(ctx, repo, now)
+		if factsErr != nil {
+			if context.Cause(ctx) != nil {
+				return refreshed, removed, kept, context.Cause(ctx)
+			}
+			for _, candidate := range candidates {
+				d.store.RecordWorktreeRefreshError(candidate.state.Path, factsErr.Error())
+				reason := "last refresh failed: " + factsErr.Error()
+				if errors.Is(factsErr, errWorktreeStashCounts) {
+					reason = "the repository could not be refreshed, so nothing here is decided"
+				}
+				d.store.SetWorktreeSweep(candidate.state.Path, store.WorktreeSweepUnknown, reason, time.Time{})
+				kept++
+			}
+			continue
+		}
+		for _, candidate := range candidates {
+			if cause := context.Cause(ctx); cause != nil {
+				return refreshed, removed, kept, cause
+			}
+			observation, observeErr := d.observeWorktreeCandidateContext(ctx, facts, candidate.state, now)
+			if observeErr != nil {
+				if context.Cause(ctx) != nil {
+					return refreshed, removed, kept, context.Cause(ctx)
+				}
+				d.store.RecordWorktreeRefreshError(candidate.state.Path, observeErr.Error())
+				d.store.SetWorktreeSweep(candidate.state.Path, store.WorktreeSweepUnknown, "last refresh failed: "+observeErr.Error(), time.Time{})
+				kept++
+				continue
+			}
+			if cause := context.Cause(ctx); cause != nil {
+				return refreshed, removed, kept, cause
+			}
+			d.store.RecordWorktreeObservation(candidate.state.Path, observation, now)
+			wt := d.store.GetWorktree(candidate.state.Path)
+			verdict := worktreeSweepVerdict(wt, d.sweepContext(repo), now, worktreeSweepIdle())
 			d.recordSweepVerdict(wt, verdict, now)
 			if verdict.Status != store.WorktreeSweepRemoved {
 				kept++
 				continue
 			}
-			if !sweeping {
+			if !d.worktreeSweepEnabled() {
 				d.store.SetWorktreeSweep(wt.Path, store.WorktreeSweepScheduled,
 					"eligible now; the sweep is off (Settings › Files and locations › Worktree sweep)", now)
 				kept++
 				continue
 			}
-			if d.removeSweptWorktree(wt, verdict, now) {
-				removed++
+			deleteErr := lease.TryDelete(
+				func(finalCtx context.Context) error {
+					return d.finalWorktreeSweepCheck(finalCtx, candidate)
+				},
+				func(context.Context) error {
+					if d.removeSweptWorktree(wt, verdict, now) {
+						return nil
+					}
+					return errors.New("automatic worktree deletion failed")
+				},
+			)
+			if errors.Is(deleteErr, errWorktreeSweepPreempted) {
+				return refreshed, removed, kept, deleteErr
 			}
+			if deleteErr != nil {
+				kept++
+				continue
+			}
+			removed++
 		}
 	}
 	if removed > 0 {
 		d.logf("worktree sweep: reclaimed %d worktree(s), kept %d", removed, kept)
 	}
-	return refreshed, removed, kept
+	return refreshed, removed, kept, nil
+}
+
+func (d *Daemon) observeWorktreeCandidateContext(ctx context.Context, facts *repositoryFacts, state attngit.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
+	if d.worktreeObserveCandidate != nil {
+		return d.worktreeObserveCandidate(ctx, facts, state, now)
+	}
+	return observeWorktreeContext(ctx, facts, state, now)
+}
+
+func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, facts sweepContext, now time.Time, idleFor time.Duration) (sweepVerdict, bool) {
+	if state.Prunable {
+		return sweepVerdict{store.WorktreeSweepKeptStale, "git still lists it but the directory is gone; delete the row to drop the record", time.Time{}}, true
+	}
+	if state.Locked {
+		return sweepVerdict{store.WorktreeSweepUnknown, "git reports the worktree locked, so this pass leaves it alone", time.Time{}}, true
+	}
+	if wt.Pinned() {
+		return sweepVerdict{store.WorktreeSweepPinned, "kept forever by you", time.Time{}}, true
+	}
+	if sessions := facts.liveSessions[wt.Path]; len(sessions) > 0 {
+		return sweepVerdict{store.WorktreeSweepKeptLiveSession, fmt.Sprintf("%s is running in it", strings.Join(sessions, ", ")), time.Time{}}, true
+	}
+	if seeds := facts.openSeeds[wt.Path]; len(seeds) > 0 {
+		return sweepVerdict{store.WorktreeSweepKeptOpenSeed, fmt.Sprintf("open seed %s points at it", strings.Join(seeds, ", ")), time.Time{}}, true
+	}
+	floor := wt.CreatedAt
+	if activity, parseErr := time.Parse(time.RFC3339, wt.LastActivityAt); parseErr == nil && activity.After(floor) {
+		floor = activity
+	}
+	if !floor.IsZero() && now.Before(floor.Add(idleFor)) {
+		return sweepVerdict{store.WorktreeSweepScheduled,
+			fmt.Sprintf("too young for deep inspection; age floor is %d of %d days", int(now.Sub(floor).Hours()/24), int(idleFor.Hours()/24)), floor.Add(idleFor)}, true
+	}
+	return sweepVerdict{}, false
+}
+
+func (d *Daemon) finalWorktreeSweepCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
+	states, err := d.listWorktreeStatesContext(ctx, candidate.repo)
+	if err != nil {
+		return err
+	}
+	matched := false
+	for _, state := range states {
+		if state.Path != candidate.state.Path {
+			continue
+		}
+		matched = state.Branch == candidate.state.Branch && state.HeadSHA == candidate.state.HeadSHA && state.Detached == candidate.state.Detached && !state.Locked && !state.Prunable
+		break
+	}
+	if !matched {
+		return errors.New("worktree identity changed before deletion")
+	}
+	wt := d.store.GetWorktree(candidate.state.Path)
+	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || len(d.openSeedsByWorktree(candidate.repo)[wt.Path]) > 0 {
+		return errors.New("worktree gained protection before deletion")
+	}
+	return nil
 }
 
 type sweepContext struct {
@@ -197,6 +353,9 @@ func worktreeSweepVerdict(wt *store.Worktree, facts sweepContext, now time.Time,
 	if err != nil {
 		return sweepVerdict{store.WorktreeSweepUnknown, "no activity date observed yet", time.Time{}}
 	}
+	if wt.CreatedAt.After(lastActivity) {
+		lastActivity = wt.CreatedAt
+	}
 	eligibleAt := lastActivity.Add(idleFor)
 	if now.Before(eligibleAt) {
 		return sweepVerdict{store.WorktreeSweepScheduled,
@@ -228,7 +387,7 @@ func (d *Daemon) recordSweepVerdict(wt *store.Worktree, verdict sweepVerdict, no
 }
 
 func (d *Daemon) removeSweptWorktree(wt *store.Worktree, verdict sweepVerdict, now time.Time) bool {
-	err := d.doDeleteWorktree(wt.Path, nil, deleteWorktreeOptions{
+	err := d.doDeleteWorktreeForeground(wt.Path, nil, deleteWorktreeOptions{
 		RemovalAction: "removed", RemovalReason: verdict.Reason,
 	})
 	if err != nil {
@@ -263,7 +422,7 @@ func (d *Daemon) recordWorktreeRemoval(
 	body := fmt.Sprintf("attn %s the worktree %s (branch %s of %s): %s.",
 		action, wt.Path, wt.Branch, wt.MainRepo, reason)
 	for _, seedID := range seeds {
-		if _, err := d.appendSeedNote(seedID, body, "", "", "", nil); err != nil {
+		if _, err := d.appendSeedNote(seedID, body, "", "", "", nil, false, ""); err != nil {
 			d.logf("worktree removal: noting %s on seed %s: %v", wt.Path, seedID, err)
 		}
 	}

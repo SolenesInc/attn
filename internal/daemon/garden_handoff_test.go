@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -167,7 +168,7 @@ func TestGarden_AHandoffPublishesTheNoteFact(t *testing.T) {
 
 	handoff(t, d, "sess-a", seed.ID, "over to you", "keel")
 
-	if !slices.Equal(seen, []string{FactGardenNoted}) {
-		t.Fatalf("a handoff published %v, want just %s", seen, FactGardenNoted)
+	if !slices.Equal(seen, []string{seedEvents.NameNoteAdded}) {
+		t.Fatalf("a handoff published %v, want just %s", seen, seedEvents.NameNoteAdded)
 	}
 }

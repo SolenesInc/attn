@@ -2,15 +2,246 @@ package daemonctl
 
 import (
 	"context"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func TestDaemonProcessWaitForReadyReturnsOnStartupSignal(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	blockReader, blockWriter, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("/bin/sh", "-c", "printf 'ready\\n' >&3; cat <&4 >/dev/null")
+	cmd.ExtraFiles = []*os.File{writer, blockReader}
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	writer.Close()
+	blockReader.Close()
+	defer func() {
+		blockWriter.Close()
+		_ = cmd.Wait()
+	}()
+
+	if err := (daemonProcess{ready: reader}).waitForReady(context.Background()); err != nil {
+		t.Fatalf("waitForReady() error = %v", err)
+	}
+}
+
+func TestDaemonProcessWaitForReadyReportsStartupFailure(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		_, _ = writer.WriteString("error:open database\n")
+		_ = writer.Close()
+	}()
+
+	err = (daemonProcess{ready: reader}).waitForReady(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "open database") {
+		t.Fatalf("waitForReady() error = %v, want startup failure", err)
+	}
+}
+
+func TestWaitForMatchingDaemonReconcilesAConcurrentStartup(t *testing.T) {
+	retry := make(chan time.Time)
+	firstAttempt := make(chan struct{})
+	fetches := 0
+	fetch := func(context.Context) (healthResponse, error) {
+		fetches++
+		if fetches == 1 {
+			close(firstAttempt)
+			return healthResponse{}, errors.New("not ready")
+		}
+		return healthResponse{Protocol: protocol.ProtocolVersion}, nil
+	}
+	previousFingerprint := buildinfo.SourceFingerprint
+	buildinfo.SourceFingerprint = "unknown"
+	t.Cleanup(func() { buildinfo.SourceFingerprint = previousFingerprint })
+	go func() {
+		<-firstAttempt
+		retry <- time.Time{}
+	}()
+
+	if err := waitForMatchingDaemon(context.Background(), retry, fetch, func() bool { return true }, func() (bool, error) { return false, nil }); err != nil {
+		t.Fatalf("waitForMatchingDaemon() error = %v", err)
+	}
+}
+
+func TestWaitForMatchingDaemonRejectsAHealthyDaemonWithoutItsUnixSocket(t *testing.T) {
+	previousFingerprint := buildinfo.SourceFingerprint
+	buildinfo.SourceFingerprint = "unknown"
+	t.Cleanup(func() { buildinfo.SourceFingerprint = previousFingerprint })
+
+	err := waitForMatchingDaemon(
+		context.Background(),
+		make(chan time.Time),
+		func(context.Context) (healthResponse, error) {
+			return healthResponse{Protocol: protocol.ProtocolVersion}, nil
+		},
+		func() bool { return false },
+		func() (bool, error) { return false, nil },
+	)
+	if err == nil || !strings.Contains(err.Error(), "missing its Unix listener") {
+		t.Fatalf("waitForMatchingDaemon() error = %v, want missing Unix listener rejection", err)
+	}
+}
+
+func TestWaitForMatchingDaemonRetriesWhenThePIDLockIsReleased(t *testing.T) {
+	err := waitForMatchingDaemon(
+		context.Background(),
+		make(chan time.Time),
+		func(context.Context) (healthResponse, error) {
+			return healthResponse{}, errors.New("not ready")
+		},
+		func() bool { return false },
+		func() (bool, error) { return true, nil },
+	)
+	if !errors.Is(err, errDaemonLockReleased) {
+		t.Fatalf("waitForMatchingDaemon() error = %v, want startup retry", err)
+	}
+}
+
+func TestEnsureTripwireNamesLimitWhenChildNeverSignals(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errDaemonStartupTimeout)
+	run := func(ctx context.Context, _ string) (EnsureResult, error) {
+		_, err := waitForSpawnedDaemon(ctx, daemonProcess{ready: reader})
+		return EnsureResult{}, err
+	}
+
+	_, err = ensureWithTripwire(ctx, "/tmp/attn", run, func(context.Context) bool { return false })
+	if err == nil || !strings.Contains(err.Error(), "daemon startup wait exceeded 1m0s") || !strings.Contains(err.Error(), "daemon.log") {
+		t.Fatalf("ensureWithTripwire() error = %v, want named limit and diagnostic path", err)
+	}
+}
+
+func TestEnsureTripwireAcceptsDaemonThatCrossesTheBoundary(t *testing.T) {
+	ctx, cancel := context.WithCancelCause(context.Background())
+	cancel(errDaemonStartupTimeout)
+	run := func(ctx context.Context, _ string) (EnsureResult, error) {
+		return EnsureResult{}, ctx.Err()
+	}
+
+	result, err := ensureWithTripwire(ctx, "/tmp/attn", run, func(context.Context) bool { return true })
+	if err != nil {
+		t.Fatalf("ensureWithTripwire() error = %v", err)
+	}
+	if result.Status != "already_running" {
+		t.Fatalf("ensureWithTripwire() status = %q, want already_running", result.Status)
+	}
+}
+
+func TestEnsureLockSerializesSocketInspection(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "new-profile")
+	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_DATA_DIR", dir)
+	t.Setenv("ATTN_SOCKET_PATH", "")
+	t.Setenv("ATTN_DB_PATH", "")
+	t.Setenv("ATTN_CONFIG_PATH", "")
+	config.ReloadForTesting()
+
+	release, err := acquireEnsureLock(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		t.Fatalf("new profile data directory was not created: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := acquireEnsureLock(ctx); !errors.Is(err, context.Canceled) {
+		t.Fatalf("second acquireEnsureLock() error = %v, want context cancellation while first holds lock", err)
+	}
+	release()
+
+	release, err = acquireEnsureLock(context.Background())
+	if err != nil {
+		t.Fatalf("acquireEnsureLock() after release: %v", err)
+	}
+	release()
+}
+
+func TestPIDLockAvailableTracksTheKernelLock(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_DATA_DIR", dir)
+	t.Setenv("ATTN_SOCKET_PATH", "")
+	t.Setenv("ATTN_DB_PATH", "")
+	t.Setenv("ATTN_CONFIG_PATH", "")
+	config.ReloadForTesting()
+
+	holder, err := os.OpenFile(config.PIDPath(), os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer holder.Close()
+	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.WriteAt([]byte(strconv.Itoa(os.Getpid())), 0); err != nil {
+		t.Fatal(err)
+	}
+	available, err := pidLockAvailable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if available {
+		t.Fatal("pidLockAvailable() trusted numeric contents over the held flock")
+	}
+	if err := holder.Truncate(0); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := holder.WriteAt([]byte(NonDaemonHolderSentinel), 0); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(holder.Fd()), syscall.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
+	available, err = pidLockAvailable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !available {
+		t.Fatal("pidLockAvailable() trusted stale sentinel contents over the released flock")
+	}
+}
+
+func TestDaemonProcessWaitForReadyStopsWithContext(t *testing.T) {
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer writer.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err = (daemonProcess{ready: reader}).waitForReady(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("waitForReady() error = %v, want context cancellation", err)
+	}
+}
 
 func TestDaemonMatchesCurrentBinary_UsesSourceFingerprintWhenAvailable(t *testing.T) {
 	previousFingerprint := buildinfo.SourceFingerprint

@@ -106,6 +106,28 @@ func TestReloadSessionUnknownSession(t *testing.T) {
 	}
 }
 
+func TestReloadSessionRejectsLedgerRowWhileTeardownIsInFlight(t *testing.T) {
+	d, backend, client := newReloadClientTestDaemon(t, &store.LaunchIntent{})
+	d.teardownMu.Lock()
+	if d.tearingDown == nil {
+		d.tearingDown = make(map[string]chan struct{})
+	}
+	d.tearingDown["session"] = make(chan struct{})
+	d.teardownMu.Unlock()
+
+	d.handleReloadSession(client, &protocol.ReloadSessionMessage{
+		Cmd: protocol.CmdReloadSession, ID: "session", Cols: 80, Rows: 24,
+	})
+
+	result := readReloadSessionResult(t, client)
+	if result.Success || result.Error == nil || !strings.Contains(*result.Error, "closing") {
+		t.Fatalf("reload result = %+v, want closing failure", result)
+	}
+	if _, spawned := backend.LastSpawn(); spawned {
+		t.Fatal("backend Spawn called during teardown")
+	}
+}
+
 func TestReloadSessionUnattendedDeadSessionCarriesContract(t *testing.T) {
 	spec := launchcontract.UnattendedLaunchSpec{
 		Agent: "claude", Model: "sonnet", Effort: "high", Executable: "/opt/claude",

@@ -73,7 +73,6 @@ func Analyze(raw []byte) Stats {
 		}
 
 		if i+1 >= n {
-			i++
 			break
 		}
 		esc := raw[i+1]

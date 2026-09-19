@@ -43,10 +43,8 @@ describe('scenarioCatalog agent tripwire flags', () => {
     expect(allowRealAgentsForRunner('TERMINAL-ANNOTATIONS')).toBeUndefined();
   });
 
-  it('lets the pi scenarios run pi and nothing else', () => {
-    // pi is a real binary this scenario execs against a stub model, so only pi
-    // is allowed and claude/codex/copilot stay armed.
-    expect(allowRealAgentsForRunner('PI-AUTOMODE')).toEqual(['pi']);
+  it('allows only Pi for the Auto Mode guardian model catalog', () => {
+    expect(allowRealAgentsForRunner('AutoModeEnvironment')).toEqual(['pi']);
   });
 
   it('keeps the resume family armed on the mock agent', () => {
@@ -134,6 +132,12 @@ describe('scenarioCatalog soakOnly handling', () => {
   it('throws on an unknown id in direct single-scenario resolution', () => {
     expect(() => resolveScenario('does-not-exist')).toThrow('Unknown scenario id: does-not-exist');
   });
+
+  it('keeps hand-written soaks with unsafe teardown out of direct selection', () => {
+    for (const id of ['offset-soak', 'perf-baseline', 'perf-cold-warm']) {
+      expect(() => resolveScenario(id), id).toThrow(`Unknown scenario id: ${id}`);
+    }
+  });
 });
 
 describe('scenarioCatalog daemon isolation', () => {
@@ -141,6 +145,10 @@ describe('scenarioCatalog daemon isolation', () => {
     for (const id of ['tr205-probe-codex', 'tr205-probe-claude', 'tr502', 'tr504']) {
       expect(resolveScenario(id).freshWorldAfter, id).toBe(true);
     }
+  });
+
+  it('stops the daemon after exercising the shared PTY host', () => {
+    expect(resolveScenario('pty-host-setting').freshWorldAfter).toBe(true);
   });
 });
 

@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Use packaged-app CI for routine verification on product PRs, including macOS terminal copying, with local runs for reproducing failures.

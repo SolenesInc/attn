@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
+	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/github"
@@ -30,6 +31,20 @@ import (
 type automationResumeBackend struct {
 	*fakeSpawnBackend
 	snapshotCalls int
+}
+
+type automationRestoreRaceBackend struct {
+	*fakeSpawnBackend
+	secondCheck chan struct{}
+	checks      atomic.Int32
+}
+
+func (b *automationRestoreRaceBackend) SessionIDs(ctx context.Context) []string {
+	ids := b.fakeSpawnBackend.SessionIDs(ctx)
+	if b.checks.Add(1) == 2 {
+		close(b.secondCheck)
+	}
+	return ids
 }
 
 func writeCodexRolloutFixture(t *testing.T, resumeID string) {
@@ -81,6 +96,98 @@ func baselineGitHubReviewAutomation(t *testing.T, s *store.Store, definitionID, 
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
 		t.Fatalf("establish review automation baseline: candidates=%#v err=%v", candidates, err)
 	}
+}
+
+const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
+id: manual-check
+name: Manual check
+trigger: {type: manual}
+prompt: Check locally.
+launch: {driver: codex}
+location: {type: directory, path: "%s"}
+`
+
+func automationBroadcastRecorder(d *Daemon) func() []string {
+	var mu sync.Mutex
+	var ids []string
+	d.automationsBroadcastHook = func(msg *protocol.AutomationsChangedMessage) {
+		mu.Lock()
+		ids = append(ids, msg.DefinitionIds...)
+		mu.Unlock()
+	}
+	return func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return append([]string(nil), ids...)
+	}
+}
+
+func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, string, string) {
+	t.Helper()
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDaemon(t, repo, "init")
+	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
+	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
+	revisionBytes, err := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload, _ := json.Marshal(automation.PullRequestInput{
+		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
+		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: strings.TrimSpace(string(revisionBytes)),
+	})
+	location := automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{
+		Default: automation.RepositorySource{Type: "managed_cache"},
+		Overrides: map[string]automation.RepositorySource{
+			"github.com/owner/repo": {Type: "local_clone", Path: repo},
+		},
+	}}
+	d := newEnrolledDaemon(t, "")
+	d.dataRoot = filepath.Join(root, "profile")
+	enrollHomeForTest(t, d)
+	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const subject = "github.com/owner/repo#42"
+	baselineGitHubReviewAutomation(t, d.store, def.ID, "github.com", now)
+	if _, err := d.store.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
+		t.Fatal(err)
+	}
+	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{
+		RunID: origin.ID, DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
+		Provider: "github", Prompt: "Review", Context: payload, Location: location,
+		Launch: testAutomationLaunch("codex"), IDs: automation.DeliveryIDs{
+			SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID,
+		},
+	}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := d.prepareAutomationLocation(context.Background(), firstReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordGardenDispatch(origin.SessionID, origin.SeedID, "", prepared.Directory, "codex", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, origin.ID, string(prepared.Resolved), now); err != nil {
+		t.Fatal(err)
+	}
+	continuation := firstReq
+	continuation.RunID = "run-2"
+	return d, continuation, prepared.Directory, repo
 }
 
 func TestPrepareRepositoryWorktreeUsesLocalOverrideAndExactRevision(t *testing.T) {
@@ -305,6 +412,7 @@ func TestAutomationOccurrenceInputIsStructurallySeparateFromPrompt(t *testing.T)
 func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	directory := t.TempDir()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	setupDelegationGarden(t, d)
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	addTestWorkspace(d, "workspace-1", directory)
@@ -335,86 +443,6 @@ func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	}
 }
 
-func TestFailAutomationRunFailsRunAndVisibleTicket(t *testing.T) {
-	s := store.New()
-	now := time.Now()
-	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{"id":"daily-check"}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reservation := store.AutomationRunReservation{
-		RunID:        "run-1",
-		OccurrenceID: "occ-1",
-		TicketID:     "ticket-1",
-		SessionID:    "session-1",
-		WorkspaceID:  "workspace-1",
-		PaneID:       "pane-1",
-	}
-	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, reservation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{
-		ID:              run.TicketID,
-		Title:           "Daily check",
-		Status:          store.TicketStatusWorking,
-		Assignee:        run.SessionID,
-		AutomationRunID: run.ID,
-	}, "automation:daily-check", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-
-	d := &Daemon{store: s}
-	failed, err := d.failAutomationRun(run, errors.New("spawn unavailable"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if failed.State != "failed" || !strings.Contains(failed.LastError, "spawn unavailable") {
-		t.Fatalf("failed run = %#v", failed)
-	}
-	ticket, err := s.GetTicketByAutomationRunID(run.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ticket == nil || ticket.Status != store.TicketStatusFailed {
-		t.Fatalf("ticket = %#v, want failed", ticket)
-	}
-}
-
-func TestRetryableAutomationDeliveryKeepsRunAndTicketActive(t *testing.T) {
-	s := store.New()
-	now := time.Now()
-	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{"id":"daily-check"}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{
-		ID: run.TicketID, Title: "Daily check", Status: store.TicketStatusWorking,
-		Assignee: run.SessionID, AutomationRunID: run.ID,
-	}, "automation:daily-check", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-
-	d := &Daemon{store: s}
-	got, err := d.handleAutomationDeliveryError(run, &retryableAutomationDeliveryError{cause: errors.New("screen not ready")})
-	if err == nil || got.State != "pending" {
-		t.Fatalf("run = %#v, err = %v; want pending retryable failure", got, err)
-	}
-	ticket, err := s.GetTicketByAutomationRunID(run.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ticket == nil || ticket.Status != store.TicketStatusWorking {
-		t.Fatalf("ticket = %#v, want working", ticket)
-	}
-}
-
 func TestDisabledAutomationRefusesRecoveredPendingDelivery(t *testing.T) {
 	s := store.New()
 	now := time.Now()
@@ -423,7 +451,7 @@ func TestDisabledAutomationRefusesRecoveredPendingDelivery(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -431,7 +459,7 @@ func TestDisabledAutomationRefusesRecoveredPendingDelivery(t *testing.T) {
 	if _, _, err := s.SetAutomationEnabled(def.ID, false, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	deliveryErr := d.deliverAutomationRun(context.Background(), run)
 	if deliveryErr == nil || !strings.Contains(deliveryErr.Error(), "definition is disabled") {
 		t.Fatalf("disabled delivery err=%v", deliveryErr)
@@ -444,7 +472,7 @@ func TestDisabledAutomationRefusesRecoveredPendingDelivery(t *testing.T) {
 
 func TestAutomationSetEnabledDisableFailsQueuedPendingRun(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	raw := `api_version: attn.dev/automations/v1alpha1
 id: queued
 name: Queued
@@ -458,7 +486,7 @@ location: {type: directory, path: "` + t.TempDir() + `"}
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -503,12 +531,12 @@ func TestAutomationRecoveryLeavesGitHubRunsForFreshProviderObservation(t *testin
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	d.recoverAutomations()
 	got, err := s.GetAutomationRun(run.ID)
 	if err != nil || got == nil || got.State != "pending" {
@@ -570,10 +598,7 @@ location:
 	d := &Daemon{store: s, ghRegistry: registry}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered.Add(1)
-		if _, err := s.EnsureAutomationTicket(store.Ticket{ID: run.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:requested-review", store.TicketRoleChiefOfStaff, time.Now()); err != nil {
-			return err
-		}
-		return s.MarkAutomationRunDelivered(run.ID, `{"type":"test"}`, time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, `{"type":"test"}`, time.Now())
 	}
 	demand := []*protocol.PR{{Host: "github.com", Repo: "owner/repo", Number: 42, HeadSHA: protocol.Ptr(headOne), Role: protocol.PRRoleReviewer, State: protocol.PRStateWaiting, Reason: protocol.PRReasonReviewNeeded}}
 	observedAt := time.Now()
@@ -613,7 +638,7 @@ location:
 		t.Fatalf("runs=%#v err=%v", runs, err)
 	}
 	for i := 1; i < len(runs); i++ {
-		if runs[i-1].ID == runs[i].ID || runs[i-1].TicketID != runs[i].TicketID || runs[i-1].SessionID != runs[i].SessionID || runs[i-1].WorkspaceID != runs[i].WorkspaceID || runs[i-1].PaneID != runs[i].PaneID {
+		if runs[i-1].ID == runs[i].ID || runs[i-1].SeedID != runs[i].SeedID || runs[i-1].SessionID != runs[i].SessionID || runs[i-1].WorkspaceID != runs[i].WorkspaceID || runs[i-1].PaneID != runs[i].PaneID {
 			t.Fatalf("continuation did not preserve reviewer binding: %#v", runs)
 		}
 	}
@@ -662,7 +687,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	delivered := make(chan struct{}, 1)
 	d := &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
-		if err := s.MarkAutomationRunDelivered(run.ID, `{}`, time.Now()); err != nil {
+		if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now()); err != nil {
 			return err
 		}
 		delivered <- struct{}{}
@@ -728,7 +753,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		if attempts.Add(1) == 1 {
 			return &retryableAutomationDeliveryError{cause: errors.New("transient launch failure")}
 		}
-		return s.MarkAutomationRunDelivered(run.ID, `{}`, time.Now())
+		return markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now())
 	}
 	var broadcasts []string
 	d.automationsBroadcastHook = func(msg *protocol.AutomationsChangedMessage) {
@@ -757,125 +782,9 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	}
 }
 
-func TestContinuationFailurePreservesOriginTicketOutcome(t *testing.T) {
-	s := store.New()
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	firstIDs := store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
-	first, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, firstIDs)
-	if err != nil || !created {
-		t.Fatalf("first claim created=%v err=%v", created, err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.SetTicketStatus(first.TicketID, store.TicketStatusDone, first.SessionID, "review complete", now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(2*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(3*time.Minute))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("second candidates=%#v err=%v", candidates, err)
-	}
-	second, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, `{}`, `{}`, now.Add(3*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", TicketID: "unused-ticket", SessionID: "unused-session", WorkspaceID: "unused-workspace", PaneID: "unused-pane"})
-	if err != nil || !created {
-		t.Fatalf("second claim created=%v err=%v", created, err)
-	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	failed, err := d.failAutomationRun(second, errors.New("changed revision requires an explicit continuity rule"))
-	if err != nil || failed == nil || failed.State != "failed" {
-		t.Fatalf("failed run=%#v err=%v", failed, err)
-	}
-	ticket, err := s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil || ticket.Status != store.TicketStatusDone {
-		t.Fatalf("origin ticket=%#v err=%v", ticket, err)
-	}
-	if len(ticket.Activity) == 0 || !strings.Contains(ticket.Activity[len(ticket.Activity)-1].Comment, "changed revision") {
-		t.Fatalf("continuation failure activity=%#v", ticket.Activity)
-	}
-}
-
-func TestSuccessfulContinuationReopensOriginTicketAfterDelivery(t *testing.T) {
-	s := store.New()
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusDone, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("second candidates=%#v err=%v", candidates, err)
-	}
-	second, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, `{}`, `{}`, now.Add(2*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := s.EnsureAutomationContinuationTicket(first.TicketID, first.SessionID, second.ID, "/tmp/occ-2.json", "automation:review", now.Add(3*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	req := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, IDs: automation.DeliveryIDs{TicketID: second.TicketID, SessionID: second.SessionID}}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
-		t.Fatal(err)
-	}
-	ticket, err := s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil || ticket.Status != store.TicketStatusWorking || ticket.ClosedAt != nil {
-		t.Fatalf("reopened ticket=%#v err=%v", ticket, err)
-	}
-	if len(ticket.Activity) != 2 {
-		t.Fatalf("activity=%#v, want occurrence comment plus one reopen", ticket.Activity)
-	}
-}
-
-func TestContinuationActivationFailsIfTicketDisappeared(t *testing.T) {
-	d := &Daemon{store: store.New()}
-	err := d.activateAutomationContinuationTicket(automation.WorkRequest{
-		RunID: "run-2", DefinitionID: "review", ContinuityKey: "github.com/owner/repo#42",
-		IDs: automation.DeliveryIDs{TicketID: "missing-ticket"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "disappeared during delivery") {
-		t.Fatalf("missing ticket activation err=%v", err)
-	}
-}
-
 func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC)
 	const sessionID = "sess-a"
-	if _, err := d.store.CreateTicket(store.Ticket{
-		ID: "ticket-1", Title: "Review", Status: store.TicketStatusDone,
-		Assignee: sessionID, AutomationRunID: "run-1",
-	}, "automation:review", now); err != nil {
-		t.Fatal(err)
-	}
 	seedID, err := d.bindDelegationSeed(sessionID, "", "Review the pull request.", "Review", "", t.TempDir(), "codex", false)
 	if err != nil {
 		t.Fatal(err)
@@ -883,14 +792,16 @@ func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	if _, _, err := d.applySeedTransition(seedID, garden.VerbHarvest, garden.Ask{Actor: garden.Tender{Session: sessionID}, Reason: "first review complete"}); err != nil {
 		t.Fatal(err)
 	}
+	addGardenSession(t, d, "observer")
+	watchSeed(t, d, "observer", seedID, false)
 	req := automation.WorkRequest{
 		RunID: "run-2", DefinitionID: "review", ContinuityKey: "github.com/owner/repo#42",
-		IDs: automation.DeliveryIDs{TicketID: "ticket-1", SessionID: sessionID},
+		IDs: automation.DeliveryIDs{SeedID: seedID, SessionID: sessionID},
 	}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
+	if _, err := d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
+	if _, err := d.activateAutomationContinuationSeed(req.IDs.SeedID, req.IDs.SessionID); err != nil {
 		t.Fatal(err)
 	}
 	seed, _, err := d.readSeed(seedID)
@@ -900,60 +811,131 @@ func TestSuccessfulContinuationReopensBoundSeed(t *testing.T) {
 	if seed.Status != garden.StatusGrowing || seed.TenderSession != sessionID {
 		t.Fatalf("continued seed=%#v, want growing and tended by %s", seed, sessionID)
 	}
-	ticket, err := d.store.GetTicket("ticket-1")
-	if err != nil || ticket == nil || ticket.Status != store.TicketStatusWorking {
-		t.Fatalf("continued ticket=%#v err=%v", ticket, err)
+	if queued := queuedSeedBells(t, d, "observer"); len(queued) != 0 {
+		t.Fatalf("automation reactivation rang before work was ready: %q", queued)
 	}
 }
 
-func TestFreshThreadAfterTicketSweepGetsItsOwnTicketNotTheOldOne(t *testing.T) {
-	s := store.New()
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+func TestAutomationContinuationRetendStaysQuiet(t *testing.T) {
+	for _, test := range []struct {
+		name  string
+		setup func(t *testing.T, d *Daemon, seedID string)
+	}{
+		{
+			name: "parked",
+			setup: func(t *testing.T, d *Daemon, seedID string) {
+				t.Helper()
+				if _, _, err := d.applySeedTransition(seedID, garden.VerbPark, garden.Ask{Actor: garden.Tender{Session: "sess-a"}}); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "abandoned tender",
+			setup: func(t *testing.T, d *Daemon, seedID string) {
+				t.Helper()
+				addGardenSession(t, d, "stale")
+				if _, _, err := d.applySeedTransition(seedID, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: "stale"}, Force: true}); err != nil {
+					t.Fatal(err)
+				}
+				d.store.Remove("stale")
+			},
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			d := newGardenDaemon(t)
+			seedID, err := d.bindDelegationSeed("sess-a", "", "Review the pull request.", "Review", "", t.TempDir(), "codex", false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			test.setup(t, d, seedID)
+			addGardenSession(t, d, "observer")
+			watchSeed(t, d, "observer", seedID, false)
+
+			if _, err := d.activateAutomationContinuationSeed(seedID, "sess-a"); err != nil {
+				t.Fatal(err)
+			}
+			if queued := queuedSeedBells(t, d, "observer"); len(queued) != 0 {
+				t.Fatalf("automation retend rang before work was ready: %q", queued)
+			}
+		})
+	}
+}
+
+func TestFailedInitialAutomationWithersSeedWithoutCreatingTicket(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, _, err := d.store.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusDone, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
+
+	failed, err := d.failAutomationRun(run, errors.New("spawn unavailable"))
+	if err != nil || failed == nil || failed.State != store.AutomationRunStateFailed {
+		t.Fatalf("failed run=%#v err=%v", failed, err)
 	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
-		t.Fatal(err)
+	seed, _, err := d.readSeed(run.SeedID)
+	if err != nil || seed.Status != garden.StatusWithered {
+		t.Fatalf("seed=%#v err=%v, want withered", seed, err)
 	}
-	if removed, err := s.SweepExpiredAutomationTickets(now.Add(2*time.Hour), time.Hour); err != nil || removed != 1 {
-		t.Fatalf("sweep removed=%d err=%v", removed, err)
+	notes, err := d.readNotesDomain(run.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, "spawn unavailable") {
+		t.Fatalf("notes=%#v err=%v", notes, err)
 	}
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(3*time.Hour)); err != nil {
-		t.Fatal(err)
+	if ticket, err := d.store.GetTicket(run.SeedID); err != nil || ticket != nil {
+		t.Fatalf("legacy ticket=%#v err=%v, want none", ticket, err)
 	}
-	candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(4*time.Hour))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("second candidates=%#v err=%v", candidates, err)
-	}
-	second, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, `{}`, `{}`, now.Add(4*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", TicketID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
+}
+
+func TestFailedRepeatedOccurrenceNotesSharedSeedOnce(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if second.SessionID != "session-2" || second.TicketID != "ticket-2" {
-		t.Fatalf("second ids=%s/%s, want its own freshly reserved ones (no binding survived to hand it session-1/ticket-1)", second.SessionID, second.TicketID)
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	if err := d.ensureAutomationTicket(context.Background(), automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, IDs: automation.DeliveryIDs{TicketID: second.TicketID, SessionID: second.SessionID}}); err != nil {
-		t.Fatalf("a fresh thread with no artifacts to reuse must not be refused: %v", err)
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if continuation, _, err := d.ensureAutomationSeed(firstReq); err != nil || continuation {
+		t.Fatalf("initial seed continuation=%v err=%v", continuation, err)
 	}
-	if ticket, err := s.GetTicket(first.TicketID); err != nil || ticket != nil {
-		t.Fatalf("swept ticket was recreated: ticket=%#v err=%v", ticket, err)
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
 	}
-	if ticket, err := s.GetTicket(second.TicketID); err != nil || ticket == nil {
-		t.Fatalf("expected the fresh thread's own ticket to be created: ticket=%#v err=%v", ticket, err)
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.SeedID != first.SeedID {
+		t.Fatalf("second seed=%s, want shared %s", second.SeedID, first.SeedID)
+	}
+	if _, err := d.failAutomationRun(second, errors.New("changed input rejected")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.failAutomationRun(second, errors.New("changed input rejected")); err != nil {
+		t.Fatal(err)
+	}
+	seed, _, err := d.readSeed(first.SeedID)
+	if err != nil || seed.Status != garden.StatusGrowing {
+		t.Fatalf("shared seed=%#v err=%v, want origin state preserved", seed, err)
+	}
+	notes, err := d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) {
+		t.Fatalf("notes=%#v err=%v, want one idempotent failure note", notes, err)
+	}
+	if ticket, err := d.store.GetTicket(first.SeedID); err != nil || ticket != nil {
+		t.Fatalf("legacy ticket=%#v err=%v, want none", ticket, err)
 	}
 }
 
@@ -971,11 +953,11 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, firstPayload, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, firstPayload, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusDone, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
@@ -990,7 +972,7 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := &Daemon{store: s, ptyBackend: &fakeSpawnBackend{sessionIDs: []string{first.SessionID}}}
-	req := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Context: json.RawMessage(secondPayload), IDs: automation.DeliveryIDs{TicketID: second.TicketID, SessionID: second.SessionID}}
+	req := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Context: json.RawMessage(secondPayload), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
 	changedContract := req
 	changedContract.Context = json.RawMessage(firstPayload)
 	changedContract.Prompt = "Updated review instructions"
@@ -1002,17 +984,35 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("changed-head preflight rejected safe continuation: %v", err)
 	}
-	ticket, err := s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil {
-		t.Fatalf("ticket=%#v err=%v", ticket, err)
-	}
-	if len(ticket.Activity) != 0 {
-		t.Fatalf("continuation validation published ticket activity: %#v", ticket.Activity)
-	}
 }
 
 func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing.T) {
-	d := newDaemonForTest(t)
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
+		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
+	}
+	if spawn.InitialPromptFile != "" {
+		t.Fatalf("continuation resume initial prompt = %q, want durable work-ready delivery", spawn.InitialPromptFile)
+	}
+}
+
+type stoppedAutomationContinuationFixture struct {
+	d         *Daemon
+	backend   *automationResumeBackend
+	origin    *store.AutomationRun
+	req       automation.WorkRequest
+	directory string
+}
+
+func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuationFixture {
+	t.Helper()
+	d := newEnrolledDaemon(t, "")
+	setupDelegationGarden(t, d)
 	backend := &automationResumeBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
 	d.ptyBackend = backend
 	now := time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC)
@@ -1026,15 +1026,12 @@ func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	directory := t.TempDir()
-	if _, err := d.store.EnsureAutomationTicket(store.Ticket{ID: origin.TicketID, Title: "Review", Status: store.TicketStatusDone, Assignee: origin.SessionID, Cwd: directory, LastAgentID: "codex", AutomationRunID: origin.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: origin.WorkspaceID, Title: "review", Directory: directory})
 	d.store.Add(&protocol.Session{ID: origin.SessionID, Agent: protocol.SessionAgentCodex, Directory: directory, WorkspaceID: origin.WorkspaceID})
 	writeCodexRolloutFixture(t, "codex-rollout-1")
@@ -1043,19 +1040,252 @@ func TestStoppedContinuationResumesRecordedReviewerWithPinnedContract(t *testing
 	req := automation.WorkRequest{
 		RunID: "run-2", DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
 		Prompt: "Review locally", Context: json.RawMessage(`{}`), Launch: testAutomationLaunch("codex"),
-		IDs: automation.DeliveryIDs{TicketID: origin.TicketID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID},
+		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID},
 	}
-	if err := d.ensureAutomationSession(context.Background(), req, directory); err != nil {
+	d.store.SetLaunchIntent(origin.SessionID, store.LaunchIntent{
+		ApprovalRoute:    launchcontract.ApprovalRouteReviewer,
+		Executable:       req.Launch.Executable,
+		Model:            req.Launch.Model,
+		Effort:           req.Launch.Effort,
+		UnattendedLaunch: req.Launch,
+	})
+	return stoppedAutomationContinuationFixture{
+		d: d, backend: backend, origin: origin, req: req, directory: directory,
+	}
+}
+
+func TestStoppedContinuationWaitsForClosingRuntimeBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	killEntered := make(chan struct{})
+	releaseKill := make(chan struct{})
+	fixture.backend.onKill = func() {
+		close(killEntered)
+		<-releaseKill
+	}
+
+	closing, err := fixture.d.beginSessionClose(
+		fixture.origin.SessionID,
+		store.SessionClose{By: store.SessionClosedByUser},
+		nil,
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
-	spawn, ok := backend.LastSpawn()
-	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != req.Launch {
+	fixture.d.finishSessionClose(fixture.origin.SessionID, closing)
+	<-killEntered
+
+	started := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		close(started)
+		done <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	<-started
+	select {
+	case err := <-done:
+		t.Fatalf("continuation completed before the closing runtime exited: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls before teardown completed = %d, want 0", got)
+	}
+
+	close(releaseKill)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	fixture.d.waitForSessionTeardown(fixture.origin.SessionID)
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.ResumeSessionID != "codex-rollout-1" || spawn.UnattendedLaunch != fixture.req.Launch {
 		t.Fatalf("resume spawn=%#v ok=%v", spawn, ok)
 	}
 }
 
+func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+
+	deleteEntered := make(chan struct{})
+	foregroundWaiting := make(chan error, 1)
+	releaseDelete := make(chan struct{})
+	deleteDone := make(chan error, 1)
+	go func() {
+		deleteDone <- fixture.d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
+			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error {
+				close(deleteEntered)
+				<-lease.Context().Done()
+				foregroundWaiting <- context.Cause(lease.Context())
+				<-releaseDelete
+				return nil
+			})
+		})
+	}()
+	<-deleteEntered
+
+	continued := make(chan error, 1)
+	go func() {
+		continued <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
+	}()
+	if err := <-foregroundWaiting; !errors.Is(err, errWorktreeSweepPreempted) {
+		t.Fatalf("sweep cancellation = %v, want foreground preemption", err)
+	}
+	select {
+	case err := <-continued:
+		t.Fatalf("continuation completed during the worktree delete commit: %v", err)
+	default:
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls during the worktree delete commit = %d, want 0", got)
+	}
+
+	close(releaseDelete)
+	if err := <-deleteDone; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-continued; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(fixture.backend.fakeSpawnBackend); got != 1 {
+		t.Fatalf("spawn calls after the worktree delete commit = %d, want 1", got)
+	}
+}
+
+func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	setupDelegationGarden(t, d)
+	directory, err := validateDelegationDirectory(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &automationRestoreRaceBackend{
+		fakeSpawnBackend: &fakeSpawnBackend{screenUnavailable: true},
+		secondCheck:      make(chan struct{}),
+	}
+	d.ptyBackend = backend
+	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := automation.Snapshot{
+		Prompt: "Review locally", Launch: testAutomationLaunch("claude"),
+		Location: automation.LocationSpec{Type: "directory", Path: directory}, Continuity: "singleton",
+	}
+	snapshotJSON, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:one", "singleton", def.Revision, `{}`, string(snapshotJSON), now,
+		store.AutomationRunReservation{
+			RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
+			WorkspaceID: "workspace-1", PaneID: "pane-1",
+		},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{
+		RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: snapshot.Prompt,
+		Context: json.RawMessage(`{}`), Launch: snapshot.Launch, Location: snapshot.Location,
+		IDs: automation.DeliveryIDs{
+			SeedID: first.SeedID, SessionID: first.SessionID,
+			WorkspaceID: first.WorkspaceID, PaneID: first.PaneID,
+		},
+	}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+		Cmd: protocol.CmdRegisterWorkspace, ID: first.WorkspaceID, Title: "nightly", Directory: directory,
+	})
+	d.store.Add(&protocol.Session{
+		ID: first.SessionID, Agent: protocol.SessionAgentClaude,
+		Directory: directory, WorkspaceID: first.WorkspaceID, State: protocol.SessionStateWaitingInput,
+	})
+	writeClaudeTranscriptFixture(t, "claude-transcript-1")
+	d.store.SetResumeSessionID(first.SessionID, "claude-transcript-1")
+	d.store.SetLaunchIntent(first.SessionID, store.LaunchIntent{
+		ApprovalRoute: launchcontract.ApprovalRouteReviewer,
+		Model:         snapshot.Launch.Model, Effort: snapshot.Launch.Effort,
+		UnattendedLaunch: snapshot.Launch,
+	})
+	if err := d.recordGardenDispatch(first.SessionID, first.SeedID, "", directory, "claude", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(
+		def.ID, "scheduled:two", "singleton", def.Revision, `{}`, string(snapshotJSON), now.Add(time.Minute),
+		store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	lifecycle := d.sessionLifecycleLockFor(first.SessionID)
+	lifecycle.Lock()
+	delivered := make(chan error, 1)
+	go func() { delivered <- d.deliverAutomationRun(context.Background(), second) }()
+	select {
+	case <-backend.secondCheck:
+	case err := <-delivered:
+		lifecycle.Unlock()
+		t.Fatalf("automation delivery ended before its second runtime check: %v", err)
+	case <-time.After(5 * time.Second):
+		lifecycle.Unlock()
+		t.Fatal("automation delivery did not reach its second runtime check")
+	}
+	backend.mu.Lock()
+	backend.sessionIDs = []string{first.SessionID}
+	backend.mu.Unlock()
+	lifecycle.Unlock()
+	if err := <-delivered; err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls = %d, want the concurrent restore to remain authoritative", got)
+	}
+	notes, err := d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) ||
+		!strings.Contains(notes[0].Body, filepath.Join("automation", "occurrences", second.ID+".json")) {
+		t.Fatalf("occurrence notes=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
+
+	if err := d.deliverAutomationRun(context.Background(), second); err != nil {
+		t.Fatal(err)
+	}
+	if got := spawnCount(backend.fakeSpawnBackend); got != 0 {
+		t.Fatalf("spawn calls after retry = %d, want 0", got)
+	}
+	notes, err = d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 {
+		t.Fatalf("occurrence notes after retry=%#v err=%v", notes, err)
+	}
+	assertOneSeedBell(t, d, first.SessionID, first.SeedID, "work.ready")
+}
+
+func TestStoppedContinuationKeepsTheLedgerContractAcrossDefinitionChanges(t *testing.T) {
+	fixture := setupStoppedAutomationContinuation(t)
+	original := fixture.req.Launch
+	fixture.d.closeSession(fixture.origin.SessionID, store.SessionClose{By: store.SessionClosedByUser})
+	fixture.req.Launch.Model = "new-definition-model"
+	fixture.req.Launch.Effort = "low"
+	fixture.req.Launch.Executable = "/new/definition/codex"
+
+	if err := fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory); err != nil {
+		t.Fatal(err)
+	}
+	spawn, ok := fixture.backend.LastSpawn()
+	if !ok || spawn.UnattendedLaunch != original {
+		t.Fatalf("resume spawn=%#v ok=%v, want ledger contract %#v", spawn, ok, original)
+	}
+}
+
 func TestStoppedContinuationRequiresAvailableTranscript(t *testing.T) {
-	d := newDaemonForTest(t)
+	d := newEnrolledDaemon(t, "")
 	req := automation.WorkRequest{Launch: testAutomationLaunch("claude"), IDs: automation.DeliveryIDs{SessionID: "session-1"}}
 	d.store.Add(&protocol.Session{ID: req.IDs.SessionID, Agent: protocol.SessionAgentClaude})
 	d.store.SetResumeSessionID(req.IDs.SessionID, "missing-transcript")
@@ -1074,85 +1304,6 @@ func TestStoppedContinuationRequiresAvailableTranscript(t *testing.T) {
 	if _, err := d.automationResumeSessionID(codexReq); err == nil || !strings.Contains(err.Error(), "transcript is unavailable") {
 		t.Fatalf("unavailable Codex rollout err=%v", err)
 	}
-}
-
-func TestSuccessfulContinuationReopensArchivedTicket(t *testing.T) {
-	s := store.New()
-	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
-	if _, err := s.CreateTicket(store.Ticket{ID: "ticket-1", Title: "Review", Status: store.TicketStatusDone, Assignee: "session-1", AutomationRunID: "run-1"}, "automation:review", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.ArchiveTicket("ticket-1", now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	req := automation.WorkRequest{RunID: "run-2", DefinitionID: "review", ContinuityKey: "github.com/owner/repo#42", IDs: automation.DeliveryIDs{TicketID: "ticket-1"}}
-	if err := d.activateAutomationContinuationTicket(req); err != nil {
-		t.Fatal(err)
-	}
-	ticket, err := s.GetTicket("ticket-1")
-	if err != nil || ticket == nil || ticket.Status != store.TicketStatusWorking || ticket.ArchivedAt != nil {
-		t.Fatalf("reopened archived ticket=%#v err=%v", ticket, err)
-	}
-}
-
-func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, string, string) {
-	t.Helper()
-	root := t.TempDir()
-	repo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, repo, "init")
-	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
-	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	revisionBytes, err := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
-	revision := strings.TrimSpace(string(revisionBytes))
-	payload, _ := json.Marshal(automation.PullRequestInput{
-		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
-		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: revision,
-	})
-	location := automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{
-		Default: automation.RepositorySource{Type: "managed_cache"},
-		Overrides: map[string]automation.RepositorySource{
-			"github.com/owner/repo": {Type: "local_clone", Path: repo},
-		},
-	}}
-	d := newDaemonForTest(t)
-	d.dataRoot = filepath.Join(root, "profile")
-	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, d.store, def.ID, "github.com", now)
-	if _, err := d.store.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	firstReq := automation.WorkRequest{RunID: origin.ID, DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject, Context: payload, Location: location, Launch: testAutomationLaunch("codex"), IDs: automation.DeliveryIDs{TicketID: origin.TicketID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID}}
-	prepared, err := d.prepareAutomationLocation(context.Background(), firstReq)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.store.EnsureAutomationTicket(store.Ticket{ID: origin.TicketID, Title: "Review", Status: store.TicketStatusDone, Assignee: origin.SessionID, Cwd: prepared.Directory, LastAgentID: "codex", AutomationRunID: origin.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.MarkAutomationRunDelivered(origin.ID, string(prepared.Resolved), now); err != nil {
-		t.Fatal(err)
-	}
-	continuation := firstReq
-	continuation.RunID = "run-2"
-	return d, continuation, prepared.Directory, repo
 }
 
 func TestContinuationPreservesOwnedDirtyWorktree(t *testing.T) {
@@ -1209,11 +1360,11 @@ func TestContinuationFailsWhenOwnedWorktreeIsMissing(t *testing.T) {
 
 func TestWithdrawnBeforeLaunchReRequestCreatesFirstWorktree(t *testing.T) {
 	d, req, worktree, _ := setupContinuationWorktree(t)
-	ticket, err := d.store.GetTicket(req.IDs.TicketID)
-	if err != nil || ticket == nil {
-		t.Fatalf("ticket=%#v err=%v", ticket, err)
+	binding, err := d.store.GetActiveAutomationContinuityBinding(req.DefinitionID, req.ContinuityKey)
+	if err != nil || binding == nil {
+		t.Fatalf("binding=%#v err=%v", binding, err)
 	}
-	if err := d.store.MarkAutomationRunCancelled(ticket.AutomationRunID, store.AutomationCancelReasonReviewWithdrawn, time.Now()); err != nil {
+	if err := d.store.MarkAutomationRunCancelled(binding.OriginRunID, store.AutomationCancelReasonReviewWithdrawn, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.RemoveAll(worktree); err != nil {
@@ -1245,16 +1396,14 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	_, _, err = s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	d := &Daemon{store: s, ptyBackend: &fakeSpawnBackend{}, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
+	d.ptyBackend = &fakeSpawnBackend{}
 	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -1268,287 +1417,16 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	}
 	req := automation.WorkRequest{
 		RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Prompt: "Review", Context: json.RawMessage(payload),
-		IDs: automation.DeliveryIDs{TicketID: second.TicketID, SessionID: second.SessionID},
+		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID},
 	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		t.Fatalf("withdrawn-before-launch re-request rejected: %v", err)
 	}
 }
 
-func TestReviewRequestWithdrawalStopsLaunchedPendingReviewer(t *testing.T) {
-	d := newDaemonForTest(t)
-	s := d.store
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	run, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: run.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	s.Add(&protocol.Session{
-		ID: run.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateWorking,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
-	})
-	backend := &fakeSpawnBackend{sessionIDs: []string{run.SessionID}, killErr: errors.New("kill unavailable")}
-	d.ptyBackend = backend
-
-	candidates, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute))
-	if err == nil || !strings.Contains(err.Error(), "kill unavailable") || len(candidates) != 0 {
-		t.Fatalf("failed kill reconcile candidates=%#v err=%v", candidates, err)
-	}
-	stillPending, err := s.GetAutomationRun(run.ID)
-	if err != nil || stillPending == nil || stillPending.State != "pending" || s.Get(run.SessionID) == nil || backend.WasKilledAndRemoved(run.SessionID) {
-		t.Fatalf("failed kill discarded cancellation evidence: run=%#v session=%#v removed=%v err=%v", stillPending, s.Get(run.SessionID), backend.WasKilledAndRemoved(run.SessionID), err)
-	}
-	if s.SessionCloseIntentional(run.SessionID) || d.hasForcedStopMark(run.SessionID) {
-		t.Fatal("failed kill left intentional-close suppression on the live reviewer")
-	}
-	backend.killErr = nil
-	if err := d.handleAutomationRecoveryError(stillPending, errAutomationReviewWithdrawn); err != nil {
-		t.Fatalf("startup recovery did not finish withdrawn reviewer cancellation: %v", err)
-	}
-	failed, err := s.GetAutomationRun(run.ID)
-	if err != nil || failed == nil || failed.State != store.AutomationRunStateCancelled || failed.CancelReason != store.AutomationCancelReasonReviewWithdrawn {
-		t.Fatalf("withdrawn run=%#v err=%v", failed, err)
-	}
-	if session := s.Get(run.SessionID); session != nil {
-		t.Fatalf("withdrawn reviewer session remains registered: %#v", session)
-	}
-	if !backend.WasKilledAndRemoved(run.SessionID) {
-		t.Fatalf("withdrawn reviewer was not killed and removed")
-	}
-	ticket, err := s.GetTicket(run.TicketID)
-	if err != nil || ticket == nil || ticket.Status != store.TicketStatusFailed || len(ticket.Activity) == 0 || !strings.Contains(ticket.Activity[len(ticket.Activity)-1].Comment, "withdrawn") {
-		t.Fatalf("withdrawn ticket=%#v err=%v", ticket, err)
-	}
-}
-
-func TestReviewRequestWithdrawalLeavesDeliveredReviewerToTicketLifecycle(t *testing.T) {
-	d := newDaemonForTest(t)
-	s := d.store
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	run, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: run.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MarkAutomationRunDelivered(run.ID, `{}`, now); err != nil {
-		t.Fatal(err)
-	}
-	s.Add(&protocol.Session{
-		ID: run.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateWorking,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
-	})
-	backend := &fakeSpawnBackend{sessionIDs: []string{run.SessionID}}
-	d.ptyBackend = backend
-
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	delivered, err := s.GetAutomationRun(run.ID)
-	if err != nil || delivered == nil || delivered.State != "delivered" {
-		t.Fatalf("delivered run changed after provider withdrawal: run=%#v err=%v", delivered, err)
-	}
-	if session := s.Get(run.SessionID); session == nil {
-		t.Fatal("delivered reviewer was removed instead of remaining under ticket/session lifecycle")
-	}
-	if backend.WasKilledAndRemoved(run.SessionID) {
-		t.Fatal("delivered reviewer was cancelled after automation handoff")
-	}
-}
-
-func TestReviewRequestCancellationRecoversBeforeReactivation(t *testing.T) {
-	d := newDaemonForTest(t)
-	s := d.store
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	run, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: run.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	s.Add(&protocol.Session{
-		ID: run.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateWorking,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
-	})
-	backend := &fakeSpawnBackend{sessionIDs: []string{run.SessionID}}
-	d.ptyBackend = backend
-
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MarkAutomationRunCancelled(run.ID, store.AutomationCancelReasonReviewWithdrawn, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
-	if err != nil || len(candidates) != 1 || candidates[0].Cycle != 2 {
-		t.Fatalf("reactivation candidates=%#v err=%v", candidates, err)
-	}
-	failed, err := s.GetAutomationRun(run.ID)
-	if err != nil || failed == nil || failed.State != store.AutomationRunStateCancelled || failed.CancelReason != store.AutomationCancelReasonReviewWithdrawn {
-		t.Fatalf("recovered withdrawal run=%#v err=%v", failed, err)
-	}
-	if s.Get(run.SessionID) != nil || !backend.WasKilledAndRemoved(run.SessionID) {
-		t.Fatal("reactivation advanced before the durable withdrawal cancellation completed")
-	}
-}
-
-func TestContinuationWithdrawalDoesNotCancelDeliveredOriginReviewer(t *testing.T) {
-	d := newDaemonForTest(t)
-	s := d.store
-	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	const subject = "github.com/owner/repo#42"
-	baselineGitHubReviewAutomation(t, s, def.ID, "github.com", now)
-	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
-		t.Fatal(err)
-	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.EnsureAutomationTicket(store.Ticket{ID: first.TicketID, Title: "Review", Status: store.TicketStatusWorking, Assignee: first.SessionID, AutomationRunID: first.ID}, "automation:review", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.MarkAutomationRunDelivered(first.ID, `{}`, now); err != nil {
-		t.Fatal(err)
-	}
-	s.Add(&protocol.Session{
-		ID: first.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateWorking,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: first.WorkspaceID,
-	})
-	backend := &fakeSpawnBackend{sessionIDs: []string{first.SessionID}}
-	d.ptyBackend = backend
-
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	candidates, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(2*time.Minute))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("continuation candidates=%#v err=%v", candidates, err)
-	}
-	second, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, `{}`, `{}`, now.Add(2*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second.SessionID != first.SessionID || second.TicketID != first.TicketID {
-		t.Fatalf("continuation did not reuse origin binding: first=%#v second=%#v", first, second)
-	}
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(3*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	failed, err := s.GetAutomationRun(second.ID)
-	if err != nil || failed == nil || failed.State != store.AutomationRunStateCancelled || failed.CancelReason != store.AutomationCancelReasonReviewWithdrawn {
-		t.Fatalf("withdrawn continuation=%#v err=%v", failed, err)
-	}
-	if s.Get(first.SessionID) == nil || backend.WasKilledAndRemoved(first.SessionID) {
-		t.Fatal("withdrawn continuation cancelled the delivered origin reviewer")
-	}
-	ticket, err := s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil {
-		t.Fatalf("origin ticket=%#v err=%v", ticket, err)
-	}
-	if len(ticket.Activity) == 0 || !strings.Contains(ticket.Activity[len(ticket.Activity)-1].Comment, second.ID) {
-		t.Fatalf("withdrawn continuation activity lacks run provenance: %#v", ticket.Activity)
-	}
-	activityCount := len(ticket.Activity)
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(4*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	ticket, err = s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil || len(ticket.Activity) != activityCount {
-		t.Fatalf("replayed withdrawal duplicated ticket activity: before=%d ticket=%#v err=%v", activityCount, ticket, err)
-	}
-	candidates, err = d.reconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(5*time.Minute))
-	if err != nil || len(candidates) != 1 {
-		t.Fatalf("later continuation candidates=%#v err=%v", candidates, err)
-	}
-	third, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, candidates[0].Cycle, def.Revision, `{}`, `{}`, now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-3", OccurrenceID: "occ-3"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.reconcileAutomationReviewRequests(def.ID, "github.com", nil, now.Add(6*time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	ticket, err = s.GetTicket(first.TicketID)
-	if err != nil || ticket == nil || len(ticket.Activity) != activityCount+1 || !strings.Contains(ticket.Activity[len(ticket.Activity)-1].Comment, third.ID) {
-		t.Fatalf("distinct withdrawal was deduped by shared text: before=%d ticket=%#v err=%v", activityCount, ticket, err)
-	}
-	origin, err := s.GetAutomationRun(first.ID)
-	if err != nil || origin == nil || origin.State != "delivered" {
-		t.Fatalf("origin run changed after continuation withdrawal: run=%#v err=%v", origin, err)
-	}
-}
-
-func automationBroadcastRecorder(d *Daemon) func() []string {
-	var mu sync.Mutex
-	var ids []string
-	d.automationsBroadcastHook = func(msg *protocol.AutomationsChangedMessage) {
-		mu.Lock()
-		ids = append(ids, msg.DefinitionIds...)
-		mu.Unlock()
-	}
-	return func() []string {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]string(nil), ids...)
-	}
-}
-
-const manualAutomationYAML = `api_version: attn.dev/automations/v1alpha1
-id: manual-check
-name: Manual check
-trigger: {type: manual}
-prompt: Check locally.
-launch: {driver: codex}
-location: {type: directory, path: "%s"}
-`
-
 func TestAutomationApplyBroadcastsOnUpsert(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	broadcasts := automationBroadcastRecorder(d)
 
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
@@ -1570,7 +1448,7 @@ func TestAutomationApplyBroadcastsOnUpsert(t *testing.T) {
 
 func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
@@ -1579,12 +1457,12 @@ func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1616,7 +1494,7 @@ func TestAutomationRunRejectsNonManualTrigger(t *testing.T) {
 
 func TestAutomationSetEnabledDisableFailsPendingRunsAndBroadcasts(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
@@ -1624,7 +1502,7 @@ func TestAutomationSetEnabledDisableFailsPendingRunsAndBroadcasts(t *testing.T) 
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1653,7 +1531,7 @@ func TestAutomationSetEnabledDisableFailsPendingRunsAndBroadcasts(t *testing.T) 
 
 func TestAutomationSetEnabledReachesRealSocketDispatch(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -1702,7 +1580,7 @@ func TestAutomationSetEnabledReachesRealSocketDispatch(t *testing.T) {
 
 func TestAutomationSetEnabledNoOpDoesNotBroadcast(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
@@ -1725,7 +1603,7 @@ func TestAutomationSetEnabledNoOpDoesNotBroadcast(t *testing.T) {
 
 func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -1733,12 +1611,12 @@ func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", TicketID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := s.MarkAutomationRunDelivered(run.ID, "{}", now); err != nil {
+	if err := markAutomationRunDeliveredForTest(s, run.ID, "{}", now); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1775,7 +1653,7 @@ func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing
 
 func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := newHomeDaemonForTest(t, s)
 	dir := t.TempDir()
 	raw := fmt.Sprintf(manualAutomationYAML, dir)
 
@@ -1815,5 +1693,369 @@ func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *t
 	}
 	if stillAfterConcurrentEdit.Revision != 2 {
 		t.Fatalf("revision after refused guarded apply = %d, want unchanged at 2", stillAfterConcurrentEdit.Revision)
+	}
+}
+
+func TestFailedContinuationAfterContractRotationKeepsOriginSeedOpen(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil || second.SeedID != first.SeedID {
+		t.Fatalf("second run=%#v err=%v, want shared seed %s", second, err, first.SeedID)
+	}
+	if err := d.store.ReleaseAutomationContinuityBindings(def.ID, store.AutomationBindingReleasedContractRotated, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		run  *store.AutomationRun
+		want bool
+	}{{first, false}, {second, true}} {
+		if got, err := d.automationRunIsContinuation(tc.run); err != nil || got != tc.want {
+			t.Fatalf("run %s continuation=%v err=%v, want %v after rotation", tc.run.ID, got, err, tc.want)
+		}
+	}
+
+	if _, err := d.failAutomationRun(second, errors.New("contract changed under the occurrence")); err != nil {
+		t.Fatal(err)
+	}
+	seed, _, err := d.readSeed(first.SeedID)
+	if err != nil || seed.Status != garden.StatusGrowing {
+		t.Fatalf("shared seed=%#v err=%v, want the origin's seed left open", seed, err)
+	}
+	notes, err := d.readNotesDomain(first.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) {
+		t.Fatalf("notes=%#v err=%v, want one failure note", notes, err)
+	}
+}
+
+func TestEnsureAutomationSeedRefusesOutpostDaemon(t *testing.T) {
+	d := newEnrolledDaemon(t, "d-"+strings.Repeat("b", 32))
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	var fenced *enrollment.FencedError
+	if _, _, err := d.ensureAutomationSeed(req); !errors.As(err, &fenced) {
+		t.Fatalf("ensureAutomationSeed err=%v, want FencedError", err)
+	}
+	if _, _, err := d.readSeed(run.SeedID); err == nil {
+		t.Fatalf("seed %s planted on an outpost", run.SeedID)
+	}
+}
+
+func TestEnsureAutomationSeedValidatesTitleAndBody(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	claim := func(defID, name, seedID string) automation.WorkRequest {
+		t.Helper()
+		def, err := d.store.UpsertAutomationDefinition(defID, name, `{}`, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:"+defID, "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+			RunID: "run-" + defID, OccurrenceID: "occ-" + defID, SeedID: seedID, SessionID: "session-" + defID, WorkspaceID: "workspace-1", PaneID: "pane-1",
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "  Check locally.  ", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	}
+	long := claim("long", strings.Repeat("x", garden.MaxTitleChars+1), "s-seed01")
+	if _, _, err := d.ensureAutomationSeed(long); err == nil || !strings.Contains(err.Error(), "limit is") {
+		t.Fatalf("long title err=%v, want the title limit", err)
+	}
+	if _, _, err := d.readSeed(long.IDs.SeedID); err == nil {
+		t.Fatalf("seed %s planted with an oversized title", long.IDs.SeedID)
+	}
+	padded := claim("padded", "  Nightly  ", "s-seed02")
+	if _, _, err := d.ensureAutomationSeed(padded); err != nil {
+		t.Fatal(err)
+	}
+	seed, _, err := d.readSeed(padded.IDs.SeedID)
+	if err != nil || seed.Title != "Nightly" || seed.Body != "Check locally." {
+		t.Fatalf("seed=%#v err=%v, want trimmed title and body", seed, err)
+	}
+}
+
+func newHomeDaemonForTest(t *testing.T, s *store.Store) *Daemon {
+	t.Helper()
+	d := &Daemon{store: s, wsHub: newWSHub(), dataRoot: t.TempDir()}
+	enrollHomeForTest(t, d)
+	return d
+}
+
+func enrollHomeForTest(t *testing.T, d *Daemon) {
+	t.Helper()
+	id, err := enrollment.EnsureDaemonID(d.dataRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.daemonInstanceID = id
+	if err := d.ensureEnrollment(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestFailedContinuationDeliveryRestoresClosedSeedAndRingsItsSession(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	t.Cleanup(d.stopEventBus)
+	d.ensureGardenCollections()
+	stamp := string(protocol.TimestampNow())
+	d.store.Add(&protocol.Session{ID: "session-1", Label: "nightly", State: "idle", StateSince: stamp, StateUpdatedAt: stamp, LastSeen: stamp})
+	d.workspaces.register("workspace-1", "nightly", t.TempDir(), "n0", false, false)
+	d.workspaces.associateSession("session-1", "workspace-1", "nightly")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.applySeedTransition(first.SeedID, garden.VerbHarvest, garden.Ask{Actor: garden.Tender{Session: first.SessionID}, Reason: "first check complete"}); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), Location: automation.LocationSpec{Type: "directory", Path: filepath.Join(t.TempDir(), "deleted-worktree")}, IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
+	if _, err := d.materializeAutomationRun(context.Background(), secondReq); err == nil || !strings.Contains(err.Error(), "prepare location") {
+		t.Fatalf("materialize err=%v, want the location step to fail", err)
+	}
+	seed, _, err := d.readSeed(second.SeedID)
+	if err != nil || seed.Status != garden.StatusHarvested || seed.Reason != "first check complete" {
+		t.Fatalf("seed=%#v err=%v, want harvested with its original reason restored", seed, err)
+	}
+	watching, err := d.store.GardenSeedWatching(second.SessionID, second.SeedID)
+	if err != nil || !watching {
+		t.Fatalf("continuation watch=%v err=%v, want its durable seed watch", watching, err)
+	}
+	if err := d.recordAutomationRunSeedOutcome(second, "continuation failed after rollback"); err != nil {
+		t.Fatal(err)
+	}
+	assertOneSeedBell(t, d, second.SessionID, second.SeedID, "note.added")
+}
+
+func TestAutomationContinuationRollbackDoesNotRingAnUnchangedDependent(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	d.ensureGardenCollections()
+	addGardenSession(t, d, "session-1")
+	addGardenSession(t, d, "session-2")
+	blocker := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("session-1"), Title: "Run the automation"})
+	dependent := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("session-2"), Title: "Use its result"})
+	mustLink(t, d, blocker.ID, garden.EdgeBlocks, dependent.ID)
+	move(t, d, "session-1", blocker.ID, garden.VerbTend, "", "")
+	move(t, d, "session-2", dependent.ID, garden.VerbTend, "", "")
+	move(t, d, "session-1", blocker.ID, garden.VerbHarvest, "complete", "")
+	if _, _, err := d.store.ReadGardenSeedMailboxItems("session-2", dependent.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	restore, err := d.activateAutomationContinuationSeed(blocker.ID, "session-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if restore == nil {
+		t.Fatal("closed continuation did not provide a rollback")
+	}
+	if err := restore(); err != nil {
+		t.Fatal(err)
+	}
+	if queued := queuedSeedBells(t, d, "session-2"); len(queued) != 0 {
+		t.Fatalf("rollback rang an unchanged dependent: %q", queued)
+	}
+}
+
+func TestWithdrawnContinuationRingsItsSessionOnce(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	addGardenSession(t, d, "session-1")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.store.MarkAutomationRunCancelled(second.ID, store.AutomationCancelReasonReviewWithdrawn, now.Add(2*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	outcome := automationFailureComment(second, automationReviewWithdrawnMessage)
+	if err := d.recordAutomationRunSeedOutcome(second, outcome); err != nil {
+		t.Fatal(err)
+	}
+	assertOneSeedBell(t, d, second.SessionID, second.SeedID, "note.added")
+	if _, _, err := d.store.ReadGardenSeedMailboxItems(second.SessionID, second.SeedID, now.Add(3*time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := d.recordAutomationRunSeedOutcome(second, outcome); err != nil {
+			t.Fatalf("refresh %d: %v", i, err)
+		}
+	}
+	if queued := queuedSeedBells(t, d, second.SessionID); len(queued) != 0 {
+		t.Fatalf("a recorded withdrawal rang again: %q", queued)
+	}
+	notes, err := d.readNotesDomain(second.SeedID)
+	if err != nil || len(notes) != 1 || notes[0].Body != outcome {
+		t.Fatalf("notes=%#v err=%v, want the single withdrawal note", notes, err)
+	}
+}
+
+func TestInitialAutomationOutcomeDoesNotRingItsOwnSession(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	addGardenSession(t, d, "session-1")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(req); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, run.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.recordAutomationRunSeedOutcome(run, "initial run failed"); err != nil {
+		t.Fatal(err)
+	}
+	if queued := queuedSeedBells(t, d, run.SessionID); len(queued) != 0 {
+		t.Fatalf("initial outcome rang its own session: %q", queued)
+	}
+}
+
+func TestAutomationWorkReadyExcludesOnlyAnInitialRunsOwnSession(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	assertWorkReadyCause := func(run *store.AutomationRun, want string) {
+		t.Helper()
+		occurrence, err := d.automationWorkReadyOccurrence(run)
+		if err != nil {
+			t.Fatal(err)
+		}
+		encoded, err := gardenSeedEventModel.Encode(occurrence)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decision, err := gardenSeedEventModel.Interpret(encoded.Name, encoded.Subject, encoded.Payload)
+		if err != nil || decision.CausedBySessionID() != want {
+			t.Fatalf("work-ready cause = %q, want %q, err=%v", decision.CausedBySessionID(), want, err)
+		}
+	}
+	assertWorkReadyCause(first, first.SessionID)
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertWorkReadyCause(second, "")
+}
+
+func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
+		t.Fatal(err)
+	}
+	if err := markAutomationRunDeliveredForTest(d.store, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	second, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:two", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now.Add(time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
+	for i := 0; i < 3; i++ {
+		if err := d.ensureAutomationOccurrenceNote(secondReq); err != nil {
+			t.Fatalf("attempt %d: %v", i, err)
+		}
+	}
+	notes, err := d.readNotesDomain(second.SeedID)
+	if err != nil || len(notes) != 1 || !strings.Contains(notes[0].Body, second.ID) {
+		t.Fatalf("notes=%#v err=%v, want one occurrence note for %s", notes, err, second.ID)
 	}
 }

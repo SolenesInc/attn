@@ -111,3 +111,66 @@ describe('MacOSDriver key entry points on a non-focusable window', () => {
     expect(driver.execCalls).toHaveLength(1);
   });
 });
+
+class InAppDriver extends MacOSDriver {
+  constructor() {
+    const requests = [];
+    super({
+      bundleId: 'test.harness',
+      appPath: '/tmp/attn-harness-test.app',
+      client: { request: async (action, payload) => { requests.push({ action, payload }); return {}; } },
+      keyInputGuard: createKeyInputGuard({
+        platform: 'darwin',
+        appExecutable: APP,
+        manifestPath: '/does/not/matter',
+        readAppPid: () => 4242,
+        readCommand: () => APP_ALWAYS_ON_TOP,
+      }),
+    });
+    this.actionDelayMs = 0;
+    this.requests = requests;
+    this.execCalls = [];
+  }
+
+  async runInputDriver(args) {
+    this.execCalls.push(args);
+  }
+}
+
+describe('MacOSDriver with the automation client attached', () => {
+  it('sends keys as in-app events and never consults the focus guard', async () => {
+    const driver = new InAppDriver();
+    await driver.pressKey('c', { command: true, shift: true });
+    await driver.pressEnter();
+    await driver.typeText('hi there');
+    expect(driver.requests).toEqual([
+      { action: 'native_key', payload: { key: 'c', modifiers: ['command', 'shift'] } },
+      { action: 'native_key', payload: { keyCode: 36, modifiers: [] } },
+      { action: 'native_text', payload: { text: 'hi there' } },
+    ]);
+    expect(driver.execCalls).toEqual([]);
+  });
+
+  it('sends pointer gestures as in-app events with the same window-relative shape', async () => {
+    const driver = new InAppDriver();
+    await driver.movePointerInWindow(0.1, 0.2);
+    await driver.clickWindow(0.3, 0.4, { modifiers: { command: true } });
+    await driver.rightClickWindow(0.5, 0.6);
+    await driver.dragWindow(0.1, 0.1, 0.9, 0.9, { steps: 20 });
+    expect(driver.requests.map((entry) => entry.payload)).toEqual([
+      { action: 'move', x: 0.1, y: 0.2 },
+      { action: 'click', x: 0.3, y: 0.4, modifiers: ['command'] },
+      { action: 'right_click', x: 0.5, y: 0.6, modifiers: [] },
+      { action: 'drag', x: 0.1, y: 0.1, toX: 0.9, toY: 0.9, steps: 20 },
+    ]);
+    expect(driver.requests.every((entry) => entry.action === 'native_mouse')).toBe(true);
+    expect(driver.execCalls).toEqual([]);
+  });
+
+  it('targets a secondary window by label and refuses a title', async () => {
+    const driver = new InAppDriver();
+    await driver.clickWindow(0.5, 0.5, { windowLabel: 'present' });
+    expect(driver.requests[0].payload.window).toBe('present');
+    await expect(driver.clickWindow(0.5, 0.5, { windowTitle: 'attn — present' })).rejects.toThrow(/windowLabel/);
+  });
+});

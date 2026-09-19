@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -87,7 +88,7 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	defer db.Close()
 
-	tables := []string{"sessions", "prs", "repos", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links"}
+	tables := []string{"sessions", "prs", "repos", "profile_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links", "garden_seed_event_receipts", "garden_seed_event_sources"}
 	for _, table := range tables {
 		var count int
 		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
@@ -101,6 +102,56 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	if baselineDefault != "0" {
 		t.Fatalf("baseline_cycle default=%q, want 0", baselineDefault)
+	}
+}
+
+func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration-148.db")
+	db, err := OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		DROP TABLE garden_seed_event_receipts;
+		DROP TABLE garden_seed_event_sources;
+		DROP TABLE garden_seed_artifact_observations;
+		DELETE FROM schema_migrations WHERE version >= 148;
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
+		VALUES
+			('pending', 'sess-a', 'garden_seed', 's-one', 's-one', 'unblocked', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', ''),
+			('read', 'sess-a', 'garden_seed', 's-two', 's-two', 'lifecycle', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', '2026-09-12T12:02:00Z')
+	`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var hint, bell, notified, read string
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='pending'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "unblocked" || bell != "seed activity" || notified != "2026-09-12T12:01:00Z" || read != "" {
+		t.Fatalf("pending row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='read'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "lifecycle" || bell != "" || notified != "2026-09-12T12:01:00Z" || read != "2026-09-12T12:02:00Z" {
+		t.Fatalf("read row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources", "garden_seed_artifact_observations"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatalf("%s missing after migration: %v", table, err)
+		}
 	}
 }
 
@@ -293,6 +344,66 @@ func TestMigration73RepairsAutomationProfileMigration70Collision(t *testing.T) {
 		if count != 1 {
 			t.Fatalf("delegation_operations.%s count = %d, want 1", column, count)
 		}
+	}
+}
+
+func TestMigration143AddsDelegationHandoverSnapshot(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-143.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, column := range []string{"handover_seed_rev", "handover_tender_session", "handover_tender_member"} {
+		if _, err := db.Exec(`ALTER TABLE delegation_operations DROP COLUMN ` + column); err != nil {
+			db.Close()
+			t.Fatalf("drop delegation_operations.%s: %v", column, err)
+		}
+	}
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 143`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migrated.Close()
+	for _, column := range []string{"handover_seed_rev", "handover_tender_session", "handover_tender_member"} {
+		var count int
+		if err := migrated.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('delegation_operations') WHERE name = ?`, column).Scan(&count); err != nil || count != 1 {
+			t.Fatalf("delegation_operations.%s count = %d, err = %v", column, count, err)
+		}
+	}
+}
+
+func TestMigration144AddsDelegationParentSnapshot(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "migration-144.db")
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE delegation_operations DROP COLUMN parent_seed_id`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 144`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	migrated, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer migrated.Close()
+	var count int
+	if err := migrated.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('delegation_operations') WHERE name = 'parent_seed_id'`).Scan(&count); err != nil || count != 1 {
+		t.Fatalf("delegation_operations.parent_seed_id count = %d, err = %v", count, err)
 	}
 }
 
@@ -1919,5 +2030,61 @@ func TestMigration123AddsTranscriptPathAndIsRewindSafe(t *testing.T) {
 
 	if got := s.GetSessionConversation("legacy-session"); got != (SessionConversation{NativeID: "native-legacy"}) {
 		t.Fatalf("migrated binding = %+v, want native ID with an empty path", got)
+	}
+}
+
+func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := NewWithDB(dbPath)
+	if err != nil {
+		t.Fatalf("NewWithDB: %v", err)
+	}
+	defer s.Close()
+
+	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.EnsureAutomationTicket(Ticket{ID: "legacy-ticket", Title: "Review", Status: TicketStatusWorking, Assignee: run.SessionID, AutomationRunID: run.ID}, "automation:review", TicketRoleChiefOfStaff, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DefineDocumentCollection(garden.DispatchesSchema(), now); err != nil {
+		t.Fatal(err)
+	}
+	dispatches, found, err := s.DocumentCollection(garden.Namespace, garden.CollectionDispatches)
+	if err != nil || !found {
+		t.Fatalf("load dispatch collection: found=%v err=%v", found, err)
+	}
+	if _, err := s.PutDocument(*dispatches, run.SessionID, []byte(`{"session_id":"session-1","crown":"s-live01"}`), now, nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`
+		UPDATE automation_runs SET seed_id='',ticket_id='legacy-ticket' WHERE id='run-1';
+		UPDATE automation_continuity_bindings SET seed_id='',origin_run_id='',ticket_id='legacy-ticket' WHERE definition_id='review';
+		DELETE FROM schema_migrations WHERE version>=145;
+	`); err != nil {
+		t.Fatalf("rewind migration 145: %v", err)
+	}
+
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatalf("migrateDB: %v", err)
+	}
+	migratedRun, err := s.GetAutomationRun(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binding, err := s.GetActiveAutomationContinuityBinding(def.ID, "singleton")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if migratedRun == nil || binding == nil || migratedRun.SeedID != "s-live01" || binding.SeedID != "s-live01" || binding.OriginRunID != run.ID {
+		t.Fatalf("migrated run=%#v binding=%#v", migratedRun, binding)
 	}
 }

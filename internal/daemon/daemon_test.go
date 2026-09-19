@@ -691,8 +691,8 @@ func (b *fakeWorkerReconcileBackend) Attach(context.Context, string, string, ...
 	return ptybackend.AttachInfo{}, nil, nil
 }
 func (b *fakeWorkerReconcileBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeWorkerReconcileBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeWorkerReconcileBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeWorkerReconcileBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -762,8 +762,8 @@ func (b *fakeClearSessionsBackend) Attach(context.Context, string, string, ...pt
 	return ptybackend.AttachInfo{}, nil, nil
 }
 func (b *fakeClearSessionsBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeClearSessionsBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeClearSessionsBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeClearSessionsBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -1796,8 +1796,8 @@ func (b *fakeAttachBackend) Attach(_ context.Context, _, _ string, opts ...ptyba
 	return info, stream, nil
 }
 func (b *fakeAttachBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeAttachBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeAttachBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeAttachBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -1945,8 +1945,8 @@ func (b *fakeSpawnBackend) Input(_ context.Context, id string, data []byte) erro
 	}
 	return nil
 }
-func (b *fakeSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeSpawnBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeSpawnBackend) SetTheme(_ context.Context, id string, theme pty.TerminalTheme) error {
 	b.mu.Lock()
@@ -2617,6 +2617,23 @@ func TestDaemon_BroadcastRawWSMessage_RoutesRemotePTYTrafficToInterestedClients(
 	outputEvent := readOutboundEvent(t, clientAttached)
 	if asString(outputEvent["event"]) != protocol.EventPtyOutput || asString(outputEvent["id"]) != "remote-runtime-1" {
 		t.Fatalf("unexpected pty_output event: %+v", outputEvent)
+	}
+	assertNoOutboundEvent(t, clientOther)
+
+	resizePayload, err := json.Marshal(protocol.WebSocketEvent{
+		Event: protocol.EventPtyResized,
+		ID:    protocol.Ptr("remote-runtime-1"),
+		Cols:  protocol.Ptr(100),
+		Rows:  protocol.Ptr(30),
+	})
+	if err != nil {
+		t.Fatalf("marshal pty_resized: %v", err)
+	}
+	d.broadcastRawWSMessage(resizePayload)
+
+	resizeEvent := readOutboundEvent(t, clientAttached)
+	if asString(resizeEvent["event"]) != protocol.EventPtyResized || asString(resizeEvent["id"]) != "remote-runtime-1" {
+		t.Fatalf("unexpected pty_resized event: %+v", resizeEvent)
 	}
 	assertNoOutboundEvent(t, clientOther)
 }

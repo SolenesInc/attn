@@ -2,8 +2,10 @@ package daemon
 
 import (
 	"encoding/json"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,11 +16,68 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
+func TestAutoModeConfigForSessionMergesRepositoryRules(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	path := filepath.Join(root, automode.RepositoryRulesFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"rules":[{
+  "pattern":["go","test"],"decision":"allow","sandbox":"bypass"
+}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := newDaemonForTest(t)
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolved, repository, err := d.autoModeConfigForSession(cfg, root)
+	if err != nil {
+		t.Fatalf("resolve session auto mode: %v", err)
+	}
+	project := automode.StripShippedRules(resolved.Rules)
+	if len(project) != 1 || project[0].Describe() != "go test" ||
+		project[0].Decision != automode.DecisionAllow || project[0].Sandbox != automode.RuleSandboxBypass {
+		t.Fatalf("effective rules = %+v", resolved.Rules)
+	}
+	if repository.Path == "" || len(repository.Rules) != 1 {
+		t.Fatalf("repository source = %+v", repository)
+	}
+}
+
+func TestAutoModeConfigForSessionRefusesInvalidRepositoryRules(t *testing.T) {
+	root := t.TempDir()
+	if output, err := exec.Command("git", "init", "--quiet", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v: %s", err, output)
+	}
+	path := filepath.Join(root, automode.RepositoryRulesFile)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"rules":[{"pattern":[]}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := newDaemonForTest(t)
+	cfg, err := d.store.GetAutoModeConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _, err = d.autoModeConfigForSession(cfg, root)
+	if err == nil || !strings.Contains(err.Error(), path) || !strings.Contains(err.Error(), "rule 1") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
 func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	now := time.Now().UTC()
-	proposal, err := d.store.CreateAutoModeProposal(automode.KindAllow, "", "git push origin*", "", now)
+	proposal, err := d.store.CreateAutoModeProposal(
+		automode.KindRule, "", `{"pattern":["git","push"],"decision":"allow"}`, "", now)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
@@ -51,14 +110,17 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			t.Error("spawn params carry no auto mode config")
 			return
 		}
-		if len(params.AutoMode.Allow) != 1 || params.AutoMode.Allow[0] != "git push origin*" {
-			t.Errorf("auto mode allow = %v, want the promoted pattern", params.AutoMode.Allow)
+		promoted := automode.StripShippedRules(params.AutoMode.Rules)
+		if len(promoted) != 1 || promoted[0].Describe() != "git push" {
+			t.Errorf("auto mode rules = %v, want the promoted one beside the shipped ones", params.AutoMode.Rules)
 		}
 		if got := params.AutoMode.Environment.Slots["remote_targets"]; len(got) != 1 {
 			t.Errorf("auto mode environment = %v", params.AutoMode.Environment)
 		}
-		if len(params.AutoMode.Models) != 0 {
-			t.Errorf("models = %v, want none until the user names one", params.AutoMode.Models)
+		if params.AutoMode.ApprovalPolicy != automode.PolicyOnRequest ||
+			params.AutoMode.SandboxMode != automode.SandboxWorkspaceWrite {
+			t.Errorf("auto mode policy = %q/%q, want the defaults",
+				params.AutoMode.ApprovalPolicy, params.AutoMode.SandboxMode)
 		}
 		var raw struct {
 			AutoMode map[string]json.RawMessage `json:"auto_mode"`
@@ -67,7 +129,10 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 			t.Errorf("decode raw spawn params: %v", err)
 			return
 		}
-		for _, key := range []string{"enabled_default", "environment", "allow", "hard_deny", "models"} {
+		for _, key := range []string{
+			"enabled_default", "approval_policy", "sandbox_mode", "rules",
+			"network", "environment", "legacy_patterns",
+		} {
 			if _, ok := raw.AutoMode[key]; !ok {
 				t.Errorf("auto mode payload is missing %q", key)
 			}
@@ -95,12 +160,14 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-snipe-session", t.TempDir())
-	addReloadSession(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle)
+	directory := t.TempDir()
+	addTestWorkspace(d, "ws-snipe-session", directory)
+	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 
 	now := time.Now().UTC()
-	proposal, err := d.store.CreateAutoModeProposal(automode.KindDeny, "", "curl *", "", now)
+	proposal, err := d.store.CreateAutoModeProposal(
+		automode.KindHost, "", `{"host":"crates.io","decision":"allow"}`, "", now)
 	if err != nil {
 		t.Fatalf("propose: %v", err)
 	}
@@ -132,9 +199,12 @@ func TestReloadCarriesThePromotedAutoModeConfig(t *testing.T) {
 		}
 		if params.AutoMode == nil {
 			t.Error("resume params carry no auto mode config")
-		} else if promoted := automode.StripShippedHardDeny(config.WSPort(), params.AutoMode.HardDeny); len(promoted) != 1 || promoted[0] != "curl *" {
-			t.Errorf("auto mode hard deny = %v, want the promoted pattern beside the shipped ones",
-				params.AutoMode.HardDeny)
+		} else if allowed := params.AutoMode.Network.AllowedDomains; len(allowed) != 1 ||
+			allowed[0] != "crates.io" {
+			t.Errorf("auto mode allowed domains = %v, want the promoted host", allowed)
+		} else if denied := automode.StripShippedNetwork(config.WSPort(), params.AutoMode.Network); len(denied.DeniedDomains) != 0 {
+			t.Errorf("auto mode denied domains = %v, want only the shipped ones",
+				params.AutoMode.Network.DeniedDomains)
 		}
 		respondPluginRequest(t, plugin, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
@@ -272,8 +342,9 @@ func TestReloadKeepsThePerSessionAutoModeOverride(t *testing.T) {
 		params:  ptybackend.SessionLaunchParams{Recorded: true},
 	}
 	d := newReloadTestDaemon(t, backend)
-	addTestWorkspace(d, "ws-snipe-session", t.TempDir())
-	addReloadSession(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle)
+	directory := t.TempDir()
+	addTestWorkspace(d, "ws-snipe-session", directory)
+	addReloadSessionAt(d, "snipe-session", protocol.SessionAgent("snipe"), protocol.SessionStateIdle, directory)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	if _, err := d.store.SetAutoModeEnabledDefault(true, time.Now().UTC()); err != nil {
 		t.Fatalf("set default: %v", err)

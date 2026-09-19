@@ -130,7 +130,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
 
   runner.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
@@ -138,8 +138,6 @@ async function main() {
   runner.registerCleanup('quit_app', () => client.quitApp());
 
   try {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-    process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
     await runner.step('launch_app', async () => {
       await launchFreshAppAndConnect(client, observer);
     });
@@ -178,7 +176,6 @@ async function main() {
     });
 
     const summon = async (description) => {
-      await driver.activateApp();
       await pressShortcutKeys(client, driver, 'file.open');
       try {
         await waitForOpener(client, (state) => state.open, description);

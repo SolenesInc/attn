@@ -1,0 +1,64 @@
+name: Install App acceptance tree
+description: Prepare a runner and install a packaged App acceptance tree.
+
+inputs:
+  profile:
+    description: Non-production profile to install
+    required: true
+  archive:
+    description: Path to the packed application tree
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Linux sandbox
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/setup-linux-sandbox
+
+    - name: Install Linux desktop dependencies
+      if: runner.os == 'Linux'
+      uses: ./.github/actions/setup-linux-app-deps
+      with:
+        role: run
+
+    - name: Install macOS shell dependencies
+      if: runner.os == 'macOS'
+      shell: bash
+      run: brew install fish
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '26'
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Install pnpm
+      uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
+    - name: Install harness dependencies
+      shell: bash
+      run: pnpm --dir app install --frozen-lockfile
+
+    - name: Install the packaged app and bundled plugin
+      shell: bash
+      run: |
+        tar -xzf "${{ inputs.archive }}"
+        make install-staged PROFILE="${{ inputs.profile }}"
+        ./attn plugin install-bundled attn-pi
+        echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
+
+    - name: Install Linux URL opener
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        mkdir -p "$RUNNER_TEMP/attn-harness-bin"
+        install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$RUNNER_TEMP/attn-harness-bin/xdg-open"
+        echo "$RUNNER_TEMP/attn-harness-bin" >> "$GITHUB_PATH"

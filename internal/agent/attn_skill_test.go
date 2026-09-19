@@ -17,12 +17,56 @@ func TestAttnSkillUsesTheSeedBodyAndANeutralHarvestExample(t *testing.T) {
 		t.Fatalf("read delegated-agent reference: %v", err)
 	}
 	for _, want := range []string{
-		"Close it when its outcome and required verification are complete",
-		`attn seed harvest <seed-id> -m "<what got done>"`,
+		"Harvest only when the assigned outcome and required verification are complete",
+		`attn seed harvest <seed-id> -m "<outcome and verification>"`,
 	} {
 		if !strings.Contains(string(contents), want) {
 			t.Fatalf("delegated-agent reference dropped %q:\n%s", want, contents)
 		}
+	}
+}
+
+func TestEnsureWorkflowSkillsInstalledUsesSupportedIsolatedRoots(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	t.Setenv("ATTN_PROFILE", "dev")
+
+	paths, attempted, err := EnsureWorkflowSkillsInstalled([]string{"codex", "pi", "claude", "copilot", "plugin-only"})
+	if err != nil || !attempted {
+		t.Fatalf("paths=%v attempted=%v error=%v", paths, attempted, err)
+	}
+	want := []string{
+		filepath.Join(home, ".agents", "skills", "attn-workflow"),
+		filepath.Join(home, ".claude", "skills", "attn-workflow"),
+		filepath.Join(home, ".copilot", "skills", "attn-workflow"),
+	}
+	if strings.Join(paths, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("paths=%v, want %v", paths, want)
+	}
+	for _, skillDir := range paths {
+		for _, relative := range []string{"SKILL.md", filepath.Join("references", "planning.md")} {
+			if _, err := os.Stat(filepath.Join(skillDir, relative)); err != nil {
+				t.Fatalf("installed %s: %v", filepath.Join(skillDir, relative), err)
+			}
+		}
+	}
+
+	again, attempted, err := EnsureWorkflowSkillsInstalled([]string{"pi", "codex"})
+	if err != nil || !attempted || len(again) != 1 || again[0] != want[0] {
+		t.Fatalf("repeat paths=%v attempted=%v error=%v", again, attempted, err)
+	}
+}
+
+func TestEnsureWorkflowSkillsInstalledSkipsVerificationProfiles(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	paths, attempted, err := EnsureWorkflowSkillsInstalled([]string{"codex"})
+	if err != nil || attempted || len(paths) != 0 {
+		t.Fatalf("paths=%v attempted=%v error=%v", paths, attempted, err)
+	}
+	if _, err := os.Stat(filepath.Join(home, ".agents")); !os.IsNotExist(err) {
+		t.Fatalf("verification profile wrote user-global skills: %v", err)
 	}
 }
 
@@ -207,6 +251,23 @@ func TestUserGlobalSkillSyncIsSkippedOutsideDefaultAndDevProfiles(t *testing.T) 
 			t.Fatalf("verification profile wrote %s: stat err = %v", root, err)
 		}
 	}
+}
+
+func TestUserGlobalSkillSyncRunsForExplicitIsolatedHarness(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv(toolhome.EnvVar, home)
+	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	t.Setenv("ATTN_AUTOMATION", "1")
+	t.Setenv(harnessSkillSyncEnv, "1")
+
+	synced, err := EnsureAgentsSkillInstalled()
+	if err != nil {
+		t.Fatalf("ensure skill: %v", err)
+	}
+	if !synced {
+		t.Fatal("explicit isolated harness skipped skill synchronization")
+	}
+	assertAttnSkillTree(t, filepath.Join(home, ".agents", "skills", "attn"))
 }
 
 func TestUserGlobalSkillSyncRunsForDevProfile(t *testing.T) {

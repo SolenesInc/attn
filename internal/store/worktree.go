@@ -208,6 +208,26 @@ func scanWorktree(row rowScanner) (*Worktree, error) {
 }
 
 func (s *Store) UpdateWorktreeObservation(path string, obs WorktreeObservation, now time.Time) {
+	if obs.Error != "" {
+		s.RecordWorktreeRefreshError(path, obs.Error)
+		return
+	}
+	s.RecordWorktreeObservation(path, obs, now)
+}
+
+func (s *Store) ApplyWorktreeInventory(path, branch, head string, detached, prunable bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+
+	s.execLog(`UPDATE worktrees SET branch = ?, head_sha = ?, detached = ?, prunable = ? WHERE path = ?`,
+		branch, head, detached, prunable, path)
+}
+
+func (s *Store) RecordWorktreeObservation(path string, obs WorktreeObservation, now time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -227,8 +247,18 @@ func (s *Store) UpdateWorktreeObservation(path string, obs WorktreeObservation, 
 		WHERE path = ?`,
 		obs.Branch, obs.HeadSHA, obs.Detached, obs.Dirty, obs.DirtyFiles, obs.Stashes,
 		obs.Unpushed, string(obs.MergedSignal), obs.Prunable, lastActivity,
-		now.Format(time.RFC3339), obs.Error, path,
+		now.Format(time.RFC3339), "", path,
 	)
+}
+
+func (s *Store) RecordWorktreeRefreshError(path, message string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.db == nil {
+		return
+	}
+	s.execLog(`UPDATE worktrees SET refresh_error = ? WHERE path = ?`, message, path)
 }
 
 func (s *Store) SetWorktreeSweep(path string, status WorktreeSweepStatus, reason string, at time.Time) {

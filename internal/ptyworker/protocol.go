@@ -42,6 +42,7 @@ const (
 	EventStateChanged      = "state_changed"
 	EventExit              = "exit"
 	EventTeardownEscalated = "teardown_escalated"
+	EventResize            = "resize"
 	// Carries the FULL placement set as of the chunk stamped Seq, the empty set
 	// included: that is how a client learns the last image is gone.
 	EventKittyPlacements = "kitty_placements"
@@ -86,6 +87,10 @@ type EventEnvelope struct {
 	Seq        *uint32 `json:"seq,omitempty"`
 	Data       *string `json:"data,omitempty"`
 	Reason     *string `json:"reason,omitempty"`
+	Cols       *uint16 `json:"cols,omitempty"`
+	Rows       *uint16 `json:"rows,omitempty"`
+	XPixel     *uint16 `json:"xpixel,omitempty"`
+	YPixel     *uint16 `json:"ypixel,omitempty"`
 	State      *string `json:"state,omitempty"`
 	ExitCode   *int    `json:"exit_code,omitempty"`
 	ExitSignal *string `json:"exit_signal,omitempty"`
@@ -293,8 +298,9 @@ type ResizeParams struct {
 
 type ResizeResult struct {
 	OK bool `json:"ok"`
-	// Pointer distinguishes an old {ok:true} from a new authoritative no-op.
-	Changed *bool `json:"changed,omitempty"`
+	// Pointers distinguish fields omitted by workers predating their capability.
+	Changed       *bool `json:"changed,omitempty"`
+	StreamOrdered *bool `json:"stream_ordered,omitempty"`
 }
 
 type SignalParams struct {

@@ -35,6 +35,50 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
+func TestSessionLifecycleLocksStayBounded(t *testing.T) {
+	d := newDaemonForTest(t)
+	first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable")
+	if first.entry != second.entry {
+		t.Fatal("same session mapped to different lifecycle locks")
+	}
+	first.Lock()
+	if first.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	first.Unlock()
+	second.Lock()
+	if second.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	second.Unlock()
+	left, right := d.sessionLifecycleLockFor("session-left"), d.sessionLifecycleLockFor("session-right")
+	if left.entry == right.entry {
+		t.Fatal("different sessions shared a lifecycle lock")
+	}
+	left.Lock()
+	if left.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	left.Unlock()
+	right.Lock()
+	if right.entry == nil {
+		t.Fatal("acquired lifecycle lock has no entry")
+	}
+	right.Unlock()
+
+	for i := 0; i < 640; i++ {
+		lease := d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))
+		lease.Lock()
+		if lease.entry == nil {
+			t.Fatal("acquired lifecycle lock has no entry")
+		}
+		lease.Unlock()
+	}
+	if len(d.sessionLifecycleLocks) != 0 {
+		t.Fatalf("lifecycle lock count = %d, want 0 after all leases released", len(d.sessionLifecycleLocks))
+	}
+}
+
 type fakeReloadBackend struct {
 	mu        sync.Mutex
 	liveIDs   []string
@@ -103,8 +147,8 @@ func (b *fakeReloadBackend) Attach(context.Context, string, string, ...ptybacken
 	return ptybackend.AttachInfo{Running: true}, newFakeOutputStream(), nil
 }
 func (b *fakeReloadBackend) Input(context.Context, string, []byte) error { return nil }
-func (b *fakeReloadBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (bool, error) {
-	return true, nil
+func (b *fakeReloadBackend) Resize(context.Context, string, uint16, uint16, uint16, uint16) (ptybackend.ResizeResult, error) {
+	return ptybackend.ResizeResult{Changed: true}, nil
 }
 func (b *fakeReloadBackend) SetTheme(context.Context, string, pty.TerminalTheme) error {
 	return nil
@@ -201,9 +245,13 @@ func newReloadTestDaemonOn(t *testing.T, d *Daemon, backend *fakeReloadBackend) 
 }
 
 func addReloadSession(d *Daemon, id string, agent protocol.SessionAgent, state protocol.SessionState) {
+	addReloadSessionAt(d, id, agent, state, "/tmp/"+id)
+}
+
+func addReloadSessionAt(d *Daemon, id string, agent protocol.SessionAgent, state protocol.SessionState, directory string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
-		ID: id, Label: id, Agent: agent, Directory: "/tmp/" + id,
+		ID: id, Label: id, Agent: agent, Directory: directory,
 		WorkspaceID: "ws-" + id, State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

@@ -267,7 +267,7 @@ func newPluginConnection(conn net.Conn, reader *bufio.Reader, params pluginHello
 }
 
 func (p *pluginConnection) request(ctx context.Context, method string, params interface{}, result interface{}) error {
-	return p.jsonrpcPeer.request(ctx, "plugin", method, params, result)
+	return p.jsonrpcPeer.request(ctx, fmt.Sprintf("plugin %q", p.name), method, params, result)
 }
 
 // The check timestamp is deliberately not part of the moved answer: it advances
@@ -519,6 +519,7 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 	result, handled, err := d.handlePluginDriverMethod(plugin, msg)
 	if handled {
 		if err != nil {
+			d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, err)
 			_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCInvalidRequest, err.Error()))
 			return
 		}
@@ -526,7 +527,9 @@ func (d *Daemon) handlePluginMethod(plugin *pluginConnection, msg jsonRPCMessage
 		return
 	}
 
-	_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCMethodNotFound, fmt.Sprintf("unknown method %q", msg.Method)))
+	unknown := fmt.Errorf("unknown method %q", msg.Method)
+	d.logf("plugin request %s from plugin %s failed: %v", msg.Method, plugin.name, unknown)
+	_ = plugin.send(jsonRPCFailure(msg.ID, jsonRPCMethodNotFound, unknown.Error()))
 }
 
 func (d *Daemon) callPlugin(ctx context.Context, name, method string, params interface{}, result interface{}) error {

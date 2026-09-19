@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fsnotify/fsnotify"
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
@@ -24,6 +25,12 @@ type pluginDriverFixtureRecord struct {
 
 type pluginDriverCloseRecord struct {
 	Params pluginDriverSessionClosedParams `json:"params"`
+}
+
+type pluginDriverReportReceipt struct {
+	SessionID string `json:"session_id"`
+	RunID     string `json:"run_id"`
+	NativeID  string `json:"native_id"`
 }
 
 func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorkerPTY(t *testing.T) {
@@ -43,11 +50,23 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	fixtureCWD := filepath.Join(tmpDir, "driver-cwd")
 	fixtureLog := filepath.Join(tmpDir, "driver-requests.jsonl")
 	fixtureCloseLog := filepath.Join(tmpDir, "driver-close.jsonl")
+	fixtureReportLog := filepath.Join(tmpDir, "driver-reports.jsonl")
 	fixtureStderr := filepath.Join(tmpDir, "driver-stderr.log")
 	fixtureReady := filepath.Join(tmpDir, "driver-ready")
 	fixtureStateTrigger := filepath.Join(tmpDir, "driver-live-state.trigger")
 	if err := os.MkdirAll(fixtureCWD, 0o755); err != nil {
 		t.Fatalf("mkdir fixture cwd: %v", err)
+	}
+	if err := os.WriteFile(fixtureReportLog, nil, 0o644); err != nil {
+		t.Fatalf("create fixture report log: %v", err)
+	}
+	reportWatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		t.Fatalf("watch fixture reports: %v", err)
+	}
+	defer reportWatcher.Close()
+	if err := reportWatcher.Add(fixtureReportLog); err != nil {
+		t.Fatalf("watch fixture report log: %v", err)
 	}
 	writeTestPluginManifest(t, pluginDir, "fixture-driver")
 
@@ -68,6 +87,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	t.Setenv("ATTN_TEST_HELPER_BINARY", os.Args[0])
 	t.Setenv("ATTN_DRIVER_FIXTURE_LOG", fixtureLog)
 	t.Setenv("ATTN_DRIVER_FIXTURE_CLOSE_LOG", fixtureCloseLog)
+	t.Setenv("ATTN_DRIVER_FIXTURE_REPORT_LOG", fixtureReportLog)
 	t.Setenv("ATTN_DRIVER_FIXTURE_STDERR", fixtureStderr)
 	t.Setenv("ATTN_DRIVER_FIXTURE_READY", fixtureReady)
 	t.Setenv("ATTN_DRIVER_FIXTURE_CWD", fixtureCWD)
@@ -122,6 +142,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 		daemon:    d,
 		sessionID: sessionID,
 		closeLog:  fixtureCloseLog,
+		reportLog: fixtureReportLog,
 		stderr:    fixtureStderr,
 		daemonLog: daemonLog,
 	}
@@ -138,7 +159,8 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	})
 
 	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, workspaceID, tmpDir, true, "", "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
-	assertPluginFixtureReports(t, d, sessionID, "driver.spawn-native")
+	waitForPluginFixtureReportReceipt(t, reportWatcher, fixture, 1, "driver.spawn-native")
+	assertPluginFixtureReports(t, fixture, "driver.spawn-native")
 	attachAndAssertPluginPTY(t, ws, sessionID, "driver.spawn", fixtureCWD)
 	triggerAndAssertPluginFixtureStateTransitions(t, ws, sessionID, fixtureStateTrigger)
 
@@ -158,7 +180,8 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 		return session != nil && session.State == protocol.SessionStateIdle
 	}, "initial PTY exit to settle before resume")
 	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, workspaceID, tmpDir, false, sessionID, "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
-	assertPluginFixtureReports(t, d, sessionID, "driver.resume-native")
+	waitForPluginFixtureReportReceipt(t, reportWatcher, fixture, 2, "driver.resume-native")
+	assertPluginFixtureReports(t, fixture, "driver.resume-native")
 	attachAndAssertPluginPTY(t, ws, sessionID, "driver.resume", fixtureCWD)
 
 	records = waitForPluginFixtureRecords(t, fixtureLog, 2)
@@ -309,15 +332,13 @@ func pluginFixtureStateEvent(event map[string]interface{}, sessionID string) (st
 	return asString(session["state"]), true
 }
 
-func assertPluginFixtureReports(t *testing.T, d *Daemon, sessionID, nativeID string) {
+func assertPluginFixtureReports(t *testing.T, fixture pluginFixtureSession, nativeID string) {
 	t.Helper()
-	waitForCondition(t, 5*time.Second, func() bool {
-		session := d.store.Get(sessionID)
-		return session != nil &&
-			session.Agent == "fixture" &&
-			session.State == protocol.SessionStateWaitingInput &&
-			d.store.GetAgentMetadata(sessionID) == `{"native_id":"`+nativeID+`"}`
-	}, "plugin state, stop verdict, and metadata reports")
+	session := fixture.daemon.store.Get(fixture.sessionID)
+	metadata := fixture.daemon.store.GetAgentMetadata(fixture.sessionID)
+	if session == nil || session.Agent != "fixture" || session.State != protocol.SessionStateWaitingInput || metadata != `{"native_id":"`+nativeID+`"}` {
+		t.Fatalf("acknowledged plugin reports not applied: session=%+v metadata=%q\n%s", session, metadata, fixture.diagnose())
+	}
 }
 
 func attachAndAssertPluginPTY(t *testing.T, ws *websocket.Conn, sessionID, method, cwd string) {
@@ -376,8 +397,58 @@ type pluginFixtureSession struct {
 	daemon    *Daemon
 	sessionID string
 	closeLog  string
+	reportLog string
 	stderr    string
 	daemonLog string
+}
+
+func waitForPluginFixtureReportReceipt(t *testing.T, watcher *fsnotify.Watcher, fixture pluginFixtureSession, count int, nativeID string) {
+	t.Helper()
+	timer := time.NewTimer(5 * time.Second)
+	defer timer.Stop()
+	for {
+		receipts, ok := readPluginFixtureReportReceipts(fixture.reportLog, count)
+		if ok {
+			receipt := receipts[count-1]
+			run := fixture.daemon.store.GetAgentDriverRun(fixture.sessionID)
+			if receipt.SessionID != fixture.sessionID || receipt.RunID != run.RunID || receipt.NativeID != nativeID {
+				t.Fatalf("plugin report receipt=%+v active_run=%+v, want session=%q native_id=%q", receipt, run, fixture.sessionID, nativeID)
+			}
+			return
+		}
+		select {
+		case _, ok := <-watcher.Events:
+			if !ok {
+				t.Fatal("fixture report watcher closed")
+			}
+		case err, ok := <-watcher.Errors:
+			if !ok {
+				t.Fatal("fixture report watcher closed")
+			}
+			t.Fatalf("watch fixture reports: %v", err)
+		case <-timer.C:
+			t.Fatalf("timed out waiting for %d acknowledged plugin report batch(es)\n%s", count, fixture.diagnose())
+		}
+	}
+}
+
+func readPluginFixtureReportReceipts(path string, count int) ([]pluginDriverReportReceipt, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var receipts []pluginDriverReportReceipt
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var receipt pluginDriverReportReceipt
+		if err := json.Unmarshal([]byte(line), &receipt); err != nil {
+			return nil, false
+		}
+		receipts = append(receipts, receipt)
+	}
+	return receipts, len(receipts) >= count
 }
 
 // Measured on Linux with six copies of this test in parallel under CPU load, the chain
@@ -427,6 +498,8 @@ func (f pluginFixtureSession) diagnose() string {
 		state, run.RunID, run.PluginName, f.driverRegistered())
 	records, _ := readPluginFixtureCloseRecords(f.closeLog, 0)
 	fmt.Fprintf(&out, "close records recorded: %d\n", len(records))
+	receipts, _ := readPluginFixtureReportReceipts(f.reportLog, 0)
+	fmt.Fprintf(&out, "report batches acknowledged: %d\n", len(receipts))
 	out.WriteString(pluginFixtureFileTail("fixture stderr", f.stderr, 40))
 	out.WriteString(pluginFixtureFileTail("daemon log", f.daemonLog, 60))
 	return out.String()
@@ -509,6 +582,18 @@ func appendPluginFixtureCloseRecord(t *testing.T, record pluginDriverCloseRecord
 	defer file.Close()
 	if err := json.NewEncoder(file).Encode(record); err != nil {
 		t.Fatalf("append fixture close log: %v", err)
+	}
+}
+
+func appendPluginFixtureReportReceipt(t *testing.T, receipt pluginDriverReportReceipt) {
+	t.Helper()
+	file, err := os.OpenFile(os.Getenv("ATTN_DRIVER_FIXTURE_REPORT_LOG"), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatalf("open fixture report log: %v", err)
+	}
+	defer file.Close()
+	if err := json.NewEncoder(file).Encode(receipt); err != nil {
+		t.Fatalf("append fixture report receipt: %v", err)
 	}
 }
 

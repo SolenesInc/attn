@@ -154,7 +154,7 @@ func TestCodexConfigOverrides_NonChiefOmitsJournalingDirective(t *testing.T) {
 	if devInstr[0] != want {
 		t.Fatalf("developer_instructions = %q, want the agent + garden composition %q", devInstr[0], want)
 	}
-	if !strings.Contains(devInstr[0], "attn delegate") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
+	if !strings.Contains(devInstr[0], "Attn delegation") || !strings.Contains(devInstr[0], "attn keeps work as seeds in the garden") {
 		t.Fatalf("developer_instructions should carry agent and garden guidance: %q", devInstr[0])
 	}
 	if strings.Contains(devInstr[0], "notable moments, not routine steps") {

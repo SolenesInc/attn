@@ -6,7 +6,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, member, resumeID, resumeCwd, resumeAgent string) (*protocol.SeedPlantResult, error) {
+func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, member string) (*protocol.SeedPlantResult, error) {
 	msg := protocol.SeedPlantMessage{Cmd: protocol.CmdSeedPlant, Title: title}
 	if sessionID != "" {
 		msg.SourceSessionID = protocol.Ptr(sessionID)
@@ -23,11 +23,6 @@ func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, membe
 	if discoveredFrom != "" {
 		msg.DiscoveredFrom = protocol.Ptr(discoveredFrom)
 	}
-	if resumeID != "" || resumeCwd != "" || resumeAgent != "" {
-		msg.ResumeSessionID = protocol.Ptr(resumeID)
-		msg.ResumeCwd = protocol.Ptr(resumeCwd)
-		msg.ResumeAgent = protocol.Ptr(resumeAgent)
-	}
 	resp, err := c.send(msg)
 	if err != nil {
 		return nil, err
@@ -36,25 +31,6 @@ func (c *Client) SeedPlant(sessionID, title, body, partOf, discoveredFrom, membe
 		return nil, fmt.Errorf("the daemon accepted the planting but returned no seed")
 	}
 	return resp.SeedPlantResult, nil
-}
-
-func (c *Client) SeedSetResume(seedID, resumeID, cwd, agent string, clear bool) (*protocol.SeedSetResumeResult, error) {
-	msg := protocol.SeedSetResumeMessage{Cmd: protocol.CmdSeedSetResume, SeedID: seedID}
-	if clear {
-		msg.Clear = protocol.Ptr(true)
-	} else {
-		msg.ResumeSessionID = protocol.Ptr(resumeID)
-		msg.ResumeCwd = protocol.Ptr(cwd)
-		msg.ResumeAgent = protocol.Ptr(agent)
-	}
-	resp, err := c.send(msg)
-	if err != nil {
-		return nil, err
-	}
-	if resp.SeedSetResumeResult == nil {
-		return nil, fmt.Errorf("the daemon accepted the resume identity but returned no seed")
-	}
-	return resp.SeedSetResumeResult, nil
 }
 
 func (c *Client) SeedSearch(sessionID, query string, limit int) (*protocol.SeedSearchResult, error) {

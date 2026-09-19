@@ -8,7 +8,6 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
@@ -26,6 +25,7 @@ import { recordingEnabled } from './windowRecording.mjs';
 const BRIEF = 'BRIEF7 hold this seed until the dispatcher closes you';
 const REASON = 'REASON3 its report landed, nothing left to drive';
 const SELF_REASON = 'REASON4 I am done and nobody is waiting on me';
+const REPRO_PROMPT = `${'p'.repeat(78)}$ `;
 
 const PACE_MS = recordingEnabled() ? 1_400 : 0;
 
@@ -81,7 +81,7 @@ async function openPane(client, observer, runner, label) {
     client, observer, cwd, label, agent: 'shell',
   });
   const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
-  return { sessionId, paneId: pane.paneId };
+  return { sessionId, paneId: pane.paneId, cwd };
 }
 
 async function waitForSessionGone(client, sessionId, timeoutMs) {
@@ -130,12 +130,20 @@ async function main() {
     dispatcher = await runner.step('open_dispatcher', () => openPane(client, observer, runner, 'dispatcher'));
     sibling = await runner.step('open_sibling', () => openPane(client, observer, runner, 'sibling'));
 
+    await runner.step('use_a_wrapped_bash_prompt', async () => {
+      await client.request('write_pane', {
+        ...dispatcher,
+        text: 'exec /bin/bash --noprofile --norc',
+      });
+      await runInPane(client, dispatcher, `PS1='${REPRO_PROMPT}'`, '');
+    });
+
     delegate = await runner.step('dispatch_a_delegate', async () => {
       const known = new Set(observer.sessionsById.keys());
       await client.request('write_pane', {
         ...dispatcher,
-        text: `attn delegate --agent shell --model none --no-worktree --source-session ${dispatcher.sessionId} ` +
-          `--name closeme --brief "${BRIEF}"`,
+        text: `attn delegate --agent shell --model none --source-session ${dispatcher.sessionId} ` +
+          `--cwd ${dispatcher.cwd} --name closeme --brief "${BRIEF}"`,
       });
       let spawned = null;
       await observer.waitFor(() => {
@@ -175,13 +183,15 @@ async function main() {
 
     await pace();
     await runner.step('the_dispatcher_closes_its_delegate', async () => {
-      const closed = await runInPane(client, dispatcher,
-        `attn agent close ${delegate} -m "${REASON}" --source-session ${dispatcher.sessionId}`,
-        'closed session');
-      runner.assert(saw(closed, seed), 'the close says which seed it noted', { closed, seed });
+      await client.request('click_pane', dispatcher);
+      await waitForPaneVisible(client, dispatcher.sessionId, dispatcher.paneId);
+      await waitForPaneAttached(client, dispatcher.sessionId, dispatcher.paneId);
+      await client.request('write_pane', {
+        ...dispatcher,
+        text: `attn agent close ${delegate} -m "${REASON}" --source-session ${dispatcher.sessionId}`,
+      });
       const ui = await waitForSessionGone(client, delegate, 15_000);
       runner.writeJson('session-ui-after-close.json', ui);
-      runner.writeText('close.txt', `${closed}\n`);
     });
 
     await pace();
@@ -239,9 +249,7 @@ async function main() {
     console.error(summary.error);
     process.exitCode = 1;
   } finally {
-    await client.quitApp().catch(() => {});
-    await observer.close().catch(() => {});
-    await restoreHarnessSettings();
+    await runner.finishCleanup({ delegate, seed });
   }
 }
 

@@ -260,13 +260,14 @@ describe('GardenReviewPanel', () => {
   it('keeps user edits when an advisory draft arrives late', async () => {
     let finishDraft: (value: string) => void = () => {};
     const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document());
     options.onDraft = vi.fn().mockImplementation(() => new Promise<string>((resolve) => {
       finishDraft = resolve;
     }));
     render(<GardenReviewPanel {...options} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Draft' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Draft' }));
     const handoff = screen.getByLabelText(/What should the new agent know/);
     fireEvent.change(handoff, { target: { value: 'My own handoff' } });
     await act(async () => finishDraft('Late generated handoff'));
@@ -275,6 +276,64 @@ describe('GardenReviewPanel', () => {
     expect(screen.getByText('Draft ready. Your edits were kept.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Use draft' }));
     expect(handoff).toHaveValue('Late generated handoff');
+  });
+
+  it('starts a handover from the saved working context', async () => {
+    const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
+      seed: seed({ continuation: {
+        ...seed().continuation!, repository_root: '/tmp/repo', branch: 'feature-x',
+      } }),
+    }));
+    render(<GardenReviewPanel {...options} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    expect(await screen.findByLabelText('Working folder')).toHaveValue('/tmp/work');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('reuse');
+    expect(screen.getByLabelText('Branch')).toHaveValue('feature-x');
+    expect(screen.getByLabelText('Agent')).toHaveValue('codex');
+  });
+
+  it('recreates a missing branch checkout from its repository context', async () => {
+    const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
+      seed: seed({ continuation: {
+        ...seed().continuation!,
+        cwd: '/tmp/missing-worktree/subdir',
+        directory_state: 'missing',
+        handover_placement: 'recreate_branch',
+        repository_root: '/tmp/repo',
+        repository_subdir: 'subdir',
+        branch: 'feature/recreate',
+      } }),
+    }));
+    render(<GardenReviewPanel {...options} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    expect(await screen.findByLabelText('Working folder')).toHaveValue('/tmp/repo/subdir');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('existing_branch_worktree');
+    expect(screen.getByLabelText('Branch')).toHaveValue('feature/recreate');
+  });
+
+  it('requires explicit placement when the saved working folder cannot be reused', async () => {
+    const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document({
+      seed: seed({ continuation: {
+        ...seed().continuation!,
+        cwd: '/tmp/unavailable',
+        handover_placement: 'placement_required',
+        repository_root: '/tmp/repo',
+        branch: 'feature-old',
+      } }),
+    }));
+    render(<GardenReviewPanel {...options} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+
+    expect(await screen.findByLabelText('Working folder')).toHaveValue('');
+    expect(screen.getByLabelText('Git checkout')).toHaveValue('none');
   });
 
   it('sends optional guidance to Chief without asking for placement', async () => {
@@ -315,15 +374,21 @@ describe('GardenReviewPanel', () => {
     render(<GardenReviewPanel {...options} />);
 
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
-    const handoff = screen.getByLabelText(/What should the new agent know/);
+    const handoff = await screen.findByLabelText(/What should the new agent know/);
     fireEvent.change(handoff, { target: { value: 'Keep this text' } });
+    fireEvent.change(screen.getByLabelText('Working folder'), { target: { value: '/tmp/placed' } });
+    fireEvent.change(screen.getByLabelText('Git checkout'), { target: { value: 'reuse' } });
+    fireEvent.change(screen.getByLabelText('Branch'), { target: { value: 'feature/shared' } });
+    fireEvent.click(screen.getByLabelText('Allow sharing an occupied checkout'));
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
 
     expect(await screen.findByText('Worker could not start')).toBeInTheDocument();
     expect(handoff).toHaveValue('Keep this text');
     expect(options.onHandoverSeed).toHaveBeenCalledWith(expect.objectContaining({
       seedId: 's-review1',
-      expectedRev: 7,
+      cwd: '/tmp/placed',
+      checkout: { kind: 'reuse', branch: 'feature/shared' },
+      allowWorktreeReuse: true,
       handoff: 'Keep this text',
       review: { reviewId: 'r-review1', evidenceVersion: 'evidence-1' },
     }));
@@ -362,10 +427,12 @@ describe('GardenReviewPanel', () => {
     await waitFor(() => expect(options.onRetry).toHaveBeenCalledWith('r-review1', 's-review1'));
   });
 
-  it('closes the composer before leaving the review on Escape', () => {
+  it('closes the composer before leaving the review on Escape', async () => {
     const options = props();
+    options.fetchSeedDocument = vi.fn().mockResolvedValue(document());
     render(<GardenReviewPanel {...options} />);
     fireEvent.click(screen.getByRole('button', { name: 'Handover' }));
+    await screen.findByLabelText(/What should the new agent know/);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByLabelText(/What should the new agent know/)).not.toBeInTheDocument();

@@ -65,6 +65,50 @@ async function injectWorkspace(
 }
 
 test.describe('Workspace Sessions', () => {
+  test('leaves agent focus mode when selecting another workspace', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-a', [
+      { id: 'a1', label: 'alpha-one', paneId: 'pane-a1', cwd: '/tmp/workspace-a' },
+    ]);
+    await injectWorkspace(page, daemon, 'workspace-b', [
+      { id: 'b1', label: 'beta-one', paneId: 'pane-b1', cwd: '/tmp/workspace-b' },
+    ]);
+    await page.getByTestId('session-a1').click();
+    await page.getByTestId('focus-pane-pane-a1').click();
+    const workspace = page.locator('[data-session-terminal-workspace="workspace-a"]');
+    await expect(workspace).toHaveClass(/agent-focus-mode/);
+    await page.keyboard.press('Meta+2');
+    await expect(page.locator('[data-session-terminal-workspace="workspace-b"]')).toBeVisible();
+    await page.keyboard.press('Meta+1');
+    await expect(workspace).toBeVisible();
+    await expect(workspace).not.toHaveClass(/agent-focus-mode/);
+    await expect(page.locator('.sidebar')).toBeVisible();
+  });
+
+  test('cancels a sidebar workspace drag and can select it afterward', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'drag-workspace', [
+      { id: 'drag-agent', label: 'drag-agent', paneId: 'drag-pane', cwd: '/tmp/drag-workspace' },
+    ]);
+    const group = page.getByTestId('sidebar-workspace-drag-workspace');
+    const header = group.locator('.workspace-group-header > .sidebar-row-select');
+    const box = await header.boundingBox();
+    expect(box).not.toBeNull();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height * 2);
+    await expect(group).toHaveClass(/workspace-group--reorder-source/);
+    await header.dispatchEvent('pointercancel', { pointerId: 1 });
+    await expect(group).not.toHaveClass(/workspace-group--reorder-source/);
+    await page.mouse.up();
+    await page.getByTestId('sidebar-session-drag-agent').getByRole('button', { name: 'Open drag-agent' }).click();
+    await expect(page.locator('[data-session-terminal-workspace="drag-workspace"]')).toBeVisible();
+  });
+
   test('switches workspaces and Cmd+number jumps to the first session', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
@@ -159,4 +203,75 @@ test.describe('Workspace Sessions', () => {
     await expect(page.locator('[data-testid="sidebar-session-focus-agent"]')).toHaveClass(/selected/);
     await expect(activeWorkspace).toHaveAttribute('data-active-pane-id', 'pane-focus-agent');
   });
+
+  test('focus mode gives one agent the shell and restores the workspace on exit', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+
+    await injectWorkspace(page, daemon, 'workspace-focus-mode', [
+      { id: 'focus-main', label: 'focus-main', paneId: 'pane-focus-main', cwd: '/tmp/workspace-focus-mode' },
+      { id: 'focus-peer', label: 'focus-peer', paneId: 'pane-focus-peer', cwd: '/tmp/workspace-focus-mode' },
+    ], 'pane-focus-main');
+
+    await page.locator('[data-testid="session-focus-main"]').click();
+    const workspace = page.locator('[data-session-terminal-workspace="workspace-focus-mode"]');
+
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
+
+    await workspace.locator('[data-pane-id="pane-focus-main"] .workspace-pane-header').hover();
+    await workspace.locator('[data-testid="focus-pane-pane-focus-main"]').click();
+
+    await expect(page.locator('.sidebar')).toBeHidden();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toHaveCount(0);
+    await expect(workspace.getByRole('button', { name: 'Return to split' })).toBeVisible();
+
+    await workspace.getByRole('button', { name: 'Return to split' }).click();
+
+    await expect(page.locator('.sidebar')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
+    await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
+  });
+  test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-keyboard', [
+      { id: 'keyboard-one', label: 'keyboard-one', paneId: 'pane-keyboard-one', cwd: '/tmp/workspace-keyboard' },
+      { id: 'keyboard-two', label: 'keyboard-two', paneId: 'pane-keyboard-two', cwd: '/tmp/workspace-keyboard' },
+    ]);
+    const first = page.getByTestId('sidebar-session-keyboard-one');
+    const second = page.getByTestId('sidebar-session-keyboard-two');
+    const icon = await first.getByRole('img', { name: 'Shell' }).boundingBox();
+    expect(icon).not.toBeNull();
+    await page.mouse.click(icon!.x + icon!.width / 2, icon!.y + icon!.height / 2);
+    await expect(first).toHaveClass(/selected/);
+    await expect(page.locator('[data-pane-id="pane-keyboard-one"]').getByRole('textbox', { name: 'Terminal input' })).toBeFocused();
+    await second.getByRole('button', { name: 'Open keyboard-two' }).focus();
+    await expect(second.getByRole('button', { name: 'Open keyboard-two' })).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(second).toHaveClass(/selected/);
+    await first.hover();
+    await first.getByRole('button', { name: 'Actions for keyboard-one' }).click();
+    await expect(page.getByRole('menu', { name: 'Actions for keyboard-one' })).toBeVisible();
+    await expect(second).toHaveClass(/selected/);
+    await page.keyboard.press('Escape');
+    const settings = page.getByRole('button', { name: 'Sidebar settings', exact: true });
+    await settings.focus();
+    await page.keyboard.press('Enter');
+    const dialog = page.getByRole('dialog', { name: 'Sidebar settings' });
+    await expect(dialog.getByRole('switch', { name: 'Agent queue', exact: true })).toBeFocused();
+    const sidebar = await page.locator('.sidebar').boundingBox();
+    const popup = await dialog.boundingBox();
+    expect(popup!.x).toBeGreaterThanOrEqual(sidebar!.x);
+    expect(popup!.x + popup!.width).toBeLessThanOrEqual(sidebar!.x + sidebar!.width);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await expect(settings).toBeFocused();
+    await expect(page.locator('.sidebar button button')).toHaveCount(0);
+  });
+
 });

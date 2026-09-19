@@ -58,7 +58,7 @@ print(next(f["sha256"] for v in json.load(sys.stdin) for f in v["files"] if f["f
 fi
 ln -sfn "$tools/go-$go_version/bin/go" "$HOME/.local/bin/go"
 ln -sfn "$tools/go-$go_version/bin/gofmt" "$HOME/.local/bin/gofmt"
-node_version="v22.22.0"
+node_version="v26.8.2"
 if [[ ! -d "$tools/node-$node_version" ]]; then
   temp="$(mktemp -d)"
   archive="node-$node_version-linux-$node_arch.tar.xz"

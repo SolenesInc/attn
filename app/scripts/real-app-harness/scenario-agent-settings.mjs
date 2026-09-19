@@ -10,14 +10,12 @@ import { currentHarnessProfile } from './harnessProfile.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, snapshot, readProcessTable, readLiveDaemonPid, readAppFootprint } from './perfMeasure.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
-
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const options = parseCommonArgs(process.argv.slice(2));
 if (!currentHarnessProfile()) throw new Error('Agent settings verification requires a named profile');
 const runner = createScenarioRunner(options, { scenarioId: 'AgentSettings', tier: 'local', prefix: 'agent-settings', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const root = '[data-testid="settings-section-agents"]';
 const click = selector => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });
@@ -68,11 +66,14 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 try {
   const webkitBaseline = await captureWebKitPids();
   await launchFreshAppAndConnect(client, observer);
+  runner.registerCleanup('restore_settings', async () => {
+    await Promise.all([...baseline].map(([key, value]) => set(key, value)));
+  });
   const fixture = process.env.ATTN_SETTINGS_FIXTURE
     ? JSON.parse(fs.readFileSync(process.env.ATTN_SETTINGS_FIXTURE, 'utf8'))
     : { 'activity.config': '{"agent":"codex","model":"gpt-5.6-luna","effort":"low"}', 'activity.intervals': '{"watching":120,"present":300}' };
-  for (const [key, value] of Object.entries(fixture)) await set(key, value);
-  for (const [key, value] of Object.entries({ default_model_codex: '', default_effort_codex: '', default_context_window_cap_codex: '', 'session_cost.price.settings-check-model': '', chief_model_claude: '', 'garden.advisor': '{"agent":"codex","model":"gpt-5.6-luna","effort":"xhigh"}', new_session_agent: 'codex' })) await set(key, value);
+  await Promise.all(Object.entries(fixture).map(([key, value]) => set(key, value)));
+  await Promise.all(Object.entries({ default_model_codex: '', default_effort_codex: '', default_context_window_cap_codex: '', 'session_cost.price.settings-check-model': '', chief_model_claude: '', 'garden.advisor': '{"agent":"codex","model":"gpt-5.6-luna","effort":"xhigh"}', new_session_agent: 'codex' }).map(([key, value]) => set(key, value)));
   await client.request('dismiss_whats_new');
   await client.request('dispatch_shortcut', { shortcutId: 'ui.openSettings' });
   await runner.step('agent_sections_and_keyboard_save', async () => {
@@ -121,7 +122,7 @@ try {
     await client.request('dom_scroll_into_view', { selector: '.settings-price-card--new' });
     await type('#settings-price-new-model', 'settings-check-model');
     const rates = { input_usd_per_mtok: 2, output_usd_per_mtok: 10, cache_read_usd_per_mtok: 0, cache_write_5m_usd_per_mtok: 0, cache_write_1h_usd_per_mtok: 0 };
-    for (const [key, value] of Object.entries(rates)) await type(`#settings-price-new-${key}`, String(value));
+    await Promise.all(Object.entries(rates).map(([key, value]) => type(`#settings-price-new-${key}`, String(value))));
     const setting = 'session_cost.price.settings-check-model';
     await saved(setting, JSON.stringify(rates), () => client.request('dom_key', { selector: '#settings-price-new-cache_write_1h_usd_per_mtok', key: 'Enter' }));
     await type('#settings-price-settings-check-model-output_usd_per_mtok', '12');
@@ -134,8 +135,8 @@ try {
     runner.assert((await text('[data-testid="settings-section-workspace"]')).includes('Editor'), 'editor belongs with file locations');
     await section('terminal');
     runner.assert((await text('[data-testid="settings-section-terminal"]')).includes('PTY Backend'), 'terminal hosting is under System');
-    await section('delegation');
-    runner.assert((await text('[data-testid="settings-section-delegation"]')).includes('Enable workflows'), 'workflows live beside delegation');
+    await section('workflows');
+    runner.assert((await text('[data-testid="settings-section-workflows"]')).includes('Enable workflows'), 'workflows have their own section');
     await section('agents');
     await screenshot('04-finished.png');
   });
@@ -158,12 +159,4 @@ try {
   await screenshot('failure.png').catch(() => {});
   console.error(JSON.stringify(await runner.finishFailure(error), null, 2));
   process.exitCode = 1;
-} finally {
-  if (observer.connected) {
-    for (const [key, value] of baseline) {
-      try { await set(key, value); } catch (error) { console.error(`Restore ${key}: ${error.message}`); process.exitCode = 1; }
-    }
-  }
-  await observer.close().catch(() => {});
-  await client.quitApp().catch(() => {});
 }

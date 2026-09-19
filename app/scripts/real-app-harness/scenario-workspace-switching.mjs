@@ -18,9 +18,12 @@ import {
   waitForPaneText,
   waitForPaneVisible,
   waitForSessionWorkspace,
+  sleep,
 } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+const hold = () => (process.env.ATTN_HARNESS_RECORD === '1' ? sleep(1200) : Promise.resolve());
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -55,11 +58,6 @@ async function waitForActiveSession(client, sessionId, description, timeoutMs = 
     await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error(`Timed out waiting for ${description}. Last state:\n${JSON.stringify(lastState, null, 2)}`);
-}
-
-async function focusAppForNativeShortcut(driver) {
-  await driver.activateApp();
-  await driver.clickWindow(0.5, 0.5);
 }
 
 async function closeExistingSessions(client, sessionRootDir) {
@@ -129,8 +127,10 @@ async function waitForFreshSplitPaneAttached(client, sessionId, paneId) {
 }
 
 async function assertWorkspaceVisible(client, visibleSessionId, hiddenSessionId, expectedPaneCount) {
-  const visible = await client.request('get_session_ui_state', { sessionId: visibleSessionId });
-  const hidden = await client.request('get_session_ui_state', { sessionId: hiddenSessionId });
+  const [visible, hidden] = await Promise.all([
+    client.request('get_session_ui_state', { sessionId: visibleSessionId }),
+    client.request('get_session_ui_state', { sessionId: hiddenSessionId }),
+  ]);
   if (!visible.workspace?.view?.sessionVisible) {
     throw new Error(`Expected ${visibleSessionId} workspace to be visible: ${JSON.stringify(visible, null, 2)}`);
   }
@@ -170,13 +170,14 @@ async function writeAndAssertToken(client, sessionId, pane, token) {
 }
 
 async function capturePaneTexts(client, runDir, prefix, sessionId, panes) {
-  const payload = {};
-  for (const pane of panes) {
-    payload[pane.paneId] = await client.request('read_pane_text', {
+  const entries = await Promise.all(panes.map(async (pane) => {
+    const text = await client.request('read_pane_text', {
       sessionId,
       paneId: pane.paneId,
     }).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
-  }
+    return [pane.paneId, text];
+  }));
+  const payload = Object.fromEntries(entries);
   fs.writeFileSync(path.join(runDir, `${prefix}-pane-texts.json`), `${JSON.stringify(payload, null, 2)}\n`, 'utf8');
 }
 
@@ -219,15 +220,13 @@ async function main() {
     prefix: 'workspace-switching',
     metadata: {
       agent: 'shell',
-      focus: 'session switching keeps each workspace\'s panes and history isolated, and closing one split leaves the surviving shells and their scrollback intact',
+      focus: 'session switching keeps each workspace\'s panes and history isolated, focus mode gives one agent the shell and restores it, and closing one split leaves the surviving shells and their scrollback intact',
     },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({
-    appPath: options.appPath,
-  });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const createdSessionIds = [];
 
   runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl });
@@ -244,8 +243,6 @@ async function main() {
 
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
       await closeExistingSessions(client, options.sessionRootDir);
     });
@@ -304,7 +301,6 @@ async function main() {
     });
 
     await runner.step('assert_cmd_number_shortcuts', async () => {
-      await focusAppForNativeShortcut(driver);
       await pressShortcutKeys(client, driver, 'workspace.select1');
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);
@@ -356,6 +352,95 @@ async function main() {
       }
     });
 
+    let focusModeReceipt;
+    await runner.step('focus_mode_gives_one_agent_the_shell_and_restores_the_split', async () => {
+      await client.request('select_session', { sessionId: workspaceA.sessionId });
+      await client.request('dom_click', {
+        selector: `[data-testid="focus-pane-${workspaceA.firstPane.paneId}"]`,
+      });
+
+      const focusedSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const focused = focusedSnapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      if (!focused) {
+        throw new Error(`Focused session ${workspaceA.sessionId} is missing from the structured snapshot`);
+      }
+      const focusedPane = focused.panes.find((pane) => pane.paneId === workspaceA.firstPane.paneId);
+      const hiddenPeer = focused.panes.find((pane) => pane.paneId === horizontalA.paneId);
+      runner.assert(
+        focused.workspace?.view?.maximizedPaneId === workspaceA.firstPane.paneId,
+        `Focus mode did not maximize ${workspaceA.firstPane.paneId}: ${JSON.stringify(focused, null, 2)}`,
+        focused.workspace?.view,
+      );
+      runner.assert(
+        focused.sidebarItem?.bounds?.width === 0,
+        `Focus mode left the sidebar visible: ${JSON.stringify(focused.sidebarItem, null, 2)}`,
+        focused.sidebarItem,
+      );
+      runner.assert(
+        focusedPane?.bounds?.width > 0 && hiddenPeer?.bounds == null,
+        `Focus mode did not isolate the selected agent: ${JSON.stringify(focused.panes, null, 2)}`,
+        focused.panes,
+      );
+
+      const shot = await client.request('capture_screenshot_data', { selector: '.app' });
+      fs.writeFileSync(path.join(runner.runDir, 'focus-mode.png'), Buffer.from(shot.pngBase64, 'base64'));
+      await hold();
+
+      await client.request('dom_click', { selector: '.workspace-focus-exit' });
+      const restoredSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const restored = restoredSnapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      if (!restored) {
+        throw new Error(`Restored session ${workspaceA.sessionId} is missing from the structured snapshot`);
+      }
+      const restoredPane = restored.panes.find((pane) => pane.paneId === workspaceA.firstPane.paneId);
+      const restoredPeer = restored.panes.find((pane) => pane.paneId === horizontalA.paneId);
+      runner.assert(
+        restored.workspace?.view?.maximizedPaneId == null,
+        `Focus mode remained active after exit: ${JSON.stringify(restored.workspace?.view, null, 2)}`,
+        restored.workspace?.view,
+      );
+      runner.assert(
+        restored.sidebarItem?.bounds?.width > 0,
+        `Focus mode did not restore the sidebar: ${JSON.stringify(restored.sidebarItem, null, 2)}`,
+        restored.sidebarItem,
+      );
+      runner.assert(
+        restoredPane?.bounds?.width > 0 && restoredPeer?.bounds?.width > 0,
+        `Focus mode did not restore both panes: ${JSON.stringify(restored.panes, null, 2)}`,
+        restored.panes,
+      );
+      await hold();
+      focusModeReceipt = {
+        focusedPaneId: focused.workspace.view.maximizedPaneId,
+        focusedSidebarWidth: focused.sidebarItem.bounds.width,
+        restoredSidebarWidth: restored.sidebarItem.bounds.width,
+        restoredPaneIds: restored.panes.filter((pane) => pane.bounds?.width > 0).map((pane) => pane.paneId),
+      };
+    });
+
+    await runner.step('selecting_another_workspace_clears_agent_focus_mode', async () => {
+      await client.request('dom_click', {
+        selector: `[data-testid="focus-pane-${workspaceA.firstPane.paneId}"]`,
+      });
+      await client.request('select_session', { sessionId: workspaceB.sessionId });
+      await client.request('select_session', { sessionId: workspaceA.sessionId });
+      const snapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const returned = snapshot.sessions.find((session) => session.id === workspaceA.sessionId);
+      runner.assert(
+        returned?.workspace?.view?.maximizedPaneId == null && returned?.sidebarItem?.bounds?.width > 0,
+        `Returning to the workspace restored stale focus mode: ${JSON.stringify(returned, null, 2)}`,
+        returned?.workspace?.view,
+      );
+      runner.assert(
+        [workspaceA.firstPane.paneId, horizontalA.paneId].every((paneId) =>
+          returned?.panes.some((pane) => pane.paneId === paneId && pane.bounds?.width > 0)),
+        `Returning to the workspace did not restore both panes: ${JSON.stringify(returned?.panes, null, 2)}`,
+        returned?.panes,
+      );
+      focusModeReceipt.returnedSidebarWidth = returned.sidebarItem.bounds.width;
+      await hold();
+    });
+
     const result = await runner.finishSuccess({
       workspaceA: {
         firstSessionId: workspaceA.sessionId,
@@ -363,6 +448,7 @@ async function main() {
         remainingSplitSessionId: horizontalA.runtimeId,
       },
       workspaceB: { firstSessionId: workspaceB.sessionId, closedSplitSessionId: splitB.runtimeId },
+      focusMode: focusModeReceipt,
       tokens: [tokenA1, tokenA2, tokenA3, tokenB1, tokenB2],
     });
     console.log('[RealAppHarness] Workspace switching passed.');

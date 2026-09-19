@@ -157,6 +157,7 @@ model AutomationProvenance {
 
 model SessionUsageModel {
   `model`: string;
+  purpose: string;              // Whose work this row is: "agent" for the session's own turns, "guardian" for the reviewer attn runs beside it. Rows written before purposes existed read as "agent".
   input_tokens: safeint;
   output_tokens: safeint;
   cache_read_tokens: safeint;
@@ -175,6 +176,12 @@ model SessionUsage {
   has_unpriced_usage: boolean;
   measurement_incomplete?: boolean;
   models: SessionUsageModel[];
+}
+
+model SessionDelegationRole {
+  name: string;
+  builtin?: BuiltinDelegationRole;
+  icon?: string;
 }
 
 model Session {
@@ -201,6 +208,7 @@ model Session {
   seed_id?: string;             // The seed this session reports to: the crown a delegation was dispatched at, or the seed planted for it. Read from the session's dispatch record at broadcast, never stored on the session — the record is the single answer to what a session reports to. Absent for a session no delegation bound.
   dispatcher_session_id?: string; // The live session for this session's dispatcher, resolved from its dispatch record at broadcast and never stored on the session. Absent when nothing resolves.
   dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
+  delegation_role?: SessionDelegationRole;
   nudge_fires_at?: string;      // ISO timestamp a pending ticket-nudge countdown will fire; absent when paused (active session) or no countdown
   turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief, pinned, muted); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
@@ -1020,6 +1028,7 @@ model DelegationChoice {
 
 model DelegationRole {
   id: string;
+  builtin?: BuiltinDelegationRole;
   name: string;
   icon: string;
   enabled: boolean;
@@ -1030,6 +1039,13 @@ model DelegationRole {
   choices: DelegationChoice[];
 }
 
+enum BuiltinDelegationRole {
+  pathfinder,
+  builder,
+  reviewer,
+  orchestrator,
+}
+
 model DelegationFallback {
   selection: DelegationSelection;
   instructions: string;
@@ -1038,6 +1054,7 @@ model DelegationFallback {
 model DelegationPreferences {
   enabled: boolean;
   revision: safeint;
+  workflow_skill_enabled: boolean;
   roles: DelegationRole[];
   fallback: DelegationFallback;
 }
@@ -1078,6 +1095,7 @@ model DelegationPreferencesSaveMessage {
   cmd: "delegation_preferences_save";
   request_id: string;
   preferences: DelegationPreferences;
+  install_workflow_skill?: boolean;
 }
 
 model DelegationPreferencesResultMessage {
@@ -1087,6 +1105,8 @@ model DelegationPreferencesResultMessage {
   error?: string;
   preferences?: DelegationPreferences;
   templates?: DelegationRole[];
+  expanded_roles?: DelegationRole[];
+  workflow_skill_paths?: string[];
   harnesses?: DelegationHarness[];
 }
 
@@ -1121,32 +1141,53 @@ model DelegationRolesResult {
   guidance: string;
 }
 
+enum DelegateAssignmentKind {
+  new,
+  seed,
+}
+
+model DelegateHandover {
+  note?: string;
+}
+
+model DelegateAssignment {
+  kind: DelegateAssignmentKind;
+  brief?: string;
+  seed_id?: string;
+  handover?: DelegateHandover;
+}
+
+enum DelegateCheckoutKind {
+  reuse,
+  new_worktree,
+  existing_branch_worktree,
+}
+
+model DelegateCheckout {
+  kind: DelegateCheckoutKind;
+  branch: string;
+  from?: string;
+  path?: string;
+}
+
 model DelegateMessage {
   cmd: "delegate";
   request_id: string; // Stable caller-supplied idempotency key for one logical delegation
-  source_session_id: string;
-  brief: string; // Empty only when ticket_id supplies the task source
-  ticket_id?: string; // Existing ticket to adopt; mutually exclusive with brief
-  confirm?: boolean; // Allow takeover when the ticket has a non-orphan assignee
+  source_session_id?: string;
+  assignment: DelegateAssignment;
+  cwd: string;
+  checkout?: DelegateCheckout;
   agent?: string;
   label?: string;
   yolo_mode?: boolean;
-  placement?: string;
-  workspace_id?: string;
-  cwd?: string;
-  worktree?: DelegateWorktreeRequest;
   `model`?: string; // Pin the delegated agent's model (alias or full id); empty = agent default
   effort?: string; // Pin the delegated agent's reasoning effort; empty = agent default
   allow_worktree_reuse?: boolean; // Exceptional opt-in to share an existing worktree
-  plot?: string; // A crown to dispatch the delegate at: scope inference for its flag-free `ready` and launch priming, never a fence or an assignment
-  // A guarded transfer of one existing seed. The expected fields are the
-  // caller's read receipt; a changed seed is refreshed, never taken over.
-  handover?: SeedHandoverRequest;
   role?: string;
   choice?: string;
   fallback?: boolean;
-  preferences_revision?: safeint;
   provider?: string;
+  review?: SeedReviewActionContext;
 }
 
 model SeedHandoverRequest {
@@ -1155,8 +1196,8 @@ model SeedHandoverRequest {
   expected_rev: safeint;
   expected_tender_session: string;
   expected_tender_member: string;
-  // Present only when Handover resolves one captured Review garden item.
   review?: SeedReviewActionContext;
+  note_id?: string; // Reserved recovery identity for a new handoff note.
 }
 
 model DelegateStatusMessage {
@@ -2206,6 +2247,12 @@ model SpawnSessionMessage {
   // session alone. Persisted with the launch intent, so a revive or a reload
   // relaunches on the choice that was made rather than on today's default.
   auto_mode?: boolean;
+  // Per-session override of the daemon's auto-mode `approval_policy` /
+  // `sandbox_mode`, for an agent whose driver advertises `auto_mode`. Absent
+  // means "follow the daemon config"; the values are the same sets as the
+  // auto-mode config carries. Each may be given without the other.
+  approval_policy?: string;
+  sandbox_mode?: string;
   chief_of_staff?: boolean;    // Launch this session already holding the chief role (guidance injected at first spawn)
   spawned_from?: string;       // The session this one was split from. Consulted only for agent "shell": the daemon resolves it to the owning agent session and stores that as the satellite's parent.
   initial_prompt?: string;
@@ -3819,7 +3866,7 @@ model AutomationRunSummary {
   state: string;
   last_error?: string;
   cancel_reason?: string;
-  ticket_id?: string;
+  seed_id?: string;
   session_id?: string;
   pane_id?: string;
   created_at: string;
@@ -4603,11 +4650,6 @@ model Seed {
   "template": boolean;
   "gate": boolean;
   "vars": SeedVar[];
-  // Optional fallback for reopening a conversation that has no garden dispatch
-  // record. These three fields are written and cleared as one identity.
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
   // Detailed reads only. Garden snapshots omit this filesystem-sensitive
   // projection so opening the Garden never stats every saved directory.
   "continuation"?: SeedContinuation;
@@ -4642,11 +4684,12 @@ model SeedHarvestCondition {
   "set_at": string;
   "set_by_session"?: string;
   "set_by_member"?: string;
+  "checked_at"?: string;
 }
 
 model SeedContinuation {
   "execution_id": string;
-  // execution | legacy
+  // execution
   "source": string;
   "session_live": boolean;
   "native_conversation_id"?: string;
@@ -4714,9 +4757,6 @@ model SeedPlantMessage {
   "discovered_from"?: string;
   // The crew member planting, free-string until the crew primitive lands.
   "member"?: string;
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
 }
 
 model SeedPlantResult {
@@ -4852,21 +4892,6 @@ model SeedEditMessage {
 }
 
 model SeedEditResult {
-  "seed": Seed;
-}
-
-// Set or clear the seed-owned fallback identity used when no dispatch record
-// survives. The identity is atomic: all three values, or clear=true.
-model SeedSetResumeMessage {
-  "cmd": "seed_set_resume";
-  "seed_id": string;
-  "resume_session_id"?: string;
-  "resume_cwd"?: string;
-  "resume_agent"?: string;
-  "clear"?: boolean;
-}
-
-model SeedSetResumeResult {
   "seed": Seed;
 }
 
@@ -5096,6 +5121,9 @@ model SeedTransitionResult {
   // is the one move whose answer has to prime the tender. The other four are
   // fate calls and nobody is picking the seed up.
   "handoff"?: SeedNote;
+  // What the close set free, on harvest and wither alone: the seeds this one
+  // was the last blocker of. Absent when the move freed nothing.
+  "unblocked"?: Seed[];
 }
 
 // One entry on a seed's log: what happened and what was learned, written for
@@ -5141,8 +5169,9 @@ model SeedNoteMessage {
   // Omitted is a plain log entry, so a caller that never heard of kinds
   // writes a note. An unknown kind is refused, naming the whole set.
   "kind"?: string;
-  // Ring the seed's watchers after the note commits. Ordinary notes stay
-  // silent; ringing is the author's explicit request for eyes.
+  // Ring the seed's current tender and covering watchers after the note
+  // commits, excluding the session that caused it. Ordinary notes stay silent;
+  // ringing is the author's explicit request for eyes.
   "ring"?: boolean;
   // Required on attach and detach, refused on every other kind. When the body
   // is empty the daemon renders one from this reference.
@@ -5925,17 +5954,69 @@ model AppRollbackResult {
 // human in the app is the trust boundary no CLI caller can fake. An agent must
 // not be able to write its own leash.
 
+model GuardianSelection {
+  provider?: string;
+  "model"?: string;
+  effort?: string;
+}
+
 model AutoModeConfigInfo {
+  guardian?: GuardianSelection;
   "enabled_default": boolean;
+  // "untrusted" | "on-request" | "never".
+  "approval_policy": string;
+  // "read-only" | "workspace-write" | "danger-full-access".
+  "sandbox_mode": string;
   "environment": AutoModeEnvironmentInfo;
-  "allow": string[];
-  "hard_deny": string[];
-  // The subset of "hard_deny" auto mode ships with rather than a human adding:
-  // resolved in at read, never stored, and not removable. It names this
-  // daemon's own WebSocket port, so a client cannot derive it and has to be
-  // told which entries are built-in.
-  "shipped_hard_deny": string[];
-  "models": string[];
+  "rules": AutoModeRuleInfo[];
+  // The subset of "rules" attn ships rather than a human adding: resolved in at
+  // read, never stored, and not removable. They are what stops a session under
+  // auto mode from rewriting its own policy.
+  "shipped_rules": AutoModeRuleInfo[];
+  "network": AutoModeNetworkInfo;
+  // The subset of network.denied_domains attn ships. It names this daemon's own
+  // WebSocket port, so a client cannot derive it and has to be told.
+  "shipped_denied_domains": string[];
+  // Old allow/hard-deny globs the migration could not turn into a prefix rule.
+  // Nothing enforces them; settings shows them so the user can rewrite them.
+  "legacy_patterns": string[];
+  // The named pairs a client offers instead of two raw dropdowns. Static, and
+  // resolved at read time like the shipped rules, so no client keeps a copy.
+  "presets": AutoModePresetInfo[];
+}
+
+// One named approval policy and sandbox mode pair. "id" is what a launcher
+// names on the CLI; the pair is what reaches spawn_session and delegate.
+model AutoModePresetInfo {
+  "id": string;
+  "label": string;
+  "description": string;
+  "approval_policy": string;
+  "sandbox_mode": string;
+}
+
+// One Codex prefix rule. "pattern" is the command's leading tokens, and each
+// token is the list of alternatives that token accepts - a token with one
+// alternative is a literal. "match" and "not_match" are pi's own example
+// commands, carried through untouched; pi checks them when it loads the rules.
+model AutoModeRuleInfo {
+  "pattern": string[][];
+  // "allow" | "prompt" | "forbidden".
+  "decision": string;
+  "sandbox": string;
+  // Required for a forbidden rule: it is the text the agent is given.
+  "justification": string;
+  "match": string[][];
+  "not_match": string[][];
+}
+
+model AutoModeNetworkInfo {
+  "enabled": boolean;
+  "allowed_domains": string[];
+  "denied_domains": string[];
+  // Off by default. With it off the driver's proxy hard denies a host that
+  // resolves to a loopback or private address, whoever allowed the name.
+  "allow_local_binding": boolean;
 }
 
 model AutoModeEnvironmentSlot {
@@ -5959,15 +6040,21 @@ model AutoModeEnvironmentSlotValue {
   "values": string[];
 }
 
-// One proposed change awaiting a human. "value" is a pattern for allow/deny and
-// a comma-separated ordered list of `provider/id` for model, which promotion
+// One proposed change awaiting a human. "kind" says what "value" carries, and
+// promotion applies it as the matching app-only command would:
+//   "rule"        the rule's JSON, {"pattern":..,"decision":..,..}
+//   "rule_remove" {"pattern":..}, the prefix of the rule to take away
+//   "host"        {"host":..,"decision":..}
+//   "host_remove" the same pair, naming the entry to drop
+//   "policy"      {"approval_policy"?,"sandbox_mode"?,"allow_local_binding"?}
 model AutoModeProposalInfo {
   "id": safeint;
-  // "allow" | "deny" | "model".
   "kind": string;
-  // "classifier" | "escalation" for a model proposal; empty otherwise.
+  // Always empty: no kind takes a target.
   "target": string;
   "value": string;
+  // "value" read back as one line, for a list a human scans.
+  "summary": string;
   // Who proposed it, when the caller said. Empty when nobody did.
   "proposed_by": string;
   // "pending" | "promoted" | "discarded".
@@ -5985,19 +6072,22 @@ model AutoModeDenialInfo {
   // The blocked call in one line — the same text the model was given.
   "signature": string;
   "reason": string;
-  // Who decided: a static envelope rule, the classifier layer that answered
-  // ("classifier-2a" | "classifier-2b"), "classifier-unavailable" when no
-  // classifier model could be reached, or "circuit-breaker".
+  // Who decided: the prefix rule that matched, the reviewer that answered, or
+  // "circuit-breaker".
   "rule": string;
   "created_at": string;
 }
 
 model AutoModeShowMessage {
   "cmd": "automode_show";
+  "cwd"?: string;
 }
 
 model AutoModeShowResult {
   "config": AutoModeConfigInfo;
+  "global_rules": AutoModeRuleInfo[];
+  "repository_rules": AutoModeRuleInfo[];
+  "repository_rules_path"?: string;
   // Everything still pending, oldest first.
   "proposals": AutoModeProposalInfo[];
 }
@@ -6019,8 +6109,8 @@ model AutoModeEnvResult {
   "environment": AutoModeEnvironmentInfo;
 }
 
-// Record a proposal. Refused at submission when it could never be promoted — a
-// broad allow pattern most of all, mirroring the pi-side config loader.
+// Record a proposal. Refused at submission when it could never be promoted: a
+// value that is not the JSON of a rule or of a host amendment.
 model AutoModeProposeMessage {
   "cmd": "automode_propose";
   "kind": string;
@@ -6091,79 +6181,82 @@ model AutoModePromoteResultMessage {
   config?: AutoModeConfigInfo;
 }
 
-// Add one pattern to the allow or hard-deny list, or take one out. App-only,
-// for the same reason promotion is: the lists decide what a session may do
-// without asking, so only a human at the trust boundary edits them. An agent
-// reaching the unix socket still has nothing but `automode_propose`.
+// Write a rule, a host or the policy itself. Every one of these is app-only,
+// for the same reason promotion is: a rule decides what a session may do
+// without asking, so only a human at the trust boundary writes one. Removal is
+// no different from adding - `attn automode rule remove` on the unix socket
+// records a rule_remove proposal, and a human promotes it here.
 //
-// "list" is "allow" or "hard_deny", naming the field in AutoModeConfigInfo. A
-// removal names the pattern rather than an index, because the hard-deny list a
-// client renders has the shipped entries resolved into it and an index into
-// that list is not an index into what is stored.
-model AutoModePatternAddMessage {
-  cmd: "automode_pattern_add";
-  list: string;
-  pattern: string;
+// "pattern" is the command's leading tokens, one token per entry. A removal
+// names the pattern rather than an index, because the list a client renders has
+// the shipped rules resolved into it and an index into that is not an index
+// into what is stored. Re-adding a pattern that is already there replaces it,
+// so a rule keeps one decision.
+model AutoModeRuleAddMessage {
+  cmd: "automode_rule_add";
+  pattern: string[];
+  // Absent means "allow", Codex's default.
+  decision?: string;
+  sandbox?: string;
+  justification?: string;
   request_id: string;
 }
 
-model AutoModePatternRemoveMessage {
-  cmd: "automode_pattern_remove";
-  list: string;
+// App-only, like every other config write: on the unix socket `attn automode
+// rule remove` records a rule_remove proposal instead. "pattern" carries the
+// whole prefix - one entry per token, each the alternatives that token accepts,
+// as AutoModeRuleInfo writes it - because the prefix identifies the rule.
+model AutoModeRuleRemoveMessage {
+  cmd: "automode_rule_remove";
+  pattern: string[][];
+  request_id?: string;
+}
+
+// Drop one entry from legacy_patterns. Nothing enforces those, so this only
+// takes the reminder out of the list once its rule is in place.
+model AutoModeLegacyDismissMessage {
+  cmd: "automode_legacy_dismiss";
   pattern: string;
+  request_id?: string;
+}
+
+model AutoModeHostAddMessage {
+  cmd: "automode_host_add";
+  host: string;
+  // "allow" | "deny". A host holds one decision; this replaces the other.
+  decision: string;
   request_id: string;
 }
 
-// Both edits answer with the config they produced, so the section re-renders
-// from what the daemon stored rather than from what it hoped it stored.
-model AutoModePatternResultMessage {
-  event: "automode_pattern_result";
+model AutoModeHostRemoveMessage {
+  cmd: "automode_host_remove";
+  host: string;
+  decision: string;
+  request_id?: string;
+}
+
+// Naming neither field is refused rather than silently doing nothing.
+model AutoModePolicySetMessage {
+  cmd: "automode_policy_set";
+  guardian?: GuardianSelection;
+  approval_policy?: string;
+  sandbox_mode?: string;
+  allow_local_binding?: boolean;
+  request_id?: string;
+}
+
+// Every config edit answers with the config it produced, so the section
+// re-renders from what the daemon stored rather than what it hoped it stored.
+model AutoModeConfigResultMessage {
+  event: "automode_config_result";
   request_id: string;
   success: boolean;
   error?: string;
   config?: AutoModeConfigInfo;
 }
 
-model AutoModeModelSetMessage {
-  cmd: "automode_model_set";
-  models: string[];
-  request_id: string;
-}
-
-model AutoModeModelSetResultMessage {
-  event: "automode_model_set_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  config?: AutoModeConfigInfo;
-}
-
-model AutoModeModelsMessage {
-  cmd: "automode_models";
-  request_id: string;
-}
-
-model AutoModeCatalogModel {
-  id: string;
-  name?: string;
-  context_window?: safeint;
-}
-
-model AutoModeModelProvider {
-  provider: string;
-  ready: boolean;
-  detail?: string;
-  checked_at?: safeint;
-  models: AutoModeCatalogModel[];
-}
-
-model AutoModeModelsResultMessage {
-  event: "automode_models_result";
-  request_id: string;
-  success: boolean;
-  error?: string;
-  providers?: AutoModeModelProvider[];
-  problem?: string;
+model AutoModeConfigResult {
+  "config": AutoModeConfigInfo;
 }
 
 // Close a pending proposal without applying it. App-only for symmetry: the
@@ -6269,7 +6362,6 @@ model Response {
   seed_search_result?: SeedSearchResult;
   seed_show_result?: SeedShowResult;
   seed_edit_result?: SeedEditResult;
-  seed_set_resume_result?: SeedSetResumeResult;
   seed_artifact_transfer_result?: SeedArtifactTransferResult;
   seed_transition_result?: SeedTransitionResult;
   seed_send_to_chief_result?: SeedSendToChiefResult;
@@ -6300,6 +6392,7 @@ model Response {
   app_watch_result?: AppWatchResult;
   automode_show_result?: AutoModeShowResult;
   automode_env_result?: AutoModeEnvResult;
+  automode_config_result?: AutoModeConfigResult;
   automode_propose_result?: AutoModeProposeResult;
   automode_denials_result?: AutoModeDenialsResult;
 }
@@ -6941,18 +7034,29 @@ model SessionReopenResult {
 }
 
 model DelegateResult {
+  seed_id: string;
   session_id: string;
-  workspace_id: string;
+  workspace_id?: string; // Internal pane placement; CLI output does not depend on it.
   directory: string;
   branch?: string;
-  placement: string;
-  worktree_created?: boolean;
+  checkout: string; // reused | created
+  worktree_created?: boolean; // Compatibility for internal UI projections.
+  role?: string;
+  agent: string;
+  `model`: string;
+  effort: string;
+  predecessor_session_id?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;
   // Why the first turn is unconfirmed: the wait hit its limit. Names the limit
   // and where to look. Absent when first_turn_at is set.
   first_turn_unconfirmed?: string;
+}
+
+model DelegationFailure {
+  code: string;
+  message: string;
 }
 
 enum DelegationOperationState {
@@ -6968,10 +7072,15 @@ model DelegationOperation {
   state: DelegationOperationState;
   progress: string;
   session_id: string;
-  workspace_id?: string;
-  ticket_id?: string;
+  seed_id?: string;
+  directory?: string;
+  branch?: string;
   worktree_path?: string;
   result?: DelegateResult;
+  failure?: DelegationFailure;
+  // Historical operation fields remain readable after the protocol upgrade.
+  workspace_id?: string;
+  ticket_id?: string;
   error?: string;
   created_at: string;
   updated_at: string;
@@ -7039,6 +7148,7 @@ model Task {
   attempts: int32;
   next_attempt_at: string;
   last_error?: string;
+  last_diagnostic?: string;
   created_at: string;
   updated_at: string;
 }
@@ -7137,6 +7247,12 @@ enum NotificationSeverity {
   critical,
 }
 
+model NotificationAction {
+  kind: string;
+  label: string;
+  target_id: string;
+}
+
 model Notification {
   id: string;
   kind: string;
@@ -7144,6 +7260,11 @@ model Notification {
   title: string;
   body: string;
   detail: string;
+  trigger: string;
+  impact: string;
+  cause: string;
+  diagnostic: string;
+  actions?: NotificationAction[];
   source_kind: string;
   source_id: string;
   created_at: string;
@@ -7655,9 +7776,7 @@ alias DaemonEvent =
   | DocSubscriptionEndedMessage
   | AutoModeStateResultMessage
   | AutoModePromoteResultMessage
-  | AutoModePatternResultMessage
-  | AutoModeModelSetResultMessage
-  | AutoModeModelsResultMessage
+  | AutoModeConfigResultMessage
   | AutoModeDiscardResultMessage
   | AutoModeEnvSetResultMessage
   | AutoModeStateChangedMessage;

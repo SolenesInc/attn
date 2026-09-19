@@ -49,17 +49,18 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 	updated := time.Date(2026, 6, 14, 9, 15, 0, 0, time.UTC)
 	secret := "/Users/victor/.claude/transcripts/SUPER-SECRET-PATH.jsonl"
 	task := &jobs.Job{
-		ID:          "job-1",
-		Kind:        testTaskKind,
-		UniqueKey:   "ws-1",
-		State:       jobs.StateFailed,
-		Attempts:    3,
-		ScheduledAt: next,
-		LastError:   "boom",
-		CreatedAt:   created,
-		UpdatedAt:   updated,
-		Payload:     []byte(`{"transcript_path":"` + secret + `"}`),
-		Result:      []byte(`{"wrote":"` + secret + `"}`),
+		ID:             "job-1",
+		Kind:           testTaskKind,
+		UniqueKey:      "ws-1",
+		State:          jobs.StateFailed,
+		Attempts:       3,
+		ScheduledAt:    next,
+		LastError:      "boom",
+		LastDiagnostic: "stderr: auth failed",
+		CreatedAt:      created,
+		UpdatedAt:      updated,
+		Payload:        []byte(`{"transcript_path":"` + secret + `"}`),
+		Result:         []byte(`{"wrote":"` + secret + `"}`),
 	}
 
 	pt := taskToProtocol(task)
@@ -82,6 +83,9 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 	if pt.LastError == nil || *pt.LastError != "boom" {
 		t.Fatalf("last_error = %v, want ptr to %q", pt.LastError, "boom")
 	}
+	if pt.LastDiagnostic == nil || *pt.LastDiagnostic != "stderr: auth failed" {
+		t.Fatalf("last_diagnostic = %v", pt.LastDiagnostic)
+	}
 
 	raw, err := json.Marshal(pt)
 	if err != nil {
@@ -97,7 +101,8 @@ func TestTaskToProtocolMapsFieldsAndOmitsPayload(t *testing.T) {
 	}
 
 	task.LastError = ""
-	if got := taskToProtocol(task); got.LastError != nil {
+	task.LastDiagnostic = ""
+	if got := taskToProtocol(task); got.LastError != nil || got.LastDiagnostic != nil {
 		t.Fatalf("empty last_error = %v, want nil pointer", got.LastError)
 	}
 }

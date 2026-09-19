@@ -20,7 +20,6 @@ import {
   stopDaemon,
 } from './perfMeasure.mjs';
 
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const options = parseCommonArgs(process.argv.slice(2));
 const profile = currentHarnessProfile();
 if (!profile) throw new Error('Crew management verification requires a named profile');
@@ -33,7 +32,7 @@ const runner = createScenarioRunner(options, {
 const resources = resolveHarnessResources(profile);
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
-const driver = createWindowDriver({ appPath: options.appPath });
+const driver = createWindowDriver({ appPath: options.appPath, client });
 const memberSuffix = runner.runId.replace(/[^a-z0-9]/gi, '').toLowerCase().slice(-6);
 const awake = `alder-${memberSuffix}`;
 const asleep = `keel-${memberSuffix}`;
@@ -96,7 +95,6 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
 }
 
 async function screenshot(name) {
-  await driver.activateApp();
   await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
   await hold();
 }
@@ -116,7 +114,6 @@ async function sampleIdle(webkitBaseline) {
 }
 
 async function pressEscapeAndWaitFor(testId) {
-  await driver.activateApp();
   await driver.pressKeyCode(53);
   return waitForDom(`[data-testid="${testId}"]`, { focused: true });
 }
@@ -226,7 +223,6 @@ try {
   runner.assert(dashboardSessions.activeSessionId === null,
     'Crew opens from the dashboard without a placement session', dashboardSessions);
   const workspaceIdle = await sampleIdle(webkitBaseline);
-  await driver.activateApp();
 
   const plot = json(['seed', 'plant', `Crew verification plot ${memberSuffix}`, '-m', 'The planted list opens this plot in the native workspace tile.', '--member', awake, '--session', firstSession, '--json']);
   crewPlot = plot.id;
@@ -282,7 +278,6 @@ try {
     await type('[data-testid="crew-seed-search"]', `Crew verification plot ${memberSuffix}`);
     await screenshot('01-crew-seeds.png');
 
-    await driver.activateApp();
     await client.request('dom_focus', { selector: `[data-testid="crew-seed-${crewPlot}"]` });
     const activation = await client.request('dom_key', { selector: `[data-testid="crew-seed-${crewPlot}"]`, key: 'Enter' });
     runner.assert(activation.handled, 'the focused seed row handles Return', activation);

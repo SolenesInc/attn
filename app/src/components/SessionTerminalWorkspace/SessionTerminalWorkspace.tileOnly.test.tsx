@@ -147,4 +147,39 @@ describe('SessionTerminalWorkspace tile-only (sessionless) rendering', () => {
 
     expect(browserTileProps.current?.visible).toBe(false);
   });
+
+  it('renders a failed layout pane without requiring a synthetic session', () => {
+    const workspace: TerminalWorkspaceState = {
+      agents: [{
+        id: 'pane-failed',
+        runtimeId: 'closed-session',
+        sessionId: 'closed-session',
+        title: 'Failed reviewer',
+        status: 'failed',
+        error: 'session is closing',
+      }],
+      layoutTree: { type: 'pane', paneId: 'pane-failed' },
+    };
+    render(
+      <SessionTerminalWorkspace
+        workspaceId="workspace-failed"
+        workspace={workspace}
+        workspaceSessions={[]}
+        activePaneId="pane-failed"
+        fontSize={13}
+        enabled
+        isActiveSession
+        eventRouter={createPaneRuntimeEventRouterController()}
+        onSplitPane={vi.fn()}
+        onClosePane={vi.fn()}
+        onFocusPane={vi.fn()}
+        onRenameSession={vi.fn()}
+        onNavigateOutOfSession={vi.fn()}
+      />,
+      { wrapper: NotebookSurfaceTestWrapper },
+    );
+
+    expect(screen.getByText('session is closing')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Rename session Failed reviewer' })).not.toBeInTheDocument();
+  });
 });

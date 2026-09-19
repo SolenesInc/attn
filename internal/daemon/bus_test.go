@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -61,7 +62,7 @@ func TestGardenMutationPublishesAFactAndPushesTheGardenOnce(t *testing.T) {
 	var pushes int
 	d.gardenBroadcastHook = func([]protocol.Seed, int) { pushes++ }
 
-	d.publishFact(FactGardenNoted, "s-1", nil)
+	d.publishFact(seedEvents.NameNoteAdded, "s-7k3f9m", seedEvents.NoteAddedPayload{NoteID: "n-7k3f9m"})
 
 	if pushes != 1 {
 		t.Fatalf("one fact produced %d garden pushes, want exactly 1", pushes)
@@ -74,10 +75,10 @@ func TestGardenMutationPublishesAFactAndPushesTheGardenOnce(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("log holds %d events, want 1", len(events))
 	}
-	if events[0].Name != FactGardenNoted {
-		t.Fatalf("fact name = %q, want %q", events[0].Name, FactGardenNoted)
+	if events[0].Name != seedEvents.NameNoteAdded {
+		t.Fatalf("fact name = %q, want %q", events[0].Name, seedEvents.NameNoteAdded)
 	}
-	if events[0].Subject != "s-1" {
+	if events[0].Subject != "s-7k3f9m" {
 		t.Fatalf("fact subject = %q, want the seed id", events[0].Subject)
 	}
 }
@@ -298,7 +299,7 @@ func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 	d.gardenBroadcastHook = func([]protocol.Seed, int) { pushes++ }
 
 	backing.setFail(errors.New("disk had a bad night"))
-	d.publishFact(FactGardenNoted, "s-1", nil)
+	d.publishFact(seedEvents.NameNoteAdded, "s-7k3f9m", seedEvents.NoteAddedPayload{NoteID: "n-7k3f9m"})
 
 	if pushes != 1 {
 		t.Fatalf("a committed mutation produced %d pushes while the bus append was failing, want 1", pushes)
@@ -312,7 +313,7 @@ func TestSnapshotStillPushesWhenTheBusAppendFails(t *testing.T) {
 	}
 
 	backing.setFail(nil)
-	d.publishFact(FactGardenNoted, "s-1", nil)
+	d.publishFact(seedEvents.NameNoteAdded, "s-7k3f9m", seedEvents.NoteAddedPayload{NoteID: "n-7k3f9m"})
 	if pushes != 2 {
 		t.Fatalf("garden pushes = %d after recovery, want 2", pushes)
 	}

@@ -31,10 +31,10 @@ func delegateForNotify(t *testing.T, d *Daemon, agent string) (chiefID, agentID 
 	}
 	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: chiefID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(chiefID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr(agent),
 	})
 	if err != nil {
@@ -76,10 +76,10 @@ func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chie
 	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
 	consumeDelegatedPrompt(t, backend)
 	for i, brief := range briefs {
-		result, err := d.delegate(&protocol.DelegateMessage{
+		result, err := d.delegateResolved(&resolvedDelegationLaunch{
 			Cmd:             protocol.CmdDelegate,
-			SourceSessionID: chiefID,
-			Brief:           brief,
+			SourceSessionID: protocol.Ptr(chiefID),
+			Brief:           protocol.Ptr(brief),
 			Agent:           protocol.Ptr(agent),
 			Label:           protocol.Ptr(fmt.Sprintf("delegate-%d", i)),
 		})
@@ -450,8 +450,7 @@ func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t 
 		t.Fatalf("durable ticket mailbox after countdown = %+v, %v", unread, err)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	if !d.applyState(sessionStateChange{
 		sessionID: sessionID,
 		state:     protocol.StateIdle,
@@ -459,7 +458,7 @@ func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t 
 	}) {
 		t.Fatal("idle state did not apply")
 	}
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
 	}
 	if !wasNudged(doorbell.pasted()) {

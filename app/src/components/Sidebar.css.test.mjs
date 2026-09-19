@@ -3,9 +3,10 @@ import { describe, it, expect } from 'vitest';
 
 // vitest stubs stylesheets away, so only the file on disk can be asserted on.
 const css = readFileSync('src/components/Sidebar.css', 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+const chainCss = readFileSync('src/components/DelegationChain.css', 'utf8');
 
-function ruleBody(selector) {
-  for (const [, selectors, body] of css.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
+function ruleBody(selector, source = css) {
+  for (const [, selectors, body] of source.matchAll(/([^{}]+)\{([^}]*)\}/g)) {
     if (selectors.split(',').some((one) => one.trim() === selector)) return body;
   }
   return null;
@@ -35,27 +36,22 @@ describe('sidebar pull request reveal', () => {
 });
 
 describe('sidebar delegation links', () => {
-  it('keeps the dispatcher line visible at rest', () => {
-    const line = ruleBody('.sidebar-dispatcher');
-    expect(line).toBeTruthy();
-    expect(line).not.toMatch(/opacity:\s*0\s*;/);
-    expect(line).not.toMatch(/max-width:\s*0\s*;/);
+  it('removes the dispatcher subtitle', () => {
+    expect(ruleBody('.sidebar-dispatcher')).toBeNull();
   });
 
-  it('uses the chief blue going up and the accent going down', () => {
-    expect(ruleBody('.session-item.kin-up')).toMatch(/rgba\(88,\s*166,\s*255,\s*0\.08\)/);
-    expect(ruleBody('.session-item.kin-up .sidebar-session-headline > .session-label'))
-      .toMatch(/color:\s*#79b8ff\s*;/);
-    expect(ruleBody('.session-item.kin-down')).toMatch(/var\(--accent\)/);
-    expect(ruleBody('.session-item.kin-down .sidebar-dispatcher'))
-      .toMatch(/color:\s*var\(--accent\)\s*;/);
+  it('does not highlight relatives in other rows', () => {
+    expect(css).not.toMatch(/\.kin-(up|down)/);
+    expect(chainCss).not.toMatch(/\.kin-(up|down)/);
+    expect(ruleBody('.delegation-chain-trigger:hover', chainCss)).toMatch(/background:\s*var\(--color-bg-button\)/);
   });
 
-  it('keeps the count chip compact', () => {
-    const chip = ruleBody('.sidebar-delegate-count');
-    expect(chip).toMatch(/min-width:\s*18px\s*;/);
-    expect(chip).toMatch(/height:\s*18px\s*;/);
-    expect(chip).toMatch(/border-radius:\s*999px\s*;/);
+  it('replaces the count chip with a compact role cue', () => {
+    expect(ruleBody('.sidebar-delegate-count')).toBeNull();
+    const cue = ruleBody('.delegation-chain-trigger--sidebar', chainCss);
+    expect(cue).toMatch(/width:\s*22px\s*;/);
+    expect(cue).toMatch(/height:\s*22px\s*;/);
+    expect(ruleBody('.delegation-chain-trigger', chainCss)).toMatch(/flex-shrink:\s*0\s*;/);
   });
 });
 

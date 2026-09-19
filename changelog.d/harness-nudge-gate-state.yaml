@@ -1,0 +1,3 @@
+kind: internal
+area: harness
+change: The countdown scenario reads the selected-session gate without sampling an unrelated turn state.

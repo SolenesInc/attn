@@ -1,0 +1,3 @@
+kind: internal
+area: tests
+change: Codex resume verification waits for the hook completion signal instead of polling process startup.

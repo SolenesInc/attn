@@ -257,6 +257,14 @@ func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.Sp
 	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
 }
 
+func (d *Daemon) handleSpawnSessionWithPolicyForeground(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
+	if rejection := d.runSpawnPipelineForeground(msg, policy); rejection != nil {
+		d.sendSpawnRejection(client, msg.ID, rejection)
+		return
+	}
+	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
+}
+
 func (d *Daemon) sendSpawnRejection(client *wsClient, sessionID string, rejection *spawnRejection) {
 	if rejection.commandError != "" {
 		d.sendCommandError(client, protocol.CmdSpawnSession, rejection.commandError)
@@ -277,6 +285,12 @@ func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent
 		Rows:        rows,
 		YoloMode:    protocol.Ptr(intent.YoloMode),
 		AutoMode:    intent.AutoMode,
+	}
+	if intent.ApprovalPolicy != "" {
+		spawnMsg.ApprovalPolicy = protocol.Ptr(intent.ApprovalPolicy)
+	}
+	if intent.SandboxMode != "" {
+		spawnMsg.SandboxMode = protocol.Ptr(intent.SandboxMode)
 	}
 	if intent.Executable != "" {
 		spawnMsg.Executable = protocol.Ptr(intent.Executable)
@@ -557,6 +571,25 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				_ = stream.Close()
 				return
 			}
+		case ptybackend.OutputEventKindResize:
+			wsEvent := &protocol.WebSocketEvent{
+				Event: protocol.EventPtyResized,
+				ID:    protocol.Ptr(sessionID),
+				Cols:  protocol.Ptr(int(event.Cols)),
+				Rows:  protocol.Ptr(int(event.Rows)),
+			}
+			if event.XPixel > 0 && event.YPixel > 0 {
+				wsEvent.Xpixel = protocol.Ptr(int(event.XPixel))
+				wsEvent.Ypixel = protocol.Ptr(int(event.YPixel))
+			}
+			payload, err := json.Marshal(wsEvent)
+			if err != nil {
+				continue
+			}
+			if !d.sendOutboundBlocking(client, outboundMessage{kind: messageKindText, payload: payload}, ptyOutputSendWait) {
+				_ = stream.Close()
+				return
+			}
 		case ptybackend.OutputEventKindDesync:
 			if d.debugLogging {
 				d.logf("pty_desync forward: id=%s reason=%s", sessionID, event.Reason)
@@ -678,14 +711,14 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		xpixel, ypixel = 0, 0
 	}
 	d.logf("pty_resize: id=%s cols=%d rows=%d xpixel=%d ypixel=%d", msg.ID, msg.Cols, msg.Rows, xpixel, ypixel)
-	changed, err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
+	result, err := d.ptyBackend.Resize(context.Background(), msg.ID, uint16(msg.Cols), uint16(msg.Rows), uint16(xpixel), uint16(ypixel))
 	if err != nil {
 		if shouldLogPtyCommandError(err) {
 			d.logf("pty_resize failed for %s: %v", msg.ID, err)
 		}
 		return
 	}
-	if !changed {
+	if result.StreamOrdered {
 		return
 	}
 	d.publishFact(FactSessionPTYResized, msg.ID, ptyGeometry{

@@ -149,7 +149,9 @@ func (d *Daemon) snoozeSuppressesTurn(sessionID string, state protocol.SessionSt
 }
 
 func (d *Daemon) registerSnoozeWakeHandler(runner *jobs.Runner) error {
-	return runner.Register(snoozeWakeKind, d.snoozeWakeHandler)
+	return d.registerTaskWithFailureRenderer(
+		runner, snoozeWakeKind, d.snoozeWakeHandler, jobs.HandlerConfig{}, d.renderSnoozeWakeFailure,
+	)
 }
 
 func (d *Daemon) enqueueSnoozeWake(sessionID string, deadline time.Time) error {

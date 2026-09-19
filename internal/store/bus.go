@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -32,6 +33,180 @@ func (s *Store) AppendBusEvent(e BusEvent, now time.Time) (int64, error) {
 		return 0, nil
 	}
 	return appendBusEventWith(s.db, e, now)
+}
+
+func (s *Store) AppendBusEventOnce(
+	sourceKind, sourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	return s.AppendBusEventOnceReplacingSource(sourceKind, sourceID, "", event, now)
+}
+
+func (s *Store) AppendBusEventOnceReplacingSource(
+	sourceKind, sourceID, replacedSourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(sourceKind) == "" || strings.TrimSpace(sourceID) == "" || strings.TrimSpace(event.Name) == "" {
+		return 0, false, fmt.Errorf("append bus event once: source kind, source id, and event name are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	seq, inserted, err := appendBusEventOnceReplacingSourceWith(tx, sourceKind, sourceID, replacedSourceID, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, inserted, nil
+}
+
+func appendBusEventOnceReplacingSourceWith(
+	tx *sql.Tx, sourceKind, sourceID, replacedSourceID string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	var existing int64
+	err := tx.QueryRow(`
+		SELECT event_seq FROM garden_seed_event_sources
+		WHERE source_kind=? AND source_id=? AND event_name=?
+	`, sourceKind, sourceID, event.Name).Scan(&existing)
+	if err == nil {
+		if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
+			return 0, false, err
+		}
+		return existing, false, nil
+	}
+	if err != sql.ErrNoRows {
+		return 0, false, err
+	}
+	seq, err := appendBusEventWith(tx, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO garden_seed_event_sources(source_kind, source_id, event_name, event_seq)
+		VALUES (?, ?, ?, ?)
+	`, sourceKind, sourceID, event.Name, seq); err != nil {
+		return 0, false, err
+	}
+	if err := deleteReplacedBusEventSource(tx, sourceKind, sourceID, replacedSourceID); err != nil {
+		return 0, false, err
+	}
+	return seq, true, nil
+}
+
+func deleteReplacedBusEventSource(tx *sql.Tx, sourceKind, sourceID, replacedSourceID string) error {
+	replacedSourceID = strings.TrimSpace(replacedSourceID)
+	if replacedSourceID == "" || replacedSourceID == sourceID {
+		return nil
+	}
+	_, err := tx.Exec(`DELETE FROM garden_seed_event_sources WHERE source_kind=? AND source_id=?`, sourceKind, replacedSourceID)
+	return err
+}
+
+func (s *Store) AppendGardenSeedArtifactObservation(
+	checksum string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(checksum) == "" || strings.TrimSpace(event.Name) == "" || strings.TrimSpace(event.Subject) == "" {
+		return 0, false, fmt.Errorf("append Garden seed artifact observation: checksum, event name, and subject are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var previousChecksum string
+	var previousSeq int64
+	err = tx.QueryRow(`
+		SELECT checksum, event_seq FROM garden_seed_artifact_observations WHERE seed_id=?
+	`, event.Subject).Scan(&previousChecksum, &previousSeq)
+	switch err {
+	case nil:
+		if previousChecksum == checksum {
+			return previousSeq, false, tx.Commit()
+		}
+	case sql.ErrNoRows:
+	default:
+		return 0, false, err
+	}
+	seq, err := appendBusEventWith(tx, event, now)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := upsertGardenSeedArtifactObservation(tx, event.Subject, checksum, seq, now); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, true, nil
+}
+
+func (s *Store) AppendGardenSeedArtifactTransferObservation(
+	sourceID, replacedSourceID, checksum string, event BusEvent, now time.Time,
+) (int64, bool, error) {
+	if strings.TrimSpace(sourceID) == "" || strings.TrimSpace(checksum) == "" ||
+		strings.TrimSpace(event.Name) == "" || strings.TrimSpace(event.Subject) == "" {
+		return 0, false, fmt.Errorf("append Garden seed artifact transfer observation: source id, checksum, event name, and subject are required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return 0, false, nil
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	seq, inserted, err := appendBusEventOnceReplacingSourceWith(
+		tx, "artifact_transfer", sourceID, replacedSourceID, event, now,
+	)
+	if err != nil {
+		return 0, false, err
+	}
+	if err := upsertGardenSeedArtifactObservation(tx, event.Subject, checksum, seq, now); err != nil {
+		return 0, false, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return seq, inserted, nil
+}
+
+func upsertGardenSeedArtifactObservation(tx *sql.Tx, seedID, checksum string, eventSeq int64, now time.Time) error {
+	_, err := tx.Exec(`
+		INSERT INTO garden_seed_artifact_observations(seed_id, checksum, event_seq, observed_at)
+		VALUES (?, ?, ?, ?)
+		ON CONFLICT(seed_id) DO UPDATE SET
+			checksum=excluded.checksum,
+			event_seq=excluded.event_seq,
+			observed_at=excluded.observed_at
+	`, seedID, checksum, eventSeq, formatTicketTime(now))
+	return err
+}
+
+func (s *Store) HasGardenSeedArtifactObservation(seedID string) (bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return false, nil
+	}
+	var present bool
+	err := s.db.QueryRow(`
+		SELECT EXISTS(SELECT 1 FROM garden_seed_artifact_observations WHERE seed_id=?)
+	`, seedID).Scan(&present)
+	return present, err
 }
 
 func appendBusEventWith(x execer, e BusEvent, now time.Time) (int64, error) {
@@ -278,7 +453,12 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 	if s.db == nil {
 		return 0, nil
 	}
-	res, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.Exec(`
 		DELETE FROM bus_events
 		WHERE created_at < ?
 		  AND seq <= COALESCE(
@@ -293,7 +473,21 @@ func (s *Store) TrimBusEvents(cutoff time.Time) (int, error) {
 		return 0, err
 	}
 	n, err := res.RowsAffected()
-	return int(n), err
+	if err != nil {
+		return 0, err
+	}
+	if _, err := tx.Exec(`
+		DELETE FROM garden_seed_event_receipts
+		WHERE NOT EXISTS (
+			SELECT 1 FROM bus_events WHERE bus_events.seq = garden_seed_event_receipts.event_seq
+		)
+	`); err != nil {
+		return 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
+	return int(n), nil
 }
 
 // CompactBusEvents keeps only the newest fact per subject among the named names, at or below

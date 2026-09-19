@@ -27,17 +27,18 @@ type Job struct {
 	Kind string `json:"kind"`
 	// Coalescing identity within a kind: a second Enqueue for the same kind+key
 	// targets the SAME record.
-	UniqueKey   string          `json:"unique_key,omitempty"`
-	Priority    int             `json:"priority,omitempty"`
-	Payload     json.RawMessage `json:"payload,omitempty"`
-	Result      json.RawMessage `json:"result,omitempty"`
-	State       State           `json:"state"`
-	Attempts    int             `json:"attempts"`
-	MaxAttempts int             `json:"max_attempts,omitempty"`
-	ScheduledAt time.Time       `json:"scheduled_at"`
-	LastError   string          `json:"last_error,omitempty"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	UniqueKey      string          `json:"unique_key,omitempty"`
+	Priority       int             `json:"priority,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	Result         json.RawMessage `json:"result,omitempty"`
+	State          State           `json:"state"`
+	Attempts       int             `json:"attempts"`
+	MaxAttempts    int             `json:"max_attempts,omitempty"`
+	ScheduledAt    time.Time       `json:"scheduled_at"`
+	LastError      string          `json:"last_error,omitempty"`
+	LastDiagnostic string          `json:"last_diagnostic,omitempty"`
+	CreatedAt      time.Time       `json:"created_at"`
+	UpdatedAt      time.Time       `json:"updated_at"`
 	// A coalescing Enqueue that arrived WHILE this job ran; finish() then returns it
 	// to queued so a mid-run trigger is never lost.
 	Requeued bool `json:"requeued,omitempty"`

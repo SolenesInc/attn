@@ -53,10 +53,10 @@ func TestTicketInboxConsumesByIdentity(t *testing.T) {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: chiefSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(chiefSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -156,10 +156,10 @@ func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 	}
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: creatorSessionID,
-		Brief:           "Plain delegated task.",
+		SourceSessionID: protocol.Ptr(creatorSessionID),
+		Brief:           protocol.Ptr("Plain delegated task."),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {
@@ -210,10 +210,10 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	}
 	consumeDelegatedPrompt(t, backend)
 
-	result, err := d.delegate(&protocol.DelegateMessage{
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: chiefSessionID,
-		Brief:           "Migrate the store to X",
+		SourceSessionID: protocol.Ptr(chiefSessionID),
+		Brief:           protocol.Ptr("Migrate the store to X"),
 		Agent:           protocol.Ptr("codex"),
 	})
 	if err != nil {

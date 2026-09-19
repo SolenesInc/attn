@@ -1,0 +1,1407 @@
+mod browser_alerts;
+mod browser_host;
+mod native_input;
+mod native_input_diagnostics;
+mod profile;
+mod ui_automation;
+
+use std::env;
+use std::io::{Read, Write};
+use std::net::{SocketAddr, TcpStream};
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use std::thread;
+use std::time::{Duration, Instant};
+
+static ENSURE_DAEMON_LOCK: Mutex<()> = Mutex::new(());
+
+fn daemon_socket_path() -> Option<PathBuf> {
+    if let Ok(path) = env::var("ATTN_SOCKET_PATH") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
+        }
+    }
+
+    Some(profile::data_dir().ok()?.join("attn.sock"))
+}
+
+fn daemon_pid_path() -> Option<PathBuf> {
+    let socket_path = daemon_socket_path()?;
+    Some(socket_path.parent()?.join("attn.pid"))
+}
+
+#[cfg(unix)]
+fn socket_is_live(path: &Path) -> bool {
+    use std::os::unix::net::UnixStream;
+    UnixStream::connect(path).is_ok()
+}
+
+#[cfg(not(unix))]
+fn socket_is_live(path: &Path) -> bool {
+    path.exists()
+}
+
+fn daemon_is_running_at(socket_path: &Path) -> bool {
+    if !socket_path.exists() {
+        return false;
+    }
+    socket_is_live(socket_path)
+}
+
+fn daemon_http_is_live(timeout: Duration) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], daemon_http_port()));
+    TcpStream::connect_timeout(&addr, timeout).is_ok()
+}
+
+#[derive(Debug, serde::Deserialize, Default)]
+struct DaemonHealth {
+    #[serde(default)]
+    status: String,
+}
+
+fn resolve_daemon_binary() -> Result<PathBuf, String> {
+    if let Ok(path) = env::var("ATTN_DAEMON_BINARY") {
+        let trimmed = path.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    let bundled_path = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.join("attn")));
+    if let Some(ref path) = bundled_path {
+        if path.exists() {
+            return Ok(path.clone());
+        }
+    }
+    Err("No bundled daemon binary found. Reinstall attn.app.".into())
+}
+
+fn spawn_daemon(bin_path: &Path) -> Result<(), String> {
+    Command::new(bin_path)
+        .env("ATTN_WRAPPER_PATH", bin_path)
+        .arg("daemon")
+        .spawn()
+        .map_err(|e| format!("Failed to start daemon: {}", e))?;
+    Ok(())
+}
+
+fn run_daemon_ensure(bin_path: &Path) -> Result<String, String> {
+    let child = Command::new(bin_path)
+        .arg("daemon")
+        .arg("ensure")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            format!(
+                "Failed to run daemon ensure with {}: {}",
+                bin_path.display(),
+                e
+            )
+        })?;
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("Failed while waiting for daemon ensure: {}", e))?;
+    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+
+    if !output.status.success() {
+        let stderr = stderr.trim();
+        return Err(if stderr.is_empty() {
+            "daemon ensure failed".to_string()
+        } else {
+            format!("daemon ensure failed: {}", stderr)
+        });
+    }
+
+    Ok(stdout)
+}
+
+fn daemon_http_port() -> u16 {
+    env::var("ATTN_WS_PORT")
+        .ok()
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port > 0)
+        .unwrap_or(9849)
+}
+
+fn fetch_daemon_health(timeout: Duration) -> Result<DaemonHealth, String> {
+    let addr = SocketAddr::from(([127, 0, 0, 1], daemon_http_port()));
+    let mut stream = TcpStream::connect_timeout(&addr, timeout)
+        .map_err(|e| format!("connect /health: {}", e))?;
+    stream
+        .set_read_timeout(Some(timeout))
+        .map_err(|e| format!("set /health read timeout: {}", e))?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .map_err(|e| format!("set /health write timeout: {}", e))?;
+    stream
+        .write_all(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+        .map_err(|e| format!("write /health request: {}", e))?;
+    stream
+        .flush()
+        .map_err(|e| format!("flush /health request: {}", e))?;
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .map_err(|e| format!("read /health response: {}", e))?;
+
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .ok_or_else(|| "invalid /health response".to_string())?;
+    let body = &response[split + 4..];
+    serde_json::from_slice(body).map_err(|e| format!("decode /health response: {}", e))
+}
+
+fn wait_for_daemon_shutdown(socket_path: &Path, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if !daemon_is_running_at(socket_path) && !daemon_http_is_live(Duration::from_millis(250)) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+const DAEMON_START_TIMEOUT: Duration = Duration::from_secs(10);
+
+fn wait_for_daemon_health(socket_path: &Path, timeout: Duration) -> bool {
+    let deadline = Instant::now() + timeout;
+    loop {
+        if daemon_is_running_at(socket_path) && daemon_http_is_live(Duration::from_millis(250)) {
+            if let Ok(health) = fetch_daemon_health(Duration::from_millis(500)) {
+                if health.status.trim() == "ok" {
+                    return true;
+                }
+            }
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+fn stop_running_daemon(socket_path: &Path) -> Result<(), String> {
+    let pid_path = daemon_pid_path().ok_or("Cannot resolve daemon pid path")?;
+    let pid = read_daemon_pid(&pid_path)?;
+    let self_pid = std::process::id();
+    if pid == self_pid || parent_process_id() == Some(pid) {
+        return Err(format!(
+            "Refusing to stop daemon pid {} because it matches the current app process tree",
+            pid
+        ));
+    }
+
+    terminate_process(pid)?;
+    if !wait_for_daemon_shutdown(socket_path, Duration::from_secs(5)) {
+        return Err("Timed out waiting for daemon to stop".into());
+    }
+    let _ = std::fs::remove_file(socket_path);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
+    let output = Command::new("lsof")
+        .arg("-ti")
+        .arg(format!("tcp:{port}"))
+        .arg("-sTCP:LISTEN")
+        .output();
+
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    if !output.status.success() && output.stdout.is_empty() {
+        return Vec::new();
+    }
+
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .filter_map(|line| line.trim().parse::<u32>().ok())
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn listening_socket_inodes(table: &str, port: u16) -> std::collections::HashSet<u64> {
+    table
+        .lines()
+        .skip(1)
+        .filter_map(|line| {
+            let fields: Vec<_> = line.split_whitespace().collect();
+            if fields.len() <= 9 || fields[3] != "0A" {
+                return None;
+            }
+            let (_, local_port) = fields[1].rsplit_once(':')?;
+            if u16::from_str_radix(local_port, 16).ok()? != port {
+                return None;
+            }
+            fields[9].parse::<u64>().ok()
+        })
+        .collect()
+}
+
+#[cfg(target_os = "linux")]
+fn socket_inode(path: &Path) -> Option<u64> {
+    path.to_str()?
+        .strip_prefix("socket:[")?
+        .strip_suffix(']')?
+        .parse()
+        .ok()
+}
+
+#[cfg(target_os = "linux")]
+fn listening_pids_for_port(port: u16) -> Vec<u32> {
+    let mut inodes = std::collections::HashSet::new();
+    for table_path in ["/proc/net/tcp", "/proc/net/tcp6"] {
+        if let Ok(table) = std::fs::read_to_string(table_path) {
+            inodes.extend(listening_socket_inodes(&table, port));
+        }
+    }
+    if inodes.is_empty() {
+        return Vec::new();
+    }
+
+    let Ok(processes) = std::fs::read_dir("/proc") else {
+        return Vec::new();
+    };
+    let mut pids = Vec::new();
+    for process in processes.flatten() {
+        let Ok(pid) = process.file_name().to_string_lossy().parse::<u32>() else {
+            continue;
+        };
+        let Ok(fds) = std::fs::read_dir(process.path().join("fd")) else {
+            continue;
+        };
+        if fds.flatten().any(|fd| {
+            std::fs::read_link(fd.path())
+                .ok()
+                .and_then(|target| socket_inode(&target))
+                .is_some_and(|inode| inodes.contains(&inode))
+        }) {
+            pids.push(pid);
+        }
+    }
+    pids
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn listening_pids_for_port(_port: u16) -> Vec<u32> {
+    Vec::new()
+}
+
+fn listening_pids_for_daemon_port() -> Vec<u32> {
+    listening_pids_for_port(daemon_http_port())
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_listener_tests {
+    use super::*;
+    use std::net::TcpListener;
+
+    #[test]
+    fn parses_only_listeners_on_the_requested_port() {
+        let table = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n\
+            0: 0100007F:2679 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 12345 1\n\
+            1: 0100007F:2679 0100007F:1234 01 00000000:00000000 00:00000000 00000000 1000 0 23456 1\n\
+            2: 0100007F:2680 00000000:0000 0A 00000000:00000000 00:00000000 00000000 1000 0 34567 1\n";
+
+        assert_eq!(
+            listening_socket_inodes(table, 9849),
+            std::collections::HashSet::from([12345])
+        );
+    }
+
+    #[test]
+    fn finds_the_process_holding_a_live_listener() {
+        let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind listener");
+        let port = listener.local_addr().expect("listener address").port();
+
+        let pids = listening_pids_for_port(port);
+
+        assert!(
+            pids.contains(&std::process::id()),
+            "current pid missing from {pids:?}"
+        );
+    }
+}
+
+#[cfg(unix)]
+fn command_for_pid(pid: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("command=")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if command.is_empty() {
+        return None;
+    }
+    Some(command)
+}
+
+#[cfg(not(unix))]
+fn command_for_pid(_pid: u32) -> Option<String> {
+    None
+}
+
+fn looks_like_attn_daemon_command(command: &str) -> bool {
+    let mut parts = command.split_whitespace();
+    let Some(program) = parts.next() else {
+        return false;
+    };
+    if !parts.any(|part| part == "daemon") {
+        return false;
+    }
+
+    let program_name = Path::new(program)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or(program)
+        .to_ascii_lowercase();
+    program_name.contains("attn")
+}
+
+fn force_stop_running_daemon(socket_path: &Path) -> Result<(), String> {
+    let self_pid = std::process::id();
+    let parent_pid = parent_process_id();
+    let mut pids = listening_pids_for_daemon_port();
+    pids.sort_unstable();
+    pids.dedup();
+    pids.retain(|pid| *pid != 0 && *pid != self_pid && Some(*pid) != parent_pid);
+
+    let mut attn_daemon_pids = Vec::new();
+    let mut other_listeners = Vec::new();
+    for pid in pids {
+        match command_for_pid(pid) {
+            Some(command) if looks_like_attn_daemon_command(&command) => {
+                attn_daemon_pids.push(pid);
+            }
+            Some(command) => other_listeners.push(format!("{pid}:{command}")),
+            None => other_listeners.push(format!("{pid}:<unknown>")),
+        }
+    }
+
+    if attn_daemon_pids.is_empty() {
+        if other_listeners.is_empty() {
+            return Err(format!(
+                "No attn daemon listener found on port {} for temporary fallback recovery",
+                daemon_http_port()
+            ));
+        }
+        return Err(format!(
+            "Refusing temporary fallback recovery because port {} is owned by non-attn listener(s): {}",
+            daemon_http_port(),
+            other_listeners.join(", ")
+        ));
+    }
+
+    for pid in &attn_daemon_pids {
+        let _ = terminate_process(*pid);
+    }
+
+    if wait_for_daemon_shutdown(socket_path, Duration::from_secs(3)) {
+        return Ok(());
+    }
+
+    #[cfg(unix)]
+    {
+        for pid in &attn_daemon_pids {
+            let _ = kill_process(*pid, libc::SIGKILL);
+        }
+    }
+
+    if wait_for_daemon_shutdown(socket_path, Duration::from_secs(2)) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Timed out waiting for daemon listener to stop on port {}",
+        daemon_http_port()
+    ))
+}
+
+fn temporary_force_daemon_recovery(bin_path: &Path) -> Result<(), String> {
+    let socket_path = daemon_socket_path().ok_or("Cannot resolve daemon socket path")?;
+    if daemon_is_running_at(&socket_path) {
+        if stop_running_daemon(&socket_path).is_err() {
+            force_stop_running_daemon(&socket_path)?;
+        }
+    } else if daemon_http_is_live(Duration::from_millis(250)) {
+        force_stop_running_daemon(&socket_path)?;
+    }
+
+    let pid_path = daemon_pid_path().ok_or("Cannot resolve daemon pid path")?;
+    let _ = std::fs::remove_file(&socket_path);
+    let _ = std::fs::remove_file(&pid_path);
+
+    spawn_daemon(bin_path)?;
+    if wait_for_daemon_health(&socket_path, DAEMON_START_TIMEOUT) {
+        return Ok(());
+    }
+    Err(format!(
+        "Daemon did not become healthy within {} seconds",
+        DAEMON_START_TIMEOUT.as_secs()
+    ))
+}
+
+fn read_daemon_pid(pid_path: &Path) -> Result<u32, String> {
+    let data = std::fs::read_to_string(pid_path).map_err(|e| {
+        format!(
+            "Failed to read daemon pid file {}: {}",
+            pid_path.display(),
+            e
+        )
+    })?;
+    let pid = data.trim().parse::<u32>().map_err(|e| {
+        format!(
+            "Failed to parse daemon pid file {}: {}",
+            pid_path.display(),
+            e
+        )
+    })?;
+    if pid == 0 {
+        return Err(format!("Invalid daemon pid in {}", pid_path.display()));
+    }
+    Ok(pid)
+}
+
+#[cfg(unix)]
+fn terminate_process(pid: u32) -> Result<(), String> {
+    kill_process(pid, libc::SIGTERM)
+}
+
+#[cfg(unix)]
+fn kill_process(pid: u32, signal: libc::c_int) -> Result<(), String> {
+    let rc = unsafe { libc::kill(pid as i32, signal) };
+    if rc == 0 {
+        return Ok(());
+    }
+
+    let err = std::io::Error::last_os_error();
+    if err.raw_os_error() == Some(libc::ESRCH) {
+        return Ok(());
+    }
+
+    Err(format!(
+        "Failed to send signal {} to daemon process {}: {}",
+        signal, pid, err
+    ))
+}
+
+#[cfg(not(unix))]
+fn terminate_process(_pid: u32) -> Result<(), String> {
+    Err("Daemon restart is only supported on unix targets".into())
+}
+
+#[cfg(unix)]
+fn parent_process_id() -> Option<u32> {
+    Some(unsafe { libc::getppid() as u32 })
+}
+
+#[cfg(not(unix))]
+fn parent_process_id() -> Option<u32> {
+    None
+}
+
+#[derive(Debug, serde::Serialize)]
+struct BuildProfileInfo {
+    profile: &'static str,
+    label: &'static str,
+    expected_port: &'static str,
+    bundle_identifier: &'static str,
+}
+
+/// The frontend compares this with the daemon's at startup; a mismatch is fatal.
+#[tauri::command]
+fn get_build_profile() -> BuildProfileInfo {
+    BuildProfileInfo {
+        profile: profile::build_profile(),
+        label: profile::build_profile_label(),
+        expected_port: profile::default_port_for_build_profile(),
+        bundle_identifier: profile::bundle_identifier(),
+    }
+}
+
+#[tauri::command]
+fn get_browser_host_token(_caller: browser_host::TrustedMainWebview) -> Result<String, String> {
+    profile::ensure_browser_host_token()
+}
+
+#[tauri::command]
+fn get_client_token() -> Result<String, String> {
+    profile::read_client_token()
+}
+
+#[tauri::command]
+fn ensure_daemon(_app: tauri::AppHandle) -> Result<(), String> {
+    let _guard = ENSURE_DAEMON_LOCK
+        .lock()
+        .map_err(|_| "Failed to acquire daemon ensure lock".to_string())?;
+    let bin_path = resolve_daemon_binary()?;
+    match run_daemon_ensure(&bin_path) {
+        Ok(_) => Ok(()),
+        Err(err) => {
+            eprintln!("[Daemon] daemon ensure failed: {err}; entering temporary fallback recovery");
+            temporary_force_daemon_recovery(&bin_path)
+                .map(|_| {
+                    eprintln!("[Daemon] temporary fallback recovery completed successfully");
+                })
+                .map_err(|fallback_err| {
+                    format!(
+                        "daemon ensure failed ({err}); temporary fallback also failed: {fallback_err}"
+                    )
+                })
+        }
+    }
+}
+
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
+const CLOSE_ACTIVE_PANE_MENU_ID: &str = "attn-close-active-pane";
+// macOS consumes Command-period as the system cancel gesture before any DOM
+// keydown, so a menu item is the only way it reaches attn (hence nativeDelivery).
+const CANCEL_COUNTDOWN_MENU_ID: &str = "attn-cancel-countdown";
+const NATIVE_SHORTCUT_EVENT: &str = "attn:native-shortcut";
+const NATIVE_BROWSER_CLOSE_EVENT: &str = "attn:native-browser-close";
+
+#[cfg(target_os = "macos")]
+fn app_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
+    use tauri::menu::{Menu, MenuItem, MenuItemKind};
+
+    let menu = Menu::default(app)?;
+    let close_active_pane = MenuItem::with_id(
+        app,
+        CLOSE_ACTIVE_PANE_MENU_ID,
+        "Close Pane",
+        true,
+        Some("CmdOrCtrl+W"),
+    )?;
+    let mut inserted_close_active_pane = false;
+    let cancel_countdown = MenuItem::with_id(
+        app,
+        CANCEL_COUNTDOWN_MENU_ID,
+        "Stop Countdown",
+        true,
+        Some("CmdOrCtrl+."),
+    )?;
+    // Always enabled: a disabled NSMenuItem stops responding to its key equivalent.
+    let mut inserted_cancel_countdown = false;
+
+    for item in menu.items()? {
+        let MenuItemKind::Submenu(submenu) = item else {
+            continue;
+        };
+        let submenu_text = submenu.text()?.replace('&', "");
+        let is_file_menu = submenu_text == "File";
+        let is_edit_menu = submenu_text == "Edit";
+        let mut removed_close_window = false;
+
+        for (position, item) in submenu.items()?.into_iter().enumerate().rev() {
+            let text = item
+                .as_predefined_menuitem()
+                .and_then(|item| item.text().ok())
+                .map(|text| text.replace('&', ""))
+                .unwrap_or_default();
+
+            let is_close_window = text == "Close Window";
+            let is_redo = text == "Redo";
+            let is_undo = text == "Undo";
+
+            if is_close_window {
+                submenu.remove_at(position)?;
+                removed_close_window = true;
+                if is_file_menu {
+                    submenu.insert(&close_active_pane, position)?;
+                    inserted_close_active_pane = true;
+                }
+            } else if (is_redo || is_undo) && is_edit_menu {
+                // Dropped so they stop claiming ⌘Z/⇧⌘Z: in packaged builds the
+                // predefined items swallow both keys before the WebView sees them.
+                submenu.remove_at(position)?;
+            }
+        }
+
+        if removed_close_window && !is_file_menu {
+            let items = submenu.items()?;
+            let has_trailing_separator = items
+                .last()
+                .and_then(|item| item.as_predefined_menuitem())
+                .and_then(|item| item.text().ok())
+                .is_some_and(|text| text.is_empty());
+            if has_trailing_separator {
+                submenu.remove_at(items.len() - 1)?;
+            }
+        }
+
+        if is_file_menu && !inserted_close_active_pane {
+            submenu.append(&close_active_pane)?;
+            inserted_close_active_pane = true;
+        }
+
+        if is_file_menu && !inserted_cancel_countdown {
+            submenu.insert(&cancel_countdown, 0)?;
+            inserted_cancel_countdown = true;
+        }
+    }
+
+    Ok(menu)
+}
+
+fn dispatch_native_shortcut(app: &tauri::AppHandle, shortcut_id: &str) {
+    use tauri::Manager;
+
+    let Some(main_webview) = app.get_webview("main") else {
+        return;
+    };
+    let Ok(shortcut_id) = serde_json::to_string(shortcut_id) else {
+        return;
+    };
+    let script = format!(
+        "window.dispatchEvent(new CustomEvent({NATIVE_SHORTCUT_EVENT:?}, {{ detail: {shortcut_id} }}));"
+    );
+    let _ = main_webview.eval(script);
+}
+
+fn dispatch_native_browser_close(app: &tauri::AppHandle, label: &str) {
+    use tauri::Manager;
+
+    let Some(main_webview) = app.get_webview("main") else {
+        return;
+    };
+    let Ok(label) = serde_json::to_string(label) else {
+        return;
+    };
+    let script = format!(
+        "window.dispatchEvent(new CustomEvent({NATIVE_BROWSER_CLOSE_EVENT:?}, {{ detail: {label} }}));"
+    );
+    let _ = main_webview.eval(script);
+}
+
+const PRESENT_WINDOW_LABEL: &str = "present";
+
+fn presentation_window_url(presentation_id: &str) -> String {
+    format!("index.html?window=present&presentation={presentation_id}")
+}
+
+#[tauri::command]
+fn open_presentation_window(
+    app: tauri::AppHandle,
+    _caller: browser_host::TrustedMainWebview,
+    presentation_id: String,
+) -> Result<(), String> {
+    use tauri::Manager;
+
+    if presentation_id.is_empty()
+        || !presentation_id
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
+        return Err("presentation_id must be alphanumeric or hyphens".to_string());
+    }
+
+    let url = presentation_window_url(&presentation_id);
+
+    if let Some(window) = app.get_webview_window(PRESENT_WINDOW_LABEL) {
+        window
+            .show()
+            .map_err(|error| format!("show presentation window: {error}"))?;
+        window
+            .set_focus()
+            .map_err(|error| format!("focus presentation window: {error}"))?;
+        let Ok(url) = serde_json::to_string(&url) else {
+            return Err("failed to encode presentation URL".to_string());
+        };
+        window
+            .eval(format!("window.location.href = {url};"))
+            .map_err(|error| format!("navigate presentation window: {error}"))?;
+        return Ok(());
+    }
+
+    tauri::WebviewWindowBuilder::new(
+        &app,
+        PRESENT_WINDOW_LABEL,
+        tauri::WebviewUrl::App(url.into()),
+    )
+    .title("attn — present")
+    .inner_size(1100.0, 800.0)
+    .min_inner_size(700.0, 500.0)
+    .background_throttling(tauri::utils::config::BackgroundThrottlingPolicy::Disabled)
+    .visible(false)
+    .build()
+    .map(|_| ())
+    .map_err(|error| format!("create presentation window: {error}"))
+}
+
+#[tauri::command]
+async fn list_directory(path: String, prefix: Option<String>) -> Result<Vec<String>, String> {
+    use std::fs;
+    use std::path::Path;
+
+    let dir_path = if let Some(suffix) = path.strip_prefix("~/") {
+        let home = dirs::home_dir().ok_or("Cannot get home directory")?;
+        home.join(suffix)
+    } else if path == "~" {
+        dirs::home_dir().ok_or("Cannot get home directory")?
+    } else {
+        Path::new(&path).to_path_buf()
+    };
+
+    let entries = fs::read_dir(&dir_path).map_err(|e| format!("Cannot read directory: {}", e))?;
+
+    let prefix_lower = prefix.map(|p| p.to_lowercase());
+
+    let mut directories: Vec<String> = entries
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            let metadata = entry.metadata().ok()?;
+            if metadata.is_dir() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if let Some(ref p) = prefix_lower {
+                    if !name.to_lowercase().contains(p) {
+                        return None;
+                    }
+                }
+                Some(name)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    if let Some(ref p) = prefix_lower {
+        directories.sort_by(|a, b| {
+            let a_lower = a.to_lowercase();
+            let b_lower = b.to_lowercase();
+            let a_starts = a_lower.starts_with(p);
+            let b_starts = b_lower.starts_with(p);
+            match (a_starts, b_starts) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a.cmp(b),
+            }
+        });
+    } else {
+        directories.sort();
+    }
+    directories.truncate(50);
+
+    Ok(directories)
+}
+
+fn is_safe_markdown_target_extension(path: &Path) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .as_deref(),
+        Some(
+            "bmp"
+                | "gif"
+                | "jpeg"
+                | "jpg"
+                | "markdown"
+                | "md"
+                | "pdf"
+                | "png"
+                | "rst"
+                | "text"
+                | "tif"
+                | "tiff"
+                | "txt"
+                | "webp"
+        )
+    )
+}
+
+fn canonical_safe_markdown_target(path: &Path) -> Result<PathBuf, String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|e| format!("Cannot inspect Markdown target {}: {}", path.display(), e))?;
+    if metadata.file_type().is_symlink() {
+        return Err("Markdown panel links cannot open symbolic links.".to_string());
+    }
+    if !metadata.is_file() {
+        return Err("Markdown panel links can only open regular files.".to_string());
+    }
+
+    let canonical = std::fs::canonicalize(path)
+        .map_err(|e| format!("Cannot resolve Markdown target {}: {}", path.display(), e))?;
+    let canonical_metadata = std::fs::metadata(&canonical).map_err(|e| {
+        format!(
+            "Cannot inspect canonical Markdown target {}: {}",
+            canonical.display(),
+            e
+        )
+    })?;
+    if !canonical_metadata.is_file() || !is_safe_markdown_target_extension(&canonical) {
+        return Err("Markdown panel links can only open safe document or image files.".to_string());
+    }
+    Ok(canonical)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_session_bus_available() -> bool {
+    // Same call the plugin makes: it unwraps a malformed address and swallows a
+    // failed connect, so only a live connection proves it can own its name.
+    zbus::blocking::Connection::session().is_ok()
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_session_bus_tests {
+    use super::*;
+
+    static BUS_ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn with_bus_address(value: &str) -> bool {
+        let _guard = BUS_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let previous = env::var_os("DBUS_SESSION_BUS_ADDRESS");
+        env::set_var("DBUS_SESSION_BUS_ADDRESS", value);
+        let available = linux_session_bus_available();
+        match previous {
+            Some(value) => env::set_var("DBUS_SESSION_BUS_ADDRESS", value),
+            None => env::remove_var("DBUS_SESSION_BUS_ADDRESS"),
+        }
+        available
+    }
+
+    #[test]
+    fn malformed_inherited_address_is_no_bus() {
+        assert!(!with_bus_address("not-an-address"));
+    }
+
+    #[test]
+    fn well_formed_but_unreachable_address_is_no_bus() {
+        assert!(!with_bus_address("unix:path=/nonexistent/bus"));
+    }
+}
+
+fn launch_safe_markdown_target(path: &Path) -> Result<(), String> {
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open Markdown target {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+fn open_safe_markdown_target(path: String) -> Result<(), String> {
+    let canonical = canonical_safe_markdown_target(Path::new(&path))?;
+    launch_safe_markdown_target(&canonical)
+}
+
+fn canonical_regular_seed_artifact(path: &Path) -> Result<PathBuf, String> {
+    let metadata = std::fs::symlink_metadata(path)
+        .map_err(|e| format!("Managed artifact {} is unavailable: {}", path.display(), e))?;
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        return Err("Managed artifact targets must be regular files, never links.".to_string());
+    }
+    let canonical = std::fs::canonicalize(path).map_err(|e| {
+        format!(
+            "Managed artifact {} could not be resolved: {}",
+            path.display(),
+            e
+        )
+    })?;
+    let canonical_metadata = std::fs::symlink_metadata(&canonical).map_err(|e| {
+        format!(
+            "Managed artifact {} is unavailable: {}",
+            canonical.display(),
+            e
+        )
+    })?;
+    if canonical_metadata.file_type().is_symlink() || !canonical_metadata.is_file() {
+        return Err("Managed artifact targets must resolve to regular files.".to_string());
+    }
+    Ok(canonical)
+}
+
+fn validate_seed_artifact_launch(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal || is_safe_markdown_target_extension(path) {
+        return Ok(());
+    }
+    Err("This managed artifact can only be revealed in Finder.".to_string())
+}
+
+fn launch_seed_artifact(path: &Path, reveal: bool) -> Result<(), String> {
+    if reveal {
+        return tauri_plugin_opener::reveal_item_in_dir(path).map_err(|e| {
+            format!(
+                "Failed to reveal managed artifact {}: {}",
+                path.display(),
+                e
+            )
+        });
+    }
+    tauri_plugin_opener::open_path(path, None::<&str>)
+        .map_err(|e| format!("Failed to open managed artifact {}: {}", path.display(), e))
+}
+
+#[tauri::command]
+fn open_safe_seed_artifact_target(path: String, reveal: Option<bool>) -> Result<(), String> {
+    let canonical = canonical_regular_seed_artifact(Path::new(&path))?;
+    let reveal = reveal.unwrap_or(false);
+    validate_seed_artifact_launch(&canonical, reveal)?;
+    launch_seed_artifact(&canonical, reveal)
+}
+
+#[cfg(test)]
+mod markdown_target_tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let suffix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock")
+            .as_nanos();
+        let dir = env::temp_dir().join(format!("attn-{name}-{}-{suffix}", std::process::id()));
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn canonical_safe_markdown_target_accepts_regular_document_outside_home() {
+        let dir = temp_dir("markdown-target-regular");
+        let file = dir.join("guide.md");
+        fs::write(&file, "# Guide").expect("write guide");
+
+        assert_eq!(
+            canonical_safe_markdown_target(&file).expect("safe Markdown target"),
+            fs::canonicalize(&file).expect("canonical guide")
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn canonical_safe_markdown_target_rejects_executable_associated_files() {
+        let dir = temp_dir("markdown-target-command");
+        let file = dir.join("install.command");
+        fs::write(&file, "#!/bin/sh").expect("write command");
+
+        assert!(canonical_safe_markdown_target(&file).is_err());
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn canonical_regular_seed_artifact_accepts_binary_files() {
+        let dir = temp_dir("seed-artifact-binary");
+        let file = dir.join("payload.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+
+        assert_eq!(
+            canonical_regular_seed_artifact(&file).expect("regular artifact"),
+            fs::canonicalize(&file).expect("canonical artifact")
+        );
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[test]
+    fn seed_artifact_command_can_only_be_revealed() {
+        let command = Path::new("install.command");
+
+        assert_eq!(
+            validate_seed_artifact_launch(command, false),
+            Err("This managed artifact can only be revealed in Finder.".to_string())
+        );
+        assert_eq!(validate_seed_artifact_launch(command, true), Ok(()));
+    }
+
+    #[test]
+    fn seed_artifact_safe_document_can_still_be_opened() {
+        assert_eq!(
+            validate_seed_artifact_launch(Path::new("report.pdf"), false),
+            Ok(())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_safe_markdown_target_rejects_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = temp_dir("markdown-target-symlink");
+        let command = dir.join("install.command");
+        let disguised = dir.join("guide.md");
+        fs::write(&command, "#!/bin/sh").expect("write command");
+        symlink(&command, &disguised).expect("create symlink");
+
+        assert!(canonical_safe_markdown_target(&disguised).is_err());
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn canonical_regular_seed_artifact_rejects_symbolic_links() {
+        use std::os::unix::fs::symlink;
+
+        let dir = temp_dir("seed-artifact-symlink");
+        let file = dir.join("payload.bin");
+        let linked = dir.join("linked.bin");
+        fs::write(&file, [0, 1, 2, 255]).expect("write artifact");
+        symlink(&file, &linked).expect("create symlink");
+
+        assert!(canonical_regular_seed_artifact(&linked).is_err());
+
+        fs::remove_dir_all(dir).expect("remove temp dir");
+    }
+}
+
+fn shell_escape_unix(arg: &str) -> String {
+    if arg.is_empty() {
+        return "''".to_string();
+    }
+    let escaped = arg.replace('\'', "'\\''");
+    format!("'{}'", escaped)
+}
+
+fn shell_escape_windows(arg: &str) -> String {
+    if arg.is_empty() {
+        return "\"\"".to_string();
+    }
+    format!("\"{}\"", arg.replace('"', "\\\""))
+}
+
+fn percent_encode_path(path: &str) -> String {
+    let mut encoded = String::with_capacity(path.len());
+    for byte in path.bytes() {
+        let ch = byte as char;
+        let is_unreserved = ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '~' | '/');
+        if is_unreserved {
+            encoded.push(ch);
+        } else {
+            encoded.push_str(&format!("%{:02X}", byte));
+        }
+    }
+    encoded
+}
+
+fn looks_like_zed_editor(editor: &str) -> bool {
+    editor.to_ascii_lowercase().contains("zed")
+}
+
+fn build_remote_zed_target(remote_target: &str, cwd: &str, file_path: Option<&str>) -> String {
+    let resolved = if let Some(path) = file_path.filter(|value| !value.trim().is_empty()) {
+        let path_buf = Path::new(path);
+        if path_buf.is_absolute() {
+            path_buf.to_path_buf()
+        } else {
+            Path::new(cwd).join(path_buf)
+        }
+    } else {
+        PathBuf::from(cwd)
+    };
+    let normalized = resolved.to_string_lossy().replace('\\', "/");
+    let with_leading = if normalized.starts_with('/') {
+        normalized
+    } else {
+        format!("/{}", normalized)
+    };
+    format!(
+        "ssh://{}{}",
+        remote_target.trim(),
+        percent_encode_path(&with_leading)
+    )
+}
+
+#[tauri::command]
+fn open_in_editor(
+    cwd: String,
+    file_path: Option<String>,
+    editor: Option<String>,
+    remote_target: Option<String>,
+) -> Result<(), String> {
+    let editor = editor
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .or_else(|| env::var("EDITOR").ok())
+        .or_else(|| env::var("VISUAL").ok())
+        .ok_or_else(|| "EDITOR (or VISUAL) is not set".to_string())?;
+
+    let mut local_cwd: Option<PathBuf> = None;
+    let mut args: Vec<String> = Vec::new();
+    if let Some(remote_target) = remote_target
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        if !looks_like_zed_editor(&editor) {
+            return Err("Remote open-in-editor currently requires Zed.".to_string());
+        }
+        args.push(build_remote_zed_target(
+            &remote_target,
+            &cwd,
+            file_path.as_deref(),
+        ));
+    } else {
+        let cwd_path = PathBuf::from(&cwd);
+        if !cwd_path.exists() {
+            return Err(format!("Directory does not exist: {}", cwd));
+        }
+        local_cwd = Some(cwd_path.clone());
+
+        if let Some(path) = file_path {
+            let path_buf = Path::new(&path);
+            let resolved = if path_buf.is_absolute() {
+                path_buf.to_path_buf()
+            } else {
+                cwd_path.join(path_buf)
+            };
+            args.push(resolved.to_string_lossy().to_string());
+        } else {
+            args.push(".".to_string());
+        }
+    }
+
+    let command_line = if cfg!(windows) {
+        let mut cmd = editor.clone();
+        for arg in &args {
+            cmd.push(' ');
+            cmd.push_str(&shell_escape_windows(arg));
+        }
+        cmd
+    } else {
+        let mut cmd = editor.clone();
+        for arg in &args {
+            cmd.push(' ');
+            cmd.push_str(&shell_escape_unix(arg));
+        }
+        cmd
+    };
+
+    let mut command = if cfg!(windows) {
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/C").arg(command_line);
+        cmd
+    } else {
+        let mut cmd = Command::new("sh");
+        cmd.arg("-lc").arg(command_line);
+        cmd
+    };
+
+    if let Some(cwd_path) = local_cwd {
+        command.current_dir(cwd_path);
+    }
+
+    command
+        .spawn()
+        .map_err(|e| format!("Failed to open editor: {}", e))?;
+
+    Ok(())
+}
+
+pub fn run(context: tauri::Context<tauri::Wry>, browser_runtime_js: &'static str) {
+    browser_host::set_browser_runtime_js(browser_runtime_js);
+    // Must run before anything reads ATTN_PROFILE / ATTN_WS_PORT (including
+    // any spawned `attn daemon` child that inherits our env).
+    profile::apply_build_profile_env();
+
+    // Disable "press and hold for accents" so a held key in the terminal repeats.
+    // Scoped to the running bundle so a dev install never overwrites the prod pref.
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("defaults")
+            .args([
+                "write",
+                profile::bundle_identifier(),
+                "ApplePressAndHoldEnabled",
+                "-bool",
+                "false",
+            ])
+            .output();
+    }
+
+    // An initialization script, so `useUiAutomationBridge` sees the gate
+    // synchronously on first render rather than racing a command roundtrip.
+    let automation_init_script = format!(
+        "window.__ATTN_AUTOMATION_ENABLED = {};",
+        profile::automation_enabled()
+    );
+    let native_dialog_capture_script = r#"
+Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
+  value: {
+    alert: window.alert.bind(window),
+    confirm: window.confirm.bind(window),
+    prompt: window.prompt.bind(window),
+  },
+  configurable: false,
+  enumerable: false,
+  writable: false,
+});
+"#;
+
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(target_os = "linux")]
+    {
+        // zbus panics without a session bus, so a headless launch without one keeps
+        // the old behaviour (a deep link opens a second window) instead of aborting.
+        if linux_session_bus_available() {
+            builder = builder.plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+                use tauri::Manager;
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.unminimize();
+                    let _ = window.show();
+                    let _ = window.set_focus();
+                }
+            }));
+        } else {
+            eprintln!("[attn] no reachable session D-Bus (DBUS_SESSION_BUS_ADDRESS); a deep link will open a second app instance");
+        }
+    }
+
+    let builder = builder
+        .append_invoke_initialization_script(automation_init_script)
+        .append_invoke_initialization_script(native_dialog_capture_script)
+        .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_clipboard_manager::init());
+    // Off-mac, a default menu would claim Ctrl+C/V/W/Z, keys the app and the PTY need,
+    // so only macOS gets a menu.
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(app_menu);
+    builder
+        .on_menu_event(|app, event| {
+            use tauri::Manager;
+
+            if event.id() == CANCEL_COUNTDOWN_MENU_ID {
+                dispatch_native_shortcut(app, "session.cancelCountdown");
+                return;
+            }
+
+            if event.id() == CLOSE_ACTIVE_PANE_MENU_ID {
+                if let Some(present) = app.get_webview_window(PRESENT_WINDOW_LABEL) {
+                    if present.is_focused().unwrap_or(false) {
+                        let _ = present.hide();
+                        return;
+                    }
+                }
+                if let Some(label) = browser_host::focused_browser_label() {
+                    dispatch_native_browser_close(app, &label);
+                } else {
+                    dispatch_native_shortcut(app, "session.close");
+                }
+            }
+        })
+        .on_window_event(|window, event| {
+            if window.label() == PRESENT_WINDOW_LABEL {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            list_directory,
+            ensure_daemon,
+            quit_app,
+            open_in_editor,
+            open_safe_markdown_target,
+            open_safe_seed_artifact_target,
+            get_build_profile,
+            get_browser_host_token,
+            get_client_token,
+            open_presentation_window,
+            browser_host::browser_host_mount,
+            browser_host::browser_host_update,
+            browser_host::browser_host_unmount,
+            browser_host::browser_host_control,
+            browser_host::browser_host_clear_focus,
+            browser_host::browser_host_claim_focus,
+            browser_host::browser_host_focus_state,
+            native_input_diagnostics::native_input_diagnostics_snapshot,
+        ])
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            use tauri::Manager;
+            // Fail closed: an app that starts unlocked can have its profile deleted out
+            // from under it by a `profile clean` that is already past its last check.
+            profile::hold_app_lock()?;
+            profile::write_app_pid_file();
+            native_input_diagnostics::install();
+            ui_automation::maybe_start(&app.handle().clone());
+            // Harness-only: visible so WKWebView does not throttle for occlusion, never
+            // active. Accessory policy keeps it off the Dock; set_focusable(false) stops key theft.
+            #[cfg(target_os = "macos")]
+            if env::var("ATTN_HARNESS_ALWAYS_ON_TOP")
+                .ok()
+                .is_some_and(|v| v == "1")
+            {
+                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                if let Some(window) = app.get_window("main") {
+                    let _ = window.set_always_on_top(true);
+                    let _ = window.set_focusable(false);
+                }
+            }
+            Ok(())
+        })
+        .on_page_load(|webview, _payload| {
+            // The visible strip is logical pixels while primary_monitor().size() is
+            // physical, hence the scale_factor.
+            #[cfg(target_os = "macos")]
+            if webview.label() == "main" {
+                if let Ok(px_str) = std::env::var("ATTN_HARNESS_PARK_VISIBLE_PX") {
+                    if let Ok(visible_px) = px_str.parse::<f64>() {
+                        if visible_px > 0.0 {
+                            let window = webview.window();
+                            if let Ok(Some(monitor)) = window.primary_monitor() {
+                                let scale = monitor.scale_factor();
+                                let mon_size = monitor.size();
+                                let mon_pos = monitor.position();
+                                let logical_w = mon_size.width as f64 / scale;
+                                let logical_h = mon_size.height as f64 / scale;
+                                let logical_origin_x = mon_pos.x as f64 / scale;
+                                let logical_origin_y = mon_pos.y as f64 / scale;
+                                let win_h_logical = window
+                                    .inner_size()
+                                    .map(|s| s.height as f64 / scale)
+                                    .unwrap_or(800.0);
+                                let new_x = logical_origin_x + logical_w - visible_px;
+                                let new_y =
+                                    logical_origin_y + ((logical_h - win_h_logical) / 2.0).max(0.0);
+                                let _ =
+                                    window.set_position(tauri::LogicalPosition::new(new_x, new_y));
+                            }
+                        }
+                    }
+                }
+            }
+            let _ = webview.window().show();
+            // Must take focus: an unfocused, hidden-at-creation WKWebView can leave
+            // requestAnimationFrame parked (blank diff pane).
+            if webview.window().label() == PRESENT_WINDOW_LABEL {
+                let _ = webview.window().set_focus();
+            }
+        })
+        .build(context)
+        .unwrap_or_else(|err| {
+            eprintln!("attn: {err}");
+            std::process::exit(1);
+        })
+        .run(|_handle, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                profile::remove_app_pid_file();
+            }
+        });
+}

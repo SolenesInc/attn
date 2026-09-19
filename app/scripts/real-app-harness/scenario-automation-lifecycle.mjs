@@ -403,24 +403,29 @@ async function main() {
         return rows.length >= 1 ? rows[0] : null;
       }, 'P1 initial delivery', SCHEDULE_RUN_TIMEOUT_MS);
       runner.log('schedule_delivery_receipt', { which: 'P1 initial', waitedMs: Date.now() - anchorSeenAt });
-      runner.assert(Boolean(run1.ticket_id) && Boolean(run1.session_id), 'P1 delivery reserves a ticket and session', run1);
+      runner.assert(Boolean(run1.seed_id) && Boolean(run1.session_id), 'P1 delivery reserves a seed and session', run1);
       runner.assert(!run1.last_error, 'P1 delivery has no error', run1);
+      const [legacyTicketCount] = sqliteRow(
+        dbPath,
+        `SELECT COUNT(*) FROM tickets WHERE automation_run_id IN (SELECT id FROM automation_runs WHERE definition_id='${sqlEscape(editID)}');`,
+      );
+      runner.assert(legacyTicketCount === '0', 'automation delivery creates no legacy tickets', { legacyTicketCount });
 
       fs.writeFileSync(editDefinitionFile, editRebindDefinitionYAML({ id: editID, locationPath: editFixture, executable: probe.executable, prompt: PROMPT_P2 }));
       const editedAt = Date.now();
       runJSON(binary, ['automation', 'apply', '--file', editDefinitionFile], daemonEnv);
 
       run2 = await poll(() => {
-        const rows = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).filter((row) => row.state === 'delivered' && row.ticket_id !== run1.ticket_id);
+        const rows = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).filter((row) => row.state === 'delivered' && row.seed_id !== run1.seed_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'P2 edit delivery on a fresh thread', SCHEDULE_RUN_TIMEOUT_MS);
       runner.log('schedule_delivery_receipt', { which: 'P2 edit', waitedMs: Date.now() - editedAt });
       runner.assert(!run2.last_error, 'P2 edit delivery succeeds; no "contract changed" refusal', run2);
-      runner.assert(run2.ticket_id !== run1.ticket_id && run2.session_id !== run1.session_id, 'P2 edit delivery reserves a fresh ticket and session', { run1, run2 });
+      runner.assert(run2.seed_id !== run1.seed_id && run2.session_id !== run1.session_id, 'P2 edit delivery reserves a fresh seed and session', { run1, run2 });
 
       const run1AfterEdit = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).find((row) => row.id === run1.id);
       runner.assert(
-        run1AfterEdit && run1AfterEdit.state === run1.state && run1AfterEdit.ticket_id === run1.ticket_id && run1AfterEdit.session_id === run1.session_id,
+        run1AfterEdit && run1AfterEdit.state === run1.state && run1AfterEdit.seed_id === run1.seed_id && run1AfterEdit.session_id === run1.session_id,
         "P1's original run row is unchanged after the P2 edit",
         { before: run1, after: run1AfterEdit },
       );
@@ -431,14 +436,14 @@ async function main() {
 
       run3 = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', editID], daemonEnv) || []).filter(
-          (row) => row.state === 'delivered' && row.ticket_id !== run1.ticket_id && row.ticket_id !== run2.ticket_id,
+          (row) => row.state === 'delivered' && row.seed_id !== run1.seed_id && row.seed_id !== run2.seed_id,
         );
         return rows.length >= 1 ? rows[0] : null;
       }, 'P1 revert delivery on yet another fresh thread (the A1-fix, live)', SCHEDULE_RUN_TIMEOUT_MS);
       runner.log('schedule_delivery_receipt', { which: 'P1 revert', waitedMs: Date.now() - revertedAt });
       runner.assert(!run3.last_error, 'P1 revert delivery succeeds; the revert edge does not brick delivery', run3);
       runner.assert(
-        run3.ticket_id !== run1.ticket_id && run3.ticket_id !== run2.ticket_id,
+        run3.seed_id !== run1.seed_id && run3.seed_id !== run2.seed_id,
         'P1 revert delivery reserves a third distinct thread even though its contract matches run1 exactly',
         { run1, run2, run3 },
       );
@@ -535,7 +540,7 @@ async function main() {
 
       const dirtyRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [])
-          .filter((row) => row.state === 'delivered' && row.ticket_id !== cleanRun.ticket_id);
+          .filter((row) => row.state === 'delivered' && row.seed_id !== cleanRun.seed_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'cleanup leg second delivery on a fresh thread', GH_DELIVERY_TIMEOUT_MS);
       const dirtyWorktree = resolveWorktree(observer, profile, dirtyRun.session_id);
@@ -557,7 +562,7 @@ async function main() {
 
       const activeRun = await poll(() => {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || [])
-          .filter((row) => row.state === 'delivered' && row.ticket_id !== cleanRun.ticket_id && row.ticket_id !== dirtyRun.ticket_id);
+          .filter((row) => row.state === 'delivered' && row.seed_id !== cleanRun.seed_id && row.seed_id !== dirtyRun.seed_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'cleanup leg third delivery on the current thread', GH_DELIVERY_TIMEOUT_MS);
       const activeWorktree = resolveWorktree(observer, profile, activeRun.session_id);

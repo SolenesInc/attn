@@ -1,0 +1,3 @@
+kind: fixed
+area: sidebar
+change: Sidebar rows and their actions have separate keyboard targets, and closing sidebar settings restores focus to its button.

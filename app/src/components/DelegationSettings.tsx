@@ -1,182 +1,353 @@
-import { useState, useId } from 'react';
+import { useCallback, useEffect, useEffectEvent, useState } from 'react';
 import type { DelegationChoice, DelegationPreferences, DelegationRole, DelegationSelection, DelegationHarness } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 import type { DelegationPreferencesPolicy } from '../hooks/useDelegationPreferences';
-import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
+import { knownModelName } from '../hooks/useDelegationModelCatalog';
 import { DelegationRoleIcon } from './DelegationRoleIcon';
+import { DelegationModelPopover, type Anchor } from './DelegationModelPopover';
+import { FALLBACK, adoptMaintainedRoles, adoptionConflicts, alternatives, complete, defaultChoice, emptySelection, firstLine, freshAdoption, liveRoles, missingTemplates, newID, roleLabel, roleViewer, selectionAt } from './delegationRoles';
 import './DelegationSettings.css';
 
-const emptySelection = (): DelegationSelection => ({ harness: '', provider: '', model: '', effort: '' });
-const id = (prefix: string) => `${prefix}-${crypto.randomUUID()}`;
-const route = (s: DelegationSelection) => !s.harness ? 'Not configured' : [s.harness, s.provider, s.model || 'Harness default', s.effort].filter(Boolean).join(' / ');
+type PopoverTarget = { key: string; anchor: Anchor };
+type Undo = { label: string; previous: DelegationPreferences; generation: number };
+
 const DELEGATION_ICONS = ['search', 'diamond', 'code', 'arrow', 'list', 'bug', 'spark', 'circle'] as const;
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+const leadText = (enabled: boolean) => enabled
+  ? 'Roles guide agents that delegate. Each role has a model; an agent reads this table and picks the row that fits the work.'
+  : 'Off. Agents that delegate pick harness and model on their own. Turn on to route them through this table.';
 
-type SelectionPickerProps = {
-  value: DelegationSelection;
-  onChange: (s: DelegationSelection) => void;
-  harnesses: DelegationHarness[];
-  catalog?: DelegationModelCatalog;
-  loading: boolean;
-  error?: string;
-  discover: (harness: string) => void;
-};
+function useUndo(generation: number) {
+  const [undo, setUndo] = useState<Undo | null>(null);
+  const live = undo && undo.generation === generation ? undo : null;
+  const remember = (label: string, previous: DelegationPreferences) => setUndo({ label, previous: structuredClone(previous), generation: generation + 1 });
+  return { undo: live, remember, forget: () => setUndo(null) };
+}
 
-const modelKey = (provider: string, model: string) => JSON.stringify([provider, model]);
+function useExpansion() {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [expandedAlt, setExpandedAlt] = useState<string | null>(null);
+  const toggle = (key: string) => { setExpanded(current => current === key ? null : key); setExpandedAlt(null); };
+  const expand = (key: string) => { setExpanded(key); setExpandedAlt(null); };
+  const closeAlt = (id: string) => setExpandedAlt(current => current === id ? null : current);
+  return { expanded, expandedAlt, toggle, expand, setExpandedAlt, closeAlt, collapse: () => setExpanded(null) };
+}
 
-function ModelField({ value, onChange, catalog, disabled, manual, setManual }: {
-  value: DelegationSelection;
-  onChange: (s: DelegationSelection) => void;
-  catalog?: DelegationModelCatalog;
-  disabled: boolean;
-  manual: boolean;
-  setManual: (manual: boolean) => void;
-}) {
-  const selected = catalog?.models.find(model => model.id === value.model && model.provider === value.provider);
-  const selectedKey = modelKey(value.provider, value.model);
-  const choose = (key: string) => {
-    if (key === '__custom') { setManual(true); return; }
-    if (key === modelKey('', '')) { onChange({ ...value, provider: '', model: '', effort: '' }); return; }
-    const model = catalog?.models.find(candidate => modelKey(candidate.provider, candidate.id) === key);
-    if (model) onChange({ ...value, provider: model.provider, model: model.id, effort: '' });
+function useModelPopover() {
+  const [popover, setPopover] = useState<PopoverTarget | null>(null);
+  const open = (key: string, anchor: Anchor) => setPopover(current => current?.key === key ? null : { key, anchor });
+  const close = useCallback(() => setPopover(null), []);
+  return { popover, key: popover?.key ?? null, open, close };
+}
+
+function LoadingState({ error, onRetry }: { error: string; onRetry: () => void }) {
+  if (!error) return <div role="status">Loading delegation preferences…</div>;
+  return <div role="status">{error}<button type="button" className="settings-action" onClick={onRetry}>Retry</button></div>;
+}
+
+export function DelegationSwitch({ policy }: { policy: DelegationPreferencesPolicy }) {
+  const { preferences, save } = policy;
+  if (!preferences) return null;
+  return <button type="button" role="switch" aria-checked={preferences.enabled} aria-label="Delegation preferences" className="delegation-switch" onClick={() => void save({ ...preferences, enabled: !preferences.enabled })}>
+    <span className="delegation-switch-track" /><span>{preferences.enabled ? 'On' : 'Off'}</span>
+  </button>;
+}
+
+function ModelCell({ selection, harnesses, label, open, onOpen }: { selection: DelegationSelection; harnesses: DelegationHarness[]; label: string; open: boolean; onOpen: (anchor: Anchor) => void }) {
+  const harness = harnesses.find(h => h.id === selection.harness);
+  let className = 'delegation-model';
+  let body: React.ReactNode;
+  if (!complete(selection)) { className += ' unset'; body = 'Choose a model'; }
+  else if (harness && !harness.model_pin) { className += ' pinned'; body = <><span className="h">{harness.name}</span><span className="m">its own model</span>{selection.effort && <span className="e">{selection.effort}</span>}</>; }
+  else body = <><span className="h">{harness?.name ?? selection.harness}</span><span className="m">{selection.model ? knownModelName(selection.harness, selection.provider, selection.model) || `${selection.provider ? `${selection.provider}/` : ''}${selection.model}` : 'default'}</span>{selection.effort && <span className="e">{selection.effort}</span>}</>;
+  return <button type="button" className={className} aria-label={label} aria-haspopup="dialog" aria-expanded={open} onClick={e => onOpen(e.currentTarget)}>
+    {body}<span className="delegation-caret" aria-hidden="true">⌄</span>
+  </button>;
+}
+
+// A draft exists only while the field is focused, so a reload made elsewhere cannot replace what is being typed.
+function TextField({ id: fieldID, label, value, onCommit, placeholder, hint, multiline = true, note }: { id: string; label: string; value: string; onCommit: (value: string) => void; placeholder?: string; hint?: string; multiline?: boolean; note?: string }) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const field = {
+    id: fieldID, value: draft ?? value, placeholder,
+    onFocus: () => setDraft(value),
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setDraft(e.target.value),
+    onBlur: () => { if (draft !== null && draft !== value) onCommit(draft); setDraft(null); },
   };
-  return <label>Model<span className="delegation-select"><select value={manual ? '__custom' : selectedKey} disabled={disabled} onChange={e => choose(e.target.value)}>
-    <option value={modelKey('', '')}>Harness default</option>
-    {catalog?.models.map(model => <option key={`${model.provider}/${model.id}`} value={modelKey(model.provider, model.id)} disabled={model.access === 'unsupported'}>{model.provider ? `${model.provider} / ` : ''}{model.name || model.id}</option>)}
-    {value.model && !selected && <option value={selectedKey}>{value.provider ? `${value.provider} / ` : ''}{value.model} (custom)</option>}
-    <option value="__custom">Enter a model ID…</option>
-  </select></span></label>;
-}
-
-function SelectionHelp({ harness, model, levels, catalog, loading, error, discover }: {
-  harness?: DelegationHarness;
-  model?: DelegationModelCatalog['models'][number];
-  levels: string[];
-  catalog?: DelegationModelCatalog;
-  loading: boolean;
-  error?: string;
-  discover: (harness: string) => void;
-}) {
-  let hint = '';
-  if (levels.length) hint = `Supported effort: ${levels.join(', ')}.`;
-  if (model?.effort_support === 'unsupported') hint = 'This model does not support an effort override.';
-  if (harness?.model_pin === false) hint = 'This harness uses its own selected model.';
-  return <>
-    <div className="delegation-row">
-      {hint && <p className="settings-hint">{hint}</p>}
-      <button className="settings-action" disabled={!harness || loading} onClick={() => harness && discover(harness.id)}>{loading ? 'Discovering…' : catalog ? 'Refresh models' : 'Discover models'}</button>
-    </div>
-    {error && <p className="settings-warning" role="alert">{error}</p>}
-    {catalog?.detail && <p className="settings-hint">{catalog.detail}</p>}
-    {harness && !harness.available && <p className="settings-warning">This harness is unavailable on this daemon. Check Agents and models.</p>}
-  </>;
-}
-
-function SelectionPicker({ value, onChange, harnesses, catalog, loading, error, discover }: SelectionPickerProps) {
-  const prefix = useId();
-  const [manual, setManual] = useState(false);
-  const harness = harnesses.find(h => h.id === value.harness);
-  const model = catalog?.models.find(m => m.id === value.model && m.provider === value.provider);
-  const levels = model?.effort_levels ?? [];
-  return <div className="delegation-picker">
-    <div className="delegation-fields">
-      <label>Harness<span className="delegation-select"><select value={value.harness} onChange={e => { setManual(false); onChange({ ...emptySelection(), harness: e.target.value }); }}>
-        <option value="">Choose a harness</option>
-        {harnesses.map(h => <option value={h.id} key={h.id}>{h.name}{h.available ? '' : ' (unavailable)'}</option>)}
-        {value.harness && !harness && <option>{value.harness}</option>}
-      </select></span></label>
-      <ModelField value={value} onChange={onChange} catalog={catalog} disabled={!value.harness || harness?.model_pin === false} manual={manual} setManual={setManual} />
-      <label>Effort<input list={`${prefix}-efforts`} value={value.effort} placeholder="Harness default" disabled={!value.harness || harness?.effort_pin === false || model?.effort_support === 'unsupported'} onChange={e => onChange({ ...value, effort: e.target.value })} />
-        <datalist id={`${prefix}-efforts`}>{levels.map(level => <option key={level} value={level} />)}</datalist>
-      </label>
-    </div>
-    {manual && <div className="delegation-fields custom-model">
-      <label>Exact model ID<input value={value.model} onChange={e => onChange({ ...value, model: e.target.value, effort: '' })} placeholder="Model ID from your harness" /></label>
-      {!['claude', 'codex', 'copilot'].includes(value.harness) && <label>Provider<input value={value.provider} onChange={e => onChange({ ...value, provider: e.target.value })} /></label>}
-      <button className="settings-action" onClick={() => setManual(false)}>Done</button>
-    </div>}
-    <SelectionHelp harness={harness} model={model} levels={levels} catalog={catalog} loading={loading} error={error} discover={discover} />
+  return <div className="delegation-field">
+    <label htmlFor={fieldID}>{label}{note && <span className="delegation-field-note">{note}</span>}</label>
+    {multiline
+      ? <textarea {...field} />
+      : <input {...field} onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }} />}
+    {hint && <span className="delegation-hint">{hint}</span>}
   </div>;
 }
 
-export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
-  const { state, draft: config, setDraft, busy, dirty, error, changedElsewhere, persist, reload } = policy;
-  const [screen, setScreen] = useState<'roles' | 'fallback'>('roles');
-  const [roleID, setRoleID] = useState('');
-  const [choiceID, setChoiceID] = useState('');
-  const [iconsOpen, setIconsOpen] = useState(false);
-  const [undo, setUndo] = useState<DelegationPreferences | null>(null);
-  const { catalogs, loading, errors: modelErrors, discover } = useHarnessModelCatalogs(Boolean(config?.enabled), loadModels);
-  if (!config || !state) return <div role="status">{error || 'Loading delegation preferences…'}{error && <button className="settings-action" onClick={() => void reload()}>Retry</button>}</div>;
-  const update = (next: DelegationPreferences) => setDraft(next);
-  const role = config.roles.find(r => r.id === roleID);
-  const updateRole = (next: DelegationRole) => update({ ...config, roles: config.roles.map(r => r.id === next.id ? next : r) });
-  const picker = (selection: DelegationSelection, onChange: (s: DelegationSelection) => void) => <SelectionPicker value={selection} onChange={onChange} harnesses={state.harnesses} catalog={catalogs[selection.harness]} loading={!!loading[selection.harness]} error={modelErrors[selection.harness]} discover={h => void discover(h)} />;
-  const addTemplates = () => update({ ...config, roles: [...config.roles, ...structuredClone(state.templates.filter(t => !config.roles.some(r => r.id === t.id)))] });
-  const addRole = () => {
-    const next: DelegationRole = { id: id('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
-    update({ ...config, roles: [...config.roles, next] }); setRoleID(next.id); setChoiceID('default');
-  };
-  const removeRole = () => { setUndo(structuredClone(config)); update({ ...config, roles: config.roles.filter(r => r.id !== roleID) }); setRoleID(''); };
-  const addChoice = () => {
-    if (!role) return;
-    const choice: DelegationChoice = { id: id('choice'), name: 'Alternative', when: '', selection: structuredClone(role.choices.find(c => c.id === role.default_choice_id)?.selection ?? emptySelection()) };
-    updateRole({ ...role, choices: [...role.choices, choice] }); setChoiceID(choice.id);
-  };
-  return <div className="delegation-settings" data-testid="delegation-settings">
-    <div className="delegation-enable">
-      <div><h3>Use delegation preferences</h3></div>
-      <label className="delegation-switch"><input type="checkbox" checked={config.enabled} disabled={busy} onChange={e => {
-        const next = { ...config, enabled: e.target.checked };
-        if (next.enabled && next.revision === 0 && !next.roles.length) next.roles = structuredClone(state.templates);
-        void persist(next);
-      }} />{config.enabled ? 'On' : 'Off'}</label>
+function ReadOnlyField({ label, value, note }: { label: string; value: string; note?: string }) {
+  return <div className="delegation-field"><span className="delegation-field-label">{label}{note && <span className="delegation-field-note">{note}</span>}</span><div className="delegation-ro">{value}</div></div>;
+}
+
+function RoleEditor({ role, onUpdate }: { role: DelegationRole; onUpdate: (role: DelegationRole) => void }) {
+  return <>
+    <TextField id={`name-${role.id}`} label="Name" value={role.name} multiline={false} onCommit={name => { if (name.trim()) onUpdate({ ...role, name: name.trim() }); }} />
+    <div className="delegation-icons" role="group" aria-label="Role icon">
+      <button type="button" className={`delegation-icon pick ${role.icon === '' ? 'active' : ''}`} aria-label="Initial as icon" aria-pressed={role.icon === ''} onClick={() => onUpdate({ ...role, icon: '' })}><DelegationRoleIcon icon="" name={role.name} /></button>
+      {DELEGATION_ICONS.map(icon => <button key={icon} type="button" className={`delegation-icon pick ${role.icon === icon ? 'active' : ''}`} aria-label={`${icon} icon`} aria-pressed={role.icon === icon} onClick={() => onUpdate({ ...role, icon })}><DelegationRoleIcon icon={icon} name={role.name} /></button>)}
     </div>
-    {error && <p role="alert" className="settings-warning">{error}</p>}
-    {changedElsewhere && <p role="alert" className="settings-warning">Preferences changed elsewhere. Your draft is preserved. Revert changes before making a new edit.</p>}
-    {!config.enabled ? <div className="delegation-off"><p className="settings-description">Enable to configure roles and models for delegated work.</p></div> : <fieldset disabled={busy} className="delegation-content">
-      <div className="delegation-tabs settings-segmented" role="group" aria-label="Delegation settings">
-        <button className={`settings-segmented-option ${screen === 'roles' ? 'active' : ''}`} aria-pressed={screen === 'roles'} onClick={() => { setScreen('roles'); setRoleID(''); }}>Roles</button>
-        <button className={`settings-segmented-option ${screen === 'fallback' ? 'active' : ''}`} aria-pressed={screen === 'fallback'} onClick={() => { setScreen('fallback'); setRoleID(''); }}>Fallback</button>
+    <TextField id={`desc-${role.id}`} label="When to choose this role" value={role.description} placeholder="Describe the work this role fits. The agent reads this to pick a role, so say what it looks like and what it is not for." hint="Prose, as long as it needs to be. The first line is what the table shows." onCommit={description => onUpdate({ ...role, description })} />
+    <TextField id={`ins-${role.id}`} label="Instructions" value={role.instructions} onCommit={instructions => onUpdate({ ...role, instructions })} />
+    <TextField id={`stop-${role.id}`} label="Stops when" value={role.stopping_point} onCommit={stopping_point => onUpdate({ ...role, stopping_point })} />
+  </>;
+}
+
+function AlternativeRow({ alt, harnesses, open, popoverOpen, onToggle, onOpenPopover, onUpdate, onMakeDefault, onRemove }: {
+  alt: DelegationChoice;
+  harnesses: DelegationHarness[];
+  open: boolean;
+  popoverOpen: boolean;
+  onToggle: () => void;
+  onOpenPopover: (anchor: Anchor) => void;
+  onUpdate: (choice: DelegationChoice) => void;
+  onMakeDefault: () => void;
+  onRemove: () => void;
+}) {
+  const name = alt.name || 'alternative';
+  const when = firstLine(alt.when);
+  return <div>
+    <div className="delegation-alt">
+      <span />
+      <button type="button" className="delegation-alt-who" aria-label={alt.name || 'Unnamed alternative'} aria-expanded={open} onClick={onToggle}>
+        <span className="delegation-alt-name">{alt.name || 'Unnamed alternative'}</span>
+        <span className={`delegation-alt-when ${when ? '' : 'blank'}`}><span className="w">when</span>{when || 'No condition yet. The agent cannot pick this.'}</span>
+      </button>
+      <ModelCell selection={alt.selection} harnesses={harnesses} label={`Model for ${name}`} open={popoverOpen} onOpen={onOpenPopover} />
+      <button type="button" className="delegation-rm" aria-label={`Remove ${name}`} onClick={onRemove} title={`Remove ${name}`}>×</button>
+    </div>
+    {open && <div className="delegation-alt-edit">
+      <TextField id={`altname-${alt.id}`} label="Name" value={alt.name} multiline={false} placeholder="Short label, shown to the agent with the condition" onCommit={next => onUpdate({ ...alt, name: next.trim() || 'Alternative' })} />
+      <TextField id={`when-${alt.id}`} label="When to use this instead of the default" value={alt.when} placeholder="Describe the work this alternative fits. The agent reads this to decide, so say what it looks like and what it is not for." hint="Prose, as long as it needs to be. The first line is what the table shows." onCommit={next => onUpdate({ ...alt, when: next })} />
+      <div className="delegation-actions"><button type="button" className="settings-action quiet" onClick={onMakeDefault}>Make default</button></div>
+    </div>}
+  </div>;
+}
+
+type RoleRowProps = {
+  role: DelegationRole;
+  view: DelegationRole;
+  harnesses: DelegationHarness[];
+  open: boolean;
+  expandedAlt: string | null;
+  popoverKey: string | null;
+  onToggle: () => void;
+  onExpandAlt: (id: string | null) => void;
+  onOpenPopover: (key: string, anchor: Anchor) => void;
+  onUpdate: (role: DelegationRole) => void;
+  onCopy: () => void;
+  onDelete: () => void;
+  onMakeDefault: (alt: DelegationChoice) => void;
+  onRemoveAlt: (alt: DelegationChoice) => void;
+};
+
+function RoleRow({ role, view: v, harnesses, open, expandedAlt, popoverKey, onToggle, onExpandAlt, onOpenPopover, onUpdate, onCopy, onDelete, onMakeDefault, onRemoveAlt }: RoleRowProps) {
+  const main = defaultChoice(role);
+  const alts = alternatives(role);
+  const needs = role.enabled && !complete(main.selection);
+  const readOnly = Boolean(role.builtin);
+  const cellKey = `${role.id}/${main.id}`;
+  const updateChoice = (next: DelegationChoice) => onUpdate({ ...role, choices: role.choices.map(choice => choice.id === next.id ? next : choice) });
+  const addAlternative = () => {
+    const choice: DelegationChoice = { id: newID('choice'), name: 'Alternative', when: '', selection: structuredClone(main.selection) };
+    onUpdate({ ...role, choices: [...role.choices, choice] });
+    onExpandAlt(choice.id);
+  };
+  return <div className={`delegation-row ${role.enabled ? '' : 'off'} ${open ? 'open' : ''}`} data-role-id={role.id}>
+    <div className="delegation-row-main">
+      <span className="delegation-icon"><DelegationRoleIcon icon={v.icon} name={v.name} /></span>
+      <button type="button" className="delegation-who" aria-label={v.name} aria-expanded={open} onClick={onToggle}>
+        <span className="delegation-name">{v.name}{readOnly && <span className="delegation-tag">Attn</span>}{!role.enabled && <span className="delegation-tag">Off</span>}{needs && <span className="delegation-tag needs">Needs a model</span>}</span>
+        <span className="delegation-desc">{firstLine(v.description)}</span>
+      </button>
+      <span className="delegation-cell">
+        <ModelCell selection={main.selection} harnesses={harnesses} label={`Model for ${v.name}`} open={popoverKey === cellKey} onOpen={anchor => onOpenPopover(cellKey, anchor)} />
+        {alts.length > 0 && !open && <button type="button" className="delegation-altchip" onClick={onToggle}>+{alts.length} alternative{alts.length === 1 ? '' : 's'}</button>}
+      </span>
+      <button type="button" className={`delegation-more ${open ? 'open' : ''}`} aria-label={`${v.name} details`} aria-expanded={open} onClick={onToggle}>···</button>
+    </div>
+    {open && <>
+      <div className="delegation-details">
+        {readOnly
+          ? <>
+            <ReadOnlyField label="Instructions" value={v.instructions} note="maintained by Attn, updates with releases" />
+            <ReadOnlyField label="Stops when" value={v.stopping_point} />
+          </>
+          : <RoleEditor role={role} onUpdate={onUpdate} />}
       </div>
-      {screen === 'fallback' ? <>
-        <h3>When no role fits</h3>
-        {picker(config.fallback.selection, selection => update({ ...config, fallback: { ...config.fallback, selection } }))}
-        <label className="delegation-field">Instructions (optional)<textarea value={config.fallback.instructions} onChange={e => update({ ...config, fallback: { ...config.fallback, instructions: e.target.value } })} /></label>
-      </> : role ? <>
-        <div className="delegation-row between"><button className="settings-action" onClick={() => { setRoleID(''); setIconsOpen(false); }}>← All roles</button><button className="settings-action danger" onClick={removeRole}>Delete role</button></div>
-        <div className="delegation-role-heading"><button className="delegation-icon" aria-label="Choose role icon" aria-expanded={iconsOpen} onClick={() => setIconsOpen(v => !v)}><DelegationRoleIcon icon={role.icon} name={role.name} /></button>
-          <label className="delegation-field">Role name<input value={role.name} onChange={e => updateRole({ ...role, name: e.target.value })} /></label></div>
-        {iconsOpen && <div className="delegation-icons" role="group" aria-label="Role icons"><button className="settings-action" onClick={() => { updateRole({ ...role, icon: '' }); setIconsOpen(false); }}>Initial</button>{DELEGATION_ICONS.map(icon => <button key={icon} className="delegation-icon" aria-label={`${icon} icon`} aria-pressed={role.icon === icon} onClick={() => { updateRole({ ...role, icon }); setIconsOpen(false); }}><DelegationRoleIcon icon={icon} name={role.name} /></button>)}</div>}
-        <label className="delegation-field">When to choose this role<input value={role.description} onChange={e => updateRole({ ...role, description: e.target.value })} /></label>
-        <details className="delegation-behavior" open key={role.id}><summary>Instructions and stopping point</summary>
-          <label className="delegation-field">Instructions<textarea value={role.instructions} onChange={e => updateRole({ ...role, instructions: e.target.value })} /></label>
-          <label className="delegation-field">Stopping point<textarea value={role.stopping_point} onChange={e => updateRole({ ...role, stopping_point: e.target.value })} /></label>
-        </details>
-        <div className="delegation-row between"><h3>Model choices</h3><button className="settings-action" data-testid="delegation-add-choice" onClick={addChoice}>+ Add alternative</button></div>
-        {[...role.choices].sort((a, b) => Number(b.id === role.default_choice_id) - Number(a.id === role.default_choice_id)).map(choice => {
-          const isDefault = role.default_choice_id === choice.id;
-          const setChoice = (next: DelegationChoice) => updateRole({ ...role, choices: role.choices.map(c => c.id === next.id ? next : c) });
-          return <section className="delegation-choice" key={choice.id}>
-            <div className="delegation-row between"><div><h4>{choice.name}{isDefault && choice.name !== 'Default' && <span className="delegation-choice-default">Default</span>}</h4>{!isDefault && <p className="settings-hint">{choice.when || 'No condition set'}</p>}<p className="delegation-route">{route(choice.selection)}</p></div><button className="settings-action" aria-expanded={choiceID === choice.id} onClick={() => setChoiceID(choiceID === choice.id ? '' : choice.id)}>{choiceID === choice.id ? 'Close' : 'Edit'}</button></div>
-            {choiceID === choice.id && <div className="delegation-choice-body">
-              <label className="delegation-field">Choice name<input value={choice.name} onChange={e => setChoice({ ...choice, name: e.target.value })} /></label>
-              {!isDefault && <label className="delegation-field">Use when<textarea value={choice.when} onChange={e => setChoice({ ...choice, when: e.target.value })} placeholder="For example: requirements are ambiguous or verification is difficult." /></label>}
-              {picker(choice.selection, selection => setChoice({ ...choice, selection }))}
-              <div className="delegation-row">
-                {!isDefault && <button className="settings-action" onClick={() => { setUndo(structuredClone(config)); updateRole({ ...role, default_choice_id: choice.id }); }}>Make default</button>}
-                <button className="settings-action" onClick={() => { const copy = { ...structuredClone(choice), id: id('choice'), name: `${choice.name} copy` }; updateRole({ ...role, choices: [...role.choices, copy] }); setChoiceID(copy.id); }}>Duplicate</button>
-                {!isDefault && <button className="settings-action danger" onClick={() => { setUndo(structuredClone(config)); updateRole({ ...role, choices: role.choices.filter(c => c.id !== choice.id) }); }}>Remove alternative</button>}
-              </div>
-            </div>}
-          </section>;
-        })}
-      </> : <>
-        <div className="delegation-row between"><h3>Roles</h3><button className="settings-action" onClick={addRole}>+ New role</button></div>
-        {config.roles.map(r => <div className={`delegation-role-row ${r.enabled ? '' : 'disabled'}`} key={r.id}><span className="delegation-icon"><DelegationRoleIcon icon={r.icon} name={r.name} /></span><div className="delegation-role-summary"><h4>{r.name}</h4><p className="settings-description">{r.description}</p><p className="delegation-route">{route(r.choices.find(c => c.id === r.default_choice_id)?.selection ?? emptySelection())}{r.choices.length > 1 ? ` · ${r.choices.length - 1} alternatives` : ''}</p></div><button className="settings-action" aria-label={`Edit ${r.name}`} onClick={() => { setRoleID(r.id); setChoiceID(r.default_choice_id); setIconsOpen(false); }}>Edit</button><input type="checkbox" aria-label={`Enable ${r.name}`} checked={r.enabled} onChange={e => updateRole({ ...r, enabled: e.target.checked })} /></div>)}
-        <button className="settings-action" disabled={state.templates.every(t => config.roles.some(r => r.id === t.id))} onClick={addTemplates}>Add starter roles</button>
-      </>}
-    </fieldset>}
-    {undo && <div role="status" className="delegation-row"><button className="settings-action" onClick={() => { update({ ...undo, revision: config.revision }); setUndo(null); }}>Undo</button></div>}
-    <div className="delegation-save"><span role="status">{busy ? 'Saving…' : dirty ? 'Unsaved changes' : 'Saved'}</span><button className="settings-action" disabled={busy || (!dirty && !changedElsewhere)} onClick={() => { setUndo(null); void reload(true); }}>Revert changes</button><button className="settings-action primary" data-testid="delegation-save" disabled={busy || !dirty || changedElsewhere} onClick={() => void persist(config)}>Save</button></div>
+      {alts.map(alt => <AlternativeRow key={alt.id} alt={alt} harnesses={harnesses} open={expandedAlt === alt.id} popoverOpen={popoverKey === `${role.id}/${alt.id}`}
+        onToggle={() => onExpandAlt(expandedAlt === alt.id ? null : alt.id)} onOpenPopover={anchor => onOpenPopover(`${role.id}/${alt.id}`, anchor)} onUpdate={updateChoice} onMakeDefault={() => onMakeDefault(alt)} onRemove={() => onRemoveAlt(alt)} />)}
+      <div className="delegation-alt add"><span /><button type="button" className="settings-action quiet" onClick={addAlternative}>+ Alternative model</button></div>
+      <div className="delegation-details actions"><div className="delegation-actions">
+        {readOnly && <button type="button" className="settings-action" onClick={onCopy}>Make an editable copy</button>}
+        <span className="delegation-spacer" />
+        <button type="button" className="settings-action quiet" onClick={() => onUpdate({ ...role, enabled: !role.enabled })}>{role.enabled ? 'Turn off' : 'Turn on'}</button>
+        <button type="button" className="settings-action quiet danger" onClick={onDelete}>Delete</button>
+      </div></div>
+    </>}
+  </div>;
+}
+
+function FallbackRow({ fallback, harnesses, open, popoverOpen, onToggle, onOpenPopover, onChange }: {
+  fallback: DelegationPreferences['fallback'];
+  harnesses: DelegationHarness[];
+  open: boolean;
+  popoverOpen: boolean;
+  onToggle: () => void;
+  onOpenPopover: (anchor: Anchor) => void;
+  onChange: (fallback: DelegationPreferences['fallback']) => void;
+}) {
+  return <div className={`delegation-row ${open ? 'open' : ''}`} data-role-id="fallback">
+    <div className="delegation-row-main">
+      <span className="delegation-icon fallback"><DelegationRoleIcon icon="arrow" name="Anything else" /></span>
+      <button type="button" className="delegation-who" aria-label="Anything else" aria-expanded={open} onClick={onToggle}>
+        <span className="delegation-name">Anything else</span>
+        <span className="delegation-desc">When no role fits the work. Agents use this instead of choosing a model themselves.</span>
+      </button>
+      <span className="delegation-cell"><ModelCell selection={fallback.selection} harnesses={harnesses} label="Model for anything else" open={popoverOpen} onOpen={onOpenPopover} /></span>
+      <button type="button" className={`delegation-more ${open ? 'open' : ''}`} aria-label="Anything else details" aria-expanded={open} onClick={onToggle}>···</button>
+    </div>
+    {open && <div className="delegation-details">
+      <TextField id="fb-ins" label="Instructions (optional)" value={fallback.instructions} placeholder="Anything every unmatched delegation should hear." onCommit={instructions => onChange({ ...fallback, instructions })} />
+    </div>}
+  </div>;
+}
+
+function EmptyPanel({ canAdopt, onAdopt, onAdd }: { canAdopt: boolean; onAdopt: () => void; onAdd: () => void }) {
+  return <div className="delegation-empty">
+    <h3>No roles yet</h3>
+    <p>Start with Attn's four maintained roles, then pick a model for each. Attn keeps their instructions current; the model choices stay yours.</p>
+    <div className="delegation-actions center">
+      <button type="button" className="settings-action primary" disabled={!canAdopt} onClick={onAdopt}>Add Attn roles</button>
+      <button type="button" className="settings-action" onClick={onAdd}>+ Custom role</button>
+    </div>
+  </div>;
+}
+
+function AddRow({ config, missing, onAdd, onAdopt }: { config: DelegationPreferences; missing: DelegationRole[]; onAdd: () => void; onAdopt: () => void }) {
+  const restore = config.roles.some(role => role.builtin);
+  return <div className="delegation-addrow">
+    <button type="button" className="settings-action quiet" onClick={onAdd}>+ Custom role</button>
+    {missing.length > 0 && <button type="button" className="settings-action quiet" onClick={onAdopt}>{restore ? `Restore Attn roles (${missing.length})` : 'Add Attn roles'}</button>}
+  </div>;
+}
+
+function TableFoot({ config }: { config: DelegationPreferences }) {
+  const live = liveRoles(config).length;
+  const needs = config.roles.filter(role => role.enabled && !complete(defaultChoice(role).selection)).length;
+  const off = config.roles.filter(role => !role.enabled).length;
+  const text = !config.enabled
+    ? 'Off. Agents choose harness and model themselves. Your table is kept.'
+    : `Agents see ${live} of ${plural(config.roles.length, 'role')}${complete(config.fallback.selection) ? ' and the fallback' : ''}.${needs ? ` ${needs} need${needs === 1 ? 's' : ''} a model.` : ''}${off ? ` ${off} off.` : ''}`;
+  return <div className="delegation-foot">
+    <span className={`delegation-live ${config.enabled ? '' : 'off'}`} role="status"><span className="delegation-dot" />{text}</span>
+    <span className="delegation-spacer" />
+    <span>Agents read this with <code>attn delegate roles</code>.</span>
+  </div>;
+}
+
+function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel, onConfirm }: {
+  config: DelegationPreferences;
+  templates: DelegationRole[];
+  names: (role: DelegationRole) => string;
+  adoption: Record<string, string>;
+  onChange: (next: Record<string, string>) => void;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const taken = new Set(Object.values(adoption));
+  return <section className="delegation-confirm" aria-label="Adopt maintained roles">
+    <h4>Some Attn roles look like roles you already have</h4>
+    <p>Choose whether to add them beside your custom rows or replace one. Replacing keeps that row's model choices and on/off state.</p>
+    {templates.map(template => {
+      const key = template.builtin ?? template.id;
+      const options = config.roles.filter(role => !role.builtin && (!taken.has(role.id) || adoption[key] === role.id));
+      return <label className="delegation-confirm-line" key={key}><strong>{names(template)}</strong>
+        <select value={adoption[key]} onChange={event => onChange({ ...adoption, [key]: event.target.value })}>
+          <option value="new">Add as a new role</option>
+          {options.map(role => <option key={role.id} value={role.id}>Replace {role.name}</option>)}
+        </select>
+      </label>;
+    })}
+    <div className="delegation-actions">
+      <button type="button" className="settings-action" onClick={onCancel}>Cancel</button>
+      <button type="button" className="settings-action primary" data-testid="delegation-add-attn-roles-confirm" onClick={onConfirm}>Add Attn roles</button>
+    </div>
+  </section>;
+}
+
+export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
+  const { state, preferences: config, error, generation, reload, save } = policy;
+  const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
+  const { undo, remember, forget } = useUndo(generation);
+  const rows = useExpansion();
+  const picker = useModelPopover();
+  const refreshOnReturn = useEffectEvent(() => { if (state) void reload(); });
+  useEffect(() => { refreshOnReturn(); }, []);
+  if (!config || !state) return <LoadingState error={error} onRetry={() => void reload()} />;
+
+  const view = roleViewer(state.expandedRoles);
+  const commit = (next: DelegationPreferences) => { void save(next); };
+  const commitUndoable = (next: DelegationPreferences, label: string) => { void save(next); remember(label, config); };
+  const withRoles = (roles: DelegationRole[]) => ({ ...config, roles });
+  const updateRole = (next: DelegationRole) => commit(withRoles(config.roles.map(role => role.id === next.id ? next : role)));
+
+  const addRole = () => {
+    const role: DelegationRole = { id: newID('role'), name: 'New role', icon: '', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
+    commit(withRoles([...config.roles, role]));
+    rows.expand(role.id);
+  };
+  const copyRole = (role: DelegationRole) => {
+    const v = view(role);
+    const copy: DelegationRole = { ...structuredClone(v), id: newID('role'), builtin: undefined, name: `${v.name} (custom)`, enabled: role.enabled, default_choice_id: role.default_choice_id, choices: structuredClone(role.choices) };
+    const index = config.roles.findIndex(r => r.id === role.id);
+    commit(withRoles([...config.roles.slice(0, index + 1), copy, ...config.roles.slice(index + 1)]));
+    rows.expand(copy.id);
+  };
+  const deleteRole = (role: DelegationRole) => {
+    commitUndoable(withRoles(config.roles.filter(r => r.id !== role.id)), `Deleted ${view(role).name}`);
+    rows.collapse();
+  };
+  const makeDefault = (role: DelegationRole, alt: DelegationChoice) => {
+    commitUndoable(withRoles(config.roles.map(r => r.id === role.id ? { ...role, default_choice_id: alt.id } : r)), `Made ${alt.name || 'alternative'} the default for ${view(role).name}`);
+    rows.closeAlt(alt.id);
+  };
+  const removeAlternative = (role: DelegationRole, alt: DelegationChoice) => {
+    const name = alt.name || 'alternative';
+    commitUndoable(withRoles(config.roles.map(r => r.id === role.id ? { ...role, choices: role.choices.filter(c => c.id !== alt.id) } : r)), `Removed ${name} from ${view(role).name}`);
+    rows.closeAlt(alt.id);
+  };
+  const missing = missingTemplates(config, state.templates);
+  const templateName = (template: DelegationRole) => roleLabel(view(template));
+  const adopt = () => {
+    if (adoptionConflicts(config, missing, templateName)) { setAdoption(freshAdoption(missing)); return; }
+    forget();
+    void save(adoptMaintainedRoles(config, missing, {}), true);
+  };
+  const confirmAdoption = () => { forget(); void save(adoptMaintainedRoles(config, missing, adoption ?? {}), true); setAdoption(null); };
+  const target = picker.key === null ? null : selectionAt(config, picker.key);
+
+  return <div className="delegation-settings" data-testid="delegation-settings">
+    <p className={`delegation-lead ${config.enabled ? '' : 'off'}`}>{leadText(config.enabled)}</p>
+    {error && <p role="alert" className="settings-warning">{error}</p>}
+    <div className={`delegation-table ${config.enabled ? '' : 'dim'}`}>
+      <div className="delegation-thead"><span /><span>Role</span><span>Runs on</span><span /></div>
+      {config.roles.length === 0 && !adoption && <EmptyPanel canAdopt={missing.length > 0} onAdopt={adopt} onAdd={addRole} />}
+      {config.roles.map(role => <RoleRow key={role.id} role={role} view={view(role)} harnesses={state.harnesses} open={rows.expanded === role.id} expandedAlt={rows.expandedAlt} popoverKey={picker.key}
+        onToggle={() => rows.toggle(role.id)} onExpandAlt={rows.setExpandedAlt} onOpenPopover={picker.open} onUpdate={updateRole} onCopy={() => copyRole(role)} onDelete={() => deleteRole(role)} onMakeDefault={alt => makeDefault(role, alt)} onRemoveAlt={alt => removeAlternative(role, alt)} />)}
+      <FallbackRow fallback={config.fallback} harnesses={state.harnesses} open={rows.expanded === FALLBACK} popoverOpen={picker.key === FALLBACK} onToggle={() => rows.toggle(FALLBACK)} onOpenPopover={anchor => picker.open(FALLBACK, anchor)} onChange={fallback => commit({ ...config, fallback })} />
+      {config.roles.length > 0 && <AddRow config={config} missing={missing} onAdd={addRole} onAdopt={adopt} />}
+    </div>
+    {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
+    {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); forget(); }}>Undo</button></div>}
+    {config.roles.length > 0 && <TableFoot config={config} />}
+    {picker.popover && target && <DelegationModelPopover value={target.value} harnesses={state.harnesses} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} loadModels={loadModels} />}
   </div>;
 }

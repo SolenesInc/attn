@@ -4,6 +4,7 @@ import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext'
 import { CrewRestartState, type CrewMember } from '../types/generated';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
+import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
 import { CrewPanel } from './CrewPanel';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
@@ -122,6 +123,7 @@ function renderPanel({
 
 afterEach(() => {
   _resetEscapeStackForTest();
+  clearDelegationModelCatalogs();
   vi.restoreAllMocks();
 });
 

@@ -13,8 +13,8 @@ import (
 
 func delegateForFirstTurn(t *testing.T, d *Daemon, sourceID string) (*protocol.DelegateResult, error) {
 	t.Helper()
-	return d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: sourceID, Brief: "Say hello.",
+	return d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(sourceID), Brief: protocol.Ptr("Say hello."),
 		Agent: protocol.Ptr("codex"), Label: protocol.Ptr("hello"),
 	})
 }

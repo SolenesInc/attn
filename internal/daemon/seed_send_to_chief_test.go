@@ -16,6 +16,9 @@ func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 	}
 	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "Place this work"})
 	move(t, d, "sess-a", seedWire.ID, garden.VerbTend, "", "")
+	addGardenSession(t, d, "observer")
+	watchSeed(t, d, "sess-a", seedWire.ID, false)
+	watchSeed(t, d, "observer", seedWire.ID, false)
 	seed, doc, err := d.readSeed(seedWire.ID)
 	if err != nil {
 		t.Fatal(err)
@@ -41,6 +44,13 @@ func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 	if result.ChiefSessionID != "chief" || result.Seed.TenderSession != "chief" {
 		t.Fatalf("result = %+v", result)
 	}
+	if queued := queuedSeedBells(t, d, "sess-a"); len(queued) != 0 {
+		t.Fatalf("source received its own transfer bell: %q", queued)
+	}
+	if queued, err := d.store.UnreadGardenSeedMailboxItems("chief"); err != nil || len(queued) != 0 {
+		t.Fatalf("directly prompted Chief received a duplicate transfer bell: %+v, %v", queued, err)
+	}
+	assertOneSeedBell(t, d, "observer", seed.ID, "tended")
 	shown := show(t, d, seed.ID)
 	if len(shown.Notes) == 0 || !strings.Contains(shown.Notes[0].Body, "feature/special") ||
 		!strings.Contains(shown.Notes[0].Body, "Sent to Chief") {

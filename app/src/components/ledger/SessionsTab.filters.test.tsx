@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import type { SessionLedgerPage } from '../../hooks/daemonSessionLedgerEvents';
 import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
 import { NOW, entry, listing, page, renderSessionsTab, rows } from './testSupport';
 
@@ -162,6 +163,45 @@ describe('SessionsTab filter memory', () => {
     expect(calls[0]).toEqual({ closed: true, since, workspace_id: 'ws-2', repository: '/Users/victor/projects/attn', limit: 50, reopen: true });
     expect(query().value).toBe('repo:attn ws:attn 7d');
     expect(setSetting).not.toHaveBeenCalled();
+  });
+
+  it('keeps the remembered path when repository names collide', async () => {
+    const { list, calls } = listing([page({
+      facets: {
+        workspaces: [],
+        repositories: [
+          { value: '/tmp/earlier/attn', count: 4 },
+          { value: '/Users/victor/projects/attn', count: 3 },
+        ],
+      },
+    })]);
+    const { setSetting } = renderSessionsTab(
+      { listSessions: list },
+      { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
+    );
+
+    await waitFor(() => expect(calls).toHaveLength(1));
+    expect(calls[0].repository).toBe('/Users/victor/projects/attn');
+    expect(query().value).toContain('repo:attn');
+    expect(setSetting).not.toHaveBeenCalled();
+  });
+
+  it('keeps remembered facet filters while the first page is loading', async () => {
+    vi.useFakeTimers();
+    try {
+      const listSessions = vi.fn(() => new Promise<SessionLedgerPage>(() => {}));
+      const { setSetting } = renderSessionsTab(
+        { listSessions, workspaceNames: { 'ws-2': 'attn' } },
+        { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
+      );
+
+      await act(async () => { vi.runOnlyPendingTimers(); });
+
+      expect(query().value).toBe('repo:attn ws:attn 7d');
+      expect(setSetting).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('restores a custom range exactly as it was left', async () => {

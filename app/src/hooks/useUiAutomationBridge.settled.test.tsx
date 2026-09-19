@@ -128,6 +128,55 @@ describe('bridge dispatch', () => {
     expect((lastAnswer() as { gridActive: boolean }).gridActive).toBe(true);
   });
 
+  it('reads the settled value of a form control', async () => {
+    const { dispatch } = mountBridge(null);
+    const select = document.createElement('select');
+    select.dataset.testid = 'rule-sandbox';
+    select.innerHTML = '<option value="inherit">inherit</option><option value="bypass">bypass</option>';
+    select.value = 'bypass';
+    document.body.appendChild(select);
+
+    await dispatch({
+      request_id: 'r-value',
+      action: 'dom_value',
+      payload: { selector: '[data-testid="rule-sandbox"]' },
+    });
+
+    expect(lastAnswer().value).toBe('bypass');
+  });
+
+  it('exposes DOM and focus expectations through the bridge', async () => {
+    const { dispatch } = mountBridge(null);
+    const input = document.createElement('input');
+    input.className = 'menu-input';
+    document.body.append(input);
+    input.focus();
+
+    await dispatch({
+      request_id: 'r-dom-wait',
+      action: 'dom_wait',
+      payload: { selector: '.menu-input:focus', timeoutMs: 1000 },
+    });
+
+    expect(lastAnswer()).toEqual({ matched: true });
+  });
+
+  it('identifies the active element by selector without depending on window focus', async () => {
+    const { dispatch } = mountBridge(null);
+    const button = document.createElement('button');
+    button.dataset.chainSession = 'builder';
+    document.body.append(button);
+    button.focus();
+    const documentFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+
+    for (const [selector, matches] of [['[data-chain-session="builder"]', true], ['[data-chain-session="reviewer"]', false]] as const) {
+      await dispatch({ request_id: selector, action: 'dom_active_element', payload: { selector } });
+      expect(lastAnswer()).toMatchObject({ tag: 'BUTTON', matches });
+      expect(document.activeElement).toBe(button);
+    }
+    documentFocus.mockRestore();
+  });
+
   it('answers with props from the render that committed during the settle', async () => {
     const { dispatch, rerender } = mountBridge('before');
 

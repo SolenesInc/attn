@@ -29,7 +29,7 @@ func (d *Daemon) requireAutoModeStore(conn net.Conn) bool {
 	return true
 }
 
-func (d *Daemon) handleAutoModeShow(conn net.Conn, _ *protocol.AutoModeShowMessage) {
+func (d *Daemon) handleAutoModeShow(conn net.Conn, msg *protocol.AutoModeShowMessage) {
 	if !d.requireAutoModeStore(conn) {
 		return
 	}
@@ -38,17 +38,32 @@ func (d *Daemon) handleAutoModeShow(conn net.Conn, _ *protocol.AutoModeShowMessa
 		d.sendError(conn, err.Error())
 		return
 	}
+	globalRules := autoModeRuleInfos(cfg.Rules)
+	repository := automode.RepositoryRules{Rules: []automode.Rule{}}
+	if cwd := strings.TrimSpace(protocol.Deref(msg.Cwd)); cwd != "" {
+		cfg, repository, err = autoModeConfigWithRepositoryRules(cfg, cwd)
+		if err != nil {
+			d.sendError(conn, err.Error())
+			return
+		}
+	}
 	proposals, err := d.store.ListAutoModeProposals(automode.StatePending)
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
+	result := protocol.AutoModeShowResult{
+		Config:          autoModeConfigInfo(cfg),
+		GlobalRules:     globalRules,
+		RepositoryRules: autoModeRuleInfos(repository.Rules),
+		Proposals:       autoModeProposalInfos(proposals),
+	}
+	if repository.Path != "" {
+		result.RepositoryRulesPath = protocol.Ptr(repository.Path)
+	}
 	d.sendAutoModeResponse(conn, protocol.Response{
-		Ok: true,
-		AutomodeShowResult: &protocol.AutoModeShowResult{
-			Config:    autoModeConfigInfo(cfg),
-			Proposals: autoModeProposalInfos(proposals),
-		},
+		Ok:                 true,
+		AutomodeShowResult: &result,
 	})
 }
 
@@ -232,15 +247,115 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 	}
 }
 
+// applySessionPolicyPair puts the session's own pair over the daemon's default;
+// an empty half keeps the default.
+func applySessionPolicyPair(cfg automode.Config, policy, sandbox string) automode.Config {
+	if policy != "" {
+		cfg.ApprovalPolicy = policy
+	}
+	if sandbox != "" {
+		cfg.SandboxMode = sandbox
+	}
+	return cfg
+}
+
+// The pair as asked for. A bad value is refused on this, so a launcher that
+// mistyped one is told, even when yolo would have replaced it.
+func requestedSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
+	return strings.TrimSpace(protocol.Deref(msg.ApprovalPolicy)),
+		strings.TrimSpace(protocol.Deref(msg.SandboxMode))
+}
+
+// Yolo asks for the full-access preset and wins over a pair sent beside it.
+func effectiveSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
+	if protocol.Deref(msg.YoloMode) {
+		return automode.PolicyNever, automode.SandboxDangerFullAccess
+	}
+	return requestedSpawnPolicyPair(msg)
+}
+
+func autoModePresetInfos() []protocol.AutoModePresetInfo {
+	presets := automode.Presets()
+	infos := make([]protocol.AutoModePresetInfo, 0, len(presets))
+	for _, preset := range presets {
+		infos = append(infos, protocol.AutoModePresetInfo{
+			ID:             preset.ID,
+			Label:          preset.Label,
+			Description:    preset.Description,
+			ApprovalPolicy: preset.ApprovalPolicy,
+			SandboxMode:    preset.SandboxMode,
+		})
+	}
+	return infos
+}
+
 func autoModeConfigInfo(cfg automode.Config) protocol.AutoModeConfigInfo {
 	return protocol.AutoModeConfigInfo{
-		EnabledDefault:  cfg.EnabledDefault,
-		Environment:     autoModeEnvironmentInfo(cfg.Environment),
-		Allow:           nonNilStrings(cfg.Allow),
-		HardDeny:        nonNilStrings(cfg.HardDeny),
-		ShippedHardDeny: nonNilStrings(automode.ShippedHardDeny(config.WSPort())),
-		Models:          nonNilStrings(cfg.Models),
+		Guardian:       &protocol.GuardianSelection{Provider: protocol.Ptr(cfg.Guardian.Provider), Model: protocol.Ptr(cfg.Guardian.Model), Effort: protocol.Ptr(cfg.Guardian.Effort)},
+		EnabledDefault: cfg.EnabledDefault,
+		ApprovalPolicy: cfg.ApprovalPolicy,
+		SandboxMode:    cfg.SandboxMode,
+		Environment:    autoModeEnvironmentInfo(cfg.Environment),
+		Rules:          autoModeRuleInfos(cfg.Rules),
+		ShippedRules:   autoModeRuleInfos(automode.ShippedRules()),
+		Network: protocol.AutoModeNetworkInfo{
+			Enabled:           cfg.Network.Enabled,
+			AllowedDomains:    nonNilStrings(cfg.Network.AllowedDomains),
+			DeniedDomains:     nonNilStrings(cfg.Network.DeniedDomains),
+			AllowLocalBinding: cfg.Network.AllowLocalBinding,
+		},
+		ShippedDeniedDomains: nonNilStrings(automode.ShippedDeniedDomains(config.WSPort())),
+		LegacyPatterns:       nonNilStrings(cfg.LegacyPatterns),
+		Presets:              autoModePresetInfos(),
 	}
+}
+
+func autoModeRuleInfos(rules []automode.Rule) []protocol.AutoModeRuleInfo {
+	out := make([]protocol.AutoModeRuleInfo, 0, len(rules))
+	for _, rule := range rules {
+		pattern := make([][]string, 0, len(rule.Pattern))
+		for _, token := range rule.Pattern {
+			pattern = append(pattern, nonNilStrings(token.Alternatives))
+		}
+		out = append(out, protocol.AutoModeRuleInfo{
+			Pattern:       pattern,
+			Decision:      rule.Decision,
+			Sandbox:       automode.NormalizeRule(rule).Sandbox,
+			Justification: rule.Justification,
+			Match:         nonNilCommands(rule.Match),
+			NotMatch:      nonNilCommands(rule.NotMatch),
+		})
+	}
+	return out
+}
+
+// The app edits literals only, so each wire entry becomes a single-alternative token.
+func autoModeRuleTokens(pattern []string) []automode.PatternToken {
+	tokens := make([]automode.PatternToken, 0, len(pattern))
+	for _, literal := range pattern {
+		tokens = append(tokens, automode.Token(strings.TrimSpace(literal)))
+	}
+	return tokens
+}
+
+// Unlike autoModeRuleTokens, this carries every alternative: "git {push|pull}" and "git push" differ.
+func autoModeFullPatternTokens(pattern [][]string) []automode.PatternToken {
+	tokens := make([]automode.PatternToken, 0, len(pattern))
+	for _, alternatives := range pattern {
+		trimmed := make([]string, 0, len(alternatives))
+		for _, alternative := range alternatives {
+			trimmed = append(trimmed, strings.TrimSpace(alternative))
+		}
+		tokens = append(tokens, automode.Token(trimmed...))
+	}
+	return tokens
+}
+
+func nonNilCommands(commands [][]string) [][]string {
+	if commands == nil {
+		return [][]string{}
+	}
+	return commands
 }
 
 func autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInfo {
@@ -249,6 +364,7 @@ func autoModeProposalInfo(p store.AutoModeProposal) protocol.AutoModeProposalInf
 		Kind:       p.Kind,
 		Target:     p.Target,
 		Value:      p.Value,
+		Summary:    automode.DescribeProposal(p.Kind, p.Value),
 		ProposedBy: p.ProposedBy,
 		State:      p.State,
 		CreatedAt:  formatAutoModeStamp(p.CreatedAt),

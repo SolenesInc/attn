@@ -64,7 +64,13 @@ export function ActionMenu({ isOpen, actions, onClose }: ActionMenuProps) {
 
   return (
     <div className="action-menu-overlay" onClick={onClose}>
-      <FocusTrap focusTrapOptions={{ allowOutsideClick: true, escapeDeactivates: false }}>
+      <FocusTrap focusTrapOptions={{
+        allowOutsideClick: true,
+        escapeDeactivates: false,
+        setReturnFocus: (previous: HTMLElement | SVGElement) => (
+          document.activeElement === document.body ? previous : false
+        ),
+      }}>
         <div
           className="action-menu"
           role="dialog"

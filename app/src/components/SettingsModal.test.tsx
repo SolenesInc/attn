@@ -11,6 +11,9 @@ const daemonApi = vi.hoisted(() => ({
   sendAutoModeGet: vi.fn(() => new Promise(() => {})),
   sendAutoModePromote: vi.fn(),
   sendAutoModeDiscard: vi.fn(),
+  sendDelegationPreferencesGet: vi.fn(() => new Promise(() => {})),
+  sendDelegationPreferencesSave: vi.fn(),
+  sendDelegationModels: vi.fn(),
 }));
 vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => daemonApi }));
 
@@ -521,7 +524,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
+    fireEvent.click(screen.getByTestId('settings-nav-workflows'));
     const toggle = await screen.findByTestId('settings-workflows-toggle');
     expect(toggle).toHaveTextContent('Enable');
     fireEvent.click(toggle);
@@ -554,7 +557,7 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId('settings-nav-delegation'));
+    fireEvent.click(screen.getByTestId('settings-nav-workflows'));
     const toggleOn = await screen.findByTestId('settings-workflows-toggle');
     expect(toggleOn).toHaveTextContent('Disable');
     fireEvent.click(toggleOn);
@@ -1439,5 +1442,43 @@ describe('SettingsModal sent files', () => {
     expect(toggle).toHaveTextContent('Enable');
     fireEvent.click(toggle);
     expect(onSetSetting).toHaveBeenCalledWith('open_sent_files_enabled', 'true');
+  });
+});
+
+describe('SettingsModal delegation badge', () => {
+  it('counts live roles as soon as Settings opens, before the section is visited', async () => {
+    const role = (id: string) => ({ id, name: id, icon: 'code', enabled: true, description: '', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: { harness: 'codex', provider: '', model: '', effort: '' } }] });
+    daemonApi.sendDelegationPreferencesGet.mockClear().mockResolvedValueOnce({
+      preferences: { enabled: true, revision: 3, workflow_skill_enabled: false, roles: [role('build'), role('review')], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+      templates: [], expandedRoles: [], workflowSkillPaths: [], harnesses: [],
+    });
+    render(
+      <SettingsModal
+        isOpen
+        onClose={vi.fn()}
+        mutedRepos={[]}
+        githubHosts={[]}
+        onUnmuteRepo={vi.fn()}
+        mutedAuthors={[]}
+        onUnmuteAuthor={vi.fn()}
+        settings={{}}
+        endpoints={[]}
+        plugins={[]}
+        pluginIssues={[]}
+        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
+        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
+        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
+        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
+        onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
+        onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+        onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
+        onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })}
+        onSetSetting={vi.fn()}
+        themePreference="system"
+        onSetTheme={vi.fn()}
+      />
+    );
+    await waitFor(() => expect(screen.getByTestId('settings-nav-delegation')).toHaveTextContent('2'));
+    expect(daemonApi.sendDelegationPreferencesGet).toHaveBeenCalledTimes(1);
   });
 });

@@ -26,6 +26,7 @@ export interface SessionPullRequest {
 }
 export interface SessionUsageModel {
     readonly model: string;
+    readonly purpose: string;
     readonly input_tokens: number;
     readonly output_tokens: number;
     readonly cache_read_tokens: number;
@@ -44,6 +45,11 @@ export interface SessionUsage {
     readonly measurement_incomplete?: boolean;
     readonly models: readonly SessionUsageModel[];
 }
+export interface SessionDelegationRole {
+    readonly name: string;
+    readonly builtin?: "pathfinder" | "builder" | "reviewer" | "orchestrator";
+    readonly icon?: string;
+}
 export interface Session {
     readonly activity?: string;
     readonly activity_at?: string;
@@ -57,6 +63,7 @@ export interface Session {
     readonly context_window_cap?: number;
     readonly crew_member?: string;
     readonly delegated_from_chief?: boolean;
+    readonly delegation_role?: SessionDelegationRole;
     readonly directory: string;
     readonly dispatcher_member?: string;
     readonly dispatcher_session_id?: string;
@@ -248,9 +255,6 @@ export interface Seed {
     readonly plot_progress?: SeedPlotProgress;
     readonly ready: boolean;
     readonly reason?: string;
-    readonly resume_agent?: string;
-    readonly resume_cwd?: string;
-    readonly resume_session_id?: string;
     readonly rev: number;
     readonly state_changed_at: string;
     readonly state_changed_at_exact: boolean;

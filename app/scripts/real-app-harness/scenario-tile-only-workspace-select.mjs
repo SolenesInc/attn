@@ -92,7 +92,7 @@ async function main() {
     prefix: 'tile-only-workspace-select',
     metadata: {
       agent: 'shell',
-      focus: 'sessionless (tile-only) workspace select + render',
+      focus: 'sessionless (tile-only) workspace select + render, and selecting it ends agent focus mode elsewhere',
     },
   });
 
@@ -199,7 +199,50 @@ async function main() {
       return state;
     });
 
-    const summary = await runner.finishSuccess({ workspaceId, tileId, afterClose, afterSelect });
+    const focusReceipt = await runner.step('selecting_the_tile_only_workspace_clears_agent_focus_mode', async () => {
+      const agentCwd = path.join(runner.sessionDir, 'agent-ws');
+      fs.mkdirSync(agentCwd, { recursive: true });
+      const agentSessionId = await createSessionAndWaitForInitialPane({
+        client,
+        observer,
+        cwd: agentCwd,
+        label: `tile-only-agent-${runner.runId}`,
+        agent: 'shell',
+        waitForInitialPaneVisible: false,
+        sessionWaitMs: 30_000,
+      });
+      runner.registerCleanup('close_agent_session_panes', () => closeWorkspacePanes(client, agentSessionId));
+      const agentPane = await waitForFirstWorkspacePane(client, agentSessionId, 'agent workspace pane');
+      await client.request('select_session', { sessionId: agentSessionId });
+      await waitForPaneVisible(client, agentSessionId, agentPane.paneId, 20_000);
+
+      await client.request('dom_click', { selector: `[data-testid="focus-pane-${agentPane.paneId}"]` });
+      const focusedSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const focused = focusedSnapshot.sessions.find((session) => session.id === agentSessionId);
+      runner.assert(
+        focused?.workspace?.view?.maximizedPaneId === agentPane.paneId,
+        `Focus mode did not maximize ${agentPane.paneId}: ${JSON.stringify(focused?.workspace?.view, null, 2)}`,
+        focused?.workspace?.view,
+      );
+
+      await client.request('select_workspace', { workspaceId });
+      await waitForWorkspaceUi(client, workspaceId, (s) => s?.active === true, 'tile-only workspace active again');
+      await client.request('select_session', { sessionId: agentSessionId });
+      const returnedSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });
+      const returned = returnedSnapshot.sessions.find((session) => session.id === agentSessionId);
+      runner.assert(
+        returned?.workspace?.view?.maximizedPaneId == null && returned?.sidebarItem?.bounds?.width > 0,
+        `Returning from the tile-only workspace restored stale focus mode: ${JSON.stringify(returned, null, 2)}`,
+        returned?.workspace?.view,
+      );
+      return {
+        agentSessionId,
+        focusedPaneId: focused.workspace.view.maximizedPaneId,
+        returnedSidebarWidth: returned.sidebarItem.bounds.width,
+      };
+    });
+
+    const summary = await runner.finishSuccess({ workspaceId, tileId, afterClose, afterSelect, focusReceipt });
     console.log('[RealAppHarness] Tile-only workspace select+render passed.');
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {

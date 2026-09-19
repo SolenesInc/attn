@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
-import { nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
+import { baseName, formatQuery, matchesDir, matchesWords, parseQuery, removeToken, repositoryQueryToken } from './ledgerQuery';
+import { nameIds, relativeStamp, shortPath, tildePath, untilStamp } from './ledgerTime';
 
 const facets = {
   repositories: [{ value: '/Users/victor/projects/attn', count: 3 }],
@@ -27,6 +27,43 @@ describe('parseQuery', () => {
     expect(parsed.filters.repository).toBe('');
     expect(parsed.filters.workspaceId).toBe('');
     expect(parsed.unresolved).toEqual(['repo:nope', 'ws:nobody']);
+  });
+
+  it('keeps the selected repository when two paths share a base name', () => {
+    const duplicateNames = {
+      ...facets,
+      repositories: [
+        { value: '/Users/victor/projects/attn', count: 3 },
+        { value: '/tmp/checkout/attn', count: 2 },
+      ],
+    };
+
+    expect(parseQuery('repo:attn', duplicateNames, label, '/tmp/checkout/attn').filters.repository)
+      .toBe('/tmp/checkout/attn');
+    expect(parseQuery('repo:attn', {
+      ...duplicateNames,
+      repositories: [{ value: '/Users/victor/projects/attn', count: 3 }],
+    }, label, '/tmp/checkout/attn').filters.repository).toBe('/tmp/checkout/attn');
+    expect(parseQuery('repo:attn', duplicateNames, label).unresolved).toEqual(['repo:attn']);
+    expect(parseQuery('repo:/Users/victor/projects/attn', duplicateNames, label).filters.repository)
+      .toBe('/Users/victor/projects/attn');
+  });
+
+  it('carries an exact repository path with spaces in one token', () => {
+    const repository = '/tmp/attn run/ledger-repo';
+    const token = repositoryQueryToken(repository);
+    const spacedFacets = { ...facets, repositories: [{ value: repository, count: 2 }] };
+
+    expect(token).not.toMatch(/\s/);
+    expect(parseQuery(token, spacedFacets, label).filters.repository).toBe(repository);
+    expect(parseQuery(token, null, label).filters.repository).toBe(repository);
+  });
+
+  it('keeps an at-prefixed repository name literal', () => {
+    const repository = '/work/@scope';
+    const scopedFacets = { ...facets, repositories: [{ value: repository, count: 2 }] };
+
+    expect(parseQuery('repo:@scope', scopedFacets, label, repository).filters.repository).toBe(repository);
   });
 
   it('round-trips through formatQuery', () => {
@@ -67,6 +104,15 @@ describe('ledger time and names', () => {
     expect(relativeStamp('2026-09-06T11:57:00Z', now)).toBe('3m');
     expect(relativeStamp('2026-09-06T10:00:00Z', now)).toBe('2h');
     expect(relativeStamp('2026-09-03T10:00:00Z', now)).toBe('3d');
+  });
+
+  it('stamps a future instant as time until it, never as elapsed time', () => {
+    expect(untilStamp('2026-09-06T12:00:20Z', now)).toBe('now');
+    expect(untilStamp('2026-09-06T11:00:00Z', now)).toBe('now');
+    expect(untilStamp('2026-09-06T12:03:00Z', now)).toBe('3m');
+    expect(untilStamp('2026-09-06T14:00:00Z', now)).toBe('2h');
+    expect(untilStamp('2026-09-10T12:00:00Z', now)).toBe('4d');
+    expect(untilStamp('2026-11-06T12:00:00Z', now)).toBe(new Date('2026-11-06T12:00:00Z').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }));
   });
 
   it('shortens paths to a home tilde and then to the last two components', () => {

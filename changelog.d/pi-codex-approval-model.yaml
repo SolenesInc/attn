@@ -1,0 +1,15 @@
+kind: changed
+area: pi
+change: Pi auto mode is now Codex's sandbox and approval model — prefix rules, an approval policy, a sandbox mode, a network proxy, and one reviewer per session.
+notes: >-
+  Every bash command is matched against prefix rules, then runs sandboxed under
+  the configured sandbox mode; anything that needs asking goes to exactly one
+  reviewer — your approval card, or the Guardian model when /auto on is set. The
+  bash tool gained sandbox_permissions, justification and prefix_rule, so an
+  agent asks to leave the sandbox instead of failing silently. Sandboxed network
+  goes through attn's proxy, which holds a connection open while an unknown host
+  is decided; "allow in the future" persists it. The Guardian's tokens show as
+  their own row in the session's usage. The two-stage classifier, the allow and
+  hard-deny glob lists and the classifier model list are gone; globs the
+  migration could not translate are listed in Settings so you can rewrite them
+  as rules. The CLI proposes rules, hosts and policy; the app promotes them.

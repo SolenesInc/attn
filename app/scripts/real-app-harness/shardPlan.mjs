@@ -24,7 +24,7 @@ export function parseShardSelector(raw) {
 }
 
 // Scenarios are indivisible, so the slowest is the floor on any shard:
-// 91.0s of a 785.7s matrix (run 34067680122), past which more shards stop paying.
+// 93.8s of an 826.7s matrix (run 34544978355), past which more shards stop paying.
 export function planShards(scenarios, durationSeconds, shardCount, platform = process.platform, env = process.env) {
   if (!Number.isInteger(shardCount) || shardCount < 1) {
     throw new Error(`Invalid shard count: ${shardCount} (expected a positive integer)`);

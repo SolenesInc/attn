@@ -1,0 +1,265 @@
+import { useCallback, useEffect, useState } from 'react';
+import { useErrorToast } from '../components/ErrorToast';
+import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useAgentNavigation } from '../hooks/useAgentNavigation';
+import { SessionExitInfo } from '../hooks/useDaemonSocket';
+import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
+import { isSessionReloading, useSessionStore } from '../store/sessions';
+import { AppContentProps, sessionCloseProtectionHint } from './appSupport';
+import { useAppSessions } from './useAppSessions';
+
+interface Options {
+  activeSessionId: string | null;
+  activeWorkspaceId: string | null;
+  handleCloseTile: (workspaceId: string, tileId: string) => void;
+  getActivePaneIdForSession: ReturnType<
+    typeof useSessionWorkspaceController
+  >['getActivePaneIdForSession'];
+  sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
+  daemonSessions: AppContentProps['daemonSessions'];
+  enrichedLocalSessions: ReturnType<typeof useAppSessions>['enrichedLocalSessions'];
+  registerSessionExitHandler: AppContentProps['registerSessionExitHandler'];
+  removeWorkspaceRef: ReturnType<typeof useSessionWorkspaceController>['removeWorkspaceRef'];
+  prepareClosePaneFocus: ReturnType<typeof useSessionWorkspaceController>['prepareClosePaneFocus'];
+  clearPreparedClosePaneFocus: ReturnType<
+    typeof useSessionWorkspaceController
+  >['clearPreparedClosePaneFocus'];
+  getPaneSize: ReturnType<typeof useSessionWorkspaceController>['getPaneSize'];
+  selectAgentPane: ReturnType<typeof useAgentNavigation>['selectAgentPane'];
+  handleSelectSession: (id: string) => boolean;
+  showError: ReturnType<typeof useErrorToast>['showError'];
+  chooseReopenDirectory: () => Promise<string | undefined>;
+  onReopened: () => void;
+}
+export function useSessionLifecycle({
+  activeSessionId,
+  activeWorkspaceId,
+  handleCloseTile,
+  getActivePaneIdForSession,
+  sessions,
+  daemonSessions,
+  enrichedLocalSessions,
+  registerSessionExitHandler,
+  removeWorkspaceRef,
+  prepareClosePaneFocus,
+  clearPreparedClosePaneFocus,
+  getPaneSize,
+  selectAgentPane,
+  handleSelectSession,
+  showError,
+  chooseReopenDirectory,
+  onReopened,
+}: Options) {
+  const { sendUnregisterSession, sendWorkspaceClosePane, sendSessionReopen } = useDaemonApi();
+  const { closeSession, reloadSession } = useSessionStore();
+  const [pendingSessionClose, setPendingSessionClose] = useState<{
+    id: string;
+    label: string;
+    splitCount: number;
+  } | null>(null);
+
+  const handleCloseSession = useCallback(
+    async (id: string) => {
+      const closeProtection = sessionCloseProtectionHint(daemonSessions, id);
+      if (closeProtection) {
+        showError(closeProtection);
+        return;
+      }
+      const session = enrichedLocalSessions.find((s) => s.id === id);
+
+      const localDaemonSession = daemonSessions.find((ds) => ds.id === session?.id);
+      if (localDaemonSession && session) {
+        await sendUnregisterSession(session.id);
+      } else {
+        closeSession(id);
+      }
+
+      if (session) {
+        removeWorkspaceRef(session.workspaceId);
+      }
+    },
+    [
+      closeSession,
+      daemonSessions,
+      enrichedLocalSessions,
+      removeWorkspaceRef,
+      sendUnregisterSession,
+      showError,
+    ],
+  );
+
+  const handleClosePane = useCallback(
+    (sessionId: string, paneId: string, workspaceIdHint?: string) => {
+      const closeProtection = sessionCloseProtectionHint(daemonSessions, sessionId);
+      if (closeProtection) {
+        showError(closeProtection);
+        return Promise.resolve();
+      }
+      const session = enrichedLocalSessions.find((entry) => entry.id === sessionId);
+      const fallbackPaneId = prepareClosePaneFocus(sessionId, paneId);
+      const fallbackSessionId = session?.workspace.agents.find(
+        (pane) => pane.id === fallbackPaneId && pane.id !== paneId,
+      )?.sessionId;
+      const workspaceId =
+        sessions.find((session) => session.id === sessionId)?.workspaceId ?? workspaceIdHint;
+      if (!workspaceId) {
+        return Promise.reject(
+          new Error(`Cannot close pane ${paneId}: session ${sessionId} has no workspace`),
+        );
+      }
+      return sendWorkspaceClosePane(workspaceId, paneId)
+        .then((result) => {
+          if (fallbackSessionId) {
+            selectAgentPane(fallbackSessionId, fallbackPaneId);
+          }
+          return result;
+        })
+        .catch((error) => {
+          clearPreparedClosePaneFocus(sessionId);
+          throw error;
+        });
+    },
+    [
+      clearPreparedClosePaneFocus,
+      daemonSessions,
+      enrichedLocalSessions,
+      prepareClosePaneFocus,
+      selectAgentPane,
+      sendWorkspaceClosePane,
+      sessions,
+      showError,
+    ],
+  );
+
+  const handleRequestCloseSession = useCallback(
+    (id: string) => {
+      const session = sessions.find((entry) => entry.id === id);
+      if (!session) {
+        return;
+      }
+
+      const sessionPane = session.workspace.agents.find((pane) => pane.sessionId === session.id);
+      if (sessionPane) {
+        void handleClosePane(session.id, sessionPane.id).catch(console.error);
+        return;
+      }
+
+      void handleCloseSession(id);
+    },
+    [handleClosePane, handleCloseSession, sessions],
+  );
+
+  const handleSessionProcessExit = useCallback(
+    (info: SessionExitInfo) => {
+      if (info.exitCode !== 0 || info.signal) {
+        return;
+      }
+      // A reload's kill can surface as a clean exit (code 0, no signal); the same id is about to respawn in place, so closing the pane here would tear the workspace down under the pending spawn.
+      if (isSessionReloading(info.id)) {
+        return;
+      }
+      handleRequestCloseSession(info.id);
+    },
+    [handleRequestCloseSession],
+  );
+
+  useEffect(() => {
+    registerSessionExitHandler(handleSessionProcessExit);
+    return () => registerSessionExitHandler(null);
+  }, [registerSessionExitHandler, handleSessionProcessExit]);
+
+  const handleCancelSessionClose = useCallback(() => {
+    setPendingSessionClose(null);
+  }, []);
+
+  const handleConfirmSessionClose = useCallback(() => {
+    if (!pendingSessionClose) {
+      return;
+    }
+    const sessionID = pendingSessionClose.id;
+    setPendingSessionClose(null);
+    void handleCloseSession(sessionID);
+  }, [handleCloseSession, pendingSessionClose]);
+
+  const handleReloadSession = useCallback(
+    (id: string) => {
+      const session = sessions.find((entry) => entry.id === id);
+      const paneId = session?.workspace.agents.find((pane) => pane.sessionId === id)?.id;
+      const size = paneId ? getPaneSize(id, paneId) || undefined : undefined;
+      void reloadSession(id, size).catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        showError(`Failed to reload session: ${message}`);
+      });
+    },
+    [getPaneSize, reloadSession, sessions, showError],
+  );
+
+  const handleReopenSession = useCallback(
+    async (sessionId: string, actionId: string): Promise<boolean> => {
+      let directory: string | undefined;
+      if (actionId === 'start_fresh_elsewhere') {
+        const chosen = await chooseReopenDirectory();
+        if (!chosen) return false;
+        directory = chosen;
+      }
+      const result = await sendSessionReopen(sessionId, actionId, directory);
+      handleSelectSession(result.session_id);
+      onReopened();
+      return true;
+    },
+    [sendSessionReopen, chooseReopenDirectory, onReopened, handleSelectSession],
+  );
+
+  const handleCloseCurrentSessionShortcut = useCallback(() => {
+    // The packaged app's native "Close Pane" item claims Cmd+W and dispatches session.close, so a focused docked tile must be closed here, not the session.
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const tileId =
+      focused?.closest('[data-pane-kind="tile"]')?.getAttribute('data-pane-id') ??
+      focused?.closest('.session-terminal-workspace')?.getAttribute('data-active-leaf-id') ??
+      '';
+    const isTile =
+      !!tileId &&
+      !!document.querySelector(`[data-pane-kind="tile"][data-pane-id="${CSS.escape(tileId)}"]`);
+    if (isTile && activeWorkspaceId) {
+      handleCloseTile(activeWorkspaceId, tileId);
+      return;
+    }
+
+    if (!activeSessionId) {
+      return;
+    }
+
+    const activeSession = sessions.find((session) => session.id === activeSessionId);
+    if (!activeSession) {
+      return;
+    }
+
+    const activePaneId = getActivePaneIdForSession(activeSession);
+    if (activePaneId) {
+      void handleClosePane(activeSessionId, activePaneId);
+      return;
+    }
+
+    handleRequestCloseSession(activeSessionId);
+  }, [
+    activeSessionId,
+    activeWorkspaceId,
+    getActivePaneIdForSession,
+    handleCloseTile,
+    handleClosePane,
+    handleRequestCloseSession,
+    sessions,
+  ]);
+
+  return {
+    handleCloseCurrentSessionShortcut,
+    pendingSessionClose,
+    handleCloseSession,
+    handleClosePane,
+    handleRequestCloseSession,
+    handleCancelSessionClose,
+    handleConfirmSessionClose,
+    handleReloadSession,
+    handleReopenSession,
+  };
+}

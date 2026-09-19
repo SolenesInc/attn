@@ -5,7 +5,6 @@
   "recipient": "delegation",
   "event": "opening",
   "values": {
-    "brief": "Review the local change and report your findings.",
     "seed_id": "s-example"
   }
 }

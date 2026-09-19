@@ -7,43 +7,39 @@ import (
 )
 
 func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
-	source, err := os.ReadFile("../prompts/content/pi/rulebook.md")
-	if err != nil {
-		t.Fatalf("read the rulebook: %v", err)
-	}
-	rulebook := string(source)
+	policy := guardianPolicy(t)
 	for _, slot := range Slots() {
 		if len(slot.ReadBy) == 0 {
 			t.Errorf("slot %s names no rule; nothing would ever look it up", slot.ID)
 			continue
 		}
 		for _, rule := range slot.ReadBy {
-			if !strings.Contains(rulebook, rule) {
-				t.Errorf("slot %s says %q reads it, and the rulebook has no such rule", slot.ID, rule)
+			if !strings.Contains(policy, "### "+rule) {
+				t.Errorf("slot %s says %q reads it, and the guardian policy has no such rule", slot.ID, rule)
 			}
 		}
 	}
 }
 
+// The Guardian's policy renders the environment; a slot the policy never mentions
+// would be a question nobody asks.
 func TestEveryEnvironmentLookupHasSomewhereToLand(t *testing.T) {
-	source, err := os.ReadFile("../prompts/content/pi/rulebook.md")
+	policy := guardianPolicy(t)
+	if !strings.Contains(policy, "{{environment}}") {
+		t.Fatal("the guardian policy no longer renders the environment; one side moved without the other")
+	}
+	if !strings.Contains(policy, "When a slot is empty") {
+		t.Error("the guardian policy no longer says what an empty slot means")
+	}
+}
+
+func guardianPolicy(t *testing.T) string {
+	t.Helper()
+	source, err := os.ReadFile("../prompts/content/pi/guardian/policy.md")
 	if err != nil {
-		t.Fatalf("read the rulebook: %v", err)
+		t.Fatalf("read the guardian policy: %v", err)
 	}
-	lookups := 0
-	for _, line := range strings.Split(string(source), "\n") {
-		for _, phrase := range []string{
-			"Environment lists", "Environment names", "Environment excludes", "Environment does not list",
-		} {
-			if strings.Contains(line, phrase) {
-				lookups++
-			}
-		}
-	}
-	if lookups < len(Slots())/2 {
-		t.Fatalf("found %d environment lookups in the rulebook for %d slots; one side moved without the other",
-			lookups, len(Slots()))
-	}
+	return string(source)
 }
 
 func TestSlotIDsAreStableAndUnique(t *testing.T) {

@@ -4,7 +4,7 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
 import { useCrewLaunchAutosave, type CrewLaunchSelection } from '../hooks/useCrewLaunchAutosave';
 import { useEscapeStack } from '../hooks/useEscapeStack';
-import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
+import { useDelegationModelCatalog } from '../hooks/useDelegationModelCatalog';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewHandoffDocument, CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
@@ -282,7 +282,6 @@ export function CrewPanel({
   const lastInitialMember = useRef<string | undefined>(undefined);
   const autosave = useCrewLaunchAutosave(members, connectionGeneration, sendCrewSet);
   const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
-  const models = useHarnessModelCatalogs(isOpen, sendDelegationModels);
 
   useEffect(() => {
     setAttempts((current) => {
@@ -363,7 +362,8 @@ export function CrewPanel({
   const clearingAgent = selection?.agent === '' && Boolean(edit?.acknowledged.agent);
   const effectiveAgent = clearingAgent ? '' : selection?.agent || member?.resolved_agent || '';
   const harness = harnesses.find((candidate) => candidate.id === effectiveAgent);
-  const catalog = effectiveAgent ? models.catalogs[effectiveAgent] : undefined;
+  const models = useDelegationModelCatalog(isOpen ? harness : undefined, sendDelegationModels);
+  const catalog = models.catalog;
   const selectedModel = currentModel(catalog?.models, selection?.model || '');
 
   useEffect(() => {
@@ -423,12 +423,6 @@ export function CrewPanel({
     if (tab === 'charter') void charterAutosave.load(selectedRosterMember.id);
     if (tab === 'handoffs') loadHandoffs(selectedRosterMember.id);
   }, [charterAutosave, isOpen, loadHandoffs, selectedRosterMember, tab]);
-
-  useEffect(() => {
-    const agent = effectiveAgent;
-    if (!isOpen || !agent || !harness?.discovery || catalog || models.loading[agent] || models.errors[agent]) return;
-    void models.discover(agent);
-  }, [catalog, effectiveAgent, harness?.discovery, isOpen, models]);
 
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();
@@ -509,7 +503,7 @@ export function CrewPanel({
     edit.acknowledged.resolved_effort || 'default effort',
   ].join(' / ') : '';
   let discoveryLabel = catalog ? 'Refresh models' : 'Discover models';
-  if (models.loading[effectiveAgent]) discoveryLabel = 'Discovering models…';
+  if (models.loading) discoveryLabel = 'Discovering models…';
   let restartLabel = member?.binding_session ? 'Handoff and restart' : 'Wake';
   if (restartBusy) restartLabel = 'Restart in progress…';
 
@@ -687,9 +681,9 @@ export function CrewPanel({
                       </label>
                     </div>
 
-                    {(catalogError || (effectiveAgent && !harness?.available) || models.errors[effectiveAgent]) && (
+                    {(catalogError || (effectiveAgent && !harness?.available) || models.error) && (
                       <div className="crew-capability-warning" role="alert">
-                        <span>{catalogError || models.errors[effectiveAgent] || 'This harness is unavailable on this daemon.'}</span>
+                        <span>{catalogError || models.error || 'This harness is unavailable on this daemon.'}</span>
                         {catalogError && <button type="button" onClick={() => setCatalogRequest((request) => request + 1)}>Retry harness discovery</button>}
                       </div>
                     )}
@@ -697,8 +691,8 @@ export function CrewPanel({
                       <button
                         type="button"
                         className="crew-discover"
-                        disabled={models.loading[effectiveAgent]}
-                        onClick={() => void models.discover(effectiveAgent)}
+                        disabled={models.loading}
+                        onClick={() => models.discover(true)}
                       >
                         {discoveryLabel}
                       </button>

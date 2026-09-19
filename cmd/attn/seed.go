@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +12,6 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
@@ -47,8 +47,6 @@ func runSeed() {
 		runSeedHandover(args)
 	case "send-to-chief":
 		runSeedSendToChief(args)
-	case "set-resume":
-		runSeedSetResume(args)
 	case "export":
 		runSeedExport(args)
 	case "tend", "park", "harvest", "wither", "replant":
@@ -88,11 +86,10 @@ The garden lives at the home daemon. On an outpost every command here refuses,
 naming the home to run it on.
 
 commands:
-  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [resume flags] [flags]
+  plant "<title>" [-m <body>] [--part-of <plot>] [--discovered-from <seed>] [flags]
         plant a seed and print its id, slug and title. -m takes markdown, or - to read stdin —
         if the seed gains children, that body is the plot's plan. --part-of
-        plants it under a plot. --resume-session-id, --cwd and --agent
-        together make a dead conversation resumable without a dispatch record.
+        plants it under a plot.
 
   plot [-f <path>] [--json]
         plant a whole plot in one move from a JSON payload (-f, or stdin):
@@ -150,16 +147,6 @@ commands:
         replace the seed's markdown body without moving its state or claim.
         - reads stdin; an explicit empty -m clears the body.
 
-  set-resume <id> (--resume-session-id <id> --cwd <path> --agent <name> | --clear)
-        set or clear the seed-owned fallback used when attn has no dispatch
-        record for the conversation. The three identity fields move together.
-
-  handover <id> [-m "<what the new agent should know>"] [worker flags]
-        give this seed to a new agent. The seed body remains the brief and the
-        optional handoff lands on its log only after the new agent starts. The
-        saved directory is reused; if it was removed, its verified branch is
-        recreated when safe. Use --cwd when attn asks you to choose a place.
-
   send-to-chief <id> [-m "<optional guidance>"]
         give this seed to the Chief to decide its next working context. The
         saved folder, branch and placement problem are recorded automatically;
@@ -197,7 +184,7 @@ commands:
         whoever tends it next. - reads stdin. --handoff addresses it to your
         successor on this seed: show renders the freshest one first and tend
         prints it on the claim, so it is read before any work.
-        --ring tells watchers to look; ordinary notes stay quiet.
+        --ring tells the current tender and watchers to look; ordinary notes stay quiet.
 
   attach <id> --path <file> (--move | --copy)
         put a local regular file in durable seed-owned storage. Move is the
@@ -230,17 +217,7 @@ commands:
 flags:
   --part-of <plot>   plant under a plot (plant)
   --discovered-from <seed>  record the seed this work came from (plant)
-  --resume-session-id <id>  agent-native conversation id (plant, set-resume)
-  --cwd <path>        directory to reopen in (plant, set-resume)
-  --agent <name>      agent driver to reopen with, or the new Handover agent
-                      (plant, set-resume, handover)
-  --model <name>      model for the new agent (handover; defaults normally)
-  --effort <level>    reasoning effort for the new agent (handover)
-  --name <text>       name for the new agent (handover)
-  --request-id <id>   stable retry key (handover; generated when omitted)
-  --yolo              bypass agent approval prompts (handover)
-  --clear             remove the fallback identity (set-resume), or the
-                      harvest condition (harvest --when-merged)
+  --clear             remove the harvest condition (harvest --when-merged)
   --when-merged       harvest the seed when its pull request merges, instead
                       of harvesting it now (harvest)
   --plot <plot>      scope a ready answer to one plot
@@ -249,7 +226,7 @@ flags:
   --window <d>       the stale window, like 72h or 14d (ls --stale)
   -f <path>          the plot payload to read (plot; default stdin)
   --handoff          write a note to whoever tends the seed next (note)
-  --ring             ring watchers after this note lands (note)
+  --ring             ring the current tender and watchers after this note lands (note)
   --path <file>      local source, managed filename, or linked path
   --repo <name>      the repository that path lives in (attach, detach)
   --notebook <id>    a Notebook document (attach, detach)
@@ -349,14 +326,6 @@ type seedFlags struct {
 	copy           *bool
 	to             *string
 	reference      *bool
-	resumeID       *string
-	cwd            *string
-	agent          *string
-	model          *string
-	effort         *string
-	name           *string
-	requestID      *string
-	yolo           *bool
 	clear          *bool
 	whenMerged     *bool
 	force          *bool
@@ -382,7 +351,7 @@ func newSeedFlags(verb string) *seedFlags {
 		out:            fs.String("out", "", "file to write (- for stdout)"),
 		limit:          fs.Int("limit", 0, "how many log entries to read"),
 		handoff:        fs.Bool("handoff", false, "write this note to whoever tends the seed next"),
-		ring:           fs.Bool("ring", false, "ring the seed's watchers after this note lands"),
+		ring:           fs.Bool("ring", false, "ring the seed's current tender and watchers after this note lands"),
 		path:           fs.String("path", "", "a markdown document at this path"),
 		repo:           fs.String("repo", "", "the repository the path lives in"),
 		notebook:       fs.String("notebook", "", "a Notebook document, by its id"),
@@ -391,15 +360,7 @@ func newSeedFlags(verb string) *seedFlags {
 		copy:           fs.Bool("copy", false, "copy a local file into seed ownership"),
 		to:             fs.String("to", "", "destination for a detached managed artifact"),
 		reference:      fs.Bool("reference", false, "operate on an old linked path association"),
-		resumeID:       fs.String("resume-session-id", "", "agent-native conversation id"),
-		cwd:            fs.String("cwd", "", "directory to reopen in"),
-		agent:          fs.String("agent", "", "agent driver to reopen with"),
-		model:          fs.String("model", "", "model for the new agent"),
-		effort:         fs.String("effort", "", "reasoning effort for the new agent"),
-		name:           fs.String("name", "", "name for the new agent"),
-		requestID:      fs.String("request-id", "", "stable retry key"),
-		yolo:           fs.Bool("yolo", false, "bypass agent approval prompts"),
-		clear:          fs.Bool("clear", false, "remove what the verb set: the resume identity, or the harvest condition"),
+		clear:          fs.Bool("clear", false, "remove the harvest condition"),
 		whenMerged:     fs.Bool("when-merged", false, "harvest the seed when its pull request merges"),
 		force:          fs.Bool("force", false, "act even though somebody else still holds the seed"),
 	}
@@ -502,7 +463,6 @@ func runSeedPlant(args []string) {
 	}
 	result, err := seedClient().SeedPlant(
 		f.sessionID(), positionals[0], f.text("plant"), strings.TrimSpace(*f.partOf), strings.TrimSpace(*f.discoveredFrom), strings.TrimSpace(*f.member),
-		strings.TrimSpace(*f.resumeID), strings.TrimSpace(*f.cwd), strings.TrimSpace(*f.agent),
 	)
 	if err != nil {
 		seedFail("plant", err)
@@ -910,77 +870,8 @@ func runSeedEdit(args []string) {
 	fmt.Printf("updated %s at revision %d\n", result.Seed.ID, result.Seed.Rev)
 }
 
-func runSeedSetResume(args []string) {
-	f := newSeedFlags("set-resume")
-	positionals := f.parse("set-resume", args)
-	if len(positionals) != 1 {
-		seedFail("set-resume", fmt.Errorf("needs exactly one seed id, got %d", len(positionals)))
-	}
-	result, err := seedClient().SeedSetResume(
-		positionals[0], strings.TrimSpace(*f.resumeID), strings.TrimSpace(*f.cwd), strings.TrimSpace(*f.agent), *f.clear,
-	)
-	if err != nil {
-		seedFail("set-resume", err)
-	}
-	if *f.json {
-		writeJSON(result.Seed)
-		return
-	}
-	fprintSeed(os.Stdout, result.Seed)
-}
-
 func runSeedHandover(args []string) {
-	f := newSeedFlags("handover")
-	positionals := f.parse("handover", args)
-	if len(positionals) != 1 {
-		seedFail("handover", fmt.Errorf("needs exactly one seed id, got %d: attn seed handover s-7k3f9m", len(positionals)))
-	}
-	seedID := strings.TrimSpace(positionals[0])
-	c := seedClient()
-	document, err := c.SeedShow(f.sessionID(), seedID)
-	if err != nil {
-		seedFail("handover", err)
-	}
-	requestID := strings.TrimSpace(*f.requestID)
-	if requestID == "" {
-		requestID = uuid.NewString()
-	}
-	handoff := strings.TrimSpace(f.text("handover"))
-	request := &protocol.SeedHandoverRequest{
-		SeedID:                document.Seed.ID,
-		ExpectedRev:           document.Seed.Rev,
-		ExpectedTenderSession: document.Seed.TenderSession,
-		ExpectedTenderMember:  document.Seed.TenderMember,
-	}
-	if handoff != "" {
-		request.Handoff = protocol.Ptr(handoff)
-	}
-
-	fmt.Fprintf(os.Stderr, "handover request: request_id=%s seed_id=%s\n", requestID, seedID)
-	operation, err := c.StartDelegation(f.sessionID(), "", client.DelegateOptions{
-		RequestID: requestID,
-		Agent:     strings.TrimSpace(*f.agent),
-		Model:     strings.TrimSpace(*f.model),
-		Effort:    strings.TrimSpace(*f.effort),
-		Label:     strings.TrimSpace(*f.name),
-		Yolo:      *f.yolo,
-		CWD:       strings.TrimSpace(*f.cwd),
-		Handover:  request,
-	})
-	if err != nil {
-		seedFail("handover", err)
-	}
-	fmt.Fprintf(os.Stderr, "handover accepted: request_id=%s operation_id=%s session_id=%s\n",
-		operation.RequestID, operation.OperationID, operation.SessionID)
-	operation, err = waitDelegationCLI(c, operation, requestID, os.Stderr)
-	if err != nil {
-		seedFail("handover", err)
-	}
-	if *f.json {
-		writeJSON(operation.Result)
-		return
-	}
-	fmt.Printf("%s handed over to session %s in %s\n", seedID, operation.Result.SessionID, operation.Result.Directory)
+	seedFail("handover", errors.New("retired: use `attn delegate --seed <id> --handover --cwd <path>` with an explicit checkout choice inside Git"))
 }
 
 func runSeedSendToChief(args []string) {
@@ -1219,11 +1110,15 @@ func fprintSeed(out io.Writer, seed protocol.Seed, watching ...bool) {
 	if seed.Reason != nil && *seed.Reason != "" {
 		fmt.Fprintf(w, "reason\t%s\n", *seed.Reason)
 	}
-	if resumeID := protocol.Deref(seed.ResumeSessionID); resumeID != "" {
-		fmt.Fprintf(w, "resume\t%s in %s on %s\n", resumeID, protocol.Deref(seed.ResumeCwd), protocol.Deref(seed.ResumeAgent))
-	}
 	if condition := seed.HarvestWhen; condition != nil {
 		fmt.Fprintf(w, "harvests when\t%s merges\n", pullRequestLabel(condition.PullRequest))
+		checkedAt := strings.TrimSpace(protocol.Deref(condition.CheckedAt))
+		if checkedAt == "" {
+			checkedAt = "not yet"
+		} else {
+			checkedAt = shortStamp(checkedAt)
+		}
+		fmt.Fprintf(w, "PR last checked\t%s\n", checkedAt)
 	}
 	if seed.Ready {
 		fmt.Fprintf(w, "ready\tyes\n")
@@ -1309,9 +1204,33 @@ func fprintTransition(w io.Writer, result *protocol.SeedTransitionResult, cleare
 	if open := openPlotSeeds(result.Seed); open > 0 && closedSeedStatus(string(result.Seed.Status)) {
 		fmt.Fprintf(w, "its plot still holds %d open seed(s) — a closed plot over open work reads as done; close them too, or replant this one\n", open)
 	}
+	fprintUnblocked(w, result.Unblocked)
 	if result.Handoff != nil {
 		fmt.Fprintln(w)
 		fprintHandoff(w, result.Handoff)
+	}
+}
+
+func fprintUnblocked(out io.Writer, seeds []protocol.Seed) {
+	if len(seeds) == 0 {
+		return
+	}
+	fmt.Fprintf(out, "this unblocked %d seed(s):\n", len(seeds))
+	free := false
+	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
+	for _, seed := range seeds {
+		tender := crew.HolderName(seed.TenderMember, seed.TenderSession)
+		held := ""
+		if tender == "" {
+			free = true
+		} else {
+			held = " — tended by " + tender
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s%s\n", seed.ID, orDash(seed.StepSlug), seed.Title, held)
+	}
+	w.Flush()
+	if free {
+		fmt.Fprintln(out, "`attn seed tend <id>` claims one")
 	}
 }
 

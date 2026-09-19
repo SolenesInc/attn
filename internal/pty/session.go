@@ -36,6 +36,10 @@ var infoSnapshotHook func()
 
 var readLoopSeqGapHook func()
 
+var readLoopAdmissionGapHook atomic.Pointer[func()]
+
+var resizeAdmissionHook atomic.Pointer[func()]
+
 var readLoopAppliedHook func([]byte)
 
 var colorSchemeReplyHook func()
@@ -45,6 +49,7 @@ type sessionSubscriber struct {
 	send         func(data []byte, seq uint32) bool
 	onDrop       func(reason string)
 	onPlacements func(update PlacementUpdate)
+	onResize     func(update ResizeUpdate)
 }
 
 type terminalQueries struct {
@@ -95,6 +100,10 @@ type Session struct {
 	// chunk landing between payload and watermark is never dropped.
 	replayMu      sync.Mutex
 	lastReplaySeq uint32
+	// A reader holds admission until its consumer owns delivery; resize takes both
+	// in that order, so already-read bytes cannot land after the resize boundary.
+	deliveryMu          sync.Mutex
+	deliveryAdmissionMu sync.Mutex
 
 	subMu       sync.RWMutex
 	subscribers map[string]*sessionSubscriber
@@ -211,6 +220,21 @@ func (s *Session) fanOutPlacements(update PlacementUpdate) {
 	}
 }
 
+func (s *Session) fanOutResize(update ResizeUpdate) {
+	s.subMu.RLock()
+	var subs []*sessionSubscriber
+	for _, sub := range s.subscribers {
+		if sub.onResize != nil {
+			subs = append(subs, sub)
+		}
+	}
+	s.subMu.RUnlock()
+
+	for _, sub := range subs {
+		sub.onResize(update)
+	}
+}
+
 // Call with replayMu released; the callbacks take their own locks.
 func (s *Session) forceResync(reason string) {
 	s.subMu.Lock()
@@ -237,14 +261,34 @@ const (
 )
 
 type ptyRead struct {
-	data []byte
-	err  error
+	data     []byte
+	err      error
+	admitted chan struct{}
+}
+
+func (r ptyRead) acknowledgeAdmission() {
+	if r.admitted != nil {
+		close(r.admitted)
+	}
 }
 
 // The returned error belongs to the last read folded in; callers must not
 // receive after it.
 func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration) ([]byte, error) {
+	return nextCoalescedReadAdmitted(reads, maxBytes, window, nil)
+}
+
+func nextCoalescedReadAdmitted(
+	reads <-chan ptyRead,
+	maxBytes int,
+	window time.Duration,
+	beforeFirst func(),
+) ([]byte, error) {
 	first := <-reads
+	if beforeFirst != nil {
+		beforeFirst()
+	}
+	first.acknowledgeAdmission()
 	if first.err != nil {
 		return first.data, first.err
 	}
@@ -252,6 +296,7 @@ func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration)
 	var batch []byte
 	select {
 	case r := <-reads:
+		r.acknowledgeAdmission()
 		batch = append(make([]byte, 0, maxBytes+ptyReadBufBytes), first.data...)
 		batch = append(batch, r.data...)
 		if r.err != nil {
@@ -266,6 +311,7 @@ func nextCoalescedRead(reads <-chan ptyRead, maxBytes int, window time.Duration)
 	for len(batch) < maxBytes {
 		select {
 		case r := <-reads:
+			r.acknowledgeAdmission()
 			batch = append(batch, r.data...)
 			if r.err != nil {
 				return batch, r.err
@@ -292,7 +338,14 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 		for {
 			buf := make([]byte, ptyReadBufBytes)
 			n, err := s.ptmx.Read(buf)
-			reads <- ptyRead{data: buf[:n], err: err}
+			admitted := make(chan struct{})
+			s.deliveryAdmissionMu.Lock()
+			if hook := readLoopAdmissionGapHook.Load(); hook != nil {
+				(*hook)()
+			}
+			reads <- ptyRead{data: buf[:n], err: err, admitted: admitted}
+			<-admitted
+			s.deliveryAdmissionMu.Unlock()
 			if err != nil {
 				return
 			}
@@ -306,7 +359,12 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	}
 
 	for {
-		batch, err := nextCoalescedRead(reads, ptyCoalesceMaxBytes, ptyCoalesceWindow)
+		batch, err := nextCoalescedReadAdmitted(
+			reads,
+			ptyCoalesceMaxBytes,
+			ptyCoalesceWindow,
+			s.deliveryMu.Lock,
+		)
 		if len(batch) > 0 {
 			chunk := make([]byte, len(carryover)+len(batch))
 			copy(chunk, carryover)
@@ -383,6 +441,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 					}
 					s.forceResync(resync)
 				}
+				s.deliveryMu.Unlock()
 				if s.harnessSignals != nil && s.onState != nil {
 					for _, obs := range s.harnessSignals.Observe(data, time.Now()) {
 						s.emitSignal(obs)
@@ -393,7 +452,11 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 						s.emitSignal(obs)
 					}
 				}
+			} else {
+				s.deliveryMu.Unlock()
 			}
+		} else {
+			s.deliveryMu.Unlock()
 		}
 		if err != nil {
 			// A deadline we asked for is a handoff, not an ending: the child is
@@ -412,6 +475,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 	}
 
 	if len(carryover) > 0 {
+		s.deliveryMu.Lock()
 		seq := s.seqCounter.Add(1)
 		wire, resync := carryover, ""
 		var placements []KittyPlacement
@@ -436,6 +500,7 @@ func (s *Session) readLoop(onExit func(exitCode int, signal string), logf func(s
 			}
 			s.forceResync(resync)
 		}
+		s.deliveryMu.Unlock()
 	}
 
 	waitErr := s.child.wait()
@@ -797,6 +862,13 @@ func (s *Session) input(data []byte) error {
 func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	s.resizeMu.Lock()
 	defer s.resizeMu.Unlock()
+	if hook := resizeAdmissionHook.Load(); hook != nil {
+		(*hook)()
+	}
+	s.deliveryAdmissionMu.Lock()
+	defer s.deliveryAdmissionMu.Unlock()
+	s.deliveryMu.Lock()
+	defer s.deliveryMu.Unlock()
 
 	cellW, cellH := uint16(0), uint16(0)
 	if xpixel > 0 && ypixel > 0 && cols > 0 && rows > 0 {
@@ -823,6 +895,7 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 		prevCellW == cellW && prevCellH == cellH &&
 		prevPixelW == xpixel && prevPixelH == ypixel {
 		s.metaMu.Unlock()
+		s.fanOutResize(ResizeUpdate{Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel})
 		return false, nil
 	}
 	s.cols, s.rows = cols, rows
@@ -852,25 +925,27 @@ func (s *Session) resize(cols, rows, xpixel, ypixel uint16) (bool, error) {
 	seq := s.lastReplaySeq
 	s.replayMu.Unlock()
 
+	s.writeMu.Lock()
+	if !s.ptmxClosed {
+		err := s.withPTMXFd(func(fd uintptr) error {
+			return setWinsize(fd, cols, rows, xpixel, ypixel)
+		})
+		if err != nil {
+			s.writeMu.Unlock()
+			s.metaMu.Lock()
+			s.resizeFailed = true
+			s.metaMu.Unlock()
+			return true, err
+		}
+	}
+	s.writeMu.Unlock()
+
+	s.fanOutResize(ResizeUpdate{Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel})
 	// The replay watermark, not a fresh seq: no bytes were produced.
 	if placementsHeld {
 		s.fanOutPlacements(PlacementUpdate{Seq: seq, Placements: placements})
 	}
-
-	s.writeMu.Lock()
-	defer s.writeMu.Unlock()
-	if s.ptmxClosed {
-		return true, nil
-	}
-	err := s.withPTMXFd(func(fd uintptr) error {
-		return setWinsize(fd, cols, rows, xpixel, ypixel)
-	})
-	if err != nil {
-		s.metaMu.Lock()
-		s.resizeFailed = true
-		s.metaMu.Unlock()
-	}
-	return true, err
+	return true, nil
 }
 
 func (s *Session) closePTMX() {

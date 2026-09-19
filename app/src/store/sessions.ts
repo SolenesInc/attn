@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import { initialSessionNavigation, type SessionNavigationState } from '../navigation/sessionNavigation';
+import { createSessionNavigationActions, reconcileSessionNavigation, type SessionNavigationActions } from './sessionNavigationSlice';
+import type { QueueBands, QueueBandSession } from '../utils/queueBands';
 import type { UISessionState } from '../types/sessionState';
 import { normalizeSessionState } from '../types/sessionState';
 import type { SessionAgent } from '../types/sessionAgent';
@@ -13,12 +16,8 @@ import {
   type TerminalWorkspaceState,
 } from '../types/workspace';
 import {
-  createAgentHistory,
-  moveAgentHistory,
   recordAgentVisit,
   reconcileAgentHistory,
-  type AgentHistoryDirection,
-  type AgentHistoryState,
 } from '../navigation/agentHistory';
 
 export type { TerminalWorkspaceState };
@@ -53,6 +52,13 @@ export interface Session {
 }
 
 export interface DaemonSessionSnapshot {
+  chief_of_staff?: boolean;
+  turn_owed?: boolean;
+  turn_opened_at?: string;
+  turn_snoozed_until?: string;
+  pinned_at?: string;
+  crew_member?: string;
+  parent_session_id?: string;
   id: string;
   label: string;
   agent?: string;
@@ -70,11 +76,12 @@ interface LauncherConfig {
   executables: Record<string, string>;
 }
 
-interface SessionStore {
+export interface SessionStore extends SessionNavigationState, SessionNavigationActions {
   sessions: Session[];
-  activeSessionId: string | null;
-  recentSessionIds: string[];
-  agentHistory: AgentHistoryState;
+  navigationSessions: DaemonSessionSnapshot[];
+  navigationWorkspaces: DaemonWorkspace[];
+  navigationSettings: Record<string, string>;
+  navigationQueue: QueueBands<QueueBandSession> | null;
   connected: boolean;
   launcherConfig: LauncherConfig;
   // Current, not last seen: session_unregistered clears a layout on purpose.
@@ -94,11 +101,6 @@ interface SessionStore {
   ) => Promise<string>;
   closeSession: (id: string) => void;
   removeSessionLocalState: (id: string) => void;
-  setActiveSession: (id: string | null) => void;
-  navigateAgentHistory: (
-    direction: AgentHistoryDirection,
-    resumeCurrent?: boolean,
-  ) => string | null;
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => PtySpawnArgs | null;
   reloadSession: (id: string, size?: { cols: number; rows: number }) => Promise<void>;
   setLauncherConfig: (config: LauncherConfig) => void;
@@ -176,9 +178,12 @@ function pickFallbackActive(
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
-  activeSessionId: null,
-  recentSessionIds: [],
-  agentHistory: createAgentHistory(),
+  ...initialSessionNavigation(),
+  ...createSessionNavigationActions(set, get),
+  navigationSessions: [],
+  navigationWorkspaces: [],
+  navigationSettings: {},
+  navigationQueue: null,
   connected: false,
   launcherConfig: {
     executables: {},
@@ -245,6 +250,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     };
 
     set((state) => ({
+      view: 'session', followNextTurn: false, pendingSelection: null, focusRequest: null,
+      selectedSessionlessWorkspaceId: null, selectedTile: null,
       sessions: [...state.sessions, session],
       activeSessionId: id,
       agentHistory: recordAgentVisit(state.agentHistory, id),
@@ -266,11 +273,11 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       const recentSessionIds = state.recentSessionIds.filter((entry) => entry !== id);
 
       if (state.activeSessionId !== id) {
-        return { sessions, agentHistory, recentSessionIds };
+        return reconcileSessionNavigation(state, { sessions, agentHistory, recentSessionIds });
       }
 
       const activeSessionId = pickFallbackActive(id, sessions, recentSessionIds, removedSession);
-      return {
+      return reconcileSessionNavigation(state, {
         sessions,
         activeSessionId,
         agentHistory: activeSessionId
@@ -279,50 +286,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         recentSessionIds: activeSessionId
           ? recentSessionIds.filter((entry) => entry !== activeSessionId)
           : recentSessionIds,
-      };
+      });
     });
   },
 
   closeSession: (id: string) => {
     get().removeSessionLocalState(id);
-  },
-
-  setActiveSession: (id: string | null) => {
-    set((state) => {
-      if (state.activeSessionId === id) {
-        return state;
-      }
-      const nextRecent = pushRecent(state.recentSessionIds, state.activeSessionId);
-      return {
-        activeSessionId: id,
-        agentHistory: id ? recordAgentVisit(state.agentHistory, id) : state.agentHistory,
-        recentSessionIds: id ? nextRecent.filter((entry) => entry !== id) : nextRecent,
-      };
-    });
-  },
-
-  navigateAgentHistory: (direction: AgentHistoryDirection, resumeCurrent = false) => {
-    let targetSessionId: string | null = null;
-    set((state) => {
-      const move = moveAgentHistory(
-        state.agentHistory,
-        direction,
-        new Set(state.sessions.map((session) => session.id)),
-        resumeCurrent,
-      );
-      targetSessionId = move.targetSessionId;
-      if (!targetSessionId) {
-        return { agentHistory: move.state };
-      }
-
-      const nextRecent = pushRecent(state.recentSessionIds, state.activeSessionId);
-      return {
-        agentHistory: move.state,
-        activeSessionId: targetSessionId,
-        recentSessionIds: nextRecent.filter((entry) => entry !== targetSessionId),
-      };
-    });
-    return targetSessionId;
   },
 
   takeSessionSpawnArgs: (id: string, cols: number, rows: number) => {
@@ -403,6 +372,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         const nextWorkspaceId = daemonSession.workspace_id;
         const nextBranch = daemonSession.branch ?? existing?.branch;
         const nextIsWorktree = daemonSession.is_worktree ?? existing?.isWorktree;
+        const carriedLayout = existing?.workspaceId === nextWorkspaceId ? existing : undefined;
 
         if (
           existing &&
@@ -435,10 +405,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           isWorktree: nextIsWorktree,
           automation: daemonSession.automation,
           pullRequests: daemonSession.pull_requests,
-          workspace: existing?.workspace
+          workspace: carriedLayout?.workspace
             ?? daemonLayout?.workspace
             ?? createDefaultWorkspaceState(),
-          daemonActivePaneId: existing?.daemonActivePaneId ?? daemonLayout?.daemonActivePaneId ?? '',
+          daemonActivePaneId: carriedLayout?.daemonActivePaneId ?? daemonLayout?.daemonActivePaneId ?? '',
         } satisfies Session;
       });
 
@@ -471,12 +441,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
           : nextAgentHistory;
       }
 
-      return {
+      return reconcileSessionNavigation(state, {
+        navigationSessions: daemonSessions,
         sessions: allSessions,
         activeSessionId: nextActiveSessionID,
         recentSessionIds: nextRecent,
         agentHistory: nextAgentHistory,
-      };
+      });
     });
   },
 
@@ -496,37 +467,8 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         workspace: workspaceByID.get(session.workspaceId)?.workspace ?? session.workspace,
         daemonActivePaneId: workspaceByID.get(session.workspaceId)?.daemonActivePaneId ?? session.daemonActivePaneId,
       }));
-      const existingIDs = new Set(sessions.map((session) => session.id));
 
-      for (const workspace of daemonWorkspaces) {
-        if (!workspace.layout) {
-          continue;
-        }
-        const snapshot = workspaceByID.get(workspace.id);
-        if (!snapshot) {
-          continue;
-        }
-        for (const pane of snapshot.workspace.agents) {
-          if (existingIDs.has(pane.sessionId) || pane.status === 'ready') {
-            continue;
-          }
-          existingIDs.add(pane.sessionId);
-          sessions.push({
-            id: pane.sessionId,
-            label: pane.title || workspace.title,
-            state: pane.status === 'failed' ? 'unknown' : 'launching',
-            cwd: workspace.directory,
-            workspaceId: workspace.id,
-            agent: 'codex',
-            endpointId: workspace.endpoint_id,
-            transcriptMatched: true,
-            workspace: snapshot.workspace,
-            daemonActivePaneId: snapshot.daemonActivePaneId,
-          });
-        }
-      }
-
-      return { sessions, daemonWorkspaceLayouts };
+      return reconcileSessionNavigation(state, { sessions, daemonWorkspaceLayouts, navigationWorkspaces: daemonWorkspaces });
     });
   },
 }));
@@ -567,7 +509,7 @@ if (import.meta.env.DEV) {
   };
 
   window.__TEST_SET_SESSION_WORKSPACE = (sessionId: string, workspace: TerminalWorkspaceState, daemonActivePaneId = workspace.agents[0]?.id || '') => {
-    useSessionStore.setState((state) => ({
+    useSessionStore.setState((state) => reconcileSessionNavigation(state, {
       sessions: state.sessions.map((session) =>
         session.id === sessionId
           ? { ...session, workspace, daemonActivePaneId }

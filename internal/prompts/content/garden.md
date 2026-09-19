@@ -8,7 +8,7 @@ Garden words have Jira-style equivalents: seed = ticket, ready = todo, plot = ep
 
 Track work in seeds, not in markdown TODO lists or your own todo tool. Plant a seed for any work that outlives this turn: a bug you found, a follow-up you are not doing now, a piece you split off. Search before you plant: `attn seed search <words>` reads every title, body and log in the garden, harvested and withered seeds included, so you find work that already exists instead of planting it twice. Plant work before you start it, so the claim and the log exist while you work. Under a plot, plant with `--part-of <plot>` so it stays with its plan. If you discover work while tending another seed, add `--discovered-from <seed>` so its origin is on record. Before your turn ends, plant what is still undone. Harvest a seed when the outcome and required verification in its body are complete.
 
-A delegated session reports to one seed: either the seed planted for its brief or the seed targeted by `attn delegate --plot`. `attn seed ready` without flags shows that seed's plot. When the session delegates more work, `attn delegate` plants the new seed under its reporting seed; the child delegate reports to the new seed's log. Every other garden verb uses the seed id you provide.
+A new delegation stores its brief as the seed body. A delegation at an existing seed uses that body's assignment. The opening identifies the seed; the agent reads its current body and notes. Handover saves the next-step note and transfers ownership before starting a new agent, leaving the previous session running. `attn seed ready` without flags shows the reporting seed's plot. When a session delegates more work, a new brief becomes a child only when the resolved source has a reporting seed. Every other garden verb uses the seed id you provide.
 
 The loop:
 
@@ -31,6 +31,8 @@ The loop:
 
 `attn seed tend`, `attn seed park`, `attn seed harvest`, `attn seed wither` and `attn seed replant` all check who holds the seed. If a live session or crew member holds it, the command refuses it by naming the holder. `--force` performs the move anyway, and the log records who forced it. A seed whose session ended is not held. `--member <name>` on any of these commands acts as a crew member instead of this session, and a member's claim never expires.
 
+Harvest and wither print the seeds the close set free — the ones it was the last blocker of — and ring whoever holds one.
+
 Plans:
 
     attn seed plot -f <file.json>    a whole plot in one move; - reads stdin. The file is
@@ -52,7 +54,6 @@ When attn sends an update notification, run the suggested command to read it. Re
     attn seed detach <id> --path <filename> --to <destination>    move an owned file back out without overwriting
     attn seed attach <id> --path <file> --repo <repo> | --notebook <doc-id> | --url <url>    keep a link to a document elsewhere
     attn seed export <id> [--out <path>]    the seed and its log as one markdown file
-    attn seed set-resume <id> --resume-session-id <id> --cwd <path> --agent <name>    make an ended conversation resumable from the seed; --clear forgets it
 
 A new delegation starts an ordinary watch on its seed. `unwatch` removes that subscription; separate child or ancestor watches remain. `show` and `unwatch` name the subscriptions still covering a seed and how to remove them. `watch` restores one; a new delegation starts it again. Restart or recovery does not.
 

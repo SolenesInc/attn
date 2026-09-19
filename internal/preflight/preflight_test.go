@@ -32,11 +32,12 @@ func passingProber(t *testing.T) prober {
 		t.Fatal(err)
 	}
 	return prober{
-		lookPath:     func(tool string) (string, error) { return "/tools/" + filepath.Base(tool), nil },
-		writable:     func(string) error { return nil },
-		pathIsSocket: func(string) error { return nil },
-		goCachePaths: func(context.Context) ([]string, error) { return []string{"/cache/build", "/cache/mod"}, nil },
-		appProtocol:  func(context.Context, string) (string, error) { return protocol.ProtocolVersion, nil },
+		lookPath:      func(tool string) (string, error) { return "/tools/" + filepath.Base(tool), nil },
+		writable:      func(string) error { return nil },
+		cacheWritable: func(string) error { return nil },
+		pathIsSocket:  func(string) error { return nil },
+		goCachePaths:  func(context.Context) ([]string, error) { return []string{"/cache/build", "/cache/mod"}, nil },
+		appProtocol:   func(context.Context, string) (string, error) { return protocol.ProtocolVersion, nil },
 		daemonHealth: func(context.Context, string) (daemonHealth, error) {
 			return daemonHealth{
 				Protocol: protocol.ProtocolVersion, Profile: config.ProfileLabel(),
@@ -163,7 +164,7 @@ func TestRunReportsRootCausesAndActions(t *testing.T) {
 		{
 			name: "unwritable cache",
 			mutate: func(p *prober) {
-				p.writable = func(path string) error {
+				p.cacheWritable = func(path string) error {
 					if path == "/cache/build" {
 						return errors.New("permission denied")
 					}
@@ -294,6 +295,52 @@ func TestProbeWritableDirectoryDoesNotLeaveArtifact(t *testing.T) {
 	}
 	if len(entries) != 0 {
 		t.Fatalf("probe left artifacts: %+v", entries)
+	}
+}
+
+func TestProbeWritableCacheDirectoryAcceptsMissingPathWithoutCreatingIt(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "go", "build")
+	if err := probeWritableCacheDirectory(path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("missing cache path was created: %v", err)
+	}
+}
+
+func TestProbeWritableCacheDirectoryRejectsUnwritableAncestor(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write through directory mode bits")
+	}
+	ancestor := t.TempDir()
+	if err := os.Chmod(ancestor, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ancestor, 0o700) })
+
+	if err := probeWritableCacheDirectory(filepath.Join(ancestor, "go", "build")); err == nil {
+		t.Fatal("missing cache under unwritable ancestor passed")
+	}
+}
+
+func TestProbeWritableCacheDirectoryRejectsExistingUnwritablePath(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root can write through directory mode bits")
+	}
+	path := t.TempDir()
+	if err := os.Chmod(path, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0o700) })
+
+	if err := probeWritableCacheDirectory(path); err == nil {
+		t.Fatal("existing unwritable cache passed")
+	}
+}
+
+func TestProbeWritableCacheDirectoryRejectsRelativePath(t *testing.T) {
+	if err := probeWritableCacheDirectory("off"); err == nil {
+		t.Fatal("relative cache path passed")
 	}
 }
 

@@ -1875,18 +1875,11 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         return;
       }
       try {
-        const fromCols = terminal.cols;
-        const fromRows = terminal.rows;
-        modelOpRingRef.current.noteResize(dims.cols, dims.rows, true);
-        resizeGhosttyWithoutReflow(terminal, dims.cols, dims.rows);
-        reconcileBlocksAfterResize(dims.cols !== fromCols);
-        modelSizeRef.current = dims;
-        renderer.resize(dims.cols, dims.rows);
-        hoverGenerationRef.current += 1;
         noteResize(diagKeyRef.current, {
-          session, paneKind, source: 'fit', fromCols, fromRows, toCols: dims.cols, toRows: dims.rows,
+          session, paneKind, source: 'fit', fromCols: terminal.cols, fromRows: terminal.rows,
+          toCols: dims.cols, toRows: dims.rows,
         });
-        if (!renderSurface(true)) return;
+        if (!renderSurface(false)) return;
         // Cell metrics are CSS pixels; the PTY speaks device pixels.
         onResizeRef.current(dims.cols, dims.rows, {
           reason: 'ghostty_fit',
@@ -1896,7 +1889,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       } catch (reason) {
         recoverFromModelFault('fit', reason);
       }
-    }, [reconcileBlocksAfterResize, recoverFromModelFault, renderSurface]);
+    }, [recoverFromModelFault, renderSurface]);
 
     applyFitDimensionsRef.current = applyFitDimensions;
 

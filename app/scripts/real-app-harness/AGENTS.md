@@ -1,12 +1,17 @@
 # Real-app harness
 
-Read [profiles.md](../../../docs/profiles.md) before installation or verification.
+Follow the [verification requirements](../../../docs/profiles.md#verification-requirements)
+and [profile setup](../../../docs/profiles.md#build-and-install).
 Run commands from the repository root.
 
 ## Running scenarios
 
 - Scenarios share one display; run serially. Batch with
   `pnpm --dir app run real-app:serial-matrix`.
+- Hunt a CI flake with
+  `gh workflow run acceptance-soak.yml --ref next -f scenarios=terminal-annotations,terminal-block-resize`.
+  Its job summary lists every iteration and runner class; artifacts retain
+  evidence only for failed iterations.
 - `--shard <index>/<count>` runs one balanced slice, which is how CI spreads the
   matrix across runners. The weights are `scenario-durations.json`, seconds a
   green run recorded; a scenario with no entry there fails the plan by name.
@@ -150,23 +155,13 @@ piece of work rather than a rediscovery.
   empty, so `set_session_resume_id` before a `close_session` no longer
   survives. Whether that clearing is intended is the open question; the
   scenario is the only thing asserting it.
-- `scenario-automation-scheduled-cleanup.mjs` — port, then catalog. Two
-  `DOWNTIME_MS` stops spend 270 s proving a restart fires exactly one catch-up
-  run over several missed instants, and its `* * * * *` cron pins those
-  instants, so shortening the ticker alone recovers nothing. PR #134 removed
-  the same cost from `automation-lifecycle` with `@every 2s` plus
-  `ATTN_AUTOMATION_SCHEDULE_INTERVAL`; the port is that change again. Only the
-  minute-aligned `occurrence_key` assertion cannot survive it, and that format
-  belongs in `automations_schedule_test.go`.
-- `scenario-reload-not-crash.mjs` — port, then catalog. It launches real `codex`
-  and `claude` and asks a model to count to 40, so it is neither free nor
-  deterministic on a runner with no credentials, and its hand-rolled `main()`
-  never builds a `createScenarioRunner`, so no tripwire and no mock-GitHub
-  receipt cover it. The claim is worth keeping and has no cheaper twin:
-  `reload_session` leaves a bound ticket working and mints no reconcile task,
-  while a real worker `SIGKILL` still stamps the ticket crashed and mints one.
-  Driving both legs with the mock agent makes it deterministic and fit for
-  the matrix.
+- `scenario-reload-not-crash.mjs`: blocked on a contract choice. The mock-agent
+  port proves a real worker death still stamps the bound ticket `crashed`, but
+  the required `allowRealAgents: false` runner also sets
+  `ATTN_HEADLESS_TASKS=off`, so the daemon refuses reconciliation before it can
+  mint the task this scenario must assert. Cataloging it requires either a
+  no-model reconciliation fixture or an explicit decision that the refusal is
+  the contract under the harness tripwire.
 - `scenario-legacy-ticket-recovery.mjs` — hand-run, on purpose. It needs a
   second packaged bundle the acceptance job does not build
   (`make build-default-profile-harness`, profile `legacy-recovery`), and its
@@ -177,19 +172,83 @@ piece of work rather than a rediscovery.
   under default-profile packaging, and that a restart re-runs create-only. Run
   it by hand when `LegacyTicketRecoveryVersion` moves or either recovery file
   changes.
+- `scenario-pi-security.mjs` — rewrite, then catalog. It opens by promoting a
+  model through the removed auto mode model list (`attn automode model`,
+  `config.models`) and then drives the removed classifier (a stub judge role
+  found by a classifier marker in the system prompt), so no step past that
+  promotion can pass. The rewrite must still prove credential filtering, the
+  Seatbelt/bubblewrap sandbox, the security panel, and cache/write grants.
+  Garden seed s-f4bna3.
+- `scenario-pi-automode.mjs` — rewrite, then catalog. Same blocker as
+  `scenario-pi-security.mjs`: the removed model list and the removed
+  classifier (`classifier-intent` denials, the circuit breaker, prompt strings
+  such as "Auto-mode access review"), now that auto mode is a Guardian
+  reviewer instead. The rewrite must prove a session under auto mode ending in
+  a Guardian decision, a denial reaching the TUI, `attn automode denials`, and
+  the notification feed. Garden seed s-f4bna3.
+- `scenario-agent-split-blank-probe.mjs`: keep out of the matrix. It records
+  render traces around the blank-pane defect but has no pass condition, launches
+  a real provider, and says in its own header to delete it with the temporary
+  tracing. Catalog it only if it becomes a deterministic regression assertion.
+- `scenario-chief-ticket-watch.mjs`: keep out of the matrix. It is the only
+  end-to-end probe of a chief deciding to watch and react to a legacy ticket,
+  but it asks a real model to make that decision and waits up to four minutes
+  for prose. Catalog it only after a mock fixture can express the decision and
+  the claim still matters beside the Garden dispatch and read-receipt scenarios.
+- `scenario-tr402.mjs`: port, then catalog. Its remote real-Codex path is not
+  armed by the harness and leaves its session, endpoint and remote root behind.
+- `scenario-offset-soak.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-baseline.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
+- `scenario-perf-cold-warm.mjs`: hand-run only. Its hand-written soak lacks
+  signal-safe teardown and Mock GitHub isolation, and can erase the worker
+  registry before asynchronous workers exit. Port those boundaries before
+  cataloging.
+- `scenario-perf-leak-soak.mjs`: rewrite, then catalog. Its unconditional
+  settling waits outlive the soak runner; replace them with observed signals.
+- `scenario-notebook-link-nav.mjs`: port, then catalog. Only it drives relative
+  note links, heading jumps and a parent-relative image through the packaged
+  editor. Its hand-written runner has no agent tripwire, mock-GitHub receipt or
+  standard verdict. Move it to `createScenarioRunner` before adding it.
+- `scenario-notebook-tile-close.mjs`: port, then catalog. Only it proves the
+  native close shortcut undocks the focused Notebook tile without closing its
+  terminal or session. Its hand-written runner has no standard receipts; the
+  port must also declare the platform shortcut behavior.
+- `scenario-reveal-overflow.mjs`: port, then catalog. It catches a hidden pane
+  retaining the taller window geometry when revealed after a shrink. The
+  hand-written runner and unmeasured 600 ms convergence deadline block the
+  matrix; replace that deadline with a measured tripwire during the port.
+- `scenario-terminal-build-upgrade.mjs`: hand-run when the terminal upgrade
+  path changes. Only it installs a second daemon build over the running profile
+  and proves `execve` keeps the worker, child and PTY. That install mutates the
+  packaged tree shared by a matrix shard, so it must stay outside the sweep.
+- `scenario-terminal-kitty-image.mjs`: fix, then catalog. It uniquely checks
+  kitty placement pixels, signed z-order, scroll anchoring, delete and the
+  escape hatch. A local catalog run passed placement and scroll, then timed out
+  because the program delete left the placement live; `s-m715j1` owns that
+  finding.
+- `scenario-webgl-recovery.mjs`: port, then catalog. Only it forces a WebGL
+  context loss, checks the recovery event sequence and proves the rebuilt
+  renderer accepts new output. Its hand-written runner lacks the standard
+  tripwire, mock-GitHub and verdict receipts.
 
 A new scenario file lands with a catalog entry, or with its verdict added here.
 
 ## Writing scenarios
 
 - Exercise actual app actions/order; update scenarios when product flows change.
-- Pressing native keys (`driver.press*`, `driver.typeText`, `pressShortcutKeys`)
-  needs `process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0'` before the launch: macOS
-  makes the always-on-top window non-focusable, so a keystroke reaches nothing.
-  The macOS driver reads the launched app's own environment and fails the press
-  when it says otherwise, and `alwaysOnTopSweep.test.mjs` fails a scenario that
-  neither opts out nor states why it need not. Clicks, drags and `driver.menu`
-  reach the window either way.
+- Build the driver with the automation client: `createWindowDriver({ appPath,
+  client })`. Keys, text, clicks, drags and pointer moves then become NSEvents
+  the app sends to its own window (`native_key`, `native_text`, `native_mouse`),
+  so a run never activates attn, never moves the real pointer, and works while
+  the window is parked. A window that never becomes key has limits WebKit
+  sets: it delivers no mouse moves (no hover, no `pointermove`), matches no
+  `:focus`, and reports `document.hasFocus()` false; assert focus through
+  `dom_active_element` instead. A scenario whose subject needs those calls
+  `driver.activateApp()` and sets `ATTN_HARNESS_ALWAYS_ON_TOP=0`, and
+  `focusFreeSweep.test.mjs` fails such a file unless it states why. Scroll and
+  `driver.menu` still go through macOS.
 - The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
   for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
   and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
@@ -246,6 +305,9 @@ fails the scenario on a non-empty ledger and prints the lines.
   armed scenario gets a working agent instead of a dead session. Their shims stay
   on `PATH`, so a name-resolved exec still lands in the ledger. `copilot` and `pi`
   have no mock and pin at their shims.
+- Pi's bare version probe passes through. Its exact offline, no-session catalog
+  argv gets a controlled empty response for one `get_available_models` request.
+  Real Pi never starts; every other request or model-capable invocation is blocked.
 - A command a scenario types by hand into a shell pane resolves on the login
   `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
   covers every agent attn itself launches, not that.
@@ -258,7 +320,7 @@ fails the scenario on a non-empty ledger and prints the lines.
   the runner options, which wins over the catalog. `false` arms everything,
   `true` allows all four, an array names the ones the scenario needs. A runner
   id neither covers fails at construction rather than defaulting to permissive.
-  Every arming logs what it allowed. `pi-automode` carries `['pi']` because the
+  Every arming logs what it allowed. A pi scenario carries `['pi']` because the
   attn-pi plugin execs `pi --version` as its health probe, then runs `pi` against
   the loopback stub. Claude, Codex, and Copilot stay armed.
 - Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses
@@ -333,8 +395,8 @@ alone keeps a run off github.com.
 
 ## Recordings
 
-Record the installed verification profile; watch for private data before publishing
-to the public evidence repository:
+Record a non-production profile; watch for private data before publishing to the
+public evidence repository:
 
 ```bash
 ./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4

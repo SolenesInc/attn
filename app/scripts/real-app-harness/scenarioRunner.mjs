@@ -228,6 +228,18 @@ export function acquireScenarioLock({ scenarioId, tier, runId, runDir, appPath }
   return release;
 }
 
+export async function closeScenarioSessions(client, sessionIds) {
+  const failures = [];
+  for (const sessionId of sessionIds) {
+    try {
+      await client.request('close_session', { sessionId });
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length) throw new AggregateError(failures, `Failed to close ${failures.length} scenario session(s)`);
+}
+
 export function createScenarioRunner(options, {
   scenarioId,
   tier,
@@ -294,6 +306,9 @@ export function createScenarioRunner(options, {
   const cleanupHandlers = [];
   let cleanupPromise = null;
   let finalizationPromise = null;
+  let reportedFailure = null;
+  let reportedSuccessSummary = null;
+  let finalFailureSummary = null;
 
   const appendTrace = (message, details) => {
     const line = `[${new Date().toISOString()}] ${message}${details ? ` ${JSON.stringify(details)}` : ''}\n`;
@@ -333,6 +348,7 @@ export function createScenarioRunner(options, {
       return cleanupPromise;
     }
     cleanupPromise = (async () => {
+      const errors = [];
       // beforeExit does not fire on a signal; draining the queue makes whichever
       // of the two runs second a no-op.
       try {
@@ -342,9 +358,10 @@ export function createScenarioRunner(options, {
         }
       } catch (error) {
         appendTrace('settings:restore_failed', { error: normalizeError(error) });
+        errors.push({ name: 'restore_harness_settings', error: normalizeError(error) });
       }
       if (cleanupHandlers.length === 0) {
-        return;
+        return errors;
       }
       appendTrace('cleanup:start', { reason, count: cleanupHandlers.length });
       for (const cleanup of [...cleanupHandlers].reverse()) {
@@ -353,17 +370,24 @@ export function createScenarioRunner(options, {
           await cleanup.fn();
           appendTrace('cleanup:ok', { reason, name: cleanup.name });
         } catch (error) {
+          const normalized = normalizeError(error);
           appendTrace('cleanup:error', {
             reason,
             name: cleanup.name,
-            error: normalizeError(error),
+            error: normalized,
           });
+          errors.push({ name: cleanup.name, error: normalized });
         }
       }
       appendTrace('cleanup:done', { reason });
+      return errors;
     })();
     return cleanupPromise;
   };
+
+  const teardownError = (errors) => new Error(
+    `Scenario teardown failed: ${errors.map(({ name, error }) => `${name}: ${error.split(/\r?\n/, 1)[0]}`).join('; ')}`,
+  );
 
   const finalizeRunner = async () => {
     if (finalizationPromise) return finalizationPromise;
@@ -503,16 +527,20 @@ export function createScenarioRunner(options, {
       appendTrace('mock_github:expected', { url: expectedMockGitHubURL });
     },
     async finishSuccess(summary = {}) {
+      reportedSuccessSummary = summary;
+      const receipt = readDaemonReceipt();
+      const observedMockGitHub = observeMockGitHub();
+      const teardownErrors = await runRegisteredCleanup('finish');
       const recorderError = await finalizeRunner();
-      if (recorderError) throw recorderError;
       const ledger = collectTripwireLedger();
+      let failure = recorderError;
+      let failureSummary = summary;
       if (ledger.length > 0) {
         const digest = formatTripwireFailure({ scenarioId, ledgerPath: tripwire.ledgerPath, lines: ledger });
         process.stdout.write(`${digest}\n`);
-        throw new Error(digest);
+        failure = new Error(digest);
       }
-      const receipt = readDaemonReceipt();
-      if (tripwire.armed && !(receipt?.headlessTasks === 'off' && receipt?.carriesMarker)) {
+      if (!failure && tripwire.armed && !(receipt?.headlessTasks === 'off' && receipt?.carriesMarker)) {
         const digest = formatReceiptFailure({
           scenarioId,
           receipt,
@@ -520,10 +548,9 @@ export function createScenarioRunner(options, {
           pidPath: tripwire.pidPath,
         });
         process.stdout.write(`${digest}\n`);
-        throw new Error(digest);
+        failure = new Error(digest);
       }
-      const observedMockGitHub = observeMockGitHub();
-      if (expectedMockGitHubURL && observedMockGitHub !== expectedMockGitHubURL) {
+      if (!failure && expectedMockGitHubURL && observedMockGitHub !== expectedMockGitHubURL) {
         const digest = formatMockGitHubFailure({
           scenarioId,
           expected: expectedMockGitHubURL,
@@ -531,7 +558,20 @@ export function createScenarioRunner(options, {
           pidPath: tripwire.pidPath,
         });
         process.stdout.write(`${digest}\n`);
-        throw new Error(digest);
+        failure = new Error(digest);
+      }
+      if (teardownErrors.length > 0) {
+        const teardownOnly = !failure;
+        failure ||= teardownError(teardownErrors);
+        failureSummary = {
+          ...summary,
+          ...(teardownOnly ? { failurePhase: 'teardown' } : {}),
+          teardownErrors,
+        };
+      }
+      if (failure) {
+        await runner.finishFailure(failure, failureSummary);
+        throw failure;
       }
       const finalSummary = {
         ok: true,
@@ -562,6 +602,11 @@ export function createScenarioRunner(options, {
       return finalSummary;
     },
     async finishFailure(error, summary = {}) {
+      if (finalFailureSummary) {
+        return finalFailureSummary;
+      }
+      reportedFailure = { error, summary };
+      const teardownErrors = await runRegisteredCleanup('finish');
       const recorderError = await finalizeRunner();
       const ledger = collectTripwireLedger();
       const finalSummary = {
@@ -584,8 +629,10 @@ export function createScenarioRunner(options, {
           ? { agentTripwire: { count: ledger.length, ledgerPath: tripwire.ledgerPath, lines: ledger } }
           : {}),
         ...summary,
+        ...(teardownErrors.length > 0 ? { teardownErrors } : {}),
       };
       const summaryPath = path.join(runDir, 'failure.json');
+      fs.rmSync(path.join(runDir, 'summary.json'), { force: true });
       writeJson(summaryPath, finalSummary);
       const digest = buildFailureDigest({
         scenarioId,
@@ -607,7 +654,26 @@ export function createScenarioRunner(options, {
         summaryPath,
         durationMs: Date.now() - runnerCreatedAt,
       });
+      finalFailureSummary = finalSummary;
       return finalSummary;
+    },
+    async finishCleanup(summary = {}) {
+      const errors = await runRegisteredCleanup('finish');
+      if (errors.length === 0 || finalFailureSummary) {
+        return;
+      }
+      const error = teardownError(errors);
+      if (reportedFailure) {
+        await runner.finishFailure(reportedFailure.error, { ...reportedFailure.summary, teardownErrors: errors });
+      } else {
+        await runner.finishFailure(error, {
+          ...reportedSuccessSummary,
+          ...summary,
+          failurePhase: 'teardown',
+          teardownErrors: errors,
+        });
+      }
+      throw error;
     },
     async close() {
       const recorderError = await finalizeRunner();

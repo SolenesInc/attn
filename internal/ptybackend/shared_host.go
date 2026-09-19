@@ -533,7 +533,7 @@ func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 }
 
 func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) error {
-	if err := validateUnattendedSpawnOptions(opts); err != nil {
+	if err := validateSpawnOptions(opts); err != nil {
 		return err
 	}
 	if err := validateSessionID(opts.ID); err != nil {

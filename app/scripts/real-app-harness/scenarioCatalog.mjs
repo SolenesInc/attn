@@ -121,6 +121,13 @@ export const scenarioCatalog = [
     timeoutMs: 180_000,
   },
   {
+    id: 'crew-seed-header',
+    runnerId: 'CrewSeedHeader',
+    label: 'Crew header: member claim, latest note and a fresh wake session',
+    command: ['node', 'scripts/real-app-harness/scenario-crew-seed-header.mjs'],
+    timeoutMs: 180_000,
+  },
+  {
     id: 'agent-settings',
     runnerId: 'AgentSettings',
     label: 'Agent settings: grouped defaults, background agents, autosave acknowledgements and close recovery',
@@ -139,6 +146,12 @@ export const scenarioCatalog = [
     label: 'Crew management: launch lifecycle, seed attribution and tile return, charter recovery/conflicts, handoff history with seed return, quiet launch autosave, reconnect recovery, and a changed successor',
     command: ['pnpm', 'run', 'real-app:scenario-crew-management'],
     timeoutMs: 300_000,
+  },
+  {
+    id: 'delegation-chain',
+    runnerId: 'DelegationChain',
+    label: 'Delegation identity: sidebar and header roles, hover chain and native keyboard navigation',
+    command: ['node', 'scripts/real-app-harness/scenario-delegation-chain.mjs'],
   },
   {
     id: 'countdown-cancel',
@@ -162,9 +175,30 @@ export const scenarioCatalog = [
     timeoutMs: 600_000,
   },
   {
+    id: 'automation-form',
+    runnerId: 'AUTOMATION-FORM',
+    label: 'Automation form: validation, create, edit, collision, schedule and persistence',
+    command: ['pnpm', 'run', 'real-app:scenario-automation-form'],
+    timeoutMs: 240_000,
+  },
+  {
+    id: 'automation-surface',
+    runnerId: 'AUTOMATION-SURFACE',
+    label: 'Automation panel: manual delivery, scheduled rows, disabled rejection and restart persistence',
+    command: ['node', 'scripts/real-app-harness/scenario-automation-surface.mjs'],
+    timeoutMs: 240_000,
+  },
+  {
+    id: 'automation-scheduled-cleanup',
+    runnerId: 'AUTOMATION-SCHEDULED-CLEANUP',
+    label: 'Scheduled cleanup: restart catch-up, singleton coalescing, dirty worktree safety and storm guard',
+    command: ['pnpm', 'run', 'real-app:scenario-automation-scheduled-cleanup'],
+    timeoutMs: 240_000,
+  },
+  {
     id: 'worktree-surface',
     runnerId: 'WORKTREE-SURFACE',
-    label: 'Worktrees panel: a slow refresh stays visible, the keep pin goes both ways, and a removal lands on its seed',
+    label: 'Worktrees panel: one refresh completes every verdict, the keep pin goes both ways, and a removal lands on its seed',
     command: ['pnpm', 'run', 'real-app:scenario-worktree-surface'],
     timeoutMs: 900_000,
   },
@@ -199,6 +233,7 @@ export const scenarioCatalog = [
     runnerId: 'PTY-HOST-SETTING',
     label: 'Experimental shared PTY opt-in preserves existing terminals',
     command: ['node', 'scripts/real-app-harness/scenario-pty-host-setting.mjs'],
+    freshWorldAfter: true,
   },
   {
     id: 'terminal-md-link',
@@ -290,29 +325,12 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'pi-security',
-    runnerId: 'PI-SECURITY',
-    label: 'Pi sandbox and credential filtering',
-    command: ['pnpm', 'run', 'real-app:scenario-pi-security'],
-    allowRealAgents: ['pi'],
-    timeoutMs: 360_000,
-  },
-  {
-    id: 'pi-automode',
-    runnerId: 'PI-AUTOMODE',
-    allowRealAgents: ['pi'],
-    label: 'pi auto mode: envelope invisibility, a denial and its surfaces, a conversational grant, the circuit breaker',
-    command: ['pnpm', 'run', 'real-app:scenario-pi-automode'],
-    // Needs `pi` on PATH and the attn-pi plugin installed, but no credentials and
-    // no network: the model and the classifier are both a loopback stub.
-    timeoutMs: 900_000,
-  },
-  {
     id: 'automode-environment',
     runnerId: 'AutoModeEnvironment',
-    label: 'Auto mode: a slot written from the pane and from the CLI, what an unfilled one says, and that a named model is what turns auto mode on',
+    label: 'Auto mode: independent rule controls, environment writes, and unset slots',
     command: ['pnpm', 'run', 'real-app:scenario-automode-environment'],
     timeoutMs: 300_000,
+    allowRealAgents: ['pi'],
   },
   {
     id: 'focus-probe',

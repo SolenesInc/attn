@@ -167,6 +167,15 @@ try {
   await page.getByLabel("Full source text", { exact: true }).fill(diffEditedText);
   await expect(page.locator("#source")).toHaveValue(diffEditedText);
   await expect(page.locator("#source-diff")).toContainText("while reading its diff");
+  let releaseCatalog;
+  let catalogRequested;
+  const heldCatalog = new Promise((resolve) => { releaseCatalog = resolve; });
+  const catalogRefresh = new Promise((resolve) => { catalogRequested = resolve; });
+  await page.route("**/api/catalog", async (route) => {
+    catalogRequested();
+    await heldCatalog;
+    await route.continue();
+  });
   await page.locator("#review-save").click();
   await expect(page.locator("#global-status")).toHaveText("Checkout sources");
   assert.equal(await fs.readFile(wake, "utf8"), diffEditedText);
@@ -194,6 +203,19 @@ try {
   if (artifacts) await page.screenshot({ path: path.join(artifacts, "narrow-full-comparison.png"), fullPage: true });
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator("#review-close").click();
+  await catalogRefresh;
+  const workspace = page.locator(".workspace");
+  await workspace.evaluate((element) => {
+    element.dataset.busyClears = "0";
+    new MutationObserver((records) => {
+      const clears = records.filter((record) => record.oldValue === "true").length;
+      element.dataset.busyClears = String(Number(element.dataset.busyClears) + clears);
+    }).observe(element, { attributes: true, attributeFilter: ["aria-busy"], attributeOldValue: true });
+  });
+  releaseCatalog();
+  await page.unrouteAll({ behavior: "wait" });
+  await expect(workspace).not.toHaveAttribute("aria-busy", "true");
+  await expect(workspace).toHaveAttribute("data-busy-clears", "1");
   let requests = 0;
   page.on("request", () => requests++);
   await expect(page.locator("#output")).toContainText("Write a complete work prompt while reading its diff");

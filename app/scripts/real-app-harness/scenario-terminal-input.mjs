@@ -197,8 +197,6 @@ async function main() {
     return;
   }
 
-  process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-INPUT',
     tier: 'tier1-local-shell',
@@ -435,7 +433,7 @@ async function main() {
         const deadline = Date.now() + 5_000;
         let found = false;
         while (Date.now() < deadline) {
-          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0'], {
+          const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0', '--grep', pane.runtimeId], {
             encoding: 'utf8', env: profileCliEnv(profileForAppPath(options.appPath)),
           });
           if (dump.includes(privateText)) throw new Error('Input diagnostics exposed composition text');
@@ -605,21 +603,6 @@ async function main() {
     const result = await runner.finishFailure(error, { sessionId, paneId: pane?.paneId ?? null });
     console.error(result.error);
     process.exitCode = 1;
-  } finally {
-    await client.request('set_setting', { key: 'keybindings_config', value: '' }).catch(() => {});
-    if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const current of workspace?.panes || []) {
-        await client.request('close_pane', { sessionId, paneId: current.paneId }).catch(() => {});
-      }
-    }
-    await client.quitApp().catch(() => {});
-    await observer.close();
-    if (generatedReportPath && path.dirname(generatedReportPath) === downloadsDir
-      && DIAGNOSTIC_REPORT_NAME.test(path.basename(generatedReportPath))) {
-      fs.unlinkSync(generatedReportPath);
-      generatedReportPath = null;
-    }
   }
 }
 

@@ -151,10 +151,12 @@ func (r *Runner) rearmCronLocked(j *Job, interval time.Duration, runErr error) {
 	j.UpdatedAt = now
 	if runErr != nil {
 		j.LastError = runErr.Error()
+		j.LastDiagnostic = DiagnosticOutput(runErr)
 		r.log("jobs: cron %s failed, next fire at %s: %v",
 			j.Kind, j.ScheduledAt.Format(time.RFC3339), runErr)
 	} else {
 		j.LastError = ""
+		j.LastDiagnostic = ""
 	}
 	if err := r.store.Save(j); err != nil {
 		// The claim write left the row RUNNING, which dispatch never selects; only the orphan

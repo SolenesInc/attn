@@ -29,6 +29,8 @@ const (
 	StatusDormant   = "dormant"
 )
 
+const HarvestWhenPullRequestField = "harvest_when_pull_request"
+
 type Edge struct {
 	Kind string `json:"kind"`
 	To   string `json:"to"`
@@ -62,9 +64,6 @@ type Seed struct {
 	Gate            bool   `json:"gate"`
 	Vars            []Var  `json:"vars"`
 	Reason          string `json:"reason,omitempty"`
-	ResumeSessionID string `json:"resume_session_id,omitempty"`
-	ResumeCwd       string `json:"resume_cwd,omitempty"`
-	ResumeAgent     string `json:"resume_agent,omitempty"`
 
 	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
 	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON
@@ -98,7 +97,7 @@ func SeedsSchema() docstore.CollectionSchema {
 			{Name: "status", Type: docstore.FieldString},
 			{Name: "step_slug", Type: docstore.FieldString},
 			{Name: "tender_session", Type: docstore.FieldString},
-			{Name: "harvest_when_pull_request", Type: docstore.FieldString},
+			{Name: HarvestWhenPullRequestField, Type: docstore.FieldString},
 			{Name: "template", Type: docstore.FieldBool},
 			{Name: "gate", Type: docstore.FieldBool},
 		},

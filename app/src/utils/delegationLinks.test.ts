@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { delegatesByDispatcher, dispatcherOf } from './delegationLinks';
+import { delegatesByDispatcher, delegationTree, dispatcherOf } from './delegationLinks';
 
 interface LinkedSession {
   id: string;
@@ -45,5 +45,32 @@ describe('delegation links', () => {
       ['root', [delegate, sibling]],
       ['ended', [orphan]],
     ]));
+  });
+
+  it('walks the connected tree from its root, including peers and deeper delegates', () => {
+    const sessions = [dispatcher, delegate,
+      { id: 'grandchild', label: 'grandchild', dispatcher_session_id: 'child' },
+      { id: 'peer', label: 'peer', dispatcher_session_id: 'root' },
+      { id: 'unrelated', label: 'unrelated' },
+    ];
+    const tree = delegationTree('grandchild', sessions);
+    expect(tree.rows.map(({ session, depth }) => [session.id, depth])).toEqual([
+      ['root', 0], ['child', 1], ['grandchild', 2], ['peer', 1],
+    ]);
+    expect(tree.earlierDispatcher).toBeNull();
+  });
+
+  it('shows an unavailable dispatcher without fabricating a clickable session', () => {
+    const orphan = { ...delegate, dispatcher_session_id: 'ended' };
+    const tree = delegationTree('child', [orphan, { ...orphan, id: 'peer' }]);
+    expect(tree.earlierDispatcher).toBe('Alder');
+    expect(tree.rows.map(({ session }) => session.id)).toEqual(['child', 'peer']);
+  });
+
+  it('does not cross endpoints, revisit cycles, or invent missing sessions', () => {
+    expect(delegationTree('missing', [dispatcher])).toEqual({ rows: [], earlierDispatcher: null });
+    const cycle = [{ ...dispatcher, dispatcher_session_id: 'child' }, delegate];
+    expect(delegationTree('child', cycle).rows.map(({ session }) => session.id).sort()).toEqual(['child', 'root']);
+    expect(delegationTree('child', [delegate, { ...dispatcher, endpoint_id: 'remote' }]).rows.map(({ session }) => session.id)).toEqual(['child']);
   });
 });

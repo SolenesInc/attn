@@ -103,6 +103,27 @@ func TestConvertWorkerEventCarriesTheEmptyPlacementSet(t *testing.T) {
 	}
 }
 
+func TestConvertWorkerEventCarriesResizeGeometry(t *testing.T) {
+	cols, rows := uint16(100), uint16(30)
+	xpixel, ypixel := uint16(800), uint16(480)
+	evt, ok := convertWorkerEvent(ptyworker.EventEnvelope{
+		Type:      "evt",
+		Event:     ptyworker.EventResize,
+		SessionID: "s1",
+		Cols:      &cols,
+		Rows:      &rows,
+		XPixel:    &xpixel,
+		YPixel:    &ypixel,
+	})
+	if !ok {
+		t.Fatal("a resize event was dropped at the backend boundary")
+	}
+	if evt.Kind != OutputEventKindResize || evt.Cols != cols || evt.Rows != rows ||
+		evt.XPixel != xpixel || evt.YPixel != ypixel {
+		t.Fatalf("event = %+v, want the complete resize geometry", evt)
+	}
+}
+
 func TestWorkerBackend_KittyPlacementsAndImagePull(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping worker integration test in short mode")

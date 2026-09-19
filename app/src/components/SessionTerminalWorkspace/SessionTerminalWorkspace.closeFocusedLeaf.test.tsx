@@ -1,7 +1,8 @@
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render } from '@testing-library/react';
-import { annotationSurfaceOwnsFocus, SessionTerminalWorkspace } from './index';
+import { SessionTerminalWorkspace } from './index';
+import { annotationSurfaceOwnsFocus } from './annotationFocus';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import { tileContentKey, type TerminalWorkspaceState } from '../../types/workspace';
 import { NotebookSurfaceProvider, type NotebookSurfaceContextValue } from '../../contexts/NotebookSurfaceContext';

@@ -190,7 +190,7 @@ func (d *Daemon) noteCloseOnTendedSeeds(
 	}
 	body := agentCloseSeedNote(target, caller, rule, reason)
 	for _, doc := range read.Documents {
-		if _, err := d.appendSeedNote(doc.ID, body, caller.ID, "", garden.NoteKindNote, nil); err != nil {
+		if _, err := d.appendSeedNote(doc.ID, body, caller.ID, "", garden.NoteKindNote, nil, false, caller.ID); err != nil {
 			d.logf("agent close: noting the close of %s on %s: %v", target.ID, doc.ID, err)
 			continue
 		}

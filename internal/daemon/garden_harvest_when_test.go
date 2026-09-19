@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"net"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
+	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -25,7 +27,14 @@ func armSeed(t *testing.T, d *Daemon, seedID string, condition garden.HarvestCon
 		t.Fatalf("read %s: %v", seedID, err)
 	}
 	seed.HarvestWhen = &condition
-	if _, err := d.writeSeed(*schema, seed, doc.Rev, FactGardenHarvestWhenChanged); err != nil {
+	occurrence, err := seedEvents.Occur(
+		gardenSeedEventModel, gardenSeedEventVocabulary.HarvestWhenConfigured, seed.ID,
+		seedEvents.HarvestWhenPayload{PullRequestID: condition.PullRequest},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.writeSeedWithEvents(*schema, seed, doc.Rev, occurrence); err != nil {
 		t.Fatalf("write %s: %v", seedID, err)
 	}
 }
@@ -75,9 +84,73 @@ func TestArmedSeedsAreFoundByTheirPullRequest(t *testing.T) {
 	}
 }
 
+func TestArmedSeedsAreReadPastTheSnapshotPage(t *testing.T) {
+	d := newGardenDaemon(t)
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	for i := 0; i < gardenSnapshotLimit+1; i++ {
+		id := fmt.Sprintf("s-%06d", i)
+		pr := "github.com:victorarias/attn#275"
+		if i == gardenSnapshotLimit {
+			pr = "github.com:victorarias/attn#276"
+		}
+		seed := garden.Seed{
+			ID: id, Title: id, StepSlug: id, Status: garden.StatusPlanted,
+			StateChangedAt: "2026-09-12T00:00:00Z", Edges: []garden.Edge{}, Vars: []garden.Var{},
+			HarvestWhen: &garden.HarvestCondition{PullRequest: pr},
+		}
+		body, encodeErr := seed.Encode()
+		if encodeErr != nil {
+			t.Fatalf("encode %s: %v", id, encodeErr)
+		}
+		if _, putErr := d.store.PutDocument(*schema, id, body, time.Now(), nil); putErr != nil {
+			t.Fatalf("put %s: %v", id, putErr)
+		}
+	}
+
+	seeds, err := d.armedSeeds()
+	if err != nil {
+		t.Fatalf("armed seeds: %v", err)
+	}
+	if len(seeds) != gardenSnapshotLimit+1 {
+		t.Fatalf("armed seeds returned %d, want %d", len(seeds), gardenSnapshotLimit+1)
+	}
+	if got := seeds[len(seeds)-1].ID; got != fmt.Sprintf("s-%06d", gardenSnapshotLimit) {
+		t.Fatalf("last armed seed is %s", got)
+	}
+}
+
+func TestArmedSeedsQueryUsesThePullRequestIndex(t *testing.T) {
+	d := newGardenDaemon(t)
+	schema, err := d.seedsCollection()
+	if err != nil {
+		t.Fatalf("seeds collection: %v", err)
+	}
+	compiled, err := armedSeedsQuery("").Compile(*schema, nil)
+	if err != nil {
+		t.Fatalf("compile armed seeds query: %v", err)
+	}
+	plan, err := d.store.QueryPlan(compiled)
+	if err != nil {
+		t.Fatalf("armed seeds query plan: %v", err)
+	}
+	joined := strings.Join(plan, "\n")
+	index := schema.Table + "_f_harvest_when_pull_request"
+	if !strings.Contains(joined, "SEARCH "+schema.Table) || !strings.Contains(joined, index) {
+		t.Fatalf("armed seeds query did not use %s:\n%s", index, joined)
+	}
+}
+
 func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "ship the protocol"})
+	recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/113")
+	failedAt := time.Date(2026, 9, 12, 11, 42, 0, 0, time.UTC)
+	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", failedAt); err != nil {
+		t.Fatalf("mark the pull request checked: %v", err)
+	}
 	if before := show(t, d, seed.ID); before.Seed.HarvestWhen != nil {
 		t.Fatalf("an unarmed seed carries a condition on the wire: %+v", before.Seed.HarvestWhen)
 	}
@@ -102,6 +175,21 @@ func TestSeedShowCarriesTheHarvestCondition(t *testing.T) {
 	}
 	if got.SetAt != "2026-09-02T00:21:00Z" {
 		t.Fatalf("the wire changed when it was armed: %+v", got)
+	}
+	if got.CheckedAt != nil {
+		t.Fatalf("the wire reports a successful check after only a failed attempt: %+v", got)
+	}
+
+	fetchedAt := failedAt.Add(time.Minute)
+	if err := d.store.UpdateSessionPullRequestStatus("github.com:victorarias/attn#113", store.SessionPullRequestStatus{State: sessionPullRequestOpen}, fetchedAt); err != nil {
+		t.Fatalf("store the fetched pull request: %v", err)
+	}
+	if err := d.store.MarkSessionPullRequestChecked("github.com:victorarias/attn#113", fetchedAt.Add(time.Minute)); err != nil {
+		t.Fatalf("mark a later failed attempt: %v", err)
+	}
+	got = show(t, d, seed.ID).Seed.HarvestWhen
+	if protocol.Deref(got.CheckedAt) != fetchedAt.Format(time.RFC3339Nano) {
+		t.Fatalf("the wire says the pull request was checked at %q, want the successful fetch at %s", protocol.Deref(got.CheckedAt), fetchedAt.Format(time.RFC3339Nano))
 	}
 }
 
@@ -522,6 +610,32 @@ func TestAMergeThatLandsDuringArmingStillHarvests(t *testing.T) {
 	}
 	if harvested.Status != garden.StatusHarvested || harvested.HarvestWhen != nil {
 		t.Fatalf("the merge that landed during arming was missed: %+v", harvested)
+	}
+}
+
+func TestAClosureDuringArmingDoesNotRingItsInitiator(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "closed during arming"})
+	watchSeed(t, d, "sess-a", seed.ID, false)
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	armed, doc, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestClosed, "closed between the check and the commit")
+
+	cleared, _, err := d.settleFreshlyArmed(armed, doc, "sess-a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleared.HarvestWhen != nil {
+		t.Fatalf("closed pull request left harvest condition %+v", cleared.HarvestWhen)
+	}
+	if queued := queuedSeedBells(t, d, "sess-a"); len(queued) != 0 {
+		t.Fatalf("immediate clear rang its initiating session: %q", queued)
 	}
 }
 

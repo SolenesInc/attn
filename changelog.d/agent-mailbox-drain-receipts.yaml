@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Daemon tests take one receipt per agent inbox drain and stop the doorbell timers at cleanup, so a re-armed drain never blocks a test daemon after its test ends.

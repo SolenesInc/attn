@@ -323,7 +323,8 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 			record.Err = err.Error()
 		})
-		return nil, fmt.Errorf("session_activity: run agent: %w (%s)", err, result.Diagnostics)
+		cause := fmt.Errorf("session_activity: run agent: %w (%s)", err, result.Diagnostics)
+		return nil, jobs.WithDiagnostic(cause, result.FailureOutput)
 	}
 
 	line, ok := activity.Sanitize(result.Text)

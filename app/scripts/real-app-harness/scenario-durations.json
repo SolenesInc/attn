@@ -1,66 +1,157 @@
 {
   "receipt": {
-    "run": "https://github.com/SolenesInc/attn/actions/runs/34067680122",
+    "run": "https://github.com/SolenesInc/attn/actions/runs/34544978355",
     "job": "App acceptance",
-    "recordedAt": "2026-09-07",
-    "matrixSeconds": 785.7,
+    "recordedAt": "2026-09-11",
+    "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
-    "crewManagement": {
-      "run": "https://github.com/SolenesInc/attn/actions/runs/34073350549/job/101594808961",
-      "recordedAt": "2026-09-07",
-      "scenarioRun": "crew-management-2026-09-07T01-45-07-590Z",
-      "note": "The fully green Linux serial matrix reports 32.9s for crew-management in matrix-digest.txt. Its scenario source is unchanged from this run."
-    },
-    "terminalAnnotations": {
-      "run": "https://github.com/SolenesInc/attn/actions/runs/34543069126",
-      "job": "https://github.com/SolenesInc/attn/actions/runs/34543069126/job/103091680265",
-      "recordedAt": "2026-09-10",
-      "platform": "Linux",
-      "head": "0fe04fea6c69f857d42add6d4f6cb1978e5feabb",
-      "note": "All four Linux acceptance shards and the aggregate passed. Shard 3/4 reports PASS terminal-annotations 18.9s in its matrix digest. The native annotation scenario is unchanged from this run."
+    "updates": {
+      "crew-management": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34073350549/job/101594808961",
+        "recordedAt": "2026-09-07",
+        "seconds": 32.9,
+        "runnerClass": "github-hosted 4vcpu/16GB",
+        "note": "Green Linux serial matrix, scenario crew-management-2026-09-07T01-45-07-590Z. Remeasure after the seeds tab and handoff history landed."
+      },
+      "workspace-switching": {
+        "run": "workspace-switching-2026-09-15T21-17-34-309Z",
+        "job": "Local serial matrix, rugged-doctor profile",
+        "recordedAt": "2026-09-15",
+        "seconds": 45.7,
+        "runnerClass": "local macOS",
+        "note": "Green matrix-digest.txt, including focus exit and cross-workspace focus reset, with recording. Remeasure on Linux CI."
+      },
+      "delegation-chain": {
+        "run": "delegation-chain-2026-09-13T23-06-51-792Z",
+        "job": "Local serial matrix, frosty-chain profile",
+        "recordedAt": "2026-09-13",
+        "seconds": 41.0,
+        "runnerClass": "local macOS",
+        "note": "Measured from the green matrix-digest.txt; includes native hover, click and command-menu focus checks and idle resource samples, without recording. Remeasure on Linux CI."
+      },
+      "agent-close": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 8.2,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "automation-form": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34551113982",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 10.2,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "automation-scheduled-cleanup": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
+        "job": "App acceptance shard 3/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 40.6,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "automation-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34552552869",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 13.2,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "crew-seed-header": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34560996731",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 53.2,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "sessions-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 23.6,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "terminal-annotations": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 21.0,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "worktree-surface": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 34.3,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "delegation-preferences": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 25.9,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "garden-seed-reopen": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
+        "job": "App acceptance shard 1/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 8.1,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "garden-plot-dispatch": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/34556034570",
+        "job": "App acceptance shard 2/4",
+        "recordedAt": "2026-09-11",
+        "seconds": 24.0,
+        "runnerClass": "github-hosted 4vcpu/16GB"
+      }
     }
   },
   "seconds": {
-    "prompt-composition": 14.9,
-    "workspace-creation-shortcuts": 20.6,
-    "workspace-switching": 37.6,
-    "workspace-close-one-session-keeps-selection": 22.6,
-    "close-pane-nonblocking": 9.5,
-    "agent-close": 7.4,
-    "session-close-ledger": 5.2,
-    "session-reopen": 5.4,
-    "sessions-surface": 24.8,
+    "agent-close": 8.2,
+    "agent-queue": 93.8,
+    "agent-settings": 18.7,
+    "autoclose-on-exit": 19.1,
+    "automation-form": 10.2,
+    "automation-lifecycle": 49.3,
+    "automation-scheduled-cleanup": 40.6,
+    "automation-surface": 13.2,
+    "automode-environment": 4.8,
+    "close-pane-nonblocking": 10,
+    "countdown-cancel": 46.3,
+    "crash-recovery": 9,
+    "crew-seed-header": 53.2,
+    "delegation-chain": 41.0,
+    "delegation-preferences": 25.9,
+    "garden-plot-dispatch": 24.0,
+    "garden-seed-header": 17.4,
+    "garden-seed-read-receipts": 13.4,
+    "garden-seed-reopen": 8.1,
+    "garden-seed-tile-navigation": 7.8,
+    "ghostty-scroll": 6.2,
+    "markdown-opener": 20.3,
+    "notebook-editor-undo": 32.8,
+    "present-submit-closes-window": 10.7,
+    "prompt-composition": 19,
+    "pty-host-setting": 8.3,
+    "session-close-ledger": 9.9,
+    "session-reopen": 6.2,
+    "session-usage": 10,
+    "sessions-surface": 23.6,
+    "terminal-annotations": 21.0,
+    "terminal-block-resize": 10.6,
+    "terminal-context-menu": 9.7,
+    "terminal-input": 12.8,
+    "terminal-md-link": 15.9,
     "tile-only-workspace-select": 5,
-    "markdown-opener": 18.8,
-    "notebook-editor-undo": 32.4,
-    "autoclose-on-exit": 18.3,
-    "garden-plot-dispatch": 22.6,
-    "garden-seed-tile-navigation": 7.7,
-    "garden-seed-read-receipts": 12.2,
-    "garden-seed-reopen": 8.8,
-    "garden-seed-header": 17,
-    "agent-settings": 18.3,
-    "delegation-preferences": 25.5,
-    "countdown-cancel": 48.2,
-    "agent-queue": 91,
-    "automation-lifecycle": 48.9,
-    "worktree-surface": 37.8,
-    "terminal-annotations": 18.9,
-    "terminal-context-menu": 9.1,
-    "terminal-input": 11.7,
-    "pty-host-setting": 8.9,
-    "terminal-md-link": 16,
-    "session-usage": 8.2,
-    "terminal-block-resize": 9.1,
-    "tr201-local-claude": 10.1,
-    "tr301-local-claude": 7.3,
-    "tr401-local-claude": 15.1,
-    "crash-recovery": 9.5,
-    "ghostty-scroll": 5.8,
-    "present-submit-closes-window": 9.9,
-    "pi-security": 66.2,
-    "pi-automode": 11.7,
-    "automode-environment": 5.4,
+    "tr201-local-claude": 8.7,
+    "tr301-local-claude": 6.9,
+    "tr401-local-claude": 14.2,
+    "workspace-close-one-session-keeps-selection": 27.4,
+    "workspace-creation-shortcuts": 22.6,
+    "workspace-switching": 45.7,
+    "worktree-surface": 34.3,
     "crew-management": 32.9
   }
 }

@@ -1,0 +1,3 @@
+kind: internal
+area: harness
+change: Let Pi's offline model catalog discovery pass the real-agent tripwire while every model-capable invocation remains blocked.

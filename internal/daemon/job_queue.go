@@ -45,26 +45,28 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
 	if !runner.Disabled() {
-		if err := d.registerSnoozeWakeHandler(runner); err != nil {
+		if err := d.registerTaskWithFailureRenderer(runner, snoozeWakeKind, d.snoozeWakeHandler, jobs.HandlerConfig{}, d.renderSnoozeWakeFailure); err != nil {
 			d.logf("snooze wake: register session_snooze_wake: %v", err)
 		}
-		if err := runner.RegisterWith(
+		if err := d.registerTaskWithFailureRenderer(
+			runner,
 			sessionActivityKind,
 			d.sessionActivityHandler,
 			jobs.HandlerConfig{
 				Timeout:       sessionActivityTimeout,
 				MaxConcurrent: sessionActivityConcurrency,
-			},
+			}, d.renderSessionActivityFailure,
 		); err != nil {
 			d.logf("session activity: register session_activity: %v", err)
 		}
-		if err := runner.RegisterWith(
+		if err := d.registerTaskWithFailureRenderer(
+			runner,
 			reconcileKind,
 			d.reconcileJobHandler,
 			jobs.HandlerConfig{
 				Timeout:       ticketReconcileTimeout(),
 				MaxConcurrent: ticketReconcileConcurrency,
-			},
+			}, d.renderReconcileFailure,
 		); err != nil {
 			d.logf("ticket reconcile: register reconcile: %v", err)
 		}
@@ -75,20 +77,22 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 		); err != nil {
 			d.logf("legacy ticket recovery: register: %v", err)
 		}
-		if err := runner.RegisterWith(
+		if err := d.registerTaskWithFailureRenderer(
+			runner,
 			sessionTitleKind,
 			d.sessionTitleHandler,
-			jobs.HandlerConfig{Timeout: sessionTitleTimeout},
+			jobs.HandlerConfig{Timeout: sessionTitleTimeout}, d.renderSessionTitleFailure,
 		); err != nil {
 			d.logf("session title: register session_title: %v", err)
 		}
-		if err := runner.RegisterWith(
+		if err := d.registerTaskWithFailureRenderer(
+			runner,
 			gardenReviewClassifyKind,
 			d.gardenReviewClassifyHandler,
 			jobs.HandlerConfig{
 				Timeout:       gardenReviewClassifyTimeout,
 				MaxConcurrent: gardenReviewClassifyConcurrency,
-			},
+			}, d.renderGardenReviewFailure,
 		); err != nil {
 			d.logf("garden review: register classification: %v", err)
 		}

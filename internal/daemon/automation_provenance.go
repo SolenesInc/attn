@@ -96,7 +96,7 @@ func (d *Daemon) automationProvenanceFromRecord(kind, id string, record *store.A
 	return provenance
 }
 
-func automationReviewNames(req automation.WorkRequest) (workspace, session, ticket string, ok bool) {
+func automationReviewNames(req automation.WorkRequest) (workspace, session, seedTitle string, ok bool) {
 	input, err := automation.ParsePullRequestInput(req.Context)
 	if err != nil {
 		return "", "", "", false

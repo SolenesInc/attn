@@ -53,7 +53,7 @@ const IDLE_STATES = new Set(['idle', 'waiting_input']);
 const BUSY_RELEASE_FILE = 'busy-turn-release';
 const GENERIC_DOORBELL = '📬 You have unread items in your attn inbox. Run attn agent inbox to read them.';
 // Mirrors ticketNudgePrompt minus the leading emoji, which the grid can split.
-const LEGACY_ITEM_CORE = 'Activity on a ticket that predates the garden — run `attn ticket inbox` to read and acknowledge it.';
+const LEGACY_ITEM_CORE = 'Activity on a ticket that predates the garden. Run `attn ticket inbox` now. Read its output before responding.';
 
 const squashWs = (text) => text.replace(/\s+/g, '');
 
@@ -93,7 +93,6 @@ async function submitPrompt(client, sessionId, paneId, text) {
 }
 
 async function pressCancelCountdown(client, driver) {
-  await driver.activateApp();
   await pressShortcutKeys(client, driver, 'session.cancelCountdown');
 }
 
@@ -183,12 +182,6 @@ async function main() {
   }
   const socketPath = socketPathForProfile(profile);
 
-  // The pointer leg drives a real cursor into the window, so the window has to
-  // sit where a pointer can reach it.
-  if (process.env.ATTN_HARNESS_PARK_VISIBLE_PX === undefined) {
-    process.env.ATTN_HARNESS_PARK_VISIBLE_PX = '800';
-  }
-
   const runner = createScenarioRunner(options, {
     scenarioId: 'COUNTDOWN-CANCEL',
     tier: 'tier2-local-mock-agent',
@@ -199,9 +192,11 @@ async function main() {
     },
   });
 
+  process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
+
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ appPath: options.appPath });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   const note = (message, extra) => runner.log(message, extra);
 
   let agentId = null;
@@ -221,8 +216,8 @@ async function main() {
     client.request('set_setting', { key: 'auto_settle_enabled', value: 'false' }).catch(() => {}));
   try {
     await runner.step('launch_app', async () => {
-      process.env.ATTN_HARNESS_ALWAYS_ON_TOP ??= '0';
       await launchFreshAppAndConnect(client, observer);
+      await driver.activateApp();
     });
 
     await runner.step('boot_agent_owing_a_turn', async () => {
@@ -322,6 +317,7 @@ async function main() {
     });
 
     await runner.step('pointer_movement_freezes_and_extends_the_countdown', async () => {
+      await driver.activateApp();
       const logicalBounds = await getFrontWindowBounds(null, {
         appPath: options.appPath,
         client,
@@ -466,9 +462,9 @@ async function main() {
       const unread = await pollFor(
         () => {
           const s = observer.getSession(targetId);
-          return s && s.ticket_unread === true ? s : null;
+          return s && s.ticket_unread === true && IDLE_STATES.has(s.state) ? s : null;
         },
-        `target ${targetId} to show unread ticket activity`,
+        `target ${targetId} to show unread ticket activity after its prior turn settles`,
         30_000,
       );
       note('target shows unread ticket activity', {
@@ -481,7 +477,6 @@ async function main() {
         `selected target's nudge is paused (no armed countdown); got nudge_fires_at=${JSON.stringify(unread.nudge_fires_at)}`,
         unread,
       );
-      runner.assert(IDLE_STATES.has(unread.state), `target is still idle/waiting while paused (got ${unread.state})`, unread);
     });
 
     await runner.step('the_deliver_now_button_submits_the_doorbell', async () => {

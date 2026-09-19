@@ -117,6 +117,10 @@ func TestSettle_ClosedPullRequestClearsTheConditionAndRings(t *testing.T) {
 	recordSettlePR(t, d, "sess-a")
 	setPRState(t, d, "closed", "Harvest on merge")
 	armOnSettlePR(t, d, seed.ID)
+	assertOneSeedBell(t, d, "sess-b", seed.ID, "harvest_when.configured")
+	if _, _, err := d.store.ReadGardenSeedMailboxItems("sess-b", seed.ID, time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	if harvested, cleared := d.settleHarvestConditions(); harvested != 0 || cleared != 1 {
 		t.Fatalf("settle = (%d harvested, %d cleared), want (0, 1)", harvested, cleared)
@@ -134,7 +138,7 @@ func TestSettle_ClosedPullRequestClearsTheConditionAndRings(t *testing.T) {
 	if len(bodies) != 1 || bodies[0] != want {
 		t.Fatalf("the log = %q, want %q", bodies, want)
 	}
-	assertOneSeedBell(t, d, "sess-b", seed.ID, harvestWhenRingCleared)
+	assertOneSeedBell(t, d, "sess-b", seed.ID, "harvest_when.cleared")
 }
 
 func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {
@@ -178,6 +182,33 @@ func TestSettle_TheRefreshHarvestsWhenTheMergeLands(t *testing.T) {
 	}
 	if !strings.HasPrefix(protocol.Deref(got.Reason), "PR #113 merged: ") {
 		t.Fatalf("harvest reason = %q, want the merged pull request and its title", protocol.Deref(got.Reason))
+	}
+}
+
+func TestSettle_TheRefreshHarvestsAfterTheArmingSessionCloses(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "outlives its session"})
+	recordSettlePR(t, d, "sess-a")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, settlePRURL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	closed, err := d.store.CloseSession("sess-a", store.SessionClose{By: "sess-a", Reason: "work handed back"}, time.Now())
+	if err != nil || !closed {
+		t.Fatalf("close the arming session = %t, %v", closed, err)
+	}
+	if d.store.Get("sess-a") != nil {
+		t.Fatal("the arming session is still active")
+	}
+	serveHost(d, "github.com", &fakePRHost{snapshot: &github.PullRequestSnapshot{
+		Number: 113, State: "closed", Merged: true, Title: "Keep harvest-on-merge alive",
+	}})
+
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land after the session closed", fetched, changed)
+	}
+	got := show(t, d, seed.ID).Seed
+	if got.Status != garden.StatusHarvested || got.HarvestWhen != nil {
+		t.Fatalf("the closed session stranded its armed seed: %+v", got)
 	}
 }
 

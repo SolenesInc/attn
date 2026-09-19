@@ -262,7 +262,7 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		ID:            run.ID,
 		DefinitionID:  run.DefinitionID,
 		State:         run.State,
-		TicketID:      protocol.Ptr(run.TicketID),
+		SeedID:        protocol.Ptr(run.SeedID),
 		SessionID:     protocol.Ptr(run.SessionID),
 		PaneID:        protocol.Ptr(run.PaneID),
 		CreatedAt:     string(protocol.NewTimestamp(run.CreatedAt)),

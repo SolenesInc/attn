@@ -387,6 +387,7 @@
 }
 
 .workspace-group-header {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -567,71 +568,8 @@
   max-width: 100%;
 }
 
-.sidebar-dispatcher {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: 4px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
-  line-height: 1.25;
-}
-
-.sidebar-dispatcher__link,
-.sidebar-dispatcher__name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.sidebar-dispatcher__link {
-  border: 0;
-  padding: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  cursor: pointer;
-}
-
-.sidebar-dispatcher__link:hover,
-.sidebar-dispatcher__link:focus-visible {
-  color: var(--color-text-secondary);
-  text-decoration: underline;
-}
-
-.sidebar-delegate-count {
-  display: inline-flex;
-  flex: none;
-  min-width: 18px;
-  height: 18px;
+.delegation-chain-trigger--sidebar {
   margin-left: auto;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-xs);
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-}
-
-.session-item.kin-up {
-  background: rgba(88, 166, 255, 0.08);
-}
-
-.session-item.kin-up .sidebar-session-headline > .session-label {
-  color: #79b8ff;
-}
-
-.session-item.kin-down {
-  background: color-mix(in srgb, var(--accent) 8%, transparent);
-}
-
-.session-item.kin-down .sidebar-dispatcher {
-  color: var(--accent);
 }
 
 .sidebar-session-pr {
@@ -731,6 +669,8 @@
 }
 
 .session-actions {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: row;
   align-items: center;
@@ -745,6 +685,8 @@
 }
 
 .workspace-actions {
+  position: relative;
+  z-index: 1;
   align-items: center;
   display: flex;
   flex-shrink: 0;
@@ -946,6 +888,9 @@
 }
 
 .sidebar-settings-popover {
+  margin: 0;
+  left: auto;
+  color: var(--color-text-primary);
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
@@ -1501,14 +1446,15 @@
   color: var(--color-text-muted);
 }
 
-.crew-row-mark + .sidebar-delegate-count {
+.crew-row-mark + .delegation-chain-trigger {
   margin-left: 0;
 }
 
 /* Fills the row from behind, so a click lands on it wherever it falls. Absolute
    rather than a wrapper: the row's other children stay direct children of
    .session-item and keep their layout. */
-.queue-row-select {
+.queue-row-select,
+.sidebar-row-select {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -1519,7 +1465,8 @@
   cursor: pointer;
 }
 
-.queue-row-select:focus-visible {
+.queue-row-select:focus-visible,
+.sidebar-row-select:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
 }
@@ -1574,7 +1521,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-.sidebar-delegate-count + .queue-row-age {
+.delegation-chain-trigger + .queue-row-age {
   margin-left: 0;
 }
 

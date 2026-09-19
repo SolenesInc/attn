@@ -1,0 +1,946 @@
+use base64::Engine as _;
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::{BufRead, BufReader, Write};
+use std::net::{Shutdown, TcpListener, TcpStream};
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Mutex};
+use std::thread;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tauri::{AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Runtime};
+
+use crate::native_input;
+use crate::profile;
+
+const REQUEST_EVENT: &str = "attn://ui-automation/request";
+const RESPONSE_EVENT: &str = "attn://ui-automation/response";
+const READY_EVENT: &str = "attn://ui-automation/ready";
+// The perf harness can intentionally keep the frontend busy for tens of seconds.
+const DEFAULT_TIMEOUT_MS: u64 = 120_000;
+const MANIFEST_RELATIVE_PATH: &str = "debug/ui-automation.json";
+const LOG_RELATIVE_PATH: &str = "debug/ui-automation-server.log";
+
+#[derive(Clone)]
+struct PendingAutomationResponses {
+    by_request_id: Arc<Mutex<HashMap<String, mpsc::Sender<BridgeResponse>>>>,
+}
+
+impl PendingAutomationResponses {
+    fn new() -> Self {
+        Self {
+            by_request_id: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    fn insert(&self, request_id: String, sender: mpsc::Sender<BridgeResponse>) {
+        self.by_request_id
+            .lock()
+            .expect("pending automation responses lock poisoned")
+            .insert(request_id, sender);
+    }
+
+    fn resolve(&self, response: BridgeResponse) {
+        if let Some(sender) = self
+            .by_request_id
+            .lock()
+            .expect("pending automation responses lock poisoned")
+            .remove(&response.request_id)
+        {
+            let _ = sender.send(response);
+        }
+    }
+
+    fn remove(&self, request_id: &str) {
+        self.by_request_id
+            .lock()
+            .expect("pending automation responses lock poisoned")
+            .remove(request_id);
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct AutomationManifest {
+    enabled: bool,
+    port: u16,
+    token: String,
+    pid: u32,
+    started_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct AutomationSocketRequest {
+    #[serde(default)]
+    id: Option<String>,
+    token: String,
+    action: String,
+    #[serde(default)]
+    payload: Option<Value>,
+}
+
+#[derive(Debug, Serialize)]
+struct AutomationSocketResponse {
+    id: String,
+    ok: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    result: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BridgeRequest {
+    request_id: String,
+    action: String,
+    payload: Value,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct BridgeResponse {
+    request_id: String,
+    ok: bool,
+    #[serde(default)]
+    result: Option<Value>,
+    #[serde(default)]
+    error: Option<String>,
+}
+
+fn generate_token() -> String {
+    // 32 bytes from the OS RNG: a pid+nanos scheme is guessable enough that
+    // anyone on the box could drive the bridge.
+    let mut buf = [0u8; 32];
+    getrandom::getrandom(&mut buf).expect("OS RNG must be available");
+    let mut hex = String::with_capacity(buf.len() * 2);
+    for byte in buf {
+        hex.push(nibble(byte >> 4));
+        hex.push(nibble(byte & 0x0f));
+    }
+    hex
+}
+
+fn nibble(n: u8) -> char {
+    match n {
+        0..=9 => (b'0' + n) as char,
+        10..=15 => (b'a' + n - 10) as char,
+        _ => unreachable!(),
+    }
+}
+
+fn manifest_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|dir| dir.join(MANIFEST_RELATIVE_PATH))
+}
+
+fn write_manifest<R: Runtime>(app: &AppHandle<R>, manifest: &AutomationManifest) {
+    let Some(path) = manifest_path(app) else {
+        eprintln!("[UIAutomation] Failed to resolve app local data dir for manifest");
+        return;
+    };
+
+    if let Some(parent) = path.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            eprintln!("[UIAutomation] Failed to create manifest dir: {error}");
+            return;
+        }
+    }
+
+    match serde_json::to_string_pretty(manifest) {
+        Ok(contents) => {
+            if let Err(error) = fs::write(&path, format!("{contents}\n")) {
+                eprintln!(
+                    "[UIAutomation] Failed to write manifest {}: {error}",
+                    path.display()
+                );
+            }
+        }
+        Err(error) => {
+            eprintln!("[UIAutomation] Failed to encode manifest: {error}");
+        }
+    }
+}
+
+fn log_path<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|dir| dir.join(LOG_RELATIVE_PATH))
+}
+
+fn append_log<R: Runtime>(app: &AppHandle<R>, message: &str) {
+    let Some(path) = log_path(app) else {
+        eprintln!("[UIAutomation] {message}");
+        return;
+    };
+
+    if let Some(parent) = path.parent() {
+        if let Err(error) = fs::create_dir_all(parent) {
+            eprintln!("[UIAutomation] Failed to create log dir: {error}");
+            return;
+        }
+    }
+
+    let timestamp = chrono_like_now();
+    match OpenOptions::new().create(true).append(true).open(&path) {
+        Ok(mut file) => {
+            let _ = writeln!(file, "[{timestamp}] {message}");
+        }
+        Err(error) => {
+            eprintln!(
+                "[UIAutomation] Failed to open log {}: {error}",
+                path.display()
+            );
+        }
+    }
+}
+
+fn next_request_id(counter: &AtomicU64) -> String {
+    format!("ui-automation-{}", counter.fetch_add(1, Ordering::Relaxed))
+}
+
+fn handle_request<R: Runtime>(
+    app: &AppHandle<R>,
+    pending: &PendingAutomationResponses,
+    request_counter: &AtomicU64,
+    expected_token: &str,
+    frontend_ready: &AtomicBool,
+    request: AutomationSocketRequest,
+) -> AutomationSocketResponse {
+    let request_id = request
+        .id
+        .unwrap_or_else(|| next_request_id(request_counter));
+    let started_at = SystemTime::now();
+    append_log(
+        app,
+        &format!(
+            "request start id={} action={} frontend_ready={}",
+            request_id,
+            request.action,
+            frontend_ready.load(Ordering::Relaxed)
+        ),
+    );
+
+    if request.token != expected_token {
+        append_log(
+            app,
+            &format!(
+                "request reject id={} action={} invalid-token",
+                request_id, request.action
+            ),
+        );
+        return AutomationSocketResponse {
+            id: request_id,
+            ok: false,
+            result: None,
+            error: Some("invalid token".into()),
+        };
+    }
+
+    if request.action == "ping" {
+        append_log(app, &format!("request ok id={} action=ping", request_id));
+        return AutomationSocketResponse {
+            id: request_id,
+            ok: true,
+            result: Some(serde_json::json!({
+                "pong": true,
+                "frontendReady": frontend_ready.load(Ordering::Relaxed),
+            })),
+            error: None,
+        };
+    }
+
+    if request.action == "get_window_bounds" {
+        return match window_bounds(app) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action=get_window_bounds", request_id),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action=get_window_bounds error={}",
+                        request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    if request.action == "set_window_bounds" {
+        let payload = request.payload.clone().unwrap_or(Value::Null);
+        return match set_window_bounds(app, &payload) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action=set_window_bounds", request_id),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action=set_window_bounds error={}",
+                        request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    if request.action == "capture_screenshot" {
+        let payload = request.payload.unwrap_or(Value::Null);
+        return match capture_webview_screenshot(app, pending, &request_id, payload) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action=capture_screenshot", request_id),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action=capture_screenshot error={}",
+                        request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    if request.action == "capture_native_window_screenshot" {
+        let payload = request.payload.unwrap_or(Value::Null);
+        return match capture_native_window_screenshot(app, payload) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request ok id={} action=capture_native_window_screenshot",
+                        request_id
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action=capture_native_window_screenshot error={}",
+                        request_id, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    if native_input::ACTIONS.contains(&request.action.as_str()) {
+        let payload = request.payload.unwrap_or(Value::Null);
+        return match native_input::inject(app, &request.action, &payload) {
+            Ok(result) => {
+                append_log(
+                    app,
+                    &format!("request ok id={} action={}", request_id, request.action),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: true,
+                    result: Some(result),
+                    error: None,
+                }
+            }
+            Err(error) => {
+                append_log(
+                    app,
+                    &format!(
+                        "request err id={} action={} error={}",
+                        request_id, request.action, error
+                    ),
+                );
+                AutomationSocketResponse {
+                    id: request_id,
+                    ok: false,
+                    result: None,
+                    error: Some(error),
+                }
+            }
+        };
+    }
+
+    let payload = request.payload.unwrap_or(Value::Null);
+    let bridge_request = BridgeRequest {
+        request_id: request_id.clone(),
+        action: request.action,
+        payload,
+    };
+
+    let (sender, receiver) = mpsc::channel();
+    pending.insert(request_id.clone(), sender);
+
+    if let Err(error) = app.emit(REQUEST_EVENT, &bridge_request) {
+        pending.remove(&request_id);
+        append_log(
+            app,
+            &format!(
+                "request err id={} action={} emit={}",
+                request_id, bridge_request.action, error
+            ),
+        );
+        return AutomationSocketResponse {
+            id: request_id,
+            ok: false,
+            result: None,
+            error: Some(format!("failed to emit automation request: {error}")),
+        };
+    }
+
+    match receiver.recv_timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
+        Ok(response) => {
+            let elapsed_ms = started_at.elapsed().unwrap_or_default().as_millis();
+            append_log(
+                app,
+                &format!(
+                    "request done id={} action={} ok={} elapsed_ms={}",
+                    response.request_id, bridge_request.action, response.ok, elapsed_ms
+                ),
+            );
+            AutomationSocketResponse {
+                id: response.request_id,
+                ok: response.ok,
+                result: response.result,
+                error: response.error,
+            }
+        }
+        Err(_) => {
+            pending.remove(&request_id);
+            let elapsed_ms = started_at.elapsed().unwrap_or_default().as_millis();
+            append_log(
+                app,
+                &format!(
+                    "request timeout id={} action={} elapsed_ms={}",
+                    request_id, bridge_request.action, elapsed_ms
+                ),
+            );
+            AutomationSocketResponse {
+                id: request_id,
+                ok: false,
+                result: None,
+                error: Some("frontend automation request timed out".into()),
+            }
+        }
+    }
+}
+
+fn request_bridge_action<R: Runtime>(
+    app: &AppHandle<R>,
+    pending: &PendingAutomationResponses,
+    request_id: &str,
+    action: &str,
+    payload: Value,
+) -> Result<BridgeResponse, String> {
+    let bridge_request = BridgeRequest {
+        request_id: request_id.to_string(),
+        action: action.to_string(),
+        payload,
+    };
+
+    let (sender, receiver) = mpsc::channel();
+    pending.insert(request_id.to_string(), sender);
+
+    if let Err(error) = app.emit(REQUEST_EVENT, &bridge_request) {
+        pending.remove(request_id);
+        return Err(format!("failed to emit automation request: {error}"));
+    }
+
+    match receiver.recv_timeout(Duration::from_millis(DEFAULT_TIMEOUT_MS)) {
+        Ok(response) => Ok(response),
+        Err(_) => {
+            pending.remove(request_id);
+            Err("frontend automation request timed out".into())
+        }
+    }
+}
+
+fn capture_webview_screenshot<R: Runtime>(
+    app: &AppHandle<R>,
+    pending: &PendingAutomationResponses,
+    request_id: &str,
+    payload: Value,
+) -> Result<Value, String> {
+    let bridge_response = request_bridge_action(
+        app,
+        pending,
+        request_id,
+        "capture_screenshot_data",
+        payload.clone(),
+    )?;
+    if !bridge_response.ok {
+        return Err(bridge_response
+            .error
+            .unwrap_or_else(|| "web screenshot capture failed".into()));
+    }
+
+    let result = bridge_response
+        .result
+        .ok_or_else(|| "web screenshot capture returned no result".to_string())?;
+    let png_base64 = result
+        .get("pngBase64")
+        .and_then(Value::as_str)
+        .ok_or_else(|| "web screenshot capture returned no png data".to_string())?;
+    let png_bytes = base64::engine::general_purpose::STANDARD
+        .decode(png_base64)
+        .map_err(|error| format!("invalid screenshot base64 payload: {error}"))?;
+
+    let output_path = match payload
+        .get("path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(path) => PathBuf::from(path),
+        None => default_screenshot_path(app)?,
+    };
+
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create screenshot parent dir: {error}"))?;
+    }
+    fs::write(&output_path, png_bytes)
+        .map_err(|error| format!("failed to write screenshot: {error}"))?;
+
+    Ok(serde_json::json!({
+        "path": output_path.to_string_lossy().to_string(),
+        "source": "web",
+        "bounds": result.get("bounds").cloned().unwrap_or(Value::Null),
+    }))
+}
+
+#[cfg(target_os = "macos")]
+fn capture_native_window_screenshot<R: Runtime>(
+    app: &AppHandle<R>,
+    payload: Value,
+) -> Result<Value, String> {
+    use std::process::Command;
+
+    let bounds = window_bounds(app)?;
+    let (window_id_sender, window_id_receiver) = mpsc::channel();
+    let app_for_window_id = app.clone();
+    app.run_on_main_thread(move || {
+        let result = app_for_window_id
+            .get_window("main")
+            .ok_or_else(|| "main window not found".to_string())
+            .and_then(|window| {
+                window
+                    .ns_window()
+                    .map_err(|error| format!("failed to get native window handle: {error}"))
+            })
+            .map(|window_ptr| {
+                let window: &objc2_app_kit::NSWindow = unsafe { &*window_ptr.cast() };
+                window.windowNumber()
+            });
+        let _ = window_id_sender.send(result);
+    })
+    .map_err(|error| format!("failed to request native window number: {error}"))?;
+    let window_id = window_id_receiver
+        .recv_timeout(Duration::from_secs(5))
+        .map_err(|_| "timed out resolving native window number".to_string())??;
+
+    let output_path = match payload
+        .get("path")
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(path) => PathBuf::from(path),
+        None => default_screenshot_path(app)?,
+    };
+    if let Some(parent) = output_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create screenshot parent dir: {error}"))?;
+    }
+
+    let output = Command::new("/usr/sbin/screencapture")
+        .args(["-x", "-l", &window_id.to_string(), "-o"])
+        .arg(&output_path)
+        .output()
+        .map_err(|error| format!("failed to run native screencapture: {error}"))?;
+    let mut source = "native_window";
+    let mut window_capture_error = None;
+    if !output.status.success() {
+        let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let primary_error = format!(
+            "native screencapture failed for window_id={} bounds={}{}",
+            window_id,
+            bounds.get("logicalBounds").cloned().unwrap_or(Value::Null),
+            if detail.is_empty() {
+                String::new()
+            } else {
+                format!(": {detail}")
+            }
+        );
+        let logical_bounds = bounds.get("logicalBounds").ok_or_else(|| {
+            format!("{primary_error}; missing logical bounds for region fallback")
+        })?;
+        let component = |name: &str| -> Result<i64, String> {
+            logical_bounds
+                .get(name)
+                .and_then(Value::as_f64)
+                .map(|value| value.round() as i64)
+                .ok_or_else(|| format!("{primary_error}; invalid logical bounds field {name}"))
+        };
+        let region = format!(
+            "{},{},{},{}",
+            component("x")?,
+            component("y")?,
+            component("width")?,
+            component("height")?,
+        );
+        let fallback = Command::new("/usr/sbin/screencapture")
+            .args(["-x", "-R", &region])
+            .arg(&output_path)
+            .output()
+            .map_err(|error| format!("{primary_error}; failed to run region fallback: {error}"))?;
+        if !fallback.status.success() {
+            let fallback_detail = String::from_utf8_lossy(&fallback.stderr).trim().to_string();
+            return Err(format!(
+                "{primary_error}; native screen-region fallback failed for region={region}{}",
+                if fallback_detail.is_empty() {
+                    String::new()
+                } else {
+                    format!(": {fallback_detail}")
+                }
+            ));
+        }
+        source = "native_screen_region";
+        window_capture_error = Some(primary_error);
+    }
+
+    Ok(serde_json::json!({
+        "path": output_path.to_string_lossy().to_string(),
+        "source": source,
+        "windowId": window_id,
+        "bounds": bounds.get("logicalBounds").cloned().unwrap_or(Value::Null),
+        "windowCaptureError": window_capture_error,
+    }))
+}
+
+#[cfg(not(target_os = "macos"))]
+fn capture_native_window_screenshot<R: Runtime>(
+    _app: &AppHandle<R>,
+    _payload: Value,
+) -> Result<Value, String> {
+    Err("native window screenshots are only supported on macOS".into())
+}
+
+fn serve_connection<R: Runtime>(
+    mut stream: TcpStream,
+    app: AppHandle<R>,
+    pending: PendingAutomationResponses,
+    request_counter: Arc<AtomicU64>,
+    expected_token: String,
+    frontend_ready: Arc<AtomicBool>,
+) {
+    let reader_stream = match stream.try_clone() {
+        Ok(clone) => clone,
+        Err(error) => {
+            eprintln!("[UIAutomation] Failed to clone TCP stream: {error}");
+            return;
+        }
+    };
+    let mut reader = BufReader::new(reader_stream);
+
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                let trimmed = line.trim();
+                if trimmed.is_empty() {
+                    continue;
+                }
+
+                let response = match serde_json::from_str::<AutomationSocketRequest>(trimmed) {
+                    Ok(request) => handle_request(
+                        &app,
+                        &pending,
+                        request_counter.as_ref(),
+                        &expected_token,
+                        frontend_ready.as_ref(),
+                        request,
+                    ),
+                    Err(error) => AutomationSocketResponse {
+                        id: "invalid".into(),
+                        ok: false,
+                        result: None,
+                        error: Some(format!("invalid request json: {error}")),
+                    },
+                };
+
+                match serde_json::to_string(&response) {
+                    Ok(json) => {
+                        if writeln!(stream, "{json}").is_err() {
+                            break;
+                        }
+                        if stream.flush().is_err() {
+                            break;
+                        }
+                    }
+                    Err(error) => {
+                        let fallback = format!(
+                            "{{\"id\":\"{}\",\"ok\":false,\"error\":\"failed to encode response: {}\"}}",
+                            response.id, error
+                        );
+                        let _ = writeln!(stream, "{fallback}");
+                        let _ = stream.flush();
+                    }
+                }
+            }
+            Err(error) => {
+                eprintln!("[UIAutomation] Failed to read TCP request: {error}");
+                break;
+            }
+        }
+    }
+
+    let _ = stream.shutdown(Shutdown::Both);
+}
+
+pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
+    if !profile::automation_enabled() {
+        return;
+    }
+
+    let listener = match TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(listener) => listener,
+        Err(error) => {
+            eprintln!("[UIAutomation] Failed to bind localhost automation server: {error}");
+            return;
+        }
+    };
+
+    let port = match listener.local_addr() {
+        Ok(address) => address.port(),
+        Err(error) => {
+            eprintln!("[UIAutomation] Failed to read automation server address: {error}");
+            return;
+        }
+    };
+
+    let token = generate_token();
+    if let Some(path) = log_path(app) {
+        if let Some(parent) = path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        let _ = fs::write(&path, "");
+    }
+    let manifest = AutomationManifest {
+        enabled: true,
+        port,
+        token: token.clone(),
+        pid: std::process::id(),
+        started_at: chrono_like_now(),
+    };
+    write_manifest(app, &manifest);
+    append_log(
+        app,
+        &format!(
+            "server start pid={} port={} enabled=true",
+            std::process::id(),
+            port,
+        ),
+    );
+
+    let pending = PendingAutomationResponses::new();
+    let frontend_ready = Arc::new(AtomicBool::new(false));
+    let pending_for_events = pending.clone();
+    let _event_id = app.listen_any(RESPONSE_EVENT, move |event| {
+        match serde_json::from_str::<BridgeResponse>(event.payload()) {
+            Ok(response) => pending_for_events.resolve(response),
+            Err(error) => eprintln!("[UIAutomation] Failed to parse frontend response: {error}"),
+        }
+    });
+    let ready_state = frontend_ready.clone();
+    let app_for_ready = app.clone();
+    let _ready_event_id = app.listen_any(READY_EVENT, move |_event| {
+        ready_state.store(true, Ordering::Relaxed);
+        append_log(&app_for_ready, "frontend ready");
+    });
+
+    let app_handle = app.clone();
+    let request_counter = Arc::new(AtomicU64::new(1));
+
+    thread::spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    let app = app_handle.clone();
+                    let pending = pending.clone();
+                    let request_counter = request_counter.clone();
+                    let token = token.clone();
+                    let frontend_ready = frontend_ready.clone();
+                    thread::spawn(move || {
+                        serve_connection(
+                            stream,
+                            app,
+                            pending,
+                            request_counter,
+                            token,
+                            frontend_ready,
+                        );
+                    });
+                }
+                Err(error) => {
+                    eprintln!("[UIAutomation] Failed to accept automation connection: {error}");
+                }
+            }
+        }
+    });
+}
+
+fn chrono_like_now() -> String {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    format!("{seconds}")
+}
+
+fn window_bounds<R: Runtime>(app: &AppHandle<R>) -> Result<Value, String> {
+    let window = app
+        .get_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    let scale_factor = window
+        .scale_factor()
+        .map_err(|error| format!("failed to get scale factor: {error}"))?;
+    let position = window
+        .outer_position()
+        .map_err(|error| format!("failed to get outer position: {error}"))?;
+    let size = window
+        .outer_size()
+        .map_err(|error| format!("failed to get outer size: {error}"))?;
+    let minimized = window
+        .is_minimized()
+        .map_err(|error| format!("failed to check minimized: {error}"))?;
+    let logical_position = position.to_logical::<f64>(scale_factor);
+    let logical_size = size.to_logical::<f64>(scale_factor);
+    // The shape must match the JS bridge in `useUiAutomationBridge.ts`: a mismatch
+    // falls through silently to the unreliable AppleScript fallback.
+    Ok(serde_json::json!({
+        "scaleFactor": scale_factor,
+        "minimized": minimized,
+        "logicalBounds": {
+            "x": logical_position.x,
+            "y": logical_position.y,
+            "width": logical_size.width,
+            "height": logical_size.height,
+        },
+    }))
+}
+
+// Logical bounds, the coordinate system window_bounds returns. Drives Tauri's window
+// API directly because AppleScript is unreliable for Tauri/wry windows.
+fn set_window_bounds<R: Runtime>(app: &AppHandle<R>, payload: &Value) -> Result<Value, String> {
+    let bounds = payload
+        .get("logicalBounds")
+        .ok_or_else(|| "missing logicalBounds in payload".to_string())?;
+    let x = bounds
+        .get("x")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| "logicalBounds.x must be a number".to_string())?;
+    let y = bounds
+        .get("y")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| "logicalBounds.y must be a number".to_string())?;
+    let width = bounds
+        .get("width")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| "logicalBounds.width must be a number".to_string())?;
+    let height = bounds
+        .get("height")
+        .and_then(Value::as_f64)
+        .ok_or_else(|| "logicalBounds.height must be a number".to_string())?;
+    if width <= 0.0 || height <= 0.0 {
+        return Err(format!(
+            "logicalBounds must have positive width and height (got width={width} height={height})"
+        ));
+    }
+
+    let window = app
+        .get_window("main")
+        .ok_or_else(|| "main window not found".to_string())?;
+    window
+        .set_position(LogicalPosition::new(x, y))
+        .map_err(|error| format!("failed to set outer position: {error}"))?;
+    window
+        .set_size(LogicalSize::new(width, height))
+        .map_err(|error| format!("failed to set outer size: {error}"))?;
+
+    window_bounds(app)
+}
+
+fn default_screenshot_path<R: Runtime>(app: &AppHandle<R>) -> Result<PathBuf, String> {
+    let base = app
+        .path()
+        .app_local_data_dir()
+        .map_err(|error| format!("failed to resolve app local data dir: {error}"))?;
+    let dir = base.join("debug").join("ui-automation-screenshots");
+    fs::create_dir_all(&dir)
+        .map_err(|error| format!("failed to create screenshot dir: {error}"))?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    Ok(dir.join(format!("screenshot-{timestamp}.png")))
+}

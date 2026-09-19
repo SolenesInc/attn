@@ -90,24 +90,52 @@ describe('the shim a real agent exec lands in', () => {
     ]);
   });
 
-  it('lets only pi pass a bare --version probe through to the real binary without a ledger entry', () => {
+  it('runs Pi version but answers only its exact catalog request without the real binary', () => {
     const env = freshEnv();
     const tripwire = armAgentTripwire({ scenarioId: 'TR-201', runDir, env, log: () => {} });
     const realDir = path.join(runDir, 'real-bin');
     fs.mkdirSync(realDir, { recursive: true });
-    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\necho pi 9.9.9\n', { mode: 0o755 });
+    fs.writeFileSync(path.join(realDir, 'pi'), '#!/bin/sh\nprintf \'%s\\n%s\\n\' "$$" "$*"\nIFS= read -r request && printf \'%s\\n\' "$request"\nexit 0\n', { mode: 0o755 });
+    const probeEnv = { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` };
 
     const probe = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
-      encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:${realDir}:/usr/bin:/bin` },
+      encoding: 'utf8', env: probeEnv,
     });
     expect(probe.status).toBe(0);
-    expect(probe.stdout.trim()).toBe('pi 9.9.9');
+    expect(probe.stdout.trim().split('\n')).toEqual([String(probe.pid), '--version']);
+
+    const catalogArgs = ['--mode', 'rpc', '--offline', '--no-session', '--no-tools', '--no-skills', '--no-prompt-templates', '--no-context-files'];
+    const catalogRequest = '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"get_available_models"}';
+    const catalog = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
+      encoding: 'utf8', env,
+      input: `${catalogRequest}\n{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n`,
+    });
+    expect(catalog.status).toBe(0);
+    expect(JSON.parse(catalog.stdout)).toEqual({
+      id: 'd2382ae5-48ef-4de0-b9c7-4fdf09af5608',
+      type: 'response',
+      command: 'get_available_models',
+      success: true,
+      data: { models: [] },
+    });
+
+    const modelRequest = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs, {
+      encoding: 'utf8', env: probeEnv,
+      input: '{"id":"d2382ae5-48ef-4de0-b9c7-4fdf09af5608","type":"prompt"}\n',
+    });
+    expect(modelRequest.status).toBe(TRIPWIRE_EXIT_CODE);
+
+    const online = spawnSync(path.join(tripwire.dir, 'pi'), catalogArgs.filter((arg) => arg !== '--offline'), { encoding: 'utf8', env: probeEnv });
+    expect(online.status).toBe(TRIPWIRE_EXIT_CODE);
+    expect(tripwire.read()).toEqual([
+      `TR-201\tpi ${catalogArgs.join(' ')}`,
+      `TR-201\tpi ${catalogArgs.filter((arg) => arg !== '--offline').join(' ')}`,
+    ]);
 
     const missing = spawnSync(path.join(tripwire.dir, 'pi'), ['--version'], {
       encoding: 'utf8', env: { ...env, PATH: `${tripwire.dir}:/usr/bin:/bin` },
     });
     expect(missing.status).toBe(127);
-    expect(tripwire.read()).toEqual([]);
   });
 });
 

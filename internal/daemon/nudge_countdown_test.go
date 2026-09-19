@@ -375,14 +375,13 @@ func TestTriggerNudgeQueuesWhenUnknownAndWakesOnIdle(t *testing.T) {
 		t.Fatalf("unknown session lost the durable nudge: unread=%v err=%v", unread, err)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	d.applyState(sessionStateChange{
 		sessionID: agentID,
 		state:     protocol.StateIdle,
 		cause:     resolverObservation{},
 	})
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
 	}
 	if !wasNudged(inputs(agentID)) {
@@ -410,14 +409,13 @@ func TestTriggerNudgeQueuesWhileWorkingAndWakesOnIdle(t *testing.T) {
 		t.Fatalf("working session lost the durable nudge: unread=%v err=%v", unread, err)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	d.applyState(sessionStateChange{
 		sessionID: agentID,
 		state:     protocol.StateIdle,
 		cause:     resolverObservation{},
 	})
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
 	}
 	if !wasNudged(inputs(agentID)) {

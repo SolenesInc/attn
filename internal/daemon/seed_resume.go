@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -21,6 +22,19 @@ func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
 }
 
 func (d *Daemon) resumeSeedFromReview(
+	seedID string,
+	review *protocol.SeedReviewActionContext,
+) (*seedResumeOutcome, error) {
+	var outcome *seedResumeOutcome
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
+		var err error
+		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
+		return err
+	})
+	return outcome, err
+}
+
+func (d *Daemon) resumeSeedFromReviewForeground(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
 ) (*seedResumeOutcome, error) {
@@ -49,7 +63,7 @@ func (d *Daemon) resumeSeedFromReview(
 	if garden.Closed(seed.Status) {
 		return nil, fmt.Errorf("%s is %s; replant it before resuming its agent", seed.ID, seed.Status)
 	}
-	continuation := d.continuationForSeed(seed)
+	continuation := d.continuationForSeedForeground(seed)
 	if continuation == nil {
 		if tender := strings.TrimSpace(seed.TenderSession); tender != "" {
 			return nil, fmt.Errorf("%s was tended by session %s, but no continuation was saved", seedID, tender)
@@ -65,9 +79,10 @@ func (d *Daemon) resumeSeedFromReview(
 	if _, err := garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: actor}, d.sessionExists); err != nil {
 		return nil, err
 	}
-	if existing := d.gardenSession(sessionID); existing != nil {
-		if _, _, _, err := d.applySeedTransitionDetailedAtRevision(
-			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", expectedRev); err != nil {
+	if existing := d.gardenSession(sessionID); existing != nil &&
+		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
+		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(
+			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err
 		}
 		if err := d.resolveGardenReviewAction(review, seedID, "resume"); err != nil {
@@ -94,8 +109,6 @@ func (d *Daemon) resumeSeedFromReview(
 	reopened, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID:   sessionID,
 		Directory:   execution.Cwd,
-		Agent:       execution.Agent,
-		ResumeID:    execution.Resume,
 		Title:       seed.Title,
 		WorkspaceID: reopenWorkspaceID(sessionID),
 	}, d.newDelegationRollback(), afterSpawn)
@@ -180,7 +193,20 @@ func (d *Daemon) bindResumedSeed(
 			Fact:  dispatchFact,
 		},
 	}
-	written, err := d.store.CommitDocumentWrites(commits, d.gardenTime())
+	tended, err := gardenSeedLifecycleOccurrence(garden.VerbTend, seed.ID, sessionID)
+	if err != nil {
+		return err
+	}
+	events, err := encodeGardenSeedEvents(tended)
+	if err != nil {
+		return err
+	}
+	d.gardenWatchMu.Lock()
+	written, eventSeqs, err := d.store.CommitDocumentWritesWithEvents(commits, events, d.gardenTime())
+	if err == nil {
+		err = d.discardAllIneligibleGardenSeedBellsLocked()
+	}
+	d.gardenWatchMu.Unlock()
 	if err != nil {
 		if docstore.IsConflict(err) {
 			return fmt.Errorf("%s changed while its conversation was resuming; refresh it and try again", seed.ID)
@@ -189,9 +215,8 @@ func (d *Daemon) bindResumedSeed(
 	}
 	d.announceCommittedWrite(seedFact, written[0].Seq)
 	d.announceCommittedWrite(dispatchFact, written[1].Seq)
-	d.publishFact(FactGardenTended, seed.ID, nil)
+	announceGardenSeedEvents(d, eventSeqs)
 	d.rememberDispatchProjection(sessionID, dispatch, written[1].Rev)
-	d.ringSeedActivity(seed.ID, gardenRingEvents[garden.VerbTend], sessionID, "")
 	return nil
 }
 

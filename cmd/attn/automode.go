@@ -25,12 +25,12 @@ func runAutoMode() {
 		runAutoModeShow(args)
 	case "env":
 		runAutoModeEnv(args)
-	case "allow":
-		runAutoModePropose("allow", automode.KindAllow, "", args)
-	case "deny":
-		runAutoModePropose("deny", automode.KindDeny, "", args)
-	case "model":
-		runAutoModeModel(args)
+	case "rule":
+		runAutoModeRule(args)
+	case "host":
+		runAutoModeHost(args)
+	case "policy":
+		runAutoModePolicy(args)
 	case "denials":
 		runAutoModeDenials(args)
 	default:
@@ -43,8 +43,9 @@ func runAutoMode() {
 func writeAutoModeHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn automode <command>
 
-pi's auto mode: a static safety envelope plus a classifier for everything that
-reaches past it. This CLI proposes changes; only the attn app promotes one.
+pi's approval policy: prefix rules over the commands a session runs, an allow and
+a deny list of network hosts, an approval policy and a sandbox mode. Every change
+from here RECORDS A PROPOSAL; only the attn app puts one in force.
 
 commands:
   show                              effective config and pending proposals
@@ -52,27 +53,37 @@ commands:
   env set <slot> <value>…           replace that slot's entries
   env clear <slot>                  empty it back to its unset meaning
   env notes                         replace the prose beside the slots, from stdin
-  allow <pattern>                   propose an allow entry
-  deny <pattern>                    propose a hard-deny entry
-  model <provider/id>…              propose the classifier's models, primary first
-  model --none                      propose no model, which leaves auto mode off
+  rule add <token>…                 propose a prefix rule over those command tokens
+  rule remove <token>…              propose taking that rule out
+  host add <host>                   propose a network host rule
+  host remove <host>                propose taking that host rule out
+  policy [--approval-policy P]      propose an approval policy, a sandbox mode
+         [--sandbox-mode M]         and/or whether the proxy may reach localhost
+         [--allow-local-binding=B]
   denials [--limit <n>]             recent denials, newest first
 
 Every command takes --json.
 
-allow, deny and model RECORD A PROPOSAL. Nothing they write changes what a
-session runs under until a human promotes it in the app. A broad allow pattern —
-one with no literal characters left after the wildcards — is refused outright.
+  --decision       for a rule: allow (the default), prompt or forbidden.
+                   for a host: allow (the default) or deny.
+  --sandbox        for a rule: inherit or bypass. Absent preserves legacy
+                   behavior: allow bypasses and other decisions inherit.
+  --justification  why a rule prompts or refuses; it is shown to the agent.
 
-The environment is a direct edit, and it is what the classifier's rules look up
-about this machine: whether a destination is trusted, whether a registry is
-yours, what counts as production here. A slot nobody filled means nothing is
-trusted for it, which blocks more rather than less. A grant belongs in the allow
-list, where a human promotes it.
+rule, host and policy RECORD A PROPOSAL. Nothing they write changes what a session
+runs under until a human promotes it in the app. The environment is the exception:
+it is a direct edit, and a shipped forbidden rule keeps a session out of it.
 
-Both classifier passes walk one ordered model list — the first one judges, and
-the rest are tried only when the one before it cannot be reached. Name them
-separated by spaces or commas; the proposal replaces the whole list.
+A rule is a command prefix, one token per argument: `+"`rule add git push`"+` matches
+every command starting `+"`git push`"+`. There are no wildcards.
+
+approval policy: `+strings.Join(automode.Policies(), ", ")+`
+sandbox mode:    `+strings.Join(automode.SandboxModes(), ", ")+`
+
+The environment is a direct edit, and it is what the reviewer looks up about this
+machine: whether a destination is trusted, whether a registry is yours, what counts
+as production here. A slot nobody filled means nothing is trusted for it, which
+blocks more rather than less.
 
 `)
 }
@@ -88,7 +99,11 @@ func autoModeFail(verb string, err error) {
 
 func runAutoModeShow(args []string) {
 	asJSON := hasFlag(args, "--json")
-	result, err := autoModeClient().AutoModeShow()
+	cwd, err := os.Getwd()
+	if err != nil {
+		autoModeFail("show", err)
+	}
+	result, err := autoModeClient().AutoModeShow(cwd)
 	if err != nil {
 		autoModeFail("show", err)
 	}
@@ -102,11 +117,26 @@ func runAutoModeShow(args []string) {
 	cfg := result.Config
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintf(w, "enabled by default\t%t\n", cfg.EnabledDefault)
+	fmt.Fprintf(w, "approval policy\t%s\n", cfg.ApprovalPolicy)
+	fmt.Fprintf(w, "sandbox mode\t%s\n", cfg.SandboxMode)
+	guardian := automode.GuardianSelection{}
+	if cfg.Guardian != nil {
+		guardian = automode.GuardianSelection{Provider: protocol.Deref(cfg.Guardian.Provider), Model: protocol.Deref(cfg.Guardian.Model), Effort: protocol.Deref(cfg.Guardian.Effort)}
+	}
+	fmt.Fprintf(w, "guardian\t%s\n", guardian.Describe())
 	w.Flush()
-	printAutoModeList("models", cfg.Models)
 	printAutoModeEnvironment(cfg.Environment)
-	printAutoModeList("allow", cfg.Allow)
-	printAutoModeList("hard deny", cfg.HardDeny)
+	if result.RepositoryRulesPath == nil {
+		printAutoModeRules("rules", cfg.Rules, cfg.ShippedRules)
+	} else {
+		printAutoModeRules("global rules", result.GlobalRules, cfg.ShippedRules)
+		printAutoModeRules("repository rules ("+*result.RepositoryRulesPath+")", result.RepositoryRules, nil)
+		printAutoModeRules("effective rules", cfg.Rules, cfg.ShippedRules)
+	}
+	printAutoModeList("network allowed", cfg.Network.AllowedDomains)
+	printAutoModeList("network denied", cfg.Network.DeniedDomains)
+	fmt.Printf("\nnetwork local binding: %t\n", cfg.Network.AllowLocalBinding)
+	printAutoModeList("not converted (rewrite these as rules)", cfg.LegacyPatterns)
 	if len(result.Proposals) == 0 {
 		fmt.Println("\npending proposals: none")
 		return
@@ -131,14 +161,44 @@ func printAutoModeList(label string, values []string) {
 }
 
 func autoModeProposalSubject(p protocol.AutoModeProposalInfo) string {
-	value := p.Value
-	if value == "" {
-		value = "(none, which leaves auto mode off)"
+	if p.Summary != "" {
+		return p.Summary
 	}
-	if p.Target != "" {
-		return p.Target + " " + value
+	return p.Value
+}
+
+func printAutoModeRules(label string, rules, shippedRules []protocol.AutoModeRuleInfo) {
+	if len(rules) == 0 {
+		fmt.Printf("\n%s: none\n", label)
+		return
 	}
-	return value
+	shipped := map[string]bool{}
+	for _, rule := range shippedRules {
+		shipped[autoModeRuleLine(rule)] = true
+	}
+	fmt.Printf("\n%s:\n", label)
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	for _, rule := range rules {
+		line := autoModeRuleLine(rule)
+		note := rule.Justification
+		if shipped[line] {
+			note = "built-in; " + note
+		}
+		fmt.Fprintf(w, "  %s\t%s\t%s\t%s\n", rule.Decision, rule.Sandbox, line, note)
+	}
+	w.Flush()
+}
+
+func autoModeRuleLine(rule protocol.AutoModeRuleInfo) string {
+	tokens := make([]string, 0, len(rule.Pattern))
+	for _, alternatives := range rule.Pattern {
+		if len(alternatives) == 1 {
+			tokens = append(tokens, alternatives[0])
+			continue
+		}
+		tokens = append(tokens, "{"+strings.Join(alternatives, "|")+"}")
+	}
+	return strings.Join(tokens, " ")
 }
 
 func runAutoModeEnv(args []string) {
@@ -161,7 +221,7 @@ func runAutoModeEnv(args []string) {
 }
 
 func runAutoModeEnvList(args []string) {
-	result, err := autoModeClient().AutoModeShow()
+	result, err := autoModeClient().AutoModeShow("")
 	if err != nil {
 		autoModeFail("env", err)
 	}
@@ -278,37 +338,146 @@ func printAutoModeEnvResult(result *protocol.AutoModeEnvResult, asJSON bool) {
 	printAutoModeEnvironment(result.Environment)
 }
 
-func runAutoModeModel(args []string) {
-	rest := stripFlags(args)
-	if len(rest) == 0 && !hasFlag(args, "--none") {
+func runAutoModeRule(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "automode rule: want `rule add <token>…` or `rule remove <token>…`")
+		os.Exit(2)
+	}
+	rest := stripFlags(args[1:])
+	switch args[0] {
+	case "add":
+		runAutoModeRuleAdd(rest, args)
+	case "remove":
+		runAutoModeRuleRemove(rest, args)
+	default:
+		fmt.Fprintf(os.Stderr, "automode rule: unknown command %q (want add or remove)\n", args[0])
+		os.Exit(2)
+	}
+}
+
+func runAutoModeRuleAdd(tokens []string, args []string) {
+	if len(tokens) == 0 {
 		fmt.Fprintln(os.Stderr,
-			"automode model: name at least one provider/id, or pass --none to propose turning auto mode off")
+			"automode rule add: name the command tokens the rule matches, such as `rule add git push`")
 		os.Exit(2)
 	}
-	models, err := automode.ParseModelList(strings.Join(rest, automode.ModelListSeparator))
+	decision, _ := takeStringFlag(args, "--decision")
+	sandbox, _ := takeStringFlag(args, "--sandbox")
+	justification, _ := takeStringFlag(args, "--justification")
+	rule := automode.NormalizeRule(automode.Rule{
+		Pattern:       automode.Tokens(tokens...),
+		Decision:      strings.TrimSpace(decision),
+		Sandbox:       strings.TrimSpace(sandbox),
+		Justification: strings.TrimSpace(justification),
+	})
+	if err := automode.ValidateRule(rule); err != nil {
+		fmt.Fprintf(os.Stderr, "automode rule add: %v\n", err)
+		os.Exit(2)
+	}
+	value, err := automode.FormatRuleValue(rule)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "automode model: %v\n", err)
+		autoModeFail("rule add", err)
+	}
+	proposeAutoModeValue("rule add", automode.KindRule, "", value, hasFlag(args, "--json"))
+}
+
+func runAutoModeRuleRemove(tokens []string, args []string) {
+	if len(tokens) == 0 {
+		fmt.Fprintln(os.Stderr, "automode rule remove: name the command tokens the rule matches")
 		os.Exit(2)
 	}
-	proposeAutoModeValue("model", automode.KindModel, automode.TargetModels,
-		automode.FormatModelList(models), hasFlag(args, "--json"))
+	value, err := automode.FormatPatternValue(automode.Tokens(tokens...))
+	if err != nil {
+		autoModeFail("rule remove", err)
+	}
+	proposeAutoModeValue("rule remove", automode.KindRuleRemove, "", value, hasFlag(args, "--json"))
 }
 
-func runAutoModePropose(verb, kind, target string, args []string) {
-	proposeAutoMode(verb, kind, target, strings.Join(stripFlags(args), " "), hasFlag(args, "--json"))
-}
-
-func proposeAutoMode(verb, kind, target, value string, asJSON bool) {
-	value = strings.TrimSpace(value)
-	if value == "" {
-		fmt.Fprintf(os.Stderr, "automode %s: needs a value\n", verb)
+func runAutoModeHost(args []string) {
+	if len(args) == 0 {
+		fmt.Fprintln(os.Stderr, "automode host: want `host add <host>` or `host remove <host>`")
 		os.Exit(2)
 	}
-	proposeAutoModeValue(verb, kind, target, value, asJSON)
+	rest := stripFlags(args[1:])
+	if len(rest) != 1 {
+		fmt.Fprintf(os.Stderr, "automode host %s: name exactly one host\n", args[0])
+		os.Exit(2)
+	}
+	decision := automode.HostAllow
+	if named, ok := takeStringFlag(args, "--decision"); ok {
+		decision = strings.TrimSpace(named)
+	}
+	amendment := automode.HostAmendment{Host: strings.TrimSpace(rest[0]), Decision: decision}
+	if err := automode.ValidateHost(amendment); err != nil {
+		fmt.Fprintf(os.Stderr, "automode host %s: %v\n", args[0], err)
+		os.Exit(2)
+	}
+	switch args[0] {
+	case "add":
+		value, err := automode.FormatHostValue(amendment)
+		if err != nil {
+			autoModeFail("host add", err)
+		}
+		proposeAutoModeValue("host add", automode.KindHost, "", value, hasFlag(args, "--json"))
+	case "remove":
+		value, err := automode.FormatHostValue(amendment)
+		if err != nil {
+			autoModeFail("host remove", err)
+		}
+		proposeAutoModeValue("host remove", automode.KindHostRemove, "", value, hasFlag(args, "--json"))
+	default:
+		fmt.Fprintf(os.Stderr, "automode host: unknown command %q (want add or remove)\n", args[0])
+		os.Exit(2)
+	}
 }
 
-// The model list is the one proposal whose empty value means something: no
-// model at all, which is auto mode off.
+func runAutoModePolicy(args []string) {
+	amendment := automode.PolicyAmendment{}
+	if approval, ok := takeStringFlag(args, "--approval-policy"); ok {
+		amendment.ApprovalPolicy = strPtr(strings.TrimSpace(approval))
+	}
+	if sandbox, ok := takeStringFlag(args, "--sandbox-mode"); ok {
+		amendment.SandboxMode = strPtr(strings.TrimSpace(sandbox))
+	}
+	amendment.AllowLocalBinding = autoModeLocalBindingFlag(args)
+	if err := automode.ValidatePolicy(amendment); err != nil {
+		fmt.Fprintf(os.Stderr,
+			"automode policy: %v; --approval-policy is one of %s, --sandbox-mode one of %s, "+
+				"--allow-local-binding true or false. `automode show` reads what is set today\n",
+			err, strings.Join(automode.Policies(), ", "), strings.Join(automode.SandboxModes(), ", "))
+		os.Exit(2)
+	}
+	value, err := automode.FormatPolicyValue(amendment)
+	if err != nil {
+		autoModeFail("policy", err)
+	}
+	proposeAutoModeValue("policy", automode.KindPolicy, "", value, hasFlag(args, "--json"))
+}
+
+func strPtr(value string) *string { return &value }
+
+// The flag is a tri-state: unnamed leaves the setting alone, so a bare --allow-local-binding
+// with nothing after it is a typo rather than "true".
+func autoModeLocalBindingFlag(args []string) *bool {
+	raw, ok := takeStringFlag(args, "--allow-local-binding")
+	if !ok {
+		if hasFlag(args, "--allow-local-binding") {
+			fmt.Fprintln(os.Stderr, "automode policy: --allow-local-binding wants true or false")
+			os.Exit(2)
+		}
+		return nil
+	}
+	switch strings.TrimSpace(raw) {
+	case "true":
+		return protocol.Ptr(true)
+	case "false":
+		return protocol.Ptr(false)
+	}
+	fmt.Fprintf(os.Stderr, "automode policy: --allow-local-binding wants true or false, got %q\n", raw)
+	os.Exit(2)
+	return nil
+}
+
 func proposeAutoModeValue(verb, kind, target, value string, asJSON bool) {
 	result, err := autoModeClient().AutoModePropose(kind, target, value, autoModeProposer())
 	if err != nil {
@@ -405,5 +574,10 @@ func takeStringFlag(args []string, flag string) (string, bool) {
 }
 
 func autoModeFlagTakesValue(flag string) bool {
-	return flag == "--limit"
+	switch flag {
+	case "--limit", "--decision", "--sandbox", "--justification", "--approval-policy", "--sandbox-mode",
+		"--allow-local-binding":
+		return true
+	}
+	return false
 }

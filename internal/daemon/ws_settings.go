@@ -258,6 +258,19 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 			settings[capabilitySettingKey(driver.Agent, capability)] = strconv.FormatBool(enabled)
 		}
 	}
+	if cfg, err := d.store.GetDelegationPreferences(); err == nil && cfg.WorkflowSkillEnabled {
+		var harnesses []string
+		for _, harness := range d.delegationHarnesses() {
+			if harness.Available {
+				harnesses = append(harnesses, harness.ID)
+			}
+		}
+		if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(harnesses); err != nil {
+			d.logf("failed to ensure attn-workflow skill: %v", err)
+		} else if !synced {
+			d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
+		}
+	}
 
 	if _, ok := settings[SettingClaudeAvailable]; !ok {
 		settings[SettingClaudeAvailable] = settings[availabilitySettingKey(string(protocol.SessionAgentClaude))]

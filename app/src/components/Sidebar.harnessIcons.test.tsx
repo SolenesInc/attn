@@ -67,7 +67,7 @@ describe('sidebar harness identity', () => {
       const icon = within(row).getByRole('img', { name });
       expect(icon).toHaveAttribute('title', name);
       expect(row.querySelector('.state-indicator')).toBeInTheDocument();
-      fireEvent.click(icon);
+      fireEvent.click(within(row).getByRole('button', { name: /^Open / }));
       expect(onSelectSession).toHaveBeenLastCalledWith(id);
     }
   });

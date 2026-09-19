@@ -12,21 +12,19 @@ import {
   pressShortcutKeys,
   queueDaemonSettingRestore,
   relaunchAppAndConnect,
-  restoreHarnessSettings,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
-import { createScenarioRunner } from './scenarioRunner.mjs';
+import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
 const execFileAsync = promisify(execFile);
 
 // The surface is keyboard-first, so the shortcut opens it here rather than a click.
-process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -125,11 +123,13 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver();
+  const driver = createWindowDriver({ client });
   const sessions = {};
 
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
+  runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, Object.values(sessions)));
 
   try {
     const { repo, other } = await runner.step('build_repositories', () => buildRepositories(runner.sessionDir));
@@ -285,6 +285,11 @@ async function main() {
       const picked = await waitForSessions(client, (s) => s.scope === 'Closed' && s.range === '7d',
         'the filters this run wants remembered');
       runner.writeJson('filters-picked.json', picked);
+      const remembered = JSON.stringify({
+        scope: 'closed', range: '7d', customFrom: '', customTo: '', workspaceId: '', repository: repo,
+      });
+      await observer.waitFor(() => observer.getSetting(SESSIONS_FILTERS_SETTING) === remembered,
+        'the daemon to persist the filters');
       await hold();
 
       await closeTheSurface(client);
@@ -293,10 +298,7 @@ async function main() {
       runner.writeJson('filters-after-reopen.json', reopened);
       await hold();
 
-      const stored = observer.getSetting(SESSIONS_FILTERS_SETTING) || '';
-      runner.assert(stored.includes('"scope":"closed"') && stored.includes('"range":"7d"'),
-        'the daemon holds the filters, not the browser', { stored });
-      runner.writeText('filters-setting.json', stored);
+      runner.writeText('filters-setting.json', remembered);
 
       await closeTheSurface(client);
       await relaunchAppAndConnect(client, observer);
@@ -328,14 +330,6 @@ async function main() {
     const summary = await runner.finishFailure(error, { sessions });
     console.error(summary.error);
     process.exitCode = 1;
-  } finally {
-    for (const sessionId of Object.values(sessions)) {
-      await client.request('close_session', { sessionId }).catch(() => {});
-    }
-    await client.quitApp().catch(() => {});
-    await observer.close().catch(() => {});
-    await restoreHarnessSettings();
-    await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
   }
 }
 

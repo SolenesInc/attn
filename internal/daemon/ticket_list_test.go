@@ -82,9 +82,9 @@ func TestHandleTicketListLeavesLegacyActivityForInbox(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegate(&protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, SourceSessionID: chiefSessionID,
-		Brief: "Migrate the store to X", Agent: protocol.Ptr("codex"),
+	result, err := d.delegateResolved(&resolvedDelegationLaunch{
+		Cmd: protocol.CmdDelegate, SourceSessionID: protocol.Ptr(chiefSessionID),
+		Brief: protocol.Ptr("Migrate the store to X"), Agent: protocol.Ptr("codex"),
 	})
 	if err != nil {
 		t.Fatal(err)

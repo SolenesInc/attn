@@ -3,7 +3,11 @@ package store
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/victorarias/attn/internal/docstore"
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 // One pull request an agent opened from inside a session. Everything below
@@ -25,7 +29,6 @@ type SessionPullRequestRecord struct {
 	HeadBranch      string
 	StatusFetchedAt string
 	LastActivityAt  string
-	// Pacing cursor, moved on every attempt; StatusFetchedAt is the last status that landed.
 	StatusCheckedAt string
 }
 
@@ -133,6 +136,66 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	defer rows.Close()
 	records, _ := scanSessionPullRequests(rows)
 	return records
+}
+
+func (s *Store) OpenSessionPullRequestsReferencedBy(
+	schema docstore.CollectionSchema, field string,
+) ([]SessionPullRequestRecord, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, errors.New("store has no database")
+	}
+	table, err := s.documentTable(schema)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, spec := range schema.Fields {
+		if spec.Name != field {
+			continue
+		}
+		if spec.Type != docstore.FieldString {
+			return nil, fmt.Errorf("store: %s/%s field %q is %s, want string", schema.Namespace, schema.Collection, field, spec.Type)
+		}
+		found = true
+		break
+	}
+	if !found {
+		return nil, fmt.Errorf("store: %s/%s has no field %q", schema.Namespace, schema.Collection, field)
+	}
+
+	rows, err := s.db.Query(openSessionPullRequestsReferencedByQuery(table, docstore.FieldColumn(field)),
+		protocol.SessionStateRecoverable)
+	if err != nil {
+		return nil, fmt.Errorf("store: selecting refreshable session pull requests: %w", err)
+	}
+	defer rows.Close()
+	records, err := scanSessionPullRequests(rows)
+	if err != nil {
+		return nil, fmt.Errorf("store: selecting refreshable session pull requests: %w", err)
+	}
+	return records, nil
+}
+
+func openSessionPullRequestsReferencedByQuery(table, column string) string {
+	return `
+		SELECT ` + sessionPullRequestColumns + `
+		FROM session_pull_requests
+		WHERE state NOT IN ('merged', 'closed')
+		AND (
+			EXISTS (
+				SELECT 1 FROM sessions
+				WHERE sessions.id = session_pull_requests.session_id
+				AND sessions.closed_at = ''
+				AND sessions.state != ?
+			)
+			OR EXISTS (
+				SELECT 1 FROM ` + table + `
+				WHERE ` + quoteIdent(column) + ` = session_pull_requests.pr_id
+			)
+		)
+		ORDER BY created_at DESC, rowid DESC`
 }
 
 func (s *Store) SessionPullRequestByID(prID string) (SessionPullRequestRecord, bool) {

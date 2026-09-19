@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: Foreground session and Git operations preempt slow background worktree sweeps instead of waiting behind them.
+symptom: Starting or reopening a session could stall while a large repository sweep was running.

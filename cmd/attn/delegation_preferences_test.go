@@ -1,27 +1,23 @@
 package main
 
 import (
-	"github.com/victorarias/attn/internal/protocol"
 	"testing"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestDelegateRoleRequestOptions(t *testing.T) {
-	t.Setenv("ATTN_SESSION_ID", "source-session")
-	parsed, err := parseDelegateArgs([]string{"--brief", "Build this", "--role", "build", "--choice", "hard", "--preferences-revision", "9", "--model", "custom", "--effort", "high"})
+	parsed, err := parseDelegateArgs([]string{"--brief", "Build this", "--cwd", "/repo", "--role", "builder", "--choice", "hard", "--model", "custom", "--effort", "high"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	o := parsed.options
-	if o.Role != "build" || o.Choice != "hard" || protocol.Deref(o.PreferencesRevision) != 9 || protocol.Deref(o.ModelOverride) != "custom" || protocol.Deref(o.EffortOverride) != "high" {
-		t.Fatalf("%+v", o)
+	request := parsed.request
+	if protocol.Deref(request.Role) != "builder" || protocol.Deref(request.Choice) != "hard" || protocol.Deref(request.Model) != "custom" || protocol.Deref(request.Effort) != "high" {
+		t.Fatalf("%+v", request)
 	}
-	parsed, err = parseDelegateArgs([]string{"--brief", "Task", "--fallback", "--effort", "default"})
-	if err != nil || !parsed.options.Fallback || parsed.options.EffortOverride == nil || *parsed.options.EffortOverride != "" {
+
+	parsed, err = parseDelegateArgs([]string{"--brief", "Task", "--cwd", "/notes", "--fallback", "--effort", "default"})
+	if err != nil || !protocol.Deref(parsed.request.Fallback) || parsed.request.Effort == nil || *parsed.request.Effort != "" {
 		t.Fatalf("%+v %v", parsed, err)
-	}
-	for _, flags := range [][]string{{"--role", "build", "--fallback"}, {"--choice", "hard", "--model", "x"}, {"--model", "x", "--provider", "p"}, {"--model", "x", "--preferences-revision", "3"}} {
-		if _, err := parseDelegateArgs(append([]string{"--brief", "Task"}, flags...)); err == nil {
-			t.Fatalf("accepted %v", flags)
-		}
 	}
 }

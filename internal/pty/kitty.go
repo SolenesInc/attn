@@ -26,6 +26,13 @@ type PlacementUpdate struct {
 	Placements []KittyPlacement
 }
 
+type ResizeUpdate struct {
+	Cols   uint16
+	Rows   uint16
+	XPixel uint16
+	YPixel uint16
+}
+
 var ErrKittyImageNotFound = errors.New("kitty image not found")
 
 type SubscriberOption func(*sessionSubscriber)
@@ -35,6 +42,12 @@ type SubscriberOption func(*sessionSubscriber)
 func OnPlacements(fn func(PlacementUpdate)) SubscriberOption {
 	return func(sub *sessionSubscriber) {
 		sub.onPlacements = fn
+	}
+}
+
+func OnResize(fn func(ResizeUpdate)) SubscriberOption {
+	return func(sub *sessionSubscriber) {
+		sub.onResize = fn
 	}
 }
 

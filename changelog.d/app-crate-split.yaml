@@ -1,0 +1,10 @@
+kind: internal
+area: app
+change: The Tauri shell is split into a thin `app` crate that embeds the frontend and an `app-core` crate with the code, and named profiles build with a `fast` cargo profile that leaves `app-core` unoptimized.
+symptom: Every `make install` recompiled and re-optimized the whole Rust shell, about 170 CPU seconds, because the embedded frontend assets change on every build; ten agents building at once turned that into minutes of contention.
+notes: >
+  A frontend-only change now recompiles the thin crate alone (about 15 CPU
+  seconds); a Rust change costs about 35 CPU seconds in a named profile and
+  about 125 in `release`. Releases, the default profile, and CI acceptance
+  builds keep `release`. Packaged builds land at `app/src-tauri/target/staged`
+  whatever cargo profile built them.

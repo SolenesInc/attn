@@ -1,5 +1,5 @@
-import { useCallback, useRef } from 'react';
-import type { Session } from '../store/sessions';
+import { useCallback, useEffect, useRef } from 'react';
+import { useSessionStore, type Session } from '../store/sessions';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
 import type { LeafDropSnapshot } from '../components/SessionTerminalWorkspace/leafDrag';
@@ -47,13 +47,23 @@ export function useSessionWorkspaceController(
   activeSessionId: string | null
 ): SessionWorkspaceController {
   const workspaceRefs = useRef<Map<string, SessionTerminalWorkspaceHandle>>(new Map());
+  const focusRequest = useSessionStore(state => state.focusRequest);
+  const focusedRequest = useRef<typeof focusRequest>(null);
+  useEffect(() => {
+    if (!focusRequest || focusedRequest.current === focusRequest) return;
+    const workspaceId = sessions.find(session => session.id === focusRequest.sessionId)?.workspaceId;
+    const workspace = workspaceId ? workspaceRefs.current.get(workspaceId) : undefined;
+    if (!workspace) return;
+    focusedRequest.current = focusRequest;
+    workspace.focusPane(focusRequest.paneId, 40);
+  }, [focusRequest, sessions]);
   const eventRouter = usePaneRuntimeEventRouter();
   const {
     getActivePaneIdForSession,
     setActivePane,
     prepareClosePaneFocus: prepareClosePaneFocusForSession,
     clearPreparedClosePaneFocus,
-  } = useSessionWorkspaceViewState(sessions);
+  } = useSessionWorkspaceViewState();
 
   useWorkspaceDebugHarness({
     sessions,

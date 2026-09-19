@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Post a slopradar complexity and clone report on every pull request.

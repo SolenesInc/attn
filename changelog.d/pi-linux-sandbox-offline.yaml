@@ -1,0 +1,4 @@
+kind: fixed
+area: pi
+change: The Linux pi sandbox under attn now runs offline instead of sharing the host network, so a sandboxed command can no longer bypass the host allowlist by talking to the network directly. A command that needs the network asks for escalated permissions and runs outside the sandbox after review. An attn session whose network proxy is not running now runs its sandboxed commands offline on macOS and Linux as well, and says so at session start.
+symptom: On Linux a sandboxed command could reach any host directly, so the host allowlist was not a boundary there.

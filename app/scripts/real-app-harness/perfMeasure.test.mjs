@@ -2,7 +2,45 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
-import { appPids, parseFootprint, parseGraphicsRegions, parseVmmapSummary, readProcessTable } from './perfMeasure.mjs';
+import {
+  appPids,
+  assertDaemonRestartDoesNotHostSession,
+  parseFootprint,
+  parseGraphicsRegions,
+  parseVmmapSummary,
+  readProcessTable,
+} from './perfMeasure.mjs';
+
+describe('assertDaemonRestartDoesNotHostSession', () => {
+  const hosted = {
+    env: {
+      ATTN_SESSION_ID: 'session-under-test',
+      ATTN_SOCKET_PATH: '/tmp/attn-host/attn.sock',
+    },
+    resolveSocket: () => '/tmp/attn-target/attn.sock',
+    readDaemonPid: () => null,
+    readPidFile: () => null,
+  };
+
+  it('refuses the daemon reached through the invoking session socket', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', {
+      ...hosted,
+      resolveSocket: () => hosted.env.ATTN_SOCKET_PATH,
+    })).toThrow(/hosts invoking session session-under-test.*--no-restart-daemon/);
+  });
+
+  it('refuses the hosting daemon reached through another socket path', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', {
+      ...hosted,
+      readDaemonPid: () => process.pid,
+      readPidFile: () => process.pid,
+    })).toThrow(/hosts invoking session session-under-test/);
+  });
+
+  it('allows another profile daemon', () => {
+    expect(() => assertDaemonRestartDoesNotHostSession('review', hosted)).not.toThrow();
+  });
+});
 
 describe('readProcessTable', () => {
   it('retains the final process in a table larger than the measured developer snapshot', async () => {

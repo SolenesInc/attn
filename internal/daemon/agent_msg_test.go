@@ -180,8 +180,7 @@ func TestHandleAgentMsgWakesASleepingMemberBeforeNotifyingIt(t *testing.T) {
 		t.Fatalf("message was not durable before the wake completed: queued=%+v err=%v", queued, err)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	if !d.applyState(sessionStateChange{
 		sessionID: result.TargetSessionID,
 		state:     protocol.StateIdle,
@@ -189,7 +188,7 @@ func TestHandleAgentMsgWakesASleepingMemberBeforeNotifyingIt(t *testing.T) {
 	}) {
 		t.Fatal("idle state did not apply")
 	}
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("ready-state drain delivered %d messages, want 1", delivered)
 	}
 	queued, err = d.store.UnreadAgentMailboxDeliveries(result.TargetSessionID)
@@ -225,9 +224,8 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	}
 
 	scheduled := make(chan string, 1)
-	drained := make(chan int, 1)
 	d.agentMailboxDrainScheduledHook = func(sessionID string) { scheduled <- sessionID }
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	if !d.applyState(sessionStateChange{
 		sessionID: sessionID,
 		state:     protocol.StateIdle,
@@ -243,7 +241,7 @@ func TestHandleAgentMsgDuringWakePrimingDrainsAfterTheInitialPrompt(t *testing.T
 	default:
 		t.Fatal("ready-state hook did not open the queued-message drain")
 	}
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("drained %d messages behind the initial prompt, want 1", delivered)
 	}
 	queued, err = d.store.UnreadAgentMailboxDeliveries(sessionID)
@@ -343,8 +341,7 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 		t.Fatalf("typed into a session waiting on an approval: %q", prompts)
 	}
 
-	drained := make(chan int, 1)
-	d.agentMailboxDrainHook = func(_ string, delivered int) { drained <- delivered }
+	drains := observeAgentMailboxDrains(t, d)
 	if !d.applyState(sessionStateChange{
 		sessionID: "target-session-id",
 		state:     protocol.StateIdle,
@@ -353,7 +350,7 @@ func TestHandleAgentMsgQueuesUnderApprovalAndDrainsOnTheNextStateChange(t *testi
 		t.Fatal("applyState did not apply")
 	}
 
-	if delivered := <-drained; delivered != 1 {
+	if delivered := drains.next(); delivered != 1 {
 		t.Fatalf("drain delivered %d messages, want 1", delivered)
 	}
 	prompts := doorbell.pasted()

@@ -13,6 +13,11 @@
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
 #   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
+#   ATTN_APP_CARGO_PROFILE   cargo profile for a named profile (default: fast);
+#                            the default/prod bundle always builds with release
+#
+# Output lands at app/src-tauri/target/staged/<appName>.app (macOS) or
+# app/src-tauri/target/staged/linux-tree/<appName>, whatever cargo profile built it.
 #
 # Not using `set -u`: macOS ships bash 3.2 where empty-array/var expansion under
 # `set -u` is fragile. Required vars are validated explicitly.
@@ -49,6 +54,15 @@ if [ "$(uname -s)" = "Darwin" ]; then
 else
   bundle_args="--no-bundle"
 fi
+
+# `fast` is `release` with app-core unoptimized (app/src-tauri/Cargo.toml): a
+# Rust change costs a quarter of the CPU. What ships is always `release`.
+if [ -n "$profile" ]; then
+  cargo_profile="${ATTN_APP_CARGO_PROFILE:-fast}"
+else
+  cargo_profile="release"
+fi
+echo ">>> Cargo profile: $cargo_profile"
 
 host_triple="$(rustc -vV | awk '/host:/ {print $2}')"
 if [ -z "$host_triple" ]; then
@@ -90,7 +104,7 @@ if [ -n "$profile" ]; then
     VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-    pnpm tauri build $bundle_args --config "$gen_rel"
+    pnpm tauri build $bundle_args --config "$gen_rel" -- --profile "$cargo_profile"
   else
     ATTN_BUILD_PROFILE="$profile" \
     VITE_ATTN_BUILD_PROFILE="$profile" \
@@ -103,7 +117,7 @@ if [ -n "$profile" ]; then
     VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
     VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-    pnpm tauri build $bundle_args --config "$gen_rel"
+    pnpm tauri build $bundle_args --config "$gen_rel" -- --profile "$cargo_profile"
   fi
 else
   # Default/prod build: committed tauri.conf.json, no baked profile env. This is
@@ -114,11 +128,13 @@ else
   VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64="$SOURCE_DIRTY_PATHS_BASE64" \
   VITE_ATTN_GIT_COMMIT="$GIT_COMMIT" \
   VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
-  pnpm tauri build $bundle_args
+  pnpm tauri build $bundle_args -- --profile "$cargo_profile"
 fi
 cd "$repo_root"
 
-bundle_dir="app/src-tauri/target/release/bundle/macos/${app_name}.app"
+target_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}"
+staged_dir="app/src-tauri/target/staged"
+bundle_dir="${staged_dir}/${app_name}.app"
 
 write_build_identity() {
   printf '{\n  "version": "%s",\n  "sourceFingerprint": "%s",\n  "gitCommit": "%s",\n  "buildTime": "%s"\n}\n' \
@@ -126,11 +142,10 @@ write_build_identity() {
 }
 
 if [ "$(uname -s)" != "Darwin" ]; then
-  release_dir="${CARGO_TARGET_DIR:-$repo_root/app/src-tauri/target}/release"
-  tree_dir="app/src-tauri/target/release/linux-tree/${app_name}"
+  tree_dir="${staged_dir}/linux-tree/${app_name}"
   rm -rf "$tree_dir"
   mkdir -p "${tree_dir}/bin" "${tree_dir}/resources"
-  cp "${release_dir}/app" "${tree_dir}/bin/attn-app"
+  cp "${target_dir}/${cargo_profile}/app" "${tree_dir}/bin/attn-app"
   cp "$attn" "${tree_dir}/bin/attn"
   cp "$pty_host" "${tree_dir}/bin/attn-pty-host"
   cp -R app/src-tauri/bundled-plugins "${tree_dir}/resources/plugins"
@@ -141,6 +156,9 @@ if [ "$(uname -s)" != "Darwin" ]; then
 fi
 
 if [ "$(uname -s)" = "Darwin" ]; then
+  mkdir -p "$staged_dir"
+  rm -rf "$bundle_dir"
+  mv "${target_dir}/${cargo_profile}/bundle/macos/${app_name}.app" "$bundle_dir"
   mkdir -p "${bundle_dir}/Contents/Resources"
   write_build_identity "${bundle_dir}/Contents/Resources/build-identity.json"
 

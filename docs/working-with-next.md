@@ -25,11 +25,14 @@ and prepare [experience testing](../AGENTS.md#experience-testing) before merging
 
 - Open ordinary PRs ready for review, with scoped conventional-commit titles
   and a [changelog fragment](making-a-release.md#changelog-fragments).
-- Meet [verification requirements](profiles.md#verification-requirements);
-  include a recording for visible changes.
+- Meet the [verification requirements](profiles.md#verification-requirements).
 - Merge only a ready PR with required checks and approval for its exact head
   and GitHub reporting it mergeable. A changed head needs fresh checks/approval.
 - Squash ordinary PRs, including epic pieces and completed epics.
+- Read the slopradar comment on the PR: the source mass the PR adds to or removes
+  from functions over cyclomatic complexity 10, the clone pairs it introduces or
+  removes, and a twelve-month trend of erosion and clone share. It is information
+  for the reviewer, never a gate; the job cannot fail on the numbers.
 - Rebase for conflicts or needed newer work; unrelated `next` merges do not require it.
 - After merge, `Acceptance` tests the resulting exact `next` SHA for release eligibility.
 
