@@ -379,7 +379,8 @@ func hasMoreReadinessPages(pr *readinessPullRequest) bool {
 func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*PullRequestReadiness, error) {
 	mergeableState := strings.ToLower(pr.MergeStateStatus)
 	evidence := prreadiness.Evidence{
-		State: strings.ToLower(pr.State), Draft: pr.IsDraft, HeadSHA: pr.HeadRefOID,
+		State: strings.ToLower(pr.State), Draft: pr.IsDraft, MergeableState: mergeableState,
+		HeadSHA: pr.HeadRefOID,
 	}
 	if len(pr.Commits.Nodes) > 0 {
 		commit := pr.Commits.Nodes[0].Commit

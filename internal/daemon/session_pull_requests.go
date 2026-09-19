@@ -226,6 +226,10 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		return nil
 	}
 	out := make([]protocol.SessionPullRequest, 0, len(records))
+	watchesByPR := make(map[string][]store.PullRequestWatch)
+	for _, watch := range d.store.PullRequestWatches() {
+		watchesByPR[watch.PRID] = append(watchesByPR[watch.PRID], watch)
+	}
 	for _, rec := range records {
 		sessionID := rec.SessionID
 		entry := protocol.SessionPullRequest{
@@ -241,7 +245,7 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		entry.ReviewStatus = pullRequestField(rec.ReviewStatus)
 		entry.MergeableState = pullRequestField(rec.MergeableState)
 		entry.StatusFetchedAt = pullRequestField(rec.StatusFetchedAt)
-		watches := d.store.PullRequestWatchesByPR(rec.PRID)
+		watches := watchesByPR[rec.PRID]
 		if len(watches) > 0 {
 			labels := make([]string, 0, len(watches))
 			for _, watch := range watches {
