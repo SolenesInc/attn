@@ -193,14 +193,13 @@ verify-ghostty-vt-wasm:
 
 DIFF_BASE ?= origin/next
 test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
-	@if [ -n "$(FORCE)" ] || ./scripts/go-test-inputs-changed.sh $(DIFF_BASE); then \
-		./scripts/test-go.sh; \
-	else \
-		echo "make test: nothing the Go suite reads changed since $(DIFF_BASE); skipped. FORCE=1 runs it."; \
-	fi
+	@if [ -n "$(FORCE)" ]; then verdict=changed; else verdict="$$(go run ./cmd/go-test-inputs -base $(DIFF_BASE))" || exit 1; fi; \
+	case "$$verdict" in \
+		changed) ./scripts/test-go.sh ;; \
+		unchanged) echo "make test: skipped the Go suite. FORCE=1 runs it." ;; \
+		*) echo "make test: go-test-inputs answered '$$verdict'" >&2; exit 1 ;; \
+	esac
 
-# Neither make test nor CI runs the hook and script tests. Run them after
-# changing a hook, a script, or the release tooling.
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 

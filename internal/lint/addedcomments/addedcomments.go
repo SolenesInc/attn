@@ -1,7 +1,6 @@
 package addedcomments
 
 import (
-	"bufio"
 	"path"
 	"regexp"
 	"strconv"
@@ -46,10 +45,8 @@ func FindInUnifiedDiff(diff string) []Finding {
 	removed := map[string]bool{}
 	var added []Finding
 	file, line := "", 0
-	scanner := bufio.NewScanner(strings.NewReader(diff))
-	scanner.Buffer(make([]byte, 0, 1<<20), 1<<26)
-	for scanner.Scan() {
-		text := scanner.Text()
+	for _, text := range strings.Split(diff, "\n") {
+		text = strings.TrimSuffix(text, "\r")
 		switch {
 		case strings.HasPrefix(text, "+++ "):
 			file = strings.TrimPrefix(strings.TrimPrefix(text, "+++ "), "b/")

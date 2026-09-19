@@ -4,38 +4,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
+	"github.com/victorarias/attn/internal/devdiff"
 	"github.com/victorarias/attn/internal/lint/addedcomments"
 )
 
-func git(args ...string) (string, error) {
-	out, err := exec.Command("git", args...).Output()
-	if err != nil {
-		if exit, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("git %s: %s", strings.Join(args, " "), strings.TrimSpace(string(exit.Stderr)))
-		}
-		return "", err
-	}
-	return string(out), nil
-}
-
 func run(base string) ([]addedcomments.Finding, error) {
-	mergeBase, err := git("merge-base", base, "HEAD")
+	change, err := devdiff.Since(base)
 	if err != nil {
 		return nil, err
 	}
-	diff, err := git("diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--diff-filter=AM", strings.TrimSpace(mergeBase), "--")
+	diff, err := change.UnifiedDiff()
 	if err != nil {
 		return nil, err
 	}
 	findings := addedcomments.FindInUnifiedDiff(diff)
-	untracked, err := git("ls-files", "--others", "--exclude-standard")
+	untracked, err := change.Untracked()
 	if err != nil {
 		return nil, err
 	}
-	for _, file := range strings.Fields(untracked) {
+	for _, file := range untracked {
 		if !addedcomments.Checked(file) {
 			continue
 		}
@@ -55,14 +44,7 @@ func run(base string) ([]addedcomments.Finding, error) {
 func main() {
 	base := flag.String("base", "origin/next", "ref the change will merge into")
 	flag.Parse()
-	root, err := git("rev-parse", "--show-toplevel")
-	if err == nil {
-		err = os.Chdir(strings.TrimSpace(root))
-	}
-	var findings []addedcomments.Finding
-	if err == nil {
-		findings, err = run(*base)
-	}
+	findings, err := run(*base)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "addedcomments:", err)
 		os.Exit(2)

@@ -1,0 +1,3 @@
+kind: internal
+area: store
+change: Fresh databases copy an already migrated schema instead of replaying every migration.
