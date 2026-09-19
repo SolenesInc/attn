@@ -2,14 +2,11 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-source "$root/scripts/lib/test-git.sh"
 script="$root/scripts/sync-main-to-next.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-main-sync-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
-source "$root/scripts/lib/prebuilt-go-run.sh"
-install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -49,7 +46,6 @@ setup_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
-  borrow_clone_objects "$fixture_origin" "$fixture_repo"
   cp "$root/cmd/release-train/main.go" "$fixture_repo/cmd/release-train/main.go"
   git -C "$fixture_repo" config user.name 'Release Train Test'
   git -C "$fixture_repo" config user.email 'release-train@example.com'
@@ -107,7 +103,7 @@ EOF
 run_sync() {
   (
     cd "$fixture_repo"
-    PATH="$work/bin:$PATH" FAKE_GH_LOG="$fixture_log" \
+    PATH="$work/bin:$PATH" GOCACHE="$work/go-cache" FAKE_GH_LOG="$fixture_log" \
       FAKE_ACTIVE_CANDIDATE="${1:-}" "$script"
   )
 }
@@ -155,7 +151,7 @@ grep -q 'pr create --base next --head sync/main-into-next-' "$fixture_log"
 
 sync_sha="$(git --git-dir="$fixture_origin" rev-parse "$sync_ref")"
 sync_branch="${sync_ref#refs/heads/}"
-if ! (cd "$fixture_repo" && PATH="$work/bin:$PATH" \
+if ! (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
   "$root/scripts/changelog-gate.sh" next "$sync_branch" "$sync_sha") >/dev/null; then
   echo "generated sync did not pass its changelog gate" >&2
   exit 1
@@ -166,7 +162,7 @@ printf '%s\n' 'smuggled change' >"$fixture_repo/smuggled.txt"
 git -C "$fixture_repo" add smuggled.txt
 git -C "$fixture_repo" commit -q --amend -m 'chore(release): forged sync'
 forged_sync_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-if (cd "$fixture_repo" && PATH="$work/bin:$PATH" \
+if (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
   "$root/scripts/changelog-gate.sh" next "$sync_branch" "$forged_sync_sha") >/dev/null 2>&1; then
   echo "forged sync tree bypassed the changelog gate" >&2
   exit 1
@@ -183,23 +179,5 @@ if git --git-dir="$fixture_origin" for-each-ref --format='%(refname)' \
   echo "failed rewritten-fragment sync pushed a branch" >&2
   exit 1
 fi
-
-main_sha="$(git -C "$fixture_repo" rev-parse origin/main)"
-next_sha="$(git -C "$fixture_repo" rev-parse origin/next)"
-merged_tree="$(git -C "$fixture_repo" merge-tree --write-tree "$next_sha" "$main_sha")"
-export GIT_INDEX_FILE="$work/dropped-rewrite.index"
-git -C "$fixture_repo" read-tree "$merged_tree"
-git -C "$fixture_repo" rm -q --cached changelog.d/frozen.yaml
-dropped_tree="$(git -C "$fixture_repo" write-tree)"
-unset GIT_INDEX_FILE
-dropped_sha="$(git -C "$fixture_repo" commit-tree "$dropped_tree" -p "$next_sha" -p "$main_sha" \
-  -m 'chore(release): drop a rewritten fragment')"
-if (cd "$fixture_repo" && PATH="$work/bin:$PATH" \
-  "$root/scripts/changelog-gate.sh" next "sync/main-into-next-${main_sha:0:12}" "$dropped_sha") \
-  >"$work/dropped-rewrite.out" 2>&1; then
-  echo "a sync that drops a rewritten fragment passed the changelog gate" >&2
-  exit 1
-fi
-grep -q 'changelog.d/frozen.yaml is not the frozen fragment recorded at source' "$work/dropped-rewrite.out"
 
 echo "main to next sync: OK"

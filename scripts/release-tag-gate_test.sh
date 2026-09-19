@@ -7,8 +7,6 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-tag-gate-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
-source "$root/scripts/lib/prebuilt-go-run.sh"
-install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -58,6 +56,7 @@ chmod +x "$work/bin/gh"
 
 export PATH="$work/bin:$PATH"
 export GITHUB_REPOSITORY=example/attn
+export GOCACHE="$work/go-cache"
 export FAKE_ACCEPTANCE_MODE=success
 export FAKE_ACCEPTANCE_STATUS=completed
 export FAKE_ACCEPTANCE_CONCLUSION=success

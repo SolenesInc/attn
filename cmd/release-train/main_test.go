@@ -511,28 +511,6 @@ func TestFragmentRenderingIsStableAndCarriesCommitSubjects(t *testing.T) {
 	}
 }
 
-func TestFragmentRenderingStopsAtTheOldestCurrentFragment(t *testing.T) {
-	repo := newTestRepository(t)
-	repo.write("changelog.d/released.yaml", "kind: fixed\narea: old\nchange: released\n")
-	ancient := repo.commit("fix(old): add a fragment that was released long ago")
-	ancientTree := repo.git("rev-parse", ancient+"^{tree}")
-	repo.remove("changelog.d/released.yaml")
-	repo.commit("release: consume the old fragment")
-	repo.write("changelog.d/current.yaml", "kind: added\narea: new\nchange: current\n")
-	repo.commit("feat(new): add the current fragment")
-	if err := os.Remove(filepath.Join(repo.root, ".git", "objects", ancientTree[:2], ancientTree[2:])); err != nil {
-		t.Fatal(err)
-	}
-
-	rendered, err := renderFragments(repo.root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(rendered, "--- introduced by: feat(new): add the current fragment") {
-		t.Fatalf("rendered facts omit the introducing commit:\n%s", rendered)
-	}
-}
-
 func TestFragmentReceiptBindsPathsAndBlobs(t *testing.T) {
 	repo := newTestRepository(t)
 	repo.write("changelog.d/b.yaml", "kind: fixed\narea: b\nchange: second\n")

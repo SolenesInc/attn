@@ -42,23 +42,19 @@ if ! [[ "$source_sha" =~ ^[0-9a-f]{40}$ ]]; then
   exit 1
 fi
 
-removed_fragments=()
 while IFS=$'\t' read -r status path; do
   [[ -z "$status" ]] && continue
   if [[ "$status" != D || "$path" != changelog.d/*.yaml ]]; then
     echo "sync candidate gate: unexpected generated-tree change $status $path" >&2
     exit 1
   fi
-  removed_fragments+=("$path")
-done < <(git diff --name-status --no-renames "$expected_tree" "$head_sha")
-
-if [[ "${#removed_fragments[@]}" -gt 0 ]]; then
-  rewritten="$(git --literal-pathspecs diff --name-only --no-renames "$source_sha" "$expected_tree" -- "${removed_fragments[@]}")"
-  if [[ -n "$rewritten" ]]; then
-    echo "sync candidate gate: ${rewritten%%$'\n'*} is not the frozen fragment recorded at source" >&2
+  source_blob="$(git rev-parse --verify "$source_sha:$path")"
+  merged_blob="$(git rev-parse --verify "$expected_tree:$path")"
+  if [[ "$source_blob" != "$merged_blob" ]]; then
+    echo "sync candidate gate: $path is not the frozen fragment recorded at source" >&2
     exit 1
   fi
-fi
+done < <(git diff --name-status --no-renames "$expected_tree" "$head_sha")
 
 go run ./cmd/release-train sync check --main "$main_sha" --head "$head_sha" >/dev/null
 echo "sync candidate gate: exact generated main-to-next reconciliation verified"

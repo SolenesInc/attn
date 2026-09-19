@@ -1,9 +1,7 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
-	"context"
 	"crypto/sha256"
 	"errors"
 	"flag"
@@ -337,18 +335,14 @@ func renderFragments(root string) (string, error) {
 		}
 	}
 	sort.Strings(names)
-	paths := make([]string, len(names))
-	for i, name := range names {
-		paths[i] = "changelog.d/" + name
-	}
-	introductions, err := fragmentIntroductions(root, paths)
-	if err != nil {
-		return "", err
-	}
 	var out strings.Builder
 	for _, name := range names {
 		path := filepath.Join("changelog.d", name)
-		subject := introductions["changelog.d/"+name]
+		subjectBytes, err := gitOutput(root, "log", "--diff-filter=A", "--format=%s", "-1", "--", path)
+		if err != nil {
+			return "", err
+		}
+		subject := strings.TrimSpace(string(subjectBytes))
 		if subject == "" {
 			subject = "(uncommitted)"
 		}
@@ -363,57 +357,6 @@ func renderFragments(root string) (string, error) {
 		out.WriteByte('\n')
 	}
 	return out.String(), nil
-}
-
-func fragmentIntroductions(root string, paths []string) (map[string]string, error) {
-	subjects := map[string]string{}
-	if len(paths) == 0 {
-		return subjects, nil
-	}
-	wanted := map[string]bool{}
-	for _, path := range paths {
-		wanted[path] = true
-	}
-	ctx, stop := context.WithCancel(context.Background())
-	defer stop()
-	args := append([]string{"--literal-pathspecs", "log", "-z", "--diff-filter=A", "--format=%x01%s", "--name-only", "--"}, paths...)
-	command := exec.CommandContext(ctx, "git", args...)
-	command.Dir = root
-	var stderr bytes.Buffer
-	command.Stderr = &stderr
-	stdout, err := command.StdoutPipe()
-	if err != nil {
-		return nil, err
-	}
-	if err := command.Start(); err != nil {
-		return nil, err
-	}
-	fields := bufio.NewReader(stdout)
-	subject := ""
-	for len(subjects) < len(wanted) {
-		field, readErr := fields.ReadString(0)
-		field = strings.TrimSuffix(field, "\x00")
-		if _, after, isSubject := strings.Cut(field, "\x01"); isSubject {
-			subject = strings.TrimSpace(after)
-		} else if path := strings.TrimPrefix(field, "\n"); wanted[path] {
-			if _, seen := subjects[path]; !seen {
-				subjects[path] = subject
-			}
-		}
-		if readErr != nil {
-			break
-		}
-	}
-	foundEveryPath := len(subjects) == len(wanted)
-	stop()
-	if err := command.Wait(); err != nil && !foundEveryPath {
-		message := strings.TrimSpace(stderr.String())
-		if message == "" {
-			message = err.Error()
-		}
-		return nil, fmt.Errorf("git log for changelog fragments: %s", message)
-	}
-	return subjects, nil
 }
 
 func runManifest(root string, args []string, stdout io.Writer) error {
@@ -859,13 +802,12 @@ func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bo
 	if err != nil {
 		return 0, err
 	}
-	headFragments, err := fragmentBlobs(root, headSHA)
-	if err != nil {
-		return 0, err
-	}
 	var present []string
 	for path, sourceBlob := range fragments {
-		currentBlob, exists := headFragments[path]
+		currentBlob, exists, err := blobAt(root, headSHA, path)
+		if err != nil {
+			return 0, err
+		}
 		if !exists {
 			continue
 		}
@@ -878,16 +820,13 @@ func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bo
 	if !apply && len(present) > 0 {
 		return 0, fmt.Errorf("released fragments remain on next: %s", strings.Join(present, ", "))
 	}
-	if len(present) == 0 {
-		return 0, nil
-	}
 	for _, path := range present {
 		if err := os.Remove(filepath.Join(root, path)); err != nil {
 			return 0, err
 		}
-	}
-	if _, err := gitOutput(root, append([]string{"add", "-u", "--"}, present...)...); err != nil {
-		return 0, err
+		if _, err := gitOutput(root, "add", "-u", "--", path); err != nil {
+			return 0, err
+		}
 	}
 	return len(present), nil
 }
@@ -940,6 +879,20 @@ func fragmentReceipt(root, ref string) (string, error) {
 		fmt.Fprintf(digest, "%s\x00%s\n", path, fragments[path])
 	}
 	return fmt.Sprintf("<!-- changelog-fragments-sha256: %x -->", digest.Sum(nil)), nil
+}
+
+func blobAt(root, ref, path string) (string, bool, error) {
+	command := exec.Command("git", "rev-parse", "--verify", ref+":"+path)
+	command.Dir = root
+	out, err := command.Output()
+	if err == nil {
+		return strings.TrimSpace(string(out)), true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return "", false, nil
+	}
+	return "", false, err
 }
 
 func normalizeVersion(value string) (string, string, error) {

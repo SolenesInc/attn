@@ -18,8 +18,3 @@ resolve_test_git() {
   fi
   printf '%s\n' "$test_git"
 }
-
-borrow_clone_objects() {
-  local origin="$1" clone="$2"
-  printf '%s/.git/objects\n' "$clone" >"$origin/objects/info/alternates"
-}
