@@ -507,7 +507,8 @@ build-default-profile-harness:
 	@env -u ATTN_PROFILE ATTN_BUILD_DEFAULT_PROFILE_HARNESS=1 $(MAKE) build-app PROFILE=legacy-recovery
 
 ensure-codesign-identity:
-	@identity="$$(bash ./scripts/macos-codesign-identity.sh ensure)"; \
+	@identity="$(MACOS_CODESIGN_IDENTITY)"; \
+	if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh ensure)"; fi; \
 	if [ "$$identity" = "-" ]; then \
 		echo "No stable macOS code-signing identity available; falling back to ad-hoc signing."; \
 	else \

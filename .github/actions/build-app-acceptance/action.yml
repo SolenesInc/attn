@@ -94,6 +94,7 @@ runs:
         CI: 'true'
         # Acceptance tests what ships, not the unoptimized app-core named profiles get locally.
         ATTN_APP_CARGO_PROFILE: release
+        MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
       run: make build-app PROFILE="${{ inputs.profile }}"
 
     - name: Save Go build cache

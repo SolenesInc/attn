@@ -51,6 +51,7 @@ for contract in \
   'uses: actions/cache/restore@v4' \
   'uses: Swatinem/rust-cache@v2' \
   'run: make build-app PROFILE="${{ inputs.profile }}"' \
+  "MACOS_CODESIGN_IDENTITY: \${{ runner.os == 'macOS' && '-' || '' }}" \
   'macOS) app_tree="app/src-tauri/target/staged/$app_name.app"' \
   'Linux) app_tree="app/src-tauri/target/staged/linux-tree/$app_name"' \
   '${{ steps.go-cache-paths.outputs.build }}' \
@@ -58,6 +59,15 @@ for contract in \
   'plugins/attn-pi/node_modules'; do
   if ! grep -Fq "$contract" "$build_action"; then
     echo "Shared App acceptance build is missing: $contract" >&2
+    exit 1
+  fi
+done
+codesign_target="$(sed -n '/^ensure-codesign-identity:/,/^[^[:space:]#].*:/p' "$root/Makefile")"
+for contract in \
+  'identity="$(MACOS_CODESIGN_IDENTITY)"' \
+  'if [ -z "$$identity" ]; then identity="$$(bash ./scripts/macos-codesign-identity.sh ensure)"; fi'; do
+  if ! grep -Fq "$contract" <<<"$codesign_target"; then
+    echo "Explicit App acceptance signing identity is not respected: $contract" >&2
     exit 1
   fi
 done
