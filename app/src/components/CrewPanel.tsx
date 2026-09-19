@@ -1,12 +1,15 @@
 import FocusTrap from 'focus-trap-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit } from '../hooks/useCrewCharterAutosave';
 import { useCrewLaunchAutosave, type CrewLaunchSelection } from '../hooks/useCrewLaunchAutosave';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
-import type { CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
+import type { CrewHandoffDocument, CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
+import { MarkdownReader } from './MarkdownReader';
+import { seedMarkdownSource } from './MarkdownReader/documentSource';
 import './CrewPanel.css';
 
 interface CrewPanelProps {
@@ -14,7 +17,20 @@ interface CrewPanelProps {
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
+  preserveStateOnOpen?: boolean;
   onClose: () => void;
+  onOpenSeed: (seedId: string, placementSessionId?: string) => void;
+}
+
+type CrewTab = 'launch' | 'charter' | 'handoffs';
+
+interface HandoffLoad {
+  state: 'loading' | 'ready' | 'error';
+  handoffs: CrewHandoffDocument[];
+  selected?: string;
+  error?: string;
+  request: number;
+  connectionGeneration: number;
 }
 
 interface RestartAttempt {
@@ -25,6 +41,133 @@ interface RestartAttempt {
   sending: boolean;
   transportError?: string;
   conflict?: boolean;
+}
+
+function charterStatus(edit?: CrewCharterEdit): string {
+  if (!edit || edit.state === 'idle' || edit.state === 'loading') return 'Loading…';
+  if (edit.state === 'dirty') return 'Waiting to save';
+  if (edit.state === 'saving') return 'Saving…';
+  if (edit.state === 'conflict') return 'Changed elsewhere';
+  if (edit.state === 'error') return 'Not saved';
+  return 'Saved';
+}
+
+function CharterTab({ member, edit, autosave }: {
+  member: CrewMember;
+  edit?: CrewCharterEdit;
+  autosave: CrewCharterAutosave;
+}) {
+  if (!edit || edit.state === 'idle' || edit.state === 'loading') {
+    return <div className="crew-document-state">Loading charter…</div>;
+  }
+  if (!edit.acknowledged) {
+    return (
+      <div className="crew-document-state is-error" role="alert">
+        <span>{edit.error || 'The charter could not be loaded.'}</span>
+        <button type="button" data-testid="crew-charter-load-retry" onClick={() => void autosave.load(member.id, true)}>Retry</button>
+      </div>
+    );
+  }
+  return (
+    <section className="crew-charter" aria-label="Charter editor">
+      <div className="crew-document-heading">
+        <h3>Charter</h3>
+        <span data-testid="crew-charter-status" className={`crew-document-save is-${edit.state}`} role="status" aria-live="polite">{charterStatus(edit)}</span>
+      </div>
+      <div className="crew-charter-meta"><span>CHARTER.md</span><span>Markdown</span></div>
+      <label className="crew-visually-hidden" htmlFor={`crew-charter-${member.id}`}>Charter for {crewDisplayName(member.id)}</label>
+      <textarea
+        id={`crew-charter-${member.id}`}
+        data-testid="crew-charter-editor"
+        className="crew-charter-editor"
+        value={edit.draft}
+        onChange={(event) => autosave.update(member.id, event.target.value)}
+        onBlur={() => void autosave.flush(member.id)}
+        spellCheck
+      />
+      {edit.state === 'error' && (
+        <div className="crew-document-error" role="alert">
+          <span>{edit.error || 'The charter was not saved. Your edit is still here.'}</span>
+          <button type="button" data-testid="crew-charter-save-retry" onClick={() => void autosave.retry(member.id)}>Retry</button>
+        </div>
+      )}
+      {edit.state === 'conflict' && edit.external && (
+        <div className="crew-charter-conflict" role="alert">
+          <div>
+            <strong>The file changed outside this editor.</strong>
+            <span>Your edit is still here. Choose which version should become canonical.</span>
+          </div>
+          <button type="button" data-testid="crew-charter-use-file" onClick={() => autosave.useExternal(member.id)}>Use file version</button>
+          <button type="button" data-testid="crew-charter-keep-mine" onClick={() => void autosave.keepMine(member.id)}>Keep my edit</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function handoffDate(value: Date): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return new Intl.DateTimeFormat(undefined, {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short',
+  }).format(date);
+}
+
+function HandoffsTab({ member, load, selected, onSelect, onRefresh, onOpenSeed }: {
+  member: CrewMember;
+  load?: HandoffLoad;
+  selected?: string;
+  onSelect: (filename: string) => void;
+  onRefresh: () => void;
+  onOpenSeed: (seedId: string) => void;
+}) {
+  if (!load || load.state === 'loading') return <div className="crew-document-state">Loading handoffs…</div>;
+  if (load.state === 'error') {
+    return <div className="crew-document-state is-error" role="alert"><span>{load.error}</span><button type="button" data-testid="crew-handoffs-retry" onClick={onRefresh}>Retry</button></div>;
+  }
+  if (load.handoffs.length === 0) {
+    return (
+      <section className="crew-handoffs">
+        <div className="crew-document-heading"><h3>Handoffs</h3><button type="button" data-testid="crew-handoffs-refresh" onClick={onRefresh}>Refresh</button></div>
+        <div className="crew-document-empty">No handoffs recorded.</div>
+      </section>
+    );
+  }
+  const handoff = load.handoffs.find((candidate) => candidate.filename === selected) ?? load.handoffs[0];
+  return (
+    <section className="crew-handoffs">
+      <div className="crew-document-heading">
+        <h3>Handoffs</h3>
+        <div className="crew-handoff-actions"><span>Read only</span><button type="button" data-testid="crew-handoffs-refresh" onClick={onRefresh}>Refresh</button></div>
+      </div>
+      <div className="crew-handoff-layout">
+        <nav className="crew-handoff-index" aria-label={`${crewDisplayName(member.id)} handoffs`}>
+          <span>{load.handoffs.length} {load.handoffs.length === 1 ? 'letter' : 'letters'}</span>
+          {load.handoffs.map((candidate, index) => (
+            <button
+              key={candidate.filename}
+              type="button"
+              data-testid={`crew-handoff-${index}`}
+              aria-current={candidate.filename === handoff.filename ? 'page' : undefined}
+              onClick={() => onSelect(candidate.filename)}
+            >
+              <strong>{new Date(candidate.occurred_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', timeZone: 'UTC' })}</strong>
+              <small>{index === 0 ? 'Latest · ' : ''}{new Date(candidate.occurred_at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })} UTC</small>
+            </button>
+          ))}
+        </nav>
+        <article className="crew-handoff-reader" data-testid="crew-handoff-reader">
+          <div className="crew-handoff-date"><span>{handoffDate(handoff.occurred_at)}</span><code>{handoff.filename}</code></div>
+          <MarkdownReader
+            content={handoff.content}
+            source={seedMarkdownSource(`crew-handoff-${member.id}-${handoff.filename}`)}
+            allowLocalTargets={false}
+            onOpenSeed={onOpenSeed}
+          />
+        </article>
+      </div>
+    </section>
+  );
 }
 
 function effectiveMember(roster: CrewMember, acknowledged?: CrewMember): CrewMember {
@@ -91,17 +234,29 @@ function RestartState({ member, attempt, onRetryTransport, onRetryFailed }: {
   return null;
 }
 
-export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }: CrewPanelProps) {
+export function CrewPanel({
+  isOpen,
+  initialMember,
+  members,
+  sessions,
+  preserveStateOnOpen = false,
+  onClose,
+  onOpenSeed,
+}: CrewPanelProps) {
   const {
     isConnected,
     connectionGeneration,
     sendCrewSet,
     sendCrewRestart,
+    sendCrewCharterGet,
+    sendCrewCharterSet,
+    sendCrewHandoffsGet,
     sendDelegationPreferencesGet,
     sendDelegationModels,
   } = useDaemonApi();
   const [selectedId, setSelectedId] = useState(initialMember || members[0]?.id || '');
   const [filter, setFilter] = useState('');
+  const [tab, setTab] = useState<CrewTab>('launch');
   const [harnesses, setHarnesses] = useState<DelegationHarness[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -109,11 +264,17 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   const [manualModel, setManualModel] = useState<Record<string, boolean>>({});
   const [confirming, setConfirming] = useState(false);
   const [attempts, setAttempts] = useState<Record<string, RestartAttempt>>({});
+  const [handoffLoads, setHandoffLoads] = useState<Record<string, HandoffLoad>>({});
+  const handoffLoadsRef = useRef(handoffLoads);
+  const handoffRequest = useRef(0);
+  const [navigationPending, setNavigationPending] = useState(false);
+  const navigationSequence = useRef(0);
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
   const lastInitialMember = useRef<string | undefined>(undefined);
   const autosave = useCrewLaunchAutosave(members, connectionGeneration, sendCrewSet);
+  const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
   const models = useHarnessModelCatalogs(isOpen, sendDelegationModels);
 
   useEffect(() => {
@@ -132,7 +293,26 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     });
   }, [members]);
 
-  useEscapeStack(onClose, isOpen && !confirming);
+  const selectedRosterMember = members.find((member) => member.id === selectedId) ?? members[0];
+  const charterEdit = selectedRosterMember ? charterAutosave.read(selectedRosterMember.id) : undefined;
+
+  const navigate = useCallback((action: () => void) => {
+    const sequence = ++navigationSequence.current;
+    if (!selectedRosterMember || tab !== 'charter' || !charterEdit?.acknowledged || charterEdit.state === 'saved') {
+      action();
+      return;
+    }
+    setNavigationPending(true);
+    void charterAutosave.flush(selectedRosterMember.id).then((saved) => {
+      if (saved && navigationSequence.current === sequence) action();
+    }).finally(() => {
+      if (navigationSequence.current === sequence) setNavigationPending(false);
+    });
+  }, [charterAutosave, charterEdit?.state, selectedRosterMember, tab]);
+
+  const requestClose = useCallback(() => navigate(onClose), [navigate, onClose]);
+
+  useEscapeStack(requestClose, isOpen && !confirming);
   useEscapeStack(() => setConfirming(false), isOpen && confirming);
 
   useEffect(() => {
@@ -142,7 +322,8 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     }
     const opening = !wasOpen.current;
     wasOpen.current = true;
-    if (opening || initialMember !== lastInitialMember.current) {
+    if (opening && !preserveStateOnOpen) setTab('launch');
+    if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
         ? initialMember
@@ -150,7 +331,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
       return;
     }
     if (!members.some((candidate) => candidate.id === selectedId)) setSelectedId(members[0]?.id || '');
-  }, [initialMember, isOpen, members, selectedId]);
+  }, [initialMember, isOpen, members, preserveStateOnOpen, selectedId]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -167,7 +348,6 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     return () => { live = false; };
   }, [catalogRequest, isOpen, sendDelegationPreferencesGet]);
 
-  const selectedRosterMember = members.find((member) => member.id === selectedId) ?? members[0];
   const edit = selectedRosterMember ? autosave.read(selectedRosterMember.id) : undefined;
   const member = selectedRosterMember ? effectiveMember(selectedRosterMember, edit?.acknowledged) : undefined;
   const selection = edit?.draft;
@@ -176,6 +356,64 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
   const harness = harnesses.find((candidate) => candidate.id === effectiveAgent);
   const catalog = effectiveAgent ? models.catalogs[effectiveAgent] : undefined;
   const selectedModel = currentModel(catalog?.models, selection?.model || '');
+
+  useEffect(() => {
+    handoffLoadsRef.current = handoffLoads;
+  }, [handoffLoads]);
+
+  const loadHandoffs = useCallback((memberId: string, force = false) => {
+    const existing = handoffLoadsRef.current[memberId];
+    if (!force && existing && existing.state !== 'error'
+      && existing.connectionGeneration === connectionGeneration) return;
+    const request = ++handoffRequest.current;
+    setHandoffLoads((current) => ({
+      ...current,
+      [memberId]: {
+        state: 'loading',
+        handoffs: current[memberId]?.handoffs ?? [],
+        selected: current[memberId]?.selected,
+        request,
+        connectionGeneration,
+      },
+    }));
+    void sendCrewHandoffsGet(memberId).then((result) => {
+      if (result.member !== memberId) {
+        throw new Error(`Handoff response named ${result.member}, expected ${memberId}`);
+      }
+      setHandoffLoads((current) => {
+        const existing = current[memberId];
+        if (existing?.request !== request) return current;
+        const selected = existing.selected
+          && result.handoffs.some((handoff) => handoff.filename === existing.selected)
+          ? existing.selected
+          : result.handoffs[0]?.filename;
+        return {
+          ...current,
+          [memberId]: {
+            state: 'ready', handoffs: result.handoffs, selected, request, connectionGeneration,
+          },
+        };
+      });
+    }).catch((error) => {
+      setHandoffLoads((current) => current[memberId]?.request !== request ? current : ({
+        ...current,
+        [memberId]: {
+          state: 'error',
+          handoffs: current[memberId]?.handoffs ?? [],
+          selected: current[memberId]?.selected,
+          error: error instanceof Error ? error.message : String(error),
+          request,
+          connectionGeneration,
+        },
+      }));
+    });
+  }, [connectionGeneration, sendCrewHandoffsGet]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedRosterMember) return;
+    if (tab === 'charter') void charterAutosave.load(selectedRosterMember.id);
+    if (tab === 'handoffs') loadHandoffs(selectedRosterMember.id);
+  }, [charterAutosave, isOpen, loadHandoffs, selectedRosterMember, tab]);
 
   useEffect(() => {
     const agent = effectiveAgent;
@@ -202,8 +440,10 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
     const next = Math.max(0, Math.min(visibleMembers.length - 1, current + offset));
     const nextMember = visibleMembers[next];
     if (!nextMember) return;
-    setSelectedId(nextMember.id);
-    rosterRef.current?.querySelectorAll<HTMLButtonElement>('[data-crew-roster-member]')[next]?.focus();
+    navigate(() => {
+      setSelectedId(nextMember.id);
+      rosterRef.current?.querySelectorAll<HTMLButtonElement>('[data-crew-roster-member]')[next]?.focus();
+    });
   };
 
   const sendAttempt = useCallback((memberId: string, attempt: RestartAttempt) => {
@@ -266,14 +506,21 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
 
   return (
     <div className={`crew-panel-layer ${isOpen ? 'is-open' : ''}`} aria-hidden={!isOpen}>
-      <FocusTrap active={isOpen} focusTrapOptions={{ escapeDeactivates: false, initialFocus: () => closeRef.current }}>
+      <FocusTrap
+        active={isOpen}
+        focusTrapOptions={{
+          escapeDeactivates: false,
+          initialFocus: () => closeRef.current,
+          returnFocusOnDeactivate: false,
+        }}
+      >
         <section className="crew-panel" data-testid="crew-panel" role="dialog" aria-modal="true" aria-labelledby="crew-panel-title">
           <header className="crew-panel-bar">
             <div>
               <span className="crew-kicker">Crew</span>
               <h1 id="crew-panel-title">Manage crew</h1>
             </div>
-            <button ref={closeRef} type="button" className="crew-close" data-testid="crew-panel-close" onClick={onClose}>Close <kbd>Esc</kbd></button>
+            <button ref={closeRef} type="button" className="crew-close" data-testid="crew-panel-close" disabled={navigationPending} onClick={requestClose}>Close <kbd>Esc</kbd></button>
           </header>
           <div className="crew-panel-shell">
             <aside className="crew-roster" aria-label="Crew roster">
@@ -293,7 +540,7 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                       data-testid={`crew-roster-${candidate.id}`}
                       aria-current={candidate.id === member?.id ? 'true' : undefined}
                       className={candidate.id === member?.id ? 'is-selected' : ''}
-                      onClick={() => setSelectedId(candidate.id)}
+                      onClick={() => navigate(() => setSelectedId(candidate.id))}
                     >
                       <span className="crew-avatar" aria-hidden="true">{crewDisplayName(candidate.id).slice(0, 1)}</span>
                       <span className="crew-roster-identity">
@@ -319,6 +566,13 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                     <span className={`crew-presence ${member.binding_session ? 'is-awake' : ''}`}>{member.binding_session ? 'Current day active' : 'Between days'}</span>
                   </div>
 
+                  <nav className="crew-member-tabs" aria-label="Member details">
+                    <button type="button" data-testid="crew-tab-launch" className={tab === 'launch' ? 'is-selected' : ''} aria-current={tab === 'launch' ? 'page' : undefined} onClick={() => navigate(() => setTab('launch'))}>Launch settings</button>
+                    <button type="button" data-testid="crew-tab-charter" className={tab === 'charter' ? 'is-selected' : ''} aria-current={tab === 'charter' ? 'page' : undefined} onClick={() => navigate(() => setTab('charter'))}>Charter</button>
+                    <button type="button" data-testid="crew-tab-handoffs" className={tab === 'handoffs' ? 'is-selected' : ''} aria-current={tab === 'handoffs' ? 'page' : undefined} onClick={() => navigate(() => setTab('handoffs'))}>Handoffs</button>
+                  </nav>
+
+                  {tab === 'launch' && <>
                   {member.binding_session && (
                     <section className="crew-running" aria-label="Running now">
                       <span className="crew-kicker">Running now</span>
@@ -473,6 +727,22 @@ export function CrewPanel({ isOpen, initialMember, members, sessions, onClose }:
                       setConfirming(true);
                     }}
                   />
+                  </>}
+
+                  {tab === 'charter' && <CharterTab member={member} edit={charterEdit} autosave={charterAutosave} />}
+                  {tab === 'handoffs' && (
+                    <HandoffsTab
+                      member={member}
+                      load={handoffLoads[member.id]}
+                      selected={handoffLoads[member.id]?.selected}
+                      onSelect={(filename) => setHandoffLoads((current) => ({
+                        ...current,
+                        [member.id]: { ...current[member.id], selected: filename },
+                      }))}
+                      onRefresh={() => loadHandoffs(member.id, true)}
+                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
+                    />
+                  )}
                 </>
               )}
             </main>
