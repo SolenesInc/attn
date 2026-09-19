@@ -191,8 +191,13 @@ $(GOTESTSUM):
 verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
+DIFF_BASE ?= origin/next
 test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
-	./scripts/test-go.sh
+	@if [ -n "$(FORCE)" ] || ./scripts/go-test-inputs-changed.sh $(DIFF_BASE); then \
+		./scripts/test-go.sh; \
+	else \
+		echo "make test: nothing the Go suite reads changed since $(DIFF_BASE); skipped. FORCE=1 runs it."; \
+	fi
 
 # Neither make test nor CI runs the hook and script tests. Run them after
 # changing a hook, a script, or the release tooling.
@@ -226,9 +231,8 @@ test-frontend: $(APP_NODE_MODULES)
 
 lint: lint-go lint-frontend lint-added-comments
 
-LINT_BASE ?= origin/next
 lint-added-comments:
-	go run ./cmd/addedcomments -base $(LINT_BASE)
+	go run ./cmd/addedcomments -base $(DIFF_BASE)
 
 lint-go: $(NATIVE_VT_DEP)
 	go run ./cmd/commentlint ./...
