@@ -25,20 +25,21 @@ done
 
 app_acceptance_build_job="$(sed -n '/^  app-acceptance-build:/,/^  app-acceptance-shard:/p' "$workflow")"
 app_acceptance_shard_job="$(sed -n '/^  app-acceptance-shard:/,/^  app-acceptance:/p' "$workflow")"
-app_acceptance_job="$(sed -n '/^  app-acceptance:/,/^  release-preflight:/p' "$workflow")"
+app_acceptance_job="$(sed -n '/^  app-acceptance:/,/^  app-acceptance-macos:/p' "$workflow")"
+app_acceptance_macos_job="$(sed -n '/^  app-acceptance-macos:/,/^  release-preflight:/p' "$workflow")"
 soak_workflow="$root/.github/workflows/acceptance-soak.yml"
 soak_build_job="$(sed -n '/^  build:/,/^  soak:/p' "$soak_workflow")"
 soak_job="$(sed -n '/^  soak:/,$p' "$soak_workflow")"
 build_action="$root/.github/actions/build-app-acceptance/action.yml"
 install_action="$root/.github/actions/install-app-acceptance/action.yml"
 
-for job in "$app_acceptance_build_job" "$soak_build_job"; do
+for job in "$app_acceptance_build_job" "$app_acceptance_macos_job" "$soak_build_job"; do
   if ! grep -Fq 'uses: ./.github/actions/build-app-acceptance' <<<"$job"; then
     echo "CI and soak builds must share build-app-acceptance" >&2
     exit 1
   fi
 done
-for job in "$app_acceptance_shard_job" "$soak_job"; do
+for job in "$app_acceptance_shard_job" "$app_acceptance_macos_job" "$soak_job"; do
   if ! grep -Fq 'uses: ./.github/actions/install-app-acceptance' <<<"$job"; then
     echo "CI and soak runners must share install-app-acceptance" >&2
     exit 1
@@ -50,6 +51,10 @@ for contract in \
   'uses: actions/cache/restore@v4' \
   'uses: Swatinem/rust-cache@v2' \
   'run: make build-app PROFILE="${{ inputs.profile }}"' \
+  'macOS) app_tree="app/src-tauri/target/staged/$app_name.app"' \
+  'Linux) app_tree="app/src-tauri/target/staged/linux-tree/$app_name"' \
+  '${{ steps.go-cache-paths.outputs.build }}' \
+  '${{ steps.go-cache-paths.outputs.modules }}' \
   'plugins/attn-pi/node_modules'; do
   if ! grep -Fq "$contract" "$build_action"; then
     echo "Shared App acceptance build is missing: $contract" >&2
@@ -64,6 +69,46 @@ for contract in \
   './attn plugin install-bundled attn-pi'; do
   if ! grep -Fq "$contract" "$install_action"; then
     echo "Shared App acceptance install is missing: $contract" >&2
+    exit 1
+  fi
+done
+for contract in \
+  'runs-on: macos-15' \
+  "ATTN_HARNESS_PARK_VISIBLE_PX: '0'" \
+  'pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy' \
+  'name: Require executed macOS coverage' \
+  'name: Upload macOS acceptance evidence' \
+  'ref: ${{ github.event.pull_request.head.sha || github.sha }}'; do
+  if ! grep -Fq -- "$contract" <<<"$app_acceptance_macos_job"; then
+    echo "macOS acceptance is missing: $contract" >&2
+    exit 1
+  fi
+done
+macos_coverage_check="$(sed -n '/^          import assert /,/^          NODE$/p' <<<"$app_acceptance_macos_job" | sed '/^          NODE$/d; s/^          //')"
+if [ -z "$macos_coverage_check" ]; then
+  echo "macOS acceptance must check that its native scenario executed" >&2
+  exit 1
+fi
+mkdir -p "$work/macos-evidence"
+printf '%s\n' '{"results":[{"id":"terminal-block-copy","code":0}]}' >"$work/macos-evidence/last-matrix.json"
+ATTN_REAL_APP_ARTIFACTS_DIR="$work/macos-evidence" node --input-type=module -e "$macos_coverage_check"
+for result in \
+  '{"results":[]}' \
+  '{"results":[{"id":"terminal-block-copy","code":0,"skipped":true}]}' \
+  '{"results":[{"id":"terminal-block-copy","code":1}]}' \
+  '{"results":[{"id":"another-scenario","code":0}]}' \
+  '{"results":[{"id":"terminal-block-copy"}]}' \
+  '{"results":[{"id":"terminal-block-copy","code":0},{"id":"terminal-block-copy","code":0}]}'; do
+  printf '%s\n' "$result" >"$work/macos-evidence/last-matrix.json"
+  expect_failure env ATTN_REAL_APP_ARTIFACTS_DIR="$work/macos-evidence" node --input-type=module -e "$macos_coverage_check"
+done
+expect_failure env ATTN_REAL_APP_ARTIFACTS_DIR="$work/missing-evidence" node --input-type=module -e "$macos_coverage_check"
+for contract in \
+  'needs: [changes, app-acceptance-build, app-acceptance-shard, app-acceptance-macos]' \
+  'MACOS_RESULT: ${{ needs.app-acceptance-macos.result }}' \
+  'if [ "$MACOS_RESULT" != success ]; then'; do
+  if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
+    echo "App acceptance must require macOS coverage: $contract" >&2
     exit 1
   fi
 done
@@ -105,7 +150,7 @@ if grep -Fq 'github.run_attempt' "$soak_workflow"; then
   echo "Acceptance soak artifacts must survive failed-job reruns" >&2
   exit 1
 fi
-for job in "$app_acceptance_build_job" "$app_acceptance_shard_job" "$app_acceptance_job"; do
+for job in "$app_acceptance_build_job" "$app_acceptance_shard_job" "$app_acceptance_job" "$app_acceptance_macos_job"; do
   if grep -Eq '^    concurrency:' <<<"$job"; then
     echo "App acceptance must not serialize independent hosted runners" >&2
     exit 1
@@ -147,16 +192,16 @@ for contract in \
   fi
 done
 
-path_policy="if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'"
-for job in "$app_acceptance_build_job" "$app_acceptance_shard_job"; do
+path_policy="if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'"
+for job in "$app_acceptance_build_job" "$app_acceptance_shard_job" "$app_acceptance_macos_job"; do
   if ! grep -Fq "$path_policy" <<<"$job"; then
-    echo "App acceptance build and shards need the harness path policy: $path_policy" >&2
+    echo "App acceptance needs the product path policy: $path_policy" >&2
     exit 1
   fi
 done
 for contract in \
   '!cancelled() &&' \
-  "(needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')"; do
+  "(needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true')"; do
   if ! grep -Fq "$contract" <<<"$app_acceptance_job"; then
     echo "App acceptance must aggregate even when a shard is red: $contract" >&2
     exit 1
@@ -273,22 +318,22 @@ if ! grep -Fq "              - 'scripts/**'" "$workflow"; then
   echo "Daemon path filter must cover every repository script" >&2
   exit 1
 fi
-if ! grep -Fq 'harness: ${{ steps.filter.outputs.harness }}' <<<"$changes_job"; then
-  echo "Changes must publish the harness filter App acceptance gates on" >&2
+if ! grep -Fq 'app_acceptance: ${{ steps.filter.outputs.app_acceptance }}' <<<"$changes_job"; then
+  echo "Changes must publish the product filter App acceptance gates on" >&2
   exit 1
 fi
 for path in \
-  "app/scripts/real-app-harness/**" \
-  "app/src-tauri/**" \
+  "app/**" \
   "apphost/**" \
-  "scripts/build-app-runtime-host.sh" \
-  "scripts/install-app-tree.sh" \
+  "cmd/**" "internal/**" "plugins/**" "pty-host/**" "sdk/**" "test/**" \
+  "scripts/**" "go.mod" "go.sum" "Makefile" \
+  ".tool-versions" "ghostty-vt.pin" "ghostty-vt-native.lock" "ghostty-vt-wasm.lock" \
   ".github/actions/**" \
   ".github/workflows/app-acceptance.yml" \
   ".github/workflows/acceptance-soak.yml" \
   ".github/workflows/ci.yml"; do
-  if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            harness:/,/^            release_preflight:/p' "$workflow")"; then
-    echo "Harness path filter must cover: $path" >&2
+  if ! grep -Fq "              - '$path'" <<<"$(sed -n '/^            app_acceptance:/,/^            release_preflight:/p' "$workflow")"; then
+    echo "App acceptance path filter must cover: $path" >&2
     exit 1
   fi
 done

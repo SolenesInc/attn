@@ -193,10 +193,6 @@ if [ "$run_shell_checks" = true ]; then
 fi
 
 if [ "$run_frontend_checks" = true ]; then
-  if [[ "${NODE_OPTIONS:-}" != *"--localstorage-file="* ]]; then
-    export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--localstorage-file=/tmp/attn-vitest-localstorage.json"
-  fi
-
   header "Frontend tests"
   (cd "$root/app" && pnpm run test)
 

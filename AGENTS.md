@@ -42,8 +42,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 ## Working rules
 
-- Run tests when making changes. If relevant, install a non-production profile
-  for additional verification.
+- Run tests when making changes.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
@@ -96,10 +95,8 @@ compile-time guarantees. Use the [test contracts](docs/maintainer-contracts.md#t
 when choosing time, property, or network-failure test helpers.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/profiles.md#verification-requirements), including
-any exemption. App-observable changes need the running app; visible changes need
-a recording. Rendering changes must avoid continuous repainting; check idle CPU
-and memory. If required verification is unavailable, ask before merging.
+[verification requirements](docs/profiles.md#verification-requirements).
+Rendering changes must avoid continuous repainting; check idle CPU and memory.
 
 ### Experience testing
 

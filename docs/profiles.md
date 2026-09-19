@@ -126,16 +126,21 @@ an app-launched daemon.
 
 ## Verification requirements
 
-- Non-trivial PRs need live verification from their branch in a non-production profile.
-- Exempt trivial docs/comments/renames/log strings, or isolated changes fully
-  covered by unit tests with no lifecycle, protocol, PTY, runner, timing, or UI
-  behavior. State the exemption.
-- Self-contained CLI behavior: built binary plus unit tests.
-- Daemon-only verification: only when no behavior reaches the app.
-- App-observable changes, including daemon state/broadcasts, PTYs, and PR/git
-  flows: exercise the running app. Visible changes need a recording.
-- Lifecycle, protocol, PTY, background-runner, and UI changes always need live
-  verification. If unavailable, ask before merging.
+Require passing packaged-app CI on the current PR head for lifecycle, protocol,
+PTY, background-runner, timing and app-observable changes, including daemon
+state/broadcasts and PR/git flows. Reuse or extend scenarios to cover the changed
+behavior on relevant platforms. Report missing or skipped required coverage and
+ask before merging.
+
+Outside those categories, self-contained CLI changes need the built binary and
+unit tests; daemon-only changes need scoped daemon tests. Trivial docs, comments,
+renames and log strings, or isolated changes fully covered by unit tests, are
+exempt from live verification; state the exemption.
+
+Run real-app scenarios locally in a non-production profile when reproducing CI
+failures and iterating on fixes. Use CI results, logs and screenshots as routine
+evidence; recordings are optional when motion helps explain an interaction.
+[Experience testing](../AGENTS.md#experience-testing) covers feel with Victor.
 
 ## Verify the installed build
 

@@ -1,6 +1,7 @@
 # Real-app harness
 
-Read [profiles.md](../../../docs/profiles.md) before installation or verification.
+Follow the [verification requirements](../../../docs/profiles.md#verification-requirements)
+and [profile setup](../../../docs/profiles.md#build-and-install).
 Run commands from the repository root.
 
 ## Running scenarios
@@ -363,8 +364,8 @@ alone keeps a run off github.com.
 
 ## Recordings
 
-Record the installed verification profile; watch for private data before publishing
-to the public evidence repository:
+Record a non-production profile; watch for private data before publishing to the
+public evidence repository:
 
 ```bash
 ./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4

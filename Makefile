@@ -205,6 +205,7 @@ test-scripts:
 	@bash ./scripts/source-fingerprint_test.sh
 	@bash ./scripts/pr-evidence_test.sh
 	@bash ./scripts/ci-acceptance_test.sh
+	@bash ./scripts/pre-commit_test.sh
 	@bash ./scripts/ci-retry_test.sh
 	@bash ./scripts/ci-flake-report_test.sh
 	@bash ./scripts/app-acceptance_test.sh
