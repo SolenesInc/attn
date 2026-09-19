@@ -259,6 +259,41 @@ describe('CrewPanel', () => {
     });
   });
 
+  it('keeps a redelivered restart result when the superseded delivery settles late', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('22222222-2222-4222-8222-222222222222');
+    const first = deferred<any>();
+    const sendCrewRestart = vi.fn()
+      .mockReturnValueOnce(first.promise)
+      .mockResolvedValueOnce({
+        success: true, conflict: false,
+        member: member('trellis', 10, {
+          binding_session: 'session-trellis', resolved_agent: 'claude',
+          restart: { request_id: '22222222-2222-4222-8222-222222222222', session_id: 'session-trellis', state: CrewRestartState.Queued },
+        }),
+      });
+    renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
+      binding_session: 'session-trellis', resolved_agent: 'claude',
+    })] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
+    await act(async () => first.reject(new Error('Restarting Trellis timed out')));
+    fireEvent.click(await screen.findByRole('button', { name: 'Retry delivery' }));
+    await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Retry delivery' })).not.toBeInTheDocument());
+  });
+
+  it('keeps the panel behind the restart confirmation out of the tab order', async () => {
+    renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(screen.getByTestId('crew-panel-close').closest('[inert]')).not.toBeNull();
+    expect(screen.getByLabelText('Crew roster').closest('[inert]')).not.toBeNull();
+    expect(dialog.closest('[inert]')).toBeNull();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+    expect(screen.getByTestId('crew-panel-close').closest('[inert]')).toBeNull();
+  });
+
   it.each([
     [CrewRestartState.Completed, 'New day started'],
     [CrewRestartState.Failed, 'Successor launch failed'],

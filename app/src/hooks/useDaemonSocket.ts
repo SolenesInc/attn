@@ -1168,10 +1168,12 @@ export function useDaemonSocket({
         reject(new Error('WebSocket not connected'));
         return;
       }
-      pendingActionsRef.current.set(key, { resolve: resolve as (value: unknown) => void, reject });
+      pendingActionsRef.current.get(key)?.reject(new Error(`Request ${key} was superseded by a newer send`));
+      const waiter = { resolve: resolve as (value: unknown) => void, reject };
+      pendingActionsRef.current.set(key, waiter);
       ws.send(JSON.stringify(payload));
       setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
+        if (pendingActionsRef.current.get(key) === waiter) {
           pendingActionsRef.current.delete(key);
           reject(new Error(timeoutMessage));
         }

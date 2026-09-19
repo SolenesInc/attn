@@ -224,7 +224,11 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 	letter, hasLetter, letterErr := d.crewRestartFiledLetter(member, *restart)
 	liveSuccessor := false
 	if member.BindingSession != "" {
-		liveSuccessor, _ = d.crewSessionActuallyLive(member.BindingSession)
+		live, err := d.crewSessionActuallyLive(member.BindingSession)
+		if err != nil {
+			return nil, fmt.Errorf("check %s's successor session %s: %w", crew.DisplayName(member.ID), shortSessionID(member.BindingSession), err)
+		}
+		liveSuccessor = live
 	}
 	if letterErr == nil && hasLetter && liveSuccessor {
 		d.completeCrewRestartWithDetail(member.ID, restart.RequestID, restart.SessionID, letter, member.BindingSession,

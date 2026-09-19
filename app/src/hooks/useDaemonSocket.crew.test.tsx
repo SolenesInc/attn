@@ -437,4 +437,35 @@ describe('useDaemonSocket crew', () => {
       success: true, conflict: false, member: current, restart: current.restart,
     });
   });
+
+  it('lets a redelivered restart supersede the earlier waiter under the same request id', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    vi.useFakeTimers();
+    try {
+      const options = { member: 'keel', requestId: 'restart-again', expectedSessionId: 'sess-keel', expectedRevision: 12 };
+      let first: ReturnType<typeof result.current.sendCrewRestart>;
+      let second: ReturnType<typeof result.current.sendCrewRestart>;
+      act(() => { first = result.current.sendCrewRestart(options); });
+      act(() => { vi.advanceTimersByTime(2_000); });
+      act(() => { second = result.current.sendCrewRestart(options); });
+      await expect(first!).rejects.toThrow('superseded');
+
+      act(() => { vi.advanceTimersByTime(9_000); });
+      const current = {
+        ...member('keel', 'sess-keel'), revision: 13, resolved_agent: 'claude',
+        restart: { request_id: 'restart-again', session_id: 'sess-keel', state: 'queued' },
+      };
+      act(() => {
+        ws.emit({
+          event: 'crew_restart_result', request_id: 'restart-again', success: true, conflict: false,
+          member: current, restart: current.restart,
+        });
+      });
+      await expect(second!).resolves.toEqual({
+        success: true, conflict: false, member: current, restart: current.restart,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

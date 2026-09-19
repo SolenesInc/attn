@@ -9,6 +9,7 @@ export interface CrewRestartAttempt {
   expectedSessionId: string;
   expectedRevision: number;
   sending: boolean;
+  delivery?: number;
   transportError?: string;
   conflict?: boolean;
 }
@@ -33,10 +34,12 @@ export function useCrewRestart(
 ): CrewRestarts {
   const [attempts, setAttempts] = useState<Record<string, CrewRestartAttempt>>({});
 
-  const deliver = useCallback((member: string, attempt: CrewRestartAttempt) => {
+  const deliver = useCallback((member: string, previous: CrewRestartAttempt) => {
+    const attempt = { ...previous, delivery: (previous.delivery ?? 0) + 1 };
     const finish = (result: Pick<CrewRestartAttempt, 'transportError' | 'conflict'>) => {
       setAttempts((current) => {
-        if (current[member]?.requestId !== attempt.requestId) return current;
+        const live = current[member];
+        if (live?.requestId !== attempt.requestId || live.delivery !== attempt.delivery) return current;
         return { ...current, [member]: { ...attempt, sending: false, ...result } };
       });
     };

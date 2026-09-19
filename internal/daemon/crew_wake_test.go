@@ -241,6 +241,7 @@ func TestCrewWake_AnAwakeMemberIsNotWokenTwice(t *testing.T) {
 type crewRuntimeBackend struct {
 	*fakeSpawnBackend
 	running map[string]bool
+	infoErr map[string]error
 }
 
 func (b *crewRuntimeBackend) Spawn(ctx context.Context, opts ptybackend.SpawnOptions) error {
@@ -252,6 +253,9 @@ func (b *crewRuntimeBackend) Spawn(ctx context.Context, opts ptybackend.SpawnOpt
 }
 
 func (b *crewRuntimeBackend) SessionInfo(_ context.Context, sessionID string) (ptybackend.SessionInfo, error) {
+	if err := b.infoErr[sessionID]; err != nil {
+		return ptybackend.SessionInfo{}, err
+	}
 	running, ok := b.running[sessionID]
 	if !ok {
 		return ptybackend.SessionInfo{}, pty.ErrSessionNotFound

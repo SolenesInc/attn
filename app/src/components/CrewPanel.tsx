@@ -243,14 +243,14 @@ function CrewPanelSurface({
         }}
       >
         <section className="crew-panel" data-testid="crew-panel" role="dialog" aria-modal="true" aria-labelledby="crew-panel-title">
-          <header className="crew-panel-bar">
+          <header className="crew-panel-bar" inert={confirming}>
             <div>
               <span className="crew-kicker">Crew</span>
               <h1 id="crew-panel-title">Manage crew</h1>
             </div>
             <button ref={closeRef} type="button" className="crew-close" data-testid="crew-panel-close" disabled={navigationPending} onClick={requestClose}>Close <kbd>Esc</kbd></button>
           </header>
-          {isOpen && <div className="crew-panel-shell">
+          {isOpen && <div className="crew-panel-shell" inert={confirming}>
             <CrewRoster
               members={members}
               visibleMembers={visibleMembers}

@@ -393,6 +393,56 @@ func TestCrewRestart_ReconcileCompletesAfterSuccessorSpawnWithoutLaunchingAgain(
 	}
 }
 
+func TestCrewRestart_ReconcileKeepsAFiledRestartQueuedWhileTheSuccessorProbeFails(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool), infoErr: make(map[string]error)}
+	d.ptyBackend = runtime
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if response := crewRestartCall(t, d, "alder", "probe-flake"); !response.Ok {
+		t.Fatalf("queue restart: %v", protocol.Deref(response.Error))
+	}
+	member, _, err := d.crewMember("alder")
+	if err != nil {
+		t.Fatalf("read member: %v", err)
+	}
+	if _, err := d.crewLetterForHandoff(member, woken.SessionID, "A real filed handoff.", false); err != nil {
+		t.Fatalf("file handoff: %v", err)
+	}
+	member, _, err = d.crewMember("alder")
+	if err != nil {
+		t.Fatalf("read filed member: %v", err)
+	}
+	teardown, err := d.prepareSessionTeardown(woken.SessionID)
+	if err != nil {
+		t.Fatalf("prepare old day: %v", err)
+	}
+	successor, err := d.crewNap(member, woken.SessionID, teardown)
+	if err != nil {
+		t.Fatalf("spawn successor: %v", err)
+	}
+	runtime.infoErr[successor] = errors.New("worker rpc: connection refused")
+
+	d.reconcileCrewRestarts()
+	flaky := memberByID(t, crewList(t, d), "alder")
+	if flaky.Restart == nil || flaky.Restart.State != protocol.CrewRestartStateQueued || protocol.Deref(flaky.BindingSession) != successor {
+		t.Fatalf("restart after a failed successor probe = %+v, want it still queued on %s", flaky.Restart, successor)
+	}
+
+	delete(runtime.infoErr, successor)
+	d.reconcileCrewRestarts()
+	after := memberByID(t, crewList(t, d), "alder")
+	if after.Restart == nil || after.Restart.State != protocol.CrewRestartStateCompleted ||
+		protocol.Deref(after.Restart.SuccessorSessionID) != successor {
+		t.Fatalf("recovered restart = %+v", after.Restart)
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("recovery launched another successor: %d spawns", len(spawnedSessions(t, backend)))
+	}
+}
+
 func TestCrewRestart_ReconcileCompletesAPendingRestartWhoseDayExited(t *testing.T) {
 	for _, state := range []crew.RestartState{crew.RestartQueued, crew.RestartRequested} {
 		t.Run(string(state), func(t *testing.T) {

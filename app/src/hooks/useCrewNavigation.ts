@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import type { CrewMember } from '../types/generated';
 import type { CrewCharterAutosave } from './useCrewCharterAutosave';
 
@@ -31,6 +31,10 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
   const [tab, setTab] = useState<CrewTab>('launch');
   const [pending, setPending] = useState(false);
   const sequence = useRef(0);
+  const handlers = useRef({ onClose, onOpenSeed });
+  useEffect(() => {
+    handlers.current = { onClose, onOpenSeed };
+  }, [onClose, onOpenSeed]);
 
   const selectedMember = members.find((member) => member.id === selectedId) ?? members[0];
   const selectedMemberId = selectedMember?.id;
@@ -53,10 +57,10 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
           setTab(intent.tab);
           return;
         case 'seed':
-          onOpenSeed(intent.seedId, bindingSession);
+          handlers.current.onOpenSeed(intent.seedId, bindingSession);
           return;
         case 'close':
-          onClose();
+          handlers.current.onClose();
       }
     };
     if (!charterUnsettled || !selectedMemberId) {
@@ -69,7 +73,7 @@ export function useCrewNavigation({ members, initialMember, rosterRef, charter, 
     }).finally(() => {
       if (sequence.current === current) setPending(false);
     });
-  }, [bindingSession, charter, charterUnsettled, onClose, onOpenSeed, rosterRef, selectedMemberId]);
+  }, [bindingSession, charter, charterUnsettled, rosterRef, selectedMemberId]);
 
   return { selectedMember, tab, pending, navigate };
 }
