@@ -88,7 +88,7 @@ function renderPanel({
   const panel = (nextMembers: CrewMember[], nextOpen: boolean) => (
     <DaemonApiProvider api={daemon}>
       <CrewPanel
-        key={visit}
+        visit={visit}
         isOpen={nextOpen}
         initialMember={initialMember}
         members={nextMembers}
@@ -662,6 +662,46 @@ describe('CrewPanel', () => {
     expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
     expect(screen.getByText('The charter was not saved. Your edit is still here.')).toBeInTheDocument();
     expect(sendCrewCharterSet).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps a retained offline charter edit across close and a fresh reopen', async () => {
+    const members = [member('trellis', 4)];
+    const sendCrewCharterSet = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
+    const { onClose, rerenderPanel } = renderPanel({ members, daemon: api({
+      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
+      sendCrewCharterSet,
+    }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    const editor = await screen.findByTestId('crew-charter-editor');
+    fireEvent.change(editor, { target: { value: 'offline edit' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    await screen.findByText('WebSocket not connected');
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    rerenderPanel(members, false);
+    rerenderPanel(members, true);
+
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    expect(await screen.findByTestId('crew-charter-editor')).toHaveValue('offline edit');
+    expect(screen.getByTestId('crew-charter-status')).not.toHaveTextContent('Saved');
+  });
+
+  it('commits a launch field that still has focus when Escape closes the panel', async () => {
+    const sendCrewSet = vi.fn().mockResolvedValue({ success: true, conflict: false });
+    const { onClose, rerenderPanel } = renderPanel({ daemon: api({ sendCrewSet }), members: [member('keel', 6)] });
+    const effort = await screen.findByLabelText('Reasoning effort');
+    effort.focus();
+    fireEvent.change(effort, { target: { value: 'high' } });
+    expect(sendCrewSet).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    rerenderPanel([member('keel', 6)], false);
+
+    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledWith(expect.objectContaining({ member: 'keel', effort: 'high' })));
+    expect(sendCrewSet).toHaveBeenCalledTimes(1);
   });
 
   it('renders no roster or member content while closed', () => {

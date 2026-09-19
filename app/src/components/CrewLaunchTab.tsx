@@ -1,4 +1,4 @@
-import { useState, type InputHTMLAttributes } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react';
 import type { CrewLaunchEdit, CrewLaunchSelection, useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import type { CrewRestartAttempt } from '../hooks/useCrewRestart';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
@@ -24,10 +24,18 @@ function CommitOnBlurInput({ value, onCommit, onKeyDown, ...rest }: Omit<InputHT
   const [draft, setDraft] = useState(value);
   const [editing, setEditing] = useState(false);
   const shown = editing ? draft : value;
+  const latest = useRef({ draft, editing, value, onCommit });
+  useEffect(() => {
+    latest.current = { draft, editing, value, onCommit };
+  });
   const commit = () => {
     setEditing(false);
     if (draft !== value) onCommit(draft);
   };
+  useEffect(() => () => {
+    const { draft: unsent, editing: open, value: saved, onCommit: send } = latest.current;
+    if (open && unsent !== saved) send(unsent);
+  }, []);
   return (
     <input
       {...rest}

@@ -178,6 +178,7 @@ process.env.ATTN_CODEX_EXECUTABLE = wrapper;
 process.env.ATTN_CLAUDE_EXECUTABLE = wrapper;
 process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT = 'wake-received';
 
+runner.registerCleanup('stop_daemon', () => stopDaemon(profile));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_queue_mode', () => (

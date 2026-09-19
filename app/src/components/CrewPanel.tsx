@@ -5,7 +5,7 @@ import { useCrewCharterAutosave, type CrewCharterAutosave, type CrewCharterEdit 
 import { useCrewHandoffs, type CrewHandoffHistory } from '../hooks/useCrewHandoffs';
 import { useCrewLaunchAutosave } from '../hooks/useCrewLaunchAutosave';
 import { useCrewNavigation, type CrewTab } from '../hooks/useCrewNavigation';
-import { useCrewRestart } from '../hooks/useCrewRestart';
+import { useCrewRestart, type CrewRestarts } from '../hooks/useCrewRestart';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { DaemonSession, Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember, DelegationHarness } from '../types/generated';
@@ -19,8 +19,11 @@ import { effectiveMember, nextWakeLabel, runningSessionFor } from './crewLaunchP
 import type { CrewSeedFilter } from './crewSeedOwnership';
 import './CrewPanel.css';
 
+type CrewLaunchAutosave = ReturnType<typeof useCrewLaunchAutosave>;
+
 interface CrewPanelProps {
   isOpen: boolean;
+  visit: number;
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
@@ -139,16 +142,17 @@ function RestartConfirm({ member, summary, onCancel, onConfirm }: {
   );
 }
 
-export function CrewPanel({
-  isOpen,
-  initialMember,
-  members,
-  sessions,
-  seeds,
-  seedsTotal,
-  onClose,
-  onOpenSeed,
-}: CrewPanelProps) {
+interface CrewPanelStores {
+  isConnected: boolean;
+  autosave: CrewLaunchAutosave;
+  charterAutosave: CrewCharterAutosave;
+  handoffs: CrewHandoffHistory;
+  restarts: CrewRestarts;
+  catalog: ReturnType<typeof useHarnessCatalog>;
+  loadModels: ReturnType<typeof useDaemonApi>['sendDelegationModels'];
+}
+
+export function CrewPanel({ visit, ...surface }: CrewPanelProps) {
   const {
     isConnected,
     connectionGeneration,
@@ -161,17 +165,38 @@ export function CrewPanel({
     sendDelegationPreferencesGet,
     sendDelegationModels,
   } = useDaemonApi();
+  const autosave = useCrewLaunchAutosave(surface.members, connectionGeneration, sendCrewSet);
+  const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
+  const handoffs = useCrewHandoffs(connectionGeneration, sendCrewHandoffsGet, sendCrewHandoffGet);
+  const restarts = useCrewRestart(sendCrewRestart, autosave.observe);
+  const catalog = useHarnessCatalog(surface.isOpen, sendDelegationPreferencesGet);
+  return (
+    <CrewPanelSurface
+      key={visit}
+      {...surface}
+      stores={{ isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels: sendDelegationModels }}
+    />
+  );
+}
+
+function CrewPanelSurface({
+  isOpen,
+  initialMember,
+  members,
+  sessions,
+  seeds,
+  seedsTotal,
+  onClose,
+  onOpenSeed,
+  stores,
+}: Omit<CrewPanelProps, 'visit'> & { stores: CrewPanelStores }) {
+  const { isConnected, autosave, charterAutosave, handoffs, restarts, catalog, loadModels } = stores;
   const [filter, setFilter] = useState('');
   const [seedFilter, setSeedFilter] = useState<CrewSeedFilter>('tending');
   const [seedQuery, setSeedQuery] = useState('');
   const [confirming, setConfirming] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
   const rosterRef = useRef<HTMLDivElement>(null);
-  const autosave = useCrewLaunchAutosave(members, connectionGeneration, sendCrewSet);
-  const charterAutosave = useCrewCharterAutosave(connectionGeneration, sendCrewCharterGet, sendCrewCharterSet);
-  const handoffs = useCrewHandoffs(connectionGeneration, sendCrewHandoffsGet, sendCrewHandoffGet);
-  const restarts = useCrewRestart(sendCrewRestart, autosave.observe);
-  const catalog = useHarnessCatalog(isOpen, sendDelegationPreferencesGet);
   const { selectedMember, tab, pending: navigationPending, navigate } = useCrewNavigation({
     members, initialMember, rosterRef, charter: charterAutosave, onClose, onOpenSeed,
   });
@@ -255,7 +280,7 @@ export function CrewPanel({
                       catalogError: catalog.error,
                       onRetryCatalog: catalog.retry,
                       autosave,
-                      loadModels: sendDelegationModels,
+                      loadModels,
                       isConnected,
                       restart: restarts.read(member),
                       onRestart: () => setConfirming(true),

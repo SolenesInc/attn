@@ -11,7 +11,7 @@ export function AppCrewPanel() {
   const { handleOpenSeedFromCrew } = useAppGardenActionsContext();
   return (
     <CrewPanel
-      key={crewPanel.visit}
+      visit={crewPanel.visit}
       isOpen={crewPanel.open}
       initialMember={crewPanel.member}
       members={crew}
