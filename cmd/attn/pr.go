@@ -720,7 +720,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 		}
 		if freshReviewVerdict(observation, reviewBaseline) {
 			switch {
-			case observation.ReviewState == "changes_requested":
+			case observation.ReviewState == "changes_requested" || observation.ReviewState == prreadiness.ReviewUnresolved:
 				events = append(events, outcomeChangesRequested)
 			case observation.ready():
 				events = append(events, outcomeApproved)
@@ -834,7 +834,7 @@ func readinessLine(r *prReadiness) string {
 }
 
 func hasReviewVerdict(r *prReadiness) bool {
-	return r.ReviewState == "approved" || r.ReviewState == "changes_requested"
+	return r.ReviewState == "approved" || r.ReviewState == "changes_requested" || r.ReviewState == prreadiness.ReviewUnresolved
 }
 
 func shortSHA(sha string) string {

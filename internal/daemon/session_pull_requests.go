@@ -56,7 +56,8 @@ func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequest
 		d.sendError(conn, err.Error())
 		return
 	}
-	if d.forwardedToSessionOwner(conn, rec.SessionID, msg) {
+	if d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		d.sendError(conn, "remote pull request watches are unsupported; run this command on the owning daemon")
 		return
 	}
 	if err := d.watchSessionPullRequest(rec, msg.Reviewer); err != nil {
@@ -72,7 +73,8 @@ func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullReque
 		d.sendError(conn, err.Error())
 		return
 	}
-	if d.forwardedToSessionOwner(conn, rec.SessionID, msg) {
+	if d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		d.sendError(conn, "remote pull request watches are unsupported; run this command on the owning daemon")
 		return
 	}
 	if err := d.unwatchSessionPullRequest(rec); err != nil {

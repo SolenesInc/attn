@@ -208,6 +208,15 @@ func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 		t.Fatalf("add endpoint: %v", err)
 	}
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
+	for _, msg := range []any{
+		protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1", Reviewer: "reviewer"},
+		protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1"},
+	} {
+		resp := sendPRCommand(t, d, msg)
+		if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "remote pull request watches are unsupported") {
+			t.Fatalf("remote watch falsely succeeded: %+v", resp)
+		}
+	}
 
 	for _, msg := range []any{
 		protocol.PullRequestCreatedMessage{

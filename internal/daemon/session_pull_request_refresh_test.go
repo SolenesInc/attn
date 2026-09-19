@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -701,6 +702,56 @@ func TestPullRequestWatchThumbsUpMustFollowObservedHead(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	ready := watchedReadiness("current-head", prreadiness.ChecksGreen, "APPROVED")
+	ready.Evidence.Threads = []prreadiness.Thread{
+		{ID: "old-codex", Author: "chatgpt-codex-connector", CommitOID: "old-head", Body: "Codex finding"},
+		{ID: "old-human", Author: "human-reviewer", CommitOID: "old-head", Body: "Human finding"},
+	}
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	now := time.Now()
+	d.refreshSessionPullRequests(now)
+	if status := storedPullRequest(t, d, "s1").ReviewStatus; status != "unresolved_threads" {
+		t.Fatalf("review status = %q", status)
+	}
+	deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now)
+	if err != nil || len(deliveries) != 1 {
+		t.Fatalf("initial notification = %+v, %v", deliveries, err)
+	}
+	for _, thread := range ready.Evidence.Threads {
+		if !strings.Contains(deliveries[0].Item.Prompt, thread.Body) {
+			t.Fatalf("notification omitted %s: %s", thread.ID, deliveries[0].Item.Prompt)
+		}
+	}
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("unchanged threads repeated: %+v, %v", unread, err)
+	}
+	ready.Evidence.Threads[0].Resolved = true
+	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	if status := storedPullRequest(t, d, "s1").ReviewStatus; status != "unresolved_threads" {
+		t.Fatalf("remaining human thread did not block: %q", status)
+	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
+		t.Fatal(err)
+	}
+	ready.Evidence.Threads[1].Resolved = true
+	d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+	if status := storedPullRequest(t, d, "s1").ReviewStatus; status != prreadiness.ReviewApproved {
+		t.Fatalf("resolved threads still block: %q", status)
+	}
+	deliveries, _, err = d.store.ReadAgentMailbox("s1", 20, now)
+	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "ready") {
+		t.Fatalf("ready notification = %+v, %v", deliveries, err)
+	}
+	d.refreshSessionPullRequests(now.Add(4 * protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("readiness repeated: %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchReportsReadyAfterEarlierHumanFeedback(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"
@@ -779,14 +830,38 @@ func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *test
 
 func TestPullRequestWatchExposesPersistentFailureWithoutStorming(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
+	persistent, err := store.NewWithDB(filepath.Join(t.TempDir(), "outage.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = d.store.Close()
+	d.store = persistent
+	t.Cleanup(func() { _ = persistent.Close() })
+	registerSessionForPRTest(t, d, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"
 	watchPRForRefresh(t, d, "s1", url)
 	host := &fakePRHost{readyErr: errors.New("review API unavailable")}
 	serveHost(d, "github.com", host)
+	direct, err := store.OpenDB(d.store.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer direct.Close()
+	if _, err := direct.Exec(`CREATE TRIGGER reject_outage BEFORE INSERT ON agent_mailbox_items
+		BEGIN SELECT RAISE(FAIL, 'injected enqueue failure'); END`); err != nil {
+		t.Fatal(err)
+	}
 	now := time.Now()
 	for i := 0; i < pullRequestWatchFailureThreshold; i++ {
 		d.refreshSessionPullRequests(now.Add(time.Duration(i) * protocol.HeatHotInterval))
 	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("failed insert queued an outage: %+v, %v", unread, err)
+	}
+	if _, err := direct.Exec("DROP TRIGGER reject_outage"); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold) * protocol.HeatHotInterval))
 	entry := onlySessionPullRequest(t, d, "s1")
 	if protocol.Deref(entry.WatchError) != "review API unavailable" {
 		t.Fatalf("watch error = %+v", entry)
@@ -795,14 +870,17 @@ func TestPullRequestWatchExposesPersistentFailureWithoutStorming(t *testing.T) {
 	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "monitoring unavailable") {
 		t.Fatalf("failure notification = %+v, %v", unread, err)
 	}
-	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold) * protocol.HeatHotInterval))
+	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold+1) * protocol.HeatHotInterval))
 	unread, err = d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(unread) != 1 {
+	if err != nil || len(unread) != 0 {
 		t.Fatalf("failure stormed: %+v, %v", unread, err)
 	}
 	host.readyErr = nil
 	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
-	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold+1) * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold+2) * protocol.HeatHotInterval))
 	unread, err = d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "ready") {
 		t.Fatalf("recovered readiness did not replace failure: %+v, %v", unread, err)
@@ -817,6 +895,21 @@ func TestPullRequestWatchUsesGraphQLRateLimitResource(t *testing.T) {
 	d.refreshSessionPullRequests(time.Now())
 	if host.limitedFor != "graphql" {
 		t.Fatalf("rate-limit resource = %q, want graphql", host.limitedFor)
+	}
+}
+
+func TestPullRequestWatchRefreshCoalescesSessionSnapshots(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	for _, number := range []int{71, 72} {
+		watchPRForRefresh(t, d, "s1", fmt.Sprintf("https://github.com/o/r/pull/%d", number))
+	}
+	serveHost(d, "github.com", &fakePRHost{readiness: watchedReadiness("head", prreadiness.ChecksPending, "")})
+	cap := captureBroadcasts(d)
+	if _, err := d.sessionPullRequestRefreshHandler(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if events := sessionUpdates(cap, "s1"); len(events) != 1 {
+		t.Fatalf("one refresh produced %d session snapshots", len(events))
 	}
 }
 

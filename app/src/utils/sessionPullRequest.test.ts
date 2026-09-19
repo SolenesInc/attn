@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { SessionPullRequest } from '../types/generated';
 import {
   describeSessionPullRequest,
+  describeSessionPullRequestReview,
   pickSessionPullRequest,
   sortSessionPullRequests,
 } from './sessionPullRequest';
@@ -63,6 +64,15 @@ describe('sortSessionPullRequests', () => {
 });
 
 describe('describeSessionPullRequest', () => {
+  it.each([
+    ['unresolved_threads', 'unresolved review threads', 'unresolved review threads', 'warn'],
+    ['waiting', 'in review', 'waiting on a reviewer', 'neutral'],
+  ])('describes watched review status %s', (review_status, summary, review, tone) => {
+    const watched = pr({ review_status, ci_status: 'success' });
+    expect(describeSessionPullRequest(watched)).toEqual({ label: summary, tone });
+    expect(describeSessionPullRequestReview(watched)).toEqual({ label: review, tone });
+  });
+
   it('reports the strongest blocker first', () => {
     expect(describeSessionPullRequest(pr({
       mergeable_state: 'dirty',

@@ -303,19 +303,23 @@ func TestWaitForPRActionableResetsAcrossHeadChangeAndSuppressesDuplicatePolls(t 
 }
 
 func TestWaitForPRActionableReturnsPromptlyOnChangesRequested(t *testing.T) {
-	head := strings.Repeat("c", 40)
-	observation := readinessObservation("12", head, checksGreen, "changes_requested")
-	source := &fakeReadinessSource{results: []*prReadiness{observation}}
+	for _, state := range []string{"changes_requested", prreadiness.ReviewUnresolved} {
+		t.Run(state, func(t *testing.T) {
+			head := strings.Repeat("c", 40)
+			observation := readinessObservation("12", head, checksGreen, state)
+			source := &fakeReadinessSource{results: []*prReadiness{observation}}
 
-	got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster"}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeChangesRequested || outcome.exitCode() != prWaitExitChangesRequested || got != observation {
-		t.Fatalf("got=%#v outcome=%s", got, outcome)
-	}
-	if source.calls != 1 {
-		t.Fatalf("polled %d times; changes_requested must return on the first observation", source.calls)
+			got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster"}, &bytes.Buffer{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if outcome != outcomeChangesRequested || outcome.exitCode() != prWaitExitChangesRequested || got != observation {
+				t.Fatalf("got=%#v outcome=%s", got, outcome)
+			}
+			if source.calls != 1 {
+				t.Fatalf("polled %d times; changes_requested must return on the first observation", source.calls)
+			}
+		})
 	}
 }
 

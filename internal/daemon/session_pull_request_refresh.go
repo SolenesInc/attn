@@ -124,7 +124,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 		host, ok := d.sessionPRHostFor(group.host)
 		if !ok {
 			d.logf("session pull requests: no GitHub client for host %s, %s stays as recorded", group.host, group.prID)
-			d.recordPullRequestWatchFailures(group, fmt.Errorf("GitHub monitoring is unavailable for host %s", group.host), now)
+			changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, fmt.Errorf("GitHub monitoring is unavailable for host %s", group.host), now)...)
 			d.markSessionPullRequestChecked(group.prID, now)
 			continue
 		}
@@ -144,7 +144,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 				continue
 			}
 			d.logf("session pull requests: refresh %s: %v", group.prID, err)
-			d.recordPullRequestWatchFailures(group, err, now)
+			changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 			d.markSessionPullRequestChecked(group.prID, now)
 			continue
 		}
@@ -161,7 +161,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			d.logf("session pull requests: store status for %s: %v", group.prID, updateErr)
 			continue
 		}
-		d.processPullRequestWatches(group, readiness, observedAt)
+		changedSessions = append(changedSessions, d.processPullRequestWatches(group, readiness, observedAt)...)
 		if status == group.previous {
 			continue
 		}
@@ -175,7 +175,12 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	d.broadcastSessionPullRequestLimits(limitedResources)
 	if len(changedSessions) > 0 {
 		d.coalesceSnapshots(func() {
+			seen := make(map[string]bool)
 			for _, sessionID := range changedSessions {
+				if seen[sessionID] {
+					continue
+				}
+				seen[sessionID] = true
 				d.publishFact(FactSessionPullRequestChanged, sessionID, nil)
 			}
 		})
@@ -420,7 +425,7 @@ func (d *Daemon) sessionPullRequestRecordsForArmedWatches(
 
 const pullRequestWatchFailureThreshold = 3
 
-func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, fetchErr error, now time.Time) {
+func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, fetchErr error, now time.Time) (changedSessions []string) {
 	d.sessionPullRequestWatchMu.Lock()
 	defer d.sessionPullRequestWatchMu.Unlock()
 	for _, watch := range group.watches {
@@ -433,14 +438,22 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			d.logf("pull request watch: record failure for %s/%s: %v", watch.SessionID, watch.PRID, err)
 			continue
 		}
-		if updated.FailureCount == pullRequestWatchFailureThreshold {
-			d.notifyPullRequestWatch(watch, "monitoring unavailable", []string{fetchErr.Error()}, now)
+		if updated.FailureCount >= pullRequestWatchFailureThreshold {
+			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
+				d.logf("pull request watch: clear stale status for %s/%s: %v", watch.SessionID, watch.PRID, err)
+				continue
+			}
+			id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+				"pull-request-outage", watch.SessionID, watch.PRID, watch.CreatedAt, updated.ErrorSince,
+			}, "\x00"))).String()
+			d.queuePullRequestWatchNotification(watch, id, "pull-request-outage:"+watch.PRID, "monitoring unavailable", []string{fetchErr.Error()}, now)
 		}
-		d.publishFact(FactSessionPullRequestChanged, watch.SessionID, sessionPullRequestFact{PRID: watch.PRID})
+		changedSessions = append(changedSessions, watch.SessionID)
 	}
+	return changedSessions
 }
 
-func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readiness *github.PullRequestReadiness, now time.Time) {
+func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readiness *github.PullRequestReadiness, now time.Time) (changedSessions []string) {
 	if readiness == nil {
 		return
 	}
@@ -452,6 +465,12 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			continue
 		}
 		watch = current
+		if watch.LastError != "" {
+			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, "pull-request-outage:"+watch.PRID); err != nil {
+				d.logf("pull request watch: clear recovered outage for %s/%s: %v", watch.SessionID, watch.PRID, err)
+				continue
+			}
+		}
 		evidence := readiness.Evidence
 		evidence.HeadObservedAt = pullRequestWatchHeadObservedAt(watch, readiness.Snapshot.HeadSHA, now)
 		evaluation := prreadiness.Evaluate(evidence, watch.Reviewer)
@@ -491,8 +510,9 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			}
 		}
 		d.refreshAgentMailboxUnread(watch.SessionID)
-		d.publishFact(FactSessionPullRequestChanged, watch.SessionID, sessionPullRequestFact{PRID: watch.PRID})
+		changedSessions = append(changedSessions, watch.SessionID)
 	}
+	return changedSessions
 }
 
 func pullRequestWatchHeadObservedAt(watch store.PullRequestWatch, head string, now time.Time) time.Time {

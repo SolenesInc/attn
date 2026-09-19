@@ -19,6 +19,7 @@ const (
 	ReviewApproved         = "approved"
 	ReviewChangesRequested = "changes_requested"
 	ReviewUnavailable      = "unavailable"
+	ReviewUnresolved       = "unresolved_threads"
 )
 
 type Finding struct {
@@ -93,7 +94,7 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 	reviewer = strings.TrimSuffix(strings.TrimSpace(reviewer), "[bot]")
 
 	for _, thread := range evidence.Threads {
-		if thread.Resolved || !sameActor(thread.Author, reviewer) {
+		if thread.Resolved {
 			continue
 		}
 		result.Unresolved = append(result.Unresolved, Finding{
@@ -178,7 +179,7 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 	}
 
 	if len(result.Unresolved) > 0 && result.ReviewState == ReviewApproved {
-		result.ReviewState = ReviewChangesRequested
+		result.ReviewState = ReviewUnresolved
 	}
 	result.Ready = strings.EqualFold(evidence.State, "open") && !evidence.Draft &&
 		strings.EqualFold(evidence.MergeableState, "clean") &&
