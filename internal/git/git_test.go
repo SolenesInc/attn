@@ -1,11 +1,31 @@
 package git
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
+
+func TestClientAndPackageWrappersAgree(t *testing.T) {
+	dir := t.TempDir()
+	runGit(t, dir, "init")
+	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
+
+	client := NewClient()
+	clientOutput, clientErr := client.Output(context.Background(), OpMetadata, dir, "rev-parse", "HEAD")
+	wrapperOutput, wrapperErr := Output(OpMetadata, dir, "rev-parse", "HEAD")
+	if clientErr != nil || wrapperErr != nil || string(clientOutput) != string(wrapperOutput) {
+		t.Fatalf("raw client=(%q, %v), wrapper=(%q, %v)", clientOutput, clientErr, wrapperOutput, wrapperErr)
+	}
+	clientInfo, clientErr := client.GetBranchInfo(context.Background(), dir)
+	wrapperInfo, wrapperErr := GetBranchInfo(dir)
+	if clientErr != nil || wrapperErr != nil || !reflect.DeepEqual(clientInfo, wrapperInfo) {
+		t.Fatalf("typed client=(%+v, %v), wrapper=(%+v, %v)", clientInfo, clientErr, wrapperInfo, wrapperErr)
+	}
+}
 
 func TestGetBranchInfo_MainRepo(t *testing.T) {
 	t.Parallel()

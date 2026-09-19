@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,6 +16,10 @@ func RepositoryCacheKey(identity string) string {
 }
 
 func ValidateLocalClone(path, expectedIdentity string) (string, error) {
+	return defaultClient.ValidateLocalClone(context.Background(), path, expectedIdentity)
+}
+
+func (c *Client) ValidateLocalClone(ctx context.Context, path, expectedIdentity string) (string, error) {
 	path = CanonicalizePath(path)
 	info, err := os.Stat(path)
 	if err != nil {
@@ -23,17 +28,17 @@ func ValidateLocalClone(path, expectedIdentity string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("local clone is not a directory: %s", path)
 	}
-	root, err := GetRepoRoot(path)
+	root, err := c.GetRepoRoot(ctx, path)
 	if err != nil || !sameDirectory(root, path) {
 		return "", fmt.Errorf("local clone is not a repository root: %s", path)
 	}
-	mainRepo := ResolveMainRepoPath(root)
-	host, ownerRepo := OriginHostOwnerRepo(mainRepo)
+	mainRepo := c.ResolveMainRepoPath(ctx, root)
+	host, ownerRepo, _ := c.OriginHostOwnerRepo(ctx, mainRepo)
 	identity := strings.ToLower(host + "/" + ownerRepo)
 	if identity != strings.ToLower(expectedIdentity) {
 		return "", fmt.Errorf("local clone origin mismatch: got %s want %s", identity, strings.ToLower(expectedIdentity))
 	}
-	remoteURL, err := runGitOutput(OpMetadata, mainRepo, "remote", "get-url", "origin")
+	remoteURL, err := c.Output(ctx, OpMetadata, mainRepo, "remote", "get-url", "origin")
 	if err != nil {
 		return "", fmt.Errorf("read local clone origin: %w", err)
 	}
@@ -65,8 +70,12 @@ func authorizationForGitURL(rawURL, authorization string) (string, error) {
 }
 
 func EnsureManagedClone(cloneURL, target, expectedIdentity, authorization string) (string, bool, error) {
+	return defaultClient.EnsureManagedClone(context.Background(), cloneURL, target, expectedIdentity, authorization)
+}
+
+func (c *Client) EnsureManagedClone(ctx context.Context, cloneURL, target, expectedIdentity, authorization string) (string, bool, error) {
 	if _, err := os.Stat(target); err == nil {
-		mainRepo, err := ValidateLocalClone(target, expectedIdentity)
+		mainRepo, err := c.ValidateLocalClone(ctx, target, expectedIdentity)
 		return mainRepo, false, err
 	} else if !os.IsNotExist(err) {
 		return "", false, fmt.Errorf("inspect managed clone: %w", err)
@@ -81,21 +90,25 @@ func EnsureManagedClone(cloneURL, target, expectedIdentity, authorization string
 	}
 	defer os.RemoveAll(stagingRoot)
 	staging := filepath.Join(stagingRoot, "repo")
-	if err := cloneWithHTTPAuthorization(cloneURL, staging, authorization); err != nil {
+	if err := c.cloneWithHTTPAuthorization(ctx, cloneURL, staging, authorization); err != nil {
 		return "", false, err
 	}
-	mainRepo, err := publishManagedClone(staging, target, expectedIdentity)
+	mainRepo, err := c.publishManagedClone(ctx, staging, target, expectedIdentity)
 	return mainRepo, err == nil, err
 }
 
 func publishManagedClone(staging, target, expectedIdentity string) (string, error) {
-	if _, err := ValidateLocalClone(staging, expectedIdentity); err != nil {
+	return defaultClient.publishManagedClone(context.Background(), staging, target, expectedIdentity)
+}
+
+func (c *Client) publishManagedClone(ctx context.Context, staging, target, expectedIdentity string) (string, error) {
+	if _, err := c.ValidateLocalClone(ctx, staging, expectedIdentity); err != nil {
 		return "", err
 	}
 	if err := os.Rename(staging, target); err != nil {
 		return "", fmt.Errorf("publish managed clone: %w", err)
 	}
-	mainRepo, err := ValidateLocalClone(target, expectedIdentity)
+	mainRepo, err := c.ValidateLocalClone(ctx, target, expectedIdentity)
 	if err != nil {
 		return "", fmt.Errorf("validate published managed clone: %w", err)
 	}

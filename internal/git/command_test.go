@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -37,6 +38,40 @@ func TestOutputContextReturnsCancellationCause(t *testing.T) {
 	cancel(cause)
 	_, err := OutputContext(ctx, OpMetadata, t.TempDir(), "status")
 	if !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want cancellation cause", err)
+	}
+}
+
+func TestClientCancellationStopsRunningGitChild(t *testing.T) {
+	fakeBin := t.TempDir()
+	readyFIFO := filepath.Join(t.TempDir(), "ready")
+	if err := syscall.Mkfifo(readyFIFO, 0o600); err != nil {
+		t.Fatalf("create ready fifo: %v", err)
+	}
+	fakeGit := filepath.Join(fakeBin, "git")
+	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf ready > \"$ATTN_GIT_TEST_READY_FIFO\"\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ATTN_GIT_TEST_READY_FIFO", readyFIFO)
+
+	cause := errors.New("cancel admitted operation")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
+		result <- err
+	}()
+
+	ready, err := os.ReadFile(readyFIFO)
+	if err != nil {
+		t.Fatalf("read child barrier: %v", err)
+	}
+	if strings.TrimSpace(string(ready)) != "ready" {
+		t.Fatalf("child barrier = %q, want ready", ready)
+	}
+	cancel(cause)
+	if err := <-result; !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want cancellation cause", err)
 	}
 }

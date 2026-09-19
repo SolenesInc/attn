@@ -1,16 +1,21 @@
 package git
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 func Clone(cloneURL, targetPath string) error {
-	return cloneWithHTTPAuthorization(cloneURL, targetPath, "")
+	return defaultClient.Clone(context.Background(), cloneURL, targetPath)
 }
 
-func cloneWithHTTPAuthorization(cloneURL, targetPath, authorization string) error {
+func (c *Client) Clone(ctx context.Context, cloneURL, targetPath string) error {
+	return c.cloneWithHTTPAuthorization(ctx, cloneURL, targetPath, "")
+}
+
+func (c *Client) cloneWithHTTPAuthorization(ctx context.Context, cloneURL, targetPath, authorization string) error {
 	targetPath = ExpandPath(targetPath)
 	var err error
 	authorization, err = authorizationForGitURL(cloneURL, authorization)
@@ -27,7 +32,7 @@ func cloneWithHTTPAuthorization(cloneURL, targetPath, authorization string) erro
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	if out, err := runGitCombinedWithHTTPAuthorization(OpClone, "", cloneURL, authorization, "clone", cloneURL, targetPath); err != nil {
+	if out, err := c.combinedWithHTTPAuthorization(ctx, OpClone, "", cloneURL, authorization, "clone", cloneURL, targetPath); err != nil {
 		return fmt.Errorf("git clone failed: %s", string(out))
 	}
 
@@ -35,13 +40,17 @@ func cloneWithHTTPAuthorization(cloneURL, targetPath, authorization string) erro
 }
 
 func EnsureRepo(cloneURL, targetPath string) (bool, error) {
+	return defaultClient.EnsureRepo(context.Background(), cloneURL, targetPath)
+}
+
+func (c *Client) EnsureRepo(ctx context.Context, cloneURL, targetPath string) (bool, error) {
 	targetPath = ExpandPath(targetPath)
 
-	if isGitRepo(targetPath) {
+	if c.isGitRepo(ctx, targetPath) {
 		return false, nil
 	}
 
-	if err := Clone(cloneURL, targetPath); err != nil {
+	if err := c.Clone(ctx, cloneURL, targetPath); err != nil {
 		return false, err
 	}
 

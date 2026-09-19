@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,6 +113,36 @@ EOF
 	}
 	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
 		t.Fatalf("git source dependency marker stat failed: %v", err)
+	}
+}
+
+func TestInstallSourceWithOptionsUsesInjectedGitClone(t *testing.T) {
+	installMarker, env := fakeBunEnvironment(t)
+	var gotSource string
+	manifest, err := InstallSourceWithOptionsContext(
+		context.Background(),
+		"https://example.com/team/plugin.git",
+		filepath.Join(t.TempDir(), "plugins"),
+		InstallOptions{
+			Env: env,
+			CloneGit: func(_ context.Context, source, target string, gotEnv []string) ([]byte, error) {
+				gotSource = source
+				if len(gotEnv) != len(env) {
+					t.Fatalf("clone env entries=%d, want %d", len(gotEnv), len(env))
+				}
+				writeTestPlugin(t, target, "injected-clone")
+				return nil, nil
+			},
+		},
+	)
+	if err != nil {
+		t.Fatalf("InstallSourceWithOptionsContext failed: %v", err)
+	}
+	if gotSource != "https://example.com/team/plugin.git" || manifest.Name != "injected-clone" {
+		t.Fatalf("source=%q manifest=%q", gotSource, manifest.Name)
+	}
+	if _, err := os.Stat(filepath.Join(manifest.Dir, installMarker)); err != nil {
+		t.Fatalf("injected clone dependency marker stat failed: %v", err)
 	}
 }
 

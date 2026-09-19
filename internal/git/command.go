@@ -26,6 +26,22 @@ const (
 	OpClone    Operation = "clone"
 )
 
+type commandRunner interface {
+	run(context.Context, Operation, time.Duration, string, io.Reader, bool, map[string]string, ...string) ([]byte, error)
+}
+
+type execCommandRunner struct{}
+
+type Client struct {
+	runner commandRunner
+}
+
+func NewClient() *Client {
+	return &Client{runner: execCommandRunner{}}
+}
+
+var defaultClient = NewClient()
+
 var (
 	logMu               sync.RWMutex
 	logf                func(format string, args ...interface{})
@@ -93,70 +109,71 @@ func setTimeoutForTesting(op Operation, timeout time.Duration) func() {
 }
 
 func runGitOutput(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, nil, false, args...)
+	return defaultClient.Output(context.Background(), op, dir, args...)
 }
 
 func OutputContext(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommandContext(ctx, op, dir, nil, false, args...)
+	return defaultClient.Output(ctx, op, dir, args...)
 }
 
 func Output(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitOutput(op, dir, args...)
+	return defaultClient.Output(context.Background(), op, dir, args...)
 }
 
 func OutputWithTimeout(op Operation, timeout time.Duration, dir string, args ...string) ([]byte, error) {
-	return runGitCommandWithTimeout(op, timeout, dir, nil, false, args...)
-}
-
-func runGitCombined(op Operation, dir string, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, nil, true, args...)
+	return defaultClient.OutputWithTimeout(context.Background(), op, timeout, dir, args...)
 }
 
 func runGitCombinedWithHTTPAuthorization(op Operation, dir, authorizationURL, authorization string, args ...string) ([]byte, error) {
+	return defaultClient.combinedWithHTTPAuthorization(context.Background(), op, dir, authorizationURL, authorization, args...)
+}
+
+func (c *Client) combinedWithHTTPAuthorization(ctx context.Context, op Operation, dir, authorizationURL, authorization string, args ...string) ([]byte, error) {
 	var err error
 	authorization, err = authorizationForGitURL(authorizationURL, authorization)
 	if err != nil {
 		return nil, err
 	}
-	return runGitCommandWithTimeoutAndEnv(op, defaultTimeout(op), dir, nil, true, gitHTTPAuthorizationEnv(authorizationURL, authorization), args...)
-}
-
-func runGitWithStdin(op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
-	return runGitCommand(op, dir, stdin, false, args...)
+	return c.run(ctx, op, defaultTimeout(op), dir, nil, true, gitHTTPAuthorizationEnv(authorizationURL, authorization), args...)
 }
 
 func OutputWithStdin(op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
-	return runGitWithStdin(op, dir, stdin, args...)
-}
-
-func runGitNoOutput(op Operation, dir string, args ...string) error {
-	_, err := runGitCommand(op, dir, nil, true, args...)
-	return err
+	return defaultClient.OutputWithStdin(context.Background(), op, dir, stdin, args...)
 }
 
 func NoOutputContext(ctx context.Context, op Operation, dir string, args ...string) error {
-	_, err := runGitCommandContext(ctx, op, dir, nil, true, args...)
+	return defaultClient.NoOutput(ctx, op, dir, args...)
+}
+
+func (c *Client) Output(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
+	return c.run(ctx, op, defaultTimeout(op), dir, nil, false, nil, args...)
+}
+
+func (c *Client) Combined(ctx context.Context, op Operation, dir string, args ...string) ([]byte, error) {
+	return c.run(ctx, op, defaultTimeout(op), dir, nil, true, nil, args...)
+}
+
+func (c *Client) NoOutput(ctx context.Context, op Operation, dir string, args ...string) error {
+	_, err := c.run(ctx, op, defaultTimeout(op), dir, nil, true, nil, args...)
 	return err
 }
 
-func runGitCommand(op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	timeout := defaultTimeout(op)
-	return runGitCommandWithTimeout(op, timeout, dir, stdin, combined, args...)
+func (c *Client) OutputWithStdin(ctx context.Context, op Operation, dir string, stdin io.Reader, args ...string) ([]byte, error) {
+	return c.run(ctx, op, defaultTimeout(op), dir, stdin, false, nil, args...)
 }
 
-func runGitCommandContext(ctx context.Context, op Operation, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	return runGitCommandWithContextAndEnv(ctx, op, defaultTimeout(op), dir, stdin, combined, nil, args...)
+func (c *Client) OutputWithTimeout(ctx context.Context, op Operation, timeout time.Duration, dir string, args ...string) ([]byte, error) {
+	return c.run(ctx, op, timeout, dir, nil, false, nil, args...)
 }
 
-func runGitCommandWithTimeout(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, args ...string) ([]byte, error) {
-	return runGitCommandWithTimeoutAndEnv(op, timeout, dir, stdin, combined, nil, args...)
+func (c *Client) run(ctx context.Context, op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
+	if c == nil || c.runner == nil {
+		return nil, errors.New("git client has no command runner")
+	}
+	return c.runner.run(ctx, op, timeout, dir, stdin, combined, env, args...)
 }
 
-func runGitCommandWithTimeoutAndEnv(op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
-	return runGitCommandWithContextAndEnv(context.Background(), op, timeout, dir, stdin, combined, env, args...)
-}
-
-func runGitCommandWithContextAndEnv(parent context.Context, op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
+func (execCommandRunner) run(parent context.Context, op Operation, timeout time.Duration, dir string, stdin io.Reader, combined bool, env map[string]string, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(parent, timeout)
 	defer cancel()
 

@@ -9,8 +9,12 @@ import (
 )
 
 func ResolveRepoDir(repoDir string) (string, error) {
+	return defaultClient.ResolveRepoDir(context.Background(), repoDir)
+}
+
+func (c *Client) ResolveRepoDir(ctx context.Context, repoDir string) (string, error) {
 	expanded := ExpandPath(repoDir)
-	if isGitRepo(expanded) {
+	if c.isGitRepo(ctx, expanded) {
 		return expanded, nil
 	}
 
@@ -33,10 +37,10 @@ func ResolveRepoDir(repoDir string) (string, error) {
 			continue
 		}
 		candidate := filepath.Join(parent, entry.Name(), base)
-		if !isGitRepo(candidate) {
+		if !c.isGitRepo(ctx, candidate) {
 			continue
 		}
-		originName := originRepoName(candidate)
+		originName := c.originRepoName(ctx, candidate)
 		switch {
 		case originName == base:
 			originMatches = append(originMatches, candidate)
@@ -67,8 +71,8 @@ func ResolveRepoDir(repoDir string) (string, error) {
 	}
 }
 
-func originRepoName(path string) string {
-	out, err := runGitOutput(OpMetadata, path, "remote", "get-url", "origin")
+func (c *Client) originRepoName(ctx context.Context, path string) string {
+	out, err := c.Output(ctx, OpMetadata, path, "remote", "get-url", "origin")
 	if err != nil {
 		return ""
 	}
@@ -76,17 +80,21 @@ func originRepoName(path string) string {
 }
 
 func OriginOwnerRepo(path string) string {
-	_, slug := OriginHostOwnerRepo(path)
+	_, slug, _ := defaultClient.OriginHostOwnerRepo(context.Background(), path)
 	return slug
 }
 
 func OriginHostOwnerRepo(path string) (host, ownerRepo string) {
-	host, ownerRepo, _ = OriginHostOwnerRepoContext(context.Background(), path)
+	host, ownerRepo, _ = defaultClient.OriginHostOwnerRepo(context.Background(), path)
 	return host, ownerRepo
 }
 
 func OriginHostOwnerRepoContext(ctx context.Context, path string) (host, ownerRepo string, err error) {
-	out, err := OutputContext(ctx, OpMetadata, path, "remote", "get-url", "origin")
+	return defaultClient.OriginHostOwnerRepo(ctx, path)
+}
+
+func (c *Client) OriginHostOwnerRepo(ctx context.Context, path string) (host, ownerRepo string, err error) {
+	out, err := c.Output(ctx, OpMetadata, path, "remote", "get-url", "origin")
 	if err != nil {
 		return "", "", err
 	}
@@ -147,7 +155,11 @@ func repoNameFromRemote(remote string) string {
 }
 
 func RemoteHostOwnerRepos(dir string) []string {
-	out, err := runGitOutput(OpMetadata, dir, "remote", "-v")
+	return defaultClient.RemoteHostOwnerRepos(context.Background(), dir)
+}
+
+func (c *Client) RemoteHostOwnerRepos(ctx context.Context, dir string) []string {
+	out, err := c.Output(ctx, OpMetadata, dir, "remote", "-v")
 	if err != nil {
 		return nil
 	}
