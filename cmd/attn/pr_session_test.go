@@ -11,10 +11,25 @@ func TestPRHelpNamesTheSessionCommands(t *testing.T) {
 	if code := executePRCommand([]string{"--help"}, &stdout, &stdout); code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	for _, want := range []string{"record <url>", "ls [--session", "forget <url>", "wait-ready"} {
+	for _, want := range []string{"record <url>", "ls [--session", "forget <url>", "wait-ready", "watch <url>", "unwatch <url>", "status [url]"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("help does not mention %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestPullRequestWatchArgsDefaultToCodexAndStatusAllowsNoURL(t *testing.T) {
+	t.Setenv("ATTN_SESSION_ID", "session")
+	watch, err := parseSessionPRArgs("watch", []string{"https://github.com/o/r/pull/1"})
+	if err != nil {
+		t.Fatalf("parse watch: %v", err)
+	}
+	if watch.reviewer != defaultPRWatchReviewer {
+		t.Fatalf("reviewer = %q, want %q", watch.reviewer, defaultPRWatchReviewer)
+	}
+	status, err := parseSessionPRArgs("status", nil)
+	if err != nil || status.url != "" {
+		t.Fatalf("parse status = %+v, %v", status, err)
 	}
 }
 

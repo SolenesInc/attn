@@ -114,6 +114,13 @@ describe('SessionProvenance', () => {
     expect(screen.getByText('checks failed')).toBeInTheDocument();
   });
 
+  it('shows watching separately from review and CI state', () => {
+    render(<SessionProvenance pullRequests={[pr({ watching: true, ci_status: 'pending' })]} />);
+
+    expect(screen.getByText('checks running')).toBeInTheDocument();
+    expect(screen.getByText('Watching')).toBeInTheDocument();
+  });
+
   it('shows the newest open PR, not the newer merged one', () => {
     render(<SessionProvenance pullRequests={[
       pr({ number: 74, state: 'merged', created_at: '2026-08-30T14:00:00Z' }),

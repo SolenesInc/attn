@@ -430,6 +430,9 @@ function pullRequestLineParts(
     ),
     <span key="pr-status" className="session-provenance__status" data-tone={tone}>{label}</span>,
   ];
+  if (pullRequest.watching) {
+    parts.push(<span key="pr-watching" className="session-provenance__status">Watching</span>);
+  }
   if (pullRequest.title) {
     parts.push(<span key="pr-title" className="session-provenance__title">{pullRequest.title}</span>);
   }

@@ -18,6 +18,8 @@ type prWaitCursor struct {
 	VerdictAt     time.Time `json:"verdict_at,omitempty"`
 	FailureHead   string    `json:"failure_head,omitempty"`
 	FailureChecks []string  `json:"failure_checks,omitempty"`
+	ReactionHead  string    `json:"reaction_head,omitempty"`
+	ReactionAfter time.Time `json:"reaction_after,omitempty"`
 	UpdatedAt     time.Time `json:"updated_at,omitempty"`
 }
 
@@ -29,9 +31,17 @@ func (c prWaitCursor) MarshalJSON() ([]byte, error) {
 		VerdictAt     *time.Time `json:"verdict_at,omitempty"`
 		FailureHead   string     `json:"failure_head,omitempty"`
 		FailureChecks []string   `json:"failure_checks,omitempty"`
+		ReactionHead  string     `json:"reaction_head,omitempty"`
+		ReactionAfter *time.Time `json:"reaction_after,omitempty"`
 		UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 	}
-	out := payload{CommentIDs: c.CommentIDs, FailureHead: c.FailureHead, FailureChecks: c.FailureChecks}
+	out := payload{
+		CommentIDs: c.CommentIDs, FailureHead: c.FailureHead, FailureChecks: c.FailureChecks,
+		ReactionHead: c.ReactionHead,
+	}
+	if !c.ReactionAfter.IsZero() {
+		out.ReactionAfter = &c.ReactionAfter
+	}
 	if !c.VerdictAt.IsZero() {
 		out.VerdictAt = &c.VerdictAt
 	}
@@ -42,7 +52,7 @@ func (c prWaitCursor) MarshalJSON() ([]byte, error) {
 }
 
 func (c prWaitCursor) empty() bool {
-	return len(c.CommentIDs) == 0 && c.VerdictAt.IsZero() && c.FailureHead == ""
+	return len(c.CommentIDs) == 0 && c.VerdictAt.IsZero() && c.FailureHead == "" && c.ReactionHead == ""
 }
 
 func (c prWaitCursor) seenComments() map[string]bool {

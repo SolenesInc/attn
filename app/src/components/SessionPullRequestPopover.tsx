@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
+import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import {
@@ -60,6 +61,7 @@ export function SessionPullRequestPopover({
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(anchor);
   const [selected, setSelected] = useState(0);
+  const daemonApi = useOptionalDaemonApi();
 
   // Escape only belongs to a popover the user clicked into. A hover popover
   // that grabbed it would eat the terminal's Escape, which agents live on.
@@ -185,7 +187,38 @@ export function SessionPullRequestPopover({
               .filter(Boolean).join(' · ')}
           </span>
         </dd>
+        {current.watching && (
+          <>
+            <dt>watching</dt>
+            <dd>
+              <span className="session-pr-popover__value">
+                {(current.watch_recipients ?? []).join(', ') || 'this session'}
+              </span>
+            </dd>
+            <dt>last check</dt>
+            <dd>
+              <span className="session-pr-popover__value">
+                {current.watch_error
+                  ? `delayed · ${current.watch_error}`
+                  : current.watch_last_checked_at
+                    ? formatAge(current.watch_last_checked_at)
+                    : 'waiting for first check'}
+              </span>
+            </dd>
+          </>
+        )}
       </dl>
+
+      {current.watching && (
+        <button
+          type="button"
+          className="session-pr-popover__stop-watch"
+          disabled={!daemonApi || !current.session_id}
+          onClick={() => current.session_id && daemonApi?.sendPullRequestUnwatch(current.session_id, current.url)}
+        >
+          Stop watching for this session
+        </button>
+      )}
 
       {pullRequests.length > 1 && (
         <ul className="session-pr-popover__list" aria-label="Pull requests from this session">

@@ -240,6 +240,18 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 	return err
 }
 
+func (s *Store) UpdateSessionPullRequestReviewStatus(sessionID, prID, reviewStatus string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+	_, err := s.db.Exec(
+		`UPDATE session_pull_requests SET review_status = ? WHERE session_id = ? AND pr_id = ?`,
+		reviewStatus, sessionID, prID)
+	return err
+}
+
 func (s *Store) MarkSessionPullRequestChecked(prID string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

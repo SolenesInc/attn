@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type fakeReadinessSource struct {
@@ -212,6 +214,33 @@ func TestParsePRSnapshotFailsClosedOnReviewCommentTruncation(t *testing.T) {
 	if _, err := parsePRSnapshot(snapshotPayload(head, "", truncated, ""), prWaitOptions{Reviewer: "figgyster"}); err == nil ||
 		!strings.Contains(err.Error(), "without truncation") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestParsePRSnapshotFailsClosedOnBackwardConnectionTruncation(t *testing.T) {
+	payload := string(snapshotPayload("abc", "", "", ""))
+	reviews := strings.Replace(payload, `"reviews":{"nodes"`, `"reviews":{"pageInfo":{"hasPreviousPage":true},"nodes"`, 1)
+	if _, err := parsePRSnapshot([]byte(reviews), prWaitOptions{Reviewer: "r"}); err == nil ||
+		!strings.Contains(err.Error(), "verification window") {
+		t.Fatalf("reviews error = %v", err)
+	}
+	comments := strings.Replace(payload, `"comments":{"nodes"`, `"comments":{"pageInfo":{"hasPreviousPage":true},"nodes"`, 1)
+	if _, err := parsePRSnapshot([]byte(comments), prWaitOptions{Reviewer: "r"}); err == nil ||
+		!strings.Contains(err.Error(), "verification window") {
+		t.Fatalf("comments error = %v", err)
+	}
+}
+
+func TestParsePRSnapshotNormalizesBotReviewerFindings(t *testing.T) {
+	head := strings.Repeat("a", 40)
+	review := reviewNode("r1", "COMMENTED", "", "2026-07-19T10:00:00Z", "chatgpt-codex-connector", head,
+		`{"id":"finding","createdAt":"2026-07-19T10:00:00Z","bodyText":"Fix the guard.","path":"watch.go","line":42,"author":{"__typename":"Bot","login":"chatgpt-codex-connector"}}`)
+	readiness, err := parsePRSnapshot(snapshotPayload(head, "", review, ""), prWaitOptions{Reviewer: "chatgpt-codex-connector[bot]"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if readiness.ReviewState != prreadiness.ReviewChangesRequested {
+		t.Fatalf("review state = %q, want findings", readiness.ReviewState)
 	}
 }
 

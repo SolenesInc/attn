@@ -1,0 +1,3 @@
+kind: added
+area: pull requests
+change: Let agents arm durable PR readiness watches that surface exact-head Codex feedback through their inbox and existing PR status UI.
