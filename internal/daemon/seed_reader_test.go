@@ -238,6 +238,31 @@ func TestOpenSeedWSWithoutPlacementReturnsAStandaloneTile(t *testing.T) {
 	}
 }
 
+func TestOpenSeedWSStandaloneIgnoresTheSelectedSession(t *testing.T) {
+	d := newGardenDaemon(t)
+	_, _, workspaceID := setupMarkdownWorkspaceOn(t, d)
+	d.setSelectedSession("session-1")
+	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Open for an asleep member"})
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handleOpenSeedWS(client, &protocol.OpenSeedMessage{
+		Cmd: protocol.CmdOpenSeed, SeedID: seed.ID, Standalone: protocol.Ptr(true), RequestID: protocol.Ptr("open-standalone"),
+	})
+	var result protocol.OpenSeedResultMessage
+	message := <-client.send
+	if err := json.Unmarshal(message.payload, &result); err != nil {
+		t.Fatal(err)
+	}
+	if !result.Success || protocol.Deref(result.WorkspaceID) == "" || protocol.Deref(result.WorkspaceID) == workspaceID {
+		t.Fatalf("standalone open docked into the selected session's workspace: %+v", result)
+	}
+	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot == nil || snapshot.Layout.Type == "tile" {
+		t.Fatalf("the selected session's workspace changed: %+v", snapshot)
+	}
+	if !isStandaloneSeedReader(d.store.GetWorkspaceLayout(protocol.Deref(result.WorkspaceID)), seedTileIDForID(seed.ID)) {
+		t.Fatalf("workspace %s is not a standalone reader", protocol.Deref(result.WorkspaceID))
+	}
+}
+
 func TestConcurrentMarkdownAndSeedOpenPreservesBothTiles(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, _, workspaceID := setupMarkdownWorkspaceOn(t, d)

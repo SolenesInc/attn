@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { type SeedReviewActionContext } from '../hooks/useDaemonSocket';
+import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useDaemonStore } from '../store/daemonSessions';
@@ -49,10 +49,10 @@ export function useAppGardenActions({
   const openSeedTile = useCallback(
     async (
       seedId: string,
+      placement: SeedPlacement,
       beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
-      placementSessionId?: string,
     ) => {
-      const opened = await sendOpenSeed(seedId, placementSessionId || activeSessionId || '');
+      const opened = await sendOpenSeed(seedId, placement);
       if (!opened.workspaceId || !opened.tileId) {
         throw new Error(`The daemon opened ${seedId} without a workspace tile`);
       }
@@ -61,27 +61,27 @@ export function useAppGardenActions({
       handleSelectTile(workspaceId, tileId);
       return opened;
     },
-    [sendOpenSeed, activeSessionId, handleSelectTile],
+    [sendOpenSeed, handleSelectTile],
   );
 
   const handleOpenSeedTile = useCallback(
     (seedId: string) => {
-      void openSeedTile(seedId).catch((error) => {
+      void openSeedTile(seedId, { sessionId: activeSessionId || '' }).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });
     },
-    [openSeedTile, showError],
+    [activeSessionId, openSeedTile, showError],
   );
 
   const handleOpenSeedFromCrew = useCallback(
     (seedId: string, placementSessionId?: string) => {
       void openSeedTile(
         seedId,
+        placementSessionId ? { sessionId: placementSessionId } : 'standalone',
         (opened) => {
           setCrewSeedTile(opened);
           closeCrewPanel();
         },
-        placementSessionId,
       ).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });

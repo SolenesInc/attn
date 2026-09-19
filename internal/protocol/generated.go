@@ -6186,6 +6186,9 @@ type OpenSeedMessage struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID *string `json:"session_id,omitempty,omitzero"`
+
+	// Standalone corresponds to the JSON schema field "standalone".
+	Standalone *bool `json:"standalone,omitempty,omitzero"`
 }
 
 type OpenSeedResultMessage struct {

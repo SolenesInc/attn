@@ -2767,6 +2767,7 @@ model OpenSeedMessage {
   cmd: "open_seed";
   seed_id: string;
   session_id?: string;
+  standalone?: boolean;
   request_id?: string;
 }
 

@@ -561,12 +561,16 @@ func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMes
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
+func (d *Daemon) seedPlacementSession(msg *protocol.OpenSeedMessage) string {
 	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" {
+	if placementSessionID == "" && !protocol.Deref(msg.Standalone) {
 		placementSessionID = d.currentlySelectedSession()
 	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, placementSessionID)
+	return placementSessionID
+}
+
+func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
+	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
@@ -647,11 +651,7 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 		SeedID:    strings.TrimSpace(msg.SeedID),
 		Success:   true,
 	}
-	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" {
-		placementSessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, placementSessionID)
+	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())

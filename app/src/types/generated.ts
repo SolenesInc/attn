@@ -6346,6 +6346,7 @@ export interface OpenSeedMessage {
     request_id?: string;
     seed_id:     string;
     session_id?: string;
+    standalone?: boolean;
     [property: string]: any;
 }
 
@@ -20432,6 +20433,7 @@ const typeMap: any = {
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "seed_id", js: "seed_id", typ: "" },
         { json: "session_id", js: "session_id", typ: u(undefined, "") },
+        { json: "standalone", js: "standalone", typ: u(undefined, true) },
     ], "any"),
     "OpenSeedResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },

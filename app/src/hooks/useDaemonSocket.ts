@@ -198,6 +198,8 @@ export interface CrewSetOptions {
   model: string;
   effort: string;
 }
+export type SeedPlacement = 'standalone' | { sessionId: string };
+
 export interface CrewRestartOptions {
   member: string;
   requestId: string;
@@ -310,7 +312,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '313';
+export const PROTOCOL_VERSION = '314';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -3743,7 +3745,7 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const sendOpenSeed = useCallback((seedId: string, sessionId = ''): Promise<{ workspaceId?: string; tileId?: string }> => {
+  const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ workspaceId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3757,7 +3759,7 @@ export function useDaemonSocket({
         cmd: 'open_seed',
         request_id: requestId,
         seed_id: seedId,
-        ...(sessionId ? { session_id: sessionId } : {}),
+        ...(placement === 'standalone' ? { standalone: true } : placement.sessionId ? { session_id: placement.sessionId } : {}),
       }));
       setTimeout(() => {
         if (pendingActionsRef.current.has(key)) {
