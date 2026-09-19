@@ -465,7 +465,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			d.refreshAgentMailboxUnread(watch.SessionID)
 		}
 
-		kind, details := pullRequestWatchAction(readiness, evaluation, watch)
+		kind, details, feedbackSeenAt, feedbackSeenIDs := pullRequestWatchAction(readiness, evaluation, watch)
 		key := ""
 		if kind != "" {
 			key = prreadiness.Fingerprint(kind, readiness.Snapshot.HeadSHA, details)
@@ -476,7 +476,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			d.logf("pull request watch: clear inactive inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
 		if err := d.store.RecordPullRequestWatchSuccess(
-			watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA, key, now,
+			watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA, key, feedbackSeenAt, feedbackSeenIDs, now,
 		); err != nil {
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
@@ -508,18 +508,11 @@ func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {
 
 func pullRequestWatchAction(
 	readiness *github.PullRequestReadiness, evaluation prreadiness.Evaluation, watch store.PullRequestWatch,
-) (string, []string) {
+) (string, []string, time.Time, []string) {
+	feedback, feedbackSeenAt, feedbackSeenIDs := pullRequestWatchFeedback(readiness.Evidence, watch)
 	if readiness.Snapshot.State != sessionPullRequestOpen {
 		state := sessionPullRequestStateFromSnapshot(readiness.Snapshot)
-		return state, []string{"pull request is " + state}
-	}
-	createdAt, _ := time.Parse(time.RFC3339Nano, watch.CreatedAt)
-	var feedback []string
-	for _, comment := range readiness.Evidence.Comments {
-		if !comment.CreatedAt.After(createdAt) || comment.Bot || samePullRequestWatchActor(comment.Author, watch.Reviewer) {
-			continue
-		}
-		feedback = append(feedback, comment.Author+": "+strings.TrimSpace(comment.Body))
+		return state, []string{"pull request is " + state}, feedbackSeenAt, feedbackSeenIDs
 	}
 	var kinds []string
 	var details []string
@@ -557,7 +550,37 @@ func pullRequestWatchAction(
 		kinds = append(kinds, "human feedback")
 		details = append(details, feedback...)
 	}
-	return strings.Join(kinds, " and "), details
+	return strings.Join(kinds, " and "), details, feedbackSeenAt, feedbackSeenIDs
+}
+
+func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]string, time.Time, []string) {
+	seenAt, err := time.Parse(time.RFC3339Nano, watch.FeedbackSeenAt)
+	if err != nil {
+		seenAt, _ = time.Parse(time.RFC3339Nano, watch.CreatedAt)
+	}
+	seenIDs := make(map[string]bool, len(watch.FeedbackSeenIDs))
+	for _, id := range watch.FeedbackSeenIDs {
+		seenIDs[id] = true
+	}
+	nextAt := seenAt
+	nextIDs := append([]string(nil), watch.FeedbackSeenIDs...)
+	var feedback []string
+	for _, comment := range evidence.Comments {
+		if comment.Bot || samePullRequestWatchActor(comment.Author, watch.Reviewer) || comment.CreatedAt.Before(seenAt) ||
+			(comment.CreatedAt.Equal(seenAt) && seenIDs[comment.ID]) {
+			continue
+		}
+		feedback = append(feedback, comment.Author+": "+strings.TrimSpace(comment.Body))
+		switch {
+		case comment.CreatedAt.After(nextAt):
+			nextAt = comment.CreatedAt
+			nextIDs = []string{comment.ID}
+		case comment.CreatedAt.Equal(nextAt):
+			nextIDs = append(nextIDs, comment.ID)
+		}
+	}
+	sort.Strings(nextIDs)
+	return feedback, nextAt, nextIDs
 }
 
 func (d *Daemon) notifyPullRequestWatch(watch store.PullRequestWatch, kind string, details []string, now time.Time) {

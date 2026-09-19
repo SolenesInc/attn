@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"time"
 )
@@ -18,10 +19,13 @@ type PullRequestWatch struct {
 	LastError          string
 	ErrorSince         string
 	FailureCount       int
+	FeedbackSeenAt     string
+	FeedbackSeenIDs    []string
 }
 
 const pullRequestWatchColumns = `session_id, pr_id, reviewer, created_at,
-	last_head_sha, head_observed_at, last_observation_key, last_success_at, last_error, error_since, failure_count`
+	last_head_sha, head_observed_at, last_observation_key, last_success_at, last_error, error_since, failure_count,
+	feedback_seen_at, feedback_seen_ids`
 
 func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time) (bool, error) {
 	s.mu.Lock()
@@ -38,8 +42,8 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 		return false, err
 	}
 	_, err = s.db.Exec(`
-		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at, feedback_seen_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(session_id, pr_id) DO UPDATE SET
 			reviewer = excluded.reviewer,
 			created_at = excluded.created_at,
@@ -49,8 +53,10 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 			last_success_at = '',
 			last_error = '',
 			error_since = '',
-			failure_count = 0
-	`, sessionID, prID, reviewer, at.UTC().Format(sortableTimeFormat))
+			failure_count = 0,
+			feedback_seen_at = excluded.feedback_seen_at,
+			feedback_seen_ids = '[]'
+	`, sessionID, prID, reviewer, at.UTC().Format(sortableTimeFormat), at.UTC().Format(sortableTimeFormat))
 	if err != nil {
 		return false, err
 	}
@@ -107,26 +113,29 @@ func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool
 	if s.db == nil {
 		return PullRequestWatch{}, false
 	}
-	var watch PullRequestWatch
-	err := s.db.QueryRow(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID).Scan(
-		&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
-		&watch.LastHeadSHA, &watch.HeadObservedAt, &watch.LastObservationKey, &watch.LastSuccessAt,
-		&watch.LastError, &watch.ErrorSince, &watch.FailureCount,
-	)
+	watch, err := scanPullRequestWatch(s.db.QueryRow(
+		`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID))
 	return watch, err == nil
 }
 
-func (s *Store) RecordPullRequestWatchSuccess(sessionID, prID, headSHA, observationKey string, at time.Time) error {
+func (s *Store) RecordPullRequestWatchSuccess(
+	sessionID, prID, headSHA, observationKey string, feedbackSeenAt time.Time, feedbackSeenIDs []string, at time.Time,
+) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	_, err := s.db.Exec(`
+	feedbackIDsJSON, err := json.Marshal(feedbackSeenIDs)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
 		UPDATE pull_request_watches
 		SET head_observed_at = CASE WHEN last_head_sha != ? OR head_observed_at = '' THEN ? ELSE head_observed_at END,
 		    last_head_sha = ?, last_observation_key = ?, last_success_at = ?,
-		    last_error = '', error_since = '', failure_count = 0
+		    last_error = '', error_since = '', failure_count = 0,
+		    feedback_seen_at = ?, feedback_seen_ids = ?
 		WHERE session_id = ? AND pr_id = ?
 	`, headSHA, at.UTC().Format(sortableTimeFormat), headSHA, observationKey,
-		at.UTC().Format(sortableTimeFormat), sessionID, prID)
+		at.UTC().Format(sortableTimeFormat), feedbackSeenAt.UTC().Format(sortableTimeFormat), string(feedbackIDsJSON), sessionID, prID)
 	return err
 }
 
@@ -143,24 +152,37 @@ func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, message string, a
 	if err != nil {
 		return PullRequestWatch{}, err
 	}
+	watch, err := scanPullRequestWatch(s.db.QueryRow(
+		`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID))
+	return watch, err
+}
+
+type pullRequestWatchScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
-	err = s.db.QueryRow(`SELECT `+pullRequestWatchColumns+` FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID).Scan(
+	var feedbackSeenIDs string
+	err := row.Scan(
 		&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
 		&watch.LastHeadSHA, &watch.HeadObservedAt, &watch.LastObservationKey, &watch.LastSuccessAt,
-		&watch.LastError, &watch.ErrorSince, &watch.FailureCount,
+		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &watch.FeedbackSeenAt, &feedbackSeenIDs,
 	)
-	return watch, err
+	if err != nil {
+		return PullRequestWatch{}, err
+	}
+	if err := json.Unmarshal([]byte(feedbackSeenIDs), &watch.FeedbackSeenIDs); err != nil {
+		return PullRequestWatch{}, err
+	}
+	return watch, nil
 }
 
 func scanPullRequestWatches(rows *sql.Rows) ([]PullRequestWatch, error) {
 	var watches []PullRequestWatch
 	for rows.Next() {
-		var watch PullRequestWatch
-		if err := rows.Scan(
-			&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
-			&watch.LastHeadSHA, &watch.HeadObservedAt, &watch.LastObservationKey, &watch.LastSuccessAt,
-			&watch.LastError, &watch.ErrorSince, &watch.FailureCount,
-		); err != nil {
+		watch, err := scanPullRequestWatch(rows)
+		if err != nil {
 			return nil, err
 		}
 		watches = append(watches, watch)

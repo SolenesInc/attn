@@ -493,6 +493,40 @@ func TestPullRequestWatchReportsHumanFeedbackAfterReady(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchDoesNotRepeatHumanFeedbackOnNewHead(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	now := time.Now()
+	readiness := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+	readiness.Evidence.Comments = []prreadiness.Comment{{
+		ID: "human-1", Author: "reviewer", Body: "Please check the retry path.", CreatedAt: now.Add(time.Second),
+	}}
+	host := &fakePRHost{readiness: readiness}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now)
+	if deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now.Add(2*time.Second)); err != nil || len(deliveries) != 1 {
+		t.Fatalf("read first feedback = %+v, %v", deliveries, err)
+	}
+
+	host.readiness = watchedReadiness("sha-2", prreadiness.ChecksPending, "")
+	host.readiness.Evidence.Comments = readiness.Evidence.Comments
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("old feedback repeated on new head: %+v, %v", unread, err)
+	}
+
+	host.readiness.Evidence.Comments = append(host.readiness.Evidence.Comments, prreadiness.Comment{
+		ID: "human-2", Author: "reviewer", Body: "The new head needs another guard.", CreatedAt: now.Add(2 * time.Second),
+	})
+	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "another guard") ||
+		strings.Contains(unread[0].Item.Prompt, "retry path") {
+		t.Fatalf("new feedback delivery = %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchIgnoresFetchedObservationAfterUnwatch(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"

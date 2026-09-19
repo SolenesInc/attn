@@ -1264,6 +1264,10 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		CREATE INDEX IF NOT EXISTS idx_pull_request_watches_pr
 			ON pull_request_watches(pr_id, session_id);
 	`},
+	{151, "remember delivered pull request feedback", `
+		ALTER TABLE pull_request_watches ADD COLUMN feedback_seen_at TEXT NOT NULL DEFAULT '';
+		ALTER TABLE pull_request_watches ADD COLUMN feedback_seen_ids TEXT NOT NULL DEFAULT '[]';
+	`},
 }
 
 const migration99SQL = `
