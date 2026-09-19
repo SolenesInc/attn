@@ -452,7 +452,7 @@ func TestApps_CommitVersionRefusesAnIncompleteRow(t *testing.T) {
 
 func TestApps_MigrationCarriesTheRecordedPredecessorIntoTheChain(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -460,7 +460,7 @@ func TestApps_MigrationCarriesTheRecordedPredecessorIntoTheChain(t *testing.T) {
 	older, newer := seedApps(t, s, now)
 	s.Close()
 
-	db, err := OpenDB(path)
+	db, err := openSeededDB(path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -480,7 +480,7 @@ func TestApps_MigrationCarriesTheRecordedPredecessorIntoTheChain(t *testing.T) {
 	}
 	db.Close()
 
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatalf("reopen after rewind: %v", err)
 	}

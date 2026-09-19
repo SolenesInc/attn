@@ -11,7 +11,6 @@ import (
 	"time"
 )
 
-// bufio.Scanner's token size limit would truncate long transcript lines.
 func readJSONLLines(r io.Reader, fn func(line []byte)) error {
 	br := bufio.NewReader(r)
 	for {
@@ -36,7 +35,6 @@ type contentBlock struct {
 	Text string `json:"text"`
 }
 
-// Claude Code writes message.content as an array of content blocks, not a string.
 type transcriptEntry struct {
 	Type    string `json:"type"`
 	UUID    string `json:"uuid"`
@@ -305,30 +303,21 @@ func ExtractCopilotToolLifecycle(line []byte) (CopilotToolLifecycle, bool) {
 	}
 }
 
-// No agent reports a turn the user halted: measured on claude 2.1.220 (all 31 hook events),
-// codex 0.146.0 and copilot 1.0.77, ESC writes the abort only to the transcript.
 const (
-	// Matched exactly: a user is free to type the text.
 	claudeInterruptMarker           = "[Request interrupted by user]"
 	claudeInterruptMarkerForToolUse = "[Request interrupted by user for tool use]"
 	copilotUserAbortReason          = "user_initiated"
-	// The 0.146.0 enum also carries `replaced`, `review_ended`, and `budget_limited`,
-	// none of which are halts: after `replaced` the session works again a moment later.
-	codexUserAbortReason = "interrupted"
+	codexUserAbortReason            = "interrupted"
 )
 
 type TurnAbort struct {
 	Reason string
 
-	// Only a user halt settles a session; the other abandonments are the harness's
-	// business and some are followed by another turn.
 	UserHalt bool
 
 	At time.Time
 }
 
-// `interruptedMessageId` is believed on its own; the tool-use marker is honored solely in the
-// exact shape claude emits it, so a user who types it cannot settle their own session.
 func ClaudeTurnAborted(line []byte) (TurnAbort, bool) {
 	var entry struct {
 		Type                 string          `json:"type"`
@@ -369,7 +358,6 @@ func ClaudeTurnAborted(line []byte) (TurnAbort, bool) {
 	return abort, true
 }
 
-// The array is required — a marker the user typed arrives as a plain string.
 func claudeInterruptMarkerBlock(raw json.RawMessage) (string, bool) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || trimmed[0] != '[' {
@@ -417,8 +405,6 @@ func CodexTurnAborted(line []byte) (TurnAbort, bool) {
 	}, true
 }
 
-// Copilot writes a bare top-level `abort` event and no `assistant.turn_end`, so every abort
-// must be seen, or the watcher's turn bracket stays open and pins the session working.
 func CopilotTurnAborted(line []byte) (TurnAbort, bool) {
 	var entry struct {
 		Type      string `json:"type"`

@@ -10,15 +10,9 @@ import (
 	"time"
 )
 
-// `bun x tsc` re-resolves the package on every run, measured at 2.1s against 0.77s for
-// a direct exec of an installed compiler; per-app installs cost ~30MB each.
-
 const (
-	// Must match the frontend's version so one repo has one TypeScript.
 	TypeScriptVersion = "5.8.3"
 
-	// Must match the version the frontend resolves; TestReactTypesPinMatchesTheFrontend
-	// fails when the two drift.
 	ReactTypesVersion = "19.2.7"
 
 	toolchainDirName = "toolchain"
@@ -30,8 +24,6 @@ func toolchainPins() string {
 	return fmt.Sprintf("typescript@%s @types/react@%s", TypeScriptVersion, ReactTypesVersion)
 }
 
-// DefaultNPMRegistry is set explicitly rather than inherited: an exported
-// NPM_CONFIG_REGISTRY for a corporate mirror measured here as a 401 on every install.
 const DefaultNPMRegistry = "https://registry.npmjs.org/"
 
 func npmRegistryEnv(environ []string) []string {
@@ -66,8 +58,6 @@ func ResolveToolchain(toolchainRoot string, log func(string)) (Toolchain, error)
 	return Toolchain{Bun: bun, TSC: tsc}, nil
 }
 
-// The check-and-install runs under a lock on the toolchain directory: an `attn app dev`
-// loop racing a manual apply would otherwise run two installs into one node_modules.
 func ensureTypeScript(bun, dir string, log func(string)) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("creating the app toolchain directory %s: %w", dir, err)
@@ -147,6 +137,4 @@ func lockDir(dir string) (func(), error) {
 	}
 }
 
-// toolchainLockWait is a tripwire, not a budget: one `bun install` of a single package,
-// measured under 10s cold and instant after, so only a stuck holder reaches two minutes.
 const toolchainLockWait = 2 * time.Minute

@@ -19,8 +19,6 @@ func (d *Daemon) seedUnblocked(seedID string) ([]garden.Seed, []protocol.Seed) {
 	if d.store == nil {
 		return nil, nil
 	}
-	// The whole graph, never the newest snapshot page: a blocker paged out of
-	// that window would make a seed it still holds back look freed.
 	read, err := d.readGardenTo(0)
 	if err != nil {
 		d.logf("garden bell: reading the graph to see what %s unblocked: %v", seedID, err)
@@ -130,7 +128,6 @@ func newGardenSubscriptions(seeds []garden.Seed, watches []store.GardenSeedWatch
 	return subscriptions
 }
 
-// Coverage names the ordinary subscriptions covering this seed for each session.
 func (s gardenSubscriptions) coverage(seedID string) map[string][]string {
 	covered, _ := s.coverageChecked(seedID)
 	return covered
@@ -186,7 +183,6 @@ func (d *Daemon) seedWatchCoverage(sessionID, seedID string) ([]string, error) {
 	return coverage, nil
 }
 
-// Caller holds gardenWatchMu through the dependent enqueue or inbox read.
 func (d *Daemon) discardUncoveredSeedBells(sessionID string) error {
 	return d.discardIneligibleGardenSeedBellsLocked(sessionID)
 }

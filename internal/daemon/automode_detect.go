@@ -6,7 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/automode"
 )
 
-// Git answers now; visibility comes from an earlier lookup, unset meaning private.
 func (d *Daemon) detectAutoModeEnvironment(cwd string) map[string][]string {
 	detected, identities := automode.DetectFromRepo(cwd)
 	if detected == nil {
@@ -20,8 +19,6 @@ func (d *Daemon) detectAutoModeEnvironment(cwd string) map[string][]string {
 	return detected
 }
 
-// repoVisibility reads what a previous lookup learned, and starts one when
-// nothing has. It runs off-path: a launch must not wait on GitHub.
 func (d *Daemon) repoVisibility(identity string) (string, bool) {
 	d.repoVisibilityMu.Lock()
 	defer d.repoVisibilityMu.Unlock()
@@ -79,7 +76,6 @@ func splitRepoIdentity(identity string) (host, ownerRepo string, ok bool) {
 	return parts[0], parts[1] + "/" + parts[2], true
 }
 
-// The user's slots, with the detected ones filling what they left empty.
 func (d *Daemon) autoModeConfigForSession(
 	cfg automode.Config, cwd string,
 ) (automode.Config, automode.RepositoryRules, error) {

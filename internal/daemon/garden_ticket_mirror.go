@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// This mirror is the inverse of mirrorStatusOntoSeed. The two cannot loop: both
-// write through store/log helpers rather than through each other's handler.
-
 func seedMoveTicketStatus(verb garden.Verb) (store.TicketStatus, bool) {
 	switch verb {
 	case garden.VerbTend, garden.VerbReplant:
@@ -52,7 +49,6 @@ func (d *Daemon) mirrorSeedMoveOntoTicket(sessionID, seedID string, verb garden.
 		d.logf("garden: mirroring %s of %s onto ticket %s: %v", verb, seedID, ticket.ID, err)
 		return
 	}
-	// No observer nudge: the tender already wrote the same report in the seed's log.
 	d.publishTicketFact(FactTicketStatusChanged, updated.ID)
 }
 
@@ -96,8 +92,6 @@ func (d *Daemon) mirrorTargetTicket(sessionID, seedID string) (*store.Ticket, bo
 	return ticket, true
 }
 
-// No observers and no attention key on purpose: the read-before-you-write gate would
-// drop the echo exactly when the ticket has unread news on it.
 func mirrorTicketMutationOptions() store.TicketMutationOptions {
 	return store.TicketMutationOptions{}
 }

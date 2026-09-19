@@ -7,11 +7,8 @@ import (
 	"testing"
 )
 
-// Tests MUST set this — Dir panics under go test otherwise.
 const EnvVar = "ATTN_TOOL_HOME"
 
-// Point ATTN_TOOL_HOME at a temp dir from TestMain or t.Setenv, never redirect
-// HOME.
 func Dir() (string, error) {
 	if override := strings.TrimSpace(os.Getenv(EnvVar)); override != "" {
 		return filepath.Clean(override), nil

@@ -1,5 +1,3 @@
-// Package sessioninstructions deliberately holds no authorization, workflow, or resource
-// taxonomy: attn validates only transcript identity and the excerpts returned.
 package sessioninstructions
 
 import (
@@ -28,7 +26,6 @@ const (
 	defaultConversationMax = 120_000
 )
 
-// Safe to render: Message never includes transcript or question content.
 type Error struct {
 	Code    string
 	Message string
@@ -356,8 +353,6 @@ func exactQuote(text, hint string) string {
 	if at := strings.Index(text, hint); at >= 0 {
 		return text[at : at+len(hint)]
 	}
-	// Normalized matching has no byte-stable offset; the whole turn preserves source bytes
-	// and cannot fabricate a quoted fragment.
 	return text
 }
 

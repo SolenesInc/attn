@@ -479,7 +479,6 @@ func TestStatusReportsLandOnTheBoundSeedsLog(t *testing.T) {
 	if log.NotesTotal != 2 {
 		t.Fatalf("the seed's log holds %d entries, want one per report", log.NotesTotal)
 	}
-	// Matched by content rather than position: two writes inside one clock tick share a stamp, and the log's tiebreaker is the note id.
 	for _, want := range []struct{ state, comment string }{
 		{"in_progress", "reading the store layer"},
 		{"ready_for_review", "PR #1 is up"},
@@ -608,7 +607,6 @@ func TestAgentMsgToAnUntendedSeedRefusesByName(t *testing.T) {
 	}
 }
 
-// Waits on the note fact itself: the status reply is written before the mirror runs, so reading the log straight after the reply would race the write.
 func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func()) {
 	t.Helper()
 	landed := make(chan struct{}, want+4)
@@ -628,7 +626,6 @@ func awaitSeedNotes(t *testing.T, d *Daemon, seedID string, want int, work func(
 	}
 }
 
-// Returns when the handler has finished, not when it replied — the mirror runs after the reply. The signal is the server side of the pipe closing.
 func awaitStatusHandled(t *testing.T, d *Daemon, msg *protocol.SetTicketStatusMessage) {
 	t.Helper()
 	client, server := net.Pipe()

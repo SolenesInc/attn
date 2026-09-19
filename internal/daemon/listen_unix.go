@@ -5,8 +5,6 @@ import (
 	"os"
 )
 
-// bind() creates the socket file before listen() accepts, and a client that
-// watches the directory connects in that gap and is refused. Listen elsewhere, then rename in.
 func listenUnixAtomically(path string) (net.Listener, error) {
 	staging := path + ".listen"
 	os.Remove(staging)

@@ -20,12 +20,8 @@ const (
 	ErrorCodeUnauthorizedClient   = "unauthorized_client"
 )
 
-// Tripwire: measured 2026-08-13 against production, where no workspace held
-// more than one docked tile.
 const DocSubscriptionsPerClient = 64
 
-// Measured 2026-08-10: 32KiB is 1.75x the largest assistant prose block across 120
-// transcripts (18,713 chars), and fits the daemon's 64KiB socket frame after escaping.
 const AgentMessageMaxChars = 32 * 1024
 
 const CapabilityWorkspaceSessions = "workspace_sessions"
@@ -34,8 +30,6 @@ const CapabilityBrowserHost = "browser_host"
 
 const CapabilityBinaryPtyOutput = "binary_pty_output"
 
-// Says nothing about transport, which is CapabilityBinaryPtyOutput's call. The hub relays
-// kitty descriptions as JSON over a text pipe and cannot take a binary frame.
 const CapabilityKittyImages = "kitty_images"
 
 type SessionAgent = string
@@ -302,8 +296,6 @@ const (
 	CmdSetSessionContextWindowCap            = "set_session_context_window_cap"
 )
 
-// First group is agent-reachable over the unix socket and records proposals
-// only; the second is the app's alone, because promotion needs a human.
 const (
 	CmdAutoModeShow     = "automode_show"
 	CmdAutoModeEnvSlot  = "automode_env_slot"
@@ -326,7 +318,6 @@ const EventAutoModeEnvSetResult = "automode_env_set_result"
 
 const EventAutoModeStateChanged = "automode_state_changed"
 
-// Per-action automations result events (socket + WS share one command set;
 const (
 	EventAutomationApplyResult       = "automation_apply_result"
 	EventAutomationValidateResult    = "automation_validate_result"

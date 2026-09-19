@@ -10,12 +10,10 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// One pull request an agent opened from inside a session. Everything below
-// CreatedAt is status the refresh job fills in; a fresh row carries only `open`.
 type SessionPullRequestRecord struct {
 	SessionID       string
-	PRID            string // host:owner/repo#number, the inbox's id format
-	Repository      string // host/owner/repository
+	PRID            string
+	Repository      string
 	Number          int
 	URL             string
 	CreatedAt       string
@@ -47,8 +45,6 @@ const sessionPullRequestColumns = `session_id, pr_id, repository, number, url, c
 	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at,
 	status_checked_at`
 
-// Reports false when the row was already there; a hook and a manual `attn pr
-// record` reporting the same pull request is normal.
 func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -91,7 +87,6 @@ func (s *Store) ListSessionPullRequests(sessionID string) []SessionPullRequestRe
 	return records
 }
 
-// One query for every session, so decorating a whole broadcast costs one round trip.
 func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

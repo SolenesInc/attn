@@ -1,4 +1,3 @@
-// Design: docs/plans/2026-08-10-home-garden-crew-arc.md
 package enrollment
 
 import (
@@ -378,8 +377,6 @@ func writeFileAtomic(path string, data []byte) error {
 	return nil
 }
 
-// lockPath takes an exclusive flock on <path>.lock and returns the release. The lock
-// file is never removed: unlinking it lets a later locker hold an uncontended lock.
 func lockPath(path string) (func(), error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, fmt.Errorf("create data root: %w", err)

@@ -201,8 +201,6 @@ func (d *Daemon) bindSeedHandoverForeground(
 		return nil, err
 	}
 
-	// The new worker's session-start hook and the old worker's metadata refresh
-	// both rewrite dispatches while this runs; the seed itself moving is fatal.
 	const attempts = 3
 	var commits []store.DocumentCommit
 	var written []store.DocumentWriteResult
@@ -308,8 +306,6 @@ type handoverDispatchCommits struct {
 	oldDispatch    garden.Dispatch
 }
 
-// The new dispatch comes first and the superseded old one second, when the
-// seed's last execution still claims it.
 func (d *Daemon) handoverDispatchCommits(
 	msg *resolvedDelegationLaunch, operationID, sessionID, directory, agent string, fromChief bool,
 	seed garden.Seed, session *protocol.Session,

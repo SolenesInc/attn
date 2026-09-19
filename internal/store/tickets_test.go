@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-// ticketBase is a fixed clock for deterministic, injected-time tests.
 var ticketBase = time.Date(2026, 6, 26, 10, 0, 0, 0, time.UTC)
 
 func TestTicketCRUDRoundTrip(t *testing.T) {
@@ -504,7 +503,7 @@ func TestTicketAssigneesOwnedByRole(t *testing.T) {
 
 func TestTicketPersistence(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -518,7 +517,7 @@ func TestTicketPersistence(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	reopened, err := NewWithDB(dbPath)
+	reopened, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -573,8 +572,6 @@ func TestTicketResumeSessionID(t *testing.T) {
 		t.Fatalf("activity changed: %d -> %d", len(before.Activity), len(after.Activity))
 	}
 
-	// No session row exists here, which is the post-close state the key has to
-	// survive.
 	if got := s.GetResumeSessionID(sessionID); got != "" {
 		t.Fatalf("session-table resume id = %q, want empty (no session row)", got)
 	}

@@ -8,8 +8,6 @@ import (
 
 const CronKey = "cron"
 
-// A cron entry NEVER dies: a failing fire is logged and re-armed instead of counting
-// toward the attempt cap.
 func (r *Runner) RegisterCron(kind string, interval time.Duration, fn HandlerFunc, cfg HandlerConfig) error {
 	if interval <= 0 {
 		return fmt.Errorf("jobs: cron interval for %s must be positive, got %s", kind, interval)
@@ -46,8 +44,6 @@ func (r *Runner) armCron() {
 	}
 }
 
-// In memory because a failed arm left NO record behind: dispatch never selects it and
-// finish() never re-arms it.
 type pendingArm struct {
 	interval time.Duration
 	attempts int
@@ -69,8 +65,6 @@ func (r *Runner) armCronKind(kind string, interval time.Duration) {
 	}
 }
 
-// An on-schedule record is left alone: re-arming every boot would starve a daemon restarted
-// more often than the interval. A terminal or further-out record is revived or pulled in.
 func (r *Runner) writeCronEntry(kind string, interval time.Duration) error {
 	existing, err := r.GetByKey(kind, CronKey)
 	if err != nil {
@@ -108,8 +102,6 @@ func (r *Runner) deferCronArm(kind string, interval time.Duration, cause error) 
 		kind, attempts, cause, retryAt.Format(time.RFC3339))
 }
 
-// Runs once per dispatch pass, so it costs one uncontended mutex on a runner with
-// nothing parked — which is every healthy runner.
 func (r *Runner) retryCronArming() {
 	r.mu.Lock()
 	if len(r.pendingArms) == 0 {
@@ -141,7 +133,6 @@ func (r *Runner) cronArmError(kind string) error {
 	return nil
 }
 
-// Caller holds ioMu.
 func (r *Runner) rearmCronLocked(j *Job, interval time.Duration, runErr error) {
 	now := r.now()
 	j.State = StateQueued
@@ -159,8 +150,6 @@ func (r *Runner) rearmCronLocked(j *Job, interval time.Duration, runErr error) {
 		j.LastDiagnostic = ""
 	}
 	if err := r.store.Save(j); err != nil {
-		// The claim write left the row RUNNING, which dispatch never selects; only the orphan
-		// recovery at the next Start puts it back in the rotation.
 		r.log("jobs: CRON %s DID NOT RE-ARM: %v — it will not fire again until the daemon restarts", j.Kind, err)
 	}
 }
@@ -169,8 +158,6 @@ var ErrNotCron = errors.New("jobs: kind is not a cron entry")
 
 var ErrCronKind = errors.New("jobs: kind is a cron entry and cannot be enqueued directly")
 
-// A missing record is an error whenever the runner knows why it is missing: "no entry,
-// no error" reads as "not armed yet" and explains nothing.
 func (r *Runner) CronEntry(kind string) (*Job, error) {
 	if r.disabled {
 		return nil, ErrDisabled

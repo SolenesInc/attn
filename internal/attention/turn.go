@@ -40,7 +40,6 @@ type Input struct {
 
 	SessionPinned bool
 
-	// WorkspacePinned and WorkspaceMuted filter at read, not at open: OpenedAt still accumulates, so un-pinning surfaces the turn at its true age.
 	WorkspacePinned bool
 	WorkspaceMuted  bool
 }

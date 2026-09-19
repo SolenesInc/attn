@@ -6,9 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Mutations can block behind automationMu for tens of seconds; set_enabled/delete/apply
-// abort at the daemon-side 25s deadline, strictly inside the client's 30s timeout.
-
 func (d *Daemon) handleAutomationDefinitionsGetWS(client *wsClient, msg *protocol.AutomationDefinitionsGetMessage) {
 	result := d.actionAutomationDefinitionsGet(msg)
 	d.sendToClient(client, result)
@@ -53,8 +50,6 @@ func (d *Daemon) handleAutomationRunWS(client *wsClient, msg *protocol.Automatio
 	}()
 }
 
-// handleAutomationApplyWS backs the app editor's Save. The app always sends
-// expected_id/expected_revision, which enforces guards absent on the socket/CLI path.
 func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.AutomationApplyMessage) {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), d.wsAutomationMutationTimeoutDuration())
@@ -64,8 +59,6 @@ func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.Automat
 	}()
 }
 
-// handleAutomationValidateWS runs on its own goroutine: validation shells out to git
-// per location override, and the dispatcher calls handlers inline on the read loop.
 func (d *Daemon) handleAutomationValidateWS(client *wsClient, msg *protocol.AutomationValidateMessage) {
 	go func() {
 		result := d.actionAutomationValidate(msg)

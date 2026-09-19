@@ -12,8 +12,6 @@ import (
 
 var errLegacyDelegationRequest = errors.New("this pending delegation used the retired implicit launch contract")
 
-// resolvedDelegationLaunch is the daemon's execution description. Resolution fills its
-// internal placement and seed-binding fields once for the existing launch machinery.
 type resolvedDelegationLaunch struct {
 	Cmd                string
 	RequestID          string
@@ -203,8 +201,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			runtime.PreviousTenderSession = previousTenderSession
 			alreadyBound := strings.TrimSpace(operationID) != "" && d.handoverAlreadyBound(operationID, sessionID, seedID)
 			if handoverSeedRev > 0 && !alreadyBound {
-				// Acceptance pins the intended holder, not the seed body. The binding transaction
-				// guards allowed same-holder edits at their current revision.
 				if int(doc.Rev) < handoverSeedRev ||
 					seed.TenderSession != strings.TrimSpace(handoverTenderSession) ||
 					seed.TenderMember != strings.TrimSpace(handoverTenderMember) {

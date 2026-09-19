@@ -47,8 +47,6 @@ func protocolCommands(t *testing.T) map[string]string {
 	return commands
 }
 
-// This list may only get shorter — give a command a real CommandMeta entry and
-// delete its line here. Nothing may be added.
 var commandsPredatingTheScopeGuard = map[string]bool{
 	"automation_apply": true, "automation_cleanup": true, "automation_definition_get": true, "automation_definitions_get": true,
 	"automation_delete": true, "automation_run": true, "automation_runs_get": true, "automation_set_enabled": true,
@@ -100,8 +98,6 @@ func TestUnclassifiedCommandListOnlyShrinks(t *testing.T) {
 
 const sessionLedgerIsPerDaemon = "the ledger records the sessions this daemon ran; another daemon's rows are read there"
 
-// A hub answering one of these locally reads its own store instead of the owner's,
-// and fails invisibly: the local pane keeps working, only a remote pane is wrong.
 var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdRegister:            "arrives from the agent process over the unix socket",
 	protocol.CmdState:               "arrives from the agent process over the unix socket",
@@ -136,7 +132,6 @@ var sessionCommandsAnsweredWhereTheyLand = map[string]string{
 	protocol.CmdBrowserControl: "handleRemoteBrowserControl resolves the browser host itself",
 }
 
-// A command naming its target with a field absent from this probe reads as unrouted.
 func routingProbe(wire string) []byte {
 	return []byte(`{"cmd":"` + wire + `","id":"probe","session_id":"probe","target_session_id":"probe",` +
 		`"workspace_id":"probe","source_workspace_id":"probe","source_kind":"file","endpoint_id":"probe","directory":"/probe"}`)

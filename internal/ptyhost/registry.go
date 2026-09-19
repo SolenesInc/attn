@@ -15,8 +15,6 @@ import (
 
 const BinaryName = "attn-pty-host"
 
-// Profiles share ~/.local/bin on remote hosts, so each daemon resolves a
-// sidecar that another profile cannot replace underneath it.
 func BinaryNameForProfile(profile string) string {
 	profile = strings.TrimSpace(profile)
 	if profile == "" {

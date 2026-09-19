@@ -66,7 +66,6 @@ func TestStatusReportsProducerRatesAndShare(t *testing.T) {
 	}
 
 	loud := producer(t, status, "session.state.changed")
-	// 60 events inside a 1h window is 60/hour; 180 inside 24h is 7.5/hour.
 	if loud.RecentPerHour != 60 {
 		t.Errorf("recent rate = %v, want 60", loud.RecentPerHour)
 	}
@@ -83,8 +82,6 @@ func TestStatusReportsProducerRatesAndShare(t *testing.T) {
 
 func TestStatusDoesNotCallABurstySmallProducerLoud(t *testing.T) {
 	b, s := statusBus(t)
-	// 900 events in the last 10 minutes: a 5400/hour instantaneous rate, far
-	// past the ceiling — but only 900 across either sustained window.
 	publishAt(t, s, "pr.updated", 40, 900, 10*time.Minute)
 
 	status, err := b.Status()
@@ -103,7 +100,6 @@ func TestStatusDoesNotCallABurstySmallProducerLoud(t *testing.T) {
 
 func TestStatusCatchesASurgeOnTheSustainedWindow(t *testing.T) {
 	b, s := statusBus(t)
-	// 6001 events spread over the last 6 hours: just past 1000/hour.
 	for i := 0; i < 6001; i++ {
 		publishAt(t, s, "session.state.changed", 2, 1, time.Duration(i%360)*time.Minute)
 	}

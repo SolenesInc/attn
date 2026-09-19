@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// clientDocSubscriptions has its own lock: a subscription ends from three directions
-// (client asking, client disconnecting, daemon giving up) and none holds the other's.
 type clientDocSubscriptions struct {
 	mu   sync.Mutex
 	subs map[string]chan struct{}
@@ -44,8 +42,6 @@ func (s *clientDocSubscriptions) close(id string) bool {
 	return true
 }
 
-// closeAll: a vanished client would otherwise leave loops re-running its queries
-// on every write to their collections, forever.
 func (s *clientDocSubscriptions) closeAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -88,8 +84,6 @@ func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscri
 		return
 	}
 
-	// Its own goroutine: the loop blocks between deliveries, and the pump that got us here
-	// handles this client's commands in order — including the doc_unsubscribe that ends it.
 	go func() {
 		defer client.docSubscriptions.close(id)
 		d.runDocSubscription(q, msg.Have, docSink{

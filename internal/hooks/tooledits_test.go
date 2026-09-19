@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// The payloads below are trimmed from real PostToolUse hook output: Claude Code
-// 2.x and codex-cli 0.145.0.
 func TestMarkdownEdits(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -72,10 +70,8 @@ func TestMarkdownEdits(t *testing.T) {
 			want:      nil,
 		},
 		{
-			name:     "a shell rewrite is not attributable",
-			toolName: "Bash",
-			// Both agents report shell calls with the command only. Editing a
-			// file this way is real but unattributable; accepted coverage gap.
+			name:      "a shell rewrite is not attributable",
+			toolName:  "Bash",
 			toolInput: `{"command":"sed -i '' s/a/b/ notes.md"}`,
 			want:      nil,
 		},

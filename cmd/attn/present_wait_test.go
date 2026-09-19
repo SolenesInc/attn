@@ -33,7 +33,7 @@ func TestWaitForPresentFeedbackPrintsOnceThenReturns(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	tick := make(chan time.Time) // unbuffered: a send blocks until the loop is back at its select
+	tick := make(chan time.Time)
 	var out bytes.Buffer
 
 	errCh := make(chan error, 1)

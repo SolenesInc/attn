@@ -5,10 +5,6 @@ import (
 	"github.com/victorarias/attn/internal/ticketnotify"
 )
 
-// The forward, inverse, and attention views of one mapping: they are defined
-// together because a role they disagree on is an identity nothing delivers to.
-
-// In precedence order: a member comes first, its cursors and clock outliving its days.
 func (d *Daemon) ticketDurableIdentitiesForSession(sessionID string) []string {
 	var identities []string
 	if member := d.crewMemberBoundTo(sessionID); member != "" {
@@ -43,8 +39,6 @@ func (d *Daemon) ticketActorIdentity(sessionID string) string {
 	return sessionID
 }
 
-// AuthorID is the acting identity, so a member never receives its own event;
-// DeliveryID is the concrete session, the only thing that can be nudged.
 func (d *Daemon) ticketObserversForSession(sessionID string) []ticketnotify.Observer {
 	authorID := d.ticketActorIdentity(sessionID)
 	durable := d.ticketDurableIdentitiesForSession(sessionID)

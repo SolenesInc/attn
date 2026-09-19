@@ -118,8 +118,6 @@ func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
 	}
 }
 
-// Claude Code folds a CR arriving in the same read as the paste end into the pasted
-// text, leaving the payload unsent, and an undelayed second write lands in that read.
 func TestTypeDoorbellDelaysEnterAfterThePaste(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -156,8 +154,6 @@ func TestTypeDoorbellDelaysEnterAfterThePaste(t *testing.T) {
 	}
 }
 
-// A keystroke arriving inside the doorbell's paste-to-Enter gap has to be written
-// after the Enter, or it is spliced into the doorbell's own submission.
 func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -214,8 +210,6 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 			t.Fatalf("PTY writes = %q, want %q (the keystroke was spliced into the submission)", writes, want)
 		}
 	}
-	// Without this the ordering above holds vacuously when the keystroke simply
-	// arrived late.
 	if !typedAt.Before(writtenAt[1]) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}

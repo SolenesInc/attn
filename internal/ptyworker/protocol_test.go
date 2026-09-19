@@ -145,8 +145,6 @@ func TestAttachResultCarriesSnapshotFormat(t *testing.T) {
 		t.Fatalf("snapshot format = %q, want %q", decoded.GhosttySnapshotFormat, "cafef00d1234")
 	}
 
-	// A worker that predates the field answers attach with bytes and no format; empty
-	// must survive the decode so the client can refuse them.
 	var old AttachResult
 	if err := json.Unmarshal([]byte(`{"ghostty_snapshot":"c25hcHNob3Q="}`), &old); err != nil {
 		t.Fatalf("unmarshal legacy attach result: %v", err)

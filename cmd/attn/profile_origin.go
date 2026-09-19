@@ -92,8 +92,6 @@ func runProfileSetOrigin(args []string) {
 		profileFatal(err.Error())
 	}
 	if normalized == "" {
-		// The production profile must never be reported as belonging to a worktree,
-		// or the cleanup nudge would target ~/.attn.
 		profileFatal("refusing to record an origin for the default (production) profile")
 	}
 	if worktree == "" {
@@ -171,7 +169,6 @@ func newProfileListEntry(profile string, active string) profileListEntry {
 	}
 }
 
-// A stale socket file outlives the daemon that made it.
 func socketLive(path string) bool {
 	if path == "" {
 		return false
@@ -184,7 +181,6 @@ func socketLive(path string) bool {
 	return true
 }
 
-// Registry entries outlive their processes.
 func countLiveWorkers(dataDir string) int {
 	paths, err := filepath.Glob(filepath.Join(dataDir, "workers", "*", "registry", "*.json"))
 	if err != nil {

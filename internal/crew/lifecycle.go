@@ -6,8 +6,6 @@ import (
 )
 
 type CacheState struct {
-	// The TTL restarts on every request that writes OR reads the entry, which is why
-	// this is time since the last request, not time since the cache was written.
 	Age time.Duration
 	TTL time.Duration
 }
@@ -66,8 +64,6 @@ func Decide(s Signals) Action {
 	return ActionHeartbeat
 }
 
-// Default arithmetic, list prices not a measurement: ~3.5k priming tokens x $15/M
-// input x 2 (1h-TTL cache write) = ~$0.15 a wake, ~$1.20 per member per absence.
 type WakeLedger struct {
 	Stamps []time.Time
 	Limit  int

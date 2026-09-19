@@ -257,8 +257,6 @@ func TestValidateProfile_RejectsBadNames(t *testing.T) {
 	}
 }
 
-// Calls the pure defaultAttnDir helper directly, because the go-test backstop refuses
-// to resolve attnDir()/DataDir() without an explicit ATTN_DATA_DIR override.
 func TestDefaultAttnDir_SplitsByProfile(t *testing.T) {
 	home, _ := os.UserHomeDir()
 
@@ -420,8 +418,6 @@ func TestPprofAddr(t *testing.T) {
 	}
 }
 
-// Pins the default/dev literals so the helpers stay wire-compatible with the values
-// hardcoded in profile.rs, harnessProfile.mjs, and the tauri configs.
 func TestProfileDerivation_DefaultAndDev(t *testing.T) {
 	cases := []struct {
 		profile                   string
@@ -469,7 +465,7 @@ func TestE2EPorts_BandsAreDisjoint(t *testing.T) {
 		if vPort < 31000 || vPort > 31999 {
 			t.Errorf("e2e vite port for %q = %d, want [31000,31999]", profile, vPort)
 		}
-		realPort, _ := strconv.Atoi(WSPortForProfile(profile)) // [20000,29848]
+		realPort, _ := strconv.Atoi(WSPortForProfile(profile))
 		for _, reserved := range []int{9849, 29849, 1420, 1421, 19849, realPort} {
 			if dPort == reserved || vPort == reserved {
 				t.Errorf("e2e port for %q collided with reserved %d (daemon=%d vite=%d)", profile, reserved, dPort, vPort)

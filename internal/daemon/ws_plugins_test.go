@@ -121,8 +121,6 @@ func TestDaemon_PluginsUpdatedMessageIncludesSupervisorBackoff(t *testing.T) {
 	})
 }
 
-// A parked plugin must not read as one still coming back: nothing is scheduled for
-// it, so it gets its own runtime state rather than backoff's degraded one.
 func TestDaemon_PluginsUpdatedMessageReportsAParkedPlugin(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	d.pluginDir = filepath.Join(t.TempDir(), "plugins")

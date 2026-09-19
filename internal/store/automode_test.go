@@ -429,8 +429,6 @@ func TestAutoModeMigrationCreatesItsTables(t *testing.T) {
 	}
 }
 
-// plantPre140AutoModeConfig puts back the glob-list shape migration 140 replaced, so a
-// re-run of the chain from `from` sees what an installed machine actually holds.
 func plantPre140AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allow, hardDeny string, from int) {
 	t.Helper()
 	for _, stmt := range []string{
@@ -466,7 +464,7 @@ func plantPre140AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 
 func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -525,7 +523,7 @@ func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 
 func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -923,7 +921,6 @@ func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
 	}
 }
 
-// Planted straight into the table, bypassing CreateAutoModeProposal's own check.
 func TestPromotingAPlantedShippedAmendmentIsRefused(t *testing.T) {
 	s := New()
 	now := time.Now().UTC()
@@ -991,7 +988,6 @@ func TestANetworkRowWrittenBeforeLocalBindingReadsAsOff(t *testing.T) {
 	}
 }
 
-// "git push" and "git {push|pull}" are distinct rules despite sharing an alternative.
 func TestRemovingARuleWithAlternativesLeavesItsLiteralNamesake(t *testing.T) {
 	s := New()
 	now := time.Now()

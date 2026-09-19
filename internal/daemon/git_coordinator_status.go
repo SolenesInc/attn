@@ -158,7 +158,6 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 			continue
 		}
 
-		// Binary files show "-" for additions/deletions.
 		additions, _ := strconv.ParseInt(parts[0], 10, 64)
 		deletions, _ := strconv.ParseInt(parts[1], 10, 64)
 		path := parts[2]
@@ -172,7 +171,6 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 	return result
 }
 
-// Callers use gitCoordinator.Status so concurrent requests for one repo/mode share a git process.
 func getGitStatusForSubscription(dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 	return getGitStatusWithOptions(dir, gitStatusOptions{
 		mode:         mode,
@@ -187,7 +185,6 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 		mode = gitStatusModeFull
 	}
 
-	// The default collapses a brand-new untracked directory into one "?? dir/" line, hiding everything inside.
 	statusArgs := []string{"status", "--porcelain", "-z", "--untracked-files=all"}
 	if mode == gitStatusModeTrackedOnly {
 		statusArgs = []string{"status", "--porcelain", "-z", "--untracked-files=no"}

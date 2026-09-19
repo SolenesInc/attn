@@ -160,7 +160,6 @@ func TestShellArbiterPromptVerdictDoesNotLeakOntoTheNextCommand(t *testing.T) {
 	}
 }
 
-// bash, because an interactive bash enables job control unconditionally.
 func TestShellForegroundPollerObservesARealCommand(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")

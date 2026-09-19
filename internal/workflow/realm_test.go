@@ -47,8 +47,6 @@ func TestDeterminismBans(t *testing.T) {
 			wantSubstr: []string{"new Date()", "explicit argument"},
 		},
 		{
-			// Date() as a plain function call ALWAYS reads the wall clock and ignores its args per spec, so
-			// it must throw with or without args; new.target distinguishes it from a deterministic new Date(arg).
 			name:       "argless Date() function call throws",
 			script:     `return Date();`,
 			wantErr:    true,

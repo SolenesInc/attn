@@ -596,7 +596,6 @@ func TestReportedAmendmentsFromAnUnownedRunAreRefused(t *testing.T) {
 	}
 }
 
-// The plugin swallows the JSON-RPC error it gets back, so the daemon log is the only trace of it.
 func TestARefusedPluginRequestNamesItselfInTheDaemonLog(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	logPath := attachPluginTestLogger(t, d)

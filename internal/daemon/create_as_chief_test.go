@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The app's create ordering: register workspace, add the session pane, spawn.
-// Leaves the spawn_result on the client for the caller to drain.
 func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, agent string, chief bool) {
 	t.Helper()
 	cwd := t.TempDir()

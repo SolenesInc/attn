@@ -1,4 +1,3 @@
-// Package headless owns the switch over headless tasks the daemon starts on its own, with no session or PTY.
 package headless
 
 import (
@@ -15,8 +14,6 @@ const SettingKey = "headless_tasks.enabled"
 
 var ErrRefused = errors.New("headless tasks are off")
 
-// The zero value is "on": a process that never mirrors a setting runs headless
-// tasks, which is what every non-daemon caller expects.
 var storedOff atomic.Bool
 
 func SetStoredEnabled(enabled bool) {

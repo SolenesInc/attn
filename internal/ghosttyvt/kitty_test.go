@@ -8,15 +8,12 @@ import (
 	"testing"
 )
 
-// 1x1 direct RGB, base64 of 0xFF,0x00,0x00.
 const (
 	kittyQueryAPC    = "\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\"
 	kittyTransmitAPC = "\x1b_Ga=T,i=32,f=24,s=1,v=1;/wAA\x1b\\"
 	kittyRespPrefix  = "\x1b_G"
 )
 
-// The resize is what installs cell pixel metrics. Without them a placed image spans zero
-// cells and never moves the cursor, so every grid assertion below would hold vacuously.
 func newKittyT(t *testing.T, cols, rows int, limit uint64) *Terminal {
 	t.Helper()
 	term, err := New(cols, rows, Options{KittyImageStorageLimit: limit})
@@ -59,8 +56,6 @@ func TestKittyDisabledByDefaultPlacementHasNoGridEffect(t *testing.T) {
 	}
 }
 
-// A lazily-created alternate screen coming up with the library's own default
-// would resurrect the protocol behind every full-screen TUI.
 func TestKittyDisabledOnAlternateScreen(t *testing.T) {
 	term := newKittyT(t, 20, 4, 0)
 	term.Write([]byte("\x1b[?1049h"))
@@ -78,8 +73,6 @@ func TestKittyDisabledOnAlternateScreen(t *testing.T) {
 	}
 }
 
-// The value has to reach the right option at the right width, or turning images
-// on later is a silent no-op.
 func TestKittyPositiveLimitKeepsProtocolLive(t *testing.T) {
 	term := newKittyT(t, 20, 4, 10<<20)
 	term.DrainResponses()

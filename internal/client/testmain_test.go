@@ -7,7 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// Without this, config.DataDir() resolves to the real ~/.attn.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "attn-test-data-*")
 	if err != nil {

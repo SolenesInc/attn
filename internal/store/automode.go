@@ -32,8 +32,6 @@ type AutoModeDenial struct {
 	CreatedAt time.Time
 }
 
-// AutoModeDenialRows is a tripwire, not a budget: auto mode's circuit breaker stops a
-// session at 20 denials (plugins/attn-pi/automode/session.ts), so this is 25 episodes.
 const AutoModeDenialRows = 500
 
 func (s *Store) GetAutoModeConfig() (automode.Config, error) {
@@ -156,8 +154,6 @@ func decodeRules(raw string) ([]automode.Rule, error) {
 	return rules, nil
 }
 
-// A row written before allow_local_binding existed has no such key; DefaultNetwork's
-// zero value there is the safe one.
 func decodeNetwork(raw string) (automode.Network, error) {
 	network := automode.DefaultNetwork()
 	if strings.TrimSpace(raw) == "" {
@@ -255,7 +251,6 @@ func removeRuleFrom(cfg *automode.Config, pattern []automode.PatternToken) error
 	return nil
 }
 
-// Nothing enforces a legacy pattern; dismissing one only takes it off the reminder list.
 func (s *Store) DismissAutoModeLegacyPattern(pattern string, now time.Time) (automode.Config, error) {
 	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
@@ -348,7 +343,6 @@ func withoutHost(hosts []string, host string) []string {
 	return kept
 }
 
-// A rule is its prefix: re-adding one with a new decision replaces it rather than duplicating it.
 func upsertRule(rules []automode.Rule, rule automode.Rule) []automode.Rule {
 	key := automode.PatternKey(rule.Pattern)
 	for i, existing := range rules {
@@ -360,7 +354,6 @@ func upsertRule(rules []automode.Rule, rule automode.Rule) []automode.Rule {
 	return append(rules, rule)
 }
 
-// Both promotion paths land here; ValidateProposal already refused shipped entries once.
 func applyAutoModeAmendment(cfg *automode.Config, kind, value string) error {
 	if err := automode.ValidateProposal(kind, "", value, config.WSPort()); err != nil {
 		return err
@@ -539,7 +532,6 @@ func (s *Store) PromoteAutoModeProposal(id int64, now time.Time) (AutoModePropos
 	return proposal, cfg, nil
 }
 
-// PromoteReportedAmendment is the pi relay's path: it records and promotes in one move.
 func (s *Store) PromoteReportedAmendment(kind, value, proposedBy string, now time.Time) (AutoModeProposal, automode.Config, error) {
 	if err := automode.ValidateProposal(kind, "", value, config.WSPort()); err != nil {
 		return AutoModeProposal{}, automode.Config{}, err
@@ -627,7 +619,6 @@ func (s *Store) RecordAutoModeDenial(denial AutoModeDenial, now time.Time) (Auto
 	if s.db == nil {
 		return AutoModeDenial{}, 0, fmt.Errorf("store: no database")
 	}
-	// Ledger recovery can beat the relay. Check their shared identity under the insertion lock.
 	existing, err := scanAutoModeDenial(s.db.QueryRow(`
 		SELECT id, session_id, tool, signature, reason, rule, created_at
 		FROM automode_denials WHERE session_id = ? AND signature = ? AND created_at = ?
@@ -737,8 +728,6 @@ func writeAutoModeConfig(e execer, cfg automode.Config, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	// Every config here came out of a read, which resolved the shipped entries in;
-	// persisting them would freeze today's list into the row.
 	cfg.Rules = automode.StripShippedRules(cfg.Rules)
 	cfg.Network = automode.StripShippedNetwork(config.WSPort(), cfg.Network)
 	environment, err := encodeEnvironment(cfg.Environment)

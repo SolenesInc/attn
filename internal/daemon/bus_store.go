@@ -10,8 +10,6 @@ import (
 
 var _ bus.Store = (*sqlBusStore)(nil)
 
-// sqlBusStore adapts the SQLite store to bus.Store here, in the one package that
-// imports both, so neither internal/bus nor internal/store depends on the other.
 type sqlBusStore struct{ store *store.Store }
 
 func (d *Daemon) newSQLBusStore() *sqlBusStore { return &sqlBusStore{store: d.store} }

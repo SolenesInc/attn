@@ -250,7 +250,6 @@ func TestReactTypesPinMatchesTheFrontend(t *testing.T) {
 	}
 }
 
-// Direct importer entries only, matching the pnpm lockfile's specifier/version shape.
 func directDependencyVersions(lock, pkg string) []string {
 	var out []string
 	lines := strings.Split(lock, "\n")

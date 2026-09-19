@@ -239,7 +239,6 @@ func prepareAppendLocked(dir string, at time.Time, maxBytes, appendBytes int64) 
 	target := maxBytes - appendBytes
 	protectedPath := activePath
 	if activeSize+appendBytes > maxBytes {
-		// A JSONL record is never split, so a segment that cannot take a whole one is closed.
 		protectedPath = ""
 		activePath = nextPath
 	}

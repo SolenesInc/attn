@@ -42,8 +42,6 @@ const (
 	claudeTranscriptFreshnessSkew = 5 * time.Second
 )
 
-// ListAgents' address book is keyed by working directory, not attn's names.
-// SendMessage stays: it's also how a session continues its own subagents.
 var claudePeerTools = []string{"ListAgents"}
 
 func init() {
@@ -93,8 +91,6 @@ func (c *Claude) BuildCommand(opts SpawnOpts) *exec.Cmd {
 		args = append(args, "--append-system-prompt", instructions)
 	}
 
-	// Denying removes the tools from the agent's list rather than failing the call
-	// (measured with two rules: 31 tools -> 29). One element per rule: a joined element can go inert.
 	if enabled, _ := boolEnv("ATTN_CLAUDE_PEER_MESSAGING"); !enabled {
 		args = append(args, "--disallowed-tools")
 		args = append(args, claudePeerTools...)
@@ -133,8 +129,6 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	} else {
 		env = append(env, "ATTN_AGENT_GUIDANCE=append_system_prompt")
 	}
-	// Cap the effective context window so auto-compaction fires at the configured
-	// threshold. The user's settings can overwrite it, so claudeSettingsEnv repeats it.
 	if opts.AutoCompactWindow > 0 {
 		env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(opts.AutoCompactWindow))
 	}
@@ -144,8 +138,6 @@ func (c *Claude) BuildEnv(opts SpawnOpts) []string {
 	return env
 }
 
-// claudeNativeDefaultTools is the file-tool allow-list used when a native-tools
-// headless task specifies none. Bash is intentionally omitted.
 var claudeNativeDefaultTools = []string{"Read", "Write", "Edit", "Grep", "Glob"}
 
 func (c *Claude) RunHeadlessTask(ctx context.Context, request HeadlessTaskRequest) (HeadlessTaskResult, error) {
@@ -217,8 +209,6 @@ func parseClaudeResultMeta(stdout []byte) claudeResultMeta {
 	return claudeResultMeta{}
 }
 
-// SECURITY BOUNDARY: with Sandbox == "workspace-write" the writable tool set adds Edit,
-// Write, MultiEdit and Bash. There is no OS seatbelt, so the allowlist is the boundary.
 func buildClaudeHeadlessArgs(request HeadlessTaskRequest) ([]string, error) {
 	serverName := strings.TrimSpace(request.MCPServerName)
 	if serverName == "" {
@@ -264,8 +254,6 @@ func buildClaudeHeadlessArgs(request HeadlessTaskRequest) ([]string, error) {
 	tools := strings.Join(prefixed, ",")
 	args := []string{"--print"}
 	args = append(args, claudeHeadlessIsolationArgs()...)
-	// An empty --model is rejected as an invalid model; omitting it lets Claude use
-	// its own default.
 	if model := strings.TrimSpace(request.Model); model != "" {
 		args = append(args, "--model", model)
 	}
@@ -277,8 +265,6 @@ func buildClaudeHeadlessArgs(request HeadlessTaskRequest) ([]string, error) {
 		"--no-chrome",
 		"--tools", tools,
 		"--allowedTools", tools,
-		// dontAsk auto-approves edits AND bash in --print mode (acceptEdits would
-		// not cover Bash); it is the headless no-prompt posture for both paths.
 		"--permission-mode", "dontAsk",
 		"--output-format", "json",
 		request.Prompt,
@@ -286,8 +272,6 @@ func buildClaudeHeadlessArgs(request HeadlessTaskRequest) ([]string, error) {
 	return args, nil
 }
 
-// DisableTools skips the claudeNativeDefaultTools fallback and emits an empty
-// --allowedTools. An empty AllowedTools alone re-enables the native defaults.
 func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	tools := request.AllowedTools
 	if len(tools) == 0 && !request.DisableTools {
@@ -295,21 +279,13 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 	}
 	args := []string{"--print"}
 	args = append(args, claudeHeadlessIsolationArgs()...)
-	// --strict-mcp-config with no --mcp-config loads ZERO MCP servers. Without it the
-	// user's claude.ai connectors still attach (verified on 2.1.198) and can sink a run.
 	args = append(args, "--strict-mcp-config")
-	// An empty --model is rejected as an invalid model; omitting it lets Claude use
-	// its own default.
 	if model := strings.TrimSpace(request.Model); model != "" {
 		args = append(args, "--model", model)
 	}
-	// Reasoning effort. Measured inert on claude-haiku-4-5 (none/low/medium/high all
-	// produce ~900-1,050 output tokens on the same input).
 	if effort := strings.TrimSpace(request.ReasoningEffort); effort != "" {
 		args = append(args, "--effort", effort)
 	}
-	// --max-turns is accepted by the CLI though absent from --help (verified
-	// empirically, 2.1.198); --max-budget-usd and --json-schema are documented.
 	if request.MaxTurns > 0 {
 		args = append(args, "--max-turns", strconv.Itoa(request.MaxTurns))
 	}
@@ -327,8 +303,6 @@ func claudeHeadlessArgs(request HeadlessTaskRequest) []string {
 		"--disable-slash-commands",
 		"--no-chrome",
 	)
-	// --disallowedTools "*" drops the native tool definitions from the billed prefix
-	// (~24.8K to ~2.3K tokens, measured) but disables StructuredOutput.
 	if request.DisableTools && len(request.OutputSchema) == 0 {
 		args = append(args, "--disallowedTools", "*")
 	} else {
@@ -450,8 +424,6 @@ func claudeHasBareModeAuthentication() bool {
 	return false
 }
 
-// PrepareLaunch copies resume transcripts into the target project folder so
-// Claude can resolve --resume when the resumed transcript belongs to another project folder.
 func (c *Claude) PrepareLaunch(opts SpawnOpts) error {
 	if _, err := EnsureClaudeSkillInstalled(); err != nil {
 		return err
@@ -466,8 +438,6 @@ func (c *Claude) GenerateHooksConfig(opts SpawnOpts) string {
 	return hooks.Generate(opts.SessionID, opts.SocketPath, opts.WrapperPath, claudeSettingsEnv(opts))
 }
 
-// claudeSettingsEnv is the env block of the --settings file attn writes for a launch.
-// The --settings scope is applied after the user's, so a cap set here holds.
 func claudeSettingsEnv(opts SpawnOpts) map[string]string {
 	if opts.AutoCompactWindow <= 0 {
 		return nil
@@ -485,8 +455,6 @@ func (c *Claude) FindTranscriptForResume(resumeID string) string {
 	return transcript.FindClaudeTranscript(resumeID)
 }
 
-// ResumeAvailable reports whether resumeID can be resumed. claude -r needs a transcript
-// on disk, written lazily on the first turn, so a zero-turn session has none.
 func (c *Claude) ResumeAvailable(resumeID string) bool {
 	return transcript.FindClaudeTranscript(resumeID) != ""
 }

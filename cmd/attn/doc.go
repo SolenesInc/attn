@@ -364,8 +364,6 @@ func runDocWatch(args []string) {
 	}
 }
 
-// daemonReconnectInterval: measured, a stop plus ensure returns the socket in
-// 0.49s, so a resuming watch polls twice inside the outage it exists for.
 const daemonReconnectInterval = 200 * time.Millisecond
 
 func printDocWindow(window client.DocWindow, asJSON bool) {
@@ -445,7 +443,6 @@ func parseDocQueryFlags(verb, namespace, collection string, args []string) (prot
 	return query, opts
 }
 
-// docWhereOps are matched longest-first so ">=" is not read as ">".
 var docWhereOps = []struct {
 	token string
 	op    docstore.Op
@@ -457,8 +454,6 @@ var docWhereOps = []struct {
 	{"<", docstore.OpLt},
 }
 
-// parseDocWhere reads one --where expression. The bound is taken as JSON when it parses
-// as JSON and as a string otherwise, so a numeric-looking string needs status='"5"'.
 func parseDocWhere(expr string) (protocol.DocumentFilter, error) {
 	for _, candidate := range docWhereOps {
 		field, value, ok := strings.Cut(expr, candidate.token)

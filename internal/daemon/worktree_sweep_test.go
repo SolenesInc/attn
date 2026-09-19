@@ -490,7 +490,6 @@ func TestDeletingAWorktreeByHandLeavesTheSameTrailAsTheSweep(t *testing.T) {
 	}
 }
 
-// Iterating a null takes the whole app down through its error boundary.
 func TestTheWorktreeSurfaceNeverPutsNullWhereTheAppExpectsAnArray(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(d.stopEventBus)
@@ -540,7 +539,6 @@ func TestASweepNeverActsOnARepositoryItCouldNotRefresh(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(stale, "new-work.txt")); err != nil {
 		t.Fatalf("the work committed since the last refresh is gone: %v", err)
 	}
-	// A removal git happened to refuse still writes its failure here.
 	if entries, _ := d.store.WorktreeSweepLog(repo.main, 10); len(entries) != 0 {
 		t.Fatalf("the sweep acted on a repository it could not refresh: %+v", entries)
 	}
@@ -578,7 +576,6 @@ func TestAFailedStashListingStopsTheSweepRatherThanReadingAsNoStash(t *testing.T
 		t.Fatalf("the stash gate does not hold before the listing breaks: %q / %q", verdict.Status, verdict.Reason)
 	}
 
-	// A stash ref pointing at an object that is gone: git refuses the listing.
 	stashRef := filepath.Join(repo.root, "main", ".git", "refs", "stash")
 	if err := os.WriteFile(stashRef, []byte(strings.Repeat("0", 39)+"1\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -615,7 +612,6 @@ func TestAnUncountableCommitCountKeepsTheWorktreeRatherThanReadingAsZero(t *test
 		{Branch: "feat/reused", Number: 11, HeadSHA: mergedHead},
 	}, now)
 
-	// The pull request rung needs no local ref, so this reads merged anyway.
 	d.store.SetRepoIntegrationBranch(repo.main, "origin/gone", "pull_requests", now)
 
 	d.refreshRepositoryWorktrees(repo.main, now)

@@ -72,8 +72,6 @@ func (d *Daemon) legacyTicketRecoveryEligible() bool {
 	return d.requireHome(garden.Surface) == nil
 }
 
-// prepareLegacyTicketRecovery performs the only synchronous part of recovery:
-// it freezes the exact backup files before any attn pruner can run.
 func (d *Daemon) prepareLegacyTicketRecovery() (bool, error) {
 	if !d.legacyTicketRecoveryEligible() {
 		return false, nil

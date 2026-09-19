@@ -7,19 +7,16 @@ import (
 	"time"
 )
 
-// At one observation per second, a bit over three minutes of history.
 const DefaultCapacity = 256
 
 type Outcome string
 
 const (
-	OutcomeApplied Outcome = "applied"
-	// OutcomeDiscarded means applyState's commit rule refused it.
+	OutcomeApplied   Outcome = "applied"
 	OutcomeDiscarded Outcome = "discarded"
-	// OutcomeVetoed means it was rejected before ever reaching applyState.
-	OutcomeVetoed   Outcome = "vetoed"
-	OutcomeSkipped  Outcome = "skipped"
-	OutcomeObserved Outcome = "observed"
+	OutcomeVetoed    Outcome = "vetoed"
+	OutcomeSkipped   Outcome = "skipped"
+	OutcomeObserved  Outcome = "observed"
 )
 
 type Observation struct {
@@ -95,8 +92,6 @@ func (r *Recorder) Record(sessionID string, obs Observation) {
 	r.RecordIf(sessionID, obs, nil)
 }
 
-// admit runs under the recorder's lock, so the check is atomic with Forget (checking before
-// Record can recreate a ring nothing forgets); it must not call in or take a held lock.
 func (r *Recorder) RecordIf(sessionID string, obs Observation, admit func() bool) {
 	if r == nil || sessionID == "" {
 		return
@@ -178,8 +173,6 @@ func (r *ring) push(obs Observation) {
 	r.start = (r.start + 1) % capacity
 }
 
-// newest points into the ring's own storage (nil when empty) so a collapsing repeat
-// can update it in place.
 func (r *ring) newest() *Observation {
 	if r.size == 0 {
 		return nil

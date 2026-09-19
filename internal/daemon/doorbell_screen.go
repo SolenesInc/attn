@@ -10,15 +10,11 @@ import (
 )
 
 const (
-	// Over 44,724 live viewports, 6, 8 and 12 find the same 47 selector screens
-	// and 20 starts matching assistant prose, so 8 is the tripwire.
 	doorbellScreenTailLines = 8
 
 	doorbellScreenTimeout = 2 * time.Second
 )
 
-// Reads words rather than glyphs on purpose: claude changed which glyphs it
-// animates with inside one minor version.
 var doorbellSelectorFooter = regexp.MustCompile(`(?i)\bto select\b|\besc to cancel\b`)
 
 func screenShowsSelector(text string) (string, bool) {

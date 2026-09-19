@@ -20,9 +20,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Measured 2026-08-14: `claude --session-id <id>` refuses a second launch under an id
-// it already used, so the resume-preserving reload cannot serve the nap.
-
 var crewNapPrompt = prompts.RenderText("crew", "successor", prompts.Values{})
 
 func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
@@ -31,8 +28,6 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 			return false, fmt.Errorf("%s's day is no longer session %s; nothing was moved", crew.DisplayName(member.ID), shortSessionID(from))
 		}
 		member.BindingSession = to
-		// The filed-letter fields are left alone: a rollback that puts the binding
-		// back finds them still true.
 		return true, nil
 	})
 	if err != nil {
@@ -199,8 +194,6 @@ func (d *Daemon) crewLetterForHandoff(member crew.Member, sessionID, note string
 	return path, nil
 }
 
-// Best-effort: the letter is on disk either way, and a failed registry write
-// must not fail the nap.
 func (d *Daemon) recordCrewLetter(memberID, sessionID, path string) {
 	if _, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.BindingSession != sessionID {
@@ -231,8 +224,6 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 	if session == nil {
 		return "", fmt.Errorf("session %s is no longer here", shortSessionID(oldSessionID))
 	}
-	// Checked before anything is spawned, so a member past its allowance keeps the
-	// day it has rather than losing it to a refused wake.
 	now := time.Now()
 	if d.UserAwayFor(now) >= d.crewAwayLimit() {
 		if err := d.chargeAutonomousWake(member.ID, now); err != nil {
@@ -247,8 +238,6 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 	spawnMsg.Cwd = launchDir
 	newSessionID = spawnMsg.ID
 
-	// Before the spawn: the launching wrapper asks `crew_prime` for what to inject,
-	// and the binding is what answers. One write, so the member is never unbound.
 	if err := d.transferCrewBinding(member.ID, oldSessionID, newSessionID); err != nil {
 		return "", err
 	}
@@ -277,8 +266,6 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
 
-	// releaseCrewBindingIfSession only clears a binding pointing at the id being
-	// closed, so this releases nothing the member still needs.
 	d.closeNappedSession(oldSessionID, teardown)
 	committed = true
 	d.logf("crew: %s napped — session %s ended, session %s is the new day", crew.DisplayName(member.ID), oldSessionID, newSessionID)
@@ -323,7 +310,7 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 			strings.TrimSpace(launch.Executable) != strings.TrimSpace(protocol.Deref(spawnMsg.Executable))) {
 		policy.unattendedLaunch = launchcontract.UnattendedLaunchSpec{}
 	}
-	// A resume would carry the closed day's transcript into the new one.
+
 	spawnMsg.ResumeSessionID = nil
 	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {
 		spawnMsg.WorkspaceID = crewWorkspaceID(member.ID)

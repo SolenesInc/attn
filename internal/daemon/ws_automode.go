@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Every command here only records a proposal: a caller on the unix socket cannot fake app trust.
-
 func (d *Daemon) handleAutoModeGet(client *wsClient, msg *protocol.AutoModeGetMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
@@ -174,7 +172,6 @@ func (d *Daemon) handleAutoModeEnvNotesWS(client *wsClient, msg *protocol.AutoMo
 
 const autoModePluginName = "attn-pi"
 
-// A driver without this method is a driver with no proxy to update: log and move on.
 const autoModePolicyChangedTimeout = 5 * time.Second
 
 type autoModePolicyChangedParams struct {

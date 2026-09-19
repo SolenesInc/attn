@@ -86,8 +86,6 @@ func Build(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 
-	// Staging lives inside the store: the last step is a rename into it, and a
-	// cross-filesystem rename fails — /tmp is a different volume often on Linux.
 	stagingRoot := filepath.Join(opts.StoreDir, ".staging")
 	if err := os.MkdirAll(stagingRoot, 0o755); err != nil {
 		return Result{}, fmt.Errorf("creating the app build staging directory %s: %w", stagingRoot, err)
@@ -158,8 +156,6 @@ func WriteGenerated(dir string, m Manifest) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
 		}
-		// Rewriting an unchanged file touches its mtime, and `attn app dev` watches
-		// this directory: codegen would wake the watcher that triggered it, forever.
 		if existing, err := os.ReadFile(path); err == nil && string(existing) == content {
 			continue
 		}
@@ -227,8 +223,6 @@ type ViewArtifact struct {
 	Content []byte
 }
 
-// `--production` is NOT optional. Measured: without it bun emits jsxDEV imports
-// whatever tsconfig says, and React's production build exports jsxDEV undefined.
 func bundleView(ctx context.Context, tools Toolchain, dir string, m Manifest, v View, outfile string) error {
 	args := []string{"build", filepath.FromSlash(v.Entrypoint), "--target", "browser", "--format", "esm", "--production"}
 	for _, specifier := range SDKSpecifiers() {
@@ -244,8 +238,6 @@ func bundleView(ctx context.Context, tools Toolchain, dir string, m Manifest, v 
 	return nil
 }
 
-// The handler bundle alone would be wrong twice: a manifest edit can leave it
-// byte-identical, and editing only a view moves neither it nor the declaration.
 func versionHash(declaration string, bundle []byte, views []ViewArtifact) string {
 	h := sha256.New()
 	h.Write([]byte(declaration))
@@ -289,8 +281,6 @@ func placeArtifact(storeDir, name, hash, staging string) (string, bool, error) {
 		return "", false, fmt.Errorf("creating the app artifact store %s: %w", filepath.Dir(target), err)
 	}
 	if err := os.Rename(staging, target); err != nil {
-		// Another apply of the same content won the race; its directory holds the
-		// same bytes by construction, so the loser has nothing to do.
 		if _, statErr := os.Stat(final); statErr == nil {
 			return final, false, nil
 		}

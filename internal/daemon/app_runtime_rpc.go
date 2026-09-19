@@ -58,7 +58,6 @@ func (c *appRuntimeConnection) reconcile(ctx context.Context, req appReconcileRe
 	return result, nil
 }
 
-// Served without touching app code, so a silent ping means the loop is blocked.
 type appRuntimePingResult struct {
 	OK bool `json:"ok"`
 }
@@ -74,8 +73,6 @@ func (c *appRuntimeConnection) ping(ctx context.Context) error {
 	return nil
 }
 
-// Runs before the plugin hello sniff, which would refuse this frame with "first
-// plugin method must be hello" — a true sentence about the wrong protocol.
 func parseAppRuntimeHello(data []byte) (json.RawMessage, appRuntimeHelloParams, bool, error) {
 	var msg jsonRPCMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
@@ -119,11 +116,8 @@ func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader,
 	}
 	d.setAppRuntimeConnection(runtime)
 	defer func() {
-		// Before the connection stops being reachable, so a replacement's NoteConnected
-		// cancels the grace timer instead of an old defer arming it afterwards.
 		d.ensureAppRuntimeSupervisor().NoteDisconnected(appRuntimeChildName, runtime.generation)
 		d.clearAppRuntimeConnection(runtime)
-		// Otherwise every parked dispatch waits out its whole timeout.
 		runtime.closePending(io.EOF)
 	}()
 
@@ -154,12 +148,9 @@ func (d *Daemon) handleAppRuntimeConnection(conn net.Conn, reader *bufio.Reader,
 			continue
 		}
 		if msg.Method == appRuntimeEnteredMethod || msg.Method == appRuntimeLeftMethod {
-			// On the read loop on purpose: it is a map write whose whole value is the
-			// order it arrives in.
 			d.appRuntimeHandlerMoved(runtime, msg)
 			continue
 		}
-		// Off the read loop: a collection read for one app must not hold up another's.
 		go d.serveAppRuntimeMethod(runtime, msg)
 	}
 }
@@ -219,8 +210,6 @@ func (d *Daemon) appRuntimeCrashed(msg jsonRPCMessage) (any, error) {
 	return appRuntimeHelloResult{OK: true}, nil
 }
 
-// entered reaches the daemon *before* the handler runs, so it is already on the wire when
-// a handler that never yields freezes the loop behind it. See attributeWedgedDispatch.
 const (
 	appRuntimeEnteredMethod = "app_runtime.entered"
 	appRuntimeLeftMethod    = "app_runtime.left"
@@ -252,8 +241,6 @@ func (d *Daemon) appRuntimeHandlerMoved(runtime *appRuntimeConnection, msg jsonR
 	d.noteEnteredHandler(runtime.generation, params.Dispatch, params.App)
 }
 
-// Deliberately no namespace: the daemon reads it off the dispatch record, so an
-// app cannot name one — its own or anybody else's.
 type appCollectionParams struct {
 	Dispatch   string          `json:"dispatch"`
 	Collection string          `json:"collection"`
@@ -343,8 +330,6 @@ func (d *Daemon) appCollectionGet(dispatch *appDispatch, params appCollectionPar
 		return nil, undeclaredCollectionError(dispatch.namespace, params.Collection)
 	}
 	if !read.Found {
-		// The SDK types this as Document | null, so the absent case is a value
-		// rather than a failure.
 		return nil, nil
 	}
 	return appDocumentOf(*read.Document), nil
@@ -369,7 +354,6 @@ func (d *Daemon) appCollectionPut(dispatch *appDispatch, params appCollectionPar
 		return nil, err
 	}
 	d.announceCommittedWrite(fact, written.Seq)
-	// Read back rather than synthesize: the timestamps must be the store's.
 	read, _, err := d.store.ReadDocument(dispatch.namespace, params.Collection, params.ID)
 	if err == nil && read.Found {
 		return appDocumentOf(*read.Document), nil
@@ -395,7 +379,6 @@ func (d *Daemon) appCollectionDelete(dispatch *appDispatch, params appCollection
 	return written.Changed, nil
 }
 
-// Fills in the two fields the app is not allowed to choose.
 func (d *Daemon) appQuery(dispatch *appDispatch, params appCollectionParams) docstore.Query {
 	q := docstore.Query{}
 	if params.Query != nil {

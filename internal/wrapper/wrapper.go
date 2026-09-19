@@ -20,7 +20,6 @@ func DefaultLabel() string {
 	return filepath.Base(dir)
 }
 
-// Creates a subdirectory to isolate from other temp files (avoids fs.watch issues).
 func WriteSettingsConfig(tmpDir, sessionID, content string) (string, error) {
 	settingsDir := filepath.Join(tmpDir, "attn-hooks-"+sessionID)
 	if err := os.MkdirAll(settingsDir, 0700); err != nil {

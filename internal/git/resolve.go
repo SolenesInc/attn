@@ -109,7 +109,6 @@ func hostOwnerRepoFromRemote(remote string) (host, ownerRepo string) {
 		host = rest[:slashIdx]
 		remote = rest[slashIdx+1:]
 	} else if colonIdx := strings.Index(remote, ":"); colonIdx > 0 {
-		// scp-like form: [user@]host:owner/name
 		host = remote[:colonIdx]
 		remote = remote[colonIdx+1:]
 	}
@@ -147,7 +146,6 @@ func repoNameFromRemote(remote string) string {
 	return parts[len(parts)-1]
 }
 
-// RemoteHostOwnerRepos returns "host/owner/name" for every remote in dir, origin
 func RemoteHostOwnerRepos(dir string) []string {
 	out, err := runGitOutput(OpMetadata, dir, "remote", "-v")
 	if err != nil {

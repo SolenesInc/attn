@@ -68,7 +68,6 @@ func reReviewObservation(head, checks, review string, requested bool, submitted,
 	return obs
 }
 
-// GitHub attaches every inline comment to a freshly submitted review, including a reply to a dormant thread.
 func reviewNode(id, state, body, at, author, oid, inline string) string {
 	return fmt.Sprintf(`{"id":%q,"state":%q,"bodyText":%q,"submittedAt":%q,
 	  "author":{"__typename":"User","login":%q},"commit":{"oid":%q},
@@ -155,7 +154,6 @@ func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
 	}
 }
 
-// GitHub wraps a standalone inline comment in a bodyless COMMENTED review.
 func TestParsePRSnapshotDoesNotDoubleCountInlineCommentWrapper(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	wrapper := reviewNode("r1", "COMMENTED", "", "2026-07-19T19:33:19Z", "victorarias", head,
@@ -173,7 +171,6 @@ func TestParsePRSnapshotDoesNotDoubleCountInlineCommentWrapper(t *testing.T) {
 func TestParsePRSnapshotSeesReplyOnLongDormantThread(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	nodes := make([]string, 0, 130)
-	// 128 old reviews, each opening a thread, push the first thread outside a 100-thread window.
 	for i := range 128 {
 		nodes = append(nodes, reviewNode(
 			fmt.Sprintf("old-r%d", i), "COMMENTED", "", "2026-01-01T00:00:00Z", "victorarias", head,
@@ -515,7 +512,6 @@ func TestWaitForPRActionableBotCommentIsItsOwnEvent(t *testing.T) {
 	}
 }
 
-// A real `gh api graphql` response, with `state` flipped to OPEN so the closed event does not short the wait.
 func TestParsePRSnapshotAgainstRealApprovalPayload(t *testing.T) {
 	payload, err := os.ReadFile(filepath.Join("testdata", "pr-approval-with-body.json"))
 	if err != nil {
@@ -863,10 +859,8 @@ func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
 	          "author":{"__typename":"User","login":"victorarias"}}`
 	theirs := `{"id":"c2","createdAt":"2026-07-26T10:05:00Z","bodyText":"one more thing",
 	            "author":{"__typename":"User","login":"figgyster"}}`
-	// GitHub renders a login in whatever case it was registered with.
 	opts := prWaitOptions{Reviewer: "figgyster", Interval: time.Millisecond, SelfLogin: "VictorArias"}
 	resumed := prWaitCursor{VerdictAt: mustTime(t, "2026-07-26T09:00:00Z")}
-	// Given context.Background() these waits would poll a fixed snapshot forever and hang the package.
 	bounded := func() (context.Context, context.CancelFunc) {
 		return context.WithTimeout(context.Background(), 10*time.Second)
 	}

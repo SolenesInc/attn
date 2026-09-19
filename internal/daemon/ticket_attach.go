@@ -39,7 +39,6 @@ type attachFingerprintInput struct {
 	Comment  string                  `json:"comment,omitempty"`
 }
 
-// handleTicketAttach is the Unix-socket form used by the CLI and agents.
 func (d *Daemon) handleTicketAttach(conn net.Conn, msg *protocol.TicketAttachMessage) {
 	result, err := d.submitTicketAttach(msg, strings.TrimSpace(msg.SourceSessionID), true)
 	if err != nil {
@@ -49,8 +48,6 @@ func (d *Daemon) handleTicketAttach(conn net.Conn, msg *protocol.TicketAttachMes
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, TicketAttachResult: result})
 }
 
-// handleTicketAttachWS is the in-app form. The human is the audited author and
-// must name the ticket explicitly.
 func (d *Daemon) handleTicketAttachWS(client *wsClient, msg *protocol.TicketAttachMessage) {
 	requestID := protocol.Deref(msg.RequestID)
 	if err := requireExpectedTicketEventSeq(msg.ExpectedEventSeq); err != nil {

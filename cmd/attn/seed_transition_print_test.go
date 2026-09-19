@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A closed plot over open work must never close silently: the harvest that
-// strands growing children says so on the same screen that confirmed the move.
 func TestFprintTransitionWarnsOnClosingAPlotWithOpenChildren(t *testing.T) {
 	var buf bytes.Buffer
 	fprintTransition(&buf, &protocol.SeedTransitionResult{

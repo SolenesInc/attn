@@ -22,9 +22,8 @@ import (
 )
 
 const (
-	stopTimeout = 5 * time.Second
-	readyFDEnv  = "ATTN_DAEMON_READY_FD"
-	// Runs 34526737207 and 34537529658 took 13s on github-hosted 4vcpu/16GB; 60s is the startup tripwire.
+	stopTimeout    = 5 * time.Second
+	readyFDEnv     = "ATTN_DAEMON_READY_FD"
 	startupTimeout = 60 * time.Second
 )
 
@@ -165,8 +164,6 @@ func acquireEnsureLock(ctx context.Context) (func(), error) {
 }
 
 func daemonMatchesCurrentBinary(health healthResponse) bool {
-	// Profile identity is stronger than binary identity: a daemon running under
-	// another profile must be restarted even when the fingerprint matches.
 	if !profileMatchesCurrent(health) {
 		return false
 	}
@@ -179,7 +176,6 @@ func daemonMatchesCurrentBinary(health healthResponse) bool {
 
 func profileMatchesCurrent(health healthResponse) bool {
 	expected := config.ProfileLabel()
-	// Older daemons predate the profile field; treat an empty profile as "default".
 	reported := strings.TrimSpace(health.Profile)
 	if reported == "" {
 		reported = "default"
@@ -385,8 +381,6 @@ func matchingDaemonIsLive(ctx context.Context) bool {
 	return err == nil && daemonMatchesCurrentBinary(health) && isSocketLive(config.SocketPath())
 }
 
-// removeStaleSocketFiles unlinks the listening socket only. The PID file must
-// survive: its exclusive flock is the lock `attn db restore` contends on.
 func removeStaleSocketFiles() error {
 	socketPath := config.SocketPath()
 	if err := os.Remove(socketPath); err != nil && !os.IsNotExist(err) {

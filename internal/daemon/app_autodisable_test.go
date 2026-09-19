@@ -170,8 +170,6 @@ func TestARuntimeOutageLongerThanTheWindowDisablesNothing(t *testing.T) {
 	installApp(t, d, "greeter", subscribing("ticket.*"))
 	t.Setenv(appRuntimeHostOverride, writeExecutableStub(t, "exit 0"))
 	d.appRuntimeSupervise.GiveUpAfter = 1
-	// The connect wait is the one thing here that is real time rather than the
-	// injected clock, and the runtime is never going to connect.
 	d.appRuntimeWait = 20 * time.Millisecond
 
 	stuck := appEvent("ticket.created", "tk-1", 4)
@@ -271,8 +269,6 @@ func TestADisabledInstalledAppStillHoldsTheRetentionFloor(t *testing.T) {
 	}
 }
 
-// Both notifications rounded the stall to the minute, so a moved window read
-// "for 0s": the constant repeated back instead of a measurement.
 func TestAnAutoDisableNotificationReportsHowLongAttnTried(t *testing.T) {
 	const window = 25 * time.Second
 

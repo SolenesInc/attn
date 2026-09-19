@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// These stamp columns are TEXT, so every SQL comparison is a text comparison; these
-// offsets encode in an order that is not their own ('Z' is 0x5A, above '.' and digits).
-
 var raggedOffsets = []struct {
 	id     string
 	offset time.Duration
@@ -31,8 +28,6 @@ func chronologicalRaggedIDs() []string {
 	return out
 }
 
-// The guard asks `turn_opened_at <= turn_settled_at` in text, so a settle in the same
-// second as its open reads as still-open and the session drops out of the queue.
 func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 	cases := []struct {
 		name            string
@@ -64,11 +59,9 @@ func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 	}
 }
 
-// turn_snoozed_until is matched for equality, and a whole second is where the two
-// encodings disagree ("…:00Z" against "…:00.000000000Z").
 func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -99,8 +92,6 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	}
 }
 
-// The schedule cursor is deliberately not the subject: its upsert carries no
-// WHERE, so it advances whatever the encoding does and proves nothing.
 func TestAReviewRequestCursorAdvancesWithinASecond(t *testing.T) {
 	s := newTurnStore(t)
 	def, err := s.UpsertAutomationDefinition("reviews", "Reviews", `{"id":"reviews"}`, turnBase())
@@ -184,7 +175,7 @@ func TestWorkflowRunsAreNewestFirstWithinASecond(t *testing.T) {
 
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -198,7 +189,6 @@ func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T
 		}
 	}
 
-	// An unsnoozed session holds '' as a sentinel, not a stamp that failed to parse.
 	if _, err := s.db.Exec(
 		`UPDATE sessions SET turn_opened_at = ?, turn_settled_at = ? WHERE id = 's1'`,
 		turnBase().Format(time.RFC3339Nano),

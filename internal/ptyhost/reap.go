@@ -17,8 +17,6 @@ func HostRegistryPaths(dataDir string) []string {
 	return paths
 }
 
-// Shutdown is authenticated over the host socket. Never signal a registry PID:
-// an unreachable host must keep its registry for a later cleanup attempt.
 func ReapDataDir(dataDir string) []procreap.ReapResult {
 	var results []procreap.ReapResult
 	for _, path := range HostRegistryPaths(dataDir) {

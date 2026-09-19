@@ -28,8 +28,6 @@ type sessionListArgs struct {
 	json       bool
 }
 
-// Resolved here, never by the daemon: only the client knows its timezone, and
-// these are calendar days, so "last 7 days" is today and the six before it.
 var sessionListPresets = map[string]int{"today": 0, "yesterday": 1, "7d": 6, "30d": 29}
 
 func sessionListPresetNames() string {
@@ -54,7 +52,6 @@ func sessionListPresetWindow(name string, now time.Time) (string, string, error)
 	return since.Format(time.RFC3339), "", nil
 }
 
-// A bare date starts at that day's first instant, never silently at noon.
 func sessionListInstant(flagName, raw string, now time.Time) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -255,7 +252,6 @@ func pluralRows(n int) string {
 	return fmt.Sprintf("%d rows are", n)
 }
 
-// A closed row keeps the state it held when it closed, which would read as live.
 func sessionLedgerState(entry protocol.SessionLedgerEntry) string {
 	if protocol.Deref(entry.ClosedAt) != "" {
 		return "closed"
@@ -282,8 +278,6 @@ type sessionRenameArgs struct {
 	name      string
 }
 
-// The session defaults to the caller's own, so an agent renames itself with one
-// word. --session is accepted before or after the name.
 func parseSessionRenameArgs(args []string, ownSessionID string) (sessionRenameArgs, error) {
 	var parsed sessionRenameArgs
 	var positional []string

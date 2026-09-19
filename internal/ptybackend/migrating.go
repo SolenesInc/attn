@@ -19,8 +19,6 @@ const (
 	ownerShared
 )
 
-// MigratingBackend keeps live sessions on the runtime that created them while
-// allowing new sessions to move to a replacement runtime.
 type MigratingBackend struct {
 	legacy Backend
 	shared Backend
@@ -59,7 +57,6 @@ func (b *MigratingBackend) ProbeShared(ctx context.Context) error {
 	return probe.Probe(ctx)
 }
 
-// Selection changes affect future admissions only, including explicit reloads.
 func (b *MigratingBackend) SetSharedForNewSessions(enabled bool) {
 	b.mu.Lock()
 	defer b.mu.Unlock()

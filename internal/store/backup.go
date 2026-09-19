@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Rotating backup names: attn-<UTC YYYYMMDD-HHMMSS>.db. Pre-migration snapshots
-// use a different prefix so the rotation prune never counts or removes them.
 const (
 	backupNamePrefix = "attn-"
 	backupNameLayout = "20060102-150405"
@@ -24,8 +22,6 @@ const premigrationNamePrefix = "attn-premigration-"
 
 const premigrationTimestampLen = len(backupNameLayout)
 
-// BackupNow is safe while the daemon serves traffic: VACUUM INTO reads a
-// consistent snapshot without blocking writers.
 func (s *Store) BackupNow(dir string) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("backup: store has no open database")
@@ -53,7 +49,6 @@ func (s *Store) BackupNow(dir string) (string, error) {
 	return target, nil
 }
 
-// Lexical sort on the fixed-width timestamp is chronological.
 func PruneBackups(dir string, keep int, protected map[string]struct{}) error {
 	if keep < 0 {
 		keep = 0
@@ -115,8 +110,6 @@ func backupPreMigration(db *sql.DB, dbPath string, version int) (string, error) 
 	return target, nil
 }
 
-// Ordered by the trailing timestamp: the embedded schema version varies in digit
-// count, so a whole-filename sort is not chronological.
 func PrunePremigrationBackups(dir string, keep int, protected map[string]struct{}) error {
 	if keep < 0 {
 		keep = 0

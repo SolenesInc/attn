@@ -103,12 +103,8 @@ func TestMain(m *testing.M) {
 
 	sessionInputSubmitDelay = 0
 
-	// A fake PTY never reports working, so a non-zero confirmation window times
-	// out on every send here.
 	sessionInputTakenWindow = 0
 
-	// Helper subprocesses need the exact ATTN_SOCKET_PATH their parent test
-	// injected; scoping them here would clobber it.
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" || os.Getenv("ATTN_PLUGIN_DRIVER_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
@@ -126,8 +122,6 @@ func TestMain(m *testing.M) {
 	_ = os.Setenv(toolhome.EnvVar, toolHomeDir)
 	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHomeDir, ".codex"))
 
-	// Daemons here use a per-test socket dir, so a minted token would land
-	// where config.ClientToken() never looks.
 	_ = os.Setenv("ATTN_CLIENT_TOKEN", "daemon-test-client-token")
 
 	code := m.Run()
@@ -157,8 +151,6 @@ func waitForRecovery(t *testing.T, d *Daemon) {
 
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	// Unix socket paths are length-limited on macOS and a t.TempDir() path can
-	// exceed it.
 	base := "/tmp"
 	if _, err := os.Stat(base); err != nil {
 		base = ""
@@ -343,8 +335,6 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	d := NewForTesting(socketPath)
 	t.Cleanup(d.Stop)
 
-	// Start() blocks on its accept loop, so race its return against the
-	// daemon's own started signal.
 	startErr := make(chan error, 1)
 	go func() { startErr <- d.Start() }()
 
@@ -1232,11 +1222,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLivePluginReportedSt
 
 func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	// The session store is the package's, so this row outlives the test and
-	// would seed the next run.
 	t.Cleanup(func() { d.store.Remove("just-registered") })
-	// Derive from the cutoff: two time.Now() calls can land on the same
-	// microsecond, and then the row is not strictly after it.
 	cutoff := time.Now()
 	now := string(protocol.NewTimestamp(cutoff.Add(time.Second)))
 	d.store.Add(&protocol.Session{
@@ -2437,8 +2423,6 @@ func TestDaemon_HandleAttachSession_ServesGhosttySnapshotWhenAvailable(t *testin
 		if protocol.Deref(result.LastSeq) != 12 {
 			t.Fatalf("last_seq = %d, want 12", protocol.Deref(result.LastSeq))
 		}
-		// A worker outlives an install, so the encoding format must travel with
-		// the bytes for the client to know whether it can decode them.
 		if got := protocol.Deref(result.Snapshot.Format); got != "cafef00d1234" {
 			t.Fatalf("snapshot format = %q, want %q", got, "cafef00d1234")
 		}
@@ -3928,8 +3912,6 @@ func TestDaemon_ChiefLaunchEffort(t *testing.T) {
 }
 
 func TestDaemon_ApplyHeadlessContextWindowCap(t *testing.T) {
-	// The cap is a process-wide global; restore it or it leaks into other
-	// tests in this binary.
 	t.Cleanup(func() { agentdriver.SetHeadlessContextWindowCap(0) })
 
 	d := &Daemon{store: store.New()}
@@ -4233,7 +4215,6 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 	t.Setenv("ATTN_MOCK_GH_TOKEN", "test-token")
 	t.Setenv("ATTN_MOCK_GH_HOST", ghClient.Host())
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 	d := NewWithGitHubClient(sockPath, ghClient)
@@ -4400,7 +4381,6 @@ func TestDaemon_InjectTestPR(t *testing.T) {
 func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 
@@ -4511,7 +4491,6 @@ func TestDaemon_MutePR_ViaWebSocket(t *testing.T) {
 func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 
@@ -4582,7 +4561,6 @@ func TestDaemon_MuteRepo_ViaWebSocket(t *testing.T) {
 func TestDaemon_InitialState_IncludesRepoStates(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 
@@ -4738,7 +4716,6 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 
 	sendWorkspaceClientHello(t, wsConn)
 	waitForProtocolWebSocketEvent(t, wsConn, protocol.EventInitialState)
-	// coder/websocket defaults to 32 KiB; CI saw this legal state event cross it.
 	d.store.UpdateTodos("test-session", []string{strings.Repeat("x", 32<<10)})
 
 	for i, expected := range []string{
@@ -4861,7 +4838,6 @@ func TestDaemon_InjectTestSession_BroadcastsToWebSocket(t *testing.T) {
 func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 	useFreeWSPort(t)
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 
@@ -4921,7 +4897,6 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T) {
 	useFreeWSPort(t)
 
-	// /tmp: a t.TempDir() path can exceed the unix socket length limit.
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
 

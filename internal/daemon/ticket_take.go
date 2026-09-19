@@ -56,7 +56,6 @@ func (d *Daemon) handleTicketTake(conn net.Conn, msg *protocol.TicketTakeMessage
 			UnreadCount: protocol.Ptr(d.targetTicketUnreadCount(sourceSessionID, ticketID)),
 		},
 	})
-	// Authored by the taker, so notifyTicketObservers excludes it (no self-nudge) and fans out to the other participants.
 	d.notifyTicketObservers(ticketID)
 	d.publishTicketFact(FactTicketAssigned, ticketID)
 }

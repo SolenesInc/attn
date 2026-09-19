@@ -76,8 +76,6 @@ func inboxHasTicket(bundles []protocol.TicketEventBundle, ticketID string) bool 
 	return false
 }
 
-// The trigger goes through commentOnTicket (synchronous), so the nudge countdown is armed
-// before the assertion — unlike callSetTicketStatus, which returns before its async notify.
 func TestTicketSubscribeLifecycle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Hour

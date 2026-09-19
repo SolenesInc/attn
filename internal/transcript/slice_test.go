@@ -181,8 +181,6 @@ func TestExtractConversationSlice_ClaudeNonHumanOriginNeverCounts(t *testing.T) 
 	}
 }
 
-// Provenance is per-line, so a file holding only injected user-role content is
-// indistinguishable from a legacy one and the fallback reports the injected text.
 func TestExtractConversationSlice_ClaudeOnlyInjectedContent(t *testing.T) {
 	lines := []string{
 		`{"type":"user","isMeta":true,"message":{"role":"user","content":"<local-command-caveat>Caveat: ...</local-command-caveat>"}}`,

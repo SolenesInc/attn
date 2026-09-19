@@ -419,16 +419,12 @@ func TestClient_ConnectError_IncludesProfileAndSocket(t *testing.T) {
 }
 
 func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
-	// Unix socket paths on macOS are limited to ~104 chars, so the fake HOME goes
-	// under /tmp rather than t.TempDir().
 	tmp, err := os.MkdirTemp("/tmp", "attn-client-")
 	if err != nil {
 		t.Fatalf("mkdtemp: %v", err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 
-	// DataDirForProfile is HOME-based for cross-profile probing, so HOME is its
-	// only lever.
 	t.Setenv("HOME", tmp)
 	t.Setenv("ATTN_PROFILE", "dev")
 	t.Setenv("ATTN_SOCKET_PATH", "")

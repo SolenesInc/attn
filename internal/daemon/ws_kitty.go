@@ -1,8 +1,5 @@
 package daemon
 
-// CapabilityKittyImages gates the kitty_placements fan-out; CapabilityBinaryPtyOutput
-// decides only how a blob travels — the hub relay wants the first without the second.
-
 import (
 	"context"
 	"encoding/base64"
@@ -15,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// Never nil: the empty set is the only message that says "stop drawing", and a nil slice marshals to null.
 func placementsToProtocol(placements []pty.KittyPlacement) []protocol.KittyPlacement {
 	out := make([]protocol.KittyPlacement, len(placements))
 	for i, p := range placements {
@@ -54,7 +50,6 @@ func encodeKittyPlacementsMessage(sessionID string, event ptybackend.OutputEvent
 	return outboundMessage{kind: messageKindText, payload: payload}, nil
 }
 
-// Explicit, not a cast: a pin that reorders ghostty's values would silently re-label every client's pixels.
 func kittyImageFormatCode(format ghosttyvt.KittyImageFormat) (byte, bool) {
 	switch format {
 	case ghosttyvt.KittyImageRGB:
@@ -100,7 +95,6 @@ func (d *Daemon) handleGetKittyImage(client *wsClient, msg *protocol.GetKittyIma
 			d.sendKittyImageFailure(client, msg.ID, msg.ImageID, err.Error())
 			return
 		}
-		// Blocking, like PTY output: better a slow client waits than pixels that never arrive.
 		if !d.sendOutboundBlocking(client, outboundMessage{kind: messageKindBinary, payload: frame}, ptyOutputSendWait) {
 			d.logf("kitty image send failed: id=%s image=%d bytes=%d", msg.ID, image.ID, len(frame))
 		}

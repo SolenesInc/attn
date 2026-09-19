@@ -131,7 +131,6 @@ func parseCrewWakeArgs(args []string) (crewWakeArgs, error) {
 	return crewWakeArgs{member: member, agent: strings.TrimSpace(*agent), json: *jsonOut}, nil
 }
 
-// Go's flag package stops at the first positional, so the member is lifted out first.
 func parseMemberAndFlags(fs *flag.FlagSet, args []string, verb string) (string, error) {
 	if err := fs.Parse(args); err != nil {
 		return "", err
@@ -281,8 +280,6 @@ func (l *crewDirList) Set(value string) error {
 	return nil
 }
 
-// A nil pointer is a field the caller did not name, which the daemon leaves as it was;
-// a pointer to the empty string is the way out of one.
 type crewSetArgs struct {
 	member    string
 	cwd       *string

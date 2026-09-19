@@ -119,8 +119,6 @@ func TestClaudeWatcherBehaviorSkipClassification(t *testing.T) {
 		t.Fatal("should not skip when LastSeen is unparseable")
 	}
 
-	// A parked session is never reclassified, regardless of hook freshness: parks
-	// routinely outlast the 2-minute stale threshold.
 	if skip, _ := b.SkipClassification(protocol.SessionStateScheduled, recent, time.Now()); !skip {
 		t.Fatal("should skip for scheduled session (recent hooks)")
 	}
@@ -204,8 +202,6 @@ func newCopilotBehavior() TranscriptWatcherBehavior {
 	return b
 }
 
-// Copilot writes no assistant.turn_end after an abort, so the abort has to close
-// the bracket its watcher keeps, or Tick pins the session working forever.
 func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 	for _, abort := range []string{
 		`{"type":"abort","data":{"reason":"user_initiated"}}`,
@@ -224,8 +220,6 @@ func TestCopilotAbortClosesTheTurnBracket(t *testing.T) {
 
 			got := b.HandleLine([]byte(abort), now.Add(3*time.Second), protocol.SessionStateWorking)
 
-			// The same turn_start opened an evidence bracket through Tick, and the result
-			// is the only way to reach it: copilot paints no heartbeat, so it runs to `stuck`.
 			if !got.Aborted && !got.BracketClosed {
 				t.Fatalf("got %+v, want the evidence bracket closed: nothing else closes it", got)
 			}

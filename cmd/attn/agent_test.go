@@ -477,8 +477,6 @@ func TestAgentMailboxErrorMessagesDoNotLeakOtherSessionsMessages(t *testing.T) {
 	}
 }
 
-// A message far past the limit never reaches the daemon refusal: the socket hangs
-// up mid-write and the sender sees a broken pipe, so the command answers first.
 func TestParseAgentMsgArgsNamesTheSizeLimitBeforeSending(t *testing.T) {
 	_, err := parseAgentMsgArgs([]string{"target", strings.Repeat("x", protocol.AgentMessageMaxChars+1)}, "sender-session-id")
 	if err == nil {

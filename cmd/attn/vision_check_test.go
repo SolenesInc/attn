@@ -132,8 +132,6 @@ func TestParseVisionCheckResultMissingResultEvent(t *testing.T) {
 }
 
 func TestParseVisionCheckResultHugeLine(t *testing.T) {
-	// Simulate an assistant line far larger than bufio.Scanner's default
-	// 64KB token limit, to prove the reader doesn't choke on it.
 	huge := strings.Repeat("x", 300*1024)
 	stdout := strings.Join([]string{
 		`{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"` + huge + `"}]}}`,

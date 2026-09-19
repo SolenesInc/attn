@@ -19,8 +19,6 @@ func (s *Store) TransitionSessionResumeID(sessionID, nativeID string) (bool, err
 	return s.transitionSessionConversation(sessionID, nativeID, "", false)
 }
 
-// Repeated transitions are no-ops. When the live session row is already gone the ticket
-// mirror is still updated: ticket Resume captures this binding after close.
 func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPath string, pathRequired bool) (bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	nativeID = strings.TrimSpace(nativeID)

@@ -156,8 +156,6 @@ type seededNudgeGarden struct {
 	crown, child, leaf protocol.Seed
 }
 
-// newSeededNudgeGarden is a copy-shaped fixture: several live sessions and a
-// real two-level plot already exist before a test starts exercising bells.
 func newSeededNudgeGarden(t *testing.T) seededNudgeGarden {
 	t.Helper()
 	d := newGardenDaemon(t)

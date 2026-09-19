@@ -33,8 +33,6 @@ func TestHandlePTYState_VetoNamesTheDriverThatHasNotRegisteredYet(t *testing.T) 
 	d := newTraceDaemon(t)
 	seedDriverRun(t, d, "unregistered-driver", "snipe-plugin", "run-1", protocol.SessionStateIdle)
 
-	// The watch-subscribe replay a daemon restart fires beats driver.register by about a
-	// second on a live pi session.
 	d.handlePTYState("unregistered-driver", pty.Observation{
 		Source: pty.SourceWorkerInfo,
 		Claim:  protocol.StateWorking,
@@ -162,7 +160,6 @@ func TestPluginDriverSilence_ClosedSessionCancelsTheAlarm(t *testing.T) {
 	})
 }
 
-// A reconnect must not restamp `state_since` and re-open a settled turn.
 func TestPluginReportedState_OnlyIfUnknownRestatesNothingElse(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	seedDriverRun(t, d, "restated", "snipe-plugin", "run-1", protocol.SessionStateUnknown)

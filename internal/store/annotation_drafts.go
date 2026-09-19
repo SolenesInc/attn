@@ -7,17 +7,12 @@ import (
 	"time"
 )
 
-// A save is accepted only above both the stored generation and the tombstone, so no
-// in-flight save resurrects cleared marks. Clearing is a tombstone, not a delete.
-
 var ErrStaleAnnotationSave = errors.New("stale annotation save")
 
 type annotationDraftTable struct {
 	table string
 	key   string
-	// Markdown drafts have no note column: they read/write the empty string so both
-	// tables keep one query shape.
-	note bool
+	note  bool
 }
 
 var (
@@ -28,7 +23,7 @@ var (
 type annotationDraft struct {
 	Annotations string
 	Note        string
-	Generation  int // max(generation, tombstone_generation)
+	Generation  int
 	UpdatedAt   string
 }
 
@@ -39,7 +34,6 @@ func (t annotationDraftTable) noteColumn() string {
 	return "''"
 }
 
-// The generation includes any tombstone, so a re-mounting client seeds past a clear.
 func (t annotationDraftTable) get(s *Store, key string) (annotationDraft, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -110,7 +104,6 @@ func (t annotationDraftTable) save(s *Store, key, annotationsJSON, note string, 
 	return nil
 }
 
-// Works on a missing row — the tombstone IS the row.
 func (t annotationDraftTable) clear(s *Store, key string, generation int, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -127,7 +120,6 @@ func (t annotationDraftTable) clear(s *Store, key string, generation int, now ti
 	}
 	newTombstone := max(generation, max(storedGeneration, tombstone))
 
-	// Left behind, the note would front the next turn's annotations.
 	noteColumns, noteValues, noteUpdates := "", "", ""
 	if t.note {
 		noteColumns, noteValues, noteUpdates = ", note", ", ''", "note = '',\n\t\t\t"

@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Appends through the per-root cached notebook.Store, so concurrent agent writes
-// serialize instead of racing the way direct file edits do.
 func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendMessage) {
 	entry := strings.TrimSpace(msg.Entry)
 	if entry == "" {
@@ -35,8 +33,6 @@ func (d *Daemon) handleJournalAppend(conn net.Conn, msg *protocol.JournalAppendM
 		d.sendError(conn, "journal append: "+err.Error())
 		return
 	}
-	// Content-aware self-write: the watcher must not re-announce this as an
-	// external edit.
 	d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: rel, Hash: hash})
 	d.broadcastNotebookChanged(originAgent, rel)
 	_ = json.NewEncoder(conn).Encode(protocol.Response{

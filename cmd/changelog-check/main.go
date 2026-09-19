@@ -1,4 +1,3 @@
-// Format and workflow: docs/making-a-release.md.
 package main
 
 import (
@@ -34,8 +33,6 @@ func validateFragment(data []byte) error {
 		}
 		return err
 	}
-	// The decoder reads the first document and stops, so a second one here would
-	// pass this check and then never reach the changelog.
 	var extra fragment
 	if err := dec.Decode(&extra); err == nil {
 		return fmt.Errorf("fragment file holds more than one YAML document; put each fragment in its own file")
@@ -66,8 +63,6 @@ func validateDir(dir string) []error {
 			continue
 		}
 		path := filepath.Join(dir, name)
-		// Type() comes from lstat, so a symlink is reported as a symlink, not as
-		// its target.
 		if !e.Type().IsRegular() {
 			errs = append(errs, fmt.Errorf("%s: fragments must be regular files (not directories, symlinks, or other special files)", path))
 			continue

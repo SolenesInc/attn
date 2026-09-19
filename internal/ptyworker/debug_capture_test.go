@@ -9,8 +9,6 @@ import (
 )
 
 func TestShouldEnableDebugCapture_DefaultAndOverrides(t *testing.T) {
-	// Off by default for every agent: the capture buffer is a debugging aid that
-	// otherwise retains ~16-22 MiB per claude/codex worker for its lifetime.
 	t.Setenv("ATTN_DEBUG_PTY_CAPTURE", "")
 	for _, agent := range []string{"codex", "claude", "copilot"} {
 		if shouldEnableDebugCapture(agent) {
@@ -23,7 +21,6 @@ func TestShouldEnableDebugCapture_DefaultAndOverrides(t *testing.T) {
 		t.Fatal("expected copilot capture enabled with ATTN_DEBUG_PTY_CAPTURE=all")
 	}
 
-	// Explicit per-agent opt-in is scoped to that agent only.
 	t.Setenv("ATTN_DEBUG_PTY_CAPTURE", "codex")
 	if !shouldEnableDebugCapture("codex") {
 		t.Fatal("expected codex capture enabled with ATTN_DEBUG_PTY_CAPTURE=codex")

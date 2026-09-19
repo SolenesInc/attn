@@ -7,16 +7,10 @@ import (
 	"strings"
 )
 
-// The intersection of what a bus consumer name, a document-store owner segment
-// and a directory name all accept.
 var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// The build script, the daemon and the hub each need this string and none can
-// see the others; TestRuntimeHostBinaryNameMatchesTheBuild pins the build to it.
 const RuntimeHostBinaryName = "attn-app-runtime"
 
-// Each profile resolves its runtime beside its own binary: one shared file name
-// would let the newest sync replace another profile's sidecar.
 func RuntimeHostBinaryNameForProfile(profile string) string {
 	p := strings.TrimSpace(profile)
 	if p == "" {
@@ -25,11 +19,8 @@ func RuntimeHostBinaryNameForProfile(profile string) string {
 	return RuntimeHostBinaryName + "-" + p
 }
 
-// MaxNameLength is a tripwire on the document namespace: 64 is far past any real
-// name — attn's longest today is 13 — and an unaddressable one is refused here.
 const MaxNameLength = 64
 
-// Generous rather than minimal: refusing a name later would be a migration.
 var reserved = map[string]string{
 	"runtime":  "the shared app runtime is called `runtime`",
 	"new":      "it is an `attn app` subcommand",
@@ -72,8 +63,6 @@ func ValidateName(name string) error {
 
 const MaxViewNameLength = 64
 
-// A view name is also a file name and a segment of the `app:<app>/<view>` tile
-// kind.
 func ValidateViewName(name string) error {
 	if name == "" {
 		return fmt.Errorf("a view name is required, as lowercase letters, digits and dashes (for example approvals)")
@@ -106,21 +95,16 @@ func CommandLabel(command string) string      { return "command:" + command }
 func SubscriptionLabel(pattern string) string { return "subscribe:" + pattern }
 func ViewLabel(view string) string            { return "view:" + view }
 
-// Reserved: no built-in tile kind may start with it. Nothing validates that —
-// `tile_kind` stays daemon-opaque.
 const ViewTileKindPrefix = ConsumerPrefix
 
 func ViewTileKind(app, view string) string { return ViewTileKindPrefix + app + "/" + view }
 
-// A fact name nothing publishes: every other candidate ("", "*") means
-// "everything" somewhere in the bus, and daemon and CLI share this exact string.
 const NoSubscriptionsPattern = "app.subscribes.to.nothing"
 
 func ConsumerName(name string) string { return ConsumerPrefix + name }
 
 const ConsumerPrefix = "app:"
 
-// Survives the app's removal on purpose: documents are the user's data.
 func Namespace(name string) string { return NamespacePrefix + name }
 
 const NamespacePrefix = "app/"

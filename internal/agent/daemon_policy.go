@@ -22,11 +22,7 @@ type ResumePolicyProvider interface {
 	ResumeSessionIDFromStopTranscriptPath(transcriptPath string) string
 }
 
-// ResumeAvailabilityProvider reports whether a resolved resume target exists on disk.
-// Claude writes its transcript lazily, so a zero-turn session kills a resuming agent.
 type ResumeAvailabilityProvider interface {
-	// ResumeAvailable reports whether resumeID can be resumed. resumeID is already
-	// resolved and is never empty when called.
 	ResumeAvailable(resumeID string) bool
 }
 

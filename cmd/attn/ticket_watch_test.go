@@ -26,7 +26,6 @@ func TestWatchTicketInboxDedupesErrorsAndPrintsBundles(t *testing.T) {
 		{nil, down},
 	}
 
-	// Buffered so the fetch closure never blocks: the loop pulls exactly one per poll.
 	fetchCh := make(chan step, len(steps))
 	for _, s := range steps {
 		fetchCh <- s
@@ -37,7 +36,7 @@ func TestWatchTicketInboxDedupesErrorsAndPrintsBundles(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	tick := make(chan time.Time) // unbuffered: a send blocks until the loop is back at its select
+	tick := make(chan time.Time)
 	var out, errOut bytes.Buffer
 	done := make(chan struct{})
 	go func() {

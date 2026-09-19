@@ -69,10 +69,9 @@ type Node struct {
 	SplitID       string    `json:"split_id,omitempty"`
 	Direction     Direction `json:"direction,omitempty"`
 	Ratio         float64   `json:"ratio,omitempty"`
-	// RatioLocked survives normalization instead of being rebalanced to an equal split.
-	RatioLocked bool      `json:"ratio_locked,omitempty"`
-	RatioMode   RatioMode `json:"ratio_mode,omitempty"`
-	Children    []Node    `json:"children,omitempty"`
+	RatioLocked   bool      `json:"ratio_locked,omitempty"`
+	RatioMode     RatioMode `json:"ratio_mode,omitempty"`
+	Children      []Node    `json:"children,omitempty"`
 }
 
 type WorkspaceLayout struct {
@@ -225,8 +224,6 @@ func rebalanceSplitChains(node Node) Node {
 }
 
 func splitChainSpanCount(node Node, direction Direction) int {
-	// A locked split is an opaque unit: an enclosing chain must not redistribute
-	// space through it.
 	if node.Type != "split" || node.Direction != direction || len(node.Children) < 2 || node.RatioLocked {
 		return 1
 	}
@@ -246,8 +243,6 @@ func normalizeNode(node Node, panesByID map[string]Pane) (Node, bool) {
 	case "tile":
 		tileID := strings.TrimSpace(node.TileID)
 		tileKind := strings.TrimSpace(node.TileKind)
-		// Drop an identity-less tile so it cannot wedge the layout. Tiles are
-		// otherwise never pruned by pane bookkeeping: they have no panesByID entry.
 		if tileID == "" || tileKind == "" {
 			return Node{}, true
 		}
@@ -484,7 +479,6 @@ func hasLeaf(node Node, leafID string) bool {
 	return HasPane(node, leafID) || HasTile(node, leafID)
 }
 
-// Run LayoutEmpty on a normalized layout.
 func LayoutEmpty(node Node) bool {
 	return len(PaneIDs(node)) == 0 && len(TileIDs(node)) == 0
 }
@@ -638,8 +632,6 @@ func collectTileLeaves(node Node, leaves *[]TileLeaf) {
 	}
 }
 
-// `ratio` is the children[0] fraction. An empty tileSessionID carries any
-// existing binding forward, so moving a tile never silently drops its session.
 func DockTile(node Node, anchorID string, direction Direction, before bool, splitID, tileID, tileKind, tileParams, tileSessionID string, ratio float64) (Node, bool) {
 	tileID = strings.TrimSpace(tileID)
 	tileKind = strings.TrimSpace(tileKind)

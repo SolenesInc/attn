@@ -62,8 +62,6 @@ func TestDiffKittyPlacements(t *testing.T) {
 			want:   kittyPlacementDelta{},
 		},
 		{
-			// Two placements of one image share an image id, and two images can
-			// both carry placement id 1. Keying on either alone loses one of them.
 			name:   "placements are identified by image and placement id together",
 			before: []ghosttyvt.KittyPlacement{one},
 			after:  []ghosttyvt.KittyPlacement{one, two, other},

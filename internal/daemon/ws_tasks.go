@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// SECURITY: Job.Payload, Job.Result and Job.CommitGuard carry internal state and have
-// no field on protocol.Task, so none can leak to a client. Do not add them.
 func taskToProtocol(t *jobs.Job) protocol.Task {
 	pt := protocol.Task{
 		ID:            t.ID,
@@ -63,8 +61,6 @@ func (d *Daemon) sendTaskListWSResult(client *wsClient, requestID string) {
 	d.sendToClient(client, msg)
 }
 
-// The runner's OnChange callback fires broadcastTasksChanged, so this handler
-// must NOT broadcast itself.
 func (d *Daemon) sendTaskRetryWSResult(client *wsClient, requestID, taskID string) {
 	runner := d.jobQueueRef()
 	if runner == nil {
@@ -91,8 +87,6 @@ func (d *Daemon) sendTaskRetryWSResult(client *wsClient, requestID, taskID strin
 	d.sendToClient(client, msg)
 }
 
-// May fire CONCURRENTLY from the dispatch goroutine and from each in-flight run;
-// the push holds no shared state and drops on a full broadcast channel.
 func (d *Daemon) projectTasksChanged() {
 	d.projectSnapshot(snapshotTasks, func() {
 		d.broadcastMessage(protocol.TasksChangedMessage{

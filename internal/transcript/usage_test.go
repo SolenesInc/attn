@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/sessioncost"
 )
 
-// Redacted Claude Code 2.1.233 and Codex 0.147.0 captures: shapes and counts kept,
-// content replaced. The pi capture is verbatim, plus hand-written guardian entries.
 func usageFixture(t *testing.T, name string) string {
 	t.Helper()
 	path := filepath.Join("testdata", "usage", name)
@@ -67,8 +65,6 @@ func TestFollowerExtractsCodexLastUsageWithCachedAndReasoningSubsets(t *testing.
 		t.Fatalf("usage = %+v, want two non-null token_count observations", batch.Usage)
 	}
 	first := batch.Usage[0]
-	// The captured record reports 256 reasoning tokens within 563 output tokens:
-	// total_tokens is exactly input_tokens + output_tokens, not reasoning on top.
 	if first.Model != "gpt-5.5" || first.InputTokens != 8427 || first.CacheReadTokens != 24448 || first.OutputTokens != 563 {
 		t.Fatalf("first usage = %+v", first)
 	}

@@ -8,8 +8,6 @@ import (
 	"strings"
 )
 
-// PrintProfileBanner writes a one-line banner to w when a non-default ATTN_PROFILE
-// is active. Not from hook commands: they run on every action and flood output.
 func PrintProfileBanner(w io.Writer) {
 	profile := Profile()
 	if profile == "" {

@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The stamp is the pin: its instant orders the pinned band, so re-pinning moves a session to
-// the end of it. Pinning filters at read, so turn stamps keep accruing underneath.
 func (s *Store) SetSessionPinned(id string, pinned bool, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -40,8 +38,6 @@ func (s *Store) SetSessionPinned(id string, pinned bool, now time.Time) bool {
 	return err == nil && updated == 1
 }
 
-// The column is owned by this setter alone — absent from the session upsert, so
-// a respawn or state re-add cannot disturb it.
 func (s *Store) SetSessionContextWindowCap(id string, cap int) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()

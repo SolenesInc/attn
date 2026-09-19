@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// quiesceTimeout is a tripwire, not a budget: quiescing measured at 38µs under a
-// 15MB/s stream, so anything near a second means the read loop is wedged.
 const quiesceTimeout = 2 * time.Second
 
 var (
@@ -33,16 +31,12 @@ type HandoffState struct {
 	PixelW uint16
 	PixelH uint16
 
-	VTDump []byte
-	// Carryover was never applied nor sent: the new image feeds it as its first bytes.
+	VTDump    []byte
 	Carryover []byte
-	// A VT replay rebuilds no OSC 133 block, so Blocks must carry them.
-	Blocks  []AttachBlockData
-	LastSeq uint32
+	Blocks    []AttachBlockData
+	LastSeq   uint32
 
-	Theme TerminalTheme
-	// Carried so the new image neither re-announces a scheme nor reports to a
-	// child that never asked (DECSET 2031).
+	Theme                TerminalTheme
 	ReportedScheme       int
 	SchemeReportsEnabled bool
 
@@ -52,7 +46,6 @@ type HandoffState struct {
 	CleanupDir string
 }
 
-// No resume: dumping the screen consumes it, so a late failure kills the session.
 func (m *Manager) Handoff(sessionID string) (HandoffState, error) {
 	session, err := m.getSession(sessionID)
 	if err != nil {
@@ -100,7 +93,6 @@ func (s *Session) handoff() (HandoffState, error) {
 		return HandoffState{}, ErrSessionExited
 	}
 
-	// A deadline in the past ends the blocked read without consuming anything.
 	if err := s.ptmx.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
 		return HandoffState{}, fmt.Errorf("stop read loop: %w", err)
 	}
@@ -135,7 +127,6 @@ func (s *Session) handoff() (HandoffState, error) {
 		state.LastSignal = &obs
 	}
 
-	// One hold: dump, block rows, and watermark must describe the same terminal.
 	s.replayMu.Lock()
 	if s.ghostty != nil {
 		dump := s.ghostty.HandoffVT()
@@ -147,8 +138,6 @@ func (s *Session) handoff() (HandoffState, error) {
 	state.LastSeq = s.lastReplaySeq
 	s.replayMu.Unlock()
 
-	// dup(2) returns a descriptor without CLOEXEC, which carries the master past execve.
-	// Through withPTMXFd, because File.Fd() would clear O_NONBLOCK on the description.
 	var fd int
 	s.writeMu.Lock()
 	err := s.withPTMXFd(func(master uintptr) error {
@@ -244,11 +233,9 @@ func (m *Manager) Adopt(st HandoffState) error {
 	if st.CellW > 0 && st.CellH > 0 {
 		gt.SetCellPixelSize(int(st.CellW), int(st.CellH))
 	}
-	// Replay before the wire feeder exists: it reads its kitty baseline at construction.
 	gt.Write(st.VTDump)
 	gt.DrainResponses()
 
-	// A new epoch, deliberately: pixels held from before the upgrade must not draw.
 	session.kittyEpoch = mintKittyEpoch()
 	session.wireFeed = newWireFeeder(gt, session.kittyEpoch, m.logf, kittyLimit)
 	if session.wireFeed != nil && len(st.Blocks) > 0 {
@@ -256,7 +243,6 @@ func (m *Manager) Adopt(st HandoffState) error {
 		session.wireFeed.restoreBlocks(st.Blocks)
 		session.replayMu.Unlock()
 	}
-	// Continue the attach stream: a reconnecting client dedups on seq > last_seq.
 	session.seqCounter.Store(st.LastSeq)
 	session.lastReplaySeq = st.LastSeq
 

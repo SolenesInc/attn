@@ -165,8 +165,6 @@ func TestRoundTripPlainText(t *testing.T) {
 
 func TestRoundTripCursor(t *testing.T) {
 	a := newT(t, 80, 10)
-	// Land the cursor at a column that is NOT a tabstop, so the upstream cursor/tabstop
-	// ordering bug would move it if uncorrected.
 	a.Write([]byte("hello\r\nworld\x1b[3;7H"))
 	ax, ay := a.cursorXY()
 
@@ -263,8 +261,6 @@ func TestMalformedInputSafe(t *testing.T) {
 	term := newT(t, 80, 10)
 	garbage := []byte("\x1b[999;999H\x1b[?xyz\x1b]999;bad\x07\xff\xfe\x1b[38;5;m\x1bP+q\x1b\\partial\x1b[")
 	term.Write(garbage)
-	// The garbage ends mid-CSI on purpose; a leading ESC in the next write aborts the
-	// dangling sequence, so this asserts the parser recovers.
 	term.Write([]byte("\x1b[0mrecovered\r\n"))
 	if !strings.Contains(term.PlainText(), "recovered") {
 		t.Errorf("terminal unusable after garbage input")
@@ -292,7 +288,7 @@ func TestCloseIdempotent(t *testing.T) {
 	}
 	term.Write([]byte("hi"))
 	term.Close()
-	term.Close() // must not panic or double-free
+	term.Close()
 	term.Write([]byte("ignored"))
 	if term.PlainText() != "" {
 		t.Errorf("PlainText after close should be empty")

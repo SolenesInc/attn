@@ -32,16 +32,12 @@ import (
 )
 
 const (
-	defaultRPCTimeout = 5 * time.Second
-	// Must outlive pty's 10s kill timeout: the signal RPC replies only once the
-	// child has exited, and an early deadline tears down the control connection.
-	killRPCTimeout       = 15 * time.Second
-	livenessRPCTimeout   = 2 * time.Second
-	reclaimRPCTimeout    = 3 * time.Second
-	pollerInterval       = 5 * time.Second
-	monitorRetryInterval = 1 * time.Second
-	// Enforced by closing the conn, not a conn deadline: deadlines have fired
-	// spuriously and immediately on some systems.
+	defaultRPCTimeout       = 5 * time.Second
+	killRPCTimeout          = 15 * time.Second
+	livenessRPCTimeout      = 2 * time.Second
+	reclaimRPCTimeout       = 3 * time.Second
+	pollerInterval          = 5 * time.Second
+	monitorRetryInterval    = 1 * time.Second
 	watchResponseTimeout    = 5 * time.Second
 	pollerFailureThreshold  = 3
 	pollerUnreachableAfter  = 30 * time.Second
@@ -55,8 +51,6 @@ const (
 )
 
 var (
-	// Covers binary launch, socket bind, PTY spawn, and registry write on a slow
-	// CI machine, not just "the binary is up".
 	spawnReadyTimeout = 45 * time.Second
 	probeTimeout      = 45 * time.Second
 )
@@ -84,9 +78,7 @@ type WorkerBackendConfig struct {
 	OwnerStartedAt   string
 	OwnerNonce       string
 	Logf             func(format string, args ...interface{})
-	// A recovered worker's handshake lands after the session broadcast, so
-	// without this callback its terminal build never reaches the wire.
-	OnTerminalBuild func(sessionID, snapshotFormat string)
+	OnTerminalBuild  func(sessionID, snapshotFormat string)
 }
 
 type workerRuntimeKind uint8
@@ -104,25 +96,23 @@ type workerSession struct {
 	WorkerPID    int
 	LifecycleID  string
 
-	mu              sync.Mutex
-	controlMu       sync.Mutex
-	controlConn     net.Conn
-	controlEnc      *json.Encoder
-	controlDec      *json.Decoder
-	lastState       string
-	lastStateSentAt time.Time
-	exitNotified    bool
-	evictionStarted bool
-	unreachable     bool
-	unreachableAt   time.Time
-	pollFailures    int
-	pollStop        chan struct{}
-	pollDone        chan struct{}
-	monitorStop     chan struct{}
-	monitorDone     chan struct{}
-	legacyLifecycle bool
-	// A pre-field worker answers empty forever, so "not asked yet" needs its own
-	// flag. Both guarded by mu.
+	mu                  sync.Mutex
+	controlMu           sync.Mutex
+	controlConn         net.Conn
+	controlEnc          *json.Encoder
+	controlDec          *json.Decoder
+	lastState           string
+	lastStateSentAt     time.Time
+	exitNotified        bool
+	evictionStarted     bool
+	unreachable         bool
+	unreachableAt       time.Time
+	pollFailures        int
+	pollStop            chan struct{}
+	pollDone            chan struct{}
+	monitorStop         chan struct{}
+	monitorDone         chan struct{}
+	legacyLifecycle     bool
 	snapshotFormat      string
 	snapshotFormatKnown bool
 }
@@ -199,8 +189,6 @@ func NewWorker(cfg WorkerBackendConfig) (*WorkerBackend, error) {
 	return newWorkerBackend(cfg, workerRuntimeDedicated)
 }
 
-// NewSharedHost speaks the worker protocol to one Rust process that owns every
-// session. Its registry namespace never overlaps dedicated Go workers.
 func NewSharedHost(cfg WorkerBackendConfig) (*WorkerBackend, error) {
 	return newWorkerBackend(cfg, workerRuntimeSharedHost)
 }
@@ -275,8 +263,6 @@ func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerB
 	return b, nil
 }
 
-// Re-resolves because the binary can vanish under a running daemon: an app
-// update replaces it, or security software deletes it.
 func (b *WorkerBackend) resolveBinaryPath() string {
 	b.binaryPathMu.RLock()
 	binaryPath := b.binaryPath
@@ -306,8 +292,6 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 		return binaryPath
 	}
 
-	// os.Executable() is excluded: it returns the same stale path when
-	// BinaryPath came from it, and an unrelated binary under tests.
 	candidates := make([]string, 0, 4)
 	if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
 		candidates = append(candidates, wrapperPath)
@@ -900,8 +884,6 @@ func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows
 		return ResizeResult{}, err
 	}
 	streamOrdered := result.StreamOrdered != nil && *result.StreamOrdered
-	// The first request may have applied before its connection failed; preserve
-	// the broadcast after any retry even when that retry reports a no-op.
 	if retried {
 		return ResizeResult{Changed: true, StreamOrdered: streamOrdered}, nil
 	}
@@ -909,7 +891,6 @@ func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows
 }
 
 func resizeResultChanged(result ptyworker.ResizeResult) bool {
-	// A missing field came from a worker that treated every resize as changed.
 	if result.Changed == nil {
 		return true
 	}
@@ -990,8 +971,6 @@ func (b *WorkerBackend) SessionIDs(_ context.Context) []string {
 	return ids
 }
 
-// Drifting off this interface makes the daemon report "embedded" PIDs rather
-// than fail to build.
 var _ WorkerProcessProvider = (*WorkerBackend)(nil)
 
 func (b *WorkerBackend) WorkerPIDs(_ context.Context) map[string]int {
@@ -1040,8 +1019,6 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 		if err != nil {
 			report.Failed++
 			b.quarantineRegistry(path, "socket_path_mismatch")
-			// Do NOT remove entry.SocketPath here: a bad validation change would
-			// unlink a live worker socket and orphan the session permanently.
 			if expected, expectedErr := b.expectedSocketPath(entry.SessionID); expectedErr == nil {
 				b.removeOwnedSocket(expected)
 			}
@@ -1191,8 +1168,6 @@ func (b *WorkerBackend) SessionInfo(ctx context.Context, sessionID string) (Sess
 }
 
 func (b *WorkerBackend) SessionTerminalBuild(sessionID string) (format string, known bool) {
-	// Map lookup only: this runs on every session broadcast, and getSession
-	// falls back to a registry read plus a probe RPC on a miss.
 	b.mu.RLock()
 	session := b.sessions[sessionID]
 	b.mu.RUnlock()
@@ -1295,8 +1270,6 @@ func (b *WorkerBackend) KittyImage(ctx context.Context, sessionID string, imageI
 	}
 }
 
-// Nothing branches on this; it exists so the daemon's failure log names the
-// reason instead of a bare RPC error.
 var errUpgradeUnsupported = errors.New("worker does not support in-place upgrade")
 
 func (b *WorkerBackend) UpgradeWorker(ctx context.Context, sessionID string) error {
@@ -1307,8 +1280,6 @@ func (b *WorkerBackend) UpgradeWorker(ctx context.Context, sessionID string) err
 	if err != nil {
 		return err
 	}
-	// The connection queues in the kernel until the new image accepts it, so it
-	// is the proof the swap landed; its hello re-records the format.
 	conn, _, _, err := b.connectAuthed(ctx, session)
 	if err != nil {
 		return fmt.Errorf("re-handshake after upgrade: %w", err)
@@ -1317,8 +1288,6 @@ func (b *WorkerBackend) UpgradeWorker(ctx context.Context, sessionID string) err
 	return nil
 }
 
-// One-shot connection on purpose: the exec ends every connection the worker
-// holds, so a persistent control connection would be left poisoned.
 func (b *WorkerBackend) upgrade(ctx context.Context, sessionID, executable string) (ptyworker.UpgradeResult, error) {
 	session, err := b.getSession(sessionID)
 	if err != nil {
@@ -1357,8 +1326,6 @@ func (b *WorkerBackend) upgrade(ctx context.Context, sessionID, executable strin
 		if err := json.Unmarshal(res.Result, &result); err != nil {
 			return ptyworker.UpgradeResult{}, fmt.Errorf("decode upgrade result: %w", err)
 		}
-		// The worker is mid-exec: every connection it holds is about to drop, so
-		// drop the cached ones rather than let the next call find them dead.
 		b.closePersistentControlConn(session, "upgrade")
 		return result, nil
 	}
@@ -1403,8 +1370,6 @@ func (b *WorkerBackend) SessionLikelyAlive(ctx context.Context, sessionID string
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 	}
-	// No persistent control connection here: it would leak fake-server goroutines
-	// in tests and skew ownership.
 	if err := b.callSimpleWithIdentity(
 		probeCtx,
 		session,
@@ -1861,8 +1826,6 @@ func (b *WorkerBackend) connectWithIdentity(
 		session.snapshotFormat = hello.SnapshotFormat
 		session.mu.Unlock()
 		if changed && session.SessionID != "" && b.cfg.OnTerminalBuild != nil {
-			// The format travels with the call: this can run before the session is
-			// in b.sessions, where a consumer would read back "unknown".
 			b.cfg.OnTerminalBuild(session.SessionID, hello.SnapshotFormat)
 		}
 		break
@@ -1888,8 +1851,6 @@ func (b *WorkerBackend) rpcError(sessionID string, rpcErr *ptyworker.RPCError) e
 }
 
 func unixSocketPathLimit() int {
-	// sockaddr_un.sun_path is 104 bytes on Darwin, 108 bytes on Linux.
-	// Keep 1 byte of slack for a trailing NUL.
 	switch runtime.GOOS {
 	case "linux":
 		return 108
@@ -1918,7 +1879,6 @@ func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 	}
 	root := b.sockDir()
 
-	// Hashed to stay within the unix socket path limit; $HOME can be long.
 	sum := sha256.Sum256([]byte(sessionID))
 	hash := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(sum[:])
 
@@ -1938,7 +1898,6 @@ func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 	if keep > len(hash) {
 		keep = len(hash)
 	}
-	// If we can't fit even ~25 bits of hash, don't risk collisions.
 	if keep < 5 {
 		return "", fmt.Errorf("unix socket path too constrained for session %s (dir=%s)", sessionID, root)
 	}
@@ -1950,8 +1909,6 @@ func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 	return path, nil
 }
 
-// Older attn versions named sockets "h-" + hex sha256, and live workers from
-// them still have registry entries pointing at that filename.
 func (b *WorkerBackend) legacyExpectedSocketPath(sessionID string) (string, error) {
 	if b.kind == workerRuntimeSharedHost {
 		return "", errors.New("shared PTY hosts have no legacy per-session socket")
@@ -1977,7 +1934,6 @@ func (b *WorkerBackend) legacyExpectedSocketPath(sessionID string) (string, erro
 	if keep > len(hexHash) {
 		keep = len(hexHash)
 	}
-	// If we can't fit even ~20 bits of hash, don't risk collisions.
 	if keep < 5 {
 		return "", fmt.Errorf("unix socket path too constrained for session %s (dir=%s)", sessionID, root)
 	}
@@ -2158,14 +2114,11 @@ func (b *WorkerBackend) workerProcessAlive(session *workerSession) bool {
 	alive, err := b.SessionLikelyAlive(context.Background(), session.SessionID)
 	if err != nil {
 		b.cfg.Logf("worker backend liveness probe inconclusive for session %s: %v", session.SessionID, err)
-		// Poller eviction is destructive; treat unknown as alive and retry later.
 		return true
 	}
 	return alive
 }
 
-// Nothing else globs the handoff directory, so a worker that died between
-// writing a handoff and exec'ing would litter it forever.
 func (b *WorkerBackend) pruneSessionFiles(sessionID, registryPath, socketPath string) {
 	_ = os.Remove(registryPath)
 	if b.kind == workerRuntimeSharedHost {
@@ -2490,8 +2443,6 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 			return
 		}
 		now := time.Now()
-		// Forwarded as-is: the worker already broadcasts only on change, so a
-		// second dedup here could only drop a genuine refresh.
 		observation := ptyworker.ObservationFromEvent(evt, state, now)
 
 		b.hooksMu.RLock()
@@ -2688,8 +2639,6 @@ func convertWorkerEvent(evt ptyworker.EventEnvelope) (OutputEvent, bool) {
 		if evt.Seq != nil {
 			seq = *evt.Seq
 		}
-		// No emptiness check: an event with no placements is the worker saying
-		// the last image is gone, and dropping it would leave a ghost on screen.
 		return OutputEvent{
 			Kind:       OutputEventKindPlacements,
 			Seq:        seq,

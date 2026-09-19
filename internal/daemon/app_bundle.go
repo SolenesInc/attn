@@ -13,23 +13,15 @@ import (
 
 const appBundleRoutePrefix = "/apps/bundle/"
 
-// A year in seconds, the conventional ceiling for `immutable` content: the hash
-// in the path is a digest of the bytes, so a URL cannot outlive what it names.
 const appBundleMaxAge = 31536000
 
-// Checked before the path is touched, so a hash off the wire can never become a
-// directory traversal.
 var contentHashRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 func AppBundleURLPath(app, contentHash, view string) string {
 	return appBundleRoutePrefix + app + "/" + contentHash + "/" + view + ".js"
 }
 
-// The artifact path comes from appbuild rather than being joined here: builder
-// and handler must agree, or a rollback serves the wrong module.
 func (d *Daemon) handleAppBundle(w http.ResponseWriter, r *http.Request) {
-	// A module script is fetched in CORS mode from tauri://localhost. `*` is safe:
-	// the route serves immutable public artifacts and reads no credentials.
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	if r.Method == http.MethodOptions {
 		w.Header().Set("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS")

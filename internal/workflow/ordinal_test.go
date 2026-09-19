@@ -396,7 +396,6 @@ func counterOf(t *testing.T, ordinal string) int {
 	t.Helper()
 	parts := splitOrdinal(ordinal)
 	last := parts[len(parts)-1]
-	// last looks like "cs@file:line:col#N"
 	hashIdx := -1
 	for i := len(last) - 1; i >= 0; i-- {
 		if last[i] == '#' {

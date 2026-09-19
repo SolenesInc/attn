@@ -27,7 +27,7 @@ type MockPR struct {
 	Number int
 	Title  string
 	Draft  bool
-	Role   string // "author" or "reviewer"
+	Role   string
 }
 
 func New() *Server {

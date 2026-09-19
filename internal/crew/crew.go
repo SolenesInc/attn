@@ -25,12 +25,8 @@ const HomesDirName = "crew"
 
 const CharterFileName = "CHARTER.md"
 
-// The crew simulation has run on Claude Code since 2026-08-06, so a member
-// registered before the agent field existed keeps waking where it was.
 const DefaultAgent = "claude"
 
-// Every declared field is written unconditionally, empty string included, so a
-// filter on `binding_session = ""` matches the members that are asleep.
 type Member struct {
 	ID             string   `json:"id"`
 	CharterPath    string   `json:"charter_path"`
@@ -41,8 +37,7 @@ type Member struct {
 	Effort         string   `json:"effort"`
 	AwarenessDirs  []string `json:"awareness_dirs"`
 	BindingSession string   `json:"binding_session"`
-	// The letter store is append-only: a letter cannot be written twice, so a
-	// turnover that failed after filing retries against the one on disk.
+
 	LetterPath      string   `json:"letter_path"`
 	LetterSession   string   `json:"letter_session"`
 	AutonomousWakes []string `json:"autonomous_wakes"`
@@ -103,8 +98,6 @@ func (m Member) Encode() ([]byte, error) {
 	return json.Marshal(m)
 }
 
-// Unknown keys are ignored on purpose: a record written by a later attn stays
-// readable by an older one.
 func Decode(body []byte) (Member, error) {
 	var member Member
 	if err := json.Unmarshal(body, &member); err != nil {
@@ -113,14 +106,10 @@ func Decode(body []byte) (Member, error) {
 	return member, nil
 }
 
-// The longest real id is 7 characters (`trellis`); 40 is a tripwire only a
-// generated string touches.
 const MaxIDChars = 40
 
 var memberIDRe = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
-// The name the daemon moves a seed under when it acts on its own. No crew file
-// can claim it, and it is displayed the way the product is written: lowercase.
 const DaemonID = "attn"
 
 func ValidateID(id string) error {
@@ -139,8 +128,6 @@ func ValidateID(id string) error {
 	return docstore.ValidateDocumentID(id)
 }
 
-// app/src/utils/crewName.ts keeps the same rule; the id itself stays lowercase
-// in paths, arguments, JSON and the store.
 func DisplayName(id string) string {
 	id = strings.TrimSpace(id)
 	if id == "" {

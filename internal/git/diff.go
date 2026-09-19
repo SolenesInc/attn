@@ -8,7 +8,7 @@ import (
 
 type DiffFileInfo struct {
 	Path           string `json:"path"`
-	Status         string `json:"status"` // "added", "modified", "deleted", "renamed"
+	Status         string `json:"status"`
 	OldPath        string `json:"old_path,omitempty"`
 	Additions      int    `json:"additions,omitempty"`
 	Deletions      int    `json:"deletions,omitempty"`
@@ -20,7 +20,6 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 
 	statusOut, err := runGitOutput(OpDiff, repoDir, "diff", "--name-status", baseRef+"...HEAD")
 	if err != nil {
-		// A missing baseRef or merge-base is fine; fall back to uncommitted changes.
 		statusOut = []byte{}
 	}
 
@@ -51,7 +50,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	numstatOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", baseRef+"...HEAD") // Ignore errors, stats are optional
+	numstatOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", baseRef+"...HEAD")
 
 	if len(numstatOut) > 0 {
 		lines := strings.Split(strings.TrimSpace(string(numstatOut)), "\n")
@@ -76,23 +75,18 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	// --untracked-files=all expands a brand-new untracked directory into its files;
-	// without it git collapses the folder into one "?? dir/" entry, hiding every file.
 	porcelainOut, _ := runGitOutput(OpStatus, repoDir, "status", "--porcelain", "--untracked-files=all")
 
 	uncommittedFiles := make(map[string]bool)
 	if len(porcelainOut) > 0 {
-		// Don't TrimSpace the whole output: the leading space is part of the status code.
 		lines := strings.Split(strings.TrimRight(string(porcelainOut), "\n"), "\n")
 		for _, line := range lines {
-			if len(line) < 4 { // Need at least "XY " + 1 char path
+			if len(line) < 4 {
 				continue
 			}
-			// Format: "XY path" where X=staged, Y=unstaged, followed by single space
 			statusXY := line[:2]
-			path := line[3:] // Don't TrimSpace - path may have intentional spaces
+			path := line[3:]
 
-			// Handle renames in porcelain: "R  old -> new"
 			if strings.Contains(path, " -> ") {
 				parts := strings.Split(path, " -> ")
 				if len(parts) == 2 {
@@ -211,8 +205,6 @@ func parseGitPorcelainStatus(xy string) string {
 	return "modified"
 }
 
-// Handles git numstat rename shapes: "old.go => new.go", "{old => new}/file.go",
-// and "dir/{old.go => new.go}".
 func extractRenamePath(path string) string {
 	if !strings.Contains(path, "{") {
 		parts := strings.Split(path, " => ")

@@ -16,7 +16,7 @@ import (
 )
 
 func TestSanitizeSessionTitle(t *testing.T) {
-	longMultibyte := strings.Repeat("é", 60) // multibyte rune: a byte-based cut would corrupt/mis-truncate this
+	longMultibyte := strings.Repeat("é", 60)
 	wantLongMultibyte := strings.Repeat("é", maxSessionNameRunes)
 
 	cases := []struct {
@@ -544,8 +544,6 @@ func TestMaybeGenerateSessionTitle_EmptyTranscriptNotMarkedAttempted(t *testing.
 	}
 }
 
-// exec re-entering maybeGenerateSessionTitle stands in for a second Stop that raced past
-// the early attempted-check; a guard mutex held across exec would deadlock here.
 func TestMaybeGenerateSessionTitle_ConcurrentAttemptRunsExecOnce(t *testing.T) {
 	d := newSessionTitleDaemon(t)
 	directory := t.TempDir()

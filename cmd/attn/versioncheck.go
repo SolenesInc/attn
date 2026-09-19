@@ -46,7 +46,6 @@ func comparableBuildVersion(v string) bool {
 	}
 }
 
-// Targets 127.0.0.1 directly so the probe works with the daemon bound to 0.0.0.0.
 func fetchDaemonVersion() string {
 	httpClient := &http.Client{Timeout: 400 * time.Millisecond}
 	url := "http://" + net.JoinHostPort("127.0.0.1", config.WSPort()) + "/health"

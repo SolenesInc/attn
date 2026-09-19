@@ -32,11 +32,9 @@ type DefinitionSpec struct {
 type TriggerSpec struct {
 	Type         string               `yaml:"type" json:"type"`
 	Repositories RepositoryFilterSpec `yaml:"repositories,omitempty" json:"repositories,omitempty"`
-	// A pointer so omitempty actually omits it: a value field would add a spurious
-	// "schedule":{} to canonical JSON and bump the revision on a byte-identical re-apply.
-	Schedule   *ScheduleSpec `yaml:"schedule,omitempty" json:"schedule,omitempty"`
-	Continuity string        `yaml:"continuity,omitempty" json:"continuity,omitempty"`
-	CatchUp    string        `yaml:"catch_up,omitempty" json:"catch_up,omitempty"`
+	Schedule     *ScheduleSpec        `yaml:"schedule,omitempty" json:"schedule,omitempty"`
+	Continuity   string               `yaml:"continuity,omitempty" json:"continuity,omitempty"`
+	CatchUp      string               `yaml:"catch_up,omitempty" json:"catch_up,omitempty"`
 }
 type ScheduleSpec struct {
 	Cron     string `yaml:"cron,omitempty" json:"cron,omitempty"`
@@ -79,7 +77,6 @@ type Snapshot struct {
 
 var idPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
-// `enabled` has exactly one authority, the automation_definitions.enabled column.
 var errEnabledManagedOutsideSpec = errors.New("enabled is managed outside the spec; use 'attn automation enable' or 'attn automation disable'")
 
 var errPolicyRemoved = errors.New("policy has been removed; scheduled triggers take continuity and catch_up directly")
@@ -112,8 +109,6 @@ func MarshalDefinitionYAML(spec DefinitionSpec) ([]byte, error) {
 	return yaml.Marshal(spec)
 }
 
-// Deliberately not appliable as-is — Location.Path fails canonicalizeDirectory until the
-// user edits it — but every field is filled so the editor opens on a complete document.
 var StarterDefinition = DefinitionSpec{
 	APIVersion: APIVersion,
 	ID:         "my-automation",
@@ -481,8 +476,6 @@ func Effective(spec DefinitionSpec, revision int) (Snapshot, error) {
 	return Snapshot{APIVersion: APIVersion, DefinitionRevision: revision, Prompt: spec.Prompt, Launch: launch, Location: spec.Location, Continuity: continuity, CatchUp: catchUp}, nil
 }
 
-// Excludes Continuity/CatchUp (a policy change does not invalidate an in-flight thread)
-// and per-occurrence input such as HeadSHA.
 type ContinuationContract struct {
 	Prompt   string
 	Launch   EffectiveLaunch
@@ -497,7 +490,6 @@ func (s Snapshot) ContinuationContract() ContinuationContract {
 	return NewContinuationContract(s.Prompt, s.Launch, s.Location)
 }
 
-// Location holds a map, so it is compared via JSON, not struct equality.
 func (c ContinuationContract) Equal(other ContinuationContract) bool {
 	if c.Prompt != other.Prompt || c.Launch != other.Launch {
 		return false

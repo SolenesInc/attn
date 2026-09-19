@@ -5,8 +5,6 @@ import (
 	"testing"
 )
 
-// A kitty image frame is a header followed by raw pixels with no length prefix: an off-by-one
-// in a field boundary hands the client the right pixels with the wrong stride.
 func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 	pixels := []byte{0xde, 0xad, 0xbe, 0xef, 0x00, 0x01, 0x7f, 0x80}
 	layouts := map[byte]string{
@@ -31,8 +29,6 @@ func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 		if decoded.ImageID != 4242 {
 			t.Errorf("format %d: image id = %d, want 4242", code, decoded.ImageID)
 		}
-		// Past uint32: a generation truncated to 32 bits collides with an
-		// earlier one and a client's cache serves the stale pixels forever.
 		if decoded.Generation != 1<<40 {
 			t.Errorf("format %d: generation = %d, want %d", code, decoded.Generation, uint64(1)<<40)
 		}
@@ -51,8 +47,6 @@ func TestKittyImageFrameRoundTripsEveryPixelLayout(t *testing.T) {
 	}
 }
 
-// Session ids vary in length and the header shifts with them, so a decoder that
-// hardcodes an offset reads the image id out of the session id's bytes.
 func TestKittyImageFrameSurvivesSessionIDLengths(t *testing.T) {
 	pixels := []byte{1, 2, 3, 4}
 	for _, id := range []string{"a", "session-with-a-long-name", string(bytes.Repeat([]byte("x"), 255))} {
@@ -124,8 +118,6 @@ func TestDecodeKittyImageFrameRejectsMalformedFrames(t *testing.T) {
 		}
 	}
 
-	// The type byte is the only thing separating a multi-megabyte blob from
-	// terminal bytes about to be written to a screen.
 	if _, _, _, err := DecodePtyOutputFrame(good); err == nil {
 		t.Error("pty output decoder accepted a kitty image frame, want a rejection")
 	}

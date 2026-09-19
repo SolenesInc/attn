@@ -23,7 +23,6 @@ func (d *Daemon) discoverDelegationModels(ctx context.Context, harness string) (
 		return delegationModelCatalog{}, err
 	}
 	executable := d.store.GetSetting(executableSettingKey(harness))
-	// Deduplicate only in-flight calls; the next refresh observes current account settings.
 	value, err, _ := d.delegationModelQueries.Do(harness+"\x00"+executable, func() (any, error) {
 		ctx, cancel := context.WithTimeout(ctx, time.Minute)
 		defer cancel()

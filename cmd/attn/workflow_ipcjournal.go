@@ -53,8 +53,6 @@ func (j *ipcJournal) Append(e workflow.JournalEntry) error {
 	return nil
 }
 
-// Upsert overwrites any stale entry at the same ordinal. The Journal interface gives
-// it no error return, so a proxy failure is captured in lastErr rather than dropped.
 func (j *ipcJournal) Upsert(e workflow.JournalEntry) {
 	j.mirror.Upsert(e)
 	j.proxy(e)
@@ -92,8 +90,6 @@ func callFromEntry(runID string, e workflow.JournalEntry) protocol.WorkflowAgent
 	}
 }
 
-// entryFromCall round-trips losslessly for the six JournalEntry fields, the only
-// correctness requirement: IsCacheHit needs Ordinal+PromptHash+SchemaHash.
 func entryFromCall(call protocol.WorkflowAgentCall) workflow.JournalEntry {
 	return workflow.JournalEntry{
 		Ordinal:    call.Ordinal,
@@ -105,7 +101,6 @@ func entryFromCall(call protocol.WorkflowAgentCall) workflow.JournalEntry {
 	}
 }
 
-// The engine writes "ok" | "skipped" | "errored"; an empty status becomes "ok".
 func callStatusOrOk(status string) string {
 	switch status {
 	case string(protocol.WorkflowAgentCallStatusOk),

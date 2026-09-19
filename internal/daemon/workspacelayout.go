@@ -216,8 +216,6 @@ func (d *Daemon) broadcastWorkspaceLayoutUpdated(workspaceID string) {
 	d.broadcastWorkspaceLayoutSnapshotUpdated(snapshot)
 }
 
-// The layout travels in the payload rather than being re-read at projection time: a
-// re-read cannot reproduce the deliberately empty layout a workspace with no panes gets.
 func (d *Daemon) broadcastWorkspaceLayoutSnapshotUpdated(snapshot *protocol.WorkspaceLayout) {
 	if snapshot == nil {
 		return
@@ -413,7 +411,6 @@ func (d *Daemon) handleWorkspaceLayoutDockTile(client *wsClient, msg *protocol.W
 	d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutDockTile, msg.WorkspaceID, msg.TileID, err)
 }
 
-// An empty tileSessionID preserves any existing binding.
 func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParams, tileSessionID string, edge protocol.WorkspaceLayoutDockEdge, ratio *float64) error {
 	snapshot, err := d.ensureWorkspaceLayout(workspaceID)
 	if err != nil {
@@ -446,7 +443,6 @@ func (d *Daemon) dockTile(workspaceID, anchorPaneID, tileID, tileKind, tileParam
 	if ratio != nil && *ratio > 0 && *ratio < 1 {
 		tileFraction = *ratio
 	}
-	// DockTile takes the children[0] fraction; convert from the tile's share.
 	childZeroRatio := tileFraction
 	if !before {
 		childZeroRatio = 1 - tileFraction
@@ -495,15 +491,11 @@ func (d *Daemon) handleWorkspaceLayoutUndockTile(client *wsClient, msg *protocol
 	snapshot.Layout = layout
 	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
 	if workspacelayout.LayoutEmpty(normalized.Layout) {
-		// Drop the layout row rather than storing a leafless one: ensureWorkspaceLayout rejects
-		// it, so the sidebar row would survive with a close button that never works.
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 		d.sendWorkspaceLayoutTileActionResult(client, protocol.CmdWorkspaceLayoutUndockTile, msg.WorkspaceID, tileID, nil)
 		if d.unregisterWorkspaceIfEmpty(msg.WorkspaceID) {
 			return
 		}
-		// It survives, so publish the empty layout instead of leaving clients
-		// replaying the undocked tile.
 		emptyLayout, err := protocolWorkspaceLayout(normalized)
 		if err != nil {
 			d.logf("workspace empty layout update failed for workspace %s: %v", msg.WorkspaceID, err)
@@ -559,8 +551,6 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 		return
 	}
 	if retarget := strings.TrimSpace(protocol.Deref(msg.TileSessionID)); retarget != "" {
-		// Never persist a binding to a session the daemon does not know: a racing
-		// client would write a dangling id into the layout.
 		if d.store.Get(retarget) == nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, fmt.Errorf("session not found: %s", retarget))
 			return
@@ -573,8 +563,6 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, nil)
 			return
 		}
-		// The params-update path below saves a whole normalized snapshot, so
-		// re-fetch it or the save clobbers the binding just persisted.
 		if snapshot, err = d.ensureWorkspaceLayout(msg.WorkspaceID); err != nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, err)
 			return
@@ -596,7 +584,6 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 			return
 		}
 	case string(workspacelayout.TileKindNotebook):
-		// tileParams is the open file's path — opaque here, already trimmed.
 	case string(workspacelayout.TileKindSeed):
 		if err := d.requireHome(garden.Surface); err != nil {
 			d.sendWorkspaceLayoutTileActionResultWithRequest(
@@ -655,8 +642,6 @@ func (d *Daemon) handleWorkspaceLayoutMoveLeafToWorkspace(client *wsClient, msg 
 	d.sendWorkspaceLayoutMoveToWorkspaceResult(client, msg.SourceWorkspaceID, msg.TargetWorkspaceID, msg.LeafID, finalLeafID, err)
 }
 
-// The workspace_registered broadcast goes out BEFORE the layout move so clients learn the
-// workspace exists before its first workspace_layout_updated references it.
 func (d *Daemon) handleWorkspaceLayoutMoveLeafToNewWorkspace(client *wsClient, msg *protocol.WorkspaceLayoutMoveLeafToNewWorkspaceMessage) {
 	sourceWorkspaceID := strings.TrimSpace(msg.SourceWorkspaceID)
 	leafID := strings.TrimSpace(msg.LeafID)
@@ -729,8 +714,6 @@ func (d *Daemon) sendWorkspaceLayoutMoveToNewWorkspaceResult(client *wsClient, s
 	d.sendToClient(client, result)
 }
 
-// prev_workspace_id ends up ABOVE the moved workspace and next_workspace_id
-// BELOW it; the daemon computes the fractional key between their ranks.
 func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorkspaceRankMessage) {
 	workspaceID := strings.TrimSpace(msg.WorkspaceID)
 	prevID := strings.TrimSpace(protocol.Deref(msg.PrevWorkspaceID))
@@ -748,8 +731,6 @@ func (d *Daemon) handleSetWorkspaceRank(client *wsClient, msg *protocol.SetWorks
 		return
 	}
 
-	// An empty neighbour id (move to top/bottom) resolves to "" — the MIN/MAX
-	// sentinel rankkey.Between expects.
 	prevRank := d.workspaces.rankOf(prevID)
 	nextRank := d.workspaces.rankOf(nextID)
 	rank, err := rankkey.Between(prevRank, nextRank)
@@ -783,7 +764,6 @@ func (d *Daemon) moveLeaf(workspaceID, leafID, anchorID string, edge protocol.Wo
 	if ratio != nil && *ratio > 0 && *ratio < 1 {
 		leafFraction = *ratio
 	}
-	// MoveLeaf takes the children[0] fraction; convert from the moved leaf's share.
 	childZeroRatio := leafFraction
 	if !before {
 		childZeroRatio = 1 - leafFraction
@@ -913,8 +893,6 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 		return "", err
 	}
 
-	// Broadcast layout changes before changing session ownership: the frontend filters
-	// visible sessions through layouts, so the opposite order hides the moved session.
 	d.broadcastWorkspaceLayoutUpdated(targetWorkspaceID)
 	if !sourceEmpty {
 		d.broadcastWorkspaceLayoutUpdated(sourceWorkspaceID)
@@ -975,8 +953,6 @@ func (d *Daemon) handleWorkspaceLayoutAddSessionPane(client *wsClient, msg *prot
 	d.sendWorkspaceLayoutActionResult(client, protocol.CmdWorkspaceLayoutAddSessionPane, msg.WorkspaceID, paneID, err)
 }
 
-// Reports whether this call created the pane; a caller that rolls back needs the
-// receipt, and the check and the save must not interleave with another add.
 func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, bool, error) {
 	d.sessionPaneAddMu.Lock()
 	paneID, created, err := d.addWorkspaceSessionPaneLocked(msg)
@@ -1131,8 +1107,6 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		}
 	}
 
-	// Commit the pane removal before terminating the session: teardown broadcasts
-	// immediately, and every observer of those events must see the pane-free layout.
 	if layoutEmpty {
 		d.store.RemoveWorkspaceLayout(msg.WorkspaceID)
 	} else if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
@@ -1158,8 +1132,6 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 		workspaceRemoved = d.unregisterWorkspaceIfEmpty(msg.WorkspaceID)
 	}
 	if layoutEmpty && !workspaceRemoved {
-		// Publish the empty layout so clients cannot retain and replay the
-		// removed pane.
 		if d.store.GetWorkspace(msg.WorkspaceID) != nil {
 			emptyLayout, err := protocolWorkspaceLayout(normalized)
 			if err != nil {

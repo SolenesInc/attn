@@ -8,9 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/sessionstate"
 )
 
-// The bracket pair (turn/tool open) is deliberately NOT reconstructed on recovery:
-// inventing it would hold a session `working` on a bracket whose closing hook can never arrive.
-
 func (d *Daemon) seedRecoveredEvidence(sessionID string, existing *protocol.Session, info ptybackend.SessionInfo) {
 	if d == nil || existing == nil {
 		return
@@ -24,8 +21,6 @@ func (d *Daemon) seedRecoveredEvidence(sessionID string, existing *protocol.Sess
 	d.seedRecoveredHarnessEdge(sessionID, existing, info)
 }
 
-// A title painted after the state was concluded means the prompt was answered unobserved,
-// so only a level no newer than the conclusion corroborates the edge.
 func (d *Daemon) seedRecoveredHarnessEdge(sessionID string, existing *protocol.Session, info ptybackend.SessionInfo) {
 	claim, ok := recoveredHarnessClaim(existing.State)
 	if !ok {

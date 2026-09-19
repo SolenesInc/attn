@@ -41,7 +41,6 @@ import (
 )
 
 var (
-	// Kept for builders that inject build metadata into the main package instead of internal/buildinfo.
 	version           = ""
 	buildTime         = ""
 	sourceFingerprint = ""
@@ -67,15 +66,12 @@ type hookInput struct {
 	Trigger          string           `json:"trigger"`
 }
 
-// Verified against Claude Code 2.1.257: type is shell or subagent, status running, and
-// description is the human-readable label (the docs' name field is not sent).
 type backgroundTask struct {
 	Type        string `json:"type"`
 	Status      string `json:"status"`
 	Description string `json:"description"`
 }
 
-// Verified against Claude Code 2.1.177: there is no status field — a fired or deleted cron drops out of the list.
 type sessionCron struct {
 	ID        string `json:"id"`
 	Schedule  string `json:"schedule"`
@@ -248,7 +244,6 @@ func main() {
 		maybePrintProfileBanner()
 		runJournal()
 	case "vision-check":
-		// No banner: stdout must stay pure for machine consumption by the caller.
 		runVisionCheck()
 	case "present":
 		maybePrintProfileBanner()
@@ -257,7 +252,6 @@ func main() {
 		maybePrintProfileBanner()
 		runWorktree()
 	case "profile":
-		// No banner: `attn profile resolve --field …` must print only the value for the Makefile / harness.
 		runProfile()
 	case "open":
 		maybePrintProfileBanner()
@@ -486,7 +480,6 @@ func runPTYWorker() {
 		fmt.Fprintf(os.Stderr, "[pty-worker] "+format+"\n", args...)
 	}
 
-	// The daemon scrubs these too; a worker spawned from an unscrubbed parent self-protects.
 	if scrubbed := config.ScrubInheritedAgentSessionEnv(); len(scrubbed) > 0 {
 		cfg.Logf("scrubbed inherited agent session env before startup: %v", scrubbed)
 	}
@@ -526,7 +519,6 @@ func runDaemon() {
 		os.Exit(1)
 	}
 	d := daemon.New(socketPath)
-	// Must precede Start(), which warms the login-shell env cache.
 	d.ScrubInheritedAgentSessionEnv()
 	startResult := make(chan error, 1)
 	go func() {
@@ -753,7 +745,6 @@ func runDelegate() {
 	}
 	warnIfDaemonVersionMismatch()
 	c := client.New("")
-	// Must print before crossing the transport: the daemon may durably accept the request even if the response never arrives.
 	fmt.Fprintf(os.Stderr, "delegation request: request_id=%s\n", args.request.RequestID)
 	operation, err := c.StartDelegation(args.request)
 	if err != nil {
@@ -1097,7 +1088,6 @@ func runTicketInboxWatch(source string, interval time.Duration, jsonOutput bool)
 	}, os.Stdout, os.Stderr, jsonOutput)
 }
 
-// Report a daemon error once per outage: a wrapping Monitor treats every printed line as new activity.
 func watchTicketInbox(
 	ctx context.Context,
 	tick <-chan time.Time,
@@ -1271,7 +1261,6 @@ func parseJournalAppendArgs(args []string) (journalAppendArgs, error) {
 	}, nil
 }
 
-// Appends through the daemon's single serialized notebook writer; editing journal/<date>.md directly races other agents.
 func runJournalAppend(args []string) {
 	parsed, err := parseJournalAppendArgs(args)
 	if err != nil {
@@ -1719,7 +1708,6 @@ func parseDelegateArgs(args []string) (delegateCLIArgs, error) {
 	if source == "" {
 		source = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 	}
-	// Retired flags stay parseable so the answer is the signpost, not "flag provided but not defined".
 	if ticket := strings.TrimSpace(*ticketID); ticket != "" {
 		return delegateCLIArgs{}, fmt.Errorf(
 			"--ticket retired: plant the work and dispatch at it — `attn seed plant %q -m \"<brief>\"`, then `attn delegate --seed <seed-id> --cwd <path>`", ticket)
@@ -2489,7 +2477,6 @@ func runAgentDirectly(requestedAgent string) {
 	opts.TrustWorkingDirectory = consumeOneShotBoolEnv("ATTN_TRUST_WORKING_DIRECTORY")
 	opts.Model = consumeOneShotEnv("ATTN_MODEL")
 	opts.Effort = consumeOneShotEnv("ATTN_EFFORT")
-	// The old env name is read as a fallback so a not-yet-restarted daemon still caps its chief.
 	window := consumeOneShotEnv("ATTN_AUTO_COMPACT_WINDOW")
 	if window == "" {
 		window = consumeOneShotEnv("ATTN_CHIEF_AUTO_COMPACT_WINDOW")
@@ -2533,7 +2520,6 @@ func runAgentDirectly(requestedAgent string) {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	// Identity vars only: this path inherits the live shell env, so the user's exported tuning vars must survive.
 	config.ScrubAgentSessionIdentityEnv()
 	cmd.Env = mergeEnv(os.Environ(), driver.BuildEnv(opts))
 
@@ -2782,7 +2768,6 @@ func runHookToolUse() {
 	_ = json.NewDecoder(os.Stdin).Decode(&input)
 
 	c := client.New(strings.TrimSpace(os.Getenv("ATTN_SOCKET_PATH")))
-	// A subagent's completions must not report working: that would retire the approval the user is being asked to answer.
 	if strings.TrimSpace(input.AgentID) == "" {
 		if err := c.UpdateState(sessionID, protocol.StateWorking); err != nil {
 			fmt.Fprintf(os.Stderr, "error updating state: %v\n", err)
@@ -2790,14 +2775,12 @@ func runHookToolUse() {
 		}
 	}
 
-	// A failure here must not fail the hook and stall the agent.
 	if edited := hooks.MarkdownEdits(input.ToolName, input.ToolInput, input.CWD); len(edited) > 0 {
 		if err := c.RecordFilesEdited(sessionID, edited); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not record edited files: %v\n", err)
 		}
 	}
 
-	// Same: a daemon that is down or gated off must not fail the hook.
 	if sent := hooks.SentFiles(input.ToolName, input.ToolInput, input.CWD); len(sent) > 0 {
 		if err := c.OpenSentFiles(sessionID, sent); err != nil {
 			fmt.Fprintf(os.Stderr, "warning: could not open sent files: %v\n", err)

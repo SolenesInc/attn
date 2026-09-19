@@ -20,8 +20,6 @@ func (s connWorkflowEngineSink) sendWorkflowControl(msg interface{}) error {
 	return json.NewEncoder(s.conn).Encode(msg)
 }
 
-// The map is lazy-inited so a directly-constructed &Daemon{store: ...} test
-// daemon does not panic.
 func (d *Daemon) registerWorkflowEngine(runID string, sink workflowEngineSink) {
 	if d == nil || strings.TrimSpace(runID) == "" || sink == nil {
 		return

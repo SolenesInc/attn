@@ -146,8 +146,6 @@ func (s *Store) CompleteAppReconcile(name string, throughRequestID, throughSeq i
 	return tx.Commit()
 }
 
-// One transaction, so a crash leaves the whole attempt owed or the whole attempt
-// complete, never half of each.
 func (s *Store) CompleteAppReconcileInvocation(name string, invocationID, throughRequestID, throughSeq int64, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -261,8 +259,6 @@ func appendAppReconcileRequest(tx *sql.Tx, name, reason string, versionID, throu
 	return err
 }
 
-// A view-or-command-only app still carries a consumer row, recognised by its sentinel
-// filter: recording a rebuild for one refuses its commands until a reconcile runs.
 func appConsumerCursorWith(q reconcileQueryer, name string) (int64, bool, error) {
 	var (
 		cursor int64

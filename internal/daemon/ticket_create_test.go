@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// callTicketCreate waits for the handler to fully return: the response is encoded
-// before the board broadcast, so without that barrier a test races the fan-out.
 func callTicketCreate(t *testing.T, d *Daemon, msg *protocol.TicketCreateMessage) protocol.Response {
 	t.Helper()
 	server, client := net.Pipe()

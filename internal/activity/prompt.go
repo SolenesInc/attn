@@ -20,8 +20,6 @@ type Template struct {
 	Body string
 }
 
-// SystemMarker splits a template into its invariant half and this run's data. The first
-// half REPLACES the CLI's own system prompt, worth ~22K tokens of billed prefix.
 const SystemMarker = "{{USER}}"
 
 type Rendered struct {
@@ -39,7 +37,6 @@ func LoadTemplate(name, path string) (Template, error) {
 	return Template{Name: name, Body: string(body)}, nil
 }
 
-// Render substitutes {{STATE}}, {{STATE_REASON}}, {{PREVIOUS}} and {{WINDOW}} as literal tokens, not text/template actions, so prompts carry braces unescaped.
 func (t Template) Render(in Input) Rendered {
 	if t.Body == baselineBody {
 		values := prompts.Values{"state": in.State, "state_reason": in.StateReason, "previous": in.Previous, "window": in.Window}

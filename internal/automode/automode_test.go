@@ -75,7 +75,6 @@ func TestPatternTokenReadsAStringOrAlternatives(t *testing.T) {
 	}
 }
 
-// pi validates the examples; the daemon only has to carry them back unchanged.
 func TestRuleCarriesMatchExamplesUntouched(t *testing.T) {
 	raw := `{"pattern":["git","push"],"decision":"prompt","sandbox":"inherit","justification":"leaves the machine",` +
 		`"match":[["git","push","origin"]],"not_match":[["git","pull"]]}`
@@ -142,8 +141,6 @@ func TestDescribeProposalReadsAsOneLine(t *testing.T) {
 	}
 }
 
-// The JSON here IS plugins/attn-pi/approval/config.ts's RawApprovalConfig: a field renamed
-// on one side without the other silently drops to the pi-side default.
 func TestConfigMarshalsIntoThePiSideShape(t *testing.T) {
 	raw, err := json.Marshal(Defaults())
 	if err != nil {
@@ -331,7 +328,6 @@ func TestPresetsRoundTripThroughBothLookups(t *testing.T) {
 	if preset, ok := PresetByID("yolo"); ok {
 		t.Errorf("PresetByID(\"yolo\") = %+v, want no preset", preset)
 	}
-	// A real pair no preset names: nothing may be reported as a named preset.
 	if preset, ok := PresetFor(PolicyUntrusted, SandboxDangerFullAccess); ok {
 		t.Errorf("PresetFor untrusted/danger-full-access = %+v, want no preset", preset)
 	}

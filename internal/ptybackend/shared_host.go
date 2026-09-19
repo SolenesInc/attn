@@ -613,8 +613,6 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	}
 	var result ptyhost.SpawnResult
 	if err := b.callSharedHost(ctx, host, ptyhost.MethodSpawn, params, &result); err != nil {
-		// A dropped response may follow a successful fork. Info is authoritative,
-		// so never tear down launch overlays until absence is confirmed.
 		if _, probeErr := b.callInfo(ctx, session); probeErr != nil {
 			return err
 		}
@@ -745,7 +743,6 @@ func (b *WorkerBackend) validateCurrentSharedHostEntry(entry ptyhost.HostRegistr
 }
 
 func validateSharedHostSnapshotFormat(hostFormat, daemonFormat string) error {
-	// Raw development and test builds deliberately use portable replay.
 	if daemonFormat == "unknown" {
 		return nil
 	}

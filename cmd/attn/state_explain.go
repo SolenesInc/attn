@@ -13,9 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// `attn state explain <id>` answers "why is this session that color?" by printing
-// the daemon's capped ring of state observations, including the ones vetoed before the store door or discarded by it.
-
 type stateExplainArgs struct {
 	target string
 	json   bool

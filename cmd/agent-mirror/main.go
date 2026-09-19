@@ -1,4 +1,3 @@
-// Dev-only: re-captures internal/probetui/testdata/agent-vocab-*.json; not shipped.
 package main
 
 import (
@@ -235,8 +234,6 @@ func newQueryResponder(ptmx *os.File, rows *atomic.Int32) *queryResponder {
 	return &queryResponder{ptmx: ptmx, rows: rows}
 }
 
-// Best-effort per-chunk byte scan; queries split across chunk boundaries are not
-// reassembled.
 func (q *queryResponder) handle(chunk []byte) {
 	q.mu.Lock()
 	defer q.mu.Unlock()

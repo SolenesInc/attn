@@ -35,8 +35,6 @@ func TestSanitizeTakesTheAnswerOutOfWhateverItArrivedIn(t *testing.T) {
 	}
 }
 
-// Nothing usable must come back not-ok rather than empty, so the caller keeps
-// the previous line instead of writing nothing over something true.
 func TestSanitizeReportsWhenNothingSurvived(t *testing.T) {
 	for _, raw := range []string{"", "   ", "\n\n", "```\n```", "...", `""`} {
 		if line, ok := Sanitize(raw); ok {

@@ -82,7 +82,6 @@ func (m daemonSessionInstructionsModel) Run(ctx context.Context, request session
 	return sessioninstructions.ParseModelAnswer(result.Text)
 }
 
-// SessionInstructionsErrorMessage is the stable, transcript-free CLI surface.
 func SessionInstructionsErrorMessage(code string) string {
 	switch strings.TrimSpace(code) {
 	case "session_not_found":

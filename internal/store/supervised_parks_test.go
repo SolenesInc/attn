@@ -8,7 +8,7 @@ import (
 
 func TestSupervisedParkSurvivesReopeningTheDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -30,7 +30,7 @@ func TestSupervisedParkSurvivesReopeningTheDatabase(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	reopened, err := NewWithDB(path)
+	reopened, err := newSeededStore(path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -57,10 +57,8 @@ func TestSupervisedParkSurvivesReopeningTheDatabase(t *testing.T) {
 	}
 }
 
-// A child that never exited has no code to record, and one that was never parked
-// has no row. Both are ordinary answers, not missing data.
 func TestSupervisedParkHandlesAbsenceAndClearing(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "attn.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -91,7 +89,6 @@ func TestSupervisedParkHandlesAbsenceAndClearing(t *testing.T) {
 		t.Fatalf("got=%+v, want signal killed and no exit time", got)
 	}
 
-	// A second park replaces the first rather than colliding on the primary key.
 	later := time.Now().UTC().Add(time.Hour)
 	if err := s.SaveSupervisedPark(SupervisedPark{Child: "runtime", ParkedAt: later, RestartAttempt: 4}); err != nil {
 		t.Fatalf("re-save: %v", err)

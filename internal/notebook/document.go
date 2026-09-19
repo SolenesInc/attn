@@ -9,9 +9,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// A disk-parsed document re-serializes its frontmatter byte-for-byte, so externally-written fields survive an attn rewrite untouched; only an attn-constructed document is serialized from the map.
 type Document struct {
-	// Read-only after Parse: mutating it does not change what Bytes emits — construct a fresh Document to serialize edited frontmatter.
 	Frontmatter    map[string]any
 	Body           string
 	rawFrontmatter string
@@ -34,7 +32,6 @@ func Parse(raw []byte) (Document, error) {
 	return Document{Frontmatter: meta, Body: body, rawFrontmatter: fm}, nil
 }
 
-// Timestamps stay literal text, not time.Time, so dates round-trip and string accessors work.
 func decodeFrontmatter(text []byte) (map[string]any, error) {
 	var root yaml.Node
 	if err := yaml.Unmarshal(text, &root); err != nil {

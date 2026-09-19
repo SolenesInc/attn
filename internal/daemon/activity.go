@@ -18,18 +18,12 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// sessionActivityTimeout bounds one generation. A tripwire: measured ~5s on
-// Codex, ~12s on Claude, worst observed ~19s.
 const sessionActivityTimeout = time.Minute
 
-// sessionActivityBudgetUSD caps one run, two orders of magnitude above the measured
-// cost ($0.0027 on Codex, $0.011-0.017 on Claude), so only a runaway touches it.
 const sessionActivityBudgetUSD = "0.50"
 
 const sessionActivityConcurrency = 3
 
-// activityMaxTurns is 2, not 1: a headless run that exhausts its turn budget
-// exits non-zero even when it already produced the text.
 const activityMaxTurns = 2
 
 const (
@@ -80,8 +74,6 @@ func latest(a, b time.Time) time.Time {
 	return b
 }
 
-// Interval and transcript movement are measured against the last PASS, not the last
-// stored line: against the line, a failing generation is invisible and re-runs every tick.
 func (d *Daemon) sessionActivityScanHandler(context.Context, *jobs.Job) (any, error) {
 	if !d.activityEnabled() {
 		return nil, nil
@@ -140,8 +132,6 @@ func (d *Daemon) transcriptMovedSince(session *protocol.Session, since time.Time
 	return info.ModTime().After(since)
 }
 
-// Caches the resolved path across ticks: resolving it on Codex measured 235-489ms per
-// session. A resume under a new id writes a new file, hence the remembered resume id.
 func (d *Daemon) sessionActivityTranscript(session *protocol.Session) string {
 	if session == nil {
 		return ""
@@ -248,8 +238,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	})
 
 	stored := d.store.GetSessionActivity(sessionID)
-	// Cold start, checked before the read: reading from byte 0 succeeds, which is
-	// the problem — a full scan summarizing history as if it were now.
 	if stored.Cursor == "" {
 		return nil, d.reseedSessionActivity(sessionID, resumeID, transcriptPath)
 	}
@@ -268,8 +256,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 	if window.Empty() {
 		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
 	}
-	// The cursor advances past a refused delta on purpose: holding it would re-refuse
-	// the same bytes on every scan.
 	if d.headlessTaskRefused(sessionActivityKind) {
 		return nil, d.advanceSessionActivityCursor(sessionID, resumeID, stored, window.NextCursor)
 	}
@@ -300,7 +286,6 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 			return p.RunHeadlessTask(ctx, r)
 		}
 	}
-	// Stamped before the call: a hanging run would otherwise retry every tick.
 	d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 		record.SpentAt = time.Now()
 	})
@@ -309,15 +294,11 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		Model:           config.Model,
 		ReasoningEffort: config.Effort,
 		Prompt:          prompt.User,
-		// Replaces the CLI's own interactive-coding system prompt. Measured: the
-		// billed prefix drops from 46,745 tokens to 33,955.
-		SystemPrompt: prompt.System,
-		WorkDir:      workDir,
-		// No OutputSchema: the answer IS the final text, and Codex's tool-free path has none.
-		// MaxTurns/MaxBudgetUSD are Claude-only; DisableTools plus the ctx timeout bound both.
-		DisableTools: true,
-		MaxTurns:     activityMaxTurns,
-		MaxBudgetUSD: sessionActivityBudgetUSD,
+		SystemPrompt:    prompt.System,
+		WorkDir:         workDir,
+		DisableTools:    true,
+		MaxTurns:        activityMaxTurns,
+		MaxBudgetUSD:    sessionActivityBudgetUSD,
 	})
 	if err != nil {
 		d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
@@ -360,7 +341,6 @@ func (d *Daemon) reseedSessionActivity(sessionID, resumeID, transcriptPath strin
 	return nil
 }
 
-// An empty cursor here would silently clear the line.
 func (d *Daemon) advanceSessionActivityCursor(sessionID, resumeID string, stored store.SessionActivity, next string) error {
 	if next == "" || next == stored.Cursor {
 		return nil

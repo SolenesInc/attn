@@ -15,11 +15,8 @@ const (
 	stopSigkillWait = 2 * time.Second
 )
 
-// NonDaemonHolderSentinel is written into the pid file by non-daemon lock
-// holders, so a concurrent Stop never trusts a pid the current holder didn't write.
 const NonDaemonHolderSentinel = "non-daemon-holder"
 
-// Only EWOULDBLOCK means the lock is held; every other flock error fails closed.
 var flockFn = syscall.Flock
 
 type StopResult struct {
@@ -29,8 +26,6 @@ type StopResult struct {
 	Note    string
 }
 
-// The pid file's exclusive flock is the liveness+ownership gate: an acquirable lock means
-// any pid on disk is stale and is never signaled. Not running is a nil error with a Note.
 func Stop(pidPath string) (StopResult, error) {
 	lockFile, err := os.OpenFile(pidPath, os.O_RDWR, 0)
 	if os.IsNotExist(err) {
@@ -49,7 +44,6 @@ func Stop(pidPath string) (StopResult, error) {
 	}
 	lockFile.Close()
 
-	// Lock held: trust only content written under it. Only numeric content is signalable.
 	data, err := os.ReadFile(pidPath)
 	if err != nil {
 		return StopResult{}, fmt.Errorf("could not read pid file: %w", err)
@@ -62,11 +56,9 @@ func Stop(pidPath string) (StopResult, error) {
 	if err != nil || pid <= 0 {
 		return StopResult{}, fmt.Errorf("malformed pid file %q", pidText)
 	}
-	// Never signal our own process tree.
 	if pid == os.Getpid() || pid == os.Getppid() {
 		return StopResult{}, fmt.Errorf("refusing to stop pid %d: it is this command's own process tree", pid)
 	}
-	// Positive proof required: the pid must hold the file open right now.
 	holds, err := pidHoldsPIDFile(pid, pidPath)
 	if err != nil {
 		return StopResult{}, fmt.Errorf("could not verify pid %d holds the daemon lock: %w", pid, err)

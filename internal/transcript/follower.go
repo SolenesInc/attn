@@ -71,8 +71,6 @@ func NewFollower(path, agent string, startOffset int64) (*Follower, error) {
 	}, nil
 }
 
-// The cursor binds the checkpoint to the transcript's first record, so rotation
-// or replacement fails loudly.
 func NewFollowerAfterCursor(path, agent, cursor string) (*Follower, error) {
 	cursor = strings.TrimSpace(cursor)
 	if cursor == "" {

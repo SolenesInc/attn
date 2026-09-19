@@ -222,8 +222,6 @@ func (r *workspaceRegistry) applyRank(id, rank string) (protocol.Workspace, bool
 	return snapshotEntry(entry), true
 }
 
-// "" doubles as rankkey.Between's MIN/MAX sentinel, so an unranked or missing
-// neighbour resolves to the open bound.
 func (r *workspaceRegistry) rankOf(id string) string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -356,8 +354,6 @@ func (d *Daemon) recomputeAndBroadcastWorkspaceForSession(sessionID string) {
 	d.publishFact(FactWorkspaceStatusChanged, workspaceID, nil)
 }
 
-// The store persists rank on INSERT only, so this seed must be set before
-// AddWorkspace or it is silently dropped.
 func (d *Daemon) resolveWorkspaceRank(existing *protocol.Workspace) string {
 	if existing != nil && existing.Rank != "" {
 		return existing.Rank
@@ -491,7 +487,6 @@ func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
 	id := snapshot.ID
 	d.store.RemoveWorkspace(id)
 	d.pruneTileContentSubscriptionsForLayout(id, nil)
-	// Rides in the payload: the registry entry is gone by projection time.
 	d.publishFact(FactWorkspaceUnregistered, id, snapshot)
 }
 
@@ -505,8 +500,6 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 		return
 	}
 
-	// Snapshot before removing session state: the association map changes with it.
-	// session_unregistered must reach clients before workspace_unregistered.
 	memberIDs := d.workspaces.sessionIDs(id)
 	sort.Strings(memberIDs)
 	teardowns := make(map[string]*sessionTeardown, len(memberIDs))
@@ -542,8 +535,6 @@ func (d *Daemon) handleUnregisterWorkspace(client *wsClient, msg *protocol.Unreg
 	}
 }
 
-// Every workspace must be registered before sessions are re-bound, or
-// associateSession has nowhere to land.
 func (d *Daemon) loadWorkspacesFromStore() []string {
 	if d.workspaces == nil {
 		d.workspaces = newWorkspaceRegistry()

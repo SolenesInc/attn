@@ -12,11 +12,9 @@ import (
 )
 
 type Entry struct {
-	Version int    `json:"version"`
-	ID      string `json:"id"`
-	PID     int    `json:"pid"`
-	// PGID equal to PID means the child leads its own group and may be swept; a
-	// shared group is never group-signalled — its members are not this entry's.
+	Version          int      `json:"version"`
+	ID               string   `json:"id"`
+	PID              int      `json:"pid"`
 	PGID             int      `json:"pgid"`
 	Command          []string `json:"command"`
 	ProcessStartTime string   `json:"process_start_time"`
@@ -28,7 +26,6 @@ const entryVersion = 1
 func NewEntry(id string, pid, pgid int, command []string) Entry {
 	startTime, err := processStartTime(pid)
 	if err != nil {
-		// An empty stamp reads as "cannot identify", never as "safe to signal".
 		startTime = ""
 	}
 	return Entry{
@@ -101,8 +98,6 @@ type ReapResult struct {
 	Err     error
 }
 
-// A group id is held until its last member leaves, so sweeping the group after
-// the leader is gone cannot hit a recycled pid.
 func ReapDir(dir string, grace time.Duration) []ReapResult {
 	paths, err := filepath.Glob(filepath.Join(dir, "*.json"))
 	if err != nil {
@@ -138,8 +133,6 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 		return res
 	}
 
-	// Identity gate: signal only a process still carrying the start time recorded at
-	// spawn. A recycled pid fails it, and an empty stamp matches nothing.
 	current, err := processStartTime(entry.PID)
 	if err != nil || entry.ProcessStartTime == "" || current != entry.ProcessStartTime {
 		if err == nil {
@@ -208,6 +201,3 @@ func waitForGone(pid int, timeout time.Duration) bool {
 	}
 	return !processAlive(pid)
 }
-
-// processStartTime's resolution is the whole safety property: a stamp coarser than the
-// interval in which the kernel can reuse a pid passes the gate for a stranger.

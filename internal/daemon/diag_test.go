@@ -61,7 +61,6 @@ func TestMaybeStartDiagServer_EnabledServesLoopback(t *testing.T) {
 	if err := json.Unmarshal(body, &vars); err != nil {
 		t.Fatalf("/debug/vars not JSON: %v", err)
 	}
-	// NewForTesting uses the embedded backend → no worker subprocesses.
 	if vars["pty_backend"] != "embedded" {
 		t.Errorf("pty_backend = %v, want embedded", vars["pty_backend"])
 	}

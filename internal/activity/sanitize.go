@@ -5,7 +5,6 @@ import (
 	"unicode/utf8"
 )
 
-// Never invents content: an empty or preamble-only answer comes back not-ok so the caller keeps the previous line.
 func Sanitize(raw string) (string, bool) {
 	line := firstMeaningfulLine(raw)
 	line = strings.TrimSpace(line)

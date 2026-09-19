@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// An inherited ATTN_DB_PATH pointing at the real ~/.attn/attn.db still resolves there
-// unless ScopeTestEnvironment clears it, so the hostile values go into a re-exec.
 func TestScopeTestEnvironment_SanitizesInheritedOverrides(t *testing.T) {
 	const hostileDB = "/tmp/attn-hostile-inherited-test.db"
 	const hostileSocket = "/tmp/attn-hostile-inherited-test.sock"

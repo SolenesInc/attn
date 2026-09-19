@@ -74,7 +74,6 @@ func TestRemoveAppLocalDataRemovesTheResolvedDir(t *testing.T) {
 			t.Fatalf("resolveProfile(lx).AppLocalData = %q, want %q", r.AppLocalData, want)
 		}
 	} else {
-		// Never point a test at the real ~/Library/Application Support.
 		r.AppLocalData = filepath.Join(dataHome, "com.attn.manager.lx")
 	}
 
@@ -109,8 +108,6 @@ func TestStopProfileDaemonNoPidFile(t *testing.T) {
 	}
 }
 
-// A pid file no live daemon holds the lock on is stale and must NOT be signaled, even
-// when its pid names a live (recycled) process. pid 1 is the canary: alive, never ours.
 func TestStopProfileDaemonStalePidNotSignaled(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")

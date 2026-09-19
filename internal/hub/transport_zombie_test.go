@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// The leak was cmd.Process.Kill with no matching cmd.Wait, leaving a <defunct>
-// child per failed dial until the per-user process limit was hit.
 func TestConnectViaSSHOnceReapsChildOnDialFailure(t *testing.T) {
 	shimDir := t.TempDir()
 	shim := filepath.Join(shimDir, "ssh")
@@ -41,7 +39,6 @@ func TestConnectViaSSHOnceReapsChildOnDialFailure(t *testing.T) {
 	}
 }
 
-// `ps` without -A scopes to the controlling tty and misses detached children in CI.
 func zombieChildrenOf(t *testing.T, parent int) int {
 	t.Helper()
 	out, err := exec.Command("ps", "-A", "-o", "pid=,ppid=,stat=").Output()

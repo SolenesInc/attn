@@ -9,8 +9,6 @@ import (
 	"strings"
 )
 
-// A GUI app on macOS starts with a minimal PATH, so subprocesses lose tools
-// like 'gh' unless this ran first.
 func EnsureGUIPath() error {
 	currentPath := os.Getenv("PATH")
 
@@ -46,7 +44,6 @@ func runPathHelper() string {
 	return extractPathFromShellOutput(string(output))
 }
 
-// extractPathFromShellOutput parses `path_helper -s` output: PATH="..."; export PATH;
 func extractPathFromShellOutput(output string) string {
 	const prefix = "PATH=\""
 	start := strings.Index(output, prefix)

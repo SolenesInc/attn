@@ -73,8 +73,6 @@ func extractPRRefs(text string) []int {
 	return refs
 }
 
-// Must stay a positive allowlist: the prs table holds only `is:open` rows and its
-// State carries attn's annotation, so a blacklist would call every open PR finished.
 var groundTruthTerminalStates = map[string]bool{
 	"merged": true,
 	"closed": true,
@@ -153,8 +151,6 @@ func groundTruthUntrackedLines(ctx context.Context, refs []int, tracked map[int]
 	return lines, caps
 }
 
-// fetchPRStateCtx runs fetch under ctx: github.Client has no context plumbing, so
-// the call is abandoned on a goroutine and finishes against its own HTTP timeout.
 func fetchPRStateCtx(ctx context.Context, fetch prStateFetcher, repo string, number int) (state string, merged bool, title string, err error) {
 	type result struct {
 		state  string

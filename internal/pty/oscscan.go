@@ -1,10 +1,5 @@
 package pty
 
-// Strips nothing — OSC 0 and OSC 777 are state the client must keep — so it
-// carries no parity contract with any frontend parser.
-
-// Abandons a never-terminated sequence so a broken producer cannot make the
-// scanner buffer forever; anything past this is not a title.
 const oscScanMaxPending = 4096
 
 type oscScanner struct {
@@ -30,7 +25,6 @@ func (s *oscScanner) Feed(chunk []byte, emit func(code int, payload string)) {
 	for {
 		start := indexOfOSCIntroducer(buffer, from)
 		if start < 0 {
-			// Hold a trailing lone ESC: the `]` may arrive in the next chunk.
 			if len(buffer) > 0 && buffer[len(buffer)-1] == oscESC {
 				s.pending = []byte{oscESC}
 			}
@@ -45,7 +39,6 @@ func (s *oscScanner) Feed(chunk []byte, emit func(code int, payload string)) {
 			}
 			from = next
 		case oscScanAbandoned:
-			// Resume at the stray ESC, which may introduce the next one.
 			from = next
 		default:
 			if len(buffer)-start > oscScanMaxPending {
@@ -75,7 +68,6 @@ const (
 	oscScanAbandoned
 )
 
-// next is just past the terminator, or the stray ESC to resume at (abandoned).
 func scanOSCBody(buffer []byte, from int) ([]byte, int, oscScanStatus) {
 	for i := from; i < len(buffer); i++ {
 		switch buffer[i] {

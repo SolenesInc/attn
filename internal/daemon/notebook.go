@@ -23,7 +23,6 @@ const originExternal = "external"
 
 const originUI = "ui"
 
-// Cached so writes serialize through one in-process writer.
 func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 	root, err := d.notebookRoot()
 	if err != nil {
@@ -35,13 +34,11 @@ func (d *Daemon) notebookStoreFor() (*notebook.Store, error) {
 	}
 	store := d.notebookStore
 	d.notebookMu.Unlock()
-	// Must run after releasing notebookMu; ensureNotebookWatcher takes its own.
 	d.ensureNotebookWatcher(root)
 	return store, nil
 }
 
 func (d *Daemon) ensureNotebookWatcher(root string) {
-	// Never resurrect during shutdown: a watcher started after Stop() closes d.done leaks a goroutine and an fd.
 	select {
 	case <-d.done:
 		return
@@ -121,7 +118,6 @@ func (d *Daemon) notebookRoot() (string, error) {
 			}
 			return filepath.Join(home, configured[2:]), nil
 		}
-		// Canonical form is what the store's containment checks expect.
 		return filepath.Clean(configured), nil
 	}
 	home, err := os.UserHomeDir()
@@ -178,7 +174,6 @@ func (d *Daemon) ensureNotebookScaffold() (root string, created bool, err error)
 	}
 	createdPaths, scaffoldErr := store.EnsureScaffold()
 	if len(createdPaths) > 0 {
-		// Exactly the files written, never all reserved paths: recording those would suppress real external edits.
 		writes := make([]notebook.SelfWrite, len(createdPaths))
 		for i, p := range createdPaths {
 			writes[i] = notebook.SelfWrite{Rel: p}
@@ -280,7 +275,6 @@ func (d *Daemon) sendNotebookBacklinksWSResult(client *wsClient, requestID, path
 	d.sendToClient(client, msg)
 }
 
-// A conflict is a successful result carrying conflict=true, not an error.
 func (d *Daemon) sendNotebookWriteWSResult(client *wsClient, requestID, path, content, baseHash string) {
 	var result *protocol.NotebookWriteResult
 	store, err := d.notebookStoreFor()
@@ -360,7 +354,6 @@ func formatChiefInboxEntry(sourcePath, selection string) string {
 	var b strings.Builder
 	b.WriteString(chiefInboxSourceHeading(sourcePath))
 	b.WriteString("\n\n")
-	// A non-UI client's CRLF would leave a stray CR on every blockquoted line.
 	normalized := strings.ReplaceAll(selection, "\r\n", "\n")
 	normalized = strings.ReplaceAll(normalized, "\r", "\n")
 	for _, line := range strings.Split(strings.TrimRight(normalized, "\n"), "\n") {
@@ -371,7 +364,6 @@ func formatChiefInboxEntry(sourcePath, selection string) string {
 	return b.String()
 }
 
-// CleanPath permits markdown-corrupting characters, so anything risky renders as code.
 func chiefInboxSourceHeading(sourcePath string) string {
 	rel, err := notebook.CleanPath(sourcePath)
 	if err != nil {
@@ -386,7 +378,6 @@ func chiefInboxSourceHeading(sourcePath string) string {
 	if rel == "" {
 		return "## From the Notebook"
 	}
-	// The link parser stops a target at the first ')' or whitespace.
 	if !strings.ContainsAny(rel, " \t()[]<>") {
 		return fmt.Sprintf("## From [/%s](/%s)", rel, rel)
 	}

@@ -1,5 +1,3 @@
-// The JSON tags here ARE plugins/attn-pi/approval/config.ts's `RawApprovalConfig`: a
-// field renamed here and not there silently drops to the pi-side default.
 package automode
 
 import (
@@ -20,7 +18,6 @@ type Config struct {
 	LegacyPatterns []string          `json:"legacy_patterns"`
 }
 
-// Match and NotMatch are pi's own self-tests, round-tripped here but never read.
 type Rule struct {
 	Pattern       []PatternToken `json:"pattern"`
 	Decision      string         `json:"decision"`
@@ -35,11 +32,10 @@ type PatternToken struct {
 }
 
 type Network struct {
-	Enabled        bool     `json:"enabled"`
-	AllowedDomains []string `json:"allowed_domains"`
-	DeniedDomains  []string `json:"denied_domains"`
-	// Off by default: unset, the proxy hard-denies a host resolving to loopback or private.
-	AllowLocalBinding bool `json:"allow_local_binding"`
+	Enabled           bool     `json:"enabled"`
+	AllowedDomains    []string `json:"allowed_domains"`
+	DeniedDomains     []string `json:"denied_domains"`
+	AllowLocalBinding bool     `json:"allow_local_binding"`
 }
 
 const (
@@ -141,8 +137,6 @@ func (r Rule) Describe() string {
 	return strings.Join(parts, " ")
 }
 
-// wsPort is the daemon's own per-profile port, so the deny names the port this machine
-// actually listens on rather than a hardcoded 9849.
 func ShippedDeniedDomains(wsPort string) []string {
 	domains := []string{}
 	if wsPort = strings.TrimSpace(wsPort); wsPort != "" {
@@ -155,7 +149,6 @@ func ShippedDeniedDomains(wsPort string) []string {
 	return domains
 }
 
-// Defense in depth: the daemon also refuses these regardless of any stored rule.
 func ShippedRules() []Rule {
 	forbid := func(justification string, literals ...string) Rule {
 		return Rule{
@@ -177,8 +170,6 @@ func ShippedRules() []Rule {
 	}
 }
 
-// Shipped entries are resolved at read rather than written into anyone's row, so no
-// stored row can drop one.
 func ResolveRules(stored []Rule) []Rule {
 	resolved := ShippedRules()
 	shipped := shippedRuleKeys()
@@ -191,7 +182,6 @@ func ResolveRules(stored []Rule) []Rule {
 	return resolved
 }
 
-// A config read, changed, and written back must not persist the shipped entries it was handed.
 func StripShippedRules(resolved []Rule) []Rule {
 	shipped := shippedRuleKeys()
 	stored := []Rule{}
@@ -273,10 +263,8 @@ func nonNil(values []string) []string {
 	return values
 }
 
-// Receipt: pi stops a session for a human question at 20 denials, and a denial is what prompts a proposal.
 const MaxPendingProposalsPerProposer = 20
 
-// Every kind here is a proposal the CLI records; only the app promotes it into the config.
 const (
 	KindRule       = "rule"
 	KindRuleRemove = "rule_remove"
@@ -298,7 +286,6 @@ type HostAmendment struct {
 	Decision string `json:"decision"`
 }
 
-// A policy amendment names only the fields it moves; a nil field stays as it stands.
 type PolicyAmendment struct {
 	Guardian          *GuardianSelection `json:"guardian,omitempty"`
 	ApprovalPolicy    *string            `json:"approval_policy,omitempty"`
@@ -535,7 +522,6 @@ func DescribePolicy(amendment PolicyAmendment) string {
 	return strings.Join(parts, ", ")
 }
 
-// wsPort is this daemon's own control port; passing "" only skips the shipped-host check.
 func ValidateProposal(kind, target, value, wsPort string) error {
 	if strings.TrimSpace(target) != "" {
 		return fmt.Errorf("a %s proposal takes no target", kind)
@@ -610,8 +596,6 @@ func DescribeProposal(kind, value string) string {
 	return value
 }
 
-// Preset is a named approval policy and sandbox mode pair: Codex's three plus
-// attn's untrusted. Ids and labels are Codex's, so a user reads one vocabulary.
 type Preset struct {
 	ID             string `json:"id"`
 	Label          string `json:"label"`
@@ -675,7 +659,6 @@ func PresetFor(policy, mode string) (Preset, bool) {
 	return Preset{}, false
 }
 
-// An empty value means "not set", which is how a launcher says "follow the daemon's".
 func ValidatePolicyPair(policy, mode string) error {
 	if policy != "" {
 		if err := validateOneOf("approval policy", policy, Policies()); err != nil {

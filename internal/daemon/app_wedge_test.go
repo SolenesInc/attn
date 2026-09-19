@@ -17,7 +17,6 @@ func enterOnceThenBlock(entered chan<- string, release <-chan struct{}) func(*fa
 
 func TestFrozenLoopChargesTheHandlerOnTheLoopNotTheEarliestDispatch(t *testing.T) {
 	d := newAppDaemon(t)
-	// The shipped tripwires are 60s and 2s; waiting them out proves nothing extra.
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "bystander", subscribing("ticket.*"))

@@ -50,8 +50,6 @@ func ticketMutationCatchUp(ticketID string, events []store.TicketEvent) *protoco
 	return &bundles[0]
 }
 
-// Caller holds deliveryMu so no stale deadline reconstruction can cross the new
-// attention clock.
 func (d *Daemon) afterTicketMutationCatchUpLocked(sessionID string, events []store.TicketEvent) {
 	if len(events) == 0 {
 		return
@@ -59,8 +57,6 @@ func (d *Daemon) afterTicketMutationCatchUpLocked(sessionID string, events []sto
 	if d.debugLogging {
 		d.logf("ticket delivery: observer=%s session=%s channel=mutation outcome=catch-up pending=%d", d.ticketAttentionKey(sessionID), sessionID, len(events))
 	}
-	// Catch-up advances the interruption clock, so a timer derived from its old value may now
-	// fire too early; rebuild from the remaining durable unread events.
 	d.cancelNudgeCountdown(sessionID, "mutation catch-up")
 	d.refreshTicketUnread(sessionID)
 	d.notifyUnreadTicketSessionLocked(sessionID, time.Now())

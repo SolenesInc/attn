@@ -795,7 +795,6 @@ func presentStatsTestRepo(t *testing.T) (dir, baseSHA, headSHA string) {
 	if err := os.WriteFile(filepath.Join(dir, "a.txt"), []byte("line1\nline2\n"), 0o644); err != nil {
 		t.Fatalf("write a.txt: %v", err)
 	}
-	// A NUL byte marks this blob as binary to git, without needing a real PNG.
 	if err := os.WriteFile(filepath.Join(dir, "img.png"), []byte{0x89, 0x00, 0x50, 0x4e}, 0o644); err != nil {
 		t.Fatalf("write img.png: %v", err)
 	}

@@ -73,7 +73,6 @@ func TestAgentListRows_CarryTheCrewMember(t *testing.T) {
 	if rows[1].Member != "" {
 		t.Errorf("unbound row member = %q, want empty", rows[1].Member)
 	}
-	// The column is always on the wire, empty rather than absent.
 	encoded, err := json.Marshal(rows[1])
 	if err != nil {
 		t.Fatalf("marshal row: %v", err)
@@ -198,7 +197,6 @@ func TestCrewDirList_RepeatsAndClears(t *testing.T) {
 	}
 }
 
-// Passing --agent empty is the way back to the default, a distinction a plain string cannot carry.
 func TestParseCrewSetArgs_CarriesTheHarnessAndTheWayBack(t *testing.T) {
 	parsed, err := parseCrewSetArgs([]string{"trellis", "--agent", "codex"})
 	if err != nil {

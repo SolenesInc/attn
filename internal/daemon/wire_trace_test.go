@@ -31,7 +31,6 @@ func normalizeWirePayload(payload []byte, paths map[string]string) string {
 		return fmt.Sprintf("<unparseable: %s>", string(payload))
 	}
 	normalized := normalizeWireValue("", decoded, paths)
-	// HTML escaping off: <tmp> in a golden is unreadable in a diff.
 	var buf strings.Builder
 	encoder := json.NewEncoder(&buf)
 	encoder.SetEscapeHTML(false)
@@ -71,8 +70,6 @@ func normalizeWireValue(key string, v any, paths map[string]string) any {
 	}
 }
 
-// Agent availability is a PATH lookup, so pinning it would make the golden a statement
-// about the host. Matched by suffix so a new driver's key does not depend on the runner.
 func isEnvironmentProbedKey(key string) bool {
 	return strings.HasSuffix(key, "_available")
 }
@@ -84,7 +81,6 @@ func normalizeWireString(s string, paths map[string]string) string {
 	if wireUUIDPattern.MatchString(s) {
 		return "<uuid>"
 	}
-	// Longest first, so a nested temp dir is not half-replaced by its parent.
 	for _, path := range sortedPathsLongestFirst(paths) {
 		s = strings.ReplaceAll(s, path, paths[path])
 	}
@@ -94,8 +90,6 @@ func normalizeWireString(s string, paths map[string]string) string {
 	return s
 }
 
-// Paths the daemon derives from the host's home — the notebook root, say — would pin
-// the golden to whoever ran it, and tests must not redirect HOME.
 var wireHomeDir = func() string {
 	home, err := os.UserHomeDir()
 	if err != nil {

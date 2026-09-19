@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The producer golden cannot prove that muting a PR still causes a prs_updated: these
-// handlers only reached clients via a whole-list re-push, so a dropped publish is green.
 func TestWireTracePRFlowGolden(t *testing.T) {
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "test.sock"))

@@ -6,7 +6,6 @@ import (
 	"testing"
 )
 
-// writeFile writes content and commits it, returning the resulting commit SHA.
 func writeCommit(t *testing.T, dir, path, content, message string) string {
 	t.Helper()
 	if err := os.WriteFile(dir+"/"+path, []byte(content), 0o644); err != nil {

@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The backstop cannot be asserted in-process: this package's TestMain always sets
-// ATTN_DATA_DIR, so this re-execs the test binary with it unset in the CHILD's env.
 func TestDataDir_PanicsWithoutATTNDataDirUnderTest(t *testing.T) {
 	if os.Getenv("ATTN_TEST_DATADIR_BACKSTOP_HELPER") == "1" {
 		_ = DataDir()

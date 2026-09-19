@@ -14,8 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Previous is carried rather than read back: the runtime draining the outgoing
-// version's handlers would otherwise read a pointer that already moved.
 type appVersionChanged struct {
 	Name        string `json:"name"`
 	VersionID   int64  `json:"version_id"`
@@ -53,7 +51,6 @@ func (d *Daemon) handleAppApply(conn net.Conn, msg *protocol.AppApplyMessage) {
 		return
 	}
 
-	// Derived from the app and the hash, never taken from the caller.
 	path := appbuild.ArtifactPath(d.appsDir, name, hash)
 	bundle, err := os.ReadFile(path)
 	if err != nil {
@@ -188,7 +185,6 @@ func (d *Daemon) handleAppRollback(conn net.Conn, msg *protocol.AppRollbackMessa
 	d.sendDocResponse(conn, protocol.Response{Ok: true, AppRollbackResult: &result})
 }
 
-// versions arrives newest-id-first, as ListAppVersions returns it.
 func pickRollbackTarget(name string, app store.App, versions []store.AppVersion, requested *int) (store.AppVersion, error) {
 	if len(versions) == 0 {
 		return store.AppVersion{}, fmt.Errorf("app rollback %s: it has no versions to roll back to; `attn app apply <path>` builds its first", name)
@@ -205,8 +201,6 @@ func pickRollbackTarget(name string, app store.App, versions []store.AppVersion,
 		}
 		return store.AppVersion{}, fmt.Errorf("app rollback %s: version %d is not a version of this app; %s", name, id, versionsSentence(versions, app.CurrentVersionID))
 	}
-	// One step back along the serving history, not the numerically previous id:
-	// an app that went good, broken, fixed has the broken one below its pointer.
 	if app.CurrentVersionID == 0 {
 		return store.AppVersion{}, fmt.Errorf("app rollback %s: it is not on any version, so there is no back to go to; name one of them. %s",
 			name, versionsSentence(versions, 0))

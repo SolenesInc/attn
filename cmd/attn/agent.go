@@ -93,9 +93,7 @@ type agentListRow struct {
 	Directory string `json:"directory"`
 	State     string `json:"state"`
 	TurnOwed  bool   `json:"turn_owed"`
-	// The crew member this session is bound as, empty for the unbound majority.
-	// Always written: a key that disappears makes every reader guard for it.
-	Member string `json:"member"`
+	Member    string `json:"member"`
 }
 
 func runAgentList(args []string) {
@@ -357,8 +355,6 @@ func parseAgentMsgArgs(args []string, envSessionID string) (agentMsgArgs, error)
 	if strings.TrimSpace(parsed.content) == "" {
 		return agentMsgArgs{}, errors.New("the message is empty")
 	}
-	// The daemon is the authority, but a message far past the limit dies as a broken
-	// pipe on the way there and its refusal never comes back.
 	if size := len(strings.TrimSpace(parsed.content)); size > protocol.AgentMessageMaxChars {
 		return agentMsgArgs{}, fmt.Errorf(
 			"message is %d bytes and the limit is %d; send the gist and point at the rest",
@@ -383,7 +379,6 @@ func runAgentMsg(args []string) {
 	} else {
 		fmt.Fprintln(os.Stdout, agentMsgOutcomeLine(result))
 	}
-	// A refusal that exits 0 reads as sent. The reason is on stdout either way.
 	if result.Status == protocol.AgentMsgStatusRefused {
 		os.Exit(1)
 	}

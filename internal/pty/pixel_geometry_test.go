@@ -2,9 +2,6 @@
 
 package pty
 
-// With no pixel geometry to read, emitters guess: measured live in A3, chafa
-// assumed ~8 x 11.4 px cells against a real 9 x 22.6 px cell.
-
 import (
 	"fmt"
 	"os"
@@ -15,8 +12,6 @@ import (
 	creackpty "github.com/creack/pty"
 )
 
-// The grid divides evenly on purpose: a wrong derivation cannot land on the
-// right number by rounding.
 const (
 	geomCols, geomRows   = 40, 12
 	geomCellW, geomCellH = 18, 45
@@ -28,12 +23,10 @@ const winsizeHelperEnv = "ATTN_PTY_WINSIZE_HELPER"
 
 const winsizeHelperMarker = "attn-winsize"
 
-// This is the re-executed child process, not a test of anything.
 func TestPTYWinsizeHelper(t *testing.T) {
 	if os.Getenv(winsizeHelperEnv) != "1" {
 		t.Skip("helper process for TestResizeReportsPixelGeometryToTheChild")
 	}
-	// Held until the parent has resized; reporting at spawn time would race it.
 	var release string
 	if _, err := fmt.Fscanln(os.Stdin, &release); err != nil {
 		t.Fatalf("helper never got its release line: %v", err)
@@ -66,10 +59,8 @@ func newWinsizeHelperSpawn(t *testing.T, id string) *kittySpawn {
 		Agent:           "probe-winsize",
 		ExternalCommand: []string{os.Args[0], "-test.run=^TestPTYWinsizeHelper$"},
 		ExternalEnv:     []string{winsizeHelperEnv + "=1"},
-		// Deliberately not the geometry under test: the resize has to be what
-		// puts the pixels there.
-		Cols: 20,
-		Rows: 6,
+		Cols:            20,
+		Rows:            6,
 	}); err != nil {
 		t.Fatalf("Spawn() error: %v", err)
 	}
@@ -109,8 +100,6 @@ func TestResizeReportsPixelGeometryToTheChild(t *testing.T) {
 	}
 }
 
-// In-band reports (DEC mode 2048) are the only answer to check: ghostty's VT
-// core does not implement XTWINOPS, so there is no CSI 14 t.
 func TestResizeDerivesTheWorkerCellFromThePaneTotal(t *testing.T) {
 	spawn := newQuietSpawn(t, "worker-cell", 20, 6)
 	term := sessionTerminal(t, spawn)
@@ -121,7 +110,6 @@ func TestResizeDerivesTheWorkerCellFromThePaneTotal(t *testing.T) {
 		t.Fatalf("Resize() error: %v", err)
 	}
 
-	// The 8x16 placeholder this replaced would report 192;320 at this grid.
 	want := fmt.Sprintf("\x1b[48;%d;%d;%d;%dt", geomRows, geomCols, geomYPixel, geomXPixel)
 	if got := string(term.DrainResponses()); !strings.Contains(got, want) {
 		t.Fatalf("the worker terminal reported %q after a resize carrying %dx%d pixels, want %q",
@@ -129,8 +117,6 @@ func TestResizeDerivesTheWorkerCellFromThePaneTotal(t *testing.T) {
 	}
 }
 
-// The attach-time reconcile and the remount hydrate resize carry no pixels and
-// arrive after a fit, so "no pixels" must not blank the remembered cell.
 func TestPixelLessResizeKeepsTheCellItAlreadyHas(t *testing.T) {
 	spawn := newQuietSpawn(t, "pixel-less", geomCols, geomRows)
 	term := sessionTerminal(t, spawn)

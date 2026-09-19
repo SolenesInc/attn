@@ -50,8 +50,6 @@ func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullReques
 	d.sendOK(conn)
 }
 
-// A hub forwards these to the session's owner, which answers over its endpoint link
-// and has no caller waiting; the log is where a rejection can still be read.
 func (d *Daemon) handlePullRequestCreatedWS(msg *protocol.PullRequestCreatedMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
@@ -159,8 +157,6 @@ func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.Sess
 	return sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID))
 }
 
-// A hub holds no rows for a session it does not own, so the mutation travels to the
-// daemon that does and its snapshot brings the result back.
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {
 	endpointID := d.sessionOwnerEndpoint(sessionID)
 	if endpointID == "" {

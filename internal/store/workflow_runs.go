@@ -6,8 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// protocol.TimestampNow()'s local-zone, trailing-zero-stripped fraction ordered two runs
-// started inside one second wrongly, and the listing ORDER BYs these stamps as text.
 func normalizeWorkflowStamp(s string) string {
 	if s == "" {
 		return s
@@ -23,7 +21,6 @@ type workflowScanner interface {
 	Scan(dest ...any) error
 }
 
-// Intentionally NOT a protocol type: the store stays free of protocol/generated types.
 type WorkflowRunRow struct {
 	RunID       string
 	ScriptPath  string
@@ -42,7 +39,6 @@ type WorkflowRunRow struct {
 	CompletedAt *string
 }
 
-// ID is informational on read (the durable append-order key) and ignored on write.
 type WorkflowAgentCallRow struct {
 	ID              int64
 	RunID           string
@@ -185,7 +181,6 @@ func (s *Store) GetWorkflowRun(runID string) (*WorkflowRunRow, error) {
 	return run, nil
 }
 
-// An empty sessionID lists all runs.
 func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -232,7 +227,6 @@ func (s *Store) ListWorkflowRuns(sessionID string) ([]*WorkflowRunRow, error) {
 	return runs, rows.Err()
 }
 
-// Ascending id is durable append order, which reconstructs the journal's Entries() ordering.
 func (s *Store) ListWorkflowAgentCalls(runID string) ([]*WorkflowAgentCallRow, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -265,8 +259,6 @@ func (s *Store) ListWorkflowAgentCalls(runID string) ([]*WorkflowAgentCallRow, e
 	return calls, rows.Err()
 }
 
-// The store never enables PRAGMA foreign_keys, so the ON DELETE CASCADE clause is
-// inert; child rows are deleted explicitly.
 func (s *Store) DeleteWorkflowRun(runID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Half of these broadcasters are exercised by no other test in this package, so without this golden they could emit nothing at all and the suite would stay green.
 func TestWireTraceProducerGolden(t *testing.T) {
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "test.sock"))
@@ -19,7 +18,6 @@ func TestWireTraceProducerGolden(t *testing.T) {
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("create workspace dir: %v", err)
 	}
-	// Registered and paned through the handlers rather than seeded: a workspace only has a layout once it has a pane, and the layout broadcasters bail out without one.
 	client := newWorkspaceProtocolTestClient()
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "One", Directory: workspaceDir,

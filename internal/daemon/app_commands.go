@@ -24,13 +24,8 @@ func (e *appReconcileOwedError) Error() string {
 		e.app, e.reason.ThroughSeq, strings.Join(e.reason.Causes, ", "), e.app)
 }
 
-// The serving version's declaration is the contract, never the manifest on disk. A failing
-// command does not advance the auto-disable clock, which exists for bus-retention pins.
-
 const appCommandEvent = "app.command"
 
-// appCommandPayloadLimit bounds what one command may carry in either direction; the document
-// store moves anything larger. 256KB is ~8x the crash reporter's 32KB component stack.
 const appCommandPayloadLimit = 256 * 1024
 
 func (d *Daemon) handleAppCommand(client *wsClient, msg *protocol.AppCommandMessage) {
@@ -186,8 +181,6 @@ func (d *Daemon) planAppCommand(name, command string) (*appDispatchPlan, error) 
 	}
 	declared := manifest.CommandNames()
 	if !containsString(declared, command) {
-		// The version, not the manifest on disk: after a rollback the two differ,
-		// and the running code is what the caller is actually talking to.
 		return nil, fmt.Errorf(
 			"the version of %s serving now (%d) declares no command %q; it declares %s. Add a [[commands]] block and `attn app apply`, or roll back to a version that has it",
 			name, version.ID, command, commandList(declared))
@@ -239,8 +232,6 @@ func (d *Daemon) dispatchAppCommand(ctx context.Context, plan *appDispatchPlan, 
 		dispatch.collections[collection] = struct{}{}
 	}
 	d.registerAppDispatch(dispatch)
-	// Released whatever happens, including the abandoned-timeout path: an id left behind would
-	// let a handler that finally woke up write documents from outside any invocation.
 	defer d.releaseAppDispatch(dispatch.id)
 
 	request := appCommandRequest{
@@ -259,8 +250,6 @@ func (d *Daemon) dispatchAppCommand(ctx context.Context, plan *appDispatchPlan, 
 	result, err := runtime.command(ctx, request)
 	if err != nil {
 		if ctx.Err() != nil {
-			// Our own deadline: the host says which app holds the frozen loop, and this
-			// dispatch must still be in the in-flight set for that answer to be right.
 			return appCommandDispatchResult{}, d.attributeWedgedDispatch(context.Background(), runtime, plan.app)
 		}
 		return appCommandDispatchResult{}, runtimeFailure("%v", err)

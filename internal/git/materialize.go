@@ -14,8 +14,6 @@ func RepositoryCacheKey(identity string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(strings.TrimSpace(identity))))
 }
 
-// An invalid override is a failure, never a signal to fall back to the managed
-// cache.
 func ValidateLocalClone(path, expectedIdentity string) (string, error) {
 	path = CanonicalizePath(path)
 	info, err := os.Stat(path)
@@ -45,14 +43,12 @@ func ValidateLocalClone(path, expectedIdentity string) (string, error) {
 	return mainRepo, nil
 }
 
-// HTTPS only: plaintext HTTP is rejected so a host token can never be attached
-// to a cleartext request.
 func authorizationForGitURL(rawURL, authorization string) (string, error) {
 	if authorization == "" {
 		return "", nil
 	}
 	if !strings.Contains(rawURL, "://") {
-		return "", nil // scp-like SSH remote
+		return "", nil
 	}
 	parsed, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil {

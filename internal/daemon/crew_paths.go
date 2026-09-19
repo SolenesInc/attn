@@ -24,8 +24,6 @@ func (d *Daemon) resolvedCrewRoot() (string, error) {
 	return root, nil
 }
 
-// validateCrewMemberPaths is the copied-database fence: absolute paths stored in
-// a registry row never gain authority in the receiving daemon.
 func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 	root, err := d.resolvedCrewRoot()
 	if err != nil {
@@ -104,8 +102,6 @@ func profileCrewRootContaining(userHome, target string) string {
 	target = filepath.Clean(target)
 	rel, err := filepath.Rel(home, target)
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		// The lexical pass deliberately preserves a symlinked .attn-<profile>
-		// component; retry canonically when only one side used a platform alias.
 		home, err = config.CanonicalRuntimePath(home)
 		if err != nil {
 			return ""

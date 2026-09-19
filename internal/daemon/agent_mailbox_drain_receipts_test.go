@@ -5,11 +5,8 @@ import (
 	"time"
 )
 
-// Receipt (2026-09-11, -race, 200 drains): p99 2.7ms, max 4.8ms; 10s is the tripwire.
 const agentMailboxDrainReceiptDeadline = 10 * time.Second
 
-// One receipt per drain. Cleanup stops the doorbell timers and releases any
-// drain still waiting on the test, so no re-armed drain outlives it.
 type agentMailboxDrainReceipts struct {
 	t      *testing.T
 	drains chan int
@@ -21,7 +18,6 @@ func observeAgentMailboxDrains(t *testing.T, d *Daemon) *agentMailboxDrainReceip
 	return observeAgentMailboxDrainsFor(t, d, "")
 }
 
-// An empty sessionID observes every session's drains.
 func observeAgentMailboxDrainsFor(t *testing.T, d *Daemon, sessionID string) *agentMailboxDrainReceipts {
 	t.Helper()
 	r := &agentMailboxDrainReceipts{t: t, drains: make(chan int), closed: make(chan struct{})}
@@ -42,8 +38,6 @@ func observeAgentMailboxDrainsFor(t *testing.T, d *Daemon, sessionID string) *ag
 	return r
 }
 
-// next returns the delivered count of the next drain, or fails the test by
-// name so the package timeout is never the first tripwire.
 func (r *agentMailboxDrainReceipts) next() int {
 	r.t.Helper()
 	deadline := time.NewTimer(agentMailboxDrainReceiptDeadline)

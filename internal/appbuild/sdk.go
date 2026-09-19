@@ -91,8 +91,6 @@ func EnsureSDK(storeDir, appDir string, log func(string)) (string, error) {
 	return pkg, nil
 }
 
-// Runs under the toolchain lock: the package it writes points at the toolchain's
-// node_modules for React's types.
 func materializeSDK(storeDir string) (string, error) {
 	root := filepath.Join(storeDir, sdkDirName)
 	if err := os.MkdirAll(root, 0o755); err != nil {
@@ -152,7 +150,6 @@ func linkSDKTypes(pkgDir string) error {
 	return nil
 }
 
-// A real directory at the link path is never removed: it is the author's own install.
 func linkSDK(appDir, pkgDir string) error {
 	link := filepath.Join(appDir, filepath.FromSlash(SDKLinkPath))
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
@@ -180,8 +177,6 @@ func describeEntry(info os.FileInfo) string {
 	return "a file"
 }
 
-// attn's own do-not-edit header is the whole test: a file under this name that
-// attn did not write is left alone and reported.
 func retireLegacySDKFile(appDir string, log func(string)) {
 	path := filepath.Join(appDir, filepath.FromSlash(LegacySDKFile))
 	data, err := os.ReadFile(path)

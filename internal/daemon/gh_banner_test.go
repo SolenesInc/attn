@@ -10,7 +10,6 @@ import (
 )
 
 func TestGHVersionWarningSplit(t *testing.T) {
-	// Warning keys are read by the frontend; only the text may change.
 	missing := errors.Join(exec.ErrNotFound, errors.New("sentinel"))
 	code, msg := ghVersionWarning(missing)
 	if code != warnGHNotInstalled {

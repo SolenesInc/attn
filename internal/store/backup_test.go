@@ -14,7 +14,7 @@ import (
 
 func TestBackupNow_ProducesValidSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -87,15 +87,13 @@ func TestBackupNow_ProducesValidSnapshot(t *testing.T) {
 
 func TestBackupNow_TargetAlreadyExists(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
 	defer s.Close()
 
 	backupDir := t.TempDir()
-	// Seed both the current-second and next-second target names: a second boundary crossed
-	// between this test's time.Now() and BackupNow's would pass vacuously.
 	now := time.Now().UTC()
 	for _, ts := range []time.Time{now, now.Add(time.Second)} {
 		name := backupNamePrefix + ts.Format(backupNameLayout) + backupNameSuffix
@@ -111,7 +109,7 @@ func TestBackupNow_TargetAlreadyExists(t *testing.T) {
 
 func TestBackupNow_Rotation(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -229,7 +227,7 @@ func TestBackupNow_RefusesNonDurableStore(t *testing.T) {
 
 func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -262,7 +260,7 @@ func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 
 func TestBackupPreMigration_CapsSnapshots(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -273,8 +271,6 @@ func TestBackupPreMigration_CapsSnapshots(t *testing.T) {
 		t.Fatalf("mkdir backups dir: %v", err)
 	}
 
-	// Differing digit widths (9 vs 10 vs 100), so a whole-filename sort misorders them
-	// relative to a timestamp sort.
 	versions := []int{9, 10, 100, 11, 12, 13, 14}
 	var seeded []string
 	for i, v := range versions {

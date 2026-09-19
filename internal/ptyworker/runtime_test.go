@@ -51,8 +51,6 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 		t.Fatal("handleRequest(set_theme) sent no response")
 	}
 
-	// The reply cannot be read back off the output stream: fish disables kernel echo, so it
-	// lands in fish's stdin. Instead the shell runs a script whose `read` takes it explicitly.
 	scriptPath := t.TempDir() + "/query.sh"
 	script := "#!/bin/bash\n" +
 		"printf '\\033]11;?\\007'\n" +
@@ -97,9 +95,6 @@ func TestConnCtx_HandleRequest_SetThemeReachesSession(t *testing.T) {
 		}
 	}
 }
-
-// The two self-stop clocks run inside synctest bubbles at their shipped lengths (45s and
-// 12h). The Runtime owns no socket, PTY or child, so nothing pins the bubble to real time.
 
 func TestRuntime_ExitedSessionCleansUpAfterTTLWithoutConnections(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {

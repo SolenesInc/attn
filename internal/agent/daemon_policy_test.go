@@ -58,8 +58,6 @@ func TestRecoveredRunningSessionState_DefaultAndAgentOverrides(t *testing.T) {
 	}
 }
 
-// No driver may filter live PTY state any more: the interface is gone. This test
-// is the guard that nobody reintroduces one.
 func TestNoDriverFiltersPTYState(t *testing.T) {
 	type ptyStateFilter interface {
 		ShouldApplyPTYState(current protocol.SessionState, incoming string) bool

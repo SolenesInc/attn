@@ -12,7 +12,7 @@ import (
 func newSessionAnnotationTestStore(t *testing.T) *Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -266,10 +266,8 @@ func TestSessionAnnotationDraftKeepsTheNoteOfTheGenerationThatWon(t *testing.T) 
 }
 
 func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
-	// attn has shipped session annotation drafts since schema 86, so real installs
-	// hold rows written by a build with no note column: they are carried, not recreated.
 	dbPath := filepath.Join(t.TempDir(), "pre-93.db")
-	db, err := OpenDB(dbPath)
+	db, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -286,7 +284,7 @@ func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
 		t.Fatalf("close pre-93 database: %v", err)
 	}
 
-	migrated, err := NewWithDB(dbPath)
+	migrated, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

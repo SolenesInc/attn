@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// addCloseGuardWorkspaceLayout wires a protected pane beside an ordinary one,
-// so each close guard can prove both sides of its boundary.
 func addCloseGuardWorkspaceLayout(t *testing.T, d *Daemon, workspaceID, protectedSessionID, protectedPaneID, otherSessionID, otherPaneID string) {
 	t.Helper()
 	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "shared", Directory: "/tmp/" + workspaceID})

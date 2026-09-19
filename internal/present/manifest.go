@@ -32,13 +32,11 @@ type FileEntry struct {
 	Annotations []AnnotationEntry `yaml:"annotations,omitempty"`
 }
 
-// Exactly one anchor form (anchor | line | start+end) and exactly one body form
-// (note xor thread) must be set; enforced in validate.
 type AnnotationEntry struct {
-	Anchor string `yaml:"anchor,omitempty"` // substring of a head-side line, min 3 chars
-	Line   int    `yaml:"line,omitempty"`   // 1-based head-side line
-	Start  int    `yaml:"start,omitempty"`  // 1-based inclusive range start; requires End
-	End    int    `yaml:"end,omitempty"`    // 1-based inclusive range end; requires Start
+	Anchor string `yaml:"anchor,omitempty"`
+	Line   int    `yaml:"line,omitempty"`
+	Start  int    `yaml:"start,omitempty"`
+	End    int    `yaml:"end,omitempty"`
 
 	Note   string   `yaml:"note,omitempty"`
 	Thread []string `yaml:"thread,omitempty"`
@@ -181,8 +179,6 @@ func validateAnnotation(a AnnotationEntry, field string) error {
 	return nil
 }
 
-// Anchor-derived overlaps can only be caught after resolution, in
-// ResolveAnnotations.
 func validateNoStaticOverlap(annotations []AnnotationEntry, fileIndex int) error {
 	type staticRange struct {
 		index      int

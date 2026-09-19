@@ -160,7 +160,6 @@ func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plan
 	return seed.ID, nil
 }
 
-// A home without Garden support may launch locally; a failed binding must surface.
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
 	var seedID string
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegation seed protection", func(context.Context) error {
@@ -182,8 +181,6 @@ func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief
 	return seedID, nil
 }
 
-// Idempotent through the dispatch record: a delegation resumed after a daemon
-// crash re-binds instead of planting a second seed.
 func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
@@ -210,8 +207,6 @@ func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, cro
 	return seedID, nil
 }
 
-// Planted already tended by its delegate: a seed that exists unheld for a moment
-// is one `ready` can offer away.
 func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
 	title := strings.TrimSpace(name)
 	if title == "" {
@@ -239,7 +234,6 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 		seed.Edges = append(seed.Edges, garden.Edge{Kind: garden.EdgePartOf, To: parent})
 	}
 	tender := garden.Tender{Session: sessionID}
-	// Nothing holds an unwritten seed: the liveness predicate is never consulted.
 	seed, err = garden.Transition(seed, garden.VerbTend, garden.Ask{Actor: tender}, func(string) bool { return false })
 	if err != nil {
 		return garden.Seed{}, err
@@ -249,8 +243,6 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 	return seed, err
 }
 
-// validateDispatchCrown already refused a seed held by a live session; this
-// take-over through garden.Transition is the race backstop behind it.
 func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) error {
 	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember("", sessionID)}
 	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(seedID, garden.VerbTend, garden.Ask{
@@ -261,8 +253,6 @@ func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) 
 	return nil
 }
 
-// Every session as it really is, except the delegating one, which is handing the
-// seed over.
 func (d *Daemon) dispatchSessionLive(plannerSessionID string) func(string) bool {
 	planner := strings.TrimSpace(plannerSessionID)
 	return func(sessionID string) bool {

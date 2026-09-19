@@ -14,8 +14,6 @@ func (d *Daemon) handleRenameSession(client *wsClient, msg *protocol.RenameSessi
 	d.sendRenameResult(client, protocol.CmdRenameSession, strings.TrimSpace(msg.SessionID), d.renameSession(msg))
 }
 
-// A hub forwards the rename to the daemon that owns the session and answers
-// with the owner's verdict, so a refused name is never reported as applied.
 func (d *Daemon) handleRenameSessionConn(conn net.Conn, msg *protocol.RenameSessionMessage) {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	if endpointID := d.sessionOwnerEndpoint(sessionID); endpointID != "" {

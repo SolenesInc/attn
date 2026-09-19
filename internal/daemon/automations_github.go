@@ -230,7 +230,6 @@ func (d *Daemon) reconcileAutomationReviewRequests(definitionID, host string, su
 func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
-	// Finish an earlier observation's durable cancellation before a fresh snapshot can reactivate the edge: closes the daemon-exit window between recording a withdrawal and stopping the partially launched PTY.
 	if err := d.cancelWithdrawnAutomationRuns(definitionID, host); err != nil {
 		return nil, err
 	}

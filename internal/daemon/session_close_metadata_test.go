@@ -147,7 +147,6 @@ func TestClosePaneWinsOverInFlightExecutionCapture(t *testing.T) {
 			if beforeRemoval {
 				var writes atomic.Int32
 				d.gardenDispatchAfterWrite = func(id string) {
-					// The second close snapshot is saved immediately before record removal.
 					if id == sessionID && writes.Add(1) == 2 {
 						finishCapture()
 					}

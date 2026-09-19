@@ -593,11 +593,9 @@ func TestDeleteCannotExpectTheDocumentToBeAbsent(t *testing.T) {
 	}
 }
 
-// Against a database file: the in-memory store is pinned to a single connection, so it
-// would serialise the writers at the driver and never reach SQLite with two at once.
 func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "contention.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "contention.db"))
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -613,7 +611,7 @@ func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 	const (
 		writers    = 8
 		perWriter  = 25
-		maxRetries = 1000 // A tripwire: contention this deep means the loop is wrong.
+		maxRetries = 1000
 	)
 
 	var wg sync.WaitGroup
@@ -756,7 +754,7 @@ func TestDocumentsSurviveReopeningTheDatabase(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 
-	first, err := NewWithDB(path)
+	first, err := newSeededStore(path)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -768,7 +766,7 @@ func TestDocumentsSurviveReopeningTheDatabase(t *testing.T) {
 	}
 	first.Close()
 
-	second, err := NewWithDB(path)
+	second, err := newSeededStore(path)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -1079,7 +1077,7 @@ func TestAnUnmintedSchemaIsRefused(t *testing.T) {
 
 func seedV88DocumentStore(t *testing.T, dbPath string) {
 	t.Helper()
-	db, err := OpenDB(dbPath)
+	db, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}
@@ -1130,7 +1128,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-89.db")
 	seedV88DocumentStore(t, dbPath)
 
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
@@ -1199,7 +1197,7 @@ func TestAPopulatedV88StoreIsCarriedIntoItsOwnTables(t *testing.T) {
 
 func seedPreRevisionDocuments(t *testing.T, dbPath string) {
 	t.Helper()
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("open for seeding: %v", err)
 	}
@@ -1229,7 +1227,7 @@ func TestDocumentsStoredBeforeRevisionsGetTheFirstOne(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-90.db")
 	seedPreRevisionDocuments(t, dbPath)
 
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

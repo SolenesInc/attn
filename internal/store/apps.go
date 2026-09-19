@@ -183,8 +183,6 @@ func (s *Store) DeleteApp(name string) (bool, error) {
 	return n > 0, tx.Commit()
 }
 
-// The bool reports whether this call minted the row: reuse is a database
-// property (UNIQUE(app_name, content_hash)) the caller cannot otherwise see.
 func (s *Store) CommitAppVersion(v AppVersion, now time.Time) (AppVersion, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -512,8 +510,6 @@ func (s *Store) StartAppInvocation(inv AppInvocation) (int64, error) {
 	return res.LastInsertId()
 }
 
-// The status predicate makes a daemon-shutdown settlement and a startup
-// interruption repair safe to race: the terminal answer cannot be rewritten.
 func (s *Store) SettleAppInvocation(id int64, status, failure string, finishedAt time.Time) (bool, error) {
 	if !terminalAppInvocationStatus(status) {
 		return false, fmt.Errorf("store: %q is not a terminal app invocation status", status)
@@ -663,8 +659,6 @@ func (s *Store) ListAppInvocations(name string, limit int) ([]AppInvocation, err
 	return out, rows.Err()
 }
 
-// The age window cannot bound the log's size, so both limits exist; their values and receipts
-// live with the caller (AppInvocationRetention, AppInvocationsPerApp).
 func (s *Store) TrimAppInvocations(cutoff time.Time, perApp int) (int, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -687,8 +681,6 @@ func (s *Store) TrimAppInvocations(cutoff time.Time, perApp int) (int, error) {
 	if perApp <= 0 {
 		return removed, nil
 	}
-	// The ordering matches ListAppInvocations exactly — newest first, id breaking
-	// a same-timestamp tie — so what the cap keeps is what a reader can see.
 	res, err = s.db.Exec(`
 		DELETE FROM app_invocations WHERE id IN (
 			SELECT id FROM (

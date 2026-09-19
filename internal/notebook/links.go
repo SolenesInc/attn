@@ -2,8 +2,6 @@ package notebook
 
 import "regexp"
 
-// Root-absolute markdown targets only, by convention — no [[wikilinks]], and
-// relative/external/anchor-only targets are deliberately unmatched.
 var rootAbsoluteLinkRE = regexp.MustCompile(`\[[^\]]*\]\((/[^)\s]+)\)`)
 
 func Links(body string) []string {

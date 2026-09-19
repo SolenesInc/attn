@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// kittySpawn's release handshake exists because a child that writes at spawn time can be
-// finished before the test attaches, and a sleep would close that gap on machine speed.
 type kittySpawn struct {
 	manager *Manager
 	id      string
@@ -73,8 +71,6 @@ func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 			return true
 		},
 		nil,
-		// The read loop must never wait on a test that stopped draining: a full
-		// buffer sheds its oldest update and keeps the newest for a waiting reader.
 		OnPlacements(func(update PlacementUpdate) {
 			for {
 				select {
@@ -94,8 +90,6 @@ func newKittySpawnCmd(t *testing.T, id, payload, script string) *kittySpawn {
 	return spawn
 }
 
-// A payload can span several chunks, so "the image was described" is not "the
-// child is done writing": a stable watermark needs a marker at the end of it.
 func (k *kittySpawn) waitForOutput(t *testing.T, marker string) uint32 {
 	t.Helper()
 	deadline := time.After(10 * time.Second)
@@ -122,8 +116,6 @@ func (k *kittySpawn) waitForOutput(t *testing.T, marker string) uint32 {
 	return session.lastReplaySeq
 }
 
-// release returns once the child has exited, which is the read loop's own statement
-// that every byte it produced has been fed and fanned.
 func (k *kittySpawn) release(t *testing.T) {
 	t.Helper()
 	if err := k.manager.Input(k.id, []byte("\n")); err != nil {
@@ -207,8 +199,6 @@ func TestSpawnedSessionDescribesImagesUnderTheStorageOverride(t *testing.T) {
 	if img.Width != 16 || img.Height != 32 {
 		t.Errorf("fetched image = %dx%d, want 16x32", img.Width, img.Height)
 	}
-	// Stored images are always raw pixels, so the payload is the full
-	// width*height*bpp regardless of how the program encoded it.
 	if got, want := len(img.Data), 16*32*3; got != want {
 		t.Errorf("fetched pixels = %d bytes, want %d (16x32 RGB, decoded)", got, want)
 	}

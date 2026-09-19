@@ -208,7 +208,6 @@ func TestSessionAnnotations_NoteSurvivesTheSaveWithTheMarks(t *testing.T) {
 }
 
 func TestSessionAnnotations_NoNoteIsAbsentNotEmpty(t *testing.T) {
-	// An older client sends no note at all; the field stays off the wire.
 	d := annotationDaemon(t)
 	annotationsSave(t, d, "session-1", 1, []protocol.SessionAnnotation{annotation("a1", "msg", "marked")})
 

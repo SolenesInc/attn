@@ -8,8 +8,6 @@ import (
 type segKind int
 
 const (
-	// segPhase records a phase boundary as a *sequence number*, never the title:
-	// a rename must not invalidate cached calls.
 	segPhase segKind = iota
 	segParallelSlot
 	segPipelineItem
@@ -68,8 +66,6 @@ func (p OrdinalPath) clone() OrdinalPath {
 	return OrdinalPath{segs: cp}
 }
 
-// pathStack is the engine-owned, loop-goroutine-only structural-path context,
-// mutated and read synchronously. NOT stored in goja.
 type pathStack struct {
 	segs []segment
 
@@ -83,8 +79,6 @@ func newPathStack() *pathStack {
 	return &pathStack{callCounter: map[string]int{}}
 }
 
-// prefix delegates to OrdinalPath.String() so the encoding has a single
-// authority — a divergence silently corrupts journal cache identity.
 func (ps *pathStack) prefix() string {
 	return OrdinalPath{segs: ps.segs}.String()
 }
@@ -140,8 +134,6 @@ func (ps *pathStack) captureState() stackState {
 	return stackState{segs: segs, counters: counters, phaseSeq: ps.phaseSeq, phaseTitle: ps.phaseTitle}
 }
 
-// restoreState deep-copies so a restored continuation cannot mutate another
-// continuation's snapshot.
 func (ps *pathStack) restoreState(s stackState) {
 	segs := make([]segment, len(s.segs))
 	copy(segs, s.segs)

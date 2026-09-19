@@ -14,7 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
-// content/skills/attn/references/showing.md retains its HumanLayer MIT attribution.
 var attnSkillFiles = prompts.AttnSkillFiles()
 var attnWorkflowSkillFiles = prompts.AttnWorkflowSkillFiles()
 
@@ -65,7 +64,6 @@ func installAttnWorkflowSkill(skillDir string) error {
 	return installBundledSkill(attnWorkflowSkillFiles, "attn_workflow_skill", skillDir)
 }
 
-// Without this an installed skill accumulates stale content forever: a retired reference stays loadable by name and can contradict the current skill's guidance.
 func pruneOrphanedSkillFiles(skillDir string, expected map[string]bool) error {
 	return filepath.WalkDir(skillDir, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -117,7 +115,6 @@ func ensureAttnClaudeSkillInstalled() error {
 	return installAttnSkill(filepath.Join(homeDir, ".claude", "skills", "attn"))
 }
 
-// ~/.agents/skills is not codex's alone: pi scans it unconditionally, so a delegated conversation agent does not depend on codex being configured.
 func ensureAttnAgentsSkillInstalled() error {
 	homeDir, err := toolhome.Dir()
 	if err != nil {

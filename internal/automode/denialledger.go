@@ -12,9 +12,6 @@ import (
 	"time"
 )
 
-// The writer is plugins/attn-pi/automode/ledger.ts, which owns the file names and record
-// shape.
-
 const DenialLedgerFileName = "attn-automode-denials.jsonl"
 
 const DenialLedgerEnvVar = "ATTN_AUTOMODE_DENIAL_LOG"
@@ -51,7 +48,6 @@ type DenialLedgerReading struct {
 
 func ReadDenialLedger(path string) (DenialLedgerReading, error) {
 	reading := DenialLedgerReading{}
-	// Oldest generation first, so records stay in written order across the rotation.
 	for _, generation := range []string{path + ".1", path} {
 		if err := readDenialGeneration(generation, &reading); err != nil {
 			return reading, err
@@ -119,8 +115,6 @@ func readDenialGeneration(path string, into *DenialLedgerReading) error {
 	return nil
 }
 
-// A line over denialLedgerMaxLineBytes is discarded to the next newline and
-// reported as tooLong; stopping instead would silently drop every record after it.
 func readLedgerLine(reader *bufio.Reader) (line []byte, tooLong bool, err error) {
 	for {
 		chunk, isPrefix, err := reader.ReadLine()
@@ -138,8 +132,6 @@ func readLedgerLine(reader *bufio.Reader) (line []byte, tooLong bool, err error)
 	}
 }
 
-// Measured 2026-08-18: a fat denial line is 476 bytes, so 1 MiB is past any denial
-// and short of a file read into memory by accident.
 const denialLedgerMaxLineBytes = 1024 * 1024
 
 type denialLedgerLine struct {

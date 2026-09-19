@@ -28,8 +28,6 @@ type TicketMutationOutcome struct {
 	Blocked bool
 }
 
-// Only another participant's word blocks: attn's own bookkeeping describes what happened
-// while a session was dead, and refusing on it failed every revived agent's first report.
 func blocksTicketMutation(event TicketEvent) bool {
 	return strings.TrimSpace(event.Author) != TicketAuthorAttn
 }

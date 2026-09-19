@@ -14,13 +14,8 @@ import (
 	"github.com/victorarias/attn/internal/supervise"
 )
 
-// `runtime` is addressed here as itself, not as an app, which is why internal/apps
-// refuses it as an app name.
-
 const appLogDefaultLines = 200
 
-// The runtime appends to this log for as long as the daemon lives, so a request
-// for all of it has no ceiling.
 const appLogMaxLines = 10000
 
 func (d *Daemon) handleAppLogs(conn net.Conn, msg *protocol.AppLogsMessage) {
@@ -83,8 +78,6 @@ func readAppLog(path, app string, whole bool, limit int) ([]string, bool, error)
 	kept := make([]string, 0, limit)
 	truncated := false
 	scanner := bufio.NewScanner(file)
-	// A handler can print a stack trace or a JSON body; the default 64KB would end
-	// the scan on it rather than truncating the line.
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -184,8 +177,6 @@ func (d *Daemon) appRuntimeInfo(snapshot supervise.Snapshot) protocol.AppRuntime
 	return info
 }
 
-// Deliveries are dropped rather than queued when the buffer fills, so a slow reader cannot
-// slow the delivery loop; a missed burst reads back with `attn app status`.
 type appWatcher struct {
 	app    string
 	events chan protocol.AppInvocationInfo
@@ -206,7 +197,6 @@ func (d *Daemon) removeAppWatcher(watcher *appWatcher) {
 	delete(d.appWatchers, watcher)
 }
 
-// Called from the delivery path, so it must never block.
 func (d *Daemon) notifyAppWatchers(info protocol.AppInvocationInfo, app string) {
 	d.appWatcherMu.Lock()
 	watchers := make([]*appWatcher, 0, len(d.appWatchers))
@@ -238,7 +228,6 @@ func (d *Daemon) handleAppWatch(conn net.Conn, msg *protocol.AppWatchMessage) {
 		return
 	}
 
-	// The caller sends nothing, so any read that returns means the socket closed.
 	gone := make(chan struct{})
 	go func() {
 		defer close(gone)
@@ -276,8 +265,6 @@ func appInvocationForWire(id int64, inv store.AppInvocation) protocol.AppInvocat
 	if info.Kind == "" {
 		info.Kind = store.AppInvocationKindSubscription
 	}
-	// Fact identity belongs to a subscription: other kinds borrow the event columns,
-	// and a reader could not tell a real seq from a placeholder.
 	if info.Kind == store.AppInvocationKindSubscription {
 		info.EventSeq = protocol.Ptr(int(inv.EventSeq))
 		info.EventName = protocol.Ptr(inv.EventName)

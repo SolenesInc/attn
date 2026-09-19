@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// `crashed` and `todo` are intentionally unreachable here: crashed is attn-authored when an agent dies without
-// reporting, and todo is the pre-assignment backlog state.
 func ticketStatusFromWorkState(ws protocol.DispatchWorkState) (store.TicketStatus, bool) {
 	switch ws {
 	case protocol.DispatchWorkStateInProgress:
@@ -31,8 +29,6 @@ func ticketStatusFromWorkState(ws protocol.DispatchWorkState) (store.TicketStatu
 	}
 }
 
-// With an explicit ticket id there is deliberately NO ownership gate: that form
-// is for awareness (the chief or a peer nudging the board).
 func (d *Daemon) handleSetTicketStatus(conn net.Conn, msg *protocol.SetTicketStatusMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {
@@ -95,12 +91,10 @@ func (d *Daemon) handleSetTicketStatus(conn net.Conn, msg *protocol.SetTicketSta
 		TicketStatusResult: result,
 	})
 	d.mirrorStatusOntoSeed(sourceSessionID, updated, msg.WorkState, comment)
-	// Notify excludes the event's author, so this never self-nudges the mover.
 	d.notifyTicketObservers(updated.ID)
 	d.publishTicketFact(FactTicketStatusChanged, updated.ID)
 }
 
-// A failed mirror is logged, never returned: the ticket already moved.
 func (d *Daemon) mirrorStatusOntoSeed(sessionID string, ticket *store.Ticket, state protocol.DispatchWorkState, comment string) {
 	if ticket == nil || ticket.Assignee != sessionID {
 		return

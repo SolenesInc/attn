@@ -148,7 +148,6 @@ func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {
 	setPRState(t, d, "merged", "Harvest on merge")
 	armOnSettlePR(t, d, seed.ID)
 
-	// A merged row is no longer refreshed, so the tick changes nothing and must not sweep.
 	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want a tick with nothing to do", fetched, changed)
 	}

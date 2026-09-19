@@ -108,7 +108,6 @@ func (l *Logger) Debugf(format string, args ...interface{}) {
 	l.Debug(fmt.Sprintf(format, args...))
 }
 
-// Callers use this to skip building log arguments: Go evaluates them eagerly and Info-level writes are not level-gated.
 func (l *Logger) DebugEnabled() bool {
 	return l.debug
 }

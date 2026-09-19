@@ -234,7 +234,7 @@ func TestDriverAgentThroughEngineSchemaPath(t *testing.T) {
 
 func TestDriverAgentThroughEngineResolvesNull(t *testing.T) {
 	runner := &fakeRunner{behave: func(_ int, _ agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-		return agentdriver.HeadlessTaskResult{}, nil // never writes a result
+		return agentdriver.HeadlessTaskResult{}, nil
 	}}
 	da := newTestDriverAgent(t, runner, 1)
 
@@ -352,7 +352,7 @@ func TestDriverAgentCWDFallsBackToRunTmpDirWhenNoWorkingTree(t *testing.T) {
 		}
 		return agentdriver.HeadlessTaskResult{Text: "ok"}, nil
 	}}
-	da := newWritableTestDriverAgent(t, runner, "" /* no working tree */, nil)
+	da := newWritableTestDriverAgent(t, runner, "", nil)
 
 	if _, err := da.Run(context.Background(), AgentCall{Ordinal: ordForTest(), Prompt: "answer"}); err != nil {
 		t.Fatalf("no-schema Run error: %v", err)

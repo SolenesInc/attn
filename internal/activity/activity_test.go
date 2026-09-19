@@ -184,8 +184,6 @@ func TestTemplateRenderSplitsOnTheSystemMarker(t *testing.T) {
 		t.Errorf("an unmarked template must be all user prompt; got %+v", unmarked)
 	}
 
-	// The shipped baseline must carry the marker: losing it is a silent 10x cost
-	// regression, not a test failure anywhere else.
 	baseline, err := LoadTemplate("baseline", filepath.Join("..", "prompts", "content", "activity", "baseline.md"))
 	if err != nil {
 		t.Fatalf("load baseline: %v", err)

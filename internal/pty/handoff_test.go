@@ -8,7 +8,6 @@ import (
 	"time"
 )
 
-// These run both halves in one process; the exec itself is measured in
 const echoChild = `printf 'banner one\r\n'; while read line; do printf 'got %s\r\n' "$line"; done`
 
 type collector struct {
@@ -171,8 +170,6 @@ func TestHandoffAndAdoptKeepTheChildRunning(t *testing.T) {
 }
 
 func TestAdoptedSessionStillReapsItsChild(t *testing.T) {
-	// Only the spawning process gets a child's exit status on Unix, so the adopt
-	// must keep the pid.
 	const id = "handoff-exit"
 	before, _ := spawnEchoSession(t, id)
 	state, err := before.Handoff(id)

@@ -10,7 +10,7 @@ import (
 
 func TestMigration146AddsGuardianAndPreservesItOnReplay(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

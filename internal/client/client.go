@@ -60,8 +60,6 @@ func (c *Client) AutomationApply(raw string) (*protocol.AutomationApplyResultMes
 	return &result, nil
 }
 
-// AutomationValidate runs the same seam apply persists through, without
-// persisting. A non-nil error IS the validation message, not a transport error.
 func (c *Client) AutomationValidate(raw string) error {
 	var result protocol.AutomationValidateResultMessage
 	return c.sendAutomation(protocol.AutomationValidateMessage{Cmd: protocol.CmdAutomationValidate, DefinitionYaml: raw}, &result)
@@ -191,8 +189,6 @@ func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
 	return c.RegisterAsMember(id, label, dir, agent, "")
 }
 
-// RegisterAsMember refuses the whole registration when the member cannot be bound;
-// callers must treat that as launch-fatal, or an identity is silently dropped.
 func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
 	msg := protocol.RegisterMessage{
 		Cmd:         protocol.CmdRegister,
@@ -380,7 +376,6 @@ func (c *Client) SessionShow(sessionID string) (*protocol.SessionShowResult, err
 	return resp.SessionShowResult, nil
 }
 
-// RenameSession sets the name a person reads in the sidebar and the session ledger.
 func (c *Client) RenameSession(sessionID, name string) error {
 	_, err := c.send(protocol.RenameSessionMessage{
 		Cmd:       protocol.CmdRenameSession,
@@ -547,8 +542,6 @@ func (c *Client) AgentMsgStatus(messageID, senderSessionID string) (*protocol.Ag
 	return resp.AgentMsgStatusResult, nil
 }
 
-// StopFacts is what the Stop hook observed about whether the turn finished; the
-// daemon decides what it means. The zero value reads as a terminal stop.
 type StopFacts struct {
 	BackgroundTasks     []protocol.StopBackgroundTask
 	PendingSessionCrons int
@@ -778,8 +771,6 @@ func (c *Client) PresentFeedback(presentationID string, seq int) (*protocol.Pres
 	return resp.PresentFeedbackResult, nil
 }
 
-// TicketInbox CONSUMES unread events: reading advances the per-ticket cursors, so a
-// second call returns only what landed since.
 func (c *Client) TicketInbox(sourceSessionID string) (*protocol.TicketInboxResult, error) {
 	return c.ticketInbox(sourceSessionID, protocol.TicketInboxModeExplicit, 0)
 }
@@ -907,8 +898,6 @@ func (c *Client) NotebookGuide(sessionID string) (*protocol.NotebookGuideResult,
 	return resp.NotebookGuide, nil
 }
 
-// AppendJournal goes through the daemon's serialized notebook.Store writer: editing
-// journal/<date>.md directly races other agents' writes. Empty date means today.
 func (c *Client) AppendJournal(sourceSessionID, date, entry string) (*protocol.JournalAppendResult, error) {
 	msg := protocol.JournalAppendMessage{Cmd: protocol.CmdJournalAppend, Entry: entry}
 	if sourceSessionID != "" {
@@ -1269,7 +1258,6 @@ func explainConnectError(sockPath string, cause error) error {
 	return errors.New(base)
 }
 
-// crossProfileHint is "" unless the OTHER profile's daemon appears to be running.
 func crossProfileHint() string {
 	current := config.Profile()
 	if current == "" {

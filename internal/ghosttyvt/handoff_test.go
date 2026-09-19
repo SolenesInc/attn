@@ -8,9 +8,6 @@ import (
 	"testing"
 )
 
-// A worker hands its screen to its replacement as plain VT because that is the one currency
-// a different libghostty-vt still reads.
-
 func handoffInto(t *testing.T, source *Terminal) *Terminal {
 	t.Helper()
 	cols, rows := source.Size()
@@ -123,8 +120,6 @@ func TestHandoffVTReplaysTheScreen(t *testing.T) {
 }
 
 func TestHandoffVTPutsTheCursorBelowTheLastLine(t *testing.T) {
-	// The upstream formatter stops at the last non-blank row, so replaying its output alone
-	// leaves the cursor ON the last line. Remove the row-deficit correction and this fails.
 	source := newT(t, 80, 24)
 	writeLines(source, 60)
 

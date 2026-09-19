@@ -13,7 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// under replayMu (blockFeeder's contract), so no internal locking.
 type pinningBlockTable struct {
 	refs []blockRef
 }
@@ -86,8 +85,6 @@ func TestBlockSnapshotAtomicity(t *testing.T) {
 	s.wireFeed = &wireFeeder{term: gt, blocks: &blockFeeder{term: gt, table: table}}
 	go s.readLoop(nil, func(string, ...any) {})
 
-	// Without the pacing the read loop takes one coalesced pipe read and the
-	// snapshotter never observes a mid-stream state.
 	go func() {
 		for i := 0; i < marks; i++ {
 			line := fmt.Sprintf("\x1b]133;A\x07MARK-%04d\r\nfiller-%04d-a\r\nfiller-%04d-b\r\n", i, i, i)

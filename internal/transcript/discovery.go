@@ -74,8 +74,6 @@ func FindCodexTranscript(cwd string, startedAt time.Time) string {
 			return nil
 		}
 
-		// `codex exec` rollouts share the pane's cwd and land seconds after the real conversation,
-		// so cwd+newest would pick them. Rollouts predating the source field keep the old behavior.
 		if entry.Payload.Source == "exec" {
 			return nil
 		}
@@ -292,8 +290,6 @@ func FindCopilotTranscript(cwd string, startedAt time.Time) string {
 			return filepath.SkipDir
 		}
 
-		// Compared through symlinks, as codex's finder is: copilot records the resolved cwd, so a
-		// session launched under /tmp writes /private/tmp.
 		matchedCWD := readCopilotWorkspaceCWD(workspacePath)
 		if matchedCWD == "" || !pathsEquivalent(matchedCWD, cwdClean) {
 			return filepath.SkipDir

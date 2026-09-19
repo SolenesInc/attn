@@ -1,4 +1,3 @@
-// Package prompttest compares runtime output with independently captured legacy prompts.
 package prompttest
 
 import (

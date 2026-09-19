@@ -17,8 +17,6 @@ var (
 	ErrTicketDelegationReserved  = errors.New("ticket already has a delegation being prepared")
 )
 
-// DelegationOperationRecord is the durable launch journal. RequestJSON lets a restart resume
-// the exact accepted request and reject a reused key whose inputs differ.
 type DelegationOperationRecord struct {
 	Operation             protocol.DelegationOperation
 	ResolvedPreferences   string

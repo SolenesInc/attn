@@ -579,8 +579,6 @@ func TestCrewSet_RecordsReadsAndClearsAMembersModel(t *testing.T) {
 	}
 }
 
-// An empty awareness list marshals away under `omitempty`, so a clear sent as an
-// empty slice would reach the daemon as "leave it alone".
 func TestCrewSet_ClearingAwarenessDirsSurvivesTheWire(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	awareness := t.TempDir()

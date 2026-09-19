@@ -40,8 +40,6 @@ func TestScreenShowsSelector(t *testing.T) {
 	}
 }
 
-// Receipt for the footer depth is in doorbell_screen.go: on the captured corpus
-// 6, 8 and 12 lines find the same screens, and 20 starts matching assistant prose.
 func TestScreenShowsSelectorReadsOnlyTheFooter(t *testing.T) {
 	scrolled := "Enter to select · Esc to cancel\n" +
 		strings.Repeat("a line of ordinary output\n", doorbellScreenTailLines)

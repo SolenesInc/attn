@@ -41,8 +41,6 @@ func (d *Daemon) agentMailboxCooldown() time.Duration {
 	return sessionInputQuietWindow
 }
 
-// Producers persist first, then call this adapter. The terminal only carries a
-// generic doorbell; reading the durable inbox is the content receipt.
 func (d *Daemon) deliverAgentMailboxItem(delivery agentmailbox.Delivery) error {
 	recipient := delivery.Item.RecipientSessionID
 	unread, err := d.store.HasUnreadAgentMailboxItems(recipient)
@@ -62,8 +60,6 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 		d.forgetAgentMailboxDoorbell(sessionID)
 		return fmt.Errorf("%w: %s", errAgentMailboxRecipientGone, sessionID)
 	}
-	// Dropped, not deferred: a shell pane never becomes a reader, so a retry
-	// would nag the pane forever. The items stay unread for `attn agent inbox`.
 	if !sessionReadsInboxDoorbells(session) {
 		d.forgetAgentMailboxDoorbell(sessionID)
 		return fmt.Errorf("%w: %s", errAgentMailboxNoPromptReader, sessionID)
@@ -95,7 +91,6 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 		d.gardenWatchMu.Unlock()
 		return errAgentMailboxDoorbellInFlight
 	}
-	// This receipt hands the doorbell to delivery; unwatch can still clear its inbox.
 	state.delivering = true
 	if state.retry != nil {
 		state.retry.Stop()
@@ -118,8 +113,6 @@ func (d *Daemon) deliverAgentMailboxDoorbell(sessionID string) error {
 	attempt := d.sessionInputs().try(context.Background(), input)
 	succeeded := attempt.err == nil && (attempt.stage == sessionInputPlaced || attempt.stage == sessionInputTaken)
 	if succeeded {
-		// A successful paste plus Enter completes a doorbell attempt. Keeping this
-		// composer until a hook arrives would make a missing hook block the lane.
 		d.sessionInputs().forget(sessionID, id)
 		if _, err := d.store.MarkAgentMailboxNotified(sessionID, time.Now()); err != nil {
 			d.logf("agent inbox doorbell placed but unread rows were not stamped: session=%s err=%v", sessionID, err)
@@ -230,7 +223,6 @@ func (d *Daemon) rollbackQueuedPeerMessage(sessionID, messageID string) {
 	d.refreshAgentMailboxUnread(sessionID)
 }
 
-// This cache keeps per-session state observations off SQLite's hot path.
 func (d *Daemon) noteQueuedAgentMailboxItem(sessionID string) {
 	d.agentMailboxMu.Lock()
 	defer d.agentMailboxMu.Unlock()
@@ -252,8 +244,6 @@ func (d *Daemon) hasQueuedAgentMailboxItems(sessionID string) bool {
 	return state != nil && state.unread
 }
 
-// Unread rows outlive the daemon. Rebuild the in-memory doorbell state and
-// attempt a wake so a restart cannot strand inbox content.
 func (d *Daemon) seedQueuedAgentMailboxItems() {
 	if d.store == nil {
 		return

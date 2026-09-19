@@ -26,20 +26,18 @@ func TestCleanPath(t *testing.T) {
 		wantErr bool
 	}{
 		{"knowledge/areas/foo.md", "knowledge/areas/foo.md", false},
-		{"/knowledge/areas/foo.md", "knowledge/areas/foo.md", false}, // root-absolute normalized
+		{"/knowledge/areas/foo.md", "knowledge/areas/foo.md", false},
 		{"  /index.md  ", "index.md", false},
 		{"knowledge/./foo.md", "knowledge/foo.md", false},
-		// escapes are neutralized to within the root, never outside
 		{"../../etc/passwd.md", "etc/passwd.md", false},
 		{"knowledge/../journal/x.md", "journal/x.md", false},
-		// rejections
 		{"", "", true},
 		{"/", "", true},
-		{"knowledge/foo.txt", "", true},                  // not .md
-		{"knowledge/foo", "", true},                      // no extension
-		{".attn/raw/x.md", "", true},                     // dotdir segment
-		{"knowledge/.hidden.md", "", true},               // dotfile segment
-		{"knowledge//foo.md", "knowledge/foo.md", false}, // doubled slash collapses to a valid path
+		{"knowledge/foo.txt", "", true},
+		{"knowledge/foo", "", true},
+		{".attn/raw/x.md", "", true},
+		{"knowledge/.hidden.md", "", true},
+		{"knowledge//foo.md", "knowledge/foo.md", false},
 	}
 	for _, tc := range tests {
 		got, err := CleanPath(tc.in)

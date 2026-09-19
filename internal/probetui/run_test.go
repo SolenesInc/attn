@@ -34,13 +34,12 @@ func TestRunDrivesStartupResizeAndTeardown(t *testing.T) {
 		done <- Run(ctx, syncWriter, StyleClaude, size, winch, 10*time.Millisecond)
 	}()
 
-	// Let at least one frame render at the initial geometry before resizing.
 	time.Sleep(50 * time.Millisecond)
 
 	mu.Lock()
 	cols, rows = 62, 27
 	mu.Unlock()
-	winch <- os.Interrupt // stand-in for SIGWINCH; Run only reads from the channel
+	winch <- os.Interrupt
 
 	time.Sleep(50 * time.Millisecond)
 	cancel()
@@ -84,7 +83,6 @@ func TestRunDrivesStartupResizeAndTeardown(t *testing.T) {
 		t.Fatalf("output does not end with Teardown()")
 	}
 
-	// The resize sequence must appear before any frame at the new geometry.
 	resizeIdx := bytes.Index(out, resize)
 	newFrameIdx := bytes.Index(out, newBanner)
 	if resizeIdx < 0 || newFrameIdx < 0 || resizeIdx > newFrameIdx {

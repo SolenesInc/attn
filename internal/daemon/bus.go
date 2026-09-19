@@ -9,9 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A projection writes to the wire and does nothing else: the bus holds its publish lock
-// across the inline fan-out, so a nested publish deadlocks.
-
 const (
 	FactSessionRegistered             = "session.registered"
 	FactSessionReregistered           = "session.reregistered"
@@ -583,7 +580,6 @@ const (
 
 const AutoModeConfigSubject = "config"
 
-// wireEqual reports whether two values reach clients as the same JSON —
 func wireEqual(a, b any) bool {
 	rawA, errA := json.Marshal(a)
 	rawB, errB := json.Marshal(b)

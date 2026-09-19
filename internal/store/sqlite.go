@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -10,9 +11,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	sqlite3 "github.com/mattn/go-sqlite3"
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/docstore"
@@ -20,8 +22,6 @@ import (
 	"github.com/victorarias/attn/internal/rankkey"
 )
 
-// A 14-watcher restore exposed sql.DB's two-idle default as schema-reparse churn.
-// Keep that measured burst resident and cap excess SQLite connection memory.
 const sqliteFileConnectionPoolSize = 16
 
 const baseSchema = `
@@ -126,8 +126,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_delegation_operations_active_ticket
 	ON delegation_operations(ticket_id)
 	WHERE ticket_id != '' AND state IN ('accepted', 'preparing');`
 
-// Never reuse a version number, even one only claimed on another branch: migrateDB skips
-// `version <= max(applied)`. Burned: 50, 98, 108, 111, 112, 113.
 var migrations = []migration{
 	{1, "add head_sha to prs", "ALTER TABLE prs ADD COLUMN head_sha TEXT"},
 	{2, "add head_branch to prs", "ALTER TABLE prs ADD COLUMN head_branch TEXT"},
@@ -430,8 +428,6 @@ var migrations = []migration{
 	`},
 	{48, "drop label from recent_locations", "ALTER TABLE recent_locations DROP COLUMN label"},
 	{49, "add rank to workspaces", `ALTER TABLE workspaces ADD COLUMN rank TEXT NOT NULL DEFAULT ''`},
-	// Dispatched to applyMigration49; this SQL never runs. Real DDL here would
-	// be a duplicate-column landmine.
 	{50, "repair missing workspace rank", `SELECT 1`},
 	{51, "create workflow engine journal tables", `CREATE TABLE IF NOT EXISTS workflow_runs (
     run_id TEXT PRIMARY KEY,
@@ -1303,8 +1299,6 @@ func applyMigration99(tx *sql.Tx) error {
 	return err
 }
 
-// A deferred transaction that reads before it writes cannot upgrade while
-// another connection holds the write lock: SQLite fails it instantly, no wait.
 func sqliteDSN(dbPath string) string {
 	if dbPath == ":memory:" {
 		return dbPath
@@ -1335,17 +1329,104 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
 
-	if _, err := db.Exec(baseSchema); err != nil {
-		db.Close()
-		return nil, err
+	if dbPath == ":memory:" {
+		if err := copyMigratedSchema(db); err != nil {
+			db.Close()
+			return nil, err
+		}
 	}
 
-	if err := migrateDB(db, dbPath); err != nil {
+	if err := migrateSchema(db, dbPath); err != nil {
 		db.Close()
 		return nil, err
 	}
 
 	return db, nil
+}
+
+func migrateSchema(db *sql.DB, dbPath string) error {
+	if _, err := db.Exec(baseSchema); err != nil {
+		return err
+	}
+	return migrateDB(db, dbPath)
+}
+
+var migratedSchema struct {
+	once  sync.Once
+	image []byte
+	err   error
+}
+
+func migratedSchemaImage() ([]byte, error) {
+	migratedSchema.once.Do(func() {
+		migratedSchema.image, migratedSchema.err = buildMigratedSchemaImage()
+	})
+	return migratedSchema.image, migratedSchema.err
+}
+
+func buildMigratedSchemaImage() ([]byte, error) {
+	db, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		return nil, err
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if err := migrateSchema(db, ":memory:"); err != nil {
+		return nil, err
+	}
+	conn, err := db.Conn(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	defer conn.Close()
+	var image []byte
+	err = conn.Raw(func(driverConn any) error {
+		var err error
+		image, err = driverConn.(*sqlite3.SQLiteConn).Serialize("main")
+		return err
+	})
+	return image, err
+}
+
+func copyMigratedSchema(dst *sql.DB) error {
+	image, err := migratedSchemaImage()
+	if err != nil {
+		return fmt.Errorf("building migrated schema: %w", err)
+	}
+	src, err := sql.Open("sqlite3", ":memory:")
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	src.SetMaxOpenConns(1)
+	ctx := context.Background()
+	srcConn, err := src.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer srcConn.Close()
+	dstConn, err := dst.Conn(ctx)
+	if err != nil {
+		return err
+	}
+	defer dstConn.Close()
+	return srcConn.Raw(func(srcDriver any) error {
+		source := srcDriver.(*sqlite3.SQLiteConn)
+		if err := source.Deserialize(image, "main"); err != nil {
+			return err
+		}
+		return dstConn.Raw(func(dstDriver any) error {
+			backup, err := dstDriver.(*sqlite3.SQLiteConn).Backup("main", source, "main")
+			if err != nil {
+				return err
+			}
+			if _, err := backup.Step(-1); err != nil {
+				backup.Finish()
+				return err
+			}
+			return backup.Finish()
+		})
+	})
 }
 
 func migrateDB(db *sql.DB, dbPath string) error {
@@ -2272,7 +2353,6 @@ func applyMigration20(tx *sql.Tx) error {
 	return nil
 }
 
-// A plain checkout's repository is unknowable here, so registration writes it.
 func applyMigration137(tx *sql.Tx) error {
 	exists, err := columnExists(tx, "sessions", "repository")
 	if err != nil {
@@ -2298,15 +2378,8 @@ func applyMigration137(tx *sql.Tx) error {
 	return nil
 }
 
-// Rewind-safe like every other column add here: the migration tests un-record
-// versions and re-run migrateDB over a database that already has the columns.
 func applyMigration135(tx *sql.Tx) error {
-	columns := map[string]string{
-		"closed_at":    "ALTER TABLE sessions ADD COLUMN closed_at TEXT NOT NULL DEFAULT ''",
-		"closed_by":    "ALTER TABLE sessions ADD COLUMN closed_by TEXT NOT NULL DEFAULT ''",
-		"close_reason": "ALTER TABLE sessions ADD COLUMN close_reason TEXT NOT NULL DEFAULT ''",
-	}
-	for column, statement := range columns {
+	for _, column := range []string{"closed_at", "closed_by", "close_reason"} {
 		exists, err := columnExists(tx, "sessions", column)
 		if err != nil {
 			return err
@@ -2314,7 +2387,7 @@ func applyMigration135(tx *sql.Tx) error {
 		if exists {
 			continue
 		}
-		if _, err := tx.Exec(statement); err != nil {
+		if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN " + column + " TEXT NOT NULL DEFAULT ''"); err != nil {
 			return err
 		}
 	}
@@ -3098,8 +3171,6 @@ func applyMigration89(tx *sql.Tx) error {
 	if _, err := tx.Exec(`ALTER TABLE document_collections RENAME TO document_collections_v88`); err != nil {
 		return err
 	}
-	// AUTOINCREMENT, not rowid: a collection's table is doc_<id>, so a reused id
-	// would point a name still held by an in-flight query at another collection.
 	if _, err := tx.Exec(`CREATE TABLE document_collections (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     namespace   TEXT NOT NULL,
@@ -3334,7 +3405,6 @@ func applyMigration124(tx *sql.Tx) error {
 	return nil
 }
 
-// A promotion row is the only witness that a human picked these models.
 func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	has, err := tableExists(tx, "automode_proposals")
 	if err != nil || !has {
@@ -3349,7 +3419,6 @@ func aModelWasEverPromoted(tx *sql.Tx) (bool, error) {
 	return count > 0, nil
 }
 
-// Prose lines become the slot document; the prose lands in notes, not discarded.
 func applyMigration125(tx *sql.Tx) error {
 	has, err := columnExists(tx, "automode_config", "environment")
 	if err != nil || !has {
@@ -3368,7 +3437,6 @@ func applyMigration125(tx *sql.Tx) error {
 	}
 	var lines []string
 	if err := json.Unmarshal([]byte(raw), &lines); err != nil {
-		// No prose to carry; the reader falls back to an empty environment.
 		return nil
 	}
 	env := automode.NewEnvironment()
@@ -3385,7 +3453,6 @@ func applyMigration125(tx *sql.Tx) error {
 	return err
 }
 
-// A shell glob that cannot become a command-token prefix rule stays in legacy_patterns instead.
 func applyMigration140(tx *sql.Tx) error {
 	has, err := tableExists(tx, "automode_config")
 	if err != nil || !has {
@@ -3426,7 +3493,6 @@ func applyMigration140(tx *sql.Tx) error {
 			return err
 		}
 	}
-	// allow, deny and model proposals name lists that are gone; nothing could promote them.
 	_, err = tx.Exec(`UPDATE automode_proposals SET state = ?, resolved_at = ?
 		WHERE state = ? AND kind NOT IN (?, ?)`,
 		automode.StateDiscarded, time.Now().UTC().Format(sortableTimeFormat),
@@ -3480,7 +3546,6 @@ func convertAutoModeGlobs(tx *sql.Tx) error {
 			rules = append(rules, rule)
 		}
 	}
-	// The shipped denies were resolved in at read, never stored, so nothing carries them here.
 	rules = automode.StripShippedRules(rules)
 	encodedRules, err := json.Marshal(rules)
 	if err != nil {
@@ -3496,8 +3561,6 @@ func convertAutoModeGlobs(tx *sql.Tx) error {
 	return err
 }
 
-// Slugs are stored at planting, so every seed planted under the old rule keeps a
-// title-length slug until it is recomputed here. Nothing references a slug as a key.
 func applyMigration126(tx *sql.Tx) error {
 	var collection int64
 	err := tx.QueryRow(
@@ -3543,8 +3606,6 @@ func applyMigration126(tx *sql.Tx) error {
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	// A new body is a new revision: stale conditional writes and resuming
-	// subscriptions decide by rev, so a silent rewrite would leave them holding the old slug.
 	stamp := time.Now().UTC().Format(docstore.TimeFormat)
 	for _, u := range updates {
 		if _, err := tx.Exec(fmt.Sprintf(`UPDATE %s SET body = ?, rev = rev + 1, updated_at = ? WHERE id = ?`, table), u.body, stamp, u.id); err != nil {
@@ -3748,8 +3809,6 @@ func applyMigration95(tx *sql.Tx) error {
 	return nil
 }
 
-// Rows are read out fully before any is written back: the driver holds one
-// connection, and a write issued while a read is still streaming deadlocks.
 func restampTable(tx *sql.Tx, table, key string, columns []string) (int, error) {
 	rows, err := tx.Query(fmt.Sprintf(`SELECT %s, %s FROM %s`, key, strings.Join(columns, ", "), table))
 	if err != nil {
@@ -3864,7 +3923,6 @@ func readV88Collections(tx *sql.Tx) ([]v88Collection, error) {
 
 func carryV88Collection(tx *sql.Tx, c v88Collection) (int, error) {
 	schema := docstore.CollectionSchema{Namespace: c.namespace, Collection: c.collection, Fields: c.fields}
-	// Validate before any field name reaches the CREATE TABLE below.
 	if err := schema.Validate(); err != nil {
 		return 0, err
 	}

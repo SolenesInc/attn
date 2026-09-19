@@ -6,9 +6,6 @@ import (
 	"time"
 )
 
-// These stamps are TEXT columns, so encoding defines "before": under RFC3339Nano
-// "…:00Z" sorts ABOVE every stamp in its own second ('Z' is 0x5A, above '.' and digits).
-
 var raggedJobOffsets = []struct {
 	id     string
 	offset time.Duration
@@ -141,7 +138,7 @@ func TestNotificationsListNewestFirstWithinASecond(t *testing.T) {
 
 func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -157,8 +154,6 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 		}
 	}
 
-	// The planted unreadable value must be left alone rather than turned into year
-	// 1, and read_at stays '' — an unread sentinel must survive too.
 	for _, r := range raggedJobOffsets {
 		old := jobBase().Add(r.offset).Format(time.RFC3339Nano)
 		if _, err := s.db.Exec(
@@ -179,8 +174,6 @@ func TestMigration94RewritesJobAndNotificationStampsThatDoNotSort(t *testing.T) 
 		t.Fatalf("unrecord migration 94: %v", err)
 	}
 
-	// Sanity: the planted state is the broken one, so a pass here would mean the
-	// test proves nothing.
 	if got, err := s.EligibleJobs(jobBase(), 10); err != nil {
 		t.Fatal(err)
 	} else if len(got) != 0 {

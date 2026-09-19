@@ -19,8 +19,6 @@ type Mark struct {
 	hit  atomic.Bool
 }
 
-// Reached records that the state happened. Safe from any goroutine; after the
-// first hit it is an atomic load and a predicted branch — measured 3.0ns.
 func (m *Mark) Reached() {
 	if m == nil || m.hit.Load() {
 		return
@@ -47,8 +45,6 @@ func newCatalog() *catalog { return &catalog{byWhat: map[string]string{}} }
 
 var defaultCatalog = newCatalog()
 
-// Sometimes registers a state this package's tests must reach at least once per
-// unfiltered run. Call it from a package-level var: registration must precede TestMain.
 func Sometimes(what string) *Mark { return defaultCatalog.add(what, callerSite(2)) }
 
 func (c *catalog) add(what, site string) *Mark {
@@ -163,8 +159,6 @@ func plural(n int) string {
 	return fmt.Sprintf("%d cataloged states", n)
 }
 
-// filterReason names why this run cannot reach the whole inventory, or "".
-// Testing's flags are parsed by m.Run, so only meaningful after it returns.
 func filterReason() string {
 	if v := testFlag("test.run"); v != "" {
 		return "this run is filtered by -run " + v

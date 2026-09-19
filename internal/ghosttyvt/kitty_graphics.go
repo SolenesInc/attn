@@ -1,7 +1,5 @@
 //go:build (darwin && arm64) || (linux && amd64) || (linux && arm64)
 
-// Storage and image handles are borrowed from the terminal and die on the next
-// mutating call, so nothing borrowed escapes t.mu.
 package ghosttyvt
 
 /*
@@ -123,7 +121,6 @@ import (
 	"unsafe"
 )
 
-// ghostty_sys_set has no per-terminal form, so the PNG hook installs once.
 var (
 	pngDecoderOnce sync.Once
 	pngDecoderRC   C.GhosttyResult
@@ -133,7 +130,6 @@ func installPNGDecoder() {
 	pngDecoderOnce.Do(func() { pngDecoderRC = C.ghosttyvt_install_png_decoder() })
 }
 
-// Never PNG: ghostty decodes PNG to RGBA before storing.
 type KittyImageFormat uint8
 
 const (
@@ -143,8 +139,6 @@ const (
 	KittyImageGray
 )
 
-// ImageGeneration is PROCESS-LOCAL, so two terminals mint the same numbers for
-// different pixels; internal/pty folds a per-instance epoch in, nothing here.
 type KittyPlacement struct {
 	ImageID         uint32
 	PlacementID     uint32
@@ -154,7 +148,7 @@ type KittyPlacement struct {
 	PixelHeight     uint32
 	GridCols        uint32
 	GridRows        uint32
-	ViewportCol     int32 // top-left, viewport-relative; negative = scrolled up
+	ViewportCol     int32
 	ViewportRow     int32
 	ViewportVisible bool
 	SourceX         uint32
@@ -173,8 +167,6 @@ type KittyImage struct {
 	Data       []byte
 }
 
-// An unchanged stamp guarantees identical placements and image data; the
-// converse does not hold, so only a *changed* stamp means "observe again".
 func (t *Terminal) KittyGeneration() uint64 {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -184,8 +176,6 @@ func (t *Terminal) KittyGeneration() uint64 {
 	return uint64(C.ghosttyvt_kitty_generation(C.ghosttyvt_kitty_storage(t.term)))
 }
 
-// The iterator free is deferred in a closure, not by value: populating it may
-// replace the handle.
 func (t *Terminal) KittyPlacements() []KittyPlacement {
 	t.mu.Lock()
 	defer t.mu.Unlock()

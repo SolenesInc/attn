@@ -8,18 +8,13 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Each watcher is a goroutine plus an OS watch handle (kqueue fd), so this is a resource
-// bound, not a UI limit.
 const maxFsWatchers = 16
 
-// Never created for the notebook root — that watcher is always-on via ensureNotebookWatcher.
 type fsRootWatch struct {
 	watcher *notebook.Watcher
 	refs    map[*wsClient]int
 }
 
-// The root resolves through resolveFsRoot, the single chokepoint gating an explicit root
-// on the authenticated app client, so there is no separate check here.
 func (d *Daemon) handleFsWatch(client *wsClient, requestID, rawRoot string) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err == nil && !d.isNotebookRoot(root) {
@@ -99,7 +94,6 @@ func (d *Daemon) dropFsWatchRef(client *wsClient, root string) {
 		toClose = entry.watcher
 	}
 	d.fsWatchMu.Unlock()
-	// Close outside fsWatchMu: it joins the watcher's loop goroutine and can block briefly.
 	_ = toClose.Close()
 }
 
@@ -142,8 +136,6 @@ func (d *Daemon) fsWatcherFor(root string) *notebook.Watcher {
 	return entry.watcher
 }
 
-// The audience restriction that keeps a generic editor root's absolute path from leaking
-// to a client that never subscribed to it.
 func (d *Daemon) sendFsChangedToWatchers(root string, msg protocol.FsChangedMessage) {
 	d.fsWatchMu.Lock()
 	entry, ok := d.fsWatchers[root]

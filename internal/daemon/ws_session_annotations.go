@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// generation is the floor, so a re-mounting client seeds past an earlier clear.
 func (d *Daemon) handleSessionAnnotationsGet(client *wsClient, msg *protocol.SessionAnnotationsGetMessage) {
 	handler := newAnnotationDraftHandler(d, client, sessionAnnotationDraftAccessors(d.store), "session_id",
 		func(result annotationDraftResult[protocol.SessionAnnotation]) protocol.SessionAnnotationsGetResultMessage {

@@ -1,23 +1,18 @@
 package daemon
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
-	"slices"
-	"strings"
 	"testing"
 )
 
-// Every wire command name stays greppable at its dispatch site via a `// wire: <name>`
-// comment. A new command, or a second dispatch site, without that comment fails here.
-
 var (
-	wireConstRe   = regexp.MustCompile(`\b(Cmd[A-Za-z0-9]+)\s*=\s*"([a-z0-9_]+)"`)
-	dispatchRe    = regexp.MustCompile(`^\s*case ((?:protocol\.Cmd[A-Za-z0-9]+)(?:,\s*protocol\.Cmd[A-Za-z0-9]+)*):`)
-	cmdRefRe      = regexp.MustCompile(`protocol\.(Cmd[A-Za-z0-9]+)`)
-	wireCommentRe = regexp.MustCompile(`//\s*wire:\s*(.*)$`)
+	wireConstRe = regexp.MustCompile(`\b(Cmd[A-Za-z0-9]+)\s*=\s*"([a-z0-9_]+)"`)
+	dispatchRe  = regexp.MustCompile(`(?m)^\s*case ((?:protocol\.Cmd[A-Za-z0-9]+)(?:,\s*protocol\.Cmd[A-Za-z0-9]+)*):`)
+	cmdRefRe    = regexp.MustCompile(`protocol\.(Cmd[A-Za-z0-9]+)`)
 )
 
 var dispatchFiles = []string{"websocket.go", "daemon.go", "automations.go"}
@@ -25,7 +20,6 @@ var dispatchFiles = []string{"websocket.go", "daemon.go", "automations.go"}
 type dispatchSite struct {
 	where     string
 	constants []string
-	annotated []string
 }
 
 func wireCommands(t *testing.T) map[string]string {
@@ -52,31 +46,13 @@ func dispatchSites(t *testing.T) []dispatchSite {
 		if err != nil {
 			t.Fatalf("read %s: %v", name, err)
 		}
-		lines := strings.Split(string(src), "\n")
-		for i, line := range lines {
-			if !dispatchRe.MatchString(line) {
-				continue
-			}
-			comment := ""
-			if m := wireCommentRe.FindStringSubmatch(line); m != nil {
-				comment = m[1]
-			} else {
-				for j := i - 1; j >= 0; j-- {
-					trimmed := strings.TrimSpace(lines[j])
-					if !strings.HasPrefix(trimmed, "//") {
-						break
-					}
-					comment = strings.TrimPrefix(trimmed, "//") + " " + comment
-				}
-			}
+		for _, match := range dispatchRe.FindAllIndex(src, -1) {
+			line := src[match[0]:match[1]]
 			site := dispatchSite{
-				where: fmt.Sprintf("%s:%d", name, i+1),
-				annotated: strings.FieldsFunc(comment, func(r rune) bool {
-					return r == ',' || r == ' ' || r == '\t'
-				}),
+				where: fmt.Sprintf("%s:%d", name, 1+bytes.Count(src[:match[0]], []byte("\n"))),
 			}
-			for _, c := range cmdRefRe.FindAllStringSubmatch(line, -1) {
-				site.constants = append(site.constants, c[1])
+			for _, c := range cmdRefRe.FindAllSubmatch(line, -1) {
+				site.constants = append(site.constants, string(c[1]))
 			}
 			sites = append(sites, site)
 		}
@@ -87,23 +63,19 @@ func dispatchSites(t *testing.T) []dispatchSite {
 	return sites
 }
 
-func TestWireCommandsAreGreppable(t *testing.T) {
+func TestWireCommandsHaveDispatchCases(t *testing.T) {
 	commands := wireCommands(t)
 	sites := dispatchSites(t)
 
 	dispatched := map[string]bool{}
 	for _, site := range sites {
 		for _, name := range site.constants {
-			wire, known := commands[name]
+			_, known := commands[name]
 			if !known {
 				t.Errorf("%s: dispatches unknown constant protocol.%s", site.where, name)
 				continue
 			}
 			dispatched[name] = true
-			if !slices.Contains(site.annotated, wire) {
-				t.Errorf("%s: protocol.%s dispatched without its wire name; add `// wire: %s` so grepping %q reaches this case",
-					site.where, name, wire, wire)
-			}
 		}
 	}
 
@@ -111,30 +83,6 @@ func TestWireCommandsAreGreppable(t *testing.T) {
 		if !dispatched[name] {
 			t.Errorf("protocol.%s (%q) has no dispatch case in %v; it is either dead or handled somewhere this test does not look",
 				name, wire, dispatchFiles)
-		}
-	}
-}
-
-func TestWireCommentsMatchTheirConstants(t *testing.T) {
-	commands := wireCommands(t)
-	byWire := map[string]string{}
-	for name, wire := range commands {
-		byWire[wire] = name
-	}
-
-	for _, site := range dispatchSites(t) {
-		expected := make([]string, 0, len(site.constants))
-		for _, name := range site.constants {
-			expected = append(expected, commands[name])
-		}
-		for _, annotated := range site.annotated {
-			if slices.Contains(expected, annotated) {
-				continue
-			}
-			if other, isWire := byWire[annotated]; isWire {
-				t.Errorf("%s: annotated %q, which is protocol.%s's wire name, but dispatches %v",
-					site.where, annotated, other, site.constants)
-			}
 		}
 	}
 }

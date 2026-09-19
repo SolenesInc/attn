@@ -211,3 +211,18 @@ func TestAuthoringContextRetainsRemovedAndUnavailableBaseText(t *testing.T) {
 		t.Fatal("unavailable composition hid available source context")
 	}
 }
+
+func TestBaseComparisonIgnoresCommittedSourcesNoEventUses(t *testing.T) {
+	e, _ := contextFixture(t)
+	writeTest(t, e, "content/unwired.md", "Committed before any event uses it.")
+	base := commitTest(t, e)
+
+	compared := operate(t, e, operationRequest{Op: "compare", Base: base}).(map[string]any)
+	if changed := compared["sources"].([]string); len(changed) != 0 {
+		t.Fatalf("unchanged checkout reports changed sources: %v", changed)
+	}
+	report := readContext(t, e, operationRequest{ID: "writer/rules", Base: base})
+	if _, reported := report.Sources["content/unwired.md"]; reported {
+		t.Fatal("context reports a source no event uses")
+	}
+}

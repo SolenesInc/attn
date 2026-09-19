@@ -1,4 +1,3 @@
-// Package desktopentry registers a profile's deep-link scheme with the Linux desktop database.
 package desktopentry
 
 import (
@@ -21,7 +20,6 @@ type Report struct {
 	MissingTools []string
 }
 
-// A `-handler` suffix leaves `<appName>.desktop` free for a launcher entry.
 func FileName(appName string) string {
 	return appName + "-handler.desktop"
 }
@@ -83,7 +81,6 @@ func Install(e Entry) (Report, error) {
 		return Report{}, fmt.Errorf("create %s: %w", dir, err)
 	}
 	path := filepath.Join(dir, FileName(e.AppName))
-	// A torn write is a desktop entry the database rejects, so swap it in whole.
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, []byte(body), 0o644); err != nil {
 		return Report{}, fmt.Errorf("write %s: %w", tmp, err)
@@ -111,8 +108,6 @@ func Install(e Entry) (Report, error) {
 	return report, nil
 }
 
-// The mimeapps.list default xdg-mime wrote stays: it names a file that no longer
-// exists, so nothing resolves through it.
 func Remove(appName string) (bool, error) {
 	path := Path(appName)
 	if err := os.Remove(path); err != nil {

@@ -22,15 +22,12 @@ const (
 	defaultPollInterval   = time.Second
 )
 
-// eligiblePageSize is a tripwire: measured eligible working sets are single
-// digits (146 rows in ~/.attn, 206 in ~/.attn-dev, nearly all terminal).
 const eligiblePageSize = 1000
 
 var ErrDisabled = errors.New("jobs: runner is disabled (no store)")
 
 var ErrUnknownKind = errors.New("jobs: no handler registered for kind")
 
-// A HandlerFunc must wrap its single durable write in job.CommitGuard.Enter/Leave.
 type HandlerFunc func(ctx context.Context, job *Job) (any, error)
 
 type handler struct {
@@ -79,11 +76,8 @@ type Runner struct {
 	retention    time.Duration
 	trimInterval time.Duration
 
-	// onChange fires after every transition, possibly concurrently; it must not block.
 	onChange func(jobID string)
 
-	// onTerminalFailure fires with ioMu released and a cloned record, so it may
-	// touch the store.
 	onTerminalFailure func(*Job)
 
 	mu          sync.Mutex
@@ -92,12 +86,10 @@ type Runner struct {
 	startErr    error
 	pendingArms map[string]*pendingArm
 
-	// ioMu serializes every read-modify-write on a job record. When both locks
-	// are needed ioMu is ALWAYS the outer lock.
 	ioMu sync.Mutex
 
-	runs     map[string]*activeRun // guarded by mu
-	inflight map[string]int        // guarded by mu
+	runs     map[string]*activeRun
+	inflight map[string]int
 
 	wake chan struct{}
 	done chan struct{}
@@ -203,7 +195,6 @@ func (r *Runner) Start() error {
 		r.mu.Unlock()
 		return startErr
 	}
-	// A second live Runner on the same store would double-execute every job.
 	token, err := r.store.AcquireLock()
 	if err != nil {
 		r.startErr = err
@@ -240,15 +231,12 @@ func (r *Runner) Stop() {
 		r.mu.Unlock()
 		return
 	}
-	// Flip under mu so a concurrent second Stop returns instead of double-closing done.
 	r.started = false
 	done, exit := r.done, r.exit
 	token := r.lockToken
 	r.lockToken = ""
 	r.mu.Unlock()
 
-	// Stop the loop launching MORE runs before joining what is in flight, or
-	// cancelAll never terminates.
 	close(done)
 	<-exit
 	r.cancelAll()
@@ -269,8 +257,6 @@ func (r *Runner) Enqueue(kind string, opts EnqueueOptions) (*Job, error) {
 	if !known {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownKind, kind)
 	}
-	// Any other key on a cron kind mints a second self-perpetuating entry that
-	// List hides and CronEntry never finds.
 	if entry.interval > 0 && opts.UniqueKey != CronKey {
 		return nil, fmt.Errorf("%w: %s (use RegisterCron; a cron kind has one entry)", ErrCronKind, kind)
 	}
@@ -310,8 +296,6 @@ func (r *Runner) Enqueue(kind string, opts EnqueueOptions) (*Job, error) {
 			UpdatedAt:   now,
 		}
 	case existing.State == StateRunning:
-		// Overwriting an in-flight run tears its bookkeeping; Requeued makes
-		// finish() re-queue instead of retiring.
 		existing.Requeued = true
 		existing.ScheduledAt = scheduled
 		existing.UpdatedAt = now
@@ -328,8 +312,6 @@ func (r *Runner) Enqueue(kind string, opts EnqueueOptions) (*Job, error) {
 		job = existing
 	}
 
-	// A nil Payload LEAVES an existing payload intact: a bare re-trigger must
-	// not wipe the inputs a prior enqueue stashed.
 	if payload != nil {
 		job.Payload = payload
 	}
@@ -381,8 +363,6 @@ func (r *Runner) Retry(id string) (*Job, error) {
 	return existing.clone(), nil
 }
 
-// Cancel blocks until the run's goroutine has exited; a run already inside its
-// commit fence is not canceled.
 func (r *Runner) Cancel(id string) {
 	if r.disabled {
 		return
@@ -396,7 +376,6 @@ func (r *Runner) Cancel(id string) {
 	r.fenceAndWait(run)
 }
 
-// CALLER must hold r.mu; fenceAndWait RELEASES it before blocking.
 func (r *Runner) fenceAndWait(run *activeRun) {
 	if run.guard.tryFence() {
 		run.cancel()
@@ -531,8 +510,6 @@ func (r *Runner) dispatch() (progressed bool, err error) {
 		if !r.runnable(j) {
 			continue
 		}
-		// Reserve the slot under mu before persisting the claim, so a later
-		// same-kind candidate in this pass cannot over-commit the cap.
 		r.mu.Lock()
 		exec, ok := r.handlers[j.Kind]
 		if !ok {
@@ -558,14 +535,12 @@ func (r *Runner) dispatch() (progressed bool, err error) {
 		r.runs[j.ID] = run
 		r.mu.Unlock()
 
-		// Persist the claim under ioMu — never wrap store I/O in mu.
 		j.State = StateRunning
 		j.Attempts++
 		j.Requeued = false
 		j.UpdatedAt = now
 		if err := r.store.Save(j); err != nil {
 			r.log("jobs: persist running state for %s: %v", j.ID, err)
-			// Roll the reservation back so the per-kind slot is not leaked.
 			r.mu.Lock()
 			delete(r.runs, j.ID)
 			r.inflight[j.Kind]--
@@ -648,8 +623,6 @@ func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeR
 	close(timeoutStop)
 	cancel()
 
-	// Record the terminal outcome BEFORE signaling exit, so a Cancel unblocking
-	// on run.done already sees the durable record.
 	r.finish(j.ID, encoded, runErr)
 
 	r.mu.Lock()
@@ -661,8 +634,6 @@ func (r *Runner) execute(j *Job, exec handler, ctx context.Context, run *activeR
 	r.nudge()
 }
 
-// finish re-loads the record under ioMu so a coalesced trigger that landed
-// mid-run is honored, not clobbered.
 func (r *Runner) finish(id string, result json.RawMessage, runErr error) {
 	r.ioMu.Lock()
 
@@ -735,8 +706,6 @@ func (r *Runner) finish(id string, result json.RawMessage, runErr error) {
 	}
 }
 
-// Caller holds ioMu. Reports a StateDead crossing so the caller can fire the
-// terminal-failure hook AFTER releasing ioMu (never under it).
 func (r *Runner) recordFailureLocked(j *Job, cause error) (wentDead bool) {
 	now := r.now()
 	limit := r.attemptCap(j)
@@ -760,8 +729,6 @@ func (r *Runner) recordFailureLocked(j *Job, cause error) (wentDead bool) {
 	return wentDead
 }
 
-// Caller holds ioMu. An unclaimable job never increments Attempts, so backoff
-// would re-fail it forever.
 func (r *Runner) recordPermanentFailureLocked(j *Job, cause error) {
 	now := r.now()
 	j.State = StateDead
@@ -791,8 +758,6 @@ func (r *Runner) backoff(attempt int) time.Duration {
 	d := r.backoffBase
 	for i := 1; i < attempt; i++ {
 		d *= 2
-		// `d <= 0` guards int64 overflow: a wrapped-negative delay yields a past
-		// ScheduledAt and a hot retry loop.
 		if d <= 0 || d >= r.backoffCap {
 			return r.backoffCap
 		}
@@ -803,8 +768,6 @@ func (r *Runner) backoff(attempt int) time.Duration {
 	return d
 }
 
-// Only valid AFTER the dispatch loop has exited, so no new run can register
-// while it drains.
 func (r *Runner) cancelAll() {
 	r.mu.Lock()
 	runs := make([]*activeRun, 0, len(r.runs))
@@ -857,8 +820,6 @@ func (r *Runner) nudge() {
 	}
 }
 
-// Transitions of cron kinds are dropped: a heartbeat firing forever would
-// append a durable event and re-push a snapshot per fire.
 func (r *Runner) notifyWorkChange(kind, jobID string) {
 	if r.cronInterval(kind) > 0 {
 		return
@@ -875,8 +836,6 @@ func (r *Runner) notifyChange(jobID string) {
 	}
 }
 
-// A nil value encodes to nil, not "null" — Enqueue relies on nil meaning
-// "leave what is there".
 func marshalPayload(v any) (json.RawMessage, error) {
 	if v == nil {
 		return nil, nil

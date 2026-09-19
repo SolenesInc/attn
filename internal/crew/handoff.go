@@ -9,15 +9,10 @@ import (
 	"time"
 )
 
-// Lexicographic order over these names IS chronological order, which is why the
-// freshest-letter read is a sort, not a stat of each file.
 const HandoffStampLayout = "2006-01-02T15-04Z"
 
-// MaxHandoffBytes is a tripwire: measured 2026-08-14 over the simulation's 23
-// filed letters, the largest is 6,601 bytes. The refusal names both numbers.
 const MaxHandoffBytes = 64000
 
-// MaxHandoffFileBytes is MaxHandoffBytes plus the newline FileHandoff appends.
 const MaxHandoffFileBytes = MaxHandoffBytes + 1
 
 func HandoffFileName(member string, at time.Time) string {
@@ -35,8 +30,6 @@ func FileHandoff(homeDir, member, note string, at time.Time) (string, error) {
 		return "", fmt.Errorf("making %s's handoffs directory at %s: %w", DisplayName(member), dir, err)
 	}
 	path := filepath.Join(dir, HandoffFileName(member, at))
-	// O_EXCL is the enforcement, not a check before one: two letters racing for the
-	// same minute cannot both land.
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
 		if os.IsExist(err) {

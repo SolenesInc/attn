@@ -230,8 +230,6 @@ func (s *Store) createTicket(t Ticket, author, ownerRole string, subscribers []s
 			return nil, err
 		}
 	}
-	// Assign-at-birth is delegation only, and its brief already went out in the spawn
-	// prompt; a pre-assigned ticket needing its brief from the inbox would lose it.
 	if t.Assignee != "" {
 		if err := setTicketCursorTx(tx, t.Assignee, t.ID, createdSeq, now); err != nil {
 			return nil, err
@@ -572,8 +570,6 @@ func (s *Store) AddTicketCommentWithOptions(
 	return activity, outcome, err
 }
 
-// The new brief goes in Detail: without it a second consecutive edit looks
-// identical to the first and is silently deduped away.
 func (s *Store) EditTicketDescription(id, description, author string, now time.Time) error {
 	_, err := s.EditTicketDescriptionWithOptions(id, description, author, TicketMutationOptions{}, now)
 	return err
@@ -972,8 +968,6 @@ func (s *Store) SweepExpiredAutomationTickets(now time.Time, ttl time.Duration) 
 	}
 
 	cutoff := formatTicketTime(now.Add(-ttl))
-	// closed_at is a fixed-width RFC3339 UTC string, so a lexical compare is a
-	// chronological compare.
 	const expired = `status IN ('done','failed','crashed') AND closed_at != '' AND closed_at < ? AND (
 		(automation_run_id IS NOT NULL AND automation_run_id != '') OR
 		EXISTS (SELECT 1 FROM automation_runs WHERE automation_runs.ticket_id = tickets.id) OR
@@ -1027,8 +1021,6 @@ func (s *Store) SweepExpiredAutomationTickets(now time.Time, ttl time.Duration) 
 	if _, err := tx.Exec(`DELETE FROM automation_ticket_occurrence_events WHERE ticket_id IN (SELECT id FROM expired_automation_tickets)`); err != nil {
 		return 0, err
 	}
-	// Bindings are append-only, so this releases and never deletes;
-	// already-released rows keep their own reason.
 	if _, err := tx.Exec(
 		`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE status=? AND ticket_id IN (SELECT id FROM expired_automation_tickets)`,
 		AutomationBindingStatusReleased, AutomationBindingReleasedTicketSwept, formatTicketTime(now), formatTicketTime(now), AutomationBindingStatusActive,
@@ -1067,7 +1059,6 @@ func nullIfEmpty(value string) any {
 	return value
 }
 
-// column is a trusted internal literal, never caller input.
 func updateTicketFieldWithEventTx(tx *sql.Tx, id, column, value string, evt TicketEvent, now time.Time) error {
 	res, err := tx.Exec(
 		`UPDATE tickets SET `+column+` = ?, updated_at = ? WHERE id = ?`,
@@ -1208,8 +1199,6 @@ func (s *Store) GetTicketByAutomationRunID(runID string) (*Ticket, error) {
 	return t, err
 }
 
-// formatTicketTime is fixed-width RFC3339 UTC, so stored timestamps sort lexically
-// — which the TTL sweep relies on.
 func formatTicketTime(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }

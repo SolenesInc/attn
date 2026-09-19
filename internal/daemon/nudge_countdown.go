@@ -11,7 +11,6 @@ import (
 
 const defaultNudgeCountdownWindow = 30 * time.Second
 
-// firesAt is stored beside the timer because time.Timer has no deadline accessor.
 type nudgeCountdown struct {
 	timer   *time.Timer
 	firesAt time.Time
@@ -33,7 +32,6 @@ func (d *Daemon) armNudgeCountdownAt(sessionID string, deadline time.Time) {
 	}
 	active := d.currentlySelectedSession() == sessionID
 
-	// Checked before the lock: nudgeMu must never be held across a store read.
 	if d.nudgeSuppressedFor(sessionID) {
 		if d.nudgeSuppressionStillStands(sessionID) {
 			d.nudgeMu.Lock()
@@ -63,8 +61,6 @@ func (d *Daemon) armNudgeCountdownAt(sessionID string, deadline time.Time) {
 	}
 }
 
-// The ready channel keeps the callback from checking identity before timer is
-// published in nudgeCountdowns.
 func (d *Daemon) startCountdownAtLocked(sessionID string, firesAt time.Time) {
 	if d.nudgeCountdowns == nil {
 		d.nudgeCountdowns = make(map[string]*nudgeCountdown)
@@ -137,11 +133,9 @@ func (d *Daemon) cancelNudgeCountdown(sessionID, reason string) {
 }
 
 func (d *Daemon) cancelNudgeCountdownByUser(sessionID string) bool {
-	// Read before taking nudgeMu: a store read must never happen under it.
 	newest, err := d.newestUnreadTicketSeq(sessionID)
 	if err != nil {
 		d.logf("nudge cancel unread scan %s: %v", sessionID, err)
-		// Fail closed rather than re-arm what the user just cancelled.
 		newest = nudgeSuppressAllSeq
 	}
 
@@ -231,7 +225,6 @@ func (d *Daemon) stopNudgeCountdowns() {
 	}
 }
 
-// The identity check against the map entry keeps a countdown that lost a reschedule/cancel race from firing twice.
 func (d *Daemon) nudgeCountdownFire(sessionID string, self *time.Timer) {
 	d.nudgeMu.Lock()
 	entry, ok := d.nudgeCountdowns[sessionID]
@@ -312,7 +305,6 @@ func (d *Daemon) runNudgeDelivery(sessionID string) string {
 	return "doorbell"
 }
 
-// The approval store read precedes nudgeMu: lock order is one-way.
 func (d *Daemon) updateNudgeSelection(oldID, newID string) {
 	resumeOld := false
 	if oldID != "" && oldID != newID && d.store != nil {
@@ -333,7 +325,6 @@ func (d *Daemon) updateNudgeSelection(oldID, newID string) {
 		d.broadcastSessionStateChanged(id)
 	}
 	if resumeUnread {
-		// Re-derive the deadline from durable unread events so switching away cannot collapse an active bundle window to the short countdown.
 		go d.notifyUnreadTicketSession(oldID, time.Now())
 	}
 }
@@ -415,7 +406,6 @@ func (d *Daemon) noteUserInput(sessionID, source string, data []byte) bool {
 	return true
 }
 
-// Shares lastInputMu with settleIfAutoSettleQuiet so activity wins.
 func (d *Daemon) noteAutoSettleActivity(sessionID string) bool {
 	if sessionID == "" {
 		return false
@@ -429,7 +419,6 @@ func (d *Daemon) noteAutoSettleActivity(sessionID string) bool {
 	return true
 }
 
-// The composer is empty once a prompt is taken, whatever the clock says.
 func (d *Daemon) forgetUserInput(sessionID string) {
 	d.lastInputMu.Lock()
 	delete(d.lastUserInputAt, sessionID)
@@ -472,7 +461,6 @@ func (d *Daemon) autoSettleActivityQuietRemainingLocked(sessionID string, within
 	return remaining
 }
 
-// The quiet check and the store write must share one critical section under the lock activity stamps use, or a real interaction lands in the gap and the turn closes with the user's hands on the session.
 func (d *Daemon) settleIfAutoSettleQuiet(sessionID string, within time.Duration) (quiet time.Duration, settled bool) {
 	d.lastInputMu.Lock()
 	defer d.lastInputMu.Unlock()
@@ -495,7 +483,6 @@ func isComposerKeystroke(source string, data []byte) bool {
 	return isUserKeystrokeSource(source) && userInputEditsComposer(data)
 }
 
-// Backstop for clients that predate the "pointer" tag: SGR mouse reports and focus reports never edit the composer.
 func userInputEditsComposer(data []byte) bool {
 	rest := data
 	for len(rest) > 0 {
@@ -515,7 +502,6 @@ func userInputEditsComposer(data []byte) bool {
 	return false
 }
 
-// Takes nudgeMu; callers must not already hold it.
 func (d *Daemon) decorateSessionWithNudge(clone *protocol.Session) {
 	if clone == nil {
 		return

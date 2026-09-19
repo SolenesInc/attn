@@ -58,7 +58,7 @@ func runProfile() {
 }
 
 type profileResolved struct {
-	Profile        string `json:"profile"` // normalized ("" for default)
+	Profile        string `json:"profile"`
 	Label          string `json:"label"`
 	DataDir        string `json:"dataDir"`
 	Socket         string `json:"socket"`
@@ -268,8 +268,6 @@ func runProfileTauriConfig(args []string) {
 	fmt.Println(string(b))
 }
 
-// Tauri replaces the whole app.windows array when an overlay names it, so the
-// overlay window starts from the base config's; without it Tauri's 800x600 wins.
 func tauriConfigOverlay(r profileResolved, baseWindow map[string]any) map[string]any {
 	window := map[string]any{}
 	for k, v := range baseWindow {
@@ -358,15 +356,12 @@ func runProfileClean(args []string) {
 func cleanProfile(w io.Writer, r profileResolved) error {
 	fmt.Fprintf(w, ">>> Cleaning profile %s\n", r.Label)
 
-	// The daemon outlives the app by design, so quit the app first.
 	msg, err := stopProfileApp(r)
 	if err != nil {
 		return fmt.Errorf("app not stopped: %w; nothing was removed, since a live app rewrites %s as fast as it is deleted. Quit it and re-run; --force does not cover a live app", err, r.AppLocalData)
 	}
 	fmt.Fprintf(w, "  app      %s\n", msg)
 
-	// Exclusive, while the app is known gone and held past the last removal: app
-	// instances hold this shared, so one launching from here on cannot get in.
 	release, err := holdAppLock(r)
 	if err != nil {
 		return err
@@ -382,8 +377,6 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 		fmt.Fprintf(w, "  daemon   stopped\n")
 	}
 
-	// The data dir removal below destroys the registry workers are found through:
-	// reap before it goes, or a live worker is stranded.
 	reportWorkerReap(w, ptyworker.ReapDataDir(r.DataDir))
 	sharedHosts := ptyhost.ReapDataDir(r.DataDir)
 	reportProcReap(w, "pty hosts", "generation", sharedHosts)
@@ -399,8 +392,6 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 		return err
 	}
 
-	// Forget the bundle first, so its id and deep-link scheme stop resolving to a
-	// path we are about to delete.
 	if fileExists(r.AppPath) {
 		lsregisterForget(r.AppPath)
 		if err := os.RemoveAll(r.AppPath); err != nil {
@@ -449,8 +440,6 @@ func refuseRelaunchedApp(r profileResolved) error {
 	return fmt.Errorf("%s reappeared after the app was stopped: it has been relaunched; nothing was removed", pidPath)
 }
 
-// The lock file itself is never removed: the kernel drops ownership when a process
-// dies, so the path outliving both of us can never go stale.
 func holdAppLock(r profileResolved) (func(), error) {
 	dir := filepath.Dir(r.AppLock)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -554,8 +543,6 @@ func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 	return strings.Join(parts, ", ")
 }
 
-// The pid file's flock, not its presence, is the liveness gate (daemonctl.Stop). Its
-// own-process-tree error maps to a note, so cleaning the profile you run under is non-fatal.
 func stopProfileDaemon(r profileResolved) string {
 	pidPath := filepath.Join(r.DataDir, "attn.pid")
 	result, err := daemonctl.Stop(pidPath)
@@ -602,8 +589,6 @@ func runProfileStopApp(args []string) {
 	fmt.Printf("  app      %s\n", msg)
 }
 
-// Tripwires, not budgets. Measured quit-to-gone, 2026-08-30: 0.10s for the packaged
-// app on macOS (attn-qfence.app, M4 Max), 72ms from SIGTERM on the attn-linux VM.
 var (
 	appStopQuitWait     = 15 * time.Second
 	appStopSigtermWait  = 5 * time.Second
@@ -678,8 +663,6 @@ const (
 	pidUnidentified
 )
 
-// Identity is rebuilt from the live process at every checkpoint: a pid the app
-// released can be reused, and one we cannot identify is never assumed to be gone.
 func appPIDOwnership(r profileResolved, pid int) (pidOwnership, string, error) {
 	if processGone(pid) {
 		return pidGone, "", nil
@@ -713,8 +696,6 @@ func unidentifiedPIDError(pid int, pidPath, stage string, idErr error) error {
 	return fmt.Errorf("pid %d from %s is alive and could not be identified %s (%v); left running — check it with `ps -p %d`", pid, pidPath, stage, idErr, pid)
 }
 
-// The shell rewrites app.pid on every launch, so a marker naming a different pid is
-// a relaunch: fail rather than delete the new app's only marker.
 func releaseAppPID(pidPath string, pid int, note string) (string, error) {
 	raw, err := os.ReadFile(pidPath)
 	if err != nil {
@@ -732,8 +713,6 @@ func releaseAppPID(pidPath string, pid int, note string) (string, error) {
 	return note, nil
 }
 
-// /proc/<pid>/exe is already resolved, so an install root behind a symlink
-// (a symlinked XDG_DATA_HOME) only matches once both sides are.
 func sameExecutable(a, b string) bool {
 	return a == b || resolvedPath(a) == resolvedPath(b)
 }
@@ -749,7 +728,6 @@ func appPIDFilePath(dataDir string) string {
 	return filepath.Join(dataDir, "app.pid")
 }
 
-// EPERM is a live process this user may not signal, so only ESRCH is "gone".
 func processGone(pid int) bool {
 	return errors.Is(syscall.Kill(pid, 0), syscall.ESRCH)
 }
@@ -901,8 +879,6 @@ func installedAppProfiles(home string) []string {
 	return found
 }
 
-// A profile whose app and data dir are already gone is still listed while its app
-// local data dir lingers, so `clean` can be pointed at it.
 func appLocalDataProfiles() []string {
 	root := filepath.Dir(config.AppLocalDataDirForProfile(""))
 	entries, err := os.ReadDir(root)

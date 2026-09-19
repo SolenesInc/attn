@@ -118,8 +118,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// Probed: ghostty scrolls the REGION rather than letting the post-placement cursor
-			// cross the bottom margin, so the synthesized CUU/CUD cannot be clamped by margins.
 			name: "cursor on the bottom margin, image taller than the rows below it",
 			cols: 20, rows: 8,
 			chunks: []string{
@@ -225,8 +223,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// PROBED: on a fresh PRIMARY screen a scrolling placement pushes the anchor cell into
-			// retained history, where the pin still reports a real row, so the clamp guard is mute.
 			name: "first line of a fresh primary screen, image tall enough to scroll",
 			cols: 20, rows: 8,
 			chunks: []string{kittyPlaceRGB(22, 16, 160, "")},
@@ -302,8 +298,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// Left/right margins plus origin mode: the worker counts columns from the screen edge
-			// while DECLRMM reads `CHA` from the LEFT MARGIN — worker 11 against client 13.
 			name: "placement inside left and right margins under origin mode",
 			cols: 20, rows: 8,
 			chunks: []string{
@@ -312,8 +306,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// The same margins with origin mode OFF, measured: this one does NOT displace an
-			// absolute column. Margins alone are not enough; it takes origin mode with them.
 			name: "placement inside margins with origin mode off",
 			cols: 20, rows: 8,
 			chunks: []string{
@@ -338,8 +330,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// kitty's `r=` makes a 2x2 image claim 15 rows on an 8-row screen. On this ghostty pin
-			// the scroll stays inside the screen; kept as-is because it would trip the tripwire.
 			name: "placement claiming far more rows than the screen holds",
 			cols: 20, rows: 8,
 			chunks: []string{
@@ -349,8 +339,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			},
 		},
 		{
-			// The pending-wrap tripwire, on the shape FuzzKittyWireMirror found (62f19a45d7a5c8c7):
-			// exactly a screen width leaves the wrap deferred, consumed on the worker alone.
 			name: "placement on a row that is already full",
 			cols: 20, rows: 8,
 			chunks: []string{
@@ -375,8 +363,6 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			chunks: []string{"\x1b\x1b]133;A\x1b\\00 done"},
 		},
 		{
-			// The permanent shape of the decoder leak: `\xe1` opens a character the APC's ESC ends
-			// for the worker. LAST column deliberately, or a synthesized CHA's ESC hides it.
 			name: "a character split around a stripped apc at the last column",
 			cols: 20, rows: 8,
 			chunks: []string{strings.Repeat("0", 19) + "\xe1", kittyDirectRGB, "\xa5 done"},
@@ -417,15 +403,11 @@ func kittyCorpusInputs() []kittyCorpusInput {
 			chunks: []string{strings.Repeat("0", 20) + "\xe1", "\x1b]133;A\x1b\\", "\xa5 done"},
 		},
 		{
-			// A C1-terminated APC: the worker consumes 0x9c as ST, but the wire replacement is
-			// always the 7-bit form — 0x9c alone is a stray continuation byte to the client.
 			name: "a c1-terminated apc still leaves the seven-bit st",
 			cols: 20, rows: 8,
 			chunks: []string{"ab", kittyIntro + "a=T,f=24,s=2,v=2;QUJDRA==\x9c", " done"},
 		},
 		{
-			// `OSC 133;A` is not grid-inert: with the cursor mid-line it breaks the line, and worker
-			// and app share a Ghostty source pin, so this tripwires that against the real WASM model.
 			name: "a prompt marker after output with no trailing newline",
 			cols: 20, rows: 8,
 			chunks: []string{"out", "\x1b]133;A\x1b\\", "$ ls\r\n", "\x1b]133;D;0\x07"},
@@ -651,8 +633,6 @@ var kittyGroundNamedPrefixes = []string{
 	"\x1b\x1b]133;A",
 }
 
-// ghosttyInGround reports whether ghostty's parser is in ground, by the only signal the API
-// exposes: a printable advances the CURSOR there and nowhere else. The CR normalizes first.
 func ghosttyInGround(t *testing.T, input string) bool {
 	t.Helper()
 	term, err := ghosttyvt.New(20, 4, ghosttyvt.Options{})
@@ -689,8 +669,6 @@ func assertGroundAgrees(t *testing.T, input string) {
 	}
 }
 
-// The falsification gate for every transition in kittyseg.go's machine. A pass is not "the
-// segmenter is right": it cannot see which DISPOSITION a byte got; the battery pins that.
 func TestKittySegmenterGroundMatchesGhostty(t *testing.T) {
 	for _, prefix := range kittyGroundNamedPrefixes {
 		for b := range 0x100 {

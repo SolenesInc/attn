@@ -169,8 +169,6 @@ func TestResolve(t *testing.T) {
 		},
 
 		{
-			// Measured claude approval: the prompt renders at t=14.6s, its Notification
-			// hook lands at t=20.6s, and the bracket goes stale at 18.6s.
 			name: "a bracket that just went stale holds instead of asserting idle",
 			evidence: Evidence{
 				TurnOpen:   true,
@@ -216,8 +214,6 @@ func TestResolve(t *testing.T) {
 		},
 
 		{
-			// codex flickers a busy frame while booting, so a busy frame alone must not
-			// count as a turn having started.
 			name: "a session that has never opened a turn is at its prompt, not settled",
 			evidence: Evidence{
 				Heartbeat:  seen(SourceHeartbeat, ClaimSettled, time.Second),
@@ -483,8 +479,6 @@ func TestResolve(t *testing.T) {
 			wantReason: ReasonStuck,
 		},
 		{
-			// Witnessed live: a session launched and left alone turned `unknown` ninety
-			// seconds after launch.
 			name: "a session that never took a turn is quiet, not stuck",
 			evidence: Evidence{
 				LastMovement: now.Add(-10 * time.Minute),
@@ -624,8 +618,6 @@ func TestHeartbeatFreshnessBoundary(t *testing.T) {
 
 func TestARepaintGapWiderThanTheTTLDoesNotFlapTheSession(t *testing.T) {
 	policy := testPolicy()
-	// Measured on claude 2.1.220 during a compaction, and periodic to the
-	// millisecond: it sits between the two windows, where every flap lives.
 	const repaint = 1920 * time.Millisecond
 	if repaint <= policy.HeartbeatTTL || repaint >= policy.HeartbeatSettleAfter {
 		t.Fatalf("repaint %s must fall between the TTL %s and the settle window %s for this test to mean anything",
@@ -648,7 +640,6 @@ func TestARepaintGapWiderThanTheTTLDoesNotFlapTheSession(t *testing.T) {
 	}
 }
 
-// Replays the shape behind every `unknown` observed on 2026-07-27.
 func TestAPromptIdleConfirmationRetiresAnOutstandingBackgroundTask(t *testing.T) {
 	policy := testPolicy()
 
@@ -690,8 +681,6 @@ func TestAPromptIdleConfirmationRetiresAnOutstandingBackgroundTask(t *testing.T)
 	}
 }
 
-// Replays the 2026-08-01 incident: a yield on an outstanding build, claude's
-// flat-timer prompt-idle notification at 60s, and a wrongly settled session.
 func TestAParkedVerdictOutlastsThePromptIdleConfirmation(t *testing.T) {
 	policy := testPolicy()
 
@@ -795,8 +784,6 @@ func TestHeartbeatTTLExpiryCannotSettleAnOpenBracket(t *testing.T) {
 	}
 }
 
-// Measured over 8.4 production days: session.state.changed was 73.7% of the bus
-// log, and 81.6% of consecutive facts for one session landed within the 1s tick.
 func TestARunningTurnKeepsOneAnswerWhileItKeepsPainting(t *testing.T) {
 	policy := testPolicy()
 	for _, tc := range []struct {
@@ -911,7 +898,6 @@ func TestDwellFor(t *testing.T) {
 	}
 }
 
-// The per-agent TTLs are measured; codex repaints ~10x faster than claude.
 func TestPolicyForUsesTheMeasuredPerAgentTTL(t *testing.T) {
 	claude := PolicyFor(string(protocol.SessionAgentClaude))
 	codex := PolicyFor(string(protocol.SessionAgentCodex))
@@ -999,7 +985,6 @@ func TestShellLifecycleResolvesOnTheForegroundHeartbeatAlone(t *testing.T) {
 	}
 }
 
-// codex has no compaction hook, so the HeartbeatSettleAfter fallback stays.
 func TestCompactionIsWorkNothingElseCanSee(t *testing.T) {
 	policy := testPolicy()
 	e := Evidence{
@@ -1050,12 +1035,8 @@ func TestATurnKilledByTheAPIAsksForTheUser(t *testing.T) {
 	}
 }
 
-// An interrupt fires no hook on any agent, so without the abort edge only
-// StaleAfter retires the bracket.
 func TestHaltingATurnSettlesItWithoutWaitingOutTheStaleWindow(t *testing.T) {
 	policy := testPolicy()
-	// Measured on claude 2.1.220: the last busy frame lands just before ESC, the
-	// idle glyph 0.07s after it, and nothing at all after that.
 	abortedAt := now
 	e := Evidence{
 		TurnOpen:       true,

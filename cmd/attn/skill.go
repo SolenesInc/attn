@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/agent"
 )
 
-// runSkill prints the bundled agent skill so any agent or human can read the
-// release-matched copy without locating an installed skill directory.
 func runSkill() {
 	os.Exit(writeSkill(os.Stdout, os.Stderr, os.Args[2:]))
 }

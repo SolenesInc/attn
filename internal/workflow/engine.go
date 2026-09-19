@@ -98,7 +98,6 @@ func (e *Engine) execute(ctx context.Context, script string, args any) (RunResul
 		return RunResult{Status: StatusErrored, Err: metaErr, Journal: jour}, metaErr
 	}
 
-	// The whole run executes on ONE goroutine; the returned error is always res.Err.
 	outCh := make(chan RunResult, 1)
 	go func() {
 		outCh <- e.runOnLoopGoroutine(ctx, stripped, args, meta, jour)
@@ -131,8 +130,6 @@ func (e *Engine) runOnLoopGoroutine(ctx context.Context, src string, args any, m
 		return RunResult{Status: StatusErrored, Err: err, Journal: jour, Meta: meta}
 	}
 
-	// Carrying the structural path across every await/.then boundary is what makes a
-	// post-await agent() read its STRUCTURAL ordinal, not a timing-dependent one.
 	vm.SetAsyncContextTracker(newPathContextTracker(rs.stack))
 
 	wd := newWatchdog(vm, e.cfg.WatchdogTimeout)
@@ -213,8 +210,6 @@ func (e *Engine) mapPanic(p interface{}, rs *runState, jour Journal, meta *Meta)
 		base.Err = &ErrInterrupted{Reason: reason}
 		return base
 	}
-	// A cancel arriving while parked on the jobs channel never enters goja, so pump
-	// returns a bare *ErrInterrupted, unwrapped by goja.InterruptedError.
 	if ie, ok := p.(*ErrInterrupted); ok {
 		base.Status = StatusInterrupted
 		base.Err = ie
@@ -289,8 +284,6 @@ func (w *watchdog) disarm() {
 func (w *watchdog) start(ctx context.Context) func() {
 	stop := make(chan struct{})
 	var once sync.Once
-	// min(timeout/10, 10ms), floor 1ms: catches a tight loop well inside the timeout
-	// without spinning.
 	tick := w.timeout / 10
 	if tick > 10*time.Millisecond {
 		tick = 10 * time.Millisecond

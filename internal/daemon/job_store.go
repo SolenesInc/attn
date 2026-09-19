@@ -33,7 +33,6 @@ func jobSubject(job *jobs.Job) string {
 	return job.UniqueKey
 }
 
-// Init is a no-op: migration {86} creates the jobs table when the DB opens.
 func (a *sqlJobStore) Init() error { return nil }
 
 func (a *sqlJobStore) AcquireLock() (string, error) { return jobs.AcquireDirLock(a.lockDir, a.log) }

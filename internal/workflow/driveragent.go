@@ -154,7 +154,6 @@ func (d *driverAgent) runIsolated(ctx context.Context, call AgentCall, model str
 	branch := worktreeBranchFor(call.Ordinal)
 	path := git.GenerateWorktreePath(repoRoot, branch)
 	if err := git.CreateWorktree(repoRoot, branch, path); err != nil {
-		// Fail closed: falling back to the shared tree would let parallel mutators collide.
 		return nil, fmt.Errorf("worktree isolation: create worktree for %s: %w", call.Ordinal.String(), err)
 	}
 
@@ -220,7 +219,6 @@ func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, pr
 	if err := os.WriteFile(schemaPath, schema, 0o600); err != nil {
 		return nil, fmt.Errorf("write result schema: %w", err)
 	}
-	// A stale result file at the same ordinal would read as a false success.
 	_ = os.Remove(resultPath)
 
 	var lastDiag string
@@ -239,7 +237,6 @@ func (d *driverAgent) runWithSchema(ctx context.Context, ordinal OrdinalPath, pr
 			Schema:           schema,
 			ResultPath:       resultPath,
 			MCPServerCommand: d.attnExec,
-			// Scratch paths stay absolute so the sink resolves them from any CWD.
 			MCPServerArgs: []string{
 				"_workflow-result-mcp",
 				"--tool-name", resultToolName,

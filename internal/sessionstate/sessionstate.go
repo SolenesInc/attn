@@ -43,22 +43,14 @@ type Evidence struct {
 	LastClassifier   *Observation
 	Process          *Observation
 
-	TurnOpen bool
-	// codex paints busy title frames before its prompt is ready, so a busy frame
-	// alone does not mean a turn happened.
+	TurnOpen       bool
 	TurnEverOpened bool
 	ToolOpen       bool
 	BackgroundWork bool
 	PendingCron    bool
-	// Compaction paints no frames and opens no turn, so nothing else here sees
-	// it. Measured at 26s.
-	Compacting bool
-	// ReviewerInLoop changes only how long an approval holds before it is shown,
-	// never whether the state is published.
+	Compacting     bool
 	ReviewerInLoop bool
 
-	// claude blips its not-busy glyph mid-turn; reading that as a settle flips a healthy
-	// open turn to idle, so staleness is measured from here, not the latest heartbeat.
 	LastBusyAt time.Time
 
 	PromptIdleAt time.Time
@@ -69,8 +61,6 @@ type Evidence struct {
 }
 
 type Policy struct {
-	// A precedence window, not a liveness one: too long and a busy frame
-	// suppresses the approval/question edges announced when painting stops.
 	HeartbeatTTL         time.Duration
 	HeartbeatSettleAfter time.Duration
 	StaleAfter           time.Duration
@@ -81,28 +71,17 @@ type Policy struct {
 	ParkedAfter          time.Duration
 }
 
-// Measured on claude 2.1.220 and codex 0.145.0 through a real PTY: claude repaints ~1/s
-// and goes silent up to ~3.5s in a blocking tool call; codex repaints ~10/s.
 const (
-	claudeHeartbeatTTL = 1500 * time.Millisecond
-	codexHeartbeatTTL  = 500 * time.Millisecond
-	// Measured: claude repaints every ~1.92s during a `/compact`, past the 1.5s
-	// TTL; 5s clears that with margin for PTY read batching.
+	claudeHeartbeatTTL          = 1500 * time.Millisecond
+	codexHeartbeatTTL           = 500 * time.Millisecond
 	defaultHeartbeatSettleAfter = 5 * time.Second
-	// Far past any measured mid-turn silence (claude's worst ~3.5s).
-	defaultStaleAfter = 60 * time.Second
-	defaultStuckAfter = 90 * time.Second
-	// Measured 90ms for claude's permission classifier, low seconds for codex's
-	// auto_review.
-	guardianDwell            = 60 * time.Second
-	defaultSettleGrace       = 4 * time.Second
-	defaultClassifierTimeout = 30 * time.Second
-	// Tripwire. Measured in one day of production: 21 parked waits that resumed,
-	// the longest 3.7 minutes; the three that did not resume were held for days.
-	defaultParkedAfter = 30 * time.Minute
-	// A shell pane's heartbeat is the foreground process group on the 1s
-	// keepalive; 2.5s covers one missed poll plus worker RPC latency.
-	shellHeartbeatTTL = 2500 * time.Millisecond
+	defaultStaleAfter           = 60 * time.Second
+	defaultStuckAfter           = 90 * time.Second
+	guardianDwell               = 60 * time.Second
+	defaultSettleGrace          = 4 * time.Second
+	defaultClassifierTimeout    = 30 * time.Second
+	defaultParkedAfter          = 30 * time.Minute
+	shellHeartbeatTTL           = 2500 * time.Millisecond
 )
 
 func PolicyFor(agent string) Policy {
@@ -156,12 +135,9 @@ type Resolution struct {
 	State  protocol.SessionState
 	Reason Reason
 	Detail string
-	// Hold means "keep whatever the session already shows"; State is empty.
-	Hold bool
+	Hold   bool
 }
 
-// Clauses are ordered and the first match wins: a fresh heartbeat outranks an
-// open approval because an agent visibly running cannot be blocked on the user.
 func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	if e.Process != nil && e.Process.Claim == ClaimExited {
 		return Resolution{State: protocol.SessionStateIdle, Reason: ReasonProcessExited, Detail: e.Process.Detail}
@@ -171,8 +147,6 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return running(e)
 	}
 
-	// Nothing announces the answer to these edges: they retire only by the agent
-	// going busy past them.
 	if r, ok := harnessEdge(e); ok {
 		return r
 	}
@@ -185,8 +159,6 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		}
 	}
 
-	// Expires on total silence: a lost PostCompact must not pin the session green
-	// for good.
 	if e.Compacting {
 		if evidenceStoppedMoving(e, now, policy.StuckAfter) {
 			return Resolution{State: protocol.SessionStateUnknown, Reason: ReasonStuck}
@@ -194,8 +166,6 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return Resolution{State: protocol.SessionStateWorking, Reason: ReasonCompacting}
 	}
 
-	// A parked verdict holds working WITHOUT decaying to unknown, which would
-	// open a turn. Past ParkedAfter the work it waited on never woke the agent.
 	if e.BackgroundWork {
 		if r, ok := classifierVerdict(e); ok {
 			return r
@@ -225,16 +195,12 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	if e.TurnOpen || e.ToolOpen {
-		// For an agent with hooks but no heartbeat, heartbeatSilentFor answers
-		// "not silent" forever; without this check stuck is unreachable.
 		if evidenceStoppedMoving(e, now, policy.StuckAfter) {
 			return Resolution{State: protocol.SessionStateUnknown, Reason: ReasonStuck}
 		}
 		if !heartbeatSilentFor(e, now, policy.StaleAfter) {
 			return running(e)
 		}
-		// A finished turn and an unannounced approval look the same, so hold for
-		// SettleGrace rather than assert idle into a late explanation.
 		if r, ok := classifierVerdict(e); ok {
 			return r
 		}
@@ -245,16 +211,12 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 	}
 
 	if e.Heartbeat != nil && everTookATurn(e) && !e.TurnOpen && !e.ToolOpen {
-		// A gap only longer than the TTL is a repaint gap, not a settle; without
-		// HeartbeatSettleAfter every wide gap costs one owed turn.
 		if e.Heartbeat.Claim == ClaimBusy && !heartbeatSilentFor(e, now, policy.HeartbeatSettleAfter) {
 			return running(e)
 		}
 		return settled(e, ReasonHeartbeatSettled, policy, now)
 	}
 
-	// Needs no heartbeat: a session reporting hooks without a title (headless,
-	// remote) would otherwise read as never having spoken.
 	if e.PendingCron && !e.TurnOpen && !e.ToolOpen {
 		return settled(e, ReasonCronPending, policy, now)
 	}
@@ -267,8 +229,6 @@ func Resolve(e Evidence, policy Policy, now time.Time) Resolution {
 		return r
 	}
 
-	// Needs a turn to have opened first: a launched-and-left-alone agent is
-	// silent because there is nothing to report.
 	if e.TurnEverOpened && evidenceStoppedMoving(e, now, policy.StuckAfter) {
 		return Resolution{State: protocol.SessionStateUnknown, Reason: ReasonStuck}
 	}
@@ -287,8 +247,6 @@ func running(e Evidence) Resolution {
 	return Resolution{State: protocol.SessionStateWorking, Reason: ReasonHeartbeatBusy, Detail: detail}
 }
 
-// Holds while a verdict is computed: publishing idle first and correcting on
-// arrival flickers green-then-yellow.
 func settled(e Evidence, fallback Reason, policy Policy, now time.Time) Resolution {
 	if r, ok := classifierVerdict(e); ok {
 		return r
@@ -346,8 +304,6 @@ func parkedVerdict(e Evidence) bool {
 		!supersededByBusy(e.LastClassifier, e)
 }
 
-// A verdict the agent has gone busy past is dropped, or a turn settling
-// mid-classification would take the previous turn's answer.
 func classifierVerdict(e Evidence) (Resolution, bool) {
 	if e.LastClassifier == nil {
 		return Resolution{}, false
@@ -391,8 +347,6 @@ func fresh(o *Observation, claim Claim, now time.Time, ttl time.Duration) bool {
 	return o != nil && o.Claim == claim && now.Sub(o.ObservedAt) <= ttl
 }
 
-// Counts the classifier alongside the brackets: a daemon restarted mid-turn is
-// judged with no bracket to show for it.
 func everTookATurn(e Evidence) bool {
 	if e.TurnOpen || e.ToolOpen || e.TurnEverOpened {
 		return true
@@ -411,8 +365,6 @@ func promptIdleConfirmed(e Evidence) bool {
 	return !e.PromptIdleAt.IsZero() && e.PromptIdleAt.After(e.LastBusyAt)
 }
 
-// An agent that never reported busy is not silent: one with no harness signals
-// must not have its brackets closed out from under it.
 func heartbeatSilentFor(e Evidence, now time.Time, d time.Duration) bool {
 	if e.LastBusyAt.IsZero() {
 		return false

@@ -22,8 +22,6 @@ func writeScript(t *testing.T, body string) string {
 	return path
 }
 
-// body must touch $READY_FILE once its traps are installed, or the reap's first
-// SIGTERM races the script's setup.
 func orphan(t *testing.T, dir, id, body string) Entry {
 	t.Helper()
 	readyFile := filepath.Join(t.TempDir(), "ready")
@@ -34,8 +32,6 @@ func orphan(t *testing.T, dir, id, body string) Entry {
 		t.Fatalf("start orphan: %v", err)
 	}
 	pid := cmd.Process.Pid
-	// Reap the exit ourselves so the pid does not linger as a zombie, which would
-	// answer signal 0 forever and hang waitForGone.
 	go func() { _ = cmd.Wait() }()
 	t.Cleanup(func() {
 		_ = syscall.Kill(-pid, syscall.SIGKILL)
@@ -81,8 +77,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// Measured pid-reuse floor: 2m37s on macOS, over 4m on Linux, against stampResolution
-// of 1µs (Darwin sysctl) / 10ms (/proc). A second-granularity source fails here.
 func TestStartTimeStampResolvesFasterThanPidsAreReused(t *testing.T) {
 	separation := 20 * stampResolution
 	if separation < time.Millisecond {
@@ -269,8 +263,8 @@ set -m
 sleep 300 &
 echo $! > `+childPIDFile+`
 set +m
-touch "$READY_FILE"
 trap 'kill $(cat `+childPIDFile+`) 2>/dev/null; exit 0' TERM
+touch "$READY_FILE"
 while true; do sleep 0.05; done
 `)
 	deadline := time.Now().Add(5 * time.Second)
@@ -298,8 +292,6 @@ while true; do sleep 0.05; done
 	}
 }
 
-// Spawned WITHOUT Setpgid: the child shares this test process's group, so a group
-// SIGKILL from the reap would take the test run down with it.
 func TestReapNeverGroupSignalsASharedGroupEntry(t *testing.T) {
 	dir := t.TempDir()
 	readyFile := filepath.Join(t.TempDir(), "ready")

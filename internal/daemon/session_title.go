@@ -19,7 +19,6 @@ import (
 )
 
 const (
-	// One cap for every session name: delegation --name, rename, and generated titles.
 	maxSessionNameRunes      = 48
 	sessionTitleTimeout      = 90 * time.Second
 	sessionTitleBriefCharCap = 1500
@@ -50,15 +49,11 @@ func (d *Daemon) maybeGenerateSessionTitle(sessionID, transcriptPath string) {
 		SummaryCharCap:    2000,
 	})
 	if err != nil || slice.Empty() || slice.Brief == "" {
-		// Leave the attempted-guard unmarked so a later Stop retries rather than
-		// permanently skipping this session.
 		return
 	}
 	d.enqueueSessionTitle(sessionID, slice.Render(), "transcript")
 }
 
-// UserPromptSubmit also delivers maintenance and peer-agent text; only a
-// correlated user turn or the session's own initial prompt may title it.
 func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, origin sessionInputOrigin) {
 	prompt = strings.TrimSpace(prompt)
 	if prompt == "" || !d.sessionWantsAutoTitle(sessionID) {
@@ -73,8 +68,6 @@ func (d *Daemon) maybeGenerateSessionTitleFromPrompt(sessionID, prompt string, o
 	d.enqueueSessionTitle(sessionID, transcript.ConversationSlice{Brief: prompt, HumanCount: 1}.Render(), "prompt")
 }
 
-// A fingerprint, not the prompt: the body can be 1 MiB and the marker may
-// outlive the attempt on durable sessions that never settle a title.
 func (d *Daemon) rememberSessionTitleInitialPrompt(sessionID, prompt string) {
 	d.sessionTitleMu.Lock()
 	defer d.sessionTitleMu.Unlock()
@@ -117,14 +110,11 @@ func (d *Daemon) sessionWantsAutoTitle(sessionID string) bool {
 }
 
 func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
-	// Ahead of the attempted-mark: a refused title must stay retryable.
 	runner := d.headlessJobQueue("session_title")
 	if runner == nil {
 		return
 	}
 
-	// The early check and this mark are separate critical sections, so a prompt
-	// submit and a Stop can both pass it; re-check under the lock.
 	d.sessionTitleMu.Lock()
 	if _, attempted := d.sessionTitleAttempted[sessionID]; attempted {
 		d.sessionTitleMu.Unlock()
@@ -147,8 +137,6 @@ func (d *Daemon) enqueueSessionTitle(sessionID, conversation, source string) {
 		return
 	}
 	d.logf("session title %s: enqueue: %v", sessionID, err)
-	// The job never existed, so the attempt is still available; a marker a
-	// concurrent caller set meanwhile is theirs to keep.
 	d.sessionTitleMu.Lock()
 	delete(d.sessionTitleAttempted, sessionID)
 	if _, newer := d.sessionTitleInitialPrompt[sessionID]; hadFingerprint && !newer {
@@ -191,8 +179,6 @@ func (d *Daemon) sessionTitleHandler(ctx context.Context, job *jobs.Job) (any, e
 	return title, nil
 }
 
-// The member check is the backstop for a member session renamed back to the cwd
-// basename the launch gave it.
 func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 	if !sessionLabelIsPlaceholder(session.Label, session.Directory, session.ID) {
 		return false
@@ -200,11 +186,8 @@ func (d *Daemon) sessionMayBeAutoTitled(session *protocol.Session) bool {
 	return d.crewMemberBoundTo(session.ID) == ""
 }
 
-// Seed ids with or without their prefix, hex tokens, and ticket keys: the names
-// agents reach for when a name is required and nothing says what one is for.
 var (
 	idShapedLabel = regexp.MustCompile(`^(?:s-)?[a-z0-9]{6}$|^[0-9a-f]{6,}$|^[A-Z][A-Z0-9]*-[0-9]+$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f-]{4,}$`)
-	// A six-letter word like "garden" is not an id; a seed id always mixes in a digit.
 	sixLetterWord = regexp.MustCompile(`^(?:s-)?[a-z]{6}$`)
 )
 
@@ -217,7 +200,6 @@ func sessionLabelIsPlaceholder(label, cwd, sessionID string) bool {
 	return idShapedLabel.MatchString(label) && !sixLetterWord.MatchString(label)
 }
 
-// Wired onto d.sessionTitleExec in New(); test daemons leave it nil.
 func (d *Daemon) execSessionTitle(ctx context.Context, session *protocol.Session, conversation string) (string, error) {
 	providerAgent := titleProviderAgent(string(session.Agent))
 	if providerAgent == "" {
@@ -279,8 +261,6 @@ func (d *Daemon) execSessionTitleHeadless(ctx context.Context, agent, model, con
 	switch agent {
 	case "claude":
 		request.MaxTurns = 2
-		// Receipt: $0.0056 on haiku with no tool definitions and this system prompt
-		// (was $0.055 with them, over this budget). A ~9x tripwire.
 		request.MaxBudgetUSD = "0.05"
 	case "codex":
 		request.ReasoningEffort = "low"
@@ -332,7 +312,6 @@ func sanitizeSessionTitle(raw string) string {
 	return line
 }
 
-// Mirrors the recovery-path default in daemon.go.
 func defaultSessionLabel(cwd, sessionID string) string {
 	label := filepath.Base(cwd)
 	if label == "" || label == "." || label == string(filepath.Separator) {

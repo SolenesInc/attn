@@ -102,8 +102,6 @@ func newTerminalBuildHarness(t *testing.T, sessionID, format string) *terminalBu
 		return h.format
 	})
 	t.Cleanup(func() {
-		// The backend's end of the control connection first: closing the listener does
-		// not close a connection it already accepted, so the fake's reader would block.
 		backend.mu.RLock()
 		session := backend.sessions[sessionID]
 		backend.mu.RUnlock()
@@ -211,8 +209,6 @@ func TestWorkerBackendTreatsASilentWorkerAsAnAnswer(t *testing.T) {
 	}
 }
 
-// The lookup must not fall back to getSession's registry read + probe RPC: it
-// runs on every session broadcast.
 func TestWorkerBackendHasNoVerdictForAnUnknownSession(t *testing.T) {
 	backend, err := NewWorker(WorkerBackendConfig{
 		DataRoot:         newWorkerBackendTestRoot(t),

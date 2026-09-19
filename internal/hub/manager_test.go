@@ -659,8 +659,6 @@ func TestForwardsRawEventIncludesOrderedPTYRelayTraffic(t *testing.T) {
 	}
 }
 
-// binary_pty_output would break the relay, which reads every message back as a
-// JSON envelope.
 func TestSendClientHelloDeclaresExactlyTheRelaysCapabilities(t *testing.T) {
 	received := make(chan protocol.ClientHelloMessage, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1132,7 +1130,6 @@ func TestForwardSessionCloseRefusalEndsOnlyItsOwnClose(t *testing.T) {
 			t.Fatal("both closes never reached the endpoint")
 		}
 	}
-	// Both frames are out, so both waiters are registered: the forward registers first.
 	manager.answerSessionClose("endpoint-1", "sess-a", false, "daemon_recovering")
 
 	select {
@@ -1243,7 +1240,6 @@ func TestManagerRefusesASecondRenameWhileOneWaitsOnTheOwner(t *testing.T) {
 		var request protocol.RenameSessionMessage
 		_ = json.Unmarshal(payload, &request)
 		close(received)
-		// Hold the verdict until the second rename has been refused.
 		<-answered
 		response, _ := json.Marshal(protocol.RenameResultMessage{Event: protocol.EventRenameResult, Cmd: protocol.CmdRenameSession, ID: request.SessionID, Success: true})
 		_ = conn.Write(r.Context(), websocket.MessageText, response)

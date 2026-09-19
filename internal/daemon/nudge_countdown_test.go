@@ -40,7 +40,6 @@ func settledNudgeDeadline(t *testing.T, d *Daemon, sessionID string) time.Time {
 	return deadline
 }
 
-// Tests that use it set an hour-long window override so the real timer never races it.
 func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	timer := currentNudgeTimer(d, sessionID)
@@ -150,7 +149,6 @@ func TestBufferedNudgePreservesDeadlineAcrossSelectionPause(t *testing.T) {
 		d.setSelectedSession(agentID)
 		deadline := settledNudgeDeadline(t, d, chiefID)
 		want := attentionAt.Add(time.Hour)
-		// Store timestamps use RFC3339 second precision, so the durable round-trip may trim sub-seconds.
 		if delta := deadline.Sub(want); delta < -time.Second || delta > time.Second {
 			t.Fatalf("resumed deadline = %s, want %s", deadline, want)
 		}

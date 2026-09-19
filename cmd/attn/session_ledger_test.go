@@ -159,8 +159,6 @@ func TestSessionListTakesTheFiltersTheAppOffers(t *testing.T) {
 		t.Errorf("parsed window = [%s, %s)", parsed.since, parsed.until)
 	}
 
-	// --last resolves to the same window the app computes, so the two agree on
-	// what "today" is; naming both would be two answers to one question.
 	bad := [][]string{
 		{"--last", "7d", "--since", "2026-09-01T00:00:00Z"},
 		{"--last", "7d", "--until", "2026-09-01T00:00:00Z"},

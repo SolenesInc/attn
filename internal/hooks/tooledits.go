@@ -6,8 +6,6 @@ import (
 	"strings"
 )
 
-// Coverage is deliberately partial: a file rewritten through the shell (`sed -i`, a
-// heredoc) arrives as a Bash call with no attributable path; deletions are skipped.
 func MarkdownEdits(toolName string, toolInput json.RawMessage, cwd string) []string {
 	var paths []string
 	switch toolName {
@@ -60,7 +58,6 @@ func MarkdownEdits(toolName string, toolInput json.RawMessage, cwd string) []str
 	return edited
 }
 
-// A rename is reported at its destination, which is the file that now exists.
 func applyPatchTargets(patch string) []string {
 	var targets []string
 	for _, line := range strings.Split(patch, "\n") {
@@ -69,8 +66,6 @@ func applyPatchTargets(patch string) []string {
 		case strings.HasPrefix(line, "*** Add File: "), strings.HasPrefix(line, "*** Update File: "):
 			targets = append(targets, strings.TrimSpace(line[strings.Index(line, ": ")+2:]))
 		case strings.HasPrefix(line, "*** Move to: "):
-			// A move follows the "Update File" header for its source, which no
-			// longer exists once the patch applies.
 			if len(targets) > 0 {
 				targets = targets[:len(targets)-1]
 			}

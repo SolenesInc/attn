@@ -19,7 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// Receipt: run 34539029783, Daemon test shard 95.459s on blacksmith-4vcpu-ubuntu-2404; this failure tripwire exceeds the whole shard.
 const codexResumeSignalTripwire = 2 * time.Minute
 
 func TestCodexResumeMappingEndToEnd(t *testing.T) {

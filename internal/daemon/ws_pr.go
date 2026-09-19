@@ -163,7 +163,6 @@ func (d *Daemon) publishPRSetChanges(before, after []*protocol.PR) {
 	}
 
 	d.coalesceSnapshots(func() {
-		// Slice order, not map order: a consumer replaying the durable log must see the sequence the daemon saw.
 		for _, pr := range after {
 			previous, existed := beforeByID[pr.ID]
 			switch {

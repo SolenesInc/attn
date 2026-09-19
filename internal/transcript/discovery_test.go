@@ -310,8 +310,6 @@ func TestFindCopilotTranscript_PrefersClosestStartTime(t *testing.T) {
 	}
 }
 
-// Copilot records the cwd it resolved, not the one it was handed: on macOS a
-// session launched under /tmp writes /private/tmp.
 func TestFindCopilotTranscript_MatchesThroughASymlinkedCWD(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv(toolhome.EnvVar, homeDir)

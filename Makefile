@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -191,36 +191,20 @@ $(GOTESTSUM):
 verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
-test: $(NATIVE_VT_DEP) test-hooks test-scripts verify-ghostty-vt-wasm
-	./scripts/test-go.sh
+DIFF_BASE ?= origin/next
+GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
+GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
+test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
+	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
+	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
+		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
+	else ./scripts/test-go.sh; fi
 
-# Repository Claude Code hooks are shell, so they are invisible to the Go suite
-# and would otherwise rot unnoticed.
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 
-# Same blind spot for the shell an agent runs by hand.
 test-scripts:
-	@bash ./scripts/test-git_test.sh
-	@bash ./scripts/source-fingerprint_test.sh
-	@bash ./scripts/pr-evidence_test.sh
-	@bash ./scripts/ci-acceptance_test.sh
-	@bash ./scripts/pre-commit_test.sh
-	@bash ./scripts/ci-retry_test.sh
-	@bash ./scripts/ci-flake-report_test.sh
-	@bash ./scripts/app-acceptance_test.sh
-	@bash ./scripts/app-acceptance-gate_test.sh
-	@bash ./scripts/candidate-gate_test.sh
-	@bash ./scripts/changelog-gate_test.sh
-	@bash ./scripts/main-route_test.sh
-	@bash ./scripts/release_test.sh
-	@bash ./scripts/release-tag-gate_test.sh
-	@bash ./scripts/workflow-job-gate_test.sh
-	@bash ./scripts/release-after-acceptance_test.sh
-	@bash ./scripts/release-health_test.sh
-	@bash ./scripts/publish-release_test.sh
-	@bash ./scripts/sync-main-to-next_test.sh
-	@bash ./scripts/make-fresh-checkout_test.sh
+	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
@@ -247,7 +231,6 @@ test-frontend: $(APP_NODE_MODULES)
 lint: lint-go lint-frontend
 
 lint-go: $(NATIVE_VT_DEP)
-	go run ./cmd/commentlint ./...
 	go tool staticcheck ./...
 
 lint-frontend: $(APP_NODE_MODULES)

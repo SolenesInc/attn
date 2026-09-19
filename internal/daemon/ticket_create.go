@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// handleTicketCreate mints an unbound backlog ticket: an explicit id is pinned
-// (hard fail if malformed or taken), otherwise the title slug is auto-suffixed.
 func (d *Daemon) handleTicketCreate(conn net.Conn, msg *protocol.TicketCreateMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {

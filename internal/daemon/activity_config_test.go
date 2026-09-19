@@ -21,8 +21,6 @@ func TestActivityConfigFillsInTheAgentsDefaults(t *testing.T) {
 	if claude.Model != activityClaudeDefaultModel {
 		t.Errorf("claude model = %q, want %q", claude.Model, activityClaudeDefaultModel)
 	}
-	// Effort measured inert on claude-haiku-4-5, so pinning one would be a setting
-	// that does nothing.
 	if claude.Effort != "" {
 		t.Errorf("claude effort = %q, want unset", claude.Effort)
 	}

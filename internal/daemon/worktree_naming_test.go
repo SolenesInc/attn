@@ -22,7 +22,6 @@ func TestDoCreateWorktree_ResolvesMainRepoFromWorktree(t *testing.T) {
 	runGitDaemon(t, mainDir, "init")
 	runGitDaemon(t, mainDir, "commit", "--allow-empty", "-m", "init")
 
-	// Simulate a pre-existing worktree with a generated suffix-heavy name.
 	existingWorktree := filepath.Join(tmpDir, "hurdy-gurdy--feat-auto-bump-yt-dlp--fork-hurdy-gurdy")
 	runGitDaemon(t, mainDir, "worktree", "add", "-b", "feat/auto-bump-yt-dlp", existingWorktree)
 
@@ -298,7 +297,6 @@ func canonicalPathDaemon(path string) string {
 	return filepath.Clean(path)
 }
 
-// gitRevParseDaemon resolves a revision to a full SHA in dir.
 func gitRevParseDaemon(t *testing.T, dir, rev string) string {
 	t.Helper()
 	cmd := exec.Command("git", "rev-parse", rev)

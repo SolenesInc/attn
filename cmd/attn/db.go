@@ -111,7 +111,6 @@ func restoreDatabase(dbPath, backupsDir, source, pidPath string) (restoredFrom, 
 		return "", "", fmt.Errorf("stat existing db %s: %w", dbPath, statErr)
 	}
 
-	// Stage fully before touching the live path: a bad source is a no-op failure.
 	stagedPath, err := stageBackupCopy(srcPath, dbPath)
 	if err != nil {
 		return "", "", fmt.Errorf("stage backup %s: %w", srcPath, err)
@@ -148,7 +147,6 @@ func restoreDatabase(dbPath, backupsDir, source, pidPath string) (restoredFrom, 
 	return srcPath, preservedAs, nil
 }
 
-// Never deleted: sidecars can hold uncheckpointed data.
 func preserveExistingDB(dbPath string) (string, error) {
 	return preserveExistingDBAt(dbPath, time.Now, os.Rename)
 }
@@ -211,7 +209,6 @@ func preserveTargetFree(candidate string) (bool, error) {
 	return true, nil
 }
 
-// "latest" only ever means the newest routine rotation, never a stray or pre-migration snapshot.
 func latestRotatingBackup(dir string) (string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -236,7 +233,6 @@ func latestRotatingBackup(dir string) (string, error) {
 	return filepath.Join(dir, names[len(names)-1]), nil
 }
 
-// Stage into dstPath's own directory, which makes the final move a same-filesystem atomic rename.
 func stageBackupCopy(src, dstPath string) (stagedPath string, err error) {
 	in, err := os.Open(src)
 	if err != nil {
@@ -281,8 +277,6 @@ func stageBackupCopy(src, dstPath string) (stagedPath string, err error) {
 	return tmpPath, nil
 }
 
-// HOLDS the flock until release: probe-then-release would leave a window for a daemon or a second restore.
-// flockFn is indirected for tests; only EWOULDBLOCK means a live daemon holds it.
 var flockFn = syscall.Flock
 
 func acquireDaemonLock(pidPath string) (release func(), err error) {
@@ -295,11 +289,8 @@ func acquireDaemonLock(pidPath string) (release func(), err error) {
 		if errors.Is(flockErr, syscall.EWOULDBLOCK) {
 			return nil, fmt.Errorf("the attn daemon is running; stop it first (quit the app, or `attn daemon stop`) before restoring the database")
 		}
-		// Indeterminate flock result: fail closed, never restore over a live daemon.
 		return nil, fmt.Errorf("cannot determine daemon state: %w", flockErr)
 	}
-	// Stamp the sentinel over any stale pid so a concurrent `attn daemon stop`, which trusts only holder-written content, never signals it.
-	// which trusts only holder-written content, never signals it.
 	if err := lockFile.Truncate(0); err != nil {
 		_ = syscall.Flock(int(lockFile.Fd()), syscall.LOCK_UN)
 		lockFile.Close()

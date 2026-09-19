@@ -13,7 +13,7 @@ import (
 
 func newSessionPRStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -228,7 +228,6 @@ func TestSessionPullRequestByIDTakesTheFreshestRowAcrossSessions(t *testing.T) {
 		t.Fatalf("row = %+v, want the merged status", rec)
 	}
 
-	// A row a session forgot leaves the other one answering for the pull request.
 	if _, err := s.ForgetSessionPullRequest("s2", prID); err != nil {
 		t.Fatalf("forget: %v", err)
 	}

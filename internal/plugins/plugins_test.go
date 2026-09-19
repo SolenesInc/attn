@@ -394,7 +394,6 @@ func TestLinkPathDiscoverAndRemoveKeepsCheckout(t *testing.T) {
 		t.Fatalf("bun install did not run in the checkout: %v", err)
 	}
 
-	// An edit in the checkout is visible through the link with no reinstall.
 	if err := os.WriteFile(filepath.Join(sourceDir, "src", "index.ts"), []byte("// edited\n"), 0o644); err != nil {
 		t.Fatalf("edit checkout: %v", err)
 	}

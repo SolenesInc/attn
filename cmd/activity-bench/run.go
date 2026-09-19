@@ -193,15 +193,11 @@ func execute(variant Variant, template activity.Template, entry Entry) Result {
 		Model:           variant.Model,
 		ReasoningEffort: variant.Effort,
 		Prompt:          prompt.User,
-		// SystemPrompt REPLACES Claude Code's own. Measured on the control prompt: the
-		// default prefix bills ~24.8K tokens, this plus DisableTools bills ~2.3K.
-		SystemPrompt: prompt.System,
-		WorkDir:      workDir,
-		// DisableTools is load-bearing: an empty AllowedTools without it re-enables the
-		// driver's default tools. No OutputSchema: measured 10.6s/$0.0059 vs 14.2s/$0.0089.
-		DisableTools: true,
-		MaxTurns:     2,
-		MaxBudgetUSD: "0.05",
+		SystemPrompt:    prompt.System,
+		WorkDir:         workDir,
+		DisableTools:    true,
+		MaxTurns:        2,
+		MaxBudgetUSD:    "0.05",
 	})
 	result.LatencyMS = time.Since(start).Milliseconds()
 	result.CostUSD = taskResult.TotalCostUSD
