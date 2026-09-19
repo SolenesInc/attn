@@ -7,6 +7,8 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
+source "$root/scripts/lib/prebuilt-go-run.sh"
+install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -157,7 +159,6 @@ EOF
 }
 
 export PATH="$work/bin:$PATH"
-export GOCACHE="$work/go-cache"
 export FAKE_GH_LOG="$work/gh.log"
 export FAKE_PR_BODY="$work/pr-body.md"
 export FAKE_CLAUDE_ARGC="$work/claude-argc.txt"

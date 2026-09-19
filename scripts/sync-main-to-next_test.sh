@@ -7,6 +7,8 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/attn-main-sync-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 mkdir -p "$work/bin"
+source "$root/scripts/lib/prebuilt-go-run.sh"
+install_prebuilt_go_run "$root" "$work/bin" release-train changelog-check
 cat >"$work/bin/gh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -103,7 +105,7 @@ EOF
 run_sync() {
   (
     cd "$fixture_repo"
-    PATH="$work/bin:$PATH" GOCACHE="$work/go-cache" FAKE_GH_LOG="$fixture_log" \
+    PATH="$work/bin:$PATH" FAKE_GH_LOG="$fixture_log" \
       FAKE_ACTIVE_CANDIDATE="${1:-}" "$script"
   )
 }
@@ -151,7 +153,7 @@ grep -q 'pr create --base next --head sync/main-into-next-' "$fixture_log"
 
 sync_sha="$(git --git-dir="$fixture_origin" rev-parse "$sync_ref")"
 sync_branch="${sync_ref#refs/heads/}"
-if ! (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
+if ! (cd "$fixture_repo" && PATH="$work/bin:$PATH" \
   "$root/scripts/changelog-gate.sh" next "$sync_branch" "$sync_sha") >/dev/null; then
   echo "generated sync did not pass its changelog gate" >&2
   exit 1
@@ -162,7 +164,7 @@ printf '%s\n' 'smuggled change' >"$fixture_repo/smuggled.txt"
 git -C "$fixture_repo" add smuggled.txt
 git -C "$fixture_repo" commit -q --amend -m 'chore(release): forged sync'
 forged_sync_sha="$(git -C "$fixture_repo" rev-parse HEAD)"
-if (cd "$fixture_repo" && GOCACHE="$work/go-cache" \
+if (cd "$fixture_repo" && PATH="$work/bin:$PATH" \
   "$root/scripts/changelog-gate.sh" next "$sync_branch" "$forged_sync_sha") >/dev/null 2>&1; then
   echo "forged sync tree bypassed the changelog gate" >&2
   exit 1
