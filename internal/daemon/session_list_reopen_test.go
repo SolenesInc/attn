@@ -249,7 +249,7 @@ func TestAPageReturnsACompleteBranchVerdict(t *testing.T) {
 	}
 }
 
-func TestAClosingRowReachesTheAppAlreadyJudged(t *testing.T) {
+func TestAClosingRowReachesTheAppBeforeItsVerdict(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
 	var pushed []*protocol.WebSocketEvent
@@ -270,14 +270,10 @@ func TestAClosingRowReachesTheAppAlreadyJudged(t *testing.T) {
 
 	projectSessionClosed(d, bus.Event{Name: FactSessionClosed, Subject: "closing", Payload: payload})
 
-	if len(pushed) != 1 || pushed[0].Reopen == nil {
-		t.Fatalf("broadcast %d events, want one session_closed carrying a verdict", len(pushed))
+	if len(pushed) != 1 {
+		t.Fatalf("broadcast %d events, want one session_closed row", len(pushed))
 	}
-	if pushed[0].Reopen.DirectoryState != directoryPresent {
-		t.Errorf("the row reached the app judged %s, want %s: its directory is still there",
-			pushed[0].Reopen.DirectoryState, directoryPresent)
-	}
-	if len(pushed[0].Reopen.Actions) == 0 {
-		t.Errorf("the row reached the app with no way back: %+v", pushed[0].Reopen)
+	if pushed[0].Event != protocol.EventSessionClosed || pushed[0].SessionLedgerEntry == nil {
+		t.Fatalf("broadcast %+v, want the session_closed row before eligibility resolves", pushed[0])
 	}
 }

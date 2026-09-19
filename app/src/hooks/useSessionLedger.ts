@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../types/generated';
-import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
+import type {
+  SessionLedgerPage,
+  SessionLedgerQuery,
+  SessionReopenResolutionEvent,
+} from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
   isRangeError,
   ledgerInstant,
   reopenVerdictView,
-  reopenVerdictsById,
   sessionRangeWindow,
 } from '../components/sessionsLedger';
 import type { ReopenVerdictView, SessionRangeId, SessionScope } from '../components/sessionsLedger';
@@ -35,6 +38,12 @@ export const SESSION_PAGE_SIZE = 50;
 const systemNow = () => new Date();
 
 const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
+const EARLY_RESOLUTION_LIMIT = 100;
+
+export type ReopenResolution =
+  | { closedAt: string; state: 'pending' }
+  | { closedAt: string; state: 'ready'; reopen: SessionReopen }
+  | { closedAt: string; state: 'failed'; error: string };
 
 export interface UseSessionLedgerOptions {
   enabled: boolean;
@@ -50,6 +59,7 @@ export interface SessionLedgerView {
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
   verdicts: Record<string, ReopenVerdictView>;
+  resolutions: Record<string, ReopenResolution>;
   facets: SessionLedgerFacets | null;
   omitted: number;
   loading: boolean;
@@ -58,8 +68,8 @@ export interface SessionLedgerView {
   filterError: string | null;
   reload: () => void;
   loadMore: () => void;
-  recordClose: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  recordVerdict: (sessionId: string, reopen: SessionReopen) => void;
+  recordClose: (entry: SessionLedgerEntry) => void;
+  recordResolution: (resolution: SessionReopenResolutionEvent) => void;
 }
 
 export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
@@ -119,7 +129,7 @@ export function useSessionLedger({
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
-  const [verdicts, setVerdicts] = useState<Record<string, ReopenVerdictView>>(NO_VERDICTS);
+  const [resolutions, setResolutions] = useState<Record<string, ReopenResolution>>({});
   const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
@@ -128,20 +138,43 @@ export function useSessionLedger({
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const readSeq = useRef(0);
-  // A branch check can land before the page that asked for it; the page then
-  // still says checking, so the sharper verdict waits here for it.
-  const sharpened = useRef<Record<string, SessionReopen>>({});
+  const early = useRef(new Map<string, ReopenResolution>());
   useEffect(() => {
-    if (!enabled) sharpened.current = {};
+    if (!enabled) early.current.clear();
   }, [enabled]);
-  const pageVerdicts = useCallback((reopen: SessionLedgerPage['reopen']) => {
-    const byId = reopenVerdictsById(reopen);
-    for (const id of Object.keys(byId)) {
-      const early = sharpened.current[id];
-      if (byId[id].refreshing && early) byId[id] = reopenVerdictView(early);
+
+  const resolutionForEntry = useCallback((entry: SessionLedgerEntry): ReopenResolution | null => {
+    const closedAt = entry.closed_at ?? '';
+    if (!closedAt) return null;
+    const key = `${entry.id}\u0000${closedAt}`;
+    const arrived = early.current.get(key);
+    if (arrived) {
+      early.current.delete(key);
+      return arrived;
     }
-    return byId;
+    return { closedAt, state: 'pending' };
   }, []);
+
+  const replacePageResolutions = useCallback((pageEntries: SessionLedgerEntry[]) => {
+    const next: Record<string, ReopenResolution> = {};
+    for (const entry of pageEntries) {
+      const resolution = resolutionForEntry(entry);
+      if (resolution) next[entry.id] = resolution;
+    }
+    setResolutions(next);
+  }, [resolutionForEntry]);
+
+  const appendPageResolutions = useCallback((pageEntries: SessionLedgerEntry[]) => {
+    setResolutions((current) => {
+      const next = { ...current };
+      for (const entry of pageEntries) {
+        const resolution = resolutionForEntry(entry);
+        if (resolution) next[entry.id] = resolution;
+        else delete next[entry.id];
+      }
+      return next;
+    });
+  }, [resolutionForEntry]);
   // Written after commit: a render React discards must not steer the committed surface.
   const filtersRef = useRef(filters);
   useEffect(() => {
@@ -167,7 +200,7 @@ export function useSessionLedger({
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries(page.entries ?? []);
-        setVerdicts(pageVerdicts(page.reopen));
+        replacePageResolutions(page.entries ?? []);
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -175,7 +208,7 @@ export function useSessionLedger({
       .catch((failure: Error) => {
         if (seq !== readSeq.current) return;
         setEntries([]);
-        setVerdicts(NO_VERDICTS);
+        setResolutions({});
         setFacets(null);
         setOmitted(0);
         setNextBefore(null);
@@ -186,9 +219,12 @@ export function useSessionLedger({
       });
     // `query` holds a fresh `now`, so depending on it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, filters, filterError, list, pageSize, pageVerdicts, reloadNonce]);
+  }, [enabled, filters, filterError, list, pageSize, replacePageResolutions, reloadNonce]);
 
-  const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
+  const reload = useCallback(() => {
+    early.current.clear();
+    setReloadNonce((n) => n + 1);
+  }, []);
 
   const loadMore = useCallback(() => {
     if (!nextBefore || loadingMore || filterError) return;
@@ -198,7 +234,7 @@ export function useSessionLedger({
       .then((page) => {
         if (seq !== readSeq.current) return;
         setEntries((current) => [...current, ...(page.entries ?? [])]);
-        setVerdicts((current) => ({ ...current, ...pageVerdicts(page.reopen) }));
+        appendPageResolutions(page.entries ?? []);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -208,9 +244,9 @@ export function useSessionLedger({
       .finally(() => {
         if (seq === readSeq.current) setLoadingMore(false);
       });
-  }, [nextBefore, loadingMore, filterError, list, pageSize, pageVerdicts, now]);
+  }, [nextBefore, loadingMore, filterError, list, pageSize, appendPageResolutions, now]);
 
-  const recordClose = useCallback((entry: SessionLedgerEntry, reopen?: SessionReopen) => {
+  const recordClose = useCallback((entry: SessionLedgerEntry) => {
     // Read outside the updater: React may replay one, and the clock would move under it.
     const dropsFromView = filtersRef.current.scope === 'live';
     const belongs = closeBelongsInView(entry, filtersRef.current, now());
@@ -224,22 +260,46 @@ export function useSessionLedger({
       if (!belongs) return current;
       return [entry, ...current];
     });
-    if (reopen) setVerdicts((current) => ({ ...current, [entry.id]: reopenVerdictView(reopen) }));
-  }, [now]);
+    setResolutions((current) => {
+      const next = { ...current };
+      if (dropsFromView || !belongs || !entry.closed_at) delete next[entry.id];
+      else next[entry.id] = resolutionForEntry(entry) ?? { closedAt: entry.closed_at, state: 'pending' };
+      return next;
+    });
+  }, [now, resolutionForEntry]);
 
-  const recordVerdict = useCallback((sessionId: string, reopen: SessionReopen) => {
-    sharpened.current[sessionId] = reopen;
-    setVerdicts((current) => {
-      if (!(sessionId in current)) return current;
-      return { ...current, [sessionId]: reopenVerdictView(reopen) };
+  const recordResolution = useCallback((event: SessionReopenResolutionEvent) => {
+    const resolution: ReopenResolution = event.success && event.reopen
+      ? { closedAt: event.closedAt, state: 'ready', reopen: event.reopen }
+      : { closedAt: event.closedAt, state: 'failed', error: event.error ?? 'Eligibility could not be checked' };
+    const key = `${event.sessionId}\u0000${event.closedAt}`;
+    early.current.delete(key);
+    early.current.set(key, resolution);
+    while (early.current.size > EARLY_RESOLUTION_LIMIT) {
+      const oldest = early.current.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      early.current.delete(oldest);
+    }
+    setResolutions((current) => {
+      if (current[event.sessionId]?.closedAt !== event.closedAt) return current;
+      return { ...current, [event.sessionId]: resolution };
     });
   }, []);
+
+  const verdicts = useMemo(() => {
+    const next: Record<string, ReopenVerdictView> = {};
+    for (const [sessionId, resolution] of Object.entries(resolutions)) {
+      if (resolution.state === 'ready') next[sessionId] = reopenVerdictView(resolution.reopen);
+    }
+    return Object.keys(next).length === 0 ? NO_VERDICTS : next;
+  }, [resolutions]);
 
   return {
     filters,
     setFilters,
     entries,
     verdicts,
+    resolutions,
     facets,
     omitted,
     loading,
@@ -249,6 +309,6 @@ export function useSessionLedger({
     reload,
     loadMore,
     recordClose,
-    recordVerdict,
+    recordResolution,
   };
 }

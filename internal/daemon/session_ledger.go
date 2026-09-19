@@ -62,7 +62,25 @@ func ledgerInstantArg(name, raw string) (time.Time, error) {
 	return at, nil
 }
 
-func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
+func sessionListStream(msg *protocol.SessionListMessage) (bool, error) {
+	delivery := protocol.SessionReopenDeliveryInline
+	if msg.ReopenDelivery != nil {
+		delivery = *msg.ReopenDelivery
+	}
+	switch delivery {
+	case protocol.SessionReopenDeliveryInline:
+		return false, nil
+	case protocol.SessionReopenDeliveryStream:
+		if !protocol.Deref(msg.Reopen) {
+			return false, errors.New("stream reopen delivery requires reopen=true")
+		}
+		return true, nil
+	default:
+		return false, fmt.Errorf("unknown reopen delivery %q", delivery)
+	}
+}
+
+func (d *Daemon) sessionLedgerStoredPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
 	query, err := ledgerQuery(msg, wantFacets)
 	if err != nil {
 		return nil, err
@@ -85,6 +103,21 @@ func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets 
 	}
 	if page.NextBefore != "" {
 		result.NextBefore = protocol.Ptr(page.NextBefore)
+	}
+	return result, nil
+}
+
+func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
+	stream, err := sessionListStream(msg)
+	if err != nil {
+		return nil, err
+	}
+	if stream {
+		return nil, errors.New("stream reopen delivery is available only over WebSocket")
+	}
+	result, err := d.sessionLedgerStoredPage(msg, wantFacets)
+	if err != nil {
+		return nil, err
 	}
 	if protocol.Deref(msg.Reopen) {
 		result.Reopen, err = d.reopenVerdictsForPage(context.Background(), result.Entries)
@@ -166,8 +199,20 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionShowResult: result})
 }
 
-func (d *Daemon) sendSessionListWSResult(client *wsClient, msg *protocol.SessionListMessage) {
-	result, err := d.sessionLedgerPage(msg, true)
+func (d *Daemon) sendSessionListWSResult(
+	client *wsClient,
+	msg *protocol.SessionListMessage,
+	intent *reopenPageIntent,
+) {
+	stream, err := sessionListStream(msg)
+	var result *protocol.SessionListResult
+	if err == nil {
+		if stream {
+			result, err = d.sessionLedgerStoredPage(msg, true)
+		} else {
+			result, err = d.sessionLedgerPage(msg, true)
+		}
+	}
 	reply := protocol.SessionListResultMessage{
 		Event:     protocol.EventSessionListResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -177,7 +222,23 @@ func (d *Daemon) sendSessionListWSResult(client *wsClient, msg *protocol.Session
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	}
-	d.sendToClient(client, reply)
+	if !d.sendToClient(client, reply) || err != nil || !stream || intent == nil {
+		return
+	}
+	if broker := d.sessionReopenBroker(); broker != nil {
+		broker.CommitPage(*intent, reopenKeysForEntries(result.Entries))
+	}
+}
+
+func reopenKeysForEntries(entries []protocol.SessionLedgerEntry) []reopenKey {
+	keys := make([]reopenKey, 0, len(entries))
+	for _, entry := range entries {
+		closedAt := strings.TrimSpace(protocol.Deref(entry.ClosedAt))
+		if closedAt != "" {
+			keys = append(keys, reopenKey{SessionID: entry.ID, ClosedAt: closedAt})
+		}
+	}
+	return keys
 }
 
 func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.SessionReopenMessage) {
@@ -213,34 +274,13 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
-func projectSessionReopenRefreshed(d *Daemon, event bus.Event) {
-	reopen, ok := decodeFact[protocol.SessionReopen](d, event)
-	if !ok {
-		return
-	}
-	d.wsHub.BroadcastValue(&protocol.SessionReopenRefreshedMessage{
-		Event:     protocol.EventSessionReopenRefreshed,
-		SessionID: event.Subject,
-		Reopen:    reopen,
-	})
-}
-
 func projectSessionClosed(d *Daemon, event bus.Event) {
 	entry, ok := decodeFact[protocol.SessionLedgerEntry](d, event)
 	if !ok {
 		return
 	}
-	message := &protocol.WebSocketEvent{
+	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:              protocol.EventSessionClosed,
 		SessionLedgerEntry: &entry,
-	}
-	verdict, err := (sessionReopenResolver{daemon: d}).ResolveEntry(
-		context.Background(), entry, d.scheduledReopenGit(gitInteractive),
-	)
-	if err != nil {
-		d.logf("session close: resolve reopen eligibility for %s: %v", entry.ID, err)
-	} else {
-		message.Reopen = verdict.toProtocol()
-	}
-	d.wsHub.Broadcast(message)
+	})
 }

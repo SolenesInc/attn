@@ -9073,9 +9073,6 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
-
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9235,6 +9232,9 @@ type SessionListMessage struct {
 
 	// Reopen corresponds to the JSON schema field "reopen".
 	Reopen *bool `json:"reopen,omitempty,omitzero"`
+
+	// ReopenDelivery corresponds to the JSON schema field "reopen_delivery".
+	ReopenDelivery *SessionReopenDelivery `json:"reopen_delivery,omitempty,omitzero"`
 
 	// Repository corresponds to the JSON schema field "repository".
 	Repository *string `json:"repository,omitempty,omitzero"`
@@ -9457,6 +9457,11 @@ const SessionReopenActionStartFreshDefaultBranch SessionReopenAction = "start_fr
 const SessionReopenActionStartFreshElsewhere SessionReopenAction = "start_fresh_elsewhere"
 const SessionReopenActionStartFreshSamePlace SessionReopenAction = "start_fresh_same_place"
 
+type SessionReopenDelivery string
+
+const SessionReopenDeliveryInline SessionReopenDelivery = "inline"
+const SessionReopenDeliveryStream SessionReopenDelivery = "stream"
+
 type SessionReopenEntry struct {
 	// Reopen corresponds to the JSON schema field "reopen".
 	Reopen SessionReopen `json:"reopen"`
@@ -9482,15 +9487,24 @@ type SessionReopenMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionReopenRefreshedMessage struct {
+type SessionReopenResolvedMessage struct {
+	// ClosedAt corresponds to the JSON schema field "closed_at".
+	ClosedAt string `json:"closed_at"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
 	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen SessionReopen `json:"reopen"`
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type SessionReopenResult struct {

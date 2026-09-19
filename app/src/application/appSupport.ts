@@ -13,7 +13,8 @@ import {
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type Session, type TerminalWorkspaceState } from '../store/sessions';
-import type { Presentation, SessionLedgerEntry, SessionReopen } from '../types/generated';
+import type { Presentation, SessionLedgerEntry } from '../types/generated';
+import type { SessionReopenResolutionEvent } from '../hooks/daemonSessionLedgerEvents';
 import { type SessionAgent } from '../types/sessionAgent';
 import { hasPane } from '../types/workspace';
 import { crewDisplayName } from '../utils/crewName';
@@ -247,7 +248,7 @@ export interface AppContentProps {
   notificationsChangeSignal: number;
   fsChangeSignals: Record<string, number>;
   notebookTaskChangeSignal: number;
-  sessionCloseNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
-  sessionVerdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
+  sessionCloseNotice?: { entry: SessionLedgerEntry; nonce: number };
+  sessionResolutionNotice?: { resolutions: Record<string, SessionReopenResolutionEvent>; nonce: number };
   registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }

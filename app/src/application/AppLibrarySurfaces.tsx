@@ -76,7 +76,7 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { sessionCloseNotice, sessionVerdictNotice, notificationsChangeSignal } = useAppInputs();
+  const { sessionCloseNotice, sessionResolutionNotice, notificationsChangeSignal } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -99,7 +99,7 @@ export function AppLibrarySurfaces() {
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
           closeNotice: sessionCloseNotice,
-          verdictNotice: sessionVerdictNotice,
+          resolutionNotice: sessionResolutionNotice,
         }}
         worktrees={{
           listWorktrees,

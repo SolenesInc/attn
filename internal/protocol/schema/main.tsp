@@ -853,6 +853,11 @@ model SessionTranscriptMessage {
 // Live sessions by default, `closed` for the closed ones alone, `all` for both.
 // Newest first, where newest means the close for a closed session and the last
 // sighting for a live one.
+enum SessionReopenDelivery {
+  inline,
+  stream,
+}
+
 model SessionListMessage {
   cmd: "session_list";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -870,8 +875,11 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
-  // Also judge every closed row of this page, so a surface renders it in one call.
+  // Request reopen eligibility for every closed row of this page.
   reopen?: boolean;
+  // Absent means inline. Stream delivery is available only over WebSocket and
+  // sends one terminal session_reopen_resolved event per closed generation.
+  reopen_delivery?: SessionReopenDelivery;
 }
 
 // Reads one ledger row, live or closed, by exact session id.
@@ -7356,10 +7364,13 @@ model SessionReopenResultMessage {
   result?: SessionReopenResult;
 }
 
-model SessionReopenRefreshedMessage {
-  event: "session_reopen_refreshed";
+model SessionReopenResolvedMessage {
+  event: "session_reopen_resolved";
   session_id: string;
-  reopen: SessionReopen;
+  closed_at: string;
+  success: boolean;
+  reopen?: SessionReopen;
+  error?: string;
 }
 
 // session_unregistered says the live session left; this says where it went, so
@@ -7367,8 +7378,6 @@ model SessionReopenRefreshedMessage {
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
-  // So a surface that updates in place judges the new row without a re-list.
-  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7782,7 +7791,7 @@ alias DaemonEvent =
   | SessionListResultMessage
   | SessionShowResultMessage
   | SessionReopenResultMessage
-  | SessionReopenRefreshedMessage
+  | SessionReopenResolvedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

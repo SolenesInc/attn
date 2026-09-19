@@ -139,6 +139,9 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
+	reopenBrokerMu                    sync.Mutex
+	reopenBrokerInstance              *sessionReopenBroker
+	reopenBrokerStopped               bool
 	sessionPaneAddMu                  sync.Mutex
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader
@@ -1659,6 +1662,7 @@ func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.Sessio
 func (d *Daemon) Stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.closeSessionReopenBroker()
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
@@ -2040,7 +2044,14 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.forgetSessionTrace(sessionID)
 	if recorded {
 		d.invalidateGardenSeedParties("session close")
-		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
+		entry := d.store.SessionLedgerEntry(sessionID)
+		d.publishFact(FactSessionClosed, sessionID, entry)
+		if entry != nil {
+			key := reopenKey{SessionID: entry.ID, ClosedAt: strings.TrimSpace(protocol.Deref(entry.ClosedAt))}
+			if broker := d.sessionReopenBroker(); broker != nil {
+				broker.ResolveForClose(key)
+			}
+		}
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)

@@ -10,7 +10,6 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
   const onTabChange = vi.fn();
   const { list } = listing([page({
     entries: [liveEntry('live'), closedEntry('wt', { is_worktree: true, directory: '/projects/attn--feat-one' })],
-    reopen: [judged('wt')],
   })]);
   const props = (current: LedgerTab) => ({
     isOpen: true,
@@ -18,7 +17,20 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     onTabChange,
     onClose: extra.onClose ?? vi.fn(),
     now,
-    sessions: { listSessions: list, workspaceNames: {}, onFocusSession: extra.onFocusSession ?? vi.fn(), onReopen: vi.fn() },
+    sessions: {
+      listSessions: list,
+      workspaceNames: {},
+      onFocusSession: extra.onFocusSession ?? vi.fn(),
+      onReopen: vi.fn(),
+      resolutionNotice: {
+        resolutions: {
+          wt: {
+            sessionId: 'wt', closedAt: '2026-09-05T10:00:00Z', success: true, reopen: judged('wt').reopen,
+          },
+        },
+        nonce: 1,
+      },
+    },
     worktrees: {
       listWorktrees: vi.fn().mockResolvedValue({ worktrees: [{ path: '/projects/attn--feat-one', branch: 'feat/one', main_repo: '/projects/attn' }], repositories: [{ main_repo: '/projects/attn' }], omitted: 0 }),
       getSweepLog: vi.fn().mockResolvedValue({ entries: [], omitted: 0 }),

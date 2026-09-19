@@ -854,6 +854,7 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 func (d *Daemon) wsReadPump(client *wsClient) {
 	defer func() {
 		d.dropPendingInitialState(client)
+		d.removeSessionReopenClient(client)
 		d.cleanupRemoteGitStatusSubscription(client)
 		d.dropFsWatchClient(client)
 		d.dropDocSubscriptions(client)
@@ -977,7 +978,15 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		nbTaskRetry := msg.(*protocol.TaskRetryMessage)
 		go d.sendTaskRetryWSResult(client, protocol.Deref(nbTaskRetry.RequestID), nbTaskRetry.TaskID)
 	case protocol.CmdSessionList:
-		go d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage))
+		list := msg.(*protocol.SessionListMessage)
+		var intent *reopenPageIntent
+		if stream, streamErr := sessionListStream(list); streamErr == nil && stream {
+			if broker := d.sessionReopenBroker(); broker != nil {
+				pageIntent := broker.BeginPage(client, strings.TrimSpace(protocol.Deref(list.Before)) != "")
+				intent = &pageIntent
+			}
+		}
+		go d.sendSessionListWSResult(client, list, intent)
 	case protocol.CmdSessionShow:
 		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:

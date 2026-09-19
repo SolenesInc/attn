@@ -155,18 +155,6 @@
 --- 11 session_closed
 {
   "event": "session_closed",
-  "reopen": {
-    "actions": [
-      "start_fresh_same_place"
-    ],
-    "checking": false,
-    "directory_state": "present",
-    "pane_plan": "reuse",
-    "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
-    "reopenable": false,
-    "workspace_id": "workspace-1",
-    "workspace_plan": "reuse"
-  },
   "session_ledger_entry": {
     "agent": "claude",
     "closed_at": "<timestamp>",
@@ -221,4 +209,23 @@
 --- 15 sessions_updated
 {
   "event": "sessions_updated"
+}
+--- 16 session_reopen_resolved
+{
+  "closed_at": "<timestamp>",
+  "event": "session_reopen_resolved",
+  "reopen": {
+    "actions": [
+      "start_fresh_same_place"
+    ],
+    "checking": false,
+    "directory_state": "present",
+    "pane_plan": "add",
+    "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
+    "reopenable": false,
+    "workspace_id": "workspace-sess-1",
+    "workspace_plan": "create"
+  },
+  "session_id": "sess-1",
+  "success": true
 }

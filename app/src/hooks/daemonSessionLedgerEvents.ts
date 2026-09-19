@@ -28,12 +28,21 @@ export interface SessionLedgerQuery {
   since?: string;
   until?: string;
   reopen?: boolean;
+  reopen_delivery?: 'inline' | 'stream';
+}
+
+export interface SessionReopenResolutionEvent {
+  sessionId: string;
+  closedAt: string;
+  success: boolean;
+  reopen?: SessionReopen;
+  error?: string;
 }
 
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
-  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
+  onSessionClosed?: (entry: SessionLedgerEntry) => void;
+  onSessionReopenResolved?: (resolution: SessionReopenResolutionEvent) => void;
 }
 
 type SessionLedgerEvent = {
@@ -45,6 +54,7 @@ type SessionLedgerEvent = {
   entry?: unknown;
   session_ledger_entry?: unknown;
   session_id?: unknown;
+  closed_at?: unknown;
   reopen?: unknown;
 };
 
@@ -80,15 +90,25 @@ export function handleSessionLedgerDaemonEvent(
         'Reopening that session failed',
       );
       return true;
-    case 'session_reopen_refreshed': {
+    case 'session_reopen_resolved': {
       const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
+      const closedAt = typeof event.closed_at === 'string' ? event.closed_at : '';
       const reopen = event.reopen as SessionReopen | undefined;
-      if (sessionId && reopen) context.onSessionReopenRefreshed?.(sessionId, reopen);
+      const error = typeof event.error === 'string' ? event.error : undefined;
+      if (sessionId && closedAt && ((event.success === true && reopen) || (event.success === false && error))) {
+        context.onSessionReopenResolved?.({
+          sessionId,
+          closedAt,
+          success: event.success === true,
+          ...(reopen ? { reopen } : {}),
+          ...(error ? { error } : {}),
+        });
+      }
       return true;
     }
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
-      if (entry) context.onSessionClosed?.(entry, event.reopen as SessionReopen | undefined);
+      if (entry) context.onSessionClosed?.(entry);
       return true;
     }
     default:

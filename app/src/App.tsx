@@ -19,7 +19,8 @@ import {
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
-import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
+import type { Presentation, SessionLedgerEntry } from './types/generated';
+import type { SessionReopenResolutionEvent } from './hooks/daemonSessionLedgerEvents';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
@@ -56,11 +57,10 @@ function App() {
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
   const [sessionCloseNotice, setSessionCloseNotice] = useState<{
     entry: SessionLedgerEntry;
-    reopen?: SessionReopen;
     nonce: number;
   }>();
-  const [sessionVerdictNotice, setSessionVerdictNotice] = useState<{
-    verdicts: Record<string, SessionReopen>;
+  const [sessionResolutionNotice, setSessionResolutionNotice] = useState<{
+    resolutions: Record<string, SessionReopenResolutionEvent>;
     nonce: number;
   }>();
 
@@ -154,12 +154,11 @@ function App() {
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
     onSessionExited: handleSessionExited,
-    onSessionClosed: (entry, reopen) =>
-      setSessionCloseNotice((prev) => ({ entry, reopen, nonce: (prev?.nonce ?? 0) + 1 })),
-    // Checks finish in bursts; one slot per session keeps every verdict of a burst.
-    onSessionReopenRefreshed: (sessionId, reopen) =>
-      setSessionVerdictNotice((prev) => ({
-        verdicts: { ...prev?.verdicts, [sessionId]: reopen },
+    onSessionClosed: (entry) =>
+      setSessionCloseNotice((prev) => ({ entry, nonce: (prev?.nonce ?? 0) + 1 })),
+    onSessionReopenResolved: (resolution) =>
+      setSessionResolutionNotice((prev) => ({
+        resolutions: { ...prev?.resolutions, [resolution.sessionId]: resolution },
         nonce: (prev?.nonce ?? 0) + 1,
       })),
   });
@@ -250,7 +249,7 @@ function App() {
             fsChangeSignals={fsChangeSignals}
             notebookTaskChangeSignal={notebookTaskChangeSignal}
             sessionCloseNotice={sessionCloseNotice}
-            sessionVerdictNotice={sessionVerdictNotice}
+            sessionResolutionNotice={sessionResolutionNotice}
             registerSessionExitHandler={registerSessionExitHandler}
           />
         </DaemonApiProvider>
