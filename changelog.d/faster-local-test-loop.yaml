@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: make test runs only the Go suite, skips it when no Go input changed, and make lint rejects added comment lines.
