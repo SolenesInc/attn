@@ -1,5 +1,5 @@
 name: Build App acceptance tree
-description: Build and pack the Linux application tree used by App acceptance runners.
+description: Build and pack the application tree used by App acceptance runners.
 
 inputs:
   profile:
@@ -15,9 +15,17 @@ runs:
   using: composite
   steps:
     - name: Install Linux desktop dependencies
+      if: runner.os == 'Linux'
       uses: ./.github/actions/setup-linux-app-deps
       with:
         role: build
+
+    - name: Set up macOS signing tools
+      if: runner.os == 'macOS'
+      shell: bash
+      run: |
+        brew install openssl@3
+        echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
 
     - name: Set up Go
       uses: actions/setup-go@v5
@@ -27,13 +35,20 @@ runs:
         # first one to finish seals it. This action owns its entry below.
         cache: false
 
+    - name: Resolve Go cache paths
+      id: go-cache-paths
+      shell: bash
+      run: |
+        echo "build=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "modules=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
     - name: Restore Go build cache
       id: go-cache
       uses: actions/cache/restore@v4
       with:
         path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
+          ${{ steps.go-cache-paths.outputs.build }}
+          ${{ steps.go-cache-paths.outputs.modules }}
         key: go-app-acceptance-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('go.mod', 'go.sum') }}
 
     - name: Set up Rust
@@ -79,6 +94,7 @@ runs:
         CI: 'true'
         # Acceptance tests what ships, not the unoptimized app-core named profiles get locally.
         ATTN_APP_CARGO_PROFILE: release
+        MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
       run: make build-app PROFILE="${{ inputs.profile }}"
 
     - name: Save Go build cache
@@ -86,8 +102,8 @@ runs:
       uses: actions/cache/save@v4
       with:
         path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
+          ${{ steps.go-cache-paths.outputs.build }}
+          ${{ steps.go-cache-paths.outputs.modules }}
         key: ${{ steps.go-cache.outputs.cache-primary-key }}
 
     # tar preserves the executable bit that upload-artifact drops.
@@ -96,10 +112,15 @@ runs:
       shell: bash
       run: |
         app_name="$(./attn profile resolve --profile "${{ inputs.profile }}" --field appName)"
+        case "$RUNNER_OS" in
+          Linux) app_tree="app/src-tauri/target/staged/linux-tree/$app_name" ;;
+          macOS) app_tree="app/src-tauri/target/staged/$app_name.app" ;;
+          *) echo "Unsupported acceptance runner: $RUNNER_OS" >&2; exit 1 ;;
+        esac
         archive="$RUNNER_TEMP/app-tree.tar.gz"
         tar -czf "$archive" \
           attn \
-          "app/src-tauri/target/staged/linux-tree/$app_name" \
+          "$app_tree" \
           plugins/attn-pi/node_modules
         echo "archive=$archive" >> "$GITHUB_OUTPUT"
         ls -l "$archive"

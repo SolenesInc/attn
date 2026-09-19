@@ -28,7 +28,7 @@ jobs:
       tauri: ${{ steps.filter.outputs.tauri }}
       plugins: ${{ steps.filter.outputs.plugins }}
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
-      harness: ${{ steps.filter.outputs.harness }}
+      app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -113,12 +113,23 @@ jobs:
               - 'internal/hostsession/**'
               - 'internal/daemon/host_*'
               - 'internal/daemon/plugin_*'
-            harness:
-              - 'app/scripts/real-app-harness/**'
-              - 'app/src-tauri/**'
+            app_acceptance:
+              - 'app/**'
               - 'apphost/**'
-              - 'scripts/build-app-runtime-host.sh'
-              - 'scripts/install-app-tree.sh'
+              - 'cmd/**'
+              - 'internal/**'
+              - 'plugins/**'
+              - 'pty-host/**'
+              - 'sdk/**'
+              - 'test/**'
+              - 'scripts/**'
+              - 'go.mod'
+              - 'go.sum'
+              - 'Makefile'
+              - '.tool-versions'
+              - 'ghostty-vt.pin'
+              - 'ghostty-vt-native.lock'
+              - 'ghostty-vt-wasm.lock'
               - '.github/actions/**'
               - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/acceptance-soak.yml'
@@ -701,7 +712,7 @@ jobs:
     name: App acceptance build
     needs: changes
     # main-route.sh admits only release/hotfix onto main, so force_all covers them.
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
       contents: read
     runs-on: ubuntu-24.04
@@ -734,7 +745,7 @@ jobs:
   app-acceptance-shard:
     name: App acceptance shard ${{ matrix.shard }}/4
     needs: [changes, app-acceptance-build]
-    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true'
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
     permissions:
       actions: read
       contents: read
@@ -836,11 +847,11 @@ jobs:
 
   app-acceptance:
     name: App acceptance
-    needs: [changes, app-acceptance-build, app-acceptance-shard]
+    needs: [changes, app-acceptance-build, app-acceptance-shard, app-acceptance-macos]
     # !cancelled() so a red shard still reaches the aggregate instead of skipping.
     if: >-
       !cancelled() &&
-      (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.harness == 'true')
+      (needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true')
     permissions:
       actions: read
       contents: read
@@ -890,9 +901,14 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           MATRIX_OUTCOME: ${{ steps.matrix.outcome }}
           SHARD_RESULT: ${{ needs.app-acceptance-shard.result }}
+          MACOS_RESULT: ${{ needs.app-acceptance-macos.result }}
         run: |
+          if [ "$MACOS_RESULT" != success ]; then
+            echo "app acceptance: macOS native clipboard verification is $MACOS_RESULT for $HEAD_SHA" >&2
+            exit 1
+          fi
           if [ "$MATRIX_OUTCOME" = success ] && [ "$SHARD_RESULT" = success ]; then
-            echo "app acceptance: every Linux serial matrix shard is green for $HEAD_SHA"
+            echo "app acceptance: Linux serial matrix and macOS native clipboard are green for $HEAD_SHA"
             exit 0
           fi
           if [[ "$EVENT_NAME/$HEAD_BRANCH" =~ ^pull_request/(release/v[0-9]+\.[0-9]+\.[0-9]+|hotfix/.+)$ ]]; then
@@ -920,6 +936,82 @@ jobs:
           fi
           exit 1
 
+  app-acceptance-macos:
+    name: App acceptance macOS
+    needs: changes
+    if: needs.changes.outputs.force_all == 'true' || needs.changes.outputs.app_acceptance == 'true'
+    permissions:
+      contents: read
+    runs-on: macos-15
+    timeout-minutes: 40
+    env:
+      ATTN_PROFILE: app-acceptance
+      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_HARNESS_PARK_VISIBLE_PX: '0'
+    steps:
+      - name: Configure artifact directory
+        run: echo "ATTN_REAL_APP_ARTIFACTS_DIR=$RUNNER_TEMP/attn-real-app-harness" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Report runner class
+        run: ./scripts/ci-runner-class.sh
+
+      - name: Build the App acceptance tree
+        id: build-app
+        uses: ./.github/actions/build-app-acceptance
+        with:
+          profile: ${{ env.ATTN_PROFILE }}
+
+      - name: Install the App acceptance tree
+        uses: ./.github/actions/install-app-acceptance
+        with:
+          profile: ${{ env.ATTN_PROFILE }}
+          archive: ${{ steps.build-app.outputs.archive }}
+
+      - name: Run native clipboard scenario
+        run: pnpm --dir app run real-app:serial-matrix -- --scenario terminal-block-copy
+
+      - name: Require executed macOS coverage
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          const { results } = JSON.parse(fs.readFileSync(`${process.env.ATTN_REAL_APP_ARTIFACTS_DIR}/last-matrix.json`, 'utf8'));
+          assert.deepEqual(results.map(({ id, code, skipped = false }) => ({ id, code, skipped })), [
+            { id: 'terminal-block-copy', code: 0, skipped: false },
+          ]);
+          NODE
+
+      - name: Collect daemon and worker logs
+        if: always()
+        env:
+          EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
+        run: |
+          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          mkdir -p "$EVIDENCE_DIR/daemon"
+          if [ -d "$data_dir" ]; then
+            find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
+          fi
+
+      - name: Upload macOS acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-acceptance-macos-evidence-${{ github.run_attempt }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/attn-real-app-harness/**/*.txt
+            ${{ runner.temp }}/attn-real-app-harness/**/*.png
+            ${{ runner.temp }}/attn-real-app-harness/**/*.json
+            ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
+
+      - name: Clean profile
+        if: always()
+        run: ./attn profile clean "$ATTN_PROFILE"
+
   release-preflight:
     name: Release preflight
     needs: changes
@@ -946,6 +1038,7 @@ jobs:
       - plugins
       - app-acceptance-build
       - app-acceptance-shard
+      - app-acceptance-macos
       - app-acceptance
       - release-preflight
     permissions:
@@ -961,7 +1054,7 @@ jobs:
           ./scripts/ci-gate.sh pr
           changes main-route changelog generated-types backend frontend frontend-e2e
           frontend-e2e-gate rust rust-gate plugins app-acceptance-build app-acceptance-shard
-          app-acceptance release-preflight pty-compatibility
+          app-acceptance app-acceptance-macos release-preflight pty-compatibility
 
   acceptance:
     name: Acceptance
@@ -981,6 +1074,7 @@ jobs:
       - plugins
       - app-acceptance-build
       - app-acceptance-shard
+      - app-acceptance-macos
       - app-acceptance
       - release-preflight
     permissions:
@@ -996,7 +1090,7 @@ jobs:
           ./scripts/ci-gate.sh acceptance
           changes main-route changelog generated-types backend frontend frontend-e2e
           frontend-e2e-gate rust rust-gate plugins app-acceptance-build app-acceptance-shard
-          app-acceptance release-preflight pty-compatibility
+          app-acceptance app-acceptance-macos release-preflight pty-compatibility
 
   branch-health:
     name: Report branch health

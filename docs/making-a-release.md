@@ -77,26 +77,17 @@ a ready PR to `main`. If `main` moves, prepare again from current `main`.
 
 ## App acceptance
 
-`ci.yml` builds the packaged Linux app from the exact head in `App acceptance
-build`, and four `App acceptance shard N/4` jobs each install that one tree and
-run a slice of the real-app serial matrix under Xvfb. The slices are balanced by
-`app/scripts/real-app-harness/scenario-durations.json`, a duration per scenario
-recorded from a green run.
+`App acceptance` verifies the packaged app at the exact head. Linux exercises
+the serial scenario matrix; `App acceptance macOS` exercises native Cmd+C
+terminal copying.
 
-`App acceptance` is the verdict and the only name the gates read. It aggregates
-every shard's `last-matrix.json`, so it reds when a scenario failed, when a
-scenario ran in no shard or in two, or when a shard reported nothing at all. It
-also accepts the candidate receipt on `main` and the protected-`main` override.
+Acceptance runs before merge for PRs changing the app, daemon, plugins, harness,
+or build inputs. Documentation-only PRs may skip it. Pushes to `next` and `main`
+and PRs onto `main` always require it.
 
-The run costs about 9 minutes of wall time and 22 minutes of runner time (run
-34066140419, github-hosted 4vcpu/16GB), so it runs only where its receipt is
-needed: pushes to `next` and `main`, PRs onto `main` (`release/v*` and
-`hotfix/*`, the only branches `main-route.sh` admits), and PRs that touch the
-harness, the Tauri shell, the app runtime host, or the job's own definition —
-the `harness` filter in the `changes` job lists the paths. Every other PR skips
-it, and `PR gate` accepts `skipped`. For those changes the receipt is the
-`Acceptance` run on `next` after merge, which still requires `App acceptance` to
-succeed; a red there blocks release eligibility until it is fixed.
+The protected-main manual override and the candidate receipt on `main` can
+substitute for Linux acceptance; macOS native clipboard verification must still
+pass.
 
 Use the command generated in the candidate PR when the automated job cannot
 cover the candidate and a manual override is warranted:
