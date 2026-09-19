@@ -83,7 +83,7 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 	}
 	legacyDB.Close()
 
-	db, err := OpenDB(dbPath)
+	db, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB failed on legacy DB: %v", err)
 	}

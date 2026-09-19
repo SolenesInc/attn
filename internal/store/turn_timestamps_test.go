@@ -68,7 +68,7 @@ func TestATurnSettledInTheSecondItOpenedInCanReopen(t *testing.T) {
 // encodings disagree ("…:00Z" against "…:00.000000000Z").
 func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestWorkflowRunsAreNewestFirstWithinASecond(t *testing.T) {
 
 func TestMigration95RewritesTurnCursorAndListingStampsThatDoNotSort(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}

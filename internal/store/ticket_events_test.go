@@ -139,7 +139,7 @@ func TestTicketCursorMonotonic(t *testing.T) {
 
 func TestTicketEventCursorPersistence(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -160,7 +160,7 @@ func TestTicketEventCursorPersistence(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 
-	reopened, err := NewWithDB(dbPath)
+	reopened, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}

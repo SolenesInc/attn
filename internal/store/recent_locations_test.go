@@ -10,7 +10,7 @@ import (
 
 func newRecentLocationsStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}

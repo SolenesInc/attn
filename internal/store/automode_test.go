@@ -466,7 +466,7 @@ func plantPre140AutoModeConfig(t *testing.T, s *Store, dbPath, environment, allo
 
 func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -525,7 +525,7 @@ func TestMigration140TurnsGlobsIntoRulesAndKeepsTheRest(t *testing.T) {
 
 func TestMigration125KeepsTheOldProseAsNotes(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}

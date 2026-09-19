@@ -10,7 +10,7 @@ import (
 
 func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = NewWithDB(dbPath)
+	s, err = newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestSessionCostObservationsPersistAndReplaceAcrossRestart(t *testing.T) {
 
 func TestSessionCostSourceCursorsPersistIndependently(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +93,7 @@ func TestSessionCostSourceCursorsPersistIndependently(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = NewWithDB(dbPath)
+	s, err = newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestSessionCostSourceCursorsPersistIndependently(t *testing.T) {
 }
 func TestSessionCostSeparatesGuardianTrafficFromTheAgentsOwn(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestSessionCostSeparatesGuardianTrafficFromTheAgentsOwn(t *testing.T) {
 
 func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 )
 
 func TestStoreWorkspaceRoundTripAndMembership(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -36,7 +36,7 @@ func TestStoreWorkspaceRoundTripAndMembership(t *testing.T) {
 }
 
 func TestToggleWorkspaceMute(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestToggleWorkspaceMute(t *testing.T) {
 }
 
 func TestUpdateWorkspaceTitle(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestUpdateWorkspaceTitle(t *testing.T) {
 }
 
 func TestSetWorkspaceRank(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -96,7 +96,7 @@ func TestSetWorkspaceRank(t *testing.T) {
 }
 
 func TestListWorkspacesOrderedByRank(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -127,7 +127,7 @@ func idsOf(list []*protocol.Workspace) []string {
 }
 
 func TestSetWorkspacePinned(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestSetWorkspacePinned(t *testing.T) {
 }
 
 func TestAddWorkspacePinnedField(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestAddWorkspacePinnedField(t *testing.T) {
 }
 
 func TestListWorkspacesPinnedField(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestListWorkspacesPinnedField(t *testing.T) {
 }
 
 func TestAssignSessionWorkspaceRefusesEmptyWorkspace(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}

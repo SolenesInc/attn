@@ -2,7 +2,6 @@ package store
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -1324,9 +1323,6 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
 	}
-	if dbPath != ":memory:" {
-		placeMigratedSchema(dbPath)
-	}
 
 	db, err := sql.Open("sqlite3", sqliteDSN(dbPath))
 	if err != nil {
@@ -1398,30 +1394,6 @@ func buildMigratedSchemaImage() ([]byte, error) {
 		return err
 	})
 	return image, err
-}
-
-func placeMigratedSchema(dbPath string) {
-	if _, err := os.Stat(dbPath); !errors.Is(err, os.ErrNotExist) {
-		return
-	}
-	if image, err := migratedSchemaImage(); err == nil {
-		linkUnlessPresent(dbPath, image)
-	}
-}
-
-const sqliteNewDatabaseMode = 0o644
-
-func linkUnlessPresent(path string, content []byte) {
-	staged, err := os.OpenFile(path+".schema-"+rand.Text(), os.O_WRONLY|os.O_CREATE|os.O_EXCL, sqliteNewDatabaseMode)
-	if err != nil {
-		return
-	}
-	defer os.Remove(staged.Name())
-	_, err = staged.Write(content)
-	if closeErr := staged.Close(); err != nil || closeErr != nil {
-		return
-	}
-	_ = os.Link(staged.Name(), path)
 }
 
 func copyMigratedSchema(dst *sql.DB) error {

@@ -334,7 +334,7 @@ func TestReadAgentMailboxItemsReportsAllRemainingUnread(t *testing.T) {
 
 func TestAgentMailboxUnreadItemsSurviveReopen(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "mailbox.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +349,7 @@ func TestAgentMailboxUnreadItemsSurviveReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s, err = NewWithDB(dbPath)
+	s, err = newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -362,7 +362,7 @@ func TestAgentMailboxUnreadItemsSurviveReopen(t *testing.T) {
 
 func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestMigration132SeparatesMailboxReceiptsAndPayloads(t *testing.T) {
 
 func TestMigration133IndexesUnreadMailboxFIFO(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-133.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

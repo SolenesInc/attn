@@ -139,7 +139,7 @@ func TestGitHubReviewActivationBaselinesExistingDemandPerHost(t *testing.T) {
 
 func TestGitHubReviewActivationBaselineSurvivesRestart(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestGitHubReviewActivationBaselineSurvivesRestart(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

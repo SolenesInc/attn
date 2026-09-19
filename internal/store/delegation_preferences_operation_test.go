@@ -12,7 +12,7 @@ import (
 
 func TestDelegationPreferencesMigrationUpgradesPreviousSchema(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -28,7 +28,7 @@ func TestDelegationPreferencesMigrationUpgradesPreviousSchema(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	migrated, err := NewWithDB(path)
+	migrated, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

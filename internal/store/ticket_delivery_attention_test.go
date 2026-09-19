@@ -7,7 +7,7 @@ import (
 
 func TestTicketDeliveryAttentionIsDurableAndMonotonic(t *testing.T) {
 	dbPath := t.TempDir() + "/attn.db"
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -21,7 +21,7 @@ func TestTicketDeliveryAttentionIsDurableAndMonotonic(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = NewWithDB(dbPath)
+	s, err = newSeededStore(dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}

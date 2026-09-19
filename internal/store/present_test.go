@@ -11,7 +11,7 @@ func newPresentTestStore(t *testing.T) *Store {
 	tmpDir := t.TempDir()
 	dbPath := filepath.Join(tmpDir, "test.db")
 
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}

@@ -10,7 +10,7 @@ import (
 
 func newTurnStore(t *testing.T) *Store {
 	t.Helper()
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestTurnStampsForUnknownSession(t *testing.T) {
 
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
-	db, err := OpenDB(dbPath)
+	db, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		t.Fatalf("close pre-81 database: %v", err)
 	}
 
-	migrated, err := NewWithDB(dbPath)
+	migrated, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

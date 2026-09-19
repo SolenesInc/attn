@@ -174,7 +174,7 @@ func TestWorkflowRunCRUD(t *testing.T) {
 func TestWorkflowMigrationIdempotentOnReopen(t *testing.T) {
 	dbPath := t.TempDir() + "/attn.db"
 
-	db1, err := OpenDB(dbPath)
+	db1, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB (first): %v", err)
 	}
@@ -193,7 +193,7 @@ func TestWorkflowMigrationIdempotentOnReopen(t *testing.T) {
 		t.Fatalf("close db1: %v", err)
 	}
 
-	db2, err := OpenDB(dbPath)
+	db2, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB (reopen): %v", err)
 	}
