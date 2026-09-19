@@ -139,6 +139,10 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, rev
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
+		if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(rec.SessionID, pullRequestWatchCoalesceKey(rec.PRID)); err != nil {
+			return fmt.Errorf("clear pull request watch inbox item %s: %w", rec.PRID, err)
+		}
+		d.refreshAgentMailboxUnread(rec.SessionID)
 		if err := d.store.MarkSessionPullRequestChecked(rec.PRID, time.Time{}); err != nil {
 			return fmt.Errorf("warm pull request %s: %w", rec.PRID, err)
 		}

@@ -284,6 +284,47 @@ func TestPullRequestWatchIsDurableIdempotentAndVisible(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchRevisitsClosedRecordUntilDisarmed(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	closed := watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	closed.Snapshot.State = "closed"
+	closed.Snapshot.Merged = true
+	host := &fakePRHost{readiness: closed}
+	serveHost(d, "github.com", host)
+
+	d.refreshSessionPullRequests(time.Now())
+	watchPRForRefresh(t, d, "s1", url)
+	if fetched, _ := d.refreshSessionPullRequests(time.Now().Add(protocol.HeatHotInterval)); fetched != 1 {
+		t.Fatalf("closed armed watch fetched %d times, want one cleanup retry", fetched)
+	}
+	if watches := d.store.PullRequestWatches(); len(watches) != 0 {
+		t.Fatalf("closed watch remains armed: %+v", watches)
+	}
+}
+
+func TestPullRequestWatchReviewerChangeClearsUnreadResult(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(time.Now())
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
+		t.Fatalf("initial unread result = %+v, %v", unread, err)
+	}
+
+	if resp := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "alternate-reviewer",
+	}); !resp.Ok {
+		t.Fatalf("reviewer change response = %+v", resp)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("stale reviewer result remains unread: %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchSharesFetchAndKeepsHotCadence(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	registerSessionForPRTest(t, d, "s2")
