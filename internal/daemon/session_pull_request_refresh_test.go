@@ -631,6 +631,9 @@ func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *test
 		{ID: "f1", Body: "first finding", Location: "a.go:1"},
 		{ID: "f2", Body: "second finding", Location: "b.go:2"},
 	}
+	ready.Evidence.Threads = []prreadiness.Thread{{
+		ID: "f1", Author: "chatgpt-codex-connector", Body: "first finding", Location: "a.go:1",
+	}}
 	host := &fakePRHost{readiness: ready}
 	serveHost(d, "github.com", host)
 	now := time.Now()
@@ -639,7 +642,7 @@ func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *test
 	if err != nil || len(deliveries) != 1 {
 		t.Fatalf("read findings = %+v, %v", deliveries, err)
 	}
-	if prompt := deliveries[0].Item.Prompt; !strings.Contains(prompt, "first finding") || !strings.Contains(prompt, "second finding") {
+	if prompt := deliveries[0].Item.Prompt; strings.Count(prompt, "first finding") != 1 || !strings.Contains(prompt, "second finding") {
 		t.Fatalf("findings prompt = %q", prompt)
 	}
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))

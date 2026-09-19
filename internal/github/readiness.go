@@ -442,7 +442,7 @@ func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*Pull
 		}
 		comment := thread.Comments.Nodes[0]
 		evidence.Threads = append(evidence.Threads, prreadiness.Thread{
-			ID: thread.ID, Author: comment.Author.Login, Resolved: thread.IsResolved,
+			ID: comment.ID, Author: comment.Author.Login, Resolved: thread.IsResolved,
 			Body: comment.BodyText, Location: comment.location(),
 		})
 	}

@@ -39,6 +39,19 @@ func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
 	}
 }
 
+func TestParsePullRequestReadinessUsesCommentIdentityForThreads(t *testing.T) {
+	body := strings.Replace(string(readinessPayload("")),
+		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
+		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"thread-id","isResolved":false,"comments":{"nodes":[{"id":"comment-id","bodyText":"finding","createdAt":"2026-09-19T10:02:00Z","path":"watch.go","line":42,"author":{"login":"chatgpt-codex-connector"}}]}}]}`, 1)
+	result, err := parsePullRequestReadiness([]byte(body), "chatgpt-codex-connector[bot]")
+	if err != nil {
+		t.Fatalf("parse readiness: %v", err)
+	}
+	if len(result.Evidence.Threads) != 1 || result.Evidence.Threads[0].ID != "comment-id" {
+		t.Fatalf("threads = %+v", result.Evidence.Threads)
+	}
+}
+
 func TestParsePullRequestReadinessRejectsTruncatedPages(t *testing.T) {
 	body := strings.Replace(string(readinessPayload("")),
 		`"reviews":{"pageInfo":{"hasNextPage":false}`,

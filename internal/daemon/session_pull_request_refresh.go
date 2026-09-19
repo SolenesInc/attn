@@ -524,7 +524,7 @@ func pullRequestWatchAction(
 		kinds = append(kinds, "review unavailable")
 		details = append(details, evaluation.UnavailableCause)
 	}
-	findings := append(append([]prreadiness.Finding(nil), evaluation.Findings...), evaluation.Unresolved...)
+	findings := uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved)
 	if len(findings) > 0 || evaluation.ReviewState == prreadiness.ReviewChangesRequested {
 		findingDetails := make([]string, 0, len(findings)+1)
 		for _, finding := range findings {
@@ -551,6 +551,26 @@ func pullRequestWatchAction(
 		details = append(details, feedback...)
 	}
 	return strings.Join(kinds, " and "), details, feedbackSeenAt, feedbackSeenIDs
+}
+
+func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadiness.Finding {
+	var findings []prreadiness.Finding
+	seen := make(map[string]bool)
+	for _, group := range groups {
+		for _, finding := range group {
+			key := strings.TrimSpace(finding.ID)
+			if key == "" {
+				key = strings.ToLower(strings.TrimSpace(finding.Location)) + "\x00" +
+					strings.ToLower(strings.Join(strings.Fields(finding.Body), " "))
+			}
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			findings = append(findings, finding)
+		}
+	}
+	return findings
 }
 
 func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]string, time.Time, []string) {
