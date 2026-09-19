@@ -1264,10 +1264,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		CREATE INDEX IF NOT EXISTS idx_pull_request_watches_pr
 			ON pull_request_watches(pr_id, session_id);
 	`},
-	{151, "remember delivered pull request feedback", `
-		ALTER TABLE pull_request_watches ADD COLUMN feedback_seen_at TEXT NOT NULL DEFAULT '';
-		ALTER TABLE pull_request_watches ADD COLUMN feedback_seen_ids TEXT NOT NULL DEFAULT '[]';
-	`},
+	{151, "remember delivered pull request feedback", ""},
 }
 
 const migration99SQL = `
@@ -1850,6 +1847,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 151 {
+			if err := applyMigration151(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1898,6 +1900,24 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration151(tx *sql.Tx) error {
+	for _, column := range []struct{ name, defaultValue string }{
+		{"feedback_seen_at", "''"},
+		{"feedback_seen_ids", "'[]'"},
+	} {
+		has, err := columnExists(tx, "pull_request_watches", column.name)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec("ALTER TABLE pull_request_watches ADD COLUMN " + column.name + " TEXT NOT NULL DEFAULT " + column.defaultValue); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
