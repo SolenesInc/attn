@@ -113,6 +113,7 @@ export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: Harn
       return <div key={id} data-testid={`workspace-${id}`}
         style={{ position: 'absolute', inset: 0, visibility: active === id ? 'visible' : 'hidden' }}>
         <SessionTerminalWorkspace workspaceId={id} workspace={workspace} activePaneId={id}
+          workspaceSessions={[{ id, label: `${id} ${revision}`, agent: 'claude', cwd: '/tmp/annotations', state: 'idle' }]}
           fontSize={14} enabled isActiveSession={active === id} isSessionViewVisible={active === id}
           eventRouter={router} annotationApi={api} focusRequestToken={revision}
           onSplitPane={noop} onClosePane={noop} onFocusPane={noop} onNavigateOutOfSession={noop} />
