@@ -97,7 +97,8 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 		if request.Variables["reviewCursor"] != "reviews-1" {
 			t.Fatalf("review cursor = %v", request.Variables["reviewCursor"])
 		}
-		_, _ = w.Write(readinessPayload(""))
+		body := strings.Replace(string(readinessPayload("")), `"id":"review"`, `"id":"second-review"`, 1)
+		_, _ = w.Write([]byte(body))
 	}))
 	t.Cleanup(server.Close)
 	client, err := NewClient(server.URL, "test-token")
@@ -111,6 +112,9 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 	evaluation := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]")
 	if calls.Load() != 2 || len(result.Evidence.Reviews) != 2 || !evaluation.Ready {
 		t.Fatalf("calls = %d, reviews = %d, evaluation = %+v", calls.Load(), len(result.Evidence.Reviews), evaluation)
+	}
+	if result.Evidence.Reviews[0].ID != "review" || result.Evidence.Reviews[1].ID != "second-review" {
+		t.Fatalf("reviews from both pages were not retained: %+v", result.Evidence.Reviews)
 	}
 }
 

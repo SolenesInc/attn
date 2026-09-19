@@ -423,27 +423,6 @@ func TestPullRequestUnwatchScopesOneRecipient(t *testing.T) {
 	}
 }
 
-func TestPullRequestForgetRemovesWatchAndInbox(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	url := "https://github.com/victorarias/attn/pull/71"
-	watchPRForRefresh(t, d, "s1", url)
-	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
-	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Now())
-
-	if resp := sendPRCommand(t, d, protocol.PullRequestForgetMessage{
-		Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url,
-	}); !resp.Ok {
-		t.Fatalf("forget response = %+v", resp)
-	}
-	if watches := d.store.PullRequestWatches(); len(watches) != 0 {
-		t.Fatalf("watches after forget = %+v", watches)
-	}
-	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
-		t.Fatalf("inbox after forget = %+v, %v", unread, err)
-	}
-}
-
 func TestPullRequestWatchInvalidatesStaleReadyMessageOnNewHead(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"
@@ -620,18 +599,21 @@ func TestPullRequestWatchExplicitStopClearsFeedback(t *testing.T) {
 			d := newPRDaemonForTest(t, "s1")
 			watchPRForRefresh(t, d, "s1", url)
 			now := time.Now()
-			ready := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+			ready := watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
 			ready.Evidence.Comments = []prreadiness.Comment{{ID: "human", Author: "human", Body: "feedback", CreatedAt: now.Add(time.Second)}}
 			serveHost(d, "github.com", &fakePRHost{readiness: ready})
 			d.refreshSessionPullRequests(now)
-			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
-				t.Fatalf("feedback was not queued: %+v, %v", unread, err)
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 2 {
+				t.Fatalf("status and feedback were not queued: %+v, %v", unread, err)
 			}
 			if response := sendPRCommand(t, d, command); !response.Ok {
 				t.Fatalf("command failed: %+v", response)
 			}
 			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
 				t.Fatalf("explicit stop left feedback: %+v, %v", unread, err)
+			}
+			if watches := d.store.PullRequestWatches(); name != "reviewer change" && len(watches) != 0 {
+				t.Fatalf("stopped watch remains: %+v", watches)
 			}
 		})
 	}

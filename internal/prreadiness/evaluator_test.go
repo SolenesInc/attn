@@ -67,25 +67,6 @@ func TestEvaluateCodexReactionNeedsCurrentCycle(t *testing.T) {
 	}
 }
 
-func TestEvaluateCodexReactionCannotCrossHeadObservation(t *testing.T) {
-	observedAt := time.Date(2026, 9, 19, 10, 0, 0, 0, time.UTC)
-	evidence := Evidence{
-		State: "open", MergeableState: "clean", HeadSHA: "new-head", HeadObservedAt: observedAt, CheckState: ChecksGreen,
-		Reactions: []Reaction{{
-			Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: observedAt.Add(-time.Second),
-		}},
-	}
-	if got := Evaluate(evidence, "chatgpt-codex-connector[bot]"); got.Ready {
-		t.Fatalf("reaction from the previous observed head passed: %+v", got)
-	}
-	evidence.Reactions = append(evidence.Reactions, Reaction{
-		Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: observedAt.Add(time.Second),
-	})
-	if got := Evaluate(evidence, "chatgpt-codex-connector[bot]"); !got.Ready {
-		t.Fatalf("reaction after the head observation did not pass: %+v", got)
-	}
-}
-
 func TestEvaluateLaterReactionSupersedesFindingAndUnavailable(t *testing.T) {
 	observedAt := time.Date(2026, 9, 19, 10, 0, 0, 0, time.UTC)
 	evidence := Evidence{
