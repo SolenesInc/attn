@@ -213,7 +213,7 @@ function CrewPanelSurface({
   const loadHandoffs = handoffs.load;
   useEffect(() => {
     if (!isOpen || !selectedMemberId) return;
-    if (tab === 'charter') void loadCharter(selectedMemberId, true);
+    if (tab === 'charter') void loadCharter(selectedMemberId);
     if (tab === 'handoffs') loadHandoffs(selectedMemberId);
   }, [isOpen, loadCharter, loadHandoffs, selectedMemberId, tab]);
 

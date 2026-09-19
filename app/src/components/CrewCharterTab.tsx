@@ -15,14 +15,14 @@ export function CrewCharterTab({ member, edit, autosave }: {
   edit?: CrewCharterEdit;
   autosave: CrewCharterAutosave;
 }) {
-  if (!edit || edit.state === 'idle' || edit.state === 'loading') {
+  if (!edit || edit.state === 'loading') {
     return <div className="crew-document-state">Loading charter…</div>;
   }
   if (!edit.acknowledged) {
     return (
       <div className="crew-document-state is-error" role="alert">
         <span>{edit.error || 'The charter could not be loaded.'}</span>
-        <button type="button" data-testid="crew-charter-load-retry" onClick={() => void autosave.load(member.id, true)}>Retry</button>
+        <button type="button" data-testid="crew-charter-load-retry" onClick={() => void autosave.load(member.id)}>Retry</button>
       </div>
     );
   }
@@ -49,7 +49,7 @@ export function CrewCharterTab({ member, edit, autosave }: {
           <button type="button" data-testid="crew-charter-save-retry" onClick={() => void autosave.retry(member.id)}>Retry</button>
         </div>
       )}
-      {edit.state === 'conflict' && edit.external && (
+      {edit.state === 'conflict' && edit.conflict && (
         <div className="crew-charter-conflict" role="alert">
           <div>
             <strong>The file changed outside this editor.</strong>

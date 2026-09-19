@@ -210,9 +210,6 @@ type Daemon struct {
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
-	crewDocumentMu                    sync.Mutex
-	crewCharterLifetime               string
-	crewCharterVersions               map[string]crewCharterVersion
 	crewExitedSessions                map[string]string
 	crewWakeStartHook                 func(memberID string)
 	crewWakeAfterClaimHook            func(memberID, sessionID string)

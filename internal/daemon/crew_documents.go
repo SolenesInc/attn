@@ -5,10 +5,10 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/fsdoc"
 	"github.com/victorarias/attn/internal/protocol"
@@ -28,34 +28,12 @@ func (d *Daemon) crewDocumentMember(name string) (crew.Member, error) {
 	return member, nil
 }
 
-type crewCharterVersion struct {
-	hash     string
-	revision uint64
-}
-
-func (d *Daemon) readCrewCharterLocked(member crew.Member) (protocol.CrewCharterDocument, string, error) {
-	content, token, err := fsdoc.NewStore(member.HomeDir).Read(crew.CharterFileName)
+func crewCharterRead(member crew.Member) (protocol.CrewCharterDocument, error) {
+	content, hash, err := fsdoc.NewStore(member.HomeDir).Read(crew.CharterFileName)
 	if err != nil {
-		return protocol.CrewCharterDocument{}, "", fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
+		return protocol.CrewCharterDocument{}, fmt.Errorf("reading %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
-	if d.crewCharterVersions == nil {
-		d.crewCharterVersions = make(map[string]crewCharterVersion)
-	}
-	if d.crewCharterLifetime == "" {
-		d.crewCharterLifetime = uuid.NewString()
-	}
-	version, ok := d.crewCharterVersions[member.ID]
-	if !ok {
-		version = crewCharterVersion{hash: token, revision: 1}
-	} else if version.hash != token {
-		version.hash = token
-		version.revision++
-	}
-	d.crewCharterVersions[member.ID] = version
-	return protocol.CrewCharterDocument{
-		Content: string(content),
-		Token:   fmt.Sprintf("%s:%d:%s", d.crewCharterLifetime, version.revision, token),
-	}, token, nil
+	return protocol.CrewCharterDocument{Content: string(content), Token: hash}, nil
 }
 
 func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, error) {
@@ -63,9 +41,7 @@ func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, er
 	if err != nil {
 		return nil, err
 	}
-	d.crewDocumentMu.Lock()
-	defer d.crewDocumentMu.Unlock()
-	charter, _, err := d.readCrewCharterLocked(member)
+	charter, err := crewCharterRead(member)
 	if err != nil {
 		return nil, err
 	}
@@ -81,38 +57,20 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 	if expectedToken == "" {
 		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
 	}
-
-	d.crewDocumentMu.Lock()
-	defer d.crewDocumentMu.Unlock()
-	current, currentHash, err := d.readCrewCharterLocked(member)
-	if err != nil {
-		return nil, err
-	}
-	if expectedToken != current.Token {
-		return &protocol.CrewCharterSetResult{Member: member.ID, Conflict: true, Charter: current}, nil
-	}
-	store := fsdoc.NewStore(member.HomeDir)
-	hash, conflict, err := store.Write(crew.CharterFileName, []byte(content), currentHash)
+	hash, conflict, err := fsdoc.NewStore(member.HomeDir).Write(crew.CharterFileName, []byte(content), expectedToken)
 	if err != nil {
 		return nil, fmt.Errorf("saving %s's charter: %w", crew.DisplayName(member.ID), err)
 	}
 	if conflict != nil {
-		current, _, readErr := d.readCrewCharterLocked(member)
-		if readErr != nil {
-			return nil, readErr
+		current, err := crewCharterRead(member)
+		if err != nil {
+			return nil, err
 		}
 		return &protocol.CrewCharterSetResult{Member: member.ID, Conflict: true, Charter: current}, nil
 	}
-	version := d.crewCharterVersions[member.ID]
-	version.hash = hash
-	version.revision++
-	d.crewCharterVersions[member.ID] = version
 	return &protocol.CrewCharterSetResult{
-		Member: member.ID,
-		Charter: protocol.CrewCharterDocument{
-			Content: content,
-			Token:   fmt.Sprintf("%s:%d:%s", d.crewCharterLifetime, version.revision, hash),
-		},
+		Member:  member.ID,
+		Charter: protocol.CrewCharterDocument{Content: content, Token: hash},
 	}, nil
 }
 
@@ -145,12 +103,13 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 		return nil, fmt.Errorf("reading %s's handoff history: %w", crew.DisplayName(member.ID), err)
 	}
 
-	names := make([]string, 0, len(entries))
+	handoffs := make([]protocol.CrewHandoffSummary, 0, len(entries))
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
-		if _, err := crewHandoffTime(entry.Name()); err != nil {
+		occurredAt, err := crewHandoffTime(entry.Name())
+		if err != nil {
 			d.logf("crew: %s's handoffs dir holds %q, which is not a filed letter; skipping it", crew.DisplayName(member.ID), entry.Name())
 			continue
 		}
@@ -158,14 +117,9 @@ func (d *Daemon) crewHandoffsGet(name string) (*protocol.CrewHandoffsGetResult, 
 			d.logf("crew: skipping %s's handoff %q: %v", crew.DisplayName(member.ID), entry.Name(), err)
 			continue
 		}
-		names = append(names, entry.Name())
+		handoffs = append(handoffs, protocol.CrewHandoffSummary{Filename: entry.Name(), OccurredAt: occurredAt})
 	}
-	crew.SortHandoffNames(names)
-	handoffs := make([]protocol.CrewHandoffSummary, 0, len(names))
-	for _, filename := range names {
-		occurredAt, _ := crewHandoffTime(filename)
-		handoffs = append(handoffs, protocol.CrewHandoffSummary{Filename: filename, OccurredAt: occurredAt})
-	}
+	sort.Slice(handoffs, func(i, j int) bool { return handoffs[i].Filename > handoffs[j].Filename })
 	return &protocol.CrewHandoffsGetResult{Member: member.ID, Handoffs: handoffs}, nil
 }
 

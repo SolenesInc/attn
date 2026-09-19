@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef } from 'react';
 import type { CrewHandoffDocument, CrewHandoffSummary } from '../types/generated';
 import type { CrewHandoffGetOutcome, CrewHandoffsGetOutcome } from './daemonCrewEvents';
 
@@ -40,13 +40,13 @@ export function useCrewHandoffs(
   getHandoff: HandoffGet,
 ): CrewHandoffHistory {
   const loadsRef = useRef<Record<string, CrewHandoffLoad>>({});
-  const [loads, setLoads] = useState(loadsRef.current);
   const listRequest = useRef(0);
   const letterRequest = useRef(0);
+  const [, redraw] = useReducer((value) => value + 1, 0);
 
   const store = useCallback((member: string, load: CrewHandoffLoad) => {
     loadsRef.current = { ...loadsRef.current, [member]: load };
-    setLoads(loadsRef.current);
+    redraw();
   }, []);
 
   const loadLetter = useCallback((member: string, filename: string) => {
@@ -106,7 +106,10 @@ export function useCrewHandoffs(
     if (existing.letter?.filename !== filename) loadLetter(member, filename);
   }, [loadLetter, store]);
 
-  const read = useCallback((member: string) => loads[member], [loads]);
-
-  return useMemo(() => ({ read, load, loadLetter, select }), [load, loadLetter, read, select]);
+  return useMemo(() => ({
+    read: (member: string) => loadsRef.current[member],
+    load,
+    loadLetter,
+    select,
+  }), [load, loadLetter, select]);
 }
