@@ -13,8 +13,6 @@ type Finding struct {
 	Text string
 }
 
-const cgoPreambleOpener = "/*"
-
 var extensions = map[string]bool{
 	".go": true, ".rs": true,
 	".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true, ".cjs": true,
@@ -41,7 +39,29 @@ func Checked(file string) bool {
 
 func IsComment(line string) bool {
 	text := strings.TrimSpace(line)
-	return comment.MatchString(text) && text != cgoPreambleOpener && !goDirective.MatchString(text) && !toolMarker.MatchString(text)
+	return comment.MatchString(text) && !goDirective.MatchString(text) && !toolMarker.MatchString(text)
+}
+
+func FindInAddedLines(file string, first int, lines []string) []Finding {
+	var out []Finding
+	for i, text := range lines {
+		if IsComment(text) && !opensCgoPreamble(file, lines[i:]) {
+			out = append(out, Finding{Path: file, Line: first + i, Text: strings.TrimSpace(text)})
+		}
+	}
+	return out
+}
+
+func opensCgoPreamble(file string, lines []string) bool {
+	if path.Ext(file) != ".go" || strings.TrimSpace(lines[0]) != "/*" {
+		return false
+	}
+	for i, text := range lines {
+		if strings.TrimSpace(text) == "*/" {
+			return i+1 < len(lines) && strings.TrimSpace(lines[i+1]) == `import "C"`
+		}
+	}
+	return false
 }
 
 func count(group string) int {
@@ -56,8 +76,15 @@ func FindInUnifiedDiff(diff string) []Finding {
 	removed := map[string]int{}
 	var added []Finding
 	file, line, removals, additions := "", 0, 0, 0
-	for _, text := range strings.Split(diff, "\n") {
+	var run []string
+	for _, text := range append(strings.Split(diff, "\n"), "") {
 		text = strings.TrimSuffix(text, "\r")
+		if len(run) > 0 && (additions == 0 || !strings.HasPrefix(text, "+")) {
+			if Checked(file) {
+				added = append(added, FindInAddedLines(file, line-len(run), run)...)
+			}
+			run = nil
+		}
 		switch {
 		case removals > 0 && strings.HasPrefix(text, "-"):
 			removals--
@@ -66,9 +93,7 @@ func FindInUnifiedDiff(diff string) []Finding {
 			}
 		case additions > 0 && strings.HasPrefix(text, "+"):
 			additions--
-			if Checked(file) && IsComment(text[1:]) {
-				added = append(added, Finding{Path: file, Line: line, Text: strings.TrimSpace(text[1:])})
-			}
+			run = append(run, text[1:])
 			line++
 		case strings.HasPrefix(text, "--- "):
 			file = strings.TrimPrefix(strings.TrimRight(strings.TrimPrefix(text, "--- "), "\t"), "a/")

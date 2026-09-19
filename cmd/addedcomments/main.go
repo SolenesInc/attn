@@ -32,11 +32,7 @@ func run(base string) ([]addedcomments.Finding, error) {
 		if err != nil {
 			return nil, err
 		}
-		for i, line := range strings.Split(string(src), "\n") {
-			if addedcomments.IsComment(line) {
-				findings = append(findings, addedcomments.Finding{Path: file, Line: i + 1, Text: strings.TrimSpace(line)})
-			}
-		}
+		findings = append(findings, addedcomments.FindInAddedLines(file, 1, strings.Split(string(src), "\n"))...)
 	}
 	return findings, nil
 }

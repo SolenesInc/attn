@@ -174,3 +174,42 @@ func TestANewCgoPreambleIsNotProse(t *testing.T) {
 		t.Fatalf("findings = %#v, want none", got)
 	}
 }
+
+func TestABareBlockOpenerIsOnlyExemptAsACgoPreamble(t *testing.T) {
+	for name, diff := range map[string]string{
+		"go block comment": `--- a/internal/store/sqlite.go
++++ b/internal/store/sqlite.go
+@@ -10,0 +11,4 @@
++/*
++The image is built once.
++*/
++func migratedSchema() {}
+`,
+		"rust block comment": `--- a/app/src-tauri/src/main.rs
++++ b/app/src-tauri/src/main.rs
+@@ -10,0 +11,4 @@
++/*
++#include <stdint.h>
++*/
++import "C"
+`,
+		"preamble cut off by the hunk": `--- a/internal/ghosttyvt/fresh.go
++++ b/internal/ghosttyvt/fresh.go
+@@ -10,0 +11,2 @@
++/*
++#include <stdint.h>
+`,
+	} {
+		got := FindInUnifiedDiff(diff)
+		if len(got) != 1 || got[0].Line != 11 || got[0].Text != "/*" {
+			t.Errorf("%s: findings = %#v, want the opener on line 11", name, got)
+		}
+	}
+}
+
+func TestADiffWithoutATrailingNewlineStillReportsItsLastLine(t *testing.T) {
+	diff := "--- a/internal/store/sqlite.go\n+++ b/internal/store/sqlite.go\n@@ -10,0 +11 @@\n+// The image is built once."
+	if got := FindInUnifiedDiff(diff); len(got) != 1 || got[0].Line != 11 {
+		t.Fatalf("findings = %#v, want one on line 11", got)
+	}
+}
