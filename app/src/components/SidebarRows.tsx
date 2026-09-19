@@ -25,18 +25,20 @@ export function SidebarSessionPullRequest({
   const pr = pickSessionPullRequest(pullRequests);
   if (!pr) return null;
   const { label, tone } = describeSessionPullRequest(pr);
-  const description = [`${pr.repository}#${pr.number}`, label, pr.title]
+  const description = [`${pr.repository}#${pr.number}`, label, pr.watching ? 'Watching' : '', pr.title]
     .filter(Boolean)
     .join(' · ');
   return (
     <span
       className="sidebar-session-pr"
       data-tone={tone}
+      data-watching={pr.watching ? 'true' : undefined}
       title={description}
       aria-label={description}
     >
       <span className="sidebar-session-pr__dot" aria-hidden="true" />
       <span className="sidebar-session-pr__number">#{pr.number}</span>
+      {pr.watching && <span className="sidebar-session-pr__watching">Watching</span>}
     </span>
   );
 }

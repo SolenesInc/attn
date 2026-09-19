@@ -404,6 +404,7 @@ func (s *Store) Get(id string) *protocol.Session {
 var sessionOwnedTables = []string{
 	"session_annotation_drafts",
 	"session_pull_requests",
+	"pull_request_watches",
 	"session_exit_screens",
 }
 

@@ -1250,6 +1250,24 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{147, "record structured task failure diagnostics", ""},
 	{148, "durable Garden seed event handling", ``},
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
+	{150, "durable pull request readiness watches", `
+		CREATE TABLE IF NOT EXISTS pull_request_watches (
+			session_id            TEXT NOT NULL,
+			pr_id                 TEXT NOT NULL,
+			reviewer              TEXT NOT NULL,
+			created_at            TEXT NOT NULL,
+			last_head_sha         TEXT NOT NULL DEFAULT '',
+			head_observed_at       TEXT NOT NULL DEFAULT '',
+			last_observation_key  TEXT NOT NULL DEFAULT '',
+			last_success_at       TEXT NOT NULL DEFAULT '',
+			last_error            TEXT NOT NULL DEFAULT '',
+			error_since           TEXT NOT NULL DEFAULT '',
+			failure_count         INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (session_id, pr_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_pull_request_watches_pr
+			ON pull_request_watches(pr_id, session_id);
+	`},
 }
 
 const migration99SQL = `

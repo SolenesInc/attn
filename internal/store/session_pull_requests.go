@@ -138,6 +138,29 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	return records
 }
 
+func (s *Store) WatchedSessionPullRequests() []SessionPullRequestRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+
+	rows, err := s.db.Query(`
+		SELECT ` + sessionPullRequestColumns + `
+		FROM session_pull_requests
+		WHERE EXISTS (
+			SELECT 1 FROM pull_request_watches
+			WHERE pull_request_watches.pr_id = session_pull_requests.pr_id
+		)
+		ORDER BY created_at DESC, rowid DESC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	records, _ := scanSessionPullRequests(rows)
+	return records
+}
+
 func (s *Store) OpenSessionPullRequestsReferencedBy(
 	schema docstore.CollectionSchema, field string,
 ) ([]SessionPullRequestRecord, error) {
@@ -237,6 +260,18 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 		WHERE pr_id = ?`,
 		status.Title, status.Draft, status.State, status.CIStatus, status.ReviewStatus,
 		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID)
+	return err
+}
+
+func (s *Store) UpdateSessionPullRequestReviewStatus(sessionID, prID, reviewStatus string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+	_, err := s.db.Exec(
+		`UPDATE session_pull_requests SET review_status = ? WHERE session_id = ? AND pr_id = ?`,
+		reviewStatus, sessionID, prID)
 	return err
 }
 

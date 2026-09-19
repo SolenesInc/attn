@@ -84,6 +84,30 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "watch.db")
+	first, err := NewWithDB(path)
+	if err != nil {
+		t.Fatalf("open first store: %v", err)
+	}
+	if changed, err := first.WatchPullRequest("session", "github.com:victorarias/attn#71", "reviewer", time.Now()); err != nil || !changed {
+		t.Fatalf("watch = %t, %v", changed, err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("close first store: %v", err)
+	}
+
+	second, err := NewWithDB(path)
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	defer second.Close()
+	watches := second.PullRequestWatches()
+	if len(watches) != 1 || watches[0].SessionID != "session" || watches[0].Reviewer != "reviewer" {
+		t.Fatalf("restarted watches = %+v", watches)
+	}
+}
+
 func TestOpenSessionPullRequestsReferencedBy(t *testing.T) {
 	s := newSessionPRStore(t)
 	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
