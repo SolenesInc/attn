@@ -46,8 +46,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
-- Go code takes no comments: `make lint-go` rejects every comment except tool directives,
-  cgo preambles and example output. Elsewhere, do not add prose comments. Git history
+- Go code takes no prose comments. Elsewhere, do not add prose comments. Git history
   holds the reasons and the receipts.
 - Align with the user before adding a bus event or changing an existing event's name, subject, payload, semantics, or compatibility behavior.
 - Remote outposts are temporarily incomplete: Garden and crew remain home-only

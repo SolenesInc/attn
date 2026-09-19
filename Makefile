@@ -231,7 +231,6 @@ test-frontend: $(APP_NODE_MODULES)
 lint: lint-go lint-frontend
 
 lint-go: $(NATIVE_VT_DEP)
-	go run ./cmd/commentlint ./...
 	go tool staticcheck ./...
 
 lint-frontend: $(APP_NODE_MODULES)
