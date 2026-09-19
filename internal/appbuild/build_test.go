@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/apps"
@@ -51,22 +52,40 @@ func sharedToolchainStore(t *testing.T, store string) string {
 	return store
 }
 
-var packageToolchain string
+var packageToolchain struct {
+	once sync.Once
+	root string
+	dir  string
+	err  error
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if packageToolchain.root != "" {
+		_ = os.RemoveAll(packageToolchain.root)
+	}
+	os.Exit(code)
+}
 
 func packageToolchainDir(t *testing.T) string {
 	t.Helper()
-	if packageToolchain != "" {
-		return packageToolchain
+	packageToolchain.once.Do(func() {
+		root, err := os.MkdirTemp("", "attn-appbuild-toolchain-")
+		if err != nil {
+			packageToolchain.err = err
+			return
+		}
+		packageToolchain.root = root
+		if _, err := ResolveToolchain(root, func(line string) { t.Log(line) }); err != nil {
+			packageToolchain.err = fmt.Errorf("installing the toolchain: %w", err)
+			return
+		}
+		packageToolchain.dir = filepath.Join(root, toolchainDirName)
+	})
+	if packageToolchain.err != nil {
+		t.Fatal(packageToolchain.err)
 	}
-	dir, err := os.MkdirTemp("", "attn-appbuild-toolchain-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ResolveToolchain(dir, func(line string) { t.Log(line) }); err != nil {
-		t.Fatalf("installing the toolchain: %v", err)
-	}
-	packageToolchain = filepath.Join(dir, toolchainDirName)
-	return packageToolchain
+	return packageToolchain.dir
 }
 
 func (e buildEnv) build(t *testing.T) (Result, error) {
