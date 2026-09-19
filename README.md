@@ -205,6 +205,28 @@ Your agents can work as a team:
 - **In-app browser.** `attn browser open <url>` docks a real browser an agent
   can drive; log in once and it persists.
 
+### Watching pull requests
+
+Run `attn pr watch <url>` from an agent session to receive findings, human feedback,
+failed checks, monitoring outages, and readiness in its inbox. Watches survive
+restarts; unchanged observations do not repeatedly ping the agent. Human feedback
+stays until read. The default reviewer is `chatgpt-codex-connector[bot]`; select
+another with `--reviewer <login>`.
+
+A PR is ready when checks pass, the required reviewer approves the current head,
+the PR is open, non-draft and mergeable, and **all review threads are resolved**,
+including older threads and other reviewers' threads. Existing unresolved threads
+notify when the watch is armed. A watch neither resolves threads nor grants merge authority.
+
+Inspect with `attn pr status`; stop with `attn pr unwatch <url>` or **Stop watching**
+in the app. Stopping clears that session's unread watch notifications. Closing or
+merging the PR ends the watch. Run commands on the session's owning daemon;
+remote watch forwarding is unsupported. For development profiles, enable
+[GitHub polling](docs/profiles.md#github-polling).
+
+Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
+--reviewer <login>`. Its `--help` explains baselining, resume, and exit codes.
+
 ### The Chief
 
 Running five agents shouldn't turn you into a full-time dispatcher. The Chief is

@@ -26,9 +26,9 @@ Retarget ordinary PRs aimed at `main`; `Main route` rejects them.
   for the reviewer, never a gate; the job cannot fail on the numbers.
 - After merge, `Acceptance` tests the resulting exact `next` SHA for release eligibility.
 
-Wait once with `attn pr wait-ready <pr> --repo <owner/repo> --reviewer <login>`.
-Read its combined checks, reviews, and comments; do not poll them separately.
-Use `--help` for baselining, resume, and exit codes.
+Use a [PR watch or blocking wait](../README.md#watching-pull-requests) for combined
+checks, reviews, and feedback; do not poll those separately. Readiness does not
+replace the merge gates above or the user's permission to merge.
 
 ## Releases, hotfixes, and syncs
 
