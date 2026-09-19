@@ -86,13 +86,14 @@ const waitForCrew = (member, predicate, description, timeoutMs = 30_000) => sett
 ));
 
 function waitForFileSignal(file, description, timeoutMs = 30_000) {
-  if (fs.existsSync(file)) return Promise.resolve();
   return settled(new Promise((resolve, reject) => {
-    const watcher = fs.watch(path.dirname(file), (_event, name) => {
-      if (name !== path.basename(file) || !fs.existsSync(file)) return;
+    const finish = () => {
       clearTimeout(timer);
       watcher.close();
       resolve();
+    };
+    const watcher = fs.watch(path.dirname(file), (_event, name) => {
+      if (name === path.basename(file) && fs.existsSync(file)) finish();
     });
     const timer = setTimeout(() => {
       watcher.close();
@@ -100,6 +101,7 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
       try { listing = fs.readdirSync(path.dirname(file)).join(','); } catch (error) { listing = String(error); }
       reject(new Error(`timed out waiting for ${description}: ${file} exists=${fs.existsSync(file)} dir=${listing}`));
     }, timeoutMs);
+    if (fs.existsSync(file)) finish();
   }));
 }
 
