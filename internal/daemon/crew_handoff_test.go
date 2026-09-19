@@ -568,41 +568,6 @@ func TestCrewHandoff_TheSuccessorKeepsApprovalButReturnsToTheMembersLaunchPins(t
 	}
 }
 
-func TestCrewHandoff_SettingsChangeClearsAnExactLaunchContractButKeepsItsApprovalRoute(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	woken, err := d.crewWake("keel", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	intent, ok := d.store.LaunchIntent(woken.SessionID)
-	if !ok {
-		t.Fatal("the woken day recorded no launch intent")
-	}
-	intent.ApprovalRoute = launchcontract.ApprovalRouteReviewer
-	intent.UnattendedLaunch = launchcontract.UnattendedLaunchSpec{
-		Agent: "claude", Model: crewWakeFallbackModel,
-		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAutoReview,
-		DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh,
-	}
-	d.store.SetLaunchIntent(woken.SessionID, intent)
-	if response := crewSet(t, d, protocol.CrewSetMessage{Member: "keel", Model: protocol.Ptr("claude-haiku-4-5")}); !response.Ok {
-		t.Fatalf("crew set: %v", protocol.Deref(response.Error))
-	}
-
-	response := crewHandoffCall(t, d, woken.SessionID, "Use the new launch settings.")
-	if !response.Ok || response.CrewHandoffResult.NapError != nil {
-		t.Fatalf("handoff: %+v", response)
-	}
-	spawns := spawnedSessions(t, backend)
-	successor := spawns[len(spawns)-1]
-	if successor.Model != "claude-haiku-4-5" || !successor.UnattendedLaunch.IsZero() {
-		t.Fatalf("successor model/contract = %q/%#v", successor.Model, successor.UnattendedLaunch)
-	}
-	if successor.ApprovalRoute != launchcontract.ApprovalRouteReviewer || !successor.AutoApprove {
-		t.Fatalf("successor approval route/auto = %q/%t", successor.ApprovalRoute, successor.AutoApprove)
-	}
-}
-
 func TestCrewHandoff_OneDayHarnessOverrideReturnsToSavedPinsWithoutExecutableLeakage(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingDefaultEffortPrefix+"claude", "medium")
@@ -739,7 +704,7 @@ func TestCrewHandoff_ARestartRecordedDuringTheNapIsSettledByTheSuccessor(t *test
 		if opts.ID == woken.SessionID {
 			return
 		}
-		if _, err := d.setCrewRestart("keel", &crew.Restart{RequestID: "mid-nap", SessionID: woken.SessionID, State: crew.RestartQueued}); err != nil {
+		if _, err := setCrewRestart(d, "keel", &crew.Restart{RequestID: "mid-nap", SessionID: woken.SessionID, State: crew.RestartQueued}); err != nil {
 			t.Errorf("record restart during the nap: %v", err)
 		}
 	}

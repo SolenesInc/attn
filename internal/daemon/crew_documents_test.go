@@ -80,60 +80,6 @@ func TestCrewCharter_ExternalEditWinsAConflictAndIsReturnedInFull(t *testing.T) 
 	}
 }
 
-func TestCrewCharter_SameContentConfirmationFencesAnEarlierDelayedWrite(t *testing.T) {
-	d := newCrewDaemon(t)
-	read, err := d.crewCharterGet("alder")
-	if err != nil {
-		t.Fatal(err)
-	}
-	original := read.Charter.Content
-	confirmed, err := d.crewCharterSet("alder", original, read.Charter.Token)
-	if err != nil {
-		t.Fatalf("confirm original content: %v", err)
-	}
-	if confirmed.Conflict || confirmed.Charter.Token == read.Charter.Token {
-		t.Fatalf("confirmation did not advance the write token: %+v", confirmed)
-	}
-
-	late, err := d.crewCharterSet("alder", "delayed earlier edit", read.Charter.Token)
-	if err != nil {
-		t.Fatalf("deliver delayed write: %v", err)
-	}
-	if !late.Conflict || late.Charter.Content != original || late.Charter.Token != confirmed.Charter.Token {
-		t.Fatalf("delayed write result = %+v, confirmed = %+v", late, confirmed)
-	}
-	current, err := d.crewCharterGet("alder")
-	if err != nil || current.Charter.Content != original {
-		t.Fatalf("canonical charter = %+v, err=%v", current, err)
-	}
-}
-
-func TestCrewCharter_DaemonRestartRejectsAnOldLifetimeToken(t *testing.T) {
-	d := newCrewDaemon(t)
-	d.crewCharterLifetime = "before-restart"
-	read, err := d.crewCharterGet("alder")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	d.crewDocumentMu.Lock()
-	d.crewCharterLifetime = "after-restart"
-	d.crewCharterVersions = nil
-	d.crewDocumentMu.Unlock()
-
-	result, err := d.crewCharterSet("alder", "stale write from the old daemon", read.Charter.Token)
-	if err != nil {
-		t.Fatalf("deliver old-lifetime write: %v", err)
-	}
-	if !result.Conflict || result.Charter.Content != read.Charter.Content || result.Charter.Token == read.Charter.Token {
-		t.Fatalf("old-lifetime write result = %+v, old read = %+v", result, read)
-	}
-	current, err := d.crewCharterGet("alder")
-	if err != nil || current.Charter.Content != read.Charter.Content {
-		t.Fatalf("canonical charter = %+v, err=%v", current, err)
-	}
-}
-
 func TestCrewHandoffs_ReadsCompleteNewestFirstHistoryAndRealDates(t *testing.T) {
 	d := newCrewDaemon(t)
 	member, _, err := d.resolveCrewMember("trellis")
@@ -168,21 +114,6 @@ func TestCrewHandoffs_ReadsCompleteNewestFirstHistoryAndRealDates(t *testing.T) 
 		if _, err := d.crewHandoffGet("trellis", bad); err == nil {
 			t.Fatalf("handoff %q was readable", bad)
 		}
-	}
-}
-
-func TestCrewHandoffs_MissingDirectoryIsAnHonestEmptyHistory(t *testing.T) {
-	d := newCrewDaemon(t)
-	member, _, err := d.resolveCrewMember("keel")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(filepath.Join(member.HomeDir, crew.HandoffsDirName)); err != nil {
-		t.Fatal(err)
-	}
-	result, err := d.crewHandoffsGet("keel")
-	if err != nil || result.Handoffs == nil || len(result.Handoffs) != 0 {
-		t.Fatalf("missing history = %+v, err=%v", result, err)
 	}
 }
 

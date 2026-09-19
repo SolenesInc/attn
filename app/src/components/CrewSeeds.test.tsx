@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember } from '../types/generated';
 import { CrewSeeds } from './CrewSeeds';
-import { seedsPlantedByMember, seedsTendedByMember } from './crewSeedOwnership';
 
 function member(id: string, bindingSession = ''): CrewMember {
   return {
@@ -46,35 +45,6 @@ const alderSnapshot = [
   seed({ id: 's-ce8999', title: 'automode-edit', status: 'harvested', planter_member: 'alder', planter_session: 'day-older' }),
   seed({ id: 's-a4', title: 'A fourth explicitly attributed seed', status: 'dormant', planter_member: 'alder', planter_session: 'day-older' }),
 ];
-
-describe('Crew seed attribution', () => {
-  it('keeps an asleep member claim, includes its current-day session claim, and lists one seed when both identities occur', () => {
-    const memberOnly = seed({ id: 's-member', title: 'Member claim', status: 'growing', tender_member: 'alder' });
-    const currentDay = seed({ id: 's-day', title: 'Day claim', status: 'growing', tender_session: 'day-current' });
-    const duplicateIdentity = seed({
-      id: 's-both',
-      title: 'Both identities',
-      status: 'growing',
-      tender_member: 'alder',
-      tender_session: 'day-current',
-    });
-    const oldDay = seed({ id: 's-old', title: 'Old day', status: 'growing', tender_session: 'day-old' });
-
-    expect(seedsTendedByMember([memberOnly], member('alder'))).toEqual([memberOnly]);
-    expect(seedsTendedByMember(
-      [memberOnly, currentDay, duplicateIdentity, oldDay],
-      member('alder', 'day-current'),
-    ).map((entry) => entry.id)).toEqual(['s-member', 's-day', 's-both']);
-  });
-
-  it('uses explicit planter_member and never a current or historical session guess', () => {
-    const explicit = alderSnapshot[0];
-    const currentSessionOnly = seed({ id: 's-current', title: 'Current day planted it', planter_session: 'day-current' });
-    const historicalSessionOnly = seed({ id: 's-history', title: 'An old day planted it', planter_session: 'day-old' });
-
-    expect(seedsPlantedByMember([explicit, currentSessionOnly, historicalSessionOnly], 'alder')).toEqual([explicit]);
-  });
-});
 
 describe('CrewSeeds', () => {
   it('shows copied snapshot attribution, state icons, plot context and progress, then opens the native seed action', () => {

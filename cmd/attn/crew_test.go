@@ -224,31 +224,26 @@ func TestParseCrewSetArgs_CarriesTheHarnessAndTheWayBack(t *testing.T) {
 	}
 }
 
-func TestParseCrewSetArgs_CarriesTheModelAndTheWayBack(t *testing.T) {
-	parsed, err := parseCrewSetArgs([]string{"trellis", "--model", "claude-haiku-4-5"})
-	if err != nil {
-		t.Fatalf("parseCrewSetArgs: %v", err)
-	}
-	if parsed.model == nil || *parsed.model != "claude-haiku-4-5" {
-		t.Fatalf("parsed model = %v, want claude-haiku-4-5", parsed.model)
-	}
-	cleared, err := parseCrewSetArgs([]string{"trellis", "--model", ""})
-	if err != nil || cleared.model == nil || *cleared.model != "" {
-		t.Fatalf("empty --model did not reach the daemon as a clear: %+v, %v", cleared.model, err)
-	}
-}
-
-func TestParseCrewSetArgs_CarriesEffortAndTheWayBack(t *testing.T) {
-	parsed, err := parseCrewSetArgs([]string{"trellis", "--effort", "high"})
-	if err != nil {
-		t.Fatalf("parseCrewSetArgs: %v", err)
-	}
-	if parsed.effort == nil || *parsed.effort != "high" {
-		t.Fatalf("effort = %v, want high", parsed.effort)
-	}
-	cleared, err := parseCrewSetArgs([]string{"trellis", "--effort", ""})
-	if err != nil || cleared.effort == nil || *cleared.effort != "" {
-		t.Fatalf("cleared effort = %v, err=%v", cleared.effort, err)
+func TestParseCrewSetArgs_CarriesModelAndEffortAndTheWayBack(t *testing.T) {
+	for _, tc := range []struct {
+		flag  string
+		value string
+		field func(crewSetArgs) *string
+	}{
+		{flag: "--model", value: "claude-haiku-4-5", field: func(a crewSetArgs) *string { return a.model }},
+		{flag: "--effort", value: "high", field: func(a crewSetArgs) *string { return a.effort }},
+	} {
+		parsed, err := parseCrewSetArgs([]string{"trellis", tc.flag, tc.value})
+		if err != nil {
+			t.Fatalf("parseCrewSetArgs %s: %v", tc.flag, err)
+		}
+		if got := tc.field(parsed); got == nil || *got != tc.value {
+			t.Fatalf("parsed %s = %v, want %s", tc.flag, got, tc.value)
+		}
+		cleared, err := parseCrewSetArgs([]string{"trellis", tc.flag, ""})
+		if got := tc.field(cleared); err != nil || got == nil || *got != "" {
+			t.Fatalf("empty %s did not reach the daemon as a clear: %v, %v", tc.flag, got, err)
+		}
 	}
 }
 

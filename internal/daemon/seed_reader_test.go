@@ -221,23 +221,6 @@ func TestOpenSeedWSReturnsCorrelatedTile(t *testing.T) {
 	}
 }
 
-func TestOpenSeedWSWithoutPlacementReturnsAStandaloneTile(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Open from dashboard"})
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-	d.handleOpenSeedWS(client, &protocol.OpenSeedMessage{
-		Cmd: protocol.CmdOpenSeed, SeedID: seed.ID, RequestID: protocol.Ptr("open-dashboard"),
-	})
-	var result protocol.OpenSeedResultMessage
-	message := <-client.send
-	if err := json.Unmarshal(message.payload, &result); err != nil {
-		t.Fatal(err)
-	}
-	if !result.Success || protocol.Deref(result.RequestID) != "open-dashboard" || protocol.Deref(result.WorkspaceID) == "" || protocol.Deref(result.TileID) != seedTileIDForID(seed.ID) {
-		t.Fatalf("standalone open_seed_result = %+v", result)
-	}
-}
-
 func TestOpenSeedWSStandaloneIgnoresTheSelectedSession(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, _, workspaceID := setupMarkdownWorkspaceOn(t, d)

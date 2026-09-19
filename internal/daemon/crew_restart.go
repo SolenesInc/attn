@@ -369,15 +369,6 @@ func (d *Daemon) writeCrewMemberMustCurrent(member crew.Member, revision int64) 
 	return member, nil
 }
 
-func (d *Daemon) setCrewRestart(memberID string, restart *crew.Restart) (crew.Member, error) {
-	member, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
-		copy := *restart
-		member.Restart = &copy
-		return true, nil
-	})
-	return member, err
-}
-
 func (d *Daemon) crewRestartResult(member crew.Member, revision int64) *protocol.CrewRestartResult {
 	wire := d.crewMemberWire(member, revision)
 	return &protocol.CrewRestartResult{Member: wire, Restart: *wire.Restart}

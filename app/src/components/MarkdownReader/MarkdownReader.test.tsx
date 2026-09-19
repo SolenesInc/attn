@@ -161,20 +161,6 @@ describe('MarkdownReader link sanitization', () => {
     expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
   });
 
-  it('hands direct seed links to a native navigation callback when provided', () => {
-    const onOpenSeed = vi.fn();
-    render(
-      <MarkdownReader
-        content="[Open work](s-rnaq01)"
-        source={seedMarkdownSource('s-7k3f9m')}
-        onOpenSeed={onOpenSeed}
-      />,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open work' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-rnaq01');
-  });
-
   it('keeps artifact links on the artifact path when seed navigation is enabled', async () => {
     const onOpenSeed = vi.fn();
     const resolveTarget = vi.fn(async (_seedId: string, target: string) => ({

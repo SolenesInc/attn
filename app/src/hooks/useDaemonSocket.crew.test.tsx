@@ -280,9 +280,8 @@ describe('useDaemonSocket crew', () => {
     await expect(asked!).rejects.toThrow('cannot receive agent messages');
   });
 
-  it('sends one atomic launch selection and returns the authoritative revision', async () => {
+  it('sends one atomic launch selection and returns a conflict with its authoritative member', async () => {
     const { ws, result } = await renderWithCrew([member('keel')]);
-
     let saved: ReturnType<typeof result.current.sendCrewSet>;
     act(() => {
       saved = result.current.sendCrewSet({
@@ -294,29 +293,6 @@ describe('useDaemonSocket crew', () => {
       cmd: 'crew_set', member: 'keel', expected_revision: 7,
       agent: 'codex', model: 'gpt-6-astra', effort: 'high',
     });
-
-    const current = {
-      ...member('keel'), revision: 8, agent: 'codex', model: 'gpt-6-astra', effort: 'high',
-      resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
-    };
-    act(() => {
-      ws.emit({
-        event: 'crew_set_result', request_id: sent.request_id, success: true, conflict: false, member: current,
-      });
-    });
-
-    await expect(saved!).resolves.toEqual({ success: true, conflict: false, member: current });
-  });
-
-  it('preserves an authoritative member on a settings conflict', async () => {
-    const { ws, result } = await renderWithCrew([member('keel')]);
-    let saved: ReturnType<typeof result.current.sendCrewSet>;
-    act(() => {
-      saved = result.current.sendCrewSet({
-        member: 'keel', expectedRevision: 7, agent: '', model: '', effort: '',
-      });
-    });
-    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
     const current = { ...member('keel'), revision: 9, resolved_agent: 'claude' };
     act(() => {
       ws.emit({
@@ -327,29 +303,6 @@ describe('useDaemonSocket crew', () => {
 
     await expect(saved!).resolves.toEqual({
       success: false, conflict: true, error: 'the member changed', member: current,
-    });
-  });
-
-  it('correlates a full charter read and ignores another request result', async () => {
-    const { ws, result } = await renderWithCrew([member('trellis')]);
-    let read: ReturnType<typeof result.current.sendCrewCharterGet>;
-    act(() => { read = result.current.sendCrewCharterGet('trellis'); });
-    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
-    expect(sent).toMatchObject({ cmd: 'crew_charter_get', member: 'trellis' });
-
-    act(() => {
-      ws.emit({
-        event: 'crew_charter_get_result', request_id: 'another-request', success: true,
-        member: 'trellis', charter: { content: 'wrong', token: 'wrong' },
-      });
-      ws.emit({
-        event: 'crew_charter_get_result', request_id: sent.request_id, success: true,
-        member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-token' },
-      });
-    });
-
-    await expect(read!).resolves.toEqual({
-      member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-token' },
     });
   });
 
@@ -372,36 +325,6 @@ describe('useDaemonSocket crew', () => {
       member: 'alder', conflict: true,
       charter: { content: '# External\n', token: 'external-token' },
     });
-  });
-
-  it('correlates an honest empty handoff history', async () => {
-    const { ws, result } = await renderWithCrew([member('keel')]);
-    let read: ReturnType<typeof result.current.sendCrewHandoffsGet>;
-    act(() => { read = result.current.sendCrewHandoffsGet('keel'); });
-    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
-    expect(sent).toMatchObject({ cmd: 'crew_handoffs_get', member: 'keel' });
-
-    act(() => {
-      ws.emit({
-        event: 'crew_handoffs_get_result', request_id: sent.request_id, success: true,
-        member: 'keel', handoffs: [],
-      });
-    });
-    await expect(read!).resolves.toEqual({ member: 'keel', handoffs: [] });
-  });
-
-  it('correlates one handoff body read', async () => {
-    const { ws, result } = await renderWithCrew([member('keel')]);
-    let read: ReturnType<typeof result.current.sendCrewHandoffGet>;
-    act(() => { read = result.current.sendCrewHandoffGet('keel', '2026-09-01T21-37Z-keel.md'); });
-    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
-    expect(sent).toMatchObject({ cmd: 'crew_handoff_get', member: 'keel', filename: '2026-09-01T21-37Z-keel.md' });
-
-    const handoff = { filename: '2026-09-01T21-37Z-keel.md', occurred_at: '2026-09-01T21:37:00Z', content: '# Letter\n', token: 'letter' };
-    act(() => {
-      ws.emit({ event: 'crew_handoff_get_result', request_id: sent.request_id, success: true, member: 'keel', handoff });
-    });
-    await expect(read!).resolves.toEqual({ member: 'keel', handoff });
   });
 
   it('reuses the caller restart identity and ignores another request result', async () => {

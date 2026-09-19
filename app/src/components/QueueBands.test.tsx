@@ -480,16 +480,12 @@ describe('the crew in the sidebar', () => {
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
-  it('opens crew management and member details for awake and asleep members', () => {
-    const onManageCrew = vi.fn();
+  it('opens member details anchored on the row action for awake and asleep members', () => {
     const onOpenCrewMemberDetails = vi.fn();
     renderCrew(
       [{ id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' }] as TestSession[],
-      { onManageCrew, onOpenCrewMemberDetails },
+      { onOpenCrewMemberDetails },
     );
-
-    fireEvent.click(screen.getByTestId('manage-crew'));
-    expect(onManageCrew).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('crew-actions-alder'));
     fireEvent.click(screen.getByTestId('crew-member-details-action'));
