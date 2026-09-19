@@ -16,13 +16,30 @@ var ErrReadinessTruncated = errors.New("pull request readiness exceeds a GitHub 
 var ErrReadinessHeadChanged = errors.New("pull request head changed while reading readiness")
 
 type PullRequestReadiness struct {
-	Snapshot *PullRequestSnapshot
-	Evidence prreadiness.Evidence
+	Snapshot           *PullRequestSnapshot
+	Evidence           prreadiness.Evidence
+	Checks             []PullRequestReadinessCheck
+	Comments           []PullRequestReadinessComment
+	RequestedReviewers []string
+}
+
+type PullRequestReadinessCheck struct {
+	Name  string
+	State string
+	URL   string
+}
+
+type PullRequestReadinessComment struct {
+	prreadiness.Comment
+	Kind        string
+	Location    string
+	ReviewState string
 }
 
 type readinessPageInfo struct {
-	HasNextPage bool   `json:"hasNextPage"`
-	EndCursor   string `json:"endCursor"`
+	HasNextPage     bool   `json:"hasNextPage"`
+	HasPreviousPage bool   `json:"hasPreviousPage"`
+	EndCursor       string `json:"endCursor"`
 }
 
 type readinessComment struct {
@@ -63,6 +80,8 @@ type readinessCheck struct {
 	Name       string `json:"name"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
+	DetailsURL string `json:"detailsUrl"`
+	TargetURL  string `json:"targetUrl"`
 	Context    string `json:"context"`
 	State      string `json:"state"`
 }
@@ -82,6 +101,14 @@ type readinessThread struct {
 }
 
 type readinessPullRequest struct {
+	ReviewRequests struct {
+		Nodes []struct {
+			RequestedReviewer struct {
+				TypeName string `json:"__typename"`
+				Login    string `json:"login"`
+			} `json:"requestedReviewer"`
+		} `json:"nodes"`
+	} `json:"reviewRequests"`
 	Number           int    `json:"number"`
 	URL              string `json:"url"`
 	Title            string `json:"title"`
@@ -171,7 +198,7 @@ query($owner:String!,$name:String!,$number:Int!,$id:ID!,$cursor:String!){
   }}}
 }`
 
-func (c *Client) FetchPullRequestReadiness(repo string, number int, reviewer string) (*PullRequestReadiness, error) {
+func (c *Client) FetchPullRequestReadiness(repo string, number int) (*PullRequestReadiness, error) {
 	owner, name, ok := strings.Cut(strings.Trim(repo, "/"), "/")
 	if !ok || owner == "" || name == "" {
 		return nil, fmt.Errorf("invalid repository %q", repo)
@@ -213,7 +240,7 @@ func (c *Client) FetchPullRequestReadiness(repo string, number int, reviewer str
 			return nil, err
 		}
 	}
-	return buildPullRequestReadiness(combined, reviewer)
+	return buildPullRequestReadiness(combined), nil
 }
 
 func (c *Client) fetchRemainingReviewComments(owner, name string, number int, head string, review *readinessReview) error {
@@ -348,19 +375,20 @@ func decodePullRequestReadiness(body []byte) (*readinessPullRequest, error) {
 	return payload.Data.Repository.PullRequest, nil
 }
 
-func parsePullRequestReadiness(body []byte, reviewer string) (*PullRequestReadiness, error) {
+func ParsePullRequestReadiness(body []byte) (*PullRequestReadiness, error) {
 	pr, err := decodePullRequestReadiness(body)
 	if err != nil {
 		return nil, err
 	}
 	if hasMoreReadinessPages(pr) {
-		return nil, ErrReadinessTruncated
+		return nil, fmt.Errorf("%w; readiness cannot be verified without truncation (100-item verification window)", ErrReadinessTruncated)
 	}
-	return buildPullRequestReadiness(pr, reviewer)
+	return buildPullRequestReadiness(pr), nil
 }
 
 func hasMoreReadinessPages(pr *readinessPullRequest) bool {
-	if pr.Reviews.PageInfo.HasNextPage || pr.Comments.PageInfo.HasNextPage ||
+	if pr.Reviews.PageInfo.HasPreviousPage || pr.Comments.PageInfo.HasPreviousPage ||
+		pr.Reviews.PageInfo.HasNextPage || pr.Comments.PageInfo.HasNextPage ||
 		pr.Reactions.PageInfo.HasNextPage || pr.ReviewThreads.PageInfo.HasNextPage {
 		return true
 	}
@@ -376,11 +404,17 @@ func hasMoreReadinessPages(pr *readinessPullRequest) bool {
 	return false
 }
 
-func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*PullRequestReadiness, error) {
+func buildPullRequestReadiness(pr *readinessPullRequest) *PullRequestReadiness {
+	result := &PullRequestReadiness{}
+	for _, request := range pr.ReviewRequests.Nodes {
+		if request.RequestedReviewer.TypeName == "User" {
+			result.RequestedReviewers = append(result.RequestedReviewers, request.RequestedReviewer.Login)
+		}
+	}
 	mergeableState := strings.ToLower(pr.MergeStateStatus)
 	evidence := prreadiness.Evidence{
 		State: strings.ToLower(pr.State), Draft: pr.IsDraft, MergeableState: mergeableState,
-		HeadSHA: pr.HeadRefOID,
+		HeadSHA: pr.HeadRefOID, CheckState: prreadiness.ChecksNone,
 	}
 	if len(pr.Commits.Nodes) > 0 {
 		commit := pr.Commits.Nodes[0].Commit
@@ -390,12 +424,13 @@ func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*Pull
 				evidence.CheckState = prreadiness.ChecksNone
 			}
 			for _, check := range commit.StatusCheckRollup.Contexts.Nodes {
-				name := check.Context
+				name, label, url := check.Context, "status:"+check.Context, check.TargetURL
 				state := readinessStatusState(check.State)
 				if check.TypeName == "CheckRun" {
-					name = check.Name
+					name, label, url = check.Name, "check:"+check.Name, check.DetailsURL
 					state = readinessCheckRunState(check.Status, check.Conclusion)
 				}
+				result.Checks = append(result.Checks, PullRequestReadinessCheck{Name: label, State: state, URL: url})
 				if state == prreadiness.ChecksFailed {
 					evidence.CheckState = prreadiness.ChecksFailed
 					evidence.FailedChecks = append(evidence.FailedChecks, name)
@@ -405,31 +440,34 @@ func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*Pull
 			}
 		}
 	}
+	addComment := func(comment readinessComment, kind, reviewState string) {
+		item := prreadiness.Comment{
+			ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText,
+			CreatedAt: comment.CreatedAt, Bot: comment.Author.TypeName != "User",
+		}
+		evidence.Comments = append(evidence.Comments, item)
+		result.Comments = append(result.Comments, PullRequestReadinessComment{
+			Comment: item, Kind: kind, Location: comment.location(), ReviewState: reviewState,
+		})
+	}
 	for _, review := range pr.Reviews.Nodes {
 		item := prreadiness.Review{ID: review.ID, Author: review.Author.Login, State: review.State,
 			Body: review.BodyText, CommitOID: review.Commit.OID, SubmittedAt: review.SubmittedAt}
 		if strings.TrimSpace(review.BodyText) != "" {
-			evidence.Comments = append(evidence.Comments, prreadiness.Comment{
-				ID: review.ID, Author: review.Author.Login, Body: review.BodyText,
-				CreatedAt: review.SubmittedAt, Bot: review.Author.TypeName != "User",
-			})
+			addComment(readinessComment{
+				ID: review.ID, Author: review.Author, BodyText: review.BodyText, CreatedAt: review.SubmittedAt,
+			}, "review", strings.ToUpper(review.State))
 		}
 		for _, comment := range review.Comments.Nodes {
 			item.Findings = append(item.Findings, prreadiness.Finding{
 				ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText, Location: comment.location(),
 			})
-			evidence.Comments = append(evidence.Comments, prreadiness.Comment{
-				ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText,
-				CreatedAt: comment.CreatedAt, Bot: comment.Author.TypeName != "User",
-			})
+			addComment(comment, "inline", "")
 		}
 		evidence.Reviews = append(evidence.Reviews, item)
 	}
 	for _, comment := range pr.Comments.Nodes {
-		evidence.Comments = append(evidence.Comments, prreadiness.Comment{
-			ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText, CreatedAt: comment.CreatedAt,
-			Bot: comment.Author.TypeName != "User",
-		})
+		addComment(comment, "issue", "")
 	}
 	for _, reaction := range pr.Reactions.Nodes {
 		evidence.Reactions = append(evidence.Reactions, prreadiness.Reaction{
@@ -447,16 +485,15 @@ func buildPullRequestReadiness(pr *readinessPullRequest, reviewer string) (*Pull
 		})
 	}
 	sort.Strings(evidence.FailedChecks)
-	return &PullRequestReadiness{
-		Snapshot: &PullRequestSnapshot{
-			Number: pr.Number, URL: pr.URL, Title: pr.Title, Body: pr.BodyText,
-			Author: pr.Author.Login, Draft: pr.IsDraft, State: strings.ToLower(pr.State), Merged: pr.Merged,
-			MergeableState: mergeableState, HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName,
-			HeadRepository: pr.HeadRepository.NameWithOwner, BaseSHA: pr.BaseRefOID,
-			BaseRef: pr.BaseRefName, BaseRepository: pr.BaseRepository.NameWithOwner,
-		},
-		Evidence: evidence,
-	}, nil
+	result.Snapshot = &PullRequestSnapshot{
+		Number: pr.Number, URL: pr.URL, Title: pr.Title, Body: pr.BodyText,
+		Author: pr.Author.Login, Draft: pr.IsDraft, State: strings.ToLower(pr.State), Merged: pr.Merged,
+		MergeableState: mergeableState, HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName,
+		HeadRepository: pr.HeadRepository.NameWithOwner, BaseSHA: pr.BaseRefOID,
+		BaseRef: pr.BaseRefName, BaseRepository: pr.BaseRepository.NameWithOwner,
+	}
+	result.Evidence = evidence
+	return result
 }
 
 func readinessCheckRunState(status, conclusion string) string {

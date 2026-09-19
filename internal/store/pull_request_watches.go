@@ -118,12 +118,17 @@ func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool
 	return watch, err == nil
 }
 
+type PullRequestFeedbackCursor struct {
+	SeenAt  time.Time
+	SeenIDs []string
+}
+
 func (s *Store) RecordPullRequestWatchSuccess(
-	sessionID, prID, headSHA, observationKey string, feedbackSeenAt time.Time, feedbackSeenIDs []string, at time.Time,
+	sessionID, prID, headSHA, observationKey string, feedback PullRequestFeedbackCursor, at time.Time,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	feedbackIDsJSON, err := json.Marshal(feedbackSeenIDs)
+	feedbackIDsJSON, err := json.Marshal(feedback.SeenIDs)
 	if err != nil {
 		return err
 	}
@@ -135,7 +140,7 @@ func (s *Store) RecordPullRequestWatchSuccess(
 		    feedback_seen_at = ?, feedback_seen_ids = ?
 		WHERE session_id = ? AND pr_id = ?
 	`, headSHA, at.UTC().Format(sortableTimeFormat), headSHA, observationKey,
-		at.UTC().Format(sortableTimeFormat), feedbackSeenAt.UTC().Format(sortableTimeFormat), string(feedbackIDsJSON), sessionID, prID)
+		at.UTC().Format(sortableTimeFormat), feedback.SeenAt.UTC().Format(sortableTimeFormat), string(feedbackIDsJSON), sessionID, prID)
 	return err
 }
 

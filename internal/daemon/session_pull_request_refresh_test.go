@@ -34,7 +34,7 @@ type fakePRHost struct {
 	limitFor   string
 }
 
-func (f *fakePRHost) FetchPullRequestReadiness(string, int, string) (*github.PullRequestReadiness, error) {
+func (f *fakePRHost) FetchPullRequestReadiness(string, int) (*github.PullRequestReadiness, error) {
 	f.readyReads++
 	if f.readyErr != nil {
 		return nil, f.readyErr

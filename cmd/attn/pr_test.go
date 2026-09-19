@@ -84,9 +84,9 @@ func inlineNode(id, at, author string) string {
 func TestParsePRSnapshotRequiresGreenChecksAndCurrentHeadApproval(t *testing.T) {
 	head := strings.Repeat("a", 40)
 	oldHead := strings.Repeat("b", 40)
-	checks := `{"__typename":"CheckRun","name":"Daemon","status":"COMPLETED","conclusion":"SUCCESS"},
+	checks := `{"__typename":"CheckRun","name":"Daemon","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://example.test/daemon"},
 	           {"__typename":"CheckRun","name":"Frontend","status":"COMPLETED","conclusion":"SKIPPED"},
-	           {"__typename":"StatusContext","context":"license","state":"SUCCESS"}`
+	           {"__typename":"StatusContext","context":"license","state":"SUCCESS","targetUrl":"https://example.test/license"}`
 	reviews := strings.Join([]string{
 		reviewNode("r1", "APPROVED", "", "2026-07-19T10:00:00Z", "figgyster", oldHead, ""),
 		reviewNode("r2", "CHANGES_REQUESTED", "", "2026-07-19T11:00:00Z", "figgyster", head, ""),
@@ -100,6 +100,10 @@ func TestParsePRSnapshotRequiresGreenChecksAndCurrentHeadApproval(t *testing.T) 
 	}
 	if !readiness.ready() || readiness.CheckState != checksGreen || readiness.ReviewState != "approved" || len(readiness.Checks) != 3 {
 		t.Fatalf("readiness = %#v", readiness)
+	}
+	if readiness.Checks[0].Name != "check:Daemon" || readiness.Checks[0].URL != "https://example.test/daemon" ||
+		readiness.Checks[2].Name != "status:license" || readiness.Checks[2].URL != "https://example.test/license" {
+		t.Fatalf("check labels or links lost: %+v", readiness.Checks)
 	}
 
 	staleReviews := strings.ReplaceAll(reviews, `"oid":"`+head+`"`, `"oid":"`+oldHead+`"`)

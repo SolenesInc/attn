@@ -27,7 +27,7 @@ func readinessPayload(extra string) []byte {
 }
 
 func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
-	result, err := parsePullRequestReadiness(readinessPayload(""), "chatgpt-codex-connector[bot]")
+	result, err := ParsePullRequestReadiness(readinessPayload(""))
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestParsePullRequestReadinessUsesCommentIdentityForThreads(t *testing.T) {
 	body := strings.Replace(string(readinessPayload("")),
 		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
 		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"thread-id","isResolved":false,"comments":{"nodes":[{"id":"comment-id","bodyText":"finding","createdAt":"2026-09-19T10:02:00Z","path":"watch.go","line":42,"author":{"login":"chatgpt-codex-connector"}}]}}]}`, 1)
-	result, err := parsePullRequestReadiness([]byte(body), "chatgpt-codex-connector[bot]")
+	result, err := ParsePullRequestReadiness([]byte(body))
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
 	}
@@ -56,7 +56,7 @@ func TestParsePullRequestReadinessRejectsTruncatedPages(t *testing.T) {
 	body := strings.Replace(string(readinessPayload("")),
 		`"reviews":{"pageInfo":{"hasNextPage":false}`,
 		`"reviews":{"pageInfo":{"hasNextPage":true}`, 1)
-	_, err := parsePullRequestReadiness([]byte(body), "reviewer")
+	_, err := ParsePullRequestReadiness([]byte(body))
 	if !errors.Is(err, ErrReadinessTruncated) {
 		t.Fatalf("error = %v, want ErrReadinessTruncated", err)
 	}
@@ -104,7 +104,7 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.FetchPullRequestReadiness("o/r", 71, "chatgpt-codex-connector[bot]")
+	result, err := client.FetchPullRequestReadiness("o/r", 71)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,7 +132,7 @@ func TestFetchPullRequestReadinessRejectsHeadChangeBetweenPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.FetchPullRequestReadiness("o/r", 71, "chatgpt-codex-connector[bot]")
+	_, err = client.FetchPullRequestReadiness("o/r", 71)
 	if !errors.Is(err, ErrReadinessHeadChanged) {
 		t.Fatalf("error = %v, want ErrReadinessHeadChanged", err)
 	}

@@ -17,6 +17,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
@@ -589,235 +590,46 @@ func (ghPRReadinessSource) Fetch(ctx context.Context, opts prWaitOptions) (*prRe
 	return parsePRSnapshot(output, opts)
 }
 
-type prGraphQLAuthor struct {
-	TypeName string `json:"__typename"`
-	Login    string `json:"login"`
-}
-
-type prGraphQLComment struct {
-	ID           string          `json:"id"`
-	CreatedAt    time.Time       `json:"createdAt"`
-	BodyText     string          `json:"bodyText"`
-	Path         string          `json:"path"`
-	Line         *int            `json:"line"`
-	OriginalLine *int            `json:"originalLine"`
-	Author       prGraphQLAuthor `json:"author"`
-}
-
-func (c prGraphQLComment) location() string {
-	if c.Path == "" {
-		return ""
-	}
-	line := c.Line
-	if line == nil {
-		line = c.OriginalLine
-	}
-	if line == nil {
-		return c.Path
-	}
-	return fmt.Sprintf("%s:%d", c.Path, *line)
-}
-
 func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
-	var payload struct {
-		Data struct {
-			Repository struct {
-				PullRequest *struct {
-					Number         json.Number `json:"number"`
-					State          string      `json:"state"`
-					IsDraft        bool        `json:"isDraft"`
-					HeadRefOID     string      `json:"headRefOid"`
-					URL            string      `json:"url"`
-					ReviewRequests struct {
-						Nodes []struct {
-							RequestedReviewer prGraphQLAuthor `json:"requestedReviewer"`
-						} `json:"nodes"`
-					} `json:"reviewRequests"`
-					Commits struct {
-						Nodes []struct {
-							Commit struct {
-								StatusCheckRollup *struct {
-									Contexts struct {
-										PageInfo struct {
-											HasNextPage bool `json:"hasNextPage"`
-										} `json:"pageInfo"`
-										Nodes []struct {
-											TypeName   string `json:"__typename"`
-											Name       string `json:"name"`
-											Context    string `json:"context"`
-											Status     string `json:"status"`
-											Conclusion string `json:"conclusion"`
-											State      string `json:"state"`
-											DetailsURL string `json:"detailsUrl"`
-											TargetURL  string `json:"targetUrl"`
-										} `json:"nodes"`
-									} `json:"contexts"`
-								} `json:"statusCheckRollup"`
-							} `json:"commit"`
-						} `json:"nodes"`
-					} `json:"commits"`
-					Reviews struct {
-						PageInfo struct {
-							HasPreviousPage bool `json:"hasPreviousPage"`
-						} `json:"pageInfo"`
-						Nodes []struct {
-							ID          string          `json:"id"`
-							State       string          `json:"state"`
-							BodyText    string          `json:"bodyText"`
-							SubmittedAt time.Time       `json:"submittedAt"`
-							Author      prGraphQLAuthor `json:"author"`
-							Commit      struct {
-								OID string `json:"oid"`
-							} `json:"commit"`
-							Comments struct {
-								PageInfo struct {
-									HasNextPage bool `json:"hasNextPage"`
-								} `json:"pageInfo"`
-								Nodes []prGraphQLComment `json:"nodes"`
-							} `json:"comments"`
-						} `json:"nodes"`
-					} `json:"reviews"`
-					Comments struct {
-						PageInfo struct {
-							HasPreviousPage bool `json:"hasPreviousPage"`
-						} `json:"pageInfo"`
-						Nodes []prGraphQLComment `json:"nodes"`
-					} `json:"comments"`
-					Reactions struct {
-						PageInfo struct {
-							HasNextPage bool `json:"hasNextPage"`
-						} `json:"pageInfo"`
-						Nodes []struct {
-							Content   string    `json:"content"`
-							CreatedAt time.Time `json:"createdAt"`
-							User      struct {
-								Login string `json:"login"`
-							} `json:"user"`
-						} `json:"nodes"`
-					} `json:"reactions"`
-					ReviewThreads struct {
-						PageInfo struct {
-							HasNextPage bool `json:"hasNextPage"`
-						} `json:"pageInfo"`
-						Nodes []struct {
-							ID         string `json:"id"`
-							IsResolved bool   `json:"isResolved"`
-							Comments   struct {
-								Nodes []prGraphQLComment `json:"nodes"`
-							} `json:"comments"`
-						} `json:"nodes"`
-					} `json:"reviewThreads"`
-				} `json:"pullRequest"`
-			} `json:"repository"`
-		} `json:"data"`
-		Errors []struct {
-			Message string `json:"message"`
-		} `json:"errors"`
+	readiness, err := github.ParsePullRequestReadiness(output)
+	if err != nil {
+		return nil, err
 	}
-	if err := json.Unmarshal(output, &payload); err != nil {
-		return nil, fmt.Errorf("parse gh api graphql: %w", err)
+	pr := readiness.Snapshot
+	if pr.Number == 0 {
+		return nil, errors.New("gh api graphql returned no PR number")
 	}
-	if len(payload.Errors) > 0 {
-		return nil, fmt.Errorf("gh api graphql: %s", payload.Errors[0].Message)
-	}
-	pr := payload.Data.Repository.PullRequest
-	if pr == nil || pr.Number == "" || pr.HeadRefOID == "" {
-		return nil, errors.New("gh api graphql returned no PR number or head SHA")
-	}
-
 	result := &prReadiness{
-		Number: pr.Number.String(), State: strings.ToLower(pr.State), Draft: pr.IsDraft,
-		HeadSHA: pr.HeadRefOID, Reviewer: opts.Reviewer, ReviewState: "waiting",
-		URL: pr.URL,
+		Number: strconv.Itoa(pr.Number), State: pr.State, Draft: pr.Draft,
+		HeadSHA: pr.HeadSHA, Reviewer: opts.Reviewer, URL: pr.URL,
+		CheckState: readiness.Evidence.CheckState, evidence: readiness.Evidence,
 	}
-	evidence := prreadiness.Evidence{
-		State: result.State, Draft: result.Draft, HeadSHA: result.HeadSHA,
-	}
-
-	for _, request := range pr.ReviewRequests.Nodes {
-		if request.RequestedReviewer.TypeName == "User" && strings.EqualFold(request.RequestedReviewer.Login, opts.Reviewer) {
+	for _, reviewer := range readiness.RequestedReviewers {
+		if strings.EqualFold(reviewer, opts.Reviewer) {
 			result.ReviewerRequested = true
 			break
 		}
 	}
-
-	if len(pr.Commits.Nodes) > 0 {
-		if rollup := pr.Commits.Nodes[0].Commit.StatusCheckRollup; rollup != nil {
-			if rollup.Contexts.PageInfo.HasNextPage {
-				return nil, errors.New("PR has more than 100 checks; readiness cannot be verified without truncation")
-			}
-			for _, check := range rollup.Contexts.Nodes {
-				name, state, url := "status:"+check.Context, statusState(check.State), check.TargetURL
-				if check.TypeName == "CheckRun" {
-					name, state, url = "check:"+check.Name, checkRunState(check.Status, check.Conclusion), check.DetailsURL
-				}
-				result.Checks = append(result.Checks, prCheck{Name: name, State: state, URL: url})
-			}
-		}
+	for _, check := range readiness.Checks {
+		result.Checks = append(result.Checks, prCheck{Name: check.Name, State: check.State, URL: check.URL})
 	}
 	sort.Slice(result.Checks, func(i, j int) bool { return result.Checks[i].Name < result.Checks[j].Name })
-	result.CheckState = summarizePRChecks(result.Checks)
-	evidence.CheckState = result.CheckState
-	for _, check := range failedChecks(result.Checks) {
-		evidence.FailedChecks = append(evidence.FailedChecks, check.Name)
-	}
-
-	for _, review := range pr.Reviews.Nodes {
-		state := strings.ToUpper(review.State)
-		reviewEvidence := prreadiness.Review{
-			ID: review.ID, Author: review.Author.Login, State: state,
-			Body: strings.TrimSpace(review.BodyText), CommitOID: review.Commit.OID,
-			SubmittedAt: review.SubmittedAt,
-		}
-		if samePRReviewer(review.Author.Login, opts.Reviewer) && review.SubmittedAt.After(result.LatestReviewAt) {
+	for _, review := range readiness.Evidence.Reviews {
+		if samePRReviewer(review.Author, opts.Reviewer) && review.SubmittedAt.After(result.LatestReviewAt) {
 			result.LatestReviewAt = review.SubmittedAt
 		}
-		if strings.TrimSpace(review.BodyText) != "" && !isTrackedReviewerVerdict(review.Author.Login, state, opts) {
-			result.Comments = appendPRComment(result.Comments, prGraphQLComment{
-				ID: review.ID, CreatedAt: review.SubmittedAt, Author: review.Author,
-				BodyText: review.BodyText,
-			}, "review", opts)
-		}
-		if review.Comments.PageInfo.HasNextPage {
-			return nil, errors.New("a review carries more than 100 comments; new comments cannot be detected without truncation")
-		}
-		for _, comment := range review.Comments.Nodes {
-			result.Comments = appendPRComment(result.Comments, comment, "inline", opts)
-			reviewEvidence.Findings = append(reviewEvidence.Findings, prreadiness.Finding{
-				ID: comment.ID, Author: comment.Author.Login, Body: strings.TrimSpace(comment.BodyText),
-				Location: comment.location(),
-			})
-		}
-		evidence.Reviews = append(evidence.Reviews, reviewEvidence)
 	}
-	if pr.Reviews.PageInfo.HasPreviousPage || pr.Comments.PageInfo.HasPreviousPage ||
-		pr.Reactions.PageInfo.HasNextPage || pr.ReviewThreads.PageInfo.HasNextPage {
-		return nil, errors.New("PR discussion exceeds the 100-item verification window; readiness is unavailable")
-	}
-	for _, comment := range pr.Comments.Nodes {
-		result.Comments = appendPRComment(result.Comments, comment, "issue", opts)
-		evidence.Comments = append(evidence.Comments, prreadiness.Comment{
-			ID: comment.ID, Author: comment.Author.Login, Body: strings.TrimSpace(comment.BodyText), CreatedAt: comment.CreatedAt,
-			Bot: comment.Author.TypeName != "User",
-		})
-	}
-	for _, reaction := range pr.Reactions.Nodes {
-		evidence.Reactions = append(evidence.Reactions, prreadiness.Reaction{
-			Author: reaction.User.Login, Content: reaction.Content, CreatedAt: reaction.CreatedAt,
-		})
-	}
-	for _, thread := range pr.ReviewThreads.Nodes {
-		if len(thread.Comments.Nodes) == 0 {
+	for _, comment := range readiness.Comments {
+		if comment.ID == "" || opts.ignored(comment.Author) ||
+			(comment.Kind == "review" && isTrackedReviewerVerdict(comment.Author, comment.ReviewState, opts)) {
 			continue
 		}
-		first := thread.Comments.Nodes[0]
-		evidence.Threads = append(evidence.Threads, prreadiness.Thread{
-			ID: thread.ID, Author: first.Author.Login, Resolved: thread.IsResolved,
-			Body: strings.TrimSpace(first.BodyText), Location: first.location(),
+		result.Comments = append(result.Comments, prComment{
+			ID: comment.ID, Author: comment.Author, Kind: comment.Kind, Bot: comment.Bot,
+			CreatedAt: comment.CreatedAt, Body: strings.TrimSpace(comment.Body), Location: comment.Location,
 		})
 	}
-	result.evidence = evidence
-	evaluation := prreadiness.Evaluate(evidence, opts.Reviewer)
+	evaluation := prreadiness.Evaluate(result.evidence, opts.Reviewer)
 	result.ReviewState = evaluation.ReviewState
 	result.ReviewBody = evaluation.ReviewBody
 	result.ReviewSubmittedAt = evaluation.ReviewSubmitted
@@ -825,62 +637,6 @@ func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
 		return result.Comments[i].CreatedAt.Before(result.Comments[j].CreatedAt)
 	})
 	return result, nil
-}
-
-func appendPRComment(comments []prComment, node prGraphQLComment, kind string, opts prWaitOptions) []prComment {
-	if node.ID == "" || opts.ignored(node.Author.Login) {
-		return comments
-	}
-	return append(comments, prComment{
-		ID:        node.ID,
-		Author:    node.Author.Login,
-		Kind:      kind,
-		Bot:       node.Author.TypeName != "User",
-		CreatedAt: node.CreatedAt,
-		Body:      strings.TrimSpace(node.BodyText),
-		Location:  node.location(),
-	})
-}
-
-func checkRunState(status, conclusion string) string {
-	if !strings.EqualFold(status, "COMPLETED") {
-		return checksPending
-	}
-	switch strings.ToUpper(conclusion) {
-	case "SUCCESS", "NEUTRAL", "SKIPPED":
-		return checksGreen
-	case "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE":
-		return checksFailed
-	default:
-		return checksPending
-	}
-}
-
-func statusState(state string) string {
-	switch strings.ToUpper(state) {
-	case "SUCCESS":
-		return checksGreen
-	case "FAILURE", "ERROR":
-		return checksFailed
-	default:
-		return checksPending
-	}
-}
-
-func summarizePRChecks(checks []prCheck) string {
-	if len(checks) == 0 {
-		return checksNone
-	}
-	result := checksGreen
-	for _, check := range checks {
-		if check.State == checksFailed {
-			return checksFailed
-		}
-		if check.State != checksGreen {
-			result = checksPending
-		}
-	}
-	return result
 }
 
 type prWaitResult struct {
