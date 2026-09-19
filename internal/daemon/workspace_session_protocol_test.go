@@ -495,7 +495,7 @@ func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *t
 
 	if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{
 		ID: sessionID, CWD: cwd, Agent: "probe-close", Cols: 80, Rows: 24,
-		ExternalCommand: []string{"/bin/bash", "-c", `trap '' TERM HUP; printf '__CLOSE_READY__\n'; while :; do read -r -t 1 _ || :; done`},
+		ExternalCommand: []string{"/bin/bash", "-c", `trap '' TERM HUP; read -r _; printf '__CLOSE_READY__\n'; while :; do read -r -t 1 _ || :; done`},
 	}); err != nil {
 		t.Fatalf("spawn stubborn PTY: %v", err)
 	}
@@ -504,6 +504,9 @@ func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *t
 		t.Fatalf("attach stubborn PTY: %v", err)
 	}
 	defer stream.Close()
+	if err := backend.Input(context.Background(), sessionID, []byte("\n")); err != nil {
+		t.Fatalf("release stubborn PTY readiness gate: %v", err)
+	}
 	waitForPTYOutput(t, stream, "__CLOSE_READY__")
 
 	layoutBroadcast := make(chan *protocol.WorkspaceLayout, 1)
