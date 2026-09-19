@@ -65,6 +65,7 @@ type Thread struct {
 type Evidence struct {
 	State          string
 	Draft          bool
+	MergeableState string
 	HeadSHA        string
 	HeadObservedAt time.Time
 	CheckState     string
@@ -180,6 +181,7 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 		result.ReviewState = ReviewChangesRequested
 	}
 	result.Ready = strings.EqualFold(evidence.State, "open") && !evidence.Draft &&
+		strings.EqualFold(evidence.MergeableState, "clean") &&
 		evidence.CheckState == ChecksGreen && result.ReviewState == ReviewApproved &&
 		len(result.Unresolved) == 0
 	return result
@@ -215,7 +217,8 @@ func unavailableReason(body string) string {
 	normalized := strings.ToLower(strings.Join(strings.Fields(body), " "))
 	for _, phrase := range []string{
 		"unable to review", "cannot review", "can't review", "could not review",
-		"review unavailable", "review limit", "usage limit", "rate limit", "quota",
+		"review unavailable", "review limit reached", "usage limit reached",
+		"rate limit reached", "rate limit exceeded", "quota exhausted", "quota exceeded",
 	} {
 		if strings.Contains(normalized, phrase) {
 			return phrase

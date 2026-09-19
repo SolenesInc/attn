@@ -81,7 +81,8 @@ func openSnapshot(title, mergeableState, headSHA string) *github.PullRequestSnap
 func watchedReadiness(head, checks, review string) *github.PullRequestReadiness {
 	snapshot := openSnapshot("Watched pull request", "clean", head)
 	evidence := prreadiness.Evidence{
-		State: "open", HeadSHA: head, HeadObservedAt: time.Now().Add(-time.Minute), CheckState: checks,
+		State: "open", MergeableState: "clean", HeadSHA: head,
+		HeadObservedAt: time.Now().Add(-time.Minute), CheckState: checks,
 	}
 	if review != "" {
 		evidence.Reviews = []prreadiness.Review{{
