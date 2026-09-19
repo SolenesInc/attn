@@ -2408,6 +2408,16 @@ export function useDaemonSocket({
             }
             break;
 
+          case 'pull_request_unwatch_result':
+            settlePendingRequest(
+              pendingActionsRef.current,
+              'pull_request_unwatch',
+              data,
+              () => true,
+              'Could not stop watching the pull request',
+            );
+            break;
+
           case 'repos_updated':
             if (data.repos) {
               reposRef.current = data.repos;
@@ -5108,11 +5118,13 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'trigger_nudge', session_id: sessionId }));
   }, []);
 
-  const sendPullRequestUnwatch = useCallback((sessionId: string, url: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ cmd: 'pull_request_unwatch', id: sessionId, url }));
-  }, []);
+  const sendPullRequestUnwatch = useCallback((sessionId: string, url: string): Promise<void> => {
+    return sendRequest<true>(
+      'pull_request_unwatch',
+      { id: sessionId, url },
+      'Stopping the pull request watch timed out',
+    ).then(() => undefined);
+  }, [sendRequest]);
 
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;

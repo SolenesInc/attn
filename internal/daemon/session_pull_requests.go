@@ -111,14 +111,18 @@ func (d *Daemon) handlePullRequestWatchWS(msg *protocol.PullRequestWatchMessage)
 	}
 }
 
-func (d *Daemon) handlePullRequestUnwatchWS(msg *protocol.PullRequestUnwatchMessage) {
+func (d *Daemon) handlePullRequestUnwatchWS(client *wsClient, msg *protocol.PullRequestUnwatchMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
 		err = d.unwatchSessionPullRequest(rec)
 	}
-	if err != nil {
-		d.logf("forwarded pull request unwatch: %v", err)
+	result := protocol.PullRequestUnwatchResultMessage{
+		Event: protocol.EventPullRequestUnwatchResult, RequestID: protocol.Deref(msg.RequestID), Success: err == nil,
 	}
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	}
+	d.sendToClient(client, result)
 }
 
 func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, reviewer string) error {

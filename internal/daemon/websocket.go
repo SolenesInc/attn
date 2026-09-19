@@ -1097,7 +1097,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdPullRequestWatch:
 		d.handlePullRequestWatchWS(msg.(*protocol.PullRequestWatchMessage))
 	case protocol.CmdPullRequestUnwatch:
-		d.handlePullRequestUnwatchWS(msg.(*protocol.PullRequestUnwatchMessage))
+		d.handlePullRequestUnwatchWS(client, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge:

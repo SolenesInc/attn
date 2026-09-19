@@ -245,6 +245,22 @@ func TestForwardedPullRequestCommandsLandOnTheOwner(t *testing.T) {
 	}
 }
 
+func TestPullRequestUnwatchWSResultCorrelatesFailure(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handlePullRequestUnwatchWS(client, &protocol.PullRequestUnwatchMessage{
+		Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: "https://github.com/victorarias/attn/pull/71",
+		RequestID: protocol.Ptr("unwatch-1"),
+	})
+
+	var result protocol.PullRequestUnwatchResultMessage
+	readNotebookWSEvent(t, client.send, &result)
+	if result.RequestID != "unwatch-1" || result.Success || result.Error == nil ||
+		!strings.Contains(*result.Error, "not watching") {
+		t.Fatalf("unwatch result = %+v", result)
+	}
+}
+
 func TestPullRequestForgetIsTheWayOut(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"

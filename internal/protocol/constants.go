@@ -348,6 +348,7 @@ const (
 	EventRenameResult                    = "rename_result"
 	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
+	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenReviewUpdated             = "garden_review_updated"
 	EventAppsUpdated                     = "apps_updated"

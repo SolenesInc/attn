@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
@@ -43,7 +43,10 @@ function show(pullRequests: SessionPullRequest[], autoFocus = true) {
 }
 
 describe('SessionPullRequestPopover', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sendPullRequestUnwatch.mockResolvedValue(undefined);
+  });
 
   it('spells out every dimension the daemon knows', () => {
     show([pr()]);
@@ -80,7 +83,7 @@ describe('SessionPullRequestPopover', () => {
     expect(screen.queryByText('waiting for GitHub')).not.toBeInTheDocument();
   });
 
-  it('shows monitor health and stops only this session watch', () => {
+  it('shows monitor health and stops only this session watch', async () => {
     show([pr({
       session_id: 'session-1',
       watching: true,
@@ -94,12 +97,22 @@ describe('SessionPullRequestPopover', () => {
       'session-1',
       'https://github.com/victorarias/attn/pull/71',
     );
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop watching for this session' })).toBeEnabled());
   });
 
   it('shows an honest delayed monitor state', () => {
     show([pr({ watching: true, watch_error: 'review API unavailable' })]);
 
     expect(screen.getByText('delayed · review API unavailable')).toBeInTheDocument();
+  });
+
+  it('shows why stopping the watch failed', async () => {
+    sendPullRequestUnwatch.mockRejectedValueOnce(new Error('session is no longer watching this pull request'));
+    show([pr({ session_id: 'session-1', watching: true })]);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('session is no longer watching this pull request');
   });
 
   it('opens the PR on GitHub from its title', () => {

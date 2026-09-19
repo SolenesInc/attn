@@ -1028,6 +1028,14 @@ model PullRequestUnwatchMessage {
   cmd: "pull_request_unwatch";
   id: string;
   url: string;
+  request_id?: string;
+}
+
+model PullRequestUnwatchResultMessage {
+  event: "pull_request_unwatch_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
 }
 
 model DelegationSelection {
@@ -7681,6 +7689,7 @@ alias DaemonEvent =
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage
+  | PullRequestUnwatchResultMessage
   | PRsUpdatedMessage
   | ReposUpdatedMessage
   | AuthorsUpdatedMessage
