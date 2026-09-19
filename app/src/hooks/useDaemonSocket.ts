@@ -777,6 +777,7 @@ const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 const MODEL_DISCOVERY_TIMEOUT_MS = 70_000;
+const CREW_RESTART_TIMEOUT_MS = 120_000;
 const SESSION_REOPEN_TIMEOUT_MS = 120_000;
 // Bus status is one aggregate pass over the whole event log. Measured on a copy of production, 209ms
 // at 945k rows — so 30s is roughly a hundred times the worst real log.
@@ -1161,6 +1162,7 @@ export function useDaemonSocket({
     payload: Record<string, unknown>,
     timeoutMessage: string,
     timeoutMs: number = DEFAULT_REQUEST_TIMEOUT_MS,
+    supersede = false,
   ): Promise<T> => {
     return new Promise<T>((resolve, reject) => {
       const ws = wsRef.current;
@@ -1168,7 +1170,9 @@ export function useDaemonSocket({
         reject(new Error('WebSocket not connected'));
         return;
       }
-      pendingActionsRef.current.get(key)?.reject(new Error(`Request ${key} was superseded by a newer send`));
+      if (supersede) {
+        pendingActionsRef.current.get(key)?.reject(new Error(`Request ${key} was superseded by a newer send`));
+      }
       const waiter = { resolve: resolve as (value: unknown) => void, reject };
       pendingActionsRef.current.set(key, waiter);
       ws.send(JSON.stringify(payload));
@@ -4856,6 +4860,8 @@ export function useDaemonSocket({
         expected_revision: options.expectedRevision,
       },
       `Restarting ${crewDisplayName(options.member)} timed out`,
+      CREW_RESTART_TIMEOUT_MS,
+      true,
     )
   ), [sendKeyedRequest]);
 

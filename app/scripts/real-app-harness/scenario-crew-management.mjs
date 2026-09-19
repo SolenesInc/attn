@@ -471,6 +471,9 @@ try {
     runner.assert(Boolean(selected.text) && selectedTab.text === 'Handoffs',
       'returning preserves the selected member, Handoffs tab, and letter', { selected, selectedTab });
     await pressEscapeAndWaitFor('crew-seed-back');
+    await click(`[data-pane-id="tile-seed-${linkedSeed}"] [aria-label="Close tile"]`);
+    const closedLinkedReader = await client.request('seed_document_get_state', { seedId: linkedSeed });
+    runner.assert(!closedLinkedReader.present, 'the handoff-linked seed reader closes', closedLinkedReader);
   });
 
   await runner.step('awake_member_entry_saves_a_complete_next_wake_selection', async () => {

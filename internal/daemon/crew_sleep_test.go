@@ -162,3 +162,33 @@ func TestCrewSleep_ADeadDayWithARestartPendingFailsTheRestart(t *testing.T) {
 		t.Fatalf("spawns = %d, want no wake", len(spawnedSessions(t, backend)))
 	}
 }
+
+func TestCrewSleep_ALiveDayWithARestartPendingWithdrawsTheRestart(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if _, err := d.setCrewRestart("trellis", &crew.Restart{RequestID: "then-sleep", SessionID: woken.SessionID, State: crew.RestartRequested}); err != nil {
+		t.Fatalf("seed pending restart: %v", err)
+	}
+
+	resp := crewSleepCall(t, d, "trellis")
+	if !resp.Ok || resp.CrewSleepResult.AlreadyAsleep {
+		t.Fatalf("sleep = %+v / %v", resp.CrewSleepResult, protocol.Deref(resp.Error))
+	}
+	member := memberByID(t, crewList(t, d), "trellis")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateFailed || !strings.Contains(protocol.Deref(member.Restart.Error), "sleep instead") {
+		t.Fatalf("restart after the sleep request = %+v, want withdrawn", member.Restart)
+	}
+
+	msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID, Note: "Going to sleep as asked.", Close: protocol.Ptr(protocol.CrewDayCloseSleep)}
+	handoff := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
+	if !handoff.Ok || protocol.Deref(handoff.CrewHandoffResult.Outcome) != protocol.CrewDayCloseSleep {
+		t.Fatalf("handoff = %+v / %v", handoff.CrewHandoffResult, protocol.Deref(handoff.Error))
+	}
+	member = memberByID(t, crewList(t, d), "trellis")
+	if member.Restart == nil || !strings.Contains(protocol.Deref(member.Restart.Error), "sleep instead") {
+		t.Fatalf("the honoured sleep rewrote the withdrawn restart: %+v", member.Restart)
+	}
+}

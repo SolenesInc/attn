@@ -723,6 +723,20 @@ describe('CrewPanel', () => {
     expect(screen.getByTestId('crew-charter-status')).not.toHaveTextContent('Saved');
   });
 
+  it('rereads a saved charter when the tab is entered again', async () => {
+    const sendCrewCharterGet = vi.fn()
+      .mockResolvedValueOnce({ member: 'trellis', charter: { content: 'first', token: 'first' } })
+      .mockResolvedValueOnce({ member: 'trellis', charter: { content: 'edited elsewhere', token: 'second' } });
+    renderPanel({ members: [member('trellis', 4)], daemon: api({ sendCrewCharterGet }) });
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    expect(await screen.findByTestId('crew-charter-editor')).toHaveValue('first');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    await waitFor(() => expect(screen.getByTestId('crew-charter-editor')).toHaveValue('edited elsewhere'));
+    expect(sendCrewCharterGet).toHaveBeenCalledTimes(2);
+  });
+
   it('commits a launch field that still has focus when Escape closes the panel', async () => {
     const sendCrewSet = vi.fn().mockResolvedValue({ success: true, conflict: false });
     const { onClose, rerenderPanel } = renderPanel({ daemon: api({ sendCrewSet }), members: [member('keel', 6)] });

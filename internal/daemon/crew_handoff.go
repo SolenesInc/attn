@@ -111,7 +111,9 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 			return
 		}
 		if protocol.Deref(result.Outcome) != protocol.CrewDayCloseNap || result.SessionID == nil {
-			d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
+			if restart.State != crew.RestartFailed {
+				d.failCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, errors.New("the day ended without starting a successor"))
+			}
 			return
 		}
 		d.completeCrewRestart(member.ID, restart.RequestID, sessionID, result.Path, *result.SessionID)

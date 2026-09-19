@@ -438,6 +438,20 @@ describe('useDaemonSocket crew', () => {
     });
   });
 
+  it('leaves a constant-key request such as refresh_prs to its own timeout when sent again', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    let first: Promise<unknown>;
+    let second: Promise<unknown>;
+    act(() => { first = result.current.sendRefreshPRs(); });
+    act(() => { second = result.current.sendRefreshPRs(); });
+    let firstSettled = false;
+    void first!.then(() => { firstSettled = true; }, () => { firstSettled = true; });
+    await act(async () => { await Promise.resolve(); });
+    expect(firstSettled).toBe(false);
+    act(() => { ws.emit({ event: 'refresh_prs_result', success: true }); });
+    await expect(second!).resolves.toBeDefined();
+  });
+
   it('lets a redelivered restart supersede the earlier waiter under the same request id', async () => {
     const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
     vi.useFakeTimers();
