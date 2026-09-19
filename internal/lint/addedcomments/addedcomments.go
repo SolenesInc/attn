@@ -19,9 +19,10 @@ var extensions = map[string]bool{
 }
 
 var (
-	hunkHeader = regexp.MustCompile(`^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@`)
-	comment    = regexp.MustCompile(`^(//|/\*|\*/|\*$|\* )`)
-	directive  = regexp.MustCompile(`^//+\s*(go:|nolint|lint:|export |line |sys|extern |\+build|Code generated|@ts-|eslint-|oxlint-|biome-ignore|prettier-ignore|@vitest-environment|@jest-environment|@jsx|<reference|v8 ignore|c8 ignore|istanbul ignore|#region|#endregion)`)
+	hunkHeader  = regexp.MustCompile(`^@@ -\d+(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
+	comment     = regexp.MustCompile(`^(//|/\*)`)
+	goDirective = regexp.MustCompile(`^//(go:|line |export |extern |sys(nb)? |\+build|nolint|lint:| Code generated| Output:| Unordered output:)`)
+	toolMarker  = regexp.MustCompile(`^(//+|/\*+)\s*(@ts-|eslint-|oxlint-|biome-ignore|prettier-ignore|@vitest-environment|@jest-environment|@jsx|<reference|v8 ignore|c8 ignore|istanbul ignore|#region|#endregion)`)
 )
 
 func Checked(file string) bool {
@@ -38,39 +39,55 @@ func Checked(file string) bool {
 
 func IsComment(line string) bool {
 	text := strings.TrimSpace(line)
-	return comment.MatchString(text) && !directive.MatchString(text)
+	return comment.MatchString(text) && !goDirective.MatchString(text) && !toolMarker.MatchString(text)
+}
+
+func count(group string) int {
+	if group == "" {
+		return 1
+	}
+	n, _ := strconv.Atoi(group)
+	return n
 }
 
 func FindInUnifiedDiff(diff string) []Finding {
-	removed := map[string]bool{}
+	removed := map[string]int{}
 	var added []Finding
-	file, line := "", 0
+	file, line, removals, additions := "", 0, 0, 0
 	for _, text := range strings.Split(diff, "\n") {
 		text = strings.TrimSuffix(text, "\r")
 		switch {
-		case strings.HasPrefix(text, "+++ "):
-			file = strings.TrimPrefix(strings.TrimPrefix(text, "+++ "), "b/")
-		case strings.HasPrefix(text, "--- "):
-		case strings.HasPrefix(text, "@@"):
-			if m := hunkHeader.FindStringSubmatch(text); m != nil {
-				line, _ = strconv.Atoi(m[1])
+		case removals > 0 && strings.HasPrefix(text, "-"):
+			removals--
+			if Checked(file) && IsComment(text[1:]) {
+				removed[strings.TrimSpace(text[1:])]++
 			}
-		case strings.HasPrefix(text, "-"):
-			if IsComment(text[1:]) {
-				removed[strings.TrimSpace(text[1:])] = true
-			}
-		case strings.HasPrefix(text, "+"):
+		case additions > 0 && strings.HasPrefix(text, "+"):
+			additions--
 			if Checked(file) && IsComment(text[1:]) {
 				added = append(added, Finding{Path: file, Line: line, Text: strings.TrimSpace(text[1:])})
 			}
 			line++
+		case strings.HasPrefix(text, "--- "):
+			file = strings.TrimPrefix(strings.TrimRight(strings.TrimPrefix(text, "--- "), "\t"), "a/")
+		case strings.HasPrefix(text, "+++ "):
+			if name := strings.TrimRight(strings.TrimPrefix(text, "+++ "), "\t"); name != "/dev/null" {
+				file = strings.TrimPrefix(name, "b/")
+			}
+		case strings.HasPrefix(text, "@@"):
+			if m := hunkHeader.FindStringSubmatch(text); m != nil {
+				removals, additions = count(m[1]), count(m[3])
+				line, _ = strconv.Atoi(m[2])
+			}
 		}
 	}
 	var out []Finding
 	for _, f := range added {
-		if !removed[f.Text] {
-			out = append(out, f)
+		if removed[f.Text] > 0 {
+			removed[f.Text]--
+			continue
 		}
+		out = append(out, f)
 	}
 	return out
 }

@@ -80,3 +80,80 @@ func TestLeavesAloneWhatIsNotANewProseComment(t *testing.T) {
 		t.Fatalf("findings = %#v, want none", got)
 	}
 }
+
+func TestARenamedFileKeepsItsComments(t *testing.T) {
+	diff := `diff --git a/internal/a.go b/internal/a.go
+deleted file mode 100644
+--- a/internal/a.go
++++ /dev/null
+@@ -1,3 +0,0 @@
+-package a
+-// Old explains a.
+-func Old() {}
+diff --git a/internal/b.go b/internal/b.go
+new file mode 100644
+--- /dev/null
++++ b/internal/b.go
+@@ -0,0 +1,3 @@
++package a
++// Old explains a.
++func Old() {}
+`
+	if got := FindInUnifiedDiff(diff); len(got) != 0 {
+		t.Fatalf("findings = %#v, want none", got)
+	}
+}
+
+func TestOneRemovedCommentExcusesOneAddedComment(t *testing.T) {
+	diff := `--- a/internal/a.go
++++ b/internal/a.go
+@@ -4 +4,2 @@
+-// TODO
++// TODO
++// TODO
+--- a/docs/notes.md
++++ b/docs/notes.md
+@@ -1 +0,0 @@
+-// TODO
+`
+	got := FindInUnifiedDiff(diff)
+	if want := []Finding{{"internal/a.go", 5, "// TODO"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("findings = %#v, want %#v", got, want)
+	}
+}
+
+func TestProseThatStartsLikeADirectiveIsStillProse(t *testing.T) {
+	diff := `--- a/internal/a.go
++++ b/internal/a.go
+@@ -1,0 +2,4 @@
++// system must restart here
++// line up the ducks
++// export the thing
++//export realDirective
+`
+	if got := FindInUnifiedDiff(diff); len(got) != 3 {
+		t.Fatalf("findings = %#v, want the three prose lines", got)
+	}
+}
+
+func TestContentThatLooksLikeDiffSyntaxDoesNotDerailTheParser(t *testing.T) {
+	diff := "--- a/internal/sp ace.go\t\n+++ b/internal/sp ace.go\t\n@@ -3,2 +3,3 @@\n--- old banner\n-x := 1\n+++ counter\n+    * factor\n+// added after the odd lines\n"
+	got := FindInUnifiedDiff(diff)
+	if want := []Finding{{"internal/sp ace.go", 5, "// added after the odd lines"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("findings = %#v, want %#v", got, want)
+	}
+}
+
+func TestBlockFormToolMarkersAreExempt(t *testing.T) {
+	diff := `--- a/app/src/a.ts
++++ b/app/src/a.ts
+@@ -1,0 +2,3 @@
++/* eslint-disable no-console */
++/* v8 ignore next */
++/** Explains the export. */
+`
+	got := FindInUnifiedDiff(diff)
+	if want := []Finding{{"app/src/a.ts", 4, "/** Explains the export. */"}}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("findings = %#v, want %#v", got, want)
+	}
+}

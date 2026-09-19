@@ -39,7 +39,7 @@ func Since(base string) (Change, error) {
 }
 
 func (c Change) UnifiedDiff() (string, error) {
-	return git("diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--diff-filter=AM", c.MergeBase, "--")
+	return git("-c", "core.quotepath=off", "diff", "-U0", "--no-color", "--no-ext-diff", "--no-renames", "--src-prefix=a/", "--dst-prefix=b/", c.MergeBase, "--")
 }
 
 func (c Change) Untracked() ([]string, error) {
