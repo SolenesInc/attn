@@ -2,7 +2,8 @@ import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewMember } from '../types/generated';
-import { CrewSeeds, seedsPlantedByMember, seedsTendedByMember } from './CrewSeeds';
+import { CrewSeeds } from './CrewSeeds';
+import { seedsPlantedByMember, seedsTendedByMember } from './crewSeedOwnership';
 
 function member(id: string, bindingSession = ''): CrewMember {
   return {

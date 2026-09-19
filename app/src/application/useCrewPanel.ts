@@ -2,19 +2,16 @@ import { useCallback, useState } from 'react';
 
 interface CrewPanelState {
   open: boolean;
+  visit: number;
   member?: string;
   returnFocus?: HTMLElement;
-  preserveStateOnOpen?: boolean;
 }
 
 export function useCrewPanel() {
-  const [crewPanel, setCrewPanel] = useState<CrewPanelState>({
-    open: false,
-    preserveStateOnOpen: false,
-  });
+  const [crewPanel, setCrewPanel] = useState<CrewPanelState>({ open: false, visit: 0 });
 
   const handleOpenCrew = useCallback((member: string | undefined, returnFocus: HTMLElement) => {
-    setCrewPanel({ open: true, member, returnFocus, preserveStateOnOpen: false });
+    setCrewPanel((current) => ({ open: true, visit: current.visit + 1, member, returnFocus }));
   }, []);
 
   const closeCrewPanel = useCallback(() => {
@@ -30,7 +27,7 @@ export function useCrewPanel() {
   }, [closeCrewPanel, crewPanel.returnFocus]);
 
   const handleBackToCrew = useCallback((returnFocus: HTMLElement) => {
-    setCrewPanel((current) => ({ ...current, open: true, returnFocus, preserveStateOnOpen: true }));
+    setCrewPanel((current) => ({ ...current, open: true, returnFocus }));
   }, []);
 
   return { crewPanel, handleOpenCrew, closeCrewPanel, handleCloseCrew, handleBackToCrew };

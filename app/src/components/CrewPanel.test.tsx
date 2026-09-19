@@ -71,7 +71,6 @@ function renderPanel({
   sessions = [],
   initialMember,
   isOpen = true,
-  preserveStateOnOpen = false,
   onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>(),
   seeds = [],
 }: {
@@ -80,45 +79,37 @@ function renderPanel({
   sessions?: any[];
   initialMember?: string;
   isOpen?: boolean;
-  preserveStateOnOpen?: boolean;
   onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string, placementSessionId?: string) => void>>;
   seeds?: Seed[];
 } = {}) {
   const onClose = vi.fn();
-  const view = render(
+  let visit = 1;
+  let open = isOpen;
+  const panel = (nextMembers: CrewMember[], nextOpen: boolean) => (
     <DaemonApiProvider api={daemon}>
       <CrewPanel
-        isOpen={isOpen}
-        initialMember={initialMember}
-        members={members}
-        sessions={sessions}
-        seeds={seeds}
-        seedsTotal={seeds.length}
-        preserveStateOnOpen={preserveStateOnOpen}
-        onClose={onClose}
-        onOpenSeed={onOpenSeed}
-      />
-    </DaemonApiProvider>,
-  );
-  const rerenderPanel = (
-    nextMembers: CrewMember[],
-    nextOpen = isOpen,
-    preserve = preserveStateOnOpen,
-  ) => view.rerender(
-    <DaemonApiProvider api={daemon}>
-      <CrewPanel
+        key={visit}
         isOpen={nextOpen}
         initialMember={initialMember}
         members={nextMembers}
         sessions={sessions}
         seeds={seeds}
         seedsTotal={seeds.length}
-        preserveStateOnOpen={preserve}
         onClose={onClose}
         onOpenSeed={onOpenSeed}
       />
-    </DaemonApiProvider>,
+    </DaemonApiProvider>
   );
+  const view = render(panel(members, isOpen));
+  const rerenderPanel = (
+    nextMembers: CrewMember[],
+    nextOpen = open,
+    preserve = false,
+  ) => {
+    if (nextOpen && !open && !preserve) visit += 1;
+    open = nextOpen;
+    view.rerender(panel(nextMembers, nextOpen));
+  };
   return { ...view, daemon, onClose, onOpenSeed, rerenderPanel };
 }
 

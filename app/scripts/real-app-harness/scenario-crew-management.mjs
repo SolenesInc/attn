@@ -189,11 +189,9 @@ runner.registerCleanup('delete_members', () => {
   if (!membersRegistered) return;
   for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
 });
-runner.registerCleanup('close_crew_days', async () => {
-  for (const sessionId of [successor, firstSession].filter(Boolean)) {
-    await client.request('close_session', { sessionId }).catch(() => {});
-  }
-});
+runner.registerCleanup('close_crew_days', () => Promise.all(
+  [successor, firstSession].filter(Boolean).map((sessionId) => client.request('close_session', { sessionId }).catch(() => {})),
+));
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
   const handoffs = path.join(awakeHome, 'handoffs');
@@ -354,8 +352,10 @@ try {
     await click('[data-testid="manage-crew"]');
     const text = await panelText();
     runner.assert(text.includes('Manage crew') && text.includes('Awake') && text.includes('Asleep'), 'the roster keeps both member states visible', { text });
-    const sidebarGeometry = await client.request('dom_bounds', { selector: '.sidebar' });
-    const panelGeometry = await client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' });
+    const [sidebarGeometry, panelGeometry] = await Promise.all([
+      client.request('dom_bounds', { selector: '.sidebar' }),
+      client.request('dom_bounds', { selector: '[data-testid="crew-panel"]' }),
+    ]);
     const sidebarBounds = sidebarGeometry.bounds;
     const panelBounds = panelGeometry.bounds;
     runner.assert(
@@ -457,8 +457,10 @@ try {
     await waitForDom('[data-testid="crew-panel"]', { textIncludes: 'Linked handoff' });
     await waitForDom(`[data-testid="crew-roster-${history}"][aria-current="true"]`);
     await waitForDom('[data-testid="crew-tab-handoffs"][aria-current="page"]');
-    const selected = await client.request('dom_text', { selector: `[data-testid="crew-roster-${history}"][aria-current="true"]` });
-    const selectedTab = await client.request('dom_text', { selector: '[data-testid="crew-tab-handoffs"][aria-current="page"]' });
+    const [selected, selectedTab] = await Promise.all([
+      client.request('dom_text', { selector: `[data-testid="crew-roster-${history}"][aria-current="true"]` }),
+      client.request('dom_text', { selector: '[data-testid="crew-tab-handoffs"][aria-current="page"]' }),
+    ]);
     runner.assert(Boolean(selected.text) && selectedTab.text === 'Handoffs',
       'returning preserves the selected member, Handoffs tab, and letter', { selected, selectedTab });
     await pressEscapeAndWaitFor('crew-seed-back');
