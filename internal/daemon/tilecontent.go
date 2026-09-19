@@ -494,7 +494,7 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 		}
 
 		workspaceID = uuid.NewString()
-		d.registerWorkspace(workspaceID, seed.Title, d.dataRoot, false)
+		d.registerWorkspace(workspaceID, seed.Title, "", false)
 		snapshot := workspacelayout.NormalizeWorkspaceLayout(workspacelayout.WorkspaceLayout{
 			WorkspaceID: workspaceID,
 			Layout: workspacelayout.Node{

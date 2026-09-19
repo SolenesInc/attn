@@ -6612,7 +6612,7 @@ model CrewHandoffsGetResultMessage {
   success: boolean;
   error?: string;
   member?: string;
-  handoffs?: CrewHandoffSummary[];
+  handoffs: CrewHandoffSummary[];
 }
 
 model CrewHandoffGetMessage {

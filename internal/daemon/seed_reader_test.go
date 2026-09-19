@@ -130,8 +130,8 @@ func TestOpenSeedWithoutPlacementCreatesAStandaloneReaderWorkspace(t *testing.T)
 		t.Fatalf("open = (%q, %q), want standalone workspace and tile for %s", workspaceID, tileID, seed.ID)
 	}
 	workspace := d.store.GetWorkspace(workspaceID)
-	if workspace == nil || workspace.Title != seed.Title || workspace.Directory != d.dataRoot {
-		t.Fatalf("standalone workspace = %+v, want seed reader rooted at the home daemon data dir", workspace)
+	if workspace == nil || workspace.Title != seed.Title || workspace.Directory != "" {
+		t.Fatalf("standalone workspace = %+v, want an unrooted seed reader rather than one at %q", workspace, d.dataRoot)
 	}
 	snapshot := d.store.GetWorkspaceLayout(workspaceID)
 	if snapshot == nil || len(snapshot.Panes) != 0 {

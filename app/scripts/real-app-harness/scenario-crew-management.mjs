@@ -96,7 +96,9 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
     });
     const timer = setTimeout(() => {
       watcher.close();
-      reject(new Error(`timed out waiting for ${description}: ${file}`));
+      let listing = '';
+      try { listing = fs.readdirSync(path.dirname(file)).join(','); } catch (error) { listing = String(error); }
+      reject(new Error(`timed out waiting for ${description}: ${file} exists=${fs.existsSync(file)} dir=${listing}`));
     }, timeoutMs);
   }));
 }
@@ -189,9 +191,13 @@ runner.registerCleanup('delete_members', () => {
   if (!membersRegistered) return;
   for (const member of [awake, asleep, history]) runAttn(['doc', 'delete', 'core/crew', 'members', member]);
 });
-runner.registerCleanup('close_crew_days', () => Promise.all(
-  [successor, firstSession].filter(Boolean).map((sessionId) => client.request('close_session', { sessionId }).catch(() => {})),
-));
+runner.registerCleanup('close_crew_days', () => {
+  const observed = [...observer.sessionsById.values()]
+    .filter((session) => [awake, asleep, history].includes(session.crew_member))
+    .map((session) => session.id);
+  const days = new Set([successor, firstSession, ...observed].filter(Boolean));
+  return Promise.all([...days].map((sessionId) => client.request('close_session', { sessionId }).catch(() => {})));
+});
 runner.registerCleanup('archive_crew_files', () => {
   if (fs.existsSync(historyHome)) fs.chmodSync(historyHome, 0o755);
   const handoffs = path.join(awakeHome, 'handoffs');

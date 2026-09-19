@@ -2651,7 +2651,7 @@ type CrewHandoffsGetResultMessage struct {
 	Event string `json:"event"`
 
 	// Handoffs corresponds to the JSON schema field "handoffs".
-	Handoffs []CrewHandoffSummary `json:"handoffs,omitempty,omitzero"`
+	Handoffs []CrewHandoffSummary `json:"handoffs"`
 
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`

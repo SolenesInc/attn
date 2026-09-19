@@ -3074,7 +3074,7 @@ export interface HandoffElement {
 export interface CrewHandoffsGetResultMessage {
     error?:     string;
     event:      CrewHandoffsGetResultMessageEvent;
-    handoffs?:  HandoffElement[];
+    handoffs:   HandoffElement[];
     member?:    string;
     request_id: string;
     success:    boolean;
@@ -18396,7 +18396,7 @@ const typeMap: any = {
     "CrewHandoffsGetResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CrewHandoffsGetResultMessageEvent") },
-        { json: "handoffs", js: "handoffs", typ: u(undefined, a(r("HandoffElement"))) },
+        { json: "handoffs", js: "handoffs", typ: a(r("HandoffElement")) },
         { json: "member", js: "member", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: "" },
         { json: "success", js: "success", typ: true },

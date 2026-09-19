@@ -186,6 +186,25 @@ func TestCrewHandoffs_MissingDirectoryIsAnHonestEmptyHistory(t *testing.T) {
 	}
 }
 
+func TestCrewHandoffs_WebSocketCarriesAnEmptyHistoryAsAnEmptyList(t *testing.T) {
+	d := newCrewDaemon(t)
+	member, _, err := d.resolveCrewMember("keel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(filepath.Join(member.HomeDir, crew.HandoffsDirName)); err != nil {
+		t.Fatal(err)
+	}
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.handleCrewHandoffsGetWS(client, &protocol.CrewHandoffsGetMessage{
+		Cmd: protocol.CmdCrewHandoffsGet, Member: "keel", RequestID: protocol.Ptr("handoffs-empty"),
+	})
+	raw := <-client.send
+	if !strings.Contains(string(raw.payload), `"handoffs":[]`) {
+		t.Fatalf("empty history frame = %s, want an explicit empty handoffs list", raw.payload)
+	}
+}
+
 func TestCrewDocuments_WebSocketResultsCorrelateAndOutpostsAreRefused(t *testing.T) {
 	d := newCrewDaemon(t)
 	client := &wsClient{send: make(chan outboundMessage, 1)}
