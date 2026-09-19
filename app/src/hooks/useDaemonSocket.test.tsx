@@ -46,6 +46,19 @@ class FakeWebSocket {
   }
 }
 
+function renderSocket() {
+  return renderHook(() =>
+    useDaemonSocket({
+      onSessionsUpdate: vi.fn(),
+      onWorkspacesUpdate: vi.fn(),
+      onPRsUpdate: vi.fn(),
+      onReposUpdate: vi.fn(),
+      onAuthorsUpdate: vi.fn(),
+      wsUrl: 'ws://localhost:9999/ws',
+    }),
+  );
+}
+
 async function waitForOpenSocket(): Promise<FakeWebSocket> {
   await waitFor(() => {
     expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
@@ -717,16 +730,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('correlates pull request unwatch failures', async () => {
-    const { result, unmount } = renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
+    const { result, unmount } = renderSocket();
     const ws = await waitForOpenSocket();
     const request = result.current.sendPullRequestUnwatch('session-1', 'https://github.com/o/r/pull/1');
     const command = ws.sent.map((entry) => JSON.parse(entry)).find((entry) => entry.cmd === 'pull_request_unwatch');
@@ -2620,19 +2624,6 @@ describe('useDaemonSocket workflow runs', () => {
     vi.clearAllMocks();
     useWorkflowRunsStore.getState().reset();
   });
-
-  function renderSocket() {
-    return renderHook(() =>
-      useDaemonSocket({
-        onSessionsUpdate: vi.fn(),
-        onWorkspacesUpdate: vi.fn(),
-        onPRsUpdate: vi.fn(),
-        onReposUpdate: vi.fn(),
-        onAuthorsUpdate: vi.fn(),
-        wsUrl: 'ws://localhost:9999/ws',
-      }),
-    );
-  }
 
   it('populates the store on workflow_run_updated', async () => {
     const { unmount } = renderSocket();
