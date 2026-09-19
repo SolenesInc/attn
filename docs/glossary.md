@@ -47,6 +47,7 @@
 - Seed outcome: completion and required verification defined by the body. Harvest when both are complete.
 - Harvest condition: a seed armed to harvest when a named session pull request merges. The daemon settles it on the pull request refresh; a pull request closed without merging clears the condition instead of closing the seed.
 - Tender: seed claimant; one at a time.
+- Member claim: a tender with no `tender_session` and a recorded `tender_member`; it belongs to the permanent crew identity and remains held while the member is asleep. Session claim: a tender recorded as `tender_session`; it belongs to that exact session and counts as a crew member's work only while that session is the member's current day. Its `tender_member` records who that session acted as, but does not turn it into a permanent member claim. One seed still appears once when both identities name the current day.
 - Execution: last observed session, native conversation, agent, directory, host, repository, and branch for a seed.
 - Resume: reopen the exact saved conversation and directory. Handover: start a new agent on the same seed, then transfer its tender.
 - Send to Chief: transfer a seed and its execution receipt to the Chief with optional guidance.

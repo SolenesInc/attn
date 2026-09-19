@@ -136,7 +136,7 @@ export const scenarioCatalog = [
   {
     id: 'crew-management',
     runnerId: 'CrewManagement',
-    label: 'Crew management: launch lifecycle, charter recovery/conflicts, and full handoff history with seed return',
+    label: 'Crew management: launch lifecycle, seed attribution and tile return, charter recovery/conflicts, handoff history with seed return, quiet launch autosave, reconnect recovery, and a changed successor',
     command: ['pnpm', 'run', 'real-app:scenario-crew-management'],
     timeoutMs: 300_000,
   },

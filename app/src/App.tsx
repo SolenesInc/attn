@@ -4180,6 +4180,8 @@ function AppContent({
         initialMember={crewPanel.member}
         members={crew}
         sessions={daemonSessions}
+        seeds={seeds}
+        seedsTotal={seedsTotal}
         preserveStateOnOpen={crewPanel.preserveStateOnOpen}
         onClose={handleCloseCrew}
         onOpenSeed={handleOpenSeedFromCrew}
