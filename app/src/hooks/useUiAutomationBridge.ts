@@ -2386,6 +2386,7 @@ export function useUiAutomationBridge({
           selector: typeof payload.selector === 'string' ? payload.selector : '',
           absent: payload.absent === true,
           textIncludes: typeof payload.textIncludes === 'string' ? payload.textIncludes : undefined,
+          focused: payload.focused === true,
           timeoutMs: typeof payload.timeoutMs === 'number' ? payload.timeoutMs : NaN,
         });
       case 'dom_bounds': {

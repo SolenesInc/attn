@@ -36,6 +36,14 @@ describe('automation DOM expectations', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
+  it('waits for activeElement when focused is asked, without the window being key', async () => {
+    document.body.innerHTML = '<input class="menu"><input class="other">';
+    (document.querySelector('.other') as HTMLInputElement).focus();
+    const waiting = waitForAutomationDom({ selector: '.menu', focused: true, timeoutMs: 1000 });
+    (document.querySelector('.menu') as HTMLInputElement).focus();
+    await expect(waiting).resolves.toEqual({ matched: true });
+  });
+
   it('waits for removal', async () => {
     document.body.innerHTML = '<div class="menu"></div>';
     const waiting = waitForAutomationDom({ selector: '.menu', absent: true, timeoutMs: 1000 });
