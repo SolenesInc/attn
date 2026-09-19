@@ -377,7 +377,12 @@ func buildWireProjections() []projection {
 		},
 		{
 			filter: bus.Filter{FactSettingChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSettingsUpdated(ev.Subject) },
+			apply: func(d *Daemon, ev bus.Event) {
+				d.projectSettingsUpdated(ev.Subject)
+				if settingShapesCrewLaunch(ev.Subject) {
+					d.projectCrewRoster()
+				}
+			},
 		},
 		{
 			filter: bus.Filter{"notification.*"},

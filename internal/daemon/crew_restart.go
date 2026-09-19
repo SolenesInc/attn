@@ -317,9 +317,7 @@ func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart)
 		status = protocol.AgentMsgStatusQueued
 		detail = agentMessageQueuedDetail(err)
 	}
-	changed := false
 	_, updateErr := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
-		changed = false
 		if member.Restart == nil || member.Restart.RequestID != restart.RequestID || member.Restart.SessionID != restart.SessionID ||
 			member.Restart.State == crew.RestartFailed || member.Restart.State == crew.RestartCompleted {
 			return false, nil
@@ -332,14 +330,10 @@ func (d *Daemon) ensureCrewRestartRequest(memberID string, restart crew.Restart)
 		if delivery.Item.ReadAt != "" {
 			member.Restart.State = crew.RestartRequested
 		}
-		changed = true
 		return true, nil
 	})
 	if updateErr != nil {
 		return fmt.Errorf("record restart delivery for %s: %w", crew.DisplayName(memberID), updateErr)
-	}
-	if changed {
-		d.publishFact(FactCrewUpdated, memberID, nil)
 	}
 	return nil
 }
@@ -372,7 +366,6 @@ func (d *Daemon) writeCrewMemberMustCurrent(member crew.Member, revision int64) 
 	if _, err := d.writeCrewMember(*schema, member, revision); err != nil {
 		return crew.Member{}, err
 	}
-	d.publishFact(FactCrewUpdated, member.ID, nil)
 	return member, nil
 }
 
@@ -382,9 +375,6 @@ func (d *Daemon) setCrewRestart(memberID string, restart *crew.Restart) (crew.Me
 		member.Restart = &copy
 		return true, nil
 	})
-	if err == nil {
-		d.publishFact(FactCrewUpdated, member.ID, nil)
-	}
 	return member, err
 }
 
@@ -411,7 +401,6 @@ func pendingCrewRestartFor(member crew.Member, sessionID string) (crew.Restart, 
 }
 
 func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, cause error) error {
-	changed := false
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
@@ -424,16 +413,12 @@ func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, 
 		if letter != "" {
 			member.Restart.LetterPath = letter
 		}
-		changed = true
 		return true, nil
 	})
 	if err != nil {
 		recordErr := fmt.Errorf("record failed restart for %s: %w", crew.DisplayName(memberID), err)
 		d.logf("crew: %v", recordErr)
 		return recordErr
-	}
-	if changed {
-		d.publishFact(FactCrewUpdated, memberID, nil)
 	}
 	return nil
 }
@@ -444,7 +429,6 @@ func (d *Daemon) completeCrewRestart(memberID, requestID, sessionID, letter, suc
 }
 
 func (d *Daemon) completeCrewRestartWithDetail(memberID, requestID, sessionID, letter, successor, detail string) {
-	changed := false
 	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
@@ -457,15 +441,11 @@ func (d *Daemon) completeCrewRestartWithDetail(memberID, requestID, sessionID, l
 		member.Restart.LetterPath = letter
 		member.Restart.SuccessorSessionID = successor
 		member.Restart.Detail = detail
-		changed = true
 		return true, nil
 	})
 	if err != nil {
 		d.logf("crew: record completed restart for %s: %v", crew.DisplayName(memberID), err)
 		return
-	}
-	if changed {
-		d.publishFact(FactCrewUpdated, memberID, nil)
 	}
 }
 
@@ -482,7 +462,6 @@ func (d *Daemon) noteCrewRestartMailboxRead(deliveries []agentmailbox.Delivery) 
 			if member.Restart == nil || member.Restart.RequestID != delivery.Item.SourceID || member.Restart.SessionID != delivery.Item.RecipientSessionID || member.Restart.State != crew.RestartQueued {
 				continue
 			}
-			changed := false
 			_, updateErr := d.updateCrewMember(member.ID, func(current *crew.Member) (bool, error) {
 				if current.Restart == nil || current.Restart.RequestID != delivery.Item.SourceID || current.Restart.SessionID != delivery.Item.RecipientSessionID || current.Restart.State != crew.RestartQueued {
 					return false, nil
@@ -490,13 +469,10 @@ func (d *Daemon) noteCrewRestartMailboxRead(deliveries []agentmailbox.Delivery) 
 				current.Restart.State = crew.RestartRequested
 				current.Restart.DeliveryStatus = string(protocol.AgentMsgStatusNotified)
 				current.Restart.Detail = fmt.Sprintf("%s read the restart request", crew.DisplayName(current.ID))
-				changed = true
 				return true, nil
 			})
 			if updateErr != nil {
 				d.logf("crew: record %s's restart request read receipt: %v", crew.DisplayName(member.ID), updateErr)
-			} else if changed {
-				d.publishFact(FactCrewUpdated, member.ID, nil)
 			}
 		}
 	}

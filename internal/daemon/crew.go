@@ -102,6 +102,7 @@ func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.M
 		return 0, err
 	}
 	d.announceCommittedWrite(fact, written.Seq)
+	d.publishFact(FactCrewUpdated, member.ID, nil)
 	return written.Rev, nil
 }
 

@@ -506,7 +506,6 @@ func (d *Daemon) crewSet(msg *protocol.CrewSetMessage) (*protocol.CrewMember, bo
 		}
 		revision, err := d.writeCrewMember(*schema, member, doc.Rev)
 		if err == nil {
-			d.publishFact(FactCrewUpdated, member.ID, nil)
 			wire := d.crewMemberWire(member, revision)
 			return &wire, false, nil
 		}

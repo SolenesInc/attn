@@ -1012,3 +1012,58 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 		t.Error("a member holding an older claim was told it holds nothing")
 	}
 }
+
+func lastCrewUpdatedMember(t *testing.T, trace *WireTrace, memberID string) (protocol.CrewMember, bool) {
+	t.Helper()
+	payloads := trace.Payloads()
+	for i := len(payloads) - 1; i >= 0; i-- {
+		var event protocol.CrewUpdatedMessage
+		if err := json.Unmarshal(payloads[i], &event); err != nil || event.Event != protocol.EventCrewUpdated {
+			continue
+		}
+		for _, member := range event.Members {
+			if member.ID == memberID {
+				return member, true
+			}
+		}
+	}
+	return protocol.CrewMember{}, false
+}
+
+func TestCrewSettings_ADefaultModelChangeRefreshesTheRosterResolvedValues(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	trace := wireRecorder(d)
+
+	d.handleSetSettingWS(&wsClient{}, &protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: SettingDefaultModelPrefix + "claude", Value: "claude-opus-5",
+	})
+	member, ok := lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || protocol.Deref(member.ResolvedModel) != "claude-opus-5" {
+		t.Fatalf("after the default model changed the roster shows trellis resolved model %q (broadcast=%v); events = %v", protocol.Deref(member.ResolvedModel), ok, trace.EventNames())
+	}
+
+	d.handleSetSettingWS(&wsClient{}, &protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: SettingDefaultEffortPrefix + "claude", Value: "high",
+	})
+	member, ok = lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || protocol.Deref(member.ResolvedEffort) != "high" {
+		t.Fatalf("after the default effort changed the roster shows trellis resolved effort %q (broadcast=%v)", protocol.Deref(member.ResolvedEffort), ok)
+	}
+}
+
+func TestCrewRegistry_EveryMemberWriteBroadcastsItsRevision(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	before := memberByID(t, crewList(t, d), "trellis").Revision
+	trace := wireRecorder(d)
+
+	d.recordCrewLetter("trellis", woken.SessionID, filepath.Join(t.TempDir(), "letter.md"))
+
+	member, ok := lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || member.Revision <= before {
+		t.Fatalf("filing a letter left the roster at revision %d (broadcast=%v), want past %d so the next save's token is current", member.Revision, ok, before)
+	}
+}
