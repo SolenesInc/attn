@@ -202,6 +202,7 @@ type Daemon struct {
 	sessionInputOnce                  sync.Once
 	sessionInputState                 *sessionInputModule
 	agentMailboxMu                    sync.Mutex
+	sessionPullRequestWatchMu         sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
 	postInitialPrompt                 map[string]struct{}
@@ -2705,6 +2706,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
 	case protocol.CmdPullRequestForget:
 		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
+	case protocol.CmdPullRequestWatch:
+		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage))
+	case protocol.CmdPullRequestUnwatch:
+		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdWorkflowRunUpsert:
 		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
 	case protocol.CmdWorkflowCallUpsert:
@@ -3262,7 +3267,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
+			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
 			out = append(out, *decorated)
 		}
 	}

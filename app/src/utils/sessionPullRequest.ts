@@ -41,6 +41,7 @@ export function describeSessionPullRequest(pr: SessionPullRequest): SessionPullR
   if (pr.mergeable_state === 'dirty') return { label: 'conflicts', tone: 'bad' };
   if (pr.ci_status === 'failure') return { label: 'checks failed', tone: 'bad' };
   if (pr.review_status === 'changes_requested') return { label: 'changes requested', tone: 'warn' };
+  if (pr.review_status === 'unavailable') return { label: 'review unavailable', tone: 'warn' };
   if (pr.ci_status === 'pending') return { label: 'checks running', tone: 'warn' };
   if (pr.state === 'draft') return { label: 'draft', tone: 'neutral' };
   if (pr.review_status === 'approved') {
@@ -69,6 +70,7 @@ export function describeSessionPullRequestReview(
   switch (pr.review_status) {
     case 'approved': return { label: 'approved', tone: 'ok' };
     case 'changes_requested': return { label: 'changes requested', tone: 'warn' };
+    case 'unavailable': return { label: 'unavailable', tone: 'warn' };
     case 'pending': return { label: 'waiting on a reviewer', tone: 'neutral' };
     default: return { label: 'none requested', tone: 'neutral' };
   }

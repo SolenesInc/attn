@@ -50,6 +50,37 @@ func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullReques
 	d.sendOK(conn)
 }
 
+func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	if d.forwardedToSessionOwner(conn, rec.SessionID, msg) {
+		return
+	}
+	if err := d.watchSessionPullRequest(rec, msg.Reviewer); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
+
+func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	if d.forwardedToSessionOwner(conn, rec.SessionID, msg) {
+		return
+	}
+	if err := d.unwatchSessionPullRequest(rec); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
 func (d *Daemon) handlePullRequestCreatedWS(msg *protocol.PullRequestCreatedMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
@@ -70,6 +101,71 @@ func (d *Daemon) handlePullRequestForgetWS(msg *protocol.PullRequestForgetMessag
 	}
 }
 
+func (d *Daemon) handlePullRequestWatchWS(msg *protocol.PullRequestWatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil {
+		err = d.watchSessionPullRequest(rec, msg.Reviewer)
+	}
+	if err != nil {
+		d.logf("forwarded pull request watch: %v", err)
+	}
+}
+
+func (d *Daemon) handlePullRequestUnwatchWS(msg *protocol.PullRequestUnwatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil {
+		err = d.unwatchSessionPullRequest(rec)
+	}
+	if err != nil {
+		d.logf("forwarded pull request unwatch: %v", err)
+	}
+}
+
+func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, reviewer string) error {
+	d.sessionPullRequestWatchMu.Lock()
+	defer d.sessionPullRequestWatchMu.Unlock()
+	reviewer = strings.TrimSpace(reviewer)
+	if reviewer == "" {
+		return fmt.Errorf("pull request watch needs a reviewer")
+	}
+	if err := d.recordSessionPullRequest(rec); err != nil {
+		return err
+	}
+	changed, err := d.store.WatchPullRequest(rec.SessionID, rec.PRID, reviewer, time.Now())
+	if err != nil {
+		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
+	}
+	if changed {
+		if err := d.store.MarkSessionPullRequestChecked(rec.PRID, time.Time{}); err != nil {
+			return fmt.Errorf("warm pull request %s: %w", rec.PRID, err)
+		}
+		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	}
+	return nil
+}
+
+func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
+	d.sessionPullRequestWatchMu.Lock()
+	defer d.sessionPullRequestWatchMu.Unlock()
+	return d.unwatchSessionPullRequestLocked(rec)
+}
+
+func (d *Daemon) unwatchSessionPullRequestLocked(rec store.SessionPullRequestRecord) error {
+	changed, err := d.store.UnwatchPullRequest(rec.SessionID, rec.PRID)
+	if err != nil {
+		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
+	}
+	if !changed {
+		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
+	}
+	if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(rec.SessionID, pullRequestWatchCoalesceKey(rec.PRID)); err != nil {
+		return fmt.Errorf("clear pull request watch inbox item %s: %w", rec.PRID, err)
+	}
+	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	return nil
+}
+
 func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) error {
 	recorded, err := d.store.RecordSessionPullRequest(rec, time.Now())
 	if err != nil {
@@ -82,6 +178,8 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 }
 
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
+	d.sessionPullRequestWatchMu.Lock()
+	defer d.sessionPullRequestWatchMu.Unlock()
 	forgotten, err := d.store.ForgetSessionPullRequest(rec.SessionID, rec.PRID)
 	if err != nil {
 		return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
@@ -89,6 +187,13 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 	if !forgotten {
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
+	if _, err := d.store.UnwatchPullRequest(rec.SessionID, rec.PRID); err != nil {
+		return fmt.Errorf("forget pull request watch %s: %w", rec.PRID, err)
+	}
+	if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(rec.SessionID, pullRequestWatchCoalesceKey(rec.PRID)); err != nil {
+		return fmt.Errorf("clear pull request watch inbox item %s: %w", rec.PRID, err)
+	}
+	d.refreshAgentMailboxUnread(rec.SessionID)
 	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
 	return nil
 }
@@ -116,13 +221,15 @@ func (d *Daemon) sessionPullRequestIdentity(id, url string) (store.SessionPullRe
 	}, nil
 }
 
-func sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) []protocol.SessionPullRequest {
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) []protocol.SessionPullRequest {
 	if len(records) == 0 {
 		return nil
 	}
 	out := make([]protocol.SessionPullRequest, 0, len(records))
 	for _, rec := range records {
+		sessionID := rec.SessionID
 		entry := protocol.SessionPullRequest{
+			SessionID:  &sessionID,
 			Repository: rec.Repository,
 			Number:     rec.Number,
 			URL:        rec.URL,
@@ -134,6 +241,23 @@ func sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) [
 		entry.ReviewStatus = pullRequestField(rec.ReviewStatus)
 		entry.MergeableState = pullRequestField(rec.MergeableState)
 		entry.StatusFetchedAt = pullRequestField(rec.StatusFetchedAt)
+		watches := d.store.PullRequestWatchesByPR(rec.PRID)
+		if len(watches) > 0 {
+			labels := make([]string, 0, len(watches))
+			for _, watch := range watches {
+				label := shortSessionID(watch.SessionID)
+				if session := d.store.Get(watch.SessionID); session != nil {
+					label = d.sessionOriginName(session)
+				}
+				labels = append(labels, label)
+				if watch.SessionID == rec.SessionID {
+					entry.Watching = protocol.Ptr(true)
+					entry.WatchLastCheckedAt = pullRequestField(watch.LastSuccessAt)
+					entry.WatchError = pullRequestField(watch.LastError)
+				}
+			}
+			entry.WatchRecipients = labels
+		}
 		out = append(out, entry)
 	}
 	return out
@@ -154,7 +278,7 @@ func pullRequestField(value string) *string {
 }
 
 func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.SessionPullRequest {
-	return sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID))
+	return d.sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID))
 }
 
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {

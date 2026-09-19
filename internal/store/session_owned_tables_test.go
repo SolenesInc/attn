@@ -28,6 +28,12 @@ var sessionOwnedTableSeeds = map[string]func(*testing.T, *Store, string){
 			t.Fatalf("record pull request for %s: %v", sessionID, err)
 		}
 	},
+	"pull_request_watches": func(t *testing.T, s *Store, sessionID string) {
+		t.Helper()
+		if _, err := s.WatchPullRequest(sessionID, "github.com:victorarias/attn#"+sessionID, "reviewer", time.Now()); err != nil {
+			t.Fatalf("watch pull request for %s: %v", sessionID, err)
+		}
+	},
 	"session_exit_screens": func(t *testing.T, s *Store, sessionID string) {
 		t.Helper()
 		if err := s.SaveSessionExitScreen(SessionExitScreen{SessionID: sessionID, Text: "Error: boom", ExitCode: 1}, time.Now()); err != nil {

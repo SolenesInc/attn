@@ -589,7 +589,8 @@
 }
 
 .session-item:hover .sidebar-session-pr,
-.session-item:focus-within .sidebar-session-pr {
+.session-item:focus-within .sidebar-session-pr,
+.sidebar-session-pr[data-watching='true'] {
   max-width: none;
   margin-left: 8px;
   opacity: 1;
@@ -608,6 +609,11 @@
   color: var(--color-text-secondary);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
+}
+
+.sidebar-session-pr__watching {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-xs);
 }
 
 .session-endpoint-badge {

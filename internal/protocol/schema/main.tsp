@@ -132,6 +132,7 @@ model PullRequestProvenance {
 // reported by the tool-use hook or `attn pr record`. Status fields stay absent
 // until the refresh job has fetched them from GitHub once.
 model SessionPullRequest {
+  session_id?: string;
   repository: string;           // host/owner/repository, same convention as PullRequestProvenance
   number: int32;
   url: string;
@@ -139,9 +140,13 @@ model SessionPullRequest {
   created_at: string;           // ISO timestamp the session reported it
   state: string;                // draft | open | merged | closed
   ci_status?: string;           // success, failure, pending, none — the PR vocabulary
-  review_status?: string;       // approved, changes_requested, pending, none
+  review_status?: string;       // approved, changes_requested, unavailable, pending, none
   mergeable_state?: string;     // clean, blocked, dirty, unstable
   status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
+  watching?: boolean;
+  watch_recipients?: string[];
+  watch_last_checked_at?: string;
+  watch_error?: string;
 }
 
 // AutomationProvenance is a derived read model. The daemon joins existing
@@ -1008,6 +1013,19 @@ model PullRequestCreatedMessage {
 // The way out: drops one recorded pull request from a session.
 model PullRequestForgetMessage {
   cmd: "pull_request_forget";
+  id: string;
+  url: string;
+}
+
+model PullRequestWatchMessage {
+  cmd: "pull_request_watch";
+  id: string;
+  url: string;
+  reviewer: string;
+}
+
+model PullRequestUnwatchMessage {
+  cmd: "pull_request_unwatch";
   id: string;
   url: string;
 }

@@ -436,3 +436,17 @@ func (s *Store) ReadGardenSeedMailboxItems(recipientSessionID, seedID string, at
 	)
 	return read > 0, remaining, err
 }
+
+func (s *Store) DeleteUnreadMaintenanceMailboxItem(recipientSessionID, coalesceKey string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	result, err := s.db.Exec(`
+		DELETE FROM agent_mailbox_items
+		WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
+	`, recipientSessionID, agentmailbox.KindMaintenancePrompt, coalesceKey)
+	if err != nil {
+		return false, err
+	}
+	changed, err := result.RowsAffected()
+	return changed > 0, err
+}

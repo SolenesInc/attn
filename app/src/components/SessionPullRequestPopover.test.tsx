@@ -8,6 +8,10 @@ import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
 vi.mock('../utils/clipboardBridge', () => ({ writeClipboardText: vi.fn(async () => {}) }));
+const sendPullRequestUnwatch = vi.hoisted(() => vi.fn());
+vi.mock('../contexts/DaemonApiContext', () => ({
+  useOptionalDaemonApi: () => ({ sendPullRequestUnwatch }),
+}));
 
 function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
   return {
@@ -74,6 +78,28 @@ describe('SessionPullRequestPopover', () => {
 
     expect(screen.getByText('GitHub polling is off for this profile')).toBeInTheDocument();
     expect(screen.queryByText('waiting for GitHub')).not.toBeInTheDocument();
+  });
+
+  it('shows monitor health and stops only this session watch', () => {
+    show([pr({
+      session_id: 'session-1',
+      watching: true,
+      watch_recipients: ['builder', 'reviewer'],
+      watch_last_checked_at: '2026-08-30T12:06:00Z',
+    })]);
+
+    expect(screen.getByText('builder, reviewer')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
+    expect(sendPullRequestUnwatch).toHaveBeenCalledWith(
+      'session-1',
+      'https://github.com/victorarias/attn/pull/71',
+    );
+  });
+
+  it('shows an honest delayed monitor state', () => {
+    show([pr({ watching: true, watch_error: 'review API unavailable' })]);
+
+    expect(screen.getByText('delayed · review API unavailable')).toBeInTheDocument();
   });
 
   it('opens the PR on GitHub from its title', () => {

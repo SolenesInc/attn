@@ -6918,6 +6918,31 @@ type PullRequestProvenance struct {
 	URL string `json:"url"`
 }
 
+type PullRequestUnwatchMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
+type PullRequestWatchMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// Reviewer corresponds to the JSON schema field "reviewer".
+	Reviewer string `json:"reviewer"`
+
+	// URL corresponds to the JSON schema field "url".
+	URL string `json:"url"`
+}
+
 type QueryAuthorsMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -9299,6 +9324,9 @@ type SessionPullRequest struct {
 	// ReviewStatus corresponds to the JSON schema field "review_status".
 	ReviewStatus *string `json:"review_status,omitempty,omitzero"`
 
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID *string `json:"session_id,omitempty,omitzero"`
+
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
 
@@ -9310,6 +9338,19 @@ type SessionPullRequest struct {
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
+
+	// WatchError corresponds to the JSON schema field "watch_error".
+	WatchError *string `json:"watch_error,omitempty,omitzero"`
+
+	// WatchLastCheckedAt corresponds to the JSON schema field
+	// "watch_last_checked_at".
+	WatchLastCheckedAt *string `json:"watch_last_checked_at,omitempty,omitzero"`
+
+	// WatchRecipients corresponds to the JSON schema field "watch_recipients".
+	WatchRecipients []string `json:"watch_recipients,omitempty,omitzero"`
+
+	// Watching corresponds to the JSON schema field "watching".
+	Watching *bool `json:"watching,omitempty,omitzero"`
 }
 
 type SessionRegisteredMessage struct {

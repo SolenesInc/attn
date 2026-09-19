@@ -1094,6 +1094,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handlePullRequestCreatedWS(msg.(*protocol.PullRequestCreatedMessage))
 	case protocol.CmdPullRequestForget:
 		d.handlePullRequestForgetWS(msg.(*protocol.PullRequestForgetMessage))
+	case protocol.CmdPullRequestWatch:
+		d.handlePullRequestWatchWS(msg.(*protocol.PullRequestWatchMessage))
+	case protocol.CmdPullRequestUnwatch:
+		d.handlePullRequestUnwatchWS(msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdCancelCountdown:
 		d.handleCancelCountdown(msg.(*protocol.CancelCountdownMessage))
 	case protocol.CmdTriggerNudge:
@@ -1483,6 +1487,14 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdPullRequestForget:
 		if typed, ok := msg.(*protocol.PullRequestForgetMessage); ok {
+			return typed.ID
+		}
+	case protocol.CmdPullRequestWatch:
+		if typed, ok := msg.(*protocol.PullRequestWatchMessage); ok {
+			return typed.ID
+		}
+	case protocol.CmdPullRequestUnwatch:
+		if typed, ok := msg.(*protocol.PullRequestUnwatchMessage); ok {
 			return typed.ID
 		}
 	case protocol.CmdCancelCountdown:
