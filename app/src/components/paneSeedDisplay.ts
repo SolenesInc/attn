@@ -9,12 +9,12 @@ export type PaneSeedDisplay = (
   | { kind: 'multi'; tended: Seed[] }
 ) & { crownSeed?: Seed };
 
-// Tender is cleared on release. Session-bound claims stay with that session;
-// member-only claims follow the crew member's current session.
+// Tender is cleared on release. A member claim belongs to the permanent member,
+// even between days; a session claim belongs only to that member's current day.
 export function tendedSeeds(seeds: Seed[], sessionId: string, crewMember?: string): Seed[] {
-  if (!sessionId) return [];
+  if (!sessionId && !crewMember) return [];
   return seeds.filter((seed) => seed.tender_session
-    ? seed.tender_session === sessionId
+    ? Boolean(sessionId && seed.tender_session === sessionId)
     : Boolean(crewMember && seed.tender_member === crewMember));
 }
 

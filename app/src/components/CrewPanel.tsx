@@ -6,10 +6,12 @@ import { useCrewLaunchAutosave, type CrewLaunchSelection } from '../hooks/useCre
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useHarnessModelCatalogs } from '../hooks/useHarnessModelCatalogs';
 import type { DaemonSession } from '../hooks/useDaemonSocket';
+import type { Seed } from '../hooks/useDaemonSocket';
 import type { CrewHandoffDocument, CrewMember, DelegationHarness, DelegationModel } from '../types/generated';
 import { crewDisplayName } from '../utils/crewName';
 import { MarkdownReader } from './MarkdownReader';
 import { seedMarkdownSource } from './MarkdownReader/documentSource';
+import { CrewSeeds, type CrewSeedFilter } from './CrewSeeds';
 import './CrewPanel.css';
 
 interface CrewPanelProps {
@@ -17,12 +19,14 @@ interface CrewPanelProps {
   initialMember?: string;
   members: CrewMember[];
   sessions: DaemonSession[];
+  seeds: Seed[];
+  seedsTotal: number;
   preserveStateOnOpen?: boolean;
   onClose: () => void;
   onOpenSeed: (seedId: string, placementSessionId?: string) => void;
 }
 
-type CrewTab = 'launch' | 'charter' | 'handoffs';
+type CrewTab = 'launch' | 'charter' | 'handoffs' | 'seeds';
 
 interface HandoffLoad {
   state: 'loading' | 'ready' | 'error';
@@ -239,6 +243,8 @@ export function CrewPanel({
   initialMember,
   members,
   sessions,
+  seeds,
+  seedsTotal,
   preserveStateOnOpen = false,
   onClose,
   onOpenSeed,
@@ -257,6 +263,7 @@ export function CrewPanel({
   const [selectedId, setSelectedId] = useState(initialMember || members[0]?.id || '');
   const [filter, setFilter] = useState('');
   const [tab, setTab] = useState<CrewTab>('launch');
+  const [seedFilter, setSeedFilter] = useState<CrewSeedFilter>('tending');
   const [harnesses, setHarnesses] = useState<DelegationHarness[]>([]);
   const [catalogError, setCatalogError] = useState('');
   const [catalogLoading, setCatalogLoading] = useState(false);
@@ -325,6 +332,8 @@ export function CrewPanel({
     if (opening && !preserveStateOnOpen) setTab('launch');
     if ((opening && !preserveStateOnOpen) || initialMember !== lastInitialMember.current) {
       lastInitialMember.current = initialMember;
+      setFilter('');
+      setSeedFilter('tending');
       setSelectedId(initialMember && members.some((candidate) => candidate.id === initialMember)
         ? initialMember
         : members[0]?.id || '');
@@ -570,6 +579,7 @@ export function CrewPanel({
                     <button type="button" data-testid="crew-tab-launch" className={tab === 'launch' ? 'is-selected' : ''} aria-current={tab === 'launch' ? 'page' : undefined} onClick={() => navigate(() => setTab('launch'))}>Launch settings</button>
                     <button type="button" data-testid="crew-tab-charter" className={tab === 'charter' ? 'is-selected' : ''} aria-current={tab === 'charter' ? 'page' : undefined} onClick={() => navigate(() => setTab('charter'))}>Charter</button>
                     <button type="button" data-testid="crew-tab-handoffs" className={tab === 'handoffs' ? 'is-selected' : ''} aria-current={tab === 'handoffs' ? 'page' : undefined} onClick={() => navigate(() => setTab('handoffs'))}>Handoffs</button>
+                    <button type="button" data-testid="crew-tab-seeds" className={tab === 'seeds' ? 'is-selected' : ''} aria-current={tab === 'seeds' ? 'page' : undefined} onClick={() => navigate(() => setTab('seeds'))}>Seeds</button>
                   </nav>
 
                   {tab === 'launch' && <>
@@ -698,9 +708,9 @@ export function CrewPanel({
                       <strong>{nextWakeLabel}</strong>
                     </div>
                     {edit.error && <div className="crew-save-error">{edit.error}</div>}
-                  </section>
+                      </section>
 
-                  <section className="crew-restart">
+                      <section className="crew-restart">
                     <div>
                       <h3>{member.binding_session ? 'Handoff and restart' : 'Wake member'}</h3>
                     </div>
@@ -740,6 +750,16 @@ export function CrewPanel({
                         [member.id]: { ...current[member.id], selected: filename },
                       }))}
                       onRefresh={() => loadHandoffs(member.id, true)}
+                      onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
+                    />
+                  )}
+                  {tab === 'seeds' && (
+                    <CrewSeeds
+                      member={member}
+                      seeds={seeds}
+                      seedsTotal={seedsTotal}
+                      filter={seedFilter}
+                      onFilterChange={setSeedFilter}
                       onOpenSeed={(seedId) => navigate(() => onOpenSeed(seedId, member.binding_session))}
                     />
                   )}

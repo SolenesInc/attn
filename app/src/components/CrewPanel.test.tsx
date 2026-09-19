@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext';
 import { CrewRestartState, type CrewMember } from '../types/generated';
+import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import { CrewPanel } from './CrewPanel';
 
@@ -14,6 +15,15 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     awareness_dirs: [],
     resolved_agent: 'claude',
     ...values,
+  };
+}
+
+function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
+  return {
+    body: '', status: 'planted', state_changed_at: '2026-09-06T16:50:50Z', state_changed_at_exact: true,
+    step_slug: overrides.title, planter_session: '', planter_member: '', tender_session: '', tender_member: '',
+    edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
+    created_at: '2026-09-06T16:50:50Z', updated_at: '2026-09-06T16:50:50Z', ...overrides,
   };
 }
 
@@ -61,6 +71,7 @@ function renderPanel({
   isOpen = true,
   preserveStateOnOpen = false,
   onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>(),
+  seeds = [],
 }: {
   daemon?: DaemonApi;
   members?: CrewMember[];
@@ -69,6 +80,7 @@ function renderPanel({
   isOpen?: boolean;
   preserveStateOnOpen?: boolean;
   onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string, placementSessionId?: string) => void>>;
+  seeds?: Seed[];
 } = {}) {
   const onClose = vi.fn();
   const view = render(
@@ -78,6 +90,8 @@ function renderPanel({
         initialMember={initialMember}
         members={members}
         sessions={sessions}
+        seeds={seeds}
+        seedsTotal={seeds.length}
         preserveStateOnOpen={preserveStateOnOpen}
         onClose={onClose}
         onOpenSeed={onOpenSeed}
@@ -95,6 +109,8 @@ function renderPanel({
         initialMember={initialMember}
         members={nextMembers}
         sessions={sessions}
+        seeds={seeds}
+        seedsTotal={seeds.length}
         preserveStateOnOpen={preserve}
         onClose={onClose}
         onOpenSeed={onOpenSeed}
@@ -110,6 +126,42 @@ afterEach(() => {
 });
 
 describe('CrewPanel', () => {
+  it('keeps member, tab and seed filter when a workspace seed returns to Crew', async () => {
+    const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
+    const onOpenSeed = vi.fn();
+    const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
+    const { rerenderPanel } = renderPanel({ members, seeds: [planted], onOpenSeed });
+
+    await waitFor(() => expect(screen.getByLabelText('Harness')).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
+    expect(onOpenSeed).toHaveBeenCalledWith(planted.id, 'session-keel');
+
+    await act(async () => {
+      rerenderPanel(members, false);
+      rerenderPanel(members, true, true);
+    });
+    expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  it('opens direct member details on launch settings after returning from a seed', async () => {
+    const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
+    const members = [member('alder', 2), member('keel', 3)];
+    const { rerenderPanel } = renderPanel({ initialMember: 'keel', members, seeds: [planted] });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
+    await act(async () => rerenderPanel(members, false));
+    await act(async () => rerenderPanel(members, true));
+
+    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('button', { name: 'Wake' })).toBeInTheDocument();
+  });
+
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
     renderPanel({
       members: [member('trellis', 4, {
