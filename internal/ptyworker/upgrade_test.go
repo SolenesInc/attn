@@ -7,8 +7,6 @@ import (
 	"testing"
 )
 
-// The handoff JSON is the whole contract for an adopted session's config: a Config
-// field that misses the round trip silently hands adopted sessions a zero.
 func TestHandoffCarriesEveryConfigField(t *testing.T) {
 	suppliedByArgv := map[string]bool{
 		"Logf":            true,
@@ -102,8 +100,6 @@ func fillNonZero(v reflect.Value) bool {
 }
 
 func TestHandoffPathsLiveBesideTheRegistryNotInIt(t *testing.T) {
-	// Recover and ReapDataDir glob registry/*.json, so a handoff written there is
-	// read as a malformed entry and deleted mid-swap.
 	registry := filepath.Join("/data", "workers", "inst", "registry", "sess.json")
 	jsonPath, dumpPath := HandoffPaths(registry, "sess")
 	wantDir := filepath.Join("/data", "workers", "inst", "handoff")

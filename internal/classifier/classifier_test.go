@@ -48,8 +48,6 @@ func TestParseResponse_Parked(t *testing.T) {
 	}
 }
 
-// The PARKED rule keys on the harness-facts marker, so the line and the template
-// must not drift apart.
 func TestComposeYieldInput_CarriesTheMarkerThePromptKeysOn(t *testing.T) {
 	input := ComposeYieldInput("The build is still running; I'll continue when it completes.", 2)
 	if !strings.Contains(input, "[harness facts]") {

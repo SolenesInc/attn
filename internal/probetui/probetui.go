@@ -1,5 +1,3 @@
-// No wall-clock time, randomness, or PID may leak into the output, or a captured
-// transcript stops being reproducible.
 package probetui
 
 import (
@@ -207,7 +205,6 @@ func fillRow(cols, rows, seq, row int) string {
 	return string(b)
 }
 
-// Assumes single-width ASCII, the only content probetui renders.
 func truncateToWidth(s string, cols int) string {
 	if cols <= 0 {
 		return ""

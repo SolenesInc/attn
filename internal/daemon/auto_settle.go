@@ -16,7 +16,6 @@ const (
 
 	autoSettleHoldQuietWindow = 5 * time.Second
 
-	// Arm floor sits past the resolver's own settle latency (HeartbeatSettleAfter, 5s).
 	autoSettleArmMinSeconds       = 5
 	autoSettleArmMaxSeconds       = 3600
 	autoSettleCountdownMinSeconds = 3
@@ -166,8 +165,6 @@ func (d *Daemon) startAutoSettleLocked(sessionID string, phase autoSettlePhase, 
 	firesAt := time.Now().Add(window)
 	run, _ := d.sessionInputs().currentUserRun(sessionID)
 	opened := d.store.TurnStamps(sessionID).OpenedAt
-	// ready blocks the closure until `timer` is published: on a zero-length window
-	// it would otherwise read the identity check's variable before it is written.
 	ready := make(chan struct{})
 	var timer *time.Timer
 	timer = time.AfterFunc(window, func() {
@@ -241,8 +238,6 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 }
 
 func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhase, armedRun sessionInputRunRef, armedTurn time.Time) string {
-	// applyState takes this lock around its store write: without it the timer can
-	// settle a turn a transition opened between the check and the settle.
 	d.autoSettleFireMu.Lock()
 	defer d.autoSettleFireMu.Unlock()
 
@@ -308,8 +303,6 @@ func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhas
 		d.autoSettlePreSettleHook()
 	}
 
-	// Asked again here because it must be indivisible from the write it guards:
-	// settleIfAutoSettleQuiet holds the activity lock across both.
 	quiet, settled := d.settleIfAutoSettleQuiet(sessionID, autoSettleHoldQuietWindow)
 	if quiet > 0 {
 		d.holdFromFire(sessionID, autoSettleCounting, quiet)

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/victorarias/attn/internal/lint/commentblock"
+	"github.com/victorarias/attn/internal/lint/nocomments"
 	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
 func main() {
-	singlechecker.Main(commentblock.Analyzer)
+	singlechecker.Main(nocomments.Analyzer)
 }

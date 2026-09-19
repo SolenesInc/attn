@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// ticketArtifacts enumerates the filesystem-canonical artifact index for one
-// ticket. Only direct, regular, visible files are current artifacts.
 func (d *Daemon) ticketArtifacts(ticketID string) ([]protocol.TicketArtifact, error) {
 	root, err := d.notebookRoot()
 	if err != nil {

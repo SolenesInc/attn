@@ -2,9 +2,6 @@
 
 package pty
 
-// Session.resize fans out inline, so a non-blocking channel read once Resize has
-// returned is a real signal rather than a wait.
-
 import (
 	"sync/atomic"
 	"testing"
@@ -16,7 +13,6 @@ func newHeldKittySpawn(t *testing.T, id, payload string) *kittySpawn {
 	return newKittySpawnCmd(t, id, payload, "stty -echo; read release; cat %s; read hold")
 }
 
-// Blocking here keeps the resize from racing the chunk that placed the image.
 func releaseAndPlace(t *testing.T, spawn *kittySpawn) PlacementUpdate {
 	t.Helper()
 	if err := spawn.manager.Input(spawn.id, []byte("\n")); err != nil {
@@ -44,12 +40,8 @@ func TestResizeDescribesPlacementsAfterTheResize(t *testing.T) {
 	spawn := newHeldKittySpawn(t, "kitty-resize", "\x1b[6;1H"+kittyPlaceRGB(82, 16, 32, "")+done)
 	placed := releaseAndPlace(t, spawn)
 	before := placed.Placements[0]
-	// The payload can span chunks, so the placement's own seq need not be the
-	// last one; take the watermark once the output has ended.
 	watermark := spawn.waitForOutput(t, done)
 
-	// 12 rows down to 4, with the image at row 6: the grid has to scroll it up
-	// to keep the cursor on screen.
 	if _, err := spawn.manager.Resize(spawn.id, 40, 4, 0, 0); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}
@@ -72,8 +64,6 @@ func TestResizeDescribesPlacementsAfterTheResize(t *testing.T) {
 	if after.ImageID != before.ImageID {
 		t.Errorf("described image id = %d after the resize, want %d", after.ImageID, before.ImageID)
 	}
-	// The watermark, not a fresh seq: no bytes were produced, so the set belongs
-	// to the last chunk the client already has.
 	if resized.Seq != watermark {
 		t.Errorf("resize update seq = %d, want the replay watermark %d", resized.Seq, watermark)
 	}
@@ -88,16 +78,12 @@ func TestResizeCostsNothingWithoutPlacements(t *testing.T) {
 		limit   string
 		payload string
 	}{
-		// Pinned rather than inherited: this went vacuous once the empty value
-		// stopped meaning images-off and started meaning 320MB.
 		{name: "images live and the program emits none", limit: "", payload: "\x1b[6;1Hplain"},
 		{name: "images off and the program emits one", limit: "0", payload: "\x1b[6;1H" + kittyPlaceRGB(83, 16, 32, "")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(kittyStorageLimitEnv, tc.limit)
 
-			// Atomic: the feed path fires this hook from the read loop. Registered
-			// before the spawn so cleanup runs after the read loop is gone.
 			var reads atomic.Int32
 			placementReadHook = func() { reads.Add(1) }
 			t.Cleanup(func() { placementReadHook = nil })

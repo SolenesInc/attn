@@ -66,8 +66,6 @@ func TestMigrationOrderError(t *testing.T) {
 	}
 }
 
-// NOT len(migrations): versions 49 and 50 are burned (see sqlite.go), so the max
-// version exceeds the migration count.
 func latestSchemaVersion() int {
 	max := 0
 	for _, m := range migrations {
@@ -421,8 +419,6 @@ func TestMigration75DefaultsExistingRowsToEmptySpecYAML(t *testing.T) {
 		db.Close()
 		t.Fatalf("seed legacy row: %v", err)
 	}
-	// A fresh OpenDB already runs migration 76, which drops spec_yaml, so only the
-	// schema_migrations record needs rolling back.
 	if _, err := db.Exec(`DELETE FROM schema_migrations WHERE version >= 75`); err != nil {
 		db.Close()
 		t.Fatalf("roll back to pre-migration-75 schema: %v", err)
@@ -463,8 +459,6 @@ func TestMigration76ClearsAutomationStateAndDropsSpecYAML(t *testing.T) {
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 
-	// Review edges go back to their pre-77 shape only so the seed below inserts;
-	// migration 76 never touched it.
 	if _, err := db.Exec(`
 		ALTER TABLE automation_definitions ADD COLUMN spec_yaml TEXT NOT NULL DEFAULT '';
 		ALTER TABLE automation_review_request_edges ADD COLUMN accepted_cycle INTEGER NOT NULL DEFAULT 0;
@@ -800,8 +794,6 @@ func TestMigratesPopulatedPreAutomationsDatabaseToHead(t *testing.T) {
 	}
 
 	now := time.Now().UTC()
-	// Seeded via raw SQL: CreateTicket INSERT names automation_run_id, which would
-	// make the seed itself depend on migration 73 having already run.
 	tickets := []Ticket{
 		{ID: "legacy-ticket-1", Title: "Legacy ticket one", Status: TicketStatusTodo},
 		{ID: "legacy-ticket-2", Title: "Legacy ticket two", Status: TicketStatusWorking, Assignee: "agent-a"},
@@ -1236,8 +1228,6 @@ func TestMigration79_ConvertsRecoverableFlagToState(t *testing.T) {
 	if _, err := migrated.Exec(`SELECT recoverable FROM sessions LIMIT 1`); err == nil {
 		t.Fatal("recoverable column still exists after migration")
 	}
-	// Rewind past 79: the runner resumes from MAX(version), so deleting only row 79
-	// would leave a later row holding the watermark and 79 would never re-run.
 	if _, err := migrated.Exec(`DELETE FROM schema_migrations WHERE version >= 79`); err != nil {
 		t.Fatalf("rewind migration 79 after column drop: %v", err)
 	}
@@ -1447,8 +1437,6 @@ func TestMigration49_BackfillsRankInCreatedAtOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open raw sqlite db: %v", err)
 	}
-	// Rows are inserted out of created_at order so the backfill must read created_at,
-	// not insertion/rowid order.
 	if _, err := rawDB.Exec(`
 		CREATE TABLE workspaces (
 			id TEXT PRIMARY KEY,
@@ -1813,7 +1801,6 @@ func TestMigration134DropsTheWorkspaceContextAndKeeperState(t *testing.T) {
 		t.Fatalf("jobs after migration = %v, want only session_title", kinds)
 	}
 
-	// The legacy handover runs after the purge, so a retired kind left in tasks would come back as a dead job.
 	moved, err := s.MigrateLegacyTasks(func(rec LegacyTaskRecord) JobRecord {
 		return JobRecord{ID: rec.ID, Kind: rec.Kind, UniqueKey: rec.Subject, State: rec.State, ScheduledAt: rec.NextAttemptAt, CreatedAt: rec.CreatedAt, UpdatedAt: rec.UpdatedAt}
 	})
@@ -1927,8 +1914,6 @@ func TestMigration118CarriesTicketBoardScaleToGardenScale(t *testing.T) {
 			}
 			defer s.Close()
 
-			// getCurrentVersion is MAX-based, so the recorded version has to come out too
-			// for migrateDB to re-apply 118 over the seeded rows.
 			for k, v := range tc.seed {
 				if _, err := s.db.Exec(`INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)`, k, v); err != nil {
 					t.Fatalf("seed %s: %v", k, err)

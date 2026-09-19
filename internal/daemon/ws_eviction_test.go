@@ -29,8 +29,6 @@ func sendClientHelloAs(t *testing.T, conn *websocket.Conn, clientID string) {
 	}
 }
 
-// Receipt: an aborted connection on loopback delivers what the client's receive buffer
-// holds and then fails; measured on macOS 400,368 bytes (1 MB written, SO_LINGER 0).
 const (
 	stalledClientMessageBytes = 1 << 20
 	maxBacklogDeliveredBytes  = 32 << 20
@@ -299,8 +297,6 @@ func TestUnansweredPingIsAnEvictionOnlyWhenTheDaemonOwesTheClient(t *testing.T) 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// A peer that stopped answering pings will not answer a close handshake either;
-	// measured, the same client held on for 5.4s when the daemon waited one out.
 	const pingDeathBudget = 2 * time.Second
 	const quietID = "went-away"
 	quiet := dialDaemonWSAs(t, ctx, addr, quietID)

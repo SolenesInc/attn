@@ -622,7 +622,6 @@ func decodeJSONRPCMessage(t *testing.T, conn net.Conn) jsonRPCMessage {
 	t.Helper()
 	var frame []byte
 	var b [1]byte
-	// net.Pipe cannot accept the reply until Encoder.Encode's newline is consumed.
 	for b[0] != '\n' {
 		if _, err := io.ReadFull(conn, b[:]); err != nil {
 			t.Fatalf("read JSON-RPC frame: %v", err)

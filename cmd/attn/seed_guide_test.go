@@ -5,7 +5,6 @@ import (
 	"testing"
 )
 
-// `attn seed --help` is how an agent finds the guide at all.
 func TestSeedHelpNamesTheGuide(t *testing.T) {
 	var b strings.Builder
 	writeSeedHelp(&b)

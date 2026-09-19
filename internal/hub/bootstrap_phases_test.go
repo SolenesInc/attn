@@ -7,9 +7,6 @@ import (
 	"time"
 )
 
-// EnsureRemoteReady is two phases with two budgets: shipping the ~93.7MB sidecar out of
-// one shared budget spent everything on the upload and never reached the reviving step.
-
 func TestEnsureRemoteReadyRevivesTheDaemonBeforeShippingTheSidecar(t *testing.T) {
 	b := NewBootstrapper(nil)
 	var order []string
@@ -54,8 +51,6 @@ func TestEnsureRemoteReadySkipsTheSidecarWhenTheRemoteNeverBecameReady(t *testin
 	}
 }
 
-// The sidecar's budget must be its own: derived from the ready phase's context, the
-// upload inherits whatever the daemon start left over, which on a slow link is nothing.
 func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	b := NewBootstrapper(nil)
 	var readyDeadline, shipDeadline time.Time
@@ -78,8 +73,6 @@ func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	if readyDeadline.IsZero() || shipDeadline.IsZero() {
 		t.Fatal("both phases must run under a deadline")
 	}
-	// Cancelling the ready phase must not reach the ship phase; if it does, the two share a
-	// lineage and the sidecar is spending the daemon's budget.
 	if shipCtxErr != nil {
 		t.Fatalf("ship phase context was already %v; it is not independent of the ready phase", shipCtxErr)
 	}
@@ -112,8 +105,6 @@ func TestEnsureRemoteReadySurvivesASidecarThatCannotBeShipped(t *testing.T) {
 	}
 }
 
-// The budgets are tripwires, not fits; the receipts they are sized from live beside
-// their declaration.
 func TestRemoteBudgetsCoverTheArtifactsTheyCarry(t *testing.T) {
 	const slowLinkBitsPerSecond = 5_000_000
 	const attnBinaryBytes = 58_934_608

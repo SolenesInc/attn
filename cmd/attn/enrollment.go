@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/enrollment"
 )
 
-// Reads and writes the data dir's two files directly, not over IPC: the record must work with the daemon stopped.
 func runEnrollment() {
 	if len(os.Args) < 3 {
 		runEnrollmentStatus(nil)
@@ -149,10 +148,8 @@ func runEnrollmentLeave(args []string) {
 	emitEnrollmentResult(os.Stdout, os.Stderr, result, *asJSON)
 }
 
-// Separates "belongs to another home" from "could not answer" for the hub's ssh call — see internal/hub/bootstrap.go.
 const enrollmentRefusedExitCode = 3
 
-// A refusal's wording always goes to stderr, JSON or not: the hub's ssh call shows stderr and parses stdout.
 func emitEnrollmentResult(out, errOut io.Writer, result enrollment.Result, asJSON bool) {
 	if result.Status == "refused" {
 		fmt.Fprintln(errOut, result.Message)

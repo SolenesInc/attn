@@ -10,9 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Idempotence is the archive: a converted ticket leaves the board and the pass reads
-// only unarchived todos.
-
 func (d *Daemon) convertBacklogTicketsToSeeds() {
 	if d.store == nil {
 		return
@@ -63,8 +60,6 @@ func (d *Daemon) unboundBacklogTickets() ([]*store.Ticket, error) {
 	return unbound, nil
 }
 
-// The close and archive come last: a crash between them duplicates a seed, which a person
-// can wither, where the other order loses the work outright.
 func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 	title := strings.TrimSpace(ticket.Title)
 	body := strings.TrimSpace(ticket.Description)
@@ -136,7 +131,6 @@ func (d *Daemon) convertBacklogTicket(ticket *store.Ticket) (string, error) {
 	if linked.SeedID == "" {
 		return "", fmt.Errorf("ticket %s has no safe one-to-one seed: %s", ticket.ID, linked.Result)
 	}
-	// Closed before archived: archiving is only offered to a closed ticket.
 	if _, _, err := d.store.SetTicketStatusWithOptions(
 		ticket.ID, store.TicketStatusDone, store.TicketAuthorAttn,
 		fmt.Sprintf("converted to seed %s at the garden cutover; the work continues there", linked.SeedID),

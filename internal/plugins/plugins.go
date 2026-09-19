@@ -38,8 +38,7 @@ type Manifest struct {
 		Path       string         `toml:"path" json:"path"`
 	} `toml:"plugin" json:"plugin"`
 
-	Dir string `toml:"-" json:"dir"`
-	// Set when Dir is a symlink into a source checkout (attn plugin link).
+	Dir        string `toml:"-" json:"dir"`
 	LinkTarget string `toml:"-" json:"link_target,omitempty"`
 }
 
@@ -232,7 +231,6 @@ func InstallPathWithOptions(sourceDir, pluginDir string, opts InstallOptions) (M
 	return installed, nil
 }
 
-// SourceName reads the plugin name a local source directory would install as.
 func SourceName(sourceDir string) (string, error) {
 	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
 	if err != nil {
@@ -245,8 +243,6 @@ func SourceName(sourceDir string) (string, error) {
 	return manifest.Name, nil
 }
 
-// LinkPath installs a plugin as a symlink to sourceDir so edits in the checkout
-// are live for new plugin processes. Dependencies are installed in the checkout.
 func LinkPath(sourceDir, pluginDir string, opts InstallOptions) (Manifest, error) {
 	sourceDir, err := filepath.Abs(strings.TrimSpace(sourceDir))
 	if err != nil {
@@ -362,7 +358,6 @@ func Remove(pluginDir, name string) error {
 		}
 		return fmt.Errorf("inspect plugin %q: %w", name, err)
 	}
-	// A linked plugin is a symlink into a checkout: drop the link, never its target.
 	if info.Mode()&os.ModeSymlink != 0 {
 		if err := os.Remove(path); err != nil {
 			return fmt.Errorf("unlink plugin %q: %w", name, err)

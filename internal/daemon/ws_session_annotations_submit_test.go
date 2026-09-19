@@ -27,8 +27,6 @@ func sendAnnotationSubmit(t *testing.T, d *Daemon, sessionID, text string) proto
 	return res
 }
 
-// The Enter that submits arrives as a SEPARATE PTY write: folded into the bracketed-paste
-// block it would be pasted text, and the feedback would sit in the composer forever.
 func TestSessionAnnotationsSubmitDelivers(t *testing.T) {
 	d := newSubmitDaemon(t)
 	var mu sync.Mutex

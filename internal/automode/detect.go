@@ -6,7 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// DetectFromRepo answers the slots a directory settles on its own, plus the
 func DetectFromRepo(dir string) (slots map[string][]string, identities []string) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {

@@ -17,17 +17,14 @@ const (
 	PurposeGuardian = "guardian"
 )
 
-// Usage is one model's billable token traffic. InputTokens excludes cache reads:
-// an adapter whose provider counts them in must subtract before adding.
 type Usage struct {
-	InputTokens                  int64 `json:"input_tokens"`
-	OutputTokens                 int64 `json:"output_tokens"`
-	CacheReadInputTokens         int64 `json:"cache_read_input_tokens"`
-	CacheWrite5mInputTokens      int64 `json:"cache_write_5m_input_tokens"`
-	CacheWrite1hInputTokens      int64 `json:"cache_write_1h_input_tokens"`
-	UnclassifiedCacheWriteTokens int64 `json:"unclassified_cache_write_tokens"`
-	// Used only as a fallback when attn has no rate card for the model.
-	ReportedCostUSD float64 `json:"reported_cost_usd,omitempty"`
+	InputTokens                  int64   `json:"input_tokens"`
+	OutputTokens                 int64   `json:"output_tokens"`
+	CacheReadInputTokens         int64   `json:"cache_read_input_tokens"`
+	CacheWrite5mInputTokens      int64   `json:"cache_write_5m_input_tokens"`
+	CacheWrite1hInputTokens      int64   `json:"cache_write_1h_input_tokens"`
+	UnclassifiedCacheWriteTokens int64   `json:"unclassified_cache_write_tokens"`
+	ReportedCostUSD              float64 `json:"reported_cost_usd,omitempty"`
 }
 
 func (u Usage) HasUsage() bool {
@@ -67,7 +64,6 @@ func (u Usage) Subtract(other Usage) Usage {
 	}
 }
 
-// Keys written before purposes existed carry no purpose and read back as the agent's own.
 type LedgerKey struct {
 	Model   string
 	Purpose string
@@ -226,7 +222,6 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 		summary.TotalTokens += total
 
 		card, cardKnown, invalidOverride := rateCardForModel(model, settings)
-		// Checked before the reported-cost fallback: a broken override is surfaced, not silently priced.
 		if invalidOverride {
 			row.HasUnpricedUsage = true
 			row.UnpricedReason = "Price override is invalid."

@@ -57,8 +57,6 @@ func TestSupervisedParkSurvivesReopeningTheDatabase(t *testing.T) {
 	}
 }
 
-// A child that never exited has no code to record, and one that was never parked
-// has no row. Both are ordinary answers, not missing data.
 func TestSupervisedParkHandlesAbsenceAndClearing(t *testing.T) {
 	s, err := newSeededStore(filepath.Join(t.TempDir(), "attn.db"))
 	if err != nil {
@@ -91,7 +89,6 @@ func TestSupervisedParkHandlesAbsenceAndClearing(t *testing.T) {
 		t.Fatalf("got=%+v, want signal killed and no exit time", got)
 	}
 
-	// A second park replaces the first rather than colliding on the primary key.
 	later := time.Now().UTC().Add(time.Hour)
 	if err := s.SaveSupervisedPark(SupervisedPark{Child: "runtime", ParkedAt: later, RestartAttempt: 4}); err != nil {
 		t.Fatalf("re-save: %v", err)

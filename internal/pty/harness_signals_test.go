@@ -45,8 +45,6 @@ func TestClaudeTitleHeartbeat(t *testing.T) {
 		claim   string
 		summary string
 	}{
-		// Claude has changed which glyphs it cycles: braille up to 2.1.227, half circles from
-		// 2.1.228. Both read as busy, because busy is any status symbol that is not the resting one.
 		{name: "braille spinner is busy", title: "⠐ Run background sleep command", claim: claimBusy, summary: "Run background sleep command"},
 		{name: "another braille frame", title: "⠸ Editing files", claim: claimBusy, summary: "Editing files"},
 		{name: "2.1.228 half circle is busy", title: "◐ Run background sleep command", claim: claimBusy, summary: "Run background sleep command"},
@@ -189,8 +187,6 @@ func TestHeartbeatDetailIsEmptyForAGlyphOnlyTitle(t *testing.T) {
 	}
 }
 
-// Codex puts an approval in its title, the only leading approval edge it emits. The titles
-// here are verbatim from a codex 0.145.0 session with --ask-for-approval untrusted.
 func TestCodexTitleReportsAnApproval(t *testing.T) {
 	for _, tc := range []struct {
 		name        string

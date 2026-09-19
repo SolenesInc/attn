@@ -120,8 +120,6 @@ func TestEnablingAnAppClearsItsCrashStreak(t *testing.T) {
 	}
 }
 
-// The strike count must stay under what supervise gives the sidecar before it
-// parks it: parking stops every app, so the culprit has to be gone first.
 func TestCrashStrikesFireBeforeTheSupervisorParksTheRuntime(t *testing.T) {
 	if appCrashStrikes < 2 {
 		t.Fatalf("appCrashStrikes = %d; one crash can be a machine event, not a broken app", appCrashStrikes)

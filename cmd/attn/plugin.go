@@ -60,8 +60,6 @@ func runPluginInstall() {
 	runPluginInstallFromPath("install", false)
 }
 
-// link symlinks the checkout into the plugin dir, so edits there are live for
-// new plugin processes without a reinstall.
 func runPluginLink() {
 	runPluginInstallFromPath("link", true)
 }
@@ -233,8 +231,6 @@ func pluginDaemonRequest(payload map[string]any, expectedEvent, expectedAction s
 		"capabilities": []string{protocol.CapabilityWorkspaceSessions},
 		"client_token": config.ClientToken(),
 	}
-	// Hello first: the daemon sends nothing at all — initial_state included —
-	// until it passes.
 	if err := writePluginDaemonMessage(ctx, conn, hello); err != nil {
 		return nil, err
 	}

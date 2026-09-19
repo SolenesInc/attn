@@ -23,8 +23,6 @@ type Bundle struct {
 	Events   []store.TicketEvent
 }
 
-// Not atomic: two Consumes racing for the SAME observer — or a crash
-// mid-ConsumeAll — double-deliver, never lose.
 func Consume(es EventStore, obs Observer, now time.Time) ([]Bundle, error) {
 	bundles, advance, err := pending(es, obs)
 	if err != nil {
@@ -104,8 +102,6 @@ const (
 	DeliveryDeferred
 )
 
-// Carries NO event content — only the bounded "go consume your tickets"
-// trigger, mirroring the daemon's doorbell rule.
 type Nudger interface {
 	Nudge(observerID string) error
 }

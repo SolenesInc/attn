@@ -219,8 +219,6 @@ func TestAppCommandCarriesAThrownHandlerBackToTheCaller(t *testing.T) {
 
 func TestAppCommandAbandonsAHandlerThatNeverReturns(t *testing.T) {
 	d := newAppDaemon(t)
-	// The shipped tripwires are 60s and 2s; waiting them out would cost a minute
-	// and prove nothing extra.
 	d.appDispatchWait = 300 * time.Millisecond
 	d.appPingWait = 50 * time.Millisecond
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -238,8 +236,6 @@ func TestAppCommandAbandonsAHandlerThatNeverReturns(t *testing.T) {
 	}
 }
 
-// The frontend waits 75s against the daemon's 60s so attn's own refusal — which
-// names the app, the command and what to do — always arrives first.
 func TestAppCommandQueuedBehindABusyAppRefusesInsideItsOwnBudget(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 300 * time.Millisecond

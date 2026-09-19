@@ -113,8 +113,6 @@ func formatAnchorIssue(issue present.AnchorIssue) string {
 	return fmt.Sprintf("%s[%d]: %s", issue.Path, issue.Index, issue.Message)
 }
 
-// The daemon is the sole authority for parsing and pinning: never trust a
-// caller-supplied SHA or manifest shape.
 func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessage) {
 	sourceSessionID := strings.TrimSpace(msg.SourceSessionID)
 	if sourceSessionID == "" {
@@ -203,7 +201,6 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		PresentOpenResult: result,
 	})
 
-	// Re-fetch so the broadcast carries the fresh latest-round summary.
 	if refreshed, err := d.store.GetPresentation(pres.ID); err == nil {
 		proto := presentationToProto(refreshed)
 		fact := FactPresentationUpdated
@@ -351,13 +348,10 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		result.Comments[i] = commentToProto(c)
 	}
 
-	// Best-effort drift signal: a rev-parse failure is non-fatal, just omit the
-	// field.
 	if headSHA, err := attngit.Output(attngit.OpMetadata, pres.RepoPath, "rev-parse", "HEAD"); err == nil {
 		result.RepoHeadSHA = protocol.Ptr(strings.TrimSpace(string(headSHA)))
 	}
 
-	// A stats lookup failure or empty result must never fail the round fetch.
 	stats := d.presentFileStats(pres.RepoPath, round.BaseSHA, round.HeadSHA)
 	if len(stats) > 0 {
 		for i := range result.Round.Manifest.Files {
@@ -369,7 +363,6 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		}
 	}
 
-	// A git error leaves ChangedFiles nil and the round still loads.
 	if changed, err := d.presentChangedFiles(pres.RepoPath, round.BaseSHA, round.HeadSHA, stats); err == nil {
 		result.Round.ChangedFiles = changed
 	}
@@ -378,8 +371,6 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 	d.sendToClient(client, result)
 }
 
-// Rename lines are skipped: the numstat rename encoding does not cleanly
-// resolve to a manifest path. Errors return nil — stats never fail a fetch.
 func (d *Daemon) presentFileStats(repoDir, baseSHA, headSHA string) map[string][2]int {
 	out, err := attngit.Output(attngit.OpDiff, repoDir, "diff", "--numstat", baseSHA+".."+headSHA)
 	if err != nil {

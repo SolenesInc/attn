@@ -27,8 +27,6 @@ const githubRepo = "victorarias/attn"
 const remoteDaemonReadyTimeout = 35 * time.Second
 const remoteHarnessRootMarker = "/.attn/harness/"
 
-// Tripwires sized past the slowest link anyone would sync over — 5 Mbit/s, a bad
-// tether: 59MB binary = 94s, 94MB app runtime = 150s, daemon readiness <= 35s.
 const (
 	remoteReadyBudget    = 180 * time.Second
 	appRuntimeShipBudget = 300 * time.Second
@@ -78,8 +76,6 @@ func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile
 		return err
 	}
 
-	// A remote without a sidecar still runs sessions (only apps park), so this must
-	// never stop a dead remote from being revived. Its failure is reported, not returned.
 	shipCtx, cancelShip := context.WithTimeout(ctx, appRuntimeShipBudget)
 	defer cancelShip()
 	if err := b.shipAppRuntime(shipCtx, sshTarget, profile, ready); err != nil {
@@ -143,8 +139,6 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		binariesUpdated = true
 	}
 
-	// Install before startup; a missing sidecar leaves new terminals on dedicated
-	// workers until the next daemon start repeats its one-time probe.
 	_, hostWasMissing, hostErr := b.ensureRemotePTYHost(ctx, sshTarget, profile, platform, localVersion, remoteInstallPath)
 	if hostErr != nil {
 		b.logf("%v", hostErr)
@@ -152,8 +146,6 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		binariesUpdated = true
 	}
 
-	// Enroll before the daemon starts, so a first-time remote knows whose outpost it is.
-	// One enrolled to another home refuses: re-homing is the operator's decision.
 	if err := b.enrollRemote(ctx, sshTarget, profile, homeDaemonID); err != nil {
 		return ready, err
 	}
@@ -164,8 +156,6 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 	return ready, nil
 }
 
-// Gated on content, not on the binary having moved: the two are built from different
-// trees, so an apphost-only change leaves the attn binary byte-identical.
 func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
 	updated, err := b.ensureRemoteAppRuntime(ctx, sshTarget, profile, ready.platform, ready.version, ready.remoteInstallPath)
 	if err != nil {
@@ -174,8 +164,6 @@ func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, prof
 	if !updated {
 		return nil
 	}
-	// A running sidecar still holds the old inode and must be bounced — but only if one
-	// is running, or this puts a Bun process on a remote hosting no enabled app.
 	return b.bounceRemoteAppRuntime(ctx, sshTarget, profile)
 }
 
@@ -202,8 +190,6 @@ func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, pr
 	return nil
 }
 
-// What `attn enrollment enroll` exits with when the remote is already another home's
-// outpost. Any other non-zero code is logged and does not block the sync.
 const enrollmentRefusedExitCode = 3
 
 func withoutProfileBanner(message string) string {
@@ -284,8 +270,6 @@ func (b *Bootstrapper) detectRemotePlatform(ctx context.Context, sshTarget, prof
 	return remoteLinuxPlatform(fields[1])
 }
 
-// The Go and Bun names disagree (amd64 vs x64) and each toolchain accepts only its
-// own, so both are recorded here rather than derived at the call site.
 func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 	switch machine {
 	case "x86_64", "amd64":
@@ -406,8 +390,6 @@ func (b *Bootstrapper) downloadReleaseArtifact(ctx context.Context, version, art
 	return nil
 }
 
-// A source build overwrites one file per platform because no version or binary
-// fingerprint covers apphost/. Affordable: 0.13s compile, 0.17s hash, 0.38s remote.
 func appRuntimeCacheDir(key string) string {
 	return filepath.Join(config.DataDir(), "remotes", "app-runtime", key)
 }
@@ -523,8 +505,6 @@ func remotePTYHostPath(remoteInstallPath, profile string) string {
 	return filepath.Join(filepath.Dir(remoteInstallPath), ptyhost.BinaryNameForProfile(profile))
 }
 
-// A newly installed host needs a restart for probing. Byte updates do not: the
-// running daemon starts their new generation on its next terminal spawn.
 func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, bool, error) {
 	remotePath := remotePTYHostPath(remoteInstallPath, profile)
 	localPath, err := b.ensureLocalPTYHost(ctx, platform, version)
@@ -554,8 +534,6 @@ func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profi
 	return true, wasMissing, nil
 }
 
-// Ships the sidecar and reports whether it changed. The gate is content: at ~90MB, a
-// hub syncing on a timer would otherwise push it every pass.
 func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, error) {
 	remotePath := remoteAppRuntimePath(remoteInstallPath, profile)
 
@@ -662,8 +640,6 @@ func (b *Bootstrapper) runRemoteSHA256(ctx context.Context, sshTarget, profile, 
 	}
 }
 
-// remoteFileSHA256 returns the hash of a remote file, or "" when it is not
-// there. pathExpr is a shell expression, so callers quote their own literals.
 func (b *Bootstrapper) remoteFileSHA256(ctx context.Context, sshTarget, profile, pathExpr string) (string, error) {
 	return b.runRemoteSHA256(ctx, sshTarget, profile, remoteSHA256Script(pathExpr))
 }
@@ -725,13 +701,9 @@ func (b *Bootstrapper) buildBinaryFromSource(ctx context.Context, platform Remot
 	if gc := buildinfo.GitCommit; gc != "" && gc != "unknown" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.GitCommit=" + gc
 	}
-	// The remote daemon's workers encode snapshots this app decodes, so its build must
-	// carry the same format tag or every remote session attaches without scrollback.
 	if sf := buildinfo.SnapshotFormat; sf != "" && sf != "unknown" {
 		ldflags += " -X github.com/victorarias/attn/internal/buildinfo.SnapshotFormat=" + sf
 	}
-	// The worker links libghostty-vt via cgo on Linux too (internal/ghosttyvt), so
-	// the cross-compile needs that target's native archive present before the build.
 	if err := ensureNativeVTArchive(ctx, root, platform); err != nil {
 		return err
 	}
@@ -820,8 +792,6 @@ func (b *Bootstrapper) installRemoteBinary(ctx context.Context, sshTarget, profi
 	return b.uploadRemoteFile(ctx, sshTarget, profile, localBinary, remoteInstallPath)
 }
 
-// Streams a local executable to the remote. `install` unlinks the destination first,
-// so replacing a running binary gets a new inode instead of failing with ETXTBSY.
 func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile, localPath, remotePath string) error {
 	remoteDir := filepath.Dir(remotePath)
 	remoteTmpPath := filepath.Join("/tmp", fmt.Sprintf("%s.%d.%d.tmp", filepath.Base(remotePath), os.Getpid(), time.Now().UnixNano()))
@@ -838,8 +808,6 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 		return fmt.Errorf("stat %s: %w", localPath, err)
 	}
 
-	// Every path out of here removes the staging file: retries never reuse the name,
-	// and /tmp is RAM on a systemd remote.
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
@@ -859,8 +827,6 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 		return fmt.Errorf("copy %s over ssh: %s", filepath.Base(localPath), strings.TrimSpace(string(out)))
 	}
 
-	// ssh's exit status says the shell ran, not that every byte arrived; a short
-	// file would otherwise install and then refuse to exec.
 	probe, err := runSSH(
 		ctx,
 		sshTarget,
@@ -1063,8 +1029,6 @@ func (b *Bootstrapper) startRemoteDaemon(ctx context.Context, sshTarget, profile
 	return err
 }
 
-// stopRemoteDaemonScript deliberately leaves the PID file in place — see
-// removeStaleRemoteSocketScript for why unlinking it would be unsafe.
 func stopRemoteDaemonScript(profile string) string {
 	port := config.WSPortForProfile(profile)
 	return remoteSocketConfigScript() + fmt.Sprintf(`
@@ -1111,8 +1075,6 @@ func (b *Bootstrapper) restartRemoteDaemon(ctx context.Context, sshTarget, profi
 	return b.startRemoteDaemon(ctx, sshTarget, profile)
 }
 
-// Unlinks ONLY the socket, never the PID path: that file's flock is the sole mutual
-// exclusion between a remote daemon and a concurrent `attn db restore`.
 func removeStaleRemoteSocketScript() string {
 	return remoteSocketConfigScript() + `rm -f "$socket_path"`
 }

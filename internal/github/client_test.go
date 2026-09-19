@@ -59,8 +59,6 @@ func TestGitHTTPSAuthorizationHeader(t *testing.T) {
 }
 
 func TestNewClient_DefaultsToGitHubAPI(t *testing.T) {
-	// A real-looking token: "test-token" is blocked when targeting the real
-	// GitHub API.
 	client, err := NewClient("", "ghp_xxxxxxxxxxxx")
 	if err != nil {
 		t.Fatalf("NewClient error: %v", err)
@@ -537,7 +535,6 @@ func TestClient_MergePR(t *testing.T) {
 }
 
 func TestClient_MergePR_InvalidMethod(t *testing.T) {
-	// A mock URL, because test-token against the real API is blocked.
 	client, _ := NewClient("http://localhost:9999", "test-token")
 	err := client.MergePR("owner/repo", 42, "invalid")
 	if err == nil {

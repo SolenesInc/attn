@@ -75,8 +75,6 @@ func TestAppLogsFiltersByTagAndRuntimeShowsEverything(t *testing.T) {
 	}
 }
 
-// The tag is written in TypeScript and read in Go; nothing but this test keeps the
-// spellings the same, and a drift makes `attn app logs <name>` return nothing.
 func TestAppLogTagMatchesTheHost(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "..", "apphost", "src", "index.ts"))
 	if err != nil {
@@ -236,8 +234,6 @@ func TestInvocationRetentionTrimsByAgeAcrossEveryApp(t *testing.T) {
 	}
 }
 
-// The age window cannot bound the table on its own: how many rows thirty days holds
-// depends on what the app subscribed to.
 func TestInvocationRetentionCapsEachAppAtItsNewestRows(t *testing.T) {
 	d := newAppDaemon(t)
 	clock := newAppTestClock(d)
@@ -312,8 +308,6 @@ func TestAppStatusCarriesTheStallClockAndWhenItFires(t *testing.T) {
 	}
 }
 
-// `runtime` in particular: `attn app logs runtime` already means the shared
-// process.
 func TestApplyRefusesAReservedAppName(t *testing.T) {
 	d := newAppDaemon(t)
 	for _, name := range apps.ReservedNames() {

@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Receipt (shared with ws_session_message.go): the largest prose block across
-// 120 transcripts was 18,713 chars, so 64KiB is a tripwire.
 const agentPeekMessageMaxChars = annotatableMessageMaxChars
 
 const agentShortIDLength = 8

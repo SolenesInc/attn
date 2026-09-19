@@ -750,8 +750,6 @@ func TestDelegateWebSocketCommandReturnsResult(t *testing.T) {
 		}
 		d.handleClientMessage(client, payload)
 
-		// handleDelegateWS polls the operation every 100ms; on the fake clock a
-		// generous run-out is free.
 		time.Sleep(time.Second)
 		outbound := requireOutbound(t, client, "no delegate_result reached the client")
 		var result protocol.DelegateResultMessage

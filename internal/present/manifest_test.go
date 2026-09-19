@@ -10,7 +10,7 @@ func TestParseManifest(t *testing.T) {
 	tests := []struct {
 		name    string
 		yaml    string
-		wantErr string // substring expected in error; empty means no error
+		wantErr string
 	}{
 		{
 			name: "valid full manifest",

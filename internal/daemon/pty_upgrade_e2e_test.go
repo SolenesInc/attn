@@ -24,8 +24,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Run with scripts/test-pty-upgrade.sh: the legacy daemon is built from a pinned
-// revision, so this exercises the old executable and registry format unchanged.
 func TestPTYUpgradeAcrossDaemonBinaries(t *testing.T) {
 	oldBinary, hostBinary := os.Getenv("ATTN_UPGRADE_OLD_BIN"), os.Getenv("ATTN_TEST_PTY_HOST")
 	if oldBinary == "" || hostBinary == "" {
@@ -157,8 +155,6 @@ done
 	current.setSharedSetting(true)
 	current.stop()
 
-	// A wrapper changes the host binary identity while running the same protocol.
-	// Real upgrades use the new executable's hash to make this same decision.
 	nextHost := filepath.Join(root, "next-pty-host")
 	if err := os.WriteFile(nextHost, []byte("#!/bin/sh\nexec '"+strings.ReplaceAll(hostBinary, "'", "'\\''")+"' \"$@\"\n"), 0o755); err != nil {
 		t.Fatal(err)

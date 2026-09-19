@@ -167,8 +167,6 @@ func TestStopRemoteDaemonScript_PortByProfile(t *testing.T) {
 	}
 }
 
-// The PID file's flock, not its presence on disk, is the sole mutual exclusion a remote daemon and
-// a concurrent `attn db restore` share: unlinking the pathname lets a restore holding the old inode's flock go uncontended.
 func TestStopRemoteDaemonScript_LeavesPIDFileInPlace(t *testing.T) {
 	script := stopRemoteDaemonScript("")
 	if !strings.Contains(script, `rm -f "$socket_path"`) {
@@ -237,7 +235,6 @@ func TestResolveRemoteInstallPath(t *testing.T) {
 	}
 }
 
-// Several profile-isolated daemons share one ~/.local/bin, so one shared file name would have the newest sync replace another profile's runtime.
 func TestRemoteAppRuntimePath(t *testing.T) {
 	cases := []struct {
 		remoteInstallPath string

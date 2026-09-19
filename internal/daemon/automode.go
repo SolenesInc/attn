@@ -110,7 +110,6 @@ func cleanEnvironmentLines(lines []string) []string {
 	return cleaned
 }
 
-// autoModeEnvironmentInfo puts the slots on the wire in the schema's order, so
 func autoModeEnvironmentInfo(env automode.Environment) protocol.AutoModeEnvironmentInfo {
 	values := []protocol.AutoModeEnvironmentSlotValue{}
 	for _, id := range automode.SlotIDs() {
@@ -247,8 +246,6 @@ func autoModeDenialNotification(label string, denial store.AutoModeDenial) store
 	}
 }
 
-// applySessionPolicyPair puts the session's own pair over the daemon's default;
-// an empty half keeps the default.
 func applySessionPolicyPair(cfg automode.Config, policy, sandbox string) automode.Config {
 	if policy != "" {
 		cfg.ApprovalPolicy = policy
@@ -259,14 +256,11 @@ func applySessionPolicyPair(cfg automode.Config, policy, sandbox string) automod
 	return cfg
 }
 
-// The pair as asked for. A bad value is refused on this, so a launcher that
-// mistyped one is told, even when yolo would have replaced it.
 func requestedSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
 	return strings.TrimSpace(protocol.Deref(msg.ApprovalPolicy)),
 		strings.TrimSpace(protocol.Deref(msg.SandboxMode))
 }
 
-// Yolo asks for the full-access preset and wins over a pair sent beside it.
 func effectiveSpawnPolicyPair(msg *protocol.SpawnSessionMessage) (string, string) {
 	if protocol.Deref(msg.YoloMode) {
 		return automode.PolicyNever, automode.SandboxDangerFullAccess
@@ -329,7 +323,6 @@ func autoModeRuleInfos(rules []automode.Rule) []protocol.AutoModeRuleInfo {
 	return out
 }
 
-// The app edits literals only, so each wire entry becomes a single-alternative token.
 func autoModeRuleTokens(pattern []string) []automode.PatternToken {
 	tokens := make([]automode.PatternToken, 0, len(pattern))
 	for _, literal := range pattern {
@@ -338,7 +331,6 @@ func autoModeRuleTokens(pattern []string) []automode.PatternToken {
 	return tokens
 }
 
-// Unlike autoModeRuleTokens, this carries every alternative: "git {push|pull}" and "git push" differ.
 func autoModeFullPatternTokens(pattern [][]string) []automode.PatternToken {
 	tokens := make([]automode.PatternToken, 0, len(pattern))
 	for _, alternatives := range pattern {

@@ -308,7 +308,6 @@ func TestSweepClaimsDeadOwnerAfterGrace(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	done, _ := armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
 	installReconcileRunner(t, d)
-	// No session row for the assignee: the owner is dead (rows are deleted on close).
 	if _, err := d.store.CreateTicket(store.Ticket{
 		ID: "orphaned", Title: "t", Assignee: "sess-dead", Status: store.TicketStatusInReview,
 	}, "chief", time.Now().Add(-time.Hour)); err != nil {
@@ -340,8 +339,6 @@ func TestSweepSkipsLiveHumanAndUnassigned(t *testing.T) {
 	armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
 	installReconcileRunner(t, d)
 
-	// A session row without a backend runtime reads as live: CLI/remote sessions have
-	// no daemon PTY, and their death-hook is the unregister path.
 	d.store.Add(&protocol.Session{ID: "sess-live", Label: "live", Directory: t.TempDir()})
 	now := time.Now()
 	mk := func(id, assignee string) {
@@ -373,7 +370,6 @@ func TestSweepRecoversAbandonedClaim(t *testing.T) {
 	}, "chief", past); err != nil {
 		t.Fatalf("CreateTicket: %v", err)
 	}
-	// The crash gap: the seam claimed but the enqueue never landed.
 	if claimed, err := d.store.ClaimTicketReconciliation("abandoned", past); err != nil || !claimed {
 		t.Fatalf("claim: %v, %v", claimed, err)
 	}

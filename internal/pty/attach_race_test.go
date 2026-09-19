@@ -50,8 +50,6 @@ func TestSessionInfoAndSubscribeDoNotSerializeReplay(t *testing.T) {
 	}
 }
 
-// info() must serialize the snapshot and read lastReplaySeq under one replayMu
-// section, or a write in that window is in neither the payload nor the stream.
 func TestAttachSnapshotSeqConsistency(t *testing.T) {
 	const cols, rows = 80, 24
 	defer func() { infoSnapshotHook = nil }()
@@ -68,7 +66,7 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		ghostty:     gt,
 		wireFeed:    newWireFeeder(gt, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),
@@ -106,8 +104,6 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 
 	lostChunk := "GAP_LOST|command-end+next-prompt\n"
 	keptChunk := "GAP_KEPT|following-output\n"
-	// Back-to-back writes coalesce into one read and one seq, which would not
-	// advance the watermark past the lost chunk.
 	injectOneChunk := func(line string) {
 		start := s.seqCounter.Load()
 		write(line)
@@ -159,8 +155,6 @@ func TestAttachSnapshotSeqConsistency(t *testing.T) {
 	}
 }
 
-// The read loop allocates a chunk's seq before applying it, so a snapshot in
-// that gap must report lastReplaySeq, not seqCounter.
 func TestScreenSnapshotSeqConsistency(t *testing.T) {
 	const cols, rows = 80, 24
 	defer func() { readLoopSeqGapHook = nil }()
@@ -177,7 +171,7 @@ func TestScreenSnapshotSeqConsistency(t *testing.T) {
 		cols:        cols,
 		rows:        rows,
 		ptmx:        r,
-		child:       &childProcess{cmd: &exec.Cmd{}}, // unstarted: readLoop's Wait() returns an error, never panics
+		child:       &childProcess{cmd: &exec.Cmd{}},
 		ghostty:     gt,
 		wireFeed:    newWireFeeder(gt, 0, nil, 0),
 		subscribers: make(map[string]*sessionSubscriber),
@@ -265,8 +259,6 @@ func (r *recordingSink) send(data []byte, seq uint32) bool {
 	return true
 }
 
-// Must mirror planLivePtyOutput's stale rule, or the test validates a contract
-// no client implements.
 func (r *recordingSink) appliedAfter(lastSeq uint32, maxChunks int) []byte {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -302,7 +294,6 @@ func (m *streamMirror) len() int {
 	return len(m.buf)
 }
 
-// have=false means the mirror has not yet reached offset+len(p).
 func (m *streamMirror) matchAt(offset int, p []byte) (ok bool, have bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

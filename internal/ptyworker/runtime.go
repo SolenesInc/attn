@@ -59,8 +59,6 @@ func attachBlocksToWire(blocks []pty.AttachBlockData) []AttachBlock {
 
 var exitedSessionCleanupTTL = 45 * time.Second
 
-// Reaps only workers that are both unowned and idle; PTY output defers it.
-// Override with ATTN_WORKER_ORPHAN_TTL (Go duration; "0" disables reaping).
 var orphanedWorkerTTL = 12 * time.Hour
 
 const orphanTTLEnvVar = "ATTN_WORKER_ORPHAN_TTL"
@@ -115,7 +113,6 @@ type Config struct {
 
 	Logf func(format string, args ...interface{}) `json:"-"`
 
-	// Set only on the adopt half of an in-place upgrade; see upgrade.go.
 	AdoptHandoff    string
 	AdoptPtmxFD     int
 	AdoptListenerFD int
@@ -124,26 +121,20 @@ type Config struct {
 }
 
 type Runtime struct {
-	cfg     Config
-	manager *pty.Manager
-	// Released after the manager takes it: it carries the whole screen as VT
-	// (measured 590KB on a full 8MB scrollback) and this process lives for days.
+	cfg      Config
+	manager  *pty.Manager
 	adopt    *pty.HandoffState
 	adopted  bool
 	listener net.Listener
 	logf     func(format string, args ...interface{})
 	capture  *debugCapture
 
-	stateMu    sync.RWMutex
-	state      string
-	exitCode   *int
-	exitSignal *string
-	// An agent that sets its title once at boot has no second heartbeat for a
-	// watcher that attaches after it; without the replay it never reads idle.
+	stateMu      sync.RWMutex
+	state        string
+	exitCode     *int
+	exitSignal   *string
 	lastEvidence *pty.Observation
-	// Orders every observation broadcast against watcher registration plus
-	// replay, so no watcher can queue a fresh heartbeat ahead of a stale replay.
-	deliverMu sync.Mutex
+	deliverMu    sync.Mutex
 
 	stopOnce sync.Once
 	stopCh   chan struct{}
@@ -153,7 +144,6 @@ type Runtime struct {
 	exited      bool
 	cleanupTTL  *time.Timer
 
-	// orphanTimer is guarded by lifecycleMu; lastOutputNano by the output path.
 	orphanTTL      time.Duration
 	orphanTimer    *time.Timer
 	lastOutputNano atomic.Int64
@@ -178,8 +168,6 @@ func Run(ctx context.Context, cfg Config) error {
 		if err != nil {
 			return err
 		}
-		// The handoff JSON is the entire contract: a Config field that does not
-		// serialize reaches an adopted session as its zero value.
 		inherited := cfg
 		cfg = hf.Config
 		cfg.Logf = logf
@@ -260,8 +248,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	r.logf("worker startup: session=%s socket=%s registry=%s", r.cfg.SessionID, r.cfg.SocketPath, r.cfg.RegistryPath)
 	var listener net.Listener
 	if r.adopted {
-		// Inherited, not rebound: rebinding leaves a measured ~12ms hole where a
-		// daemon dial fails.
 		var err error
 		if listener, err = adoptListener(r.cfg.AdoptListenerFD); err != nil {
 			return err
@@ -377,8 +363,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	entry.OwnerPID = r.cfg.OwnerPID
 	entry.OwnerStartedAt = r.cfg.OwnerStartedAt
 	entry.OwnerNonce = r.cfg.OwnerNonce
-	// The daemon cannot source these otherwise, and a reload would re-spawn with
-	// defaults instead of the same yolo/executable.
 	entry.LaunchParamsRecorded = true
 	entry.YoloMode = r.cfg.YoloMode
 	entry.ApprovalRoute = r.cfg.ApprovalRoute
@@ -421,8 +405,6 @@ func (r *Runtime) run(ctx context.Context) error {
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			// An upgrade closes the listener on purpose so new connections queue
-			// in the kernel for the image taking over.
 			if resumed, ok := r.awaitUpgradeListener(); ok {
 				listener = resumed
 				continue
@@ -617,8 +599,6 @@ func (r *Runtime) removeWatcher(conn *connCtx) {
 func (r *Runtime) observeState(obs pty.Observation) {
 	r.deliverMu.Lock()
 	defer r.deliverMu.Unlock()
-	// Evidence-only: it must not touch the cached state or be deduped against
-	// it, or a heartbeat is dropped whenever it equals the last state string.
 	if !obs.Source.ClaimsProtocolState() {
 		r.stateMu.Lock()
 		r.lastEvidence = &obs
@@ -709,7 +689,6 @@ func (r *Runtime) handleConn(conn net.Conn) {
 		if useDeadline {
 			_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		} else {
-			// Attach/watch are server-push and idle for long periods: no deadline.
 			_ = conn.SetReadDeadline(time.Time{})
 		}
 
@@ -893,8 +872,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 			subID = "conn-" + c.connID
 		}
 		send := func(data []byte, seq uint32) bool {
-			// One call per output chunk: an ungated log line here grows the
-			// per-session .log without bound.
 			if c.runtime.cfg.Debug {
 				c.runtime.logf(
 					"worker output event: session=%s conn=%s sub=%s seq=%d bytes=%d preview=%q",
@@ -948,8 +925,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 				)
 			}
 		}
-		// Placements ride this connection's own queue, which keeps a set ordered
-		// behind the output event carrying the same seq. Success must not log.
 		onPlacements := pty.OnPlacements(func(update pty.PlacementUpdate) {
 			seq := update.Seq
 			if !c.sendEvent(EventEnvelope{
@@ -1166,8 +1141,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		}
 		c.sendResult(req.ID, map[string]any{"ok": true})
 	case MethodRemove:
-		// Respond before killing: Kill waits up to defaultKillTimeout (10s),
-		// past the daemon's 5s RPC timeout, and probes then read "i/o timeout".
 		c.sendResult(req.ID, map[string]any{"ok": true})
 		c.shutdown = true
 		_ = c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
@@ -1192,7 +1165,6 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 		if state == "" {
 			state = "working"
 		}
-		// Replays the cached state; not a fresh terminal observation.
 		_ = c.sendEvent(stateChangedEvent(c.runtime.cfg.SessionID, pty.Observation{
 			Source: pty.SourceWorkerInfo,
 			Claim:  state,
@@ -1274,8 +1246,6 @@ func (r *Runtime) infoResult() (InfoResult, error) {
 	exitSignal := r.exitSignal
 	r.stateMu.RUnlock()
 
-	// State stays empty when nothing set it: a default here reads downstream as
-	// a claim, and stamped every recovered session `working` on a daemon restart.
 	result := InfoResult{
 		Running:   info.Running,
 		Agent:     r.cfg.Agent,
@@ -1333,8 +1303,6 @@ func isTemporary(err error) bool {
 	return false
 }
 
-// CLOEXEC is cleared so the socket crosses the execve still bound and queueing.
-// Must run before the session is captured, or dials get "session not found".
 func (r *Runtime) pauseAccept() (int, error) {
 	r.upgradeMu.Lock()
 	defer r.upgradeMu.Unlock()
@@ -1346,7 +1314,6 @@ func (r *Runtime) pauseAccept() (int, error) {
 		return 0, err
 	}
 	r.upgradeResume = make(chan net.Listener, 1)
-	// The dup above keeps the socket open, backlog and all.
 	_ = r.listener.Close()
 	return fd, nil
 }
@@ -1369,8 +1336,6 @@ func (r *Runtime) resumeAccept(fd int) {
 	}
 }
 
-// Reports false when no upgrade is pausing accepts, which is every other reason
-// Accept can fail.
 func (r *Runtime) awaitUpgradeListener() (net.Listener, bool) {
 	r.upgradeMu.Lock()
 	resume := r.upgradeResume

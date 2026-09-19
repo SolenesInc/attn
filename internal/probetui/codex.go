@@ -2,8 +2,6 @@ package probetui
 
 import "bytes"
 
-// codex-cli 0.145.0 never uses the alternate screen, addresses the existing screen with CUP/EL, and queries DA1/CPR/OSC 10+11 colors on startup; see internal/probetui/testdata/agent-vocab-codex.json.
-
 func startupCodex(cols, rows int) []byte {
 	var b bytes.Buffer
 	b.Write(privateMode(true, "1004", "2004"))

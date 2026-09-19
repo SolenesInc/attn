@@ -5,20 +5,14 @@ import (
 	"fmt"
 )
 
-// Binary websocket frames carry high-volume PTY output to clients that advertised
-// CapabilityBinaryPtyOutput (base64-in-JSON costs 33% inflation per chunk).
 const BinaryFrameTypePtyOutput byte = 0x01
 
-// One frame carries one whole kitty image, no chunking; measured emissions are 1.9-6.5MB
-// of raw pixels. No request id: answers match by content key, so duplicates are idempotent.
 const BinaryFrameTypeKittyImage byte = 0x02
 
 const binaryPtyHeaderBytes = 1 + 1 + 4
 
 const binaryKittyImageHeaderBytes = 1 + 1 + 4 + 8 + 4 + 4 + 1
 
-// Kitty pixel layouts. The codes are the daemon's own, translated from ghostty's enum at
-// the boundary: passing its value through would let a reordering pin reinterpret pixels.
 const (
 	KittyImageFormatCodeRGB       byte = 0
 	KittyImageFormatCodeRGBA      byte = 1
@@ -40,8 +34,6 @@ func KittyImageFormatName(code byte) (string, bool) {
 	return kittyImageFormatNames[code], true
 }
 
-// EncodeKittyImageFrame rejects a format code it has no name for: an unknown
-// layout renders as plausible garbage (wrong stride) rather than failing.
 func EncodeKittyImageFrame(sessionID string, imageID uint32, generation uint64, width, height uint32, format byte, pixels []byte) ([]byte, error) {
 	if len(sessionID) == 0 || len(sessionID) > 255 {
 		return nil, fmt.Errorf("session id length %d out of range [1,255]", len(sessionID))
@@ -65,8 +57,6 @@ func EncodeKittyImageFrame(sessionID string, imageID uint32, generation uint64, 
 	return frame, nil
 }
 
-// KittyImageFrame is a decoded kitty image frame. Pixels aliases the input
-// frame; callers must not retain it past the frame's lifetime.
 type KittyImageFrame struct {
 	SessionID  string
 	ImageID    uint32
@@ -117,8 +107,6 @@ func EncodePtyOutputFrame(sessionID string, seq uint32, data []byte) ([]byte, er
 	return frame, nil
 }
 
-// DecodePtyOutputFrame parses a binary pty_output frame. The returned data
-// aliases the input frame; callers must not retain it past the frame's lifetime.
 func DecodePtyOutputFrame(frame []byte) (sessionID string, seq uint32, data []byte, err error) {
 	if len(frame) < binaryPtyHeaderBytes+1 {
 		return "", 0, nil, fmt.Errorf("frame too short: %d bytes", len(frame))

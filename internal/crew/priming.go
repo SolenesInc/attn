@@ -12,16 +12,10 @@ import (
 
 const HandoffsDirName = "handoffs"
 
-// Match the filing tripwire so every letter attn accepts is inlined whole. A
-// hand-edited file can still exceed it, so that path names the required read.
 const handoffInlineLimit = MaxHandoffBytes
 
-// MaxHeldSeeds is a tripwire: on 2026-09-06 the busiest holder in the production
-// garden (477 seeds, 157 open) held 5, so ten is twice past the largest real case.
 const MaxHeldSeeds = 10
 
-// MaxHeldHandoffBytes is the per-note priming budget: of the 31 seeds carrying a
-// handoff note on 2026-09-06 the freshest measured p50 795 and max 2,650 bytes.
 const MaxHeldHandoffBytes = 1200
 
 type HeldSeed struct {
@@ -56,8 +50,6 @@ type Priming struct {
 	Plots      []PlotReady
 }
 
-// SortHandoffNames orders letters freshest first: the file names are UTC
-// timestamps, so lexicographic order is chronological.
 func SortHandoffNames(names []string) {
 	sort.Sort(sort.Reverse(sort.StringSlice(names)))
 }
@@ -84,7 +76,6 @@ func (p Priming) Block() string {
 	})
 }
 
-// GardenSection renders the garden block alone so the daemon can log its size.
 func (p Priming) GardenSection() string {
 	if strings.TrimSpace(p.Member) == "" {
 		return ""

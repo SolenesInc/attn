@@ -177,7 +177,6 @@ func TestWatcherSelfWriteRecordExpires(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = w.Close() })
 
-	// w.now is read under w.mu, so swapping it there makes the TTL deterministic.
 	base := time.Unix(1_700_000_000, 0)
 	var fakeNanos atomic.Int64
 	fakeNanos.Store(base.UnixNano())

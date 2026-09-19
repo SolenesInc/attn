@@ -10,7 +10,6 @@ import (
 	"strings"
 )
 
-// ManifestVersion changes when the serialized DSL or its rendering semantics change.
 const ManifestVersion = 1
 
 const ManifestPath = "catalog.generated.json"
@@ -25,7 +24,6 @@ func (c *Catalog) Manifest() Manifest {
 	return Manifest{Version: ManifestVersion, Recipients: c.Recipients()}
 }
 
-// LoadManifest uses the revision's declarations and sources, never Builtin's declarations.
 func LoadManifest(data []byte, sources fs.FS) (*Catalog, error) {
 	manifest, err := ParseManifest(data)
 	if err != nil {

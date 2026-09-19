@@ -13,8 +13,6 @@ import (
 	"time"
 )
 
-// Not a test: re-exec'd as the app being stopped. Ignores SIGTERM, or with
-// ATTN_APP_STOP_HELPER_RELAUNCH writes that marker on SIGTERM and exits.
 func TestProfileAppStopHelperProcess(t *testing.T) {
 	readyPath := os.Getenv("ATTN_APP_STOP_HELPER_READY")
 	if readyPath == "" {
@@ -123,7 +121,6 @@ func sandboxedProfile(t *testing.T) profileResolved {
 	return r
 }
 
-// Not installed, so the stop resolves without a pid file or a LaunchServices probe.
 func stoppedProfile(t *testing.T) profileResolved {
 	t.Helper()
 	r := sandboxedProfile(t)
@@ -299,7 +296,6 @@ func TestCleanProfileAbortsWhileAnAppHoldsTheLockAndProceedsOnceItReleases(t *te
 	if err := os.MkdirAll(filepath.Dir(r.AppLock), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	// An app instance holds it shared, the way the Tauri shell does; several may.
 	held := make([]*os.File, 2)
 	for i := range held {
 		f, err := os.OpenFile(r.AppLock, os.O_RDWR|os.O_CREATE, 0o600)

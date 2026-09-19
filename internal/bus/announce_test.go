@@ -192,8 +192,6 @@ func TestTrimCompactsTheNamesTheBusDeclared(t *testing.T) {
 	}
 }
 
-// Compaction is opt-in per fact class: it is only sound for facts that are pure
-// invalidations.
 func TestTrimCompactsNothingWhenNoNameWasDeclared(t *testing.T) {
 	s := newMemStore()
 	b := New(Options{Store: s, Log: func(string, ...interface{}) {}, Retention: time.Hour})
@@ -215,8 +213,6 @@ func TestTrimCompactsNothingWhenNoNameWasDeclared(t *testing.T) {
 	}
 }
 
-// The mark's zero value means "everything after seq 0", so announcing on an
-// unplaced mark replays the entire log into every live client.
 func TestABusThatCouldNotFindTheHeadDoesNotReplayTheLog(t *testing.T) {
 	s := newMemStore()
 	now := time.Now()

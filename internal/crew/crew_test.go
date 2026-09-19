@@ -7,7 +7,6 @@ import (
 	"testing"
 )
 
-// Built by shape, never copied from the live `~/.attn/crew`.
 func writeCrewFixture(t *testing.T) string {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "crew")
@@ -172,7 +171,6 @@ func TestDecode_IgnoresUnknownKeys(t *testing.T) {
 	}
 }
 
-// A declared field a query filters on must exist in every stored body, or a filter on `binding_session = ""` would not match the sleeping members.
 func TestEncode_WritesDeclaredFieldsEvenWhenEmpty(t *testing.T) {
 	encoded, err := Member{ID: "keel"}.Encode()
 	if err != nil {

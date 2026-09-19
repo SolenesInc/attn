@@ -22,7 +22,6 @@ func DiscoverHosts() ([]HostInfo, error) {
 	return parseAuthStatusHosts(output)
 }
 
-// Note: Daemon ensures PATH is set at startup via pathutil.EnsureGUIPath()
 func GetTokenForHost(host string) (string, error) {
 	cmd := exec.Command("gh", "auth", "token", "-h", host)
 	output, err := cmd.Output()

@@ -59,7 +59,6 @@ func (m *layoutModel) tileIDs() []string {
 	return ids
 }
 
-// A Node value shares its children's backing array with every copy of itself.
 func cloneNode(node Node) Node {
 	out := node
 	if node.Children == nil {
@@ -384,7 +383,6 @@ func TestLayoutStaysAWellFormedTreeUnderRandomOperations(t *testing.T) {
 	})
 }
 
-// The seed under testdata/rapid replays the counterexample rapid shrank to.
 func TestLayoutOperationsDoNotModifyTheirInput(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		tree, _ := DockTile(DefaultLayout("p0"), "p0", DirectionVertical, false, "s1",

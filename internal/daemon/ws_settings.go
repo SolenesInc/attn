@@ -20,25 +20,24 @@ import (
 )
 
 const (
-	SettingProjectsDirectory    = "projects_directory"
-	SettingUIScale              = "uiScale"
-	SettingGardenScale          = "gardenScale"
-	SettingClaudeExecutable     = "claude_executable"
-	SettingCodexExecutable      = "codex_executable"
-	SettingCopilotExecutable    = "copilot_executable"
-	SettingEditorExecutable     = "editor_executable"
-	SettingNewSessionAgent      = "new_session_agent"
-	SettingClaudeAvailable      = "claude_available"
-	SettingCodexAvailable       = "codex_available"
-	SettingCopilotAvailable     = "copilot_available"
-	SettingPTYBackendMode       = "pty_backend_mode"
-	SettingSharedPTYHostEnabled = "pty_shared_host_enabled"
-	SettingSharedPTYHostActive  = "pty_shared_host_active"
-	SettingTheme                = "theme"
-	SettingReviewerModel        = "reviewer_model"
-	SettingTailscaleEnabled     = "tailscale_enabled"
-	SettingWorkflowsEnabled     = "workflows_enabled"
-	// Explicit, local-only opt-in: captured terminal text can contain secrets.
+	SettingProjectsDirectory             = "projects_directory"
+	SettingUIScale                       = "uiScale"
+	SettingGardenScale                   = "gardenScale"
+	SettingClaudeExecutable              = "claude_executable"
+	SettingCodexExecutable               = "codex_executable"
+	SettingCopilotExecutable             = "copilot_executable"
+	SettingEditorExecutable              = "editor_executable"
+	SettingNewSessionAgent               = "new_session_agent"
+	SettingClaudeAvailable               = "claude_available"
+	SettingCodexAvailable                = "codex_available"
+	SettingCopilotAvailable              = "copilot_available"
+	SettingPTYBackendMode                = "pty_backend_mode"
+	SettingSharedPTYHostEnabled          = "pty_shared_host_enabled"
+	SettingSharedPTYHostActive           = "pty_shared_host_active"
+	SettingTheme                         = "theme"
+	SettingReviewerModel                 = "reviewer_model"
+	SettingTailscaleEnabled              = "tailscale_enabled"
+	SettingWorkflowsEnabled              = "workflows_enabled"
 	SettingModelCaptureEnabled           = "model_capture.enabled"
 	SettingModelCaptureIntervalSeconds   = "model_capture.interval_seconds"
 	SettingModelCaptureMaxGB             = "model_capture.max_gb"
@@ -316,8 +315,6 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 	settings[SettingAutoSettleEnabled] = strconv.FormatBool(parseBooleanSetting(stored[SettingAutoSettleEnabled]))
 	settings[SettingAutoSettleArmSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleArmSeconds], defaultAutoSettleArmSeconds) / time.Second))
 	settings[SettingAutoSettleCountdownSeconds] = strconv.Itoa(int(resolveAutoSettleSeconds(stored[SettingAutoSettleCountdownSeconds], defaultAutoSettleCountdownSeconds) / time.Second))
-	// Default-ON settings send their EFFECTIVE value so an absent key is never read as off.
-	// activity.config stays un-normalized: blank means no agent has been chosen.
 	settings[SettingOpenSentFilesEnabled] = strconv.FormatBool(d.openSentFilesEnabled())
 	settings[SettingHeadlessTasksEnabled] = strconv.FormatBool(headless.Enabled())
 	settings[SettingHeadlessTasksEnabledStored] = strconv.FormatBool(d.headlessTasksStored())
@@ -524,7 +521,6 @@ func (d *Daemon) validateSetting(key, value string) error {
 	case SettingCrewAwaySeconds:
 		return validateBoundedIntSetting("crew away threshold", value, crewAwayMinSeconds, crewAwayMaxSeconds)
 	case SettingCrewWakeLimit:
-		// Floor is 0, not 1: zero is the meaningful "no autonomous wakes" value.
 		return validateBoundedIntSetting("crew wake limit", value, 0, crewWakeLimitMax)
 	case SettingCrewWakeLimitWindowSeconds:
 		return validateBoundedIntSetting("crew wake limit window", value, crewWakeLimitWindowMinSecs, crewWakeLimitWindowMaxSecs)
@@ -550,8 +546,6 @@ func (d *Daemon) validateSetting(key, value string) error {
 		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(key)), SettingNewSessionDestinationPrefix) {
 			return validateNewSessionDestination(value)
 		}
-		// Model names and effort levels are agent-native and free-form; the agent
-		// rejects bad ones.
 		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(key)), SettingChiefModelPrefix) {
 			return nil
 		}
@@ -692,8 +686,6 @@ func normalizeExternalRoot(value string) (string, error) {
 	if clean == dataDir || strings.HasPrefix(clean, dataDir+string(filepath.Separator)) {
 		return "", fmt.Errorf("must be outside the attn data dir (%s)", dataDir)
 	}
-	// Symlinked roots are legitimate, so the canonical form is used only for the
-	// containment check; `clean` is what is returned.
 	canonRoot := canonicalizeForComparison(clean)
 	canonData := canonicalizeForComparison(dataDir)
 	if canonRoot == canonData || strings.HasPrefix(canonRoot, canonData+string(filepath.Separator)) {

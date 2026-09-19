@@ -13,8 +13,6 @@ import (
 
 const mirrorStorageLimit = 10 << 20
 
-// Cells are 8x16 px in ghosttyvt, so every image size below is an exact cell
-// count: 16x32 is 2x2 cells, 16x96 is 2x6.
 func kittyPlaceRGB(id uint32, w, h int, extra string) string {
 	pix := make([]byte, w*h*3)
 	for i := range pix {
@@ -29,8 +27,6 @@ func kittyTransmitRGB(id uint32, w, h int) string {
 		id, w, h, base64.StdEncoding.EncodeToString(kittyCorpusPixels(w, h)))
 }
 
-// An unfinished CSI in front of the APC makes its leading ESC that CSI's exit, so the
-// segmenter cannot cut the APC out: the bytes reach the wire verbatim.
 func undescribed(apc string) string { return "\x1b[1" + apc }
 
 type mirror struct {
@@ -41,8 +37,6 @@ type mirror struct {
 	lastResync string
 }
 
-// Placement geometry is resolved in cells, and cells only have a size after a
-// resize — hence the Resize below.
 func newKittyTerminal(t *testing.T, cols, rows int, opts ghosttyvt.Options) *ghosttyvt.Terminal {
 	t.Helper()
 	term, err := ghosttyvt.New(cols, rows, opts)
@@ -524,8 +518,6 @@ func TestWireFeedResyncsWhileLeftRightMarginsAreSet(t *testing.T) {
 		t.Fatalf("resync = %q, want %q: the placement scrolled the margin box and nothing measured it",
 			m.lastResync, kittyResyncMarginMode)
 	}
-	// Receipts against the pinned ghostty; a bump moves them. What must survive is the
-	// difference: the control carries an SU, the tripwire the same moves without it.
 	if got, want := string(control.lastWire), string(wireST)+"\x1b[1S\x1b[2C"; got != want {
 		t.Fatalf("control wire = %q, want %q: without margins the same placement scrolls a row and says so", got, want)
 	}
@@ -561,14 +553,10 @@ func TestWireFeedResyncsWithACursorInTheLastColumn(t *testing.T) {
 		t.Fatalf("resync = %q, want %q: the placement consumed a pending wrap nothing could measure",
 			m.lastResync, kittyResyncPendingWrap)
 	}
-	// At the pinned ghostty the measurement catches the wrap itself: the cursor
-	// moves down a row and back to column 0.
 	if got, want := string(m.lastWire), string(wireST)+"\x1b[1B\x1b[19D"; got != want {
 		t.Errorf("wire = %q, want %q: the dispatch is still described, wrap included", got, want)
 	}
 
-	// Both sides converge at this pin. The resync stays: no accessor exposes the
-	// pending-wrap bit, so one case converging at one pin proves nothing.
 	m.write("y")
 	wx, wy := m.worker.CursorPos()
 	cx, cy := m.client.CursorPos()
@@ -579,7 +567,6 @@ func TestWireFeedResyncsWithACursorInTheLastColumn(t *testing.T) {
 }
 
 func TestWireFeedLogsATransmissionTheStorageLimitRefused(t *testing.T) {
-	// 64x64 RGBA is 16,384 bytes stored: one limit under it, one over.
 	const refuses, accepts = 4096, 1 << 20
 
 	feedUnder := func(limit uint64, apc string) []string {

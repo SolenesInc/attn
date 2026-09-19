@@ -11,7 +11,6 @@ import (
 	"strings"
 )
 
-// PATH first, then its macOS location: Stop may run with a trimmed PATH.
 var lsofPath = resolveLsofPath()
 
 func resolveLsofPath() string {
@@ -21,7 +20,6 @@ func resolveLsofPath() string {
 	return "/usr/sbin/lsof"
 }
 
-// Membership, not exclusivity, so Stop's own fd is harmless.
 func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	cmd := exec.Command(lsofPath, "-t", "--", pidPath)
 	var stdout, stderr bytes.Buffer
@@ -30,7 +28,6 @@ func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	runErr := cmd.Run()
 	if runErr != nil {
 		if exitErr, ok := runErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 && stdout.Len() == 0 {
-			// lsof's documented "nothing matched" exit status.
 			return false, nil
 		}
 		return false, fmt.Errorf("lsof -t %s: %w (stderr: %s)", pidPath, runErr, strings.TrimSpace(stderr.String()))

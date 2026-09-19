@@ -13,8 +13,6 @@ const (
 	MatchLog   = "log"
 )
 
-// Measured against a 477-seed, 1,134-note garden: `garden search` matches 17 seeds,
-// `harvest` 95, `pty` 187; body and note lines run median 72 characters, p75 92.
 const (
 	DefaultSearchResults = 25
 	MaxSearchResults     = 1000
@@ -155,8 +153,6 @@ func firstLineOf(text string) string {
 	return line
 }
 
-// foldedIndex is strings.Index over lowered text, answered in the original
-// text's byte offsets: lowering a rune can change its encoded length.
 func foldedIndex(text, loweredTerm string) int {
 	at := strings.Index(strings.ToLower(text), loweredTerm)
 	if at <= 0 {

@@ -1,8 +1,5 @@
 package pty
 
-// Extraction is safe only from GROUND with a reached terminator: outside ground the
-// leading ESC also exits the open sequence. Change a rule only with a measurement.
-
 func indexOfByte(b []byte, target byte) int {
 	for i, c := range b {
 		if c == target {
@@ -12,15 +9,10 @@ func indexOfByte(b []byte, target byte) int {
 	return -1
 }
 
-// Ghostty identifies kitty on that G alone (src/terminal/apc.zig).
 var kittyAPCIntroducer = []byte{0x1b, 0x5f, 0x47}
 
-// A tripwire on one unterminated APC. ghostty's own kitty cap is 65 MiB (apc.zig at
-// pin ab0b9da), so 72 MiB means a payload ghostty already refused.
 const kittySegMaxPendingBytes = 72 * 1024 * 1024
 
-// Same tripwire for a held OSC 133 marker. ARG_MAX measured 1 MiB, tripled by
-// encoding = 3 MiB for the largest runnable command; 16 MiB clears it five times.
 const osc133MarkerMaxPendingBytes = 16 * 1024 * 1024
 
 type kittySegMode uint8
@@ -28,7 +20,6 @@ type kittySegMode uint8
 const (
 	kittySegGround kittySegMode = iota
 	kittySegEscape
-	// Measured: once one lands, the string introducers stop introducing.
 	kittySegEscapeIntermediate
 	kittySegCSI
 	kittySegOSC
@@ -38,8 +29,6 @@ const (
 	kittySegKitty
 )
 
-// ground from escape, CSI, and every string state. Measured: exactly 80-8f,
-// 91-97, 99-9a and 9c; the holes are the C1 introducers.
 func c1Executed(b byte) bool {
 	switch {
 	case b >= 0x80 && b <= 0x8f:
@@ -54,14 +43,10 @@ func c1Executed(b byte) bool {
 	return false
 }
 
-// its terminator. Measured: CAN and SUB abort everywhere, plus every
-// c1Executed byte. BEL is deliberately absent — it ends only an OSC.
 func kittySegAborts(b byte) bool {
 	return b == 0x18 || b == 0x1a || c1Executed(b)
 }
 
-// Inside an open DCS, PM, APC or kitty string, measured: 90/9b/9d cut the string
-// short and introduce their own, 98/9e/9f are payload, and an OSC honours none.
 func kittySegOpensInsideString(b byte) (kittySegMode, bool) {
 	switch b {
 	case 0x90:
@@ -74,8 +59,6 @@ func kittySegOpensInsideString(b byte) (kittySegMode, bool) {
 	return 0, false
 }
 
-// Measured: from escape or CSI state all six C1 introducers introduce; from
-// GROUND they open nothing — the stream is UTF-8, so they print as U+FFFD.
 func kittySegOpensC1(b byte) (kittySegMode, bool) {
 	switch b {
 	case 0x98, 0x9e, 0x9f:
@@ -104,8 +87,6 @@ const (
 	feedSegOSC133
 )
 
-// Bytes is valid only for the duration of its callback — it aliases a buffer
-// the next call reuses.
 type feedSegment struct {
 	Kind   feedSegKind
 	Bytes  []byte
@@ -136,8 +117,6 @@ func (m kittySegMode) abandoned() kittySegMode {
 	return kittySegOSC
 }
 
-// Ground is the only mode an ESC-free chunk cannot move. Only new bytes are scanned:
-// rescanning from the start makes the walk to the 72 MiB tripwire quadratic.
 func (s *feedSegmenter) Feed(chunk []byte, emit func(feedSegment)) {
 	if s.mode == kittySegGround && len(s.pending) == 0 && indexOfByte(chunk, oscESC) < 0 {
 		if len(chunk) > 0 {
@@ -176,8 +155,6 @@ scan:
 				i++
 				continue
 			}
-			// Hold until the deciding bytes arrive: no prefix of a removed
-			// sequence may reach the far side ahead of the removal.
 			if i+1 >= len(buffer) || (buffer[i+1] == kittyAPCIntroducer[1] && i+2 >= len(buffer)) {
 				emitPlain(plainStart, i)
 				s.hold(buffer, carried, i, i)
@@ -212,26 +189,20 @@ scan:
 			}
 			switch {
 			case b == oscESC:
-				// Measured: ESC ESC restarts the escape and drops collected
-				// intermediates — not ground.
 				s.mode = kittySegEscape
 			case b == 0x18 || b == 0x1a || c1Executed(b):
 				s.mode = kittySegGround
 			case b >= 0x20 && b <= 0x2f:
 				s.mode = kittySegEscapeIntermediate
 			case b >= 0x30 && b <= 0x7e:
-				// Measured: from a bare escape, 30-4f, 51-57, 59-5a, 5c and
-				// 60-7e return to ground; after an intermediate, all of 30-7e.
 				s.mode = kittySegGround
 			default:
-				// C0 controls, DEL and a0-ff all leave the parser mid-escape.
 			}
 			i++
 
 		case kittySegCSI:
 			switch {
 			case b == oscESC:
-				// Measured: an ESC cancels the CSI and starts a new escape.
 				s.mode = kittySegEscape
 			case b == 0x18 || b == 0x1a:
 				s.mode = kittySegGround
@@ -242,8 +213,6 @@ scan:
 					s.mode = kittySegGround
 				}
 			case b >= 0x40 && b <= 0x7e:
-				// A final byte. Measured: CSI returns to ground on all of
-				// 40-7e — the 7-bit letters open nothing here.
 				s.mode = kittySegGround
 			}
 			i++
@@ -253,8 +222,6 @@ scan:
 			case oscESC:
 				s.mode = kittySegEscape
 			case 0x07, 0x18, 0x1a:
-				// Measured: an OSC ends on BEL, CAN and SUB and NOTHING else —
-				// C1 ST does not, and a raw C1 introducer inside is payload.
 				s.mode = kittySegGround
 			}
 			i++
@@ -292,19 +259,14 @@ scan:
 					s.mode = kittySegGround
 					continue
 				}
-				// The client's parser knows only BEL and ST; stripping a marker
-				// it cannot recognise splits the two block tables.
 				holdStart = -1
 				s.mode = kittySegEscape
 				i++
 			case b == 0x18 || b == 0x1a:
-				// Measured: CAN and SUB also DISPATCH the marker and leave
-				// ground. Same disposal, same reason.
 				holdStart = -1
 				s.mode = kittySegGround
 				i++
 			default:
-				// Measured: an OSC swallows everything else, C1 ST included.
 				i++
 			}
 
@@ -336,13 +298,10 @@ scan:
 					s.mode = kittySegGround
 					continue
 				}
-				// Extracting would take the APC's exit off the wire, so the
-				// whole abandoned APC replays to both sides as plain.
 				holdStart = -1
 				s.mode = kittySegEscape
 				i++
 			case b == 0x9c:
-				// Measured: C1 ST terminates a kitty APC exactly as ESC \ does.
 				emitPlain(plainStart, holdStart)
 				i++
 				emit(feedSegment{Kind: feedSegKittyAPC, Bytes: buffer[holdStart:i]})
@@ -350,8 +309,6 @@ scan:
 				holdStart = -1
 				s.mode = kittySegGround
 			case kittySegAborts(b):
-				// The aborting byte has its own grid effect (IND scrolls) that
-				// synthesis cannot observe; replay as plain.
 				holdStart = -1
 				s.mode = kittySegGround
 				i++
@@ -380,8 +337,6 @@ scan:
 	s.release()
 }
 
-// Only BEL and two-byte ST may reach here: a third terminator added without
-// widening this indexes backwards past the introducer.
 func emitMarker(emit func(feedSegment), raw []byte) {
 	payloadEnd := len(raw) - 1
 	if raw[len(raw)-1] != oscBEL {
@@ -410,8 +365,6 @@ func (s *feedSegmenter) hold(buffer []byte, carried bool, from, resumeAt int) {
 	s.resume = resumeAt - from
 }
 
-// Drops the buffer rather than keeping its capacity: a finished APC may have
-// grown to megabytes and would be held for the session's whole life.
 func (s *feedSegmenter) release() {
 	s.pending = nil
 	s.resume = 0

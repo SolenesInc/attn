@@ -355,9 +355,6 @@ func TestExtractLastAssistantMessageAfterLastUserSince_Claude_FreshAssistantRetu
 	}
 }
 
-// The abort lines below are verbatim captures from claude 2.1.220, codex 0.146.0 and
-// copilot 1.0.77 interrupted mid-turn. No hook fires, so the exact shape is the contract.
-
 type turnAbortCase struct {
 	name         string
 	line         string

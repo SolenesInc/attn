@@ -13,8 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/ghosttyvt"
 )
 
-// Run under `go test -race ./internal/pty`: without it these races prove nothing.
-
 func newLifetimeRaceSession(t *testing.T, id string, cols, rows int) (*Session, *os.File) {
 	t.Helper()
 

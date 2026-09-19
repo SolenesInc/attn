@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// memStore's trim semantics deliberately mirror SQLite's (age window AND cursor
-// floor), so a passing test is not passing because the fake is more permissive.
 type memStore struct {
 	mu        sync.Mutex
 	events    []Event
@@ -110,7 +108,6 @@ func (m *memStore) DeleteConsumer(name string) error {
 	return err
 }
 
-// SetCursor refuses a name it does not know, as an UPDATE matching no row would.
 func (m *memStore) SetCursor(name string, cursor int64, now time.Time) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -188,8 +185,6 @@ func (m *memStore) Trim(cutoff time.Time) (int, error) {
 	return removed, nil
 }
 
-// Mirrors the SQLite implementation: for the named fact classes keep only the
-// newest row per subject, and only touch rows at or below the floor.
 func (m *memStore) Compact(names []string, floor int64) (int, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -216,7 +211,6 @@ func (m *memStore) Compact(names []string, floor int64) (int, error) {
 	return removed, nil
 }
 
-// Mirrors the SQLite aggregate: one row per fact class, loudest first.
 func (m *memStore) Producers(cutoffs []time.Time) ([]ProducerRow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

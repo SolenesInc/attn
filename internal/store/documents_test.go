@@ -593,8 +593,6 @@ func TestDeleteCannotExpectTheDocumentToBeAbsent(t *testing.T) {
 	}
 }
 
-// Against a database file: the in-memory store is pinned to a single connection, so it
-// would serialise the writers at the driver and never reach SQLite with two at once.
 func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 	base := time.Date(2026, 8, 3, 12, 0, 0, 0, time.UTC)
 	s, err := newSeededStore(filepath.Join(t.TempDir(), "contention.db"))
@@ -613,7 +611,7 @@ func TestConcurrentReadModifyWritesLoseNoUpdate(t *testing.T) {
 	const (
 		writers    = 8
 		perWriter  = 25
-		maxRetries = 1000 // A tripwire: contention this deep means the loop is wrong.
+		maxRetries = 1000
 	)
 
 	var wg sync.WaitGroup

@@ -49,7 +49,6 @@ func automationRetentionSweepInterval() time.Duration {
 	return defaultAutomationRetentionSweepInterval
 }
 
-// No initial pass at boot: retention must not compete with startup churn.
 func (d *Daemon) runAutomationRetentionSweep() {
 	ticker := time.NewTicker(automationRetentionSweepInterval())
 	defer ticker.Stop()
@@ -123,7 +122,6 @@ type automationRunCleanupBlock int
 const (
 	automationRunCleanupOK automationRunCleanupBlock = iota
 	automationRunCleanupLiveSession
-	// A thread reuses one session id and worktree across occurrences, so removing it bricks the next continue. Callers must surface it as "examined and kept", never silently skip it.
 	automationRunCleanupBoundThread
 	automationRunCleanupDirtyWorktree
 )
@@ -164,7 +162,6 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 	return automationRunCleanupOK, nil
 }
 
-// Resolve from the run's persisted ResolvedLocationJSON, never by path convention: an absent resolved worktree means nothing to remove, not a signal to guess.
 func automationRunWorktreePath(run store.AutomationRun) (string, error) {
 	if strings.TrimSpace(run.ResolvedLocationJSON) == "" {
 		return "", nil
@@ -176,7 +173,6 @@ func automationRunWorktreePath(run store.AutomationRun) (string, error) {
 	return resolved.Worktree, nil
 }
 
-// Automation worktrees are never registered in the store's worktree registry, so this goes through git.DeleteWorktree directly: doDeleteWorktree's registry-aware path would no-op on them.
 func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	if strings.TrimSpace(run.ResolvedLocationJSON) == "" {
 		return nil
@@ -197,7 +193,6 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	return git.DeleteWorktree(resolved.MainRepository, resolved.Worktree, false)
 }
 
-// Must mirror ensureAutomationOccurrenceInput's dataRoot fallback exactly, or the sweep and the writer disagree about the file's home.
 func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {
 	root := strings.TrimSpace(d.dataRoot)
 	if root == "" {

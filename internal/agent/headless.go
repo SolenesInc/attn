@@ -31,7 +31,7 @@ func HeadlessContextWindowCap() int {
 	return int(headlessContextWindowCap.Load())
 }
 
-const headlessOutputLimit = 1 << 20 // 1 MiB
+const headlessOutputLimit = 1 << 20
 
 type boundedHeadlessOutput struct {
 	bytes.Buffer
@@ -50,10 +50,8 @@ func (b *boundedHeadlessOutput) Write(p []byte) (int, error) {
 	return originalLength, nil
 }
 
-const headlessFailureOutputLimit = 4 << 10 // 4 KiB per stream
+const headlessFailureOutputLimit = 4 << 10
 
-// The error STRING stays free of child output: it travels into notification and
-// journal surfaces that must not echo workspace content.
 func runHeadlessCommand(
 	ctx context.Context,
 	executable string,
@@ -61,8 +59,6 @@ func runHeadlessCommand(
 	workDir string,
 	provider string,
 ) (HeadlessTaskResult, []byte, error) {
-	// Last line of defense: every caller checks the switch first, so reaching
-	// this is a caller that forgot.
 	if !headless.Enabled() {
 		return HeadlessTaskResult{}, nil, headless.Refusal(provider + " headless task")
 	}
@@ -188,8 +184,6 @@ func headlessEnvironment(provider, workDir string) []string {
 	}
 	if provider == "claude" {
 		env = append(env, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
-		// Injected, not inherited: the allowlist above drops CLAUDE_CODE_* and the
-		// daemon scrubs this var from its own environment.
 		if window := HeadlessContextWindowCap(); window > 0 {
 			env = append(env, "CLAUDE_CODE_AUTO_COMPACT_WINDOW="+strconv.Itoa(window))
 		}

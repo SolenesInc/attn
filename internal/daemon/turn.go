@@ -9,8 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/statetrace"
 )
 
-// A turn ends only here — no state transition removes one — so settling is
-// also the ordinary move on a session that is still running.
 func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	if d == nil || d.store == nil || msg == nil {
 		return
@@ -48,8 +46,6 @@ func (d *Daemon) setSessionPinned(sessionID string, pinned bool) string {
 	if session == nil {
 		return "session not found"
 	}
-	// Asked of the role registry, not of the session record: chief_of_staff is
-	// decorated at broadcast and never stored, so a stored record's copy is nil.
 	if d.isChiefOfStaffSession(id) {
 		return "the chief of staff is already anchored above the queue"
 	}
@@ -97,8 +93,6 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 	session.TurnOpenedAt = protocol.Ptr(in.OpenedAt.UTC().Format(time.RFC3339Nano))
 }
 
-// Callers must pass a broadcast-decorated clone: the chief flag and workspace
-// id it reads are decorations, absent on a stored record.
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
 	stamps := d.store.TurnStamps(session.ID)
 	in := attention.Input{

@@ -12,9 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ticketnotify"
 )
 
-// Observer identities live in ticket_identity.go, beside the inverse mapping they
-// must agree with.
-
 func (d *Daemon) ticketUnreadForSession(sessionID string) (int, error) {
 	return ticketnotify.UnreadAny(d.store, d.ticketObserversForSession(sessionID))
 }
@@ -45,7 +42,6 @@ func (d *Daemon) handleTicketInbox(conn net.Conn, msg *protocol.TicketInboxMessa
 			}
 		}
 		if attentionErr := d.store.SetTicketDeliveryAttentionThrough(d.ticketAttentionKey(sourceSessionID), now, deliveredThroughSeq); attentionErr != nil {
-			// Cursors have already advanced; erroring out here would hide the consumed bundles.
 			d.logf("ticket inbox attention update %s: %v", sourceSessionID, attentionErr)
 		}
 	}

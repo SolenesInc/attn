@@ -24,13 +24,9 @@ const (
 type classifyDecision struct {
 	action classifyAction
 	state  string
-	// reason is the diagnostic label logged with the decision; names are kept
-	// stable so log searches for past incidents still find them.
 	reason string
 }
 
-// yielded marks a stop with background work still running: every no-answer
-// outcome files nothing, because a turn that may resume must not settle.
 type stopClassification struct {
 	yielded                bool
 	runningBackgroundTasks int
@@ -51,8 +47,6 @@ func classifyPreTranscript(pendingTodos int, transcriptEnabled, classifierEnable
 	}
 }
 
-// classifyPostTranscript decides from the transcript read. ErrNoNewAssistantTurn
-// means already classified — a skip, NOT "unknown", which overwrites a good state.
 func classifyPostTranscript(lastMessage string, err error, stop stopClassification) classifyDecision {
 	if err != nil {
 		if errors.Is(err, agentdriver.ErrNoNewAssistantTurn) {
@@ -90,8 +84,6 @@ func (d *Daemon) classifySessionState(sessionID, transcriptPath string) {
 }
 
 func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassification) {
-	// Captured BEFORE any work: applyState rejects an older classifierObservation,
-	// so a slow classifier cannot clobber a newer live signal.
 	classificationStartTime := time.Now()
 	d.logf("classifySessionState: starting for session=%s, transcript=%s", sessionID, transcriptPath)
 
@@ -131,7 +123,6 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 		classifierEnabled = caps.HasClassifier
 	}
 
-	// Todos are stored as "[✓] task", "[→] task", "[ ] task".
 	pendingTodos := 0
 	for _, todo := range session.Todos {
 		if !strings.HasPrefix(todo, "[✓]") {
@@ -187,7 +178,6 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 		classifierInput = classifier.ComposeYieldInput(lastMessage, stop.runningBackgroundTasks)
 	}
 
-	// Can be slow — 30+ seconds.
 	d.logf("classifySessionState: calling classifier for session %s", sessionID)
 	state, err := d.runClassifier(session, classifierInput, 30*time.Second)
 	if err != nil {
@@ -232,8 +222,6 @@ func (d *Daemon) runClassifier(session *protocol.Session, text string, timeout t
 	return protocol.StateUnknown, errors.New("no classifier backend available")
 }
 
-// With headless tasks off no model may run, so a message naming its own state is
-// believed; without one the unknown verdict files no claim and hook evidence settles.
 func (d *Daemon) classifyFromMarker(session *protocol.Session, text string) (string, error) {
 	sessionID := ""
 	if session != nil {

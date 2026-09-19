@@ -149,8 +149,6 @@ func (s *Store) UnreadTicketEventsFor(cursorIdentity, authorIdentity string) ([]
 	if s.db == nil || cursorIdentity == "" {
 		return nil, nil
 	}
-	// The participation rule has exactly one definition, the ticket_participants
-	// view; every query asks the view and never restates the rule.
 	rows, err := s.db.Query(`
 		SELECT e.seq, e.ticket_id, e.kind, e.author, e.author_role, e.from_status, e.to_status, e.comment, e.detail, e.created_at
 		FROM ticket_events e
@@ -244,8 +242,6 @@ type ticketExecer interface {
 	Exec(query string, args ...any) (sql.Result, error)
 }
 
-// Only ever moves the cursor FORWARD: a stale write must never resurrect
-// consumed events as unread.
 func setTicketCursorTx(ex ticketExecer, identity, ticketID string, cursor int64, now time.Time) error {
 	_, err := ex.Exec(`
 		INSERT INTO ticket_event_cursors (identity, ticket_id, cursor, updated_at)

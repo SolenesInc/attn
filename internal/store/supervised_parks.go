@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-// The park's timestamp must not become the moment it was restored: everything after
-// Child mirrors the supervisor's snapshot so a restored park answers as the original did.
 type SupervisedPark struct {
 	Child          string
 	ParkedAt       time.Time

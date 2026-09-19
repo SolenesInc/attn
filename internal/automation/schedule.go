@@ -18,8 +18,6 @@ type CompiledSchedule struct {
 	location *time.Location
 }
 
-// The cron expression must carry no embedded TZ=/CRON_TZ= prefix — it would
-// silently compete with schedule.time_zone.
 func CompileSchedule(spec ScheduleSpec) (CompiledSchedule, error) {
 	cronExpr := strings.TrimSpace(spec.Cron)
 	if cronExpr == "" {
@@ -46,8 +44,6 @@ func CompileSchedule(spec ScheduleSpec) (CompiledSchedule, error) {
 	return CompiledSchedule{cron: sched, location: loc}, nil
 }
 
-// ok is false when the cap was hit before reaching now — the replay-storm guard
-// that keeps a very old cursor from firing an unbounded catch-up burst.
 func (s CompiledSchedule) DueInstants(cursor, now time.Time, limit int) (instants []time.Time, ok bool) {
 	at := cursor.In(s.location)
 	for i := 0; i < limit; i++ {
@@ -61,8 +57,6 @@ func (s CompiledSchedule) DueInstants(cursor, now time.Time, limit int) (instant
 	return instants, false
 }
 
-// Normalized to UTC so an ambiguous local wall-clock time (a fall-back DST
-// transition) still maps to a distinct key per instant.
 func ScheduledOccurrenceKey(intended time.Time) string {
 	return "scheduled:" + intended.UTC().Format(time.RFC3339)
 }

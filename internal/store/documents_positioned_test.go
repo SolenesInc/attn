@@ -56,8 +56,6 @@ func TestACommittedWriteReportsWhereItsFactLanded(t *testing.T) {
 	}
 }
 
-// The failure is injected through the real path — a trigger refusing every insert
-// into bus_events — so what is proven is that the two statements share a transaction.
 func TestAWriteDoesNotSurviveTheFactItCouldNotAppend(t *testing.T) {
 	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
 	schema := requestsDecl(t, s)

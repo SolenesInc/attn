@@ -99,8 +99,6 @@ func requireSpawnSuccess(t *testing.T, client *wsClient, sessionID string) {
 	}
 }
 
-// Boundary-bound: a goroutine parked on the per-session spawn lock is never durably
-// blocked, so there is no instant a synctest bubble could call settled.
 func TestConcurrentSameSessionSpawnsSpawnOnce(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := newBlockingSpawnBackend()
@@ -170,8 +168,6 @@ waitForSecond:
 	requireSpawnSuccess(t, secondClient, sessionID)
 }
 
-// Boundary-bound: a regression parks B on a mutex, which a bubble reads as "not yet
-// settled" rather than "blocked" — it would hang instead of failing.
 func TestDifferentSessionSpawnsDoNotSerialize(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}

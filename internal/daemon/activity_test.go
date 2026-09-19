@@ -28,8 +28,6 @@ func installActivityRunner(t *testing.T, d *Daemon) {
 	t.Cleanup(runner.Stop)
 }
 
-// Registered but not started: a caller that runs the queued job itself must be
-// the only thing running it.
 func installQuietActivityRunner(t *testing.T, d *Daemon) *jobs.Runner {
 	t.Helper()
 	d.store.SetSetting(SettingActivityEnabled, "true")

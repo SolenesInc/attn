@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// Result-set limits. Measured (2026-08-03, production ~/.attn): the lists attn
-// pushes whole are tickets 7, sessions 11, notifications 8, workspaces 8.
 const (
 	DefaultLimit = 100
 	MaxLimit     = 1000
@@ -49,7 +47,6 @@ type FieldSpec struct {
 	Type FieldType `json:"type"`
 }
 
-// Table is minted by the store and filled in on read; Compile refuses a non-minted Table.
 type CollectionSchema struct {
 	Namespace  string      `json:"namespace"`
 	Collection string      `json:"collection"`
@@ -68,7 +65,6 @@ type Sort struct {
 	Desc  bool   `json:"desc,omitempty"`
 }
 
-// A zero Limit means DefaultLimit, never "unbounded".
 type Query struct {
 	Namespace  string   `json:"namespace"`
 	Collection string   `json:"collection"`
@@ -86,7 +82,6 @@ type Document struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
-// int64: an int32 overflow (~7 years at 10 writes/s to one document) would silently make a stale check pass.
 const (
 	FirstRev     int64 = 1
 	ExpectAbsent int64 = 0
@@ -97,9 +92,8 @@ type ConflictError struct {
 	Collection string
 	ID         string
 	Expected   int64
-	// Actual is meaningless when Found is false.
-	Found  bool
-	Actual int64
+	Found      bool
+	Actual     int64
 }
 
 func (e *ConflictError) Error() string {
@@ -172,10 +166,8 @@ var (
 	reservedField = map[string]bool{FieldCreatedAt: true, FieldUpdatedAt: true}
 )
 
-// These names are spliced into SQL as identifiers; each must derive from an integer row id or a fieldNameRe-checked name.
 const (
-	tablePrefix = "doc_"
-	// Keeps a declared field (`id`, `body`) from shadowing the columns the store owns.
+	tablePrefix       = "doc_"
 	fieldColumnPrefix = "f_"
 )
 
@@ -246,7 +238,6 @@ func ValidateDocumentID(id string) error {
 	return nil
 }
 
-// Field names must be plain identifiers: a declared field becomes both a JSON path and an executed column name.
 func (s CollectionSchema) Validate() error {
 	if err := ValidateNamespace(s.Namespace); err != nil {
 		return err
@@ -298,7 +289,6 @@ func (s CollectionSchema) declaredNames() string {
 	return strings.Join(names, ", ")
 }
 
-// anchor is the document q.After names; nil with q.After set is an error, not an empty page.
 func (q Query) Compile(schema CollectionSchema, anchor *Document) (Compiled, error) {
 	compiled, err := q.compile(schema, anchor)
 	if err != nil {
@@ -322,7 +312,6 @@ func (q Query) compile(schema CollectionSchema, anchor *Document) (Compiled, err
 		return Compiled{}, err
 	}
 
-	// No namespace/collection predicate: the table IS the collection, so the isolation is structural.
 	var where []string
 	var args []any
 
@@ -389,7 +378,6 @@ func (q Query) compile(schema CollectionSchema, anchor *Document) (Compiled, err
 	}, nil
 }
 
-// NULL compares as nothing, so a missing or JSON-null sort value is branched on rather than bound; SQLite sorts NULL first.
 func (q Query) afterTuple(table, sortExpr string, desc bool, anchor *Document) (string, []any, error) {
 	if q.After == "" {
 		return "", nil, fmt.Errorf("docstore: %s/%s was compiled with a cursor document but no after id", q.Namespace, q.Collection)
@@ -424,13 +412,11 @@ func (q Query) afterTuple(table, sortExpr string, desc bool, anchor *Document) (
 		return "(" + sortExpr + " IS NOT NULL OR id > ?)", []any{q.After}, nil
 	}
 
-	// Read the anchor's sort value back through the ORDER BY column, not bound from Go: the column's affinity must govern the comparison.
 	value := "(SELECT " + sortExpr + " FROM " + table + " WHERE id = ?)"
 	valueArgs := []any{q.After}
 
 	clause := "(" + sortExpr + " > " + value + " OR (" + sortExpr + " = " + value + " AND id > ?))"
 	if desc {
-		// Descending puts NULLs last, so they are past any non-NULL anchor.
 		clause = "(" + sortExpr + " IS NULL OR " + sortExpr + " < " + value + " OR (" + sortExpr + " = " + value + " AND id < ?))"
 	}
 	args := make([]any, 0, len(valueArgs)*2+1)
@@ -459,7 +445,6 @@ func (q Query) anchorSortIsNull(anchor *Document) (bool, error) {
 	return value == nil, nil
 }
 
-// fieldExpr resolves a field reference to SQL: a reserved name literally,
 func (q Query) fieldExpr(schema CollectionSchema, name, use string) (string, FieldSpec, error) {
 	if name == "" {
 		return "", FieldSpec{}, fmt.Errorf("docstore: %s/%s has a %s with no field name", q.Namespace, q.Collection, use)
@@ -475,7 +460,6 @@ func (q Query) fieldExpr(schema CollectionSchema, name, use string) (string, Fie
 	return quoteIdent(FieldColumn(name)), spec, nil
 }
 
-// A number field against a string bound would silently match nothing.
 func (q Query) bindValue(f Filter, spec FieldSpec) (any, error) {
 	mismatch := func(want string) error {
 		return fmt.Errorf("docstore: %s/%s filter on %q needs a %s value, got %T (%v)",
@@ -484,7 +468,6 @@ func (q Query) bindValue(f Filter, spec FieldSpec) (any, error) {
 	if f.Value == nil {
 		return nil, fmt.Errorf("docstore: %s/%s filter on %q has no value", q.Namespace, q.Collection, f.Field)
 	}
-	// Re-encode to TimeFormat: a raw "…T10:00:00Z" bound sorts above every stamp in that second.
 	if reservedField[f.Field] {
 		switch v := f.Value.(type) {
 		case string:
@@ -531,7 +514,6 @@ func (q Query) bindValue(f Filter, spec FieldSpec) (any, error) {
 		if !ok {
 			return nil, mismatch("bool")
 		}
-		// json_extract yields 1/0 for JSON booleans.
 		if b {
 			return 1, nil
 		}
@@ -540,10 +522,8 @@ func (q Query) bindValue(f Filter, spec FieldSpec) (any, error) {
 	return nil, fmt.Errorf("docstore: %s/%s filter on %q has undeclared type %q", q.Namespace, q.Collection, f.Field, spec.Type)
 }
 
-// Stamps are ordered as text, so the fraction is fixed-width (nine digits, always present) and the zone always "Z"; migration 91 rewrote the stored stamps.
 const TimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
 
-// Accepts any RFC3339 form, including the pre-migration-91 trailing-zero-stripped stamps this store once handed out.
 func ParseTime(s string) (time.Time, error) {
 	t, err := time.Parse(time.RFC3339, s)
 	if err != nil {

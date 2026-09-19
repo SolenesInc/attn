@@ -13,8 +13,6 @@ import (
 
 const sessionActivityKind = "session_activity"
 
-// Measured: Codex/Luna 4.8s p50
-// at $0.0027 a run, Claude/Haiku 11.7s at $0.011-0.017; effort measured inert on Claude.
 const (
 	activityClaudeDefaultModel = "claude-haiku-4-5"
 	activityCodexDefaultModel  = "gpt-5.6-luna"
@@ -28,7 +26,6 @@ const (
 	activityIntervalMaxSeconds     = 3600
 )
 
-// UNMEASURED — a guess, safe because `away` self-heals on the next input.
 const (
 	defaultActivityPresenceIdleSeconds = 90
 	activityPresenceIdleMinSeconds     = 10
@@ -166,8 +163,6 @@ func (d *Daemon) activityConfigured() (activityConfig, error) {
 	return parseActivityConfig(d.store.GetSetting(SettingActivityConfig))
 }
 
-// `away` returns zero, which every caller must read as "generate nothing", never
-// "generate now".
 func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	if tier == PresenceAway {
 		return 0
@@ -178,7 +173,6 @@ func (d *Daemon) activityInterval(tier PresenceTier) time.Duration {
 	}
 	intervals, err := parseActivityIntervals(raw)
 	if err != nil {
-		// Falls back to defaults, never zero: zero silently stops the feature.
 		d.logf("activity: intervals setting is invalid (%v); using defaults", err)
 		intervals = activityIntervals{
 			Watching: defaultActivityWatchingSeconds,

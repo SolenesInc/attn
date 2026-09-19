@@ -16,8 +16,6 @@ func isMidFlightCrashState(state string) bool {
 	}
 }
 
-// Callers have already established the ticket is non-terminal, and a racing terminal report still
-// wins because the reconciliation claim that follows is first-writer-wins.
 func (d *Daemon) crashTicket(ticketID, sessionID, state string) bool {
 	if _, err := d.store.SetTicketStatus(
 		ticketID,

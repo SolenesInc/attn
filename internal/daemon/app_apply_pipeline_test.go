@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The builder and the daemon run in separate processes in production, so a divergence hides here.
-
 func requireAppToolchain(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("bun"); err != nil {

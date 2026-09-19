@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// Shared with internal/transcript so this exercises a real pi session file, not an invented shape.
 func piUsageFixtureLines(t *testing.T) [][]byte {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "transcript", "testdata", "usage", "pi-0.83.0.jsonl"))
@@ -67,7 +66,6 @@ func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 	if agent == nil || guardian == nil {
 		t.Fatalf("models = %+v, want an agent row and a guardian row", decorated.Usage.Models)
 	}
-	// 17386 covers all six assistant turns: the first flush must not be baselined away.
 	if agent.Model != "deepseek-v4-flash" || agent.InputTokens != 17386 || agent.OutputTokens != 1292 {
 		t.Fatalf("agent row = %+v", agent)
 	}
@@ -78,7 +76,6 @@ func TestPiTranscriptPathPricesTheGuardianBesideTheAgent(t *testing.T) {
 		t.Fatalf("total %d excludes the guardian: agent=%d guardian=%d",
 			decorated.Usage.TotalTokens, agent.TotalTokens, guardian.TotalTokens)
 	}
-	// attn has no rate card for this model, so pi's own price is what the row costs.
 	if decorated.Usage.CostUsd == nil || decorated.Usage.HasUnpricedUsage {
 		t.Fatalf("usage = %+v, want pi's reported cost to price every row", decorated.Usage)
 	}

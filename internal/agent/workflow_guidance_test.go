@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 )
 
-// workflowGuidanceMarker appears nowhere in argv, hook commands, or the agent guidance, so its presence means the workflow block was injected.
 const workflowGuidanceMarker = "hypercode"
 
 func TestClaudeBuildCommand_GatesWorkflowGuidance(t *testing.T) {

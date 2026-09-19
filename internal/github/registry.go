@@ -93,7 +93,6 @@ func (r *ClientRegistry) GetRateLimitedHosts(resource string) []string {
 	return hosts
 }
 
-// NewClientForHost takes an explicit token: a shared one cross-contaminates hosts.
 func NewClientForHost(host, apiURL, token string) (*Client, error) {
 	if apiURL == "" {
 		apiURL = mapHostToAPIURL(host)

@@ -8,7 +8,6 @@ import (
 	"syscall"
 )
 
-// Membership, not exclusivity, so Stop's own open fd is harmless.
 func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 	info, err := os.Stat(pidPath)
 	if err != nil {
@@ -27,8 +26,6 @@ func pidHoldsPIDFile(pid int, pidPath string) (bool, error) {
 		return false, fmt.Errorf("read %s: %w", fdDir, err)
 	}
 	for _, entry := range entries {
-		// An fd closed mid-walk, or one that will not resolve, is not proof of
-		// holding, so it is skipped instead of failing the whole check.
 		openInfo, err := os.Stat(filepath.Join(fdDir, entry.Name()))
 		if err != nil {
 			continue

@@ -384,8 +384,6 @@ func (f *seedFlags) text(verb string) string {
 	return string(raw)
 }
 
-// parse reads flags interleaved with positionals: Go's parser stops at the first
-// positional, so a --json written after the title would otherwise be swallowed.
 func (f *seedFlags) parse(verb string, args []string) []string {
 	var positionals []string
 	rest := args
@@ -433,8 +431,6 @@ func (f *seedFlags) staleWindowSeconds() int {
 	return int(window / time.Second)
 }
 
-// parseWindow reads a stale window. Go's ParseDuration tops out at hours, and
-// a stale window is naturally said in days, so `d` is accepted as 24h.
 func parseWindow(raw string) (time.Duration, error) {
 	if days, ok := strings.CutSuffix(raw, "d"); ok {
 		if n, err := time.ParseDuration(days + "h"); err == nil {
@@ -474,8 +470,6 @@ func runSeedPlant(args []string) {
 	fmt.Println(seedLine(result.Seed))
 }
 
-// The line an agent echoes: the id is what commands take, the slug is what the
-// user hears, the title is what both mean.
 func seedLine(seed protocol.Seed) string {
 	return fmt.Sprintf("%s  %s  %s", seed.ID, seed.StepSlug, seed.Title)
 }
@@ -1066,8 +1060,6 @@ func fprintSeedReady(out io.Writer, result *protocol.SeedReadyResult) {
 	fmt.Fprintf(out, "\n%d ready %s — `attn seed tend <id>` claims one\n", len(result.Seeds), readyScopeName(result))
 }
 
-// freshestHandoffs keeps the first handoff per seed; the daemon sends them
-// newest first, so the first one is the one to read before any work.
 func freshestHandoffs(notes []protocol.SeedNote) map[string]protocol.SeedNote {
 	freshest := make(map[string]protocol.SeedNote, len(notes))
 	for _, note := range notes {
@@ -1157,8 +1149,6 @@ func runSeedTransition(verb string, args []string) {
 	fprintTransition(os.Stdout, result, opts.ClearHarvestWhen)
 }
 
-// --when-merged carries an optional url, which flag cannot express, so the url
-// arrives as a second positional the way `attn pr record <url>` reads its own.
 func harvestWhenArgs(verb string, f *seedFlags, positionals []string) (string, client.SeedTransitionOptions, error) {
 	var none client.SeedTransitionOptions
 	if !*f.whenMerged && !*f.clear {

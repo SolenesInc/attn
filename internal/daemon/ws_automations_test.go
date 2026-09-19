@@ -791,7 +791,6 @@ func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 	}
 }
 
-// Not synctest-able: a goroutine waiting on d.automationMu is not durably blocked, so a bubble's clock never reaches the release.
 func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub(), wsAutomationMutationTimeout: 50 * time.Millisecond}
@@ -857,7 +856,6 @@ func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 	}
 }
 
-// Not synctest-able: both retries queue on d.automationMu, and a mutex wait is invisible to a bubble.
 func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	s := store.New()
 	d := &Daemon{store: s, wsHub: newWSHub()}

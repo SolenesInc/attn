@@ -71,8 +71,6 @@ func TestAFailingCronEntryStaysArmed(t *testing.T) {
 		}
 		mustStart(t, r)
 
-		// synctest.Wait settles each fire and its re-arm before the clock moves again, so
-		// the clock never advances past a schedule not yet written.
 		for want := int64(1); want <= 3; want++ {
 			time.Sleep(time.Minute)
 			synctest.Wait()

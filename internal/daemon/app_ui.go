@@ -16,12 +16,8 @@ import (
 
 const appViewCrashEvent = "app.view.crashed"
 
-// appViewCrashErrorLimit sits ~8x past the largest component stack React has
-// produced in this app. Over it the text is truncated with a line saying so.
 const appViewCrashErrorLimit = 32 * 1024
 
-// Deliberately not appSummary: that joins the bus consumer's cursor and lag,
-// costing a bus-head read per push for something a tile ignores.
 func (d *Daemon) appRegistryForWire() []protocol.AppRegistryEntry {
 	if d.store == nil {
 		return nil
@@ -107,8 +103,6 @@ func (d *Daemon) projectAppsUpdated() {
 	}
 	d.projectSnapshot(snapshotApps, func() {
 		apps := d.appRegistryForWire()
-		// AppsUpdatedMessage is its own top-level type, invisible to the hub's
-		// WebSocketEvent-only broadcast listener; tests use this hook.
 		if d.appsBroadcastHook != nil {
 			d.appsBroadcastHook(apps)
 		}
@@ -122,8 +116,6 @@ func (d *Daemon) projectAppsUpdated() {
 	})
 }
 
-// Deliberately does NOT advance the app's stall clock: that clock exists because
-// a stuck consumer holds the retention floor open, and a crashing tile pins nothing.
 func (d *Daemon) handleAppViewCrash(_ *wsClient, msg *protocol.AppViewCrashMessage) {
 	name := strings.TrimSpace(msg.App)
 	if err := apps.ValidateName(name); err != nil {
@@ -174,8 +166,6 @@ func (d *Daemon) handleAppViewCrash(_ *wsClient, msg *protocol.AppViewCrashMessa
 	}
 }
 
-// The supervisor's capture holds the same file open with O_APPEND, so the block goes out
-// in ONE write and a crash's stack cannot interleave with a handler's output.
 func appendAppLogLines(path, app, text string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

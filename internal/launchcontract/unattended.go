@@ -15,8 +15,6 @@ const (
 	RecoveryAdoptOrRestartFresh = "adopt_or_restart_fresh"
 )
 
-// Copied as a value through the daemon, PTY backend, worker registry, and wrapper
-// boundary, so it must stay immutable.
 type UnattendedLaunchSpec struct {
 	Agent               string `json:"driver"`
 	Model               string `json:"model,omitempty"`
@@ -32,8 +30,6 @@ func (s UnattendedLaunchSpec) IsZero() bool {
 	return s == (UnattendedLaunchSpec{})
 }
 
-// Upgrades Slice 1 snapshots written before directory trust and restart behavior
-// were explicit parts of the contract.
 func (s UnattendedLaunchSpec) WithLegacyDefaults() UnattendedLaunchSpec {
 	if strings.TrimSpace(s.Agent) == "" {
 		return s

@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The aggregate walks the whole log (209ms at 945k rows, measured), so it runs on its own
-// goroutine rather than blocking the socket reader.
 func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGetMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {
@@ -33,8 +31,6 @@ func (d *Daemon) handleBusStatusGet(client *wsClient, msg *protocol.BusStatusGet
 	}()
 }
 
-// Writes the database row directly rather than asking the running bus: that bit is
-// database-only BY DESIGN, so the kill switch works whether or not the daemon is healthy.
 func (d *Daemon) handleBusSetConsumerEnabled(client *wsClient, msg *protocol.BusSetConsumerEnabledMessage) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	name := strings.TrimSpace(msg.Consumer)

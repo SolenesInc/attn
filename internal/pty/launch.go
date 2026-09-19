@@ -10,8 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/launchenv"
 )
 
-// PreparedLaunchAttempt is a fully resolved child command. A PTY runtime must
-// try attempts in order and report which one started.
 type PreparedLaunchAttempt struct {
 	Executable string   `json:"executable"`
 	Args       []string `json:"args"`
@@ -79,8 +77,6 @@ func PrepareLaunch(opts SpawnOptions, logf LogFunc) (PreparedLaunch, error) {
 	return prepared, nil
 }
 
-// CleanupExcept removes shell startup overlays for every attempt except keep.
-// Pass -1 when no child started.
 func (p PreparedLaunch) CleanupExcept(keep int) {
 	for i, attempt := range p.Attempts {
 		if i == keep || attempt.CleanupDir == "" {

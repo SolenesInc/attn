@@ -512,8 +512,6 @@ func TestEverySessionWriterCarriesTheClosedRowPredicate(t *testing.T) {
 	}
 }
 
-// A session with everything the ledger filters on, so a filter test can vary
-// exactly one field.
 func addLedgerSession(t *testing.T, s *Store, id, workspace, repository string, lastSeen time.Time) {
 	t.Helper()
 	s.Add(&protocol.Session{
@@ -581,7 +579,6 @@ func TestSessionLedgerWindowIsHalfOpenOverTheRowsInstant(t *testing.T) {
 			addLedgerSession(t, s, "before", "ws", "/repos/attn", day.Add(-time.Minute))
 			addLedgerSession(t, s, "inside", "ws", "/repos/attn", day.Add(time.Hour))
 			addLedgerSession(t, s, "at-until", "ws", "/repos/attn", day.Add(24*time.Hour))
-			// A closed row is placed by when it closed, not by when it was last seen.
 			addLedgerSession(t, s, "closed-inside", "ws", "/repos/attn", day.Add(-48*time.Hour))
 			closeAt(t, s, "closed-inside", SessionClose{By: SessionClosedByUser}, day.Add(2*time.Hour))
 
@@ -617,8 +614,6 @@ func TestSessionLedgerFacetsCountEveryChoiceTheOtherFilterWouldHide(t *testing.T
 			if page.Facets == nil {
 				t.Fatal("facets = nil, want them when the query asks")
 			}
-			// Choosing a repository must not empty the workspace choices, or the
-			// user could never get back to the one they just left.
 			if got := facetCounts(page.Facets.Workspaces); !maps.Equal(got, map[string]int{"ws-attn": 2, "ws-side": 1}) {
 				t.Errorf("workspace facets = %v, want every workspace in scope", got)
 			}

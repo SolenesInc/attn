@@ -1,4 +1,3 @@
-// Package jobs MUST NOT import internal/daemon.
 package jobs
 
 import (
@@ -7,7 +6,6 @@ import (
 	"time"
 )
 
-// Never log.Printf: its stderr is discarded when the daemon runs in the background.
 type LogFunc func(format string, args ...interface{})
 
 type State string
@@ -23,10 +21,8 @@ const (
 func (s State) Terminal() bool { return s == StateDone || s == StateDead }
 
 type Job struct {
-	ID   string `json:"id"`
-	Kind string `json:"kind"`
-	// Coalescing identity within a kind: a second Enqueue for the same kind+key
-	// targets the SAME record.
+	ID             string          `json:"id"`
+	Kind           string          `json:"kind"`
 	UniqueKey      string          `json:"unique_key,omitempty"`
 	Priority       int             `json:"priority,omitempty"`
 	Payload        json.RawMessage `json:"payload,omitempty"`
@@ -39,12 +35,8 @@ type Job struct {
 	LastDiagnostic string          `json:"last_diagnostic,omitempty"`
 	CreatedAt      time.Time       `json:"created_at"`
 	UpdatedAt      time.Time       `json:"updated_at"`
-	// A coalescing Enqueue that arrived WHILE this job ran; finish() then returns it
-	// to queued so a mid-run trigger is never lost.
-	Requeued bool `json:"requeued,omitempty"`
+	Requeued       bool            `json:"requeued,omitempty"`
 
-	// The commit fence for THIS run, injected by the runner and never persisted. The
-	// handler wraps its durable write in Enter/Leave so a concurrent Cancel cannot tear it.
 	CommitGuard *CommitGuard `json:"-"`
 }
 
@@ -58,7 +50,6 @@ func (j *Job) DecodePayload(v any) error {
 	return nil
 }
 
-// Payload/Result are slices, so a shallow copy aliases the store.
 func (j *Job) clone() *Job {
 	if j == nil {
 		return nil

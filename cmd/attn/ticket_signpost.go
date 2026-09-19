@@ -8,17 +8,12 @@ import (
 	"strings"
 )
 
-// Tickets retired with the garden era: every `attn ticket` write verb is now a
-// signpost. `show`, `list`, and `inbox` remain as reads for legacy tickets.
-
 type ticketSignpost struct {
 	Lead  string
 	Moves [][2]string
 	Note  string
 }
 
-// A verb missing from this table falls through to the router's unknown-command
-// path; TestEveryTicketWriteVerbSignposts walks the router's cases against it.
 var ticketSignposts = map[string]ticketSignpost{
 	"status": {
 		Lead: "reporting your work state",
@@ -87,7 +82,6 @@ var ticketSignposts = map[string]ticketSignpost{
 	},
 }
 
-// Exit 2 is the router's own usage-error code.
 func signpostTicketVerb(verb string) {
 	fprintTicketSignpost(os.Stderr, verb)
 	os.Exit(2)

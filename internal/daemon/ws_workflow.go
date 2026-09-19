@@ -4,8 +4,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The UI is read-only over the WebSocket: run/call mutation is owned by the engine process over the unix socket (workflow_run.go), so there is no WS upsert path.
-
 func (d *Daemon) sendWorkflowActionResultWS(client *wsClient, action string, run *protocol.WorkflowRun, runs []*protocol.WorkflowRun, runID string, err error) {
 	d.sendToClient(client, buildWorkflowActionResult(action, run, runs, runID, err))
 }

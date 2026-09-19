@@ -296,8 +296,6 @@ func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 	}
 }
 
-// The windows run out for real here rather than being parked and hand-fired, which is
-// what makes A's silence mean something.
 func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {

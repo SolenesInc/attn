@@ -111,7 +111,6 @@ func (s *Store) CreatePresentationRound(presentationID, manifestYAML, baseSHA, h
 		return nil, fmt.Errorf("failed to create presentation round: %w", err)
 	}
 
-	// A new round must reopen an approved or closed presentation, or its chip never surfaces again (App.tsx gates on status open).
 	if _, err := tx.Exec(`
 		UPDATE presentations SET status = 'open' WHERE id = ? AND status != 'open'
 	`, presentationID); err != nil {

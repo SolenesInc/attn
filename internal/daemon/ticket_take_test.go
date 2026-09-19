@@ -34,7 +34,7 @@ func TestTicketTakeOverNotifiesPreviousAssignee(t *testing.T) {
 	d.nudgeWindowOverride = time.Hour
 	t.Cleanup(d.stopNudgeCountdowns)
 	_, agents, inputs := delegateMany(t, d, "codex", "Task Y", "Task X")
-	z, x := agents[0], agents[1] // z owns ticket Y; x owns its own ticket
+	z, x := agents[0], agents[1]
 	ticketY := boundTicketID(t, d, z)
 
 	if resp := callSetTicketStatus(t, d, z, string(protocol.DispatchWorkStateInProgress), "on it"); !resp.Ok {

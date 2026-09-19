@@ -125,7 +125,6 @@ func (r *rendezvous) arrive() {
 
 func (b *fakeReloadBackend) Spawn(_ context.Context, opts ptybackend.SpawnOptions) error {
 	if b.spawnGate != nil {
-		// Arrive before taking the liveness lock, or the collision is not tested.
 		b.spawnGate.arrive()
 	}
 	b.mu.Lock()
@@ -523,7 +522,6 @@ func TestReloadSessionAgentSkipsUnsupportedAgent(t *testing.T) {
 	}
 }
 
-// No synctest bubble: the notebook fsnotify watcher parks in kqueue and hangs it.
 func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"plugin-chief"},
@@ -609,7 +607,6 @@ func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testin
 	}
 }
 
-// No synctest bubble: same notebook fsnotify watcher as the test above.
 func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"plugin-chief"},
@@ -653,7 +650,6 @@ func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *
 	}
 }
 
-// No synctest bubble: same notebook fsnotify watcher.
 func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testing.T) {
 	for _, test := range []struct {
 		name         string
@@ -957,8 +953,6 @@ func TestReloadFencesTheInputLaneBeforeTheRuntimeIsReplaced(t *testing.T) {
 	}
 }
 
-// A pi-style driver declares resume without launch_instructions: a user reload
-// resumes the same conversation and hands the driver no instructions.
 func TestReloadSessionForClientResumesPluginWithoutLaunchInstructions(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs: []string{"pi-session"},

@@ -22,7 +22,6 @@ const (
 	worktreeSweepTimeout = 30 * time.Minute
 )
 
-// Sits in a measured gap. Receipt in docs/worktree-sweep.md.
 const defaultWorktreeSweepIdleDays = 14
 
 const defaultWorktreeSweepInterval = time.Hour
@@ -45,7 +44,6 @@ func worktreeSweepInterval() time.Duration {
 	return defaultWorktreeSweepInterval
 }
 
-// On by default. Receipt in docs/worktree-sweep.md.
 func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false

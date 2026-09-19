@@ -16,8 +16,6 @@ func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
 			os.Unsetenv(name)
 		}
 	}
-	// ATTN_DATA_DIR must always be set under go test (backstop in config.go), so
-	// cases that mean "no override" still need a scratch dir.
 	if overrides["ATTN_DATA_DIR"] == "" {
 		t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	}
@@ -77,8 +75,6 @@ func TestValidateProfileRouting_DefaultProfileHarnessRefusesAnInheritedProductio
 }
 
 func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
-	// The 2026-08-17 incident: an attn agent session's production routing env inherited
-	// into `make install PROFILE=fb2lists`.
 	prod := DataDirForProfile("")
 	scopeRouting(t, "fb2lists", map[string]string{
 		"ATTN_DATA_DIR":    prod,

@@ -87,8 +87,6 @@ func readKittyImageResult(t *testing.T, client *wsClient) protocol.KittyImageRes
 	return protocol.KittyImageResultMessage{}
 }
 
-// The gate is kitty_images and nothing else; binary_pty_output would serve the
-// hub nothing and kill images on every remote session.
 func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 	binaryOnly := spawnTestClient()
 	binaryOnly.setIdentity("test", "v", []string{
@@ -147,8 +145,6 @@ func TestKittyPlacementsReachOnlyClientsThatAskedForThem(t *testing.T) {
 	}
 }
 
-// The empty set says "stop drawing": an omitempty or a nil slice turns it into
-// nothing or null, and the client paints a dead image forever.
 func TestKittyPlacementsEventCarriesTheEmptySet(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -207,8 +203,6 @@ func TestHandleGetKittyImageAnswersBinaryCapableClientsWithAFrame(t *testing.T) 
 	}
 }
 
-// The hub relays over a text pipe: wanting the descriptions must not imply
-// wanting the binary frames, which it cannot re-read as JSON.
 func TestHandleGetKittyImageAnswersTheRelayWithBase64DespiteKittyImages(t *testing.T) {
 	image := kittyTestImage()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -284,8 +278,6 @@ func TestHandleGetKittyImageReportsAMissingImageByID(t *testing.T) {
 	}
 }
 
-// KittyImageProvider is optional: a bare interface assertion is a nil-interface
-// panic that takes the daemon down over a missing image.
 func TestHandleGetKittyImageAnswersWhenTheBackendServesNoImages(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -332,8 +324,6 @@ func (b *placementAttachBackend) Attach(context.Context, string, string, ...ptyb
 	return b.info, newFakeOutputStream(), nil
 }
 
-// The VT dump carries no images: the APC bytes were stripped before it was
-// serialized, so placements must ride beside it.
 func TestAttachResultCarriesTheSnapshotPlacements(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
@@ -375,8 +365,6 @@ func TestAttachResultCarriesTheSnapshotPlacements(t *testing.T) {
 	}
 }
 
-// Ghostty resolves a cell footprint only on reflow, so a fresh placement's
-// zeros must reach the client as zeros.
 func TestPlacementsToProtocolKeepsNaturalSizeZeros(t *testing.T) {
 	out := placementsToProtocol([]pty.KittyPlacement{{
 		ImageID:     77,

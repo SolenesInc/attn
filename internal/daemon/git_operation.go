@@ -36,8 +36,6 @@ func (d *Daemon) beginGitOperation(kind protocol.GitOperationKind, path string, 
 	}
 }
 
-// projectGitOperation carries the operation in the payload: the daemon does not
-// keep a git-operation registry, so the fact is the only record of it.
 func (d *Daemon) projectGitOperation(ev bus.Event) {
 	operation, ok := decodeFact[protocol.GitOperation](d, ev)
 	if !ok {

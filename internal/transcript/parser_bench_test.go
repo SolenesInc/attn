@@ -138,8 +138,6 @@ func writeSyntheticTranscript(tb testing.TB, dir string, numLines int) (path str
 	return path, info.Size()
 }
 
-// Without a real assistant turn after the last user line the benchmarks would silently
-// measure the cheap early-return path instead of the full parse.
 func TestSyntheticTranscriptFixtureIsRealistic(t *testing.T) {
 	dir := t.TempDir()
 	path, size := writeSyntheticTranscript(t, dir, 40)
@@ -170,7 +168,6 @@ func benchExtractLastAssistantTurn(b *testing.B, numLines int) {
 	b.ReportAllocs()
 	b.SetBytes(fileSize)
 	b.ResetTimer()
-	// ReportMetric must come after ResetTimer, which clears custom metrics recorded before it.
 	b.ReportMetric(float64(fileSize), "fixture_bytes")
 	for i := 0; i < b.N; i++ {
 		if _, err := ExtractLastAssistantTurnAfterLastUserSince(path, 2000, time.Time{}); err != nil {

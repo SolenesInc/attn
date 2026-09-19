@@ -87,8 +87,6 @@ func TestPluginDriverRegister_ReturnsOnlyActiveRunsOwnedByPlugin(t *testing.T) {
 	if run.SessionID != "owned" || run.RunID != "run-owned" || string(run.Metadata) != `{"native_id":"abc"}` {
 		t.Fatalf("active run=%+v", run)
 	}
-	// A driver process replacing the one that opened the run must continue the run's report
-	// cursor: a fresh counter reports under a seq the store has already passed.
 	if run.Seq != 1 {
 		t.Fatalf("active run seq=%d, want the run's report cursor (1)", run.Seq)
 	}
@@ -107,8 +105,6 @@ func registerResult(t *testing.T, client net.Conn, params pluginDriverRegisterPa
 	return result
 }
 
-// A driver that restarts has to raise the network proxy before a live session re-dials it,
-// so its own registration answers with the policy instead of waiting for the next spawn.
 func TestPluginDriverRegister_AnswersAnAutoModeDriverWithTheStoredConfig(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	host, err := automode.FormatHostValue(automode.HostAmendment{Host: "crates.io", Decision: automode.DecisionAllow})
@@ -1327,7 +1323,6 @@ func TestPluginDriverReports_MetadataResumeIDBecomesTheSessionConversation(t *te
 		t.Fatalf("resume id=%q, want the reported native-id", got)
 	}
 
-	// A stale report must not move the conversation either.
 	sendPluginMethod(t, client, 4, "session.report_metadata", pluginReportMetadataParams{
 		SessionID: "snipe-conv", RunID: "run-conv", Seq: 1,
 		Metadata:        json.RawMessage(`{"snipe_session_id":"older"}`),

@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// Bounds where an epoched identity may land: past any stamp a process reaches, and
-// inside what a JS Number keys exactly.
 const (
 	kittyEpochFloor   = uint64(1) << 32
 	kittyEpochCeiling = uint64(1) << 53
@@ -66,8 +64,6 @@ func TestKittyIdentityIsTheSameAtEveryExit(t *testing.T) {
 	}
 }
 
-// Ghostty's stamps are unique process-wide, so two terminals in ONE test binary never
-// collide (measured: with the fold removed, these sessions still describe 3 and 5).
 func TestKittyIdentitiesFromDifferentWorkersNeverCollide(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")

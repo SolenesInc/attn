@@ -101,8 +101,6 @@ func TestObserveAgentConversationTransitionsOnceAndRebindsRuntime(t *testing.T) 
 		t.Fatalf("no refreshed session snapshot cleared the activity: %+v", pushed)
 	}
 
-	// SessionStart can be observed more than once. Repetition is not another
-	// transition and must not restart runtime state or append another fact.
 	d.observeAgentConversation(agentConversationObservation{
 		SessionID:      "session-1",
 		NativeID:       "codex-new",

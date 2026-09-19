@@ -40,8 +40,6 @@ func discoverPluginManifests(pluginDir string) ([]pluginManifest, []pluginManife
 	return plugins.Discover(pluginDir)
 }
 
-// Plugin discovery stays in the same runtime root as the daemon socket: app-managed restarts
-// route by socket path, so an inherited ATTN_PROFILE would reach the wrong plugins.
 func pluginDirForSocket(socketPath string) string {
 	if override := strings.TrimSpace(os.Getenv("ATTN_PLUGIN_DIR")); override != "" {
 		return override
@@ -99,8 +97,6 @@ func (d *Daemon) ensurePluginSupervisor() *pluginSupervisor {
 	return d.pluginSupervisor
 }
 
-// Deliberately outside the plugin discovery directory: anything under there is
-// scanned for manifests.
 func pluginLogDirForSocket(socketPath string) string {
 	return filepath.Join(filepath.Dir(socketPath), "plugin-log")
 }
@@ -136,8 +132,6 @@ func pluginDataDirForSocket(socketPath, pluginName string) string {
 	return filepath.Join(filepath.Dir(socketPath), "plugin-data", pluginName)
 }
 
-// Must run before any plugin starts: a stranded runtime still holds its relay
-// socket open. An unreadable record is retired too — it names no pid to signal.
 func (d *Daemon) reapStrandedPluginRuntimes() {
 	results := plugins.ReapRuntimeProcesses(filepath.Dir(d.socketPath))
 	if len(results) == 0 {
@@ -274,8 +268,6 @@ func (d *Daemon) startInstalledPlugin(manifest pluginManifest) error {
 func (d *Daemon) pluginCommandEnv(extra ...string) []string {
 	env := append([]string(nil), os.Environ()...)
 	env = mergePluginEnvironment(env, d.cachedLoginShellEnv())
-	// The daemon names the driver's denial-ledger path because only it knows which
-	// profile's data dir it is serving; reconcileAutoModeDenialLedger reads the same.
 	env = mergePluginEnvironment(env, []string{automode.DenialLedgerEnvVar + "=" + autoModeDenialLedgerPath()})
 	env = mergePluginEnvironment(env, extra)
 	return env

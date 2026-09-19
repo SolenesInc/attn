@@ -9,12 +9,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 )
 
-// Claude has changed which glyphs it animates with, so the busy rule is the SHAPE of the
-// title: ✳ is the resting symbol, any other prefixed symbol is a spinner frame.
-
 const (
-	// At codex's ~10Hz every frame would evict every other kind of evidence from
-	// the observation ring; 1s matches claude's natural repaint rate.
 	heartbeatKeepalive = time.Second
 
 	claimBusy         = "busy"
@@ -103,12 +98,8 @@ func classifyClaudeTitle(title string) (string, string, bool) {
 	}
 }
 
-// Measured on codex 0.145.0 through a real PTY with --ask-for-approval untrusted. codex
-// has no notification escape and no approval hook, so a reword silently drops the signal.
 const codexApprovalMarker = "Action Required"
 
-// Codex has no idle glyph, so an overwritten title reads as not-busy: a live
-// capture measured a competing repaint moving accuracy by 0.2pp.
 func classifyCodexTitle(title string) (string, string, bool) {
 	first, ok := firstRune(title)
 	if !ok {
@@ -117,8 +108,6 @@ func classifyCodexTitle(title string) (string, string, bool) {
 	if isBrailleSpinner(first) {
 		return claimBusy, stripLevelGlyph(title), true
 	}
-	// Codex leaves the marker words after the prompt is answered and flips
-	// only the glyph — the marker alone would re-arm the approval forever.
 	if strings.Contains(title, codexApprovalMarker) {
 		if codexApprovalPending(title) {
 			return claimApproval, codexTitleSummary(title), true
@@ -128,8 +117,6 @@ func classifyCodexTitle(title string) (string, string, bool) {
 	return claimNotBusy, stripLevelGlyph(title), true
 }
 
-// The glyph before the marker: "." while waiting, "!" once answered (measured
-// on codex 0.145.0); anything else reads as still waiting.
 func codexApprovalPending(title string) bool {
 	prefix, _, found := strings.Cut(title, codexApprovalMarker)
 	if !found {

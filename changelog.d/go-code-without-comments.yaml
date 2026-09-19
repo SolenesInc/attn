@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: Go code carries no comments, and lint rejects any that are not tool directives, cgo preambles, example output or generated files.

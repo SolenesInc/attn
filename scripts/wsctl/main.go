@@ -167,8 +167,6 @@ func addSession(args []string) error {
 	}
 	sessID := *id
 	if sessID == "" {
-		// Claude Code rejects a non-UUID session id: the agent CLI uses it
-		// directly as its own identifier, which must be UUID-shaped.
 		sessID = newUUID()
 	}
 
@@ -217,8 +215,6 @@ func rmSession(args []string) error {
 	if *id == "" {
 		return errors.New("--id is required")
 	}
-	// `unregister`, not `kill_session`: the latter only SIGTERMs the agent, so
-	// an already-dead one leaves the session record behind as a ghost.
 	msg := map[string]any{
 		"cmd": "unregister",
 		"id":  *id,
@@ -313,8 +309,6 @@ func list(_ []string) error {
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", wsURL(), err)
 	}
-	// The daemon broadcasts full state (sessions, PRs with details, tickets);
-	// the library's 32 KiB default read limit kills the connection mid-frame.
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
@@ -363,13 +357,9 @@ func send(payload map[string]any) error {
 	if err != nil {
 		return fmt.Errorf("dial %s: %w", wsURL(), err)
 	}
-	// The daemon broadcasts full state (sessions, PRs with details, tickets);
-	// the library's 32 KiB default read limit kills the connection mid-frame.
 	conn.SetReadLimit(16 << 20)
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
-	// Drain initial_state before our write so the socket buffer doesn't
-	// backlog.
 	if err := sendClientHello(ctx, conn); err != nil {
 		return err
 	}
@@ -384,8 +374,6 @@ func send(payload map[string]any) error {
 	if err := conn.Write(ctx, websocket.MessageText, body); err != nil {
 		return fmt.Errorf("write: %w", err)
 	}
-	// Grace window: without it, fast-fire calls race the daemon's read loop on
-	// connection close.
 	time.Sleep(150 * time.Millisecond)
 	return nil
 }

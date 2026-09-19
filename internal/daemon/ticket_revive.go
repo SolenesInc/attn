@@ -6,8 +6,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// `crashed` is terminal and invisible to ActiveTicketsForSession, so un-stamping
-// is also what re-arms crash detection for a second death.
 func (d *Daemon) reviveCrashedTicketsForSession(sessionID string) {
 	if d.store == nil {
 		return

@@ -38,8 +38,6 @@ func worktreeRegistrations(t *testing.T, repo string) string {
 	return string(out)
 }
 
-// Decision 4: reopen never writes to the repository on its own. Asking for a
-// verdict, and a reopen the verdict refuses, both leave git as they found it.
 func TestNoReopenTouchesTheRepositoryWithoutBeingAskedByName(t *testing.T) {
 	d, repo, worktree := closedWorktreeWithDeletedDirectory(t, "untouched", "feat/untouched", false)
 	reopenDaemonWithBackend(t, d)
@@ -211,8 +209,6 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 	}
 }
 
-// The ledger has to survive a reopen that does not finish: the row goes back
-// under the closer and reason it had, not out of the ledger altogether.
 func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)
@@ -248,8 +244,6 @@ func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	}
 }
 
-// A pane that outlived the close is not this call's to remove: the rollback of a
-// failed reopen must leave the layout exactly as the reopen found it.
 func TestAFailedReopenKeepsThePaneThatOutlivedTheClose(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)
@@ -293,8 +287,6 @@ func TestAFailedReopenKeepsThePaneThatOutlivedTheClose(t *testing.T) {
 	}
 }
 
-// Two callers adding the same session's pane must not both believe they made it:
-// the loser's rollback would remove the winner's pane.
 func TestOnlyOneConcurrentAddReportsCreatingTheSessionPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	reopenDaemonWithBackend(t, d)
@@ -341,8 +333,6 @@ func TestOnlyOneConcurrentAddReportsCreatingTheSessionPane(t *testing.T) {
 	}
 }
 
-// A closed run's cost stays counted; the cursor says where counting stopped.
-// Clearing it while keeping the ledger would count the same usage twice.
 func TestReopeningLeavesTheCostCursorWhereTheCloseLeftIt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	reopenDaemonWithBackend(t, d)
@@ -393,8 +383,6 @@ func sessionShowResult(t *testing.T, d *Daemon, sessionID string) protocol.Sessi
 	return *response.SessionShowResult
 }
 
-// A verdict is served from the last inspection, so asking has to start the next
-// one: a branch pushed back into the repository must reach the following ask.
 func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
 	d, repo, _ := closedWorktreeWithDeletedDirectory(t, "refreshed", "feat/refreshed", false)
 	reopenDaemonWithBackend(t, d)
@@ -411,12 +399,8 @@ func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
 		t.Fatalf("session_show carried %+v, want the branch reported gone", shown.Reopen)
 	}
 
-	// Inspections coalesce per repository and branch, so the refresh the ask above
-	// started has to land before the branch changes or the next ask joins a stale one.
 	waitForBranchInspection(t, d, repo, "feat/refreshed")
 
-	// Somebody pushes the branch back outside attn. The ask that follows serves the
-	// stale answer and must leave a fresh inspection behind it.
 	runGitDaemon(t, repo, "branch", "feat/refreshed", "main")
 	sessionShowResult(t, d, "refreshed")
 	waitForBranchInspection(t, d, repo, "feat/refreshed")
@@ -427,8 +411,6 @@ func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
 	}
 }
 
-// Waits on the inspection the last ask started, without starting one: a refresh
-// that never ran leaves neither a running check nor a fresher observation.
 func waitForBranchInspection(t *testing.T, d *Daemon, repo, branch string) {
 	t.Helper()
 	key := branchInspectionKey(repo, branch)

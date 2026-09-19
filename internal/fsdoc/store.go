@@ -84,8 +84,6 @@ func (s *Store) List(dir string) ([]Entry, error) {
 			continue
 		}
 		childAbs := filepath.Join(abs, name)
-		// The root is externally syncable, so a child can be a symlink pointing outside
-		// it: without this skip, List would expose an outside file's name and size.
 		if notebook.EnsureWithinResolvedRoot(s.root, childAbs) != nil {
 			continue
 		}
@@ -149,8 +147,6 @@ func (s *Store) ReadWithLimit(p string, maxBytes int64) (content []byte, hash st
 	return content, notebook.Hash(content), nil
 }
 
-// An empty baseHash means create-only: it Conflicts if the file already exists. A
-// non-empty one applies only if the on-disk hash still matches.
 func (s *Store) Write(p string, content []byte, baseHash string) (newHash string, conflict *Conflict, err error) {
 	rel, err := cleanRel(p, false)
 	if err != nil {
@@ -190,8 +186,6 @@ func (s *Store) Write(p string, content []byte, baseHash string) (newHash string
 	return notebook.Hash(content), nil, nil
 }
 
-// A path that escapes the root returns an error, so the caller leaves such a link
-// unflagged rather than guessing; only a genuine absence is (false, nil).
 func (s *Store) Exists(p string) (bool, error) {
 	rel, err := cleanRel(p, false)
 	if err != nil {
@@ -311,8 +305,6 @@ func (s *Store) abs(rel string) (string, error) {
 	return abs, nil
 }
 
-// The temp name is dot-prefixed so it falls outside CleanPath's trackable set: fsdoc has no
-// extension filter, so a watcher would see the swap file's events as a change to a real path.
 func writeAtomic(absPath string, content []byte) error {
 	if err := os.MkdirAll(filepath.Dir(absPath), 0o755); err != nil {
 		return err

@@ -17,15 +17,11 @@ type fakeWorker struct {
 	gotHello   chan HelloParams
 	gotRemove  chan struct{}
 	rejectAuth bool
-	// Never the test's own PID — a regressed identity gate would SIGTERM the test
-	// runner instead of failing.
-	proc *exec.Cmd
+	proc       *exec.Cmd
 }
 
 func startFakeWorker(t *testing.T, dir string, rejectAuth bool) *fakeWorker {
 	t.Helper()
-	// Unix socket paths are length-limited; keep them short and out of the long
-	// temp dir the registry lives in.
 	sockDir, err := os.MkdirTemp("", "reap")
 	if err != nil {
 		t.Fatalf("temp sock dir: %v", err)
@@ -101,8 +97,6 @@ func (w *fakeWorker) serve() {
 
 func spawnSleeper(t *testing.T, marker string) *exec.Cmd {
 	t.Helper()
-	// The trailing `:` matters: with a lone simple command sh exec's it directly and argv
-	// becomes bare `sleep 60`. The leading `echo` gates on argv being readable.
 	stdout, ready, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("sleeper readiness pipe: %v", err)
@@ -122,7 +116,6 @@ func spawnSleeper(t *testing.T, marker string) *exec.Cmd {
 	})
 	go func() { _, _ = cmd.Process.Wait() }()
 
-	// A tripwire: the readiness byte lands in microseconds.
 	if err := stdout.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		t.Fatalf("sleeper readiness deadline: %v", err)
 	}
@@ -253,7 +246,6 @@ func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 
 func TestReapDataDirRefusesToSignalUnidentifiedProcess(t *testing.T) {
 	dataDir := t.TempDir()
-	// recycled PID takes.
 	cmd := spawnSleeper(t, "unrelated-process-marker")
 
 	writeEntry(t, dataDir, "sess-reused", RegistryEntry{

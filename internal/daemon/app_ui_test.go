@@ -151,7 +151,6 @@ func TestAViewCrashLandsInTheAppLogTheTileTellsYouToRead(t *testing.T) {
 		Error:     "TypeError: board is undefined\n    at Approvals (approvals.js:1:199)",
 	})
 
-	// Read through the tag filter, the way `attn app logs reviewer` does.
 	lines, _, err := readAppLog(AppRuntimeLogPath(d.socketPath), "reviewer", false, 20)
 	if err != nil {
 		t.Fatalf("reading the app log: %v", err)

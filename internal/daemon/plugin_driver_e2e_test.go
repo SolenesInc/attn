@@ -96,8 +96,6 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 
 	d := NewForTesting(socketPath)
 	d.pluginDir = pluginDir
-	// Unmuted on purpose: the only observed failure here is a close notification
-	// that never arrives, and this log is what the failure prints.
 	daemonLog := filepath.Join(tmpDir, "daemon.log")
 	if logger, err := logging.New(daemonLog); err == nil {
 		d.logger = logger
@@ -451,8 +449,6 @@ func readPluginFixtureReportReceipts(path string, count int) ([]pluginDriverRepo
 	return receipts, len(receipts) >= count
 }
 
-// Measured on Linux with six copies of this test in parallel under CPU load, the chain
-// finishes under 50ms (240 samples, worst 48.2ms); the deadline is a tripwire past that.
 func waitForPluginFixtureCloseRecords(t *testing.T, fixture pluginFixtureSession, count int) []pluginDriverCloseRecord {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)

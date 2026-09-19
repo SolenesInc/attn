@@ -308,8 +308,6 @@ func TestHeadlessRefusalFollowsTheWork(t *testing.T) {
 	}
 }
 
-// The future mtime is what makes the next scan find the session due again;
-// nothing here advances the wall clock.
 func scanAndRunActivity(t *testing.T, d *Daemon, sessionID, transcriptPath string, passes int) {
 	t.Helper()
 	for pass := 0; pass < passes; pass++ {
@@ -321,8 +319,6 @@ func scanAndRunActivity(t *testing.T, d *Daemon, sessionID, transcriptPath strin
 	}
 }
 
-// The row is dropped after the run so the next pass proves that scan queued a
-// job, rather than finding this one still sitting there.
 func runQueuedActivityJob(t *testing.T, d *Daemon, sessionID string) {
 	t.Helper()
 	job, err := d.jobQueue.GetByKey(sessionActivityKind, sessionID)
@@ -355,8 +351,6 @@ func seedActivityCursorFor(t *testing.T, d *Daemon, sessionID, transcriptPath st
 	}
 }
 
-// The error is discarded on purpose: a handler that bails on ineligibility is
-// exactly the idle case, and the refusal count is the assertion.
 func refusingTitleExec(t *testing.T) func(context.Context, *protocol.Session, string) (string, error) {
 	t.Helper()
 	return func(context.Context, *protocol.Session, string) (string, error) {

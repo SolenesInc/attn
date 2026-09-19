@@ -6,15 +6,12 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Tripwires, not budgets. Measured over 120 recent Claude Code transcripts (2,327 prose
-// blocks): largest block 18,713 chars (p99 3,949); the last 32 totalled at most 21,282.
 const (
 	annotatableMessageMaxChars = 64 * 1024
 	annotatableWindowMessages  = 32
 	annotatableWindowMaxChars  = 256 * 1024
 )
 
-// A transcript with no annotatable prose comes back as an empty list with success=true, not an error.
 func (d *Daemon) handleSessionMessagesGet(client *wsClient, msg *protocol.SessionMessagesGetMessage) {
 	sessionID := strings.TrimSpace(msg.SessionID)
 	result := protocol.SessionMessagesGetResultMessage{

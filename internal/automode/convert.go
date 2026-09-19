@@ -2,8 +2,6 @@ package automode
 
 import "strings"
 
-// ConvertGlob turns one old glob into a prefix rule: it converts when it is
-// `<token>… *` or has no wildcard, since no prefix rule can express the rest.
 func ConvertGlob(glob, decision, justification string) (Rule, bool) {
 	fields := strings.Fields(glob)
 	if len(fields) == 0 {

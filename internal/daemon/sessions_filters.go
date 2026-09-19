@@ -37,7 +37,6 @@ func validateSessionsFilters(value string) error {
 	if err := decoder.Decode(&filters); err != nil {
 		return fmt.Errorf("%s must be a session filter object: %v", SettingSessionsFilters, err)
 	}
-	// decoder.More() reads a trailing "}" as the end of the value just decoded.
 	if err := ensureJSONEOF(decoder); err != nil {
 		return fmt.Errorf("%s must be a single session filter object: %v", SettingSessionsFilters, err)
 	}

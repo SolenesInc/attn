@@ -73,7 +73,6 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 	if token == "" {
 		return nil, ErrNoToken
 	}
-	// SAFETY: never let a test token reach the real GitHub API.
 	if token == "test-token" && baseURL == "https://api.github.com" {
 		return nil, fmt.Errorf("refusing to use real GitHub API with test token - use a mock server URL")
 	}
@@ -85,8 +84,7 @@ func newClientWithToken(host, baseURL, token string) (*Client, error) {
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		rateLimits: make(map[string]*RateLimitInfo),
-		// 1 request/second average, burst 60: absorbs an app launch with many PRs
+		rateLimits:  make(map[string]*RateLimitInfo),
 		selfLimiter: rate.NewLimiter(rate.Limit(1), 60),
 	}, nil
 }
@@ -428,7 +426,6 @@ func (c *Client) FetchAll() ([]*protocol.PR, error) {
 
 	reviewedByMe, err := c.SearchReviewedByMePRs()
 	if err != nil {
-		// Non-fatal: reviewed-by-me is enhancement, not critical
 		reviewedByMe = nil
 	}
 	for _, pr := range reviewedByMe {
@@ -524,7 +521,6 @@ func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequest
 	}, nil
 }
 
-// Deliberately not built on FetchPRDetails, which makes extra review calls.
 func (c *Client) FetchPRState(repo string, number int) (state string, merged bool, title string, err error) {
 	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
 	if err != nil {
@@ -585,7 +581,6 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	}
 
 	details.CIStatus = CIStatusFromMergeableState(prData.MergeableState)
-	// Unreadable reviews leave the field empty; mergeability is still worth reporting.
 	details.ReviewStatus, _ = c.FetchPullRequestReviewStatus(repo, number)
 
 	return details, nil
@@ -698,7 +693,6 @@ type MergedPullRequest struct {
 	MergedAt string
 }
 
-// Past what the measured repositories carry. Receipt in docs/worktree-sweep.md.
 const mergedPullRequestPageLimit = 3
 
 func (c *Client) ListMergedPullRequests(repo string) ([]MergedPullRequest, error) {

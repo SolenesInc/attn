@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// The viewport a session showed when its process exited, kept so the exit can
-// be read after the worker is gone. Text is the rendered viewport, not scrollback.
 type SessionExitScreen struct {
 	SessionID  string
 	Text       string

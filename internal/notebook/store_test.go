@@ -218,7 +218,6 @@ func TestAppendJournalEntryOnceMarkerPrefixDoesNotCollide(t *testing.T) {
 	}
 }
 
-// Run under `go test -race ./internal/notebook` to also catch a regression in appendToNoteOnce's single lock.
 func TestAppendJournalEntryOnceConcurrent(t *testing.T) {
 	root := t.TempDir()
 	s := NewStore(root)
@@ -528,7 +527,6 @@ func TestBacklinksSkipsOversizedExternalFiles(t *testing.T) {
 
 func mustWrite(t *testing.T, s *Store, relPath, content string) {
 	t.Helper()
-	// A create-only write against an existing path returns a non-nil Conflict with a nil error, so retrying on err alone silently no-ops.
 	_, conflict, err := s.Write(relPath, []byte(content), "")
 	if err != nil {
 		t.Fatalf("write %s: %v", relPath, err)

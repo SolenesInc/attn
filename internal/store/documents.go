@@ -10,9 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 )
 
-// Every identifier spliced into SQL here comes from docstore — derived from an integer or
-// a validated field name, never caller text.
-
 const documentColumns = `id, body, rev, created_at, updated_at`
 
 func (s *Store) DefineDocumentCollection(schema docstore.CollectionSchema, now time.Time) (bool, error) {
@@ -226,8 +223,6 @@ func (s *Store) DeleteDocument(schema docstore.CollectionSchema, id string, expe
 
 func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, id string, expected *int64) (bool, error) {
 	if expected != nil && *expected == docstore.ExpectAbsent {
-		// Treating "expect absent" as unconditional would delete a document the
-		// caller was trying to protect.
 		return false, fmt.Errorf("store: deleting %s/%s/%s: rev %d means the document must not exist, which a delete cannot expect; pass the revision you read, or none to delete unconditionally",
 			schema.Namespace, schema.Collection, id, docstore.ExpectAbsent)
 	}
@@ -252,8 +247,6 @@ func deleteDocumentWith(x execQuerier, schema docstore.CollectionSchema, table, 
 	return n > 0, nil
 }
 
-// documentConflictWith describes a refused write, re-reading to name the revision that won.
-// The re-read must run on whatever refused the write, or it reads a state it never saw.
 func documentConflictWith(q rowQuerier, schema docstore.CollectionSchema, table, id string, expected int64) error {
 	conflict := &docstore.ConflictError{
 		Namespace: schema.Namespace, Collection: schema.Collection, ID: id, Expected: expected,
@@ -320,8 +313,6 @@ func (s *Store) CommitDocumentWritesWithEvents(
 	return s.commitDocumentWrites(commits, events, now, false, nil)
 }
 
-// CommitGardenDispatchWrites persists a new binding and its ordinary watch together.
-// Callers use the committed binding as the receipt and skip this on replay.
 func (s *Store) CommitGardenDispatchWrites(commits []DocumentCommit, watch GardenSeedWatch, now time.Time) ([]DocumentWriteResult, error) {
 	results, _, err := s.commitDocumentWrites(commits, nil, now, false, &watch)
 	return results, err
@@ -466,8 +457,6 @@ type QueryRead struct {
 	AsOfSeq   int64
 }
 
-// readAsOfSeq is the log position an answer was true at, read inside the same transaction
-// as the rows — outside it the number names a state the rows were never in.
 func readAsOfSeq(q rowQuerier) (int64, error) {
 	var seq int64
 	if err := q.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM bus_events`).Scan(&seq); err != nil {
@@ -559,8 +548,6 @@ func (s *Store) CountQuery(q docstore.Query) (CountRead, bool, error) {
 	return CountRead{Schema: schema, Count: n, AsOfSeq: asOf}, true, nil
 }
 
-// ReadQuery answers a query in a single read transaction. Split apart, a statement can
-// compile against one state and execute against another, silently returning wrong pages.
 func (s *Store) ReadQuery(q docstore.Query) (QueryRead, bool, error) {
 	if s.db == nil {
 		return QueryRead{}, false, fmt.Errorf("store: no database")
@@ -716,8 +703,6 @@ func alterCollectionTable(tx *sql.Tx, table string, before, after []docstore.Fie
 
 func addFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
 	col := quoteIdent(docstore.FieldColumn(f.Name))
-	// VIRTUAL, not STORED: the index already materialises the compared values,
-	// and SQLite refuses to add a STORED column to an existing table.
 	_, err := tx.Exec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s GENERATED ALWAYS AS (%s) VIRTUAL`,
 		table, col, docstore.ColumnAffinity(f.Type), docstore.FieldExpression(f.Name)))
 	if err != nil {
@@ -728,7 +713,6 @@ func addFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
 
 func dropFieldColumn(tx *sql.Tx, table string, f docstore.FieldSpec) error {
 	column := docstore.FieldColumn(f.Name)
-	// The index goes first: SQLite refuses to drop an indexed column.
 	if _, err := tx.Exec(`DROP INDEX IF EXISTS ` + quoteIdent(fieldIndexName(table, column))); err != nil {
 		return err
 	}

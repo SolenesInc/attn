@@ -38,8 +38,6 @@ func (t Tender) DisplayName() string { return crew.HolderName(t.Member, t.Sessio
 
 func (t Tender) Named() bool { return t.Name() != "" }
 
-// A terminal pane runs with no ATTN_SESSION_ID (internal/pty/manager.go strips
-// it), so comparing sessions alone would hand a live claim to whoever asked next.
 func (t Tender) Is(other Tender) bool {
 	mine, theirs := strings.TrimSpace(t.Session), strings.TrimSpace(other.Session)
 	if mine != "" && theirs != "" {
@@ -240,8 +238,6 @@ func ParseNoteKind(raw string) (string, error) {
 	return "", fmt.Errorf("%q is not a kind of note; the kinds are %s", raw, strings.Join(NoteKinds, ", "))
 }
 
-// MaxNoteBytes is a tripwire: the longest production description on 2026-08-12 was 14,920
-// chars. It must fit the 64KiB socket frame, which JSON escaping inflates (45KB -> 75KB).
 const (
 	MaxNoteBytes   = 32 << 10
 	MaxReasonChars = 400

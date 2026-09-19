@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// newPollableSocketpair returns a socketpair whose os.Files participate in the
-// runtime poller, so read deadlines fire and Close interrupts a blocked Read.
 func newPollableSocketpair(t *testing.T) (*os.File, *os.File) {
 	t.Helper()
 	fds, err := syscall.Socketpair(syscall.AF_UNIX, syscall.SOCK_STREAM, 0)

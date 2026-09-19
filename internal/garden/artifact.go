@@ -15,8 +15,6 @@ const (
 
 var ArtifactKinds = []string{ArtifactMarkdownFile, ArtifactNotebook, ArtifactRepository, ArtifactURL}
 
-// Optional fields are omitted rather than written empty: an empty string beside
-// a set one reads as an answer.
 type ArtifactReference struct {
 	Kind               string `json:"kind"`
 	NotebookDocumentID string `json:"notebook_document_id,omitempty"`
@@ -25,7 +23,6 @@ type ArtifactReference struct {
 	URL                string `json:"url,omitempty"`
 }
 
-// A tripwire: the longest path in this repo is 84 characters.
 const MaxArtifactFieldChars = 2048
 
 func (a ArtifactReference) trimmed() ArtifactReference {

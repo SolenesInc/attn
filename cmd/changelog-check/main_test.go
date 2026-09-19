@@ -42,8 +42,6 @@ func TestValidateFragment(t *testing.T) {
 			wantErr: "field description not found",
 		},
 		{
-			// The compiler reads one document per file, so a second one used to pass this
-			// check and then never appear in the changelog.
 			name:    "two documents in one file",
 			yaml:    "kind: added\narea: queue\nchange: first\n---\nkind: fixed\narea: queue\nchange: second\n",
 			wantErr: "more than one YAML document",
@@ -94,8 +92,6 @@ func TestValidateDir(t *testing.T) {
 	}
 }
 
-// A symlinked fragment is rejected without following it, so the release-time
-// compile step can never be pointed at a file outside changelog.d/.
 func TestValidateDirRejectsNonRegularFiles(t *testing.T) {
 	dir := t.TempDir()
 

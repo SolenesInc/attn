@@ -30,7 +30,6 @@ func TestParseSessionReopenArgs(t *testing.T) {
 	}
 }
 
-// An unknown action must name the ones that exist: the reader is an agent.
 func TestAnUnknownActionNamesTheOnesThatExist(t *testing.T) {
 	_, err := parseSessionReopenArgs([]string{"sess-1", "--action", "recreate_worktree"})
 	if err == nil {

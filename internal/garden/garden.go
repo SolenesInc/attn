@@ -1,4 +1,3 @@
-// docs/plans/2026-08-10-home-garden-crew-arc.md.
 package garden
 
 import (
@@ -45,8 +44,6 @@ type Var struct {
 	Enum        []string `json:"enum,omitempty"`
 }
 
-// Every declared field is written unconditionally, empty string and all: a field a query
-// filters on must exist in every body, or `tender_session = ""` matches nothing.
 type Seed struct {
 	ID              string `json:"id"`
 	Title           string `json:"title"`
@@ -65,10 +62,8 @@ type Seed struct {
 	Vars            []Var  `json:"vars"`
 	Reason          string `json:"reason,omitempty"`
 
-	HarvestWhen *HarvestCondition `json:"harvest_when,omitempty"`
-	// Flattened out of HarvestWhen by Encode: a docstore field is a top-level JSON
-	// key, so armed seeds cannot be found through the nested object.
-	HarvestWhenPullRequest string `json:"harvest_when_pull_request"`
+	HarvestWhen            *HarvestCondition `json:"harvest_when,omitempty"`
+	HarvestWhenPullRequest string            `json:"harvest_when_pull_request"`
 }
 
 type HarvestCondition struct {
@@ -117,8 +112,6 @@ func NotesSchema() docstore.CollectionSchema {
 	}
 }
 
-// `Crown` is scope inference, never a fence: the session may tend or plant
-// anything, and who-holds-what stays the per-seed tender.
 type Dispatch struct {
 	SessionID         string `json:"session_id"`
 	Crown             string `json:"crown"`
@@ -134,9 +127,8 @@ type Dispatch struct {
 	CapturedAt        string `json:"captured_at,omitempty"`
 	SupersededBy      string `json:"superseded_by,omitempty"`
 	OperationID       string `json:"operation_id,omitempty"`
-	// Stays true through a role transfer: it says who dispatched, not who is chief.
-	FromChief bool   `json:"from_chief,omitempty"`
-	Resume    string `json:"resume,omitempty"`
+	FromChief         bool   `json:"from_chief,omitempty"`
+	Resume            string `json:"resume,omitempty"`
 }
 
 const (
@@ -164,8 +156,6 @@ func DecodeDispatch(body []byte) (Dispatch, error) {
 	return dispatch, nil
 }
 
-// Six characters of Crockford's base32 is 32^6 ~ 1.07e9; at ten thousand seeds a
-// collision is ~4.7% likely, so the daemon mints again and planting writes create-only.
 const (
 	idPrefix     = "s-"
 	noteIDPrefix = "n-"
@@ -176,8 +166,6 @@ const (
 
 func NewID() (string, error) { return mintID(idPrefix) }
 
-// 256 is a whole multiple of the 32-character alphabet, so the modulo is
-// unbiased and no rejection loop is needed.
 func mintID(prefix string) (string, error) {
 	buf := make([]byte, idBodyLen)
 	if _, err := rand.Read(buf); err != nil {
@@ -204,15 +192,11 @@ func ValidateID(id string) error {
 	return nil
 }
 
-// Tripwires. Measured 2026-08-12 against production ~/.attn: longest ticket title 81
-// characters; the largest plan doc in this repo 75,843 bytes.
 const (
 	MaxTitleChars = 400
 	MaxBodyBytes  = 1 << 20
-	// Past the longest real title measured above, so it never truncates one.
-	MaxSlugChars = 100
-	// Enough to tell seeds apart, few enough to say out loud.
-	MaxSlugWords = 6
+	MaxSlugChars  = 100
+	MaxSlugWords  = 6
 )
 
 func ValidatePlant(title, body string) error {
@@ -233,8 +217,6 @@ func ValidateBody(body string) error {
 	return nil
 }
 
-// A slug is how a seed is spoken of, not addressed: it names the seed in prose
-// while the id names it in commands. Derived once at planting and then editable.
 func StepSlug(title string) string {
 	words := slugWords(title)
 	kept := words[:0:0]
@@ -243,7 +225,6 @@ func StepSlug(title string) string {
 			kept = append(kept, w)
 		}
 	}
-	// A title made only of stop words ("The One") still needs a name.
 	if len(kept) == 0 {
 		kept = words
 	}
@@ -260,7 +241,6 @@ func StepSlug(title string) string {
 	return slug
 }
 
-// Small on purpose: only the English filler that carries no meaning in a title.
 var slugStopWords = map[string]bool{
 	"a": true, "an": true, "the": true, "of": true, "in": true, "on": true, "at": true,
 	"to": true, "for": true, "with": true, "by": true, "from": true, "and": true, "or": true,

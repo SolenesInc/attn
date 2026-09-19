@@ -12,7 +12,7 @@ func TestHandlePtyInputAcknowledgesOnlySampledWrites(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	d := &Daemon{ptyBackend: backend}
 	client := &wsClient{send: make(chan outboundMessage, 2)}
-	automation := "automation" // Keeps unrelated auto-settle state out of this boundary test.
+	automation := "automation"
 
 	d.handlePtyInput(client, &protocol.PtyInputMessage{
 		Cmd:     protocol.CmdPtyInput,

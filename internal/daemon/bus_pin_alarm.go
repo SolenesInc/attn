@@ -18,12 +18,9 @@ const (
 
 	notificationKindBusPinned = "bus_retention_pinned"
 
-	// Below a minute the queue works far faster than a pin can change.
 	busPinAlarmMinInterval = time.Minute
 )
 
-// A quarter of the tripwire: less often reports an outage long after the
-// tripwire named it, more often buys nothing on a condition measured in hours.
 func busPinAlarmInterval(age time.Duration) time.Duration {
 	if interval := age / 4; interval > busPinAlarmMinInterval {
 		return interval
@@ -31,8 +28,6 @@ func busPinAlarmInterval(age time.Duration) time.Duration {
 	return busPinAlarmMinInterval
 }
 
-// The resolver never returns zero — off is negative — so zero means "not
-// resolved".
 func (d *Daemon) busPinAlarmAge() time.Duration {
 	d.busPinMu.Lock()
 	defer d.busPinMu.Unlock()
@@ -59,8 +54,6 @@ func (d *Daemon) busPinAlarmHandler(_ context.Context, _ *jobs.Job) (any, error)
 	return map[string]any{"pinned": len(pins), "notified": notified}, nil
 }
 
-// Announces only on the SECOND consecutive check at the same cursor: after a suspend the
-// oldest unread event is as old as the sleep, which one look cannot tell from an outage.
 func (d *Daemon) recordBusPins(pins []bus.Pin) int {
 	d.busPinMu.Lock()
 	defer d.busPinMu.Unlock()

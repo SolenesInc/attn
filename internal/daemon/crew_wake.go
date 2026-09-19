@@ -27,8 +27,6 @@ const crewWakeAgent = crew.DefaultAgent
 const crewWakeFallbackModel = "fable"
 
 func (d *Daemon) crewWakeModel(member crew.Member, agent string) *string {
-	// A one-day harness override must not receive a model chosen for the
-	// member's usual harness (for example, a Claude id passed to Codex).
 	if strings.EqualFold(strings.TrimSpace(agent), member.LaunchAgent()) {
 		if model := strings.TrimSpace(member.Model); model != "" {
 			return protocol.Ptr(model)
@@ -158,7 +156,6 @@ func (d *Daemon) crewPriming(member crew.Member) (crew.Priming, error) {
 	return priming, nil
 }
 
-// Read all pages so older member claims are included.
 func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 	read, err := d.readWholeGarden()
 	if err != nil {
@@ -273,8 +270,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	}
 
 	sessionID := uuid.NewString()
-	// The launch reads the binding through `crew_prime`, so it must be claimed
-	// before the spawn; a failed launch releases it below.
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
 	}
@@ -309,8 +304,6 @@ func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, deliv
 	}
 
 	initialPrompt := crewWakePrompt
-	// A crew binding becomes visible before the launching agent has crossed priming and its
-	// trust dialog. This marker protects unrelated foreground input, not mailbox delivery.
 	d.notePostInitialPrompt(sessionID)
 	if delivery != nil {
 		if delivery.Message != nil {
@@ -462,8 +455,6 @@ func (d *Daemon) handleCrewSet(conn net.Conn, msg *protocol.CrewSetMessage) {
 	if msg.Model != nil {
 		member.Model = strings.TrimSpace(*msg.Model)
 	}
-	// The way out arrives as its own flag: an empty list marshals away, so an
-	// empty AwarenessDirs is indistinguishable from "leave it alone" on the wire.
 	if protocol.Deref(msg.ClearAwarenessDirs) {
 		member.AwarenessDirs = nil
 	} else if msg.AwarenessDirs != nil {

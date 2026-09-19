@@ -7,8 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// A tripwire, not a deadline: the slowest legitimate path is ~65s, and across a 60s
-// daemon outage on a live pi session the replacement driver reported after 8s.
 const pluginDriverSilenceGrace = 2 * time.Minute
 
 type pluginDriverSilenceWatch struct {
@@ -45,8 +43,6 @@ func (w *pluginDriverSilenceWatch) disarm(sessionID string) bool {
 	return true
 }
 
-// stop refuses new alarms for daemon shutdown: a timer that fires into a stopped
-// daemon writes to a closed store.
 func (w *pluginDriverSilenceWatch) stop() {
 	w.mu.Lock()
 	defer w.mu.Unlock()

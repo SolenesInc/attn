@@ -103,7 +103,6 @@ func TestWorkerBackend_UpgradeKeepsTheSessionAlive(t *testing.T) {
 	waitForScreen(t, backend, sessionID, "__AFTER_UPGRADE__",
 		"printf '__AFTER_UPGRADE__\\n'\n")
 
-	// A leftover handoff file makes the next reader think an upgrade is pending.
 	jsonPath, dumpPath := ptyworker.HandoffPaths(filepath.Join(backend.registryDir(), sessionID+".json"), sessionID)
 	for _, path := range []string{jsonPath, dumpPath} {
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
@@ -147,7 +146,6 @@ func TestWorkerBackend_UpgradeRefusesABinaryThatIsNotOne(t *testing.T) {
 	}
 	defer func() { _ = backend.Remove(context.Background(), sessionID) }()
 
-	// The worker validates before it captures; capturing is the point of no return.
 	if _, err := backend.upgrade(context.Background(), sessionID, "/nonexistent/attn"); err == nil {
 		t.Fatal("Upgrade() accepted a path with no binary at it")
 	}
@@ -160,8 +158,6 @@ func TestWorkerBackend_UpgradeRefusesABinaryThatIsNotOne(t *testing.T) {
 	}
 }
 
-// Waits on the rendered screen, not the byte stream: the screen is what has to
-// survive the swap.
 func waitForScreen(t *testing.T, backend *WorkerBackend, sessionID, marker, input string) {
 	t.Helper()
 	if err := backend.Input(context.Background(), sessionID, []byte(input)); err != nil {

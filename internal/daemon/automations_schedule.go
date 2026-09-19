@@ -12,23 +12,16 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// scheduleDueInstantCap bounds DueInstants' backlog walk so a far-behind cursor
-// never fires an unbounded catch-up burst. A var so tests can shrink it.
 var scheduleDueInstantCap = 1_000_000
 
-// scheduleSkipGrace is how long after an intended instant a "skip" catch-up
-// policy will still fire it; past this the instant is never delivered.
 const scheduleSkipGrace = 5 * time.Minute
 
 const automationScheduleKind = "automation_schedule"
 
 const defaultAutomationScheduleInterval = time.Minute
 
-// automationScheduleTickTimeout is a tripwire, far past any healthy pass.
 const automationScheduleTickTimeout = 2 * time.Minute
 
-// ATTN_AUTOMATION_SCHEDULE_INTERVAL lets a test drive a sub-minute cron
-// (`@every 2s`) without waiting a real minute per instant. Users never set it.
 func automationScheduleInterval() time.Duration {
 	if v := strings.TrimSpace(os.Getenv("ATTN_AUTOMATION_SCHEDULE_INTERVAL")); v != "" {
 		if dur, err := time.ParseDuration(v); err == nil && dur > 0 {
@@ -45,7 +38,6 @@ func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any,
 
 func (d *Daemon) observeDueSchedules(now time.Time) {
 	if d.isRecovering() {
-		// Racing ahead of startup recovery could double-claim or misjudge cursors.
 		return
 	}
 	definitions, err := d.store.ListAutomationDefinitions()
@@ -109,20 +101,14 @@ func (d *Daemon) observeDueSchedule(definition store.AutomationDefinition, spec 
 	}
 	if fire {
 		if claimErr := d.claimAndDeliverScheduledRun(definition, spec, intended, now); claimErr != nil {
-			// Claim rejected: hold the cursor behind intended so the instant stays
-			// eligible and the next tick re-decides — delayed, never silently dropped.
 			return
 		}
 	}
-	// Advance only after a successful claim decision. A crash before this write
-	// is safe: the claim is idempotent and the next tick recomputes intended.
 	if err := d.store.SetAutomationScheduleCursor(definition.ID, now); err != nil {
 		d.logf("automation schedule observation advance %s: %v", definition.ID, err)
 	}
 }
 
-// A non-nil error means no run row was claimed, so the caller withholds the cursor
-// advance; a delivery failure after a successful claim returns nil.
 func (d *Daemon) claimAndDeliverScheduledRun(definition store.AutomationDefinition, spec automation.DefinitionSpec, intended, observedAt time.Time) error {
 	observationLock := d.automationObservationLock(definition.ID, "schedule", 0)
 	observationLock.Lock()

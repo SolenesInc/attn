@@ -24,8 +24,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// A fresh subscriber id per attach: reusing one lets the dying stream's Detach
-// remove the freshly installed subscriber and starve it of output.
 var wsSubscriberCounter atomic.Int64
 
 const maxInitialPromptBytes = 1 << 20
@@ -79,10 +77,9 @@ type attachReplayPayload struct {
 	ghosttyCols           uint16
 	ghosttyRows           uint16
 	ghosttyBlocks         []pty.AttachBlockData
-	// The dump carries no images, so without these a restore silently loses them.
-	ghosttyPlacements   []pty.KittyPlacement
-	scrollbackTruncated bool
-	decision            string
+	ghosttyPlacements     []pty.KittyPlacement
+	scrollbackTruncated   bool
+	decision              string
 }
 
 func shouldIncludeAttachReplay(policy protocol.AttachPolicy) bool {
@@ -206,8 +203,6 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 		state = protocol.SessionStateIdle
 	}
 	stateSince, stateUpdatedAt := nowStr, nowStr
-	// Preserving recoverable would let commitSpawn's record overwrite the live
-	// state applied during spawn.
 	if existing != nil && existing.State != protocol.SessionStateRecoverable {
 		state, stateSince, stateUpdatedAt = existing.State, existing.StateSince, existing.StateUpdatedAt
 		if stateSince == "" {
@@ -247,8 +242,6 @@ func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSession
 	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{})
 }
 
-// Daemon-owned launch paths only: the public workspace protocol must not grant
-// automatic approval or working-directory trust.
 func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
 	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
 		d.sendSpawnRejection(client, msg.ID, rejection)
@@ -455,7 +448,6 @@ func (d *Daemon) handleGetScreenSnapshot(client *wsClient, msg *protocol.GetScre
 
 	info, err := provider.ScreenSnapshot(context.Background(), msg.ID)
 	if err != nil {
-		// A worker built before MethodScreenSnapshot answers "unknown method".
 		d.sendToClient(client, protocol.GetScreenSnapshotResultMessage{
 			Event:   protocol.EventGetScreenSnapshotResult,
 			ID:      msg.ID,
@@ -534,8 +526,6 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 	for event := range stream.Events() {
 		switch event.Kind {
 		case ptybackend.OutputEventKindOutput:
-			// Hot path: the verbose log takes the global log mutex and a synchronous
-			// disk write per chunk, so gate it on debug.
 			if d.debugLogging {
 				d.logf(
 					"pty_output forward: id=%s seq=%d bytes=%d preview=%q",
@@ -564,8 +554,6 @@ func (d *Daemon) forwardPTYStreamEvents(client *wsClient, sessionID string, stre
 				d.logf("kitty_placements marshal failed: id=%s seq=%d err=%v", sessionID, event.Seq, err)
 				continue
 			}
-			// Blocking, like the bytes: a dropped set leaves a stale image that only
-			// the next change heals, which on an idle session never comes.
 			if !d.sendOutboundBlocking(client, outbound, ptyOutputSendWait) {
 				d.logf("kitty_placements send failed, closing stream: id=%s seq=%d", sessionID, event.Seq)
 				_ = stream.Close()
@@ -654,8 +642,6 @@ func (d *Daemon) handlePtyInput(client *wsClient, msg *protocol.PtyInputMessage)
 		d.sendToClient(client, result)
 	}
 
-	// After the bytes are away: freezing a pending settle can broadcast a
-	// snapshot, and a keystroke must not wait on one.
 	if userTyped {
 		d.holdAutoSettle(msg.ID)
 	}
@@ -667,7 +653,6 @@ func (d *Daemon) handleTerminalPointerActivity(msg *protocol.TerminalPointerActi
 	}
 }
 
-// XPixel/YPixel are the pane's total size in device pixels, 0 when unreported.
 type ptyGeometry struct {
 	Cols   int `json:"cols"`
 	Rows   int `json:"rows"`
@@ -686,8 +671,6 @@ func (d *Daemon) projectSessionPTYResized(ev bus.Event) {
 		Cols:  protocol.Ptr(geometry.Cols),
 		Rows:  protocol.Ptr(geometry.Rows),
 	}
-	// Left absent rather than zeroed: a client that reads 0 as "the pane has no
-	// pixels" would draw images against a degenerate cell.
 	if geometry.XPixel > 0 && geometry.YPixel > 0 {
 		event.Xpixel = protocol.Ptr(geometry.XPixel)
 		event.Ypixel = protocol.Ptr(geometry.YPixel)
@@ -700,8 +683,6 @@ func (d *Daemon) handlePtyResize(client *wsClient, msg *protocol.PtyResizeMessag
 		d.sendCommandError(client, protocol.CmdPtyResize, fmt.Sprintf("invalid terminal size cols=%d rows=%d (expected 1..%d)", msg.Cols, msg.Rows, maxPTYDimValue))
 		return
 	}
-	// An unusable pair is dropped, not refused. The bound is the kernel's own:
-	// ws_xpixel/ws_ypixel are uint16.
 	xpixel, ypixel := protocol.Deref(msg.Xpixel), protocol.Deref(msg.Ypixel)
 	if xpixel < 0 || ypixel < 0 || xpixel > maxPTYPixelValue || ypixel > maxPTYPixelValue {
 		d.logf("pty_resize: id=%s ignoring pixel geometry xpixel=%d ypixel=%d (expected 0..%d)", msg.ID, xpixel, ypixel, maxPTYPixelValue)
@@ -793,8 +774,6 @@ func (d *Daemon) handleKillSession(client *wsClient, msg *protocol.KillSessionMe
 func (d *Daemon) killSessionRuntimeAsync(sessionID string, sig syscall.Signal) {
 	err := d.ptyBackend.Kill(context.Background(), sessionID, sig)
 	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
-		// Production backends return from Kill only once the child has exited.
-		// Close here because worker lifecycle delivery can trail that return.
 		d.closePluginDriverSession(sessionID, "killed", nil, signalName(sig))
 	}
 	if err != nil {

@@ -48,8 +48,6 @@ func fileDocumentURI(workspaceID, path string) string {
 	return "attn://file/" + encodeURIComponent(workspaceID) + "/" + encodeURIComponent(filepath.Clean(path))
 }
 
-// resolveAnnotationDocumentSource validates typed authority fields and returns
-// the store key. documentURI is correlation-only and is never parsed.
 func (d *Daemon) resolveAnnotationDocumentSource(documentURI, kind string, workspaceID, path, seedID *string) (annotationDocumentSource, error) {
 	source := annotationDocumentSource{
 		documentURI: documentURI,

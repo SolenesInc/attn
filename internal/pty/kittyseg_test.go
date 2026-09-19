@@ -109,7 +109,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// BEL ends an OSC, not an APC: treating it as a terminator would cut the escape in half.
 		name:  "bel inside the payload is an ordinary byte",
 		input: kittyWithBEL + "tail",
 		want: []kittyEmission{
@@ -147,7 +146,6 @@ var kittySegBattery = []kittySegCase{
 		want:  []kittyEmission{plainEmission("a\x1b\\b")},
 	},
 	{
-		// Measured: ESC ESC leaves ghostty mid-escape, so extracting the APC that follows leaves the client's parser one escape behind.
 		name:  "an esc before the introducer keeps the apc on the wire",
 		input: "\x1b" + kittyRecovered,
 		want:  []kittyEmission{plainEmission("\x1b" + kittyRecovered)},
@@ -166,7 +164,6 @@ var kittySegBattery = []kittySegCase{
 		want:  []kittyEmission{plainEmission(kittyIntro + "a=T,f=24;AAAA\x1b[0mback to text")},
 	},
 	{
-		// The ESC that abandons the first APC is also what opens the second.
 		name:  "a stray esc that starts a new apc keeps both on the wire",
 		input: kittyIntro + "a=T;AA" + kittyRecovered + "tail",
 		want:  []kittyEmission{plainEmission(kittyIntro + "a=T;AA" + kittyRecovered + "tail")},
@@ -236,19 +233,16 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// Fuzz reproducer. Measured: ghostty ends the OSC on this ESC and executes what follows.
 		name:  "a marker cut short by a stray esc stays plain",
 		input: "\x1b]133;A\x1b0Z",
 		want:  []kittyEmission{plainEmission("\x1b]133;A\x1b0Z")},
 	},
 	{
-		// Fuzz reproducer. The marker's ESC ] is not in ground, so cutting it takes the opened escape's bytes with it.
 		name:  "a marker whose introducer was never in ground stays plain",
 		input: "\x1b\x1b]133;A" + kittyST + "00",
 		want:  []kittyEmission{plainEmission("\x1b\x1b]133;A" + kittyST + "00")},
 	},
 	{
-		// Measured: CAN and SUB dispatch the marker for ghostty, but the client's parser knows only BEL and ST.
 		name:  "a marker cut short by can stays plain",
 		input: "\x1b]133;A\x18tail",
 		want:  []kittyEmission{plainEmission("\x1b]133;A\x18tail")},
@@ -259,13 +253,11 @@ var kittySegBattery = []kittySegCase{
 		want:  []kittyEmission{plainEmission("\x1b]133;B\x1atail")},
 	},
 	{
-		// Measured: C1 ST does not end an OSC.
 		name:  "c1 st inside a marker payload is ordinary payload",
 		input: "\x1b]133;C;cmdline_url=a\x9cb\x07",
 		want:  []kittyEmission{markerEmission("\x1b]133;C;cmdline_url=a\x9cb\x07")},
 	},
 	{
-		// Measured to dispatch, but osc133Prefix is the only introducer this segmenter recognises.
 		name:  "a c1-introduced marker stays plain",
 		input: "\x9d133;A\x07",
 		want:  []kittyEmission{plainEmission("\x9d133;A\x07")},
@@ -301,15 +293,12 @@ var kittySegBattery = []kittySegCase{
 		pending: "\x1b]133;A\x1b",
 	},
 	{
-		// ESC _ is not in an OSC's terminating byte set: the ESC ends the OSC and the APC opens from escape state.
 		name:  "an apc pattern inside a marker payload keeps both on the wire",
 		input: "\x1b]133;C;cmdline_url=x" + kittyRecovered + "tail",
 		want:  []kittyEmission{plainEmission("\x1b]133;C;cmdline_url=x" + kittyRecovered + "tail")},
 	},
 
-	// An APC pattern inside a foreign string is text to ghostty; cutting it would take the string's own bytes.
 	{
-		// Fuzz reproducer: the ESC \ ends the SOS, not an APC.
 		name:  "an apc pattern inside an sos string stays plain",
 		input: "\x1bX" + kittyIntro + kittyST + "0",
 		want:  []kittyEmission{plainEmission("\x1bX" + kittyIntro + kittyST + "0")},
@@ -353,7 +342,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// Measured: C1 ST ends every string type EXCEPT an OSC.
 		name:  "c1 st ends an sos but not an osc",
 		input: "\x1bXsos\x9c" + kittyDirectRGB + "\x1b]0;t\x9c" + kittyRecovered + "\x07" + kittyQuery,
 		want: []kittyEmission{
@@ -364,7 +352,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// A raw C1 introducer opens a string from escape state but is ordinary text in ground.
 		name:  "a c1 introducer opens a string only after an esc",
 		input: "\x1b\x9e" + kittyIntro + "a=T;AA" + kittyST + "\x9e" + kittyDirectRGB,
 		want: []kittyEmission{
@@ -373,9 +360,7 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 
-	// Ghostty ends a kitty APC on each of these bytes, and each has its own effect on the grid.
 	{
-		// Fuzz reproducer: 0x84 (IND) ends the APC and scrolls.
 		name:  "an ind inside the payload ends the apc",
 		input: kittyIntro + "a=T;AA\x840" + kittyST,
 		want:  []kittyEmission{plainEmission(kittyIntro + "a=T;AA\x840" + kittyST)},
@@ -400,7 +385,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// Measured by dispatch, not by spec: 98, 9e and 9f are payload inside a string.
 		name:  "c1 sos, pm and apc bytes are ordinary payload",
 		input: kittyIntro + "a=T;A\x98B\x9eC\x9fD" + kittyST + "tail",
 		want: []kittyEmission{
@@ -409,13 +393,11 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// The APC dispatches truncated at the byte and a DCS takes over, so the ST closes THAT.
 		name:  "a c1 dcs byte ends the apc and opens a string",
 		input: kittyIntro + "a=T;A\x90B" + kittyST + "tail",
 		want:  []kittyEmission{plainEmission(kittyIntro + "a=T;A\x90B" + kittyST + "tail")},
 	},
 	{
-		// 9b opens a CSI, which ends at its own final byte rather than at ST.
 		name:  "a c1 csi byte ends the apc and the next apc is extracted",
 		input: kittyIntro + "a=T;A\x9b0m" + kittyDirectRGB,
 		want: []kittyEmission{
@@ -424,7 +406,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// 9d opens an OSC, which ends on BEL and not on C1 ST.
 		name:  "a c1 osc byte ends the apc and swallows to bel",
 		input: kittyIntro + "a=T;A\x9dtitle\x07" + kittyDirectRGB,
 		want: []kittyEmission{
@@ -433,7 +414,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// C1 ST terminates a kitty APC exactly as ESC \ does.
 		name:  "c1 st terminates and is stripped with the apc",
 		input: "head" + kittyIntro + "a=T,f=24;AAAA\x9ctail",
 		want: []kittyEmission{
@@ -466,7 +446,6 @@ var kittySegBattery = []kittySegCase{
 		},
 	},
 	{
-		// An escape with intermediates reaches ground only at its final byte.
 		name:  "an apc after a charset designation is extracted",
 		input: "\x1b(B" + kittyDirectRGB,
 		want: []kittyEmission{
@@ -689,7 +668,6 @@ func TestKittyAPCSegmenterAbandonsAnOversizedAPC(t *testing.T) {
 		t.Fatalf("the oversized apc left %d bytes pending, want none", len(seg.pending))
 	}
 
-	// Flushing does not put the stream back in ground: ghostty is still inside the unterminated APC.
 	emissions := feedKitty(t, &seg, kittyRecovered, nil)
 	if !kittyEmissionsEqual(emissions, []kittyEmission{plainEmission(kittyRecovered)}) {
 		t.Fatalf("while the flooded apc is still open, got %s, want it all plain", formatKittyEmissions(emissions))

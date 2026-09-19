@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// handleTicketList has no async side effects, so a plain syncConn suffices.
 func callTicketList(t *testing.T, d *Daemon, sessionID, status string, includeArchived bool) protocol.Response {
 	t.Helper()
 	conn := &syncConn{}

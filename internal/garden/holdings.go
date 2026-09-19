@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// Held returns the open seeds the named member holds, freshest claim first.
 func Held(seeds []Seed, member string) []Seed {
 	member = strings.TrimSpace(member)
 	if member == "" {
@@ -29,7 +28,6 @@ func Held(seeds []Seed, member string) []Seed {
 	return out
 }
 
-// PlotsOf returns the plots the given seeds sit in, once each, in seed order.
 func PlotsOf(seeds []Seed, held []Seed) []Seed {
 	index := byID(seeds)
 	seen := make(map[string]bool, len(held))

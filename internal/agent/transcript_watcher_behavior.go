@@ -39,14 +39,10 @@ type WatcherLineResult struct {
 	State string
 	Log   string
 
-	// AbortAt matters because the watcher re-reads history: an undated halt
-	// cannot be told from a fresh one.
 	Aborted     bool
 	AbortDetail string
 	AbortAt     time.Time
 
-	// Retires the evidence bracket as well as this watcher's flag: for an agent
-	// with no heartbeat nothing else retires one except the stuck timer.
 	BracketClosed bool
 }
 
@@ -113,8 +109,6 @@ func (b *claudeTranscriptWatcherBehavior) Tick(now time.Time, sessionState proto
 }
 
 func (b *claudeTranscriptWatcherBehavior) SkipClassification(sessionState protocol.SessionState, lastSeen string, now time.Time) (bool, string) {
-	// A scheduled session is parked on a /loop or cron; the transcript only shows the last
-	// turn, which classifies as idle. Parks routinely outlast the hook-stale threshold.
 	if sessionState == protocol.SessionStateScheduled {
 		return true, "transcript watcher: skipping classification, session scheduled"
 	}
@@ -131,8 +125,6 @@ func (b *claudeTranscriptWatcherBehavior) SkipClassification(sessionState protoc
 	return false, ""
 }
 
-// Codex runs the watcher only for aborted turns, the one thing its hooks do not report.
-// It never classifies — a second driver would race the Stop hook over the same turn.
 type codexTranscriptWatcherBehavior struct{}
 
 func (b *codexTranscriptWatcherBehavior) Reset() {}
@@ -189,8 +181,6 @@ func (b *copilotTranscriptWatcherBehavior) Reset() {
 }
 
 func (b *copilotTranscriptWatcherBehavior) HandleLine(line []byte, now time.Time, sessionState protocol.SessionState) WatcherLineResult {
-	// An abort is the one turn ending copilot does not follow with `assistant.turn_end`
-	// (measured on 1.0.77), so without this Tick pins the session working for its whole life.
 	if abort, ok := transcript.CopilotTurnAborted(line); ok {
 		b.turnOpen = false
 		b.pendingTools = make(map[string]copilotPendingTool)

@@ -12,8 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/transcript"
 )
 
-// `source` is "cli" for an interactive pane; `codex exec` runs write "exec" and
-// must not be picked up.
 func writeCodexRollout(t *testing.T, codexHome, id, cwd, source string, messages ...string) string {
 	t.Helper()
 	dir := filepath.Join(codexHome, "sessions", "2026", "08", "02")
@@ -239,8 +237,6 @@ func TestSessionMessagesGet_RejectsUnknownSession(t *testing.T) {
 }
 
 func TestSessionMessagesGet_IgnoresHeadlessExecRollouts(t *testing.T) {
-	// attn's stop-time classifier runs `codex exec` in the session's own directory,
-	// so a second rollout lands seconds after the pane's.
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
 	cwd := t.TempDir()

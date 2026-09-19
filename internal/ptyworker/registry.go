@@ -25,8 +25,6 @@ type RegistryEntry struct {
 	OwnerStartedAt   string `json:"owner_started_at,omitempty"`
 	OwnerNonce       string `json:"owner_nonce,omitempty"`
 
-	// What the surviving process actually launched with. When LaunchParamsRecorded is
-	// false (an older worker) the daemon must abort a reload, not respawn on defaults.
 	LaunchParamsRecorded bool                                `json:"launch_params_recorded,omitempty"`
 	YoloMode             bool                                `json:"yolo_mode,omitempty"`
 	ApprovalRoute        launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`

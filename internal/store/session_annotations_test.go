@@ -266,8 +266,6 @@ func TestSessionAnnotationDraftKeepsTheNoteOfTheGenerationThatWon(t *testing.T) 
 }
 
 func TestMigration93KeepsDraftsWrittenBeforeTheNoteExisted(t *testing.T) {
-	// attn has shipped session annotation drafts since schema 86, so real installs
-	// hold rows written by a build with no note column: they are carried, not recreated.
 	dbPath := filepath.Join(t.TempDir(), "pre-93.db")
 	db, err := openSeededDB(dbPath)
 	if err != nil {

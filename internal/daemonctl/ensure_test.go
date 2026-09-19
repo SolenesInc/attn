@@ -285,8 +285,6 @@ func TestMismatchReason_ReportsMissingFingerprint(t *testing.T) {
 	}
 }
 
-// The PID file's exclusive flock is the sole mutual-exclusion mechanism: unlinking it here
-// would leave a concurrent holder locking an orphaned inode at the same pathname.
 func TestRemoveStaleSocketFiles_LeavesPIDFileInPlace(t *testing.T) {
 	dir := t.TempDir()
 	socketPath := filepath.Join(dir, "attn.sock")

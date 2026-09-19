@@ -16,7 +16,6 @@ import (
 	"time"
 )
 
-// Past it, capture with --crop/--max-dim rather than raising the limit.
 const maxVisionCheckBase64Bytes = 4_500_000
 
 type visionCheckResult struct {
@@ -78,7 +77,6 @@ func buildVisionCheckMessage(question, mediaType, base64Data string) (string, er
 	return string(b), nil
 }
 
-// bufio.Reader, not Scanner: a large payload line exceeds Scanner's token size.
 func parseVisionCheckResult(stdout string) (*visionCheckResult, error) {
 	reader := bufio.NewReader(strings.NewReader(stdout))
 	var last *visionCheckResult

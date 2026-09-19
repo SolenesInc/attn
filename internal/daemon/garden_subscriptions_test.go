@@ -205,7 +205,6 @@ func TestSeedNudges_InboxAndDoorbellDiscardUpdatesAfterRelinking(t *testing.T) {
 			f := newSeededNudgeGarden(t)
 			d := f.d
 			watchSeed(t, d, "sess-b", f.crown.ID, false)
-			// Queue directly so the read path is the first delivery attempt.
 			if _, err := claimGardenSeedMailboxItemForTest(d.store, "sess-b", f.leaf.ID, "note", "old-tree", time.Now()); err != nil {
 				t.Fatal(err)
 			}
@@ -335,7 +334,6 @@ func TestSeedNudges_UnwatchRetryRefreshesAnAlreadyClearedQueue(t *testing.T) {
 		t.Fatal(err)
 	}
 	d.noteQueuedAgentMailboxItem("planner")
-	// A prior attempt committed deletion and cleanup, then failed to refresh unread state.
 	if _, err := d.store.SetGardenSeedWatch("planner", seed.ID, false, time.Now()); err != nil {
 		t.Fatal(err)
 	}

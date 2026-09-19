@@ -22,7 +22,6 @@ type blockRef interface {
 	Free()
 }
 
-// Rows are SCREEN-space rows of the serialized VT dump.
 type AttachBlockData struct {
 	ID             uint64
 	Pending        bool
@@ -30,14 +29,11 @@ type AttachBlockData struct {
 	InputRow       *int32
 	InputCol       *int32
 	OutputStartRow *int32
-	// EndRow is exclusive: the row the next prompt renders on.
-	EndRow   *int32
-	Command  *string
-	ExitCode *int32
+	EndRow         *int32
+	Command        *string
+	ExitCode       *int32
 }
 
-// Implementations take no locks (calls arrive under replayMu) and must free every
-// retired ref. Executable spec: testdata/osc133_block_corpus.json.
 type workerBlockTable interface {
 	ApplyMarker(m osc133Marker, ref blockRef, altScreen bool)
 	SnapshotBlocks() []AttachBlockData
@@ -45,8 +41,6 @@ type workerBlockTable interface {
 	Close()
 }
 
-// All methods run under replayMu — what makes the attach snapshot an atomic
-// {dump, blocks, watermark} triple.
 type blockFeeder struct {
 	term  *ghosttyvt.Terminal
 	table workerBlockTable
@@ -65,8 +59,6 @@ func (f *blockFeeder) write(segment []byte) {
 	}
 }
 
-// Must be called in stream order, after the marker's preceding plain bytes are
-// written, so the cursor sits on the cell the pin captures.
 func (f *blockFeeder) mark(marker *osc133Marker) {
 	if marker == nil {
 		return
@@ -84,7 +76,6 @@ func (f *blockFeeder) snapshotBlocks() []AttachBlockData {
 
 func (f *blockFeeder) restore(blocks []AttachBlockData) {
 	f.table.Restore(blocks, func(x, y int) blockRef {
-		// A nil *TrackedRef must not become a non-nil blockRef holding it.
 		if r := f.term.TrackPoint(x, y); r != nil {
 			return r
 		}

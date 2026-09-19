@@ -61,8 +61,6 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 	if opts.YoloMode {
 		args = append(args, "--yolo")
 	}
-	// -i/--interactive keeps the session alive for steering; -p/--prompt exits and tears
-	// the delegated session down. Verified against copilot CLI v1.0.63.
 	if strings.TrimSpace(opts.InitialPrompt) != "" {
 		args = append(args, "--interactive", opts.InitialPrompt)
 	}
@@ -71,7 +69,6 @@ func (c *Copilot) BuildCommand(opts SpawnOpts) *exec.Cmd {
 
 func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 	var env []string
-	// copilot carries no hook to pass it down, and a bare `attn copilot` generates a fresh one.
 	if id := strings.TrimSpace(opts.SessionID); id != "" {
 		env = append(env, "ATTN_SESSION_ID="+id)
 	}
@@ -85,8 +82,6 @@ func (c *Copilot) BuildEnv(opts SpawnOpts) []string {
 }
 
 func (c *Copilot) GenerateInstructionsFile(opts SpawnOpts) (string, string) {
-	// Measured on 1.0.81: an extra dir yields only *.instructions.md, and one file past 256 KB
-	// silently drops every custom instruction, the user's own included. Guidance is ~10 KB.
 	return "attn.instructions.md", opts.launchGuidance()
 }
 

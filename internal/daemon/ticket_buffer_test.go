@@ -181,8 +181,6 @@ func TestDeliveredUnreadDoesNotRearmUntilNewActivity(t *testing.T) {
 	})
 }
 
-// Wall-clock bound, not a bubble: a goroutine blocked on a sync.Mutex is not
-// durably blocked, so synctest.Wait would never return here.
 func TestMutationCatchUpRebuildsRemainingUnreadFromNewAttention(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.nudgeWindowOverride = time.Second

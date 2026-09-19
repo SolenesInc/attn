@@ -456,8 +456,6 @@ func runAutoModePolicy(args []string) {
 
 func strPtr(value string) *string { return &value }
 
-// The flag is a tri-state: unnamed leaves the setting alone, so a bare --allow-local-binding
-// with nothing after it is a typo rather than "true".
 func autoModeLocalBindingFlag(args []string) *bool {
 	raw, ok := takeStringFlag(args, "--allow-local-binding")
 	if !ok {
@@ -495,8 +493,6 @@ func proposeAutoModeValue(verb, kind, target, value string, asJSON bool) {
 	fmt.Println("This changed nothing yet. Promote it in the attn app to put it in force.")
 }
 
-// autoModeProposer records who asked. Attribution for the human reviewing the
-// list, not authorization: a proposal from anyone is equally inert.
 func autoModeProposer() string {
 	return strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
 }

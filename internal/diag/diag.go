@@ -1,5 +1,3 @@
-// Importing net/http/pprof registers handlers on http.DefaultServeMux, which nothing in
-// this process serves; the same handlers are re-registered here on a private mux.
 package diag
 
 import (
@@ -20,8 +18,6 @@ type Stats struct {
 	WorkerPIDs map[string]int `json:"worker_pids,omitempty"`
 }
 
-// Invoked on each /debug/vars request, so it must be cheap and safe for
-// concurrent use. May be nil.
 type StatsFunc func() Stats
 
 type Server struct {
@@ -58,7 +54,6 @@ func (s *Server) Addr() string {
 	return s.addr
 }
 
-// Close is safe to call on a nil *Server.
 func (s *Server) Close() error {
 	if s == nil || s.httpServer == nil {
 		return nil

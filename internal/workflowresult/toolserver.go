@@ -34,7 +34,6 @@ type rpcResponse struct {
 	Error   *rpcError `json:"error,omitempty"`
 }
 
-// An empty schema means a permissive {"type":"object"}.
 func ServeResultSink(
 	ctx context.Context,
 	toolName string,
@@ -162,7 +161,6 @@ func callTool(
 		arguments = map[string]any{}
 	}
 
-	// Number-preserving unmarshal, so validation sees json.Number, not float64.
 	rawArgs, err := json.Marshal(arguments)
 	if err != nil {
 		return toolResult("Validation failed: arguments are not valid JSON: "+err.Error(), true)

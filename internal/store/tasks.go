@@ -19,8 +19,6 @@ type LegacyTaskRecord struct {
 	UpdatedAt     time.Time
 }
 
-// ONE transaction: splitting the read, write and delete looks equivalent and is not —
-// a crash between the halves loses owed work.
 func (s *Store) MigrateLegacyTasks(translate func(LegacyTaskRecord) JobRecord) (int, error) {
 	if s.db == nil {
 		return 0, fmt.Errorf("store: no database")
@@ -31,8 +29,6 @@ func (s *Store) MigrateLegacyTasks(translate func(LegacyTaskRecord) JobRecord) (
 	}
 	defer tx.Rollback()
 
-	// The rows are collected before anything is written: SQLite will not accept a
-	// write on a connection with an open cursor on the same transaction.
 	rows, err := tx.Query(
 		`SELECT id, kind, subject, state, attempts, next_attempt_at, last_error, meta_json, requeued, created_at, updated_at
 		 FROM tasks WHERE state <> 'done'`)

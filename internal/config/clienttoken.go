@@ -47,7 +47,6 @@ func EnsureClientToken(dir string) (string, error) {
 	if err := os.WriteFile(path, []byte(token), 0o600); err != nil {
 		return "", fmt.Errorf("write client token %s: %w", path, err)
 	}
-	// WriteFile honours the mode only when it creates the file; an existing empty one keeps whatever mode it had.
 	if err := os.Chmod(path, 0o600); err != nil {
 		return "", fmt.Errorf("secure client token %s: %w", path, err)
 	}

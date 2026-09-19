@@ -16,15 +16,8 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The observation point is wsHub.wireTap — the marshalled bytes of every send
-// path, never a broadcast hook, which a projection can fire without sending.
-
 type wireFixture struct {
-	// Exact, not "at least": a second projection entry matching the same fact by
-	// accident would double-push.
-	events []string
-	// subject defaults to one nothing resolves, which is correct for a snapshot
-	// projection and wrong for one that re-reads the entity.
+	events  []string
 	subject func(*wireWorld) string
 	payload func(*wireWorld) any
 }
@@ -516,8 +509,6 @@ func factIsDeclared(facts []string, fact string) bool {
 	return false
 }
 
-// Parses the general fact vocabulary out of bus.go and joins the closed Garden
-// event catalog, so every production event projected to the wire is covered.
 func declaredFactNames(t *testing.T) []string {
 	t.Helper()
 	fset := token.NewFileSet()

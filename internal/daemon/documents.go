@@ -163,8 +163,6 @@ func (d *Daemon) documentSubscriptionCount() int {
 	return len(d.docSubs)
 }
 
-// Returns the declaration FROM the read: resolving it separately let a redeclare
-// land between schema and SELECT.
 func (d *Daemon) runDocQuery(q docstore.Query) (store.QueryRead, time.Duration, error) {
 	if d.store == nil {
 		return store.QueryRead{}, 0, fmt.Errorf("no database")
@@ -186,8 +184,6 @@ func (d *Daemon) runDocQuery(q docstore.Query) (store.QueryRead, time.Duration, 
 	return read, time.Since(started), nil
 }
 
-// slowDocFanOut is one 60Hz frame: a live query re-runs per committed write, so
-// its cost is one query times the watching subscriptions.
 const (
 	slowDocQuery  = 50 * time.Millisecond
 	slowDocFanOut = 16 * time.Millisecond
@@ -248,7 +244,6 @@ func undeclaredCollectionError(namespace, collection string) error {
 	return &docstore.UndeclaredCollectionError{Namespace: namespace, Collection: collection}
 }
 
-// Consumers must never match on the English — including here.
 func (d *Daemon) sendDocError(conn net.Conn, err error) {
 	d.sendDocErrorAs(conn, err, docErrorCode(err))
 }
@@ -553,11 +548,7 @@ func docSubscriptionQuery(msg *protocol.DocSubscribeMessage) (docstore.Query, er
 	return q, nil
 }
 
-// MUST never run inside the bus fan-out: a delivery writes a socket and the bus
-// holds its publish lock across that fan-out.
 func (d *Daemon) runDocSubscription(q docstore.Query, have []protocol.DocumentRevision, sink docSink, done <-chan struct{}) {
-	// Registered before the first query: the other order drops a write landing in
-	// between.
 	sub := d.addDocSubscription(q)
 	defer d.removeDocSubscription(sub.id)
 

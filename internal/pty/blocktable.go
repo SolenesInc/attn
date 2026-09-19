@@ -1,8 +1,5 @@
 package pty
 
-// Refs are native memory: every retirement path must free them, and one marker's
-// ref can back two blocks (self-heal), hence the reference counting.
-
 const maxBlocks = 200
 
 type sharedRef struct {
@@ -52,8 +49,6 @@ type trackedBlock struct {
 }
 
 func (b *trackedBlock) release() {
-	// Fields can share a *sharedRef (self-heal); releasing each acquire keeps
-	// the count balanced.
 	for _, r := range []*sharedRef{b.promptRef, b.inputRef, b.outputRef, b.endRef} {
 		if r != nil {
 			r.release()
@@ -61,8 +56,6 @@ func (b *trackedBlock) release() {
 	}
 }
 
-// blockTable's methods all run under replayMu (via blockFeeder), so it holds no
-// lock of its own.
 type blockTable struct {
 	completed []*trackedBlock
 	pending   *trackedBlock
@@ -76,8 +69,6 @@ func newBlockTable() *blockTable {
 func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) {
 	cur := newSharedRef(ref)
 
-	// Self-heal a lost command-end: a new command context while a command already
-	// ran means the previous 133;D never arrived, so close the open block here.
 	if bt.pending != nil && bt.pending.hasCommand &&
 		(m.Kind == osc133PromptStart || m.Kind == osc133InputStart || m.Kind == osc133PreExec) {
 		bt.complete(bt.pending, cur, nil)
@@ -86,8 +77,6 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 
 	switch m.Kind {
 	case osc133PromptStart:
-		// A redrawn prompt replaces the open block; retire the displaced one
-		// or its refs leak.
 		if bt.pending != nil {
 			bt.pending.release()
 		}
@@ -98,7 +87,6 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 		if bt.pending == nil {
 			bt.pending = bt.openPending(cur, altScreen)
 		}
-		// A repeated input-start re-pins; release the ref it replaces.
 		if bt.pending.inputRef != nil {
 			bt.pending.inputRef.release()
 		}
@@ -108,8 +96,6 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 		if bt.pending == nil {
 			bt.pending = bt.openPending(cur, altScreen)
 		}
-		// No release-on-replace guard: a repeated pre-exec always trips
-		// self-heal above and arrives with a fresh pending block.
 		bt.pending.outputRef = cur
 		cur.acquire()
 		bt.pending.command = m.Cmdline
@@ -121,12 +107,10 @@ func (bt *blockTable) ApplyMarker(m osc133Marker, ref blockRef, altScreen bool) 
 		case p != nil && p.hasCommand:
 			bt.complete(p, cur, m.ExitCode)
 		case p != nil:
-			// Bare Enter at the prompt: nothing copyable; free the refs.
 			p.release()
 		}
 	}
 
-	// A marker whose position no block kept must not leak its native ref.
 	cur.freeIfUnheld()
 }
 
@@ -210,8 +194,6 @@ func (bt *blockTable) Restore(blocks []AttachBlockData, pin func(x, y int) block
 			bt.nextID = d.ID + 1
 		}
 		if d.Pending {
-			// At most one block is pending; a later one replaces an earlier,
-			// which must not leak its refs.
 			if bt.pending != nil {
 				bt.pending.release()
 			}
@@ -230,7 +212,6 @@ func pinShared(pin func(x, y int) blockRef, x, y int) *sharedRef {
 	return newSharedRef(ref)
 }
 
-// The table is unusable afterwards.
 func (bt *blockTable) Close() {
 	for _, b := range bt.completed {
 		b.release()
@@ -263,7 +244,6 @@ func (b *trackedBlock) resolve(pending bool) (AttachBlockData, bool) {
 	if !pending {
 		_, y, ok := b.endRef.point()
 		if !ok {
-			// The end position is essential; drop rather than show a wrong row.
 			return AttachBlockData{}, false
 		}
 		row := int32(y)

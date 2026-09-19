@@ -66,8 +66,6 @@ func TestPlacementUpdateDescribesAPlacedImage(t *testing.T) {
 	if got := update.Placements[0].ImageID; got != 40 {
 		t.Errorf("described image id = %d, want 40", got)
 	}
-	// Ghostty reports 0x0 cells until something makes it resolve a placement's
-	// footprint, so assert pixel size, not GridCols/GridRows.
 	if got := update.Placements[0].PixelHeight; got != 32 {
 		t.Errorf("described height = %d px, want the 32 the image was transmitted at", got)
 	}

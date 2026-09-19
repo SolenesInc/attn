@@ -71,7 +71,6 @@ func TestBetweenPropertiesUnderRandomReorders(t *testing.T) {
 	})
 }
 
-// No bound is asserted — repeatedly halving one gap grows the key by design — only the shape.
 func TestBetweenGrowsKeysByAtMostOneDigit(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		lo := rapid.StringOfN(rapid.SampledFrom([]rune(digits)), 0, 8, -1).Draw(t, "lo")

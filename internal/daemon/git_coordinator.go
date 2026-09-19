@@ -136,8 +136,6 @@ func readFileDiff(directory, path, baseRef, headRef string, staged bool) (fileDi
 		content.original = string(origOutput)
 	}
 
-	// When head_ref is set (presentation reader diffs), the modified side is
-	// pinned to that ref instead of the working tree, and staged is ignored.
 	if headRef != "" {
 		headOutput, err := attngit.Output(attngit.OpDiff, directory, "show", headRef+":"+path)
 		if err != nil {

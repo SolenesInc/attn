@@ -168,13 +168,9 @@ func TestOSCColorSetIsNeverAnswered(t *testing.T) {
 	}
 }
 
-// OSC color replies share the PTY master with Session.input on another goroutine, and
-// -race cannot see interleaved writes to an *os.File's fd; assert serialization directly.
 func TestOSCColorReplyWaitsForInFlightInput(t *testing.T) {
 	s, peer := newOSCTestSession(t)
 
-	// One persistent reader: readAvailable/readReplyUntil each leave an uncancellable
-	// goroutine in peer.Read, so a second reader lets the first consume the reply.
 	var bufMu sync.Mutex
 	var buf []byte
 	go func() {
@@ -320,8 +316,6 @@ func TestColorSchemeReportFollowsMode2031(t *testing.T) {
 			themeChanged <- s.SetTheme(TerminalTheme{Background: "#ffffff"})
 		}
 
-		// The reply makes all preceding bytes observable to the child, so DECSET 2031 must
-		// be tracked before the DSR 996 reply is written.
 		if _, err := peer.Write([]byte("\x1b[?2031h\x1b[?996n")); err != nil {
 			t.Fatalf("peer write: %v", err)
 		}

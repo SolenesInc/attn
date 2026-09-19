@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Drafts are tombstone-cleared ONLY after a successful delivery; every other
-// outcome leaves them intact so the user can retry.
 func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol.MarkdownAnnotationsSubmitMessage) {
 	targetSession := strings.TrimSpace(protocol.Deref(msg.TargetSessionID))
 	targetSeed := strings.TrimSpace(protocol.Deref(msg.TargetSeedID))
@@ -101,8 +99,6 @@ func (d *Daemon) handleMarkdownAnnotationsSubmit(client *wsClient, msg *protocol
 		}
 		result.Status = annotationSubmitStatusNoted
 	}
-	// Tombstone at the generation we read so a straggling debounced save is rejected.
-	// A clear failure after delivery still reports success — never risk a duplicate.
 	result.Success = true
 	if err := d.store.ClearMarkdownAnnotationDraft(source.draftKey, draft.Generation, time.Now()); err != nil {
 		verb := result.Status

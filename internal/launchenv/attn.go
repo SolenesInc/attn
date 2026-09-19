@@ -10,7 +10,6 @@ import (
 
 const wrapperPathEnv = "ATTN_WRAPPER_PATH"
 
-// An explicit wrapper is authoritative because it names the active app/profile.
 func ActiveAttnExecutable() string {
 	candidates := make([]string, 0, 4)
 	if wrapperPath := strings.TrimSpace(os.Getenv(wrapperPathEnv)); wrapperPath != "" {

@@ -43,7 +43,6 @@ func (c *Client) CrewSleep(member string) (*protocol.CrewSleepResult, error) {
 	return resp.CrewSleepResult, nil
 }
 
-// awarenessDirs non-nil and empty clears the list, and travels as its own flag because an empty list marshals away.
 func (c *Client) CrewSet(member string, cwd, agent, model *string, awarenessDirs []string) (*protocol.CrewSetResult, error) {
 	msg := protocol.CrewSetMessage{
 		Cmd: protocol.CmdCrewSet, Member: member, Cwd: cwd, Agent: agent, Model: model, AwarenessDirs: awarenessDirs,

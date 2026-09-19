@@ -85,14 +85,11 @@ func TestPrintStateExplainShowsEveryOutcome(t *testing.T) {
 			t.Fatalf("output missing %q:\n%s", want, got)
 		}
 	}
-	// A skip has no claim; the column must not collapse into a blank.
 	if !strings.Contains(got, "-") {
 		t.Fatalf("missing placeholder for the empty claim:\n%s", got)
 	}
 }
 
-// A trace with nothing in it is the answer to "why is it stuck?" too — it says
-// the daemon has seen no evidence at all — so it must not print an empty table.
 func TestPrintStateExplainWithNoObservations(t *testing.T) {
 	var out bytes.Buffer
 	printStateExplain(&out, &protocol.StateExplainResult{

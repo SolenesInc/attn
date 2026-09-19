@@ -41,12 +41,9 @@ func GenerateCodexConfigOverrides(sessionID, socketPath, wrapperPath string, lau
 	stop := command("_hook-stop")
 
 	overrides := []string{
-		// Codex applies its shell environment policy per tool working directory, so values
-		// inherited by the top-level process vanish under a child worktree. Pin them here.
 		"shell_environment_policy.set.ATTN_SESSION_ID=" + strconv.Quote(strings.TrimSpace(sessionID)),
 		"shell_environment_policy.set.ATTN_WRAPPER_PATH=" + strconv.Quote(wrapper),
 		"features.hooks=true",
-		// Reflow enabled: without it a resized inline UI leaves stale headers.
 		"features.terminal_resize_reflow=true",
 		trustedHashOverrides([]codexHookTrustEntry{
 			{eventKey: "session_start", matcher: "startup|resume|clear|compact", command: sessionStart},

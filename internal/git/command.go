@@ -34,7 +34,6 @@ var (
 	timeoutByOp         = map[Operation]time.Duration{}
 )
 
-// SetLogFunc wires git command duration logging into the daemon logger.
 func SetLogFunc(fn func(format string, args ...interface{})) {
 	logMu.Lock()
 	defer logMu.Unlock()

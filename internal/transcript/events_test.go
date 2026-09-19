@@ -310,8 +310,6 @@ func TestReadEventPageExtractsThinking(t *testing.T) {
 	}
 }
 
-// Codex carries readable reasoning only in agent_reasoning; its sibling
-// "reasoning" response_item holds encrypted_content and an empty summary.
 func TestReadEventPageExtractsCodexAgentReasoning(t *testing.T) {
 	path := writeEventTranscript(t,
 		`{"timestamp":"2026-08-07T10:00:00Z","type":"event_msg","payload":{"type":"agent_reasoning","text":"**Preparing workspace and researching CVEs**"}}`,

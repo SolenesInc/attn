@@ -9,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-// Read from the same authority config.ValidateProfileRouting fences on: selecting a profile must clear exactly what the fence refuses.
 var profileRoutingOverrides = config.RoutingOverrideEnv()
 
 func runProfileEnv() {
@@ -50,7 +49,6 @@ func runProfileEnvArgs(args []string) {
 	writeProfileEnv(os.Stdout, arg, fishMode)
 }
 
-// attn-managed sessions inherit the daemon's ATTN_SOCKET_PATH, which otherwise wins over ATTN_PROFILE.
 func writeProfileEnv(w io.Writer, profile string, fishMode bool) {
 	for _, name := range profileRoutingOverrides {
 		if fishMode {

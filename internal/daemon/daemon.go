@@ -98,45 +98,42 @@ const (
 var ErrAlreadyRunning = errors.New("daemon already running")
 
 type Daemon struct {
-	socketPath                  string
-	pidPath                     string
-	pidFile                     *os.File
-	dataRoot                    string
-	daemonInstanceID            string
-	clientToken                 string
-	store                       *store.Store
-	automationMu                sync.Mutex
-	wsAutomationMutationTimeout time.Duration
-	automationObservationMu     sync.Mutex
-	automationObservationLocks  map[string]*sync.Mutex
-	automationRepoMu            sync.Mutex
-	automationRepos             map[string]*sync.Mutex
-	automationDeliveryHook      func(*store.AutomationRun) error
-	wsWriteTimeout              time.Duration
-	wsPingInterval              time.Duration
-	wsPingTimeout               time.Duration
-	listener                    net.Listener
-	httpServer                  *http.Server
-	httpListener                net.Listener
-	httpHandler                 http.Handler
-	diagServer                  *diag.Server
-	wsHub                       *wsHub
-	presentSince                time.Time
-	presenceMu                  sync.RWMutex
-	crewLifecycleState          *crewLifecycleMemo
-	crewMemoOnce                sync.Once
-	done                        chan struct{}
-	logger                      *logging.Logger
-	debugLogging                bool
-	ghRegistry                  *github.ClientRegistry
-	hubManager                  *hub.Manager
-	classifier                  Classifier
-	// What auto mode's repo_visibility slot knows, keyed "host/owner/name".
-	// A launch reads it and never waits on it; see automode_detect.go.
-	repoVisibilityKnown   map[string]string
-	repoVisibilityPending map[string]bool
-	repoVisibilityMu      sync.Mutex
-	// What the last inspect_branch saw, so a verdict is served without waiting on git.
+	socketPath                        string
+	pidPath                           string
+	pidFile                           *os.File
+	dataRoot                          string
+	daemonInstanceID                  string
+	clientToken                       string
+	store                             *store.Store
+	automationMu                      sync.Mutex
+	wsAutomationMutationTimeout       time.Duration
+	automationObservationMu           sync.Mutex
+	automationObservationLocks        map[string]*sync.Mutex
+	automationRepoMu                  sync.Mutex
+	automationRepos                   map[string]*sync.Mutex
+	automationDeliveryHook            func(*store.AutomationRun) error
+	wsWriteTimeout                    time.Duration
+	wsPingInterval                    time.Duration
+	wsPingTimeout                     time.Duration
+	listener                          net.Listener
+	httpServer                        *http.Server
+	httpListener                      net.Listener
+	httpHandler                       http.Handler
+	diagServer                        *diag.Server
+	wsHub                             *wsHub
+	presentSince                      time.Time
+	presenceMu                        sync.RWMutex
+	crewLifecycleState                *crewLifecycleMemo
+	crewMemoOnce                      sync.Once
+	done                              chan struct{}
+	logger                            *logging.Logger
+	debugLogging                      bool
+	ghRegistry                        *github.ClientRegistry
+	hubManager                        *hub.Manager
+	classifier                        Classifier
+	repoVisibilityKnown               map[string]string
+	repoVisibilityPending             map[string]bool
+	repoVisibilityMu                  sync.Mutex
 	branchInspections                 map[string]branchInspection
 	branchInspectionsRunning          map[string]chan struct{}
 	branchInspectionsMu               sync.Mutex
@@ -239,8 +236,7 @@ type Daemon struct {
 	lastInputMu                       sync.Mutex
 	lastUserInputAt                   map[string]time.Time
 	lastAutoSettleActivityAt          map[string]time.Time
-	// Always taken before autoSettleMu; never the other way round.
-	autoSettleFireMu sync.Mutex
+	autoSettleFireMu                  sync.Mutex
 
 	autoSettleMu            sync.Mutex
 	autoSettleTimers        map[string]*autoSettleTimer
@@ -250,34 +246,32 @@ type Daemon struct {
 
 	snoozeMu sync.Mutex
 
-	recoveryMu          sync.RWMutex
-	recovering          bool
-	recoverySettled     chan struct{}
-	notebookMu          sync.Mutex
-	notebookStore       *notebook.Store
-	notebookWatcherMu   sync.Mutex
-	notebookWatcher     *notebook.Watcher
-	notebookWatchedRoot string
-	fsMu                sync.Mutex
-	fsStores            map[string]*fsdoc.Store
-	fsWatchMu           sync.Mutex
-	fsWatchers          map[string]*fsRootWatch
-	pendingInitialWS    map[*wsClient]struct{}
-	startedOnce         sync.Once
-	startedCh           chan struct{}
-	tailscale           *tailscaleRuntime
-	plugins             *pluginRegistry
-	pluginSupervisorMu  sync.Mutex
-	pluginSupervisor    *pluginSupervisor
-	pluginHealthEnabled bool
-	pluginDriverMu      sync.Mutex
-	pluginLaunching     map[string]pluginSessionLaunch
-	pluginReports       map[string][]pendingPluginReport
-	pluginExits         map[string]ptybackend.ExitInfo
-	pluginDir           string
-	bundledPluginDir    string
-	// Derived from the data directory, as the artifact-building CLI does: a
-	// socket relocated by ATTN_SOCKET_PATH would split the two.
+	recoveryMu           sync.RWMutex
+	recovering           bool
+	recoverySettled      chan struct{}
+	notebookMu           sync.Mutex
+	notebookStore        *notebook.Store
+	notebookWatcherMu    sync.Mutex
+	notebookWatcher      *notebook.Watcher
+	notebookWatchedRoot  string
+	fsMu                 sync.Mutex
+	fsStores             map[string]*fsdoc.Store
+	fsWatchMu            sync.Mutex
+	fsWatchers           map[string]*fsRootWatch
+	pendingInitialWS     map[*wsClient]struct{}
+	startedOnce          sync.Once
+	startedCh            chan struct{}
+	tailscale            *tailscaleRuntime
+	plugins              *pluginRegistry
+	pluginSupervisorMu   sync.Mutex
+	pluginSupervisor     *pluginSupervisor
+	pluginHealthEnabled  bool
+	pluginDriverMu       sync.Mutex
+	pluginLaunching      map[string]pluginSessionLaunch
+	pluginReports        map[string][]pendingPluginReport
+	pluginExits          map[string]ptybackend.ExitInfo
+	pluginDir            string
+	bundledPluginDir     string
 	appsDir              string
 	appRuntimeMu         sync.Mutex
 	appRuntimeSupervisor *supervise.Supervisor
@@ -380,8 +374,7 @@ type Daemon struct {
 	conversationUnsubHooks func()
 	sessionPRUnsubHooks    func()
 	sessionPRHosts         func(host string) (sessionPRHost, bool)
-	// Test seam: runs between a lifecycle move's read and its write.
-	beforeSeedMoveWrite func(seedID string)
+	beforeSeedMoveWrite    func(seedID string)
 
 	harvestWhenMu        sync.Mutex
 	harvestWhenUntracked map[string]bool
@@ -394,8 +387,6 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	// Guards the POINTER swap only (startJobQueue replaces the placeholder late
-	// in Start); read via jobQueueRef(), write via setJobQueue().
 	jobQueueMu               sync.RWMutex
 	jobQueue                 *jobs.Runner
 	taskFailureRenderers     map[string]taskFailureRenderer
@@ -795,8 +786,6 @@ func (d *Daemon) Start() error {
 			_ = d.httpServer.Shutdown(ctx)
 			cancel()
 		}
-		// Shutdown closes only listeners the server is already serving, so a
-		// failure between bind and Serve() would leak the port.
 		if d.httpListener != nil {
 			_ = d.httpListener.Close()
 			d.httpListener = nil
@@ -947,8 +936,6 @@ func (d *Daemon) Start() error {
 				useSharedForNew = true
 			}
 		} else if sharedEnabled && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
-			// Tests and controlled profiles can skip the process probe only when
-			// they name the host binary explicitly.
 			useSharedForNew = true
 		}
 		migratingBackend, err := ptybackend.NewMigrating(legacyBackend, sharedBackend, useSharedForNew)
@@ -971,7 +958,6 @@ func (d *Daemon) Start() error {
 		)
 	}
 
-	// A login shell costs ~130ms; the first PTY spawn must not pay it.
 	go d.warmLoginShellEnvCache()
 
 	d.setRecovering(true)
@@ -1368,7 +1354,6 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 			}
 			continue
 		}
-		// A runtime that outlived its close: the ledger row is the verdict, so stop it.
 		if existing == nil && d.store.SessionClosed(sessionID) {
 			d.logf("worker reconciliation stopped runtime %s: its session is closed", sessionID)
 			d.terminateSession(sessionID, syscall.SIGTERM)
@@ -1616,8 +1601,6 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 	}
 }
 
-// Startup recovery dates a session by state_updated_at and runs concurrently with the
-// socket: an unstamped row reads as a leftover of a previous run and is reaped.
 func stampSessionTimestamps(session *protocol.Session, now string) {
 	if strings.TrimSpace(session.StateSince) == "" {
 		session.StateSince = now
@@ -1723,8 +1706,6 @@ func (d *Daemon) doneContext() context.Context {
 }
 
 func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
-	// Skip ALL exit processing: a session_exited here drops the just-respawned
-	// session to a dead pane.
 	if d.consumeReloading(info.ID) {
 		d.logf("suppressing exit for reloading session %s (runtime replaced in place)", info.ID)
 		return false
@@ -1859,8 +1840,6 @@ func (d *Daemon) markSessionTerminationIntent(sessionID string) error {
 }
 
 func (d *Daemon) terminateSessionChecked(sessionID string, sig syscall.Signal) error {
-	// Durable close mark BEFORE the kill: ticket reconcile can run after the
-	// in-memory mark expires and would crash-stamp a user close.
 	if err := d.markSessionTerminationIntent(sessionID); err != nil {
 		return err
 	}
@@ -2065,9 +2044,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.clearClassifyingTurn(sessionID)
 }
 
-// Reaping deletes the row; it is for what a close would not record.
 func (d *Daemon) removeReapedSession(sessionID string) {
-	// A crashed session can leave a checkout newer than the branch monitor's cache.
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
@@ -2097,8 +2074,6 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 	d.forgetPluginDriverSilenceWatch(sessionID)
 }
 
-// Called after the store stopped answering: an observation racing this rebuilds the
-// ring for an id nothing cleans up again.
 func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
@@ -2129,8 +2104,6 @@ func (d *Daemon) handlePTYState(sessionID string, obs pty.Observation) {
 	if session.State != protocol.SessionStateLaunching {
 		reason := "resolver_owned"
 		if driverRun.RunID != "" {
-			// The run record outlives the driver process, so on a restart this replay
-			// routinely beats driver.register. The claim is vetoed either way.
 			reason = "plugin_driver_not_registered"
 		}
 		d.traceStateVeto(sessionID, origin, state, reason)
@@ -2174,8 +2147,6 @@ func (d *Daemon) initHTTPServer() {
 	}
 }
 
-// The bind error is fatal: a daemon owning the unix socket but not the
-// WebSocket port serves two different daemons to the CLI and the app.
 func (d *Daemon) listenHTTP() error {
 	addr := d.httpServer.Addr
 	listener, err := net.Listen("tcp", addr)
@@ -2268,8 +2239,6 @@ func (d *Daemon) refreshGitHubHostsLoop() {
 	}
 }
 
-// ghVersionWarning maps a RequireGHVersion failure to the banner the app shows.
-// Warning keys are part of the daemon/app contract; only the text varies.
 func ghVersionWarning(err error) (string, string) {
 	if errors.Is(err, exec.ErrNotFound) {
 		return warnGHNotInstalled, "GitHub CLI not installed. PR monitoring disabled. " + github.InstallHint()
@@ -2490,8 +2459,6 @@ func (d *Daemon) acquirePIDLock() error {
 	return nil
 }
 
-// Deliberately leaves the PID file on disk: unlinking would let a concurrent flock
-// holder keep an orphaned inode while O_CREATE makes another at the same path.
 func (d *Daemon) releasePIDLock() {
 	if d.pidFile != nil {
 		syscall.Flock(int(d.pidFile.Fd()), syscall.LOCK_UN)
@@ -2503,8 +2470,6 @@ func (d *Daemon) releasePIDLock() {
 func (d *Daemon) handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	// Legacy hook traffic carries no trailing newline: read exactly one top-level JSON
-	// object, leaving pipelined bytes buffered for the line-framed plugin loop.
 	reader := bufio.NewReader(conn)
 	data, err := readInitialSocketFrame(reader, maxInitialSocketFrameBytes)
 	if err != nil {
@@ -2514,7 +2479,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Sniff the app runtime first: the plugin parser claims every JSON-RPC frame.
 	if runtimeHelloID, runtimeParams, runtimeMode, err := parseAppRuntimeHello(data); runtimeMode {
 		if err != nil {
 			_ = json.NewEncoder(conn).Encode(jsonRPCFailure(runtimeHelloID, jsonRPCInvalidRequest, err.Error()))
@@ -2541,277 +2505,275 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
-	case protocol.CmdRegister: // wire: register
+	case protocol.CmdRegister:
 		d.handleRegister(conn, msg.(*protocol.RegisterMessage))
-	case protocol.CmdDelegate: // wire: delegate
+	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
-	// wire: automation_apply, automation_validate, automation_definitions_get, automation_definition_get, automation_run,
-	// automation_runs_get, automation_set_enabled, automation_delete, automation_cleanup
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
 		d.handleAutomationCommand(conn, cmd, msg)
-	case protocol.CmdDelegationRoles: // wire: delegation_roles
+	case protocol.CmdDelegationRoles:
 		d.handleDelegationRoles(conn)
-	case protocol.CmdDelegateStatus: // wire: delegate_status
+	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
-	case protocol.CmdSetTicketStatus: // wire: set_ticket_status
+	case protocol.CmdSetTicketStatus:
 		d.handleSetTicketStatus(conn, msg.(*protocol.SetTicketStatusMessage))
-	case protocol.CmdTicketInbox: // wire: ticket_inbox
+	case protocol.CmdTicketInbox:
 		d.handleTicketInbox(conn, msg.(*protocol.TicketInboxMessage))
-	case protocol.CmdTicketList: // wire: ticket_list
+	case protocol.CmdTicketList:
 		d.handleTicketList(conn, msg.(*protocol.TicketListMessage))
-	case protocol.CmdTicketShow: // wire: ticket_show
+	case protocol.CmdTicketShow:
 		d.handleTicketShow(conn, msg.(*protocol.TicketShowMessage))
-	case protocol.CmdActivityStatus: // wire: activity_status
+	case protocol.CmdActivityStatus:
 		d.handleActivityStatus(conn, msg.(*protocol.ActivityStatusMessage))
-	case protocol.CmdClearSessionActivity: // wire: clear_session_activity
+	case protocol.CmdClearSessionActivity:
 		d.handleClearSessionActivity(conn, msg.(*protocol.ClearSessionActivityMessage))
-	case protocol.CmdTicketSubscribe: // wire: ticket_subscribe
+	case protocol.CmdTicketSubscribe:
 		d.handleTicketSubscribe(conn, msg.(*protocol.TicketSubscribeMessage))
-	case protocol.CmdTicketUnsubscribe: // wire: ticket_unsubscribe
+	case protocol.CmdTicketUnsubscribe:
 		d.handleTicketUnsubscribe(conn, msg.(*protocol.TicketUnsubscribeMessage))
-	case protocol.CmdTicketAttach: // wire: ticket_attach
+	case protocol.CmdTicketAttach:
 		d.handleTicketAttach(conn, msg.(*protocol.TicketAttachMessage))
-	case protocol.CmdDocDefine: // wire: doc_define
+	case protocol.CmdDocDefine:
 		d.handleDocDefine(conn, msg.(*protocol.DocDefineMessage))
-	case protocol.CmdDocUndefine: // wire: doc_undefine
+	case protocol.CmdDocUndefine:
 		d.handleDocUndefine(conn, msg.(*protocol.DocUndefineMessage))
-	case protocol.CmdDocCollections: // wire: doc_collections
+	case protocol.CmdDocCollections:
 		d.handleDocCollections(conn, msg.(*protocol.DocCollectionsMessage))
-	case protocol.CmdDocPut: // wire: doc_put
+	case protocol.CmdDocPut:
 		d.handleDocPut(conn, msg.(*protocol.DocPutMessage))
-	case protocol.CmdDocGet: // wire: doc_get
+	case protocol.CmdDocGet:
 		d.handleDocGet(conn, msg.(*protocol.DocGetMessage))
-	case protocol.CmdDocDelete: // wire: doc_delete
+	case protocol.CmdDocDelete:
 		d.handleDocDelete(conn, msg.(*protocol.DocDeleteMessage))
-	case protocol.CmdDocQuery: // wire: doc_query
+	case protocol.CmdDocQuery:
 		d.handleDocQuery(conn, msg.(*protocol.DocQueryMessage))
-	case protocol.CmdDocCount: // wire: doc_count
+	case protocol.CmdDocCount:
 		d.handleDocCount(conn, msg.(*protocol.DocCountMessage))
-	case protocol.CmdDocSubscribe: // wire: doc_subscribe
+	case protocol.CmdDocSubscribe:
 		d.handleDocSubscribe(conn, msg.(*protocol.DocSubscribeMessage))
-	case protocol.CmdAppList: // wire: app_list
+	case protocol.CmdAppList:
 		d.handleAppList(conn, msg.(*protocol.AppListMessage))
-	case protocol.CmdAppStatus: // wire: app_status
+	case protocol.CmdAppStatus:
 		d.handleAppStatus(conn, msg.(*protocol.AppStatusMessage))
-	case protocol.CmdAppSetEnabled: // wire: app_set_enabled
+	case protocol.CmdAppSetEnabled:
 		d.handleAppSetEnabled(conn, msg.(*protocol.AppSetEnabledMessage))
-	case protocol.CmdAppRemove: // wire: app_remove
+	case protocol.CmdAppRemove:
 		d.handleAppRemove(conn, msg.(*protocol.AppRemoveMessage))
-	case protocol.CmdAppApply: // wire: app_apply
+	case protocol.CmdAppApply:
 		d.handleAppApply(conn, msg.(*protocol.AppApplyMessage))
-	case protocol.CmdAppRollback: // wire: app_rollback
+	case protocol.CmdAppRollback:
 		d.handleAppRollback(conn, msg.(*protocol.AppRollbackMessage))
-	case protocol.CmdAppLogs: // wire: app_logs
+	case protocol.CmdAppLogs:
 		d.handleAppLogs(conn, msg.(*protocol.AppLogsMessage))
-	case protocol.CmdAppRuntimeStatus: // wire: app_runtime_status
+	case protocol.CmdAppRuntimeStatus:
 		d.handleAppRuntimeStatus(conn, msg.(*protocol.AppRuntimeStatusMessage))
-	case protocol.CmdAppRuntimeRestart: // wire: app_runtime_restart
+	case protocol.CmdAppRuntimeRestart:
 		d.handleAppRuntimeRestart(conn, msg.(*protocol.AppRuntimeRestartMessage))
-	case protocol.CmdAppWatch: // wire: app_watch
+	case protocol.CmdAppWatch:
 		d.handleAppWatch(conn, msg.(*protocol.AppWatchMessage))
-	case protocol.CmdAutoModeShow: // wire: automode_show
+	case protocol.CmdAutoModeShow:
 		d.handleAutoModeShow(conn, msg.(*protocol.AutoModeShowMessage))
-	case protocol.CmdAutoModeEnvSlot: // wire: automode_env_slot
+	case protocol.CmdAutoModeEnvSlot:
 		d.handleAutoModeEnvSlot(conn, msg.(*protocol.AutoModeEnvSlotMessage))
-	case protocol.CmdAutoModeEnvNotes: // wire: automode_env_notes
+	case protocol.CmdAutoModeEnvNotes:
 		d.handleAutoModeEnvNotes(conn, msg.(*protocol.AutoModeEnvNotesMessage))
-	case protocol.CmdAutoModePropose: // wire: automode_propose
+	case protocol.CmdAutoModePropose:
 		d.handleAutoModePropose(conn, msg.(*protocol.AutoModeProposeMessage))
-	case protocol.CmdAutoModeDenials: // wire: automode_denials
+	case protocol.CmdAutoModeDenials:
 		d.handleAutoModeDenials(conn, msg.(*protocol.AutoModeDenialsMessage))
-	case protocol.CmdTicketCreate: // wire: ticket_create
+	case protocol.CmdTicketCreate:
 		d.handleTicketCreate(conn, msg.(*protocol.TicketCreateMessage))
-	case protocol.CmdTicketComment: // wire: ticket_comment
+	case protocol.CmdTicketComment:
 		d.handleTicketComment(conn, msg.(*protocol.TicketCommentMessage))
-	case protocol.CmdPresentOpen: // wire: present_open
+	case protocol.CmdPresentOpen:
 		d.handlePresentOpen(conn, msg.(*protocol.PresentOpenMessage))
-	case protocol.CmdPresentFeedback: // wire: present_feedback
+	case protocol.CmdPresentFeedback:
 		d.handlePresentFeedback(conn, msg.(*protocol.PresentFeedbackMessage))
-	case protocol.CmdTicketTake: // wire: ticket_take
+	case protocol.CmdTicketTake:
 		d.handleTicketTake(conn, msg.(*protocol.TicketTakeMessage))
-	case protocol.CmdNotebookGuide: // wire: notebook_guide
+	case protocol.CmdNotebookGuide:
 		d.handleNotebookGuide(conn, msg.(*protocol.NotebookGuideMessage))
-	case protocol.CmdJournalAppend: // wire: journal_append
+	case protocol.CmdJournalAppend:
 		d.handleJournalAppend(conn, msg.(*protocol.JournalAppendMessage))
-	case protocol.CmdUnregister: // wire: unregister
+	case protocol.CmdUnregister:
 		d.handleUnregister(conn, msg.(*protocol.UnregisterMessage))
-	case protocol.CmdState: // wire: state
+	case protocol.CmdState:
 		d.handleState(conn, msg.(*protocol.StateMessage))
-	case protocol.CmdHookNotification: // wire: hook_notification
+	case protocol.CmdHookNotification:
 		d.handleHookNotification(conn, msg.(*protocol.HookNotificationMessage))
-	case protocol.CmdHookStopFailure: // wire: hook_stop_failure
+	case protocol.CmdHookStopFailure:
 		d.handleHookStopFailure(conn, msg.(*protocol.HookStopFailureMessage))
-	case protocol.CmdHookCompaction: // wire: hook_compaction
+	case protocol.CmdHookCompaction:
 		d.handleHookCompaction(conn, msg.(*protocol.HookCompactionMessage))
-	case protocol.CmdSetSessionResumeID: // wire: set_session_resume_id
+	case protocol.CmdSetSessionResumeID:
 		d.handleObserveAgentConversation(conn, msg.(*protocol.SetSessionResumeIDMessage))
-	case protocol.CmdSessionInstructions: // wire: session_instructions
+	case protocol.CmdSessionInstructions:
 		d.handleSessionInstructions(conn, msg.(*protocol.SessionInstructionsMessage))
-	case protocol.CmdSessionTranscript: // wire: session_transcript
+	case protocol.CmdSessionTranscript:
 		d.handleSessionTranscript(conn, msg.(*protocol.SessionTranscriptMessage))
-	case protocol.CmdSessionList: // wire: session_list
+	case protocol.CmdSessionList:
 		d.handleSessionList(conn, msg.(*protocol.SessionListMessage))
-	case protocol.CmdSessionShow: // wire: session_show
+	case protocol.CmdSessionShow:
 		d.handleSessionShow(conn, msg.(*protocol.SessionShowMessage))
-	case protocol.CmdSessionReopen: // wire: session_reopen
+	case protocol.CmdSessionReopen:
 		d.handleSessionReopen(conn, msg.(*protocol.SessionReopenMessage))
-	case protocol.CmdRenameSession: // wire: rename_session
+	case protocol.CmdRenameSession:
 		d.handleRenameSessionConn(conn, msg.(*protocol.RenameSessionMessage))
-	case protocol.CmdStateExplain: // wire: state_explain
+	case protocol.CmdStateExplain:
 		d.handleStateExplain(conn, msg.(*protocol.StateExplainMessage))
-	case protocol.CmdAgentPeek: // wire: agent_peek
+	case protocol.CmdAgentPeek:
 		d.handleAgentPeek(conn, msg.(*protocol.AgentPeekMessage))
 
-	case protocol.CmdAgentMsg: // wire: agent_msg
+	case protocol.CmdAgentMsg:
 		d.handleAgentMsg(conn, msg.(*protocol.AgentMsgMessage))
-	case protocol.CmdAgentClose: // wire: agent_close
+	case protocol.CmdAgentClose:
 		d.handleAgentClose(conn, msg.(*protocol.AgentCloseMessage))
-	case protocol.CmdAgentInbox: // wire: agent_inbox
+	case protocol.CmdAgentInbox:
 		d.handleAgentInbox(conn, msg.(*protocol.AgentInboxMessage))
-	case protocol.CmdAgentMsgStatus: // wire: agent_msg_status
+	case protocol.CmdAgentMsgStatus:
 		d.handleAgentMsgStatus(conn, msg.(*protocol.AgentMsgStatusMessage))
-	case protocol.CmdSeedPlant: // wire: seed_plant
+	case protocol.CmdSeedPlant:
 		d.handleSeedPlant(conn, msg.(*protocol.SeedPlantMessage))
-	case protocol.CmdSeedPlot: // wire: seed_plot
+	case protocol.CmdSeedPlot:
 		d.handleSeedPlot(conn, msg.(*protocol.SeedPlotMessage))
-	case protocol.CmdSeedList: // wire: seed_list
+	case protocol.CmdSeedList:
 		d.handleSeedList(conn, msg.(*protocol.SeedListMessage))
-	case protocol.CmdSeedSearch: // wire: seed_search
+	case protocol.CmdSeedSearch:
 		d.handleSeedSearch(conn, msg.(*protocol.SeedSearchMessage))
-	case protocol.CmdSeedShow: // wire: seed_show
+	case protocol.CmdSeedShow:
 		d.handleSeedShow(conn, msg.(*protocol.SeedShowMessage))
-	case protocol.CmdSeedArtifactTransfer: // wire: seed_artifact_transfer
+	case protocol.CmdSeedArtifactTransfer:
 		d.handleSeedArtifactTransfer(conn, msg.(*protocol.SeedArtifactTransferMessage))
-	case protocol.CmdSeedEdit: // wire: seed_edit
+	case protocol.CmdSeedEdit:
 		d.handleSeedEdit(conn, msg.(*protocol.SeedEditMessage))
-	case protocol.CmdSeedTransition: // wire: seed_transition
+	case protocol.CmdSeedTransition:
 		d.handleSeedTransition(conn, msg.(*protocol.SeedTransitionMessage))
-	case protocol.CmdSeedNote: // wire: seed_note
+	case protocol.CmdSeedNote:
 		d.handleSeedNote(conn, msg.(*protocol.SeedNoteMessage))
-	case protocol.CmdSeedNotes: // wire: seed_notes
+	case protocol.CmdSeedNotes:
 		d.handleSeedNotes(conn, msg.(*protocol.SeedNotesMessage))
-	case protocol.CmdSeedWatch: // wire: seed_watch
+	case protocol.CmdSeedWatch:
 		d.handleSeedWatch(conn, msg.(*protocol.SeedWatchMessage))
-	case protocol.CmdSeedLink: // wire: seed_link
+	case protocol.CmdSeedLink:
 		d.handleSeedLink(conn, msg.(*protocol.SeedLinkMessage))
-	case protocol.CmdSeedReady: // wire: seed_ready
+	case protocol.CmdSeedReady:
 		d.handleSeedReady(conn, msg.(*protocol.SeedReadyMessage))
-	case protocol.CmdSeedReviewStart: // wire: seed_review_start
+	case protocol.CmdSeedReviewStart:
 		d.handleSeedReviewStart(conn, msg.(*protocol.SeedReviewStartMessage))
-	case protocol.CmdSeedSendToChief: // wire: seed_send_to_chief
+	case protocol.CmdSeedSendToChief:
 		d.handleSeedSendToChief(conn, msg.(*protocol.SeedSendToChiefMessage))
-	case protocol.CmdSeedReviewShow: // wire: seed_review_show
+	case protocol.CmdSeedReviewShow:
 		d.handleSeedReviewShow(conn, msg.(*protocol.SeedReviewShowMessage))
-	case protocol.CmdSeedReviewCancel: // wire: seed_review_cancel
+	case protocol.CmdSeedReviewCancel:
 		d.handleSeedReviewCancel(conn, msg.(*protocol.SeedReviewCancelMessage))
-	case protocol.CmdSeedReviewRetry: // wire: seed_review_retry
+	case protocol.CmdSeedReviewRetry:
 		d.handleSeedReviewRetry(conn, msg.(*protocol.SeedReviewRetryMessage))
-	case protocol.CmdSeedReviewKeep: // wire: seed_review_keep
+	case protocol.CmdSeedReviewKeep:
 		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
-	case protocol.CmdCrewList: // wire: crew_list
+	case protocol.CmdCrewList:
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
-	case protocol.CmdCrewWake: // wire: crew_wake
+	case protocol.CmdCrewWake:
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
-	case protocol.CmdCrewSleep: // wire: crew_sleep
+	case protocol.CmdCrewSleep:
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
-	case protocol.CmdCrewSet: // wire: crew_set
+	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
-	case protocol.CmdCrewPrime: // wire: crew_prime
+	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
-	case protocol.CmdCrewHandoff: // wire: crew_handoff
+	case protocol.CmdCrewHandoff:
 		d.handleCrewHandoff(conn, msg.(*protocol.CrewHandoffMessage))
-	case protocol.CmdStop: // wire: stop
+	case protocol.CmdStop:
 		d.handleStop(conn, msg.(*protocol.StopMessage))
-	case protocol.CmdTodos: // wire: todos
+	case protocol.CmdTodos:
 		d.handleTodos(conn, msg.(*protocol.TodosMessage))
-	case protocol.CmdFilesEdited: // wire: files_edited
+	case protocol.CmdFilesEdited:
 		d.handleFilesEdited(conn, msg.(*protocol.FilesEditedMessage))
-	case protocol.CmdPullRequestCreated: // wire: pull_request_created
+	case protocol.CmdPullRequestCreated:
 		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
-	case protocol.CmdPullRequestForget: // wire: pull_request_forget
+	case protocol.CmdPullRequestForget:
 		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
-	case protocol.CmdWorkflowRunUpsert: // wire: workflow_run_upsert
+	case protocol.CmdWorkflowRunUpsert:
 		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
-	case protocol.CmdWorkflowCallUpsert: // wire: workflow_call_upsert
+	case protocol.CmdWorkflowCallUpsert:
 		d.handleWorkflowCallUpsert(conn, msg.(*protocol.WorkflowCallUpsertMessage))
-	case protocol.CmdWorkflowRunGet: // wire: workflow_run_get
+	case protocol.CmdWorkflowRunGet:
 		d.handleWorkflowRunGet(conn, msg.(*protocol.WorkflowRunGetMessage))
-	case protocol.CmdWorkflowRunList: // wire: workflow_run_list
+	case protocol.CmdWorkflowRunList:
 		d.handleWorkflowRunList(conn, msg.(*protocol.WorkflowRunListMessage))
-	case protocol.CmdWorkflowRunCancel: // wire: workflow_run_cancel
+	case protocol.CmdWorkflowRunCancel:
 		d.handleWorkflowRunCancel(conn, msg.(*protocol.WorkflowRunCancelMessage))
-	case protocol.CmdQuery: // wire: query
+	case protocol.CmdQuery:
 		d.handleQuery(conn, msg.(*protocol.QueryMessage))
-	case protocol.CmdHeartbeat: // wire: heartbeat
+	case protocol.CmdHeartbeat:
 		d.handleHeartbeat(conn, msg.(*protocol.HeartbeatMessage))
-	case protocol.CmdQueryPRs: // wire: query_prs
+	case protocol.CmdQueryPRs:
 		d.handleQueryPRs(conn, msg.(*protocol.QueryPRsMessage))
-	case protocol.CmdMutePR: // wire: mute_pr
+	case protocol.CmdMutePR:
 		d.handleMutePR(conn, msg.(*protocol.MutePRMessage))
-	case protocol.CmdMuteRepo: // wire: mute_repo
+	case protocol.CmdMuteRepo:
 		d.handleMuteRepo(conn, msg.(*protocol.MuteRepoMessage))
-	case protocol.CmdMuteWorkspace: // wire: mute_workspace
+	case protocol.CmdMuteWorkspace:
 		if _, errMsg := d.toggleWorkspaceMute(msg.(*protocol.MuteWorkspaceMessage).WorkspaceID); errMsg != "" {
 			d.sendError(conn, errMsg)
 			return
 		}
 		d.sendOK(conn)
-	case protocol.CmdPinWorkspace: // wire: pin_workspace
+	case protocol.CmdPinWorkspace:
 		m := msg.(*protocol.PinWorkspaceMessage)
 		if _, errMsg := d.setWorkspacePinned(m.WorkspaceID, m.Pinned); errMsg != "" {
 			d.sendError(conn, errMsg)
 			return
 		}
 		d.sendOK(conn)
-	case protocol.CmdPinSession: // wire: pin_session
+	case protocol.CmdPinSession:
 		m := msg.(*protocol.PinSessionMessage)
 		if errMsg := d.setSessionPinned(m.SessionID, m.Pinned); errMsg != "" {
 			d.sendError(conn, errMsg)
 			return
 		}
 		d.sendOK(conn)
-	case protocol.CmdSetSessionContextWindowCap: // wire: set_session_context_window_cap
+	case protocol.CmdSetSessionContextWindowCap:
 		m := msg.(*protocol.SetSessionContextWindowCapMessage)
 		if err := d.setSessionContextWindowCap(m.SessionID, m.Cap); err != nil {
 			d.sendError(conn, err.Error())
 			return
 		}
 		d.sendOK(conn)
-	case protocol.CmdCollapseRepo: // wire: collapse_repo
+	case protocol.CmdCollapseRepo:
 		d.handleCollapseRepo(conn, msg.(*protocol.CollapseRepoMessage))
-	case protocol.CmdQueryRepos: // wire: query_repos
+	case protocol.CmdQueryRepos:
 		d.handleQueryRepos(conn, msg.(*protocol.QueryReposMessage))
-	case protocol.CmdQueryAuthors: // wire: query_authors
+	case protocol.CmdQueryAuthors:
 		d.handleQueryAuthors(conn, msg.(*protocol.QueryAuthorsMessage))
-	case protocol.CmdFetchPRDetails: // wire: fetch_pr_details
+	case protocol.CmdFetchPRDetails:
 		d.handleFetchPRDetails(conn, msg.(*protocol.FetchPRDetailsMessage))
-	case protocol.CmdInjectTestPR: // wire: inject_test_pr
+	case protocol.CmdInjectTestPR:
 		d.handleInjectTestPR(conn, msg.(*protocol.InjectTestPRMessage))
-	case protocol.CmdInjectTestSession: // wire: inject_test_session
+	case protocol.CmdInjectTestSession:
 		d.handleInjectTestSession(conn, msg.(*protocol.InjectTestSessionMessage))
-	case protocol.CmdOpenMarkdown: // wire: open_markdown
+	case protocol.CmdOpenMarkdown:
 		d.handleOpenMarkdown(conn, msg.(*protocol.OpenMarkdownMessage))
-	case protocol.CmdOpenSeed: // wire: open_seed
+	case protocol.CmdOpenSeed:
 		d.handleOpenSeed(conn, msg.(*protocol.OpenSeedMessage))
-	case protocol.CmdOpenSentFiles: // wire: open_sent_files
+	case protocol.CmdOpenSentFiles:
 		d.handleOpenSentFiles(conn, msg.(*protocol.OpenSentFilesMessage))
-	case protocol.CmdOpenBrowser: // wire: open_browser
+	case protocol.CmdOpenBrowser:
 		d.handleOpenBrowser(conn, msg.(*protocol.OpenBrowserMessage))
-	case protocol.CmdBrowserControl: // wire: browser_control
+	case protocol.CmdBrowserControl:
 		d.handleBrowserControl(conn, msg.(*protocol.BrowserControlMessage))
-	case protocol.CmdListWorktrees: // wire: list_worktrees
+	case protocol.CmdListWorktrees:
 		d.handleListWorktrees(conn, msg.(*protocol.ListWorktreesMessage))
-	case protocol.CmdCreateWorktree: // wire: create_worktree
+	case protocol.CmdCreateWorktree:
 		d.handleCreateWorktree(conn, msg.(*protocol.CreateWorktreeMessage))
-	case protocol.CmdDeleteWorktree: // wire: delete_worktree
+	case protocol.CmdDeleteWorktree:
 		d.handleDeleteWorktree(conn, msg.(*protocol.DeleteWorktreeMessage))
-	case protocol.CmdWorktreeList: // wire: worktree_list
+	case protocol.CmdWorktreeList:
 		d.handleWorktreeList(conn, msg.(*protocol.WorktreeListMessage))
-	case protocol.CmdWorktreeKeep: // wire: worktree_keep
+	case protocol.CmdWorktreeKeep:
 		d.handleWorktreeKeep(conn, msg.(*protocol.WorktreeKeepMessage))
-	case protocol.CmdWorktreeSweepLog: // wire: worktree_sweep_log
+	case protocol.CmdWorktreeSweepLog:
 		d.handleWorktreeSweepLog(conn, msg.(*protocol.WorktreeSweepLogMessage))
-	case protocol.CmdWorktreeRefresh: // wire: worktree_refresh
+	case protocol.CmdWorktreeRefresh:
 		d.handleWorktreeRefresh(conn, msg.(*protocol.WorktreeRefreshMessage))
 	default:
 		d.sendError(conn, "unknown command")

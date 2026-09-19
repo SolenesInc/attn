@@ -21,8 +21,6 @@ func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
 	}
 }
 
-// Claude resumes via `claude -r <id>`, which needs a transcript on disk. It is written
-// lazily on the first turn, so resumability == transcript existence.
 func TestClaudeResumeAvailable(t *testing.T) {
 	claude := &Claude{}
 

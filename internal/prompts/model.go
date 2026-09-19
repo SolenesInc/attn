@@ -1,4 +1,3 @@
-// Package prompts describes prompt composition as data shared by rendering and inspection.
 package prompts
 
 import (
@@ -136,7 +135,6 @@ type Catalog struct {
 
 var placeholder = regexp.MustCompile(`\{\{([a-zA-Z][a-zA-Z0-9_]*)\}\}`)
 
-// New validates all branches, including ones that the current scenario would skip.
 func New(files fs.FS, recipients ...Recipient) (*Catalog, error) {
 	c := &Catalog{recipients: cloneRecipients(recipients), templates: map[string]string{}}
 	ids := map[string]string{}

@@ -38,7 +38,6 @@ func TestStart_ServesLoopbackPprofAndVars(t *testing.T) {
 	}
 	base := "http://" + srv.Addr()
 
-	// /debug/vars returns the daemon snapshot merged with runtime heap stats.
 	resp, body := get(t, base+"/debug/vars")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("/debug/vars status = %d", resp.StatusCode)
@@ -66,7 +65,6 @@ func TestStart_ServesLoopbackPprofAndVars(t *testing.T) {
 		}
 	}
 
-	// pprof index and a concrete profile both serve.
 	if resp, _ := get(t, base+"/debug/pprof/"); resp.StatusCode != http.StatusOK {
 		t.Errorf("/debug/pprof/ status = %d", resp.StatusCode)
 	}

@@ -5,9 +5,6 @@ import (
 	"fmt"
 )
 
-// claude 2.1.217 runs full-screen: alt-screen, mouse tracking, bracketed paste,
-// and relative CSI moves. See testdata/agent-vocab-claude.json.
-
 var claudeMouseModes = []string{"1000", "1002", "1003", "1006"}
 
 func decsc() []byte { return []byte{0x1b, '7'} }

@@ -19,8 +19,6 @@ func registerRankWorkspace(t *testing.T, d *Daemon, client *wsClient, id, dir st
 	})
 }
 
-// prevID ends up ABOVE the moved workspace, nextID BELOW it; an empty id means
-// top/bottom.
 func sendSetWorkspaceRank(t *testing.T, d *Daemon, client *wsClient, workspaceID, prevID, nextID string) {
 	t.Helper()
 	msg := &protocol.SetWorkspaceRankMessage{

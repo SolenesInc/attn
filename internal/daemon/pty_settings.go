@@ -9,7 +9,6 @@ import (
 )
 
 func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
-	// Serialize probe, persistence and selection without holding any PTY IO lock.
 	d.ptySettingsChangeMu.Lock()
 	defer d.ptySettingsChangeMu.Unlock()
 	backend, ok := d.ptyBackend.(*ptybackend.MigratingBackend)

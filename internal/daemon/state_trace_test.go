@@ -151,7 +151,6 @@ func TestTraceIsDroppedWhenTheSessionRecordGoes(t *testing.T) {
 	}
 }
 
-// The removal blocks on the recorder's lock, and a synctest bubble cannot observe a goroutine waiting for a mutex.
 func TestTraceDoesNotLeakWhenRemovalRacesTheWrite(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-racing"
@@ -338,7 +337,6 @@ func callHandler(t *testing.T, call func(net.Conn)) protocol.Response {
 	return resp
 }
 
-// The Notification hook lands ~6s late, so it is evidence and must not move the session.
 func TestTraceRecordsTheNotificationHookAsEvidence(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-hook-notify"

@@ -321,7 +321,6 @@ func (d *Daemon) goneBranchVerdict(verdict *sessionReopenVerdict, gone, branch s
 	return state, gone + "; " + tail
 }
 
-// The pull request record only; ancestry checks belong to the worktree sweep.
 func (d *Daemon) branchMerged(sessionID, branch string) bool {
 	if branch == "" {
 		return false
@@ -342,8 +341,6 @@ func (d *Daemon) reopenConversation(execution garden.Dispatch) (bool, string) {
 	return d.conversationResumable(strings.TrimSpace(execution.Agent), resumeID)
 }
 
-// A plugin driver answers by capability: the daemon cannot see its storage, and
-// the pi driver opens the id or recreates it rather than failing.
 func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string) {
 	if plugin, ok := d.ensurePluginRegistry().driver(agentName); ok {
 		if !plugin.Capabilities["resume"] {
@@ -391,7 +388,6 @@ func branchInspectionKey(repo, branch string) string {
 	return attngit.CanonicalizePath(repo) + "\x00" + strings.TrimSpace(branch)
 }
 
-// At most one inspect_branch per repository and branch; the channel closes when it lands.
 func (d *Daemon) inspectBranchInBackground(sessionID, repo, branch string) <-chan struct{} {
 	key := branchInspectionKey(repo, branch)
 	d.branchInspectionsMu.Lock()
@@ -478,7 +474,6 @@ func inspectBranch(repo, branch string) (branchInspection, error) {
 			}
 		}
 	}
-	// Observe, do not list: listing prunes, and a verdict must not write to the repository.
 	worktrees, err := attngit.ObserveWorktrees(repo)
 	if err != nil {
 		return branchInspection{}, fmt.Errorf("read worktrees of %s: %w", repo, err)
@@ -542,7 +537,6 @@ func (d *Daemon) reopenSessionForeground(
 	if action == "" {
 		action = protocol.SessionReopenActionReopen
 	}
-	// An explicit ask waits for an in-flight branch check rather than losing to a stale verdict.
 	if verdict.Checking && !verdict.offers(action) {
 		<-d.inspectBranchInBackground(sessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
 		verdict, found = d.reopenVerdict(sessionID)
@@ -628,7 +622,6 @@ func (d *Daemon) performReopen(
 	}, nil
 }
 
-// The session may have run in a subdirectory of its worktree; put that path back too.
 func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) string {
 	subdir := strings.TrimSpace(execution.RepositorySubdir)
 	if subdir == "" || subdir == "." {
@@ -641,7 +634,6 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) s
 	return worktree
 }
 
-// The only repository write in reopen, and it happens because an action named it.
 func (d *Daemon) recreateReopenWorktree(
 	verdict *sessionReopenVerdict, action protocol.SessionReopenAction,
 ) (string, error) {
@@ -650,7 +642,6 @@ func (d *Daemon) recreateReopenWorktree(
 	path := verdict.RecreatePath
 	defer d.forgetBranchInspections(repo)
 
-	// git refuses to put the worktree back while the deleted directory's registration stands.
 	if inspection, known := d.branchInspection(verdict.SessionID, repo, branch); known && inspection.StaleRegistration {
 		if err := attngit.PruneWorktrees(repo); err != nil {
 			return "", fmt.Errorf("clear the stale worktree registration in %s: %w", repo, err)
@@ -758,7 +749,6 @@ func (d *Daemon) reopenSessionRuntime(
 	d.waitForSessionTeardown(plan.SessionID)
 	d.store.ClearSessionIntentionalClose(plan.SessionID)
 
-	// The store refuses a spawn that would re-register a closed row.
 	lifted, reopened, err := d.store.ReopenSession(plan.SessionID)
 	if err != nil {
 		return fail(err)
@@ -767,8 +757,6 @@ func (d *Daemon) reopenSessionRuntime(
 		rollback.onSessionReopened(plan.SessionID, lifted)
 	}
 
-	// The spawn falls back to the binding the closed run left behind, so starting
-	// fresh means forgetting it here rather than leaving the resume out of the spawn.
 	if plan.FreshConversation {
 		prior := d.store.GetSessionConversation(plan.SessionID)
 		d.store.SetResumeSessionID(plan.SessionID, "")
@@ -776,8 +764,6 @@ func (d *Daemon) reopenSessionRuntime(
 		rollback.onConversationForgotten(plan.SessionID, prior)
 	}
 
-	// Unregister on rollback only if this call created the workspace — a re-register is
-	// idempotent and preserves a stored rename (handleRegisterWorkspace's title guard).
 	if d.store.GetWorkspace(workspaceID) == nil {
 		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 			Cmd:       protocol.CmdRegisterWorkspace,
@@ -791,8 +777,6 @@ func (d *Daemon) reopenSessionRuntime(
 		rollback.onWorkspaceCreated(workspaceID)
 	}
 
-	// The add returns a pane the session already holds without touching the layout,
-	// so the rollback follows its receipt rather than a guess taken before it.
 	_, paneCreated, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID: workspaceID,

@@ -2,9 +2,6 @@
 
 package pty
 
-// Clients resize without reflow (app/src/utils/ghosttyResize.ts); a worker that
-// reflowed would re-wrap history and move every row-indexed mapping on the wire.
-
 import (
 	"fmt"
 	"strings"
@@ -64,7 +61,6 @@ func framesAgree(t *testing.T, worker, control *ghosttyvt.Terminal, when string)
 	}
 }
 
-// Long enough to wrap at every width used below.
 const wrappingPrompt = "~/projects/victor/attn/worktrees/a4-reflow $ echo hello wrapped world"
 
 func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
@@ -77,9 +73,7 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 		cols, rows     uint16
 		toCols, toRows uint16
 		chunks         []string
-		// With DECAWM already off ghostty does not reflow, and writing it back
-		// on would enable what the program disabled.
-		wraparoundOff bool
+		wraparoundOff  bool
 	}{
 		{
 			name: "widening with wrapped history",
@@ -137,8 +131,6 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 			}
 			framesAgree(t, worker, control, fmt.Sprintf("after resizing to %dx%d", tc.toCols, tc.toRows))
 
-			// The worker's toggle must leave DECAWM as the program left it, or
-			// this line wraps on one grid and overwrites on the other.
 			after := strings.Repeat("z", int(tc.toCols)+7) + "\r\nend"
 			worker.Write([]byte(after))
 			control.Write([]byte(after))
@@ -147,8 +139,6 @@ func TestSessionResizeKeepsTheWorkerFrameEqualToAClientFrame(t *testing.T) {
 	}
 }
 
-// The client draws an image at `scrollbackLength + viewport_row`, so that sum
-// must not move across a resize.
 func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping real PTY spawn in short mode")
@@ -157,8 +147,6 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 
 	const placedMarker = "PLACED"
 	const scrolledMarker = "SCROLLED"
-	// `q=2`: ghostty answers a transmission on the program's own stdin, and an
-	// unsuppressed OK eats the read this handshake is built on.
 	spawn := newKittySpawnCmd(t, "resize-mapping",
 		wrappingPrompt+"\r\n"+kittyPlaceRGB(94, 16, 32, ",q=2")+placedMarker,
 		"read release; cat %s; read scroll; seq 1 20; echo "+scrolledMarker+"; read hold")
@@ -180,8 +168,6 @@ func TestResizeKeepsAPlacementsBufferRow(t *testing.T) {
 
 	placed := bufferRow("once the image is on the grid")
 
-	// 40 -> 24 columns: the 69-char prompt is two rows at 40 and three at 24, so
-	// a reflow inserts a row above the image.
 	if _, err := spawn.manager.Resize(spawn.id, 24, 12, 0, 0); err != nil {
 		t.Fatalf("Resize() error: %v", err)
 	}

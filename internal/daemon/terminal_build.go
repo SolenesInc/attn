@@ -10,12 +10,8 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-// terminalUpgradeTimeout is a tripwire: the swap measures ~10ms end to end, so
-// anything near this is a worker that stopped answering.
 const terminalUpgradeTimeout = 30 * time.Second
 
-// inplaceUpgradeEnvVar turns the swap off. Past the capture the worker has no way back, so
-// the escape hatch has to be an env var and a daemon restart, not a release.
 const inplaceUpgradeEnvVar = "ATTN_WORKER_INPLACE_UPGRADE"
 
 func inplaceUpgradeEnabled() bool {
@@ -32,8 +28,6 @@ func (d *Daemon) handleTerminalBuildChanged(sessionID, workerFormat string) {
 		d.publishFact(FactSessionTerminalBuildChanged, sessionID, nil)
 		return
 	}
-	// A daemon start handshakes the same worker more than once (recovery probe, lifecycle
-	// watch). Without this claim both upgrade, and the loser publishes a stale flag.
 	if !d.claimWorkerUpgrade(sessionID) {
 		return
 	}
@@ -62,8 +56,6 @@ func (d *Daemon) releaseWorkerUpgrade(sessionID string) {
 }
 
 func (d *Daemon) upgradeStaleWorker(sessionID string, upgrader ptybackend.WorkerUpgrader) {
-	// Released after the upgrade's own re-handshake has been through
-	// handleTerminalBuildChanged, so the claim covers the whole round trip.
 	defer d.releaseWorkerUpgrade(sessionID)
 	ctx, cancel := context.WithTimeout(context.Background(), terminalUpgradeTimeout)
 	defer cancel()
@@ -86,8 +78,6 @@ func (d *Daemon) decorateSessionWithTerminalBuild(clone *protocol.Session) {
 		return
 	}
 	format, known := provider.SessionTerminalBuild(clone.ID)
-	// An unknown answer is not a verdict; an empty format is one — a worker built
-	// before the field existed is exactly what the next bump strands.
 	if known && format != buildinfo.SnapshotFormat && !d.sessionCanReplayTerminalBuild(clone.ID) {
 		clone.TerminalBuildStale = protocol.Ptr(true)
 	}

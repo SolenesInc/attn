@@ -2,9 +2,6 @@
 
 package ghosttyvt
 
-// Pixel answers are the grid times the cell size: a placeholder made chafa assume
-// an 8 x 11.4 px cell against a real 9 x 22.6 px one. XTWINOPS is unanswered.
-
 import (
 	"fmt"
 	"strings"
@@ -23,7 +20,6 @@ func TestSetCellPixelSizeReportsTheNewPixelSizeImmediately(t *testing.T) {
 	term.Write([]byte("a line of text, so the grid is not empty when the cell moves\r\n"))
 	enableSizeReports(t, term)
 
-	// A real cell measured on a 2x display: 9 x 22.6 CSS px, rounded and doubled.
 	const cellW, cellH = 18, 45
 	term.SetCellPixelSize(cellW, cellH)
 
@@ -64,8 +60,6 @@ func TestSetCellPixelSizeIgnoresNonPositiveAndUnchangedGeometry(t *testing.T) {
 }
 
 func TestNewTerminalReportsFromThePlaceholderCellUntilOneIsSet(t *testing.T) {
-	// The placeholder is deliberate: a terminal reporting a zero pixel size would
-	// make an emitter divide by zero.
 	term := newT(t, 10, 4)
 	enableSizeReports(t, term)
 	term.Resize(10, 5)

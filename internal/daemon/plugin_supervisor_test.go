@@ -133,8 +133,6 @@ func newTestPluginSupervisor(t *testing.T, clock *fakePluginClock, launcher *fak
 	supervisor := newPluginSupervisor(launcher, clock, func(manifest pluginManifest, generation uint64) []string {
 		return []string{fmt.Sprintf("ATTN_PLUGIN_NAME=%s", manifest.Name), fmt.Sprintf("ATTN_PLUGIN_GENERATION=%d", generation)}
 	}, supervise.Options{})
-	// Load-bearing inside a bubble: every supervised plugin owns a goroutine parked
-	// on its process handle's exit channel, and one still parked blocks the bubble.
 	t.Cleanup(supervisor.Shutdown)
 	return supervisor
 }

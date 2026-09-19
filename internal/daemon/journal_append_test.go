@@ -11,8 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// callJournalAppend waits for the handler to fully return before the caller
-// inspects any daemon-side side effect.
 func callJournalAppend(t *testing.T, d *Daemon, msg *protocol.JournalAppendMessage) protocol.Response {
 	t.Helper()
 	server, clientConn := net.Pipe()

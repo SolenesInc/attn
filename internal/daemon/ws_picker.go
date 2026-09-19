@@ -147,8 +147,6 @@ func inspectPickerPath(input string) (*protocol.PathInspection, error) {
 }
 
 func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseDirectoryMessage) {
-	// File names are the user's documents, so a request asking for them needs the same gate
-	// every fs_* command applies to an arbitrary root (see resolveFsRoot).
 	if len(msg.Extensions) > 0 && !client.isTrustedAppClient() {
 		d.sendToClient(client, &protocol.BrowseDirectoryResultMessage{
 			Event:      protocol.EventBrowseDirectoryResult,

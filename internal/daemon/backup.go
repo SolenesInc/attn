@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// Read off the daemon instance rather than the global config so daemon tests,
-// whose dataRoot is a throwaway temp dir, never write into the real ~/.attn.
 func (d *Daemon) backupDir() string {
 	return filepath.Join(d.dataRoot, "backups")
 }
@@ -36,8 +34,6 @@ func (d *Daemon) startPermanentMaintenance() {
 	go d.runAutomationTicketRetentionSweep()
 }
 
-// Recovers from a panic in the store backup path so a corrupt or wedged database
-// cannot take the daemon down with it.
 func (d *Daemon) performDatabaseBackup() {
 	defer func() {
 		if r := recover(); r != nil {

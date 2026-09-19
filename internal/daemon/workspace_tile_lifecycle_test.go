@@ -144,7 +144,6 @@ func TestTileOnlyWorkspaceSurvivesStartupReap(t *testing.T) {
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
 	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
 
-	// A daemon restart: drop the in-memory registry and rebuild it from the store.
 	d.workspaces = newWorkspaceRegistry()
 	d.loadWorkspacesFromStore()
 

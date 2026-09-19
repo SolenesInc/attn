@@ -158,8 +158,6 @@ func (d *Daemon) armHarvestWhenMerged(
 		seedID, attempts, seedID)
 }
 
-// The refresh may have settled the pull request between the check above and the
-// arm commit; a merged row then leaves the open set and no tick looks at it again.
 func (d *Daemon) settleFreshlyArmed(
 	seed garden.Seed, written docstore.Document, sessionID string,
 ) (garden.Seed, docstore.Document, error) {
@@ -181,8 +179,6 @@ func (d *Daemon) settleFreshlyArmed(
 	return seed, written, nil
 }
 
-// The same pull request set at the same time: a re-arm on the same pull request
-// is a new promise, and an ordinary edit in between is not.
 func sameHarvestCondition(current, observed *garden.HarvestCondition) bool {
 	return current != nil && observed != nil &&
 		current.PullRequest == observed.PullRequest && current.SetAt == observed.SetAt
@@ -203,7 +199,6 @@ func (d *Daemon) observedHarvestCondition(seedID string, observed *garden.Harves
 	return seed, doc, nil
 }
 
-// observed pins the harvest to that condition; nil harvests whatever is armed now.
 func (d *Daemon) fulfilHarvestWhen(
 	seed garden.Seed, rec store.SessionPullRequestRecord, observed *garden.HarvestCondition, excludedSessions ...string,
 ) (garden.Seed, docstore.Document, error) {
@@ -241,7 +236,6 @@ func (d *Daemon) fulfilHarvestWhen(
 	return harvested, doc, nil
 }
 
-// observed pins the clear to that condition; nil clears whatever is armed now.
 func (d *Daemon) clearHarvestWhen(
 	seedID string, observed *garden.HarvestCondition, noteBody string, actor garden.Tender, causedBy ...string,
 ) (garden.Seed, docstore.Document, error) {

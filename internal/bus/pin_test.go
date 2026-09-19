@@ -228,8 +228,6 @@ func TestPinAlarmAgeFromEnv(t *testing.T) {
 		{raw: "", want: DefaultPinAlarmAge},
 		{raw: "90s", want: 90 * time.Second, says: "retention-pin alarm set to 1m30s"},
 		{raw: "2h", want: 2 * time.Hour, says: "retention-pin alarm set to 2h"},
-		// Off, and negative rather than zero: zero reads as "unset" inside New and
-		// would quietly restore the default the user just turned off.
 		{raw: "0", want: -1, says: "the retention-pin alarm is off"},
 		{raw: "-5m", want: -1, says: "the retention-pin alarm is off"},
 		{raw: "soon", want: DefaultPinAlarmAge, says: "is not a duration"},

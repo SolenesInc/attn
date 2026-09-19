@@ -127,8 +127,6 @@ func (d *Daemon) doCreateWorktreeForeground(msg *protocol.CreateWorktreeMessage)
 		return providerPath, nil
 	}
 
-	// The remote prefix is checked against the configured remotes, so a local branch
-	// containing "/" is not mistaken for one.
 	if remote, branch, ok := strings.Cut(startingFrom, "/"); ok {
 		if remotes, rerr := git.ListRemotes(mainRepo); rerr == nil && slices.Contains(remotes, remote) {
 			if ferr := git.FetchRemoteBranch(mainRepo, remote, branch); ferr != nil {
@@ -136,8 +134,6 @@ func (d *Daemon) doCreateWorktreeForeground(msg *protocol.CreateWorktreeMessage)
 			}
 		}
 	}
-	// An unresolvable start ref falls back to the repo current HEAD so creation
-	// succeeds instead of erroring.
 	if startingFrom != "" && !git.RefExists(mainRepo, startingFrom) {
 		d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
 		startingFrom = ""
@@ -250,7 +246,6 @@ func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opt
 		wt = d.discoverWorktree(path)
 		if wt == nil {
 			if _, err := os.Stat(path); os.IsNotExist(err) {
-				// Nothing to delete, but still publish so the UI removes it.
 				d.logf("Worktree %s doesn't exist and not in registry, treating as already deleted", path)
 				d.publishFact(FactWorktreeDeleted, path, nil)
 				d.cleanupDeletedWorktreeSessions(path)
@@ -263,11 +258,8 @@ func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opt
 		}
 	}
 
-	// Git is the only authoritative source for the branch and repository while a
-	// worktree still exists. Preserve it before a provider or Git removes the path.
 	d.captureGardenExecutionsInDirectory(path)
 
-	// Read before the row goes: nothing afterwards can say which seeds worked here.
 	seeds := d.seedsForWorktree(wt)
 
 	branch := wt.Branch
@@ -318,7 +310,6 @@ func (d *Daemon) finalizeDeletedWorktree(path, mainRepo, branch string) {
 	d.cleanupDeletedWorktreeSessions(path)
 	d.store.RemoveWorktree(path)
 
-	// force=true: the worktree is already gone.
 	if branch != "" {
 		if d.gardenKeepsBranch(mainRepo, branch) {
 			d.logf("Preserved branch %s because an open seed can continue from it", branch)
@@ -399,8 +390,6 @@ func (e *worktreeNotFoundError) Error() string {
 
 func (d *Daemon) handleListWorktrees(conn net.Conn, msg *protocol.ListWorktreesMessage) {
 	protoWorktrees := d.doListWorktrees(msg.MainRepo)
-	// The reconciled list travels as the payload rather than being re-read in the
-	// projection, so the push is exactly what this call computed.
 	d.publishFact(FactWorktreeListReconciled, msg.MainRepo, protoWorktrees)
 	d.sendOK(conn)
 }
@@ -492,8 +481,6 @@ func (d *Daemon) projectWorktreeCreated(ev bus.Event) {
 	})
 }
 
-// No payload: the wire event has only ever carried the path, which is the fact
-// subject.
 func (d *Daemon) projectWorktreeDeleted(ev bus.Event) {
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:     protocol.EventWorktreeDeleted,

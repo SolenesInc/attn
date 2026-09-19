@@ -105,8 +105,6 @@ func mustJSON(v any) string {
 	return string(b)
 }
 
-// The shared corpus is the only thing holding the client's parseOsc133 equal to
-// this one.
 func TestOsc133SegmenterCorpus(t *testing.T) {
 	for _, c := range loadSegCorpus(t) {
 		t.Run(c.Name, func(t *testing.T) {

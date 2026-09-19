@@ -10,7 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-// The app's own ordering: add the layout pane, then spawn the runtime.
 func addAndSpawnSessionPane(t *testing.T, d *Daemon, client *wsClient, workspaceID, sessionID, paneID, targetPaneID, cwd string) {
 	t.Helper()
 	add := &protocol.WorkspaceLayoutAddSessionPaneMessage{
@@ -375,8 +374,6 @@ func TestMoveLeafToNewWorkspaceBroadcastsRegisteredBeforeLayout(t *testing.T) {
 	})
 	newWorkspaceID := expectMoveToNewWorkspaceResult(t, client, sourceWorkspaceID, "pane-a", true)
 
-	// Registration must be announced before any layout update references it, or a
-	// client sees a layout for a workspace it does not know.
 	registeredIdx, layoutIdx := -1, -1
 	for i, event := range cap.snapshot() {
 		switch {

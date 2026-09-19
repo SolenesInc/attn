@@ -7,8 +7,6 @@ import (
 	"fmt"
 )
 
-// Hashing an absent schema to a sentinel rather than the empty string is what
-// makes a text<->schema transition flip schemaHash (R-spec R5).
 const schemaNoneSentinel = "none"
 
 func hashPrompt(prompt string) string {
@@ -24,8 +22,6 @@ func hashSchema(schema json.RawMessage) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// The DISPLAY fields below are deliberately NOT part of IsCacheHit and never folded into
-// hashPrompt/hashSchema, so renaming a phase never invalidates a cached result.
 type JournalEntry struct {
 	Ordinal     string
 	PromptHash  string
@@ -56,8 +52,6 @@ type Journal interface {
 	Entries() []JournalEntry
 }
 
-// The terminal guard is load-bearing: both journals seed their mirror from ALL persisted
-// rows, a crashed "running" row included, which would false-hit and replay a null result.
 func IsCacheHit(e JournalEntry, ordinal, promptHash, schemaHash string) bool {
 	if !isTerminalEntryStatus(e.Status) {
 		return false

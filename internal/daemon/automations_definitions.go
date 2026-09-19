@@ -29,8 +29,6 @@ const (
 	automationErrCodeValidation       = "validation"
 )
 
-// Strictly inside the frontend's 30s client timeout (useDaemonSocket.ts), so a flip after
-// a reported failure is impossible.
 const defaultWSAutomationMutationTimeout = 25 * time.Second
 
 func (d *Daemon) wsAutomationMutationTimeoutDuration() time.Duration {
@@ -66,8 +64,6 @@ func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error
 	return d.automationApplyWithGuards(context.Background(), raw, nil, nil)
 }
 
-// Guards key on POINTER PRESENCE, not zero value — nil is unguarded, and expectedRevision
-// 0 means "creating". Both run inside automationMu, atomic with the pre-upsert read.
 func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
 	spec, canonical, err := d.validateAutomationSpec(raw)
 	if err != nil {
@@ -90,8 +86,6 @@ func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expe
 			return &automationRefusal{Code: automationErrCodeRevisionConflict, Err: errors.New("automation definition changed elsewhere — reload before saving")}
 		}
 		if existing.DeletedAt != nil {
-			// An edit must never resurrect: delete already failed the pending runs and purged
-			// bindings, so a silent Save would restart a cron the user deliberately deleted.
 			return &automationRefusal{Code: automationErrCodeDeletedElsewhere, Err: fmt.Errorf("automation %q was deleted elsewhere while you were editing it — your changes were not saved; close this editor and use New if you want to bring it back", spec.ID)}
 		}
 		return nil

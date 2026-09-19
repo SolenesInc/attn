@@ -35,15 +35,11 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 	d.admitClient(client)
 	if record, ok := d.wsHub.takeEviction(clientID); ok {
 		if !d.sendEvictionNotice(client, record) {
-			// Consuming the record here would lose the only copy, so it goes back on file
-			// for the next hello; a delivered notice is never re-filed.
 			d.wsHub.rememberEviction(clientID, record)
 		}
 	}
 }
 
-// admitClient lets an authorized connection into the hub. The hub is the only fan-out, so
-// an unauthorized connection sees no broadcast at all. A double hello joins once.
 func (d *Daemon) admitClient(client *wsClient) {
 	client.admitted.Do(func() {
 		d.wsHub.add(client)
@@ -56,8 +52,6 @@ func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHell
 	if client.bearerAuthorized {
 		return true
 	}
-	// The d.clientToken != "" half matters: a daemon holding no token refuses
-	// everyone rather than matching a client that also sent nothing.
 	provided := strings.TrimSpace(protocol.Deref(msg.ClientToken))
 	if d.clientToken != "" && subtle.ConstantTimeCompare([]byte(d.clientToken), []byte(provided)) == 1 {
 		return true
@@ -78,8 +72,6 @@ func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHell
 		Error:     protocol.Ptr(reason),
 		ErrorCode: protocol.Ptr(protocol.ErrorCodeUnauthorizedClient),
 	})
-	// Close through the send channel, not the connection: the write pump drains the
-	// queue first, which is what makes the refusal arrive rather than race the close.
 	client.closeSendChannelWithStatus(websocket.StatusPolicyViolation, protocol.ErrorCodeUnauthorizedClient)
 	return false
 }

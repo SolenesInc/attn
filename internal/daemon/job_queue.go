@@ -11,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 )
 
-// Stable, not per-run temp: Claude spills tool outputs under ~/.claude/projects/<cwd-hash>, so unique cwds accumulate orphaned dirs attn must never reach in to clean.
 func headlessScratchCwd() (string, error) {
 	dir := filepath.Join(config.DataDir(), "headless-cwd")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -134,10 +133,7 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 			d.logf("automation schedule: register tick: %v", err)
 		}
 	}
-	// OnChange may fire CONCURRENTLY from dispatch and in-flight runs; the handler
-	// must be cheap, concurrency-safe and non-blocking.
 	runner.OnChange(func(jobID string) { d.publishFact(FactTaskChanged, jobID, nil) })
-	// OnTerminalFailure fires on the queue's goroutine; it must stay non-blocking.
 	runner.OnTerminalFailure(func(j *jobs.Job) {
 		d.notifyTaskTerminalFailure(j)
 		go d.failGardenReviewJob(j)

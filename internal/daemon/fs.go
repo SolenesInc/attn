@@ -13,17 +13,12 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Bounds the whole marshaled fs_read_asset_result message — the unit that hits the
-// WebSocket, which has no other outbound cap. The raw read cap below derives from it.
 const maxAssetMessageBytes = 8 << 20
 
 const assetEnvelopeSlack = 4 << 10
 
-// base64 of n bytes is 4*ceil(n/3).
 const maxAssetBytes = (maxAssetMessageBytes - assetEnvelopeSlack) / 4 * 3
 
-// The contract, not a convenience lookup: unlike mime.TypeByExtension it excludes
-// everything non-image, so this surface cannot widen Tauri's fs permissions.
 var assetMimeTypes = map[string]string{
 	".png":  "image/png",
 	".jpg":  "image/jpeg",
@@ -36,8 +31,6 @@ var assetMimeTypes = map[string]string{
 	".ico":  "image/x-icon",
 }
 
-// A non-empty root is gated on the authenticated attn app before it is even validated —
-// otherwise any local WebSocket client could read or overwrite any file in the user's home.
 func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	if strings.TrimSpace(raw) == "" {
 		return d.notebookRoot()
@@ -52,7 +45,6 @@ func (d *Daemon) resolveFsRoot(client *wsClient, raw string) (string, error) {
 	return resolved, nil
 }
 
-// Cached per resolved root so writes to one root serialize through a single in-process writer.
 func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, string, error) {
 	root, err := d.resolveFsRoot(client, rawRoot)
 	if err != nil {
@@ -74,8 +66,6 @@ func (d *Daemon) fsStoreFor(client *wsClient, rawRoot string) (*fsdoc.Store, str
 	return store, root, nil
 }
 
-// A non-notebook root's absolute path and changed paths are sensitive, so the event goes
-// only to clients holding an fs_watch ref on it.
 func (d *Daemon) broadcastFsChanged(root, origin string, paths ...string) {
 	msg := protocol.FsChangedMessage{
 		Event:  protocol.EventFsChanged,
@@ -178,8 +168,6 @@ func assetMimeTypeFor(path string) (string, error) {
 	return mimeType, nil
 }
 
-// Exact, not an estimate: base64 output never needs JSON escaping, so the length is the
-// empty-payload envelope plus EncodedLen(rawLen).
 func assetMessageFits(requestID, path, mimeType string, rawLen int) (bool, error) {
 	probe := protocol.FsReadAssetResultMessage{
 		Event:     protocol.EventFsReadAssetResult,
@@ -194,7 +182,6 @@ func assetMessageFits(requestID, path, mimeType string, rawLen int) (bool, error
 	return len(envelope)+base64.StdEncoding.EncodedLen(rawLen) <= maxAssetMessageBytes, nil
 }
 
-// A conflict is a successful result carrying conflict=true, not an error.
 func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content, baseHash, rawRoot string) {
 	var result *protocol.FsWriteResult
 	store, root, err := d.fsStoreFor(client, rawRoot)
@@ -215,7 +202,6 @@ func (d *Daemon) sendFsWriteWSResult(client *wsClient, requestID, path, content,
 			} else {
 				result.Hash = protocol.Ptr(hash)
 				if d.isNotebookRoot(root) {
-					// Content-aware self-write so the shared watcher does not surface this UI edit as an external one.
 					d.noteNotebookSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
 				} else if w := d.fsWatcherFor(root); w != nil {
 					w.NoteSelfWrite(notebook.SelfWrite{Rel: changed, Hash: hash})
@@ -309,8 +295,6 @@ func (d *Daemon) sendFsDeleteWSResult(client *wsClient, requestID, path, rawRoot
 	d.sendToClient(client, msg)
 }
 
-// A path that fails to validate is an error the frontend treats as "unknown, leave the
-// link unflagged", not as "missing".
 func (d *Daemon) sendFsExistsWSResult(client *wsClient, requestID, path, rawRoot string) {
 	var result *protocol.FsExistsResult
 	store, _, err := d.fsStoreFor(client, rawRoot)

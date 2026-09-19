@@ -1,4 +1,4 @@
-package commentblock
+package nocomments
 
 import (
 	"testing"

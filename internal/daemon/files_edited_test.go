@@ -45,16 +45,14 @@ func TestFilesEditedRecordsMarkdownAgainstTheSession(t *testing.T) {
 	}
 }
 
-// The hook already filters, but this command is reachable by anything that can
-// reach the socket, and the store is the daemon's to keep honest.
 func TestFilesEditedDropsWhatTheOpenerCannotShow(t *testing.T) {
 	d := newDaemonForTest(t)
 
 	recordFilesEdited(t, d, "session-1", []string{
-		"/repo/main.go",       // not markdown
-		"docs/relative.md",    // not absolute, so not resolvable here
-		"",                    // nothing at all
-		"/repo/kept.MARKDOWN", // extension case must not matter
+		"/repo/main.go",
+		"docs/relative.md",
+		"",
+		"/repo/kept.MARKDOWN",
 	})
 
 	files := d.store.GetRecentFiles(10, "")

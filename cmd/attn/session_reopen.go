@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// Every action a caller may name, in the order `attn session show` prefers them.
 var sessionReopenActions = []protocol.SessionReopenAction{
 	protocol.SessionReopenActionReopen,
 	protocol.SessionReopenActionRecreateWorktreeAndReopen,

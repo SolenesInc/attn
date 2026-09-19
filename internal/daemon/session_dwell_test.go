@@ -99,8 +99,6 @@ func TestSpawnFilesWhoAnswersApprovals(t *testing.T) {
 	}
 }
 
-// Codex sends `permission_mode: default` on every turn as payload filler, while
-// its reviewer is set by the approvals_reviewer flag at launch.
 func TestCodexPermissionModeDoesNotRetireTheSpawnTimeReviewer(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-codex-mode"

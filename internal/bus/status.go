@@ -10,17 +10,11 @@ const (
 	RecentWindow   = time.Hour
 	BaselineWindow = 24 * time.Hour
 
-	// An absolute ceiling, not a multiple of the producer's own history. Measured over 8
-	// days of production: healthy classes peak at 480/h in a 6h window, flapping at 5763/h.
 	SurgeWindow      = 6 * time.Hour
 	SurgeRatePerHour = 1000.0
 
-	// Delivery polls every DefaultPollInterval (5s) and a failing handler retries
-	// at most DefaultRetryCap (2m) apart; 5 minutes is 2.5x past the retry cap.
 	StallAge = 5 * time.Minute
 
-	// Sits past every stall attn resolves by itself (16m0s is the longest, an app's
-	// auto-disable clock). Cost measured over 9.5 days: 111KB in a mean hour.
 	DefaultPinAlarmAge = time.Hour
 )
 
@@ -64,14 +58,13 @@ func (p *Producer) surge() {
 }
 
 type ConsumerStatus struct {
-	Name          string
-	Cursor        int64
-	Lag           int64
-	Filter        string
-	Enabled       bool
-	PinsRetention bool
-	UpdatedAt     time.Time
-	// Meaningful only when Status.Delivering is set.
+	Name                string
+	Cursor              int64
+	Lag                 int64
+	Filter              string
+	Enabled             bool
+	PinsRetention       bool
+	UpdatedAt           time.Time
 	Live                bool
 	Stalled             string
 	OldestUnreadAt      time.Time
@@ -151,7 +144,6 @@ func (b *Bus) Status() (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	// Cutoffs are positional; the reads below must match this order.
 	cutoffs := []time.Time{
 		now.Add(-RecentWindow),
 		now.Add(-SurgeWindow),
@@ -316,8 +308,6 @@ func pinMessage(p Pin) string {
 		events(p.Events), humanBytes(p.Bytes))
 }
 
-// Indexed reads over the consumer table and the log's ends, against Status's
-// walk of every row (209ms at 945k, measured).
 func (b *Bus) PinAlarms() ([]Pin, error) {
 	if b.store == nil || b.pinAlarmAge <= 0 {
 		return nil, nil
@@ -458,8 +448,6 @@ func roundDuration(d time.Duration) string {
 	}
 }
 
-// limitDuration renders a configured limit EXACTLY, where roundDuration rounds an
-// observation: a limit shown as "2m" when set to 1m30s cannot be checked against.
 func limitDuration(d time.Duration) string {
 	d = d.Round(time.Second)
 	h, m, s := int(d/time.Hour), int(d%time.Hour/time.Minute), int(d%time.Minute/time.Second)

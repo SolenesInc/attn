@@ -6,8 +6,6 @@ import (
 	"testing"
 )
 
-// The only mark this file puts in the default catalog — everything else registers
-// into a throwaway one, so -count=N does not trip the duplicate rule.
 var selfCheck = Sometimes("testinv's own mark was reached at least once")
 
 func TestMain(m *testing.M) { os.Exit(Run(m)) }

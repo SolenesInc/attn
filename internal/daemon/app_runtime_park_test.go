@@ -31,8 +31,6 @@ func TestParkedRuntimeSurvivesADaemonRestart(t *testing.T) {
 	if parked.ParkedAt.IsZero() {
 		t.Fatal("a parked runtime carries no park time")
 	}
-	// The phase flips before the park's side effects land: the park row is written
-	// first, the notification second.
 	waitFor(t, "the parked runtime's notification to land", func() bool {
 		return len(appNotifications(t, first, notificationKindAppRuntimeParked)) == 1
 	})
@@ -151,8 +149,6 @@ func newAppDaemonOn(t *testing.T, dbPath string) *Daemon {
 		t.Fatalf("open %s: %v", dbPath, err)
 	}
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	// The bus is built around the store it was constructed with: move the two
-	// together or the daemon publishes into a database nobody reads.
 	d.stopEventBus()
 	_ = d.store.Close()
 	d.store = persistent

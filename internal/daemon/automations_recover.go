@@ -19,8 +19,6 @@ func (d *Daemon) recoverAutomations() {
 			d.logf("automation recovery occurrence %s: %v", runs[i].OccurrenceID, occurrenceErr)
 			continue
 		}
-		// Review-request demand must be refreshed before recovery decides to deliver
-		// or cancel; generic recovery must not race that snapshot with a stale edge.
 		if occurrence != nil && occurrence.Provider == "github" {
 			continue
 		}

@@ -44,8 +44,6 @@ func TestSetColorThemePreservesProgramPaletteOverride(t *testing.T) {
 	}
 }
 
-// The palette is not readable as bytes on the snapshot — it is a binary record
-// stream — so what it carried is asserted through what the restored terminal emits.
 func restoredViewportDump(t *testing.T, src *Terminal) []byte {
 	t.Helper()
 	restored, err := Restore(src.Serialize().Payload, Options{})

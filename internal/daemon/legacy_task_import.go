@@ -8,12 +8,8 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-// One-time handover from the retired task runner's `tasks` table to the job queue. The
-// legacy meta keys are pinned literally: they describe a format nothing writes anymore.
 const legacyMetaReconcileInputs = "reconcile_inputs"
 
-// importLegacyTasks runs before the queue is constructed, so nothing races it, and the
-// move is atomic in the store: any failure leaves every old row for the next start.
 func (d *Daemon) importLegacyTasks() {
 	if d.store == nil {
 		return
@@ -29,8 +25,6 @@ func (d *Daemon) importLegacyTasks() {
 	}
 }
 
-// legacyTaskToJob always returns a record: the legacy id is preserved as the job id, and
-// untranslatable meta yields a payload-less job rather than a dropped row.
 func (d *Daemon) legacyTaskToJob(rec store.LegacyTaskRecord) store.JobRecord {
 	payload, err := legacyTaskPayload(rec)
 	if err != nil {

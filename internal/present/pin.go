@@ -8,8 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 )
 
-// Pin resolves the manifest's frame.base and frame.head git refs to full 40-char SHAs, so
-// a presentation stays pinned to what it reviewed regardless of later changes to the refs.
 func Pin(m *Manifest) (baseSHA, headSHA string, err error) {
 	if _, statErr := os.Stat(m.Frame.Repo); statErr != nil {
 		return "", "", fmt.Errorf("present: frame.repo %q does not exist: %w", m.Frame.Repo, statErr)

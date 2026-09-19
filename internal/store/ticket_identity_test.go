@@ -57,7 +57,6 @@ func TestMigrateTicketIdentityCarriesParticipationAndMaxProgress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Source wins one conflict; target wins the other.
 	if err := s.SetTicketCursor(from, "subscribed", 9, base.Add(5*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +80,6 @@ func TestMigrateTicketIdentityCarriesParticipationAndMaxProgress(t *testing.T) {
 	if err := s.MigrateTicketIdentity(from, to, migratedAt); err != nil {
 		t.Fatalf("MigrateTicketIdentity: %v", err)
 	}
-	// The operation is deliberately safe to repeat after the source was removed.
 	if err := s.MigrateTicketIdentity(from, to, migratedAt.Add(time.Minute)); err != nil {
 		t.Fatalf("idempotent MigrateTicketIdentity: %v", err)
 	}

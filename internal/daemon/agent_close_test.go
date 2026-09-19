@@ -491,7 +491,6 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 		}
 		return true
 	})
-	// A recovering daemon refuses an unregister, which is its own test below.
 	waitFor(t, "the outpost to finish recovering", func() bool { return !outpost.isRecovering() })
 	return outpost
 }

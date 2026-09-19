@@ -103,8 +103,6 @@ func TestClearingActivityAlsoDropsTheCursor(t *testing.T) {
 	}
 }
 
-// Seeding a cursor before any line exists has its own writer: routing it through
-// UpdateSessionActivity would hit the clear rule and wipe the seed.
 func TestSettingTheCursorAloneSurvivesAnEmptyLine(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "s1", protocol.SessionStateWorking)

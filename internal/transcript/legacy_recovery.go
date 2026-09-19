@@ -219,8 +219,6 @@ func InspectLegacyRecoveryTranscript(source LegacyRecoverySource, dataRoot strin
 	if err != nil {
 		return inspection, err
 	}
-	// The largest receipt-bearing local transcript measured 251,829,243 bytes.
-	// Twice that corpus high-water mark is a tripwire for damaged or hostile input.
 	if info.Size() > LegacyRecoveryTranscriptLimit {
 		return inspection, fmt.Errorf("%w (%d bytes)", ErrLegacyRecoveryTranscriptTooLarge, info.Size())
 	}
@@ -295,8 +293,6 @@ func proveCopilotProduction(records [][]byte, native string) (bool, string) {
 		seenStart = true
 		cwd = startCWD
 	}
-	// Copilot did not persist profile routing. The one-time default-profile migration
-	// accepts its native envelope because Copilot was not used under named profiles.
 	return seenStart, cwd
 }
 

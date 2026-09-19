@@ -13,12 +13,8 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// DefaultWatchDebounce is opened by a burst's first event — not an idle window;
-// later events do not extend it.
 const DefaultWatchDebounce = 400 * time.Millisecond
 
-// selfWriteTTL keeps a record whose event never arrives from suppressing a real
-// edit forever.
 const selfWriteTTL = 3 * time.Second
 
 type Watcher struct {
@@ -30,7 +26,7 @@ type Watcher struct {
 	fsw *fsnotify.Watcher
 
 	mu         sync.Mutex
-	selfWrites map[string]selfWriteRecord // notebook-relative path
+	selfWrites map[string]selfWriteRecord
 	closeOnce  sync.Once
 	loopDone   chan struct{}
 	now        func() time.Time
@@ -41,8 +37,6 @@ type selfWriteRecord struct {
 	hash   string
 }
 
-// An empty Hash suppresses the next event unconditionally; a non-empty one only
-// when the on-disk bytes still match.
 type SelfWrite struct {
 	Rel  string
 	Hash string
@@ -81,7 +75,6 @@ func NewWatcherWithCleaner(root string, debounce time.Duration, cleanPath func(s
 	return w, nil
 }
 
-// A nil Watcher is a no-op.
 func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	if w == nil || len(writes) == 0 {
 		return
@@ -98,8 +91,6 @@ func (w *Watcher) NoteSelfWrite(writes ...SelfWrite) {
 	}
 }
 
-// Close waits for the event loop, so no onChange can fire after it returns. Safe
-// to call more than once and on a nil Watcher.
 func (w *Watcher) Close() error {
 	if w == nil {
 		return nil
@@ -133,20 +124,16 @@ func (w *Watcher) loop() {
 			if !ok {
 				return
 			}
-			// best-effort watcher: a transient watch error must not kill the loop.
 		}
 	}
 }
 
-// A newly created directory gets a watch attached: fsnotify is not recursive.
 func (w *Watcher) handleEvent(ev fsnotify.Event, pending map[string]struct{}) {
 	if ev.Op&fsnotify.Create != 0 {
 		if info, err := os.Stat(ev.Name); err == nil && info.IsDir() {
 			if base := filepath.Base(ev.Name); base == "." || strings.HasPrefix(base, ".") {
 				return
 			}
-			// Surface whatever addTree found even if the walk aborted partway;
-			// dropping already-discovered files would silently miss external edits.
 			files, _ := w.addTree(ev.Name)
 			for _, rel := range files {
 				pending[rel] = struct{}{}
@@ -199,8 +186,6 @@ func (w *Watcher) dropSelfWrites(rels []string) []string {
 		out = append(out, rel)
 	}
 	w.mu.Unlock()
-	// Recheck outside the lock (it reads files); only the single loop goroutine
-	// calls dropSelfWrites, so this stays race-free.
 	for _, rc := range pending {
 		if w.diskHash(rc.rel) != rc.hash {
 			out = append(out, rc.rel)
@@ -209,7 +194,6 @@ func (w *Watcher) dropSelfWrites(rels []string) []string {
 	return out
 }
 
-// "" never equals a real hash, so a deleted path surfaces as a change.
 func (w *Watcher) diskHash(rel string) string {
 	content, err := os.ReadFile(filepath.Join(w.root, filepath.FromSlash(rel)))
 	if err != nil {

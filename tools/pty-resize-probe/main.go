@@ -1,5 +1,3 @@
-// Spawns an agent in a raw PTY and drives a resize sequence, with no emulator between
-// the PTY and the observer. Configured with the AGENT and LOG env vars.
 package main
 
 import (
@@ -83,8 +81,6 @@ func main() {
 	logf("baseline bytes=%d", len(baseline))
 	_, _ = fmt.Fprintf(log, "baseline payload (hex):\n%x\n\n", baseline)
 
-	// Mimic scenario TR-205 close-pane grow sequence at ~400ms between resizes:
-	//   126x51 → 62x49 → 40x49 → 30x49 → 40x49 → 62x49 → 126x51
 	seq := []struct{ cols, rows uint16 }{
 		{62, 49},
 		{40, 49},
@@ -98,13 +94,11 @@ func main() {
 		if err := pty.Setsize(ptmx, &pty.Winsize{Cols: r.cols, Rows: r.rows}); err != nil {
 			logf("  Setsize err: %v", err)
 		}
-		// mirror scenario: ~400ms between resizes, tiny window for the agent to redraw
 		out := collect(400 * time.Millisecond)
 		logf("  after #%d (400ms window) bytes=%d", i+1, len(out))
 		_, _ = fmt.Fprintf(log, "post-resize#%d payload (hex):\n%x\n\n", i+1, out)
 	}
 
-	// After burst, drain for 5 more seconds to see if the agent catches up.
 	logf("final drain 5s after last resize")
 	tail := collect(5 * time.Second)
 	logf("tail bytes=%d", len(tail))

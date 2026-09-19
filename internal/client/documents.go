@@ -102,8 +102,6 @@ type DocSubscriptionEnded struct {
 	Code    string
 	Message string
 
-	// The one ending safe to retry. Not the same as an empty Code: resubscribing
-	// after an unappliable delivery repeats it forever.
 	lost bool
 }
 
@@ -127,8 +125,6 @@ func DocConnectionLost(err error) bool {
 	return errors.As(err, &ended) && ended.lost
 }
 
-// Ending is always an error — a stopped live query returning success is a watcher
-// exiting 0 over a frozen list.
 func (c *Client) DocSubscribe(query protocol.DocumentQuery, held []protocol.StoredDocument, onWindow func(DocWindow) bool) error {
 	conn, err := net.Dial("unix", c.socketPath)
 	if err != nil {

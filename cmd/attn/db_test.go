@@ -112,8 +112,6 @@ func TestRestoreDatabase_PreservesOldDBAndLeavesBackupInPlace(t *testing.T) {
 	if got := readFile(t, backupPath); got != "backup contents" {
 		t.Fatalf("backup file was mutated or removed: %q", got)
 	}
-	// The old db's -wal/-shm sidecars must be preserved alongside the renamed db —
-	// they can hold uncheckpointed data.
 	if got := readFile(t, preservedAs+"-wal"); got != "wal" {
 		t.Fatalf("preserved -wal content = %q, want %q", got, "wal")
 	}
@@ -330,8 +328,6 @@ func TestAcquireDaemonLock_NoPidFile(t *testing.T) {
 	}
 }
 
-// BSD flock is per-open-file-description, so a second open file description
-// holding the lock is a faithful stand-in for a live daemon.
 func TestAcquireDaemonLock_HeldByAnotherProcess(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
@@ -399,7 +395,6 @@ func TestAcquireDaemonLock_ExcludesConcurrentRestore(t *testing.T) {
 		t.Fatalf("initial acquireDaemonLock error: %v", err)
 	}
 
-	// daemon.acquirePIDLock's exact mechanism: O_RDWR|O_CREATE, then LOCK_EX|LOCK_NB.
 	daemonAttempt, err := os.OpenFile(pidPath, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
 		t.Fatalf("open pid file as a daemon-style attempt: %v", err)

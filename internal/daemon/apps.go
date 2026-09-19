@@ -14,12 +14,8 @@ import (
 
 const recentInvocationLimit = 10
 
-// Rollback names ids in its refusals and nothing else lists them, so status has
-// to; an AppVersionInfo is ~200 bytes on the wire, so ten is ~2KB.
 const recentVersionLimit = 10
 
-// servingHistoryLimit is on the same wire budget as recentVersionLimit. The list
-// says when it was cut, so a longer chain is visible rather than silently ending.
 const servingHistoryLimit = 10
 
 type appEnabledChanged struct {
@@ -28,8 +24,6 @@ type appEnabledChanged struct {
 	Enabled  bool   `json:"enabled"`
 }
 
-// appRemoved is FactAppRemoved's payload. It names the consumer and namespace
-// because a consumer of this fact cannot look them up: the registry row is gone.
 type appRemoved struct {
 	Name      string `json:"name"`
 	Consumer  string `json:"consumer"`
@@ -173,8 +167,6 @@ func (d *Daemon) handleAppStatus(conn net.Conn, msg *protocol.AppStatusMessage) 
 	d.sendDocResponse(conn, protocol.Response{Ok: true, AppStatusResult: &result})
 }
 
-// It refuses an app with no consumer instead of creating one: minting a cursor
-// here would silently decide where an app that never ran starts reading from.
 func (d *Daemon) handleAppSetEnabled(conn net.Conn, msg *protocol.AppSetEnabledMessage) {
 	name := strings.TrimSpace(msg.Name)
 	verb := "disable"
@@ -222,8 +214,6 @@ func (d *Daemon) handleAppSetEnabled(conn net.Conn, msg *protocol.AppSetEnabledM
 		return
 	}
 	if msg.Enabled && changed {
-		// Enabling is the way back from an auto-disable, so it clears both streaks
-		// that cause one — otherwise the next failure disables the app again.
 		d.clearAppStall(name)
 		d.clearAppCrashes(name)
 	}
@@ -240,8 +230,6 @@ func (d *Daemon) handleAppSetEnabled(conn net.Conn, msg *protocol.AppSetEnabledM
 	})
 }
 
-// Unregister through the bus, never delete from the store: a live delivery loop
-// reading a registration that vanished retries that error forever.
 func (d *Daemon) handleAppRemove(conn net.Conn, msg *protocol.AppRemoveMessage) {
 	name := strings.TrimSpace(msg.Name)
 	if err := apps.ValidateName(name); err != nil {
@@ -328,8 +316,6 @@ func (d *Daemon) appSummary(row store.App, head int64) (protocol.AppSummary, err
 				ArtifactPath: version.ArtifactPath,
 				CreatedAt:    stampForWire(version.CreatedAt),
 			}
-			// From the serving version's frozen declaration, not the manifest on
-			// disk: after a rollback those differ, and what docks is what serves.
 			summary.Views = appViewsForWire(version.Declaration, d.logf)
 			summary.Commands = appDeclaredCommands(version.Declaration, d.logf)
 		}

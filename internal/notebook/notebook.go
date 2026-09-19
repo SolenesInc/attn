@@ -1,5 +1,3 @@
-// The reader is permissive by contract: never reject a file for an unknown type, extra
-// keys, broken links, or a missing index, and preserve unknown keys on round-trip.
 package notebook
 
 import (

@@ -22,8 +22,6 @@ func RoutingOverrideEnv() []string {
 	return append([]string(nil), routingOverrideEnv...)
 }
 
-// Receipt: on 2026-08-17 an inherited path override let `make install PROFILE=<name>` take
-// the production PID lock and migrate the production database. Call this before any of that.
 func ValidateProfileRouting() error {
 	if err := validateHarnessRouting(); err != nil {
 		return err
@@ -35,7 +33,6 @@ func ValidateProfileRouting() error {
 	profileDir := DataDirForProfile(profile)
 	profilePort := WSPortForProfile(profile)
 
-	// ATTN_DATA_DIR comes first: every other default derives from it.
 	checks := []struct {
 		env       string
 		configKey string

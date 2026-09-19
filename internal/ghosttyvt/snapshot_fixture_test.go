@@ -11,7 +11,6 @@ import (
 	"testing"
 )
 
-// Decoded by the browser binding in app/src/ghostty/terminal.snapshot.test.ts: one committed artifact pins the native encoder and the wasm decoder to one format.
 const fixturePath = "../../app/src/ghostty/testdata/native-snapshot.bin"
 
 func fixtureCorpus() []byte {
@@ -37,7 +36,6 @@ func fixtureTerminal(t *testing.T) *Terminal {
 	return term
 }
 
-// Regenerate with ATTN_UPDATE_FIXTURES=1 after a pin bump.
 func TestSnapshotFixtureIsCurrent(t *testing.T) {
 	snap := fixtureTerminal(t).Serialize()
 

@@ -249,18 +249,13 @@ const (
 	defaultCellHeightPx = 16
 )
 
-// Ghostty budgets scrollback in bytes, not rows: measured at 200 columns, 4MB
-// held 1,955 rows and 16MB held 9,095 (~1.8KB/row), so this is ~4,400 rows.
 const DefaultScrollbackBytes = 8 << 20
 
-// Ghostty's own kitty APC buffer limit; the snapshot decoder defaults to the
-// same number.
 const ContinuationMaxBytes = 65 << 20
 
 type Options struct {
 	ScrollbackBytes int
 
-	// Zero disables the kitty protocol; it is not a "use the default" sentinel.
 	KittyImageStorageLimit uint64
 }
 
@@ -270,8 +265,6 @@ type Snapshot struct {
 	VTDump     []byte
 }
 
-// The cgo.Handle references the sink, NOT the Terminal, so the Terminal's
-// finalizer still runs.
 type respSink struct {
 	mu     sync.Mutex
 	buf    []byte
@@ -299,7 +292,6 @@ func New(cols, rows int, opts Options) (*Terminal, error) {
 	if maxSB <= 0 {
 		maxSB = DefaultScrollbackBytes
 	}
-	// Process-global, idempotent; without it ghostty rejects every PNG (f=100).
 	installPNGDecoder()
 	t := &Terminal{
 		cols:  cols,
@@ -343,18 +335,14 @@ func (t *Terminal) configure(maxSB int, opts Options) (*Terminal, error) {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set max scrollback failed: rc=%d", int(rc))
 	}
-	// Written even when zero: zero overrides the library's 10MB default.
 	if rc := C.ghosttyvt_set_kitty_limit(t.term, C.uint64_t(opts.KittyImageStorageLimit)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set kitty image storage limit failed: rc=%d", int(rc))
 	}
-	// Enabled from the first byte: tracking cannot reconstruct a sequence already
-	// in flight, and encoding mid-sequence fails without it.
 	if rc := C.ghosttyvt_set_continuation(t.term, C.size_t(ContinuationMaxBytes)); rc != C.GHOSTTY_SUCCESS {
 		C.ghostty_terminal_free(t.term)
 		return nil, fmt.Errorf("ghosttyvt: set continuation tracking failed: rc=%d", int(rc))
 	}
-	// C retains &sink.handle past this call, so it stays pinned until Close.
 	t.sink.handle = cgo.NewHandle(t.sink)
 	t.pinner.Pin(&t.sink.handle)
 	if rc := C.ghosttyvt_install(t.term, unsafe.Pointer(&t.sink.handle)); rc != C.GHOSTTY_SUCCESS {
@@ -410,8 +398,6 @@ var (
 	enableWraparound  = []byte("\x1b[?7h")
 )
 
-// Must mirror the client's resizeGhosttyWithoutReflow
-// (app/src/utils/ghosttyResize.ts): worker and client grids stay frame-equal.
 func (t *Terminal) ResizeNoReflow(cols, rows int) {
 	if cols <= 0 || rows <= 0 {
 		return
@@ -425,7 +411,6 @@ func (t *Terminal) ResizeNoReflow(cols, rows int) {
 		t.resizeLocked(cols, rows)
 		return
 	}
-	// Held across all three steps: an interleaved write would parse wraparound-off.
 	t.writeLocked(disableWraparound)
 	defer t.writeLocked(enableWraparound)
 	t.resizeLocked(cols, rows)
@@ -459,8 +444,6 @@ func (t *Terminal) resizeLocked(cols, rows int) {
 	t.cols, t.rows = cols, rows
 }
 
-// Sink lock only: the write path takes sink.mu under t.mu, so taking t.mu here
-// would deadlock.
 func (t *Terminal) DrainResponses() []byte {
 	s := t.sink
 	s.mu.Lock()
@@ -533,8 +516,6 @@ func (t *Terminal) SerializeViewport() Snapshot {
 	return Snapshot{Cols: t.cols, Rows: t.rows, VTDump: t.appendCursorLocked(dump)}
 }
 
-// The formatter emits its own cursor CUP before the tabstop resets, so this
-// has to go last.
 func (t *Terminal) appendCursorLocked(dump []byte) []byte {
 	cx, cy := t.cursorXYLocked()
 	dump = fmt.Appendf(dump, "\x1b[%d;%dH", cy+1, cx+1)
@@ -544,8 +525,6 @@ func (t *Terminal) appendCursorLocked(dump []byte) []byte {
 	return append(dump, "\x1b[?25l"...)
 }
 
-// CONSUMES the terminal: reaching the primary screen destroys the alternate
-// screen's contents. Call it only on a terminal about to be discarded.
 func (t *Terminal) HandoffVT() Snapshot {
 	t.mu.Lock()
 	defer t.mu.Unlock()
@@ -574,8 +553,6 @@ func (t *Terminal) dumpActiveLocked() []byte {
 		return nil
 	}
 
-	// The formatter stops at the last non-blank row, so a grid with blank bottom
-	// rows replays short and the child then overwrites a row it believes is there.
 	if deficit := t.replayDeficitLocked(dump); deficit > 0 {
 		dump = fmt.Appendf(dump, "\x1b[%d;1H", t.rows)
 		dump = append(dump, strings.Repeat("\r\n", deficit)...)
@@ -713,7 +690,6 @@ func (t *Terminal) Close() {
 	t.closed = true
 	C.ghostty_terminal_free(t.term)
 	t.term = nil
-	// Unpin only after the native terminal can no longer read the userdata.
 	t.pinner.Unpin()
 	t.sink.handle.Delete()
 	runtime.SetFinalizer(t, nil)

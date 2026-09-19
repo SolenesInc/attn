@@ -21,8 +21,6 @@ func TestEverySlotIsReadByARuleThatExists(t *testing.T) {
 	}
 }
 
-// The Guardian's policy renders the environment; a slot the policy never mentions
-// would be a question nobody asks.
 func TestEveryEnvironmentLookupHasSomewhereToLand(t *testing.T) {
 	policy := guardianPolicy(t)
 	if !strings.Contains(policy, "{{environment}}") {

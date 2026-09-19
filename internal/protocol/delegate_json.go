@@ -5,8 +5,6 @@ import (
 	"fmt"
 )
 
-// UnmarshalJSON rejects retired delegation spellings instead of silently ignoring them.
-// The daemon recovery path detects persisted old-shape operations before decoding.
 func (m *DelegateMessage) UnmarshalJSON(data []byte) error {
 	var fields map[string]json.RawMessage
 	if err := json.Unmarshal(data, &fields); err != nil {

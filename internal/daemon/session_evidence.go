@@ -23,8 +23,6 @@ func newSessionEvidenceTable() *sessionEvidenceTable {
 	return &sessionEvidenceTable{sessions: make(map[string]*sessionstate.Evidence)}
 }
 
-// updateIf runs admit INSIDE the table's lock: checked outside, a writer could
-// pass liveness, lose to a removal, and recreate an orphan entry.
 func (t *sessionEvidenceTable) updateIf(
 	sessionID string,
 	at time.Time,
@@ -88,7 +86,6 @@ func (t *sessionEvidenceTable) forget(sessionID string) {
 	delete(t.sessions, sessionID)
 }
 
-// Tests only: runs inside the table's lock, between the live-row check and the write.
 var evidenceRecordGateHook func(sessionID string)
 
 func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) bool {
@@ -147,8 +144,6 @@ func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) bool {
 				}
 			})
 		}
-		// A title nobody can read is still someone painting: it stamps LastMovement
-		// and leaves the level alone. Filed as settled, it would retire an open turn.
 		if obs.Claim == "unclassified" {
 			return d.recordEvidence(sessionID, at, func(*sessionstate.Evidence) {})
 		}
@@ -186,8 +181,6 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 		case protocol.StateWorking:
 			e.TurnOpen = true
 			e.TurnEverOpened = true
-			// A stale verdict judged the previous turn; left in the table the
-			// resolver would report it the moment this turn settles.
 			e.LastClassifier = nil
 			if e.LastHarnessEvent != nil {
 				switch e.LastHarnessEvent.Claim {
@@ -199,16 +192,12 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 				}
 			}
 			e.Compacting = false
-			// These describe how the LAST turn yielded; left behind, background work
-			// pins the session working with only silence to unpin it.
 			e.BackgroundWork = false
 			e.PendingCron = false
 		case protocol.StateIdle:
 			e.TurnOpen = false
 			e.ToolOpen = false
 		case protocol.StateWaitingInput:
-			// A question is filed like an approval request and retired the same way:
-			// closing the brackets alone resolves to idle and loses the question.
 			e.TurnOpen = false
 			e.ToolOpen = false
 			e.LastHarnessEvent = &sessionstate.Observation{
@@ -235,8 +224,6 @@ func (d *Daemon) recordTranscriptEvidence(sessionID, state, detail string, at ti
 	)
 }
 
-// abortedAt (agent-dated) and observedAt (read time) stay separate so a late-read
-// halt loses to later busy frames.
 func (d *Daemon) recordTurnAbortedEvidence(sessionID, detail string, abortedAt, observedAt time.Time) {
 	if observedAt.IsZero() {
 		observedAt = time.Now()
@@ -297,8 +284,6 @@ func (d *Daemon) recordReviewerEvidence(sessionID string, inLoop bool) {
 	})
 }
 
-// An absent mode (older CLI) is not a report, and codex sends `default` as filler,
-// which would retire the spawn-time fact on turn one.
 func (d *Daemon) recordReviewerEvidenceFromPermissionMode(sessionID, permissionMode string) {
 	mode := strings.TrimSpace(permissionMode)
 	if mode == "" {
@@ -389,19 +374,13 @@ func (d *Daemon) recordClassifierStarted(sessionID string, at time.Time) {
 	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
 		e.ClassifyingSince = at
 	})
-	// Suspend auto-settle until the verdict lands; the fire path repeats this
-	// check to close the race with a timer that already left the map.
 	d.cancelAutoSettle(sessionID, "classification started")
 }
 
-// Must run on EVERY exit from a classification: one that applies nothing is exactly
-// when the session has to settle on its own.
 func (d *Daemon) recordClassifierFinished(sessionID string) {
 	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
 		e.ClassifyingSince = time.Time{}
 	})
-	// No transition is guaranteed here (a background-working verdict can leave
-	// `working` persisted), so re-evaluate auto-settle explicitly.
 	if session := d.store.Get(sessionID); session != nil {
 		d.syncAutoSettle(sessionID, string(session.State))
 	}
@@ -438,8 +417,6 @@ func (d *Daemon) resolveAllSessions(now time.Time) {
 	}
 }
 
-// Resolving `recoverable` would let a stale process observation stomp the revive
-// path; `launching` must stay owned, or the session strands.
 var resolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateLaunching:       true,
 	protocol.SessionStateWorking:         true,
@@ -458,8 +435,6 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 	if resolution.Reason == sessionstate.ReasonNoEvidence {
 		return
 	}
-	// An external driver owns its session's state through sequenced report_*
-	// calls; without this veto the tick would overwrite a current report.
 	if run := d.store.GetAgentDriverRun(sessionID); run.RunID != "" {
 		if session := d.store.Get(sessionID); session != nil && d.pluginDriverReportsState(session.Agent) {
 			d.traceResolutionSkip(sessionID, resolution, "plugin_driver_owns_state")
@@ -467,8 +442,6 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 		}
 	}
 	if !resolverOwnedStates[current] || resolution.State == current {
-		// No transition: drop the dwell wait so a later one cannot inherit a clock
-		// that started before an unrelated transition.
 		d.dwellGate().clear(sessionID)
 		if d.recordStateReason(sessionID, resolution) && resolverOwnedStates[current] {
 			d.broadcastSessionStateChanged(sessionID)
@@ -479,8 +452,6 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 		d.traceResolutionSkip(sessionID, resolution, "dwell")
 		return
 	}
-	// Below the dwell, not above: recording the reason for a transition still serving
-	// its dwell publishes a self-contradicting pair, witnessed on a live session.
 	d.recordStateReason(sessionID, resolution)
 	d.applyState(sessionStateChange{
 		sessionID: sessionID,

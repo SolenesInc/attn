@@ -9,13 +9,10 @@ import (
 	"github.com/dop251/goja"
 )
 
-// Display-only; NEVER part of the cache identity.
 func nowRFC3339Nano() string {
 	return time.Now().UTC().Format(time.RFC3339Nano)
 }
 
-// runState lives on the loop goroutine; workers touch only the semaphore and
-// mutate counters back on the loop goroutine inside posted closures.
 type runState struct {
 	vm    *goja.Runtime
 	el    *eventLoop
@@ -32,8 +29,6 @@ type runState struct {
 	cachedCalls    int
 	liveCalls      int
 
-	// diverged latches on the first cache miss, so no cached call ever has a
-	// live-run ancestor.
 	diverged bool
 
 	sem chan struct{}
@@ -44,7 +39,6 @@ type runState struct {
 	nullValue goja.Value
 }
 
-// MUST be called synchronously on the VM goroutine, while the call stack is intact.
 func (rs *runState) callsiteKey() string {
 	var frames [4]goja.StackFrame
 	captured := rs.vm.CaptureCallStack(4, frames[:0])
@@ -113,7 +107,6 @@ func installHostFns(rs *runState, args any) error {
 	return nil
 }
 
-// agent() MUST read the structural ordinal synchronously, before any async boundary.
 func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 	vm := rs.vm
 	return func(call goja.FunctionCall) goja.Value {
@@ -122,7 +115,6 @@ func (rs *runState) makeAgentFn() func(goja.FunctionCall) goja.Value {
 			prompt = call.Arguments[0].String()
 		}
 		schema := extractAgentSchema(call.Argument(1))
-		// NOT part of the cache identity, which stays ordinal+prompt_hash+schema_hash.
 		isolation := validateIsolation(extractAgentString(call.Argument(1), "isolation"))
 		model := extractAgentString(call.Argument(1), "model")
 		agentType := extractAgentString(call.Argument(1), "agentType")
@@ -247,7 +239,6 @@ func validateIsolation(s string) string {
 	return ""
 }
 
-// Re-panics on goja's uncatchable *InterruptedError; swallowing it stalls the loop.
 func mustResolve(resolve func(interface{}) error, v goja.Value) {
 	if err := resolve(v); err != nil {
 		panic(err)
@@ -325,8 +316,6 @@ func (rs *runState) makePipelineFn() func(goja.FunctionCall) goja.Value {
 	}
 }
 
-// Each stage's agent() fires at resolution time, hence the captured path
-// re-established before every callback.
 func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Callable) goja.Value {
 	vm := rs.vm
 	popItem := rs.stack.push(segPipelineItem, j)
@@ -374,7 +363,6 @@ func (rs *runState) buildPipelineItem(j int, item goja.Value, stages []goja.Call
 
 func (rs *runState) invokeNullable(fn goja.Callable, capturedPath []segment) goja.Value {
 	vm := rs.vm
-	// Matters for agent() issued after an await; synchronous calls see the push.
 	restore := rs.stack.replace(capturedPath)
 	var result goja.Value
 	var thrown bool

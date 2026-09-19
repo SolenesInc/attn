@@ -40,8 +40,6 @@ func seedAppConsumer(t *testing.T, d *Daemon, name string, enabled bool, cursor 
 	}, time.Now()); err != nil {
 		t.Fatalf("seed consumer for %s: %v", name, err)
 	}
-	// SaveBusConsumer never rewrites an existing row's cursor or enabled bit, so the
-	// seed sets both explicitly.
 	if _, err := d.store.SetBusConsumerEnabled(apps.ConsumerName(name), enabled, time.Now()); err != nil {
 		t.Fatalf("seed consumer bit for %s: %v", name, err)
 	}
@@ -258,8 +256,6 @@ func TestAppVersionChangeReconcilesAtTheFrozenCursorThenDeliversTheRetainedFact(
 	waitFor(t, "reconcile followed by retained fact delivery", func() bool {
 		return len(runtime.reconcileLog()) == 1 && len(runtime.dispatchLog()) == 1
 	})
-	// Read the fence off the reconcile the runtime was handed: a drain already in flight
-	// when the app was disabled may legitimately consume the pending claim first.
 	if fence := runtime.reconcileLog()[0].Reason.ThroughSeq; fence >= retainedSeq {
 		t.Fatalf("version fence %d covered retained undelivered fact %d", fence, retainedSeq)
 	}
@@ -293,7 +289,6 @@ func TestAppRemoveKeepsHistoryAndDocuments(t *testing.T) {
 	if _, ok, err := d.store.GetApp("approval-gate"); err != nil || ok {
 		t.Fatalf("registry row survived: ok=%t err=%v", ok, err)
 	}
-	// An orphaned enabled consumer row would pin the whole event log against trimming.
 	if _, ok, err := d.store.GetBusConsumer("app:approval-gate"); err != nil || ok {
 		t.Fatalf("consumer row survived: ok=%t err=%v", ok, err)
 	}

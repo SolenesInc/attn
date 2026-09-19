@@ -170,8 +170,6 @@ func runDebugJSONL(fileName, cmdName, kind string, args []string) {
 	}
 }
 
-// runDebugDaemonLog filters daemon.log by tail/grep/since. --since matches the leading
-// "[2006-01-02 15:04:05]" stamp (internal/logging/logging.go); untimestamped continuation lines follow the last stamped line's match state.
 func runDebugDaemonLog(args []string) {
 	fs := flag.NewFlagSet("debug daemon-log", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

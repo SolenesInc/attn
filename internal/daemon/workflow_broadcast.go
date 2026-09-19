@@ -8,7 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-// The daemon drops slow WebSocket clients past a 256-message buffer, so each tick broadcasts ONE full hydrated run: any single surviving frame carries the complete state.
 const workflowBroadcastInterval = 75 * time.Millisecond
 
 func (d *Daemon) markWorkflowRunDirty(runID string) {
@@ -53,7 +52,6 @@ func (d *Daemon) flushWorkflowBroadcasts() {
 	}
 }
 
-// Ships its own top-level event via BroadcastValue, not a WebSocketEvent field; the optional hook exists because the wsHub's WebSocketEvent-only broadcastListener cannot see this message type.
 func (d *Daemon) projectWorkflowRunUpdated(ev bus.Event) {
 	run, ok := decodeFact[*protocol.WorkflowRun](d, ev)
 	if !ok || run == nil {

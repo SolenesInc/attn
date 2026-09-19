@@ -311,7 +311,6 @@ func TestParseClaudeFinalText(t *testing.T) {
 }
 
 func TestParseClaudeResultMeta(t *testing.T) {
-	// Shapes match the empirically captured --json-schema envelope (2.1.198).
 	t.Run("single result object", func(t *testing.T) {
 		meta := parseClaudeResultMeta([]byte(`{"type":"result","result":"{\"verdict\":\"ok\"}","structured_output":{"verdict":"ok"},"total_cost_usd":0.0053,"num_turns":2}`))
 		if string(meta.StructuredOutput) != `{"verdict":"ok"}` {
@@ -403,8 +402,6 @@ func TestClaudeRunHeadlessTaskExcludesNonManagedSettingsWithoutExplicitAuthentic
 		"--print",
 		"--setting-sources",
 		"--no-session-persistence",
-		// --strict-mcp-config with NO --mcp-config loads zero MCP servers; --setting-sources ""
-		// alone does not stop claude.ai connectors (the 2026-07-02 classifier failure).
 		"--strict-mcp-config",
 		"--disable-slash-commands",
 		"--no-chrome",

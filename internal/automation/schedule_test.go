@@ -44,8 +44,6 @@ func TestCompileScheduleTZPrefixErrorMentionsTimeZoneField(t *testing.T) {
 	}
 }
 
-// Observed robfig/cron behavior for "30 2 * * *" across America/New_York spring-forward on
-// 2026-03-08 (02:30 never exists): it rolls to 2026-03-09 — the day is skipped, not shifted.
 func TestScheduleSpringForwardSkipsNonexistentInstant(t *testing.T) {
 	loc := mustLocation(t, "America/New_York")
 	compiled, err := CompileSchedule(ScheduleSpec{Cron: "30 2 * * *", TimeZone: "America/New_York"})
@@ -81,8 +79,6 @@ func TestScheduleSpringForwardSkipsNonexistentInstant(t *testing.T) {
 	}
 }
 
-// Observed robfig/cron behavior for "30 1 * * *" across America/New_York fall-back on
-// 2026-11-01: it visits 01:30 twice, at -04:00 and at -05:00, in increasing UTC order.
 func TestScheduleFallBackVisitsAmbiguousHourTwice(t *testing.T) {
 	loc := mustLocation(t, "America/New_York")
 	compiled, err := CompileSchedule(ScheduleSpec{Cron: "30 1 * * *", TimeZone: "America/New_York"})
@@ -97,8 +93,8 @@ func TestScheduleFallBackVisitsAmbiguousHourTwice(t *testing.T) {
 	}
 	wantUTC := []string{
 		"2026-10-31T05:30:00Z",
-		"2026-11-01T05:30:00Z", // ambiguous hour, pre-transition offset -04:00
-		"2026-11-01T06:30:00Z", // ambiguous hour, post-transition offset -05:00
+		"2026-11-01T05:30:00Z",
+		"2026-11-01T06:30:00Z",
 		"2026-11-02T06:30:00Z",
 	}
 	if len(instants) != len(wantUTC) {
@@ -146,8 +142,6 @@ func TestScheduleUTCSanity(t *testing.T) {
 	}
 }
 
-// Europe/London spring-forward on 2026-03-29 (01:00 -> 02:00, so 01:30 does not
-// exist): the day is skipped, same field-matching behavior as America/New_York.
 func TestScheduleEuropeLondonAcrossDST(t *testing.T) {
 	loc := mustLocation(t, "Europe/London")
 	compiled, err := CompileSchedule(ScheduleSpec{Cron: "30 1 * * *", TimeZone: "Europe/London"})

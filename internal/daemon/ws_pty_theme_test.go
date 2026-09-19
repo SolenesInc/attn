@@ -45,8 +45,6 @@ func TestHandleSetTerminalTheme_StoresAndFansOutToLiveSessions(t *testing.T) {
 		}
 	}
 
-	// Driven through the real handler: a hand-built Theme passed to backend.Spawn would
-	// assert this test's own code, not handleSpawnSession's "Theme:" line.
 	client := newWorkspaceProtocolTestClient()
 	spawnForChiefTest(t, d, client, "ws-theme", "sess-c", string(protocol.SessionAgentClaude), false)
 	expectSpawnResult(t, client, "sess-c", true)
