@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -191,15 +191,13 @@ $(GOTESTSUM):
 verify-ghostty-vt-wasm:
 	bash ./app/scripts/ensure-ghostty-vt-wasm.sh
 
-test: $(NATIVE_VT_DEP) test-hooks test-scripts verify-ghostty-vt-wasm
+test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	./scripts/test-go.sh
 
-# Repository Claude Code hooks are shell, so they are invisible to the Go suite
-# and would otherwise rot unnoticed.
+# CI runs the hook and script tests on every pull request.
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 
-# Same blind spot for the shell an agent runs by hand.
 test-scripts:
 	@bash ./scripts/test-scripts.sh $(sort $(wildcard scripts/*_test.sh))
 
