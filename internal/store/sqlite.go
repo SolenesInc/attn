@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -1408,16 +1409,15 @@ func placeMigratedSchema(dbPath string) {
 	}
 }
 
+const sqliteNewDatabaseMode = 0o644
+
 func linkUnlessPresent(path string, content []byte) {
-	staged, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".schema-*")
+	staged, err := os.OpenFile(path+".schema-"+rand.Text(), os.O_WRONLY|os.O_CREATE|os.O_EXCL, sqliteNewDatabaseMode)
 	if err != nil {
 		return
 	}
 	defer os.Remove(staged.Name())
 	_, err = staged.Write(content)
-	if err == nil {
-		err = staged.Chmod(0o644)
-	}
 	if closeErr := staged.Close(); err != nil || closeErr != nil {
 		return
 	}
