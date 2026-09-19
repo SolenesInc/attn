@@ -87,6 +87,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	}
 	records := d.store.OpenSessionPullRequests()
 	watches := d.store.PullRequestWatches()
+	records = d.sessionPullRequestRecordsForArmedWatches(records, d.store.WatchedSessionPullRequests(), watches)
 	if len(records) == 0 {
 		return 0, 0
 	}

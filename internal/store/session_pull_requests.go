@@ -133,6 +133,29 @@ func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	return records
 }
 
+func (s *Store) WatchedSessionPullRequests() []SessionPullRequestRecord {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil
+	}
+
+	rows, err := s.db.Query(`
+		SELECT ` + sessionPullRequestColumns + `
+		FROM session_pull_requests
+		WHERE EXISTS (
+			SELECT 1 FROM pull_request_watches
+			WHERE pull_request_watches.pr_id = session_pull_requests.pr_id
+		)
+		ORDER BY created_at DESC, rowid DESC`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	records, _ := scanSessionPullRequests(rows)
+	return records
+}
+
 func (s *Store) OpenSessionPullRequestsReferencedBy(
 	schema docstore.CollectionSchema, field string,
 ) ([]SessionPullRequestRecord, error) {
