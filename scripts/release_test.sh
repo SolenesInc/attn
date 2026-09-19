@@ -2,6 +2,7 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$root/scripts/lib/test-git.sh"
 release_script="$root/scripts/release.sh"
 work="$(mktemp -d "${TMPDIR:-/tmp}/attn-release-test.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
@@ -85,6 +86,7 @@ setup_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
+  borrow_clone_objects "$fixture_origin" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"
@@ -121,6 +123,7 @@ setup_hotfix_fixture() {
   git init -q --bare "$fixture_origin"
   git --git-dir="$fixture_origin" config receive.shallowUpdate true
   git clone -q "$root" "$fixture_repo"
+  borrow_clone_objects "$fixture_origin" "$fixture_repo"
   git -C "$fixture_repo" config user.name 'Release Test'
   git -C "$fixture_repo" config user.email 'release@example.com'
   cp "$root/scripts/compile-changelog.sh" "$fixture_repo/scripts/compile-changelog.sh"

@@ -335,14 +335,14 @@ func renderFragments(root string) (string, error) {
 		}
 	}
 	sort.Strings(names)
+	introductions, err := fragmentIntroductions(root)
+	if err != nil {
+		return "", err
+	}
 	var out strings.Builder
 	for _, name := range names {
 		path := filepath.Join("changelog.d", name)
-		subjectBytes, err := gitOutput(root, "log", "--diff-filter=A", "--format=%s", "-1", "--", path)
-		if err != nil {
-			return "", err
-		}
-		subject := strings.TrimSpace(string(subjectBytes))
+		subject := introductions["changelog.d/"+name]
 		if subject == "" {
 			subject = "(uncommitted)"
 		}
@@ -357,6 +357,23 @@ func renderFragments(root string) (string, error) {
 		out.WriteByte('\n')
 	}
 	return out.String(), nil
+}
+
+func fragmentIntroductions(root string) (map[string]string, error) {
+	out, err := gitOutput(root, "log", "-z", "--diff-filter=A", "--format=%x01%s", "--name-only", "--", "changelog.d")
+	if err != nil {
+		return nil, err
+	}
+	subjects := map[string]string{}
+	for _, commit := range strings.Split(string(out), "\x01")[1:] {
+		subject, paths, _ := strings.Cut(commit, "\x00")
+		for _, path := range strings.Split(strings.TrimPrefix(paths, "\n"), "\x00") {
+			if _, seen := subjects[path]; path != "" && !seen {
+				subjects[path] = strings.TrimSpace(subject)
+			}
+		}
+	}
+	return subjects, nil
 }
 
 func runManifest(root string, args []string, stdout io.Writer) error {
@@ -802,12 +819,13 @@ func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bo
 	if err != nil {
 		return 0, err
 	}
+	headFragments, err := fragmentBlobs(root, headSHA)
+	if err != nil {
+		return 0, err
+	}
 	var present []string
 	for path, sourceBlob := range fragments {
-		currentBlob, exists, err := blobAt(root, headSHA, path)
-		if err != nil {
-			return 0, err
-		}
+		currentBlob, exists := headFragments[path]
 		if !exists {
 			continue
 		}
@@ -820,13 +838,16 @@ func syncReleasedFragments(root, manifestPath, mainRef, headRef string, apply bo
 	if !apply && len(present) > 0 {
 		return 0, fmt.Errorf("released fragments remain on next: %s", strings.Join(present, ", "))
 	}
+	if len(present) == 0 {
+		return 0, nil
+	}
 	for _, path := range present {
 		if err := os.Remove(filepath.Join(root, path)); err != nil {
 			return 0, err
 		}
-		if _, err := gitOutput(root, "add", "-u", "--", path); err != nil {
-			return 0, err
-		}
+	}
+	if _, err := gitOutput(root, append([]string{"add", "-u", "--"}, present...)...); err != nil {
+		return 0, err
 	}
 	return len(present), nil
 }
@@ -879,20 +900,6 @@ func fragmentReceipt(root, ref string) (string, error) {
 		fmt.Fprintf(digest, "%s\x00%s\n", path, fragments[path])
 	}
 	return fmt.Sprintf("<!-- changelog-fragments-sha256: %x -->", digest.Sum(nil)), nil
-}
-
-func blobAt(root, ref, path string) (string, bool, error) {
-	command := exec.Command("git", "rev-parse", "--verify", ref+":"+path)
-	command.Dir = root
-	out, err := command.Output()
-	if err == nil {
-		return strings.TrimSpace(string(out)), true, nil
-	}
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return "", false, nil
-	}
-	return "", false, err
 }
 
 func normalizeVersion(value string) (string, string, error) {

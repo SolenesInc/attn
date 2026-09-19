@@ -15,3 +15,10 @@ resolve_test_git() {
   fi
   printf '%s\n' "$test_git"
 }
+
+# An empty origin receives the clone's whole history on the first push. Borrowing
+# the clone's objects leaves only the refs to send.
+borrow_clone_objects() {
+  local origin="$1" clone="$2"
+  printf '%s/.git/objects\n' "$clone" >"$origin/objects/info/alternates"
+}
