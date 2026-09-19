@@ -201,26 +201,7 @@ test-hooks:
 
 # Same blind spot for the shell an agent runs by hand.
 test-scripts:
-	@bash ./scripts/test-git_test.sh
-	@bash ./scripts/source-fingerprint_test.sh
-	@bash ./scripts/pr-evidence_test.sh
-	@bash ./scripts/ci-acceptance_test.sh
-	@bash ./scripts/pre-commit_test.sh
-	@bash ./scripts/ci-retry_test.sh
-	@bash ./scripts/ci-flake-report_test.sh
-	@bash ./scripts/app-acceptance_test.sh
-	@bash ./scripts/app-acceptance-gate_test.sh
-	@bash ./scripts/candidate-gate_test.sh
-	@bash ./scripts/changelog-gate_test.sh
-	@bash ./scripts/main-route_test.sh
-	@bash ./scripts/release_test.sh
-	@bash ./scripts/release-tag-gate_test.sh
-	@bash ./scripts/workflow-job-gate_test.sh
-	@bash ./scripts/release-after-acceptance_test.sh
-	@bash ./scripts/release-health_test.sh
-	@bash ./scripts/publish-release_test.sh
-	@bash ./scripts/sync-main-to-next_test.sh
-	@bash ./scripts/make-fresh-checkout_test.sh
+	@bash ./scripts/test-scripts.sh $(sort $(wildcard scripts/*_test.sh))
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
