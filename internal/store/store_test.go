@@ -44,7 +44,7 @@ func TestStore_MarkModelRequestStartedIsMonotonicAndIndependentOfState(t *testin
 	}{
 		{name: "memory", open: func(t *testing.T) *Store { return New() }},
 		{name: "sqlite", open: func(t *testing.T) *Store {
-			s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+			s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 			if err != nil {
 				t.Fatalf("NewWithDB: %v", err)
 			}
@@ -243,7 +243,7 @@ func TestStore_ListAgentDriverRunsFiltersByOwnerAndIncludesMetadata(t *testing.T
 }
 
 func TestStore_ListActiveAgentDriverRunsNamesTheOwnerOfEveryRun(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestStore_ListActiveAgentDriverRunsNamesTheOwnerOfEveryRun(t *testing.T) {
 }
 
 func TestStore_ListAgentDriverRunsCarriesThePersistedReportCursor(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestStore_UpdateTodos(t *testing.T) {
 }
 
 func TestStore_UpdateSessionLabel(t *testing.T) {
-	s, err := NewWithDB(filepath.Join(t.TempDir(), "test.db"))
+	s, err := newSeededStore(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -623,7 +623,7 @@ func TestStore_SQLitePersistence(t *testing.T) {
 	tmpDir := t.TempDir()
 	dbPath := tmpDir + "/test.db"
 
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -632,7 +632,7 @@ func TestStore_SQLitePersistence(t *testing.T) {
 
 	s.Close()
 
-	s2, err := NewWithDB(dbPath)
+	s2, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB reopen error: %v", err)
 	}
@@ -649,7 +649,7 @@ func TestStore_SQLitePersistence(t *testing.T) {
 
 func TestStore_LaunchIntentRoundTrip(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB() error = %v", err)
 	}
@@ -668,7 +668,7 @@ func TestStore_LaunchIntentRoundTrip(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
 	}
-	s, err = NewWithDB(dbPath)
+	s, err = newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("reopen NewWithDB() error = %v", err)
 	}
@@ -805,7 +805,7 @@ func TestHasSessionInDirectoryIgnoresIdleSessions(t *testing.T) {
 		if persistent {
 			name = "sqlite"
 			var err error
-			s, err = NewWithDB(t.TempDir() + "/test.db")
+			s, err = newSeededStore(t.TempDir() + "/test.db")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -828,7 +828,7 @@ func TestHasSessionInDirectoryIgnoresIdleSessions(t *testing.T) {
 
 func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	dbPath := t.TempDir() + "/test.db"
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -853,7 +853,7 @@ func TestSessionIntentionalCloseMark_PersistsAndClears(t *testing.T) {
 	s.Remove("sess-1")
 	s.Close()
 
-	s2, err := NewWithDB(dbPath)
+	s2, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB reopen error: %v", err)
 	}
@@ -883,7 +883,7 @@ func TestSessionIntentionalCloseMark_UnknownSessionFalse(t *testing.T) {
 
 func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "legacy-close.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
@@ -897,7 +897,7 @@ func TestMigration130CarriesLegacyIntentionalCloseMark(t *testing.T) {
 		t.Fatalf("close pre-130 store: %v", err)
 	}
 
-	reopened, err := NewWithDB(dbPath)
+	reopened, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("reopen with migration 130: %v", err)
 	}

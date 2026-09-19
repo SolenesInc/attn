@@ -14,7 +14,7 @@ import (
 
 func TestBackupNow_ProducesValidSnapshot(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestBackupNow_ProducesValidSnapshot(t *testing.T) {
 
 func TestBackupNow_TargetAlreadyExists(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -111,7 +111,7 @@ func TestBackupNow_TargetAlreadyExists(t *testing.T) {
 
 func TestBackupNow_Rotation(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestBackupNow_RefusesNonDurableStore(t *testing.T) {
 
 func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestMigrateDB_PreMigrationBackup(t *testing.T) {
 
 func TestBackupPreMigration_CapsSnapshots(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("NewWithDB error: %v", err)
 	}

@@ -223,7 +223,7 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 		t.Fatalf("close: %v", err)
 	}
 
-	db2, err := OpenDB(dbPath)
+	db2, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
 	}

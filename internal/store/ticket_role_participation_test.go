@@ -41,7 +41,7 @@ func participantSet(t *testing.T, s *Store, ticketID string) map[string]bool {
 
 func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-99.db")
-	db, err := OpenDB(dbPath)
+	db, err := openSeededDB(dbPath)
 	if err != nil {
 		t.Fatalf("OpenDB setup: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestMigration99DetachesPastChiefSessionsFromTheirDelegations(t *testing.T) 
 		t.Fatalf("close pre-99 database: %v", err)
 	}
 
-	migrated, err := NewWithDB(dbPath)
+	migrated, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("migrate: %v", err)
 	}

@@ -16,7 +16,7 @@ func configuredDelegationPreferences() delegationprefs.Config {
 
 func TestDelegationPreferencesRoundTripAndDisable(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "preferences.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -38,7 +38,7 @@ func TestDelegationPreferencesRoundTripAndDisable(t *testing.T) {
 	if cfg.Revision != 2 || !reflect.DeepEqual(saved.Roles, cfg.Roles) {
 		t.Fatalf("disable changed saved roles: %+v", cfg)
 	}
-	other, err := NewWithDB(path)
+	other, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

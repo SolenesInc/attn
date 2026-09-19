@@ -10,7 +10,7 @@ import (
 func newMarkdownAnnotationTestStore(t *testing.T) *Store {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "test.db")
-	s, err := NewWithDB(dbPath)
+	s, err := newSeededStore(dbPath)
 	if err != nil {
 		t.Fatalf("failed to create store: %v", err)
 	}

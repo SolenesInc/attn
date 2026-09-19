@@ -81,7 +81,7 @@ func sortedGardenWatches(t *testing.T, s *Store) []GardenSeedWatch {
 
 func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "garden.db")
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestGardenSubscriptionMigrationRunsOnceAndPreservesExplicitWatches(t *testi
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -104,7 +104,7 @@ func TestAppReconcileTriggerDuringRunRemainsOwedAndCompletionFencesCursor(t *tes
 func TestAppReconcileRequestSurvivesRestartUntilCompletion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "reconcile.db")
 	now := time.Now().UTC().Truncate(time.Millisecond)
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestAppReconcileRequestSurvivesRestartUntilCompletion(t *testing.T) {
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
 	}
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestAppReconcileInvocationStartsSettlesOnceAndKeepsItsClaimIdentity(t *test
 func TestAppReconcileInvocationStartupRepairInterruptsRunningAttemptAndLeavesRequestOwed(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "reconcile-invocation.db")
 	now := time.Date(2026, 8, 17, 10, 0, 0, 0, time.UTC)
-	s, err := NewWithDB(path)
+	s, err := newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestAppReconcileInvocationStartupRepairInterruptsRunningAttemptAndLeavesReq
 		t.Fatal(err)
 	}
 
-	s, err = NewWithDB(path)
+	s, err = newSeededStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}

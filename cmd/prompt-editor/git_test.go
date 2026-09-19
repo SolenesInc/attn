@@ -23,7 +23,7 @@ func gitTest(t *testing.T, e *editor, args ...string) string {
 func commitTest(t *testing.T, e *editor) string {
 	t.Helper()
 	gitTest(t, e, "add", ".")
-	gitTest(t, e, "-c", "user.name=Editor test", "-c", "user.email=editor@example.test", "commit", "--no-gpg-sign", "-m", "Prompt fixture")
+	gitTest(t, e, "-c", "user.name=Editor test", "-c", "user.email=editor@example.test", "-c", "maintenance.auto=false", "-c", "gc.auto=0", "commit", "--no-gpg-sign", "-m", "Prompt fixture")
 	return gitTest(t, e, "rev-parse", "HEAD")
 }
 

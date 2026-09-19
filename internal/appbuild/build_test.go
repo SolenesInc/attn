@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/victorarias/attn/internal/apps"
@@ -51,22 +52,40 @@ func sharedToolchainStore(t *testing.T, store string) string {
 	return store
 }
 
-var packageToolchain string
+var packageToolchain struct {
+	once sync.Once
+	root string
+	dir  string
+	err  error
+}
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if packageToolchain.root != "" {
+		_ = os.RemoveAll(packageToolchain.root)
+	}
+	os.Exit(code)
+}
 
 func packageToolchainDir(t *testing.T) string {
 	t.Helper()
-	if packageToolchain != "" {
-		return packageToolchain
+	packageToolchain.once.Do(func() {
+		root, err := os.MkdirTemp("", "attn-appbuild-toolchain-")
+		if err != nil {
+			packageToolchain.err = err
+			return
+		}
+		packageToolchain.root = root
+		if _, err := ResolveToolchain(root, func(line string) { t.Log(line) }); err != nil {
+			packageToolchain.err = fmt.Errorf("installing the toolchain: %w", err)
+			return
+		}
+		packageToolchain.dir = filepath.Join(root, toolchainDirName)
+	})
+	if packageToolchain.err != nil {
+		t.Fatal(packageToolchain.err)
 	}
-	dir, err := os.MkdirTemp("", "attn-appbuild-toolchain-")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := ResolveToolchain(dir, func(line string) { t.Log(line) }); err != nil {
-		t.Fatalf("installing the toolchain: %v", err)
-	}
-	packageToolchain = filepath.Join(dir, toolchainDirName)
-	return packageToolchain
+	return packageToolchain.dir
 }
 
 func (e buildEnv) build(t *testing.T) (Result, error) {
@@ -137,6 +156,7 @@ func viewArtifact(t *testing.T, res Result, name string) ViewSize {
 }
 
 func TestScaffoldAppliesWithNoEdits(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "hello-app")
 
 	res := env.mustBuild(t)
@@ -246,6 +266,7 @@ func TestGeneratedTypesCarryTheAppsIdentityAndItsSubscriptions(t *testing.T) {
 var tscError = regexp.MustCompile(`src/index\.ts\((\d+),(\d+)\): error TS\d+:`)
 
 func TestBuild_DeclaredSubscriptionWithNoHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "unhandled-app")
 	env.editManifest(t, `events = ["session.state.changed"]`, `events = ["session.state.changed", "ticket.created"]`)
 
@@ -263,6 +284,7 @@ func TestBuild_DeclaredSubscriptionWithNoHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_DeclaredCommandWithNoHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "uncommanded-app")
 	env.editManifest(t, "[[commands]]\nname = \"forget\"", "[[commands]]\nname = \"remember\"\n\n[[commands]]\nname = \"forget\"")
 
@@ -280,6 +302,7 @@ func TestBuild_DeclaredCommandWithNoHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_UndeclaredCommandHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "overcommanded-app")
 	env.edit(t, "src/index.ts", "commands: { forget },", "commands: { forget, remember: forget },")
 
@@ -297,6 +320,7 @@ func TestBuild_UndeclaredCommandHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_DeclaredReconcileWithNoHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "unreconciled-app")
 	env.edit(t, "src/index.ts", "\n  reconcile,", "")
 
@@ -314,6 +338,7 @@ func TestBuild_DeclaredReconcileWithNoHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_UndeclaredReconcileHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "overreconciled-app")
 	env.edit(t, "src/index.ts", "commands: { forget },", "commands: { forget },\n  reconcile: onSessionState,")
 
@@ -331,6 +356,7 @@ func TestBuild_UndeclaredReconcileHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_WrongShapedHandlerIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "misshapen-app")
 	env.edit(t, "src/index.ts", "event: AppEvent, ctx: Ctx", "event: string, ctx: Ctx")
 
@@ -344,6 +370,7 @@ func TestBuild_WrongShapedHandlerIsACompilerError(t *testing.T) {
 }
 
 func TestBuild_NeverEvaluatesAppCode(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "exploding-app")
 	sentinel := filepath.Join(t.TempDir(), "evaluated")
 	env.edit(t, "src/index.ts", `import type { Ctx, Handlers } from "./generated"`,
@@ -364,6 +391,7 @@ throw new Error("this app throws the moment it is imported")`)
 }
 
 func TestBuild_IdenticalContentIsTheSameVersion(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "stable-app")
 
 	first := env.mustBuild(t)
@@ -381,6 +409,7 @@ func TestBuild_IdenticalContentIsTheSameVersion(t *testing.T) {
 }
 
 func TestBuild_ManifestOnlyChangeIsANewVersion(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "redeclared-app")
 	first := env.mustBuild(t)
 
@@ -396,6 +425,7 @@ func TestBuild_ManifestOnlyChangeIsANewVersion(t *testing.T) {
 }
 
 func TestBuild_CodeChangeIsANewVersion(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "edited-app")
 	first := env.mustBuild(t)
 
@@ -414,6 +444,7 @@ func TestBuild_CodeChangeIsANewVersion(t *testing.T) {
 }
 
 func TestBuild_FailureLeavesTheStoreUntouched(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "broken-app")
 	good := env.mustBuild(t)
 
@@ -462,6 +493,7 @@ func (e buildEnv) addView(t *testing.T, name, source string) {
 }
 
 func TestBuild_EachViewIsItsOwnArtifactBesideTheBundle(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "viewed-app")
 	env.dropScaffoldView(t)
 	env.addView(t, "approvals", "export default function Approvals(): string { return \"approvals\" }\n")
@@ -490,6 +522,7 @@ func TestBuild_EachViewIsItsOwnArtifactBesideTheBundle(t *testing.T) {
 }
 
 func TestBuild_ViewCarriesItsWholeImportGraph(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "graph-app")
 	if err := os.MkdirAll(filepath.Join(env.dir, "src", "lib"), 0o755); err != nil {
 		t.Fatal(err)
@@ -512,6 +545,7 @@ func TestBuild_ViewCarriesItsWholeImportGraph(t *testing.T) {
 }
 
 func TestBuild_ViewLeavesTheSDKSpecifierUnresolved(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "external-app")
 	env.addView(t, "approvals",
 		"import { useState } from \""+SDKModule+"\"\nexport default function Approvals(): unknown { return useState }\n")
@@ -529,6 +563,7 @@ func TestBuild_ViewLeavesTheSDKSpecifierUnresolved(t *testing.T) {
 
 // React's production build exports `jsxDEV` as `undefined`; `--production` is the only thing that selects the other runtime (tsconfig's "jsx": "react-jsx" and a NODE_ENV define do not).
 func TestBuild_ViewLinksAgainstTheProductionJSXRuntime(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "jsx-app")
 	env.addView(t, "approvals", "export default function Approvals() { return <div>ok</div> }\n")
 
@@ -547,6 +582,7 @@ func TestBuild_ViewLinksAgainstTheProductionJSXRuntime(t *testing.T) {
 }
 
 func TestBuild_ViewOnlyEditIsANewVersion(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "reviewed-app")
 	env.addView(t, "approvals", "export default function Approvals(): string { return \"before\" }\n")
 	first := env.mustBuild(t)
@@ -587,6 +623,7 @@ func TestVersionHash_DoesNotDependOnViewOrder(t *testing.T) {
 }
 
 func TestBuild_ViewlessAppHashesAsItDidBeforeViews(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "unchanged-app")
 	env.dropScaffoldView(t)
 	res := env.mustBuild(t)
@@ -605,6 +642,7 @@ func TestBuild_ViewlessAppHashesAsItDidBeforeViews(t *testing.T) {
 }
 
 func TestBuild_AppWithAViewAndNoSubscriptionsBuilds(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "board-app")
 	env.dropScaffoldView(t)
 	env.addView(t, "approvals", "export default function Approvals(): string { return \"approvals\" }\n")
@@ -622,6 +660,7 @@ func TestBuild_AppWithAViewAndNoSubscriptionsBuilds(t *testing.T) {
 }
 
 func TestBuild_BrokenViewFailsTheWholeApply(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "brokenview-app")
 	env.addView(t, "approvals", "import { missing } from \"./nowhere\"\nexport default function A(): unknown { return missing }\n")
 
@@ -666,6 +705,7 @@ func TestWriteGenerated_LeavesUnchangedFilesAlone(t *testing.T) {
 }
 
 func TestTypecheck_AnEntrypointWritingReactResolvesTheSDKAlone(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "tsx-app")
 	env.editManifest(t, `entrypoint = "src/index.ts"`, `entrypoint = "src/index.tsx"`)
 	if err := os.Remove(filepath.Join(env.dir, "src", "index.ts")); err != nil {
@@ -702,6 +742,7 @@ export default function Approvals({ params, tileId }: ViewProps): ReactNode {
 }
 
 func TestBuild_ImportingReactDirectlyIsACompilerError(t *testing.T) {
+	t.Parallel()
 	env := newBuildEnv(t, "two-reacts-app")
 	env.edit(t, "src/index.ts", `import type { Ctx, Handlers } from "./generated"`,
 		"import { useState } from \"react\"\nexport const unused = useState\nimport type { Ctx, Handlers } from \"./generated\"")
