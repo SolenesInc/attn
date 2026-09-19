@@ -94,8 +94,17 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
   });
 }
 
+// The window parks off-screen beside the user's work; a capture by window id
+// still reads the whole window from the window server, so no activation is needed.
+let captureWindowId = null;
 async function screenshot(name) {
-  await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
+  if (process.platform === 'darwin') {
+    captureWindowId ??= await driver.waitForMainWindow();
+    if (!captureWindowId) throw new Error('No verification window to capture');
+    await driver.screenshot(path.join(runner.runDir, name), { windowId: captureWindowId });
+  } else {
+    await captureFrontWindowScreenshot(path.join(runner.runDir, name), { client, driver });
+  }
   await hold();
 }
 
