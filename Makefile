@@ -194,7 +194,8 @@ verify-ghostty-vt-wasm:
 test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	./scripts/test-go.sh
 
-# CI runs the hook and script tests on every pull request.
+# Neither make test nor CI runs the hook and script tests. Run them after
+# changing a hook, a script, or the release tooling.
 test-hooks:
 	@bash ./scripts/claude/attn-profile-nudge_test.sh
 

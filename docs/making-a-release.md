@@ -33,6 +33,10 @@ change: Auto-settle advances to the next agent with an outstanding turn.
 
 ## Prepare a frozen candidate
 
+Neither `make test` nor CI runs the release tooling's tests. Run
+`make test-scripts` after changing a release script, a gate, or
+`cmd/release-train`, and before preparing a candidate.
+
 From a clean, current local `next`:
 
 ```bash

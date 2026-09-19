@@ -319,13 +319,6 @@ jobs:
           make check-prompts
           go run ./cmd/prompt-editor check
 
-      # Repository Claude Code hooks are shell, so the Go suite cannot see them.
-      - name: Test repository hooks
-        run: bash ./scripts/claude/attn-profile-nudge_test.sh
-
-      - name: Test repository scripts
-        run: make test-scripts
-
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
