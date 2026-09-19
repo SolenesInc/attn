@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# Fixture repos are fresh directories, so `go run ./cmd/<name>` recompiles in
-# each one. Build the working tree's commands once and let a `go` shim run them.
 install_prebuilt_go_run() {
   local root="$1" bin_dir="$2"
   shift 2

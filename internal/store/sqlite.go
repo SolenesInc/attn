@@ -1364,8 +1364,6 @@ func migrateSchema(db *sql.DB, dbPath string) error {
 	return migrateDB(db, dbPath)
 }
 
-// Replaying every migration costs 42ms in memory and 80ms on disk; copying the
-// migrated result costs 0.4ms and 1.7ms (2026-09-19, Apple M5).
 var migratedSchema struct {
 	once  sync.Once
 	image []byte
