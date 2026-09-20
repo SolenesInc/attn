@@ -52,12 +52,11 @@ the full requested behavior.
 During design and review, ask: what could we remove from this design and still
 satisfy the full requirement?
 
-- Run tests when making changes.
 - Make protocol bumps and DB migrations as needed by the changes.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
 - Do not commit spikes.
-- Go code takes no prose comments. Elsewhere, do not add prose comments. Git history
-  holds the reasons and the receipts.
+- Do not add explanatory code comments. Express intent through function and
+  variable names and code structure. Rewrite code that needs a comment to be understood.
 - Align with the user before adding a bus event or changing an existing event's name, subject, payload, semantics, or compatibility behavior.
 - Remote outposts are temporarily incomplete: Garden and crew remain home-only
   until the generic uplink exists, and other cross-daemon flows may be
@@ -81,11 +80,8 @@ satisfy the full requirement?
   👀 reaction means Codex is reviewing.
 - Read reviews, inline comments, review threads with `isResolved`, and PR reactions
   through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
-- Address each finding with a change and a test, reply on the thread with what
-  changed, and resolve it. When no change is needed, reply with the reason.
-- Do not ignore React Doctor warnings and errors. Don't dismiss them as irrelevant.
-  The bar to assume they are not applicable must be very high. Ask the user for approval
-  to ignore them. Do not silently bypass it.
+- Reply on the thread with what changed, and resolve it. When no change is needed,
+  reply with the reason.
 
 ## Commands and verification
 
@@ -94,16 +90,12 @@ satisfy the full requirement?
 | Go tests                | `make test`              |
 | Frontend tests          | `make test-frontend`     |
 | Browser tests           | `make test-e2e`          |
-| Go + frontend           | `make test-all`          |
-| Go + frontend + browser | `make test-harness`      |
 | Frontend dev server     | `pnpm --dir app run dev` |
 | Shell script tests      | `make test-scripts`      |
-| Hook tests              | `make test-hooks`        |
 | Lint                    | `make lint`              |
 
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`;
-`FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch. Nothing else
-runs the script and hook tests: run them after changing a script or a hook.
+`FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
 
 These targets fetch the native VT library and install `app/node_modules` as needed.
 Prefer fast integration tests; do not copy production code into tests or test
@@ -112,16 +104,7 @@ when choosing time, property, or network-failure test helpers.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/profiles.md#verification-requirements).
-Rendering changes must avoid continuous repainting; check idle CPU and memory.
-
-### Experience testing
-
-Test feel with Victor early in spikes and at the end of substantial PR arcs.
-Prepare a running profile from the branch, realistic data, and a short list
-covering changed behavior, latency, and keyboard flow.
-
-Before requesting approval or merging, remeasure every receipt in the final PR
-description and verify each value independently against the exact head.
+Rendering changes must avoid continuous repainting.
 
 ## Documentation
 

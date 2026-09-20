@@ -8,11 +8,9 @@
     "app/lint/anti-slop/**"
   ],
   "jsPlugins": [
-    { "name": "attn", "specifier": "./app/lint/attn/index.ts" },
     { "name": "anti-slop", "specifier": "./app/lint/anti-slop/index.ts" }
   ],
   "rules": {
-    "attn/comment-block-max-lines": "error",
     "unicorn/no-thenable": "off",
     "no-control-regex": "off",
     "anti-slop/no-chained-type-assertions": "off",

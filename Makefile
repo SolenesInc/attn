@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-hooks test-scripts test-v test-quick test-watch test-all test-frontend test-e2e test-harness clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -200,19 +200,12 @@ test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
 	else ./scripts/test-go.sh; fi
 
-test-hooks:
-	@bash ./scripts/claude/attn-profile-nudge_test.sh
-
 test-scripts:
 	@set -e; for script_test in $(sort $(wildcard scripts/*_test.sh)); do bash "$$script_test"; done
 
 # Verbose test output (shows all test names as they run)
 test-v: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	./scripts/test-go.sh -v
-
-# Quick test (compact package output)
-test-quick: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
-	./scripts/test-go.sh
 
 # Watch mode - re-runs tests on file changes
 test-watch: $(GOTESTSUM) $(NATIVE_VT_DEP)
@@ -248,10 +241,6 @@ test-e2e: $(APP_NODE_MODULES)
 	fi
 	-pkill -f "vite.*1421" 2>/dev/null || true
 	cd app && pnpm run e2e
-
-test-harness: test test-frontend test-e2e
-
-test-all: test test-frontend
 
 # Installing the PROD bundle while ATTN_PROFILE is set is almost always
 # a mistake — it blows away the live install a developer is using. The

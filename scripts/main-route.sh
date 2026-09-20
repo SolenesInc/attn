@@ -15,14 +15,6 @@ case "$head_branch" in
     echo "main route: ${head_branch} may target main"
     exit 0
     ;;
-  epic/release-train)
-    if git show-ref --verify --quiet refs/remotes/origin/next; then
-      echo "main route: epic/release-train was only allowed before next existed" >&2
-      exit 1
-    fi
-    echo "main route: epic/release-train may bootstrap main before next exists"
-    exit 0
-    ;;
 esac
 
 if [[ "$head_branch" =~ ^release/v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -33,8 +25,7 @@ fi
 cat >&2 <<EOF
 main route: ${head_branch:-unknown branch} may not target main.
 
-Normal work and completed epic branches target next. Only frozen release/vX.Y.Z
-candidates, urgent hotfix/* branches, and the one-time epic/release-train
-bootstrap may target main.
+Normal work targets next. Only frozen release/vX.Y.Z candidates and urgent
+hotfix/* branches may target main.
 EOF
 exit 1

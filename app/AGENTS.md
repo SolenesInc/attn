@@ -21,8 +21,6 @@ Daemon connection paths are relative to `app/src`.
 - Use `createMockDaemon()` from `src/test/mocks/daemon.ts`; helpers live in
   `src/test/utils.ts`. Assert exact calls after render settles to catch fetch loops.
   Example: `src/components/PresentRoot/PresentRoot.test.tsx`.
-- Real browser APIs need a Playwright harness under `test-harness/harnesses/`,
-  registered in `index.ts`, with a spec under `e2e/`.
 
 ## Terminal and GPU
 

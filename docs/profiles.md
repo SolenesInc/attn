@@ -132,15 +132,9 @@ state/broadcasts and PR/git flows. Reuse or extend scenarios to cover the change
 behavior on relevant platforms. Report missing or skipped required coverage and
 ask before merging.
 
-Outside those categories, self-contained CLI changes need the built binary and
-unit tests; daemon-only changes need scoped daemon tests. Trivial docs, comments,
-renames and log strings, or isolated changes fully covered by unit tests, are
-exempt from live verification; state the exemption.
-
 Run real-app scenarios locally in a non-production profile when reproducing CI
 failures and iterating on fixes. Use CI results, logs and screenshots as routine
 evidence; recordings are optional when motion helps explain an interaction.
-[Experience testing](../AGENTS.md#experience-testing) covers feel with Victor.
 
 ## Verify the installed build
 
@@ -160,7 +154,8 @@ Go and frontend e2e suites may run concurrently in distinct worktree profiles.
 
 ## Clean up
 
-Clean temporary profiles when finished with `attn profile clean <name>`.
+After merging a PR, handing off work, or otherwise moving on, clean up any attn
+test profiles you created with `attn profile clean <name>`.
 It stops workers, plugins, daemon, and app before removing
 the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
 automation manifest, frontend debug logs, WebKit state). Never delete the data

@@ -8,18 +8,17 @@
       "match": [["go", "test", "./internal/daemon"], ["go", "list", "./..."]]
     },
     {
-      "pattern": ["go", "run", ["./cmd/commentlint", "./cmd/changelog-check", "./cmd/prompt-editor"]],
+      "pattern": ["go", "run", ["./cmd/changelog-check", "./cmd/prompt-editor"]],
       "decision": "allow",
       "sandbox": "bypass",
       "justification": "Runs trusted repository maintenance tools with host cache and network access.",
       "match": [
-        ["go", "run", "./cmd/commentlint", "./..."],
         ["go", "run", "./cmd/changelog-check"],
         ["go", "run", "./cmd/prompt-editor", "context", "crew/priming", "--json"]
       ]
     },
     {
-      "pattern": ["make", ["test", "test-frontend", "test-e2e", "test-all", "test-harness", "lint"]],
+      "pattern": ["make", ["test", "test-frontend", "test-e2e", "lint"]],
       "decision": "allow",
       "sandbox": "bypass",
       "justification": "Runs the repository's standard verification targets with host access.",
@@ -27,8 +26,6 @@
         ["make", "test"],
         ["make", "test-frontend"],
         ["make", "test-e2e"],
-        ["make", "test-all"],
-        ["make", "test-harness"],
         ["make", "lint"]
       ]
     },

@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: Simplify local verification, CI aggregation, and contributor guidance; remove unused development tooling.

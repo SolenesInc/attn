@@ -123,7 +123,7 @@ if ! git merge-base --is-ancestor "$main_sha" "$source_sha"; then
     echo "sync main into next with ./scripts/sync-main-to-next.sh first" >&2
   else
     echo "prepare release: hotfix does not contain current main" >&2
-    echo "rebase or recreate the hotfix from ${remote}/main" >&2
+    echo "recreate the hotfix from ${remote}/main" >&2
   fi
   exit 1
 fi

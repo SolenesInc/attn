@@ -33,10 +33,6 @@ change: Auto-settle advances to the next agent with an outstanding turn.
 
 ## Prepare a frozen candidate
 
-Run `make test-scripts` after changing a release script, a gate, or
-`cmd/release-train`, and before preparing a candidate; nothing else runs those
-tests.
-
 From a clean, current local `next`:
 
 ```bash
@@ -138,11 +134,24 @@ in a temporary worktree and opens `sync/main-into-next-*` against `next`.
 It removes only fragments unchanged from the frozen source; rewritten fragments
 require inspection, and later fragments survive.
 
-Merge the sync PR with a merge commit. Never squash/rebase it or cherry-pick
-the hotfix into `next`. Wait for sync and green `next` Acceptance before
-preparing another candidate.
+Merge the sync PR with a merge commit. Wait for sync and green `next` Acceptance
+before preparing another candidate.
+
+## Release preflight
+
+The `Release Preflight` workflow builds and validates the Linux daemon and app
+runtime host on amd64 and arm64, and uploads artifacts without publishing a release.
 
 ## Release artifacts
+
+The release workflow publishes the signed and notarized macOS app, the Homebrew
+DMG, and Linux daemon binaries for amd64 and arm64. The macOS job needs
+`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `KEYCHAIN_PASSWORD`,
+`APPLE_API_ISSUER`, `APPLE_API_KEY`, and `APPLE_API_KEY_P8` secrets.
+
+After publication, confirm the release contains the versioned DMG,
+`attn_aarch64.dmg`, `attn-linux-amd64`, and `attn-linux-arm64`. Verify the Homebrew
+path with `brew upgrade --cask victorarias/attn/attn`.
 
 Publication waits for all build, bundled-plugin, signing, and notarization gates.
 Failure leaves a draft and opens `Release health`. Fix the cause, then retry
@@ -154,7 +163,8 @@ gh api --method POST repos/victorarias/attn/dispatches \
 ```
 
 If `main` advanced, prepare a fresh candidate/version. Successful retry replaces
-assets, publishes, and closes the issue.
+assets, publishes, and closes the issue. Publishing an older version does not
+move GitHub's latest release or the Homebrew stable-download path backward.
 
 ## What's New modal
 

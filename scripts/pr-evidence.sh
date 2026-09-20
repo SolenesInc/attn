@@ -157,7 +157,6 @@ cmd_publish() {
 
   git -C "$clone" add "$dir"
   git -C "$clone" commit --quiet -m "evidence: $dir"
-  # Another agent may publish concurrently; rebase once and retry.
   git -C "$clone" push --quiet || { git -C "$clone" pull --rebase --quiet && git -C "$clone" push --quiet; } || die "push to $EVIDENCE_REPO failed"
   local sha
   sha="$(git -C "$clone" rev-parse HEAD)"

@@ -134,8 +134,8 @@ release candidate is cut.
 
 ## Merge method
 
-Merge this PR with a **merge commit**. Squashing or rebasing it would discard
-the ancestry link this sync exists to establish.
+Merge this PR with a **merge commit** to preserve the ancestry link between
+main and next.
 
 Prepared sync commit: \`${sync_sha}\`
 EOF

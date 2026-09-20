@@ -25,7 +25,7 @@ fail() {
 
 case "$(go env GOOS)_$(go env GOARCH)" in
   darwin_arm64 | linux_amd64 | linux_arm64)
-    for target in lint lint-go test test-v test-quick test-watch build; do
+    for target in lint lint-go test test-v test-watch build; do
       fetches_vt "$target" ||
         fail "make $target does not fetch the native VT archive: a fresh checkout fails on ghostty/vt.h"
     done
@@ -35,7 +35,7 @@ case "$(go env GOOS)_$(go env GOARCH)" in
   *) echo "native VT probes skipped: this platform compiles the pure-Go stub" ;;
 esac
 
-for target in lint lint-frontend test-frontend test-e2e test-all test-harness; do
+for target in lint lint-frontend test-frontend test-e2e; do
   installs_app "$target" ||
     fail "make $target does not install app/node_modules: a fresh checkout fails on a missing oxlint"
 done
