@@ -627,8 +627,6 @@ export function answerAppServerLine(line) {
   if (request.method === 'model/list') return { id: request.id, result: { data: MOCK_AGENT_MODEL_LIST, nextCursor: null } };
   return { id: request.id, error: { message: `mock agent app-server does not know ${request.method}` } };
 }
-// `claude --print --input-format stream-json` as internal/agent/claude_models.go drives it:
-// answer the initialize control request with the mock model, then leave when stdin closes.
 export function answerStreamJsonLine(line) {
   const request = JSON.parse(line);
   if (request.type !== 'control_request' || request.request?.subtype !== 'initialize') return null;

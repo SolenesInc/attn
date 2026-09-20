@@ -107,6 +107,14 @@ func TestCrewRestart_TracksTheRequestUntilTheRealHandoffStartsASuccessor(t *test
 	if protocol.Deref(completed.BindingSession) != protocol.Deref(handoff.CrewHandoffResult.SessionID) || len(spawnedSessions(t, backend)) != 2 {
 		t.Fatalf("binding/spawns after completion = %q/%d", protocol.Deref(completed.BindingSession), len(spawnedSessions(t, backend)))
 	}
+	replayed := crewRestartCall(t, d, "trellis", "restart-1")
+	if !replayed.Ok || replayed.CrewRestartResult.Restart.State != protocol.CrewRestartStateCompleted ||
+		protocol.Deref(replayed.CrewRestartResult.Member.BindingSession) != protocol.Deref(completed.BindingSession) {
+		t.Fatalf("replayed completed restart = %+v", replayed.CrewRestartResult)
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("replayed completed restart spawned %d sessions, want 2", len(spawnedSessions(t, backend)))
+	}
 }
 
 func TestCrewRestart_AHandoffThatFailsAfterFilingKeepsTheLetterForOneRetry(t *testing.T) {

@@ -107,7 +107,6 @@ test('a wrapping comment keeps the remove control beside its row', async ({ page
   const remove = (await row.getByRole('button', { name: 'Remove annotation', exact: true }).boundingBox())!;
   expect(remove.x).toBeGreaterThanOrEqual(card.x);
   expect(remove.x + remove.width).toBeLessThanOrEqual(card.x + card.width);
-  // The packaged regression measured a 5px offset; 12px detects a separate row.
   expect(remove.y - card.y).toBeLessThanOrEqual(12);
   expect(remove.y + remove.height).toBeLessThanOrEqual(card.y + card.height);
   await row.getByTitle('Edit this annotation').click();

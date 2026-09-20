@@ -125,6 +125,44 @@ func TestParseCrewSleepArgs(t *testing.T) {
 	}
 }
 
+func TestParseCrewRestartArgsPreservesOrGeneratesTheRetryKey(t *testing.T) {
+	for _, args := range [][]string{{"trellis", "--request-id", " retry-1 ", "--json"}, {"--request-id", "retry-1", "trellis", "--json"}} {
+		parsed, err := parseCrewRestartArgs(args)
+		if err != nil {
+			t.Fatalf("parseCrewRestartArgs(%v): %v", args, err)
+		}
+		if parsed.member != "trellis" || parsed.requestID != "retry-1" || !parsed.json {
+			t.Fatalf("parseCrewRestartArgs(%v) = %+v", args, parsed)
+		}
+	}
+	generated, err := parseCrewRestartArgs([]string{"trellis"})
+	if err != nil || generated.requestID == "" {
+		t.Fatalf("generated restart args = %+v, %v", generated, err)
+	}
+	for _, args := range [][]string{{"trellis", "--request-id", ""}, {"trellis", "--request-id", "   "}} {
+		if _, err := parseCrewRestartArgs(args); err == nil {
+			t.Fatalf("parseCrewRestartArgs(%v) accepted an empty retry key", args)
+		}
+	}
+	if _, err := parseCrewSleepArgs([]string{"trellis", "--request-id", "retry-1"}); err == nil {
+		t.Fatal("crew sleep accepted the restart-only request id")
+	}
+}
+
+func TestCrewRestartReceiptIsMachineReadableInJSONMode(t *testing.T) {
+	var out bytes.Buffer
+	parsed := crewRestartArgs{member: "trellis", requestID: "retry-1", json: true}
+	if err := writeCrewRestartReceipt(&out, parsed); err != nil {
+		t.Fatal(err)
+	}
+	var receipt struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &receipt); err != nil || receipt.RequestID != parsed.requestID {
+		t.Fatalf("restart receipt = %q, decoded %+v, err=%v", out.String(), receipt, err)
+	}
+}
+
 func TestCrewWakeRepairLine_NamesTheExitedSession(t *testing.T) {
 	result := &protocol.CrewWakeResult{ReleasedSessionID: protocol.Ptr("sess-abcdef123456")}
 	line := crewWakeRepairLine(result)

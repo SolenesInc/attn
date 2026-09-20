@@ -33,7 +33,6 @@ declare global {
   interface Window { __ANNOTATIONS__: AnnotationHarnessControl }
 }
 
-// The fixture controls API replies; workspace and terminal focus use production components.
 export function TerminalAnnotationsHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [revision, setRevision] = useState(0);
   const [active, setActive] = useState('first');

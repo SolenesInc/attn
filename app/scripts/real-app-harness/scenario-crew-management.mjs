@@ -105,8 +105,6 @@ function waitForFileSignal(file, description, timeoutMs = 30_000) {
   }));
 }
 
-// The window parks off-screen beside the user's work; a capture by window id
-// still reads the whole window from the window server, so no activation is needed.
 let captureWindowId = null;
 async function screenshot(name) {
   if (process.platform === 'darwin') {
@@ -186,7 +184,6 @@ runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_queue_mode', () => (
   client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' }).catch(() => {})
 ));
-// Cleanups run last-registered first: sessions close and seeds settle while the app still answers.
 runner.registerCleanup('remove_member_homes', () => {
   for (const home of [awakeHome, asleepHome, historyHome]) fs.rmSync(home, { recursive: true, force: true });
 });
