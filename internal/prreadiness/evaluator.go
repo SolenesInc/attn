@@ -167,8 +167,7 @@ func VerdictSignalIDs(evidence Observation, reviewer string, cutoff time.Time) [
 			!SameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) {
 			continue
 		}
-		state := strings.ToUpper(strings.TrimSpace(review.State))
-		if state == "APPROVED" || state == "CHANGES_REQUESTED" || state == "COMMENTED" && isCodexReviewer(reviewer) {
+		if isFormalReviewerVerdict(review.State, reviewer) {
 			ids = append(ids, review.ID)
 		}
 	}

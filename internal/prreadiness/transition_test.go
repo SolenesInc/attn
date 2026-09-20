@@ -150,6 +150,37 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "Codex commented verdict is not duplicated as bot feedback",
+			run: func(t *testing.T) {
+				initial := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+				}
+				first := Advance(Cursor{}, initial, "chatgpt-codex-connector[bot]", StartPolicy{})
+				observation := initial
+				observation.Reviews = []Review{{
+					ID: "review", Author: "chatgpt-codex-connector", State: "COMMENTED", CommitOID: "head-a",
+					Body: "No findings.", SubmittedAt: base.Add(time.Minute),
+				}}
+				observation.Comments = []Comment{{
+					ID: "review", Author: "chatgpt-codex-connector", Kind: CommentReview, ReviewState: "COMMENTED",
+					Body: "No findings.", Bot: true, CreatedAt: base.Add(time.Minute),
+				}}
+				got := Advance(first.NextCursor, observation, "chatgpt-codex-connector[bot]", StartPolicy{})
+				if !has(got.Events, OutcomeReady) || has(got.Events, OutcomeBotComment) {
+					t.Fatalf("transition = %+v", got)
+				}
+
+				humanFirst := Advance(Cursor{}, initial, "human-reviewer", StartPolicy{})
+				observation.Reviews[0].Author = "human-reviewer"
+				observation.Comments[0].Author = "human-reviewer"
+				observation.Comments[0].Bot = false
+				human := Advance(humanFirst.NextCursor, observation, "human-reviewer", StartPolicy{})
+				if !has(human.Events, OutcomeHumanComment) {
+					t.Fatalf("human transition = %+v", human)
+				}
+			},
+		},
+		{
 			name: "durable feedback is omitted from action details",
 			run: func(t *testing.T) {
 				initial := Observation{

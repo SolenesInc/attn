@@ -161,7 +161,7 @@ func feedbackEvents(observation Observation, reviewer string, seenIDs []string, 
 	var events []Event
 	for _, comment := range observation.Comments {
 		formalReviewerVerdict := comment.Kind == CommentReview && SameActor(comment.Author, reviewer) &&
-			isFormalReviewState(comment.ReviewState)
+			isFormalReviewerVerdict(comment.ReviewState, reviewer)
 		if comment.ID == "" || seen[comment.ID] || ignoredAuthor(comment.Author, policy.IgnoreAuthors) ||
 			(!policy.Since.IsZero() && !comment.CreatedAt.After(policy.Since)) ||
 			(formalReviewerVerdict && !policy.EmitReviewerVerdictFeedback) {
@@ -254,9 +254,10 @@ func ignoredAuthor(author string, ignored []string) bool {
 	return false
 }
 
-func isFormalReviewState(state string) bool {
+func isFormalReviewerVerdict(state, reviewer string) bool {
 	state = strings.ToUpper(strings.TrimSpace(state))
-	return state == "APPROVED" || state == "CHANGES_REQUESTED"
+	return state == "APPROVED" || state == "CHANGES_REQUESTED" ||
+		state == "COMMENTED" && isCodexReviewer(reviewer)
 }
 
 func uniqueFindings(groups ...[]Finding) []Finding {

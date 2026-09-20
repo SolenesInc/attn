@@ -229,6 +229,34 @@ func TestPullRequestWatchSharesFetchAndKeepsReviewerStatusIsolated(t *testing.T)
 	}
 }
 
+func TestPullRequestWatchSkipsUnchangedBaselineWrite(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	recordPRForRefresh(t, d, "s1", url)
+	watchPRForRefresh(t, d, "s1", url)
+	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksPending, "")}
+	serveHost(d, "github.com", host)
+	now := time.Now()
+	d.refreshSessionPullRequests(context.Background(), now)
+	before := d.store.PullRequestWatches()[0].LastSuccessAt
+
+	db, err := store.OpenDB(d.store.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(`CREATE TRIGGER reject_redundant_baseline BEFORE UPDATE OF cursor_json ON pull_request_watches
+		WHEN NEW.last_success_at = OLD.last_success_at
+		BEGIN SELECT RAISE(FAIL, 'redundant baseline write'); END`); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
+	after := d.store.PullRequestWatches()[0].LastSuccessAt
+	if after == before {
+		t.Fatalf("unchanged poll did not record success: before=%q after=%q", before, after)
+	}
+}
+
 func TestPullRequestWatchBaselinesThenRetriesHumanFeedbackAcrossRestart(t *testing.T) {
 	d := newPersistentPRDaemonForTest(t)
 	dbPath := d.store.DatabasePath()

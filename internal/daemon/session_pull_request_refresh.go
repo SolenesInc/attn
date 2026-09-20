@@ -509,12 +509,14 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			EmitReviewerVerdictFeedback: true,
 		})
 		clearAction := transition.HeadChanged || transition.ReviewerChanged
-		if err := d.store.ApplyPullRequestWatchBaseline(
-			watch.SessionID, watch.PRID, pullRequestWatchCoalesceKey(watch.PRID),
-			transition.BaselineCursor, clearAction,
-		); err != nil {
-			d.logf("pull request watch: baseline %s for %s/%s: %v", readiness.HeadSHA, watch.SessionID, watch.PRID, err)
-			continue
+		if !watch.Cursor.Initialized || transition.HeadChanged || transition.ReviewerChanged {
+			if err := d.store.ApplyPullRequestWatchBaseline(
+				watch.SessionID, watch.PRID, pullRequestWatchCoalesceKey(watch.PRID),
+				transition.BaselineCursor, clearAction,
+			); err != nil {
+				d.logf("pull request watch: baseline %s for %s/%s: %v", readiness.HeadSHA, watch.SessionID, watch.PRID, err)
+				continue
+			}
 		}
 		if clearAction {
 			d.refreshAgentMailboxUnread(watch.SessionID)
