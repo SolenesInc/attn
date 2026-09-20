@@ -59,6 +59,9 @@ export function restartNotice(member: CrewMember, attempt?: CrewRestartAttempt):
   if (restart?.state === 'failed') {
     return { tone: 'failed', text: restart.error || 'The restart failed.', action: { label: 'Try again', kind: 'review' } };
   }
+  if (restart?.state === 'queued' && attempt?.transportError) {
+    return { tone: 'failed', text: attempt.transportError, action: { label: 'Retry delivery', kind: 'resend' } };
+  }
   if (restart) {
     const label = restart.state === 'requested' ? 'Handoff requested' : 'Queued for delivery';
     return { tone: 'pending', text: `${label}${restart.detail ? ` · ${restart.detail}` : ''}` };

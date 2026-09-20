@@ -253,6 +253,32 @@ describe('CrewPanel', () => {
     });
   });
 
+  it('retries an accepted queued restart whose first delivery failed', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('12121212-1212-4212-8212-121212121212');
+    const queued = member('trellis', 10, {
+      binding_session: 'session-trellis', resolved_agent: 'claude',
+      restart: {
+        request_id: '12121212-1212-4212-8212-121212121212',
+        session_id: 'session-trellis',
+        state: CrewRestartState.Queued,
+      },
+    });
+    const sendCrewRestart = vi.fn()
+      .mockResolvedValueOnce({ success: false, conflict: false, error: 'Session lookup failed', member: queued })
+      .mockResolvedValueOnce({ success: true, conflict: false, member: queued });
+    renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
+      binding_session: 'session-trellis', resolved_agent: 'claude',
+    })] });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
+    await screen.findByText('Session lookup failed');
+    fireEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+
+    await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
+    expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
+  });
+
   it('keeps the panel behind the restart confirmation out of the tab order', async () => {
     renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
     fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
