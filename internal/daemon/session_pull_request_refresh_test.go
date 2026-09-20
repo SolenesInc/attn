@@ -832,6 +832,13 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
 		t.Fatalf("reviewer feedback repeated: %+v, %v", unread, err)
 	}
+	ready.Evidence.Reviews[0].State = "APPROVED"
+	ready.Evidence.Reviews[0].Findings = nil
+	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || strings.Contains(unread[0].Item.Prompt, "Fix the guard") {
+		t.Fatalf("approval replayed delivered findings: %+v, %v", unread, err)
+	}
 }
 
 func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *testing.T) {

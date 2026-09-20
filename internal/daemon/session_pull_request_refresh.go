@@ -626,11 +626,13 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadin
 	nextIDs := append([]string(nil), watch.FeedbackSeenIDs...)
 	var feedback []prreadiness.Comment
 	for _, comment := range evidence.Comments {
-		if comment.Bot || represented[comment.ID] || comment.CreatedAt.Before(seenAt) ||
+		if comment.Bot || comment.CreatedAt.Before(seenAt) ||
 			(comment.CreatedAt.Equal(seenAt) && seenIDs[comment.ID]) {
 			continue
 		}
-		feedback = append(feedback, comment)
+		if !represented[comment.ID] {
+			feedback = append(feedback, comment)
+		}
 		switch {
 		case comment.CreatedAt.After(nextAt):
 			nextAt = comment.CreatedAt
