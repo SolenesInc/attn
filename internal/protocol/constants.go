@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "312"
+const ProtocolVersion = "314"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -150,9 +150,14 @@ const (
 	CmdSeedReviewKeep                        = "seed_review_keep"
 	CmdSeedReviewDraft                       = "seed_review_draft"
 	CmdCrewList                              = "crew_list"
+	CmdCrewCharterGet                        = "crew_charter_get"
+	CmdCrewCharterSet                        = "crew_charter_set"
+	CmdCrewHandoffsGet                       = "crew_handoffs_get"
+	CmdCrewHandoffGet                        = "crew_handoff_get"
 	CmdCrewWake                              = "crew_wake"
 	CmdCrewSleep                             = "crew_sleep"
 	CmdCrewSet                               = "crew_set"
+	CmdCrewRestart                           = "crew_restart"
 	CmdCrewPrime                             = "crew_prime"
 	CmdCrewHandoff                           = "crew_handoff"
 	CmdStop                                  = "stop"
@@ -348,8 +353,14 @@ const (
 	EventDocSubscriptionDelivery         = "doc_subscription_delivery"
 	EventDocSubscriptionEnded            = "doc_subscription_ended"
 	EventCrewUpdated                     = "crew_updated"
+	EventCrewCharterGetResult            = "crew_charter_get_result"
+	EventCrewCharterSetResult            = "crew_charter_set_result"
+	EventCrewHandoffsGetResult           = "crew_handoffs_get_result"
+	EventCrewHandoffGetResult            = "crew_handoff_get_result"
 	EventCrewWakeResult                  = "crew_wake_result"
 	EventCrewSleepResult                 = "crew_sleep_result"
+	EventCrewSetResult                   = "crew_set_result"
+	EventCrewRestartResult               = "crew_restart_result"
 	EventTicketAttachResult              = "ticket_attach_result"
 	EventGetPresentationsResult          = "get_presentations_result"
 	EventGetPresentationRoundResult      = "get_presentation_round_result"
@@ -1232,6 +1243,34 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 		}
 		return peek.Cmd, &msg, nil
 
+	case CmdCrewCharterGet:
+		var msg CrewCharterGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCrewCharterSet:
+		var msg CrewCharterSetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCrewHandoffsGet:
+		var msg CrewHandoffsGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCrewHandoffGet:
+		var msg CrewHandoffGetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
 	case CmdCrewWake:
 		var msg CrewWakeMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
@@ -1248,6 +1287,13 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdCrewSet:
 		var msg CrewSetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdCrewRestart:
+		var msg CrewRestartMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

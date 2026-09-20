@@ -279,4 +279,130 @@ describe('useDaemonSocket crew', () => {
 
     await expect(asked!).rejects.toThrow('cannot receive agent messages');
   });
+
+  it('sends one atomic launch selection and returns a conflict with its authoritative member', async () => {
+    const { ws, result } = await renderWithCrew([member('keel')]);
+    let saved: ReturnType<typeof result.current.sendCrewSet>;
+    act(() => {
+      saved = result.current.sendCrewSet({
+        member: 'keel', expectedRevision: 7, agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+      });
+    });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({
+      cmd: 'crew_set', member: 'keel', expected_revision: 7,
+      agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+    });
+    const current = { ...member('keel'), revision: 9, resolved_agent: 'claude' };
+    act(() => {
+      ws.emit({
+        event: 'crew_set_result', request_id: sent.request_id, success: false, conflict: true,
+        error: 'the member changed', member: current,
+      });
+    });
+
+    await expect(saved!).resolves.toEqual({
+      success: false, conflict: true, error: 'the member changed', member: current,
+    });
+  });
+
+  it('sends charter content with its CAS token and returns conflicts as data', async () => {
+    const { ws, result } = await renderWithCrew([member('alder')]);
+    let saved: ReturnType<typeof result.current.sendCrewCharterSet>;
+    act(() => { saved = result.current.sendCrewCharterSet('alder', '# Mine\n', 'old-token'); });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toMatchObject({
+      cmd: 'crew_charter_set', member: 'alder', content: '# Mine\n', expected_token: 'old-token',
+    });
+
+    act(() => {
+      ws.emit({
+        event: 'crew_charter_set_result', request_id: sent.request_id, success: true, conflict: true,
+        member: 'alder', charter: { content: '# External\n', token: 'external-token' },
+      });
+    });
+    await expect(saved!).resolves.toEqual({
+      member: 'alder', conflict: true,
+      charter: { content: '# External\n', token: 'external-token' },
+    });
+  });
+
+  it('reuses the caller restart identity and ignores another request result', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    let restarted: ReturnType<typeof result.current.sendCrewRestart>;
+    act(() => {
+      restarted = result.current.sendCrewRestart({
+        member: 'keel', requestId: 'restart-stable', expectedSessionId: 'sess-keel', expectedRevision: 12,
+      });
+    });
+    const sent = JSON.parse(ws.sent[ws.sent.length - 1]);
+    expect(sent).toEqual({
+      cmd: 'crew_restart', request_id: 'restart-stable', member: 'keel',
+      expected_session_id: 'sess-keel', expected_revision: 12,
+    });
+
+    const current = {
+      ...member('keel', 'sess-keel'), revision: 13, resolved_agent: 'claude',
+      restart: { request_id: 'restart-stable', session_id: 'sess-keel', state: 'queued' },
+    };
+    act(() => {
+      ws.emit({
+        event: 'crew_restart_result', request_id: 'another-request', success: true, conflict: false,
+        member: current, restart: current.restart,
+      });
+      ws.emit({
+        event: 'crew_restart_result', request_id: 'restart-stable', success: true, conflict: false,
+        member: current, restart: current.restart,
+      });
+    });
+
+    await expect(restarted!).resolves.toEqual({
+      success: true, conflict: false, member: current, restart: current.restart,
+    });
+  });
+
+  it('leaves a constant-key request such as refresh_prs to its own timeout when sent again', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    let first: Promise<unknown>;
+    let second: Promise<unknown>;
+    act(() => { first = result.current.sendRefreshPRs(); });
+    act(() => { second = result.current.sendRefreshPRs(); });
+    let firstSettled = false;
+    void first!.then(() => { firstSettled = true; }, () => { firstSettled = true; });
+    await act(async () => { await Promise.resolve(); });
+    expect(firstSettled).toBe(false);
+    act(() => { ws.emit({ event: 'refresh_prs_result', success: true }); });
+    await expect(second!).resolves.toBeDefined();
+  });
+
+  it('lets a redelivered restart supersede the earlier waiter under the same request id', async () => {
+    const { ws, result } = await renderWithCrew([member('keel', 'sess-keel')]);
+    vi.useFakeTimers();
+    try {
+      const options = { member: 'keel', requestId: 'restart-again', expectedSessionId: 'sess-keel', expectedRevision: 12 };
+      let first: ReturnType<typeof result.current.sendCrewRestart>;
+      let second: ReturnType<typeof result.current.sendCrewRestart>;
+      act(() => { first = result.current.sendCrewRestart(options); });
+      act(() => { vi.advanceTimersByTime(2_000); });
+      act(() => { second = result.current.sendCrewRestart(options); });
+      await expect(first!).rejects.toThrow('superseded');
+
+      act(() => { vi.advanceTimersByTime(9_000); });
+      const current = {
+        ...member('keel', 'sess-keel'), revision: 13, resolved_agent: 'claude',
+        restart: { request_id: 'restart-again', session_id: 'sess-keel', state: 'queued' },
+      };
+      act(() => {
+        ws.emit({
+          event: 'crew_restart_result', request_id: 'restart-again', success: true, conflict: false,
+          member: current, restart: current.restart,
+        });
+      });
+      await expect(second!).resolves.toEqual({
+        success: true, conflict: false, member: current, restart: current.restart,
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -12,7 +12,7 @@ const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function readProcessTable() {
-  const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,%cpu=,rss=,comm=,command=']);
+  const { stdout } = await execFileAsync('ps', ['-axo', 'pid=,ppid=,%cpu=,rss=,comm=,command='], { maxBuffer: Infinity });
   return stdout
     .split('\n')
     .map((line) => line.trim())
@@ -363,9 +363,9 @@ export async function paneIdForSession(client, sessionId) {
 // The observer's WS `unregister` is rejected without the workspace_sessions
 // capability, so close_session is the supported cleanup path.
 export async function closeSessions(client, ids) {
-  for (const sessionId of ids) {
-    await client.request('close_session', { sessionId }, { timeoutMs: 15_000 }).catch(() => {});
-  }
+  await Promise.allSettled([...new Set(ids)].map((sessionId) => (
+    client.request('close_session', { sessionId }, { timeoutMs: 15_000 })
+  )));
 }
 
 // Sequential with a per-pane settle: filling every pane at once overruns the

@@ -2,6 +2,8 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import { GridLayoutControl } from './grid/GridLayoutControl';
 import { RenamePopover } from './RenamePopover';
 import { SessionActionsPopover } from './SessionActionsPopover';
+import { CrewMemberActionsPopover } from './CrewMemberActionsPopover';
+import { crewDisplayName } from '../utils/crewName';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { CollapseIcon, ExpandIcon, HomeIcon, PlusIcon } from './SidebarIcons';
@@ -165,6 +167,9 @@ export function SidebarPopovers() {
     setRenameTarget,
     sessionActionsTarget,
     setSessionActionsTarget,
+    crewActionsTarget,
+    setCrewActionsTarget,
+    onOpenCrewMemberDetails,
   } = useSidebarContext();
   return (
     <>
@@ -203,7 +208,28 @@ export function SidebarPopovers() {
           }
           onCloseSession={() => onCloseSession(sessionActionsTarget.id)}
           onReloadSession={() => onReloadSession(sessionActionsTarget.id)}
+          onMemberDetails={
+            sessionActionsTarget.crewMember && onOpenCrewMemberDetails
+              ? () =>
+                  onOpenCrewMemberDetails(
+                    sessionActionsTarget.crewMember!,
+                    sessionActionsTarget.trigger,
+                  )
+              : undefined
+          }
           onClose={() => setSessionActionsTarget(null)}
+        />
+      )}
+      {crewActionsTarget && (
+        <CrewMemberActionsPopover
+          memberName={crewDisplayName(crewActionsTarget.member)}
+          anchor={crewActionsTarget.anchor}
+          onOpenDetails={() => {
+            const target = crewActionsTarget;
+            setCrewActionsTarget(null);
+            onOpenCrewMemberDetails?.(target.member, target.trigger);
+          }}
+          onClose={() => setCrewActionsTarget(null)}
         />
       )}
     </>

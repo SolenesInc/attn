@@ -7,6 +7,7 @@ import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
+  useCrewPanelContext,
   useAppGridContext,
   useAppInputs,
   useAppSessionsContext,
@@ -67,6 +68,7 @@ export function AppSidebar() {
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const crew = useDaemonStore((state) => state.crew);
   const { handleWakeCrewMember, handleSleepCrewMember } = useAppGardenActionsContext();
+  const { handleOpenCrew } = useCrewPanelContext();
   const {
     queueModeEnabled,
     handleToggleQueueMode,
@@ -123,6 +125,8 @@ export function AppSidebar() {
         crew={crew}
         onWakeCrewMember={handleWakeCrewMember}
         onSleepCrewMember={handleSleepCrewMember}
+        onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
+        onOpenCrewMemberDetails={handleOpenCrew}
         queueModeEnabled={queueModeEnabled}
         onToggleQueueMode={handleToggleQueueMode}
         crewQueueEnabled={crewQueueEnabled}

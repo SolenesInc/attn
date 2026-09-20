@@ -19,14 +19,15 @@ func (d *Daemon) ensureCrewCollections() {
 	if d.store == nil {
 		return
 	}
-	schema := crew.MembersSchema()
-	redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
-	if err != nil {
-		d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
-		return
-	}
-	if redeclared {
-		d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
+	for _, schema := range []docstore.CollectionSchema{crew.MembersSchema(), crew.RestartRequestsSchema()} {
+		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
+		if err != nil {
+			d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
+			continue
+		}
+		if redeclared {
+			d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
+		}
 	}
 }
 
@@ -62,7 +63,7 @@ func (d *Daemon) importCrewHomes() {
 			d.logf("crew: import refused member %s: %v", crew.DisplayName(member.ID), err)
 			continue
 		}
-		if err := d.writeCrewMember(*schema, member, docstore.ExpectAbsent); err != nil {
+		if _, err := d.writeCrewMember(*schema, member, docstore.ExpectAbsent); err != nil {
 			if docstore.IsConflict(err) {
 				continue
 			}
@@ -81,23 +82,31 @@ func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 	return d.collectionFor(crew.Namespace, crew.CollectionMembers)
 }
 
-func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) error {
+func (d *Daemon) crewRestartRequestsCollection() (*docstore.CollectionSchema, error) {
+	if d.store == nil {
+		return nil, errors.New("no database")
+	}
+	return d.collectionFor(crew.Namespace, crew.CollectionRestartRequests)
+}
+
+func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) (int64, error) {
 	if err := d.validateCrewMemberPaths(member); err != nil {
-		return err
+		return 0, err
 	}
 	body, err := member.Encode()
 	if err != nil {
-		return err
+		return 0, err
 	}
 	fact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
 	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
 		Schema: schema, ID: member.ID, Body: body, Expected: &expected,
 	}, fact, time.Now())
 	if err != nil {
-		return err
+		return 0, err
 	}
 	d.announceCommittedWrite(fact, written.Seq)
-	return nil
+	d.publishFact(FactCrewUpdated, member.ID, nil)
+	return written.Rev, nil
 }
 
 func (d *Daemon) readCrewMembers() ([]crew.Member, map[string]docstore.Document, error) {
@@ -171,7 +180,7 @@ func (d *Daemon) updateCrewMember(memberID string, mutate func(*crew.Member) (bo
 		if err != nil || !write {
 			return member, err
 		}
-		err = d.writeCrewMember(*schema, member, docs[member.ID].Rev)
+		_, err = d.writeCrewMember(*schema, member, docs[member.ID].Rev)
 		if err == nil {
 			return member, nil
 		}
@@ -262,7 +271,7 @@ func (d *Daemon) claimCrewBinding(memberName, sessionID string) (string, error) 
 			return "", err
 		}
 		member.BindingSession = sessionID
-		err = d.writeCrewMember(*schema, member, docs[member.ID].Rev)
+		_, err = d.writeCrewMember(*schema, member, docs[member.ID].Rev)
 		if err == nil {
 			if err := d.migrateCrewTicketIdentity(member.ID, sessionID); err != nil {
 				return "", err
@@ -330,8 +339,16 @@ func (d *Daemon) releaseExitedCrewBinding(sessionID string) {
 		d.logf("crew: releasing exited session %s from %s: %v", sessionID, crew.DisplayName(member.ID), err)
 		return
 	}
-	if released {
-		d.noteCrewExitedSession(member.ID, sessionID)
+	if !released {
+		return
+	}
+	d.noteCrewExitedSession(member.ID, sessionID)
+	restart, pending := pendingCrewRestartFor(member, sessionID)
+	if !pending || restart.LetterPath != "" || member.LetterSession == sessionID {
+		return
+	}
+	if _, err := d.crewRestart(member.ID, restart.RequestID, nil, nil); err != nil {
+		d.logf("crew: restarting %s after session %s exited: %v", crew.DisplayName(member.ID), sessionID, err)
 	}
 }
 
@@ -362,7 +379,7 @@ func (d *Daemon) releaseCrewBindingsExcept(schema docstore.CollectionSchema, mem
 			continue
 		}
 		member.BindingSession = ""
-		if err := d.writeCrewMember(schema, member, docs[member.ID].Rev); err != nil {
+		if _, err := d.writeCrewMember(schema, member, docs[member.ID].Rev); err != nil {
 			d.logf("crew: releasing %s's binding for session %s: %v", crew.DisplayName(member.ID), sessionID, err)
 			continue
 		}
@@ -463,22 +480,38 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 	d.sendError(conn, fmt.Sprintf("crew %s: %v", verb, err))
 }
 
-func (d *Daemon) crewMemberWire(member crew.Member) protocol.CrewMember {
+func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	wire := protocol.CrewMember{
-		ID:          member.ID,
-		CharterPath: member.CharterPath,
-		HomeDir:     member.HomeDir,
+		ID:            member.ID,
+		Revision:      int(revision),
+		CharterPath:   member.CharterPath,
+		HomeDir:       member.HomeDir,
+		ResolvedAgent: member.LaunchAgent(),
 	}
 	if member.CWD != "" {
 		wire.Cwd = protocol.Ptr(member.CWD)
 	}
-	wire.Agent = protocol.Ptr(member.LaunchAgent())
+	if member.Agent != "" {
+		wire.Agent = protocol.Ptr(member.Agent)
+	}
 	if member.Model != "" {
 		wire.Model = protocol.Ptr(member.Model)
+	}
+	if member.Effort != "" {
+		wire.Effort = protocol.Ptr(member.Effort)
+	}
+	if model := d.crewWakeModel(member, member.LaunchAgent()); model != nil {
+		wire.ResolvedModel = model
+	}
+	if effort := d.crewWakeEffort(member, member.LaunchAgent()); effort != nil {
+		wire.ResolvedEffort = effort
 	}
 	wire.AwarenessDirs = append([]string{}, member.AwarenessDirs...)
 	if d.crewBindingLive(member) {
 		wire.BindingSession = protocol.Ptr(member.BindingSession)
+	}
+	if member.Restart != nil {
+		wire.Restart = crewRestartWire(member.Restart)
 	}
 	return wire
 }
@@ -490,7 +523,7 @@ func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil
 	}
-	members, _, err := d.readCrewMembers()
+	members, docs, err := d.readCrewMembers()
 	if err != nil {
 		if !docstore.IsUndeclaredCollection(err) {
 			d.logf("crew: reading roster for broadcast: %v", err)
@@ -499,7 +532,7 @@ func (d *Daemon) crewForBroadcast() []protocol.CrewMember {
 	}
 	out := make([]protocol.CrewMember, 0, len(members))
 	for _, member := range members {
-		out = append(out, d.crewMemberWire(member))
+		out = append(out, d.crewMemberWire(member, docs[member.ID].Rev))
 	}
 	return out
 }
@@ -525,14 +558,14 @@ func (d *Daemon) handleCrewList(conn net.Conn, _ *protocol.CrewListMessage) {
 		d.sendCrewError(conn, "list", err)
 		return
 	}
-	members, _, err := d.readCrewMembers()
+	members, docs, err := d.readCrewMembers()
 	if err != nil {
 		d.sendCrewError(conn, "list", err)
 		return
 	}
 	out := make([]protocol.CrewMember, 0, len(members))
 	for _, member := range members {
-		out = append(out, d.crewMemberWire(member))
+		out = append(out, d.crewMemberWire(member, docs[member.ID].Rev))
 	}
 	d.sendGardenResponse(conn, protocol.Response{
 		Ok:             true,

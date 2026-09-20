@@ -52,8 +52,10 @@
 - Replant: reopen completed or abandoned work.
 - Seed states: planted means open, growing means claimed, dormant means paused, harvested means done, and withered means abandoned.
 - Seed outcome: the result and verification required before harvesting.
-- Harvest condition: an instruction to harvest a seed when its PR merges.
+- Harvest condition: an instruction to harvest a seed when its PR merges. A PR closed without merging clears it instead of closing the seed.
 - Tender: the agent or person claiming a seed. A seed has one tender at a time.
+- Member claim: a tender recorded as a crew member with no session. It belongs to the permanent member and stays held while the member is asleep.
+- Session claim: a tender recorded as a session. It counts as a crew member's work only while that session is the member's current day.
 - Execution: the saved conversation and working location for a seed.
 - Garden resume: reopens the seed's saved conversation in its saved directory.
 - Handover: starts a new agent on the same seed and transfers the claim.
@@ -73,10 +75,18 @@
 - Delegation chain: an agent's dispatchers and delegates.
 - Ticket: an archived work item from before the Garden.
 - Crew member: an agent with a permanent charter.
+- `attn`: the reserved member name the daemon uses when it moves a seed by itself. No crew home may claim it.
+- Registry: the index of crew member files.
+- Binding: a crew member's active session.
+- Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
+- Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
 - Chief of staff: the agent coordinating work across workspaces.
 - Day: a crew member's current session.
 - Member home: the directory holding a crew member's charter and handoff.
 - Wake: starts a crew member's day.
+- Sleep request: asks a crew member to file a handoff and stop.
+- Restart request: asks the current day to file its handoff and nap. It completes when the successor starts; an asleep member wakes directly.
+- Wake limit: the cap on a crew member's autonomous starts.
 - Sleep: a crew member has no active day.
 - Nap: replaces the current day using its handoff.
 - Heartbeat: refreshes a crew member's working context.

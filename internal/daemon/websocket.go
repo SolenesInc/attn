@@ -1012,8 +1012,20 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		go d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage))
 	case protocol.CmdCrewWake:
 		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
+	case protocol.CmdCrewCharterGet:
+		go d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage))
+	case protocol.CmdCrewCharterSet:
+		go d.handleCrewCharterSetWS(client, msg.(*protocol.CrewCharterSetMessage))
+	case protocol.CmdCrewHandoffsGet:
+		go d.handleCrewHandoffsGetWS(client, msg.(*protocol.CrewHandoffsGetMessage))
+	case protocol.CmdCrewHandoffGet:
+		go d.handleCrewHandoffGetWS(client, msg.(*protocol.CrewHandoffGetMessage))
 	case protocol.CmdCrewSleep:
 		go d.handleCrewSleepWS(client, msg.(*protocol.CrewSleepMessage))
+	case protocol.CmdCrewSet:
+		go d.handleCrewSetWS(client, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRestart:
+		go d.handleCrewRestartWS(client, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdFsList:
 		fsList := msg.(*protocol.FsListMessage)
 		go d.sendFsListWSResult(client, protocol.Deref(fsList.RequestID), protocol.Deref(fsList.Path), protocol.Deref(fsList.Root))

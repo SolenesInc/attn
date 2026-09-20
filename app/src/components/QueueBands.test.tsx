@@ -480,6 +480,22 @@ describe('the crew in the sidebar', () => {
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
+  it('opens member details anchored on the row action for awake and asleep members', () => {
+    const onOpenCrewMemberDetails = vi.fn();
+    renderCrew(
+      [{ id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' }] as TestSession[],
+      { onOpenCrewMemberDetails },
+    );
+
+    fireEvent.click(screen.getByTestId('crew-actions-alder'));
+    fireEvent.click(screen.getByTestId('crew-member-details-action'));
+    expect(onOpenCrewMemberDetails).toHaveBeenLastCalledWith('alder', screen.getByTestId('crew-actions-alder'));
+
+    fireEvent.click(screen.getByTestId('session-actions-sess-keel'));
+    fireEvent.click(screen.getByTestId('crew-member-details-action'));
+    expect(onOpenCrewMemberDetails).toHaveBeenLastCalledWith('keel', screen.getByTestId('session-actions-sess-keel'));
+  });
+
   it('shows an awake member exactly once, under its own row', () => {
     const { container } = renderCrew([
       { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel', turnOwed: true, turnOpenedAt: '2026-07-26T08:00:00Z' },

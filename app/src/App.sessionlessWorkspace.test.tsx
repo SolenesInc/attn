@@ -16,6 +16,8 @@ let mockDaemonWorkspaces: Array<Record<string, unknown>>;
 let mockSendWorkspaceSelected: ReturnType<typeof vi.fn>;
 let mockSendWorkspaceClosePane: ReturnType<typeof vi.fn>;
 let mockOpenUrlListener: ((urls: string[]) => void) | null;
+let mockPushWorkspaces: ((workspaces: unknown[]) => void) | undefined;
+const { mockFocusWorkspaceLeaf } = vi.hoisted(() => ({ mockFocusWorkspaceLeaf: vi.fn() }));
 
 function collectTileIds(node: TerminalLayoutNode | null): string[] {
   if (!node) {
@@ -51,13 +53,17 @@ vi.mock('./components/Sidebar', () => ({
   Sidebar: ({
     visualOrder,
     selectedWorkspaceId,
+    selectedTile,
     onSelectWorkspace,
+    onSelectTile,
     onSelectGridLayout,
     collapsed,
   }: {
     visualOrder: Array<{ id: string; sessions: unknown[] }>;
     selectedWorkspaceId: string | null;
+    selectedTile?: { workspaceId: string; tileId: string } | null;
     onSelectWorkspace: (id: string) => void;
+    onSelectTile: (workspaceId: string, tileId: string) => void;
     onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
     collapsed: boolean;
   }) => (
@@ -65,6 +71,7 @@ vi.mock('./components/Sidebar', () => ({
       data-testid="sidebar"
       data-collapsed={collapsed ? '1' : '0'}
       data-selected-workspace={selectedWorkspaceId ?? ''}
+      data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
     >
       {visualOrder.map((workspace) => (
         <button
@@ -82,6 +89,13 @@ vi.mock('./components/Sidebar', () => ({
       >
         grid
       </button>
+      <button
+        type="button"
+        data-testid="select-late-tile"
+        onClick={() => onSelectTile('ws-late', 'tile-seed')}
+      >
+        late tile
+      </button>
     </div>
   ),
 }));
@@ -92,8 +106,9 @@ vi.mock('./components/grid/GridView', () => ({
   ),
 }));
 
-vi.mock('./components/SessionTerminalWorkspace', () => ({
-  SessionTerminalWorkspace: ({
+vi.mock('./components/SessionTerminalWorkspace', async () => {
+  const React = await import('react');
+  return { SessionTerminalWorkspace: React.forwardRef(function MockWorkspace({
     workspaceId,
     workspace,
     isActiveSession,
@@ -109,7 +124,9 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
     terminalsLive?: boolean;
     onFocusPane?: (paneId: string) => void;
     onClosePane?: (paneId: string) => void;
-  }) => (
+  }, ref) {
+    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusWorkspaceLeaf, focusPane: vi.fn() }));
+    return (
     <div>
       <div
         data-testid={`workspace-${workspaceId}`}
@@ -137,8 +154,9 @@ vi.mock('./components/SessionTerminalWorkspace', () => ({
         );
       })}
     </div>
-  ),
-}));
+    );
+  }) };
+});
 
 vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
@@ -162,6 +180,7 @@ vi.mock('./hooks/useDaemonSocket', async () => {
   const React = await import('react');
   return {
     useDaemonSocket: (args: { onWorkspacesUpdate?: (workspaces: unknown[]) => void }) => {
+      mockPushWorkspaces = args.onWorkspacesUpdate;
       React.useEffect(() => {
         args.onWorkspacesUpdate?.(mockDaemonWorkspaces);
       }, []);
@@ -191,6 +210,8 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     mockSendWorkspaceSelected = vi.fn();
     mockSendWorkspaceClosePane = vi.fn(async () => ({ success: true }));
     mockOpenUrlListener = null;
+    mockPushWorkspaces = undefined;
+    mockFocusWorkspaceLeaf.mockClear();
 
     mockDaemonWorkspaces = [
       {
@@ -252,6 +273,7 @@ describe('tile-only (sessionless) workspace selection and render', () => {
 
     mockUseDaemonStore.mockReturnValue({
       daemonSessions: [{ id: 's1', label: 'working-session', directory: '/tmp/repo', state: 'working' }],
+      crew: [],
       setDaemonSessions: vi.fn(),
       prs: [], setPRs: vi.fn(),
       repoStates: [], setRepoStates: vi.fn(),
@@ -410,6 +432,47 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     });
 
     expect(useSessionStore.getState().focusRequest?.sessionId).toBe('s1');
+  });
+
+  it('waits for an opened tile to reach workspace state before selecting and focusing it', async () => {
+    useSessionStore.setState({
+      ...useSessionStore.getState(),
+      activeSessionId: null,
+    });
+    render(<App />);
+    await screen.findByTestId('workspace-ws-tiles');
+
+    await userEvent.click(screen.getByTestId('select-late-tile'));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
+
+    act(() => {
+      mockPushWorkspaces?.([
+        ...mockDaemonWorkspaces,
+        {
+          id: 'ws-late',
+          title: 'Seed reader',
+          directory: '/tmp/repo',
+          status: 'active',
+          layout: {
+            active_pane_id: '',
+            layout_json: JSON.stringify({
+              type: 'tile',
+              tile_id: 'tile-seed',
+              tile_kind: 'document',
+              tile_params: 'seed:s-work11',
+            }),
+            panes: [],
+          },
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workspace-ws-late').getAttribute('data-active')).toBe('1');
+      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('ws-late:tile-seed');
+      expect(mockFocusWorkspaceLeaf).toHaveBeenCalledWith('tile-seed');
+    });
+    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-late');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {

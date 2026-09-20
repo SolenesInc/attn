@@ -66,6 +66,7 @@ interface WorkspaceDockTileProps {
   onUpdateParams?: (tileParams: string) => Promise<unknown> | void;
   onRetargetTile?: (sessionId: string) => Promise<unknown> | void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  onBackToCrew?: (returnFocus: HTMLElement) => void;
   onHeaderPointerDown: (event: ReactPointerEvent<HTMLDivElement>) => void;
   onRequestContent: (workspaceId: string, tileId: string) => void;
   bodyRef?: Ref<HTMLDivElement>;
@@ -90,6 +91,7 @@ export function WorkspaceDockTile({
   onUpdateParams,
   onRetargetTile,
   onRevealSeedInGarden,
+  onBackToCrew,
   onHeaderPointerDown,
   onRequestContent,
   bodyRef,
@@ -229,6 +231,7 @@ export function WorkspaceDockTile({
           isSeed={isSeed}
           onFocusDocument={onFocusDocument}
           onRevealSeedInGarden={onRevealSeedInGarden}
+          onBackToCrew={onBackToCrew}
           path={path}
           tile={tile}
           workspaceId={workspaceId}
@@ -466,13 +469,14 @@ function WorkspaceTileActions({
   isSeed,
   onFocusDocument,
   onRevealSeedInGarden,
+  onBackToCrew,
   path,
   tile,
   workspaceId,
   onClose,
 }: Pick<
   WorkspaceDockTileProps,
-  'tile' | 'workspaceId' | 'onClose' | 'onFocusDocument' | 'onRevealSeedInGarden'
+  'tile' | 'workspaceId' | 'onClose' | 'onFocusDocument' | 'onRevealSeedInGarden' | 'onBackToCrew'
 > & { isAnnotatedDocument: boolean; isSeed: boolean; path: string }) {
   const reloadBrowser = () => {
     void controlBrowserHost(workspaceId, tile.tileId, 'reload').catch((error) => {
@@ -481,6 +485,22 @@ function WorkspaceTileActions({
   };
   return (
     <div className="workspace-dock-tile-actions">
+      {isSeed && onBackToCrew ? (
+        <button
+          type="button"
+          className="workspace-dock-tile-back-crew"
+          data-testid="crew-seed-back"
+          aria-label="Back to Crew"
+          title="Back to Crew"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => onBackToCrew(event.currentTarget)}
+        >
+          <span className="workspace-dock-tile-back-crew-icon" aria-hidden="true">
+            ←
+          </span>
+          <span className="workspace-dock-tile-back-crew-label">Back to Crew</span>
+        </button>
+      ) : null}
       {isAnnotatedDocument && onFocusDocument ? (
         <button
           type="button"

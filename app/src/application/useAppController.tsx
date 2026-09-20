@@ -18,6 +18,7 @@ import { useAppDeepLinks } from './useAppDeepLinks';
 import { useAppDiagnostics } from './useAppDiagnostics';
 import { useAppErrors } from './useAppErrors';
 import { useAppGardenActions } from './useAppGardenActions';
+import { useCrewPanel } from './useCrewPanel';
 import { useAppGrid } from './useAppGrid';
 import { useAppNavigation } from './useAppNavigation';
 import { useAppNotebookSurface } from './useAppNotebookSurface';
@@ -169,6 +170,7 @@ export function useAppController({
     workspaceViews,
     unmutedEnrichedSessions,
     attentionQueue,
+    focusWorkspaceLeaf,
   });
   const {
     view,
@@ -186,7 +188,9 @@ export function useAppController({
     activeWorkspaceId,
     activeWorkspaceIdRef,
     handleSelectWorkspace,
+    handleSelectTile,
     handleCloseTile,
+    setCrewSeedTile,
     handleSelectWorkspaceByIndex,
     handlePrevWorkspace,
     handleNextWorkspace,
@@ -224,6 +228,8 @@ export function useAppController({
     sessions.length +
     workspaceViews.filter((workspace) => workspace.hasUnresolvedAgentPanes).length;
   const appPanels = useAppPanels({ agentSurfaceCount });
+  const crewPanelState = useCrewPanel();
+  const { crewPanel, closeCrewPanel } = crewPanelState;
   const {
     settingsOpen,
     setSettingsOpen,
@@ -334,6 +340,7 @@ export function useAppController({
     actionMenuOpen,
     sessionsOpen,
     notebookOpen,
+    crewPanelOpen: crewPanel.open,
     gardenHoldsWindow,
     chiefTransferOpen: Boolean(chiefTransferTarget),
     contextCapOpen: Boolean(contextCapPromptSession),
@@ -514,7 +521,6 @@ export function useAppController({
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,
     activeSessionId,
-    focusWorkspaceLeaf,
     showError,
     seeds,
     openDockPanel,
@@ -526,6 +532,10 @@ export function useAppController({
     sendSeedToChief,
     sendCrewWake,
     sendCrewSleep,
+    handleSelectTile,
+    focusWorkspaceLeaf,
+    setCrewSeedTile,
+    closeCrewPanel,
   });
 
   // One stable object: the surface re-fetches on identity change.
@@ -662,6 +672,7 @@ export function useAppController({
       workflowPanel,
       appGardenActions,
       appNotebookSurface,
+      crewPanel: crewPanelState,
     },
     shell: {
       surface: {

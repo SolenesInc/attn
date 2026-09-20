@@ -396,6 +396,10 @@ func (d *Daemon) chiefLaunchEffort(agent string, chief bool) string {
 	return strings.TrimSpace(d.store.GetSetting(SettingChiefEffortPrefix + strings.ToLower(strings.TrimSpace(agent))))
 }
 
+func settingShapesCrewLaunch(key string) bool {
+	return strings.HasPrefix(key, SettingDefaultModelPrefix) || strings.HasPrefix(key, SettingDefaultEffortPrefix)
+}
+
 func (d *Daemon) defaultLaunchModel(agent string) string {
 	return strings.TrimSpace(d.store.GetSetting(SettingDefaultModelPrefix + strings.ToLower(strings.TrimSpace(agent))))
 }

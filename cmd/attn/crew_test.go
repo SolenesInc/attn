@@ -125,6 +125,44 @@ func TestParseCrewSleepArgs(t *testing.T) {
 	}
 }
 
+func TestParseCrewRestartArgsPreservesOrGeneratesTheRetryKey(t *testing.T) {
+	for _, args := range [][]string{{"trellis", "--request-id", " retry-1 ", "--json"}, {"--request-id", "retry-1", "trellis", "--json"}} {
+		parsed, err := parseCrewRestartArgs(args)
+		if err != nil {
+			t.Fatalf("parseCrewRestartArgs(%v): %v", args, err)
+		}
+		if parsed.member != "trellis" || parsed.requestID != "retry-1" || !parsed.json {
+			t.Fatalf("parseCrewRestartArgs(%v) = %+v", args, parsed)
+		}
+	}
+	generated, err := parseCrewRestartArgs([]string{"trellis"})
+	if err != nil || generated.requestID == "" {
+		t.Fatalf("generated restart args = %+v, %v", generated, err)
+	}
+	for _, args := range [][]string{{"trellis", "--request-id", ""}, {"trellis", "--request-id", "   "}} {
+		if _, err := parseCrewRestartArgs(args); err == nil {
+			t.Fatalf("parseCrewRestartArgs(%v) accepted an empty retry key", args)
+		}
+	}
+	if _, err := parseCrewSleepArgs([]string{"trellis", "--request-id", "retry-1"}); err == nil {
+		t.Fatal("crew sleep accepted the restart-only request id")
+	}
+}
+
+func TestCrewRestartReceiptIsMachineReadableInJSONMode(t *testing.T) {
+	var out bytes.Buffer
+	parsed := crewRestartArgs{member: "trellis", requestID: "retry-1", json: true}
+	if err := writeCrewRestartReceipt(&out, parsed); err != nil {
+		t.Fatal(err)
+	}
+	var receipt struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &receipt); err != nil || receipt.RequestID != parsed.requestID {
+		t.Fatalf("restart receipt = %q, decoded %+v, err=%v", out.String(), receipt, err)
+	}
+}
+
 func TestCrewWakeRepairLine_NamesTheExitedSession(t *testing.T) {
 	result := &protocol.CrewWakeResult{ReleasedSessionID: protocol.Ptr("sess-abcdef123456")}
 	line := crewWakeRepairLine(result)
@@ -222,28 +260,37 @@ func TestParseCrewSetArgs_CarriesTheHarnessAndTheWayBack(t *testing.T) {
 	}
 }
 
-func TestParseCrewSetArgs_CarriesTheModelAndTheWayBack(t *testing.T) {
-	parsed, err := parseCrewSetArgs([]string{"trellis", "--model", "claude-haiku-4-5"})
-	if err != nil {
-		t.Fatalf("parseCrewSetArgs: %v", err)
-	}
-	if parsed.model == nil || *parsed.model != "claude-haiku-4-5" {
-		t.Fatalf("parsed model = %v, want claude-haiku-4-5", parsed.model)
-	}
-	cleared, err := parseCrewSetArgs([]string{"trellis", "--model", ""})
-	if err != nil || cleared.model == nil || *cleared.model != "" {
-		t.Fatalf("empty --model did not reach the daemon as a clear: %+v, %v", cleared.model, err)
+func TestParseCrewSetArgs_CarriesModelAndEffortAndTheWayBack(t *testing.T) {
+	for _, tc := range []struct {
+		flag  string
+		value string
+		field func(crewSetArgs) *string
+	}{
+		{flag: "--model", value: "claude-haiku-4-5", field: func(a crewSetArgs) *string { return a.model }},
+		{flag: "--effort", value: "high", field: func(a crewSetArgs) *string { return a.effort }},
+	} {
+		parsed, err := parseCrewSetArgs([]string{"trellis", tc.flag, tc.value})
+		if err != nil {
+			t.Fatalf("parseCrewSetArgs %s: %v", tc.flag, err)
+		}
+		if got := tc.field(parsed); got == nil || *got != tc.value {
+			t.Fatalf("parsed %s = %v, want %s", tc.flag, got, tc.value)
+		}
+		cleared, err := parseCrewSetArgs([]string{"trellis", tc.flag, ""})
+		if got := tc.field(cleared); err != nil || got == nil || *got != "" {
+			t.Fatalf("empty %s did not reach the daemon as a clear: %v, %v", tc.flag, got, err)
+		}
 	}
 }
 
 func TestPrintCrewList_NamesTheHarnessEachMemberRunsOn(t *testing.T) {
 	var out bytes.Buffer
 	printCrewList(&out, []protocol.CrewMember{
-		{ID: "keel", HomeDir: "/home/.attn/crew/keel", Agent: protocol.Ptr("codex"), Model: protocol.Ptr("gpt-5.6-sol")},
-		{ID: "trellis", HomeDir: "/home/.attn/crew/trellis", Agent: protocol.Ptr("claude"), Model: protocol.Ptr("claude-haiku-4-5")},
+		{ID: "keel", HomeDir: "/home/.attn/crew/keel", ResolvedAgent: "codex", ResolvedModel: protocol.Ptr("gpt-5.6-sol"), ResolvedEffort: protocol.Ptr("high")},
+		{ID: "trellis", HomeDir: "/home/.attn/crew/trellis", ResolvedAgent: "claude", ResolvedModel: protocol.Ptr("claude-haiku-4-5")},
 	})
 	text := out.String()
-	for _, want := range []string{"AGENT", "MODEL", "codex", "claude", "gpt-5.6-sol", "claude-haiku-4-5"} {
+	for _, want := range []string{"AGENT", "MODEL", "EFFORT", "codex", "claude", "gpt-5.6-sol", "claude-haiku-4-5", "high"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("crew list output is missing %q:\n%s", want, text)
 		}

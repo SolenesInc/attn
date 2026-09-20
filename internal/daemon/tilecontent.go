@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -461,13 +462,6 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	if err != nil {
 		return "", "", err
 	}
-	if placementSessionID == "" {
-		return "", "", fmt.Errorf("no session selected; open a session in attn or pass --session")
-	}
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
-	}
 	bindingSessionID := strings.TrimSpace(seed.TenderSession)
 	if bindingSessionID == "" {
 		bindingSessionID = placementSessionID
@@ -477,6 +471,50 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	defer d.openTileMu.Unlock()
 
 	tileID = seedTileIDForID(seed.ID)
+	if placementSessionID == "" {
+		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
+			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && isStandaloneSeedReader(snapshot, tileID) {
+				layout, ok := workspacelayout.UpdateTileParams(snapshot.Layout, tileID, seed.ID)
+				if !ok {
+					return "", "", fmt.Errorf("tile not found: %s", tileID)
+				}
+				layout, ok = workspacelayout.UpdateTileSessionID(layout, tileID, bindingSessionID)
+				if !ok {
+					return "", "", fmt.Errorf("tile not found: %s", tileID)
+				}
+				snapshot.Layout = layout
+				if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
+					return "", "", err
+				}
+				d.broadcastWorkspaceLayoutUpdated(candidateID)
+				return candidateID, tileID, nil
+			}
+		}
+
+		workspaceID = uuid.NewString()
+		d.registerWorkspace(workspaceID, seed.Title, "", false)
+		snapshot := workspacelayout.NormalizeWorkspaceLayout(workspacelayout.WorkspaceLayout{
+			WorkspaceID: workspaceID,
+			Layout: workspacelayout.Node{
+				Type:          "tile",
+				TileID:        tileID,
+				TileKind:      string(workspacelayout.TileKindSeed),
+				TileParams:    seed.ID,
+				TileSessionID: bindingSessionID,
+			},
+		})
+		if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
+			d.unregisterWorkspaceIfEmpty(workspaceID)
+			return "", "", err
+		}
+		d.broadcastWorkspaceLayoutUpdated(workspaceID)
+		return workspaceID, tileID, nil
+	}
+
+	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
+	if !ok {
+		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
+	}
 	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && workspacelayout.HasTile(snapshot.Layout, tileID) {
 		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
 			return "", "", err
@@ -521,12 +559,16 @@ func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMes
 	d.sendOK(conn)
 }
 
-func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
+func (d *Daemon) seedPlacementSession(msg *protocol.OpenSeedMessage) string {
 	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" {
+	if placementSessionID == "" && !protocol.Deref(msg.Standalone) {
 		placementSessionID = d.currentlySelectedSession()
 	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, placementSessionID)
+	return placementSessionID
+}
+
+func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
+	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
@@ -605,11 +647,7 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 		SeedID:    strings.TrimSpace(msg.SeedID),
 		Success:   true,
 	}
-	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" {
-		placementSessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, placementSessionID)
+	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
@@ -699,4 +737,8 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 		}
 	}
 	return changed
+}
+
+func isStandaloneSeedReader(snapshot *workspacelayout.WorkspaceLayout, tileID string) bool {
+	return len(snapshot.Panes) == 0 && snapshot.Layout.Type == "tile" && snapshot.Layout.TileID == tileID
 }

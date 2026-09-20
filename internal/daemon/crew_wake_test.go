@@ -24,6 +24,17 @@ import (
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
 	t.Helper()
 	d := newCrewDaemon(t)
+	binDir := t.TempDir()
+	for _, agent := range []string{"claude", "codex"} {
+		script := "#!/bin/sh\nexit 0\n"
+		if agent == "claude" {
+			script = "#!/bin/sh\nread request\nprintf '%s\\n' '{\"type\":\"control_response\",\"response\":{\"subtype\":\"success\",\"request_id\":\"attn-model-discovery\",\"response\":{\"models\":[{\"value\":\"fixture-model\",\"supportsEffort\":true}]}}}'\ncat >/dev/null\n"
+		}
+		if err := os.WriteFile(filepath.Join(binDir, agent), []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake %s executable: %v", agent, err)
+		}
+	}
+	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	backend := &fakeSpawnBackend{screen: "❯"}
 	d.ptyBackend = backend
 
@@ -89,10 +100,34 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	}
 }
 
+func TestCrewWake_BroadcastsTheLiveBindingAfterSessionRegistration(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	trace := wireRecorder(d)
+
+	result, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+
+	for _, payload := range trace.Payloads() {
+		var event protocol.CrewUpdatedMessage
+		if err := json.Unmarshal(payload, &event); err != nil || event.Event != protocol.EventCrewUpdated {
+			continue
+		}
+		for _, member := range event.Members {
+			if member.ID == "trellis" && protocol.Deref(member.BindingSession) == result.SessionID {
+				return
+			}
+		}
+	}
+	t.Fatalf("crew_updated never exposed trellis bound to %s; events = %v", result.SessionID, trace.EventNames())
+}
+
 func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.store.SetSetting(SettingDefaultModelPrefix+"claude", "claude-sonnet-4-5")
-	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr("claude-haiku-4-5")}); !resp.Ok {
+	const qualifiedModel = "anthropic/claude-haiku-4-5"
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Model: protocol.Ptr(qualifiedModel)}); !resp.Ok {
 		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
 	}
 	if _, err := d.crewWake("trellis", ""); err != nil {
@@ -102,10 +137,10 @@ func TestCrewWake_AMemberWakesOnItsConfiguredModel(t *testing.T) {
 	backend.mu.Lock()
 	model := backend.spawnOpts[0].Model
 	backend.mu.Unlock()
-	if model != "claude-haiku-4-5" {
+	if model != qualifiedModel {
 		t.Fatalf("member woke on model %q, want its configured model", model)
 	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Model); got != "claude-haiku-4-5" {
+	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Model); got != qualifiedModel {
 		t.Fatalf("roster model = %q, want the configured model", got)
 	}
 }
@@ -206,6 +241,7 @@ func TestCrewWake_AnAwakeMemberIsNotWokenTwice(t *testing.T) {
 type crewRuntimeBackend struct {
 	*fakeSpawnBackend
 	running map[string]bool
+	infoErr map[string]error
 }
 
 func (b *crewRuntimeBackend) Spawn(ctx context.Context, opts ptybackend.SpawnOptions) error {
@@ -217,6 +253,9 @@ func (b *crewRuntimeBackend) Spawn(ctx context.Context, opts ptybackend.SpawnOpt
 }
 
 func (b *crewRuntimeBackend) SessionInfo(_ context.Context, sessionID string) (ptybackend.SessionInfo, error) {
+	if err := b.infoErr[sessionID]; err != nil {
+		return ptybackend.SessionInfo{}, err
+	}
 	running, ok := b.running[sessionID]
 	if !ok {
 		return ptybackend.SessionInfo{}, pty.ErrSessionNotFound
@@ -343,7 +382,11 @@ func TestCrewWake_ConcurrentWakesShareTheFirstDay(t *testing.T) {
 	if member := <-started; member != "keel" {
 		t.Fatalf("first wake started for %q", member)
 	}
-	<-firstClaimed
+	select {
+	case <-firstClaimed:
+	case result := <-results:
+		t.Fatalf("first wake returned before claiming the day: %+v, %v", result.result, result.err)
+	}
 	go wake()
 	if member := <-started; member != "keel" {
 		t.Fatalf("second wake started for %q", member)
@@ -744,8 +787,9 @@ func TestCrewWake_LaunchesTheHarnessTheMemberIsRegisteredOn(t *testing.T) {
 
 func TestCrewWake_AnUnsetAgentIsStillTheDefaultHarness(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
-		t.Fatalf("roster agent = %q, want the default %q", got, crew.DefaultAgent)
+	member := memberByID(t, crewList(t, d), "trellis")
+	if member.Agent != nil || member.ResolvedAgent != crew.DefaultAgent {
+		t.Fatalf("roster stored/resolved agent = %v/%q, want unset/%q", member.Agent, member.ResolvedAgent, crew.DefaultAgent)
 	}
 	if _, err := d.crewWake("trellis", ""); err != nil {
 		t.Fatalf("wake: %v", err)
@@ -793,8 +837,9 @@ func TestCrewSet_RefusesAnUnknownHarnessAndClearsBackToTheDefault(t *testing.T) 
 	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Agent: protocol.Ptr("")}); !resp.Ok {
 		t.Fatalf("crew set --agent '': %v", protocol.Deref(resp.Error))
 	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").Agent); got != crew.DefaultAgent {
-		t.Errorf("clearing the agent left %q, want %q", got, crew.DefaultAgent)
+	member := memberByID(t, crewList(t, d), "trellis")
+	if member.Agent != nil || member.ResolvedAgent != crew.DefaultAgent {
+		t.Errorf("clearing the agent left stored/resolved %v/%q, want unset/%q", member.Agent, member.ResolvedAgent, crew.DefaultAgent)
 	}
 }
 
@@ -963,5 +1008,60 @@ func TestCrewPrime_AClaimOlderThanAPageOfTheGardenStillWakesWithItsMember(t *tes
 	}
 	if strings.Contains(block, "You hold no seeds in the garden") {
 		t.Error("a member holding an older claim was told it holds nothing")
+	}
+}
+
+func lastCrewUpdatedMember(t *testing.T, trace *WireTrace, memberID string) (protocol.CrewMember, bool) {
+	t.Helper()
+	payloads := trace.Payloads()
+	for i := len(payloads) - 1; i >= 0; i-- {
+		var event protocol.CrewUpdatedMessage
+		if err := json.Unmarshal(payloads[i], &event); err != nil || event.Event != protocol.EventCrewUpdated {
+			continue
+		}
+		for _, member := range event.Members {
+			if member.ID == memberID {
+				return member, true
+			}
+		}
+	}
+	return protocol.CrewMember{}, false
+}
+
+func TestCrewSettings_ADefaultModelChangeRefreshesTheRosterResolvedValues(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	trace := wireRecorder(d)
+
+	d.handleSetSettingWS(&wsClient{}, &protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: SettingDefaultModelPrefix + "claude", Value: "claude-opus-5",
+	})
+	member, ok := lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || protocol.Deref(member.ResolvedModel) != "claude-opus-5" {
+		t.Fatalf("after the default model changed the roster shows trellis resolved model %q (broadcast=%v); events = %v", protocol.Deref(member.ResolvedModel), ok, trace.EventNames())
+	}
+
+	d.handleSetSettingWS(&wsClient{}, &protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: SettingDefaultEffortPrefix + "claude", Value: "high",
+	})
+	member, ok = lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || protocol.Deref(member.ResolvedEffort) != "high" {
+		t.Fatalf("after the default effort changed the roster shows trellis resolved effort %q (broadcast=%v)", protocol.Deref(member.ResolvedEffort), ok)
+	}
+}
+
+func TestCrewRegistry_EveryMemberWriteBroadcastsItsRevision(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	before := memberByID(t, crewList(t, d), "trellis").Revision
+	trace := wireRecorder(d)
+
+	d.recordCrewLetter("trellis", woken.SessionID, filepath.Join(t.TempDir(), "letter.md"))
+
+	member, ok := lastCrewUpdatedMember(t, trace, "trellis")
+	if !ok || member.Revision <= before {
+		t.Fatalf("filing a letter left the roster at revision %d (broadcast=%v), want past %d so the next save's token is current", member.Revision, ok, before)
 	}
 }

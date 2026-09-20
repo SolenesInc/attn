@@ -296,12 +296,9 @@ async function main() {
     fs.mkdirSync(toolGateDir, { recursive: true });
     fs.writeFileSync(toolReleaseMarker, 'release\n', 'utf8');
   });
-  runner.registerCleanup('close_session_panes', async () => {
+  runner.registerCleanup('close_session', async () => {
     if (!sessionId) return;
-    const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-    for (const pane of workspace?.panes || []) {
-      await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
-    }
+    await client.request('close_session', { sessionId }).catch(() => {});
   });
 
   try {
@@ -556,8 +553,10 @@ async function main() {
       const comment = 'checked against the real behaviour';
       await client.request('dom_type', { selector: '.anno-popup-text', text: comment });
 
-      const typed = await client.request('get_annotation_state', {});
-      const windowBounds = await client.request('get_window_bounds', {});
+      const [typed, windowBounds] = await Promise.all([
+        client.request('get_annotation_state', {}),
+        client.request('get_window_bounds', {}),
+      ]);
       runner.assert(Boolean(windowBounds?.logicalBounds), `No window bounds: ${JSON.stringify(windowBounds)}`);
       const outside = terminalPointOutside(typed.paneRects, typed.popupRect, typed.panelRect);
       runner.assert(Boolean(outside), `No terminal point clears the editor and panel: ${JSON.stringify(typed)}`);
@@ -568,7 +567,11 @@ async function main() {
         typed.viewport.width,
         typed.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.terminal-container.ghostty-terminal' });
       await driver.clickWindow(outsideWindow.relativeX, outsideWindow.relativeY);
+      const outsideReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(outsideReceipt.matches,
+        `Native terminal click landed elsewhere: ${JSON.stringify({ outside, outsideWindow, outsideReceipt })}`);
 
       const afterOutside = await client.request('get_annotation_state', {});
       runner.assert(
@@ -589,7 +592,11 @@ async function main() {
         afterOutside.viewport.width,
         afterOutside.viewport.height,
       );
+      await client.request('arm_native_pointer_witness', { selector: '.anno-popup-quote' });
       await driver.clickWindow(quoteWindow.relativeX, quoteWindow.relativeY);
+      const quoteReceipt = await client.request('wait_native_pointer_witness', {});
+      runner.assert(quoteReceipt.matches,
+        `Native editor click landed elsewhere: ${JSON.stringify({ quoteWindow, quoteReceipt })}`);
       let refocused = await client.request('get_annotation_state', {});
       runner.assert(
         refocused.commentFocused && refocused.popupDraft === comment,
@@ -797,10 +804,7 @@ async function main() {
     process.exitCode = 1;
   } finally {
     if (sessionId) {
-      const workspace = await client.request('get_workspace', { sessionId }).catch(() => null);
-      for (const pane of workspace?.panes || []) {
-        await client.request('close_pane', { sessionId, paneId: pane.paneId }).catch(() => {});
-      }
+      await client.request('close_session', { sessionId }).catch(() => {});
     }
     await client.quitApp().catch(() => {});
     await observer.close();

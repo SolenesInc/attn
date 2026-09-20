@@ -4,8 +4,9 @@ import {
   type LogicalLine,
   type LogicalSpan,
 } from './terminalLinks';
+import { SEED_ID_BODY } from './seedId';
 
-const SEED_ID_RE = /\bs-[0-9a-hjkmnp-tv-z]{6}\b/g;
+const SEED_ID_RE = new RegExp(`\\bs-${SEED_ID_BODY}\\b`, 'g');
 
 export interface TerminalSeedOccurrence {
   seedId: string;

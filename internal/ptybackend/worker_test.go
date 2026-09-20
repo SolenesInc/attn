@@ -22,6 +22,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
@@ -389,6 +390,18 @@ func TestWorkerBackend_ResolveBinaryPath_ReResolvesImplicitPath(t *testing.T) {
 	if got := backend.resolveBinaryPath(); got != recoveredPath {
 		t.Fatalf("resolveBinaryPath() = %q, want %q", got, recoveredPath)
 	}
+}
+
+func TestSharedHostCandidatesIncludeTheRunningProfilesInstall(t *testing.T) {
+	t.Setenv("ATTN_PROFILE", "host-lookup")
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	want := filepath.Join(filepath.Dir(config.AppDaemonBinaryForProfile(config.Profile())), ptyhost.BinaryName)
+	for _, candidate := range sharedHostBinaryCandidates() {
+		if candidate == want {
+			return
+		}
+	}
+	t.Fatalf("shared host candidates omit profile install %q", want)
 }
 
 func TestBundledAttnCandidatesLeadWithTheRunningProfilesInstall(t *testing.T) {

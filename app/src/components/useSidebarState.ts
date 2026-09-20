@@ -34,6 +34,8 @@ export function useSidebarState({
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
+  onManageCrew,
+  onOpenCrewMemberDetails,
   onSettleTurn,
   onOpenSnooze,
   onWakeTurn,
@@ -100,6 +102,13 @@ export function useSidebarState({
     id: string;
     label: string;
     chiefOfStaff: boolean;
+    crewMember?: string;
+    trigger: HTMLElement;
+    anchor: { top: number; left: number };
+  } | null>(null);
+  const [crewActionsTarget, setCrewActionsTarget] = useState<{
+    member: string;
+    trigger: HTMLElement;
     anchor: { top: number; left: number };
   } | null>(null);
 
@@ -114,7 +123,7 @@ export function useSidebarState({
     setRenameTarget({ kind, id, name, anchor: { top: rect.bottom + 4, left: rect.left } });
   };
   const openSessionActions = (
-    session: { id: string; label: string; chiefOfStaff?: boolean },
+    session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
@@ -123,6 +132,17 @@ export function useSidebarState({
       id: session.id,
       label: session.label,
       chiefOfStaff: Boolean(session.chiefOfStaff),
+      crewMember: session.crewMember,
+      trigger: event.currentTarget as HTMLElement,
+      anchor: { top: rect.bottom + 4, left: rect.right - 190 },
+    });
+  };
+  const openCrewMemberActions = (member: string, event: ReactMouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setCrewActionsTarget({
+      member,
+      trigger: event.currentTarget,
       anchor: { top: rect.bottom + 4, left: rect.right - 190 },
     });
   };
@@ -264,6 +284,8 @@ export function useSidebarState({
     crew,
     onWakeCrewMember,
     onSleepCrewMember,
+    onManageCrew,
+    onOpenCrewMemberDetails,
     onSettleTurn,
     onOpenSnooze,
     onWakeTurn,
@@ -312,8 +334,11 @@ export function useSidebarState({
     setRenameTarget,
     sessionActionsTarget,
     setSessionActionsTarget,
+    crewActionsTarget,
+    setCrewActionsTarget,
     openRename,
     openSessionActions,
+    openCrewMemberActions,
     mutedExpanded,
     setMutedExpanded,
     automationGroups,

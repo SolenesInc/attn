@@ -23,6 +23,43 @@ func (s *Store) EnqueueMaintenancePrompt(id, recipientSessionID, prompt string, 
 	return agentmailbox.Delivery{Item: item}, nil
 }
 
+func (s *Store) CommitDocumentWriteWithMaintenancePrompt(
+	write DocumentWrite,
+	fact BusEvent,
+	id, recipientSessionID, prompt string,
+	at time.Time,
+) (DocumentWriteResult, agentmailbox.Delivery, error) {
+	table, err := s.documentTable(write.Schema)
+	if err != nil {
+		return DocumentWriteResult{}, agentmailbox.Delivery{}, err
+	}
+	item := agentmailbox.Item{
+		ID: id, RecipientSessionID: recipientSessionID,
+		Kind: agentmailbox.KindMaintenancePrompt, Prompt: prompt,
+		CreatedAt: at.UTC().Format(sortableTimeFormat),
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return DocumentWriteResult{}, agentmailbox.Delivery{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	results, _, err := commitDocumentWritesWith(tx, []DocumentCommit{{Write: write, Fact: fact}}, []string{table}, at)
+	if err != nil {
+		return DocumentWriteResult{}, agentmailbox.Delivery{}, err
+	}
+	if err := insertAgentMailboxItem(tx, item); err != nil {
+		return DocumentWriteResult{}, agentmailbox.Delivery{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return DocumentWriteResult{}, agentmailbox.Delivery{}, err
+	}
+	return results[0], agentmailbox.Delivery{Item: item}, nil
+}
+
 func (s *Store) EnqueueMaintenancePromptOnce(
 	id, recipientSessionID, sourceID, coalesceKey, prompt string,
 	at time.Time,

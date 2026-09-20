@@ -3587,10 +3587,11 @@ describe('useDaemonSocket notebook and annotation events', () => {
   it('opens a seed tile with typed identity', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 
-    const promise = result.current.sendOpenSeed('s-7k3f9m', 'session-1');
+    const promise = result.current.sendOpenSeed('s-7k3f9m', { sessionId: 'session-1' });
     await Promise.resolve();
     const sent = lastSent(ws);
     expect(sent).toMatchObject({ cmd: 'open_seed', seed_id: 's-7k3f9m', session_id: 'session-1' });
+    expect(sent).not.toHaveProperty('standalone');
 
     ws.emit({
       event: 'open_seed_result',
@@ -3601,6 +3602,17 @@ describe('useDaemonSocket notebook and annotation events', () => {
       tile_id: 'tile-seed-s-7k3f9m',
     });
     await expect(promise).resolves.toEqual({ workspaceId: 'workspace-1', tileId: 'tile-seed-s-7k3f9m' });
+    unmount();
+  });
+
+  it('opens a standalone seed reader without naming a session', async () => {
+    const { result, unmount, ws } = await renderAndOpen();
+
+    void result.current.sendOpenSeed('s-7k3f9m', 'standalone');
+    await Promise.resolve();
+    const sent = lastSent(ws);
+    expect(sent).toMatchObject({ cmd: 'open_seed', seed_id: 's-7k3f9m', standalone: true });
+    expect(sent).not.toHaveProperty('session_id');
     unmount();
   });
 

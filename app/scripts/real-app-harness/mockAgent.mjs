@@ -426,6 +426,12 @@ async function runMockAgent() {
       transcript_path: transcriptPath,
       cwd,
     }));
+    const launchReceipt = process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT;
+    if (launchReceipt) {
+      const target = resolveFixturePath(cwd, launchReceipt);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `${id}\n`, 'utf8');
+    }
   };
   const writeRecords = (records) => {
     fs.mkdirSync(path.dirname(conversation.path), { recursive: true });
@@ -621,7 +627,17 @@ export function answerAppServerLine(line) {
   if (request.method === 'model/list') return { id: request.id, result: { data: MOCK_AGENT_MODEL_LIST, nextCursor: null } };
   return { id: request.id, error: { message: `mock agent app-server does not know ${request.method}` } };
 }
-function runAppServer() {
+export function answerStreamJsonLine(line) {
+  const request = JSON.parse(line);
+  if (request.type !== 'control_request' || request.request?.subtype !== 'initialize') return null;
+  return { type: 'control_response', response: { subtype: 'success', request_id: request.request_id,
+    response: { models: [{ value: MOCK_AGENT_MODEL, displayName: 'Mock agent 1', supportsEffort: true,
+      supportedEffortLevels: ['low', 'medium', 'high'] }] } } };
+}
+function isStreamJsonDiscovery(args) {
+  return args.includes('--print') && args.includes('--input-format') && args.includes('stream-json');
+}
+function runLineServer(answerLine) {
   let buffer = '';
   process.stdin.setEncoding('utf8');
   process.stdin.on('data', (chunk) => {
@@ -631,7 +647,7 @@ function runAppServer() {
       const line = buffer.slice(0, newline).trim();
       buffer = buffer.slice(newline + 1);
       if (!line) continue;
-      const reply = answerAppServerLine(line);
+      const reply = answerLine(line);
       if (reply) process.stdout.write(`${JSON.stringify(reply)}\n`);
     }
   });
@@ -640,7 +656,8 @@ function runAppServer() {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === executablePath) {
-  if (process.argv[2] === 'app-server') runAppServer();
+  if (process.argv[2] === 'app-server') runLineServer(answerAppServerLine);
+  else if (isStreamJsonDiscovery(process.argv.slice(2))) runLineServer(answerStreamJsonLine);
   else runMockAgent().catch((error) => {
     console.error(`mock agent failed: ${error instanceof Error ? error.message : String(error)}`);
     process.exitCode = 1;

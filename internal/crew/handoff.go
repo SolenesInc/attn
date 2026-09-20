@@ -13,6 +13,8 @@ const HandoffStampLayout = "2006-01-02T15-04Z"
 
 const MaxHandoffBytes = 64000
 
+const MaxHandoffFileBytes = MaxHandoffBytes + 1
+
 func HandoffFileName(member string, at time.Time) string {
 	return at.UTC().Format(HandoffStampLayout) + "-" + member + ".md"
 }

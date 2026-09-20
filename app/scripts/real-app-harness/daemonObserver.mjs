@@ -90,6 +90,58 @@ export class DaemonObserver {
     });
   }
 
+  async waitForMessage(predicate, description, timeoutMs = 10_000) {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      throw new Error(`Cannot wait for ${description}: daemon websocket is not connected`);
+    }
+    return new Promise((resolve, reject) => {
+      const cleanup = () => {
+        clearTimeout(timeout);
+        ws.off('message', onMessage);
+        ws.off('close', onClose);
+      };
+      const onMessage = (raw) => {
+        let data;
+        try {
+          data = JSON.parse(raw.toString());
+        } catch {
+          return;
+        }
+        const value = predicate(data);
+        if (!value) return;
+        cleanup();
+        resolve(value);
+      };
+      const onClose = () => {
+        cleanup();
+        reject(new Error(`Daemon websocket closed while waiting for ${description}`));
+      };
+      const timeout = setTimeout(() => {
+        cleanup();
+        reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${description}`));
+      }, timeoutMs);
+      ws.on('message', onMessage);
+      ws.once('close', onClose);
+    });
+  }
+
+  async waitForDisconnect(description = 'daemon websocket to close', timeoutMs = 10_000) {
+    const ws = this.ws;
+    if (!ws || ws.readyState === WebSocket.CLOSED) return true;
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        ws.off('close', onClose);
+        reject(new Error(`Timed out after ${timeoutMs}ms waiting for ${description}`));
+      }, timeoutMs);
+      const onClose = () => {
+        clearTimeout(timeout);
+        resolve(true);
+      };
+      ws.once('close', onClose);
+    });
+  }
+
   send(message) {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('Daemon websocket is not connected');

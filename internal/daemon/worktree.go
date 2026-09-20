@@ -230,9 +230,13 @@ func (e *deleteWorktreeError) Unwrap() error {
 }
 
 func (d *Daemon) doDeleteWorktree(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {
-	return d.worktreeMaintenance.RunForeground(context.Background(), "delete worktree", func(context.Context) error {
+	err = d.worktreeMaintenance.RunForeground(context.Background(), "delete worktree", func(context.Context) error {
 		return d.doDeleteWorktreeForeground(path, endpointID, opts)
 	})
+	if err == nil {
+		d.reconcileCrewRestarts()
+	}
+	return err
 }
 
 func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opts deleteWorktreeOptions) (err error) {

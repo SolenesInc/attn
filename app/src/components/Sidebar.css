@@ -1352,6 +1352,35 @@
   color: var(--color-text-dimmed);
 }
 
+.sidebar-crew-manage {
+  display: flex;
+  align-items: center;
+  width: calc(100% - 12px);
+  margin: 2px 6px 0;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sidebar-crew-manage:hover,
+.sidebar-crew-manage:focus-visible {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+}
+
+.sidebar-crew-count {
+  margin-left: auto;
+  color: var(--color-text-dimmed);
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-xs);
+}
+
 /* Queue arrangement: the chief's anchored slot and the "Your turn" band, both
    above the workspace tree. The tree below is unchanged, so these rows are
    additions to the sidebar, never a filter over it. */

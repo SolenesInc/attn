@@ -78,6 +78,8 @@ export interface SessionTerminalWorkspaceProps {
   gardenSeeds?: Seed[];
   onOpenSeed?: (seedId: string) => void;
   onRevealSeedInGarden?: (seedId: string) => void;
+  backToCrewTileId?: string;
+  onBackToCrew?: (returnFocus: HTMLElement) => void;
   seedPopoverRequest?: { sessionId: string; nonce: number };
   usagePopoverRequest?: { sessionId: string; nonce: number };
   annotationApi?: SessionAnnotationApi;

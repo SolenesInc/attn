@@ -2761,12 +2761,11 @@ model OpenMarkdownResultMessage {
   tile_id?: string;
 }
 
-// Open a seed into a docked reader tile. The seed lives in the hub's garden;
-// session_id identifies the local workspace/pane beside which the tile docks.
 model OpenSeedMessage {
   cmd: "open_seed";
   seed_id: string;
   session_id?: string;
+  standalone?: boolean;
   request_id?: string;
 }
 
@@ -6347,9 +6346,14 @@ model Response {
   agent_inbox_batch_result?: AgentInboxBatchResult;
   agent_msg_status_result?: AgentPeerMessage;
   crew_list_result?: CrewListResult;
+  crew_charter_get_result?: CrewCharterGetResult;
+  crew_charter_set_result?: CrewCharterSetResult;
+  crew_handoffs_get_result?: CrewHandoffsGetResult;
+  crew_handoff_get_result?: CrewHandoffGetResult;
   crew_wake_result?: CrewWakeResult;
   crew_sleep_result?: CrewSleepResult;
   crew_set_result?: CrewSetResult;
+  crew_restart_result?: CrewRestartResult;
   crew_prime_result?: CrewPrimeResult;
   crew_handoff_result?: CrewHandoffResult;
   seed_plant_result?: SeedPlantResult;
@@ -6482,28 +6486,134 @@ model CrewListMessage {
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
   id: string;
+  revision: safeint;
   charter_path: string;
   home_dir: string;
   // Where the member's sessions launch; absent until the wake slice records one.
   cwd?: string;
-  // The harness this member's days run on. Absent means the crew default
-  // (claude); a wake's own `agent` still wins for that one day.
   agent?: string;
   // The model this member's days run on with its recorded harness. Absent takes
   // the configured default for the launch harness, then the crew fallback when
   // none is configured. A one-day agent override does not carry this model to
   // another harness.
   `model`?: string;
+  effort?: string;
+  resolved_agent: string;
+  resolved_model?: string;
+  resolved_effort?: string;
   // The places the member's charter is about.
   awareness_dirs: string[];
   // The session living this member's current day. Present only while that
   // session is live — the daemon judges the binding at read, so presence IS
   // "awake" and a caller never re-derives liveness.
   binding_session?: string;
+  restart?: CrewRestart;
 }
 
 model CrewListResult {
   members: CrewMember[];
+}
+
+model CrewCharterDocument {
+  content: string;
+  token: string;
+}
+
+model CrewCharterGetMessage {
+  cmd: "crew_charter_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewCharterGetResult {
+  member: string;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterGetResultMessage {
+  event: "crew_charter_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+model CrewCharterSetMessage {
+  cmd: "crew_charter_set";
+  member: string;
+  content: string;
+  expected_token: string;
+  request_id?: string;
+}
+
+model CrewCharterSetResult {
+  member: string;
+  conflict: boolean;
+  charter: CrewCharterDocument;
+}
+
+model CrewCharterSetResultMessage {
+  event: "crew_charter_set_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: string;
+  charter?: CrewCharterDocument;
+}
+
+model CrewHandoffSummary {
+  filename: string;
+  occurred_at: utcDateTime;
+}
+
+model CrewHandoffDocument {
+  filename: string;
+  occurred_at: utcDateTime;
+  content: string;
+  token: string;
+}
+
+model CrewHandoffsGetMessage {
+  cmd: "crew_handoffs_get";
+  member: string;
+  request_id?: string;
+}
+
+model CrewHandoffsGetResult {
+  member: string;
+  handoffs: CrewHandoffSummary[];
+}
+
+model CrewHandoffsGetResultMessage {
+  event: "crew_handoffs_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  handoffs: CrewHandoffSummary[];
+}
+
+model CrewHandoffGetMessage {
+  cmd: "crew_handoff_get";
+  member: string;
+  filename: string;
+  request_id?: string;
+}
+
+model CrewHandoffGetResult {
+  member: string;
+  handoff: CrewHandoffDocument;
+}
+
+model CrewHandoffGetResultMessage {
+  event: "crew_handoff_get_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+  member?: string;
+  handoff?: CrewHandoffDocument;
 }
 
 // Start a member's day: launch a session bound to it, in the member's own cwd,
@@ -6597,6 +6707,9 @@ model CrewSetMessage {
   // The model the member's days run on. An empty string clears it back to the
   // configured harness default, then the crew fallback.
   `model`?: string;
+  effort?: string;
+  expected_revision?: safeint;
+  request_id?: string;
   awareness_dirs?: string[];
 
   // The way out. An empty awareness_dirs cannot say "clear it": the field is
@@ -6607,6 +6720,56 @@ model CrewSetMessage {
 
 model CrewSetResult {
   member: CrewMember;
+}
+
+model CrewSetResultMessage {
+  event: "crew_set_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: CrewMember;
+}
+
+enum CrewRestartState {
+  queued,
+  requested,
+  failed,
+  completed,
+}
+
+model CrewRestart {
+  request_id: string;
+  session_id: string;
+  state: CrewRestartState;
+  delivery_status?: AgentMsgStatus;
+  detail?: string;
+  error?: string;
+  letter_path?: string;
+  successor_session_id?: string;
+}
+
+model CrewRestartMessage {
+  cmd: "crew_restart";
+  member: string;
+  request_id: string;
+  expected_session_id?: string;
+  expected_revision?: safeint;
+}
+
+model CrewRestartResult {
+  member: CrewMember;
+  restart: CrewRestart;
+}
+
+model CrewRestartResultMessage {
+  event: "crew_restart_result";
+  request_id: string;
+  success: boolean;
+  conflict: boolean;
+  error?: string;
+  member?: CrewMember;
+  restart?: CrewRestart;
 }
 
 // What a launching session needs to be its member: the composed priming block
@@ -7488,8 +7651,14 @@ alias DaemonEvent =
   | SeedTransitionResultMessage
   | SeedNoteResultMessage
   | CrewUpdatedMessage
+  | CrewCharterGetResultMessage
+  | CrewCharterSetResultMessage
+  | CrewHandoffsGetResultMessage
+  | CrewHandoffGetResultMessage
   | CrewWakeResultMessage
   | CrewSleepResultMessage
+  | CrewSetResultMessage
+  | CrewRestartResultMessage
   | TicketAttachResultMessage
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage

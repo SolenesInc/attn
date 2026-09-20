@@ -125,6 +125,8 @@ type Daemon struct {
 	presenceMu                        sync.RWMutex
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
+	crewCharterMu                     sync.Mutex
+	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
 	logger                            *logging.Logger
 	debugLogging                      bool
@@ -1033,6 +1035,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
 		d.gardenWatchMu.Unlock()
@@ -2672,12 +2675,22 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleSeedReviewKeep(conn, msg.(*protocol.SeedReviewKeepMessage))
 	case protocol.CmdCrewList:
 		d.handleCrewList(conn, msg.(*protocol.CrewListMessage))
+	case protocol.CmdCrewCharterGet:
+		d.handleCrewCharterGet(conn, msg.(*protocol.CrewCharterGetMessage))
+	case protocol.CmdCrewCharterSet:
+		d.handleCrewCharterSet(conn, msg.(*protocol.CrewCharterSetMessage))
+	case protocol.CmdCrewHandoffsGet:
+		d.handleCrewHandoffsGet(conn, msg.(*protocol.CrewHandoffsGetMessage))
+	case protocol.CmdCrewHandoffGet:
+		d.handleCrewHandoffGet(conn, msg.(*protocol.CrewHandoffGetMessage))
 	case protocol.CmdCrewWake:
 		d.handleCrewWake(conn, msg.(*protocol.CrewWakeMessage))
 	case protocol.CmdCrewSleep:
 		d.handleCrewSleep(conn, msg.(*protocol.CrewSleepMessage))
 	case protocol.CmdCrewSet:
 		d.handleCrewSet(conn, msg.(*protocol.CrewSetMessage))
+	case protocol.CmdCrewRestart:
+		d.handleCrewRestart(conn, msg.(*protocol.CrewRestartMessage))
 	case protocol.CmdCrewPrime:
 		d.handleCrewPrime(conn, msg.(*protocol.CrewPrimeMessage))
 	case protocol.CmdCrewHandoff:

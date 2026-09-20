@@ -65,6 +65,7 @@
     "real-app:scenario-garden-seed-tile-navigation": "node scripts/real-app-harness/scenario-garden-seed-tile-navigation.mjs",
     "real-app:scenario-garden-plot-dispatch": "node scripts/real-app-harness/scenario-garden-plot-dispatch.mjs",
     "real-app:scenario-delegation-preferences": "node scripts/real-app-harness/scenario-delegation-preferences.mjs",
+    "real-app:scenario-crew-management": "node scripts/real-app-harness/scenario-crew-management.mjs",
     "real-app:scenario-garden-seed-read-receipts": "node scripts/real-app-harness/scenario-garden-seed-read-receipts.mjs",
     "real-app:scenario-garden-seed-reopen": "node scripts/real-app-harness/scenario-garden-seed-reopen.mjs",
     "real-app:scenario-legacy-ticket-recovery": "node scripts/real-app-harness/scenario-legacy-ticket-recovery.mjs",

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/docstore"
 )
 
 func newAgentMailboxStore(t *testing.T) *Store {
@@ -27,6 +28,49 @@ func enqueuePeer(t *testing.T, s *Store, id, sender, recipient, body string, cre
 		t.Fatalf("EnqueuePeerMessage(%s): %v", id, err)
 	}
 	return delivery
+}
+
+func TestDocumentWriteAndMaintenancePromptCommitTogether(t *testing.T) {
+	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
+	schema := requestsDecl(t, s)
+	if _, err := s.db.Exec(`CREATE TRIGGER refuse_sleep_prompt BEFORE INSERT ON agent_mailbox_items BEGIN SELECT RAISE(ABORT, 'mailbox unavailable'); END`); err != nil {
+		t.Fatal(err)
+	}
+
+	expected := docstore.FirstRev
+	_, _, err := s.CommitDocumentWriteWithMaintenancePrompt(
+		DocumentWrite{Schema: schema, ID: "a", Body: []byte(`{"status":"withdrawn"}`), Expected: &expected},
+		changeFact("a", false), "sleep-a", "session-a", "sleep now", base.Add(time.Second),
+	)
+	if err == nil || !strings.Contains(err.Error(), "mailbox unavailable") {
+		t.Fatalf("commit error = %v", err)
+	}
+	doc, found, err := s.GetDocument(schema, "a")
+	if err != nil || !found || string(doc.Body) != `{"status":"pending"}` || doc.Rev != docstore.FirstRev {
+		t.Fatalf("document after mailbox failure = %+v, found=%t err=%v", doc, found, err)
+	}
+	items, err := s.UnreadAgentMailboxDeliveries("session-a")
+	if err != nil || len(items) != 0 {
+		t.Fatalf("mailbox after failed commit = %+v, err=%v", items, err)
+	}
+}
+
+func TestStaleDocumentWriteDoesNotEnqueueMaintenancePrompt(t *testing.T) {
+	s, base := storeWithRequests(t, map[string]string{"a": `{"status":"pending"}`})
+	schema := requestsDecl(t, s)
+	stale := docstore.ExpectAbsent
+
+	_, _, err := s.CommitDocumentWriteWithMaintenancePrompt(
+		DocumentWrite{Schema: schema, ID: "a", Body: []byte(`{"status":"withdrawn"}`), Expected: &stale},
+		changeFact("a", false), "sleep-a", "session-a", "sleep now", base.Add(time.Second),
+	)
+	if !docstore.IsConflict(err) {
+		t.Fatalf("stale commit error = %v", err)
+	}
+	items, err := s.UnreadAgentMailboxDeliveries("session-a")
+	if err != nil || len(items) != 0 {
+		t.Fatalf("mailbox after stale write = %+v, err=%v", items, err)
+	}
 }
 
 func TestReadAgentMailboxReturnsABoundedFIFOAndExactReceipts(t *testing.T) {

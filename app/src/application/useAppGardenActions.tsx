@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { type SeedReviewActionContext } from '../hooks/useDaemonSocket';
+import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
 import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useDaemonStore } from '../store/daemonSessions';
@@ -11,7 +11,6 @@ import { crewDisplayName } from '../utils/crewName';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
   activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
-  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
   showError: ReturnType<typeof useErrorToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
@@ -23,11 +22,14 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
+  handleSelectTile: (workspaceId: string, tileId: string) => void;
+  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
+  setCrewSeedTile: (tile: { workspaceId: string; tileId: string } | null) => void;
+  closeCrewPanel: () => void;
 }
 export function useAppGardenActions({
   sendOpenSeed,
   activeSessionId,
-  focusWorkspaceLeaf,
   showError,
   seeds,
   openDockPanel,
@@ -39,18 +41,52 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
+  handleSelectTile,
+  focusWorkspaceLeaf,
+  setCrewSeedTile,
+  closeCrewPanel,
 }: Options) {
+  const openSeedTile = useCallback(
+    async (
+      seedId: string,
+      placement: SeedPlacement,
+      beforeFocus?: (opened: { workspaceId: string; tileId: string }) => void,
+    ) => {
+      const opened = await sendOpenSeed(seedId, placement);
+      if (!opened.workspaceId || !opened.tileId) {
+        throw new Error(`The daemon opened ${seedId} without a workspace tile`);
+      }
+      const { workspaceId, tileId } = opened;
+      beforeFocus?.({ workspaceId, tileId });
+      handleSelectTile(workspaceId, tileId);
+      return opened;
+    },
+    [sendOpenSeed, handleSelectTile],
+  );
+
   const handleOpenSeedTile = useCallback(
     (seedId: string) => {
-      void sendOpenSeed(seedId, activeSessionId || '')
-        .then(({ workspaceId, tileId }) => {
-          if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-        })
-        .catch((error) => {
-          showError(error instanceof Error ? error.message : 'Could not open the seed');
-        });
+      void openSeedTile(seedId, { sessionId: activeSessionId || '' }).catch((error) => {
+        showError(error instanceof Error ? error.message : 'Could not open the seed');
+      });
     },
-    [sendOpenSeed, activeSessionId, focusWorkspaceLeaf, showError],
+    [activeSessionId, openSeedTile, showError],
+  );
+
+  const handleOpenSeedFromCrew = useCallback(
+    (seedId: string, placementSessionId?: string) => {
+      void openSeedTile(
+        seedId,
+        placementSessionId ? { sessionId: placementSessionId } : 'standalone',
+        (opened) => {
+          setCrewSeedTile(opened);
+          closeCrewPanel();
+        },
+      ).catch((error) => {
+        showError(error instanceof Error ? error.message : 'Could not open the seed');
+      });
+    },
+    [closeCrewPanel, openSeedTile, setCrewSeedTile, showError],
   );
 
   const handleRevealSeedInGarden = useCallback(
@@ -152,6 +188,7 @@ export function useAppGardenActions({
     handleWakeCrewMember,
     handleSleepCrewMember,
     handleOpenSeedTile,
+    handleOpenSeedFromCrew,
     handleRevealSeedInGarden,
     handleOpenMarkdownArtifact,
     checkArtifactPath,
