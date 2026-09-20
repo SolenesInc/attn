@@ -98,21 +98,9 @@ class MockGitHubServer {
   }
 }
 
-// The teardown kill interpolates this port, so it must stay scoped to this run's
-// own daemon and never a peer agent's.
 const { daemonPort: TEST_DAEMON_PORT } = e2ePorts();
 const MOCK_GH_HOST = 'mock.github.local';
 const TEST_DAEMON_WS_URL = `ws://127.0.0.1:${TEST_DAEMON_PORT}/ws`;
-
-async function killTestDaemons(): Promise<void> {
-  try {
-    await new Promise<void>((resolve) => {
-      spawn('pkill', ['-f', `ATTN_WS_PORT=${TEST_DAEMON_PORT}`], { stdio: 'ignore' }).on('close', () => resolve());
-    });
-    await new Promise((resolve) => setTimeout(resolve, 300));
-  } catch {
-  }
-}
 
 function createFakeAgentStubs(): { binDir: string; cleanup: () => void } {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-e2e-stubs-'));
@@ -571,8 +559,6 @@ export const test = base.extend<Fixtures>({
     let daemon: { proc: ChildProcess; socketPath: string; tempDir: string; stop: () => void } | null = null;
 
     const startFn = async () => {
-      await killTestDaemons();
-
       daemon = await startDaemon(mockGitHub.url);
       return {
         wsUrl: TEST_DAEMON_WS_URL,
@@ -593,7 +579,6 @@ export const test = base.extend<Fixtures>({
 
     const fixture: DaemonFixture = {
       start: async () => {
-        await killTestDaemons();
         await managed.start();
         started = true;
         return {

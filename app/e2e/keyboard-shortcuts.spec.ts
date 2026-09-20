@@ -1,30 +1,6 @@
 import { test, expect } from './fixtures';
 
-async function injectLocalSession(
-  page: import('@playwright/test').Page,
-  session: { id: string; label: string; state: string; cwd?: string; isWorktree?: boolean; branch?: string }
-) {
-  await page.evaluate((s) => {
-    const paneId = `pane-${s.id}`;
-    const workspaceId = `workspace-${s.id}`;
-    window.__TEST_INJECT_SESSION?.({
-      id: s.id,
-      label: s.label,
-      state: s.state as 'working' | 'waiting_input' | 'idle',
-      cwd: s.cwd || '/tmp/test',
-      workspaceId,
-      ...(s.isWorktree !== undefined ? { isWorktree: s.isWorktree } : {}),
-      ...(s.branch ? { branch: s.branch } : {}),
-    });
-    window.__TEST_SET_SESSION_WORKSPACE?.(s.id, {
-      agents: [{ id: paneId, runtimeId: s.id, sessionId: s.id, title: s.label }],
-      layoutTree: { type: 'pane', paneId },
-    }, paneId);
-  }, session);
-}
-
 async function createSession(
-  page: import('@playwright/test').Page,
   daemon: {
     injectSession: (s: {
       id: string;
@@ -48,11 +24,6 @@ async function createSession(
   }
 ) {
   const cwd = session.cwd || '/tmp/test';
-  await injectLocalSession(page, {
-    ...session,
-    cwd,
-    ...(session.is_worktree !== undefined ? { isWorktree: session.is_worktree } : {}),
-  });
   await daemon.injectSession({
     id: session.id,
     label: session.label,
@@ -72,7 +43,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's-new', label: 'Root', state: 'working', cwd: '/tmp/test/new-session' });
+      await createSession(daemon, { id: 's-new', label: 'Root', state: 'working', cwd: '/tmp/test/new-session' });
       await expect(page.locator('[data-testid="session-s-new"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-new"]').click();
@@ -92,7 +63,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's-shell', label: 'Root', state: 'working', cwd: '/tmp/test/shell-session' });
+      await createSession(daemon, { id: 's-shell', label: 'Root', state: 'working', cwd: '/tmp/test/shell-session' });
       await expect(page.locator('[data-testid="session-s-shell"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-shell"]').click();
@@ -112,7 +83,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/horizontal-session' });
+      await createSession(daemon, { id: 's-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/horizontal-session' });
       await expect(page.locator('[data-testid="session-s-horizontal"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-horizontal"]').click();
@@ -133,7 +104,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's-picked-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/picked-horizontal-session' });
+      await createSession(daemon, { id: 's-picked-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/picked-horizontal-session' });
       await expect(page.locator('[data-testid="session-s-picked-horizontal"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-picked-horizontal"]').click();
@@ -162,7 +133,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's-zoom', label: 'Zoom', state: 'working', cwd: '/tmp/test/zoom' });
+      await createSession(daemon, { id: 's-zoom', label: 'Zoom', state: 'working', cwd: '/tmp/test/zoom' });
       await expect(page.locator('[data-testid="session-s-zoom"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-zoom"]').click();
@@ -320,7 +291,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s1"]').click();
@@ -337,7 +308,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s1"]').click();
@@ -354,9 +325,9 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
-      await createSession(page, daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
-      await createSession(page, daemon, { id: 's3', label: 'Third', state: 'working', cwd: '/tmp/test/s3' });
+      await createSession(daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
+      await createSession(daemon, { id: 's3', label: 'Third', state: 'working', cwd: '/tmp/test/s3' });
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
@@ -382,8 +353,8 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
-      await createSession(page, daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
+      await createSession(daemon, { id: 's1', label: 'First', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's2', label: 'Second', state: 'working', cwd: '/tmp/test/s2' });
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
@@ -402,8 +373,8 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
-      await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
+      await createSession(daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
 
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
@@ -427,7 +398,7 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await createSession(page, daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
+      await createSession(daemon, { id: 's1', label: 'Test', state: 'working', cwd: '/tmp/test/s1' });
       await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s1"]').click();
