@@ -483,7 +483,9 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 				continue
 			}
 		}
-		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{})
+		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{
+			EmitReviewerVerdictFeedback: true,
+		})
 		clearAction := transition.HeadChanged || transition.ReviewerChanged
 		if err := d.store.ApplyPullRequestWatchBaseline(
 			watch.SessionID, watch.PRID, pullRequestWatchCoalesceKey(watch.PRID),
@@ -569,7 +571,7 @@ func (d *Daemon) deliverPullRequestTransition(watch store.PullRequestWatch, even
 
 func pullRequestWatchEventID(watch store.PullRequestWatch, eventID string) string {
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
-		"pull-request-watch", watch.SessionID, watch.PRID, eventID,
+		"pull-request-watch", watch.SessionID, watch.PRID, watch.CreatedAt, eventID,
 	}, "\x00"))).String()
 }
 

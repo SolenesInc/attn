@@ -243,6 +243,75 @@ func TestPullRequestWatchBaselinesThenRetriesHumanFeedbackAcrossRestart(t *testi
 	}
 }
 
+func TestPullRequestWatchDeliversHumanReviewerVerdictAsDurableFeedback(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	if resp := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "human-reviewer",
+	}); !resp.Ok {
+		t.Fatalf("watch response = %+v", resp)
+	}
+	now := time.Now()
+	observation := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
+	host := &fakePRHost{readiness: observation}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now)
+
+	observation.Reviews = []prreadiness.Review{{
+		ID: "approval", Author: "human-reviewer", State: "APPROVED", CommitOID: "sha-1",
+		Body: "Ship it, with this rollout caveat.", SubmittedAt: now.Add(time.Second),
+	}}
+	observation.Comments = []prreadiness.Comment{{
+		ID: "approval", Author: "human-reviewer", Kind: prreadiness.CommentReview, ReviewState: "APPROVED",
+		Body: "Ship it, with this rollout caveat.", CreatedAt: now.Add(time.Second),
+	}}
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 2 {
+		t.Fatalf("deliveries = %+v, %v", unread, err)
+	}
+	var durable bool
+	for _, delivery := range unread {
+		if delivery.Item.CoalesceKey == "" && strings.Contains(delivery.Item.Prompt, "rollout caveat") {
+			durable = true
+		}
+	}
+	if !durable {
+		t.Fatalf("durable formal review feedback missing: %+v", unread)
+	}
+}
+
+func TestPullRequestWatchRearmRedeliversSameAction(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	first := d.store.PullRequestWatches()[0]
+	event := prreadiness.Event{
+		ID: "action:unchanged", Kind: prreadiness.EventAction,
+		Outcomes: []prreadiness.Outcome{prreadiness.OutcomeChecksFailed}, Details: []string{"CI"},
+	}
+	if err := d.deliverPullRequestTransition(first, []prreadiness.Event{event}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if read, remaining, err := d.store.ReadAgentMailbox("s1", 1, time.Now()); err != nil || len(read) != 1 || remaining != 0 {
+		t.Fatalf("read first action = %+v, %d, %v", read, remaining, err)
+	}
+	if _, err := d.store.UnwatchPullRequest(first.SessionID, first.PRID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.WatchPullRequest(first.SessionID, first.PRID, first.Reviewer, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	second := d.store.PullRequestWatches()[0]
+	if err := d.deliverPullRequestTransition(second, []prreadiness.Event{event}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || unread[0].Item.ID == pullRequestWatchEventID(first, event.ID) {
+		t.Fatalf("rearmed action = %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchClearsStaleActionOnHeadChangeAndDisarmsOnClose(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"

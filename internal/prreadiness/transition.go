@@ -20,6 +20,7 @@ type StartPolicy struct {
 	Since                            time.Time
 	HoldExistingVerdictWhenRequested bool
 	IgnoreAuthors                    []string
+	EmitReviewerVerdictFeedback      bool
 }
 
 type Outcome string
@@ -150,9 +151,11 @@ func feedbackEvents(observation Observation, reviewer string, seenIDs []string, 
 	seen := stringSet(seenIDs)
 	var events []Event
 	for _, comment := range observation.Comments {
+		formalReviewerVerdict := comment.Kind == CommentReview && SameActor(comment.Author, reviewer) &&
+			isFormalReviewState(comment.ReviewState)
 		if comment.ID == "" || seen[comment.ID] || ignoredAuthor(comment.Author, policy.IgnoreAuthors) ||
 			(!policy.Since.IsZero() && !comment.CreatedAt.After(policy.Since)) ||
-			comment.Kind == CommentReview && SameActor(comment.Author, reviewer) && isFormalReviewState(comment.ReviewState) {
+			(formalReviewerVerdict && !policy.EmitReviewerVerdictFeedback) {
 			continue
 		}
 		outcome := OutcomeHumanComment

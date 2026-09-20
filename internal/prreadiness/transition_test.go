@@ -114,6 +114,28 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "formal reviewer body is optional durable feedback",
+			run: func(t *testing.T) {
+				initial := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+				}
+				first := Advance(Cursor{}, initial, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				observation := ready("head-a", "approval-a")
+				observation.Reviews[0].Body = "Ship it, with this rollout caveat."
+				observation.Reviews[0].SubmittedAt = base.Add(time.Minute)
+				observation.Comments = []Comment{{
+					ID: "approval-a", Author: "reviewer", Kind: CommentReview, ReviewState: "APPROVED",
+					Body: "Ship it, with this rollout caveat.", CreatedAt: base.Add(time.Minute),
+				}}
+				daemon := Advance(first.NextCursor, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				cli := Advance(first.NextCursor, observation, "reviewer", StartPolicy{})
+				if !has(daemon.Events, OutcomeReady) || !has(daemon.Events, OutcomeHumanComment) ||
+					has(cli.Events, OutcomeHumanComment) {
+					t.Fatalf("daemon = %+v, cli = %+v", daemon, cli)
+				}
+			},
+		},
+		{
 			name: "reaction freshness uses identity despite clock skew",
 			run: func(t *testing.T) {
 				observation := Observation{
