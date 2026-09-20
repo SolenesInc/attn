@@ -219,6 +219,33 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "Codex outage is not duplicated as bot feedback",
+			run: func(t *testing.T) {
+				initial := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+				}
+				first := Advance(Cursor{}, initial, "chatgpt-codex-connector[bot]", StartPolicy{})
+				observation := initial
+				observation.Comments = []Comment{{
+					ID: "outage", Author: "chatgpt-codex-connector", Kind: CommentIssue, Bot: true,
+					Body: "Review unavailable: quota exceeded", CreatedAt: base.Add(time.Minute),
+				}}
+				got := Advance(first.NextCursor, observation, "chatgpt-codex-connector[bot]", StartPolicy{})
+				if !has(got.Events, OutcomeReviewUnavailable) || has(got.Events, OutcomeBotComment) || len(got.Events) != 1 {
+					t.Fatalf("transition = %+v", got)
+				}
+
+				observation.Comments = append(observation.Comments, Comment{
+					ID: "diagnostic", Author: "doctor-bot", Kind: CommentIssue, Bot: true,
+					Body: "diagnostic detail", CreatedAt: base.Add(2 * time.Minute),
+				})
+				next := Advance(got.NextCursor, observation, "chatgpt-codex-connector[bot]", StartPolicy{})
+				if !has(next.Events, OutcomeBotComment) || has(next.Events, OutcomeReviewUnavailable) || len(next.Events) != 1 {
+					t.Fatalf("ordinary bot feedback = %+v", next)
+				}
+			},
+		},
+		{
 			name: "durable feedback is omitted from action details",
 			run: func(t *testing.T) {
 				initial := Observation{

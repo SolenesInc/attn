@@ -60,13 +60,12 @@ func Evaluate(evidence Observation, reviewer string, baselineIDs []string) Evalu
 		}
 	}
 	for _, comment := range evidence.Comments {
-		reason := unavailableReason(comment.Body)
+		reason := reviewerOutageReason(comment, reviewer)
 		candidate := verdictSignal{
 			ID: comment.ID, State: ReviewUnavailable, Body: strings.TrimSpace(comment.Body),
 			Cause: reason, At: comment.CreatedAt, priority: 1,
 		}
-		if candidate.ID != "" && reason != "" && !baseline[candidate.ID] &&
-			eligibleOutageComment(comment, reviewer) && candidate.laterThan(signal, found) {
+		if candidate.ID != "" && reason != "" && !baseline[candidate.ID] && candidate.laterThan(signal, found) {
 			signal, found = candidate, true
 		}
 	}
@@ -153,7 +152,7 @@ func UnscopedSignalIDs(evidence Observation, reviewer string, cutoff time.Time) 
 	}
 	for _, comment := range evidence.Comments {
 		if comment.ID != "" && (cutoff.IsZero() || !comment.CreatedAt.After(cutoff)) &&
-			eligibleOutageComment(comment, reviewer) && unavailableReason(comment.Body) != "" {
+			reviewerOutageReason(comment, reviewer) != "" {
 			ids = append(ids, comment.ID)
 		}
 	}
@@ -176,6 +175,13 @@ func VerdictSignalIDs(evidence Observation, reviewer string, cutoff time.Time) [
 
 func eligibleOutageComment(comment Comment, reviewer string) bool {
 	return isCodexReviewer(reviewer) && comment.Bot && comment.Kind == CommentIssue && SameActor(comment.Author, reviewer)
+}
+
+func reviewerOutageReason(comment Comment, reviewer string) string {
+	if !eligibleOutageComment(comment, reviewer) {
+		return ""
+	}
+	return unavailableReason(comment.Body)
 }
 
 func uniqueSorted(ids []string) []string {

@@ -186,6 +186,7 @@ func feedbackEvents(observation Observation, reviewer string, seenIDs []string, 
 			isFormalReviewerVerdict(comment.ReviewState, reviewer)
 		if comment.ID == "" || seen[comment.ID] || ignoredAuthor(comment.Author, policy.IgnoreAuthors) ||
 			(!policy.Since.IsZero() && !comment.CreatedAt.After(policy.Since)) ||
+			reviewerOutageReason(comment, reviewer) != "" ||
 			(formalReviewerVerdict && !policy.EmitReviewerVerdictFeedback) {
 			continue
 		}
