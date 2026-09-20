@@ -27,15 +27,21 @@ func readinessPayload(extra string) []byte {
 }
 
 func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
-	result, err := ParsePullRequestReadiness(readinessPayload(""))
+	payload := strings.Replace(string(readinessPayload("")),
+		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
+		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"inline","bodyText":"Check this guard","path":"watch.go","line":42,"author":{"__typename":"User","login":"human"}}]}`, 1)
+	result, err := ParsePullRequestReadiness([]byte(payload))
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
 	}
 	if result.Snapshot.HeadSHA != "abcdef1234567890" || result.Evidence.CheckState != prreadiness.ChecksGreen {
 		t.Fatalf("result = %+v", result)
 	}
-	if got := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]"); !got.Ready {
+	if got := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]"); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
 		t.Fatalf("evaluation = %+v", got)
+	}
+	if len(result.Evidence.Comments) != 2 || result.Evidence.Comments[1].Location != "watch.go:42" || result.Evidence.Comments[1].Bot {
+		t.Fatalf("human inline evidence lost context: %+v", result.Evidence.Comments)
 	}
 }
 

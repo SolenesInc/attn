@@ -50,6 +50,7 @@ type Comment struct {
 	ID        string
 	Author    string
 	Body      string
+	Location  string
 	CreatedAt time.Time
 	Bot       bool
 }

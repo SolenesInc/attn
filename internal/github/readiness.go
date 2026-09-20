@@ -32,7 +32,6 @@ type PullRequestReadinessCheck struct {
 type PullRequestReadinessComment struct {
 	prreadiness.Comment
 	Kind        string
-	Location    string
 	ReviewState string
 }
 
@@ -443,11 +442,12 @@ func buildPullRequestReadiness(pr *readinessPullRequest) *PullRequestReadiness {
 	addComment := func(comment readinessComment, kind, reviewState string) {
 		item := prreadiness.Comment{
 			ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText,
+			Location:  comment.location(),
 			CreatedAt: comment.CreatedAt, Bot: comment.Author.TypeName != "User",
 		}
 		evidence.Comments = append(evidence.Comments, item)
 		result.Comments = append(result.Comments, PullRequestReadinessComment{
-			Comment: item, Kind: kind, Location: comment.location(), ReviewState: reviewState,
+			Comment: item, Kind: kind, ReviewState: reviewState,
 		})
 	}
 	for _, review := range pr.Reviews.Nodes {

@@ -544,7 +544,7 @@ type watchObservation struct {
 func pullRequestWatchAction(
 	readiness *github.PullRequestReadiness, evaluation prreadiness.Evaluation, watch store.PullRequestWatch,
 ) watchObservation {
-	feedback, cursor := pullRequestWatchFeedback(readiness.Evidence, evaluation, watch)
+	feedback, cursor := pullRequestWatchFeedback(readiness.Evidence, watch)
 	if readiness.Snapshot.State != sessionPullRequestOpen {
 		state := sessionPullRequestStateFromSnapshot(readiness.Snapshot)
 		return watchObservation{Kind: state, Details: []string{"pull request is " + state}, Feedback: cursor, Comments: feedback}
@@ -580,7 +580,13 @@ func pullRequestWatchAction(
 				findingDetails = append(findingDetails, line)
 			}
 		}
-		if len(findings) == 0 && evaluation.ReviewBody != "" {
+		humanReview := false
+		for _, review := range readiness.Evidence.Reviews {
+			if humanComments[review.ID] && review.SubmittedAt.Equal(evaluation.ReviewSubmitted) {
+				humanReview = true
+			}
+		}
+		if len(findings) == 0 && !humanReview && evaluation.ReviewBody != "" {
 			findingDetails = append(findingDetails, evaluation.ReviewBody)
 		}
 		kinds = append(kinds, "review findings")
@@ -613,13 +619,7 @@ func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadine
 	return findings
 }
 
-func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadiness.Evaluation, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
-	represented := make(map[string]bool)
-	for _, review := range evidence.Reviews {
-		if samePullRequestWatchActor(review.Author, watch.Reviewer) && review.SubmittedAt.Equal(evaluation.ReviewSubmitted) {
-			represented[review.ID] = true
-		}
-	}
+func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
 	seenAt, err := time.Parse(time.RFC3339Nano, watch.FeedbackSeenAt)
 	if err != nil {
 		seenAt, _ = time.Parse(time.RFC3339Nano, watch.CreatedAt)
@@ -636,9 +636,7 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadin
 			(comment.CreatedAt.Equal(seenAt) && seenIDs[comment.ID]) {
 			continue
 		}
-		if !represented[comment.ID] {
-			feedback = append(feedback, comment)
-		}
+		feedback = append(feedback, comment)
 		switch {
 		case comment.CreatedAt.After(nextAt):
 			nextAt = comment.CreatedAt
@@ -656,7 +654,11 @@ func (d *Daemon) notifyPullRequestWatchFeedback(watch store.PullRequestWatch, co
 		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
 			"pull-request-feedback", watch.SessionID, watch.PRID, comment.ID,
 		}, "\x00"))).String()
-		if err := d.queuePullRequestWatchNotification(watch, id, "", "human feedback", []string{comment.Author + ": " + strings.TrimSpace(comment.Body)}, now); err != nil {
+		detail := strings.TrimSpace(comment.Body)
+		if comment.Location != "" {
+			detail = comment.Location + ": " + detail
+		}
+		if err := d.queuePullRequestWatchNotification(watch, id, "", "human feedback", []string{comment.Author + ": " + detail}, now); err != nil {
 			return err
 		}
 	}
@@ -693,10 +695,6 @@ func (d *Daemon) queuePullRequestWatchNotification(watch store.PullRequestWatch,
 }
 
 func pullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
-
-func samePullRequestWatchActor(left, right string) bool {
-	return strings.EqualFold(strings.TrimSuffix(left, "[bot]"), strings.TrimSuffix(right, "[bot]"))
-}
 
 func (d *Daemon) subscribeSessionPullRequestFacts() {
 	if d.eventBus == nil || d.sessionPRUnsubHooks != nil {

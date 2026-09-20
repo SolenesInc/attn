@@ -838,43 +838,45 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	now := time.Now()
 	ready := watchedReadiness("head", prreadiness.ChecksGreen, "CHANGES_REQUESTED")
 	ready.Evidence.Reviews[0].Author = "human"
-	ready.Evidence.Reviews[0].Body = ""
+	ready.Evidence.Reviews[0].ID = "review-summary"
+	ready.Evidence.Reviews[0].Body = "Check the cancellation behavior"
 	ready.Evidence.Reviews[0].Findings = []prreadiness.Finding{{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7"}}
 	ready.Evidence.Threads = []prreadiness.Thread{{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7"}}
 	ready.Evidence.Comments = []prreadiness.Comment{
+		{ID: "review-summary", Author: "human", Body: "Check the cancellation behavior", CreatedAt: now},
 		{ID: "conversation", Author: "human", Body: "Please update the docs", CreatedAt: now},
-		{ID: "inline", Author: "human", Body: "Fix the guard", CreatedAt: now},
+		{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7", CreatedAt: now},
 	}
 	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	d.refreshSessionPullRequests(now)
 	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(deliveries) != 3 {
+	if err != nil || len(deliveries) != 4 {
 		t.Fatalf("feedback and findings = %+v, %v", deliveries, err)
 	}
 	var prompts string
 	for _, delivery := range deliveries {
 		prompts += delivery.Item.Prompt
 	}
-	if strings.Count(prompts, "Please update the docs") != 1 || strings.Count(prompts, "Fix the guard") != 1 {
+	if strings.Count(prompts, "Please update the docs") != 1 || strings.Count(prompts, "a.go:7: Fix the guard") != 1 || strings.Count(prompts, "Check the cancellation behavior") != 1 {
 		t.Fatalf("missing or duplicate reviewer feedback: %s", prompts)
 	}
+	ready.Evidence.Reviews[0].Findings = nil
+	ready.Evidence.Threads[0].Resolved = true
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
-	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 3 {
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 4 {
 		t.Fatalf("reviewer feedback repeated: %+v, %v", unread, err)
 	}
 	ready.Evidence.Reviews[0].State = "APPROVED"
-	ready.Evidence.Reviews[0].Findings = nil
-	ready.Evidence.Threads[0].Resolved = true
 	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(unread) != 3 {
+	if err != nil || len(unread) != 4 {
 		t.Fatalf("approval lost unread feedback: %+v, %v", unread, err)
 	}
 	prompts = ""
 	for _, delivery := range unread {
 		prompts += delivery.Item.Prompt
 	}
-	if strings.Count(prompts, "Fix the guard") != 1 || strings.Count(prompts, "Please update the docs") != 1 {
+	if strings.Count(prompts, "a.go:7: Fix the guard") != 1 || strings.Count(prompts, "Please update the docs") != 1 || strings.Count(prompts, "Check the cancellation behavior") != 1 {
 		t.Fatalf("approval lost or repeated unread feedback: %s", prompts)
 	}
 	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
