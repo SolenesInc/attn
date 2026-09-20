@@ -1,7 +1,6 @@
 package prreadiness
 
 import (
-	"encoding/json"
 	"slices"
 	"testing"
 	"time"
@@ -291,41 +290,29 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
-			name: "new head accepts newly observed reaction and keeps old signals baselined",
+			name: "new head baselines reactions whose ordering is ambiguous",
 			run: func(t *testing.T) {
 				observation := Observation{
 					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
-					Reactions: []Reaction{
-						{ID: "old-a", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base},
-						{ID: "old-b", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base.Add(time.Second)},
-					},
 				}
 				first := Advance(Cursor{}, observation, "chatgpt-codex-connector", StartPolicy{})
-				raw, err := json.Marshal(first.NextCursor)
-				if err != nil {
-					t.Fatal(err)
-				}
-				var resumed Cursor
-				if err := json.Unmarshal(raw, &resumed); err != nil {
-					t.Fatal(err)
-				}
 				observation.HeadSHA = "head-b"
-				observation.Reactions = append(observation.Reactions, Reaction{
-					ID: "new", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base.Add(2 * time.Second),
-				})
-				second := Advance(resumed, observation, "chatgpt-codex-connector", StartPolicy{})
-				if !second.HeadChanged || !second.Evaluation.Ready || second.Evaluation.SignalID != "new" ||
-					!slices.Equal(second.BaselineCursor.SignalBaselineIDs, []string{"old-a", "old-b"}) {
+				observation.Reactions = []Reaction{{
+					ID: "ambiguous", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base.Add(time.Second),
+				}}
+				second := Advance(first.NextCursor, observation, "chatgpt-codex-connector", StartPolicy{})
+				if !second.HeadChanged || second.Evaluation.Ready || second.Evaluation.SignalID != "" ||
+					!slices.Equal(second.BaselineCursor.SignalBaselineIDs, []string{"ambiguous"}) || len(second.Events) != 0 {
 					t.Fatalf("head transition = %+v", second)
 				}
-				retry := Advance(second.BaselineCursor, observation, "chatgpt-codex-connector", StartPolicy{})
-				if !retry.Evaluation.Ready || retry.Evaluation.SignalID != "new" {
-					t.Fatalf("baseline retry suppressed replacement reaction: %+v", retry)
+				third := Advance(second.NextCursor, observation, "chatgpt-codex-connector", StartPolicy{})
+				if third.Evaluation.Ready || third.Evaluation.SignalID != "" || len(third.Events) != 0 {
+					t.Fatalf("ambiguous reaction escaped baseline: %+v", third)
 				}
 			},
 		},
 		{
-			name: "new head accepts newly observed outage signal",
+			name: "new head baselines newly observed outage signal",
 			run: func(t *testing.T) {
 				observation := Observation{
 					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
@@ -341,8 +328,8 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 					Body: "Unable to review because quota exceeded", CreatedAt: base.Add(time.Second),
 				})
 				second := Advance(first.NextCursor, observation, "chatgpt-codex-connector", StartPolicy{})
-				if second.Evaluation.ReviewState != ReviewUnavailable || second.Evaluation.SignalID != "new" ||
-					!has(second.Events, OutcomeReviewUnavailable) {
+				if second.Evaluation.ReviewState != ReviewWaiting || second.Evaluation.SignalID != "" ||
+					has(second.Events, OutcomeReviewUnavailable) {
 					t.Fatalf("head transition = %+v", second)
 				}
 			},

@@ -8,16 +8,15 @@ import (
 )
 
 type Cursor struct {
-	Initialized           bool     `json:"initialized,omitempty"`
-	Reviewer              string   `json:"reviewer,omitempty"`
-	HeadSHA               string   `json:"head_sha,omitempty"`
-	SignalBaselineIDs     []string `json:"signal_baseline_ids,omitempty"`
-	SeenUnscopedSignalIDs []string `json:"seen_unscoped_signal_ids,omitempty"`
-	SeenCommentIDs        []string `json:"seen_comment_ids,omitempty"`
-	DeliveredFeedbackIDs  []string `json:"delivered_feedback_ids,omitempty"`
-	SeenVerdictIDs        []string `json:"seen_verdict_ids,omitempty"`
-	LastActionKey         string   `json:"last_action_key,omitempty"`
-	ActionGeneration      uint64   `json:"action_generation,omitempty"`
+	Initialized          bool     `json:"initialized,omitempty"`
+	Reviewer             string   `json:"reviewer,omitempty"`
+	HeadSHA              string   `json:"head_sha,omitempty"`
+	SignalBaselineIDs    []string `json:"signal_baseline_ids,omitempty"`
+	SeenCommentIDs       []string `json:"seen_comment_ids,omitempty"`
+	DeliveredFeedbackIDs []string `json:"delivered_feedback_ids,omitempty"`
+	SeenVerdictIDs       []string `json:"seen_verdict_ids,omitempty"`
+	LastActionKey        string   `json:"last_action_key,omitempty"`
+	ActionGeneration     uint64   `json:"action_generation,omitempty"`
 }
 
 type StartPolicy struct {
@@ -86,17 +85,11 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	}
 	baseline.Initialized = true
 	baseline.Reviewer = reviewer
-	unscopedSignalIDs := UnscopedSignalIDs(observation, reviewer, time.Time{})
 	if first || reviewerChanged || headChanged {
 		baseline.HeadSHA = observation.HeadSHA
-		if headChanged && !reviewerChanged {
-			baseline.SignalBaselineIDs = intersectIDs(unscopedSignalIDs, baseline.SeenUnscopedSignalIDs)
-		} else {
-			baseline.SignalBaselineIDs = UnscopedSignalIDs(observation, reviewer, startCutoff)
-		}
+		baseline.SignalBaselineIDs = UnscopedSignalIDs(observation, reviewer, startCutoff)
 		baseline.LastActionKey = ""
 	}
-	baseline.SeenUnscopedSignalIDs = uniqueSorted(append(baseline.SeenUnscopedSignalIDs, unscopedSignalIDs...))
 	requested := policy.HoldExistingVerdictWhenRequested && reviewerRequested(observation, reviewer)
 	if (first || reviewerChanged || headChanged) && requested {
 		baseline.SeenVerdictIDs = VerdictSignalIDs(observation, reviewer, startCutoff)
@@ -169,22 +162,10 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 
 func cloneCursor(cursor Cursor) Cursor {
 	cursor.SignalBaselineIDs = append([]string(nil), cursor.SignalBaselineIDs...)
-	cursor.SeenUnscopedSignalIDs = append([]string(nil), cursor.SeenUnscopedSignalIDs...)
 	cursor.SeenCommentIDs = append([]string(nil), cursor.SeenCommentIDs...)
 	cursor.DeliveredFeedbackIDs = append([]string(nil), cursor.DeliveredFeedbackIDs...)
 	cursor.SeenVerdictIDs = append([]string(nil), cursor.SeenVerdictIDs...)
 	return cursor
-}
-
-func intersectIDs(values, candidates []string) []string {
-	allowed := stringSet(candidates)
-	var intersection []string
-	for _, value := range values {
-		if allowed[value] {
-			intersection = append(intersection, value)
-		}
-	}
-	return uniqueSorted(intersection)
 }
 
 func baselineCommentIDs(comments []Comment, since time.Time) []string {
