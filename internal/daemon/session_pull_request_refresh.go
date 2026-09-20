@@ -561,8 +561,17 @@ func pullRequestWatchAction(
 	}
 	findings := uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved)
 	if len(findings) > 0 || evaluation.ReviewState == prreadiness.ReviewChangesRequested {
+		humanComments := make(map[string]bool)
+		for _, comment := range readiness.Evidence.Comments {
+			if !comment.Bot {
+				humanComments[comment.ID] = true
+			}
+		}
 		findingDetails := make([]string, 0, len(findings)+1)
 		for _, finding := range findings {
+			if humanComments[finding.ID] {
+				continue
+			}
 			line := strings.TrimSpace(finding.Body)
 			if finding.Location != "" {
 				line = finding.Location + ": " + line
@@ -571,7 +580,7 @@ func pullRequestWatchAction(
 				findingDetails = append(findingDetails, line)
 			}
 		}
-		if len(findingDetails) == 0 && evaluation.ReviewBody != "" {
+		if len(findings) == 0 && evaluation.ReviewBody != "" {
 			findingDetails = append(findingDetails, evaluation.ReviewBody)
 		}
 		kinds = append(kinds, "review findings")
@@ -606,9 +615,6 @@ func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadine
 
 func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadiness.Evaluation, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
 	represented := make(map[string]bool)
-	for _, finding := range uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved) {
-		represented[finding.ID] = true
-	}
 	for _, review := range evidence.Reviews {
 		if samePullRequestWatchActor(review.Author, watch.Reviewer) && review.SubmittedAt.Equal(evaluation.ReviewSubmitted) {
 			represented[review.ID] = true

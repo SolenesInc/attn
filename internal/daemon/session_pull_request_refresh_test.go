@@ -597,9 +597,11 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {
 	url := "https://github.com/victorarias/attn/pull/71"
 	for name, command := range map[string]any{
-		"unwatch":         protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url},
-		"forget":          protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url},
-		"reviewer change": protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "another-reviewer"},
+		"unwatch":             protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url},
+		"forget":              protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url},
+		"interrupted unwatch": protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url},
+		"interrupted forget":  protocol.PullRequestForgetMessage{Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url},
+		"reviewer change":     protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "another-reviewer"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			d := newPRDaemonForTest(t, "s1")
@@ -612,7 +614,19 @@ func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {
 			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 2 {
 				t.Fatalf("status and feedback were not queued: %+v, %v", unread, err)
 			}
-			if response := sendPRCommand(t, d, command); !response.Ok {
+			interrupted := strings.HasPrefix(name, "interrupted")
+			if interrupted {
+				watch := d.store.PullRequestWatches()[0]
+				if _, err := d.store.UnwatchPullRequest("s1", watch.PRID); err != nil {
+					t.Fatal(err)
+				}
+				if name == "interrupted forget" {
+					if _, err := d.store.ForgetSessionPullRequest("s1", watch.PRID); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if response := sendPRCommand(t, d, command); !response.Ok && !interrupted {
 				t.Fatalf("command failed: %+v", response)
 			}
 			wantUnread := 0
@@ -826,14 +840,15 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	ready.Evidence.Reviews[0].Author = "human"
 	ready.Evidence.Reviews[0].Body = ""
 	ready.Evidence.Reviews[0].Findings = []prreadiness.Finding{{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7"}}
+	ready.Evidence.Threads = []prreadiness.Thread{{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7"}}
 	ready.Evidence.Comments = []prreadiness.Comment{
 		{ID: "conversation", Author: "human", Body: "Please update the docs", CreatedAt: now},
 		{ID: "inline", Author: "human", Body: "Fix the guard", CreatedAt: now},
 	}
 	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	d.refreshSessionPullRequests(now)
-	deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now)
-	if err != nil || len(deliveries) != 2 {
+	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 3 {
 		t.Fatalf("feedback and findings = %+v, %v", deliveries, err)
 	}
 	var prompts string
@@ -844,18 +859,30 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 		t.Fatalf("missing or duplicate reviewer feedback: %s", prompts)
 	}
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
-	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 3 {
 		t.Fatalf("reviewer feedback repeated: %+v, %v", unread, err)
 	}
 	ready.Evidence.Reviews[0].State = "APPROVED"
 	ready.Evidence.Reviews[0].Findings = nil
+	ready.Evidence.Threads[0].Resolved = true
 	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(unread) != 1 || strings.Contains(unread[0].Item.Prompt, "Fix the guard") {
-		t.Fatalf("approval replayed delivered findings: %+v, %v", unread, err)
+	if err != nil || len(unread) != 3 {
+		t.Fatalf("approval lost unread feedback: %+v, %v", unread, err)
+	}
+	prompts = ""
+	for _, delivery := range unread {
+		prompts += delivery.Item.Prompt
+	}
+	if strings.Count(prompts, "Fix the guard") != 1 || strings.Count(prompts, "Please update the docs") != 1 {
+		t.Fatalf("approval lost or repeated unread feedback: %s", prompts)
 	}
 	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
 		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("read feedback reappeared: %+v, %v", unread, err)
 	}
 	ready.Evidence.Reviews = append(ready.Evidence.Reviews, prreadiness.Review{
 		ID: "follow-up", Author: "human", State: "COMMENTED", CommitOID: "head",
@@ -864,7 +891,7 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	ready.Evidence.Comments = append(ready.Evidence.Comments, prreadiness.Comment{
 		ID: "follow-up", Author: "human", Body: "One more note", CreatedAt: now.Add(time.Second),
 	})
-	d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(now.Add(4 * protocol.HeatHotInterval))
 	if status := storedPullRequest(t, d, "s1").ReviewStatus; status != prreadiness.ReviewApproved {
 		t.Fatalf("comment-only review erased approval: %q", status)
 	}
