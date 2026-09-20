@@ -261,7 +261,7 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 		t.Fatalf("begin watch head = %v", err)
 	}
 	if err := first.RecordPullRequestWatchSuccess(
-		"session", "github.com:victorarias/attn#71", cursor, prreadiness.ReviewWaiting, time.Now(),
+		"session", "github.com:victorarias/attn#71", cursor, prreadiness.ReviewWaiting, false, time.Now(),
 	); err != nil {
 		t.Fatalf("record watch baseline: %v", err)
 	}
@@ -280,6 +280,63 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 		strings.Join(watches[0].Cursor.SeenCommentIDs, ",") != "comment" ||
 		strings.Join(watches[0].Cursor.DeliveredFeedbackIDs, ",") != "feedback" {
 		t.Fatalf("restarted watches = %+v", watches)
+	}
+}
+
+func TestPullRequestWatchRecoveryIsAtomic(t *testing.T) {
+	s := newSessionPRStore(t)
+	now := time.Now()
+	prID := "github.com:victorarias/attn#71"
+	recordPR(t, s, "s1", prID, 71, now)
+	if _, err := s.WatchPullRequest("s1", prID, "reviewer", now); err != nil {
+		t.Fatal(err)
+	}
+	oldCursor := prreadiness.Cursor{Initialized: true, HeadSHA: "old"}
+	if err := s.ApplyPullRequestWatchBaseline("s1", prID, "watch", oldCursor, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.RecordPullRequestWatchFailure("s1", prID, "GitHub unavailable", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.EnqueueMaintenancePromptOnce(
+		"outage", "s1", prID, PullRequestWatchOutageCoalesceKey(prID), "monitoring unavailable", now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_outage_clear BEFORE DELETE ON agent_mailbox_items
+		WHEN OLD.coalesce_key = '` + PullRequestWatchOutageCoalesceKey(prID) + `'
+		BEGIN SELECT RAISE(FAIL, 'injected outage clear failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	newCursor := prreadiness.Cursor{Initialized: true, HeadSHA: "new"}
+	if err := s.RecordPullRequestWatchSuccess("s1", prID, newCursor, prreadiness.ReviewApproved, true, now.Add(time.Minute)); err == nil {
+		t.Fatal("failed recovery committed")
+	}
+	watch, found := s.PullRequestWatch("s1", prID)
+	if !found || watch.Cursor.HeadSHA != "old" || watch.LastError != "GitHub unavailable" || watch.FailureCount != 1 {
+		t.Fatalf("failed recovery changed watch: %+v", watch)
+	}
+	if unread, err := s.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
+		t.Fatalf("failed recovery cleared outage: unread=%+v err=%v", unread, err)
+	}
+	if pullRequest, found := s.SessionPullRequestByID(prID); !found || pullRequest.ReviewStatus != "waiting" {
+		t.Fatalf("failed recovery changed review status: %+v", pullRequest)
+	}
+	if _, err := s.db.Exec("DROP TRIGGER reject_outage_clear"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.RecordPullRequestWatchSuccess("s1", prID, newCursor, prreadiness.ReviewApproved, true, now.Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	watch, found = s.PullRequestWatch("s1", prID)
+	if !found || watch.Cursor.HeadSHA != "new" || watch.LastError != "" || watch.FailureCount != 0 {
+		t.Fatalf("successful recovery not recorded: %+v", watch)
+	}
+	if unread, err := s.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("successful recovery retained outage: unread=%+v err=%v", unread, err)
+	}
+	if pullRequest, found := s.SessionPullRequestByID(prID); !found || pullRequest.ReviewStatus != "approved" {
+		t.Fatalf("successful recovery lost review status: %+v", pullRequest)
 	}
 }
 

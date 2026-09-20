@@ -499,12 +499,6 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			continue
 		}
 		watch = current
-		if watch.LastError != "" {
-			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, store.PullRequestWatchOutageCoalesceKey(watch.PRID)); err != nil {
-				d.logf("pull request watch: clear recovered outage for %s/%s: %v", watch.SessionID, watch.PRID, err)
-				continue
-			}
-		}
 		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{
 			EmitReviewerVerdictFeedback: true,
 		})
@@ -525,7 +519,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			continue
 		}
 		if err := d.store.RecordPullRequestWatchSuccess(
-			watch.SessionID, watch.PRID, transition.NextCursor, transition.Evaluation.ReviewState, now,
+			watch.SessionID, watch.PRID, transition.NextCursor, transition.Evaluation.ReviewState, watch.LastError != "", now,
 		); err != nil {
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
 			continue

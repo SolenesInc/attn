@@ -216,6 +216,7 @@ func (s *Store) RecordPullRequestWatchSuccess(
 	sessionID, prID string,
 	cursor prreadiness.Cursor,
 	reviewStatus prreadiness.ReviewState,
+	clearOutage bool,
 	at time.Time,
 ) error {
 	s.mu.Lock()
@@ -246,6 +247,14 @@ func (s *Store) RecordPullRequestWatchSuccess(
 		UPDATE session_pull_requests SET review_status = ? WHERE session_id = ? AND pr_id = ?
 	`, string(reviewStatus), sessionID, prID); err != nil {
 		return err
+	}
+	if clearOutage {
+		if _, err := tx.Exec(`
+			DELETE FROM agent_mailbox_items
+			WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
+		`, sessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchOutageCoalesceKey(prID)); err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

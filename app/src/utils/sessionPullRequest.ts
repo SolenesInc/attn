@@ -46,8 +46,8 @@ export function describeSessionPullRequest(pr: SessionPullRequest): SessionPullR
   if (pr.ci_status === 'pending') return { label: 'checks running', tone: 'warn' };
   if (pr.state === 'draft') return { label: 'draft', tone: 'neutral' };
   if (pr.review_status === 'approved') {
-    const held = pr.mergeable_state === 'blocked' || pr.mergeable_state === 'unstable';
-    return { label: held ? 'approved' : 'ready to merge', tone: 'ok' };
+    const ready = pr.ci_status === 'success' && pr.mergeable_state === 'clean';
+    return { label: ready ? 'ready to merge' : 'approved', tone: 'ok' };
   }
   if (pr.review_status === 'waiting' || pr.review_status === 'pending') return { label: 'in review', tone: 'neutral' };
   if (pr.ci_status === 'success') return { label: 'checks passed', tone: 'ok' };

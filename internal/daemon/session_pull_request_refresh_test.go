@@ -519,6 +519,52 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchKeepsOutageUntilRecoveryDeliverySucceeds(t *testing.T) {
+	d := newPersistentPRDaemonForTest(t)
+	dbPath := d.store.DatabasePath()
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	host := &fakePRHost{readyErr: errors.New("review API unavailable")}
+	serveHost(d, "github.com", host)
+	now := time.Now()
+	for i := 0; i < pullRequestWatchFailureThreshold; i++ {
+		d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(i)*protocol.HeatHotInterval))
+	}
+
+	direct, err := store.OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer direct.Close()
+	if _, err := direct.Exec(`CREATE TRIGGER reject_recovery_notice BEFORE INSERT ON agent_mailbox_items
+		WHEN NEW.prompt LIKE '%ready%' BEGIN SELECT RAISE(FAIL, 'injected recovery delivery failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	host.readyErr = nil
+	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold)*protocol.HeatHotInterval))
+	watch := d.store.PullRequestWatches()[0]
+	if watch.LastError != "review API unavailable" || watch.ErrorSince == "" || watch.FailureCount != pullRequestWatchFailureThreshold || watch.LastSuccessAt != "" {
+		t.Fatalf("failed recovery changed watch: %+v", watch)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "monitoring unavailable") {
+		t.Fatalf("failed recovery lost outage: unread=%+v err=%v", unread, err)
+	}
+
+	if _, err := direct.Exec("DROP TRIGGER reject_recovery_notice"); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold+1)*protocol.HeatHotInterval))
+	watch = d.store.PullRequestWatches()[0]
+	if watch.LastError != "" || watch.ErrorSince != "" || watch.FailureCount != 0 || watch.LastSuccessAt == "" {
+		t.Fatalf("successful recovery not recorded: %+v", watch)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "ready") {
+		t.Fatalf("successful recovery = %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchReemitsActionClearedByOutage(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")

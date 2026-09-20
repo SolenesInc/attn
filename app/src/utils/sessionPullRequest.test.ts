@@ -106,11 +106,38 @@ describe('describeSessionPullRequest', () => {
       .toEqual({ label: 'closed', tone: 'neutral' });
   });
 
-  it('holds "ready to merge" back while the merge is still blocked', () => {
-	expect(describeSessionPullRequest(pr({ review_status: SessionPullRequestReviewStatus.Approved, mergeable_state: 'clean' })))
-      .toEqual({ label: 'ready to merge', tone: 'ok' });
-	expect(describeSessionPullRequest(pr({ review_status: SessionPullRequestReviewStatus.Approved, mergeable_state: 'blocked' })))
-      .toEqual({ label: 'approved', tone: 'ok' });
+  it('requires green checks and clean mergeability before saying ready to merge', () => {
+    expect(describeSessionPullRequest(pr({
+      review_status: SessionPullRequestReviewStatus.Approved,
+      ci_status: SessionPullRequestCheckStatus.Success,
+      mergeable_state: 'clean',
+    }))).toEqual({ label: 'ready to merge', tone: 'ok' });
+    for (const notReady of [
+      pr({ review_status: SessionPullRequestReviewStatus.Approved, mergeable_state: 'clean' }),
+      pr({ review_status: SessionPullRequestReviewStatus.Approved, ci_status: SessionPullRequestCheckStatus.Success }),
+      pr({
+        review_status: SessionPullRequestReviewStatus.Approved,
+        ci_status: SessionPullRequestCheckStatus.None,
+        mergeable_state: 'clean',
+      }),
+      pr({
+        review_status: SessionPullRequestReviewStatus.Approved,
+        ci_status: SessionPullRequestCheckStatus.Success,
+        mergeable_state: 'unknown',
+      }),
+      pr({
+        review_status: SessionPullRequestReviewStatus.Approved,
+        ci_status: SessionPullRequestCheckStatus.Success,
+        mergeable_state: 'blocked',
+      }),
+      pr({
+        review_status: SessionPullRequestReviewStatus.Approved,
+        ci_status: SessionPullRequestCheckStatus.Success,
+        mergeable_state: 'unstable',
+      }),
+    ]) {
+      expect(describeSessionPullRequest(notReady)).toEqual({ label: 'approved', tone: 'ok' });
+    }
   });
 
   it('says nothing it cannot know before the first GitHub fetch', () => {
