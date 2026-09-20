@@ -242,7 +242,7 @@ function deserializeScriptValue(value: unknown): unknown {
 }
 
 function selectedFrameFunction(script: string): Function {
-  const constructor = (frameWindow as unknown as { Function: FunctionConstructor }).Function;
+  const constructor = (frameWindow as Window & typeof globalThis).Function;
   return new constructor("arguments", script);
 }
 
@@ -555,7 +555,7 @@ function execute(action: string, params: JsonObject): unknown | Promise<unknown>
     case "get_element_text": return requireElement(params).textContent || "";
     case "get_element_tag_name": return requireElement(params).tagName.toLowerCase();
     case "get_element_attribute": return requireElement(params).getAttribute(stringParam(params, "name"));
-    case "get_element_property": return serializeScriptValue((requireElement(params) as unknown as JsonObject)[stringParam(params, "name")]);
+    case "get_element_property": return serializeScriptValue((requireElement(params) as Element & JsonObject)[stringParam(params, "name")]);
     case "get_element_css_value": {
       const element = requireElement(params);
       return (element.ownerDocument.defaultView || window)

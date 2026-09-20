@@ -41,8 +41,7 @@ class ResizeObserverStub {
   unobserve() {}
   disconnect() {}
 }
-(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver =
-  ResizeObserverStub as unknown as typeof ResizeObserver;
+globalThis.ResizeObserver = ResizeObserverStub;
 
 // Node 22+ ships a built-in `localStorage` that shadows happy-dom's Storage and
 // lacks its methods unless --localstorage-file is set.

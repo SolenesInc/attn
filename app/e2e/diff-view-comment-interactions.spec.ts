@@ -23,9 +23,9 @@ async function openLargeDiff(page: Page) {
     .toBeGreaterThan(20);
 }
 
-async function scrollTopReport(page: Page): Promise<Record<string, number | null>> {
+async function scrollTopReport(page: Page): Promise<Record<string, number | string | null>> {
   return page.evaluate(() => {
-    const report: Record<string, number | null> = {};
+    const report: Record<string, number | string | null> = {};
     const scroller = document.querySelector('.diff-view-scroller');
     report['.diff-view-scroller'] = scroller ? scroller.scrollTop : null;
 
@@ -45,7 +45,7 @@ async function scrollTopReport(page: Page): Promise<Record<string, number | null
         }
       });
       report['diffs-container shadowRoot (max scrollTop element)'] = maxScrollTop;
-      report['diffs-container shadowRoot (max scrollTop selector)'] = maxSelector as unknown as number;
+      report['diffs-container shadowRoot (max scrollTop selector)'] = maxSelector;
     }
     return report;
   });

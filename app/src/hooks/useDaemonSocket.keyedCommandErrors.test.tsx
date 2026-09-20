@@ -84,19 +84,19 @@ function emitInitialState(ws: FakeWebSocket) {
 // A `command_error` carries no correlation id, so it has to be matched by command name
 // with the `<cmd>:<id>` suffix allowed, or the caller reports "timed out" instead.
 describe('useDaemonSocket keyed command errors', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

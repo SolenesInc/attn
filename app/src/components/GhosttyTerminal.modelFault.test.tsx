@@ -128,7 +128,7 @@ describe('GhosttyTerminal model-fault containment', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
 
     const onReady = vi.fn();
     const onTerminalModelRecovered = vi.fn();

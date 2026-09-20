@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 declare global {
   interface Window {
+    __OPENED__: string[];
     __NB_HARNESS__?: {
       fsChanged: (path?: string, content?: string, hash?: string) => void;
       getContent: (path: string) => string;
@@ -376,9 +377,9 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
   test('mod-click on a bare-relative link navigates to the sibling note (resolved against the linking note\'s directory)', async ({ page }) => {
     await page.addInitScript(() => {
-      (window as unknown as { __OPENED__: string[] }).__OPENED__ = [];
+      window.__OPENED__ = [];
       window.open = ((url?: string | URL) => {
-        (window as unknown as { __OPENED__: string[] }).__OPENED__.push(String(url));
+        window.__OPENED__.push(String(url));
         return null;
       }) as typeof window.open;
     });
@@ -399,7 +400,7 @@ test.describe('NotebookBrowser (fs surface)', () => {
 
     await expect(page.getByRole('heading', { level: 2, name: 'bar' })).toBeVisible();
     await expect(page.locator('.cm-content')).toContainText('Sibling of foo');
-    expect(await page.evaluate(() => (window as unknown as { __OPENED__: string[] }).__OPENED__)).toEqual([]);
+    expect(await page.evaluate(() => window.__OPENED__)).toEqual([]);
   });
 
   test('mod-click on a #heading link scrolls that heading into view', async ({ page }) => {

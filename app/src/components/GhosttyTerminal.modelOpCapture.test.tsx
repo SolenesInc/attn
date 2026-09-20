@@ -122,9 +122,9 @@ describe('GhosttyTerminal model-op capture', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
 
-    let handle: GhosttyTerminalHandle | null = null;
+    let handle!: GhosttyTerminalHandle;
     try {
       render(
         <GhosttyTerminal
@@ -135,8 +135,8 @@ describe('GhosttyTerminal model-op capture', () => {
           onResize={vi.fn()}
         />,
       );
-      await waitFor(() => expect(handle).not.toBeNull());
-      const terminal = handle as unknown as GhosttyTerminalHandle;
+      await waitFor(() => expect(handle).toBeDefined());
+      const terminal = handle;
 
       await act(async () => {
         await terminal.restoreSnapshot(new Uint8Array([0x64, 0x75, 0x6d, 0x70]));

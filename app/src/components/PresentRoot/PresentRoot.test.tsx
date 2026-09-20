@@ -55,7 +55,7 @@ function latestTourProps(): PresentTourProps {
   const calls = vi.mocked(PresentTour).mock.calls;
   const props = calls[calls.length - 1]?.[0];
   if (!props) throw new Error('PresentTour has not been rendered yet');
-  return props as unknown as PresentTourProps;
+  return props;
 }
 
 class FakeWebSocket {
@@ -246,15 +246,15 @@ const presentation = {
 };
 
 describe('PresentRoot', () => {
-  let originalWebSocket: typeof WebSocket;
+
   let originalSetTimeout: typeof globalThis.setTimeout;
   let originalClearTimeout: typeof globalThis.clearTimeout;
   let pendingTimeouts: Set<ReturnType<typeof globalThis.setTimeout>>;
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
 
     originalSetTimeout = globalThis.setTimeout;
     originalClearTimeout = globalThis.clearTimeout;
@@ -290,7 +290,7 @@ describe('PresentRoot', () => {
     pendingTimeouts.clear();
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     document.getElementById('loading-screen')?.remove();
     vi.clearAllMocks();
   });

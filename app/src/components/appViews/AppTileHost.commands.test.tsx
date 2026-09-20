@@ -1,3 +1,4 @@
+import { createMockDaemonApi } from '../../test/mocks/daemon';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { Button, useCommand } from '@victorarias/attn-app';
@@ -34,7 +35,7 @@ function renderHost(sendAppCommand: DaemonApi['sendAppCommand']) {
       views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals' }],
     } as AppRegistryEntry]);
   });
-  const api = { sendAppCommand, sendAppViewCrash: vi.fn() } as unknown as DaemonApi;
+  const api = createMockDaemonApi({ sendAppCommand, sendAppViewCrash: vi.fn() });
   render(
     <DaemonApiProvider api={api}>
       <AppTileHost

@@ -1295,7 +1295,7 @@ describe('SessionTerminalWorkspace', () => {
         this.callback([{
           target,
           contentRect: { width: 1816, height: 1258 } as DOMRectReadOnly,
-        } as ResizeObserverEntry], this as unknown as ResizeObserver);
+        } as ResizeObserverEntry], this as ResizeObserver);
       }
 
       disconnect(): void {}

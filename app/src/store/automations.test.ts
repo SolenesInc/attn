@@ -40,7 +40,7 @@ describe('useAutomationsStore', () => {
 
   it('setDefinitions with an empty/undefined list clears to []', () => {
     useAutomationsStore.getState().setDefinitions([makeDefinition({ id: 'd1' })]);
-    useAutomationsStore.getState().setDefinitions(undefined as unknown as AutomationDefinitionSummary[]);
+    useAutomationsStore.getState().setDefinitions(undefined);
     expect(useAutomationsStore.getState().definitions).toEqual([]);
   });
 

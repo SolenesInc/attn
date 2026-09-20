@@ -2258,7 +2258,7 @@ export function useDaemonSocket({
             const pending = pendingActionsRef.current.get(key);
             if (!pending) break;
             pendingActionsRef.current.delete(key);
-            pending.resolve(data as unknown as SupportSnapshotResultMessage);
+            pending.resolve(data as SupportSnapshotResultMessage);
             break;
           }
 

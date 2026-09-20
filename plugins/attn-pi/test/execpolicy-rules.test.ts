@@ -230,7 +230,7 @@ describe("rule validation", () => {
       { pattern: ["ls"], decision: "maybe" },
       { pattern: ["ls", []] },
       { pattern: ["ls"], match: [[]] },
-    ] as unknown as PrefixRule[];
+    ] as PrefixRule[];
     expect(validateRules(rules)).toEqual([
       { index: 1, message: "invalid pattern element: pattern cannot be empty" },
       { index: 2, message: "invalid decision: maybe (rule `ls`)" },
@@ -242,7 +242,8 @@ describe("rule validation", () => {
   test("a rule with an unknown decision never matches a command", () => {
     // A rule that cannot be compiled must not count as a match either: a
     // matched segment skips the heuristics, so a typo would allow the command.
-    const rules = [{ pattern: ["rm"], decision: "deny" }] as unknown as PrefixRule[];
+    const rules: PrefixRule[] = [{ pattern: ["rm"] }];
+    Object.assign(rules[0], { decision: "deny" });
     expect(validateRules(rules)).toEqual([{ index: 0, message: "invalid decision: deny (rule `rm`)" }]);
 
     const evaluation = evaluateCommand("rm -rf /tmp/zz", {

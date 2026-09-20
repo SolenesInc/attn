@@ -101,8 +101,7 @@ export function catalogFromModels(value: unknown): AvailableModels {
   if (!Array.isArray(value)) throw new Error("Expected Pi's model list");
   const providers = new Map<string, Map<string, CatalogModel>>();
   for (const model of value) {
-    if (!isRecord(model) || typeof model.provider !== "string" || !model.provider.trim()
-      || typeof model.id !== "string" || !model.id.trim()) {
+    if (!isIdentifiedModel(model)) {
       throw new Error("Invalid Pi model");
     }
     let models = providers.get(model.provider);
@@ -112,7 +111,7 @@ export function catalogFromModels(value: unknown): AvailableModels {
       id: model.id,
       ...(typeof model.reasoning === "boolean" && typeof model.api === "string"
         ? { effortSupport: model.reasoning ? "supported" as const : "unsupported" as const,
-            effortLevels: model.reasoning ? getSupportedThinkingLevels(model as unknown as Model<Api>) : [] }
+            effortLevels: model.reasoning ? getSupportedThinkingLevels(model as Model<Api>) : [] }
         : {}),
       ...(typeof model.name === "string" && model.name ? { name: model.name } : {}),
       ...(typeof model.contextWindow === "number" && model.contextWindow > 0
@@ -130,4 +129,9 @@ export function catalogFromModels(value: unknown): AvailableModels {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isIdentifiedModel(value: unknown): value is Pick<Model<Api>, "id" | "provider"> & Partial<Record<keyof Model<Api>, unknown>> {
+  return isRecord(value) && typeof value.provider === "string" && value.provider.trim().length > 0
+    && typeof value.id === "string" && value.id.trim().length > 0;
 }

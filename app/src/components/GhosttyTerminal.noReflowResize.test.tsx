@@ -95,7 +95,7 @@ beforeEach(() => {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  };
 });
 
 async function mountTerminal(): Promise<{
@@ -104,7 +104,7 @@ async function mountTerminal(): Promise<{
   onResize: ReturnType<typeof vi.fn>;
 }> {
   mocks.terminals.length = 0;
-  let ready: GhosttyTerminalHandle | null = null;
+  let ready!: GhosttyTerminalHandle;
   const onResize = vi.fn();
   render(
     <GhosttyTerminal
@@ -115,10 +115,10 @@ async function mountTerminal(): Promise<{
       onResize={onResize}
     />,
   );
-  await waitFor(() => expect(ready).not.toBeNull());
+  await waitFor(() => expect(ready).toBeDefined());
   const model = mocks.terminals[0];
   model.ops.length = 0;
-  return { handle: ready as unknown as GhosttyTerminalHandle, model, onResize };
+  return { handle: ready, model, onResize };
 }
 
 const noReflowRecipe = (cols: number, rows: number): ModelOp[] => [

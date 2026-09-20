@@ -144,7 +144,7 @@ export interface WebGlRenderSample {
 }
 
 export function graphemeAtViewportCell(
-  terminal: GhosttyTerminal,
+  terminal: Pick<GhosttyTerminal, 'getScrollbackLength' | 'getScrollbackGraphemeString' | 'getGraphemeString'>,
   row: number,
   col: number,
   viewportOffset: number,
@@ -436,7 +436,9 @@ export class WebGlTerminalRenderer {
   }
 
   render(
-    terminal: GhosttyTerminal,
+    terminal: Pick<GhosttyTerminal,
+      'cols' | 'rows' | 'update' | 'getCursor' | 'isRowDirty' | 'getViewport' | 'markClean' |
+      'getScrollbackLength' | 'getScrollbackGraphemeString' | 'getGraphemeString'>,
     force = false,
     viewportCells?: GhosttyCell[],
     overlays?: readonly WebGlOverlay[] | null,

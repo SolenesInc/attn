@@ -97,7 +97,7 @@ vi.mock('../../hooks/useDaemonSocket', () => ({
 
 function latestTourProps(): PresentTourProps | undefined {
   const calls = vi.mocked(PresentTour).mock.calls;
-  return calls[calls.length - 1]?.[0] as unknown as PresentTourProps | undefined;
+  return calls[calls.length - 1]?.[0];
 }
 
 function foundFile(props: PresentTourProps | undefined) {

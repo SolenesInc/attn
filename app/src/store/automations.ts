@@ -14,7 +14,7 @@ interface AutomationsStore {
   // same click must reuse it or a timed-out-but-delivered run re-triggers as a duplicate.
   pendingRunRequests: Record<string, string>;
 
-  setDefinitions: (definitions: AutomationDefinitionSummary[]) => void;
+  setDefinitions: (definitions: AutomationDefinitionSummary[] | undefined) => void;
   setRuns: (definitionId: string, runs: AutomationRunSummary[]) => void;
   bumpChanged: () => void;
   ensureRunRequest: (definitionId: string) => string;

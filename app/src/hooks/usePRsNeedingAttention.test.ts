@@ -194,7 +194,7 @@ describe('usePRsNeedingAttention', () => {
         isAuthorMuted: () => false,
         repoStates: [],
         authorStates: [],
-      } as unknown as ReturnType<typeof useDaemonStore>);
+      } as ReturnType<typeof useDaemonStore>);
 
       const prs = [createPR({ id: 'pr-1', repo: 'org/repo' })];
       const { result, rerender } = renderHook(() => usePRsNeedingAttention(prs));
@@ -209,7 +209,7 @@ describe('usePRsNeedingAttention', () => {
         isAuthorMuted: () => false,
         repoStates: [{ repo: 'org/repo', muted: true, collapsed: false }],
         authorStates: [],
-      } as unknown as ReturnType<typeof useDaemonStore>);
+      } as ReturnType<typeof useDaemonStore>);
 
       rerender();
 
@@ -227,7 +227,7 @@ describe('usePRsNeedingAttention', () => {
         isAuthorMuted: stableIsAuthorMuted,
         repoStates: [],
         authorStates: [],
-      } as unknown as ReturnType<typeof useDaemonStore>);
+      } as ReturnType<typeof useDaemonStore>);
 
       const prs = [createPR({ id: 'pr-1', author: 'some-author' })];
       const { result, rerender } = renderHook(() => usePRsNeedingAttention(prs));
@@ -242,7 +242,7 @@ describe('usePRsNeedingAttention', () => {
         isAuthorMuted: stableIsAuthorMuted,
         repoStates: [],
         authorStates: [{ author: 'some-author', muted: true }],
-      } as unknown as ReturnType<typeof useDaemonStore>);
+      } as ReturnType<typeof useDaemonStore>);
 
       rerender();
 

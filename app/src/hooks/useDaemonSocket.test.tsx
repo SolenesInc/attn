@@ -59,18 +59,18 @@ async function waitForOpenSocket(): Promise<FakeWebSocket> {
 }
 
 describe('useDaemonSocket PTY kill sequencing', () => {
-  let originalWebSocket: typeof WebSocket;
+
   let originalSetTimeout: typeof globalThis.setTimeout;
   let originalClearTimeout: typeof globalThis.clearTimeout;
   let pendingTimeouts: Set<ReturnType<typeof globalThis.setTimeout>>;
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     originalSetTimeout = globalThis.setTimeout;
     originalClearTimeout = globalThis.clearTimeout;
     pendingTimeouts = new Set();
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     globalThis.setTimeout = ((handler: TimerHandler, timeout?: number, ...args: any[]) => {
       let timeoutId: ReturnType<typeof globalThis.setTimeout>;
       timeoutId = originalSetTimeout((...callbackArgs: any[]) => {
@@ -99,7 +99,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     pendingTimeouts.clear();
     globalThis.setTimeout = originalSetTimeout;
     globalThis.clearTimeout = originalClearTimeout;
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.useRealTimers();
     vi.clearAllMocks();
   });
@@ -2543,16 +2543,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 });
 
 describe('useDaemonSocket settings refresh', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
   });
 
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -2577,19 +2577,19 @@ describe('useDaemonSocket settings refresh', () => {
 });
 
 describe('useDaemonSocket workflow runs', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockResolvedValue(true);
     useWorkflowRunsStore.getState().reset();
   });
 
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
     useWorkflowRunsStore.getState().reset();
   });
@@ -2686,15 +2686,15 @@ describe('useDaemonSocket workflow runs', () => {
 });
 
 describe('useDaemonSocket fs surface', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
   });
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -2855,15 +2855,15 @@ describe('useDaemonSocket fs surface', () => {
 });
 
 describe('useDaemonSocket seed resume request/result', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
   });
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -2987,15 +2987,15 @@ describe('useDaemonSocket seed resume request/result', () => {
 });
 
 describe('useDaemonSocket notebook and annotation events', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
   });
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 
@@ -3697,15 +3697,15 @@ describe('useDaemonSocket notebook and annotation events', () => {
 });
 
 describe('useDaemonSocket app commands', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
   });
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

@@ -41,6 +41,8 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       body: words(rand, bodyWords(rand)),
       status: statuses[Math.floor(rand() * statuses.length)],
       ready: rand() < 0.4,
+      state_changed_at: '2026-08-19T12:00:00Z',
+      state_changed_at_exact: true,
       created_at: '2026-08-19T12:00:00Z',
       updated_at: '2026-08-19T12:00:00Z',
       rev: 1,
@@ -53,7 +55,7 @@ function corpus(count: number, bodyWords: (rand: () => number) => number): Seed[
       tender_member: members[Math.floor(rand() * members.length)],
       tender_session: '',
       vars: [],
-    } as unknown as Seed);
+    });
   }
   return seeds;
 }

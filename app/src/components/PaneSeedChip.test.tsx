@@ -1,8 +1,9 @@
+import { createMockDaemonApi } from '../test/mocks/daemon';
 import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { PaneSeedChip } from './PaneSeedChip';
 import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
-import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext';
+import { DaemonApiProvider } from '../contexts/DaemonApiContext';
 import { derivePaneSeedDisplay } from './paneSeedDisplay';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
@@ -214,7 +215,7 @@ describe('seed lifecycle and context', () => {
     doc.notes.push({ ...doc.notes[0], id: 'n-2', kind: 'attach', body: 'attached screenshot', created_at: '2099-01-01T00:00:00Z' });
     const fetchDocument = vi.fn().mockResolvedValue(doc);
     render(
-      <DaemonApiProvider api={{ sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi}>
+      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
         <PaneSeedChip {...props} display={{ kind: 'crown', seedId: value.id, seed: value }} />
       </DaemonApiProvider>,
     );
@@ -234,7 +235,7 @@ describe('seed lifecycle and context', () => {
     const fetchDocument = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
       .mockResolvedValueOnce(documentFor({ ...value, rev: 2, status: 'harvested' }, 'Finished and verified.'));
     const view = (current: Seed) => (
-      <DaemonApiProvider api={{ sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi}>
+      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
         <PaneSeedChip {...props} pinned display={{ kind: 'crown', seedId: current.id, seed: current }} />
       </DaemonApiProvider>
     );
@@ -250,7 +251,7 @@ describe('seed lifecycle and context', () => {
     const value = seed({ id: 's-work11', title: 'Garden icons' });
     const onOpenSeed = vi.fn();
     render(
-      <DaemonApiProvider api={{ sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('offline')) } as unknown as DaemonApi}>
+      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('offline')) })}>
         <PaneSeedChip {...props} onOpenSeed={onOpenSeed} pinned display={{ kind: 'seed', seed: value }} />
       </DaemonApiProvider>,
     );
@@ -263,7 +264,7 @@ describe('seed lifecycle and context', () => {
     const value = seed({ id: 's-work11', title: 'Garden icons' });
     const fetchDocument = vi.fn().mockResolvedValueOnce(documentFor(value, 'First note.'))
       .mockResolvedValueOnce(documentFor(value, 'A new observation.'));
-    const api = { sendSeedDocumentGet: fetchDocument } as unknown as DaemonApi;
+    const api = createMockDaemonApi({ sendSeedDocumentGet: fetchDocument });
     const view = (current: Seed) => (
       <DaemonApiProvider api={api}>
         <PaneSeedChip {...props} pinned display={{ kind: 'seed', seed: current }} />

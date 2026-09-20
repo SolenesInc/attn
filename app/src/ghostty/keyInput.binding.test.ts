@@ -1,14 +1,12 @@
-// @vitest-environment node
 // @ts-expect-error -- @types/node is only a transitive peer here (see terminal.binding.test.ts)
 import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, URL as NodeURL } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Window } from 'happy-dom';
 import { attachTerminalInput } from './input';
 import { Ghostty } from './index';
 
-const wasmPath = fileURLToPath(new URL('../../vendor/ghostty-vt/ghostty-vt.wasm', import.meta.url));
+const wasmPath = fileURLToPath(new NodeURL('../../vendor/ghostty-vt/ghostty-vt.wasm', import.meta.url));
 
 let ghostty: Ghostty;
 
@@ -27,13 +25,12 @@ beforeAll(async () => {
 });
 
 function encodeKey(code: 'ArrowUp' | 'ArrowDown', applicationCursor = false): string[] {
-  const window = new Window();
   const container = window.document.createElement('div');
   const terminal = ghostty.createTerminal();
   if (applicationCursor) terminal.write('\x1b[?1h');
   const data: string[] = [];
   const dispose = attachTerminalInput({
-    element: container as unknown as HTMLElement,
+    element: container,
     terminal: () => terminal,
     send: (value) => data.push(value),
     interceptKey: () => false,

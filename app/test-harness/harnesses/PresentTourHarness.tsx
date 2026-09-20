@@ -180,17 +180,18 @@ export function PresentTourHarness({ onReady }: HarnessProps) {
   }, [onReady]);
 
   useEffect(() => {
-    const api = window.__HARNESS__ as unknown as Record<string, unknown>;
-    api.scrollToFile = (path: string) => {
-      setScrollToPath(path);
-      setScrollNonce((n) => n + 1);
-    };
-    api.failNextAddComment = () => {
-      failNextAddRef.current = true;
-    };
-    api.getActivePath = () => activePath;
-    api.settleDiffs = () => setDiffsSettled(true);
-    api.getReviewedPaths = () => Array.from(reviewedPaths);
+    Object.assign(window.__HARNESS__, {
+      scrollToFile: (path: string) => {
+        setScrollToPath(path);
+        setScrollNonce((n) => n + 1);
+      },
+      failNextAddComment: () => {
+        failNextAddRef.current = true;
+      },
+      getActivePath: () => activePath,
+      settleDiffs: () => setDiffsSettled(true),
+      getReviewedPaths: () => Array.from(reviewedPaths),
+    });
   }, [activePath, failNextAddRef, reviewedPaths]);
 
   const files = FILES.map((f) => ({

@@ -1,7 +1,8 @@
+import { createMockDaemonApi } from '../../src/test/mocks/daemon';
 import { useEffect, useState } from 'react';
 import { PaneSeedChip } from '../../src/components/PaneSeedChip';
 import { derivePaneSeedDisplay } from '../../src/components/paneSeedDisplay';
-import { DaemonApiProvider, type DaemonApi } from '../../src/contexts/DaemonApiContext';
+import { DaemonApiProvider } from '../../src/contexts/DaemonApiContext';
 import type { Seed } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
@@ -15,13 +16,13 @@ const base: Seed = {
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
 const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
-const api = {
+const api = createMockDaemonApi({
   sendSeedDocumentGet: async (id: string) => ({
     seed: { ...base, id, status: id.startsWith('s-') && states.includes(id.slice(2)) ? id.slice(2) : 'growing' },
     children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
     notes: [{ id: 'n-1', seed_id: id, kind: 'note', body: 'The silhouettes work at 24px. Next, check the hover at the edge of a narrow pane.', created_at: now, author_session: '', author_member: '' }],
   }),
-} as unknown as DaemonApi;
+});
 
 export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [status, setStatus] = useState('growing');

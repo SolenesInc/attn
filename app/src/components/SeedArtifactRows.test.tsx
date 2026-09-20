@@ -1,3 +1,4 @@
+import { createMockDaemonApi } from '../test/mocks/daemon';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
@@ -10,8 +11,8 @@ vi.mock('@tauri-apps/plugin-dialog', () => ({
   save: vi.fn(),
 }));
 
-function api(overrides: Record<string, unknown> = {}): DaemonApi {
-  return {
+function api(overrides: Partial<DaemonApi> = {}): DaemonApi {
+  return createMockDaemonApi({
     sendSeedArtifactTarget: vi.fn(async () => ({ relative_target: 'report.bin', path: '/notebook/seeds/s-1/report.bin' })),
     sendSeedArtifactTransfer: vi.fn(async () => ({
       operation_id: 'op-1', seed_id: 's-1', operation: 'copy', source_path: '/tmp/report.bin',
@@ -19,7 +20,7 @@ function api(overrides: Record<string, unknown> = {}): DaemonApi {
     })),
     sendSeedArtifactReferenceDetach: vi.fn(async () => {}),
     ...overrides,
-  } as unknown as DaemonApi;
+  });
 }
 
 describe('SeedArtifactRows', () => {

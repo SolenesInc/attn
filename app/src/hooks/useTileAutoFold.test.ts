@@ -26,7 +26,7 @@ function emitWidth(width: number) {
 const RealResizeObserver = globalThis.ResizeObserver;
 beforeEach(() => {
   resizeCallback = null;
-  globalThis.ResizeObserver = MockResizeObserver as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = MockResizeObserver;
 });
 afterEach(() => {
   globalThis.ResizeObserver = RealResizeObserver;

@@ -1,4 +1,3 @@
-import { Window } from 'happy-dom';
 import { describe, expect, it, vi } from 'vitest';
 import {
   attachTerminalInput,
@@ -11,8 +10,7 @@ function setup(overrides: Partial<{
   target: TerminalInputTarget | null;
   interceptKey: (event: KeyboardEvent) => boolean;
 }> = {}) {
-  const window = new Window();
-  const element = window.document.createElement('div') as unknown as HTMLElement;
+  const element = window.document.createElement('div');
   let target = overrides.target === undefined ? {
     encodeKey: vi.fn((event: TerminalKeyEvent) => event.action),
     formatPaste: vi.fn((text: string) => `<${text}>`),
@@ -40,7 +38,7 @@ function setup(overrides: Partial<{
 }
 
 function key(
-  window: Window,
+  window: Window & typeof globalThis,
   type: 'keydown' | 'keyup',
   init: KeyboardEventInit,
   modifierStates: readonly string[] = [],
@@ -49,7 +47,7 @@ function key(
     bubbles: true,
     cancelable: true,
     ...init,
-  } as never) as unknown as KeyboardEvent;
+  });
   Object.defineProperty(event, 'getModifierState', {
     value: (name: string) => modifierStates.includes(name),
   });
@@ -232,10 +230,10 @@ describe('attachTerminalInput', () => {
       altKey: true,
     });
     input.element.dispatchEvent(dead);
-    input.element.dispatchEvent(new input.window.Event('compositionstart') as unknown as Event);
+    input.element.dispatchEvent(new input.window.Event('compositionstart'));
     input.element.dispatchEvent(key(input.window, 'keydown', { key: 'a', code: 'KeyA' }));
-    input.element.appendChild(input.window.document.createTextNode('preedit') as unknown as Node);
-    const end = new input.window.Event('compositionend') as unknown as CompositionEvent;
+    input.element.appendChild(input.window.document.createTextNode('preedit'));
+    const end = new input.window.Event('compositionend');
     Object.defineProperty(end, 'data', { value: 'å' });
     input.element.dispatchEvent(end);
 
@@ -252,7 +250,7 @@ describe('attachTerminalInput', () => {
     const paste = new input.window.Event('paste', {
       bubbles: true,
       cancelable: true,
-    }) as unknown as ClipboardEvent;
+    });
     Object.defineProperty(paste, 'clipboardData', {
       value: { getData: () => 'one\r\ntwo\nthree' },
     });

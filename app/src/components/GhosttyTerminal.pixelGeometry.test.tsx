@@ -90,7 +90,7 @@ beforeEach(() => {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  };
 });
 
 afterEach(() => {
@@ -101,7 +101,7 @@ afterEach(() => {
 async function fitOnce(dpr: number) {
   mocks.rendererConfig.dpr = dpr;
   const onResize = vi.fn();
-  let ready: GhosttyTerminalHandle | null = null;
+  let ready!: GhosttyTerminalHandle;
   render(
     <GhosttyTerminal
       fontSize={14}
@@ -111,9 +111,9 @@ async function fitOnce(dpr: number) {
       onResize={onResize}
     />,
   );
-  await waitFor(() => expect(ready).not.toBeNull());
+  await waitFor(() => expect(ready).toBeDefined());
   await act(async () => {
-    (ready as unknown as GhosttyTerminalHandle).fit();
+    ready.fit();
   });
   await waitFor(() => expect(onResize).toHaveBeenCalled());
   return onResize;

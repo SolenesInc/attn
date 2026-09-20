@@ -1,3 +1,4 @@
+import { createMockDaemonApi } from '../../test/mocks/daemon';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -60,7 +61,7 @@ const testSurfaceValue: NotebookSurfaceContextValue = {
   connectionGeneration: 0,
 };
 
-const defaultDaemonApi = {} as DaemonApi;
+const defaultDaemonApi = createMockDaemonApi({});
 
 function NotebookSurfaceTestWrapper({
   api = defaultDaemonApi,
@@ -281,7 +282,7 @@ describe('WorkspaceDockTile browser integration', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
   });
 
   it('closes the exact browser tile targeted by the native close command', async () => {
@@ -1078,7 +1079,7 @@ describe('WorkspaceDockTile seed reader', () => {
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second);
     const sendOpenMarkdown = vi.fn().mockResolvedValue({});
-    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown } as unknown as DaemonApi;
+    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown });
     const { transport, getSpy, submitSpy } = makeSendTransport();
     setMarkdownAnnotationsTransport(transport);
     const onRequestContent = vi.fn();
@@ -1152,7 +1153,7 @@ describe('WorkspaceDockTile seed reader', () => {
     const sendSeedDocumentGet = vi.fn((seedID: string) => (
       seedID === child.id ? childPending : Promise.resolve(details.get(seedID) as SeedDocument)
     ));
-    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
     const { transport, getSpy } = makeSendTransport();
     setMarkdownAnnotationsTransport(transport);
     const onUpdateParams = vi.fn().mockResolvedValue({});
@@ -1216,10 +1217,10 @@ describe('WorkspaceDockTile seed reader', () => {
       [nested.id, { ...seedDocumentFixture(nested.body), seed: nested, children: [leaf] }],
       [leaf.id, { ...seedDocumentFixture(leaf.body), seed: leaf, children: [] }],
     ]);
-    const daemonApi = {
+    const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn((seedID: string) => Promise.resolve(details.get(seedID) as SeedDocument)),
       sendOpenMarkdown: vi.fn(),
-    } as unknown as DaemonApi;
+    });
     const onUpdateParams = vi.fn().mockResolvedValue({});
     const view = render(
       <WorkspaceDockTile
@@ -1275,7 +1276,7 @@ describe('WorkspaceDockTile seed reader', () => {
         ? childPending
         : Promise.resolve({ ...seedDocumentFixture(plot.body), seed: plot, children: [child] })
     ));
-    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
 
     render(
       <WorkspaceDockTile
@@ -1298,10 +1299,10 @@ describe('WorkspaceDockTile seed reader', () => {
 
   it('keeps the tended seed primary bound to its live tender and offers Note on seed in the caret menu', async () => {
     const detail = seedDocumentFixture();
-    const daemonApi = {
+    const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
       sendOpenMarkdown: vi.fn(),
-    } as unknown as DaemonApi;
+    });
     const { transport, submitSpy } = makeSendTransport();
     submitSpy.mockResolvedValue({ status: 'noted', generation: 8 });
     setMarkdownAnnotationsTransport(transport);
@@ -1345,10 +1346,10 @@ describe('WorkspaceDockTile seed reader', () => {
       seed: seedFixture({ tender_session: '', tender_member: '' }),
       tender_holds: false,
     };
-    const daemonApi = {
+    const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn().mockResolvedValue(detail),
       sendOpenMarkdown: vi.fn(),
-    } as unknown as DaemonApi;
+    });
     const { transport, submitSpy } = makeSendTransport();
     submitSpy.mockResolvedValue({ status: 'noted', generation: 8 });
     setMarkdownAnnotationsTransport(transport);
@@ -1385,7 +1386,7 @@ describe('WorkspaceDockTile seed reader', () => {
     const sendSeedDocumentGet = vi.fn()
       .mockResolvedValueOnce(first)
       .mockImplementation(() => never);
-    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
     const { transport, submitSpy } = makeSendTransport();
     setMarkdownAnnotationsTransport(transport);
     const props = {
@@ -1434,7 +1435,7 @@ describe('WorkspaceDockTile seed reader', () => {
     const sendSeedDocumentGet = vi.fn()
       .mockResolvedValueOnce(first)
       .mockReturnValueOnce(detailPending);
-    const daemonApi = { sendSeedDocumentGet, sendOpenMarkdown: vi.fn() } as unknown as DaemonApi;
+    const daemonApi = createMockDaemonApi({ sendSeedDocumentGet, sendOpenMarkdown: vi.fn() });
     const { transport } = makeSendTransport([anchoredNote(oldBody, 'target words')]);
     setMarkdownAnnotationsTransport(transport);
     const props = {
@@ -1477,10 +1478,10 @@ describe('WorkspaceDockTile seed reader', () => {
   });
 
   it('names an unknown seed read failure in the tile', async () => {
-    const daemonApi = {
+    const daemonApi = createMockDaemonApi({
       sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('no seed s-missing is planted here')),
       sendOpenMarkdown: vi.fn(),
-    } as unknown as DaemonApi;
+    });
     render(
       <WorkspaceDockTile
         tile={{ type: 'tile', tileId: 'tile-seed-s-missing', tileKind: 'seed', tileParams: 's-missing' }}

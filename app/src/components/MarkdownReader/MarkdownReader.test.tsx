@@ -1,3 +1,4 @@
+import { createMockDaemonApi } from '../../test/mocks/daemon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -39,8 +40,8 @@ function renderReader(content: string, allowLocalTargets = true) {
   );
 }
 
-function seedReaderApi(resolveTarget: ReturnType<typeof vi.fn>): DaemonApi {
-  return { sendSeedArtifactTarget: resolveTarget } as unknown as DaemonApi;
+function seedReaderApi(resolveTarget: DaemonApi['sendSeedArtifactTarget']): DaemonApi {
+  return createMockDaemonApi({ sendSeedArtifactTarget: resolveTarget });
 }
 
 describe('MarkdownReader source anchoring', () => {
@@ -295,7 +296,7 @@ describe('MarkdownReader link sanitization', () => {
     );
     const body = container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
     const scrollTo = vi.fn();
-    body.scrollTo = scrollTo as unknown as typeof body.scrollTo;
+    body.scrollTo = scrollTo;
 
     fireEvent.click(screen.getByRole('link', { name: 'Jump' }));
 
@@ -319,8 +320,8 @@ describe('MarkdownReader link sanitization', () => {
     const bodies = container.querySelectorAll<HTMLElement>('.workspace-dock-tile-body');
     const firstScrollTo = vi.fn();
     const secondScrollTo = vi.fn();
-    bodies[0].scrollTo = firstScrollTo as unknown as HTMLElement['scrollTo'];
-    bodies[1].scrollTo = secondScrollTo as unknown as HTMLElement['scrollTo'];
+    bodies[0].scrollTo = firstScrollTo;
+    bodies[1].scrollTo = secondScrollTo;
 
     fireEvent.click(screen.getAllByRole('link', { name: 'Jump' })[1]);
 

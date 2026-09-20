@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { isColorGlyphBitmap } from './terminalGlyphProgram';
 
-function img(pixels: Array<[number, number, number, number]>): ImageData {
+function img(pixels: Array<[number, number, number, number]>): Pick<ImageData, 'data'> {
   const data = new Uint8ClampedArray(pixels.length * 4);
   pixels.forEach((p, i) => {
     data[i * 4] = p[0];
@@ -9,7 +9,7 @@ function img(pixels: Array<[number, number, number, number]>): ImageData {
     data[i * 4 + 2] = p[2];
     data[i * 4 + 3] = p[3];
   });
-  return { data, width: pixels.length, height: 1 } as unknown as ImageData;
+  return { data };
 }
 
 describe('isColorGlyphBitmap', () => {

@@ -43,8 +43,8 @@ const BRIDGE_ARGS = {
   scrollSessionPaneToTop: vi.fn(() => true),
   getPaneText: vi.fn(() => ''),
   getPaneSize: vi.fn(() => null),
-  getPaneVisibleContent: vi.fn(),
-  getPaneVisibleStyleSummary: vi.fn(),
+  getPaneVisibleContent: vi.fn(() => { throw new Error('Unexpected visible-content request'); }),
+  getPaneVisibleStyleSummary: vi.fn(() => { throw new Error('Unexpected style-summary request'); }),
   getPaneBlockState: vi.fn(() => null),
   getPanePlacementState: vi.fn(() => null),
   fitSessionActivePane: vi.fn(),
@@ -62,9 +62,7 @@ function mountBridge(initialActiveSessionId: string | null) {
 
   const { rerender } = renderHook(
     ({ activeSessionId }: { activeSessionId: string | null }) =>
-      useUiAutomationBridge({ ...BRIDGE_ARGS, activeSessionId } as unknown as Parameters<
-        typeof useUiAutomationBridge
-      >[0]),
+      useUiAutomationBridge({ ...BRIDGE_ARGS, activeSessionId }),
     { initialProps: { activeSessionId: initialActiveSessionId } },
   );
 
@@ -75,7 +73,7 @@ function mountBridge(initialActiveSessionId: string | null) {
   return {
     rerender,
     dispatch: (request: AutomationRequest) =>
-      handler({ payload: request } as never) as unknown as Promise<void>,
+      handler({ event: 'attn://ui-automation/request', id: 0, payload: request }),
   };
 }
 
@@ -83,13 +81,11 @@ function latestDispatch() {
   const calls = vi.mocked(listen).mock.calls;
   const handler = calls.length > 0 ? calls[calls.length - 1][1] : undefined;
   if (!handler) throw new Error('the bridge never subscribed to automation requests');
-  return (request: AutomationRequest) => handler({ payload: request } as never) as unknown as Promise<void>;
+  return (request: AutomationRequest) => handler({ event: 'attn://ui-automation/request', id: 0, payload: request });
 }
 
 function BridgeHost({ activeSessionId, abandon }: { activeSessionId: string; abandon: boolean }) {
-  useUiAutomationBridge({ ...BRIDGE_ARGS, activeSessionId } as unknown as Parameters<
-    typeof useUiAutomationBridge
-  >[0]);
+  useUiAutomationBridge({ ...BRIDGE_ARGS, activeSessionId });
   if (abandon) throw new Error('render abandoned before commit');
   return null;
 }

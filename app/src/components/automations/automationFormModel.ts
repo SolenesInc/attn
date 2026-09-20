@@ -144,7 +144,7 @@ const baseFormSchema = z.object({
   prompt: z.string(),
 });
 
-export const automationFormSchema: z.ZodType<AutomationFormValues> = baseFormSchema.superRefine((values, ctx) => {
+export const automationFormSchema = baseFormSchema.superRefine((values, ctx) => {
   if (values.name.trim() === '') {
     ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['name'], message: 'A name is required.' });
   }
