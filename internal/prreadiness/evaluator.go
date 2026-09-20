@@ -213,7 +213,11 @@ func reviewMatchesHead(review Review, head string) bool {
 }
 
 func NormalizeActor(actor string) string {
-	return strings.TrimSuffix(strings.TrimSpace(actor), "[bot]")
+	actor = strings.TrimSpace(actor)
+	if len(actor) >= len("[bot]") && strings.EqualFold(actor[len(actor)-len("[bot]"):], "[bot]") {
+		actor = actor[:len(actor)-len("[bot]")]
+	}
+	return actor
 }
 
 func SameActor(left, right string) bool {

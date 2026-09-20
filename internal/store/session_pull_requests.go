@@ -258,23 +258,55 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 	return err
 }
 
-func (s *Store) UpdateSessionPullRequestSharedStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
+func (s *Store) UpdateSessionPullRequestSharedStatus(prID string, status SessionPullRequestStatus, at time.Time) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return errors.New("store has no database")
+		return nil, errors.New("store has no database")
 	}
 
 	stamp := at.Format(time.RFC3339Nano)
-	_, err := s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	rows, err := tx.Query(`
+		SELECT session_id FROM session_pull_requests
+		WHERE pr_id = ? AND review_status <> ''
+		ORDER BY session_id`, prID)
+	if err != nil {
+		return nil, err
+	}
+	var cleared []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		cleared = append(cleared, sessionID)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if _, err := tx.Exec(`
 		UPDATE session_pull_requests
 		SET title = ?, draft = ?, state = ?, ci_status = ?, review_status = '',
 			mergeable_state = ?, head_sha = ?, head_branch = ?,
 			status_fetched_at = ?, status_checked_at = ?
 		WHERE pr_id = ?`,
 		status.Title, status.Draft, status.State, status.CIStatus,
-		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID)
-	return err
+		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return cleared, nil
 }
 
 func (s *Store) UpdateSessionPullRequestReviewStatus(sessionID, prID, reviewStatus string) error {

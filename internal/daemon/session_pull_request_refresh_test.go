@@ -312,6 +312,69 @@ func TestPullRequestWatchRearmRedeliversSameAction(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchRedeliversRecurringAction(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	watch := d.store.PullRequestWatches()[0]
+	failed := prreadiness.Observation{
+		State: "open", HeadSHA: "sha-1", MergeableState: "clean", CheckState: prreadiness.ChecksFailed,
+		Checks: []prreadiness.Check{{Name: "CI", State: prreadiness.ChecksFailed}},
+	}
+	first := prreadiness.Advance(prreadiness.Cursor{}, failed, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, first.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if read, remaining, err := d.store.ReadAgentMailbox("s1", 1, time.Now()); err != nil || len(read) != 1 || remaining != 0 {
+		t.Fatalf("read first failure = %+v, %d, %v", read, remaining, err)
+	}
+	recovered := failed
+	recovered.CheckState = prreadiness.ChecksPending
+	recovered.Checks[0].State = prreadiness.ChecksPending
+	clear := prreadiness.Advance(first.NextCursor, recovered, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, clear.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	recurred := prreadiness.Advance(clear.NextCursor, failed, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, recurred.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || unread[0].Item.ID != pullRequestWatchEventID(watch, recurred.Events[0].ID) {
+		t.Fatalf("recurring action = %+v, %v", unread, err)
+	}
+}
+
+func TestPullRequestWatchBroadcastsClearedUnwatchedVerdict(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	registerSessionForPRTest(t, d, "s2")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	recordPRForRefresh(t, d, "s2", url)
+	prID := d.store.PullRequestWatches()[0].PRID
+	now := time.Now()
+	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksPending, "")}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now)
+	if err := d.store.UpdateSessionPullRequestReviewStatus("s2", prID, "approved"); err != nil {
+		t.Fatal(err)
+	}
+	before := len(docFacts(t, d, FactSessionPullRequestChanged))
+	if fetched, changed := d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval)); fetched != 1 || changed != 0 {
+		t.Fatalf("refresh = (%d,%d)", fetched, changed)
+	}
+	if got := storedPullRequest(t, d, "s2").ReviewStatus; got != "" {
+		t.Fatalf("unwatched review status = %q", got)
+	}
+	facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]
+	seen := map[string]int{}
+	for _, fact := range facts {
+		seen[fact.Subject]++
+	}
+	if seen["s1"] != 1 || seen["s2"] != 1 {
+		t.Fatalf("refresh facts = %+v", facts)
+	}
+}
+
 func TestPullRequestWatchClearsStaleActionOnHeadChangeAndDisarmsOnClose(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"

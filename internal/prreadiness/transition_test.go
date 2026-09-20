@@ -202,7 +202,8 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				second := Advance(first.NextCursor, recovered, "reviewer", StartPolicy{})
 				third := Advance(second.NextCursor, failed, "reviewer", StartPolicy{})
 				if !has(first.Events, OutcomeChecksFailed) || len(second.Events) != 1 || second.Events[0].Kind != EventClearAction ||
-					!has(third.Events, OutcomeChecksFailed) {
+					!has(third.Events, OutcomeChecksFailed) || first.Events[0].ID == third.Events[0].ID ||
+					third.NextCursor.ActionGeneration != 1 {
 					t.Fatalf("failure lifecycle = first:%+v recovered:%+v refailed:%+v", first, second, third)
 				}
 			},
@@ -211,7 +212,7 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			name: "closure emits and reviewer spelling change does not rearm",
 			run: func(t *testing.T) {
 				observation := ready("head-a", "review-a")
-				first := Advance(Cursor{}, observation, "reviewer[bot]", StartPolicy{})
+				first := Advance(Cursor{}, observation, "reviewer[BOT]", StartPolicy{})
 				same := Advance(first.NextCursor, observation, "reviewer", StartPolicy{})
 				if same.ReviewerChanged {
 					t.Fatalf("bot suffix changed generation: %+v", same)

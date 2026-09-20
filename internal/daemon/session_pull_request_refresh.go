@@ -157,7 +157,9 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 		if readiness == nil {
 			updateErr = d.store.UpdateSessionPullRequestStatus(group.prID, status, now)
 		} else {
-			updateErr = d.store.UpdateSessionPullRequestSharedStatus(group.prID, status, now)
+			var cleared []string
+			cleared, updateErr = d.store.UpdateSessionPullRequestSharedStatus(group.prID, status, now)
+			changedSessions = append(changedSessions, cleared...)
 		}
 		if updateErr != nil {
 			d.logf("session pull requests: store status for %s: %v", group.prID, updateErr)

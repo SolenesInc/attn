@@ -1,6 +1,7 @@
 package prreadiness
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ type Cursor struct {
 	SeenCommentIDs    []string `json:"seen_comment_ids,omitempty"`
 	SeenVerdictIDs    []string `json:"seen_verdict_ids,omitempty"`
 	LastActionKey     string   `json:"last_action_key,omitempty"`
+	ActionGeneration  uint64   `json:"action_generation,omitempty"`
 }
 
 type StartPolicy struct {
@@ -110,9 +112,10 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	if actionKey != baseline.LastActionKey {
 		if actionKey == "" {
 			events = append(events, Event{ID: "clear:" + baseline.LastActionKey, Kind: EventClearAction})
+			next.ActionGeneration++
 		} else {
 			events = append(events, Event{
-				ID: "action:" + actionKey, Kind: EventAction,
+				ID: fmt.Sprintf("action:%d:%s", baseline.ActionGeneration, actionKey), Kind: EventAction,
 				Outcomes: outcomes, Details: details,
 			})
 		}
