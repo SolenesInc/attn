@@ -109,6 +109,9 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 		if !sameActor(review.Author, reviewer) || !reviewMatchesHead(*review, evidence.HeadSHA) {
 			continue
 		}
+		if !isCodexReviewer(reviewer) && strings.EqualFold(review.State, "COMMENTED") {
+			continue
+		}
 		if current == nil || review.SubmittedAt.After(current.SubmittedAt) {
 			current = review
 		}

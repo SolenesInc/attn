@@ -1448,6 +1448,18 @@ func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg inte
 	if !ok {
 		return false
 	}
+	if cmd == protocol.CmdPullRequestUnwatch {
+		request := msg.(*protocol.PullRequestUnwatchMessage)
+		d.sendToClient(client, protocol.PullRequestUnwatchResultMessage{
+			Event: protocol.EventPullRequestUnwatchResult, RequestID: protocol.Deref(request.RequestID),
+			Success: false, Error: protocol.Ptr("remote pull request watches are unsupported; run this command on the owning daemon"),
+		})
+		return true
+	}
+	if cmd == protocol.CmdPullRequestWatch {
+		d.sendCommandError(client, cmd, "remote pull request watches are unsupported; run this command on the owning daemon")
+		return true
+	}
 	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
 		d.sendCommandError(client, cmd, err.Error())
 		return true

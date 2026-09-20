@@ -839,6 +839,24 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	if err != nil || len(unread) != 1 || strings.Contains(unread[0].Item.Prompt, "Fix the guard") {
 		t.Fatalf("approval replayed delivered findings: %+v, %v", unread, err)
 	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
+		t.Fatal(err)
+	}
+	ready.Evidence.Reviews = append(ready.Evidence.Reviews, prreadiness.Review{
+		ID: "follow-up", Author: "human", State: "COMMENTED", CommitOID: "head",
+		Body: "One more note", SubmittedAt: now.Add(time.Second),
+	})
+	ready.Evidence.Comments = append(ready.Evidence.Comments, prreadiness.Comment{
+		ID: "follow-up", Author: "human", Body: "One more note", CreatedAt: now.Add(time.Second),
+	})
+	d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+	if status := storedPullRequest(t, d, "s1").ReviewStatus; status != prreadiness.ReviewApproved {
+		t.Fatalf("comment-only review erased approval: %q", status)
+	}
+	unread, err = d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "One more note") {
+		t.Fatalf("comment-only review feedback = %+v, %v", unread, err)
+	}
 }
 
 func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *testing.T) {

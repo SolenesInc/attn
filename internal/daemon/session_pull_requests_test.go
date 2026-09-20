@@ -208,6 +208,14 @@ func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 		t.Fatalf("add endpoint: %v", err)
 	}
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	client.setIdentity("app-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	d.handleClientMessage(client, []byte(`{"cmd":"pull_request_unwatch","id":"s-remote","url":"https://github.com/o/r/pull/1","request_id":"remote-unwatch"}`))
+	var result protocol.PullRequestUnwatchResultMessage
+	readNotebookWSEvent(t, client.send, &result)
+	if result.RequestID != "remote-unwatch" || result.Success || !strings.Contains(protocol.Deref(result.Error), "unsupported") {
+		t.Fatalf("remote stop did not return a correlated refusal: %+v", result)
+	}
 	for _, msg := range []any{
 		protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1", Reviewer: "reviewer"},
 		protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1"},
