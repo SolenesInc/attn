@@ -421,6 +421,33 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchReemitsActionClearedByOutage(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	failed := watchedReadiness("sha-1", prreadiness.ChecksFailed, "")
+	host := &fakePRHost{readiness: failed}
+	serveHost(d, "github.com", host)
+	now := time.Now()
+	d.refreshSessionPullRequests(now)
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "checks failed") {
+		t.Fatalf("initial failure = %+v, %v", unread, err)
+	}
+	host.readyErr = errors.New("review API unavailable")
+	for i := 1; i <= pullRequestWatchFailureThreshold; i++ {
+		d.refreshSessionPullRequests(now.Add(time.Duration(i) * protocol.HeatHotInterval))
+	}
+	if watch := d.store.PullRequestWatches()[0]; watch.Cursor.LastActionKey != "" || watch.Cursor.ActionGeneration != 1 {
+		t.Fatalf("outage cursor = %+v", watch.Cursor)
+	}
+	host.readyErr = nil
+	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold+1) * protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "checks failed") {
+		t.Fatalf("recovered failure = %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchUsesGraphQLRateLimitResource(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")

@@ -453,9 +453,20 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			continue
 		}
 		if updated.FailureCount >= pullRequestWatchFailureThreshold {
-			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
-				d.logf("pull request watch: clear stale status for %s/%s: %v", watch.SessionID, watch.PRID, err)
-				continue
+			if updated.Cursor.LastActionKey == "" {
+				if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
+					d.logf("pull request watch: clear stale status for %s/%s: %v", watch.SessionID, watch.PRID, err)
+					continue
+				}
+			} else {
+				updated.Cursor.LastActionKey = ""
+				updated.Cursor.ActionGeneration++
+				if err := d.store.ApplyPullRequestWatchBaseline(
+					watch.SessionID, watch.PRID, pullRequestWatchCoalesceKey(watch.PRID), updated.Cursor, true,
+				); err != nil {
+					d.logf("pull request watch: clear stale status for %s/%s: %v", watch.SessionID, watch.PRID, err)
+					continue
+				}
 			}
 			id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
 				"pull-request-outage", watch.SessionID, watch.PRID, watch.CreatedAt, updated.ErrorSince,

@@ -67,6 +67,10 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	first := !previous.Initialized
 	reviewerChanged := previous.Initialized && !SameActor(previous.Reviewer, reviewer)
 	headChanged := previous.Initialized && previous.HeadSHA != observation.HeadSHA
+	startCutoff := time.Time{}
+	if first {
+		startCutoff = policy.Since
+	}
 
 	baseline := cloneCursor(previous)
 	if first {
@@ -77,16 +81,12 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	baseline.Initialized = true
 	baseline.Reviewer = reviewer
 	if first || reviewerChanged || headChanged {
-		cutoff := time.Time{}
-		if first {
-			cutoff = policy.Since
-		}
 		baseline.HeadSHA = observation.HeadSHA
-		baseline.SignalBaselineIDs = UnscopedSignalIDs(observation, reviewer, cutoff)
+		baseline.SignalBaselineIDs = UnscopedSignalIDs(observation, reviewer, startCutoff)
 		baseline.LastActionKey = ""
 	}
 	if (first || reviewerChanged) && policy.HoldExistingVerdictWhenRequested && reviewerRequested(observation, reviewer) {
-		baseline.SeenVerdictIDs = VerdictSignalIDs(observation, reviewer, time.Time{})
+		baseline.SeenVerdictIDs = VerdictSignalIDs(observation, reviewer, startCutoff)
 	}
 	baseline.SeenCommentIDs = uniqueSorted(baseline.SeenCommentIDs)
 	baseline.SeenVerdictIDs = uniqueSorted(baseline.SeenVerdictIDs)

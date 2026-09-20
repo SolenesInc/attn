@@ -61,6 +61,20 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "explicit since replays later verdict during pending rereview",
+			run: func(t *testing.T) {
+				observation := ready("head-a", "approval-a")
+				observation.Reviews[0].SubmittedAt = base.Add(time.Minute)
+				observation.RequestedReviewers = []string{"reviewer"}
+				got := Advance(Cursor{}, observation, "reviewer", StartPolicy{
+					Since: base, HoldExistingVerdictWhenRequested: true,
+				})
+				if !has(got.Events, OutcomeReady) || slices.Contains(got.BaselineCursor.SeenVerdictIDs, "approval-a") {
+					t.Fatalf("transition = %+v", got)
+				}
+			},
+		},
+		{
 			name: "pending rereview holds existing verdict",
 			run: func(t *testing.T) {
 				observation := ready("head-a", "approval-a")
