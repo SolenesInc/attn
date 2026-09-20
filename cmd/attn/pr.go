@@ -688,10 +688,9 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			lastLine = line
 		}
 
-		if !notedStaleVerdict && observation.ReviewerRequested && hasReviewVerdict(observation) &&
-			observation.ReviewSignalID != "" && containsString(transition.BaselineCursor.SeenVerdictIDs, observation.ReviewSignalID) {
-			fmt.Fprintf(progress, "%s %s predates the pending re-review request; waiting for a new review\n",
-				observation.Reviewer, observation.ReviewState)
+		if !notedStaleVerdict && transition.VerdictHeld {
+			fmt.Fprintf(progress, "%s verdict predates the pending re-review request; waiting for a new review\n",
+				observation.Reviewer)
 			notedStaleVerdict = true
 		}
 

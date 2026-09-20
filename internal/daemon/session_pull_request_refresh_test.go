@@ -520,6 +520,54 @@ func TestPullRequestWatchBroadcastsReviewChangeOnce(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchHoldsRequestedRereviewUntilFreshVerdict(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	now := time.Now()
+	observation := watchedReadiness("sha-1", prreadiness.ChecksGreen, "APPROVED")
+	host := &fakePRHost{readiness: observation}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(context.Background(), now)
+	if got := storedPullRequest(t, d, "s1").ReviewStatus; got != string(prreadiness.ReviewApproved) {
+		t.Fatalf("initial review status = %q", got)
+	}
+
+	observation.RequestedReviewers = []string{"chatgpt-codex-connector"}
+	before := len(docFacts(t, d, FactSessionPullRequestChanged))
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
+	if got := storedPullRequest(t, d, "s1").ReviewStatus; got != string(prreadiness.ReviewWaiting) {
+		t.Fatalf("pending rereview status = %q", got)
+	}
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 1 || facts[0].Subject != "s1" {
+		t.Fatalf("pending rereview facts = %+v", facts)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("stale ready action survived rerequest: %+v, %v", unread, err)
+	}
+
+	observation.Reviews = append(observation.Reviews, prreadiness.Review{
+		ID: "approval-b", Author: "chatgpt-codex-connector", State: "APPROVED",
+		CommitOID: "sha-1", SubmittedAt: now.Add(time.Minute),
+	})
+	d.refreshSessionPullRequests(context.Background(), now.Add(2*protocol.HeatHotInterval))
+	if got := storedPullRequest(t, d, "s1").ReviewStatus; got != string(prreadiness.ReviewApproved) {
+		t.Fatalf("fresh rereview status = %q", got)
+	}
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "ready") {
+		t.Fatalf("fresh rereview action = %+v, %v", unread, err)
+	}
+
+	before = len(docFacts(t, d, FactSessionPullRequestChanged))
+	d.refreshSessionPullRequests(context.Background(), now.Add(3*protocol.HeatHotInterval))
+	if got := storedPullRequest(t, d, "s1").ReviewStatus; got != string(prreadiness.ReviewApproved) {
+		t.Fatalf("repeated fresh rereview status = %q", got)
+	}
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 0 {
+		t.Fatalf("repeated fresh rereview facts = %+v", facts)
+	}
+}
+
 func TestPullRequestWatchClearsStaleActionOnHeadChangeAndDisarmsOnClose(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"

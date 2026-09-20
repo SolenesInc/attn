@@ -61,6 +61,7 @@ type Transition struct {
 	NextCursor      Cursor
 	HeadChanged     bool
 	ReviewerChanged bool
+	VerdictHeld     bool
 }
 
 func Advance(previous Cursor, observation Observation, reviewer string, policy StartPolicy) Transition {
@@ -89,7 +90,8 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		baseline.SignalBaselineIDs = UnscopedSignalIDs(observation, reviewer, startCutoff)
 		baseline.LastActionKey = ""
 	}
-	if (first || reviewerChanged) && policy.HoldExistingVerdictWhenRequested && reviewerRequested(observation, reviewer) {
+	requested := policy.HoldExistingVerdictWhenRequested && reviewerRequested(observation, reviewer)
+	if (first || reviewerChanged || headChanged) && requested {
 		baseline.SeenVerdictIDs = VerdictSignalIDs(observation, reviewer, startCutoff)
 	}
 	baseline.SeenCommentIDs = uniqueSorted(baseline.SeenCommentIDs)
@@ -97,6 +99,18 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	baseline.SeenVerdictIDs = uniqueSorted(baseline.SeenVerdictIDs)
 
 	evaluation := Evaluate(observation, reviewer, baseline.SignalBaselineIDs)
+	verdictFresh := evaluation.SignalID != "" && !stringSet(baseline.SeenVerdictIDs)[evaluation.SignalID]
+	verdictHeld := requested && evaluation.SignalID != "" && !verdictFresh
+	if verdictHeld {
+		evaluation.Ready = false
+		evaluation.ReviewState = ReviewWaiting
+		if len(evaluation.Unresolved) > 0 {
+			evaluation.ReviewState = ReviewUnresolved
+		}
+		evaluation.Findings = nil
+		evaluation.ReviewBody = ""
+		evaluation.UnavailableCause = ""
+	}
 	next := cloneCursor(baseline)
 	events := feedbackEvents(observation, reviewer, baseline.SeenCommentIDs, policy)
 	durableFeedback := stringSet(baseline.DeliveredFeedbackIDs)
@@ -110,7 +124,7 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		}
 	}
 
-	outcomes, details := currentAction(observation, evaluation, reviewer, baseline, policy, durableFeedback)
+	outcomes, details := currentAction(observation, evaluation, reviewer, durableFeedback)
 	actionKey := ""
 	if len(outcomes) > 0 {
 		parts := make([]string, 0, len(outcomes))
@@ -133,7 +147,7 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		}
 		next.LastActionKey = actionKey
 	}
-	if evaluation.SignalID != "" {
+	if evaluation.SignalID != "" && !requested {
 		next.SeenVerdictIDs = append(next.SeenVerdictIDs, evaluation.SignalID)
 	}
 	next.SeenCommentIDs = uniqueSorted(next.SeenCommentIDs)
@@ -142,7 +156,7 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 
 	return Transition{
 		Evaluation: evaluation, Events: events, BaselineCursor: baseline, NextCursor: next,
-		HeadChanged: headChanged, ReviewerChanged: reviewerChanged,
+		HeadChanged: headChanged, ReviewerChanged: reviewerChanged, VerdictHeld: verdictHeld,
 	}
 }
 
@@ -191,8 +205,6 @@ func currentAction(
 	observation Observation,
 	evaluation Evaluation,
 	reviewer string,
-	cursor Cursor,
-	policy StartPolicy,
 	durableFeedback map[string]bool,
 ) ([]Outcome, []string) {
 	var outcomes []Outcome
@@ -209,14 +221,12 @@ func currentAction(
 		details = append(details, observation.FailedChecks()...)
 	}
 
-	verdictFresh := evaluation.SignalID != "" && !stringSet(cursor.SeenVerdictIDs)[evaluation.SignalID]
-	holdVerdict := policy.HoldExistingVerdictWhenRequested && reviewerRequested(observation, reviewer) && !verdictFresh
-	if evaluation.ReviewState == ReviewUnavailable && !holdVerdict {
+	if evaluation.ReviewState == ReviewUnavailable {
 		outcomes = append(outcomes, OutcomeReviewUnavailable)
 		details = append(details, evaluation.UnavailableCause)
 	}
 	findings := uniqueFindings(evaluation.Findings, evaluation.Unresolved)
-	if len(evaluation.Unresolved) > 0 || evaluation.ReviewState == ReviewChangesRequested && !holdVerdict {
+	if len(evaluation.Unresolved) > 0 || evaluation.ReviewState == ReviewChangesRequested {
 		outcomes = append(outcomes, OutcomeChangesRequested)
 		visibleFindings := 0
 		for _, finding := range findings {
@@ -232,11 +242,12 @@ func currentAction(
 				details = append(details, line)
 			}
 		}
-		if visibleFindings == 0 && evaluation.ReviewBody != "" && !durableFeedback[evaluation.SignalID] {
+		if visibleFindings == 0 && evaluation.ReviewState == ReviewChangesRequested &&
+			evaluation.ReviewBody != "" && !durableFeedback[evaluation.SignalID] {
 			details = append(details, evaluation.ReviewBody)
 		}
 	}
-	if evaluation.Ready && !holdVerdict {
+	if evaluation.Ready {
 		outcomes = append(outcomes, OutcomeReady)
 		details = append(details, "checks passed", reviewer+" reviewed the current head")
 	}

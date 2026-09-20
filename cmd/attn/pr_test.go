@@ -73,6 +73,24 @@ func TestWaitForPRActionableUsesSharedTransitionAndPersistsBaseline(t *testing.T
 	}
 }
 
+func TestWaitForPRActionableReportsHeldRereviewVerdict(t *testing.T) {
+	observation := prreadiness.Observation{
+		Number: 303, State: "open", HeadSHA: "head", MergeableState: "clean", CheckState: prreadiness.ChecksGreen,
+		RequestedReviewers: []string{"reviewer"},
+		Reviews: []prreadiness.Review{{
+			ID: "approval", Author: "reviewer", State: "APPROVED", CommitOID: "head", SubmittedAt: time.Now(),
+		}},
+	}
+	var progress bytes.Buffer
+	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{
+		results: []*prReadiness{cliObservation(observation, "reviewer")}, after: context.DeadlineExceeded,
+	}, prWaitOptions{Number: 303, Reviewer: "reviewer"}, prWaitCursor{}, &progress)
+	if err != nil || result.Outcome != outcomeTimeout || result.Observation.ReviewState != prreadiness.ReviewWaiting ||
+		!strings.Contains(progress.String(), "verdict predates the pending re-review request") {
+		t.Fatalf("result=%+v err=%v progress=%q", result, err, progress.String())
+	}
+}
+
 func TestWaitForPRActionableRanksConcurrentEvents(t *testing.T) {
 	at := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
 	observation := prreadiness.Observation{

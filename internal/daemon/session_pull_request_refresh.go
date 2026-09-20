@@ -528,7 +528,8 @@ func (d *Daemon) processPullRequestWatches(
 		watch = current
 		finalReviewStatuses[watch.SessionID] = ""
 		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{
-			EmitReviewerVerdictFeedback: true,
+			HoldExistingVerdictWhenRequested: true,
+			EmitReviewerVerdictFeedback:      true,
 		})
 		clearAction := transition.HeadChanged || transition.ReviewerChanged
 		if !watch.Cursor.Initialized || transition.HeadChanged || transition.ReviewerChanged {

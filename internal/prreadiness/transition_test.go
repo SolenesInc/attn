@@ -80,15 +80,53 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				observation := ready("head-a", "approval-a")
 				observation.RequestedReviewers = []string{"reviewer"}
 				first := Advance(Cursor{}, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
-				if has(first.Events, OutcomeReady) {
+				if has(first.Events, OutcomeReady) || !first.VerdictHeld || first.Evaluation.Ready ||
+					first.Evaluation.ReviewState != ReviewWaiting {
 					t.Fatalf("existing verdict emitted: %+v", first)
 				}
 				observation.Reviews = append(observation.Reviews, Review{
 					ID: "approval-b", Author: "reviewer", State: "APPROVED", CommitOID: "head-a", SubmittedAt: base.Add(time.Minute),
 				})
 				second := Advance(first.NextCursor, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
-				if !has(second.Events, OutcomeReady) {
+				if !has(second.Events, OutcomeReady) || second.VerdictHeld || !second.Evaluation.Ready {
 					t.Fatalf("fresh verdict not emitted: %+v", second)
+				}
+				third := Advance(second.NextCursor, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
+				if third.VerdictHeld || !third.Evaluation.Ready || len(third.Events) != 0 {
+					t.Fatalf("accepted verdict became stale: %+v", third)
+				}
+			},
+		},
+		{
+			name: "new rereview request holds previously accepted verdict",
+			run: func(t *testing.T) {
+				observation := ready("head-a", "approval-a")
+				first := Advance(Cursor{}, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
+				observation.RequestedReviewers = []string{"reviewer"}
+				second := Advance(first.NextCursor, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
+				if !second.VerdictHeld || second.Evaluation.ReviewState != ReviewWaiting || second.Evaluation.Ready ||
+					len(second.Events) != 1 || second.Events[0].Kind != EventClearAction {
+					t.Fatalf("pending rereview = %+v", second)
+				}
+			},
+		},
+		{
+			name: "held verdict leaves unresolved thread evidence",
+			run: func(t *testing.T) {
+				observation := ready("head-a", "approval-a")
+				observation.Reviews[0].Body = "Looks good to me."
+				observation.RequestedReviewers = []string{"reviewer"}
+				observation.Threads = []Thread{{ID: "thread", Body: "Resolve this thread"}}
+				got := Advance(Cursor{}, observation, "reviewer", StartPolicy{HoldExistingVerdictWhenRequested: true})
+				if !got.VerdictHeld || got.Evaluation.ReviewState != ReviewUnresolved || got.Evaluation.ReviewBody != "" ||
+					!has(got.Events, OutcomeChangesRequested) {
+					t.Fatalf("held unresolved verdict = %+v", got)
+				}
+				for _, event := range got.Events {
+					if event.Kind == EventAction && (!slices.Contains(event.Details, "Resolve this thread") ||
+						slices.Contains(event.Details, "Looks good to me.")) {
+						t.Fatalf("held verdict leaked into unresolved action: %+v", got)
+					}
 				}
 			},
 		},
@@ -209,6 +247,28 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				unchanged := Advance(got.NextCursor, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
 				if len(unchanged.Events) != 0 || !slices.Contains(unchanged.NextCursor.DeliveredFeedbackIDs, "inline") {
 					t.Fatalf("delivered feedback changed unchanged poll: %+v", unchanged)
+				}
+			},
+		},
+		{
+			name: "approval body is not substituted for delivered unresolved feedback",
+			run: func(t *testing.T) {
+				observation := ready("head-a", "approval-a")
+				observation.Reviews[0].Body = "Looks good to me."
+				first := Advance(Cursor{}, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				observation.Threads = []Thread{{ID: "inline", Author: "human", Body: "Please fix this", Location: "a.go:7"}}
+				observation.Comments = []Comment{{
+					ID: "inline", Author: "human", Kind: CommentInline, Body: "Please fix this",
+					Location: "a.go:7", CreatedAt: base.Add(time.Minute),
+				}}
+				got := Advance(first.NextCursor, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				if !has(got.Events, OutcomeHumanComment) || !has(got.Events, OutcomeChangesRequested) {
+					t.Fatalf("transition = %+v", got)
+				}
+				for _, event := range got.Events {
+					if event.Kind == EventAction && slices.Contains(event.Details, "Looks good to me.") {
+						t.Fatalf("approval body became a blocker: %+v", got)
+					}
 				}
 			},
 		},
