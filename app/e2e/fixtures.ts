@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as net from 'net';
 import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './profileEnv';
-import { waitForDaemonSocket } from './daemonReadiness';
+import { waitForDaemonReady } from './daemonReadiness';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
 
 class MockGitHubServer {
@@ -163,6 +163,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       ATTN_TOOL_HOME: tempDir,
       CODEX_HOME: path.join(tempDir, '.codex'),
       ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
+      ATTN_DAEMON_READY_FD: '3',
       ATTN_WS_PORT: TEST_DAEMON_PORT,
       ATTN_SOCKET_PATH: socketPath,
       ATTN_DB_PATH: dbPath,
@@ -172,7 +173,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       ATTN_MOCK_GH_TOKEN: 'test-token',
       ATTN_MOCK_GH_HOST: MOCK_GH_HOST,
     },
-    stdio: 'pipe',
+    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
   });
 
   let stdout = '';
@@ -189,7 +190,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
     console.log(`[Daemon] Process exited with code ${code}, signal ${signal}`);
   });
 
-  await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
+  await waitForDaemonReady(proc, () => daemonStartDebugInfo(tempDir, stdout, stderr));
   console.log(`Daemon started with socket at ${socketPath}`);
 
   return {
@@ -254,6 +255,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         ATTN_TOOL_HOME: tempDir,
         CODEX_HOME: path.join(tempDir, '.codex'),
         ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
+        ATTN_DAEMON_READY_FD: '3',
         ATTN_WS_PORT: TEST_DAEMON_PORT,
         ATTN_SOCKET_PATH: socketPath,
         ATTN_DB_PATH: dbPath,
@@ -263,7 +265,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         ATTN_MOCK_GH_TOKEN: 'test-token',
         ATTN_MOCK_GH_HOST: MOCK_GH_HOST,
       },
-      stdio: 'pipe',
+      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
     });
 
     proc.stdout?.on('data', (data) => {
@@ -281,7 +283,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       proc = null;
     });
 
-    await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
+    await waitForDaemonReady(proc, () => daemonStartDebugInfo(tempDir, stdout, stderr));
     console.log(`[Managed daemon] started with socket ${socketPath}`);
   };
 

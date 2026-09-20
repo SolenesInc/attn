@@ -1,10 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { spawn, type ChildProcess } from 'child_process';
-import * as fs from 'fs';
-import * as net from 'net';
-import * as os from 'os';
-import * as path from 'path';
-import { waitForDaemonSocket } from './daemonReadiness';
+import { waitForDaemonReady } from './daemonReadiness';
 
 async function stopChild(proc: ChildProcess): Promise<void> {
   if (proc.exitCode !== null || proc.signalCode !== null) return;
@@ -14,36 +10,31 @@ async function stopChild(proc: ChildProcess): Promise<void> {
   });
 }
 
-test('daemon readiness follows socket creation without a wall-clock poll', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-ready-'));
-  const socketPath = path.join(tempDir, 'attn.sock');
-  const proc = spawn(process.execPath, ['-e', 'process.stdin.resume()'], { stdio: 'pipe' });
-  const server = net.createServer();
+test('daemon readiness follows its startup signal', async () => {
+  const proc = spawn(process.execPath, ['-e',
+    'process.stdin.once("data", () => require("fs").writeSync(3, "ready\\n"))',
+  ], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
 
   try {
-    const ready = waitForDaemonSocket(proc, socketPath);
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(socketPath, resolve);
-    });
+    const ready = waitForDaemonReady(proc);
+    proc.stdin!.write('start');
     await expect(ready).resolves.toBeUndefined();
   } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
     await stopChild(proc);
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 });
 
-test('daemon readiness reports an early child exit with its diagnostics', async () => {
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-ready-'));
-  const socketPath = path.join(tempDir, 'attn.sock');
-  const proc = spawn(process.execPath, ['-e', 'process.exit(23)']);
-
-  try {
-    await expect(waitForDaemonSocket(proc, socketPath, () => 'daemon log: fixture failed'))
-      .rejects.toThrow(/code 23[\s\S]*daemon log: fixture failed/);
-  } finally {
-    await stopChild(proc);
-    fs.rmSync(tempDir, { recursive: true, force: true });
-  }
-});
+for (const [name, script, reason] of [
+  ['early exit', 'process.exit(23)', 'closed without a ready signal'],
+  ['startup failure', 'require("fs").writeSync(3, "error:port is occupied\\n"); process.exit(1)', 'port is occupied'],
+]) {
+  test(`daemon readiness reports ${name} with diagnostics`, async () => {
+    const proc = spawn(process.execPath, ['-e', script], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] });
+    try {
+      await expect(waitForDaemonReady(proc, () => 'daemon log: fixture failed'))
+        .rejects.toThrow(new RegExp(`${reason}[\\s\\S]*daemon log: fixture failed`));
+    } finally {
+      await stopChild(proc);
+    }
+  });
+}
