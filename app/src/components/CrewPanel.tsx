@@ -127,7 +127,7 @@ function RestartConfirm({ member, summary, onCancel, onConfirm }: {
   const name = crewDisplayName(member.id);
   return (
     <div className="crew-confirm-backdrop">
-      <div className="crew-confirm" role="alertdialog" aria-modal="true" aria-labelledby="crew-confirm-title">
+      <dialog open className="crew-confirm" role="alertdialog" aria-modal="true" aria-labelledby="crew-confirm-title">
         <span className="crew-kicker">Confirm</span>
         <h2 id="crew-confirm-title">{member.binding_session ? `Restart ${name}?` : `Wake ${name}?`}</h2>
         <div className="crew-confirm-selection">{summary}</div>
@@ -137,7 +137,7 @@ function RestartConfirm({ member, summary, onCancel, onConfirm }: {
             {member.binding_session ? 'Request handoff and restart' : 'Wake member'}
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }
@@ -242,7 +242,7 @@ function CrewPanelSurface({
           returnFocusOnDeactivate: false,
         }}
       >
-        <section className="crew-panel" data-testid="crew-panel" role="dialog" aria-modal="true" aria-labelledby="crew-panel-title">
+        <dialog open={isOpen} className="crew-panel" data-testid="crew-panel" aria-modal="true" aria-labelledby="crew-panel-title">
           <header className="crew-panel-bar" inert={confirming}>
             <div>
               <span className="crew-kicker">Crew</span>
@@ -304,7 +304,7 @@ function CrewPanelSurface({
           {confirming && member && edit && (
             <RestartConfirm member={member} summary={nextWakeLabel(edit)} onCancel={() => setConfirming(false)} onConfirm={confirmRestart} />
           )}
-        </section>
+        </dialog>
       </FocusTrap>
     </div>
   );

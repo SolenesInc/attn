@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
 import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
-import { workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
+import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { oldestWantedTurn } from '../utils/queueBands';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
@@ -203,47 +203,56 @@ export function useAppNavigation({
     [focusWorkspaceLeaf, handleSelectWorkspace, setSelectedTile],
   );
 
-  const [pendingTileSelection, setPendingTileSelection] = useState<{
-    workspaceId: string;
-    tileId: string;
-  } | null>(null);
+  const selectTileRef = useRef(selectTile);
+  useLayoutEffect(() => {
+    selectTileRef.current = selectTile;
+  }, [selectTile]);
+  const pendingTileSelectionRef = useRef<{ key: string; unsubscribe: () => void } | null>(null);
   const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(
     null,
   );
-  const tileExists = useCallback(
-    (workspaceId: string, tileId: string) =>
-      workspaceViews.some(
-        (workspace) =>
-          workspace.id === workspaceId &&
-          workspace.children.some((child) => child.kind === 'tile' && child.tile.tileId === tileId),
-      ),
-    [workspaceViews],
+
+  useEffect(
+    () => () => {
+      pendingTileSelectionRef.current?.unsubscribe();
+      pendingTileSelectionRef.current = null;
+    },
+    [],
   );
 
   const handleSelectTile = useCallback(
     (workspaceId: string, tileId: string) => {
-      if (!tileExists(workspaceId, tileId)) {
-        setPendingTileSelection({ workspaceId, tileId });
+      const key = `${workspaceId}:${tileId}`;
+      pendingTileSelectionRef.current?.unsubscribe();
+      pendingTileSelectionRef.current = null;
+      const tileExists = () => {
+        const layout = useSessionStore.getState().daemonWorkspaceLayouts[workspaceId]?.workspace.layoutTree;
+        return layout ? hasLeaf(layout, tileId) : false;
+      };
+      if (tileExists()) {
+        selectTileRef.current(workspaceId, tileId);
         return;
       }
-      setPendingTileSelection(null);
-      selectTile(workspaceId, tileId);
+      const unsubscribe = useSessionStore.subscribe(() => {
+        if (!tileExists()) return;
+        unsubscribe();
+        if (pendingTileSelectionRef.current?.key === key) pendingTileSelectionRef.current = null;
+        window.requestAnimationFrame(() => selectTileRef.current(workspaceId, tileId));
+      });
+      pendingTileSelectionRef.current = { key, unsubscribe };
     },
-    [selectTile, tileExists],
+    [],
   );
-
-  useEffect(() => {
-    if (!pendingTileSelection) return;
-    if (!tileExists(pendingTileSelection.workspaceId, pendingTileSelection.tileId)) return;
-    setPendingTileSelection(null);
-    selectTile(pendingTileSelection.workspaceId, pendingTileSelection.tileId);
-  }, [pendingTileSelection, selectTile, tileExists]);
 
   const handleCloseTile = useCallback(
     (workspaceId: string, tileId: string) => {
       const clearIfClosed = <T extends { workspaceId: string; tileId: string } | null>(current: T) =>
         current?.workspaceId === workspaceId && current.tileId === tileId ? null : current;
-      setPendingTileSelection(clearIfClosed);
+      const pendingKey = `${workspaceId}:${tileId}`;
+      if (pendingTileSelectionRef.current?.key === pendingKey) {
+        pendingTileSelectionRef.current.unsubscribe();
+        pendingTileSelectionRef.current = null;
+      }
       setCrewSeedTile(clearIfClosed);
       setSelectedTile(clearIfClosed);
       void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});

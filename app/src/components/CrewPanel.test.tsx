@@ -120,6 +120,14 @@ afterEach(() => {
 });
 
 describe('CrewPanel', () => {
+  it('uses a native dialog inside the sidebar-adjacent panel layer', () => {
+    renderPanel();
+    const panel = screen.getByTestId('crew-panel');
+    expect(panel.tagName).toBe('DIALOG');
+    expect(panel).toHaveAttribute('open');
+    expect(panel.closest('.crew-panel-layer')).toBeInTheDocument();
+  });
+
   it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
     const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
     const onOpenSeed = vi.fn();
@@ -249,6 +257,7 @@ describe('CrewPanel', () => {
     renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
     fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
     const dialog = screen.getByRole('alertdialog');
+    expect(dialog.tagName).toBe('DIALOG');
     expect(screen.getByTestId('crew-panel-close').closest('[inert]')).not.toBeNull();
     expect(screen.getByLabelText('Crew roster').closest('[inert]')).not.toBeNull();
     expect(dialog.closest('[inert]')).toBeNull();
