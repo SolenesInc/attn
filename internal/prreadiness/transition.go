@@ -94,13 +94,17 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	evaluation := Evaluate(observation, reviewer, baseline.SignalBaselineIDs)
 	next := cloneCursor(baseline)
 	events := feedbackEvents(observation, reviewer, baseline.SeenCommentIDs, policy)
+	durableFeedback := make(map[string]bool)
 	for _, event := range events {
 		for _, comment := range event.Comments {
 			next.SeenCommentIDs = append(next.SeenCommentIDs, comment.ID)
+			if !comment.Bot {
+				durableFeedback[comment.ID] = true
+			}
 		}
 	}
 
-	outcomes, details := currentAction(observation, evaluation, reviewer, baseline, policy)
+	outcomes, details := currentAction(observation, evaluation, reviewer, baseline, policy, durableFeedback)
 	actionKey := ""
 	if len(outcomes) > 0 {
 		parts := make([]string, 0, len(outcomes))
@@ -181,6 +185,7 @@ func currentAction(
 	reviewer string,
 	cursor Cursor,
 	policy StartPolicy,
+	durableFeedback map[string]bool,
 ) ([]Outcome, []string) {
 	var outcomes []Outcome
 	var details []string
@@ -205,7 +210,12 @@ func currentAction(
 	findings := uniqueFindings(evaluation.Findings, evaluation.Unresolved)
 	if len(evaluation.Unresolved) > 0 || evaluation.ReviewState == ReviewChangesRequested && !holdVerdict {
 		outcomes = append(outcomes, OutcomeChangesRequested)
+		visibleFindings := 0
 		for _, finding := range findings {
+			if durableFeedback[finding.ID] {
+				continue
+			}
+			visibleFindings++
 			line := strings.TrimSpace(finding.Body)
 			if finding.Location != "" {
 				line = finding.Location + ": " + line
@@ -214,7 +224,7 @@ func currentAction(
 				details = append(details, line)
 			}
 		}
-		if len(findings) == 0 && evaluation.ReviewBody != "" {
+		if visibleFindings == 0 && evaluation.ReviewBody != "" && !durableFeedback[evaluation.SignalID] {
 			details = append(details, evaluation.ReviewBody)
 		}
 	}

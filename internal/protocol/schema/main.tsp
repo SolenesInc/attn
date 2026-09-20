@@ -139,6 +139,8 @@ enum SessionPullRequestCheckStatus {
 }
 
 enum SessionPullRequestReviewStatus {
+  none,
+  pending,
   waiting,
   approved,
   changes_requested,

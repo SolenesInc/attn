@@ -2476,6 +2476,8 @@ export enum SessionPullRequestCheckStatus {
 export enum SessionPullRequestReviewStatus {
     Approved = "approved",
     ChangesRequested = "changes_requested",
+    None = "none",
+    Pending = "pending",
     Unavailable = "unavailable",
     UnresolvedThreads = "unresolved_threads",
     Waiting = "waiting",
@@ -23826,6 +23828,8 @@ const typeMap: any = {
     "SessionPullRequestReviewStatus": [
         "approved",
         "changes_requested",
+        "none",
+        "pending",
         "unavailable",
         "unresolved_threads",
         "waiting",

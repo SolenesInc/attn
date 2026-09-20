@@ -71,6 +71,7 @@ describe('describeSessionPullRequest', () => {
   it.each([
 	[SessionPullRequestReviewStatus.UnresolvedThreads, 'unresolved review threads', 'unresolved review threads', 'warn'],
 	[SessionPullRequestReviewStatus.Waiting, 'in review', 'waiting on a reviewer', 'neutral'],
+	[SessionPullRequestReviewStatus.Pending, 'in review', 'waiting on a reviewer', 'neutral'],
   ])('describes watched review status %s', (review_status, summary, review, tone) => {
 	const watched = pr({ review_status, ci_status: SessionPullRequestCheckStatus.Success });
     expect(describeSessionPullRequest(watched)).toEqual({ label: summary, tone });
@@ -114,6 +115,8 @@ describe('describeSessionPullRequest', () => {
 
   it('says nothing it cannot know before the first GitHub fetch', () => {
     expect(describeSessionPullRequest(pr())).toEqual({ label: 'open', tone: 'neutral' });
+    expect(describeSessionPullRequestReview(pr({ review_status: SessionPullRequestReviewStatus.None })))
+      .toEqual({ label: 'none requested', tone: 'neutral' });
     expect(describeSessionPullRequest(pr({ state: 'draft' })))
       .toEqual({ label: 'draft', tone: 'neutral' });
   });

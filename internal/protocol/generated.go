@@ -9378,6 +9378,8 @@ type SessionPullRequestReviewStatus string
 
 const SessionPullRequestReviewStatusApproved SessionPullRequestReviewStatus = "approved"
 const SessionPullRequestReviewStatusChangesRequested SessionPullRequestReviewStatus = "changes_requested"
+const SessionPullRequestReviewStatusNone SessionPullRequestReviewStatus = "none"
+const SessionPullRequestReviewStatusPending SessionPullRequestReviewStatus = "pending"
 const SessionPullRequestReviewStatusUnavailable SessionPullRequestReviewStatus = "unavailable"
 const SessionPullRequestReviewStatusUnresolvedThreads SessionPullRequestReviewStatus = "unresolved_threads"
 const SessionPullRequestReviewStatusWaiting SessionPullRequestReviewStatus = "waiting"

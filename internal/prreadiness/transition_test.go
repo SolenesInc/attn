@@ -36,11 +36,11 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			name: "first fetch baselines comments but reports unresolved threads",
 			run: func(t *testing.T) {
 				observation := ready("head-a", "approval-a")
-				observation.Comments = []Comment{{ID: "existing", Author: "human", CreatedAt: base}}
+				observation.Comments = []Comment{{ID: "old-thread", Author: "human", CreatedAt: base}}
 				observation.Threads = []Thread{{ID: "old-thread", Body: "resolve me", CommitOID: "old-head"}}
 				got := Advance(Cursor{}, observation, "reviewer", StartPolicy{})
 				if got.Evaluation.ReviewState != ReviewUnresolved || !has(got.Events, OutcomeChangesRequested) || has(got.Events, OutcomeHumanComment) ||
-					!slices.Contains(got.BaselineCursor.SeenCommentIDs, "existing") {
+					!slices.Contains(got.BaselineCursor.SeenCommentIDs, "old-thread") || !slices.Contains(got.Events[0].Details, "resolve me") {
 					t.Fatalf("transition = %+v", got)
 				}
 			},
@@ -146,6 +146,34 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				if !has(daemon.Events, OutcomeReady) || !has(daemon.Events, OutcomeHumanComment) ||
 					has(cli.Events, OutcomeHumanComment) {
 					t.Fatalf("daemon = %+v, cli = %+v", daemon, cli)
+				}
+			},
+		},
+		{
+			name: "durable feedback is omitted from action details",
+			run: func(t *testing.T) {
+				initial := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+				}
+				first := Advance(Cursor{}, initial, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				observation := initial
+				observation.Reviews = []Review{{
+					ID: "review", Author: "reviewer", State: "CHANGES_REQUESTED", CommitOID: "head-a",
+					Body: "review summary", SubmittedAt: base.Add(time.Minute),
+					Findings: []Finding{{ID: "inline", Body: "inline finding", Location: "a.go:7"}},
+				}}
+				observation.Comments = []Comment{
+					{ID: "review", Author: "reviewer", Kind: CommentReview, ReviewState: "CHANGES_REQUESTED", Body: "review summary", CreatedAt: base.Add(time.Minute)},
+					{ID: "inline", Author: "reviewer", Kind: CommentInline, Body: "inline finding", Location: "a.go:7", CreatedAt: base.Add(time.Minute)},
+				}
+				got := Advance(first.NextCursor, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				for _, event := range got.Events {
+					if event.Kind == EventAction && (slices.Contains(event.Details, "review summary") || slices.Contains(event.Details, "a.go:7: inline finding")) {
+						t.Fatalf("durable feedback duplicated in action: %+v", got)
+					}
+				}
+				if !has(got.Events, OutcomeHumanComment) || !has(got.Events, OutcomeChangesRequested) {
+					t.Fatalf("transition = %+v", got)
 				}
 			},
 		},
