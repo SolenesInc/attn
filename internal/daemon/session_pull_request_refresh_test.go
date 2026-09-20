@@ -736,8 +736,11 @@ func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
 	ready := watchedReadiness("current-head", prreadiness.ChecksGreen, "APPROVED")
 	ready.Evidence.Threads = []prreadiness.Thread{
 		{ID: "old-codex", Author: "chatgpt-codex-connector", CommitOID: "old-head", Body: "Codex finding"},
-		{ID: "old-human", Author: "human-reviewer", CommitOID: "old-head", Body: "Human finding"},
+		{ID: "old-human", Author: "human-reviewer", CommitOID: "old-head", Body: "Human finding", Location: "watch.go:42"},
 	}
+	ready.Evidence.Comments = []prreadiness.Comment{{
+		ID: "old-human", Author: "human-reviewer", Body: "Human finding", Location: "watch.go:42", CreatedAt: time.Now(),
+	}}
 	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
 	now := time.Now()
@@ -750,7 +753,7 @@ func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
 		t.Fatalf("initial notification = %+v, %v", deliveries, err)
 	}
 	for _, thread := range ready.Evidence.Threads {
-		if !strings.Contains(deliveries[0].Item.Prompt, thread.Body) {
+		if !strings.Contains(deliveries[0].Item.Prompt, thread.Body) || !strings.Contains(deliveries[0].Item.Prompt, thread.Location) {
 			t.Fatalf("notification omitted %s: %s", thread.ID, deliveries[0].Item.Prompt)
 		}
 	}

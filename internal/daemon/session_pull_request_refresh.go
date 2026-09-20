@@ -562,8 +562,9 @@ func pullRequestWatchAction(
 	findings := uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved)
 	if len(findings) > 0 || evaluation.ReviewState == prreadiness.ReviewChangesRequested {
 		humanComments := make(map[string]bool)
+		armedAt, err := time.Parse(time.RFC3339Nano, watch.CreatedAt)
 		for _, comment := range readiness.Evidence.Comments {
-			if !comment.Bot {
+			if err == nil && !comment.Bot && !comment.CreatedAt.Before(armedAt) {
 				humanComments[comment.ID] = true
 			}
 		}
