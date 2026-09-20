@@ -21,29 +21,18 @@ Not all contributions will be accepted. Opening an issue first sets expectations
 
 ## Development Workflow
 
-```bash
-make install              # Fast iteration on daemon (~2s build)
-cd app && pnpm run dev:all  # Frontend with hot reload
-make test-all             # Run all tests before submitting
-```
-
-## Pull Request Process
-
-1. **Open an issue first** to discuss your proposed change
-2. Create a branch from `main`
-3. Make your changes with clear commit messages
-4. Ensure tests pass: `make test-all`
-5. Submit a PR referencing the issue
+Follow [Working with next](docs/working-with-next.md) for branches and pull
+requests, and [Profiles](docs/profiles.md) for development setup and verification.
+Reference the issue in your PR.
 
 ## Code Style
 
-- Go: `gofmt` (enforced)
-- TypeScript: Prettier (`pnpm format`)
+- Go: `gofmt`
 - Commits: Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
 
-## Architecture
+## Project guidance
 
-See [CLAUDE.md](CLAUDE.md) for detailed architecture documentation.
+See [AGENTS.md](AGENTS.md) for repository guidance.
 
 ## Questions?
 

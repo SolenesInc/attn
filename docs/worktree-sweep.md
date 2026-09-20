@@ -46,7 +46,7 @@ The ladder, first hit wins, recorded on the row as the merged signal:
    appear on the integration branch.
 2. `ancestor` — the branch tip is an ancestor of the integration branch.
 3. `tree` — the branch's exact tree hash already appears somewhere on the
-   integration branch's history. This is how a rebase or squash merge reads once
+   integration branch's history. This is how rewritten commits read once
    the pull request record has aged out, and it is content-identical by
    definition, not a heuristic.
 

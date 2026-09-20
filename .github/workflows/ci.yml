@@ -5,9 +5,8 @@ env:
 
 on:
   push:
-    branches: [main, next, 'epic/**']
+    branches: [main, next]
   pull_request:
-    branches: [main, next, 'epic/**']
 
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
@@ -187,6 +186,19 @@ jobs:
       - name: Validate pending fragments
         if: github.event_name == 'push'
         run: go run ./cmd/changelog-check
+
+  script-tests:
+    name: Script tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '26'
+      - run: make test-scripts
 
   main-route:
     name: Main route
@@ -526,20 +538,6 @@ jobs:
           node cmd/prompt-editor/test/browser.mjs
           node cmd/prompt-editor/test/collaboration.mjs
 
-  # Single stable check name over the shard matrix, for branch-protection
-  # rulesets. Green when all shards pass or the frontend filter skipped them.
-  frontend-e2e-gate:
-    name: Frontend E2E
-    needs: frontend-e2e
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check shard results
-        run: |
-          result="${{ needs.frontend-e2e.result }}"
-          echo "shards result: $result"
-          [ "$result" = "success" ] || [ "$result" = "skipped" ]
-
   rust:
     name: Tauri (${{ matrix.os }})
     needs: changes
@@ -640,20 +638,6 @@ jobs:
 
       - name: Cargo test
         run: cargo test
-
-  # Single stable check name over the os matrix, for branch-protection
-  # rulesets. Green when both legs pass or the tauri filter skipped them.
-  rust-gate:
-    name: Tauri
-    needs: rust
-    if: always()
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Check matrix results
-        run: |
-          result="${{ needs.rust.result }}"
-          echo "matrix result: $result"
-          [ "$result" = "success" ] || [ "$result" = "skipped" ]
 
   # The bundled plugins are compiled by the packaged-app build, which no CI job
   # runs — so a plugin that only builds on a machine with warm node_modules got
@@ -1018,13 +1002,12 @@ jobs:
       - main-route
       - changelog
       - generated-types
+      - script-tests
       - backend
       - pty-compatibility
       - frontend
       - frontend-e2e
-      - frontend-e2e-gate
       - rust
-      - rust-gate
       - plugins
       - app-acceptance-build
       - app-acceptance-shard
@@ -1035,16 +1018,10 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
       - name: Aggregate checks
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: >-
-          ./scripts/ci-gate.sh pr
-          changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins app-acceptance-build app-acceptance-shard
-          app-acceptance app-acceptance-macos release-preflight pty-compatibility
+        run: jq -e 'all(.[]; .result == "success" or .result == "skipped")' <<< "$NEEDS_JSON"
 
   acceptance:
     name: Acceptance
@@ -1054,13 +1031,12 @@ jobs:
       - main-route
       - changelog
       - generated-types
+      - script-tests
       - backend
       - pty-compatibility
       - frontend
       - frontend-e2e
-      - frontend-e2e-gate
       - rust
-      - rust-gate
       - plugins
       - app-acceptance-build
       - app-acceptance-shard
@@ -1071,16 +1047,10 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-
       - name: Aggregate exact-SHA acceptance
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-        run: >-
-          ./scripts/ci-gate.sh acceptance
-          changes main-route changelog generated-types backend frontend frontend-e2e
-          frontend-e2e-gate rust rust-gate plugins app-acceptance-build app-acceptance-shard
-          app-acceptance app-acceptance-macos release-preflight pty-compatibility
+        run: jq -e 'all(.[]; .result == "success")' <<< "$NEEDS_JSON"
 
   branch-health:
     name: Report branch health

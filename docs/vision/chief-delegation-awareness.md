@@ -156,7 +156,7 @@ and attn-authored **crash** capture so a silent death is still visible.
 
 ## The arc — shipped and open
 
-The work-tracker epic delivered the loop across slices 1–7.
+The work-tracker changes delivered the loop across slices 1–7.
 
 **Shipped:**
 - [x] **Durable ticket store + lifecycle** — status enum, activity thread (status

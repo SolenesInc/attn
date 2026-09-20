@@ -324,7 +324,7 @@ The full dev-loop, profile, and harness targets live in
 | | |
 |---|---|
 | [Profiles](docs/profiles.md) | Run multiple isolated attn worlds side by side |
-| [Release](docs/RELEASE.md) | Maintainer runbook |
+| [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status
 

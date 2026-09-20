@@ -1,226 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-root="$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)"
 
-header() {
-  printf '\n[pre-commit] %s\n' "$1"
-}
-
-changed_files="$(git diff --cached --name-only --diff-filter=ACMR)"
-unset GIT_INDEX_FILE
-
-if [ -z "$changed_files" ]; then
-  header "No staged files"
-  exit 0
-fi
-
-has_changed() {
-  local pattern="$1"
-  printf '%s\n' "$changed_files" | grep -Eq "$pattern"
-}
-
-has_go_files() {
-  printf '%s\n' "$changed_files" | grep -Eq '\.go$'
-}
-
-has_frontend_files() {
-  printf '%s\n' "$changed_files" | grep -E '^app/' | grep -Ev '^app/src-tauri/' | grep -Eq '.'
-}
-
-changed_matching() {
-  local pattern="$1"
-  printf '%s\n' "$changed_files" | grep -E "$pattern" || true
-}
-
-configure_pkg_config() {
-  if ! command -v pkg-config >/dev/null 2>&1 && command -v pkgconf >/dev/null 2>&1; then
-    PKG_CONFIG="$(command -v pkgconf)"
-    export PKG_CONFIG
-  fi
-
-  if [ -z "${PKG_CONFIG_PATH:-}" ] && [ -d "$HOME/.nix-profile/lib/pkgconfig" ]; then
-    export PKG_CONFIG_PATH="$HOME/.nix-profile/lib/pkgconfig:$HOME/.nix-profile/share/pkgconfig"
-  fi
-}
-
-ensure_no_unstaged_changes() {
-  local dirty=()
-  local file
-  for file in "$@"; do
-    if ! git diff --quiet -- "$file"; then
-      dirty+=("$file")
-    fi
-  done
-
-  if [ "${#dirty[@]}" -gt 0 ]; then
-    echo "Cannot auto-format partially staged files:"
-    printf '  %s\n' "${dirty[@]}"
-    echo "Stage or stash the unstaged edits, then commit again."
+go_files=()
+rust_files=()
+while IFS= read -r -d '' file; do
+  case "$file" in
+    *.go) go_files+=("$file") ;;
+    app/src-tauri/*.rs) rust_files+=("$file") ;;
+    *) continue ;;
+  esac
+  if ! git diff --quiet -- "$file"; then
+    printf 'Cannot auto-format partially staged file: %s\n' "$file" >&2
     exit 1
   fi
-}
+done < <(git diff --cached --name-only -z --diff-filter=ACMR)
 
-format_go_files() {
-  local go_files=()
-  while IFS= read -r file; do
-    go_files+=("$file")
-  done < <(changed_matching '\.go$')
-  if [ "${#go_files[@]}" -eq 0 ]; then
-    return
-  fi
-
-  ensure_no_unstaged_changes "${go_files[@]}"
+if [ "${#go_files[@]}" -gt 0 ]; then
   gofmt -w "${go_files[@]}"
   git add -- "${go_files[@]}"
-}
+fi
 
-format_rust_files() {
-  local pattern="$1"
-  local rust_files=()
-  while IFS= read -r file; do
-    rust_files+=("$file")
-  done < <(changed_matching "$pattern")
-  if [ "${#rust_files[@]}" -eq 0 ]; then
-    return
-  fi
-
-  ensure_no_unstaged_changes "${rust_files[@]}"
+if [ "${#rust_files[@]}" -gt 0 ]; then
   rustfmt --edition 2021 --config skip_children=true "${rust_files[@]}"
   git add -- "${rust_files[@]}"
-}
-
-tmp_bin=""
-# This binary is a test artifact, not a release. Stable metadata lets Go reuse
-# daemon E2E results when the staged source and all other inputs are unchanged.
-test_build_time="1970-01-01T00:00:00Z"
-test_source_fingerprint="pre-commit"
-test_git_commit="pre-commit"
-test_goflags="${GOFLAGS:+$GOFLAGS }-buildvcs=false"
-cleanup_tmp_bin() {
-  if [ -n "$tmp_bin" ]; then
-    rm -f "$tmp_bin"
-  fi
-}
-trap cleanup_tmp_bin EXIT
-
-ensure_e2e_binary() {
-  if [ -n "${ATTN_E2E_BIN:-}" ] || [ -x "$root/attn" ]; then
-    return
-  fi
-
-  header "Go build for E2E"
-  tmp_bin="$(mktemp -t attn-precommit.XXXXXX)"
-  make -C "$root" build OUTPUT="$tmp_bin" \
-    BUILD_TIME="$test_build_time" \
-    SOURCE_FINGERPRINT="$test_source_fingerprint" \
-    GIT_COMMIT="$test_git_commit" \
-    GOFLAGS="$test_goflags"
-  export ATTN_E2E_BIN="$tmp_bin"
-}
-
-run_daemon_checks=false
-run_frontend_checks=false
-run_tauri_checks=false
-run_shell_checks=false
-
-if has_go_files; then
-  run_daemon_checks=true
-fi
-
-if has_changed '(^|/)[^/]+\.sh$|^\.githooks/pre-commit$'; then
-  run_shell_checks=true
-fi
-
-if has_changed '^(cmd|internal|test|scripts/source-fingerprint\.sh|go\.mod|go\.sum|Makefile)(/|$)'; then
-  run_daemon_checks=true
-fi
-
-if has_changed '^internal/protocol/schema/'; then
-  run_daemon_checks=true
-  run_frontend_checks=true
-fi
-
-if has_changed '^app/src-tauri/'; then
-  run_tauri_checks=true
-fi
-
-if has_frontend_files; then
-  run_frontend_checks=true
-fi
-
-if has_changed '^(\.githooks/pre-commit|scripts/pre-commit\.sh|AGENTS\.md)$'; then
-  run_daemon_checks=true
-fi
-
-if [ "$run_daemon_checks" = true ]; then
-  header "Go format"
-  format_go_files
-
-  header "Go build"
-  tmp_bin="$(mktemp -t attn-precommit.XXXXXX)"
-  make -C "$root" build OUTPUT="$tmp_bin" \
-    BUILD_TIME="$test_build_time" \
-    SOURCE_FINGERPRINT="$test_source_fingerprint" \
-    GIT_COMMIT="$test_git_commit" \
-    GOFLAGS="$test_goflags"
-  if [ -z "${ATTN_E2E_BIN:-}" ]; then
-    export ATTN_E2E_BIN="$tmp_bin"
-  fi
-
-  header "Go tests"
-  (cd "$root" && ./scripts/test-go.sh)
-
-  header "Tauri daemon binary"
-  target_triple="$(rustc -vV | awk '/host:/ {print $2}')"
-  tauri_bin_dir="$root/app/src-tauri/binaries"
-  tauri_bin_path="$tauri_bin_dir/attn-$target_triple"
-  mkdir -p "$tauri_bin_dir"
-  if [ ! -f "$tauri_bin_path" ]; then
-    cp "$tmp_bin" "$tauri_bin_path"
-  fi
-fi
-
-if [ "$run_shell_checks" = true ]; then
-  header "Shell syntax"
-  shell_files=()
-  while IFS= read -r file; do
-    shell_files+=("$file")
-  done < <(changed_matching '(^|/)[^/]+\.sh$|^\.githooks/pre-commit$')
-  if [ "${#shell_files[@]}" -gt 0 ]; then
-    bash -n "${shell_files[@]}"
-  fi
-fi
-
-if [ "$run_frontend_checks" = true ]; then
-  header "Frontend tests"
-  (cd "$root/app" && pnpm run test)
-
-  header "Frontend build"
-  (cd "$root/app" && pnpm run build)
-
-  ensure_e2e_binary
-
-  header "E2E"
-  (cd "$root/app" && pnpm run e2e)
-fi
-
-if [ "$run_tauri_checks" = true ]; then
-  configure_pkg_config
-
-  header "Tauri Rust format"
-  format_rust_files '^app/src-tauri/.*\.rs$'
-
-  header "Tauri Rust lint"
-  (cd "$root/app/src-tauri" && cargo clippy --all-targets -- -D warnings)
-
-  header "Tauri Rust tests"
-  (cd "$root/app/src-tauri" && cargo test)
-fi
-
-if [ "$run_daemon_checks" != true ] &&
-  [ "$run_frontend_checks" != true ] &&
-  [ "$run_tauri_checks" != true ] &&
-  [ "$run_shell_checks" != true ]; then
-  header "No matching test bucket"
 fi

@@ -18,8 +18,8 @@ receipt: its merged PR and, where one exists, its plan doc's own status line.
 | A1 event bus core | Shipped 2026-08-02 | #710 |
 | A2 broadcaster migration | Believed complete; **unverified** | No dedicated plan doc or PR receipt. Migrations rode A1/A3-era bus work (e.g. #871 pins projections to the wire). Verify remaining legacy broadcasters before relying on "all of it". |
 | A3 doc store + live queries | Shipped 2026-08-03–08-06 | plan and sub-plans a3.1–a3.4 shipped |
-| A4 registry + shared runtime | Shipped 2026-08-11 | epic merge #843 |
-| A5 UI host + app SDK | Shipped 2026-08-18 | epic merge #943 (exit proof recorded on the PR) |
+| A4 registry + shared runtime | Shipped 2026-08-11 | PR #843 |
+| A5 UI host + app SDK | Shipped 2026-08-18 | PR #943 (exit proof recorded on the PR) |
 | B1 durable job queue | Shipped 2026-08-03 | #734. The cron-ownership gate question resolved itself — `automation_schedule` is a job kind on the queue. |
 | B2 workflow layer | Not started | Gate discussion is the next step. |
 | C1 hook points | Not started | Gate discussion pending; independent of B2. |

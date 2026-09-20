@@ -21,15 +21,10 @@ const DRIVES_THROUGH_MACOS = {
   'linuxDriver.mjs': 'the Linux driver; xdotool under Xvfb has no foreground to steal',
   'common.mjs': 'pressShortcutKeys presses through whichever driver the scenario built',
   'scenario-focus-probe.mjs': 'measures which input paths steal focus, so it must use the one that does',
-  'drive-wake-confirm.mjs': 'a hand-run driver for a native confirm dialog, which only macOS can reach',
 };
 
 const TAKES_THE_FOREGROUND = {
   'scenario-focus-probe.mjs': 'its subject is focus theft',
-  'dev-launch-focus-probe.mjs': 'its subject is focus theft',
-  'dev-raf-throttle-probe.mjs': 'its subject is the throttling a real focus state produces',
-  'dev-wkwv-occlusion-probe.mjs': 'its subject is the occlusion a real window stack produces',
-  'drive-wake-confirm.mjs': 'a native confirm dialog only answers a frontmost app',
   'scenario-delegation-chain.mjs': 'hover and :focus need an active page, which WebKit ties to a key window',
   'scenario-countdown-cancel.mjs': 'its pointer leg needs mouse moves, which WebKit delivers only to a key window',
 };
