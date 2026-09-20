@@ -5,6 +5,7 @@ import { CrewRestartState, type CrewMember } from '../types/generated';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
+import { createMockDaemon, type MockDaemon } from '../test/mocks/daemon';
 import { CrewPanel } from './CrewPanel';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
@@ -35,10 +36,21 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function api(overrides: Record<string, unknown> = {}): DaemonApi {
-  return {
-    isConnected: true,
-    connectionGeneration: 1,
+type CrewDaemonMethod =
+  | 'sendCrewSet'
+  | 'sendCrewRestart'
+  | 'sendCrewCharterGet'
+  | 'sendCrewCharterSet'
+  | 'sendCrewHandoffsGet'
+  | 'sendCrewHandoffGet'
+  | 'sendDelegationPreferencesGet'
+  | 'sendDelegationModels';
+type CrewDaemonOverrides = Partial<Pick<DaemonApi, CrewDaemonMethod>>;
+type CrewDaemonApi = DaemonApi & { mockDaemon: MockDaemon };
+
+function api(overrides: CrewDaemonOverrides = {}): CrewDaemonApi {
+  const mockDaemon = createMockDaemon();
+  const implementations: Pick<DaemonApi, CrewDaemonMethod> = {
     sendCrewSet: vi.fn().mockResolvedValue({ success: true, conflict: false }),
     sendCrewRestart: vi.fn().mockResolvedValue({ success: true, conflict: false }),
     sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-1' } }),
@@ -62,7 +74,26 @@ function api(overrides: Record<string, unknown> = {}): DaemonApi {
       ],
     }),
     ...overrides,
+  };
+  const request = <K extends CrewDaemonMethod>(method: K): DaemonApi[K] => {
+    const implementation = implementations[method] as (...args: unknown[]) => unknown;
+    mockDaemon.setResponse(method, (args) => implementation(...args));
+    const recorded = mockDaemon.createRequest<unknown>(method);
+    return vi.fn((...args: unknown[]) => recorded(...args)) as DaemonApi[K];
+  };
+  const provider = {
+    isConnected: true,
+    connectionGeneration: 1,
+    sendCrewSet: request('sendCrewSet'),
+    sendCrewRestart: request('sendCrewRestart'),
+    sendCrewCharterGet: request('sendCrewCharterGet'),
+    sendCrewCharterSet: request('sendCrewCharterSet'),
+    sendCrewHandoffsGet: request('sendCrewHandoffsGet'),
+    sendCrewHandoffGet: request('sendCrewHandoffGet'),
+    sendDelegationPreferencesGet: request('sendDelegationPreferencesGet'),
+    sendDelegationModels: request('sendDelegationModels'),
   } as unknown as DaemonApi;
+  return Object.assign(provider, { mockDaemon });
 }
 
 function renderPanel({
@@ -74,7 +105,7 @@ function renderPanel({
   onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>(),
   seeds = [],
 }: {
-  daemon?: DaemonApi;
+  daemon?: CrewDaemonApi;
   members?: CrewMember[];
   sessions?: any[];
   initialMember?: string;
@@ -153,7 +184,7 @@ describe('CrewPanel', () => {
   });
 
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
-    renderPanel({
+    const { daemon } = renderPanel({
       members: [member('trellis', 4, {
         binding_session: 'session-trellis',
         agent: 'codex', model: 'gpt-6-astra', effort: 'high',
@@ -168,6 +199,9 @@ describe('CrewPanel', () => {
     expect(running).toHaveTextContent('EffortNot reported');
     expect(screen.getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
     expect(screen.getByLabelText('Harness')).toHaveValue('codex');
+    await screen.findByRole('option', { name: 'openai / Astra' });
+    expect(daemon.mockDaemon.getCalls('sendDelegationModels').map((call) => call.args)).toEqual([['codex']]);
+    expect(daemon.mockDaemon.getCalls('sendDelegationPreferencesGet').map((call) => call.args)).toEqual([[]]);
   });
 
   it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {

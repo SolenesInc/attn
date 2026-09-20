@@ -532,19 +532,6 @@ func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, 
 	return nil
 }
 
-func (d *Daemon) withdrawCrewRestart(memberID, requestID, sessionID string) error {
-	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
-		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
-			return false, nil
-		}
-		member.Restart.State = crew.RestartFailed
-		member.Restart.Withdrawn = true
-		member.Restart.Error = fmt.Sprintf("the restart was withdrawn because the user asked %s to sleep instead", crew.DisplayName(member.ID))
-		return true, nil
-	})
-	return err
-}
-
 func (d *Daemon) completeCrewRestart(memberID, requestID, sessionID, letter, successor string) {
 	d.completeCrewRestartWithDetail(memberID, requestID, sessionID, letter, successor,
 		fmt.Sprintf("the handoff was filed and successor session %s started", shortSessionID(successor)))
