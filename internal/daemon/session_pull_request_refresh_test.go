@@ -750,6 +750,12 @@ func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {
 			if watches := d.store.PullRequestWatches(); name != "reviewer change" && len(watches) != 0 {
 				t.Fatalf("stopped watch remains: %+v", watches)
 			}
+			if strings.Contains(name, "unwatch") {
+				rec := storedPullRequest(t, d, "s1")
+				if rec.ReviewStatus != "" || rec.StatusCheckedAt != "" {
+					t.Fatalf("unwatch retained watch-owned status: %+v", rec)
+				}
+			}
 		})
 	}
 }

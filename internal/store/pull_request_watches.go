@@ -77,12 +77,26 @@ func (s *Store) UnwatchPullRequest(sessionID, prID string) (bool, error) {
 	if s.db == nil {
 		return false, errors.New("store has no database")
 	}
-	result, err := s.db.Exec(`DELETE FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
 	if err != nil {
 		return false, err
 	}
 	changed, err := result.RowsAffected()
-	return changed > 0, err
+	if err != nil || changed == 0 {
+		return false, err
+	}
+	if _, err := tx.Exec(`
+		UPDATE session_pull_requests SET review_status = '', status_checked_at = ''
+		WHERE session_id = ? AND pr_id = ?
+	`, sessionID, prID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
 }
 
 func (s *Store) PullRequestWatches() []PullRequestWatch {

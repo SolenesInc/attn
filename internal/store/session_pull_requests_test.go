@@ -94,6 +94,31 @@ func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
 		strings.Join(watch.FeedbackBaselineIDs, ",") != "comment" {
 		t.Fatalf("successful head reset lost its baseline: %+v", watch)
 	}
+	if err := s.UpdateSessionPullRequestReviewStatus("s1", prID, "approved"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkSessionPullRequestChecked(prID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_unwatch_reset BEFORE UPDATE OF review_status ON session_pull_requests
+		WHEN NEW.review_status = '' BEGIN SELECT RAISE(FAIL, 'injected unwatch reset failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := s.UnwatchPullRequest("s1", prID); err == nil || changed {
+		t.Fatalf("failed unwatch changed the watch: changed=%v err=%v", changed, err)
+	}
+	if _, found := s.PullRequestWatch("s1", prID); !found {
+		t.Fatal("failed unwatch deleted the watch")
+	}
+	if _, err := s.db.Exec("DROP TRIGGER reject_unwatch_reset"); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := s.UnwatchPullRequest("s1", prID); err != nil || !changed {
+		t.Fatalf("retry unwatch: changed=%v err=%v", changed, err)
+	}
+	if pr, found := s.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "" || pr.StatusCheckedAt != "" {
+		t.Fatalf("successful unwatch retained watch-owned state: %+v", pr)
+	}
 }
 
 func TestSessionPullRequestsComeBackNewestFirst(t *testing.T) {
