@@ -412,6 +412,10 @@ func TestPullRequestWatchDoesNotShareReviewerStatusWithUnwatchedSession(t *testi
 	url := "https://github.com/victorarias/attn/pull/71"
 	recordPRForRefresh(t, d, "s2", url)
 	watchPRForRefresh(t, d, "s1", url)
+	prID := d.store.ListSessionPullRequests("s2")[0].PRID
+	if err := d.store.UpdateSessionPullRequestReviewStatus("s2", prID, prreadiness.ReviewChangesRequested); err != nil {
+		t.Fatal(err)
+	}
 	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
 	serveHost(d, "github.com", host)
 	now := time.Now()

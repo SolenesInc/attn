@@ -268,7 +268,7 @@ func (s *Store) UpdateSessionPullRequestSharedStatus(prID string, status Session
 	stamp := at.Format(time.RFC3339Nano)
 	_, err := s.db.Exec(`
 		UPDATE session_pull_requests
-		SET title = ?, draft = ?, state = ?, ci_status = ?,
+		SET title = ?, draft = ?, state = ?, ci_status = ?, review_status = '',
 			mergeable_state = ?, head_sha = ?, head_branch = ?,
 			status_fetched_at = ?, status_checked_at = ?
 		WHERE pr_id = ?`,
