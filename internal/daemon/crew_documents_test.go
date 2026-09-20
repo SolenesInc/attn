@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -77,6 +78,74 @@ func TestCrewCharter_ExternalEditWinsAConflictAndIsReturnedInFull(t *testing.T) 
 	content, _ := os.ReadFile(member.CharterPath)
 	if string(content) != external {
 		t.Fatalf("conflict overwrote canonical charter: %q", content)
+	}
+}
+
+func TestCrewCharter_ConcurrentWritesWithTheSameTokenHaveOneWinner(t *testing.T) {
+	d := newCrewDaemon(t)
+	read, err := d.crewCharterGet("alder")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstEntered := make(chan struct{}, 1)
+	releaseFirst := make(chan struct{})
+	var pauseFirst sync.Once
+	d.crewCharterBeforeWriteHook = func() {
+		pauseFirst.Do(func() {
+			firstEntered <- struct{}{}
+			<-releaseFirst
+		})
+	}
+
+	type outcome struct {
+		result  *protocol.CrewCharterSetResult
+		err     error
+		content string
+	}
+	outcomes := make(chan outcome, 2)
+	write := func(content string) {
+		result, err := d.crewCharterSet("alder", content, read.Charter.Token)
+		outcomes <- outcome{result: result, err: err, content: content}
+	}
+	go write("# Alder\n\nFirst concurrent edit.\n")
+	<-firstEntered
+	if d.crewCharterMu.TryLock() {
+		d.crewCharterMu.Unlock()
+		close(releaseFirst)
+		t.Fatal("charter write did not hold the daemon charter lock before its compare-and-swap")
+	}
+	go write("# Alder\n\nSecond concurrent edit.\n")
+	close(releaseFirst)
+
+	first := <-outcomes
+	second := <-outcomes
+	if first.err != nil || second.err != nil {
+		t.Fatalf("concurrent writes returned errors: first=%v second=%v", first.err, second.err)
+	}
+	winner, loser := first, second
+	if winner.result.Conflict {
+		winner, loser = loser, winner
+	}
+	if winner.result.Conflict || !loser.result.Conflict {
+		t.Fatalf("concurrent results = first %+v, second %+v; want one write and one conflict", first.result, second.result)
+	}
+	if winner.result.Charter.Content != winner.content {
+		t.Fatalf("winner = %+v, submitted %q", winner.result, winner.content)
+	}
+	if loser.result.Charter != winner.result.Charter {
+		t.Fatalf("conflict charter = %+v, want winner %+v", loser.result.Charter, winner.result.Charter)
+	}
+	member, _, err := d.resolveCrewMember("alder")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, err := os.ReadFile(member.CharterPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(stored) != winner.content {
+		t.Fatalf("stored charter = %q, want winner %q", stored, winner.content)
 	}
 }
 

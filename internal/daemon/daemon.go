@@ -125,6 +125,8 @@ type Daemon struct {
 	presenceMu                        sync.RWMutex
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
+	crewCharterMu                     sync.Mutex
+	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
 	logger                            *logging.Logger
 	debugLogging                      bool

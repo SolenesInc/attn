@@ -49,6 +49,9 @@ func (d *Daemon) crewCharterGet(name string) (*protocol.CrewCharterGetResult, er
 }
 
 func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.CrewCharterSetResult, error) {
+	d.crewCharterMu.Lock()
+	defer d.crewCharterMu.Unlock()
+
 	member, err := d.crewDocumentMember(name)
 	if err != nil {
 		return nil, err
@@ -56,6 +59,9 @@ func (d *Daemon) crewCharterSet(name, content, expectedToken string) (*protocol.
 	expectedToken = strings.TrimSpace(expectedToken)
 	if expectedToken == "" {
 		return nil, fmt.Errorf("saving %s's charter requires the content token that was read", crew.DisplayName(member.ID))
+	}
+	if d.crewCharterBeforeWriteHook != nil {
+		d.crewCharterBeforeWriteHook()
 	}
 	hash, conflict, err := fsdoc.NewStore(member.HomeDir).Write(crew.CharterFileName, []byte(content), expectedToken)
 	if err != nil {
