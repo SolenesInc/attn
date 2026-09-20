@@ -629,6 +629,16 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	if watch := d.store.PullRequestWatches()[0]; len(watch.FeedbackBaselineIDs) != 0 || watch.LastSuccessAt == baseline {
 		t.Fatalf("successful retry changed the baseline or did not record success: %+v", watch)
 	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := direct.Exec(`CREATE TRIGGER reject_feedback_reenqueue BEFORE INSERT ON agent_mailbox_items
+		BEGIN SELECT RAISE(FAIL, 'delivered feedback must not be re-enqueued'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.notifyPullRequestWatchFeedback(d.store.PullRequestWatches()[0], ready.Evidence.Comments, now); err != nil {
+		t.Fatalf("already-delivered feedback attempted another insert: %v", err)
+	}
 }
 
 func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {

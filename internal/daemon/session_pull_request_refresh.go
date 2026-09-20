@@ -640,10 +640,21 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullReq
 }
 
 func (d *Daemon) notifyPullRequestWatchFeedback(watch store.PullRequestWatch, comments []prreadiness.Comment, now time.Time) error {
+	if len(comments) == 0 {
+		return nil
+	}
+	delivered, err := d.store.MaintenanceMailboxItemIDs(watch.SessionID, watch.PRID)
+	if err != nil {
+		d.logf("pull request watch: load delivered feedback for %s/%s: %v", watch.SessionID, watch.PRID, err)
+		return err
+	}
 	for _, comment := range comments {
 		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
 			"pull-request-feedback", watch.SessionID, watch.PRID, comment.ID,
 		}, "\x00"))).String()
+		if delivered[id] {
+			continue
+		}
 		detail := strings.TrimSpace(comment.Body)
 		if comment.Location != "" {
 			detail = comment.Location + ": " + detail

@@ -3262,12 +3262,13 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	rolesBySession := d.sessionDelegationRoles()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
+	watchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
+			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID], watchesByPR)
 			out = append(out, *decorated)
 		}
 	}

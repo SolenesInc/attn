@@ -437,6 +437,27 @@ func (s *Store) ReadGardenSeedMailboxItems(recipientSessionID, seedID string, at
 	return read > 0, remaining, err
 }
 
+func (s *Store) MaintenanceMailboxItemIDs(recipientSessionID, sourceID string) (map[string]bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rows, err := s.db.Query(`SELECT id FROM agent_mailbox_items
+		WHERE kind = ? AND source_id = ? AND recipient_session_id = ?`,
+		agentmailbox.KindMaintenancePrompt, sourceID, recipientSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	ids := make(map[string]bool)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids[id] = true
+	}
+	return ids, rows.Err()
+}
+
 func (s *Store) DeleteUnreadMaintenanceMailboxItem(recipientSessionID, coalesceKey string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

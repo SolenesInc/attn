@@ -316,6 +316,8 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 	}); !resp.Ok {
 		t.Fatalf("record response = %+v", resp)
 	}
+	registerSessionForPRTest(t, d, "s3")
+	watchPRForRefresh(t, d, "s3", "https://github.com/victorarias/attn/pull/71")
 
 	for _, session := range d.sessionsForBroadcast(d.store.List("")) {
 		switch session.ID {
@@ -323,9 +325,14 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 			if len(session.PullRequests) != 0 {
 				t.Errorf("s1 pull requests = %+v, want none", session.PullRequests)
 			}
-		case "s2":
+		case "s2", "s3":
 			if len(session.PullRequests) != 1 || session.PullRequests[0].Number != 71 {
-				t.Errorf("s2 pull requests = %+v, want the recorded one", session.PullRequests)
+				t.Fatalf("%s pull requests = %+v, want the recorded one", session.ID, session.PullRequests)
+			}
+			pr := session.PullRequests[0]
+			if protocol.Deref(pr.SessionID) != session.ID || protocol.Deref(pr.Watching) != (session.ID == "s3") ||
+				len(pr.WatchRecipients) != 1 || pr.WatchRecipients[0] != "workspace-s3" {
+				t.Errorf("%s watch metadata = %+v", session.ID, pr)
 			}
 		}
 	}

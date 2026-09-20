@@ -242,15 +242,19 @@ func (d *Daemon) sessionPullRequestIdentity(id, url string) (store.SessionPullRe
 	}, nil
 }
 
-func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) []protocol.SessionPullRequest {
-	if len(records) == 0 {
-		return nil
-	}
-	out := make([]protocol.SessionPullRequest, 0, len(records))
+func (d *Daemon) pullRequestWatchesByPR() map[string][]store.PullRequestWatch {
 	watchesByPR := make(map[string][]store.PullRequestWatch)
 	for _, watch := range d.store.PullRequestWatches() {
 		watchesByPR[watch.PRID] = append(watchesByPR[watch.PRID], watch)
 	}
+	return watchesByPR
+}
+
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
+	if len(records) == 0 {
+		return nil
+	}
+	out := make([]protocol.SessionPullRequest, 0, len(records))
 	for _, rec := range records {
 		sessionID := rec.SessionID
 		entry := protocol.SessionPullRequest{
@@ -303,7 +307,11 @@ func pullRequestField(value string) *string {
 }
 
 func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.SessionPullRequest {
-	return d.sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID))
+	records := d.store.ListSessionPullRequests(sessionID)
+	if len(records) == 0 {
+		return nil
+	}
+	return d.sessionPullRequestsForBroadcast(records, d.pullRequestWatchesByPR())
 }
 
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {
