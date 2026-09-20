@@ -60,7 +60,7 @@ func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, req
 	if !ok {
 		return nil, fmt.Errorf("GitHub host %s is not authenticated", host)
 	}
-	snapshot, err := client.FetchPullRequestSnapshot(owner+"/"+repository, number)
+	snapshot, err := client.FetchPullRequestSnapshot(ctx, owner+"/"+repository, number)
 	if err != nil {
 		return nil, err
 	}
@@ -159,7 +159,7 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 				d.logf("automation GitHub observation invalid repository %q", pr.Repo)
 				continue
 			}
-			providerSnapshot, err := client.FetchPullRequestSnapshot(pr.Repo, pr.Number)
+			providerSnapshot, err := client.FetchPullRequestSnapshot(context.Background(), pr.Repo, pr.Number)
 			if err != nil {
 				observationLock.Unlock()
 				d.logf("automation GitHub observation fetch %s: %v", candidate.SubjectKey, err)

@@ -138,7 +138,7 @@ func TestFetchPullRequestSnapshotUsesOneReadOnlyRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshot, err := client.FetchPullRequestSnapshot("owner/repo", 42)
+	snapshot, err := client.FetchPullRequestSnapshot(context.Background(), "owner/repo", 42)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -168,7 +168,7 @@ func TestFetchPullRequestSnapshotSeparatesMergedFromClosed(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			snapshot, err := client.FetchPullRequestSnapshot("owner/repo", 42)
+			snapshot, err := client.FetchPullRequestSnapshot(context.Background(), "owner/repo", 42)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -204,7 +204,7 @@ func TestFetchPullRequestReviewStatusReportsFailureInsteadOfNone(t *testing.T) {
 	defer server.Close()
 	client, _ := NewClient(server.URL, "test-token")
 
-	if status, err := client.FetchPullRequestReviewStatus("owner/repo", 42); err == nil {
+	if status, err := client.FetchPullRequestReviewStatus(context.Background(), "owner/repo", 42); err == nil {
 		t.Fatalf("status = %q with no error, want the failure reported so a caller can keep what it has", status)
 	}
 }

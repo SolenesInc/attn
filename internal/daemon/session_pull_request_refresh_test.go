@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -14,22 +15,26 @@ import (
 )
 
 type fakePRHost struct {
-	snapshot   *github.PullRequestSnapshot
-	readiness  *prreadiness.Observation
-	review     string
-	err        error
-	readyErr   error
-	reviewErr  error
-	limited    bool
-	limitReset time.Time
-	snapshots  int
-	reviews    int
-	readyReads int
-	limitedFor string
-	limitFor   string
+	snapshot     *github.PullRequestSnapshot
+	readiness    *prreadiness.Observation
+	review       string
+	err          error
+	readyErr     error
+	reviewErr    error
+	limited      bool
+	limitReset   time.Time
+	readinessCtx context.Context
+	snapshotCtx  context.Context
+	reviewCtx    context.Context
+	snapshots    int
+	reviews      int
+	readyReads   int
+	limitedFor   string
+	limitFor     string
 }
 
-func (f *fakePRHost) FetchPullRequestReadiness(string, int) (*prreadiness.Observation, error) {
+func (f *fakePRHost) FetchPullRequestReadiness(ctx context.Context, _ string, _ int) (*prreadiness.Observation, error) {
+	f.readinessCtx = ctx
 	f.readyReads++
 	if f.readyErr != nil {
 		return nil, f.readyErr
@@ -37,7 +42,8 @@ func (f *fakePRHost) FetchPullRequestReadiness(string, int) (*prreadiness.Observ
 	return f.readiness, nil
 }
 
-func (f *fakePRHost) FetchPullRequestSnapshot(string, int) (*github.PullRequestSnapshot, error) {
+func (f *fakePRHost) FetchPullRequestSnapshot(ctx context.Context, _ string, _ int) (*github.PullRequestSnapshot, error) {
+	f.snapshotCtx = ctx
 	f.snapshots++
 	if f.err != nil {
 		return nil, f.err
@@ -45,7 +51,8 @@ func (f *fakePRHost) FetchPullRequestSnapshot(string, int) (*github.PullRequestS
 	return f.snapshot, nil
 }
 
-func (f *fakePRHost) FetchPullRequestReviewStatus(string, int) (string, error) {
+func (f *fakePRHost) FetchPullRequestReviewStatus(ctx context.Context, _ string, _ int) (string, error) {
+	f.reviewCtx = ctx
 	f.reviews++
 	if f.reviewErr != nil {
 		return "", f.reviewErr
@@ -116,6 +123,30 @@ func TestEmptyPullRequestTransitionDoesNotReadMailbox(t *testing.T) {
 	}
 }
 
+func TestPullRequestStatusFetchUsesRefreshContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d := &Daemon{}
+	host := &fakePRHost{readiness: watchedReadiness("head", prreadiness.ChecksGreen, "APPROVED")}
+	group := &sessionPullRequestGroup{repo: "o/r", number: 71, watches: []store.PullRequestWatch{{SessionID: "session"}}}
+	if _, _, err := d.fetchSessionPullRequestStatus(ctx, host, group); err != nil {
+		t.Fatal(err)
+	}
+	if host.readinessCtx != ctx {
+		t.Fatal("readiness fetch did not receive the refresh context")
+	}
+
+	host.snapshot = openSnapshot("Pull request", "clean", "head")
+	host.review = "approved"
+	group.watches = nil
+	if _, _, err := d.fetchSessionPullRequestStatus(ctx, host, group); err != nil {
+		t.Fatal(err)
+	}
+	if host.snapshotCtx != ctx || host.reviewCtx != ctx {
+		t.Fatal("snapshot and review fetches did not receive the refresh context")
+	}
+}
+
 func recordPRForRefresh(t *testing.T, d *Daemon, sessionID, url string) {
 	t.Helper()
 	if resp := sendPRCommand(t, d, protocol.PullRequestCreatedMessage{
@@ -164,7 +195,7 @@ func TestSessionPullRequestRefreshTracksUnwatchedStatus(t *testing.T) {
 	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
 	host := &fakePRHost{snapshot: openSnapshot("Fresh", "blocked", "sha-1"), review: "approved"}
 	serveHost(d, "github.com", host)
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 1 || changed != 1 {
 		t.Fatalf("refresh = (%d,%d)", fetched, changed)
 	}
 	entry := onlySessionPullRequest(t, d, "s1")
@@ -191,7 +222,7 @@ func TestPullRequestWatchSharesFetchAndKeepsReviewerStatusIsolated(t *testing.T)
 	})
 	host := &fakePRHost{readiness: observation}
 	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Now())
+	d.refreshSessionPullRequests(context.Background(), time.Now())
 	if host.readyReads != 1 || storedPullRequest(t, d, "s1").ReviewStatus != "approved" ||
 		storedPullRequest(t, d, "s2").ReviewStatus != "changes_requested" {
 		t.Fatalf("reads=%d s1=%+v s2=%+v", host.readyReads, storedPullRequest(t, d, "s1"), storedPullRequest(t, d, "s2"))
@@ -207,7 +238,7 @@ func TestPullRequestWatchBaselinesThenRetriesHumanFeedbackAcrossRestart(t *testi
 	observation.Comments = []prreadiness.Comment{{ID: "existing", Author: "human", Body: "old", CreatedAt: now}}
 	host := &fakePRHost{readiness: observation}
 	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(context.Background(), now)
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
 		t.Fatalf("first-fetch feedback was delivered: %+v, %v", unread, err)
 	}
@@ -225,7 +256,7 @@ func TestPullRequestWatchBaselinesThenRetriesHumanFeedbackAcrossRestart(t *testi
 		prreadiness.Comment{ID: "first", Author: "human", Body: "first feedback", CreatedAt: now.Add(time.Second)},
 		prreadiness.Comment{ID: "second", Author: "human", Body: "second feedback", CreatedAt: now.Add(time.Second)},
 	)
-	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
 	watch := d.store.PullRequestWatches()[0]
 	if strings.Join(watch.Cursor.SeenCommentIDs, ",") != "existing" {
 		t.Fatalf("failed delivery advanced cursor: %+v", watch.Cursor)
@@ -243,7 +274,7 @@ func TestPullRequestWatchBaselinesThenRetriesHumanFeedbackAcrossRestart(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(2*protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 2 || strings.Join(d.store.PullRequestWatches()[0].Cursor.SeenCommentIDs, ",") != "existing,first,second" {
 		t.Fatalf("retry = %+v, watch=%+v, err=%v", unread, d.store.PullRequestWatches()[0], err)
@@ -262,7 +293,7 @@ func TestPullRequestWatchDeliversHumanReviewerVerdictAsDurableFeedback(t *testin
 	observation := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
 	host := &fakePRHost{readiness: observation}
 	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(context.Background(), now)
 
 	observation.Reviews = []prreadiness.Review{{
 		ID: "approval", Author: "human-reviewer", State: "APPROVED", CommitOID: "sha-1",
@@ -272,7 +303,7 @@ func TestPullRequestWatchDeliversHumanReviewerVerdictAsDurableFeedback(t *testin
 		ID: "approval", Author: "human-reviewer", Kind: prreadiness.CommentReview, ReviewState: "APPROVED",
 		Body: "Ship it, with this rollout caveat.", CreatedAt: now.Add(time.Second),
 	}}
-	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 2 {
 		t.Fatalf("deliveries = %+v, %v", unread, err)
@@ -393,12 +424,12 @@ func TestPullRequestWatchBroadcastsClearedUnwatchedVerdict(t *testing.T) {
 	now := time.Now()
 	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksPending, "")}
 	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(context.Background(), now)
 	if err := d.store.UpdateSessionPullRequestReviewStatus("s2", prID, "approved"); err != nil {
 		t.Fatal(err)
 	}
 	before := len(docFacts(t, d, FactSessionPullRequestChanged))
-	if fetched, changed := d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval)); fetched != 1 || changed != 0 {
+	if fetched, changed := d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval)); fetched != 1 || changed != 0 {
 		t.Fatalf("refresh = (%d,%d)", fetched, changed)
 	}
 	if got := storedPullRequest(t, d, "s2").ReviewStatus; got != "" {
@@ -421,18 +452,18 @@ func TestPullRequestWatchClearsStaleActionOnHeadChangeAndDisarmsOnClose(t *testi
 	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
 	serveHost(d, "github.com", host)
 	now := time.Now()
-	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(context.Background(), now)
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "ready") {
 		t.Fatalf("ready = %+v, %v", unread, err)
 	}
 	host.readiness = watchedReadiness("sha-2", prreadiness.ChecksPending, "")
-	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
 		t.Fatalf("stale action survived: %+v, %v", unread, err)
 	}
 	host.readiness.State = "closed"
-	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(2*protocol.HeatHotInterval))
 	if watches := d.store.PullRequestWatches(); len(watches) != 0 {
 		t.Fatalf("closed watch remained armed: %+v", watches)
 	}
@@ -445,7 +476,7 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	serveHost(d, "github.com", host)
 	now := time.Now()
 	for i := 0; i < pullRequestWatchFailureThreshold; i++ {
-		d.refreshSessionPullRequests(now.Add(time.Duration(i) * protocol.HeatHotInterval))
+		d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(i)*protocol.HeatHotInterval))
 	}
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "monitoring unavailable") {
@@ -453,7 +484,7 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	}
 	host.readyErr = nil
 	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
-	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold) * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold)*protocol.HeatHotInterval))
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "ready") {
 		t.Fatalf("recovery = %+v, %v", unread, err)
@@ -467,20 +498,20 @@ func TestPullRequestWatchReemitsActionClearedByOutage(t *testing.T) {
 	host := &fakePRHost{readiness: failed}
 	serveHost(d, "github.com", host)
 	now := time.Now()
-	d.refreshSessionPullRequests(now)
+	d.refreshSessionPullRequests(context.Background(), now)
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "checks failed") {
 		t.Fatalf("initial failure = %+v, %v", unread, err)
 	}
 	host.readyErr = errors.New("review API unavailable")
 	for i := 1; i <= pullRequestWatchFailureThreshold; i++ {
-		d.refreshSessionPullRequests(now.Add(time.Duration(i) * protocol.HeatHotInterval))
+		d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(i)*protocol.HeatHotInterval))
 	}
 	if watch := d.store.PullRequestWatches()[0]; watch.Cursor.LastActionKey != "" || watch.Cursor.ActionGeneration != 1 {
 		t.Fatalf("outage cursor = %+v", watch.Cursor)
 	}
 	host.readyErr = nil
-	d.refreshSessionPullRequests(now.Add(time.Duration(pullRequestWatchFailureThreshold+1) * protocol.HeatHotInterval))
+	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold+1)*protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "checks failed") {
 		t.Fatalf("recovered failure = %+v, %v", unread, err)
@@ -492,7 +523,7 @@ func TestPullRequestWatchUsesGraphQLRateLimitResource(t *testing.T) {
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
 	host := &fakePRHost{limited: true, limitReset: time.Now().Add(time.Hour)}
 	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Now())
+	d.refreshSessionPullRequests(context.Background(), time.Now())
 	if host.limitedFor != "graphql" || host.readyReads != 0 {
 		t.Fatalf("resource=%q reads=%d", host.limitedFor, host.readyReads)
 	}

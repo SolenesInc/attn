@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
@@ -148,7 +149,7 @@ func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {
 	setPRState(t, d, "merged", "Harvest on merge")
 	armOnSettlePR(t, d, seed.ID)
 
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
+	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 0 || changed != 0 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want a tick with nothing to do", fetched, changed)
 	}
 	if status := show(t, d, seed.ID).Seed.Status; status != garden.StatusPlanted {
@@ -172,7 +173,7 @@ func TestSettle_TheRefreshHarvestsWhenTheMergeLands(t *testing.T) {
 		Number: 113, State: "closed", Merged: true, Title: "Harvest a seed when its pull request merges",
 	}})
 
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 1 || changed != 1 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land", fetched, changed)
 	}
 	got := show(t, d, seed.ID).Seed
@@ -202,7 +203,7 @@ func TestSettle_TheRefreshHarvestsAfterTheArmingSessionCloses(t *testing.T) {
 		Number: 113, State: "closed", Merged: true, Title: "Keep harvest-on-merge alive",
 	}})
 
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
+	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 1 || changed != 1 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land after the session closed", fetched, changed)
 	}
 	got := show(t, d, seed.ID).Seed

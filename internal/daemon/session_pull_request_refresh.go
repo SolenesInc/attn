@@ -33,9 +33,9 @@ const (
 )
 
 type sessionPRHost interface {
-	FetchPullRequestSnapshot(repo string, number int) (*github.PullRequestSnapshot, error)
-	FetchPullRequestReviewStatus(repo string, number int) (string, error)
-	FetchPullRequestReadiness(repo string, number int) (*prreadiness.Observation, error)
+	FetchPullRequestSnapshot(ctx context.Context, repo string, number int) (*github.PullRequestSnapshot, error)
+	FetchPullRequestReviewStatus(ctx context.Context, repo string, number int) (string, error)
+	FetchPullRequestReadiness(ctx context.Context, repo string, number int) (*prreadiness.Observation, error)
 	IsRateLimited(resource string) (bool, time.Time)
 	GetRateLimit(resource string) *github.RateLimitInfo
 }
@@ -65,9 +65,9 @@ func (d *Daemon) registerSessionPullRequestRefreshCron(runner *jobs.Runner) {
 	}
 }
 
-func (d *Daemon) sessionPullRequestRefreshHandler(_ context.Context, _ *jobs.Job) (any, error) {
-	fetched, changed := d.refreshSessionPullRequests(time.Now())
-	return map[string]any{"fetched": fetched, "changed": changed}, nil
+func (d *Daemon) sessionPullRequestRefreshHandler(ctx context.Context, _ *jobs.Job) (any, error) {
+	fetched, changed := d.refreshSessionPullRequests(ctx, time.Now())
+	return map[string]any{"fetched": fetched, "changed": changed}, context.Cause(ctx)
 }
 
 type sessionPullRequestGroup struct {
@@ -81,7 +81,7 @@ type sessionPullRequestGroup struct {
 	due      bool
 }
 
-func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int) {
+func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) (fetched, changed int) {
 	if d.store == nil {
 		return 0, 0
 	}
@@ -116,6 +116,9 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	limitedResources := make(map[string]time.Time)
 	var changedSessions []string
 	for _, group := range groups {
+		if ctx.Err() != nil {
+			return fetched, changed
+		}
 		resource := sessionPullRequestResource(group)
 		limitKey := group.host + "\x00" + resource
 		resetAt, limited := limitedRequests[limitKey]
@@ -137,8 +140,11 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			continue
 		}
 
-		status, readiness, err := d.fetchSessionPullRequestStatus(host, group)
+		status, readiness, err := d.fetchSessionPullRequestStatus(ctx, host, group)
 		if err != nil {
+			if ctx.Err() != nil {
+				return fetched, changed
+			}
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
 				d.logf("session pull requests: %s rate limited mid-refresh, stopping there: %v", group.host, err)
 				limitedRequests[limitKey] = resetAt
@@ -150,6 +156,9 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 			d.markSessionPullRequestChecked(group.prID, now)
 			continue
+		}
+		if ctx.Err() != nil {
+			return fetched, changed
 		}
 
 		fetched++
@@ -267,9 +276,9 @@ func (d *Daemon) sessionPullRequestSessionActive(sessionID string) bool {
 	return session != nil && session.State != protocol.SessionStateRecoverable
 }
 
-func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessionPullRequestGroup) (store.SessionPullRequestStatus, *prreadiness.Observation, error) {
+func (d *Daemon) fetchSessionPullRequestStatus(ctx context.Context, host sessionPRHost, group *sessionPullRequestGroup) (store.SessionPullRequestStatus, *prreadiness.Observation, error) {
 	if len(group.watches) > 0 {
-		readiness, err := host.FetchPullRequestReadiness(group.repo, group.number)
+		readiness, err := host.FetchPullRequestReadiness(ctx, group.repo, group.number)
 		if err != nil {
 			return store.SessionPullRequestStatus{}, nil, err
 		}
@@ -285,7 +294,7 @@ func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessio
 		}
 		return status, readiness, nil
 	}
-	snapshot, err := host.FetchPullRequestSnapshot(group.repo, group.number)
+	snapshot, err := host.FetchPullRequestSnapshot(ctx, group.repo, group.number)
 	if err != nil {
 		return store.SessionPullRequestStatus{}, nil, err
 	}
@@ -302,7 +311,7 @@ func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessio
 
 	status.MergeableState = snapshot.MergeableState
 	status.CIStatus = github.CIStatusFromMergeableState(snapshot.MergeableState)
-	review, err := host.FetchPullRequestReviewStatus(group.repo, group.number)
+	review, err := host.FetchPullRequestReviewStatus(ctx, group.repo, group.number)
 	if err != nil {
 		d.logf("session pull requests: reviews for %s: %v", group.prID, err)
 		return status, nil, nil

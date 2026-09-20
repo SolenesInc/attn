@@ -1,6 +1,7 @@
 package github
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -123,7 +124,7 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.FetchPullRequestReadiness("o/r", 71)
+	result, err := client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +173,7 @@ func TestFetchPullRequestReadinessPaginatesReviewRequests(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.FetchPullRequestReadiness("o/r", 71)
+	result, err := client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +200,7 @@ func TestFetchPullRequestReadinessRejectsHeadChangeBetweenPages(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = client.FetchPullRequestReadiness("o/r", 71)
+	_, err = client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
 	if !errors.Is(err, ErrReadinessHeadChanged) {
 		t.Fatalf("error = %v, want ErrReadinessHeadChanged", err)
 	}

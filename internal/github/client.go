@@ -480,8 +480,8 @@ type PullRequestSnapshot struct {
 	BaseRepository string
 }
 
-func (c *Client) FetchPullRequestSnapshot(repo string, number int) (*PullRequestSnapshot, error) {
-	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
+func (c *Client) FetchPullRequestSnapshot(ctx context.Context, repo string, number int) (*PullRequestSnapshot, error) {
+	body, err := c.doRequestContext(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d", repo, number), nil)
 	if err != nil {
 		return nil, fmt.Errorf("fetch pull request snapshot: %w", err)
 	}
@@ -585,7 +585,7 @@ func (c *Client) FetchPRDetails(repo string, number int) (*PRDetails, error) {
 	}
 
 	details.CIStatus = CIStatusFromMergeableState(prData.MergeableState)
-	details.ReviewStatus, _ = c.FetchPullRequestReviewStatus(repo, number)
+	details.ReviewStatus, _ = c.FetchPullRequestReviewStatus(context.Background(), repo, number)
 
 	return details, nil
 }
@@ -603,8 +603,8 @@ func CIStatusFromMergeableState(mergeableState string) string {
 	}
 }
 
-func (c *Client) FetchPullRequestReviewStatus(repo string, number int) (string, error) {
-	body, err := c.doRequest("GET", fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number), nil)
+func (c *Client) FetchPullRequestReviewStatus(ctx context.Context, repo string, number int) (string, error) {
+	body, err := c.doRequestContext(ctx, "GET", fmt.Sprintf("/repos/%s/pulls/%d/reviews", repo, number), nil)
 	if err != nil {
 		return "", fmt.Errorf("fetch PR reviews: %w", err)
 	}

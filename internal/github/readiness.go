@@ -230,8 +230,8 @@ func FetchPullRequestReadiness(ctx context.Context, transport QueryTransport, re
 	return buildPullRequestReadiness(combined), nil
 }
 
-func (c *Client) FetchPullRequestReadiness(repo string, number int) (*prreadiness.Observation, error) {
-	return FetchPullRequestReadiness(context.Background(), c, repo, number)
+func (c *Client) FetchPullRequestReadiness(ctx context.Context, repo string, number int) (*prreadiness.Observation, error) {
+	return FetchPullRequestReadiness(ctx, c, repo, number)
 }
 
 func (c *Client) GraphQL(ctx context.Context, query string, variables map[string]any) ([]byte, error) {
