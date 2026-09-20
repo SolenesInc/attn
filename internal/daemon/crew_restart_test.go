@@ -527,6 +527,109 @@ func TestCrewRestart_APendingRestartWhoseDayExitedWakesTheSuccessor(t *testing.T
 	}
 }
 
+func TestCrewRestart_DeleteWorktreeProtocolResumesAPendingRestartAfterClosingItsDay(t *testing.T) {
+	for _, state := range []crew.RestartState{crew.RestartQueued, crew.RestartRequested} {
+		t.Run(string(state), func(t *testing.T) {
+			d, backend, _ := newWakeableDaemon(t)
+			woken, err := d.crewWake("alder", "")
+			if err != nil {
+				t.Fatalf("wake: %v", err)
+			}
+			deletedPath := filepath.Join(t.TempDir(), "deleted-worktree")
+			session := d.store.Get(woken.SessionID)
+			session.Directory = deletedPath
+			d.store.Add(session)
+			if _, err := setCrewRestart(d, "alder", &crew.Restart{RequestID: "deleted-day", SessionID: woken.SessionID, State: state}); err != nil {
+				t.Fatalf("seed pending restart: %v", err)
+			}
+			leaseFree := make(chan bool, 1)
+			d.crewWakeAfterClaimHook = func(_, _ string) {
+				available := d.worktreeMaintenance.gate.TryLock()
+				if available {
+					d.worktreeMaintenance.gate.Unlock()
+				}
+				leaseFree <- available
+			}
+
+			response := gardenCall(t, func(conn net.Conn) {
+				d.handleDeleteWorktree(conn, &protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: deletedPath})
+			})
+			if !response.Ok {
+				t.Fatalf("delete worktree: %v", protocol.Deref(response.Error))
+			}
+			select {
+			case available := <-leaseFree:
+				if !available {
+					t.Fatal("successor wake still holds the worktree deletion lease")
+				}
+			default:
+				t.Fatal("worktree deletion returned without waking a successor")
+			}
+
+			member := memberByID(t, crewList(t, d), "alder")
+			if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateCompleted || member.Restart.RequestID != "deleted-day" {
+				t.Fatalf("restart after worktree deletion = %+v, want completed", member.Restart)
+			}
+			successor := protocol.Deref(member.BindingSession)
+			if successor == "" || successor == woken.SessionID || protocol.Deref(member.Restart.SuccessorSessionID) != successor {
+				t.Fatalf("binding/successor = %q/%q, want a fresh day", successor, protocol.Deref(member.Restart.SuccessorSessionID))
+			}
+			if d.store.Get(woken.SessionID) != nil {
+				t.Fatalf("deleted worktree session %s remains open", woken.SessionID)
+			}
+			if len(spawnedSessions(t, backend)) != 2 {
+				t.Fatalf("spawns = %d, want the wake and the successor", len(spawnedSessions(t, backend)))
+			}
+		})
+	}
+}
+
+func TestCrewRestart_DeleteWorktreeProtocolPersistsASuccessorLaunchFailure(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	deletedPath := filepath.Join(t.TempDir(), "deleted-worktree")
+	session := d.store.Get(woken.SessionID)
+	session.Directory = deletedPath
+	d.store.Add(session)
+	if _, err := d.updateCrewMember("alder", func(member *crew.Member) (bool, error) {
+		member.CWD = deletedPath
+		member.Restart = &crew.Restart{RequestID: "deleted-cwd", SessionID: woken.SessionID, State: crew.RestartQueued}
+		return true, nil
+	}); err != nil {
+		t.Fatalf("seed deleted cwd and pending restart: %v", err)
+	}
+	backend.mu.Lock()
+	backend.spawnErr = errors.New("chdir deleted-worktree: no such file or directory")
+	backend.mu.Unlock()
+
+	response := gardenCall(t, func(conn net.Conn) {
+		d.handleDeleteWorktree(conn, &protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: deletedPath})
+	})
+	if !response.Ok {
+		t.Fatalf("delete worktree: %v", protocol.Deref(response.Error))
+	}
+
+	member := memberByID(t, crewList(t, d), "alder")
+	if member.Restart == nil || member.Restart.State != protocol.CrewRestartStateFailed ||
+		!strings.Contains(protocol.Deref(member.Restart.Error), "no such file or directory") {
+		t.Fatalf("restart after deleted cwd = %+v, want durable launch failure", member.Restart)
+	}
+	if member.BindingSession != nil {
+		t.Fatalf("failed successor retained binding %q", *member.BindingSession)
+	}
+	spawns := len(spawnedSessions(t, backend))
+	replay := crewRestartCall(t, d, "alder", "deleted-cwd")
+	if !replay.Ok || replay.CrewRestartResult.Restart.State != protocol.CrewRestartStateFailed {
+		t.Fatalf("failed restart replay = %+v", replay)
+	}
+	if got := len(spawnedSessions(t, backend)); got != spawns {
+		t.Fatalf("failed restart replay spawned again: before=%d after=%d", spawns, got)
+	}
+}
+
 func setCrewRestart(d *Daemon, memberID string, restart *crew.Restart) (crew.Member, error) {
 	return d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
 		copy := *restart
