@@ -139,14 +139,15 @@ func TestPRWaitCursorRoundTripsCanonicalState(t *testing.T) {
 	saved := prWaitCursor{Cursor: prreadiness.Cursor{
 		Initialized: true, Reviewer: "reviewer", HeadSHA: "head",
 		SignalBaselineIDs: []string{"signal"}, SeenCommentIDs: []string{"comment"},
-		SeenVerdictIDs: []string{"verdict"}, LastActionKey: "action",
+		DeliveredFeedbackIDs: []string{"feedback"}, SeenVerdictIDs: []string{"verdict"}, LastActionKey: "action",
 	}}
 	if err := savePRWaitCursor(dir, opts, saved, time.Unix(10, 0)); err != nil {
 		t.Fatal(err)
 	}
 	loaded, err := loadPRWaitCursor(dir, opts)
 	if err != nil || loaded.HeadSHA != "head" || loaded.LastActionKey != "action" ||
-		strings.Join(loaded.SeenCommentIDs, ",") != "comment" {
+		strings.Join(loaded.SeenCommentIDs, ",") != "comment" ||
+		strings.Join(loaded.DeliveredFeedbackIDs, ",") != "feedback" {
 		t.Fatalf("loaded = %+v, err=%v", loaded, err)
 	}
 	data, err := os.ReadFile(cursorPath(dir, opts))

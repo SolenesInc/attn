@@ -8,14 +8,15 @@ import (
 )
 
 type Cursor struct {
-	Initialized       bool     `json:"initialized,omitempty"`
-	Reviewer          string   `json:"reviewer,omitempty"`
-	HeadSHA           string   `json:"head_sha,omitempty"`
-	SignalBaselineIDs []string `json:"signal_baseline_ids,omitempty"`
-	SeenCommentIDs    []string `json:"seen_comment_ids,omitempty"`
-	SeenVerdictIDs    []string `json:"seen_verdict_ids,omitempty"`
-	LastActionKey     string   `json:"last_action_key,omitempty"`
-	ActionGeneration  uint64   `json:"action_generation,omitempty"`
+	Initialized          bool     `json:"initialized,omitempty"`
+	Reviewer             string   `json:"reviewer,omitempty"`
+	HeadSHA              string   `json:"head_sha,omitempty"`
+	SignalBaselineIDs    []string `json:"signal_baseline_ids,omitempty"`
+	SeenCommentIDs       []string `json:"seen_comment_ids,omitempty"`
+	DeliveredFeedbackIDs []string `json:"delivered_feedback_ids,omitempty"`
+	SeenVerdictIDs       []string `json:"seen_verdict_ids,omitempty"`
+	LastActionKey        string   `json:"last_action_key,omitempty"`
+	ActionGeneration     uint64   `json:"action_generation,omitempty"`
 }
 
 type StartPolicy struct {
@@ -76,7 +77,10 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 	if first {
 		baseline = Cursor{SeenCommentIDs: baselineCommentIDs(observation.Comments, policy.Since)}
 	} else if reviewerChanged {
-		baseline = Cursor{SeenCommentIDs: append([]string(nil), previous.SeenCommentIDs...)}
+		baseline = Cursor{
+			SeenCommentIDs:       append([]string(nil), previous.SeenCommentIDs...),
+			DeliveredFeedbackIDs: append([]string(nil), previous.DeliveredFeedbackIDs...),
+		}
 	}
 	baseline.Initialized = true
 	baseline.Reviewer = reviewer
@@ -89,17 +93,19 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		baseline.SeenVerdictIDs = VerdictSignalIDs(observation, reviewer, startCutoff)
 	}
 	baseline.SeenCommentIDs = uniqueSorted(baseline.SeenCommentIDs)
+	baseline.DeliveredFeedbackIDs = uniqueSorted(baseline.DeliveredFeedbackIDs)
 	baseline.SeenVerdictIDs = uniqueSorted(baseline.SeenVerdictIDs)
 
 	evaluation := Evaluate(observation, reviewer, baseline.SignalBaselineIDs)
 	next := cloneCursor(baseline)
 	events := feedbackEvents(observation, reviewer, baseline.SeenCommentIDs, policy)
-	durableFeedback := make(map[string]bool)
+	durableFeedback := stringSet(baseline.DeliveredFeedbackIDs)
 	for _, event := range events {
 		for _, comment := range event.Comments {
 			next.SeenCommentIDs = append(next.SeenCommentIDs, comment.ID)
 			if !comment.Bot {
 				durableFeedback[comment.ID] = true
+				next.DeliveredFeedbackIDs = append(next.DeliveredFeedbackIDs, comment.ID)
 			}
 		}
 	}
@@ -131,6 +137,7 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		next.SeenVerdictIDs = append(next.SeenVerdictIDs, evaluation.SignalID)
 	}
 	next.SeenCommentIDs = uniqueSorted(next.SeenCommentIDs)
+	next.DeliveredFeedbackIDs = uniqueSorted(next.DeliveredFeedbackIDs)
 	next.SeenVerdictIDs = uniqueSorted(next.SeenVerdictIDs)
 
 	return Transition{
@@ -142,6 +149,7 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 func cloneCursor(cursor Cursor) Cursor {
 	cursor.SignalBaselineIDs = append([]string(nil), cursor.SignalBaselineIDs...)
 	cursor.SeenCommentIDs = append([]string(nil), cursor.SeenCommentIDs...)
+	cursor.DeliveredFeedbackIDs = append([]string(nil), cursor.DeliveredFeedbackIDs...)
 	cursor.SeenVerdictIDs = append([]string(nil), cursor.SeenVerdictIDs...)
 	return cursor
 }

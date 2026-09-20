@@ -206,6 +206,10 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				if !has(got.Events, OutcomeHumanComment) || !has(got.Events, OutcomeChangesRequested) {
 					t.Fatalf("transition = %+v", got)
 				}
+				unchanged := Advance(got.NextCursor, observation, "reviewer", StartPolicy{EmitReviewerVerdictFeedback: true})
+				if len(unchanged.Events) != 0 || !slices.Contains(unchanged.NextCursor.DeliveredFeedbackIDs, "inline") {
+					t.Fatalf("delivered feedback changed unchanged poll: %+v", unchanged)
+				}
 			},
 		},
 		{
