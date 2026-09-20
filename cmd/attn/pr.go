@@ -671,7 +671,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 		last = observation
 		if cursor.SignalHead != observation.HeadSHA || !cursor.Initialized {
 			cursor.SignalHead = observation.HeadSHA
-			cursor.SignalIDs = prreadiness.UnscopedSignalIDs(observation.evidence, opts.Reviewer)
+			cursor.SignalIDs = prreadiness.UnscopedSignalIDs(observation.evidence, opts.Reviewer, opts.Since)
 		}
 		if observation.evidence.HeadSHA != "" {
 			evaluation := prreadiness.Evaluate(observation.evidence, opts.Reviewer, cursor.SignalIDs)

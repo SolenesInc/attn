@@ -476,7 +476,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 		evidence := readiness.Evidence
 		signalBaselineIDs := watch.SignalBaselineIDs
 		if watch.LastHeadSHA != readiness.Snapshot.HeadSHA {
-			signalBaselineIDs = prreadiness.UnscopedSignalIDs(evidence, watch.Reviewer)
+			signalBaselineIDs = prreadiness.UnscopedSignalIDs(evidence, watch.Reviewer, time.Time{})
 			_, feedbackBaselineIDs := pullRequestWatchFeedback(evidence, watch)
 			changed, err := d.store.BeginPullRequestWatchHead(
 				watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA,

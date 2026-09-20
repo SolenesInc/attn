@@ -949,6 +949,25 @@ func TestWaitForPRActionableSinceReplaysByTime(t *testing.T) {
 	}
 }
 
+func TestWaitForPRActionableSinceReplaysReactionByTime(t *testing.T) {
+	head := strings.Repeat("e", 40)
+	observation := readinessObservation("12", head, checksGreen, "waiting")
+	observation.evidence = prreadiness.Evidence{
+		State: "open", MergeableState: "clean", HeadSHA: head, CheckState: prreadiness.ChecksGreen,
+		Reactions: []prreadiness.Reaction{
+			{ID: "old", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Unix(100, 0)},
+			{ID: "recent", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Unix(300, 0)},
+		},
+	}
+	opts := prWaitOptions{Reviewer: "chatgpt-codex-connector[bot]", Since: time.Unix(200, 0)}
+	result, err := waitForPRActionable(
+		context.Background(), &fakeReadinessSource{results: []*prReadiness{observation}}, opts, prWaitCursor{}, &bytes.Buffer{},
+	)
+	if err != nil || result.Outcome != outcomeApproved || result.Observation.ReviewSignalID != "recent" {
+		t.Fatalf("post-since reaction was not replayed: %+v, %v", result, err)
+	}
+}
+
 type snapshotSource struct {
 	payloads [][]byte
 	calls    int

@@ -57,7 +57,7 @@ func TestEvaluateCodexReactionNeedsCurrentCycle(t *testing.T) {
 		{ID: "eyes", Author: "chatgpt-codex-connector", Content: "EYES", CreatedAt: headAt.Add(time.Minute)},
 		{ID: "old", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: headAt.Add(time.Minute)},
 	}
-	baseline := UnscopedSignalIDs(evidence, "chatgpt-codex-connector[bot]")
+	baseline := UnscopedSignalIDs(evidence, "chatgpt-codex-connector[bot]", time.Time{})
 	if got := Evaluate(evidence, "chatgpt-codex-connector[bot]", baseline); got.Ready {
 		t.Fatalf("baselined thumbs-up passed: %+v", got)
 	}

@@ -219,15 +219,17 @@ func (signal verdictSignal) laterThan(current verdictSignal, found bool) bool {
 	return signal.ID > current.ID
 }
 
-func UnscopedSignalIDs(evidence Evidence, reviewer string) []string {
+func UnscopedSignalIDs(evidence Evidence, reviewer string, cutoff time.Time) []string {
 	var ids []string
 	for _, reaction := range evidence.Reactions {
-		if reaction.ID != "" && sameActor(reaction.Author, reviewer) && strings.EqualFold(reaction.Content, "THUMBS_UP") {
+		if reaction.ID != "" && (cutoff.IsZero() || !reaction.CreatedAt.After(cutoff)) &&
+			sameActor(reaction.Author, reviewer) && strings.EqualFold(reaction.Content, "THUMBS_UP") {
 			ids = append(ids, reaction.ID)
 		}
 	}
 	for _, comment := range evidence.Comments {
-		if comment.ID != "" && eligibleOutageComment(comment, reviewer) && unavailableReason(comment.Body) != "" {
+		if comment.ID != "" && (cutoff.IsZero() || !comment.CreatedAt.After(cutoff)) &&
+			eligibleOutageComment(comment, reviewer) && unavailableReason(comment.Body) != "" {
 			ids = append(ids, comment.ID)
 		}
 	}
