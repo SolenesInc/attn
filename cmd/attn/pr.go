@@ -153,7 +153,7 @@ type prReadiness struct {
 	Comments                                                  []prComment
 	ReviewerRequested                                         bool
 	ReviewSubmittedAt                                         time.Time
-	LatestReviewAt                                            time.Time
+	ReviewSignalID                                            string
 	ReviewBody                                                string
 	URL                                                       string
 	evidence                                                  prreadiness.Evidence
@@ -564,7 +564,7 @@ query($owner:String!,$name:String!,$number:Int!){
       reviews(last:100){pageInfo{hasPreviousPage} nodes{id state bodyText submittedAt author{__typename login} commit{oid}
 		comments(first:100){pageInfo{hasNextPage} nodes{id createdAt bodyText path line originalLine author{__typename login}}}}}
 	  comments(last:100){pageInfo{hasPreviousPage} nodes{id createdAt bodyText author{__typename login}}}
-	  reactions(first:100){pageInfo{hasNextPage} nodes{content createdAt user{login}}}
+	  reactions(first:100){pageInfo{hasNextPage} nodes{id content createdAt user{login}}}
 	  reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved comments(first:1){
 		nodes{id bodyText path line originalLine author{__typename login}
 		  pullRequestReview{commit{oid}}}
@@ -615,11 +615,6 @@ func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
 		result.Checks = append(result.Checks, prCheck{Name: check.Name, State: check.State, URL: check.URL})
 	}
 	sort.Slice(result.Checks, func(i, j int) bool { return result.Checks[i].Name < result.Checks[j].Name })
-	for _, review := range readiness.Evidence.Reviews {
-		if samePRReviewer(review.Author, opts.Reviewer) && review.SubmittedAt.After(result.LatestReviewAt) {
-			result.LatestReviewAt = review.SubmittedAt
-		}
-	}
 	for _, comment := range readiness.Comments {
 		if comment.ID == "" || opts.ignored(comment.Author) ||
 			(comment.Kind == "review" && isTrackedReviewerVerdict(comment.Author, comment.ReviewState, opts)) {
@@ -630,10 +625,11 @@ func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
 			CreatedAt: comment.CreatedAt, Body: strings.TrimSpace(comment.Body), Location: comment.Location,
 		})
 	}
-	evaluation := prreadiness.Evaluate(result.evidence, opts.Reviewer)
+	evaluation := prreadiness.Evaluate(result.evidence, opts.Reviewer, nil)
 	result.ReviewState = evaluation.ReviewState
 	result.ReviewBody = evaluation.ReviewBody
 	result.ReviewSubmittedAt = evaluation.ReviewSubmitted
+	result.ReviewSignalID = evaluation.SignalID
 	sort.Slice(result.Comments, func(i, j int) bool {
 		return result.Comments[i].CreatedAt.Before(result.Comments[j].CreatedAt)
 	})
@@ -650,20 +646,21 @@ type prWaitResult struct {
 func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prWaitOptions, cursor prWaitCursor, progress io.Writer) (prWaitResult, error) {
 	var lastLine, lastHead string
 	var baseline map[string]bool
-	var reviewBaseline time.Time
+	var verdictBaseline map[string]bool
 	var notedStaleVerdict bool
 	last := &prReadiness{Number: strconv.Itoa(opts.Number), Reviewer: opts.Reviewer, CheckState: checksNone, ReviewState: "waiting"}
 	if !opts.Since.IsZero() {
-		cursor = prWaitCursor{VerdictAt: opts.Since}
+		cursor = prWaitCursor{Reviewer: opts.Reviewer, Initialized: true}
 		baseline = map[string]bool{}
-		reviewBaseline = opts.Since
-	} else if !cursor.empty() {
+		verdictBaseline = map[string]bool{}
+	} else if cursor.Initialized && samePRReviewer(cursor.Reviewer, opts.Reviewer) {
 		baseline = cursor.seenComments()
-		reviewBaseline = cursor.VerdictAt
+		verdictBaseline = cursor.seenVerdicts()
+	} else {
+		cursor = prWaitCursor{Reviewer: opts.Reviewer}
 	}
 
 	for {
-		now := time.Now()
 		observation, err := source.Fetch(ctx, opts)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -672,16 +669,16 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			return prWaitResult{Observation: last}, err
 		}
 		last = observation
-		if cursor.ReactionHead != observation.HeadSHA || cursor.ReactionAfter.IsZero() {
-			cursor.ReactionHead = observation.HeadSHA
-			cursor.ReactionAfter = now
+		if cursor.SignalHead != observation.HeadSHA || !cursor.Initialized {
+			cursor.SignalHead = observation.HeadSHA
+			cursor.SignalIDs = prreadiness.UnscopedSignalIDs(observation.evidence, opts.Reviewer)
 		}
 		if observation.evidence.HeadSHA != "" {
-			observation.evidence.HeadObservedAt = cursor.ReactionAfter
-			evaluation := prreadiness.Evaluate(observation.evidence, opts.Reviewer)
+			evaluation := prreadiness.Evaluate(observation.evidence, opts.Reviewer, cursor.SignalIDs)
 			observation.ReviewState = evaluation.ReviewState
 			observation.ReviewBody = evaluation.ReviewBody
 			observation.ReviewSubmittedAt = evaluation.ReviewSubmitted
+			observation.ReviewSignalID = evaluation.SignalID
 		}
 
 		if lastHead != "" && lastHead != observation.HeadSHA {
@@ -700,14 +697,19 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 				baseline[comment.ID] = true
 			}
 			cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
-			reviewBaseline = observation.LatestReviewAt
-			cursor.VerdictAt = reviewBaseline
+			cursor.VerdictIDs = prreadiness.VerdictSignalIDs(observation.evidence, opts.Reviewer)
+			if observation.ReviewSignalID != "" && !cursor.seenVerdicts()[observation.ReviewSignalID] {
+				cursor.VerdictIDs = append(cursor.VerdictIDs, observation.ReviewSignalID)
+				sort.Strings(cursor.VerdictIDs)
+			}
+			verdictBaseline = cursor.seenVerdicts()
+			cursor.Initialized = true
 			observation.Comments = nil
 		} else {
 			observation.Comments = unseenPRComments(observation.Comments, baseline, opts.Since)
 		}
 
-		if !notedStaleVerdict && hasReviewVerdict(observation) && !freshReviewVerdict(observation, reviewBaseline) {
+		if !notedStaleVerdict && hasReviewVerdict(observation) && !freshReviewVerdict(observation, verdictBaseline, opts.Since) {
 			fmt.Fprintf(progress, "%s %s predates the pending re-review request; waiting for a new review\n",
 				observation.Reviewer, observation.ReviewState)
 			notedStaleVerdict = true
@@ -720,7 +722,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 		if observation.CheckState == checksFailed && !cursor.sameFailure(observation.HeadSHA, observation.Checks) {
 			events = append(events, outcomeChecksFailed)
 		}
-		if freshReviewVerdict(observation, reviewBaseline) {
+		if freshReviewVerdict(observation, verdictBaseline, opts.Since) {
 			switch {
 			case observation.ReviewState == "changes_requested" || observation.ReviewState == prreadiness.ReviewUnresolved:
 				events = append(events, outcomeChangesRequested)
@@ -728,7 +730,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 				events = append(events, outcomeApproved)
 			}
 		}
-		if observation.ReviewState == prreadiness.ReviewUnavailable && observation.ReviewSubmittedAt.After(reviewBaseline) {
+		if observation.ReviewState == prreadiness.ReviewUnavailable && freshReviewUpdate(observation, verdictBaseline, opts.Since) {
 			events = append(events, outcomeReviewUnavailable)
 		}
 		if len(humanPRComments(observation.Comments)) > 0 {
@@ -752,11 +754,21 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 	}
 }
 
-func freshReviewVerdict(observation *prReadiness, baseline time.Time) bool {
+func freshReviewVerdict(observation *prReadiness, baseline map[string]bool, since time.Time) bool {
 	if !observation.ReviewerRequested {
 		return true
 	}
-	return observation.ReviewSubmittedAt.After(baseline)
+	if !since.IsZero() {
+		return observation.ReviewSubmittedAt.After(since)
+	}
+	return observation.ReviewSignalID != "" && !baseline[observation.ReviewSignalID]
+}
+
+func freshReviewUpdate(observation *prReadiness, baseline map[string]bool, since time.Time) bool {
+	if !since.IsZero() {
+		return observation.ReviewSubmittedAt.After(since)
+	}
+	return observation.ReviewSignalID != "" && !baseline[observation.ReviewSignalID]
 }
 
 func unseenPRComments(comments []prComment, baseline map[string]bool, since time.Time) []prComment {
@@ -790,7 +802,10 @@ func advancePRWaitCursor(cursor prWaitCursor, observation *prReadiness, events [
 		cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
 	}
 	if reported[outcomeApproved] || reported[outcomeChangesRequested] || reported[outcomeReviewUnavailable] {
-		cursor.VerdictAt = observation.ReviewSubmittedAt
+		if observation.ReviewSignalID != "" && !cursor.seenVerdicts()[observation.ReviewSignalID] {
+			cursor.VerdictIDs = append(cursor.VerdictIDs, observation.ReviewSignalID)
+			sort.Strings(cursor.VerdictIDs)
+		}
 	}
 	if reported[outcomeChecksFailed] {
 		cursor.FailureHead = observation.HeadSHA

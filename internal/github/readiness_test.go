@@ -30,6 +30,9 @@ func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
 	payload := strings.Replace(string(readinessPayload("")),
 		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
 		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"inline","bodyText":"Check this guard","path":"watch.go","line":42,"author":{"__typename":"User","login":"human"}}]}`, 1)
+	payload = strings.Replace(payload,
+		`"reactions":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
+		`"reactions":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"reaction","content":"THUMBS_UP","createdAt":"2026-09-19T09:00:00Z","user":{"login":"chatgpt-codex-connector"}}]}`, 1)
 	result, err := ParsePullRequestReadiness([]byte(payload))
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
@@ -37,11 +40,16 @@ func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
 	if result.Snapshot.HeadSHA != "abcdef1234567890" || result.Evidence.CheckState != prreadiness.ChecksGreen {
 		t.Fatalf("result = %+v", result)
 	}
-	if got := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]"); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
+	if got := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]", nil); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
 		t.Fatalf("evaluation = %+v", got)
 	}
-	if len(result.Evidence.Comments) != 2 || result.Evidence.Comments[1].Location != "watch.go:42" || result.Evidence.Comments[1].Bot {
+	if len(result.Evidence.Comments) != 2 || result.Evidence.Comments[0].Kind != prreadiness.CommentReview ||
+		result.Evidence.Comments[1].Kind != prreadiness.CommentInline ||
+		result.Evidence.Comments[1].Location != "watch.go:42" || result.Evidence.Comments[1].Bot {
 		t.Fatalf("human inline evidence lost context: %+v", result.Evidence.Comments)
+	}
+	if len(result.Evidence.Reactions) != 1 || result.Evidence.Reactions[0].ID != "reaction" {
+		t.Fatalf("reaction identity was not retained: %+v", result.Evidence.Reactions)
 	}
 }
 
@@ -115,7 +123,7 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluation := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]")
+	evaluation := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]", nil)
 	if calls.Load() != 2 || len(result.Evidence.Reviews) != 2 || !evaluation.Ready {
 		t.Fatalf("calls = %d, reviews = %d, evaluation = %+v", calls.Load(), len(result.Evidence.Reviews), evaluation)
 	}

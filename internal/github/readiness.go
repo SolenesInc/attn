@@ -86,6 +86,7 @@ type readinessCheck struct {
 }
 
 type readinessReaction struct {
+	ID        string    `json:"id"`
 	Content   string    `json:"content"`
 	CreatedAt time.Time `json:"createdAt"`
 	User      struct {
@@ -182,7 +183,7 @@ query($owner:String!,$name:String!,$number:Int!,$checkCursor:String,$reviewCurso
     reviews(first:100,after:$reviewCursor){pageInfo{hasNextPage endCursor} nodes{id state bodyText submittedAt author{__typename login} commit{oid}
       comments(first:100){pageInfo{hasNextPage endCursor} nodes{id bodyText createdAt path line originalLine author{__typename login}}}}}
     comments(first:100,after:$commentCursor){pageInfo{hasNextPage endCursor} nodes{id bodyText createdAt author{__typename login}}}
-    reactions(first:100,after:$reactionCursor){pageInfo{hasNextPage endCursor} nodes{content createdAt user{login}}}
+		reactions(first:100,after:$reactionCursor){pageInfo{hasNextPage endCursor} nodes{id content createdAt user{login}}}
     reviewThreads(first:100,after:$threadCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved comments(first:1){
       nodes{id bodyText createdAt path line originalLine author{__typename login}}
     }}}
@@ -442,6 +443,7 @@ func buildPullRequestReadiness(pr *readinessPullRequest) *PullRequestReadiness {
 	addComment := func(comment readinessComment, kind, reviewState string) {
 		item := prreadiness.Comment{
 			ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText,
+			Kind:      kind,
 			Location:  comment.location(),
 			CreatedAt: comment.CreatedAt, Bot: comment.Author.TypeName != "User",
 		}
@@ -471,7 +473,7 @@ func buildPullRequestReadiness(pr *readinessPullRequest) *PullRequestReadiness {
 	}
 	for _, reaction := range pr.Reactions.Nodes {
 		evidence.Reactions = append(evidence.Reactions, prreadiness.Reaction{
-			Author: reaction.User.Login, Content: reaction.Content, CreatedAt: reaction.CreatedAt,
+			ID: reaction.ID, Author: reaction.User.Login, Content: reaction.Content, CreatedAt: reaction.CreatedAt,
 		})
 	}
 	for _, thread := range pr.ReviewThreads.Nodes {

@@ -137,7 +137,6 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			continue
 		}
 
-		observedAt := time.Now()
 		status, readiness, err := d.fetchSessionPullRequestStatus(host, group)
 		if err != nil {
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
@@ -164,7 +163,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			d.logf("session pull requests: store status for %s: %v", group.prID, updateErr)
 			continue
 		}
-		changedSessions = append(changedSessions, d.processPullRequestWatches(group, readiness, observedAt)...)
+		changedSessions = append(changedSessions, d.processPullRequestWatches(group, readiness, now)...)
 		if status == group.previous {
 			continue
 		}
@@ -475,18 +474,34 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			}
 		}
 		evidence := readiness.Evidence
-		evidence.HeadObservedAt = pullRequestWatchHeadObservedAt(watch, readiness.Snapshot.HeadSHA, now)
-		evaluation := prreadiness.Evaluate(evidence, watch.Reviewer)
-		if err := d.store.UpdateSessionPullRequestReviewStatus(watch.SessionID, watch.PRID, evaluation.ReviewState); err != nil {
-			d.logf("session pull requests: store review status for %s/%s: %v", watch.SessionID, watch.PRID, err)
-		}
-		if watch.LastHeadSHA != "" && watch.LastHeadSHA != readiness.Snapshot.HeadSHA {
-			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
-				d.logf("pull request watch: invalidate stale inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
+		signalBaselineIDs := watch.SignalBaselineIDs
+		if watch.LastHeadSHA != readiness.Snapshot.HeadSHA {
+			signalBaselineIDs = prreadiness.UnscopedSignalIDs(evidence, watch.Reviewer)
+			_, feedbackBaselineIDs := pullRequestWatchFeedback(evidence, watch)
+			changed, err := d.store.BeginPullRequestWatchHead(
+				watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA,
+				pullRequestWatchCoalesceKey(watch.PRID), signalBaselineIDs, feedbackBaselineIDs, now,
+			)
+			if err != nil {
+				d.logf("pull request watch: begin head %s for %s/%s: %v", readiness.Snapshot.HeadSHA, watch.SessionID, watch.PRID, err)
+				continue
+			}
+			if !changed {
+				continue
+			}
+			watch.LastHeadSHA = readiness.Snapshot.HeadSHA
+			watch.SignalBaselineIDs = signalBaselineIDs
+			watch.LastObservationKey = ""
+			if !watch.FeedbackBaselineSet {
+				watch.FeedbackBaselineSet = true
+				watch.FeedbackBaselineIDs = feedbackBaselineIDs
 			}
 			d.refreshAgentMailboxUnread(watch.SessionID)
 		}
-
+		evaluation := prreadiness.Evaluate(evidence, watch.Reviewer, signalBaselineIDs)
+		if err := d.store.UpdateSessionPullRequestReviewStatus(watch.SessionID, watch.PRID, evaluation.ReviewState); err != nil {
+			d.logf("session pull requests: store review status for %s/%s: %v", watch.SessionID, watch.PRID, err)
+		}
 		observation := pullRequestWatchAction(readiness, evaluation, watch)
 		if err := d.notifyPullRequestWatchFeedback(watch, observation.Comments, now); err != nil {
 			continue
@@ -503,7 +518,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			d.logf("pull request watch: clear inactive inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
 		if err := d.store.RecordPullRequestWatchSuccess(
-			watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA, key, observation.BaselineIDs, now,
+			watch.SessionID, watch.PRID, key, observation.BaselineIDs, now,
 		); err != nil {
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
@@ -516,17 +531,6 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 		changedSessions = append(changedSessions, watch.SessionID)
 	}
 	return changedSessions
-}
-
-func pullRequestWatchHeadObservedAt(watch store.PullRequestWatch, head string, now time.Time) time.Time {
-	if watch.LastHeadSHA != head || watch.HeadObservedAt == "" {
-		return now
-	}
-	at, err := time.Parse(time.RFC3339Nano, watch.HeadObservedAt)
-	if err != nil {
-		return now
-	}
-	return at
 }
 
 func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {
@@ -628,11 +632,10 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullReq
 		if comment.Bot || seenIDs[comment.ID] {
 			continue
 		}
-		if watch.FeedbackBaselineAt != "" {
+		if watch.FeedbackBaselineSet {
 			feedback = append(feedback, comment)
-		} else {
-			nextIDs = append(nextIDs, comment.ID)
 		}
+		nextIDs = append(nextIDs, comment.ID)
 		seenIDs[comment.ID] = true
 	}
 	sort.Strings(nextIDs)

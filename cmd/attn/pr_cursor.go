@@ -12,48 +12,33 @@ import (
 )
 
 type prWaitCursor struct {
-	CommentIDs    []string  `json:"comment_ids,omitempty"`
-	VerdictAt     time.Time `json:"verdict_at,omitempty"`
-	FailureHead   string    `json:"failure_head,omitempty"`
-	FailureChecks []string  `json:"failure_checks,omitempty"`
-	ReactionHead  string    `json:"reaction_head,omitempty"`
-	ReactionAfter time.Time `json:"reaction_after,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at,omitempty"`
-}
-
-func (c prWaitCursor) MarshalJSON() ([]byte, error) {
-	type payload struct {
-		CommentIDs    []string   `json:"comment_ids,omitempty"`
-		VerdictAt     *time.Time `json:"verdict_at,omitempty"`
-		FailureHead   string     `json:"failure_head,omitempty"`
-		FailureChecks []string   `json:"failure_checks,omitempty"`
-		ReactionHead  string     `json:"reaction_head,omitempty"`
-		ReactionAfter *time.Time `json:"reaction_after,omitempty"`
-		UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	}
-	out := payload{
-		CommentIDs: c.CommentIDs, FailureHead: c.FailureHead, FailureChecks: c.FailureChecks,
-		ReactionHead: c.ReactionHead,
-	}
-	if !c.ReactionAfter.IsZero() {
-		out.ReactionAfter = &c.ReactionAfter
-	}
-	if !c.VerdictAt.IsZero() {
-		out.VerdictAt = &c.VerdictAt
-	}
-	if !c.UpdatedAt.IsZero() {
-		out.UpdatedAt = &c.UpdatedAt
-	}
-	return json.Marshal(out)
+	CommentIDs    []string   `json:"comment_ids,omitempty"`
+	VerdictIDs    []string   `json:"verdict_ids,omitempty"`
+	FailureHead   string     `json:"failure_head,omitempty"`
+	FailureChecks []string   `json:"failure_checks,omitempty"`
+	SignalHead    string     `json:"signal_head,omitempty"`
+	SignalIDs     []string   `json:"signal_ids,omitempty"`
+	Reviewer      string     `json:"reviewer,omitempty"`
+	Initialized   bool       `json:"initialized,omitempty"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 }
 
 func (c prWaitCursor) empty() bool {
-	return len(c.CommentIDs) == 0 && c.VerdictAt.IsZero() && c.FailureHead == "" && c.ReactionHead == ""
+	return !c.Initialized && len(c.CommentIDs) == 0 && len(c.VerdictIDs) == 0 &&
+		c.FailureHead == "" && c.SignalHead == ""
+}
+
+func (c prWaitCursor) seenVerdicts() map[string]bool {
+	return stringSet(c.VerdictIDs)
 }
 
 func (c prWaitCursor) seenComments() map[string]bool {
-	seen := make(map[string]bool, len(c.CommentIDs))
-	for _, id := range c.CommentIDs {
+	return stringSet(c.CommentIDs)
+}
+
+func stringSet(ids []string) map[string]bool {
+	seen := make(map[string]bool, len(ids))
+	for _, id := range ids {
 		seen[id] = true
 	}
 	return seen
@@ -69,8 +54,6 @@ func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
 	sort.Strings(previous)
 	return strings.Join(names, "\n") == strings.Join(previous, "\n")
 }
-
-const prCursorFileLimit = 500
 
 const prCursorMaxAge = 30 * 24 * time.Hour
 
@@ -104,10 +87,7 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	if dir == "" {
 		return nil
 	}
-	if len(cursor.CommentIDs) > prCursorFileLimit {
-		cursor.CommentIDs = cursor.CommentIDs[len(cursor.CommentIDs)-prCursorFileLimit:]
-	}
-	cursor.UpdatedAt = now
+	cursor.UpdatedAt = &now
 	path := cursorPath(dir, opts)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err

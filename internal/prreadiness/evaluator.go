@@ -41,14 +41,22 @@ type Review struct {
 }
 
 type Reaction struct {
+	ID        string
 	Author    string
 	Content   string
 	CreatedAt time.Time
 }
 
+const (
+	CommentIssue  = "issue"
+	CommentReview = "review"
+	CommentInline = "inline"
+)
+
 type Comment struct {
 	ID        string
 	Author    string
+	Kind      string
 	Body      string
 	Location  string
 	CreatedAt time.Time
@@ -69,7 +77,6 @@ type Evidence struct {
 	Draft          bool
 	MergeableState string
 	HeadSHA        string
-	HeadObservedAt time.Time
 	CheckState     string
 	FailedChecks   []string
 	Reviews        []Review
@@ -85,102 +92,68 @@ type Evaluation struct {
 	Unresolved       []Finding
 	ReviewBody       string
 	ReviewSubmitted  time.Time
+	SignalID         string
 	UnavailableCause string
 }
 
 var reviewedCommitPattern = regexp.MustCompile(`(?i)reviewed\s+commit\s*[:*` + "`" + `\s]*([0-9a-f]{7,40})`)
 
-func Evaluate(evidence Evidence, reviewer string) Evaluation {
-	result := Evaluation{ReviewState: ReviewWaiting}
+type verdictSignal struct {
+	ID       string
+	State    string
+	Body     string
+	Cause    string
+	At       time.Time
+	Findings []Finding
+	priority int
+}
+
+func Evaluate(evidence Evidence, reviewer string, baselineIDs []string) Evaluation {
 	reviewer = strings.TrimSuffix(strings.TrimSpace(reviewer), "[bot]")
-
+	baseline := make(map[string]bool, len(baselineIDs))
+	for _, id := range baselineIDs {
+		baseline[id] = true
+	}
+	result := Evaluation{ReviewState: ReviewWaiting}
 	for _, thread := range evidence.Threads {
-		if thread.Resolved {
-			continue
-		}
-		result.Unresolved = append(result.Unresolved, Finding{
-			ID: thread.ID, Author: thread.Author, Body: thread.Body,
-			Location: thread.Location, Resolved: thread.Resolved,
-		})
-	}
-
-	var current *Review
-	for i := range evidence.Reviews {
-		review := &evidence.Reviews[i]
-		if !sameActor(review.Author, reviewer) || !reviewMatchesHead(*review, evidence.HeadSHA) {
-			continue
-		}
-		if !isCodexReviewer(reviewer) && strings.EqualFold(review.State, "COMMENTED") {
-			continue
-		}
-		if current == nil || review.SubmittedAt.After(current.SubmittedAt) {
-			current = review
+		if !thread.Resolved {
+			result.Unresolved = append(result.Unresolved, Finding{
+				ID: thread.ID, Author: thread.Author, Body: thread.Body,
+				Location: thread.Location, Resolved: thread.Resolved,
+			})
 		}
 	}
 
-	var latestSignal time.Time
-	if current != nil {
-		result.ReviewBody = strings.TrimSpace(current.Body)
-		result.ReviewSubmitted = current.SubmittedAt
-		latestSignal = current.SubmittedAt
-		if unavailableReason(current.Body) != "" {
-			result.ReviewState = ReviewUnavailable
-			result.UnavailableCause = unavailableReason(current.Body)
-		} else {
-			switch strings.ToUpper(strings.TrimSpace(current.State)) {
-			case "CHANGES_REQUESTED":
-				result.ReviewState = ReviewChangesRequested
-				result.Findings = append(result.Findings, current.Findings...)
-			case "APPROVED":
-				result.ReviewState = ReviewApproved
-			case "COMMENTED":
-				if !isCodexReviewer(reviewer) {
-					break
-				}
-				if len(current.Findings) == 0 {
-					result.ReviewState = ReviewApproved
-				} else {
-					result.ReviewState = ReviewChangesRequested
-					result.Findings = append(result.Findings, current.Findings...)
-				}
-			}
-		}
-	}
-
+	signal, found := latestReviewSignal(evidence, reviewer)
 	if isCodexReviewer(reviewer) {
 		for _, reaction := range evidence.Reactions {
-			if !sameActor(reaction.Author, reviewer) || !strings.EqualFold(reaction.Content, "THUMBS_UP") {
-				continue
+			candidate := verdictSignal{
+				ID: reaction.ID, State: ReviewApproved, At: reaction.CreatedAt, priority: 2,
 			}
-			if evidence.HeadObservedAt.IsZero() || reaction.CreatedAt.Before(evidence.HeadObservedAt) ||
-				!reaction.CreatedAt.After(latestSignal) {
-				continue
+			if candidate.ID != "" && !baseline[candidate.ID] && sameActor(reaction.Author, reviewer) &&
+				strings.EqualFold(reaction.Content, "THUMBS_UP") && candidate.laterThan(signal, found) {
+				signal, found = candidate, true
 			}
-			result.ReviewState = ReviewApproved
-			result.ReviewSubmitted = reaction.CreatedAt
-			result.ReviewBody = ""
-			result.Findings = nil
-			result.UnavailableCause = ""
-			latestSignal = reaction.CreatedAt
 		}
 	}
-
 	for _, comment := range evidence.Comments {
-		if !sameActor(comment.Author, reviewer) || evidence.HeadObservedAt.IsZero() ||
-			comment.CreatedAt.Before(evidence.HeadObservedAt) {
-			continue
+		reason := unavailableReason(comment.Body)
+		candidate := verdictSignal{
+			ID: comment.ID, State: ReviewUnavailable, Body: strings.TrimSpace(comment.Body),
+			Cause: reason, At: comment.CreatedAt, priority: 1,
 		}
-		if reason := unavailableReason(comment.Body); reason != "" {
-			if !comment.CreatedAt.After(latestSignal) {
-				continue
-			}
-			result.ReviewState = ReviewUnavailable
-			result.UnavailableCause = reason
-			result.ReviewSubmitted = comment.CreatedAt
-			result.ReviewBody = strings.TrimSpace(comment.Body)
-			result.Findings = nil
-			latestSignal = comment.CreatedAt
+		if candidate.ID != "" && reason != "" && !baseline[candidate.ID] &&
+			eligibleOutageComment(comment, reviewer) && candidate.laterThan(signal, found) {
+			signal, found = candidate, true
 		}
+	}
+	if found {
+		result.ReviewState = signal.State
+		result.ReviewBody = signal.Body
+		result.ReviewSubmitted = signal.At
+		result.SignalID = signal.ID
+		result.Findings = append(result.Findings, signal.Findings...)
+		result.UnavailableCause = signal.Cause
 	}
 
 	if len(result.Unresolved) > 0 && result.ReviewState == ReviewApproved {
@@ -191,6 +164,105 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 		evidence.CheckState == ChecksGreen && result.ReviewState == ReviewApproved &&
 		len(result.Unresolved) == 0
 	return result
+}
+
+func latestReviewSignal(evidence Evidence, reviewer string) (verdictSignal, bool) {
+	var latest Review
+	found := false
+	for _, review := range evidence.Reviews {
+		if !sameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) ||
+			!isCodexReviewer(reviewer) && strings.EqualFold(review.State, "COMMENTED") {
+			continue
+		}
+		if !found || review.SubmittedAt.After(latest.SubmittedAt) ||
+			review.SubmittedAt.Equal(latest.SubmittedAt) && review.ID > latest.ID {
+			latest, found = review, true
+		}
+	}
+	if !found {
+		return verdictSignal{}, false
+	}
+	return signalForReview(latest), true
+}
+
+func signalForReview(review Review) verdictSignal {
+	signal := verdictSignal{
+		ID: review.ID, State: ReviewWaiting, Body: strings.TrimSpace(review.Body),
+		At: review.SubmittedAt, priority: 3,
+	}
+	switch strings.ToUpper(strings.TrimSpace(review.State)) {
+	case "CHANGES_REQUESTED":
+		signal.State = ReviewChangesRequested
+		signal.Findings = review.Findings
+	case "APPROVED":
+		signal.State = ReviewApproved
+	case "COMMENTED":
+		if len(review.Findings) == 0 {
+			signal.State = ReviewApproved
+		} else {
+			signal.State, signal.Findings = ReviewChangesRequested, review.Findings
+		}
+	}
+	return signal
+}
+
+func (signal verdictSignal) laterThan(current verdictSignal, found bool) bool {
+	if !found || signal.At.After(current.At) {
+		return true
+	}
+	if !signal.At.Equal(current.At) {
+		return false
+	}
+	if signal.priority != current.priority {
+		return signal.priority > current.priority
+	}
+	return signal.ID > current.ID
+}
+
+func UnscopedSignalIDs(evidence Evidence, reviewer string) []string {
+	var ids []string
+	for _, reaction := range evidence.Reactions {
+		if reaction.ID != "" && sameActor(reaction.Author, reviewer) && strings.EqualFold(reaction.Content, "THUMBS_UP") {
+			ids = append(ids, reaction.ID)
+		}
+	}
+	for _, comment := range evidence.Comments {
+		if comment.ID != "" && eligibleOutageComment(comment, reviewer) && unavailableReason(comment.Body) != "" {
+			ids = append(ids, comment.ID)
+		}
+	}
+	return uniqueSorted(ids)
+}
+
+func VerdictSignalIDs(evidence Evidence, reviewer string) []string {
+	var ids []string
+	for _, review := range evidence.Reviews {
+		if review.ID == "" || !sameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) {
+			continue
+		}
+		state := strings.ToUpper(strings.TrimSpace(review.State))
+		if state == "APPROVED" || state == "CHANGES_REQUESTED" || state == "COMMENTED" && isCodexReviewer(reviewer) {
+			ids = append(ids, review.ID)
+		}
+	}
+	return uniqueSorted(ids)
+}
+
+func eligibleOutageComment(comment Comment, reviewer string) bool {
+	return isCodexReviewer(reviewer) && comment.Bot && comment.Kind == CommentIssue && sameActor(comment.Author, reviewer)
+}
+
+func uniqueSorted(ids []string) []string {
+	seen := make(map[string]bool, len(ids))
+	unique := ids[:0]
+	for _, id := range ids {
+		if !seen[id] {
+			seen[id] = true
+			unique = append(unique, id)
+		}
+	}
+	sort.Strings(unique)
+	return unique
 }
 
 func isCodexReviewer(reviewer string) bool {

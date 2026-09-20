@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"time"
+
+	"github.com/victorarias/attn/internal/agentmailbox"
 )
 
 type PullRequestWatch struct {
@@ -13,18 +15,18 @@ type PullRequestWatch struct {
 	Reviewer            string
 	CreatedAt           string
 	LastHeadSHA         string
-	HeadObservedAt      string
+	SignalBaselineIDs   []string
 	LastObservationKey  string
 	LastSuccessAt       string
 	LastError           string
 	ErrorSince          string
 	FailureCount        int
-	FeedbackBaselineAt  string
+	FeedbackBaselineSet bool
 	FeedbackBaselineIDs []string
 }
 
 const pullRequestWatchColumns = `session_id, pr_id, reviewer, created_at,
-	last_head_sha, head_observed_at, last_observation_key, last_success_at, last_error, error_since, failure_count,
+	last_head_sha, signal_baseline_ids, last_observation_key, last_success_at, last_error, error_since, failure_count,
 	feedback_seen_at, feedback_seen_ids`
 
 func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time) (bool, error) {
@@ -53,7 +55,7 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 			reviewer = excluded.reviewer,
 			created_at = excluded.created_at,
 			last_head_sha = '',
-			head_observed_at = '',
+			signal_baseline_ids = '[]',
 			last_observation_key = '',
 			last_success_at = '',
 			last_error = '',
@@ -124,25 +126,79 @@ func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool
 	return watch, err == nil
 }
 
+func (s *Store) BeginPullRequestWatchHead(
+	sessionID, prID, headSHA, coalesceKey string, signalBaselineIDs, feedbackBaselineIDs []string, at time.Time,
+) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	signalBaselineJSON, err := json.Marshal(signalBaselineIDs)
+	if err != nil {
+		return false, err
+	}
+	feedbackBaselineJSON, err := json.Marshal(feedbackBaselineIDs)
+	if err != nil {
+		return false, err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	var currentHead string
+	if err := tx.QueryRow(`
+		SELECT last_head_sha FROM pull_request_watches WHERE session_id = ? AND pr_id = ?
+	`, sessionID, prID).Scan(&currentHead); err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, err
+	}
+	if currentHead == headSHA {
+		return false, nil
+	}
+	if _, err := tx.Exec(`
+		DELETE FROM agent_mailbox_items
+		WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
+	`, sessionID, agentmailbox.KindMaintenancePrompt, coalesceKey); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`
+		UPDATE pull_request_watches
+		SET last_head_sha = ?, signal_baseline_ids = ?, last_observation_key = '',
+		    feedback_seen_at = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_at END,
+		    feedback_seen_ids = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_ids END
+		WHERE session_id = ? AND pr_id = ?
+	`, headSHA, string(signalBaselineJSON), at.UTC().Format(sortableTimeFormat),
+		string(feedbackBaselineJSON), sessionID, prID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`
+		UPDATE session_pull_requests SET review_status = 'waiting'
+		WHERE session_id = ? AND pr_id = ?
+	`, sessionID, prID); err != nil {
+		return false, err
+	}
+	return true, tx.Commit()
+}
+
 func (s *Store) RecordPullRequestWatchSuccess(
-	sessionID, prID, headSHA, observationKey string, baselineIDs []string, at time.Time,
+	sessionID, prID, observationKey string, feedbackBaselineIDs []string, at time.Time,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	baselineIDsJSON, err := json.Marshal(baselineIDs)
+	feedbackBaselineJSON, err := json.Marshal(feedbackBaselineIDs)
 	if err != nil {
 		return err
 	}
 	_, err = s.db.Exec(`
 		UPDATE pull_request_watches
-		SET head_observed_at = CASE WHEN last_head_sha != ? OR head_observed_at = '' THEN ? ELSE head_observed_at END,
-		    last_head_sha = ?, last_observation_key = ?, last_success_at = ?,
+		SET last_observation_key = ?, last_success_at = ?,
 		    last_error = '', error_since = '', failure_count = 0,
 		    feedback_seen_at = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_at END,
 		    feedback_seen_ids = ?
 		WHERE session_id = ? AND pr_id = ?
-	`, headSHA, at.UTC().Format(sortableTimeFormat), headSHA, observationKey,
-		at.UTC().Format(sortableTimeFormat), at.UTC().Format(sortableTimeFormat), string(baselineIDsJSON), sessionID, prID)
+	`, observationKey, at.UTC().Format(sortableTimeFormat),
+		at.UTC().Format(sortableTimeFormat), string(feedbackBaselineJSON), sessionID, prID)
 	return err
 }
 
@@ -170,18 +226,22 @@ type pullRequestWatchScanner interface {
 
 func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
-	var baselineIDsJSON string
+	var signalBaselineJSON, feedbackBaselineAt, feedbackBaselineJSON string
 	err := row.Scan(
 		&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
-		&watch.LastHeadSHA, &watch.HeadObservedAt, &watch.LastObservationKey, &watch.LastSuccessAt,
-		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &watch.FeedbackBaselineAt, &baselineIDsJSON,
+		&watch.LastHeadSHA, &signalBaselineJSON, &watch.LastObservationKey, &watch.LastSuccessAt,
+		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &feedbackBaselineAt, &feedbackBaselineJSON,
 	)
 	if err != nil {
 		return PullRequestWatch{}, err
 	}
-	if err := json.Unmarshal([]byte(baselineIDsJSON), &watch.FeedbackBaselineIDs); err != nil {
+	if err := json.Unmarshal([]byte(signalBaselineJSON), &watch.SignalBaselineIDs); err != nil {
 		return PullRequestWatch{}, err
 	}
+	if err := json.Unmarshal([]byte(feedbackBaselineJSON), &watch.FeedbackBaselineIDs); err != nil {
+		return PullRequestWatch{}, err
+	}
+	watch.FeedbackBaselineSet = feedbackBaselineAt != ""
 	return watch, nil
 }
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -34,14 +33,10 @@ type fakePRHost struct {
 	readyReads int
 	limitedFor string
 	limitFor   string
-	onFetch    func()
 }
 
 func (f *fakePRHost) FetchPullRequestReadiness(string, int) (*github.PullRequestReadiness, error) {
 	f.readyReads++
-	if f.onFetch != nil {
-		f.onFetch()
-	}
 	if f.readyErr != nil {
 		return nil, f.readyErr
 	}
@@ -88,7 +83,7 @@ func watchedReadiness(head, checks, review string) *github.PullRequestReadiness 
 	snapshot := openSnapshot("Watched pull request", "clean", head)
 	evidence := prreadiness.Evidence{
 		State: "open", MergeableState: "clean", HeadSHA: head,
-		HeadObservedAt: time.Now().Add(-time.Minute), CheckState: checks,
+		CheckState: checks,
 	}
 	if review != "" {
 		evidence.Reviews = []prreadiness.Review{{
@@ -626,8 +621,8 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	if err != nil || len(unread) != 2 {
 		t.Fatalf("retry lost or duplicated feedback: %+v, %v", unread, err)
 	}
-	if watch := d.store.PullRequestWatches()[0]; len(watch.FeedbackBaselineIDs) != 0 || watch.LastSuccessAt == baseline {
-		t.Fatalf("successful retry changed the baseline or did not record success: %+v", watch)
+	if watch := d.store.PullRequestWatches()[0]; strings.Join(watch.FeedbackBaselineIDs, ",") != "first,second" || watch.LastSuccessAt == baseline {
+		t.Fatalf("successful retry did not advance the delivered feedback baseline: %+v", watch)
 	}
 	if _, _, err := d.store.ReadAgentMailbox("s1", 20, now); err != nil {
 		t.Fatal(err)
@@ -638,6 +633,64 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	}
 	if err := d.notifyPullRequestWatchFeedback(d.store.PullRequestWatches()[0], ready.Evidence.Comments, now); err != nil {
 		t.Fatalf("already-delivered feedback attempted another insert: %v", err)
+	}
+}
+
+func TestPullRequestWatchPersistsFirstFeedbackBaselineBeforeStatusDelivery(t *testing.T) {
+	d := newPersistentPRDaemonForTest(t)
+	dbPath := d.store.DatabasePath()
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	now := time.Now()
+	ready := watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	ready.Evidence.Comments = []prreadiness.Comment{{
+		ID: "existing", Author: "human", Body: "already here", CreatedAt: now.Add(-time.Hour),
+	}}
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	direct, err := store.OpenDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := direct.Exec(`CREATE TRIGGER reject_initial_watch_status BEFORE INSERT ON agent_mailbox_items
+		WHEN NEW.coalesce_key != '' BEGIN SELECT RAISE(FAIL, 'injected status enqueue failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now)
+	watch := d.store.PullRequestWatches()[0]
+	if !watch.FeedbackBaselineSet || strings.Join(watch.FeedbackBaselineIDs, ",") != "existing" || watch.LastSuccessAt != "" {
+		t.Fatalf("failed status delivery did not preserve the first feedback baseline: %+v", watch)
+	}
+	if _, err := direct.Exec("DROP TRIGGER reject_initial_watch_status"); err != nil {
+		t.Fatal(err)
+	}
+	if err := direct.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	d.store, err = store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ready.Evidence.Comments = append(ready.Evidence.Comments, prreadiness.Comment{
+		ID: "new", Author: "human", Body: "arrived after the first fetch", CreatedAt: now.Add(-2 * time.Hour),
+	})
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	feedback := 0
+	for _, delivery := range unread {
+		if strings.Contains(delivery.Item.Prompt, "human feedback") {
+			feedback++
+			if strings.Contains(delivery.Item.Prompt, "already here") || !strings.Contains(delivery.Item.Prompt, "arrived after the first fetch") {
+				t.Fatalf("wrong feedback survived restart: %s", delivery.Item.Prompt)
+			}
+		}
+	}
+	if feedback != 1 {
+		t.Fatalf("feedback deliveries = %d, want only the post-baseline comment: %+v", feedback, unread)
 	}
 }
 
@@ -750,36 +803,58 @@ func TestPullRequestWatchIgnoresFetchedObservationAfterUnwatch(t *testing.T) {
 }
 
 func TestPullRequestWatchThumbsUpMustFollowObservedHead(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		d := newPRDaemonForTest(t, "s1")
-		defer d.store.Close()
-		url := "https://github.com/victorarias/attn/pull/71"
-		watchPRForRefresh(t, d, "s1", url)
-		tickStarted := time.Now().Add(-time.Minute)
-		readiness := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
-		readiness.Evidence.Reactions = []prreadiness.Reaction{{
-			Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Now().Add(-time.Second),
-		}}
-		var reactionAt time.Time
-		host := &fakePRHost{readiness: readiness, onFetch: func() {
-			reactionAt = time.Now()
-			time.Sleep(time.Second)
-		}}
-		serveHost(d, "github.com", host)
-		d.refreshSessionPullRequests(tickStarted)
-		if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
-			t.Fatalf("reaction predating the fetch passed the newly observed head: %+v, %v", unread, err)
-		}
+	d := newPersistentPRDaemonForTest(t)
+	dbPath := d.store.DatabasePath()
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	now := time.Now()
+	readiness := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
+	readiness.Evidence.Reactions = []prreadiness.Reaction{{
+		ID: "existing", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: now,
+	}}
+	host := &fakePRHost{readiness: readiness}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now)
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("baselined reaction passed the newly observed head: %+v, %v", unread, err)
+	}
 
-		readiness.Evidence.Reactions = append(readiness.Evidence.Reactions, prreadiness.Reaction{
-			Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: reactionAt,
-		})
-		d.refreshSessionPullRequests(tickStarted.Add(protocol.HeatHotInterval))
-		if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
-			!strings.Contains(unread[0].Item.Prompt, "ready") {
-			t.Fatalf("new reaction did not pass observed head: %+v, %v", unread, err)
-		}
+	readiness.Evidence.Reactions = append(readiness.Evidence.Reactions, prreadiness.Reaction{
+		ID: "new", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: now.Add(-time.Hour),
 	})
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "ready") {
+		t.Fatalf("new reaction identity did not pass despite clock skew: %+v, %v", unread, err)
+	}
+	if err := d.store.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	d.store, err = store.NewWithDB(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.refreshSessionPullRequests(now.Add(2 * protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		storedPullRequest(t, d, "s1").ReviewStatus != prreadiness.ReviewApproved {
+		t.Fatalf("accepted reaction did not survive restart: %+v, %v", unread, err)
+	}
+
+	host.readiness = watchedReadiness("sha-2", prreadiness.ChecksGreen, "")
+	host.readiness.Evidence.Reactions = readiness.Evidence.Reactions
+	d.refreshSessionPullRequests(now.Add(3 * protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("old-head reaction passed the new head: %+v, %v", unread, err)
+	}
+	host.readiness.Evidence.Reactions = append(host.readiness.Evidence.Reactions, prreadiness.Reaction{
+		ID: "new-head", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: now.Add(-2 * time.Hour),
+	})
+	d.refreshSessionPullRequests(now.Add(4 * protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+		!strings.Contains(unread[0].Item.Prompt, "ready") {
+		t.Fatalf("new-head reaction identity did not pass: %+v, %v", unread, err)
+	}
 }
 
 func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
