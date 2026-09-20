@@ -139,6 +139,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 		retry.RequestID = requestID
 		retry.State = crew.RestartQueued
 		retry.Error = ""
+		retry.Withdrawn = false
 		candidate.Restart = &retry
 		if candidate.LetterSession != visibleSessionID || candidate.LetterPath == "" {
 			candidate.LetterSession, candidate.LetterPath = visibleSessionID, retry.LetterPath
@@ -310,7 +311,7 @@ func (d *Daemon) resumeCrewRestart(member crew.Member, revision int64) (*protoco
 			return d.wakeForCrewRestart(member, *restart, restart.SessionID)
 		}
 		if restart.LetterPath != "" {
-			if _, err := d.crewHandoff(restart.SessionID, "", true, protocol.CrewDayCloseNap); err != nil {
+			if _, err := d.crewHandoffLocked(restart.SessionID, "", true, protocol.CrewDayCloseNap); err != nil {
 				return nil, err
 			}
 			return d.crewRestartResultCurrent(member.ID)
@@ -503,7 +504,7 @@ func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, 
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
 		}
-		if member.Restart.State == crew.RestartCompleted {
+		if member.Restart.State == crew.RestartCompleted || member.Restart.Withdrawn {
 			return false, nil
 		}
 		member.Restart.State = crew.RestartFailed
@@ -521,6 +522,19 @@ func (d *Daemon) failCrewRestart(memberID, requestID, sessionID, letter string, 
 	return nil
 }
 
+func (d *Daemon) withdrawCrewRestart(memberID, requestID, sessionID string) error {
+	_, err := d.updateCrewMember(memberID, func(member *crew.Member) (bool, error) {
+		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
+			return false, nil
+		}
+		member.Restart.State = crew.RestartFailed
+		member.Restart.Withdrawn = true
+		member.Restart.Error = fmt.Sprintf("the restart was withdrawn because the user asked %s to sleep instead", crew.DisplayName(member.ID))
+		return true, nil
+	})
+	return err
+}
+
 func (d *Daemon) completeCrewRestart(memberID, requestID, sessionID, letter, successor string) {
 	d.completeCrewRestartWithDetail(memberID, requestID, sessionID, letter, successor,
 		fmt.Sprintf("the handoff was filed and successor session %s started", shortSessionID(successor)))
@@ -531,7 +545,7 @@ func (d *Daemon) completeCrewRestartWithDetail(memberID, requestID, sessionID, l
 		if member.Restart == nil || member.Restart.RequestID != requestID || member.Restart.SessionID != sessionID {
 			return false, nil
 		}
-		if member.Restart.State == crew.RestartCompleted {
+		if member.Restart.State == crew.RestartCompleted || member.Restart.Withdrawn {
 			return false, nil
 		}
 		member.Restart.State = crew.RestartCompleted

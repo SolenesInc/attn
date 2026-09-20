@@ -72,6 +72,12 @@ func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
 }
 
 func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	return d.crewHandoffLocked(sessionID, note, retry, close)
+}
+
+func (d *Daemon) crewHandoffLocked(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {
 	if err := d.requireHome(crew.Surface); err != nil {
 		return nil, err
 	}
@@ -90,7 +96,7 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 			return
 		}
 		restart := current.Restart
-		if restart == nil || restart.SessionID != sessionID ||
+		if restart == nil || restart.SessionID != sessionID || restart.Withdrawn ||
 			(restart.State != crew.RestartQueued && restart.State != crew.RestartRequested && restart.State != crew.RestartFailed) {
 			return
 		}
@@ -121,6 +127,9 @@ func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.
 
 	if retry && close == "" {
 		close = protocol.CrewDayCloseNap
+	}
+	if member.Restart != nil && member.Restart.SessionID == sessionID && member.Restart.Withdrawn {
+		close = protocol.CrewDayCloseSleep
 	}
 
 	result = &protocol.CrewHandoffResult{Member: member.ID, Path: path}

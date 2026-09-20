@@ -63,6 +63,7 @@ type Restart struct {
 	Error              string       `json:"error,omitempty"`
 	LetterPath         string       `json:"letter_path,omitempty"`
 	SuccessorSessionID string       `json:"successor_session_id,omitempty"`
+	Withdrawn          bool         `json:"withdrawn,omitempty"`
 }
 
 type RestartRequest struct {

@@ -81,7 +81,7 @@ func (d *Daemon) crewSleep(name string) (*protocol.CrewSleepResult, error) {
 	}
 
 	if restart, pending := pendingCrewRestartFor(member, sessionID); pending {
-		if err := d.failCrewRestart(member.ID, restart.RequestID, sessionID, "", fmt.Errorf("the restart was withdrawn because the user asked %s to sleep instead", crew.DisplayName(member.ID))); err != nil {
+		if err := d.withdrawCrewRestart(member.ID, restart.RequestID, sessionID); err != nil {
 			return nil, err
 		}
 	}
