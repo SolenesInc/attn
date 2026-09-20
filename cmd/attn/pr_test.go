@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -19,1228 +18,188 @@ import (
 type fakeReadinessSource struct {
 	results []*prReadiness
 	calls   int
+	after   error
 }
 
 func (f *fakeReadinessSource) Fetch(context.Context, prWaitOptions) (*prReadiness, error) {
 	index := f.calls
 	f.calls++
 	if index >= len(f.results) {
+		if f.after != nil {
+			return nil, f.after
+		}
 		index = len(f.results) - 1
 	}
 	return f.results[index], nil
 }
 
-func waitTuple(ctx context.Context, source prReadinessSource, opts prWaitOptions, progress io.Writer) (*prReadiness, prOutcome, []prOutcome, error) {
-	result, err := waitForPRActionable(ctx, source, opts, prWaitCursor{}, progress)
-	return result.Observation, result.Outcome, result.Events, err
+func cliObservation(observation prreadiness.Observation, reviewer string) *prReadiness {
+	return readinessForCLI(observation, prWaitOptions{Reviewer: reviewer})
 }
 
-func snapshotPayload(head, checks, reviews, comments string) []byte {
-	return snapshotPayloadWithRequests(head, checks, reviews, comments, "")
-}
-
-func snapshotPayloadWithRequests(head, checks, reviews, comments, requests string) []byte {
-	if checks == "" {
-		checks = `{"__typename":"CheckRun","name":"CI","status":"COMPLETED","conclusion":"SUCCESS"}`
+func TestWaitForPRActionableUsesSharedTransitionAndPersistsBaseline(t *testing.T) {
+	at := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	first := prreadiness.Observation{
+		Number: 303, URL: "https://github.com/SolenesInc/attn/pull/303", State: "open", HeadSHA: "head",
+		MergeableState: "clean", CheckState: prreadiness.ChecksPending,
+		RequestedReviewers: []string{"reviewer"},
+		Comments:           []prreadiness.Comment{{ID: "existing", Author: "human", CreatedAt: at}},
 	}
-	return fmt.Appendf(nil, `{"data":{"repository":{"pullRequest":{
-      "number":404,"state":"OPEN","isDraft":false,"mergeStateStatus":"CLEAN","headRefOid":%q,
-      "reviewRequests":{"nodes":[%s]},
-      "commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
-        "pageInfo":{"hasNextPage":false},"nodes":[%s]}}}}]},
-      "reviews":{"nodes":[%s]},
-      "comments":{"nodes":[%s]}
-    }}}}`, head, requests, checks, reviews, comments)
-}
-
-func mustTime(t *testing.T, value string) time.Time {
-	t.Helper()
-	parsed, err := time.Parse(time.RFC3339, value)
-	if err != nil {
-		t.Fatalf("parse time %q: %v", value, err)
+	second := first
+	second.Comments = append(second.Comments, prreadiness.Comment{
+		ID: "new", Author: "human", Body: "Please fix this", CreatedAt: at.Add(time.Minute),
+	})
+	var persisted []prreadiness.Cursor
+	opts := prWaitOptions{
+		Number: 303, Reviewer: "reviewer", Interval: 0,
+		persistCursor: func(cursor prreadiness.Cursor) error {
+			persisted = append(persisted, cursor)
+			return nil
+		},
 	}
-	return parsed
-}
-
-func reReviewObservation(head, checks, review string, requested bool, submitted, _ time.Time) *prReadiness {
-	obs := readinessObservation("12", head, checks, review)
-	obs.ReviewerRequested = requested
-	obs.ReviewSubmittedAt = submitted
-	obs.ReviewSignalID = submitted.UTC().Format(time.RFC3339Nano)
-	return obs
-}
-
-func reviewNode(id, state, body, at, author, oid, inline string) string {
-	return fmt.Sprintf(`{"id":%q,"state":%q,"bodyText":%q,"submittedAt":%q,
-	  "author":{"__typename":"User","login":%q},"commit":{"oid":%q},
-	  "comments":{"pageInfo":{"hasNextPage":false},"nodes":[%s]}}`,
-		id, state, body, at, author, oid, inline)
-}
-
-func inlineNode(id, at, author string) string {
-	return fmt.Sprintf(`{"id":%q,"createdAt":%q,"author":{"__typename":"User","login":%q}}`, id, at, author)
-}
-
-func TestParsePRSnapshotRequiresGreenChecksAndCurrentHeadApproval(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	oldHead := strings.Repeat("b", 40)
-	checks := `{"__typename":"CheckRun","name":"Daemon","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://example.test/daemon"},
-	           {"__typename":"CheckRun","name":"Frontend","status":"COMPLETED","conclusion":"SKIPPED"},
-	           {"__typename":"StatusContext","context":"license","state":"SUCCESS","targetUrl":"https://example.test/license"}`
-	reviews := strings.Join([]string{
-		reviewNode("r1", "APPROVED", "", "2026-07-19T10:00:00Z", "figgyster", oldHead, ""),
-		reviewNode("r2", "CHANGES_REQUESTED", "", "2026-07-19T11:00:00Z", "figgyster", head, ""),
-		reviewNode("r3", "APPROVED", "", "2026-07-19T12:00:00Z", "Figgyster", head, ""),
-	}, ",")
-
-	opts := prWaitOptions{Reviewer: "figgyster"}
-	readiness, err := parsePRSnapshot(snapshotPayload(head, checks, reviews, ""), opts)
-	if err != nil {
-		t.Fatal(err)
+	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{
+		results: []*prReadiness{cliObservation(first, opts.Reviewer), cliObservation(second, opts.Reviewer)},
+	}, opts, prWaitCursor{}, io.Discard)
+	if err != nil || result.Outcome != outcomeComment || len(result.Observation.Comments) != 1 ||
+		result.Observation.Comments[0].ID != "new" {
+		t.Fatalf("result = %+v, err=%v", result, err)
 	}
-	if !readiness.ready() || readiness.CheckState != checksGreen || readiness.ReviewState != "approved" || len(readiness.Checks) != 3 {
-		t.Fatalf("readiness = %#v", readiness)
+	if len(persisted) == 0 || !persisted[0].Initialized || !containsString(persisted[0].SeenCommentIDs, "existing") ||
+		containsString(persisted[0].SeenCommentIDs, "new") {
+		t.Fatalf("baseline was not persisted before delivery: %+v", persisted)
 	}
-	if readiness.Checks[0].Name != "check:Daemon" || readiness.Checks[0].URL != "https://example.test/daemon" ||
-		readiness.Checks[2].Name != "status:license" || readiness.Checks[2].URL != "https://example.test/license" {
-		t.Fatalf("check labels or links lost: %+v", readiness.Checks)
-	}
-
-	staleReviews := strings.ReplaceAll(reviews, `"oid":"`+head+`"`, `"oid":"`+oldHead+`"`)
-	readiness, err = parsePRSnapshot(snapshotPayload(head, checks, staleReviews, ""), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if readiness.ReviewState != "waiting" || readiness.ready() {
-		t.Fatalf("old-head approval satisfied gate: %#v", readiness)
+	if !containsString(result.Cursor.SeenCommentIDs, "new") {
+		t.Fatalf("next cursor did not advance delivered feedback: %+v", result.Cursor)
 	}
 }
 
-func TestParsePRSnapshotTagsBotCommentsAndDropsIgnoredAuthors(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	reviews := reviewNode("r1", "COMMENTED", "a real review remark", "2026-07-19T10:00:00Z", "figgyster", head,
-		inlineNode("t1", "2026-07-19T11:00:00Z", "figgyster"))
-	comments := `{"id":"c1","createdAt":"2026-07-19T09:00:00Z","author":{"__typename":"User","login":"victorarias"}},
-	             {"id":"c2","createdAt":"2026-07-19T09:30:00Z","author":{"__typename":"Bot","login":"chatgpt-codex-connector"}},
-	             {"id":"c3","createdAt":"2026-07-19T09:45:00Z","author":{"__typename":"User","login":"noisy-human"}}`
-
-	opts := prWaitOptions{Reviewer: "figgyster", IgnoreAuthors: []string{"NOISY-HUMAN"}}
-	readiness, err := parsePRSnapshot(snapshotPayload(head, "", reviews, comments), opts)
-	if err != nil {
-		t.Fatal(err)
+func TestWaitForPRActionableRanksConcurrentEvents(t *testing.T) {
+	at := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
+	observation := prreadiness.Observation{
+		Number: 303, State: "open", HeadSHA: "head", MergeableState: "clean",
+		CheckState: prreadiness.ChecksFailed,
+		Checks:     []prreadiness.Check{{Name: "CI", State: prreadiness.ChecksFailed}},
+		Comments:   []prreadiness.Comment{{ID: "new", Author: "human", CreatedAt: at.Add(time.Minute)}},
 	}
-
-	var got []string
-	for _, comment := range readiness.Comments {
-		kind := "human"
-		if comment.Bot {
-			kind = "bot"
-		}
-		got = append(got, comment.ID+":"+comment.Kind+":"+comment.Author+":"+kind)
-	}
-	want := []string{
-		"c1:issue:victorarias:human",
-		"c2:issue:chatgpt-codex-connector:bot",
-		"r1:review:figgyster:human",
-		"t1:inline:figgyster:human",
-	}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("comments = %v, want %v", got, want)
-	}
-	if len(humanPRComments(readiness.Comments)) != 3 || len(botPRComments(readiness.Comments)) != 1 {
-		t.Fatalf("split = %d human / %d bot", len(humanPRComments(readiness.Comments)), len(botPRComments(readiness.Comments)))
-	}
-	if readiness.ReviewState != "waiting" {
-		t.Fatalf("COMMENTED review changed review state: %#v", readiness)
-	}
-	for _, comment := range readiness.Comments {
-		if comment.ID == "r1" && comment.Body != "a real review remark" {
-			t.Fatalf("review comment lost its body: %#v", comment)
-		}
+	cursor := prWaitCursor{Cursor: prreadiness.Cursor{
+		Initialized: true, Reviewer: "reviewer", HeadSHA: "head", SeenCommentIDs: []string{"old"},
+	}}
+	result, err := waitForPRActionable(
+		context.Background(), &fakeReadinessSource{results: []*prReadiness{cliObservation(observation, "reviewer")}},
+		prWaitOptions{Number: 303, Reviewer: "reviewer"}, cursor, io.Discard,
+	)
+	if err != nil || result.Outcome != outcomeChecksFailed ||
+		strings.Join(outcomesToStrings(result.Events), ",") != "checks_failed,comment" {
+		t.Fatalf("result = %+v, err=%v", result, err)
 	}
 }
 
-func TestParsePRSnapshotDoesNotDoubleCountInlineCommentWrapper(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	wrapper := reviewNode("r1", "COMMENTED", "", "2026-07-19T19:33:19Z", "victorarias", head,
-		inlineNode("t1", "2026-07-19T19:33:19Z", "victorarias"))
-
-	readiness, err := parsePRSnapshot(snapshotPayload(head, "", wrapper, ""), prWaitOptions{Reviewer: "figgyster"})
-	if err != nil {
-		t.Fatal(err)
+func outcomesToStrings(outcomes []prOutcome) []string {
+	values := make([]string, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		values = append(values, string(outcome))
 	}
-	if len(readiness.Comments) != 1 || readiness.Comments[0].ID != "t1" || readiness.Comments[0].Kind != "inline" {
-		t.Fatalf("comments = %#v, want the inline comment alone", readiness.Comments)
-	}
-}
-
-func TestParsePRSnapshotSeesReplyOnLongDormantThread(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	nodes := make([]string, 0, 130)
-	for i := range 128 {
-		nodes = append(nodes, reviewNode(
-			fmt.Sprintf("old-r%d", i), "COMMENTED", "", "2026-01-01T00:00:00Z", "victorarias", head,
-			inlineNode(fmt.Sprintf("old-t%d", i), "2026-01-01T00:00:00Z", "victorarias")))
-	}
-	nodes = append(nodes, reviewNode("reply-r", "COMMENTED", "", "2026-07-19T20:00:00Z", "figgyster", head,
-		inlineNode("reply-t", "2026-07-19T20:00:00Z", "figgyster")))
-
-	readiness, err := parsePRSnapshot(snapshotPayload(head, "", strings.Join(nodes, ","), ""), prWaitOptions{Reviewer: "figgyster"})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var baseline []prComment
-	for _, comment := range readiness.Comments {
-		if comment.ID != "reply-t" {
-			baseline = append(baseline, comment)
-		}
-	}
-	seen := map[string]bool{}
-	for _, comment := range baseline {
-		seen[comment.ID] = true
-	}
-	fresh := unseenPRComments(readiness.Comments, seen, time.Time{})
-	if len(fresh) != 1 || fresh[0].ID != "reply-t" {
-		t.Fatalf("reply on a dormant thread was missed: fresh = %#v", fresh)
-	}
-}
-
-func TestParsePRSnapshotFailsClosedOnReviewCommentTruncation(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	review := reviewNode("r1", "COMMENTED", "", "2026-07-19T10:00:00Z", "victorarias", head,
-		inlineNode("t1", "2026-07-19T10:00:00Z", "victorarias"))
-	truncated := strings.Replace(review, `"pageInfo":{"hasNextPage":false}`, `"pageInfo":{"hasNextPage":true}`, 1)
-
-	if _, err := parsePRSnapshot(snapshotPayload(head, "", truncated, ""), prWaitOptions{Reviewer: "figgyster"}); err == nil ||
-		!strings.Contains(err.Error(), "without truncation") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestParsePRSnapshotFailsClosedOnBackwardConnectionTruncation(t *testing.T) {
-	payload := string(snapshotPayload("abc", "", "", ""))
-	reviews := strings.Replace(payload, `"reviews":{"nodes"`, `"reviews":{"pageInfo":{"hasPreviousPage":true},"nodes"`, 1)
-	if _, err := parsePRSnapshot([]byte(reviews), prWaitOptions{Reviewer: "r"}); err == nil ||
-		!strings.Contains(err.Error(), "verification window") {
-		t.Fatalf("reviews error = %v", err)
-	}
-	comments := strings.Replace(payload, `"comments":{"nodes"`, `"comments":{"pageInfo":{"hasPreviousPage":true},"nodes"`, 1)
-	if _, err := parsePRSnapshot([]byte(comments), prWaitOptions{Reviewer: "r"}); err == nil ||
-		!strings.Contains(err.Error(), "verification window") {
-		t.Fatalf("comments error = %v", err)
-	}
-}
-
-func TestParsePRSnapshotNormalizesBotReviewerFindings(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	review := reviewNode("r1", "COMMENTED", "", "2026-07-19T10:00:00Z", "chatgpt-codex-connector", head,
-		`{"id":"finding","createdAt":"2026-07-19T10:00:00Z","bodyText":"Fix the guard.","path":"watch.go","line":42,"author":{"__typename":"Bot","login":"chatgpt-codex-connector"}}`)
-	readiness, err := parsePRSnapshot(snapshotPayload(head, "", review, ""), prWaitOptions{Reviewer: "chatgpt-codex-connector[bot]"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if readiness.ReviewState != prreadiness.ReviewChangesRequested {
-		t.Fatalf("review state = %q, want findings", readiness.ReviewState)
-	}
-}
-
-func TestParsePRSnapshotFailsClosedForUnknownCheckState(t *testing.T) {
-	checks := `{"__typename":"CheckRun","name":"CI","status":"COMPLETED","conclusion":"NEW_STATE"}`
-	readiness, err := parsePRSnapshot(snapshotPayload("abc", checks, "", ""), prWaitOptions{Reviewer: "r"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if readiness.CheckState != checksPending {
-		t.Fatalf("readiness = %#v", readiness)
-	}
-}
-
-func TestParsePRSnapshotFailsClosedOnCheckTruncation(t *testing.T) {
-	payload := snapshotPayload("abc", "", "", "")
-	truncated := bytes.Replace(payload, []byte(`"hasNextPage":false`), []byte(`"hasNextPage":true`), 1)
-	if _, err := parsePRSnapshot(truncated, prWaitOptions{Reviewer: "r"}); err == nil ||
-		!strings.Contains(err.Error(), "without truncation") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestParsePRSnapshotSurfacesGraphQLErrors(t *testing.T) {
-	body := []byte(`{"data":{"repository":null},"errors":[{"message":"Could not resolve to a Repository"}]}`)
-	if _, err := parsePRSnapshot(body, prWaitOptions{Reviewer: "r"}); err == nil ||
-		!strings.Contains(err.Error(), "Could not resolve") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestWaitForPRActionableResetsAcrossHeadChangeAndSuppressesDuplicatePolls(t *testing.T) {
-	headA := strings.Repeat("a", 40)
-	headB := strings.Repeat("b", 40)
-	pendingA := readinessObservation("12", headA, checksPending, "waiting")
-	greenA := readinessObservation("12", headA, checksGreen, "waiting")
-	waitingB := readinessObservation("12", headB, checksGreen, "waiting")
-	readyB := readinessObservation("12", headB, checksGreen, "approved")
-	source := &fakeReadinessSource{results: []*prReadiness{pendingA, pendingA, greenA, waitingB, readyB}}
-	opts := prWaitOptions{Number: 12, Owner: "owner", Name: "repo", Reviewer: "figgyster", Interval: 0}
-
-	var output bytes.Buffer
-	got, outcome, _, err := waitTuple(context.Background(), source, opts, &output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeApproved || got.HeadSHA != headB || source.calls != 5 {
-		t.Fatalf("got=%#v outcome=%s calls=%d", got, outcome, source.calls)
-	}
-	text := output.String()
-	if strings.Count(text, "head=aaaaaaaaaaaa state=open") != 2 {
-		t.Fatalf("duplicate polls were not suppressed:\n%s", text)
-	}
-	for _, want := range []string{"head changed aaaaaaaaaaaa -> bbbbbbbbbbbb; reset", "review=approved reviewer=figgyster"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("output missing %q:\n%s", want, text)
-		}
-	}
-}
-
-func TestWaitForPRActionableReturnsPromptlyOnChangesRequested(t *testing.T) {
-	for _, state := range []string{"changes_requested", prreadiness.ReviewUnresolved} {
-		t.Run(state, func(t *testing.T) {
-			head := strings.Repeat("c", 40)
-			observation := readinessObservation("12", head, checksGreen, state)
-			source := &fakeReadinessSource{results: []*prReadiness{observation}}
-
-			got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster"}, &bytes.Buffer{})
-			if err != nil {
-				t.Fatal(err)
-			}
-			if outcome != outcomeChangesRequested || outcome.exitCode() != prWaitExitChangesRequested || got != observation {
-				t.Fatalf("got=%#v outcome=%s", got, outcome)
-			}
-			if source.calls != 1 {
-				t.Fatalf("polled %d times; changes_requested must return on the first observation", source.calls)
-			}
-		})
-	}
-}
-
-func TestWaitForPRActionableWaitsForMergeability(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	review := reviewNode("approval", "APPROVED", "", "2026-07-19T10:00:00Z", "figgyster", head, "")
-	opts := prWaitOptions{Reviewer: "figgyster"}
-	for _, state := range []string{"DIRTY", "BLOCKED", "UNKNOWN"} {
-		t.Run(state, func(t *testing.T) {
-			payload := snapshotPayload(head, "", review, "")
-			blocked, err := parsePRSnapshot([]byte(strings.Replace(string(payload), `"mergeStateStatus":"CLEAN"`, `"mergeStateStatus":"`+state+`"`, 1)), opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			clean, err := parsePRSnapshot(payload, opts)
-			if err != nil {
-				t.Fatal(err)
-			}
-			source := &fakeReadinessSource{results: []*prReadiness{blocked, clean}}
-			got, outcome, _, err := waitTuple(context.Background(), source, opts, &bytes.Buffer{})
-			if err != nil || outcome != outcomeApproved || got != clean || source.calls != 2 {
-				t.Fatalf("returned before mergeability cleared: got=%+v outcome=%s calls=%d err=%v", got, outcome, source.calls, err)
-			}
-		})
-	}
-}
-
-func TestWaitForPRActionableBaselinesExistingCommentsAndWakesOnNewOnes(t *testing.T) {
-	head := strings.Repeat("d", 40)
-	existing := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(1, 0)}
-	fresh := prComment{ID: "c2", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(2, 0)}
-
-	first := readinessObservation("12", head, checksPending, "waiting")
-	first.Comments = []prComment{existing}
-	second := readinessObservation("12", head, checksPending, "waiting")
-	second.Comments = []prComment{existing}
-	third := readinessObservation("12", head, checksPending, "waiting")
-	third.Comments = []prComment{existing, fresh}
-	source := &fakeReadinessSource{results: []*prReadiness{first, second, third}}
-
-	got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster"}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeComment || source.calls != 3 {
-		t.Fatalf("outcome=%s calls=%d", outcome, source.calls)
-	}
-	if len(got.Comments) != 1 || got.Comments[0].ID != "c2" {
-		t.Fatalf("comments = %#v", got.Comments)
-	}
-}
-
-func TestWaitForPRActionableReportsCheckFailureAndClosure(t *testing.T) {
-	failed := readinessObservation("12", strings.Repeat("c", 40), checksFailed, "approved")
-	_, outcome, _, err := waitTuple(context.Background(), &fakeReadinessSource{results: []*prReadiness{failed}}, prWaitOptions{}, &bytes.Buffer{})
-	if err != nil || outcome != outcomeChecksFailed || outcome.exitCode() != prWaitExitChecksFailed {
-		t.Fatalf("outcome=%s err=%v", outcome, err)
-	}
-
-	closed := readinessObservation("12", strings.Repeat("c", 40), checksGreen, "waiting")
-	closed.State = "merged"
-	_, outcome, _, err = waitTuple(context.Background(), &fakeReadinessSource{results: []*prReadiness{closed}}, prWaitOptions{}, &bytes.Buffer{})
-	if err != nil || outcome != outcomeClosed || outcome.exitCode() != prWaitExitError {
-		t.Fatalf("outcome=%s err=%v", outcome, err)
-	}
-}
-
-func TestWaitForPRActionableReturnsTimeoutOutcome(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	pending := readinessObservation("12", strings.Repeat("d", 40), checksPending, "waiting")
-	source := &fakeReadinessSource{results: []*prReadiness{pending}}
-
-	_, outcome, _, err := waitTuple(ctx, source, prWaitOptions{Interval: time.Hour}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeTimeout || outcome.exitCode() != prWaitExitTimeout {
-		t.Fatalf("outcome = %s", outcome)
-	}
+	return values
 }
 
 func TestReportPROutcomeWritesPlainTextAndJSON(t *testing.T) {
-	head := strings.Repeat("e", 40)
-	result := readinessObservation("12", head, checksGreen, "approved")
-
+	observation := cliObservation(prreadiness.Observation{
+		Number: 303, URL: "https://github.com/SolenesInc/attn/pull/303", State: "open", HeadSHA: "abcdef1234567890",
+		CheckState: prreadiness.ChecksFailed,
+		Checks:     []prreadiness.Check{{Name: "check:CI", State: prreadiness.ChecksFailed, URL: "https://example.test/ci"}},
+	}, "reviewer")
+	wait := prWaitResult{Observation: observation, Outcome: outcomeChecksFailed, Events: []prOutcome{outcomeChecksFailed}}
 	var plain bytes.Buffer
-	if code := reportPROutcome(prWaitResult{Observation: result, Outcome: outcomeApproved, Events: []prOutcome{outcomeApproved}}, prWaitOptions{}, &plain); code != prWaitExitApproved {
-		t.Fatalf("exit code = %d", code)
+	if code := reportPROutcome(wait, prWaitOptions{}, &plain); code != prWaitExitChecksFailed ||
+		!strings.Contains(plain.String(), "check:CI https://example.test/ci") {
+		t.Fatalf("plain report = %q, code=%d", plain.String(), code)
 	}
-	if got := plain.String(); !strings.HasPrefix(got, "approved: figgyster approved eeeeeeeeeeee") {
-		t.Fatalf("plain output = %q", got)
-	}
-
-	result.Comments = []prComment{{ID: "c1", Author: "victorarias", Kind: "issue"}}
 	var encoded bytes.Buffer
-	code := reportPROutcome(prWaitResult{Observation: result, Outcome: outcomeChangesRequested, Events: []prOutcome{outcomeChangesRequested}}, prWaitOptions{JSON: true}, &encoded)
-	if code != prWaitExitChangesRequested {
-		t.Fatalf("exit code = %d", code)
+	if code := reportPROutcome(wait, prWaitOptions{JSON: true}, &encoded); code != prWaitExitChecksFailed {
+		t.Fatalf("json code = %d", code)
 	}
-	var payload struct {
-		Outcome  string      `json:"outcome"`
-		Events   []string    `json:"events"`
-		Head     string      `json:"head"`
-		Detail   string      `json:"detail"`
-		Comments []prComment `json:"comments"`
-		Review   struct {
-			Reviewer string `json:"reviewer"`
-		} `json:"review"`
-	}
-	if err := json.Unmarshal(encoded.Bytes(), &payload); err != nil {
-		t.Fatalf("json = %q err = %v", encoded.String(), err)
-	}
-	if payload.Outcome != "changes_requested" || payload.Head != head || payload.Review.Reviewer != "figgyster" ||
-		!strings.Contains(payload.Detail, "requested changes") {
-		t.Fatalf("payload = %#v", payload)
-	}
-	if len(payload.Comments) != 1 || payload.Comments[0].Author != "victorarias" {
-		t.Fatalf("comments = %#v, want the fresh comment reported beside the verdict", payload.Comments)
-	}
-	if strings.Join(payload.Events, ",") != "changes_requested" {
-		t.Fatalf("events = %v", payload.Events)
+	var payload map[string]any
+	if err := json.Unmarshal(encoded.Bytes(), &payload); err != nil || payload["outcome"] != "checks_failed" {
+		t.Fatalf("json report = %q, err=%v", encoded.String(), err)
 	}
 }
 
-func TestWaitForPRActionableApprovalWithBodyIsOneEvent(t *testing.T) {
-	head := strings.Repeat("f", 40)
-	at := mustTime(t, "2026-07-26T10:00:00Z")
-	reviews := reviewNode("r1", "APPROVED", "Approved. The witness is the proof I wanted.", "2026-07-26T10:00:00Z", "figgyster", head, "")
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-
-	observation, err := parsePRSnapshot(snapshotPayload(head, "", reviews, ""), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(observation.Comments) != 0 {
-		t.Fatalf("the verdict body was collected as a comment: %#v", observation.Comments)
-	}
-	if observation.ReviewState != "approved" || !observation.ReviewSubmittedAt.Equal(at) {
-		t.Fatalf("verdict not read: %#v", observation)
-	}
-
-	waiting, err := parsePRSnapshot(snapshotPayload(head, "", "", ""), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	source := &fakeReadinessSource{results: []*prReadiness{waiting, observation}}
-	_, outcome, events, err := waitTuple(context.Background(), source, opts, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeApproved || outcome.exitCode() != prWaitExitApproved {
-		t.Fatalf("outcome = %s (exit %d), want approved", outcome, outcome.exitCode())
-	}
-	if strings.Join(outcomeStrings(events), ",") != "approved" {
-		t.Fatalf("events = %v, want the verdict alone", outcomeStrings(events))
-	}
-
-	remark := reviewNode("r2", "COMMENTED", "one question before I approve", "2026-07-26T10:05:00Z", "figgyster", head, "")
-	commented, err := parsePRSnapshot(snapshotPayload(head, "", remark, ""), opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(commented.Comments) != 1 || commented.Comments[0].Kind != "review" {
-		t.Fatalf("a COMMENTED review must stay a comment: %#v", commented.Comments)
-	}
-}
-
-func TestWaitForPRActionableRanksConcurrentEventsAndReportsAll(t *testing.T) {
-	head := strings.Repeat("g", 40)
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-	human := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(2, 0)}
-	bot := prComment{ID: "c2", Author: "react-doctor", Kind: "issue", Bot: true, CreatedAt: time.Unix(3, 0)}
-
-	first := readinessObservation("12", head, checksPending, "waiting")
-	second := readinessObservation("12", head, checksGreen, "approved")
-	second.Comments = []prComment{human, bot}
-	source := &fakeReadinessSource{results: []*prReadiness{first, second}}
-
-	var output bytes.Buffer
-	_, outcome, events, err := waitTuple(context.Background(), source, opts, &output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeComment {
-		t.Fatalf("outcome = %s, want the human comment to win", outcome)
-	}
-	if got := strings.Join(outcomeStrings(events), ","); got != "comment,approved,bot_comment" {
-		t.Fatalf("events = %s, want all three ranked", got)
-	}
-
-	var plain bytes.Buffer
-	if code := reportPROutcome(prWaitResult{Observation: second, Outcome: outcome, Events: events}, opts, &plain); code != prWaitExitComment {
-		t.Fatalf("exit code = %d, want %d", code, prWaitExitComment)
-	}
-	text := plain.String()
-	for _, want := range []string{"comment: 1 new comment from victorarias", "also approved:", "also bot_comment: 1 new comment from react-doctor"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("plain output missing %q:\n%s", want, text)
-		}
-	}
-}
-
-func TestWaitForPRActionableChecksFailedOutranksComment(t *testing.T) {
-	head := strings.Repeat("h", 40)
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-	first := readinessObservation("12", head, checksPending, "waiting")
-	second := readinessObservation("12", head, checksFailed, "waiting")
-	second.Comments = []prComment{{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(2, 0)}}
-
-	_, outcome, events, err := waitTuple(context.Background(),
-		&fakeReadinessSource{results: []*prReadiness{first, second}}, opts, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeChecksFailed || outcome.exitCode() != prWaitExitChecksFailed {
-		t.Fatalf("outcome = %s, want checks_failed to outrank the comment", outcome)
-	}
-	if got := strings.Join(outcomeStrings(events), ","); got != "checks_failed,comment" {
-		t.Fatalf("events = %s", got)
-	}
-}
-
-func TestWaitForPRActionableBotCommentIsItsOwnEvent(t *testing.T) {
-	head := strings.Repeat("i", 40)
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-	first := readinessObservation("12", head, checksPending, "waiting")
-	second := readinessObservation("12", head, checksPending, "waiting")
-	second.Comments = []prComment{{ID: "c1", Author: "react-doctor", Kind: "issue", Bot: true, CreatedAt: time.Unix(2, 0)}}
-
-	_, outcome, events, err := waitTuple(context.Background(),
-		&fakeReadinessSource{results: []*prReadiness{first, second}}, opts, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeBotComment || outcome.exitCode() != prWaitExitBotComment {
-		t.Fatalf("outcome = %s (exit %d), want bot_comment", outcome, outcome.exitCode())
-	}
-	if got := strings.Join(outcomeStrings(events), ","); got != "bot_comment" {
-		t.Fatalf("events = %s", got)
-	}
-
-	ignoring := prWaitOptions{Reviewer: "figgyster", Interval: 0, IgnoreAuthors: []string{"react-doctor"}}
-	snapshot, err := parsePRSnapshot(snapshotPayload(head, "",
-		"", `{"id":"c1","createdAt":"2026-07-26T10:00:00Z","author":{"__typename":"Bot","login":"react-doctor"}}`), ignoring)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(snapshot.Comments) != 0 {
-		t.Fatalf("ignored bot still collected: %#v", snapshot.Comments)
-	}
-}
-
-func TestParsePRSnapshotAgainstRealApprovalPayload(t *testing.T) {
-	payload, err := os.ReadFile(filepath.Join("testdata", "pr-approval-with-body.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-	observation, err := parsePRSnapshot(payload, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if observation.ReviewState != "approved" || observation.CheckState != checksGreen || !observation.ready() {
-		t.Fatalf("real approval not read as ready: %#v", observation)
-	}
-	if len(humanPRComments(observation.Comments)) != 0 {
-		t.Fatalf("verdict prose collected as a human comment: %#v", humanPRComments(observation.Comments))
-	}
-	bots := botPRComments(observation.Comments)
-	if len(bots) != 1 || bots[0].Author != "github-actions" || !bots[0].Bot {
-		t.Fatalf("bot comment = %#v, want the react-doctor post tagged as a bot", bots)
-	}
-
-	first, err := parsePRSnapshot(payload, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	first.ReviewState, first.ReviewSubmittedAt = "waiting", time.Time{}
-	_, outcome, events, err := waitTuple(context.Background(),
-		&fakeReadinessSource{results: []*prReadiness{first, observation}}, opts, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeApproved || outcome.exitCode() != prWaitExitApproved {
-		t.Fatalf("outcome = %s (exit %d), want approved", outcome, outcome.exitCode())
-	}
-	if got := strings.Join(outcomeStrings(events), ","); got != "approved" {
-		t.Fatalf("events = %s; the bot comment was in the baseline, so only the verdict is news", got)
-	}
-}
-
-func outcomeStrings(events []prOutcome) []string {
-	result := make([]string, 0, len(events))
-	for _, event := range events {
-		result = append(result, string(event))
-	}
-	return result
-}
-
-func TestParsePRSnapshotCapturesReviewRequestAndBaseline(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	reviews := reviewNode("r1", "CHANGES_REQUESTED", "please fix", "2026-07-19T10:00:00Z", "figgyster", head, "")
-	requests := `{"requestedReviewer":{"__typename":"User","login":"figgyster"}},
-	             {"requestedReviewer":{"__typename":"Team","slug":"platform"}}`
-
-	readiness, err := parsePRSnapshot(snapshotPayloadWithRequests(head, "", reviews, "", requests), prWaitOptions{Reviewer: "figgyster"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !readiness.ReviewerRequested {
-		t.Fatalf("re-requested reviewer not detected: %#v", readiness)
-	}
-	if readiness.ReviewState != "changes_requested" {
-		t.Fatalf("review state = %q", readiness.ReviewState)
-	}
-	want := mustTime(t, "2026-07-19T10:00:00Z")
-	if !readiness.ReviewSubmittedAt.Equal(want) || readiness.ReviewSignalID != "r1" {
-		t.Fatalf("review signal = %q at %v", readiness.ReviewSignalID, readiness.ReviewSubmittedAt)
-	}
-
-	other := `{"requestedReviewer":{"__typename":"User","login":"someone-else"}}`
-	readiness, err = parsePRSnapshot(snapshotPayloadWithRequests(head, "", reviews, "", other), prWaitOptions{Reviewer: "figgyster"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if readiness.ReviewerRequested {
-		t.Fatalf("unrelated request marked reviewer re-requested: %#v", readiness)
-	}
-}
-
-func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T) {
-	head := strings.Repeat("c", 40)
-	baselineAt := mustTime(t, "2026-07-19T10:00:00Z")
-	freshAt := mustTime(t, "2026-07-19T12:00:00Z")
-
-	stale := reReviewObservation(head, checksGreen, "changes_requested", true, baselineAt, baselineAt)
-	stillStale := reReviewObservation(head, checksGreen, "changes_requested", true, baselineAt, baselineAt)
-	approved := reReviewObservation(head, checksGreen, "approved", false, freshAt, freshAt)
-	source := &fakeReadinessSource{results: []*prReadiness{stale, stillStale, approved}}
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-
-	var output bytes.Buffer
-	got, outcome, _, err := waitTuple(context.Background(), source, opts, &output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeApproved || outcome.exitCode() != prWaitExitApproved || got != approved {
-		t.Fatalf("got=%#v outcome=%s", got, outcome)
-	}
-	if source.calls != 3 {
-		t.Fatalf("returned after %d polls; the stale verdict must not end the wait", source.calls)
-	}
-	text := output.String()
-	if !strings.Contains(text, "review=changes_requested reviewer=figgyster re-requested=true") {
-		t.Fatalf("re-request annotation missing from progress:\n%s", text)
-	}
-	if n := strings.Count(text, "predates the pending re-review request"); n != 1 {
-		t.Fatalf("stale-verdict note fired %d times, want 1:\n%s", n, text)
-	}
-}
-
-func TestWaitForPRActionableResumesPendingReReview(t *testing.T) {
-	at := time.Unix(100, 0)
-	stale := reReviewObservation("head", checksPending, "approved", true, at, at)
-	opts := prWaitOptions{Reviewer: "figgyster"}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	first, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{stale}}, opts, prWaitCursor{}, io.Discard)
-	if err != nil || first.Outcome != outcomeTimeout {
-		t.Fatalf("first wait = %+v, %v", first, err)
-	}
-	stale.CheckState = checksGreen
-	fresh := reReviewObservation("head", checksGreen, "approved", false, at.Add(time.Second), at.Add(time.Second))
-	source := &fakeReadinessSource{results: []*prReadiness{stale, fresh}}
-	resumed, err := waitForPRActionable(context.Background(), source, opts, first.Cursor, io.Discard)
-	if err != nil || resumed.Outcome != outcomeApproved || resumed.Observation != fresh {
-		t.Fatalf("resumed wait = %+v, %v", resumed, err)
-	}
-}
-
-func TestWaitForPRActionableUsesReactionIdentityAcrossFetches(t *testing.T) {
-	observation := readinessObservation("12", "head", checksGreen, "waiting")
-	observation.evidence.HeadSHA = "head"
-	source := &fakeReadinessSource{results: []*prReadiness{observation}}
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	opts := prWaitOptions{Reviewer: "chatgpt-codex-connector"}
-	first, err := waitForPRActionable(ctx, source, opts, prWaitCursor{}, io.Discard)
-	if err != nil || first.Outcome != outcomeTimeout {
-		t.Fatalf("first wait = %+v, %v", first, err)
-	}
-	observation.evidence.Reactions = []prreadiness.Reaction{{
-		ID: "reaction", Author: opts.Reviewer, Content: "THUMBS_UP", CreatedAt: time.Unix(1, 0),
+func TestPRWaitCursorRoundTripsCanonicalState(t *testing.T) {
+	dir := t.TempDir()
+	opts := prWaitOptions{Host: "github.com", Owner: "SolenesInc", Name: "attn", Number: 303}
+	saved := prWaitCursor{Cursor: prreadiness.Cursor{
+		Initialized: true, Reviewer: "reviewer", HeadSHA: "head",
+		SignalBaselineIDs: []string{"signal"}, SeenCommentIDs: []string{"comment"},
+		SeenVerdictIDs: []string{"verdict"}, LastActionKey: "action",
 	}}
-	resumed, err := waitForPRActionable(ctx, source, opts, first.Cursor, io.Discard)
-	if err != nil || resumed.Outcome != outcomeApproved {
-		t.Fatalf("new reaction identity was lost to clock skew: %+v, %v", resumed, err)
+	if err := savePRWaitCursor(dir, opts, saved, time.Unix(10, 0)); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestWaitForPRActionableReturnsOnFreshChangesRequestedAfterReReview(t *testing.T) {
-	head := strings.Repeat("c", 40)
-	baselineAt := mustTime(t, "2026-07-19T10:00:00Z")
-	freshAt := mustTime(t, "2026-07-19T12:00:00Z")
-
-	stale := reReviewObservation(head, checksGreen, "changes_requested", true, baselineAt, baselineAt)
-	fresh := reReviewObservation(head, checksGreen, "changes_requested", true, freshAt, freshAt)
-	source := &fakeReadinessSource{results: []*prReadiness{stale, fresh}}
-
-	got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster", Interval: 0}, &bytes.Buffer{})
+	loaded, err := loadPRWaitCursor(dir, opts)
+	if err != nil || loaded.HeadSHA != "head" || loaded.LastActionKey != "action" ||
+		strings.Join(loaded.SeenCommentIDs, ",") != "comment" {
+		t.Fatalf("loaded = %+v, err=%v", loaded, err)
+	}
+	data, err := os.ReadFile(cursorPath(dir, opts))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if outcome != outcomeChangesRequested || outcome.exitCode() != prWaitExitChangesRequested || got != fresh {
-		t.Fatalf("got=%#v outcome=%s", got, outcome)
-	}
-	if source.calls != 2 {
-		t.Fatalf("returned after %d polls; expected the stale verdict skipped and the fresh one to return", source.calls)
-	}
-}
-
-func TestWaitForPRActionableReturnsImmediatelyWithoutReReview(t *testing.T) {
-	head := strings.Repeat("c", 40)
-	at := mustTime(t, "2026-07-19T10:00:00Z")
-
-	approved := reReviewObservation(head, checksGreen, "approved", false, at, at)
-	source := &fakeReadinessSource{results: []*prReadiness{approved}}
-	got, outcome, _, err := waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster", Interval: 0}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeApproved || got != approved || source.calls != 1 {
-		t.Fatalf("approval not returned immediately: outcome=%s calls=%d", outcome, source.calls)
-	}
-
-	changes := reReviewObservation(head, checksGreen, "changes_requested", false, at, at)
-	source = &fakeReadinessSource{results: []*prReadiness{changes}}
-	got, outcome, _, err = waitTuple(context.Background(), source, prWaitOptions{Reviewer: "figgyster", Interval: 0}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if outcome != outcomeChangesRequested || got != changes || source.calls != 1 {
-		t.Fatalf("changes_requested not returned immediately: outcome=%s calls=%d", outcome, source.calls)
-	}
-}
-
-func TestReportPROutcomePrintsWhatWasSaid(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	result := readinessObservation("12", head, checksFailed, "changes_requested")
-	result.URL = "https://github.com/victorarias/attn/pull/12"
-	result.ReviewBody = "The witness is missing."
-	result.Checks = []prCheck{
-		{Name: "CI", State: checksFailed, URL: "https://github.com/victorarias/attn/runs/1"},
-		{Name: "Lint", State: checksGreen},
-	}
-	result.Comments = []prComment{
-		{ID: "c1", Author: "victorarias", Kind: "review", Body: "This drops the guard.", Location: "cmd/attn/pr.go:42"},
-		{ID: "c2", Author: "react-doctor", Kind: "issue", Bot: true, Body: "One finding."},
-	}
-
-	var plain bytes.Buffer
-	events := []prOutcome{outcomeChecksFailed, outcomeChangesRequested, outcomeComment, outcomeBotComment}
-	reportPROutcome(prWaitResult{Observation: result, Outcome: outcomeChecksFailed, Events: events}, prWaitOptions{Reviewer: "figgyster"}, &plain)
-
-	for _, want := range []string{
-		"CI https://github.com/victorarias/attn/runs/1",
-		"--- figgyster ---",
-		"  The witness is missing.",
-		"--- victorarias on cmd/attn/pr.go:42 ---",
-		"  This drops the guard.",
-		"--- react-doctor ---",
-		"  One finding.",
-		"https://github.com/victorarias/attn/pull/12",
-	} {
-		if !strings.Contains(plain.String(), want) {
-			t.Fatalf("output missing %q:\n%s", want, plain.String())
+	for _, obsolete := range []string{"comment_ids", "verdict_at", "reaction_head", "failure_head"} {
+		if bytes.Contains(data, []byte(`"`+obsolete+`"`)) {
+			t.Fatalf("cursor retained obsolete field %q: %s", obsolete, data)
 		}
 	}
-	if strings.Contains(plain.String(), "Lint https") {
-		t.Fatalf("a passing check was printed as a failure:\n%s", plain.String())
-	}
+}
 
-	var encoded bytes.Buffer
-	reportPROutcome(prWaitResult{Observation: result, Outcome: outcomeChangesRequested, Events: events}, prWaitOptions{JSON: true, Reviewer: "figgyster"}, &encoded)
-	var payload struct {
-		URL    string `json:"url"`
-		Checks struct {
-			Failed []prCheck `json:"failed"`
-		} `json:"checks"`
-		Review struct {
-			Body string `json:"body"`
-		} `json:"review"`
-		Comments []prComment `json:"comments"`
-	}
-	if err := json.Unmarshal(encoded.Bytes(), &payload); err != nil {
+func TestPRWaitCursorWithoutDirectoryIsInert(t *testing.T) {
+	if err := savePRWaitCursor("", prWaitOptions{Number: 1}, prWaitCursor{}, time.Unix(1, 0)); err != nil {
 		t.Fatal(err)
 	}
-	if payload.URL == "" || payload.Review.Body != "The witness is missing." ||
-		len(payload.Checks.Failed) != 1 || payload.Checks.Failed[0].Name != "CI" ||
-		len(payload.Comments) != 2 || payload.Comments[0].Location != "cmd/attn/pr.go:42" ||
-		payload.Comments[0].Body != "This drops the guard." {
-		t.Fatalf("payload = %#v", payload)
+	if loaded, err := loadPRWaitCursor("", prWaitOptions{Number: 1}); err != nil || loaded.Initialized {
+		t.Fatalf("loaded = %+v, err=%v", loaded, err)
 	}
 }
 
-func TestWaitForPRActionableResumesFromCursorAcrossCalls(t *testing.T) {
-	head := strings.Repeat("b", 40)
-	first := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(1, 0)}
-	gap := prComment{ID: "c2", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(2, 0)}
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-
-	start := readinessObservation("12", head, checksPending, "waiting")
-	start.Comments = []prComment{first}
-	arrived := readinessObservation("12", head, checksPending, "waiting")
-	arrived.Comments = []prComment{first, gap}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	timedOut, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{start}}, opts, prWaitCursor{}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
+func TestParsePRWaitArgs(t *testing.T) {
+	opts, err := parsePRWaitArgs([]string{
+		"https://github.com/SolenesInc/attn/pull/303", "--reviewer", "chatgpt-codex-connector[bot]",
+		"--timeout", "2m", "--interval", "3s", "--since", "2026-09-20T10:00:00Z", "--json",
+	})
+	if err != nil || opts.Owner != "solenesinc" || opts.Name != "attn" || opts.Number != 303 ||
+		opts.Timeout != 2*time.Minute || opts.Interval != 3*time.Second || !opts.JSON || opts.Since.IsZero() {
+		t.Fatalf("opts = %+v, err=%v", opts, err)
 	}
-	if timedOut.Outcome != outcomeTimeout {
-		t.Fatalf("outcome = %s", timedOut.Outcome)
-	}
-	if strings.Join(timedOut.Cursor.CommentIDs, ",") != "c1" {
-		t.Fatalf("cursor = %#v, want the baseline comment recorded", timedOut.Cursor)
-	}
-
-	second, err := waitForPRActionable(context.Background(),
-		&fakeReadinessSource{results: []*prReadiness{arrived}}, opts, timedOut.Cursor, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second.Outcome != outcomeComment || len(second.Observation.Comments) != 1 ||
-		second.Observation.Comments[0].ID != "c2" {
-		t.Fatalf("outcome=%s comments=%#v", second.Outcome, second.Observation.Comments)
-	}
-	if strings.Join(second.Cursor.CommentIDs, ",") != "c1,c2" {
-		t.Fatalf("cursor = %#v, want the reported comment added", second.Cursor)
-	}
-
-	ctx, cancel = context.WithCancel(context.Background())
-	cancel()
-	third, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{arrived}}, opts, second.Cursor, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if third.Outcome != outcomeTimeout {
-		t.Fatalf("a comment already reported was reported again: outcome = %s", third.Outcome)
-	}
-
-	other := opts
-	other.Reviewer = "another-reviewer"
-	forOtherReviewer := readinessObservation("12", head, checksPending, "waiting")
-	forOtherReviewer.Comments = []prComment{first, gap}
-	reset, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{forOtherReviewer}}, other, second.Cursor, &bytes.Buffer{})
-	if err != nil || reset.Outcome != outcomeTimeout || reset.Cursor.Reviewer != other.Reviewer ||
-		strings.Join(reset.Cursor.CommentIDs, ",") != "c1,c2" {
-		t.Fatalf("reviewer change did not establish a new baseline: %+v, %v", reset, err)
-	}
-}
-
-func TestWaitForPRActionableSuppressesAlreadyReportedFailure(t *testing.T) {
-	head := strings.Repeat("c", 40)
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0}
-	failing := readinessObservation("12", head, checksFailed, "waiting")
-	failing.Checks = []prCheck{{Name: "CI", State: checksFailed}}
-
-	first, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{failing}}, opts, prWaitCursor{}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.Outcome != outcomeChecksFailed || first.Cursor.FailureHead != head ||
-		strings.Join(first.Cursor.FailureChecks, ",") != "CI" {
-		t.Fatalf("outcome=%s cursor=%#v", first.Outcome, first.Cursor)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	again, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{failing}}, opts, first.Cursor, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if again.Outcome != outcomeTimeout {
-		t.Fatalf("the same failure returned twice: outcome = %s", again.Outcome)
-	}
-
-	worse := readinessObservation("12", head, checksFailed, "waiting")
-	worse.Checks = []prCheck{{Name: "CI", State: checksFailed}, {Name: "Lint", State: checksFailed}}
-	changed, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{worse}}, opts, first.Cursor, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if changed.Outcome != outcomeChecksFailed {
-		t.Fatalf("a new failing check was suppressed: outcome = %s", changed.Outcome)
-	}
-
-	pushed := readinessObservation("12", strings.Repeat("d", 40), checksFailed, "waiting")
-	pushed.Checks = []prCheck{{Name: "CI", State: checksFailed}}
-	repushed, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{pushed}}, opts, first.Cursor, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if repushed.Outcome != outcomeChecksFailed {
-		t.Fatalf("the failure on a new head was suppressed: outcome = %s", repushed.Outcome)
-	}
-}
-
-func TestWaitForPRActionableSinceReplaysByTime(t *testing.T) {
-	head := strings.Repeat("e", 40)
-	old := prComment{ID: "c1", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(100, 0)}
-	recent := prComment{ID: "c2", Author: "victorarias", Kind: "issue", CreatedAt: time.Unix(300, 0)}
-	observation := readinessObservation("12", head, checksPending, "waiting")
-	observation.Comments = []prComment{old, recent}
-
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: 0, Since: time.Unix(200, 0)}
-	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{results: []*prReadiness{observation}}, opts,
-		prWaitCursor{CommentIDs: []string{"c1", "c2"}}, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.Outcome != outcomeComment || len(result.Observation.Comments) != 1 ||
-		result.Observation.Comments[0].ID != "c2" {
-		t.Fatalf("outcome=%s comments=%#v", result.Outcome, result.Observation.Comments)
-	}
-}
-
-func TestWaitForPRActionableSinceReplaysReactionByTime(t *testing.T) {
-	head := strings.Repeat("e", 40)
-	observation := readinessObservation("12", head, checksGreen, "waiting")
-	observation.evidence = prreadiness.Evidence{
-		State: "open", MergeableState: "clean", HeadSHA: head, CheckState: prreadiness.ChecksGreen,
-		Reactions: []prreadiness.Reaction{
-			{ID: "old", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Unix(100, 0)},
-			{ID: "recent", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Unix(300, 0)},
-		},
-	}
-	opts := prWaitOptions{Reviewer: "chatgpt-codex-connector[bot]", Since: time.Unix(200, 0)}
-	result, err := waitForPRActionable(
-		context.Background(), &fakeReadinessSource{results: []*prReadiness{observation}}, opts, prWaitCursor{}, &bytes.Buffer{},
-	)
-	if err != nil || result.Outcome != outcomeApproved || result.Observation.ReviewSignalID != "recent" {
-		t.Fatalf("post-since reaction was not replayed: %+v, %v", result, err)
-	}
-}
-
-type snapshotSource struct {
-	payloads [][]byte
-	calls    int
-}
-
-func (s *snapshotSource) Fetch(_ context.Context, opts prWaitOptions) (*prReadiness, error) {
-	index := s.calls
-	s.calls++
-	if index >= len(s.payloads) {
-		index = len(s.payloads) - 1
-	}
-	return parsePRSnapshot(s.payloads[index], opts)
-}
-
-func TestWaitForPRActionableDoesNotWakeOnTheCallersOwnComment(t *testing.T) {
-	head := strings.Repeat("a", 40)
-	mine := `{"id":"c1","createdAt":"2026-07-26T10:00:00Z","bodyText":"answering the review",
-	          "author":{"__typename":"User","login":"victorarias"}}`
-	theirs := `{"id":"c2","createdAt":"2026-07-26T10:05:00Z","bodyText":"one more thing",
-	            "author":{"__typename":"User","login":"figgyster"}}`
-	opts := prWaitOptions{Reviewer: "figgyster", Interval: time.Millisecond, SelfLogin: "VictorArias"}
-	resumed := prWaitCursor{Reviewer: "figgyster", Initialized: true}
-	bounded := func() (context.Context, context.CancelFunc) {
-		return context.WithTimeout(context.Background(), 10*time.Second)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	own, err := waitForPRActionable(ctx, &snapshotSource{payloads: [][]byte{snapshotPayload(head, "", "", mine)}},
-		opts, resumed, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if own.Outcome != outcomeTimeout {
-		t.Fatalf("the caller's own comment ended the wait: outcome=%s comments=%#v", own.Outcome, own.Observation.Comments)
-	}
-
-	otherCtx, cancelOther := bounded()
-	defer cancelOther()
-	other, err := waitForPRActionable(otherCtx,
-		&snapshotSource{payloads: [][]byte{snapshotPayload(head, "", "", mine+","+theirs)}},
-		opts, resumed, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if other.Outcome != outcomeComment || len(other.Observation.Comments) != 1 ||
-		other.Observation.Comments[0].ID != "c2" {
-		t.Fatalf("outcome=%s comments=%#v, want only figgyster's comment", other.Outcome, other.Observation.Comments)
-	}
-
-	opts.SelfLogin = ""
-	includedCtx, cancelIncluded := bounded()
-	defer cancelIncluded()
-	included, err := waitForPRActionable(includedCtx,
-		&snapshotSource{payloads: [][]byte{snapshotPayload(head, "", "", mine)}},
-		opts, resumed, &bytes.Buffer{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if included.Outcome != outcomeComment || len(included.Observation.Comments) != 1 ||
-		included.Observation.Comments[0].ID != "c1" {
-		t.Fatalf("outcome=%s comments=%#v, want the caller's own comment reported", included.Outcome, included.Observation.Comments)
+	if _, err := parsePRWaitArgs([]string{"303", "--reviewer", "reviewer"}); err == nil {
+		t.Fatal("number without --repo succeeded")
 	}
 }
 
 func TestResolvePRSelfLoginIsSkippableAndFailureTolerant(t *testing.T) {
 	original := ghSelfLogin
 	t.Cleanup(func() { ghSelfLogin = original })
-
-	calls := 0
-	ghSelfLogin = func(context.Context, string) (string, error) {
-		calls++
-		return "", errors.New("gh: not authenticated")
-	}
+	ghSelfLogin = func(context.Context, string) (string, error) { return "", errors.New("offline") }
 	var stderr bytes.Buffer
-	if login := resolvePRSelfLogin(context.Background(), prWaitOptions{}, &stderr); login != "" {
-		t.Fatalf("login = %q, want an unresolvable login to report everyone", login)
+	if got := resolvePRSelfLogin(context.Background(), prWaitOptions{}, &stderr); got != "" ||
+		!strings.Contains(stderr.String(), "own comments will be reported") {
+		t.Fatalf("login = %q, stderr=%q", got, stderr.String())
 	}
-	if calls != 1 || !strings.Contains(stderr.String(), "could not resolve") {
-		t.Fatalf("calls=%d stderr=%q", calls, stderr.String())
-	}
-
-	ghSelfLogin = func(_ context.Context, host string) (string, error) {
-		calls++
-		if host != "ghe.example.com" {
-			t.Fatalf("host = %q, want the lookup scoped to the pull request's host", host)
-		}
-		return "victorarias", nil
-	}
-	if login := resolvePRSelfLogin(context.Background(), prWaitOptions{Host: "ghe.example.com"}, io.Discard); login != "victorarias" {
-		t.Fatalf("login = %q", login)
-	}
-
-	ghSelfLogin = func(context.Context, string) (string, error) {
-		t.Error("--include-self asked GitHub who we are")
-		return "", nil
-	}
-	if login := resolvePRSelfLogin(context.Background(), prWaitOptions{IncludeSelf: true}, io.Discard); login != "" {
-		t.Fatalf("login = %q under --include-self", login)
-	}
-}
-
-func TestResolvePRSelfLoginCannotOutlastTheWaitDeadline(t *testing.T) {
-	original := ghSelfLogin
-	t.Cleanup(func() { ghSelfLogin = original })
-
-	ghSelfLogin = func(ctx context.Context, _ string) (string, error) {
-		<-ctx.Done()
-		return "", ctx.Err()
-	}
-
-	budget := 50 * time.Millisecond
-	ctx, cancel := context.WithTimeout(context.Background(), budget)
-	defer cancel()
-	start := time.Now()
-	login := resolvePRSelfLogin(ctx, prWaitOptions{}, io.Discard)
-	elapsed := time.Since(start)
-
-	if login != "" {
-		t.Fatalf("login = %q, want a stalled lookup to report everyone", login)
-	}
-	if elapsed >= prSelfLoginTimeout {
-		t.Fatalf("lookup took %s with a %s budget: it borrowed its own clock", elapsed, budget)
-	}
-}
-
-func TestPRWaitCursorRoundTripsOnDisk(t *testing.T) {
-	dir := t.TempDir()
-	opts := prWaitOptions{Owner: "victorarias", Name: "attn", Number: 679}
-	now := time.Unix(1_700_000_000, 0)
-
-	if cursor, err := loadPRWaitCursor(dir, opts); err != nil || !cursor.empty() {
-		t.Fatalf("first call must start empty: cursor=%#v err=%v", cursor, err)
-	}
-
-	saved := prWaitCursor{
-		CommentIDs: []string{"c1"}, VerdictIDs: []string{"r1"}, SignalHead: "abc", SignalIDs: []string{"reaction"},
-		Reviewer: "figgyster", Initialized: true, FailureHead: "abc", FailureChecks: []string{"CI"},
-	}
-	if err := savePRWaitCursor(dir, opts, saved, now); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(dir, "github.com", "victorarias", "attn", "679.json")
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("cursor not at %s: %v", path, err)
-	}
-	loaded, err := loadPRWaitCursor(dir, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Join(loaded.CommentIDs, ",") != "c1" || strings.Join(loaded.VerdictIDs, ",") != "r1" ||
-		strings.Join(loaded.SignalIDs, ",") != "reaction" || loaded.SignalHead != "abc" ||
-		loaded.Reviewer != "figgyster" || !loaded.Initialized || loaded.FailureHead != "abc" ||
-		!loaded.sameFailure("abc", []prCheck{{Name: "CI", State: checksFailed}}) {
-		t.Fatalf("loaded = %#v", loaded)
-	}
-
-	many := make([]string, 501)
-	for i := range many {
-		many[i] = fmt.Sprintf("comment-%03d", i)
-	}
-	saved.CommentIDs = many
-	if err := savePRWaitCursor(dir, opts, saved, now); err != nil {
-		t.Fatal(err)
-	}
-	if loaded, err := loadPRWaitCursor(dir, opts); err != nil || len(loaded.CommentIDs) != len(many) {
-		t.Fatalf("cursor lost comment identities: count=%d err=%v", len(loaded.CommentIDs), err)
-	}
-
-	legacy := []byte(`{"comment_ids":["legacy-comment"],"verdict_at":"2026-09-19T10:00:00Z","reaction_head":"abc","reaction_after":"2026-09-19T10:00:00Z"}`)
-	if err := os.WriteFile(path, legacy, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if loaded, err := loadPRWaitCursor(dir, opts); err != nil || loaded.Initialized || loaded.SignalHead != "" {
-		t.Fatalf("legacy cursor was not marked for a conservative baseline: %#v, %v", loaded, err)
-	}
-
-	encoded, err := json.Marshal(prWaitCursor{CommentIDs: []string{"c1"}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if strings.Contains(string(encoded), "0001-01-01") {
-		t.Fatalf("cursor = %s", encoded)
-	}
-
-	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if cursor, err := loadPRWaitCursor(dir, opts); err == nil || !cursor.empty() {
-		t.Fatalf("corrupt cursor must report the problem and read as empty: cursor=%#v err=%v", cursor, err)
-	}
-
-	stale := filepath.Join(dir, "github.com", "victorarias", "attn", "1.json")
-	if err := os.WriteFile(stale, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	old := now.Add(-2 * prCursorMaxAge)
-	if err := os.Chtimes(stale, old, old); err != nil {
-		t.Fatal(err)
-	}
-	if err := savePRWaitCursor(dir, opts, saved, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(stale); !os.IsNotExist(err) {
-		t.Fatalf("stale cursor survived: %v", err)
-	}
-}
-
-func TestPRWaitCursorWithoutDirectoryIsInert(t *testing.T) {
-	if err := savePRWaitCursor("", prWaitOptions{Number: 1}, prWaitCursor{CommentIDs: []string{"c1"}}, time.Unix(1, 0)); err != nil {
-		t.Fatal(err)
-	}
-	if cursor, err := loadPRWaitCursor("", prWaitOptions{Number: 1}); err != nil || !cursor.empty() {
-		t.Fatalf("cursor=%#v err=%v", cursor, err)
-	}
-}
-
-func TestParsePRWaitArgs(t *testing.T) {
-	opts, err := parsePRWaitArgs([]string{"https://github.com/VictorArias/attn/pull/602", "--reviewer", "figgyster", "--interval", "5s"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if opts.Owner != "victorarias" || opts.Name != "attn" || opts.Number != 602 ||
-		opts.Reviewer != "figgyster" || opts.Interval != 5*time.Second {
-		t.Fatalf("opts = %#v", opts)
-	}
-
-	opts, err = parsePRWaitArgs([]string{"602", "--repo", "ghe.example.com/victorarias/attn", "--reviewer", "figgyster",
-		"--ignore-author", "bot-one", "--ignore-author", "bot-two", "--json"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if opts.Host != "ghe.example.com" || opts.Owner != "victorarias" || opts.Name != "attn" || !opts.JSON ||
-		strings.Join(opts.IgnoreAuthors, ",") != "bot-one,bot-two" {
-		t.Fatalf("opts = %#v", opts)
-	}
-
-	opts, err = parsePRWaitArgs([]string{"602", "--repo", "victorarias/attn", "--reviewer", "figgyster",
-		"--reset", "--since", "2026-07-26T10:00:00Z", "--include-self"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !opts.Reset || !opts.IncludeSelf || !opts.Since.Equal(mustTime(t, "2026-07-26T10:00:00Z")) {
-		t.Fatalf("opts = %#v", opts)
-	}
-	if _, err := parsePRWaitArgs([]string{"602", "--repo", "victorarias/attn", "--reviewer", "figgyster", "--since", "yesterday"}); err == nil ||
-		!strings.Contains(err.Error(), "RFC3339") {
-		t.Fatalf("--since error = %v", err)
-	}
-
-	if _, err := parsePRWaitArgs([]string{"602", "--reviewer", "figgyster"}); err == nil || !strings.Contains(err.Error(), "--repo is required") {
-		t.Fatalf("missing repo error = %v", err)
-	}
-	if _, err := parsePRWaitArgs([]string{"602", "--repo", "victorarias/attn"}); err == nil || !strings.Contains(err.Error(), "required") {
-		t.Fatalf("missing reviewer error = %v", err)
-	}
-	if _, err := parsePRWaitArgs([]string{"602", "--repo", "attn", "--reviewer", "figgyster"}); err == nil ||
-		!strings.Contains(err.Error(), "[host/]owner/repository") {
-		t.Fatalf("malformed repo error = %v", err)
+	stderr.Reset()
+	if got := resolvePRSelfLogin(context.Background(), prWaitOptions{IncludeSelf: true}, &stderr); got != "" || stderr.Len() != 0 {
+		t.Fatalf("include-self login = %q, stderr=%q", got, stderr.String())
 	}
 }
 
 func TestExecutePRCommandShowsSubcommandHelp(t *testing.T) {
-	var stdout bytes.Buffer
-	if code := executePRCommand([]string{"wait-ready", "--help"}, &stdout, &bytes.Buffer{}); code != 0 {
-		t.Fatalf("exit code = %d", code)
+	var output bytes.Buffer
+	if code := executePRCommand([]string{"wait-ready", "--help"}, &output, io.Discard); code != 0 ||
+		!strings.Contains(output.String(), "attn pr wait-ready") {
+		t.Fatalf("help = %q, code=%d", output.String(), code)
 	}
 }
 
-func readinessObservation(number, head, checks, review string) *prReadiness {
-	return &prReadiness{
-		Number: number, State: "open", HeadSHA: head, Checks: []prCheck{{Name: "check:CI", State: checks}},
-		CheckState: checks, Reviewer: "figgyster", ReviewState: review,
-		evidence: prreadiness.Evidence{MergeableState: "clean"},
+func TestCursorPathUsesRepositoryIdentity(t *testing.T) {
+	path := cursorPath("/tmp/state", prWaitOptions{Host: "ghe.example", Owner: "o", Name: "r", Number: 7})
+	if path != filepath.Join("/tmp/state", "ghe.example", "o", "r", "7.json") {
+		t.Fatalf("path = %q", path)
 	}
 }

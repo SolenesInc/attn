@@ -193,7 +193,7 @@ func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, std
 		}
 		fmt.Fprintf(w, "%s#%d\t%s\t%s\t%s\t%s\t%s\n",
 			pr.Repository, pr.Number, pr.State,
-			orDash(protocol.Deref(pr.CIStatus)), orDash(protocol.Deref(pr.ReviewStatus)), watch, pr.URL)
+			orDash(string(protocol.Deref(pr.CIStatus))), orDash(string(protocol.Deref(pr.ReviewStatus))), watch, pr.URL)
 	}
 	w.Flush()
 	return 0

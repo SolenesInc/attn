@@ -18,7 +18,8 @@ func readinessPayload(extra string) []byte {
     "isDraft":false,"state":"OPEN","merged":false,"mergeStateStatus":"CLEAN",
     "headRefOid":"abcdef1234567890","headRefName":"feature","baseRefOid":"base","baseRefName":"next",
     "author":{"login":"author"},"headRepository":{"nameWithOwner":"o/r"},"baseRepository":{"nameWithOwner":"o/r"},
-    "commits":{"nodes":[{"commit":{"committedDate":"2026-09-19T10:00:00Z","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS"}]}}}}]},
+    "reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]},
+    "commits":{"nodes":[{"commit":{"committedDate":"2026-09-19T10:00:00Z","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://ci.example.test/run/1"}]}}}}]},
     "reviews":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"review","state":"COMMENTED","bodyText":"Reviewed commit: abcdef1","submittedAt":"2026-09-19T10:01:00Z","author":{"login":"chatgpt-codex-connector"},"commit":{"oid":"abcdef1234567890"},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]},
     "comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},
     "reactions":{"pageInfo":{"hasNextPage":false},"nodes":[]},
@@ -37,19 +38,22 @@ func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
 	}
-	if result.Snapshot.HeadSHA != "abcdef1234567890" || result.Evidence.CheckState != prreadiness.ChecksGreen {
+	if result.HeadSHA != "abcdef1234567890" || result.CheckState != prreadiness.ChecksGreen {
 		t.Fatalf("result = %+v", result)
 	}
-	if got := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]", nil); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
+	if len(result.Checks) != 1 || result.Checks[0].URL != "https://ci.example.test/run/1" {
+		t.Fatalf("check URL = %+v", result.Checks)
+	}
+	if got := prreadiness.Evaluate(*result, "chatgpt-codex-connector[bot]", nil); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
 		t.Fatalf("evaluation = %+v", got)
 	}
-	if len(result.Evidence.Comments) != 2 || result.Evidence.Comments[0].Kind != prreadiness.CommentReview ||
-		result.Evidence.Comments[1].Kind != prreadiness.CommentInline ||
-		result.Evidence.Comments[1].Location != "watch.go:42" || result.Evidence.Comments[1].Bot {
-		t.Fatalf("human inline evidence lost context: %+v", result.Evidence.Comments)
+	if len(result.Comments) != 2 || result.Comments[0].Kind != prreadiness.CommentReview ||
+		result.Comments[1].Kind != prreadiness.CommentInline ||
+		result.Comments[1].Location != "watch.go:42" || result.Comments[1].Bot {
+		t.Fatalf("human inline evidence lost context: %+v", result.Comments)
 	}
-	if len(result.Evidence.Reactions) != 1 || result.Evidence.Reactions[0].ID != "reaction" {
-		t.Fatalf("reaction identity was not retained: %+v", result.Evidence.Reactions)
+	if len(result.Reactions) != 1 || result.Reactions[0].ID != "reaction" {
+		t.Fatalf("reaction identity was not retained: %+v", result.Reactions)
 	}
 }
 
@@ -61,8 +65,8 @@ func TestParsePullRequestReadinessUsesCommentIdentityForThreads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse readiness: %v", err)
 	}
-	if len(result.Evidence.Threads) != 1 || result.Evidence.Threads[0].ID != "comment-id" {
-		t.Fatalf("threads = %+v", result.Evidence.Threads)
+	if len(result.Threads) != 1 || result.Threads[0].ID != "comment-id" {
+		t.Fatalf("threads = %+v", result.Threads)
 	}
 }
 
@@ -123,12 +127,57 @@ func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	evaluation := prreadiness.Evaluate(result.Evidence, "chatgpt-codex-connector[bot]", nil)
-	if calls.Load() != 2 || len(result.Evidence.Reviews) != 2 || !evaluation.Ready {
-		t.Fatalf("calls = %d, reviews = %d, evaluation = %+v", calls.Load(), len(result.Evidence.Reviews), evaluation)
+	evaluation := prreadiness.Evaluate(*result, "chatgpt-codex-connector[bot]", nil)
+	if calls.Load() != 2 || len(result.Reviews) != 2 || !evaluation.Ready {
+		t.Fatalf("calls = %d, reviews = %d, evaluation = %+v", calls.Load(), len(result.Reviews), evaluation)
 	}
-	if result.Evidence.Reviews[0].ID != "review" || result.Evidence.Reviews[1].ID != "second-review" {
-		t.Fatalf("reviews from both pages were not retained: %+v", result.Evidence.Reviews)
+	if result.Reviews[0].ID != "review" || result.Reviews[1].ID != "second-review" {
+		t.Fatalf("reviews from both pages were not retained: %+v", result.Reviews)
+	}
+}
+
+func TestFetchPullRequestReadinessPaginatesReviewRequests(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var request struct {
+			Query     string         `json:"query"`
+			Variables map[string]any `json:"variables"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(request.Query, "detailsUrl") || !strings.Contains(request.Query, "targetUrl") {
+			t.Fatalf("readiness query omits check URLs: %s", request.Query)
+		}
+		body := string(readinessPayload(""))
+		if calls.Add(1) == 1 {
+			if _, ok := request.Variables["requestCursor"]; ok {
+				t.Fatalf("first request has request cursor: %v", request.Variables)
+			}
+			body = strings.Replace(body,
+				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
+				`"reviewRequests":{"pageInfo":{"hasNextPage":true,"endCursor":"requests-1"},"nodes":[{"requestedReviewer":{"__typename":"User","login":"alice"}}]}`, 1)
+		} else {
+			if request.Variables["requestCursor"] != "requests-1" {
+				t.Fatalf("request cursor = %v", request.Variables["requestCursor"])
+			}
+			body = strings.Replace(body,
+				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
+				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[{"requestedReviewer":{"__typename":"User","login":"bob"}}]}`, 1)
+		}
+		_, _ = w.Write([]byte(body))
+	}))
+	t.Cleanup(server.Close)
+	client, err := NewClient(server.URL, "test-token")
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := client.FetchPullRequestReadiness("o/r", 71)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 2 || strings.Join(result.RequestedReviewers, ",") != "alice,bob" {
+		t.Fatalf("calls = %d, requested reviewers = %v", calls.Load(), result.RequestedReviewers)
 	}
 }
 

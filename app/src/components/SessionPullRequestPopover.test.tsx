@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import type { SessionPullRequest } from '../types/generated';
+import {
+  SessionPullRequestCheckStatus,
+  SessionPullRequestReviewStatus,
+  type SessionPullRequest,
+} from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import { SessionPullRequestPopover } from './SessionPullRequestPopover';
 import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
@@ -22,16 +26,17 @@ function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
     created_at: '2026-08-30T12:00:00Z',
     state: 'open',
     status_fetched_at: '2026-08-30T12:05:00Z',
-    ci_status: 'failure',
-    review_status: 'pending',
+    ci_status: SessionPullRequestCheckStatus.Failure,
+    review_status: SessionPullRequestReviewStatus.Waiting,
     mergeable_state: 'clean',
     ...overrides,
   };
 }
 
-function show(pullRequests: SessionPullRequest[], autoFocus = true) {
+function show(pullRequests: SessionPullRequest[], autoFocus = true, sessionId?: string) {
   return render(
     <SessionPullRequestPopover
+	  sessionId={sessionId}
       pullRequests={pullRequests}
       anchor={{ top: 40, left: 40 }}
       autoFocus={autoFocus}
@@ -85,11 +90,10 @@ describe('SessionPullRequestPopover', () => {
 
   it('shows monitor health and stops only this session watch', async () => {
     show([pr({
-      session_id: 'session-1',
       watching: true,
       watch_recipients: ['builder', 'reviewer'],
       watch_last_checked_at: '2026-08-30T12:06:00Z',
-    })]);
+    })], true, 'session-1');
 
     expect(screen.getByText('builder, reviewer')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
@@ -108,7 +112,7 @@ describe('SessionPullRequestPopover', () => {
 
   it('shows why stopping the watch failed', async () => {
     sendPullRequestUnwatch.mockRejectedValueOnce(new Error('session is no longer watching this pull request'));
-    show([pr({ session_id: 'session-1', watching: true })]);
+    show([pr({ watching: true })], true, 'session-1');
 
     fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
 

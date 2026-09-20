@@ -9,6 +9,7 @@ import (
 
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 func newSessionPRStore(t *testing.T) *Store {
@@ -73,25 +74,25 @@ func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
 		BEGIN SELECT RAISE(FAIL, 'injected head reset failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := s.BeginPullRequestWatchHead(
-		"s1", prID, "head", "watch", []string{"reaction"}, []string{"comment"}, now,
-	); err == nil || changed {
-		t.Fatalf("failed head reset changed the watch: changed=%v err=%v", changed, err)
+	cursor := prreadiness.Cursor{
+		Initialized: true, Reviewer: "second-reviewer", HeadSHA: "head",
+		SignalBaselineIDs: []string{"reaction"}, SeenCommentIDs: []string{"comment"},
 	}
-	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.LastHeadSHA != "" || len(watch.SignalBaselineIDs) != 0 {
+	if err := s.ApplyPullRequestWatchBaseline("s1", prID, "watch", cursor, true); err == nil {
+		t.Fatal("failed head reset changed the watch")
+	}
+	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.Cursor.Initialized {
 		t.Fatalf("failed head reset persisted its baseline: %+v", watch)
 	}
 	if _, err := s.db.Exec("DROP TRIGGER reject_head_reset"); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := s.BeginPullRequestWatchHead(
-		"s1", prID, "head", "watch", []string{"reaction"}, []string{"comment"}, now,
-	); err != nil || !changed {
-		t.Fatalf("retry head reset: changed=%v err=%v", changed, err)
+	if err := s.ApplyPullRequestWatchBaseline("s1", prID, "watch", cursor, true); err != nil {
+		t.Fatalf("retry head reset: %v", err)
 	}
-	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.LastHeadSHA != "head" ||
-		strings.Join(watch.SignalBaselineIDs, ",") != "reaction" || !watch.FeedbackBaselineSet ||
-		strings.Join(watch.FeedbackBaselineIDs, ",") != "comment" {
+	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.Cursor.HeadSHA != "head" ||
+		strings.Join(watch.Cursor.SignalBaselineIDs, ",") != "reaction" ||
+		strings.Join(watch.Cursor.SeenCommentIDs, ",") != "comment" {
 		t.Fatalf("successful head reset lost its baseline: %+v", watch)
 	}
 	if err := s.UpdateSessionPullRequestReviewStatus("s1", prID, "approved"); err != nil {
@@ -178,14 +179,17 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 	if changed, err := first.WatchPullRequest("session", "github.com:victorarias/attn#71", "reviewer", time.Now()); err != nil || !changed {
 		t.Fatalf("watch = %t, %v", changed, err)
 	}
-	if changed, err := first.BeginPullRequestWatchHead(
-		"session", "github.com:victorarias/attn#71", "head", "pull-request-watch:test",
-		[]string{"reaction"}, nil, time.Now(),
-	); err != nil || !changed {
-		t.Fatalf("begin watch head = %t, %v", changed, err)
+	cursor := prreadiness.Cursor{
+		Initialized: true, Reviewer: "reviewer", HeadSHA: "head",
+		SignalBaselineIDs: []string{"reaction"}, SeenCommentIDs: []string{"comment"}, LastActionKey: "observation",
+	}
+	if err := first.ApplyPullRequestWatchBaseline(
+		"session", "github.com:victorarias/attn#71", "pull-request-watch:test", cursor, true,
+	); err != nil {
+		t.Fatalf("begin watch head = %v", err)
 	}
 	if err := first.RecordPullRequestWatchSuccess(
-		"session", "github.com:victorarias/attn#71", "observation", []string{"comment"}, time.Now(),
+		"session", "github.com:victorarias/attn#71", cursor, prreadiness.ReviewWaiting, time.Now(),
 	); err != nil {
 		t.Fatalf("record watch baseline: %v", err)
 	}
@@ -200,70 +204,9 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 	defer second.Close()
 	watches := second.PullRequestWatches()
 	if len(watches) != 1 || watches[0].SessionID != "session" || watches[0].Reviewer != "reviewer" ||
-		strings.Join(watches[0].SignalBaselineIDs, ",") != "reaction" ||
-		strings.Join(watches[0].FeedbackBaselineIDs, ",") != "comment" {
+		strings.Join(watches[0].Cursor.SignalBaselineIDs, ",") != "reaction" ||
+		strings.Join(watches[0].Cursor.SeenCommentIDs, ",") != "comment" {
 		t.Fatalf("restarted watches = %+v", watches)
-	}
-}
-
-func TestMigration152RebaselinesExistingPullRequestWatches(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "migration-152.db")
-	first, err := NewWithDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	prID := "github.com:victorarias/attn#71"
-	recordPR(t, first, "session", prID, 71, now)
-	if changed, err := first.WatchPullRequest("session", prID, "reviewer", now); err != nil || !changed {
-		t.Fatalf("watch = %t, %v", changed, err)
-	}
-	if changed, err := first.BeginPullRequestWatchHead(
-		"session", prID, "head", "pull-request-watch:"+prID,
-		[]string{"old-reaction"}, []string{"old-comment"}, now,
-	); err != nil || !changed {
-		t.Fatalf("begin head = %t, %v", changed, err)
-	}
-	if err := first.UpdateSessionPullRequestReviewStatus("session", prID, "approved"); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := first.EnqueueMaintenancePromptOnce(
-		"status", "session", prID, "pull-request-watch:"+prID, "ready", now,
-	); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := first.db.Exec(`
-		ALTER TABLE pull_request_watches DROP COLUMN signal_baseline_ids;
-		ALTER TABLE pull_request_watches ADD COLUMN head_observed_at TEXT NOT NULL DEFAULT '';
-		UPDATE pull_request_watches SET head_observed_at = '2026-09-19T10:00:00Z';
-		DELETE FROM schema_migrations WHERE version = 152;
-	`); err != nil {
-		t.Fatal(err)
-	}
-	if err := first.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	second, err := NewWithDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer second.Close()
-	watch, found := second.PullRequestWatch("session", prID)
-	if !found || watch.LastHeadSHA != "" || len(watch.SignalBaselineIDs) != 0 || watch.LastObservationKey != "" {
-		t.Fatalf("migrated watch retained stale head state: %+v", watch)
-	}
-	if pr, found := second.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "waiting" {
-		t.Fatalf("migrated pull request retained stale review status: %+v", pr)
-	}
-	if unread, err := second.UnreadAgentMailboxDeliveries("session"); err != nil || len(unread) != 0 {
-		t.Fatalf("migrated watch retained stale status notification: %+v, %v", unread, err)
-	}
-	var obsoleteColumns int
-	if err := second.db.QueryRow(`
-		SELECT COUNT(*) FROM pragma_table_info('pull_request_watches') WHERE name = 'head_observed_at'
-	`).Scan(&obsoleteColumns); err != nil || obsoleteColumns != 0 {
-		t.Fatalf("obsolete timestamp columns = %d, err=%v", obsoleteColumns, err)
 	}
 }
 

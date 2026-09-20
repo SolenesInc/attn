@@ -68,6 +68,7 @@ function provenanceDescription(
 }
 
 export function SessionProvenance({
+	sessionId,
   automation,
   pullRequests,
   dispatcher,
@@ -77,6 +78,7 @@ export function SessionProvenance({
   interactive = false,
   popoverGroup,
 }: {
+	sessionId?: string;
   automation?: AutomationProvenanceValue;
   pullRequests?: readonly SessionPullRequest[];
   dispatcher?: DispatcherLink<DelegationSession> | null;
@@ -186,6 +188,7 @@ export function SessionProvenance({
       </span>
       {popover && (
         <SessionPullRequestPopover
+		  sessionId={sessionId}
           pullRequests={pullRequestEntry?.all ?? []}
           anchor={popover.anchor}
           autoFocus={popover.focused}

@@ -35,7 +35,7 @@ const (
 type sessionPRHost interface {
 	FetchPullRequestSnapshot(repo string, number int) (*github.PullRequestSnapshot, error)
 	FetchPullRequestReviewStatus(repo string, number int) (string, error)
-	FetchPullRequestReadiness(repo string, number int) (*github.PullRequestReadiness, error)
+	FetchPullRequestReadiness(repo string, number int) (*prreadiness.Observation, error)
 	IsRateLimited(resource string) (bool, time.Time)
 	GetRateLimit(resource string) *github.RateLimitInfo
 }
@@ -265,21 +265,21 @@ func (d *Daemon) sessionPullRequestSessionActive(sessionID string) bool {
 	return session != nil && session.State != protocol.SessionStateRecoverable
 }
 
-func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessionPullRequestGroup) (store.SessionPullRequestStatus, *github.PullRequestReadiness, error) {
+func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessionPullRequestGroup) (store.SessionPullRequestStatus, *prreadiness.Observation, error) {
 	if len(group.watches) > 0 {
 		readiness, err := host.FetchPullRequestReadiness(group.repo, group.number)
 		if err != nil {
 			return store.SessionPullRequestStatus{}, nil, err
 		}
 		status := group.previous
-		status.Title = readiness.Snapshot.Title
-		status.Draft = readiness.Snapshot.Draft
-		status.State = sessionPullRequestStateFromSnapshot(readiness.Snapshot)
-		status.HeadSHA = readiness.Snapshot.HeadSHA
-		status.HeadBranch = readiness.Snapshot.HeadRef
+		status.Title = readiness.Title
+		status.Draft = readiness.Draft
+		status.State = sessionPullRequestStateFromObservation(readiness)
+		status.HeadSHA = readiness.HeadSHA
+		status.HeadBranch = readiness.HeadRef
 		if status.State == sessionPullRequestOpen {
-			status.MergeableState = readiness.Snapshot.MergeableState
-			status.CIStatus = sessionPullRequestCIStatus(readiness.Evidence.CheckState)
+			status.MergeableState = readiness.MergeableState
+			status.CIStatus = sessionPullRequestCIStatus(readiness.CheckState)
 		}
 		return status, readiness, nil
 	}
@@ -309,7 +309,7 @@ func (d *Daemon) fetchSessionPullRequestStatus(host sessionPRHost, group *sessio
 	return status, nil, nil
 }
 
-func sessionPullRequestCIStatus(state string) string {
+func sessionPullRequestCIStatus(state prreadiness.CheckState) string {
 	switch state {
 	case prreadiness.ChecksGreen:
 		return "success"
@@ -360,6 +360,16 @@ func sessionPullRequestStateFromSnapshot(snapshot *github.PullRequestSnapshot) s
 		return sessionPullRequestOpen
 	}
 	if snapshot.Merged {
+		return sessionPullRequestMerged
+	}
+	return sessionPullRequestClosed
+}
+
+func sessionPullRequestStateFromObservation(observation *prreadiness.Observation) string {
+	if observation.State == sessionPullRequestOpen {
+		return sessionPullRequestOpen
+	}
+	if observation.Merged {
 		return sessionPullRequestMerged
 	}
 	return sessionPullRequestClosed
@@ -455,7 +465,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 	return changedSessions
 }
 
-func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readiness *github.PullRequestReadiness, now time.Time) (changedSessions []string) {
+func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readiness *prreadiness.Observation, now time.Time) (changedSessions []string) {
 	if readiness == nil {
 		return
 	}
@@ -473,56 +483,28 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 				continue
 			}
 		}
-		evidence := readiness.Evidence
-		signalBaselineIDs := watch.SignalBaselineIDs
-		if watch.LastHeadSHA != readiness.Snapshot.HeadSHA {
-			signalBaselineIDs = prreadiness.UnscopedSignalIDs(evidence, watch.Reviewer, time.Time{})
-			_, feedbackBaselineIDs := pullRequestWatchFeedback(evidence, watch)
-			changed, err := d.store.BeginPullRequestWatchHead(
-				watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA,
-				pullRequestWatchCoalesceKey(watch.PRID), signalBaselineIDs, feedbackBaselineIDs, now,
-			)
-			if err != nil {
-				d.logf("pull request watch: begin head %s for %s/%s: %v", readiness.Snapshot.HeadSHA, watch.SessionID, watch.PRID, err)
-				continue
-			}
-			if !changed {
-				continue
-			}
-			watch.LastHeadSHA = readiness.Snapshot.HeadSHA
-			watch.SignalBaselineIDs = signalBaselineIDs
-			watch.LastObservationKey = ""
-			if !watch.FeedbackBaselineSet {
-				watch.FeedbackBaselineSet = true
-				watch.FeedbackBaselineIDs = feedbackBaselineIDs
-			}
-			d.refreshAgentMailboxUnread(watch.SessionID)
-		}
-		evaluation := prreadiness.Evaluate(evidence, watch.Reviewer, signalBaselineIDs)
-		if err := d.store.UpdateSessionPullRequestReviewStatus(watch.SessionID, watch.PRID, evaluation.ReviewState); err != nil {
-			d.logf("session pull requests: store review status for %s/%s: %v", watch.SessionID, watch.PRID, err)
-		}
-		observation := pullRequestWatchAction(readiness, evaluation, watch)
-		if err := d.notifyPullRequestWatchFeedback(watch, observation.Comments, now); err != nil {
+		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{})
+		clearAction := transition.HeadChanged || transition.ReviewerChanged
+		if err := d.store.ApplyPullRequestWatchBaseline(
+			watch.SessionID, watch.PRID, pullRequestWatchCoalesceKey(watch.PRID),
+			transition.BaselineCursor, clearAction,
+		); err != nil {
+			d.logf("pull request watch: baseline %s for %s/%s: %v", readiness.HeadSHA, watch.SessionID, watch.PRID, err)
 			continue
 		}
-		key := ""
-		if observation.Kind != "" {
-			key = prreadiness.Fingerprint(observation.Kind, readiness.Snapshot.HeadSHA, observation.Details)
-			if key != watch.LastObservationKey || watch.LastError != "" {
-				if err := d.notifyPullRequestWatch(watch, observation.Kind, observation.Details, now); err != nil {
-					continue
-				}
-			}
-		} else if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
-			d.logf("pull request watch: clear inactive inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
+		if clearAction {
+			d.refreshAgentMailboxUnread(watch.SessionID)
+		}
+		if err := d.deliverPullRequestTransition(watch, transition.Events, now); err != nil {
+			continue
 		}
 		if err := d.store.RecordPullRequestWatchSuccess(
-			watch.SessionID, watch.PRID, key, observation.BaselineIDs, now,
+			watch.SessionID, watch.PRID, transition.NextCursor, transition.Evaluation.ReviewState, now,
 		); err != nil {
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
+			continue
 		}
-		if readiness.Snapshot.State != sessionPullRequestOpen {
+		if readiness.State != sessionPullRequestOpen {
 			if _, err := d.store.UnwatchPullRequest(watch.SessionID, watch.PRID); err != nil {
 				d.logf("pull request watch: stop completed watch %s/%s: %v", watch.SessionID, watch.PRID, err)
 			}
@@ -538,139 +520,80 @@ func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {
 		left.Reviewer == right.Reviewer && left.CreatedAt == right.CreatedAt
 }
 
-type watchObservation struct {
-	Kind        string
-	Details     []string
-	BaselineIDs []string
-	Comments    []prreadiness.Comment
-}
-
-func pullRequestWatchAction(
-	readiness *github.PullRequestReadiness, evaluation prreadiness.Evaluation, watch store.PullRequestWatch,
-) watchObservation {
-	feedback, baselineIDs := pullRequestWatchFeedback(readiness.Evidence, watch)
-	if readiness.Snapshot.State != sessionPullRequestOpen {
-		state := sessionPullRequestStateFromSnapshot(readiness.Snapshot)
-		return watchObservation{Kind: state, Details: []string{"pull request is " + state}, BaselineIDs: baselineIDs, Comments: feedback}
-	}
-	var kinds []string
-	var details []string
-	if readiness.Evidence.CheckState == prreadiness.ChecksFailed {
-		kinds = append(kinds, "checks failed")
-		details = append(details, readiness.Evidence.FailedChecks...)
-	}
-	if evaluation.ReviewState == prreadiness.ReviewUnavailable {
-		kinds = append(kinds, "review unavailable")
-		details = append(details, evaluation.UnavailableCause)
-	}
-	findings := uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved)
-	if len(findings) > 0 || evaluation.ReviewState == prreadiness.ReviewChangesRequested {
-		humanComments := make(map[string]bool)
-		for _, comment := range feedback {
-			humanComments[comment.ID] = true
-		}
-		findingDetails := make([]string, 0, len(findings)+1)
-		for _, finding := range findings {
-			if humanComments[finding.ID] {
-				continue
-			}
-			line := strings.TrimSpace(finding.Body)
-			if finding.Location != "" {
-				line = finding.Location + ": " + line
-			}
-			if line != "" {
-				findingDetails = append(findingDetails, line)
-			}
-		}
-		humanReview := false
-		for _, review := range readiness.Evidence.Reviews {
-			if humanComments[review.ID] && review.SubmittedAt.Equal(evaluation.ReviewSubmitted) {
-				humanReview = true
-			}
-		}
-		if len(findings) == 0 && !humanReview && evaluation.ReviewBody != "" {
-			findingDetails = append(findingDetails, evaluation.ReviewBody)
-		}
-		kinds = append(kinds, "review findings")
-		details = append(details, findingDetails...)
-	}
-	if evaluation.Ready {
-		kinds = append(kinds, "ready")
-		details = append(details, "checks passed", watch.Reviewer+" reviewed the current head")
-	}
-	return watchObservation{Kind: strings.Join(kinds, " and "), Details: details, BaselineIDs: baselineIDs, Comments: feedback}
-}
-
-func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadiness.Finding {
-	var findings []prreadiness.Finding
-	seen := make(map[string]bool)
-	for _, group := range groups {
-		for _, finding := range group {
-			key := strings.TrimSpace(finding.ID)
-			if key == "" {
-				key = strings.ToLower(strings.TrimSpace(finding.Location)) + "\x00" +
-					strings.ToLower(strings.Join(strings.Fields(finding.Body), " "))
-			}
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			findings = append(findings, finding)
-		}
-	}
-	return findings
-}
-
-func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]prreadiness.Comment, []string) {
-	seenIDs := make(map[string]bool, len(watch.FeedbackBaselineIDs))
-	for _, id := range watch.FeedbackBaselineIDs {
-		seenIDs[id] = true
-	}
-	nextIDs := append([]string(nil), watch.FeedbackBaselineIDs...)
-	var feedback []prreadiness.Comment
-	for _, comment := range evidence.Comments {
-		if comment.Bot || seenIDs[comment.ID] {
-			continue
-		}
-		if watch.FeedbackBaselineSet {
-			feedback = append(feedback, comment)
-		}
-		nextIDs = append(nextIDs, comment.ID)
-		seenIDs[comment.ID] = true
-	}
-	sort.Strings(nextIDs)
-	return feedback, nextIDs
-}
-
-func (d *Daemon) notifyPullRequestWatchFeedback(watch store.PullRequestWatch, comments []prreadiness.Comment, now time.Time) error {
-	if len(comments) == 0 {
-		return nil
-	}
+func (d *Daemon) deliverPullRequestTransition(watch store.PullRequestWatch, events []prreadiness.Event, now time.Time) error {
 	delivered, err := d.store.MaintenanceMailboxItemIDs(watch.SessionID, watch.PRID)
 	if err != nil {
 		d.logf("pull request watch: load delivered feedback for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		return err
 	}
-	for _, comment := range comments {
-		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
-			"pull-request-feedback", watch.SessionID, watch.PRID, comment.ID,
-		}, "\x00"))).String()
-		if delivered[id] {
-			continue
-		}
-		detail := strings.TrimSpace(comment.Body)
-		if comment.Location != "" {
-			detail = comment.Location + ": " + detail
-		}
-		if err := d.queuePullRequestWatchNotification(watch, id, "", "human feedback", []string{comment.Author + ": " + detail}, now); err != nil {
-			return err
+	for _, event := range events {
+		switch event.Kind {
+		case prreadiness.EventClearAction:
+			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, pullRequestWatchCoalesceKey(watch.PRID)); err != nil {
+				d.logf("pull request watch: clear inactive inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
+				return err
+			}
+		case prreadiness.EventAction:
+			id := pullRequestWatchEventID(watch, event.ID)
+			if delivered[id] {
+				continue
+			}
+			if err := d.queuePullRequestWatchNotification(
+				watch, id, pullRequestWatchCoalesceKey(watch.PRID), pullRequestWatchKind(event.Outcomes, event.Details), event.Details, now,
+			); err != nil {
+				return err
+			}
+		case prreadiness.EventFeedback:
+			for _, comment := range event.Comments {
+				if comment.Bot {
+					continue
+				}
+				id := pullRequestWatchEventID(watch, event.ID)
+				if delivered[id] {
+					continue
+				}
+				detail := strings.TrimSpace(comment.Body)
+				if comment.Location != "" {
+					detail = comment.Location + ": " + detail
+				}
+				if err := d.queuePullRequestWatchNotification(
+					watch, id, "", "human feedback", []string{comment.Author + ": " + detail}, now,
+				); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
 }
 
-func (d *Daemon) notifyPullRequestWatch(watch store.PullRequestWatch, kind string, details []string, now time.Time) error {
-	return d.queuePullRequestWatchNotification(watch, uuid.NewString(), pullRequestWatchCoalesceKey(watch.PRID), kind, details, now)
+func pullRequestWatchEventID(watch store.PullRequestWatch, eventID string) string {
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
+		"pull-request-watch", watch.SessionID, watch.PRID, eventID,
+	}, "\x00"))).String()
+}
+
+func pullRequestWatchKind(outcomes []prreadiness.Outcome, details []string) string {
+	kinds := make([]string, 0, len(outcomes))
+	for _, outcome := range outcomes {
+		switch outcome {
+		case prreadiness.OutcomeChecksFailed:
+			kinds = append(kinds, "checks failed")
+		case prreadiness.OutcomeChangesRequested:
+			kinds = append(kinds, "review findings")
+		case prreadiness.OutcomeReviewUnavailable:
+			kinds = append(kinds, "review unavailable")
+		case prreadiness.OutcomeReady:
+			kinds = append(kinds, "ready")
+		case prreadiness.OutcomeClosed:
+			kind := "closed"
+			if len(details) > 0 && details[0] == "pull request is merged" {
+				kind = "merged"
+			}
+			kinds = append(kinds, kind)
+		}
+	}
+	return strings.Join(kinds, " and ")
 }
 
 func (d *Daemon) queuePullRequestWatchNotification(watch store.PullRequestWatch, id, coalesceKey, kind string, details []string, now time.Time) error {

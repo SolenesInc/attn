@@ -330,7 +330,7 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 				t.Fatalf("%s pull requests = %+v, want the recorded one", session.ID, session.PullRequests)
 			}
 			pr := session.PullRequests[0]
-			if protocol.Deref(pr.SessionID) != session.ID || protocol.Deref(pr.Watching) != (session.ID == "s3") ||
+			if protocol.Deref(pr.Watching) != (session.ID == "s3") ||
 				len(pr.WatchRecipients) != 1 || pr.WatchRecipients[0] != "workspace-s3" {
 				t.Errorf("%s watch metadata = %+v", session.ID, pr)
 			}

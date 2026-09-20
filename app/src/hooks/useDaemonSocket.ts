@@ -139,6 +139,7 @@ import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
+import { handlePullRequestDaemonEvent } from './daemonPullRequestEvents';
 
 export type DaemonSession = GeneratedSession;
 
@@ -312,7 +313,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '315';
+export const PROTOCOL_VERSION = '316';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2408,16 +2409,6 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'pull_request_unwatch_result':
-            settlePendingRequest(
-              pendingActionsRef.current,
-              'pull_request_unwatch',
-              data,
-              () => true,
-              'Could not stop watching the pull request',
-            );
-            break;
-
           case 'repos_updated':
             if (data.repos) {
               reposRef.current = data.repos;
@@ -2888,6 +2879,7 @@ export function useDaemonSocket({
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
+            if (handlePullRequestDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
               onWorktreeSwept: (entry) => useWorktreeStore.getState().swept(entry),

@@ -16,7 +16,6 @@ import (
 
 	sqlite3 "github.com/mattn/go-sqlite3"
 
-	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
@@ -1249,24 +1248,20 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", `
 		CREATE TABLE IF NOT EXISTS pull_request_watches (
-			session_id            TEXT NOT NULL,
-			pr_id                 TEXT NOT NULL,
-			reviewer              TEXT NOT NULL,
-			created_at            TEXT NOT NULL,
-			last_head_sha         TEXT NOT NULL DEFAULT '',
-			signal_baseline_ids   TEXT NOT NULL DEFAULT '[]',
-			last_observation_key  TEXT NOT NULL DEFAULT '',
-			last_success_at       TEXT NOT NULL DEFAULT '',
-			last_error            TEXT NOT NULL DEFAULT '',
-			error_since           TEXT NOT NULL DEFAULT '',
-			failure_count         INTEGER NOT NULL DEFAULT 0,
+			session_id      TEXT NOT NULL,
+			pr_id           TEXT NOT NULL,
+			reviewer        TEXT NOT NULL,
+			created_at      TEXT NOT NULL,
+			cursor_json     TEXT NOT NULL DEFAULT '{}',
+			last_success_at TEXT NOT NULL DEFAULT '',
+			last_error      TEXT NOT NULL DEFAULT '',
+			error_since     TEXT NOT NULL DEFAULT '',
+			failure_count   INTEGER NOT NULL DEFAULT 0,
 			PRIMARY KEY (session_id, pr_id)
 		);
 		CREATE INDEX IF NOT EXISTS idx_pull_request_watches_pr
 			ON pull_request_watches(pr_id, session_id);
 	`},
-	{151, "remember delivered pull request feedback", ""},
-	{152, "baseline unscoped pull request signals", ""},
 }
 
 const migration99SQL = `
@@ -1849,16 +1844,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 151 {
-			if err := applyMigration151(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
-		} else if m.version == 152 {
-			if err := applyMigration152(tx); err != nil {
-				tx.Rollback()
-				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
-			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1908,71 +1893,6 @@ func migrateDB(db *sql.DB, dbPath string) error {
 	}
 
 	return nil
-}
-
-func applyMigration151(tx *sql.Tx) error {
-	for _, column := range []struct{ name, defaultValue string }{
-		{"feedback_seen_at", "''"},
-		{"feedback_seen_ids", "'[]'"},
-	} {
-		has, err := columnExists(tx, "pull_request_watches", column.name)
-		if err != nil {
-			return err
-		}
-		if !has {
-			if _, err := tx.Exec("ALTER TABLE pull_request_watches ADD COLUMN " + column.name + " TEXT NOT NULL DEFAULT " + column.defaultValue); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func applyMigration152(tx *sql.Tx) error {
-	has, err := columnExists(tx, "pull_request_watches", "signal_baseline_ids")
-	if err != nil {
-		return err
-	}
-	if !has {
-		if _, err := tx.Exec("ALTER TABLE pull_request_watches ADD COLUMN signal_baseline_ids TEXT NOT NULL DEFAULT '[]'"); err != nil {
-			return err
-		}
-	}
-	hasObservedAt, err := columnExists(tx, "pull_request_watches", "head_observed_at")
-	if err != nil {
-		return err
-	}
-	if hasObservedAt {
-		if _, err := tx.Exec("ALTER TABLE pull_request_watches DROP COLUMN head_observed_at"); err != nil {
-			return err
-		}
-	}
-	if _, err := tx.Exec(`
-		DELETE FROM agent_mailbox_items
-		WHERE kind = ? AND read_at = '' AND EXISTS (
-			SELECT 1 FROM pull_request_watches watch
-			WHERE watch.session_id = agent_mailbox_items.recipient_session_id
-			  AND watch.pr_id = agent_mailbox_items.source_id
-			  AND agent_mailbox_items.coalesce_key = 'pull-request-watch:' || watch.pr_id
-		)
-	`, agentmailbox.KindMaintenancePrompt); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`
-		UPDATE session_pull_requests SET review_status = 'waiting'
-		WHERE EXISTS (
-			SELECT 1 FROM pull_request_watches watch
-			WHERE watch.session_id = session_pull_requests.session_id
-			  AND watch.pr_id = session_pull_requests.pr_id
-		)
-	`); err != nil {
-		return err
-	}
-	_, err = tx.Exec(`
-		UPDATE pull_request_watches
-		SET last_head_sha = '', signal_baseline_ids = '[]', last_observation_key = ''
-	`)
-	return err
 }
 
 func applyMigration146(tx *sql.Tx) error {

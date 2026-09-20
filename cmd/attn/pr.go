@@ -102,9 +102,9 @@ func (o prOutcome) exitCode() int {
 }
 
 type prCheck struct {
-	Name  string `json:"name"`
-	State string `json:"state"`
-	URL   string `json:"url,omitempty"`
+	Name  string                 `json:"name"`
+	State prreadiness.CheckState `json:"state"`
+	URL   string                 `json:"url,omitempty"`
 }
 
 type prComment struct {
@@ -118,14 +118,10 @@ type prComment struct {
 }
 
 func isTrackedReviewerVerdict(author, state string, opts prWaitOptions) bool {
-	if !samePRReviewer(author, opts.Reviewer) {
+	if !prreadiness.SameActor(author, opts.Reviewer) {
 		return false
 	}
 	return state == "APPROVED" || state == "CHANGES_REQUESTED"
-}
-
-func samePRReviewer(left, right string) bool {
-	return strings.EqualFold(strings.TrimSuffix(left, "[bot]"), strings.TrimSuffix(right, "[bot]"))
 }
 
 func humanPRComments(comments []prComment) []prComment {
@@ -147,21 +143,27 @@ func filterPRComments(comments []prComment, bot bool) []prComment {
 }
 
 type prReadiness struct {
-	Number, State, HeadSHA, CheckState, Reviewer, ReviewState string
-	Draft                                                     bool
-	Checks                                                    []prCheck
-	Comments                                                  []prComment
-	ReviewerRequested                                         bool
-	ReviewSubmittedAt                                         time.Time
-	ReviewSignalID                                            string
-	ReviewBody                                                string
-	URL                                                       string
-	evidence                                                  prreadiness.Evidence
+	Number, State, HeadSHA, Reviewer string
+	CheckState                       prreadiness.CheckState
+	ReviewState                      prreadiness.ReviewState
+	Draft                            bool
+	Checks                           []prCheck
+	Comments                         []prComment
+	ReviewerRequested                bool
+	ReviewSubmittedAt                time.Time
+	ReviewSignalID                   string
+	ReviewBody                       string
+	URL                              string
+	Ready                            bool
+	observation                      prreadiness.Observation
 }
 
-func (r *prReadiness) ready() bool {
-	return r.State == "open" && !r.Draft && r.CheckState == checksGreen && r.ReviewState == "approved" &&
-		strings.EqualFold(r.evidence.MergeableState, "clean")
+func (r *prReadiness) applyEvaluation(evaluation prreadiness.Evaluation) {
+	r.ReviewState = evaluation.ReviewState
+	r.ReviewBody = evaluation.ReviewBody
+	r.ReviewSubmittedAt = evaluation.ReviewSubmitted
+	r.ReviewSignalID = evaluation.SignalID
+	r.Ready = evaluation.Ready
 }
 
 type prReadinessSource interface {
@@ -180,6 +182,7 @@ type prWaitOptions struct {
 	Reset             bool
 	SelfLogin         string
 	IncludeSelf       bool
+	persistCursor     func(prreadiness.Cursor) error
 }
 
 func (o prWaitOptions) ignored(author string) bool {
@@ -195,6 +198,37 @@ func (o prWaitOptions) ignored(author string) bool {
 }
 
 type ghPRReadinessSource struct{}
+
+type ghQueryTransport struct {
+	host string
+}
+
+func (t ghQueryTransport) GraphQL(ctx context.Context, query string, variables map[string]any) ([]byte, error) {
+	args := []string{"api", "graphql", "-f", "query=" + query}
+	keys := make([]string, 0, len(variables))
+	for key := range variables {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := variables[key]
+		if value == nil || value == "" {
+			continue
+		}
+		args = append(args, "-F", fmt.Sprintf("%s=%v", key, value))
+	}
+	if t.host != "" {
+		args = append(args, "--hostname", t.host)
+	}
+	output, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("gh api graphql: %s", strings.TrimSpace(string(output)))
+	}
+	return output, nil
+}
 
 const prSelfLoginTimeout = 15 * time.Second
 
@@ -286,6 +320,10 @@ func executePRCommand(args []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pr wait-ready: %v; starting from the current state\n", err)
 		}
 		cursor = loaded
+	}
+	opts.persistCursor = func(next prreadiness.Cursor) error {
+		cursor.Cursor = next
+		return savePRWaitCursor(opts.CursorDir, opts, cursor, time.Now())
 	}
 
 	result, err := waitForPRActionable(ctx, ghPRReadinessSource{}, opts, cursor, progress)
@@ -551,71 +589,33 @@ func parseRepoFlag(repo string) (host, owner, name string, err error) {
 	return host, owner, name, nil
 }
 
-const prSnapshotQuery = `
-query($owner:String!,$name:String!,$number:Int!){
-  repository(owner:$owner,name:$name){
-    pullRequest(number:$number){
-      number state isDraft headRefOid url mergeStateStatus
-      commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
-        pageInfo{hasNextPage}
-        nodes{__typename ... on CheckRun{name status conclusion detailsUrl} ... on StatusContext{context state targetUrl}}
-      }}}}}
-      reviewRequests(first:100){nodes{requestedReviewer{__typename ... on User{login}}}}
-      reviews(last:100){pageInfo{hasPreviousPage} nodes{id state bodyText submittedAt author{__typename login} commit{oid}
-		comments(first:100){pageInfo{hasNextPage} nodes{id createdAt bodyText path line originalLine author{__typename login}}}}}
-	  comments(last:100){pageInfo{hasPreviousPage} nodes{id createdAt bodyText author{__typename login}}}
-	  reactions(first:100){pageInfo{hasNextPage} nodes{id content createdAt user{login}}}
-	  reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved comments(first:1){
-		nodes{id bodyText path line originalLine author{__typename login}
-		  pullRequestReview{commit{oid}}}
-      }}}
-    }}}`
-
 func (ghPRReadinessSource) Fetch(ctx context.Context, opts prWaitOptions) (*prReadiness, error) {
-	args := []string{"api", "graphql",
-		"-f", "query=" + prSnapshotQuery,
-		"-F", "owner=" + opts.Owner,
-		"-F", "name=" + opts.Name,
-		"-F", "number=" + strconv.Itoa(opts.Number),
-	}
-	if opts.Host != "" {
-		args = append(args, "--hostname", opts.Host)
-	}
-	output, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
-	if err != nil {
-		if ctx.Err() != nil {
-			return nil, ctx.Err()
-		}
-		return nil, fmt.Errorf("gh api graphql: %s", strings.TrimSpace(string(output)))
-	}
-	return parsePRSnapshot(output, opts)
-}
-
-func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
-	readiness, err := github.ParsePullRequestReadiness(output)
+	observation, err := github.FetchPullRequestReadiness(
+		ctx, ghQueryTransport{host: opts.Host}, opts.Owner+"/"+opts.Name, opts.Number,
+	)
 	if err != nil {
 		return nil, err
 	}
-	pr := readiness.Snapshot
-	if pr.Number == 0 {
-		return nil, errors.New("gh api graphql returned no PR number")
-	}
+	return readinessForCLI(*observation, opts), nil
+}
+
+func readinessForCLI(observation prreadiness.Observation, opts prWaitOptions) *prReadiness {
 	result := &prReadiness{
-		Number: strconv.Itoa(pr.Number), State: pr.State, Draft: pr.Draft,
-		HeadSHA: pr.HeadSHA, Reviewer: opts.Reviewer, URL: pr.URL,
-		CheckState: readiness.Evidence.CheckState, evidence: readiness.Evidence,
+		Number: strconv.Itoa(observation.Number), State: observation.State, Draft: observation.Draft,
+		HeadSHA: observation.HeadSHA, Reviewer: opts.Reviewer, URL: observation.URL,
+		CheckState: observation.CheckState, observation: observation,
 	}
-	for _, reviewer := range readiness.RequestedReviewers {
-		if strings.EqualFold(reviewer, opts.Reviewer) {
+	for _, reviewer := range observation.RequestedReviewers {
+		if prreadiness.SameActor(reviewer, opts.Reviewer) {
 			result.ReviewerRequested = true
 			break
 		}
 	}
-	for _, check := range readiness.Checks {
+	for _, check := range observation.Checks {
 		result.Checks = append(result.Checks, prCheck{Name: check.Name, State: check.State, URL: check.URL})
 	}
 	sort.Slice(result.Checks, func(i, j int) bool { return result.Checks[i].Name < result.Checks[j].Name })
-	for _, comment := range readiness.Comments {
+	for _, comment := range observation.Comments {
 		if comment.ID == "" || opts.ignored(comment.Author) ||
 			(comment.Kind == "review" && isTrackedReviewerVerdict(comment.Author, comment.ReviewState, opts)) {
 			continue
@@ -625,15 +625,12 @@ func parsePRSnapshot(output []byte, opts prWaitOptions) (*prReadiness, error) {
 			CreatedAt: comment.CreatedAt, Body: strings.TrimSpace(comment.Body), Location: comment.Location,
 		})
 	}
-	evaluation := prreadiness.Evaluate(result.evidence, opts.Reviewer, nil)
-	result.ReviewState = evaluation.ReviewState
-	result.ReviewBody = evaluation.ReviewBody
-	result.ReviewSubmittedAt = evaluation.ReviewSubmitted
-	result.ReviewSignalID = evaluation.SignalID
+	evaluation := prreadiness.Evaluate(observation, opts.Reviewer, nil)
+	result.applyEvaluation(evaluation)
 	sort.Slice(result.Comments, func(i, j int) bool {
 		return result.Comments[i].CreatedAt.Before(result.Comments[j].CreatedAt)
 	})
-	return result, nil
+	return result
 }
 
 type prWaitResult struct {
@@ -645,19 +642,17 @@ type prWaitResult struct {
 
 func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prWaitOptions, cursor prWaitCursor, progress io.Writer) (prWaitResult, error) {
 	var lastLine, lastHead string
-	var baseline map[string]bool
-	var verdictBaseline map[string]bool
 	var notedStaleVerdict bool
 	last := &prReadiness{Number: strconv.Itoa(opts.Number), Reviewer: opts.Reviewer, CheckState: checksNone, ReviewState: "waiting"}
 	if !opts.Since.IsZero() {
-		cursor = prWaitCursor{Reviewer: opts.Reviewer, Initialized: true}
-		baseline = map[string]bool{}
-		verdictBaseline = map[string]bool{}
-	} else if cursor.Initialized && samePRReviewer(cursor.Reviewer, opts.Reviewer) {
-		baseline = cursor.seenComments()
-		verdictBaseline = cursor.seenVerdicts()
-	} else {
-		cursor = prWaitCursor{Reviewer: opts.Reviewer}
+		cursor.Cursor = prreadiness.Cursor{}
+	}
+	ignored := append([]string(nil), opts.IgnoreAuthors...)
+	if opts.SelfLogin != "" {
+		ignored = append(ignored, opts.SelfLogin)
+	}
+	policy := prreadiness.StartPolicy{
+		Since: opts.Since, HoldExistingVerdictWhenRequested: true, IgnoreAuthors: ignored,
 	}
 
 	for {
@@ -669,17 +664,16 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			return prWaitResult{Observation: last}, err
 		}
 		last = observation
-		if cursor.SignalHead != observation.HeadSHA || !cursor.Initialized {
-			cursor.SignalHead = observation.HeadSHA
-			cursor.SignalIDs = prreadiness.UnscopedSignalIDs(observation.evidence, opts.Reviewer, opts.Since)
+		transition := prreadiness.Advance(cursor.Cursor, observation.observation, opts.Reviewer, policy)
+		if (!cursor.Initialized || transition.HeadChanged || transition.ReviewerChanged) && opts.persistCursor != nil {
+			if err := opts.persistCursor(transition.BaselineCursor); err != nil {
+				return prWaitResult{Observation: last}, fmt.Errorf("save readiness baseline: %w", err)
+			}
 		}
-		if observation.evidence.HeadSHA != "" {
-			evaluation := prreadiness.Evaluate(observation.evidence, opts.Reviewer, cursor.SignalIDs)
-			observation.ReviewState = evaluation.ReviewState
-			observation.ReviewBody = evaluation.ReviewBody
-			observation.ReviewSubmittedAt = evaluation.ReviewSubmitted
-			observation.ReviewSignalID = evaluation.SignalID
-		}
+		cursor.Cursor = transition.BaselineCursor
+		observation.applyEvaluation(transition.Evaluation)
+		outcomes, comments := cliTransitionEvents(transition.Events)
+		observation.Comments = comments
 
 		if lastHead != "" && lastHead != observation.HeadSHA {
 			fmt.Fprintf(progress, "head changed %s -> %s; reset\n", shortSHA(lastHead), shortSHA(observation.HeadSHA))
@@ -691,61 +685,27 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			lastLine = line
 		}
 
-		if baseline == nil {
-			baseline = make(map[string]bool, len(observation.Comments))
-			for _, comment := range observation.Comments {
-				baseline[comment.ID] = true
-			}
-			cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
-			cursor.VerdictIDs = prreadiness.VerdictSignalIDs(observation.evidence, opts.Reviewer)
-			if observation.ReviewSignalID != "" && !cursor.seenVerdicts()[observation.ReviewSignalID] {
-				cursor.VerdictIDs = append(cursor.VerdictIDs, observation.ReviewSignalID)
-				sort.Strings(cursor.VerdictIDs)
-			}
-			verdictBaseline = cursor.seenVerdicts()
-			cursor.Initialized = true
-			observation.Comments = nil
-		} else {
-			observation.Comments = unseenPRComments(observation.Comments, baseline, opts.Since)
-		}
-
-		if !notedStaleVerdict && hasReviewVerdict(observation) && !freshReviewVerdict(observation, verdictBaseline, opts.Since) {
+		if !notedStaleVerdict && observation.ReviewerRequested && hasReviewVerdict(observation) &&
+			observation.ReviewSignalID != "" && containsString(transition.BaselineCursor.SeenVerdictIDs, observation.ReviewSignalID) {
 			fmt.Fprintf(progress, "%s %s predates the pending re-review request; waiting for a new review\n",
 				observation.Reviewer, observation.ReviewState)
 			notedStaleVerdict = true
 		}
 
-		var events []prOutcome
-		if observation.State != "open" {
-			events = append(events, outcomeClosed)
-		}
-		if observation.CheckState == checksFailed && !cursor.sameFailure(observation.HeadSHA, observation.Checks) {
-			events = append(events, outcomeChecksFailed)
-		}
-		if freshReviewVerdict(observation, verdictBaseline, opts.Since) {
-			switch {
-			case observation.ReviewState == "changes_requested" || observation.ReviewState == prreadiness.ReviewUnresolved:
-				events = append(events, outcomeChangesRequested)
-			case observation.ready():
-				events = append(events, outcomeApproved)
-			}
-		}
-		if observation.ReviewState == prreadiness.ReviewUnavailable && freshReviewUpdate(observation, verdictBaseline, opts.Since) {
-			events = append(events, outcomeReviewUnavailable)
-		}
-		if len(humanPRComments(observation.Comments)) > 0 {
-			events = append(events, outcomeComment)
-		}
-		if len(botPRComments(observation.Comments)) > 0 {
-			events = append(events, outcomeBotComment)
-		}
-		if winner, ranked := rankPROutcomes(events); winner != "" {
+		if winner, ranked := rankPROutcomes(outcomes); winner != "" {
+			cursor.Cursor = transition.NextCursor
 			return prWaitResult{
 				Observation: observation,
 				Outcome:     winner,
 				Events:      ranked,
-				Cursor:      advancePRWaitCursor(cursor, observation, ranked),
+				Cursor:      cursor,
 			}, nil
+		}
+		cursor.Cursor = transition.NextCursor
+		if opts.persistCursor != nil {
+			if err := opts.persistCursor(cursor.Cursor); err != nil {
+				return prWaitResult{Observation: last}, fmt.Errorf("save readiness cursor: %w", err)
+			}
 		}
 
 		if err := waitPRPoll(ctx, opts.Interval); err != nil {
@@ -754,64 +714,31 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 	}
 }
 
-func freshReviewVerdict(observation *prReadiness, baseline map[string]bool, since time.Time) bool {
-	if !observation.ReviewerRequested {
-		return true
-	}
-	if !since.IsZero() {
-		return observation.ReviewSubmittedAt.After(since)
-	}
-	return observation.ReviewSignalID != "" && !baseline[observation.ReviewSignalID]
-}
-
-func freshReviewUpdate(observation *prReadiness, baseline map[string]bool, since time.Time) bool {
-	if !since.IsZero() {
-		return observation.ReviewSubmittedAt.After(since)
-	}
-	return observation.ReviewSignalID != "" && !baseline[observation.ReviewSignalID]
-}
-
-func unseenPRComments(comments []prComment, baseline map[string]bool, since time.Time) []prComment {
-	var fresh []prComment
-	for _, comment := range comments {
-		if baseline[comment.ID] {
-			continue
-		}
-		if !since.IsZero() && !comment.CreatedAt.After(since) {
-			continue
-		}
-		fresh = append(fresh, comment)
-	}
-	return fresh
-}
-
-func prCommentIDs(comments []prComment) []string {
-	ids := make([]string, 0, len(comments))
-	for _, comment := range comments {
-		ids = append(ids, comment.ID)
-	}
-	return ids
-}
-
-func advancePRWaitCursor(cursor prWaitCursor, observation *prReadiness, events []prOutcome) prWaitCursor {
-	reported := make(map[prOutcome]bool, len(events))
+func cliTransitionEvents(events []prreadiness.Event) ([]prOutcome, []prComment) {
+	var outcomes []prOutcome
+	var comments []prComment
 	for _, event := range events {
-		reported[event] = true
-	}
-	if reported[outcomeComment] || reported[outcomeBotComment] {
-		cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
-	}
-	if reported[outcomeApproved] || reported[outcomeChangesRequested] || reported[outcomeReviewUnavailable] {
-		if observation.ReviewSignalID != "" && !cursor.seenVerdicts()[observation.ReviewSignalID] {
-			cursor.VerdictIDs = append(cursor.VerdictIDs, observation.ReviewSignalID)
-			sort.Strings(cursor.VerdictIDs)
+		for _, outcome := range event.Outcomes {
+			outcomes = append(outcomes, prOutcome(outcome))
+		}
+		for _, comment := range event.Comments {
+			comments = append(comments, prComment{
+				ID: comment.ID, Author: comment.Author, Kind: comment.Kind, Bot: comment.Bot,
+				CreatedAt: comment.CreatedAt, Body: strings.TrimSpace(comment.Body), Location: comment.Location,
+			})
 		}
 	}
-	if reported[outcomeChecksFailed] {
-		cursor.FailureHead = observation.HeadSHA
-		cursor.FailureChecks = failedCheckNames(observation.Checks)
+	sort.Slice(comments, func(i, j int) bool { return comments[i].CreatedAt.Before(comments[j].CreatedAt) })
+	return outcomes, comments
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
 	}
-	return cursor
+	return false
 }
 
 func waitPRPoll(ctx context.Context, interval time.Duration) error {
@@ -836,7 +763,7 @@ func waitPRPoll(ctx context.Context, interval time.Duration) error {
 func readinessLine(r *prReadiness) string {
 	parts := make([]string, 0, len(r.Checks))
 	for _, check := range r.Checks {
-		parts = append(parts, check.Name+"="+check.State)
+		parts = append(parts, check.Name+"="+string(check.State))
 	}
 	checks := "-"
 	if len(parts) > 0 {

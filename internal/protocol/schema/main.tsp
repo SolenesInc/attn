@@ -131,16 +131,30 @@ model PullRequestProvenance {
 // SessionPullRequest is a pull request an agent opened from inside a session,
 // reported by the tool-use hook or `attn pr record`. Status fields stay absent
 // until the refresh job has fetched them from GitHub once.
+enum SessionPullRequestCheckStatus {
+  success,
+  failure,
+  pending,
+  none,
+}
+
+enum SessionPullRequestReviewStatus {
+  waiting,
+  approved,
+  changes_requested,
+  unavailable,
+  unresolved_threads,
+}
+
 model SessionPullRequest {
-  session_id?: string;
   repository: string;           // host/owner/repository, same convention as PullRequestProvenance
   number: int32;
   url: string;
   title?: string;
   created_at: string;           // ISO timestamp the session reported it
   state: string;                // draft | open | merged | closed
-  ci_status?: string;           // success, failure, pending, none — the PR vocabulary
-  review_status?: string;       // approved, changes_requested, unavailable, pending, none
+  ci_status?: SessionPullRequestCheckStatus;
+  review_status?: SessionPullRequestReviewStatus;
   mergeable_state?: string;     // clean, blocked, dirty, unstable
   status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
   watching?: boolean;

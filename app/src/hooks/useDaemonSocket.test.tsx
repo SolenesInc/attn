@@ -618,23 +618,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
-  it('correlates pull request unwatch failures', async () => {
-    const { result, unmount } = renderSocket();
-    const ws = await waitForOpenSocket();
-    const request = result.current.sendPullRequestUnwatch('session-1', 'https://github.com/o/r/pull/1');
-    const command = ws.sent.map((entry) => JSON.parse(entry)).find((entry) => entry.cmd === 'pull_request_unwatch');
-    expect(command).toMatchObject({ id: 'session-1', url: 'https://github.com/o/r/pull/1' });
-
-    act(() => {
-      ws.emit({
-        event: 'pull_request_unwatch_result', request_id: command.request_id,
-        success: false, error: 'watch persistence failed',
-      });
-    });
-    await expect(request).rejects.toThrow('watch persistence failed');
-    unmount();
-  });
-
   it('rejects setAutomationEnabled with the daemon error string on failure', async () => {
     const { result, unmount } = renderSocket();
 

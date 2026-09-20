@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import type { TerminalWorkspaceState } from '../../types/workspace';
-import type { SessionPullRequest } from '../../types/generated';
+import { SessionPullRequestCheckStatus, type SessionPullRequest } from '../../types/generated';
 import { BuiltinDelegationRole } from '../../types/generated';
 import { DelegationChainProvider, type ChainSession } from '../DelegationChain';
 
@@ -112,7 +112,7 @@ describe('SessionTerminalWorkspace provenance line', () => {
       created_at: '2026-08-30T12:00:00Z',
       state: 'open',
       status_fetched_at: '2026-08-30T12:05:00Z',
-      ci_status: 'failure',
+      ci_status: SessionPullRequestCheckStatus.Failure,
     }]);
 
     const header = document.querySelector('.workspace-pane-header');

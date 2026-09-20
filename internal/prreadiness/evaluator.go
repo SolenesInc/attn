@@ -9,84 +9,8 @@ import (
 	"time"
 )
 
-const (
-	ChecksNone    = "none"
-	ChecksPending = "pending"
-	ChecksGreen   = "green"
-	ChecksFailed  = "failed"
-
-	ReviewWaiting          = "waiting"
-	ReviewApproved         = "approved"
-	ReviewChangesRequested = "changes_requested"
-	ReviewUnavailable      = "unavailable"
-	ReviewUnresolved       = "unresolved_threads"
-)
-
-type Finding struct {
-	ID       string
-	Author   string
-	Body     string
-	Location string
-	Resolved bool
-}
-
-type Review struct {
-	ID          string
-	Author      string
-	State       string
-	Body        string
-	CommitOID   string
-	SubmittedAt time.Time
-	Findings    []Finding
-}
-
-type Reaction struct {
-	ID        string
-	Author    string
-	Content   string
-	CreatedAt time.Time
-}
-
-const (
-	CommentIssue  = "issue"
-	CommentReview = "review"
-	CommentInline = "inline"
-)
-
-type Comment struct {
-	ID        string
-	Author    string
-	Kind      string
-	Body      string
-	Location  string
-	CreatedAt time.Time
-	Bot       bool
-}
-
-type Thread struct {
-	ID        string
-	Author    string
-	CommitOID string
-	Resolved  bool
-	Body      string
-	Location  string
-}
-
-type Evidence struct {
-	State          string
-	Draft          bool
-	MergeableState string
-	HeadSHA        string
-	CheckState     string
-	FailedChecks   []string
-	Reviews        []Review
-	Reactions      []Reaction
-	Comments       []Comment
-	Threads        []Thread
-}
-
 type Evaluation struct {
-	ReviewState      string
+	ReviewState      ReviewState
 	Ready            bool
 	Findings         []Finding
 	Unresolved       []Finding
@@ -100,7 +24,7 @@ var reviewedCommitPattern = regexp.MustCompile(`(?i)reviewed\s+commit\s*[:*` + "
 
 type verdictSignal struct {
 	ID       string
-	State    string
+	State    ReviewState
 	Body     string
 	Cause    string
 	At       time.Time
@@ -108,8 +32,7 @@ type verdictSignal struct {
 	priority int
 }
 
-func Evaluate(evidence Evidence, reviewer string, baselineIDs []string) Evaluation {
-	reviewer = strings.TrimSuffix(strings.TrimSpace(reviewer), "[bot]")
+func Evaluate(evidence Observation, reviewer string, baselineIDs []string) Evaluation {
 	baseline := make(map[string]bool, len(baselineIDs))
 	for _, id := range baselineIDs {
 		baseline[id] = true
@@ -130,7 +53,7 @@ func Evaluate(evidence Evidence, reviewer string, baselineIDs []string) Evaluati
 			candidate := verdictSignal{
 				ID: reaction.ID, State: ReviewApproved, At: reaction.CreatedAt, priority: 2,
 			}
-			if candidate.ID != "" && !baseline[candidate.ID] && sameActor(reaction.Author, reviewer) &&
+			if candidate.ID != "" && !baseline[candidate.ID] && SameActor(reaction.Author, reviewer) &&
 				strings.EqualFold(reaction.Content, "THUMBS_UP") && candidate.laterThan(signal, found) {
 				signal, found = candidate, true
 			}
@@ -166,11 +89,11 @@ func Evaluate(evidence Evidence, reviewer string, baselineIDs []string) Evaluati
 	return result
 }
 
-func latestReviewSignal(evidence Evidence, reviewer string) (verdictSignal, bool) {
+func latestReviewSignal(evidence Observation, reviewer string) (verdictSignal, bool) {
 	var latest Review
 	found := false
 	for _, review := range evidence.Reviews {
-		if !sameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) ||
+		if !SameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) ||
 			!isCodexReviewer(reviewer) && strings.EqualFold(review.State, "COMMENTED") {
 			continue
 		}
@@ -219,11 +142,11 @@ func (signal verdictSignal) laterThan(current verdictSignal, found bool) bool {
 	return signal.ID > current.ID
 }
 
-func UnscopedSignalIDs(evidence Evidence, reviewer string, cutoff time.Time) []string {
+func UnscopedSignalIDs(evidence Observation, reviewer string, cutoff time.Time) []string {
 	var ids []string
 	for _, reaction := range evidence.Reactions {
 		if reaction.ID != "" && (cutoff.IsZero() || !reaction.CreatedAt.After(cutoff)) &&
-			sameActor(reaction.Author, reviewer) && strings.EqualFold(reaction.Content, "THUMBS_UP") {
+			SameActor(reaction.Author, reviewer) && strings.EqualFold(reaction.Content, "THUMBS_UP") {
 			ids = append(ids, reaction.ID)
 		}
 	}
@@ -236,10 +159,11 @@ func UnscopedSignalIDs(evidence Evidence, reviewer string, cutoff time.Time) []s
 	return uniqueSorted(ids)
 }
 
-func VerdictSignalIDs(evidence Evidence, reviewer string) []string {
+func VerdictSignalIDs(evidence Observation, reviewer string, cutoff time.Time) []string {
 	var ids []string
 	for _, review := range evidence.Reviews {
-		if review.ID == "" || !sameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) {
+		if review.ID == "" || (!cutoff.IsZero() && review.SubmittedAt.After(cutoff)) ||
+			!SameActor(review.Author, reviewer) || !reviewMatchesHead(review, evidence.HeadSHA) {
 			continue
 		}
 		state := strings.ToUpper(strings.TrimSpace(review.State))
@@ -251,7 +175,7 @@ func VerdictSignalIDs(evidence Evidence, reviewer string) []string {
 }
 
 func eligibleOutageComment(comment Comment, reviewer string) bool {
-	return isCodexReviewer(reviewer) && comment.Bot && comment.Kind == CommentIssue && sameActor(comment.Author, reviewer)
+	return isCodexReviewer(reviewer) && comment.Bot && comment.Kind == CommentIssue && SameActor(comment.Author, reviewer)
 }
 
 func uniqueSorted(ids []string) []string {
@@ -268,7 +192,7 @@ func uniqueSorted(ids []string) []string {
 }
 
 func isCodexReviewer(reviewer string) bool {
-	return strings.EqualFold(strings.TrimSuffix(reviewer, "[bot]"), "chatgpt-codex-connector")
+	return SameActor(reviewer, "chatgpt-codex-connector")
 }
 
 func reviewMatchesHead(review Review, head string) bool {
@@ -287,10 +211,12 @@ func reviewMatchesHead(review Review, head string) bool {
 	return commit == head || len(match) == 2
 }
 
-func sameActor(left, right string) bool {
-	left = strings.TrimSuffix(strings.TrimSpace(left), "[bot]")
-	right = strings.TrimSuffix(strings.TrimSpace(right), "[bot]")
-	return strings.EqualFold(left, right)
+func NormalizeActor(actor string) string {
+	return strings.TrimSuffix(strings.TrimSpace(actor), "[bot]")
+}
+
+func SameActor(left, right string) bool {
+	return strings.EqualFold(NormalizeActor(left), NormalizeActor(right))
 }
 
 func unavailableReason(body string) string {

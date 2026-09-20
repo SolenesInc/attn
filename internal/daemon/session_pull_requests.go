@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -130,7 +131,7 @@ func (d *Daemon) handlePullRequestUnwatchWS(client *wsClient, msg *protocol.Pull
 func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, reviewer string) error {
 	d.sessionPullRequestWatchMu.Lock()
 	defer d.sessionPullRequestWatchMu.Unlock()
-	reviewer = strings.TrimSpace(reviewer)
+	reviewer = prreadiness.NormalizeActor(reviewer)
 	if reviewer == "" {
 		return fmt.Errorf("pull request watch needs a reviewer")
 	}
@@ -138,7 +139,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, rev
 		return err
 	}
 	current, exists := d.store.PullRequestWatch(rec.SessionID, rec.PRID)
-	if !exists || current.Reviewer != reviewer {
+	if !exists || !prreadiness.SameActor(current.Reviewer, reviewer) {
 		for _, key := range []string{pullRequestWatchCoalesceKey(rec.PRID), "pull-request-outage:" + rec.PRID} {
 			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(rec.SessionID, key); err != nil {
 				return err
@@ -256,9 +257,7 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 	}
 	out := make([]protocol.SessionPullRequest, 0, len(records))
 	for _, rec := range records {
-		sessionID := rec.SessionID
 		entry := protocol.SessionPullRequest{
-			SessionID:  &sessionID,
 			Repository: rec.Repository,
 			Number:     rec.Number,
 			URL:        rec.URL,
@@ -266,8 +265,12 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 			State:      sessionPullRequestState(rec),
 		}
 		entry.Title = pullRequestField(rec.Title)
-		entry.CIStatus = pullRequestField(rec.CIStatus)
-		entry.ReviewStatus = pullRequestField(rec.ReviewStatus)
+		if rec.CIStatus != "" {
+			entry.CIStatus = protocol.Ptr(protocol.SessionPullRequestCheckStatus(rec.CIStatus))
+		}
+		if rec.ReviewStatus != "" {
+			entry.ReviewStatus = protocol.Ptr(protocol.SessionPullRequestReviewStatus(rec.ReviewStatus))
+		}
 		entry.MergeableState = pullRequestField(rec.MergeableState)
 		entry.StatusFetchedAt = pullRequestField(rec.StatusFetchedAt)
 		watches := watchesByPR[rec.PRID]

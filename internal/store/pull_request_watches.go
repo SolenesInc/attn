@@ -7,27 +7,23 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/agentmailbox"
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type PullRequestWatch struct {
-	SessionID           string
-	PRID                string
-	Reviewer            string
-	CreatedAt           string
-	LastHeadSHA         string
-	SignalBaselineIDs   []string
-	LastObservationKey  string
-	LastSuccessAt       string
-	LastError           string
-	ErrorSince          string
-	FailureCount        int
-	FeedbackBaselineSet bool
-	FeedbackBaselineIDs []string
+	SessionID     string
+	PRID          string
+	Reviewer      string
+	CreatedAt     string
+	Cursor        prreadiness.Cursor
+	LastSuccessAt string
+	LastError     string
+	ErrorSince    string
+	FailureCount  int
 }
 
 const pullRequestWatchColumns = `session_id, pr_id, reviewer, created_at,
-	last_head_sha, signal_baseline_ids, last_observation_key, last_success_at, last_error, error_since, failure_count,
-	feedback_seen_at, feedback_seen_ids`
+	cursor_json, last_success_at, last_error, error_since, failure_count`
 
 func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time) (bool, error) {
 	s.mu.Lock()
@@ -35,9 +31,10 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 	if s.db == nil {
 		return false, errors.New("store has no database")
 	}
+	reviewer = prreadiness.NormalizeActor(reviewer)
 	var current string
 	err := s.db.QueryRow(`SELECT reviewer FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID).Scan(&current)
-	if err == nil && current == reviewer {
+	if err == nil && prreadiness.SameActor(current, reviewer) {
 		return false, nil
 	}
 	if err != nil && err != sql.ErrNoRows {
@@ -54,9 +51,7 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 		ON CONFLICT(session_id, pr_id) DO UPDATE SET
 			reviewer = excluded.reviewer,
 			created_at = excluded.created_at,
-			last_head_sha = '',
-			signal_baseline_ids = '[]',
-			last_observation_key = '',
+			cursor_json = '{}',
 			last_success_at = '',
 			last_error = '',
 			error_since = '',
@@ -140,80 +135,87 @@ func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool
 	return watch, err == nil
 }
 
-func (s *Store) BeginPullRequestWatchHead(
-	sessionID, prID, headSHA, coalesceKey string, signalBaselineIDs, feedbackBaselineIDs []string, at time.Time,
-) (bool, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	signalBaselineJSON, err := json.Marshal(signalBaselineIDs)
-	if err != nil {
-		return false, err
-	}
-	feedbackBaselineJSON, err := json.Marshal(feedbackBaselineIDs)
-	if err != nil {
-		return false, err
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return false, err
-	}
-	defer tx.Rollback()
-	var currentHead string
-	if err := tx.QueryRow(`
-		SELECT last_head_sha FROM pull_request_watches WHERE session_id = ? AND pr_id = ?
-	`, sessionID, prID).Scan(&currentHead); err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, err
-	}
-	if currentHead == headSHA {
-		return false, nil
-	}
-	if _, err := tx.Exec(`
-		DELETE FROM agent_mailbox_items
-		WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
-	`, sessionID, agentmailbox.KindMaintenancePrompt, coalesceKey); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`
-		UPDATE pull_request_watches
-		SET last_head_sha = ?, signal_baseline_ids = ?, last_observation_key = '',
-		    feedback_seen_at = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_at END,
-		    feedback_seen_ids = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_ids END
-		WHERE session_id = ? AND pr_id = ?
-	`, headSHA, string(signalBaselineJSON), at.UTC().Format(sortableTimeFormat),
-		string(feedbackBaselineJSON), sessionID, prID); err != nil {
-		return false, err
-	}
-	if _, err := tx.Exec(`
-		UPDATE session_pull_requests SET review_status = 'waiting'
-		WHERE session_id = ? AND pr_id = ?
-	`, sessionID, prID); err != nil {
-		return false, err
-	}
-	return true, tx.Commit()
-}
-
-func (s *Store) RecordPullRequestWatchSuccess(
-	sessionID, prID, observationKey string, feedbackBaselineIDs []string, at time.Time,
+func (s *Store) ApplyPullRequestWatchBaseline(
+	sessionID, prID, coalesceKey string,
+	cursor prreadiness.Cursor,
+	clearAction bool,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	feedbackBaselineJSON, err := json.Marshal(feedbackBaselineIDs)
+	cursorJSON, err := json.Marshal(cursor)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if clearAction {
+		if _, err := tx.Exec(`
+			DELETE FROM agent_mailbox_items
+			WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
+		`, sessionID, agentmailbox.KindMaintenancePrompt, coalesceKey); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+			UPDATE session_pull_requests SET review_status = 'waiting'
+			WHERE session_id = ? AND pr_id = ?
+		`, sessionID, prID); err != nil {
+			return err
+		}
+	}
+	result, err := tx.Exec(`
+		UPDATE pull_request_watches SET cursor_json = ? WHERE session_id = ? AND pr_id = ?
+	`, string(cursorJSON), sessionID, prID)
+	if err != nil {
+		return err
+	}
+	if changed, err := result.RowsAffected(); err != nil || changed == 0 {
+		if err != nil {
+			return err
+		}
+		return sql.ErrNoRows
+	}
+	return tx.Commit()
+}
+
+func (s *Store) RecordPullRequestWatchSuccess(
+	sessionID, prID string,
+	cursor prreadiness.Cursor,
+	reviewStatus prreadiness.ReviewState,
+	at time.Time,
+) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cursorJSON, err := json.Marshal(cursor)
+	if err != nil {
+		return err
+	}
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	result, err := tx.Exec(`
 		UPDATE pull_request_watches
-		SET last_observation_key = ?, last_success_at = ?,
-		    last_error = '', error_since = '', failure_count = 0,
-		    feedback_seen_at = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_at END,
-		    feedback_seen_ids = ?
+		SET cursor_json = ?, last_success_at = ?, last_error = '', error_since = '', failure_count = 0
 		WHERE session_id = ? AND pr_id = ?
-	`, observationKey, at.UTC().Format(sortableTimeFormat),
-		at.UTC().Format(sortableTimeFormat), string(feedbackBaselineJSON), sessionID, prID)
-	return err
+	`, string(cursorJSON), at.UTC().Format(sortableTimeFormat), sessionID, prID)
+	if err != nil {
+		return err
+	}
+	if changed, err := result.RowsAffected(); err != nil {
+		return err
+	} else if changed == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.Exec(`
+		UPDATE session_pull_requests SET review_status = ? WHERE session_id = ? AND pr_id = ?
+	`, string(reviewStatus), sessionID, prID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, message string, at time.Time) (PullRequestWatch, error) {
@@ -240,22 +242,17 @@ type pullRequestWatchScanner interface {
 
 func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
-	var signalBaselineJSON, feedbackBaselineAt, feedbackBaselineJSON string
+	var cursorJSON string
 	err := row.Scan(
 		&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
-		&watch.LastHeadSHA, &signalBaselineJSON, &watch.LastObservationKey, &watch.LastSuccessAt,
-		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &feedbackBaselineAt, &feedbackBaselineJSON,
+		&cursorJSON, &watch.LastSuccessAt, &watch.LastError, &watch.ErrorSince, &watch.FailureCount,
 	)
 	if err != nil {
 		return PullRequestWatch{}, err
 	}
-	if err := json.Unmarshal([]byte(signalBaselineJSON), &watch.SignalBaselineIDs); err != nil {
+	if err := json.Unmarshal([]byte(cursorJSON), &watch.Cursor); err != nil {
 		return PullRequestWatch{}, err
 	}
-	if err := json.Unmarshal([]byte(feedbackBaselineJSON), &watch.FeedbackBaselineIDs); err != nil {
-		return PullRequestWatch{}, err
-	}
-	watch.FeedbackBaselineSet = feedbackBaselineAt != ""
 	return watch, nil
 }
 

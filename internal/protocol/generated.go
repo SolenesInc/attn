@@ -9324,7 +9324,7 @@ type SessionMessagesGetResultMessage struct {
 
 type SessionPullRequest struct {
 	// CIStatus corresponds to the JSON schema field "ci_status".
-	CIStatus *string `json:"ci_status,omitempty,omitzero"`
+	CIStatus *SessionPullRequestCheckStatus `json:"ci_status,omitempty,omitzero"`
 
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
@@ -9339,10 +9339,7 @@ type SessionPullRequest struct {
 	Repository string `json:"repository"`
 
 	// ReviewStatus corresponds to the JSON schema field "review_status".
-	ReviewStatus *string `json:"review_status,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID *string `json:"session_id,omitempty,omitzero"`
+	ReviewStatus *SessionPullRequestReviewStatus `json:"review_status,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
@@ -9369,6 +9366,21 @@ type SessionPullRequest struct {
 	// Watching corresponds to the JSON schema field "watching".
 	Watching *bool `json:"watching,omitempty,omitzero"`
 }
+
+type SessionPullRequestCheckStatus string
+
+const SessionPullRequestCheckStatusFailure SessionPullRequestCheckStatus = "failure"
+const SessionPullRequestCheckStatusNone SessionPullRequestCheckStatus = "none"
+const SessionPullRequestCheckStatusPending SessionPullRequestCheckStatus = "pending"
+const SessionPullRequestCheckStatusSuccess SessionPullRequestCheckStatus = "success"
+
+type SessionPullRequestReviewStatus string
+
+const SessionPullRequestReviewStatusApproved SessionPullRequestReviewStatus = "approved"
+const SessionPullRequestReviewStatusChangesRequested SessionPullRequestReviewStatus = "changes_requested"
+const SessionPullRequestReviewStatusUnavailable SessionPullRequestReviewStatus = "unavailable"
+const SessionPullRequestReviewStatusUnresolvedThreads SessionPullRequestReviewStatus = "unresolved_threads"
+const SessionPullRequestReviewStatusWaiting SessionPullRequestReviewStatus = "waiting"
 
 type SessionRegisteredMessage struct {
 	// Event corresponds to the JSON schema field "event".

@@ -6,53 +6,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type prWaitCursor struct {
-	CommentIDs    []string   `json:"comment_ids,omitempty"`
-	VerdictIDs    []string   `json:"verdict_ids,omitempty"`
-	FailureHead   string     `json:"failure_head,omitempty"`
-	FailureChecks []string   `json:"failure_checks,omitempty"`
-	SignalHead    string     `json:"signal_head,omitempty"`
-	SignalIDs     []string   `json:"signal_ids,omitempty"`
-	Reviewer      string     `json:"reviewer,omitempty"`
-	Initialized   bool       `json:"initialized,omitempty"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-}
-
-func (c prWaitCursor) empty() bool {
-	return !c.Initialized && len(c.CommentIDs) == 0 && len(c.VerdictIDs) == 0 &&
-		c.FailureHead == "" && c.SignalHead == ""
-}
-
-func (c prWaitCursor) seenVerdicts() map[string]bool {
-	return stringSet(c.VerdictIDs)
-}
-
-func (c prWaitCursor) seenComments() map[string]bool {
-	return stringSet(c.CommentIDs)
-}
-
-func stringSet(ids []string) map[string]bool {
-	seen := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		seen[id] = true
-	}
-	return seen
-}
-
-func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
-	if c.FailureHead != head {
-		return false
-	}
-	names := failedCheckNames(checks)
-	sort.Strings(names)
-	previous := append([]string(nil), c.FailureChecks...)
-	sort.Strings(previous)
-	return strings.Join(names, "\n") == strings.Join(previous, "\n")
+	prreadiness.Cursor
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 const prCursorMaxAge = 30 * 24 * time.Hour

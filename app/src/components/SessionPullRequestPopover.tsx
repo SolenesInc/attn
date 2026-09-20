@@ -100,6 +100,7 @@ function PullRequestDetails({ current }: { current: SessionPullRequest }) {
 }
 
 export function SessionPullRequestPopover({
+	sessionId,
   pullRequests,
   anchor,
   autoFocus,
@@ -107,6 +108,7 @@ export function SessionPullRequestPopover({
   onPointerEnter,
   onPointerLeave,
 }: {
+	sessionId?: string;
   pullRequests: readonly SessionPullRequest[];
   anchor: PopoverAnchor;
   autoFocus: boolean;
@@ -156,11 +158,11 @@ export function SessionPullRequestPopover({
   if (!current) return null;
 
   const stopWatching = () => {
-    if (!current.session_id || !daemonApi) return;
+	if (!sessionId || !daemonApi) return;
     const url = current.url;
     setStoppingWatchURL(url);
     setStopWatchError(null);
-    daemonApi.sendPullRequestUnwatch(current.session_id, url)
+	daemonApi.sendPullRequestUnwatch(sessionId, url)
       .catch((error) => setStopWatchError({
         url,
         message: error instanceof Error ? error.message : String(error),
@@ -233,7 +235,7 @@ export function SessionPullRequestPopover({
         <button
           type="button"
           className="session-pr-popover__stop-watch"
-          disabled={!daemonApi || !current.session_id || stoppingWatchURL === current.url}
+		  disabled={!daemonApi || !sessionId || stoppingWatchURL === current.url}
           onClick={stopWatching}
         >
           {stoppingWatchURL === current.url ? 'Stopping…' : 'Stop watching for this session'}
