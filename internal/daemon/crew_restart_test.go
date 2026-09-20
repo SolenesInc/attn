@@ -115,6 +115,16 @@ func TestCrewRestart_TracksTheRequestUntilTheRealHandoffStartsASuccessor(t *test
 	if len(spawnedSessions(t, backend)) != 2 {
 		t.Fatalf("replayed completed restart spawned %d sessions, want 2", len(spawnedSessions(t, backend)))
 	}
+	if next := crewRestartCall(t, d, "trellis", "restart-3"); !next.Ok || next.CrewRestartResult.Restart.RequestID != "restart-3" {
+		t.Fatalf("next restart = %+v", next)
+	}
+	aliasReplay := crewRestartCall(t, d, "trellis", "restart-2")
+	if aliasReplay.Ok || !strings.Contains(protocol.Deref(aliasReplay.Error), "already accepted for an earlier day") {
+		t.Fatalf("replayed alias for superseded restart = %+v", aliasReplay)
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("replayed alias spawned %d sessions, want 2", len(spawnedSessions(t, backend)))
+	}
 }
 
 func TestCrewRestart_AHandoffThatFailsAfterFilingKeepsTheLetterForOneRetry(t *testing.T) {
@@ -288,6 +298,36 @@ func TestCrewRestart_RevisionRejectsADelayedAsleepRequestAfterAnotherDay(t *test
 	}
 }
 
+func TestCrewRestart_AnAcceptedRequestCannotRestartANewerDay(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	first := crewRestartCall(t, d, "alder", "restart-a")
+	if !first.Ok {
+		t.Fatalf("first restart: %v", protocol.Deref(first.Error))
+	}
+	firstDay := protocol.Deref(first.CrewRestartResult.Member.BindingSession)
+	second := crewRestartCall(t, d, "alder", "restart-b")
+	if !second.Ok {
+		t.Fatalf("second restart: %v", protocol.Deref(second.Error))
+	}
+	if handoff := crewHandoffCall(t, d, firstDay, "Start another day."); !handoff.Ok || handoff.CrewHandoffResult.NapError != nil {
+		t.Fatalf("second-day handoff: %+v", handoff)
+	}
+	newest := memberByID(t, crewList(t, d), "alder")
+	spawns := len(spawnedSessions(t, backend))
+
+	replayed := crewRestartCall(t, d, "alder", "restart-a")
+	if replayed.Ok || !strings.Contains(protocol.Deref(replayed.Error), "already accepted for an earlier day") {
+		t.Fatalf("replayed old restart = %+v", replayed)
+	}
+	after := memberByID(t, crewList(t, d), "alder")
+	if protocol.Deref(after.BindingSession) != protocol.Deref(newest.BindingSession) || after.Restart == nil || after.Restart.RequestID != "restart-b" {
+		t.Fatalf("old replay changed the current day: before=%+v after=%+v", newest, after)
+	}
+	if len(spawnedSessions(t, backend)) != spawns {
+		t.Fatalf("old replay spawned another day: before=%d after=%d", spawns, len(spawnedSessions(t, backend)))
+	}
+}
+
 func TestCrewRestart_UsesTheWireAsleepBindingWhenRawBindingIsDangling(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	if _, err := d.updateCrewMember("alder", func(member *crew.Member) (bool, error) {
@@ -381,7 +421,8 @@ func TestCrewRestart_OperationRecordCASRejectsASettingsRace(t *testing.T) {
 		t.Fatalf("race a settings write: %v", err)
 	}
 
-	err = d.recordCrewRestart(candidate, doc.Rev)
+	receipt := crew.RestartRequest{Member: "alder", RequestID: "raced", RestartRequestID: "raced"}
+	err = d.recordCrewRestart(candidate, doc.Rev, receipt)
 	var conflict *crewRestartConflictError
 	if !errors.As(err, &conflict) || conflict.member.Revision <= int(doc.Rev) {
 		t.Fatalf("operation record error = %v, conflict = %+v", err, conflict)
@@ -389,6 +430,9 @@ func TestCrewRestart_OperationRecordCASRejectsASettingsRace(t *testing.T) {
 	current := memberByID(t, crewList(t, d), "alder")
 	if current.Restart != nil || protocol.Deref(current.Effort) != "high" || len(spawnedSessions(t, backend)) != 0 {
 		t.Fatalf("raced operation changed member/spawned: %+v / %d", current, len(spawnedSessions(t, backend)))
+	}
+	if _, found, readErr := d.crewRestartRequest("alder", "raced"); readErr != nil || found {
+		t.Fatalf("raced operation left a receipt: found=%t err=%v", found, readErr)
 	}
 }
 

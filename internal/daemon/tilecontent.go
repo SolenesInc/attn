@@ -474,9 +474,19 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	if placementSessionID == "" {
 		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
 			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && isStandaloneSeedReader(snapshot, tileID) {
-				if err := d.rebindTileSession(candidateID, tileID, bindingSessionID); err != nil {
+				layout, ok := workspacelayout.UpdateTileParams(snapshot.Layout, tileID, seed.ID)
+				if !ok {
+					return "", "", fmt.Errorf("tile not found: %s", tileID)
+				}
+				layout, ok = workspacelayout.UpdateTileSessionID(layout, tileID, bindingSessionID)
+				if !ok {
+					return "", "", fmt.Errorf("tile not found: %s", tileID)
+				}
+				snapshot.Layout = layout
+				if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
 					return "", "", err
 				}
+				d.broadcastWorkspaceLayoutUpdated(candidateID)
 				return candidateID, tileID, nil
 			}
 		}

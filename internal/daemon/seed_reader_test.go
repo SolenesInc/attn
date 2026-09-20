@@ -170,6 +170,31 @@ func TestOpenSeedWithoutPlacementCreatesAStandaloneReaderWorkspace(t *testing.T)
 	}
 }
 
+func TestOpenSeedWithoutPlacementResetsAReaderNavigatedToAnotherSeed(t *testing.T) {
+	d := newGardenDaemon(t)
+	first := plant(t, d, protocol.SeedPlantMessage{Title: "First"})
+	second := plant(t, d, protocol.SeedPlantMessage{Title: "Second"})
+	workspaceID, tileID, err := d.openSeedTile(first.ID, "")
+	if err != nil {
+		t.Fatalf("open first seed: %v", err)
+	}
+
+	client := newWorkspaceProtocolTestClient()
+	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
+		Cmd: protocol.CmdWorkspaceLayoutUpdateTile, WorkspaceID: workspaceID, TileID: tileID, TileParams: second.ID,
+	})
+	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutUpdateTile, workspaceID, "", "", tileID, true)
+
+	reopenedWorkspaceID, reopenedTileID, err := d.openSeedTile(first.ID, "")
+	if err != nil || reopenedWorkspaceID != workspaceID || reopenedTileID != tileID {
+		t.Fatalf("reopen first seed = (%q, %q, %v), want (%q, %q)", reopenedWorkspaceID, reopenedTileID, err, workspaceID, tileID)
+	}
+	leaves := workspacelayout.TileLeaves(d.store.GetWorkspaceLayout(workspaceID).Layout)
+	if len(leaves) != 1 || leaves[0].TileParams != first.ID {
+		t.Fatalf("reopened standalone reader = %+v, want params %s", leaves, first.ID)
+	}
+}
+
 func TestOpenSeedWithoutPlacementLeavesDockedCopiesAlone(t *testing.T) {
 	d := newGardenDaemon(t)
 	_, _, dockedWorkspaceID := setupMarkdownWorkspaceOn(t, d)

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 var crewRequestedRestartPrompt = prompts.RenderText("crew", "restart-requested", prompts.Values{})
@@ -86,7 +88,20 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 	if err != nil {
 		return nil, err
 	}
+	receipt, found, err := d.crewRestartRequest(member.ID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if found {
+		if member.Restart != nil && member.Restart.RequestID == receipt.RestartRequestID {
+			return d.resumeCrewRestart(member, doc.Rev)
+		}
+		return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("restart request %q was already accepted for an earlier day and will not restart the current day; inspect `attn crew list --json` for the current restart", requestID))
+	}
 	if member.Restart != nil && member.Restart.RequestID == requestID {
+		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.ID, RequestID: requestID, RestartRequestID: requestID}); err != nil {
+			return nil, err
+		}
 		return d.resumeCrewRestart(member, doc.Rev)
 	}
 	if expectedSessionID == nil {
@@ -108,7 +123,14 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 	}
 	if member.Restart != nil && member.Restart.SessionID == visibleSessionID &&
 		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested) {
+		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.ID, RequestID: requestID, RestartRequestID: member.Restart.RequestID}); err != nil {
+			return nil, err
+		}
 		return d.resumeCrewRestart(member, doc.Rev)
+	}
+	receipts, err := d.crewRestartAcceptanceReceipts(member, requestID)
+	if err != nil {
+		return nil, err
 	}
 
 	if member.Restart != nil && member.Restart.State == crew.RestartFailed && member.Restart.SessionID == visibleSessionID && member.Restart.LetterPath != "" {
@@ -121,7 +143,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 		if candidate.LetterSession != visibleSessionID || candidate.LetterPath == "" {
 			candidate.LetterSession, candidate.LetterPath = visibleSessionID, retry.LetterPath
 		}
-		if err := d.recordCrewRestart(candidate, doc.Rev); err != nil {
+		if err := d.recordCrewRestart(candidate, doc.Rev, receipts...); err != nil {
 			return nil, err
 		}
 		return d.resumeCrewRestartCurrent(candidate.ID)
@@ -129,7 +151,7 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 
 	candidate := member
 	candidate.Restart = &crew.Restart{RequestID: requestID, SessionID: visibleSessionID, State: crew.RestartQueued}
-	if err := d.recordCrewRestart(candidate, doc.Rev); err != nil {
+	if err := d.recordCrewRestart(candidate, doc.Rev, receipts...); err != nil {
 		return nil, err
 	}
 	return d.resumeCrewRestartCurrent(candidate.ID)
@@ -147,8 +169,100 @@ func (d *Daemon) crewRestartConflict(member crew.Member, revision int64, cause e
 	return &crewRestartConflictError{member: d.crewMemberWire(member, revision), cause: cause}
 }
 
-func (d *Daemon) recordCrewRestart(member crew.Member, revision int64) error {
-	if _, err := d.writeCrewMemberMustCurrent(member, revision); err != nil {
+func crewRestartRequestDocumentID(memberID, requestID string) string {
+	return fmt.Sprintf("r-%x", sha256.Sum256([]byte(memberID+"\x00"+requestID)))
+}
+
+func (d *Daemon) crewRestartRequest(memberID, requestID string) (crew.RestartRequest, bool, error) {
+	schema, err := d.crewRestartRequestsCollection()
+	if err != nil {
+		return crew.RestartRequest{}, false, err
+	}
+	doc, found, err := d.store.GetDocument(*schema, crewRestartRequestDocumentID(memberID, requestID))
+	if err != nil || !found {
+		return crew.RestartRequest{}, found, err
+	}
+	receipt, err := crew.DecodeRestartRequest(doc.Body)
+	if err != nil {
+		return crew.RestartRequest{}, false, err
+	}
+	if receipt.Member != memberID || receipt.RequestID != requestID || receipt.RestartRequestID == "" {
+		return crew.RestartRequest{}, false, fmt.Errorf("stored restart request %q for %s does not match its address", requestID, crew.DisplayName(memberID))
+	}
+	return receipt, true, nil
+}
+
+func (d *Daemon) recordCrewRestartRequest(receipt crew.RestartRequest) error {
+	schema, err := d.crewRestartRequestsCollection()
+	if err != nil {
+		return err
+	}
+	body, err := receipt.Encode()
+	if err != nil {
+		return err
+	}
+	absent := docstore.ExpectAbsent
+	fact := documentChangedFact(crew.Namespace, crew.CollectionRestartRequests, crewRestartRequestDocumentID(receipt.Member, receipt.RequestID), false)
+	written, err := d.store.CommitDocumentWrite(store.DocumentWrite{
+		Schema: *schema, ID: crewRestartRequestDocumentID(receipt.Member, receipt.RequestID), Body: body, Expected: &absent,
+	}, fact, time.Now())
+	if err != nil {
+		return err
+	}
+	d.announceCommittedWrite(fact, written.Seq)
+	return nil
+}
+
+func (d *Daemon) crewRestartAcceptanceReceipts(member crew.Member, requestID string) ([]crew.RestartRequest, error) {
+	receipts := []crew.RestartRequest{{Member: member.ID, RequestID: requestID, RestartRequestID: requestID}}
+	if member.Restart == nil {
+		return receipts, nil
+	}
+	_, found, err := d.crewRestartRequest(member.ID, member.Restart.RequestID)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		receipts = append(receipts, crew.RestartRequest{Member: member.ID, RequestID: member.Restart.RequestID, RestartRequestID: member.Restart.RequestID})
+	}
+	return receipts, nil
+}
+
+func (d *Daemon) recordCrewRestart(member crew.Member, revision int64, receipts ...crew.RestartRequest) error {
+	memberSchema, err := d.crewCollection()
+	if err != nil {
+		return err
+	}
+	receiptSchema, err := d.crewRestartRequestsCollection()
+	if err != nil {
+		return err
+	}
+	if err := d.validateCrewMemberPaths(member); err != nil {
+		return err
+	}
+	memberBody, err := member.Encode()
+	if err != nil {
+		return err
+	}
+	memberFact := documentChangedFact(crew.Namespace, crew.CollectionMembers, member.ID, false)
+	commits := []store.DocumentCommit{{
+		Write: store.DocumentWrite{Schema: *memberSchema, ID: member.ID, Body: memberBody, Expected: &revision},
+		Fact:  memberFact,
+	}}
+	absent := docstore.ExpectAbsent
+	for _, receipt := range receipts {
+		body, encodeErr := receipt.Encode()
+		if encodeErr != nil {
+			return encodeErr
+		}
+		id := crewRestartRequestDocumentID(receipt.Member, receipt.RequestID)
+		commits = append(commits, store.DocumentCommit{
+			Write: store.DocumentWrite{Schema: *receiptSchema, ID: id, Body: body, Expected: &absent},
+			Fact:  documentChangedFact(crew.Namespace, crew.CollectionRestartRequests, id, false),
+		})
+	}
+	written, err := d.store.CommitDocumentWrites(commits, time.Now())
+	if err != nil {
 		if !docstore.IsConflict(err) {
 			return err
 		}
@@ -158,6 +272,10 @@ func (d *Daemon) recordCrewRestart(member crew.Member, revision int64) error {
 		}
 		return d.crewRestartConflict(current, doc.Rev, fmt.Errorf("%s changed while its restart was being recorded; refresh the roster and try again: %w", crew.DisplayName(member.ID), err))
 	}
+	for i, commit := range commits {
+		d.announceCommittedWrite(commit.Fact, written[i].Seq)
+	}
+	d.publishFact(FactCrewUpdated, member.ID, nil)
 	return nil
 }
 
@@ -356,17 +474,6 @@ func (d *Daemon) reconcileCrewRestarts() {
 			d.logf("crew: reconcile %s's restart request: %v", crew.DisplayName(member.ID), err)
 		}
 	}
-}
-
-func (d *Daemon) writeCrewMemberMustCurrent(member crew.Member, revision int64) (crew.Member, error) {
-	schema, err := d.crewCollection()
-	if err != nil {
-		return crew.Member{}, err
-	}
-	if _, err := d.writeCrewMember(*schema, member, revision); err != nil {
-		return crew.Member{}, err
-	}
-	return member, nil
 }
 
 func (d *Daemon) crewRestartResult(member crew.Member, revision int64) *protocol.CrewRestartResult {

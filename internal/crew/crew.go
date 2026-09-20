@@ -17,8 +17,9 @@ import (
 const Surface = "the crew"
 
 const (
-	Namespace         = "core/crew"
-	CollectionMembers = "members"
+	Namespace                 = "core/crew"
+	CollectionMembers         = "members"
+	CollectionRestartRequests = "restart_requests"
 )
 
 const HomesDirName = "crew"
@@ -64,6 +65,12 @@ type Restart struct {
 	SuccessorSessionID string       `json:"successor_session_id,omitempty"`
 }
 
+type RestartRequest struct {
+	Member           string `json:"member"`
+	RequestID        string `json:"request_id"`
+	RestartRequestID string `json:"restart_request_id"`
+}
+
 func (m Member) LaunchAgent() string {
 	if agent := strings.TrimSpace(strings.ToLower(m.Agent)); agent != "" {
 		return agent
@@ -86,6 +93,22 @@ func MembersSchema() docstore.CollectionSchema {
 			{Name: "binding_session", Type: docstore.FieldString},
 		},
 	}
+}
+
+func RestartRequestsSchema() docstore.CollectionSchema {
+	return docstore.CollectionSchema{Namespace: Namespace, Collection: CollectionRestartRequests}
+}
+
+func (r RestartRequest) Encode() ([]byte, error) {
+	return json.Marshal(r)
+}
+
+func DecodeRestartRequest(body []byte) (RestartRequest, error) {
+	var request RestartRequest
+	if err := json.Unmarshal(body, &request); err != nil {
+		return RestartRequest{}, fmt.Errorf("this restart request's stored record is not readable: %w", err)
+	}
+	return request, nil
 }
 
 func (m Member) Encode() ([]byte, error) {

@@ -19,14 +19,15 @@ func (d *Daemon) ensureCrewCollections() {
 	if d.store == nil {
 		return
 	}
-	schema := crew.MembersSchema()
-	redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
-	if err != nil {
-		d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
-		return
-	}
-	if redeclared {
-		d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
+	for _, schema := range []docstore.CollectionSchema{crew.MembersSchema(), crew.RestartRequestsSchema()} {
+		redeclared, err := d.store.DefineDocumentCollection(schema, time.Now())
+		if err != nil {
+			d.logf("crew: declaring %s/%s: %v", schema.Namespace, schema.Collection, err)
+			continue
+		}
+		if redeclared {
+			d.publishCollectionRedeclared(schema.Namespace, schema.Collection)
+		}
 	}
 }
 
@@ -79,6 +80,13 @@ func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
 		return nil, errors.New("no database")
 	}
 	return d.collectionFor(crew.Namespace, crew.CollectionMembers)
+}
+
+func (d *Daemon) crewRestartRequestsCollection() (*docstore.CollectionSchema, error) {
+	if d.store == nil {
+		return nil, errors.New("no database")
+	}
+	return d.collectionFor(crew.Namespace, crew.CollectionRestartRequests)
 }
 
 func (d *Daemon) writeCrewMember(schema docstore.CollectionSchema, member crew.Member, expected int64) (int64, error) {
