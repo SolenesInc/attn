@@ -160,7 +160,8 @@ type prReadiness struct {
 }
 
 func (r *prReadiness) ready() bool {
-	return r.State == "open" && !r.Draft && r.CheckState == checksGreen && r.ReviewState == "approved"
+	return r.State == "open" && !r.Draft && r.CheckState == checksGreen && r.ReviewState == "approved" &&
+		strings.EqualFold(r.evidence.MergeableState, "clean")
 }
 
 type prReadinessSource interface {
@@ -554,7 +555,7 @@ const prSnapshotQuery = `
 query($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){
     pullRequest(number:$number){
-      number state isDraft headRefOid url
+      number state isDraft headRefOid url mergeStateStatus
       commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
         pageInfo{hasNextPage}
         nodes{__typename ... on CheckRun{name status conclusion detailsUrl} ... on StatusContext{context state targetUrl}}

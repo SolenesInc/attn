@@ -5,6 +5,7 @@
         "number": 679,
         "state": "OPEN",
         "isDraft": false,
+        "mergeStateStatus": "CLEAN",
         "headRefOid": "689f742d73b66efd07770f5cd244cdc65de22fcd",
         "commits": {
           "nodes": [

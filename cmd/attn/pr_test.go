@@ -44,7 +44,7 @@ func snapshotPayloadWithRequests(head, checks, reviews, comments, requests strin
 		checks = `{"__typename":"CheckRun","name":"CI","status":"COMPLETED","conclusion":"SUCCESS"}`
 	}
 	return fmt.Appendf(nil, `{"data":{"repository":{"pullRequest":{
-      "number":404,"state":"OPEN","isDraft":false,"headRefOid":%q,
+      "number":404,"state":"OPEN","isDraft":false,"mergeStateStatus":"CLEAN","headRefOid":%q,
       "reviewRequests":{"nodes":[%s]},
       "commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{
         "pageInfo":{"hasNextPage":false},"nodes":[%s]}}}}]},
@@ -318,6 +318,30 @@ func TestWaitForPRActionableReturnsPromptlyOnChangesRequested(t *testing.T) {
 			}
 			if source.calls != 1 {
 				t.Fatalf("polled %d times; changes_requested must return on the first observation", source.calls)
+			}
+		})
+	}
+}
+
+func TestWaitForPRActionableWaitsForMergeability(t *testing.T) {
+	head := strings.Repeat("a", 40)
+	review := reviewNode("approval", "APPROVED", "", "2026-07-19T10:00:00Z", "figgyster", head, "")
+	opts := prWaitOptions{Reviewer: "figgyster"}
+	for _, state := range []string{"DIRTY", "BLOCKED", "UNKNOWN"} {
+		t.Run(state, func(t *testing.T) {
+			payload := snapshotPayload(head, "", review, "")
+			blocked, err := parsePRSnapshot([]byte(strings.Replace(string(payload), `"mergeStateStatus":"CLEAN"`, `"mergeStateStatus":"`+state+`"`, 1)), opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			clean, err := parsePRSnapshot(payload, opts)
+			if err != nil {
+				t.Fatal(err)
+			}
+			source := &fakeReadinessSource{results: []*prReadiness{blocked, clean}}
+			got, outcome, _, err := waitTuple(context.Background(), source, opts, &bytes.Buffer{})
+			if err != nil || outcome != outcomeApproved || got != clean || source.calls != 2 {
+				t.Fatalf("returned before mergeability cleared: got=%+v outcome=%s calls=%d err=%v", got, outcome, source.calls, err)
 			}
 		})
 	}
@@ -1124,5 +1148,6 @@ func readinessObservation(number, head, checks, review string) *prReadiness {
 	return &prReadiness{
 		Number: number, State: "open", HeadSHA: head, Checks: []prCheck{{Name: "check:CI", State: checks}},
 		CheckState: checks, Reviewer: "figgyster", ReviewState: review,
+		evidence: prreadiness.Evidence{MergeableState: "clean"},
 	}
 }
