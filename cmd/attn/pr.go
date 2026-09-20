@@ -663,6 +663,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 	}
 
 	for {
+		now := time.Now()
 		observation, err := source.Fetch(ctx, opts)
 		if err != nil {
 			if errors.Is(err, context.DeadlineExceeded) {
@@ -671,7 +672,6 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			return prWaitResult{Observation: last}, err
 		}
 		last = observation
-		now := time.Now()
 		if cursor.ReactionHead != observation.HeadSHA || cursor.ReactionAfter.IsZero() {
 			cursor.ReactionHead = observation.HeadSHA
 			cursor.ReactionAfter = now
@@ -701,6 +701,7 @@ func waitForPRActionable(ctx context.Context, source prReadinessSource, opts prW
 			}
 			cursor.CommentIDs = append(cursor.CommentIDs, prCommentIDs(observation.Comments)...)
 			reviewBaseline = observation.LatestReviewAt
+			cursor.VerdictAt = reviewBaseline
 			observation.Comments = nil
 		} else {
 			observation.Comments = unseenPRComments(observation.Comments, baseline, opts.Since)

@@ -209,8 +209,9 @@ Your agents can work as a team:
 
 Run `attn pr watch <url>` from an agent session to receive findings, human feedback,
 failed checks, monitoring outages, and readiness in its inbox. Watches survive
-restarts; unchanged observations do not repeatedly ping the agent. Human feedback
-stays until read. The default reviewer is `chatgpt-codex-connector[bot]`; select
+restarts; unchanged observations do not repeatedly ping the agent. Human comments
+present at the first successful check are the baseline; later comments notify and
+stay until read. The default reviewer is `chatgpt-codex-connector[bot]`; select
 another with `--reviewer <login>`.
 
 A PR is ready when checks pass, the required reviewer approves the current head,

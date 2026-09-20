@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/prreadiness"
@@ -19,9 +20,13 @@ import (
 type fakeReadinessSource struct {
 	results []*prReadiness
 	calls   int
+	onFetch func()
 }
 
 func (f *fakeReadinessSource) Fetch(context.Context, prWaitOptions) (*prReadiness, error) {
+	if f.onFetch != nil {
+		f.onFetch()
+	}
 	index := f.calls
 	f.calls++
 	if index >= len(f.results) {
@@ -680,6 +685,49 @@ func TestWaitForPRActionableIgnoresStaleVerdictWhileReReviewPending(t *testing.T
 	if n := strings.Count(text, "predates the pending re-review request"); n != 1 {
 		t.Fatalf("stale-verdict note fired %d times, want 1:\n%s", n, text)
 	}
+}
+
+func TestWaitForPRActionableResumesPendingReReview(t *testing.T) {
+	at := time.Unix(100, 0)
+	stale := reReviewObservation("head", checksPending, "approved", true, at, at)
+	opts := prWaitOptions{Reviewer: "figgyster"}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	first, err := waitForPRActionable(ctx, &fakeReadinessSource{results: []*prReadiness{stale}}, opts, prWaitCursor{}, io.Discard)
+	if err != nil || first.Outcome != outcomeTimeout {
+		t.Fatalf("first wait = %+v, %v", first, err)
+	}
+	stale.CheckState = checksGreen
+	fresh := reReviewObservation("head", checksGreen, "approved", false, at.Add(time.Second), at.Add(time.Second))
+	source := &fakeReadinessSource{results: []*prReadiness{stale, fresh}}
+	resumed, err := waitForPRActionable(context.Background(), source, opts, first.Cursor, io.Discard)
+	if err != nil || resumed.Outcome != outcomeApproved || resumed.Observation != fresh {
+		t.Fatalf("resumed wait = %+v, %v", resumed, err)
+	}
+}
+
+func TestWaitForPRActionableReactionDuringFetch(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		observation := readinessObservation("12", "head", checksGreen, "waiting")
+		observation.evidence.HeadSHA = "head"
+		var reactionAt time.Time
+		source := &fakeReadinessSource{results: []*prReadiness{observation}, onFetch: func() {
+			reactionAt = time.Now()
+			time.Sleep(time.Second)
+		}}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		opts := prWaitOptions{Reviewer: "chatgpt-codex-connector"}
+		first, err := waitForPRActionable(ctx, source, opts, prWaitCursor{}, io.Discard)
+		if err != nil || first.Outcome != outcomeTimeout {
+			t.Fatalf("first wait = %+v, %v", first, err)
+		}
+		observation.evidence.Reactions = []prreadiness.Reaction{{Author: opts.Reviewer, Content: "THUMBS_UP", CreatedAt: reactionAt}}
+		resumed, err := waitForPRActionable(ctx, source, opts, first.Cursor, io.Discard)
+		if err != nil || resumed.Outcome != outcomeApproved {
+			t.Fatalf("reaction during previous fetch was lost: %+v, %v", resumed, err)
+		}
+	})
 }
 
 func TestWaitForPRActionableReturnsOnFreshChangesRequestedAfterReReview(t *testing.T) {

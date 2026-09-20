@@ -137,6 +137,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			continue
 		}
 
+		observedAt := time.Now()
 		status, readiness, err := d.fetchSessionPullRequestStatus(host, group)
 		if err != nil {
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
@@ -152,7 +153,6 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			continue
 		}
 
-		observedAt := time.Now()
 		fetched++
 		var updateErr error
 		if readiness == nil {
@@ -503,7 +503,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			d.logf("pull request watch: clear inactive inbox item for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
 		if err := d.store.RecordPullRequestWatchSuccess(
-			watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA, key, observation.Feedback, now,
+			watch.SessionID, watch.PRID, readiness.Snapshot.HeadSHA, key, observation.BaselineIDs, now,
 		); err != nil {
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
 		}
@@ -535,19 +535,19 @@ func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {
 }
 
 type watchObservation struct {
-	Kind     string
-	Details  []string
-	Feedback store.PullRequestFeedbackCursor
-	Comments []prreadiness.Comment
+	Kind        string
+	Details     []string
+	BaselineIDs []string
+	Comments    []prreadiness.Comment
 }
 
 func pullRequestWatchAction(
 	readiness *github.PullRequestReadiness, evaluation prreadiness.Evaluation, watch store.PullRequestWatch,
 ) watchObservation {
-	feedback, cursor := pullRequestWatchFeedback(readiness.Evidence, watch)
+	feedback, baselineIDs := pullRequestWatchFeedback(readiness.Evidence, watch)
 	if readiness.Snapshot.State != sessionPullRequestOpen {
 		state := sessionPullRequestStateFromSnapshot(readiness.Snapshot)
-		return watchObservation{Kind: state, Details: []string{"pull request is " + state}, Feedback: cursor, Comments: feedback}
+		return watchObservation{Kind: state, Details: []string{"pull request is " + state}, BaselineIDs: baselineIDs, Comments: feedback}
 	}
 	var kinds []string
 	var details []string
@@ -562,11 +562,8 @@ func pullRequestWatchAction(
 	findings := uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved)
 	if len(findings) > 0 || evaluation.ReviewState == prreadiness.ReviewChangesRequested {
 		humanComments := make(map[string]bool)
-		armedAt, err := time.Parse(time.RFC3339Nano, watch.CreatedAt)
-		for _, comment := range readiness.Evidence.Comments {
-			if err == nil && !comment.Bot && !comment.CreatedAt.Before(armedAt) {
-				humanComments[comment.ID] = true
-			}
+		for _, comment := range feedback {
+			humanComments[comment.ID] = true
 		}
 		findingDetails := make([]string, 0, len(findings)+1)
 		for _, finding := range findings {
@@ -597,7 +594,7 @@ func pullRequestWatchAction(
 		kinds = append(kinds, "ready")
 		details = append(details, "checks passed", watch.Reviewer+" reviewed the current head")
 	}
-	return watchObservation{Kind: strings.Join(kinds, " and "), Details: details, Feedback: cursor, Comments: feedback}
+	return watchObservation{Kind: strings.Join(kinds, " and "), Details: details, BaselineIDs: baselineIDs, Comments: feedback}
 }
 
 func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadiness.Finding {
@@ -620,34 +617,26 @@ func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadine
 	return findings
 }
 
-func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
-	seenAt, err := time.Parse(time.RFC3339Nano, watch.FeedbackSeenAt)
-	if err != nil {
-		seenAt, _ = time.Parse(time.RFC3339Nano, watch.CreatedAt)
-	}
-	seenIDs := make(map[string]bool, len(watch.FeedbackSeenIDs))
-	for _, id := range watch.FeedbackSeenIDs {
+func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]prreadiness.Comment, []string) {
+	seenIDs := make(map[string]bool, len(watch.FeedbackBaselineIDs))
+	for _, id := range watch.FeedbackBaselineIDs {
 		seenIDs[id] = true
 	}
-	nextAt := seenAt
-	nextIDs := append([]string(nil), watch.FeedbackSeenIDs...)
+	nextIDs := append([]string(nil), watch.FeedbackBaselineIDs...)
 	var feedback []prreadiness.Comment
 	for _, comment := range evidence.Comments {
-		if comment.Bot || comment.CreatedAt.Before(seenAt) ||
-			(comment.CreatedAt.Equal(seenAt) && seenIDs[comment.ID]) {
+		if comment.Bot || seenIDs[comment.ID] {
 			continue
 		}
-		feedback = append(feedback, comment)
-		switch {
-		case comment.CreatedAt.After(nextAt):
-			nextAt = comment.CreatedAt
-			nextIDs = []string{comment.ID}
-		case comment.CreatedAt.Equal(nextAt):
+		if watch.FeedbackBaselineAt != "" {
+			feedback = append(feedback, comment)
+		} else {
 			nextIDs = append(nextIDs, comment.ID)
 		}
+		seenIDs[comment.ID] = true
 	}
 	sort.Strings(nextIDs)
-	return feedback, store.PullRequestFeedbackCursor{SeenAt: nextAt, SeenIDs: nextIDs}
+	return feedback, nextIDs
 }
 
 func (d *Daemon) notifyPullRequestWatchFeedback(watch store.PullRequestWatch, comments []prreadiness.Comment, now time.Time) error {

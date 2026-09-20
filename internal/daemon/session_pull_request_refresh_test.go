@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -33,10 +34,14 @@ type fakePRHost struct {
 	readyReads int
 	limitedFor string
 	limitFor   string
+	onFetch    func()
 }
 
 func (f *fakePRHost) FetchPullRequestReadiness(string, int) (*github.PullRequestReadiness, error) {
 	f.readyReads++
+	if f.onFetch != nil {
+		f.onFetch()
+	}
 	if f.readyErr != nil {
 		return nil, f.readyErr
 	}
@@ -306,7 +311,7 @@ func TestPullRequestWatchRevisitsClosedRecordUntilDisarmed(t *testing.T) {
 }
 
 func TestPullRequestWatchReviewerChangeClearsUnreadResult(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
+	d := newPersistentPRDaemonForTest(t)
 	url := "https://github.com/victorarias/attn/pull/71"
 	watchPRForRefresh(t, d, "s1", url)
 	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")}
@@ -314,6 +319,26 @@ func TestPullRequestWatchReviewerChangeClearsUnreadResult(t *testing.T) {
 	d.refreshSessionPullRequests(time.Now())
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
 		t.Fatalf("initial unread result = %+v, %v", unread, err)
+	}
+	direct, err := store.OpenDB(d.store.DatabasePath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer direct.Close()
+	if _, err := direct.Exec(`CREATE TRIGGER reject_cleanup BEFORE DELETE ON agent_mailbox_items
+		BEGIN SELECT RAISE(FAIL, 'injected cleanup failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if resp := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: url, Reviewer: "alternate-reviewer",
+	}); resp.Ok {
+		t.Fatalf("failed cleanup reported success: %+v", resp)
+	}
+	if watch := d.store.PullRequestWatches()[0]; watch.Reviewer != "chatgpt-codex-connector[bot]" {
+		t.Fatalf("failed cleanup committed the new reviewer: %+v", watch)
+	}
+	if _, err := direct.Exec("DROP TRIGGER reject_cleanup"); err != nil {
+		t.Fatal(err)
 	}
 
 	if resp := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
@@ -466,14 +491,16 @@ func TestPullRequestWatchReportsHumanFeedbackAfterReady(t *testing.T) {
 	url := "https://github.com/victorarias/attn/pull/71"
 	watchPRForRefresh(t, d, "s1", url)
 	ready := watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	feedbackAt := time.Now().Add(-time.Hour).Truncate(time.Second)
+	ready.Evidence.Comments = []prreadiness.Comment{{ID: "existing", Author: "reviewer", Body: "Existing feedback", CreatedAt: feedbackAt}}
 	host := &fakePRHost{readiness: ready}
 	serveHost(d, "github.com", host)
 	now := time.Now()
 	d.refreshSessionPullRequests(now)
 
-	ready.Evidence.Comments = []prreadiness.Comment{{
-		ID: "human", Author: "reviewer", Body: "Please check the retry path.", CreatedAt: now.Add(time.Second),
-	}}
+	ready.Evidence.Comments = append(ready.Evidence.Comments, prreadiness.Comment{
+		ID: "human", Author: "reviewer", Body: "Please check the retry path.", CreatedAt: feedbackAt,
+	})
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 2 || !strings.Contains(unread[1].Item.Prompt, "Please check the retry path") {
@@ -488,11 +515,12 @@ func TestPullRequestWatchRetainsUnreadFeedbackUntilRead(t *testing.T) {
 			watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
 			now := time.Now()
 			ready := watchedReadiness("sha-1", checks, "COMMENTED")
+			host := &fakePRHost{readiness: ready}
+			serveHost(d, "github.com", host)
+			d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
 			ready.Evidence.Comments = []prreadiness.Comment{{
 				ID: "first", Author: "human", Body: "Keep the retry guard.", CreatedAt: now.Add(time.Second),
 			}}
-			host := &fakePRHost{readiness: ready}
-			serveHost(d, "github.com", host)
 			assertFeedback := func(want int) {
 				t.Helper()
 				unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
@@ -532,7 +560,8 @@ func TestPullRequestWatchRetainsUnreadFeedbackUntilRead(t *testing.T) {
 	}
 }
 
-func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
+func newPersistentPRDaemonForTest(t *testing.T) *Daemon {
+	t.Helper()
 	d := newDaemonForTest(t)
 	stopDaemonBackground(t, d)
 	dbPath := filepath.Join(t.TempDir(), "watch.db")
@@ -544,6 +573,12 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	d.store = persistent
 	t.Cleanup(func() { _ = d.store.Close() })
 	registerSessionForPRTest(t, d, "s1")
+	return d
+}
+
+func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
+	d := newPersistentPRDaemonForTest(t)
+	dbPath := d.store.DatabasePath()
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
 	direct, err := store.OpenDB(dbPath)
 	if err != nil {
@@ -556,14 +591,16 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	}
 	now := time.Now()
 	ready := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
+	baseline := d.store.PullRequestWatches()[0].LastSuccessAt
 	ready.Evidence.Comments = []prreadiness.Comment{
 		{ID: "first", Author: "human", Body: "first feedback", CreatedAt: now.Add(time.Second)},
 		{ID: "second", Author: "human", Body: "second feedback", CreatedAt: now.Add(time.Second)},
 	}
-	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	d.refreshSessionPullRequests(now)
 	watch := d.store.PullRequestWatches()[0]
-	if watch.LastSuccessAt != "" || len(watch.FeedbackSeenIDs) != 0 {
+	if watch.LastSuccessAt != baseline || len(watch.FeedbackBaselineIDs) != 0 {
 		t.Fatalf("failed enqueue advanced the cursor: %+v", watch)
 	}
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
@@ -589,8 +626,8 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	if err != nil || len(unread) != 2 {
 		t.Fatalf("retry lost or duplicated feedback: %+v, %v", unread, err)
 	}
-	if watch := d.store.PullRequestWatches()[0]; len(watch.FeedbackSeenIDs) != 2 || watch.LastSuccessAt == "" {
-		t.Fatalf("successful retry did not advance the cursor: %+v", watch)
+	if watch := d.store.PullRequestWatches()[0]; len(watch.FeedbackBaselineIDs) != 0 || watch.LastSuccessAt == baseline {
+		t.Fatalf("successful retry changed the baseline or did not record success: %+v", watch)
 	}
 }
 
@@ -608,8 +645,9 @@ func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {
 			watchPRForRefresh(t, d, "s1", url)
 			now := time.Now()
 			ready := watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
-			ready.Evidence.Comments = []prreadiness.Comment{{ID: "human", Author: "human", Body: "feedback", CreatedAt: now.Add(time.Second)}}
 			serveHost(d, "github.com", &fakePRHost{readiness: ready})
+			d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
+			ready.Evidence.Comments = []prreadiness.Comment{{ID: "human", Author: "human", Body: "feedback", CreatedAt: now.Add(time.Second)}}
 			d.refreshSessionPullRequests(now)
 			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 2 {
 				t.Fatalf("status and feedback were not queued: %+v, %v", unread, err)
@@ -655,11 +693,12 @@ func TestPullRequestWatchDoesNotRepeatHumanFeedbackOnNewHead(t *testing.T) {
 	watchPRForRefresh(t, d, "s1", url)
 	now := time.Now()
 	readiness := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+	host := &fakePRHost{readiness: readiness}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
 	readiness.Evidence.Comments = []prreadiness.Comment{{
 		ID: "human-1", Author: "reviewer", Body: "Please check the retry path.", CreatedAt: now.Add(time.Second),
 	}}
-	host := &fakePRHost{readiness: readiness}
-	serveHost(d, "github.com", host)
 	d.refreshSessionPullRequests(now)
 	if deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now.Add(2*time.Second)); err != nil || len(deliveries) != 1 {
 		t.Fatalf("read first feedback = %+v, %v", deliveries, err)
@@ -701,34 +740,36 @@ func TestPullRequestWatchIgnoresFetchedObservationAfterUnwatch(t *testing.T) {
 }
 
 func TestPullRequestWatchThumbsUpMustFollowObservedHead(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	url := "https://github.com/victorarias/attn/pull/71"
-	watchPRForRefresh(t, d, "s1", url)
-	tickStarted := time.Now().Add(-time.Minute)
-	readiness := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
-	readiness.Evidence.Reactions = []prreadiness.Reaction{{
-		Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Now().Add(-time.Second),
-	}}
-	host := &fakePRHost{readiness: readiness}
-	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(tickStarted)
-	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
-		t.Fatalf("reaction created during the fetch passed the newly observed head: %+v, %v", unread, err)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		d := newPRDaemonForTest(t, "s1")
+		defer d.store.Close()
+		url := "https://github.com/victorarias/attn/pull/71"
+		watchPRForRefresh(t, d, "s1", url)
+		tickStarted := time.Now().Add(-time.Minute)
+		readiness := watchedReadiness("sha-1", prreadiness.ChecksGreen, "")
+		readiness.Evidence.Reactions = []prreadiness.Reaction{{
+			Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: time.Now().Add(-time.Second),
+		}}
+		var reactionAt time.Time
+		host := &fakePRHost{readiness: readiness, onFetch: func() {
+			reactionAt = time.Now()
+			time.Sleep(time.Second)
+		}}
+		serveHost(d, "github.com", host)
+		d.refreshSessionPullRequests(tickStarted)
+		if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+			t.Fatalf("reaction predating the fetch passed the newly observed head: %+v, %v", unread, err)
+		}
 
-	watches := d.store.PullRequestWatches()
-	observedAt, err := time.Parse(time.RFC3339Nano, watches[0].HeadObservedAt)
-	if err != nil {
-		t.Fatalf("parse observed head time: %v", err)
-	}
-	readiness.Evidence.Reactions = append(readiness.Evidence.Reactions, prreadiness.Reaction{
-		Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: observedAt.Add(time.Second),
+		readiness.Evidence.Reactions = append(readiness.Evidence.Reactions, prreadiness.Reaction{
+			Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: reactionAt,
+		})
+		d.refreshSessionPullRequests(tickStarted.Add(protocol.HeatHotInterval))
+		if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
+			!strings.Contains(unread[0].Item.Prompt, "ready") {
+			t.Fatalf("new reaction did not pass observed head: %+v, %v", unread, err)
+		}
 	})
-	d.refreshSessionPullRequests(tickStarted.Add(protocol.HeatHotInterval))
-	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
-		!strings.Contains(unread[0].Item.Prompt, "ready") {
-		t.Fatalf("new reaction did not pass observed head: %+v, %v", unread, err)
-	}
 }
 
 func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
@@ -739,7 +780,7 @@ func TestPullRequestWatchArmedWithUnresolvedThreads(t *testing.T) {
 		{ID: "old-human", Author: "human-reviewer", CommitOID: "old-head", Body: "Human finding", Location: "watch.go:42"},
 	}
 	ready.Evidence.Comments = []prreadiness.Comment{{
-		ID: "old-human", Author: "human-reviewer", Body: "Human finding", Location: "watch.go:42", CreatedAt: time.Now(),
+		ID: "old-human", Author: "human-reviewer", Body: "Human finding", Location: "watch.go:42", CreatedAt: time.Now().Add(time.Hour),
 	}}
 	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
@@ -790,11 +831,12 @@ func TestPullRequestWatchReportsReadyAfterEarlierHumanFeedback(t *testing.T) {
 	watchPRForRefresh(t, d, "s1", url)
 	now := time.Now()
 	pending := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
+	host := &fakePRHost{readiness: pending}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
 	pending.Evidence.Comments = []prreadiness.Comment{{
 		ID: "human", Author: "reviewer", Body: "Please check the retry path.", CreatedAt: now.Add(time.Second),
 	}}
-	host := &fakePRHost{readiness: pending}
-	serveHost(d, "github.com", host)
 	d.refreshSessionPullRequests(now)
 	if deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now.Add(time.Second)); err != nil || len(deliveries) != 1 {
 		t.Fatalf("read feedback = %+v, %v", deliveries, err)
@@ -840,6 +882,8 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 	}
 	now := time.Now()
 	ready := watchedReadiness("head", prreadiness.ChecksGreen, "CHANGES_REQUESTED")
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	d.refreshSessionPullRequests(now.Add(-protocol.HeatHotInterval))
 	ready.Evidence.Reviews[0].Author = "human"
 	ready.Evidence.Reviews[0].ID = "review-summary"
 	ready.Evidence.Reviews[0].Body = "Check the cancellation behavior"
@@ -850,7 +894,6 @@ func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testi
 		{ID: "conversation", Author: "human", Body: "Please update the docs", CreatedAt: now},
 		{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7", CreatedAt: now},
 	}
-	serveHost(d, "github.com", &fakePRHost{readiness: ready})
 	d.refreshSessionPullRequests(now)
 	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(deliveries) != 4 {

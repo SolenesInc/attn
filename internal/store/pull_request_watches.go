@@ -8,19 +8,19 @@ import (
 )
 
 type PullRequestWatch struct {
-	SessionID          string
-	PRID               string
-	Reviewer           string
-	CreatedAt          string
-	LastHeadSHA        string
-	HeadObservedAt     string
-	LastObservationKey string
-	LastSuccessAt      string
-	LastError          string
-	ErrorSince         string
-	FailureCount       int
-	FeedbackSeenAt     string
-	FeedbackSeenIDs    []string
+	SessionID           string
+	PRID                string
+	Reviewer            string
+	CreatedAt           string
+	LastHeadSHA         string
+	HeadObservedAt      string
+	LastObservationKey  string
+	LastSuccessAt       string
+	LastError           string
+	ErrorSince          string
+	FailureCount        int
+	FeedbackBaselineAt  string
+	FeedbackBaselineIDs []string
 }
 
 const pullRequestWatchColumns = `session_id, pr_id, reviewer, created_at,
@@ -47,8 +47,8 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 	}
 	defer tx.Rollback()
 	_, err = tx.Exec(`
-		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at, feedback_seen_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at)
+		VALUES (?, ?, ?, ?)
 		ON CONFLICT(session_id, pr_id) DO UPDATE SET
 			reviewer = excluded.reviewer,
 			created_at = excluded.created_at,
@@ -59,7 +59,7 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 			last_error = '',
 			error_since = '',
 			failure_count = 0
-	`, sessionID, prID, reviewer, at.UTC().Format(sortableTimeFormat), at.UTC().Format(sortableTimeFormat))
+	`, sessionID, prID, reviewer, at.UTC().Format(sortableTimeFormat))
 	if err != nil {
 		return false, err
 	}
@@ -124,17 +124,12 @@ func (s *Store) PullRequestWatch(sessionID, prID string) (PullRequestWatch, bool
 	return watch, err == nil
 }
 
-type PullRequestFeedbackCursor struct {
-	SeenAt  time.Time
-	SeenIDs []string
-}
-
 func (s *Store) RecordPullRequestWatchSuccess(
-	sessionID, prID, headSHA, observationKey string, feedback PullRequestFeedbackCursor, at time.Time,
+	sessionID, prID, headSHA, observationKey string, baselineIDs []string, at time.Time,
 ) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	feedbackIDsJSON, err := json.Marshal(feedback.SeenIDs)
+	baselineIDsJSON, err := json.Marshal(baselineIDs)
 	if err != nil {
 		return err
 	}
@@ -143,10 +138,11 @@ func (s *Store) RecordPullRequestWatchSuccess(
 		SET head_observed_at = CASE WHEN last_head_sha != ? OR head_observed_at = '' THEN ? ELSE head_observed_at END,
 		    last_head_sha = ?, last_observation_key = ?, last_success_at = ?,
 		    last_error = '', error_since = '', failure_count = 0,
-		    feedback_seen_at = ?, feedback_seen_ids = ?
+		    feedback_seen_at = CASE WHEN feedback_seen_at = '' THEN ? ELSE feedback_seen_at END,
+		    feedback_seen_ids = ?
 		WHERE session_id = ? AND pr_id = ?
 	`, headSHA, at.UTC().Format(sortableTimeFormat), headSHA, observationKey,
-		at.UTC().Format(sortableTimeFormat), feedback.SeenAt.UTC().Format(sortableTimeFormat), string(feedbackIDsJSON), sessionID, prID)
+		at.UTC().Format(sortableTimeFormat), at.UTC().Format(sortableTimeFormat), string(baselineIDsJSON), sessionID, prID)
 	return err
 }
 
@@ -174,16 +170,16 @@ type pullRequestWatchScanner interface {
 
 func scanPullRequestWatch(row pullRequestWatchScanner) (PullRequestWatch, error) {
 	var watch PullRequestWatch
-	var feedbackSeenIDs string
+	var baselineIDsJSON string
 	err := row.Scan(
 		&watch.SessionID, &watch.PRID, &watch.Reviewer, &watch.CreatedAt,
 		&watch.LastHeadSHA, &watch.HeadObservedAt, &watch.LastObservationKey, &watch.LastSuccessAt,
-		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &watch.FeedbackSeenAt, &feedbackSeenIDs,
+		&watch.LastError, &watch.ErrorSince, &watch.FailureCount, &watch.FeedbackBaselineAt, &baselineIDsJSON,
 	)
 	if err != nil {
 		return PullRequestWatch{}, err
 	}
-	if err := json.Unmarshal([]byte(feedbackSeenIDs), &watch.FeedbackSeenIDs); err != nil {
+	if err := json.Unmarshal([]byte(baselineIDsJSON), &watch.FeedbackBaselineIDs); err != nil {
 		return PullRequestWatch{}, err
 	}
 	return watch, nil
