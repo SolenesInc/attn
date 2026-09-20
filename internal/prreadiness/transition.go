@@ -110,12 +110,14 @@ func Advance(previous Cursor, observation Observation, reviewer string, policy S
 		actionKey = Fingerprint(strings.Join(parts, "+"), observation.HeadSHA, details)
 	}
 	if actionKey != baseline.LastActionKey {
+		if baseline.LastActionKey != "" {
+			next.ActionGeneration++
+		}
 		if actionKey == "" {
 			events = append(events, Event{ID: "clear:" + baseline.LastActionKey, Kind: EventClearAction})
-			next.ActionGeneration++
 		} else {
 			events = append(events, Event{
-				ID: fmt.Sprintf("action:%d:%s", baseline.ActionGeneration, actionKey), Kind: EventAction,
+				ID: fmt.Sprintf("action:%d:%s", next.ActionGeneration, actionKey), Kind: EventAction,
 				Outcomes: outcomes, Details: details,
 			})
 		}

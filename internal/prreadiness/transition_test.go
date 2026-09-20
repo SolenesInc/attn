@@ -223,6 +223,24 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 			},
 		},
 		{
+			name: "direct action changes advance occurrence identity",
+			run: func(t *testing.T) {
+				failedA := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksFailed,
+					Checks: []Check{{Name: "A", State: ChecksFailed}},
+				}
+				first := Advance(Cursor{}, failedA, "reviewer", StartPolicy{})
+				failedB := failedA
+				failedB.Checks = []Check{{Name: "B", State: ChecksFailed}}
+				second := Advance(first.NextCursor, failedB, "reviewer", StartPolicy{})
+				third := Advance(second.NextCursor, failedA, "reviewer", StartPolicy{})
+				if first.Events[0].ID == third.Events[0].ID || second.NextCursor.ActionGeneration != 1 ||
+					third.NextCursor.ActionGeneration != 2 {
+					t.Fatalf("action cycle = first:%+v second:%+v third:%+v", first, second, third)
+				}
+			},
+		},
+		{
 			name: "closure emits and reviewer spelling change does not rearm",
 			run: func(t *testing.T) {
 				observation := ready("head-a", "review-a")

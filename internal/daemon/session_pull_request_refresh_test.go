@@ -344,6 +344,38 @@ func TestPullRequestWatchRedeliversRecurringAction(t *testing.T) {
 	}
 }
 
+func TestPullRequestWatchRedeliversDirectActionCycle(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	watch := d.store.PullRequestWatches()[0]
+	failedA := prreadiness.Observation{
+		State: "open", HeadSHA: "sha-1", MergeableState: "clean", CheckState: prreadiness.ChecksFailed,
+		Checks: []prreadiness.Check{{Name: "A", State: prreadiness.ChecksFailed}},
+	}
+	first := prreadiness.Advance(prreadiness.Cursor{}, failedA, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, first.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 1, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	failedB := failedA
+	failedB.Checks = []prreadiness.Check{{Name: "B", State: prreadiness.ChecksFailed}}
+	second := prreadiness.Advance(first.NextCursor, failedB, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, second.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	third := prreadiness.Advance(second.NextCursor, failedA, watch.Reviewer, prreadiness.StartPolicy{})
+	if err := d.deliverPullRequestTransition(watch, third.Events, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "\n- A\n") ||
+		strings.Contains(unread[0].Item.Prompt, "\n- B\n") {
+		t.Fatalf("cycled action = %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchBroadcastsClearedUnwatchedVerdict(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	registerSessionForPRTest(t, d, "s2")
