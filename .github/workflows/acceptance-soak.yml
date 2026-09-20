@@ -15,10 +15,13 @@ on:
         default: 10
         type: number
       runner:
-        description: GitHub Actions runner label
+        description: GitHub-hosted Ubuntu runner
         required: true
         default: ubuntu-24.04
-        type: string
+        type: choice
+        options:
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
 
 permissions:
   actions: read
