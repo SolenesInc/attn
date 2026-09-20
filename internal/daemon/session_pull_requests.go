@@ -135,15 +135,21 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, rev
 	if reviewer == "" {
 		return fmt.Errorf("pull request watch needs a reviewer")
 	}
-	if err := d.recordSessionPullRequest(rec); err != nil {
-		return err
+	recorded, err := d.store.RecordSessionPullRequest(rec, time.Now())
+	if err != nil {
+		return fmt.Errorf("record pull request %s: %w", rec.PRID, err)
 	}
 	changed, err := d.store.WatchPullRequest(rec.SessionID, rec.PRID, reviewer, time.Now())
 	if err != nil {
+		if recorded {
+			d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+		}
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
 		d.refreshAgentMailboxUnread(rec.SessionID)
+		d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+	} else if recorded {
 		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
 	}
 	return nil
@@ -164,7 +170,7 @@ func (d *Daemon) unwatchSessionPullRequestLocked(rec store.SessionPullRequestRec
 		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
 	}
 	d.refreshAgentMailboxUnread(rec.SessionID)
-	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
 
@@ -190,8 +196,24 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
 	d.refreshAgentMailboxUnread(rec.SessionID)
-	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
+}
+
+func (d *Daemon) publishSessionPullRequestMembershipChanged(prID string, extraSessionIDs ...string) {
+	sessionIDs, err := d.store.SessionPullRequestSessionIDs(prID)
+	if err != nil {
+		d.logf("session pull requests: list sessions for %s membership change: %v", prID, err)
+	}
+	sessionIDs = append(sessionIDs, extraSessionIDs...)
+	seen := make(map[string]bool, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		if sessionID == "" || seen[sessionID] {
+			continue
+		}
+		seen[sessionID] = true
+		d.publishFact(FactSessionPullRequestChanged, sessionID, sessionPullRequestFact{PRID: prID})
+	}
 }
 
 func (d *Daemon) sessionPullRequestIdentity(id, url string) (store.SessionPullRequestRecord, error) {

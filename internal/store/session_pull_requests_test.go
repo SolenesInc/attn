@@ -252,8 +252,11 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 	}
 	cursor := prreadiness.Cursor{
 		Initialized: true, Reviewer: "reviewer", HeadSHA: "head",
-		SignalBaselineIDs: []string{"reaction"}, SeenCommentIDs: []string{"comment"},
-		DeliveredFeedbackIDs: []string{"feedback"}, LastActionKey: "observation",
+		SignalBaselineIDs:     []string{"reaction"},
+		SeenUnscopedSignalIDs: []string{"reaction", "outage"},
+		SeenCommentIDs:        []string{"comment"},
+		DeliveredFeedbackIDs:  []string{"feedback"},
+		LastActionKey:         "observation",
 	}
 	if err := first.ApplyPullRequestWatchBaseline(
 		"session", "github.com:victorarias/attn#71", "pull-request-watch:test", cursor, true,
@@ -277,9 +280,27 @@ func TestPullRequestWatchSurvivesStoreRestart(t *testing.T) {
 	watches := second.PullRequestWatches()
 	if len(watches) != 1 || watches[0].SessionID != "session" || watches[0].Reviewer != "reviewer" ||
 		strings.Join(watches[0].Cursor.SignalBaselineIDs, ",") != "reaction" ||
+		strings.Join(watches[0].Cursor.SeenUnscopedSignalIDs, ",") != "reaction,outage" ||
 		strings.Join(watches[0].Cursor.SeenCommentIDs, ",") != "comment" ||
 		strings.Join(watches[0].Cursor.DeliveredFeedbackIDs, ",") != "feedback" {
 		t.Fatalf("restarted watches = %+v", watches)
+	}
+}
+
+func TestSessionPullRequestSessionIDsReturnsEveryRecordedSession(t *testing.T) {
+	s := newSessionPRStore(t)
+	now := time.Now()
+	prID := "github.com:victorarias/attn#71"
+	recordPR(t, s, "s2", prID, 71, now)
+	recordPR(t, s, "s1", prID, 71, now.Add(time.Second))
+	recordPR(t, s, "unrelated", "github.com:victorarias/attn#72", 72, now.Add(2*time.Second))
+
+	sessionIDs, err := s.SessionPullRequestSessionIDs(prID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(sessionIDs, ",") != "s1,s2" {
+		t.Fatalf("session ids = %v, want s1 and s2", sessionIDs)
 	}
 }
 

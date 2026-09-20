@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -306,6 +307,73 @@ func TestPullRequestForgetIsTheWayOut(t *testing.T) {
 	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "no pull request") {
 		t.Fatalf("forgetting twice = %+v, want it to say the session has no such entry", resp)
 	}
+}
+
+func TestPullRequestWatchMembershipReprojectsEveryRecordedSession(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	registerSessionForPRTest(t, d, "s2")
+	registerSessionForPRTest(t, d, "s3")
+	url := "https://github.com/victorarias/attn/pull/71"
+	otherURL := "https://github.com/victorarias/attn/pull/72"
+	for _, command := range []protocol.PullRequestCreatedMessage{
+		{Cmd: protocol.CmdPullRequestCreated, ID: "s1", URL: url},
+		{Cmd: protocol.CmdPullRequestCreated, ID: "s2", URL: url},
+		{Cmd: protocol.CmdPullRequestCreated, ID: "s3", URL: otherURL},
+	} {
+		if resp := sendPRCommand(t, d, command); !resp.Ok {
+			t.Fatalf("record response = %+v", resp)
+		}
+	}
+
+	assertUpdates := func(t *testing.T, cap *broadcastCapture, wantRecipients []string, forgotten bool) {
+		t.Helper()
+		for _, sessionID := range []string{"s1", "s2"} {
+			events := sessionUpdates(cap, sessionID)
+			if len(events) != 1 {
+				t.Fatalf("%s session updates = %d, want one", sessionID, len(events))
+			}
+			prs := events[0].Session.PullRequests
+			if forgotten && sessionID == "s1" {
+				if len(prs) != 0 {
+					t.Fatalf("forgotten session pull requests = %+v, want none", prs)
+				}
+				continue
+			}
+			if len(prs) != 1 || !slices.Equal(prs[0].WatchRecipients, wantRecipients) {
+				t.Fatalf("%s pull requests = %+v, want recipients %v", sessionID, prs, wantRecipients)
+			}
+		}
+		if events := sessionUpdates(cap, "s3"); len(events) != 0 {
+			t.Fatalf("unrelated session updates = %d, want none", len(events))
+		}
+	}
+
+	cap := captureBroadcasts(d)
+	watchPRForRefresh(t, d, "s1", url)
+	assertUpdates(t, cap, []string{"workspace-s1"}, false)
+
+	quiet := captureBroadcasts(d)
+	watchPRForRefresh(t, d, "s1", url)
+	if events := quiet.snapshot(); len(events) != 0 {
+		t.Fatalf("unchanged watch broadcasts = %+v", events)
+	}
+
+	cap = captureBroadcasts(d)
+	if resp := sendPRCommand(t, d, protocol.PullRequestUnwatchMessage{
+		Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url,
+	}); !resp.Ok {
+		t.Fatalf("unwatch response = %+v", resp)
+	}
+	assertUpdates(t, cap, nil, false)
+
+	watchPRForRefresh(t, d, "s1", url)
+	cap = captureBroadcasts(d)
+	if resp := sendPRCommand(t, d, protocol.PullRequestForgetMessage{
+		Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url,
+	}); !resp.Ok {
+		t.Fatalf("forget response = %+v", resp)
+	}
+	assertUpdates(t, cap, nil, true)
 }
 
 func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {

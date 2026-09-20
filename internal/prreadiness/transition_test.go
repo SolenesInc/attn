@@ -1,6 +1,7 @@
 package prreadiness
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 	"time"
@@ -286,6 +287,63 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				second := Advance(first.NextCursor, observation, "chatgpt-codex-connector[bot]", StartPolicy{})
 				if !has(second.Events, OutcomeReady) || second.Evaluation.SignalID != "new" {
 					t.Fatalf("skewed reaction = %+v", second)
+				}
+			},
+		},
+		{
+			name: "new head accepts newly observed reaction and keeps old signals baselined",
+			run: func(t *testing.T) {
+				observation := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+					Reactions: []Reaction{
+						{ID: "old-a", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base},
+						{ID: "old-b", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base.Add(time.Second)},
+					},
+				}
+				first := Advance(Cursor{}, observation, "chatgpt-codex-connector", StartPolicy{})
+				raw, err := json.Marshal(first.NextCursor)
+				if err != nil {
+					t.Fatal(err)
+				}
+				var resumed Cursor
+				if err := json.Unmarshal(raw, &resumed); err != nil {
+					t.Fatal(err)
+				}
+				observation.HeadSHA = "head-b"
+				observation.Reactions = append(observation.Reactions, Reaction{
+					ID: "new", Author: "chatgpt-codex-connector", Content: "THUMBS_UP", CreatedAt: base.Add(2 * time.Second),
+				})
+				second := Advance(resumed, observation, "chatgpt-codex-connector", StartPolicy{})
+				if !second.HeadChanged || !second.Evaluation.Ready || second.Evaluation.SignalID != "new" ||
+					!slices.Equal(second.BaselineCursor.SignalBaselineIDs, []string{"old-a", "old-b"}) {
+					t.Fatalf("head transition = %+v", second)
+				}
+				retry := Advance(second.BaselineCursor, observation, "chatgpt-codex-connector", StartPolicy{})
+				if !retry.Evaluation.Ready || retry.Evaluation.SignalID != "new" {
+					t.Fatalf("baseline retry suppressed replacement reaction: %+v", retry)
+				}
+			},
+		},
+		{
+			name: "new head accepts newly observed outage signal",
+			run: func(t *testing.T) {
+				observation := Observation{
+					State: "open", HeadSHA: "head-a", MergeableState: "clean", CheckState: ChecksGreen,
+					Comments: []Comment{{
+						ID: "old", Author: "chatgpt-codex-connector", Bot: true, Kind: CommentIssue,
+						Body: "Review unavailable: quota exceeded", CreatedAt: base,
+					}},
+				}
+				first := Advance(Cursor{}, observation, "chatgpt-codex-connector", StartPolicy{})
+				observation.HeadSHA = "head-b"
+				observation.Comments = append(observation.Comments, Comment{
+					ID: "new", Author: "chatgpt-codex-connector", Bot: true, Kind: CommentIssue,
+					Body: "Unable to review because quota exceeded", CreatedAt: base.Add(time.Second),
+				})
+				second := Advance(first.NextCursor, observation, "chatgpt-codex-connector", StartPolicy{})
+				if second.Evaluation.ReviewState != ReviewUnavailable || second.Evaluation.SignalID != "new" ||
+					!has(second.Events, OutcomeReviewUnavailable) {
+					t.Fatalf("head transition = %+v", second)
 				}
 			},
 		},

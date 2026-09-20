@@ -114,6 +114,30 @@ func (s *Store) ListSessionPullRequestsBySession() map[string][]SessionPullReque
 	return bySession
 }
 
+func (s *Store) SessionPullRequestSessionIDs(prID string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return nil, errors.New("store has no database")
+	}
+	rows, err := s.db.Query(`
+		SELECT session_id FROM session_pull_requests
+		WHERE pr_id = ? ORDER BY session_id`, prID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sessionIDs []string
+	for rows.Next() {
+		var sessionID string
+		if err := rows.Scan(&sessionID); err != nil {
+			return nil, err
+		}
+		sessionIDs = append(sessionIDs, sessionID)
+	}
+	return sessionIDs, rows.Err()
+}
+
 func (s *Store) OpenSessionPullRequests() []SessionPullRequestRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

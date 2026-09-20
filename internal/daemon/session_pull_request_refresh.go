@@ -71,15 +71,16 @@ func (d *Daemon) sessionPullRequestRefreshHandler(ctx context.Context, _ *jobs.J
 }
 
 type sessionPullRequestGroup struct {
-	prID           string
-	host           string
-	repo           string
-	number         int
-	previous       store.SessionPullRequestStatus
-	reviewStatuses map[string]string
-	sessions       []string
-	watches        []store.PullRequestWatch
-	due            bool
+	prID             string
+	host             string
+	repo             string
+	number           int
+	previous         store.SessionPullRequestStatus
+	reviewStatuses   map[string]string
+	sessions         []string
+	recordedSessions []string
+	watches          []store.PullRequestWatch
+	due              bool
 }
 
 func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) (fetched, changed int) {
@@ -249,6 +250,7 @@ func (d *Daemon) dueSessionPullRequests(
 		if active {
 			group.sessions = append(group.sessions, rec.SessionID)
 		}
+		group.recordedSessions = append(group.recordedSessions, rec.SessionID)
 		group.reviewStatuses[rec.SessionID] = rec.ReviewStatus
 		group.due = group.due || sessionPullRequestDue(rec, len(group.watches) > 0, now)
 	}
@@ -563,8 +565,7 @@ func (d *Daemon) processPullRequestWatches(
 			if err != nil {
 				d.logf("pull request watch: stop completed watch %s/%s: %v", watch.SessionID, watch.PRID, err)
 			} else if removed {
-				changedSessions = append(changedSessions, group.sessions...)
-				changedSessions = append(changedSessions, watch.SessionID)
+				changedSessions = append(changedSessions, group.recordedSessions...)
 			}
 		}
 		d.refreshAgentMailboxUnread(watch.SessionID)

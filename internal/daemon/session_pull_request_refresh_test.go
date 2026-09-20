@@ -594,7 +594,10 @@ func TestPullRequestWatchClearsStaleActionOnHeadChangeAndDisarmsOnClose(t *testi
 
 func TestPullRequestWatchBroadcastsAutoUnwatchForRecoverableSession(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
-	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+	registerSessionForPRTest(t, d, "s2")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	recordPRForRefresh(t, d, "s2", url)
 	now := time.Now()
 	observation := watchedReadiness("sha-1", prreadiness.ChecksPending, "")
 	host := &fakePRHost{readiness: observation}
@@ -602,6 +605,9 @@ func TestPullRequestWatchBroadcastsAutoUnwatchForRecoverableSession(t *testing.T
 	d.refreshSessionPullRequests(context.Background(), now)
 	if !d.store.UpdateState("s1", string(protocol.SessionStateRecoverable)) {
 		t.Fatal("session did not become recoverable")
+	}
+	if !d.store.UpdateState("s2", string(protocol.SessionStateRecoverable)) {
+		t.Fatal("shared session did not become recoverable")
 	}
 
 	before := len(docFacts(t, d, FactSessionPullRequestChanged))
@@ -613,7 +619,12 @@ func TestPullRequestWatchBroadcastsAutoUnwatchForRecoverableSession(t *testing.T
 	if got := storedPullRequest(t, d, "s1").State; got != sessionPullRequestClosed {
 		t.Fatalf("pull request state = %q", got)
 	}
-	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 1 || facts[0].Subject != "s1" {
+	facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]
+	subjects := make(map[string]int, len(facts))
+	for _, fact := range facts {
+		subjects[fact.Subject]++
+	}
+	if len(facts) != 2 || subjects["s1"] != 1 || subjects["s2"] != 1 {
 		t.Fatalf("auto-unwatch facts = %+v", facts)
 	}
 }
