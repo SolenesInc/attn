@@ -79,7 +79,8 @@ func Evaluate(evidence Observation, reviewer string, baselineIDs []string) Evalu
 		result.UnavailableCause = signal.Cause
 	}
 
-	if len(result.Unresolved) > 0 && result.ReviewState == ReviewApproved {
+	if len(result.Unresolved) > 0 &&
+		(result.ReviewState == ReviewWaiting || result.ReviewState == ReviewApproved) {
 		result.ReviewState = ReviewUnresolved
 	}
 	result.Ready = strings.EqualFold(evidence.State, "open") && !evidence.Draft &&

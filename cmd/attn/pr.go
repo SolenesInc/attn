@@ -441,6 +441,9 @@ func describePROutcome(result *prReadiness, outcome prOutcome, opts prWaitOption
 	case outcomeApproved:
 		return fmt.Sprintf("%s approved %s; %d checks green", result.Reviewer, head, len(result.Checks))
 	case outcomeChangesRequested:
+		if result.ReviewState == prreadiness.ReviewUnresolved {
+			return fmt.Sprintf("unresolved review threads block %s", head)
+		}
 		return fmt.Sprintf("%s requested changes on %s", result.Reviewer, head)
 	case outcomeChecksFailed:
 		return fmt.Sprintf("%s failed on %s", strings.Join(failedCheckNames(result.Checks), ", "), head)

@@ -39,7 +39,7 @@ func TestReadinessTransitionMatrix(t *testing.T) {
 				observation.Comments = []Comment{{ID: "existing", Author: "human", CreatedAt: base}}
 				observation.Threads = []Thread{{ID: "old-thread", Body: "resolve me", CommitOID: "old-head"}}
 				got := Advance(Cursor{}, observation, "reviewer", StartPolicy{})
-				if !has(got.Events, OutcomeChangesRequested) || has(got.Events, OutcomeHumanComment) ||
+				if got.Evaluation.ReviewState != ReviewUnresolved || !has(got.Events, OutcomeChangesRequested) || has(got.Events, OutcomeHumanComment) ||
 					!slices.Contains(got.BaselineCursor.SeenCommentIDs, "existing") {
 					t.Fatalf("transition = %+v", got)
 				}

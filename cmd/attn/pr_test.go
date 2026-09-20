@@ -124,6 +124,15 @@ func TestReportPROutcomeWritesPlainTextAndJSON(t *testing.T) {
 	}
 }
 
+func TestDescribePROutcomeDistinguishesUnresolvedThreads(t *testing.T) {
+	result := &prReadiness{
+		HeadSHA: "abcdef1234567890", Reviewer: "reviewer", ReviewState: prreadiness.ReviewUnresolved,
+	}
+	if got := describePROutcome(result, outcomeChangesRequested, prWaitOptions{}); got != "unresolved review threads block abcdef123456" {
+		t.Fatalf("description = %q", got)
+	}
+}
+
 func TestPRWaitCursorRoundTripsCanonicalState(t *testing.T) {
 	dir := t.TempDir()
 	opts := prWaitOptions{Host: "github.com", Owner: "SolenesInc", Name: "attn", Number: 303}
