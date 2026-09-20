@@ -564,6 +564,7 @@ func (d *Daemon) processPullRequestWatches(
 				d.logf("pull request watch: stop completed watch %s/%s: %v", watch.SessionID, watch.PRID, err)
 			} else if removed {
 				changedSessions = append(changedSessions, group.sessions...)
+				changedSessions = append(changedSessions, watch.SessionID)
 			}
 		}
 		d.refreshAgentMailboxUnread(watch.SessionID)
