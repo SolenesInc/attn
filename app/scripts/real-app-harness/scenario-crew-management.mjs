@@ -300,6 +300,7 @@ try {
       'Back to Crew restores the asleep member and Tending filter');
     await pressEscapeAndWaitFor('crew-seed-back');
     await click(`[data-pane-id="tile-seed-${asleepHeld}"] [aria-label="Close tile"]`);
+    await waitForDom(`.seed-document[data-seed-id="${asleepHeld}"]`, { absent: true });
     const closedAsleepReader = await client.request('seed_document_get_state', { seedId: asleepHeld });
     runner.assert(!closedAsleepReader.present, 'the standalone asleep-member reader closes', closedAsleepReader);
     await click('[data-testid="manage-crew"]');
@@ -349,6 +350,7 @@ try {
     );
     await pressEscapeAndWaitFor('crew-seed-back');
     await click(`.workspace-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
+    await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`, { absent: true });
     await waitForDom(`[data-pane-session-id="${firstSession}"] .terminal-container`, { focused: true });
     const closed = await client.request('seed_document_get_state', { seedId: crewChild });
     runner.assert(!closed.present, 'closing the Crew seed tile restores the terminal workspace', closed);
@@ -471,6 +473,7 @@ try {
       'returning preserves the selected member, Handoffs tab, and letter', { selected, selectedTab });
     await pressEscapeAndWaitFor('crew-seed-back');
     await click(`[data-pane-id="tile-seed-${linkedSeed}"] [aria-label="Close tile"]`);
+    await waitForDom(`.seed-document[data-seed-id="${linkedSeed}"]`, { absent: true });
     const closedLinkedReader = await client.request('seed_document_get_state', { seedId: linkedSeed });
     runner.assert(!closedLinkedReader.present, 'the handoff-linked seed reader closes', closedLinkedReader);
   });
