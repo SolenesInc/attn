@@ -480,7 +480,7 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
 				"pull-request-outage", watch.SessionID, watch.PRID, watch.CreatedAt, updated.ErrorSince,
 			}, "\x00"))).String()
-			d.queuePullRequestWatchNotification(watch, id, "pull-request-outage:"+watch.PRID, "monitoring unavailable", []string{fetchErr.Error()}, now)
+			d.queuePullRequestWatchNotification(watch, id, store.PullRequestWatchOutageCoalesceKey(watch.PRID), "monitoring unavailable", []string{fetchErr.Error()}, now)
 		}
 		changedSessions = append(changedSessions, watch.SessionID)
 	}
@@ -500,7 +500,7 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 		}
 		watch = current
 		if watch.LastError != "" {
-			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, "pull-request-outage:"+watch.PRID); err != nil {
+			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(watch.SessionID, store.PullRequestWatchOutageCoalesceKey(watch.PRID)); err != nil {
 				d.logf("pull request watch: clear recovered outage for %s/%s: %v", watch.SessionID, watch.PRID, err)
 				continue
 			}
@@ -653,7 +653,7 @@ func (d *Daemon) queuePullRequestWatchNotification(watch store.PullRequestWatch,
 	return nil
 }
 
-func pullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
+func pullRequestWatchCoalesceKey(prID string) string { return store.PullRequestWatchCoalesceKey(prID) }
 
 func (d *Daemon) subscribeSessionPullRequestFacts() {
 	if d.eventBus == nil || d.sessionPRUnsubHooks != nil {

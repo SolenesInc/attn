@@ -48,6 +48,17 @@ func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
 	if err := s.UpdateSessionPullRequestReviewStatus("s1", prID, "approved"); err != nil {
 		t.Fatal(err)
 	}
+	if err := s.MarkSessionPullRequestChecked(prID, now); err != nil {
+		t.Fatal(err)
+	}
+	for _, notice := range []struct{ id, key string }{
+		{"watch-action", PullRequestWatchCoalesceKey(prID)},
+		{"watch-outage", PullRequestWatchOutageCoalesceKey(prID)},
+	} {
+		if _, _, err := s.EnqueueMaintenancePromptOnce(notice.id, "s1", prID, notice.key, notice.id, now); err != nil {
+			t.Fatal(err)
+		}
+	}
 	if _, err := s.db.Exec(`CREATE TRIGGER reject_review_reset BEFORE UPDATE OF review_status ON session_pull_requests
 		BEGIN SELECT RAISE(FAIL, 'injected verdict reset failure'); END`); err != nil {
 		t.Fatal(err)
@@ -58,13 +69,22 @@ func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
 	if watch, found := s.PullRequestWatch("s1", prID); !found || watch.Reviewer != "first-reviewer" {
 		t.Fatalf("failed reset replaced the reviewer: %+v", watch)
 	}
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || !ids["watch-action"] || !ids["watch-outage"] {
+		t.Fatalf("failed reset deleted inbox items: ids=%v err=%v", ids, err)
+	}
+	if pr, found := s.SessionPullRequestByID(prID); !found || pr.StatusCheckedAt != now.Format(time.RFC3339Nano) {
+		t.Fatalf("failed reset warmed the pull request: %+v", pr)
+	}
 	if _, err := s.db.Exec("DROP TRIGGER reject_review_reset"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.WatchPullRequest("s1", prID, "second-reviewer", now.Add(time.Second)); err != nil {
 		t.Fatal(err)
 	}
-	if pr, found := s.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "waiting" {
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || len(ids) != 0 {
+		t.Fatalf("successful reset retained inbox items: ids=%v err=%v", ids, err)
+	}
+	if pr, found := s.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "waiting" || !protocol.Timestamp(pr.StatusCheckedAt).Time().IsZero() {
 		t.Fatalf("successful reset retained the old verdict: %+v", pr)
 	}
 	if err := s.UpdateSessionPullRequestReviewStatus("s1", prID, "approved"); err != nil {

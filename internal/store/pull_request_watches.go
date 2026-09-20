@@ -25,6 +25,10 @@ type PullRequestWatch struct {
 const pullRequestWatchColumns = `session_id, pr_id, reviewer, created_at,
 	cursor_json, last_success_at, last_error, error_since, failure_count`
 
+func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watch:" + prID }
+
+func PullRequestWatchOutageCoalesceKey(prID string) string { return "pull-request-outage:" + prID }
+
 func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -45,6 +49,18 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 		return false, err
 	}
 	defer tx.Rollback()
+	for _, key := range []string{PullRequestWatchCoalesceKey(prID), PullRequestWatchOutageCoalesceKey(prID)} {
+		if _, err := tx.Exec(`
+			DELETE FROM agent_mailbox_items
+			WHERE recipient_session_id = ? AND kind = ? AND coalesce_key = ? AND read_at = ''
+		`, sessionID, agentmailbox.KindMaintenancePrompt, key); err != nil {
+			return false, err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE session_pull_requests SET status_checked_at = ? WHERE pr_id = ?`,
+		time.Time{}.Format(time.RFC3339Nano), prID); err != nil {
+		return false, err
+	}
 	_, err = tx.Exec(`
 		INSERT INTO pull_request_watches (session_id, pr_id, reviewer, created_at)
 		VALUES (?, ?, ?, ?)

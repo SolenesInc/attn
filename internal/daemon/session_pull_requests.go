@@ -138,23 +138,12 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, rev
 	if err := d.recordSessionPullRequest(rec); err != nil {
 		return err
 	}
-	current, exists := d.store.PullRequestWatch(rec.SessionID, rec.PRID)
-	if !exists || !prreadiness.SameActor(current.Reviewer, reviewer) {
-		for _, key := range []string{pullRequestWatchCoalesceKey(rec.PRID), "pull-request-outage:" + rec.PRID} {
-			if _, err := d.store.DeleteUnreadMaintenanceMailboxItem(rec.SessionID, key); err != nil {
-				return err
-			}
-		}
-		d.refreshAgentMailboxUnread(rec.SessionID)
-		if err := d.store.MarkSessionPullRequestChecked(rec.PRID, time.Time{}); err != nil {
-			return fmt.Errorf("warm pull request %s: %w", rec.PRID, err)
-		}
-	}
 	changed, err := d.store.WatchPullRequest(rec.SessionID, rec.PRID, reviewer, time.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}
 	if changed {
+		d.refreshAgentMailboxUnread(rec.SessionID)
 		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
 	}
 	return nil
