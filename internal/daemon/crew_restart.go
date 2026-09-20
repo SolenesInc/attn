@@ -121,6 +121,16 @@ func (d *Daemon) crewRestart(name, requestID string, expectedSessionID *string, 
 	if int64(*expectedRevision) != doc.Rev {
 		return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's settings or day changed before the restart was applied: expected revision %d, current revision %d; refresh the roster and try again", crew.DisplayName(member.ID), *expectedRevision, doc.Rev))
 	}
+	if member.Restart != nil && member.Restart.State == crew.RestartFailed && member.Restart.Withdrawn &&
+		member.Restart.SessionID == visibleSessionID && visibleSessionID != "" {
+		live, liveErr := d.crewSessionActuallyLive(visibleSessionID)
+		if liveErr != nil {
+			return nil, fmt.Errorf("check %s's closing session %s: %w", crew.DisplayName(member.ID), shortSessionID(visibleSessionID), liveErr)
+		}
+		if live {
+			return nil, d.crewRestartConflict(member, doc.Rev, fmt.Errorf("%s's day in session %s is still closing after a sleep request; wait until the member is asleep, then retry this restart", crew.DisplayName(member.ID), shortSessionID(visibleSessionID)))
+		}
+	}
 	if member.Restart != nil && member.Restart.SessionID == visibleSessionID &&
 		(member.Restart.State == crew.RestartQueued || member.Restart.State == crew.RestartRequested) {
 		if err := d.recordCrewRestartRequest(crew.RestartRequest{Member: member.ID, RequestID: requestID, RestartRequestID: member.Restart.RequestID}); err != nil {

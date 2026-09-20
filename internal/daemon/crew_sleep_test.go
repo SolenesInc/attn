@@ -164,6 +164,30 @@ func TestCrewSleep_ADeadDayWithARestartPendingFailsTheRestart(t *testing.T) {
 	}
 }
 
+func TestCrewRestart_AWithdrawnDeadDayCanRestart(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	runtime := &crewRuntimeBackend{fakeSpawnBackend: backend, running: make(map[string]bool)}
+	d.ptyBackend = runtime
+	woken, err := d.crewWake("alder", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	if _, err := setCrewRestart(d, "alder", &crew.Restart{
+		RequestID: "withdrawn-dead", SessionID: woken.SessionID, State: crew.RestartFailed, Withdrawn: true,
+	}); err != nil {
+		t.Fatalf("seed withdrawn restart: %v", err)
+	}
+	runtime.running[woken.SessionID] = false
+
+	resp := crewRestartCall(t, d, "alder", "restart-dead-day")
+	if !resp.Ok || resp.CrewRestartResult.Restart.State != protocol.CrewRestartStateCompleted {
+		t.Fatalf("restart dead withdrawn day = %+v / %v", resp.CrewRestartResult, protocol.Deref(resp.Error))
+	}
+	if len(spawnedSessions(t, backend)) != 2 {
+		t.Fatalf("restart dead withdrawn day spawned %d sessions, want 2", len(spawnedSessions(t, backend)))
+	}
+}
+
 func TestCrewSleep_ALiveDayWithARestartPendingWithdrawsTheRestart(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
@@ -186,6 +210,20 @@ func TestCrewSleep_ALiveDayWithARestartPendingWithdrawsTheRestart(t *testing.T) 
 			withdrawn, _, err := d.crewMember("trellis")
 			if err != nil || withdrawn.Restart == nil || withdrawn.Restart.State != crew.RestartFailed || !withdrawn.Restart.Withdrawn {
 				t.Fatalf("restart after the sleep request = %+v, err=%v, want withdrawn", withdrawn.Restart, err)
+			}
+			blocked := crewRestartCall(t, d, "trellis", "restart-after-sleep")
+			if blocked.Ok || !strings.Contains(protocol.Deref(blocked.Error), "still closing") {
+				t.Fatalf("restart before sleep landed = %+v / %v, want closing conflict", blocked.CrewRestartResult, protocol.Deref(blocked.Error))
+			}
+			stillWithdrawn, _, err := d.crewMember("trellis")
+			if err != nil || stillWithdrawn.Restart == nil || !stillWithdrawn.Restart.Withdrawn || stillWithdrawn.Restart.RequestID != withdrawn.Restart.RequestID {
+				t.Fatalf("rejected restart changed withdrawal: %+v, err=%v", stillWithdrawn.Restart, err)
+			}
+			if _, found, receiptErr := d.crewRestartRequest("trellis", "restart-after-sleep"); receiptErr != nil || found {
+				t.Fatalf("rejected restart receipt found=%v, err=%v", found, receiptErr)
+			}
+			if len(spawnedSessions(t, backend)) != 1 {
+				t.Fatalf("restart before sleep landed spawned %d sessions, want 1", len(spawnedSessions(t, backend)))
 			}
 
 			msg := protocol.CrewHandoffMessage{Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID, Note: "Stale restart prompt.", Close: protocol.Ptr(tc.close)}
@@ -215,6 +253,9 @@ func TestCrewSleep_ALiveDayWithARestartPendingWithdrawsTheRestart(t *testing.T) 
 			current, _, err := d.crewMember("trellis")
 			if err != nil || current.Restart == nil || current.Restart.Withdrawn || current.Restart.RequestID != "restart-after-sleep" {
 				t.Fatalf("fresh restart retained withdrawal: %+v, err=%v", current.Restart, err)
+			}
+			if len(spawnedSessions(t, backend)) != 2 {
+				t.Fatalf("fresh restart spawned %d sessions, want 2", len(spawnedSessions(t, backend)))
 			}
 		})
 	}
