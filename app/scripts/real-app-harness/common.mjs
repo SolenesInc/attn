@@ -194,17 +194,17 @@ const pendingSettingRestores = [];
 // The tripwire pins the mock in the environment the daemon inherits; the app
 // sends this setting with every spawn, so both halves have to name it.
 async function pinMockAgentExecutables(client, observer, executableOverrides = {}) {
-  for (const agent of mockPinnedAgents()) {
+  const writes = mockPinnedAgents().map((agent) => {
     const key = `${agent}_executable`;
     const executable = executableOverrides[agent] || MOCK_AGENT_EXECUTABLE;
     const previous = observer.getSetting(key) || '';
-    if (previous === executable) {
-      continue;
-    }
-    queueDaemonSettingRestore(observer, key);
+    return { key, executable, previous };
+  }).filter(({ executable, previous }) => previous !== executable);
+  for (const { key } of writes) queueDaemonSettingRestore(observer, key);
+  await Promise.all(writes.map(async ({ key, executable, previous }) => {
     await client.request('set_setting', { key, value: executable });
-    console.log(`[harness] pinned ${key} at the mock agent (was ${previous ? previous : 'unconfigured'})`);
-  }
+    console.log(`[harness] pinned ${key} at the mock agent (was ${previous || 'unconfigured'})`);
+  }));
 }
 
 // Records a setting's current value so restoreHarnessSettings puts it back on exit;

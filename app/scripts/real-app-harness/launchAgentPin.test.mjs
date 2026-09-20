@@ -151,6 +151,26 @@ describe('mock agent pinning', () => {
     ]);
   });
 
+  it('records every restore before a pin write can fail', async () => {
+    armTripwireEnv();
+    const client = fakeClient();
+    client.request = async (verb, payload) => {
+      client.calls.push({ verb, payload });
+      if (verb === 'set_setting' && payload.key === 'claude_executable') throw new Error('write refused');
+      return {};
+    };
+    const observer = fakeObserver({ claude_executable: '/usr/local/bin/claude', codex_executable: '/usr/local/bin/codex' });
+
+    await expect(launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false }))
+      .rejects.toThrow('write refused');
+    const writer = recordingWriter();
+    expect(await restoreHarnessSettings({ write: writer.write })).toBe(2);
+    expect(writer.written).toEqual([
+      { key: 'claude_executable', value: '/usr/local/bin/claude' },
+      { key: 'codex_executable', value: '/usr/local/bin/codex' },
+    ]);
+  });
+
   it('restores what the run started with, not its own pin, after a relaunch', async () => {
     armTripwireEnv();
     const client = fakeClient();

@@ -2,10 +2,35 @@ import { describe, expect, it } from 'vitest';
 import {
   appPids,
   assertDaemonRestartDoesNotHostSession,
+  closeSessions,
   parseFootprint,
   parseGraphicsRegions,
   parseVmmapSummary,
 } from './perfMeasure.mjs';
+
+describe('closeSessions', () => {
+  it('deduplicates ids and waits for every best-effort close', async () => {
+    let releaseAlpha;
+    const calls = [];
+    const client = {
+      request: async (_verb, { sessionId }) => {
+        calls.push(sessionId);
+        if (sessionId === 'alpha') await new Promise((resolve) => { releaseAlpha = resolve; });
+        if (sessionId === 'beta') throw new Error('already closed');
+      },
+    };
+
+    let complete = false;
+    const closing = closeSessions(client, ['alpha', 'beta', 'alpha']).then(() => { complete = true; });
+    await Promise.resolve();
+    expect(calls).toEqual(['alpha', 'beta']);
+    expect(complete).toBe(false);
+
+    releaseAlpha();
+    await closing;
+    expect(complete).toBe(true);
+  });
+});
 
 describe('assertDaemonRestartDoesNotHostSession', () => {
   const hosted = {

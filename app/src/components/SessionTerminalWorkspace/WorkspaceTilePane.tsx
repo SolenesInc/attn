@@ -7,6 +7,10 @@ import { WorkspaceDockTile } from './WorkspaceDockTile';
 
 const noRequestContent = () => {};
 
+function suspendedTileTitle(tileLeaf: TileLeaf): string {
+  return (tileLeaf.tileParams ?? '').split('/').filter(Boolean).pop() || tileLeaf.tileKind || 'Tile';
+}
+
 export function WorkspaceTilePane({
   tileLeaf,
   bounds,
@@ -48,12 +52,10 @@ export function WorkspaceTilePane({
   } = useWorkspaceContext();
 
   if (suspendedLeafIds.has(tileLeaf.tileId) && !effectivePaneId) {
-    const suspendedTitle =
-      (tileLeaf.tileParams ?? '').split('/').filter(Boolean).pop() || tileLeaf.tileKind || 'Tile';
     return (
       <SuspendedWorkspacePane
         leafId={tileLeaf.tileId}
-        title={suspendedTitle}
+        title={suspendedTileTitle(tileLeaf)}
         kind="tile"
         tileKind={tileLeaf.tileKind}
         bounds={bounds}
