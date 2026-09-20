@@ -71,14 +71,15 @@ func (d *Daemon) sessionPullRequestRefreshHandler(ctx context.Context, _ *jobs.J
 }
 
 type sessionPullRequestGroup struct {
-	prID     string
-	host     string
-	repo     string
-	number   int
-	previous store.SessionPullRequestStatus
-	sessions []string
-	watches  []store.PullRequestWatch
-	due      bool
+	prID           string
+	host           string
+	repo           string
+	number         int
+	previous       store.SessionPullRequestStatus
+	reviewStatuses map[string]string
+	sessions       []string
+	watches        []store.PullRequestWatch
+	due            bool
 }
 
 func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) (fetched, changed int) {
@@ -117,7 +118,7 @@ func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) 
 	var changedSessions []string
 	for _, group := range groups {
 		if ctx.Err() != nil {
-			return fetched, changed
+			break
 		}
 		resource := sessionPullRequestResource(group)
 		limitKey := group.host + "\x00" + resource
@@ -143,7 +144,7 @@ func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) 
 		status, readiness, err := d.fetchSessionPullRequestStatus(ctx, host, group)
 		if err != nil {
 			if ctx.Err() != nil {
-				return fetched, changed
+				break
 			}
 			if resetAt, limited := hostRateLimitReset(host, resource, err); limited {
 				d.logf("session pull requests: %s rate limited mid-refresh, stopping there: %v", group.host, err)
@@ -158,7 +159,7 @@ func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) 
 			continue
 		}
 		if ctx.Err() != nil {
-			return fetched, changed
+			break
 		}
 
 		fetched++
@@ -168,13 +169,27 @@ func (d *Daemon) refreshSessionPullRequests(ctx context.Context, now time.Time) 
 		} else {
 			var cleared []string
 			cleared, updateErr = d.store.UpdateSessionPullRequestSharedStatus(group.prID, status, now)
-			changedSessions = append(changedSessions, cleared...)
+			watched := make(map[string]bool, len(group.watches))
+			for _, watch := range group.watches {
+				watched[watch.SessionID] = true
+			}
+			for _, sessionID := range cleared {
+				if !watched[sessionID] {
+					changedSessions = append(changedSessions, sessionID)
+				}
+			}
 		}
 		if updateErr != nil {
 			d.logf("session pull requests: store status for %s: %v", group.prID, updateErr)
 			continue
 		}
-		changedSessions = append(changedSessions, d.processPullRequestWatches(group, readiness, now)...)
+		watchChanges, finalReviewStatuses := d.processPullRequestWatches(group, readiness, now)
+		changedSessions = append(changedSessions, watchChanges...)
+		for sessionID, finalReviewStatus := range finalReviewStatuses {
+			if group.reviewStatuses[sessionID] != finalReviewStatus {
+				changedSessions = append(changedSessions, sessionID)
+			}
+		}
 		if status == group.previous {
 			continue
 		}
@@ -224,8 +239,9 @@ func (d *Daemon) dueSessionPullRequests(
 			}
 			group = &sessionPullRequestGroup{
 				prID: rec.PRID, host: host, repo: repo, number: rec.Number,
-				previous: sessionPullRequestStatusOf(rec),
-				watches:  watchesByPR[rec.PRID],
+				previous:       sessionPullRequestStatusOf(rec),
+				reviewStatuses: make(map[string]string),
+				watches:        watchesByPR[rec.PRID],
 			}
 			byPR[rec.PRID] = group
 			groups = append(groups, group)
@@ -233,6 +249,7 @@ func (d *Daemon) dueSessionPullRequests(
 		if active {
 			group.sessions = append(group.sessions, rec.SessionID)
 		}
+		group.reviewStatuses[rec.SessionID] = rec.ReviewStatus
 		group.due = group.due || sessionPullRequestDue(rec, len(group.watches) > 0, now)
 	}
 
@@ -482,23 +499,34 @@ func (d *Daemon) recordPullRequestWatchFailures(group *sessionPullRequestGroup, 
 			}, "\x00"))).String()
 			d.queuePullRequestWatchNotification(watch, id, store.PullRequestWatchOutageCoalesceKey(watch.PRID), "monitoring unavailable", []string{fetchErr.Error()}, now)
 		}
-		changedSessions = append(changedSessions, watch.SessionID)
+		if watch.LastError != updated.LastError {
+			changedSessions = append(changedSessions, watch.SessionID)
+		}
 	}
 	return changedSessions
 }
 
-func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readiness *prreadiness.Observation, now time.Time) (changedSessions []string) {
+func (d *Daemon) processPullRequestWatches(
+	group *sessionPullRequestGroup, readiness *prreadiness.Observation, now time.Time,
+) (changedSessions []string, finalReviewStatuses map[string]string) {
+	finalReviewStatuses = make(map[string]string)
 	if readiness == nil {
-		return
+		return changedSessions, finalReviewStatuses
 	}
 	d.sessionPullRequestWatchMu.Lock()
 	defer d.sessionPullRequestWatchMu.Unlock()
 	for _, watch := range group.watches {
 		current, ok := d.store.PullRequestWatch(watch.SessionID, watch.PRID)
-		if !ok || !samePullRequestWatchGeneration(current, watch) {
+		if !ok {
+			finalReviewStatuses[watch.SessionID] = ""
+			continue
+		}
+		if !samePullRequestWatchGeneration(current, watch) {
+			finalReviewStatuses[watch.SessionID] = string(prreadiness.ReviewWaiting)
 			continue
 		}
 		watch = current
+		finalReviewStatuses[watch.SessionID] = ""
 		transition := prreadiness.Advance(watch.Cursor, *readiness, watch.Reviewer, prreadiness.StartPolicy{
 			EmitReviewerVerdictFeedback: true,
 		})
@@ -510,6 +538,9 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			); err != nil {
 				d.logf("pull request watch: baseline %s for %s/%s: %v", readiness.HeadSHA, watch.SessionID, watch.PRID, err)
 				continue
+			}
+			if clearAction {
+				finalReviewStatuses[watch.SessionID] = string(prreadiness.ReviewWaiting)
 			}
 		}
 		if clearAction {
@@ -524,15 +555,22 @@ func (d *Daemon) processPullRequestWatches(group *sessionPullRequestGroup, readi
 			d.logf("pull request watch: record observation for %s/%s: %v", watch.SessionID, watch.PRID, err)
 			continue
 		}
+		finalReviewStatuses[watch.SessionID] = string(transition.Evaluation.ReviewState)
+		projectionChanged := watch.LastSuccessAt == "" || watch.LastError != ""
 		if readiness.State != sessionPullRequestOpen {
-			if _, err := d.store.UnwatchPullRequest(watch.SessionID, watch.PRID); err != nil {
+			removed, err := d.store.UnwatchPullRequest(watch.SessionID, watch.PRID)
+			if err != nil {
 				d.logf("pull request watch: stop completed watch %s/%s: %v", watch.SessionID, watch.PRID, err)
+			} else if removed {
+				changedSessions = append(changedSessions, group.sessions...)
 			}
 		}
 		d.refreshAgentMailboxUnread(watch.SessionID)
-		changedSessions = append(changedSessions, watch.SessionID)
+		if projectionChanged {
+			changedSessions = append(changedSessions, watch.SessionID)
+		}
 	}
-	return changedSessions
+	return changedSessions, finalReviewStatuses
 }
 
 func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {

@@ -31,6 +31,7 @@ type fakePRHost struct {
 	readyReads   int
 	limitedFor   string
 	limitFor     string
+	snapshotFunc func(context.Context, string, int) (*github.PullRequestSnapshot, error)
 }
 
 func (f *fakePRHost) FetchPullRequestReadiness(ctx context.Context, _ string, _ int) (*prreadiness.Observation, error) {
@@ -42,9 +43,12 @@ func (f *fakePRHost) FetchPullRequestReadiness(ctx context.Context, _ string, _ 
 	return f.readiness, nil
 }
 
-func (f *fakePRHost) FetchPullRequestSnapshot(ctx context.Context, _ string, _ int) (*github.PullRequestSnapshot, error) {
+func (f *fakePRHost) FetchPullRequestSnapshot(ctx context.Context, repo string, number int) (*github.PullRequestSnapshot, error) {
 	f.snapshotCtx = ctx
 	f.snapshots++
+	if f.snapshotFunc != nil {
+		return f.snapshotFunc(ctx, repo, number)
+	}
 	if f.err != nil {
 		return nil, f.err
 	}
@@ -183,8 +187,11 @@ func newPersistentPRDaemonForTest(t *testing.T) *Daemon {
 	if err != nil {
 		t.Fatal(err)
 	}
+	d.stopEventBus()
 	_ = d.store.Close()
 	d.store = persistent
+	d.eventBus = nil
+	d.ensureEventBus()
 	t.Cleanup(func() { _ = d.store.Close() })
 	registerSessionForPRTest(t, d, "s1")
 	return d
@@ -227,6 +234,18 @@ func TestPullRequestWatchSharesFetchAndKeepsReviewerStatusIsolated(t *testing.T)
 		storedPullRequest(t, d, "s2").ReviewStatus != "changes_requested" {
 		t.Fatalf("reads=%d s1=%+v s2=%+v", host.readyReads, storedPullRequest(t, d, "s1"), storedPullRequest(t, d, "s2"))
 	}
+	beforeFacts := len(docFacts(t, d, FactSessionPullRequestChanged))
+	beforeWatches := d.store.PullRequestWatches()
+	d.refreshSessionPullRequests(context.Background(), time.Now().Add(protocol.HeatHotInterval))
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[beforeFacts:]; len(facts) != 0 {
+		t.Fatalf("unchanged shared watch facts = %+v", facts)
+	}
+	afterWatches := d.store.PullRequestWatches()
+	if len(beforeWatches) != 2 || len(afterWatches) != 2 ||
+		beforeWatches[0].LastSuccessAt == afterWatches[0].LastSuccessAt ||
+		beforeWatches[1].LastSuccessAt == afterWatches[1].LastSuccessAt {
+		t.Fatalf("success timestamps did not advance: before=%+v after=%+v", beforeWatches, afterWatches)
+	}
 }
 
 func TestPullRequestWatchSkipsUnchangedBaselineWrite(t *testing.T) {
@@ -239,6 +258,7 @@ func TestPullRequestWatchSkipsUnchangedBaselineWrite(t *testing.T) {
 	now := time.Now()
 	d.refreshSessionPullRequests(context.Background(), now)
 	before := d.store.PullRequestWatches()[0].LastSuccessAt
+	beforeFacts := len(docFacts(t, d, FactSessionPullRequestChanged))
 
 	db, err := store.OpenDB(d.store.DatabasePath())
 	if err != nil {
@@ -254,6 +274,9 @@ func TestPullRequestWatchSkipsUnchangedBaselineWrite(t *testing.T) {
 	after := d.store.PullRequestWatches()[0].LastSuccessAt
 	if after == before {
 		t.Fatalf("unchanged poll did not record success: before=%q after=%q", before, after)
+	}
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[beforeFacts:]; len(facts) != 0 {
+		t.Fatalf("unchanged poll facts = %+v", facts)
 	}
 }
 
@@ -468,8 +491,32 @@ func TestPullRequestWatchBroadcastsClearedUnwatchedVerdict(t *testing.T) {
 	for _, fact := range facts {
 		seen[fact.Subject]++
 	}
-	if seen["s1"] != 1 || seen["s2"] != 1 {
+	if seen["s1"] != 0 || seen["s2"] != 1 {
 		t.Fatalf("refresh facts = %+v", facts)
+	}
+}
+
+func TestPullRequestWatchBroadcastsReviewChangeOnce(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	url := "https://github.com/victorarias/attn/pull/71"
+	watchPRForRefresh(t, d, "s1", url)
+	now := time.Now()
+	host := &fakePRHost{readiness: watchedReadiness("sha-1", prreadiness.ChecksPending, "")}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(context.Background(), now)
+
+	before := len(docFacts(t, d, FactSessionPullRequestChanged))
+	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksPending, "APPROVED")
+	d.refreshSessionPullRequests(context.Background(), now.Add(protocol.HeatHotInterval))
+	facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]
+	if len(facts) != 1 || facts[0].Subject != "s1" {
+		t.Fatalf("review change facts = %+v", facts)
+	}
+
+	before = len(docFacts(t, d, FactSessionPullRequestChanged))
+	d.refreshSessionPullRequests(context.Background(), now.Add(2*protocol.HeatHotInterval))
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 0 {
+		t.Fatalf("unchanged review facts = %+v", facts)
 	}
 }
 
@@ -503,8 +550,12 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	host := &fakePRHost{readyErr: errors.New("review API unavailable")}
 	serveHost(d, "github.com", host)
 	now := time.Now()
+	before := len(docFacts(t, d, FactSessionPullRequestChanged))
 	for i := 0; i < pullRequestWatchFailureThreshold; i++ {
 		d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(i)*protocol.HeatHotInterval))
+	}
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 1 || facts[0].Subject != "s1" {
+		t.Fatalf("repeated failure facts = %+v", facts)
 	}
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "monitoring unavailable") {
@@ -512,7 +563,11 @@ func TestPullRequestWatchExposesPersistentFailureAndRecovers(t *testing.T) {
 	}
 	host.readyErr = nil
 	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	before = len(docFacts(t, d, FactSessionPullRequestChanged))
 	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold)*protocol.HeatHotInterval))
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]; len(facts) != 1 || facts[0].Subject != "s1" {
+		t.Fatalf("recovery facts = %+v", facts)
+	}
 	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 ||
 		!strings.Contains(unread[0].Item.Prompt, "ready") {
 		t.Fatalf("recovery = %+v, %v", unread, err)
@@ -541,7 +596,12 @@ func TestPullRequestWatchKeepsOutageUntilRecoveryDeliverySucceeds(t *testing.T) 
 	}
 	host.readyErr = nil
 	host.readiness = watchedReadiness("sha-1", prreadiness.ChecksGreen, "COMMENTED")
+	beforeRecord := storedPullRequest(t, d, "s1")
+	beforeFacts := len(docFacts(t, d, FactSessionPullRequestChanged))
 	d.refreshSessionPullRequests(context.Background(), now.Add(time.Duration(pullRequestWatchFailureThreshold)*protocol.HeatHotInterval))
+	if facts := docFacts(t, d, FactSessionPullRequestChanged)[beforeFacts:]; len(facts) != 1 || facts[0].Subject != "s1" {
+		t.Fatalf("failed recovery facts = %+v, review %q -> %q", facts, beforeRecord.ReviewStatus, storedPullRequest(t, d, "s1").ReviewStatus)
+	}
 	watch := d.store.PullRequestWatches()[0]
 	if watch.LastError != "review API unavailable" || watch.ErrorSince == "" || watch.FailureCount != pullRequestWatchFailureThreshold || watch.LastSuccessAt != "" {
 		t.Fatalf("failed recovery changed watch: %+v", watch)
