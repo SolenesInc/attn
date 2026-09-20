@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: CI runs on GitHub-hosted runners; the Daemon job no longer uses Blacksmith.

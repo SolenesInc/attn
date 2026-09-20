@@ -5,9 +5,6 @@ set -euo pipefail
 # the measured CPU and memory beside the label.
 
 host=github-hosted
-if [[ -f /etc/profile.d/blacksmith.sh || -n "${BLACKSMITH_ENV:-}" ]]; then
-  host=blacksmith
-fi
 
 if [[ "$(uname -s)" == Darwin ]]; then
   cpus="$(sysctl -n hw.logicalcpu)"
