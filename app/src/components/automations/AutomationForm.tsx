@@ -1,7 +1,7 @@
 // The host remounts on a fresh key per target, so mount already means an explicit
 // load: edit mode reads once on mount and never re-fetches on definitionId churn.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Resolver, useFieldArray, useForm } from 'react-hook-form';
+import { useFieldArray, useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { AutomationDefinitionSummary } from '../../types/generated';
 import {
@@ -72,7 +72,7 @@ function makeCreateDefaults(): AutomationFormValues {
 }
 
 function flattenFieldErrors(errors: Record<string, unknown>, prefix = ''): Record<string, string> {
-  let out: Record<string, string> = {};
+  const out: Record<string, string> = {};
   for (const key of Object.keys(errors)) {
     const value = errors[key] as Record<string, unknown> | undefined;
     if (!value || typeof value !== 'object') continue;
@@ -86,7 +86,7 @@ function flattenFieldErrors(errors: Record<string, unknown>, prefix = ''): Recor
     if (nestedKeys.length > 0) {
       const nested: Record<string, unknown> = {};
       for (const nestedKey of nestedKeys) nested[nestedKey] = value[nestedKey];
-      out = { ...out, ...flattenFieldErrors(nested, path) };
+      Object.assign(out, flattenFieldErrors(nested, path));
     }
   }
   return out;
@@ -117,9 +117,7 @@ export function AutomationForm({
     control,
     formState: { errors },
   } = useForm<AutomationFormValues>({
-    // zod leaves the schema's input generic as `unknown`, which
-    // @hookform/resolvers' zod v4 overloads reject.
-    resolver: zodResolver(automationFormSchema as never) as unknown as Resolver<AutomationFormValues>,
+    resolver: zodResolver(automationFormSchema),
     mode: 'onBlur',
     reValidateMode: 'onChange',
     defaultValues: makeCreateDefaults(),
@@ -384,7 +382,7 @@ export function AutomationForm({
         status,
         loadError,
         values: getValues(),
-        errors: flattenFieldErrors(errors as unknown as Record<string, unknown>),
+        errors: flattenFieldErrors(errors as Record<string, unknown>),
         saving,
         saveError,
         saveErrorCode,

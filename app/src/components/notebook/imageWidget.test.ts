@@ -15,7 +15,8 @@ function stateFor(doc: string, selection?: { anchor: number; head?: number }): E
 function replaceRangeCount(state: EditorState): number {
   let count = 0;
   for (const provider of state.facet(EditorView.decorations)) {
-    const set = typeof provider === 'function' ? provider(state as unknown as EditorView) : provider;
+    if (typeof provider === 'function') throw new Error('Expected state-owned decorations');
+    const set = provider;
     const iter = set.iter();
     while (iter.value) {
       count++;

@@ -82,18 +82,18 @@ function emitInitialState(ws: FakeWebSocket) {
 
 // The close status cannot outrun the backlog that caused the hangup, so the eviction reason arrives on the *next* connection, addressed to the client id the app repeats across reconnects.
 describe('useDaemonSocket eviction notice', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

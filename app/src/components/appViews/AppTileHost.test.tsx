@@ -1,8 +1,9 @@
+import { createMockDaemonApi } from '../../test/mocks/daemon';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { AppTileHost } from './AppTileHost';
 import { AppViewLoadError } from './loadAppView';
-import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
+import { DaemonApiProvider } from '../../contexts/DaemonApiContext';
 import { useDaemonStore } from '../../store/daemonSessions';
 import type { AppRegistryEntry } from '../../hooks/useDaemonSocket';
 
@@ -30,7 +31,7 @@ function renderHost(apps: AppRegistryEntry[], sendAppViewCrash = vi.fn()) {
   act(() => {
     useDaemonStore.getState().setApps(apps);
   });
-  const api = { sendAppViewCrash } as unknown as DaemonApi;
+  const api = createMockDaemonApi({ sendAppViewCrash });
   render(
     <DaemonApiProvider api={api}>
       <AppTileHost

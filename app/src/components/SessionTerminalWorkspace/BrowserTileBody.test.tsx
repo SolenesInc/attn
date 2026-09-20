@@ -22,7 +22,7 @@ describe('BrowserTileBody', () => {
       unobserve() {}
       disconnect() {}
     }
-    globalThis.ResizeObserver = ResizeObserverMock as unknown as typeof ResizeObserver;
+    globalThis.ResizeObserver = ResizeObserverMock;
   });
 
   afterEach(() => {

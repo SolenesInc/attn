@@ -334,7 +334,7 @@ test.describe('PresentTour summary fold', () => {
     await expect(summary).toBeVisible();
     await expect(summary).not.toHaveClass(/collapsed/);
 
-    await page.evaluate(() => (window.__HARNESS__ as unknown as { settleDiffs: () => void }).settleDiffs());
+    await page.evaluate(() => (window.__HARNESS__ as typeof window.__HARNESS__ & { settleDiffs: () => void }).settleDiffs());
     await page.waitForSelector('diffs-container');
     await page.locator('diffs-container [data-line-number-content]').first().waitFor();
 
@@ -363,7 +363,7 @@ test.describe('PresentTour deferred-load scroll replay', () => {
 
     await page.evaluate(() => window.__HARNESS__.scrollToFile('src/gamma.ts'));
 
-    await page.evaluate(() => (window.__HARNESS__ as unknown as { settleDiffs: () => void }).settleDiffs());
+    await page.evaluate(() => (window.__HARNESS__ as typeof window.__HARNESS__ & { settleDiffs: () => void }).settleDiffs());
     await page.waitForSelector('diffs-container');
     await page.locator('diffs-container [data-line-number-content]').first().waitFor();
     await waitForScrollSettle(page);

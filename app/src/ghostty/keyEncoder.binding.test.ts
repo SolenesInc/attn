@@ -51,10 +51,9 @@ beforeAll(async () => {
 
 describe('the first-party libghostty key encoder', () => {
   it('rejects an incomplete key ABI before creating a terminal', () => {
-    expect(() => readGhosttyKeyAbi({
-      ...exports,
-      ghostty_key_encoder_encode: undefined,
-    } as unknown as GhosttyExports)).toThrow(
+    const incomplete = { ...exports };
+    Object.defineProperty(incomplete, 'ghostty_key_encoder_encode', { value: undefined });
+    expect(() => readGhosttyKeyAbi(incomplete)).toThrow(
       'libghostty-vt is missing required WASM export ghostty_key_encoder_encode',
     );
   });
@@ -76,7 +75,7 @@ describe('the first-party libghostty key encoder', () => {
       types: { GhosttyKey: { values: Record<string, number> } };
     };
     delete manifest.types.GhosttyKey.values.ARROW_UP;
-    const replacement = exportsWithManifest(manifest as unknown as Record<string, unknown>);
+    const replacement = exportsWithManifest(manifest);
     try {
       expect(() => readGhosttyKeyAbi(replacement.exports))
         .toThrow('libghostty-vt type manifest is missing GhosttyKey.ARROW_UP');
@@ -213,7 +212,8 @@ describe('the first-party libghostty key encoder', () => {
     const calls: string[] = [];
     const memory = new WebAssembly.Memory({ initial: 1 });
     let allocation = 0;
-    const instrumented = {
+    const instrumented: GhosttyExports = {
+      ...exports,
       memory,
       ghostty_wasm_alloc_opaque: () => 8,
       ghostty_wasm_free_opaque: (ptr: number) => calls.push(`opaque:${ptr}`),
@@ -233,7 +233,7 @@ describe('the first-party libghostty key encoder', () => {
         return 0;
       },
       ghostty_key_event_free: (event: number) => calls.push(`event:${event}`),
-    } as unknown as GhosttyExports;
+    };
     const abi = {
       keys: {},
       actions: {},

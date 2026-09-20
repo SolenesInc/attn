@@ -120,7 +120,7 @@ class ImmediateResizeObserver {
     this.callback([{
       target,
       contentRect: { width: observedWidth, height: 700 } as DOMRectReadOnly,
-    } as ResizeObserverEntry], this as unknown as ResizeObserver);
+    } as ResizeObserverEntry], this as ResizeObserver);
   }
 
   disconnect(): void {}

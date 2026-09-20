@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CellFlags, type GhosttyCell, type GhosttyTerminal } from '../ghostty';
+import { CellFlags, type GhosttyCell } from '../ghostty';
 import { TERMINAL_FLOATS_PER_QUAD } from './terminalVertexBuffer';
 import {
   graphemeAtViewportCell,
@@ -17,7 +17,7 @@ function terminalWithHistory(history: number) {
     getScrollbackLength: () => history,
     getScrollbackGraphemeString: vi.fn((row: number, col: number) => `history:${row}:${col}`),
     getGraphemeString: vi.fn((row: number, col: number) => `live:${row}:${col}`),
-  } as unknown as GhosttyTerminal;
+  };
 }
 
 describe('graphemeAtViewportCell', () => {
@@ -216,12 +216,11 @@ function makeFakeGl(recorder?: GlRecorder) {
   );
 }
 
-function makeFakeCanvas(recorder?: GlRecorder) {
+function makeFakeCanvas(canvas: HTMLCanvasElement, recorder?: GlRecorder) {
   let ctx2d: RecordingContext | null = null;
-  return {
+  const properties = {
     _w: 0,
     _h: 0,
-    style: {} as Record<string, string>,
     get width() {
       return this._w;
     },
@@ -250,25 +249,25 @@ function makeFakeCanvas(recorder?: GlRecorder) {
       return ctx2d;
     },
   };
+  return Object.defineProperties(canvas, Object.getOwnPropertyDescriptors(properties)) as HTMLCanvasElement & typeof properties;
 }
 
 function makeRenderer(fontSize = 14, fontFamily = 'monospace', recorder?: GlRecorder) {
   const created: ReturnType<typeof makeFakeCanvas>[] = [];
   const realCreate = document.createElement.bind(document);
-  const spy = vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
+  const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
     if (tag === 'canvas') {
-      const canvas = makeFakeCanvas();
+      const canvas = makeFakeCanvas(realCreate('canvas'));
       created.push(canvas);
       return canvas;
     }
     return realCreate(tag);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  }) as any);
+  });
 
   let renderer: WebGlTerminalRenderer;
-  const mainCanvas = makeFakeCanvas(recorder);
+  const mainCanvas = makeFakeCanvas(realCreate('canvas'), recorder);
   try {
-    renderer = new WebGlTerminalRenderer(mainCanvas as unknown as HTMLCanvasElement, fontSize, fontFamily, {
+    renderer = new WebGlTerminalRenderer(mainCanvas, fontSize, fontFamily, {
       background: '#000000',
       foreground: '#ffffff',
       cursor: '#ffffff',
@@ -302,6 +301,7 @@ function makeFakeTerminal(
     cols,
     rows,
     update: () => 1,
+    isRowDirty: () => true,
     markClean: () => {},
     getCursor: () => options.cursor ?? { x: 0, y: 0, visible: false },
     getViewport: () => Array.from({ length: cols * rows }, (_unused, index) => ({
@@ -311,7 +311,7 @@ function makeFakeTerminal(
     getScrollbackLength: () => 0,
     getGraphemeString: () => '',
     getScrollbackGraphemeString: () => '',
-  } as unknown as GhosttyTerminal;
+  };
 }
 
 const FLOATS_PER_QUAD = 6 * 9;
@@ -457,7 +457,7 @@ function makeControllableTerminal(cols: number, rows: number) {
     getScrollbackLength: () => 0,
     getGraphemeString: () => '',
     getScrollbackGraphemeString: () => '',
-  } as unknown as GhosttyTerminal;
+  };
   return { terminal, cells, state, markClean };
 }
 
@@ -814,11 +814,10 @@ describe('WebGlTerminalRenderer glyph cache invalidation', () => {
 describe('WebGlTerminalRenderer.setFontSize', () => {
   function withMockedCanvas<T>(fn: () => T): T {
     const realCreate = document.createElement.bind(document);
-    const spy = vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
-      if (tag === 'canvas') return makeFakeCanvas();
+    const spy = vi.spyOn(document, 'createElement').mockImplementation((tag: string) => {
+      if (tag === 'canvas') return makeFakeCanvas(realCreate('canvas'));
       return realCreate(tag);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    }) as any);
+    });
     try {
       return fn();
     } finally {

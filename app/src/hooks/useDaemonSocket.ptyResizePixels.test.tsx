@@ -96,18 +96,18 @@ async function resizeCommand(ws: FakeWebSocket) {
 }
 
 describe('useDaemonSocket pty_resize pixel geometry', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockResolvedValue(true);
   });
 
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

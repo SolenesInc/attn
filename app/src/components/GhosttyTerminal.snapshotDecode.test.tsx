@@ -129,7 +129,7 @@ describe('GhosttyTerminal snapshot decode', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
 
     const onReady = vi.fn();
     try {
@@ -174,7 +174,7 @@ describe('GhosttyTerminal snapshot decode', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
     mocks.setSnapshotMode('history-error');
 
     const onReady = vi.fn();

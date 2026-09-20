@@ -123,7 +123,7 @@ beforeEach(() => {
     observe() {}
     unobserve() {}
     disconnect() {}
-  } as unknown as typeof ResizeObserver;
+  };
   frames.length = 0;
   globalThis.requestAnimationFrame = ((callback: FrameRequestCallback) => frames.push(callback)) as typeof requestAnimationFrame;
   globalThis.cancelAnimationFrame = (() => undefined) as typeof cancelAnimationFrame;
@@ -136,7 +136,7 @@ beforeEach(() => {
 });
 
 async function mountTerminal() {
-  let ready: GhosttyTerminalHandle | null = null;
+  let ready!: GhosttyTerminalHandle;
   const onInput = vi.fn();
   const view = render(
     <GhosttyTerminal
@@ -147,10 +147,10 @@ async function mountTerminal() {
       onResize={vi.fn()}
     />,
   );
-  await waitFor(() => expect(ready).not.toBeNull());
+  await waitFor(() => expect(ready).toBeDefined());
   const surface = view.container.querySelector('.terminal-container');
   if (!surface) throw new Error('terminal surface never rendered');
-  return { handle: ready as unknown as GhosttyTerminalHandle, surface, onInput };
+  return { handle: ready, surface, onInput };
 }
 
 function wheelUp(surface: Element, times: number) {

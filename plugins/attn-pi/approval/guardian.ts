@@ -379,7 +379,7 @@ async function complete(
     systemPrompt: credentials.text(systemPrompt),
     messages,
     tools: [guardianBashTool],
-  } as unknown as Parameters<ProviderLike["streamSimple"]>[1];
+  } as Parameters<ProviderLike["streamSimple"]>[1];
   const options = {
     ...(model.reasoning && effort && effort !== "off" ? { reasoning: effort } : {}),
     apiKey: auth.apiKey,

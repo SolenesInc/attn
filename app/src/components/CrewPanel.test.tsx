@@ -5,7 +5,7 @@ import { CrewRestartState, type CrewMember } from '../types/generated';
 import type { Seed } from '../hooks/useDaemonSocket';
 import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
-import { createMockDaemon, type MockDaemon } from '../test/mocks/daemon';
+import { createMockDaemonApi, createMockDaemon, type MockDaemon } from '../test/mocks/daemon';
 import { CrewPanel } from './CrewPanel';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
@@ -81,7 +81,7 @@ function api(overrides: CrewDaemonOverrides = {}): CrewDaemonApi {
     const recorded = mockDaemon.createRequest<unknown>(method);
     return vi.fn((...args: unknown[]) => recorded(...args)) as DaemonApi[K];
   };
-  const provider = {
+  const provider = createMockDaemonApi({
     isConnected: true,
     connectionGeneration: 1,
     sendCrewSet: request('sendCrewSet'),
@@ -92,7 +92,7 @@ function api(overrides: CrewDaemonOverrides = {}): CrewDaemonApi {
     sendCrewHandoffGet: request('sendCrewHandoffGet'),
     sendDelegationPreferencesGet: request('sendDelegationPreferencesGet'),
     sendDelegationModels: request('sendDelegationModels'),
-  } as unknown as DaemonApi;
+  });
   return Object.assign(provider, { mockDaemon });
 }
 

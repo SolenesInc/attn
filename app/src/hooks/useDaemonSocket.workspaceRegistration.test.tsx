@@ -82,19 +82,19 @@ function emitInitialState(ws: FakeWebSocket) {
 }
 
 describe('useDaemonSocket workspace registration errors', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
   afterEach(() => {
     vi.useRealTimers();
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

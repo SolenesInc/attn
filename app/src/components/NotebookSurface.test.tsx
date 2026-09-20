@@ -111,7 +111,7 @@ describe('NotebookSurface off-root gating (tile variant)', () => {
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
   });
 
   afterEach(() => {
@@ -168,7 +168,7 @@ describe('NotebookSurface flushPendingSave handle (root-switch flush, PR #588 se
       observe() {}
       unobserve() {}
       disconnect() {}
-    } as unknown as typeof ResizeObserver;
+    };
   });
 
   afterEach(() => {

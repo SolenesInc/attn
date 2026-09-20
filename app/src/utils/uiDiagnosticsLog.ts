@@ -46,7 +46,7 @@ function byteLength(value: string): number {
 async function append(line: string): Promise<void> {
   if (!isTauri()) return;
   // Unit tests mock `isTauri()` without installing Tauri's real invoke bridge.
-  const tauriInternals = (window as unknown as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
+  const tauriInternals = (window as { __TAURI_INTERNALS__?: { invoke?: unknown } }).__TAURI_INTERNALS__;
   if (typeof tauriInternals?.invoke !== 'function') return;
   try {
     const { mkdir, stat, writeTextFile, BaseDirectory } = await import('@tauri-apps/plugin-fs');

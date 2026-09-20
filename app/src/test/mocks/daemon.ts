@@ -1,3 +1,4 @@
+import type { DaemonApi } from '../../contexts/DaemonApiContext';
 
 import type { GitStatusUpdate, FileDiffResult } from '../../hooks/useDaemonSocket';
 
@@ -168,4 +169,30 @@ export async function assertNoMoreCalls(
   if (finalCount !== initialCount) {
     throw new Error(`Expected no more calls to ${method}, but got ${finalCount - initialCount} additional calls`);
   }
+}
+
+export function createMockDaemonApi(methods: Partial<DaemonApi>): DaemonApi {
+  const api: Partial<DaemonApi> = {
+    isConnected: false,
+    connectionError: null,
+    disconnectExplanation: null,
+    connectionGeneration: 0,
+    hasReceivedInitialState: false,
+    settings: {},
+    rateLimit: null,
+    warnings: [],
+    gitOperations: {},
+    tileContents: {},
+    ...methods,
+  };
+  return new Proxy(api, {
+    get(target, property) {
+      if (!(property in target)) {
+        Object.defineProperty(target, property, {
+          value: () => { throw new Error(`Unexpected daemon API call: ${String(property)}`); },
+        });
+      }
+      return target[property as keyof DaemonApi];
+    },
+  }) as DaemonApi;
 }

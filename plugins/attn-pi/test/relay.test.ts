@@ -213,9 +213,8 @@ describe("suite <-> driver relay integration", () => {
     const dispatched = [relayMethods.hello, ...Object.keys(suiteReports)];
 
     expect([...dispatched].sort()).toEqual([...suiteToDriver].sort());
-    const backing = driver as unknown as Record<string, unknown>;
-    for (const member of ["suiteHello", ...Object.values(suiteReports)]) {
-      expect(typeof backing[member]).toBe("function");
+    for (const member of ["suiteHello", ...Object.values(suiteReports)] as const) {
+      expect(typeof driver[member]).toBe("function");
     }
   });
 

@@ -43,7 +43,7 @@ export const GLYPH_MODE_TINT = 0;
 export const GLYPH_MODE_COLOR = 1;
 
 // Requires STRAIGHT (non-premultiplied) ImageData, as getImageData returns.
-export function isColorGlyphBitmap(image: ImageData): boolean {
+export function isColorGlyphBitmap(image: Pick<ImageData, 'data'>): boolean {
   const data = image.data;
   for (let i = 0; i < data.length; i += 4) {
     if (data[i + 3] === 0) continue;

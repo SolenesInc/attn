@@ -160,59 +160,57 @@ export function DiffViewHarness({ onReady }: HarnessProps) {
   }, [onReady]);
 
   useEffect(() => {
-    const api = window.__HARNESS__ as unknown as Record<string, unknown>;
-    api.switchFile = (path: string) => setFilePath(path);
-    api.refreshContent = () => setRefreshCount((c) => c + 1);
-    api.setDiffStyle = (style: 'unified' | 'split') => setDiffStyle(style);
-    api.setExpandUnchanged = (value: boolean) => setExpandUnchanged(value);
-    api.setUseLargeDiff = (value: boolean) => setUseLargeDiff(value);
-    api.failNextAddComment = () => {
-      failNextAddRef.current = true;
-    };
-    api.addBackgroundComment = () =>
-      setComments((prev) => [
-        ...prev,
-        makeComment({
-          id: `bg-${prev.length + 1}`,
-          line_start: 2,
-          line_end: 2,
-          content: `background comment ${prev.length + 1}`,
-        }),
-      ]);
-    // A comment whose anchor line is past the end of the file (already stale).
-    api.seedStaleComment = () =>
-      setComments((prev) => [
-        ...prev,
-        makeComment({ id: 'stale-1', line_start: 999, line_end: 999, content: 'Stale: this code is gone' }),
-      ]);
-    // A comment on a valid unchanged line that Hunks mode collapses in LARGE_*.
-    api.seedCollapsedContextComment = () =>
-      setComments((prev) => [
-        ...prev,
-        makeComment({ id: 'collapsed-1', line_start: 30, line_end: 30, content: 'Collapsed context comment' }),
-      ]);
-    api.seedHtmlComment = () =>
-      setComments((prev) => [
-        ...prev,
-        makeComment({
-          id: 'html-1',
-          line_start: 4,
-          line_end: 4,
-          content: '<img src=x onerror=alert(1)> **safe markdown**',
-        }),
-      ]);
-    api.seedMultilineComment = () =>
-      setComments((prev) => [
-        ...prev,
-        makeComment({
-          id: 'multiline-1',
-          line_start: 4,
-          line_end: 4,
-          content: 'First line\nSecond line',
-        }),
-      ]);
-    // Collapse the file so existing comments on higher lines go stale.
-    api.shrinkContent = () => setShrunk(true);
+    Object.assign(window.__HARNESS__, {
+      switchFile: (path: string) => setFilePath(path),
+      refreshContent: () => setRefreshCount((c) => c + 1),
+      setDiffStyle: (style: 'unified' | 'split') => setDiffStyle(style),
+      setExpandUnchanged: (value: boolean) => setExpandUnchanged(value),
+      setUseLargeDiff: (value: boolean) => setUseLargeDiff(value),
+      failNextAddComment: () => {
+        failNextAddRef.current = true;
+      },
+      addBackgroundComment: () =>
+        setComments((prev) => [
+          ...prev,
+          makeComment({
+            id: `bg-${prev.length + 1}`,
+            line_start: 2,
+            line_end: 2,
+            content: `background comment ${prev.length + 1}`,
+          }),
+        ]),
+      seedStaleComment: () =>
+        setComments((prev) => [
+          ...prev,
+          makeComment({ id: 'stale-1', line_start: 999, line_end: 999, content: 'Stale: this code is gone' }),
+        ]),
+      seedCollapsedContextComment: () =>
+        setComments((prev) => [
+          ...prev,
+          makeComment({ id: 'collapsed-1', line_start: 30, line_end: 30, content: 'Collapsed context comment' }),
+        ]),
+      seedHtmlComment: () =>
+        setComments((prev) => [
+          ...prev,
+          makeComment({
+            id: 'html-1',
+            line_start: 4,
+            line_end: 4,
+            content: '<img src=x onerror=alert(1)> **safe markdown**',
+          }),
+        ]),
+      seedMultilineComment: () =>
+        setComments((prev) => [
+          ...prev,
+          makeComment({
+            id: 'multiline-1',
+            line_start: 4,
+            line_end: 4,
+            content: 'First line\nSecond line',
+          }),
+        ]),
+      shrinkContent: () => setShrunk(true),
+    });
   }, []);
 
   const controlsStyle: React.CSSProperties = {

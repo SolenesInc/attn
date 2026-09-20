@@ -75,17 +75,17 @@ function seed(id: string, title: string) {
 }
 
 describe('useDaemonSocket garden', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
   });
 
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.clearAllMocks();
   });
 

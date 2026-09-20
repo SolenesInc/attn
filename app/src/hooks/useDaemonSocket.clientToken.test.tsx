@@ -67,12 +67,12 @@ function renderSocket() {
 }
 
 describe('useDaemonSocket client token', () => {
-  let originalWebSocket: typeof WebSocket;
+
 
   beforeEach(() => {
-    originalWebSocket = globalThis.WebSocket;
+
     FakeWebSocket.instances = [];
-    globalThis.WebSocket = FakeWebSocket as unknown as typeof WebSocket;
+    vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockImplementation(async (cmd: string) =>
       cmd === 'get_client_token' ? 'profile-token' : '',
@@ -80,7 +80,7 @@ describe('useDaemonSocket client token', () => {
   });
 
   afterEach(() => {
-    globalThis.WebSocket = originalWebSocket;
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 

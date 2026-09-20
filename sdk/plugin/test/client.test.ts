@@ -197,10 +197,7 @@ describe("AttnPluginClient", () => {
       version: "0.1.0",
     });
 
-    const unsafeClient = client as unknown as {
-      request<TResult = unknown>(method: string, params?: unknown): Promise<TResult>;
-    };
-    await expect(unsafeClient.request("transport.probe", {})).rejects.toThrow(
+    await expect(client["request"]("transport.probe", {})).rejects.toThrow(
       "attn plugin socket is not connected",
     );
     expect(pendingRequestCount(client)).toBe(0);
@@ -377,7 +374,7 @@ async function waitFor(predicate: () => boolean): Promise<void> {
 }
 
 function pendingRequestCount(client: AttnPluginClient): number {
-  return (client as unknown as { pending: Map<string, unknown> }).pending.size;
+  return client["pending"].size;
 }
 
 function restoreEnv(name: "ATTN_SOCKET_PATH" | "ATTN_PLUGIN_NAME", value: string | undefined): void {

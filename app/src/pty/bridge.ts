@@ -110,11 +110,11 @@ export function setPtyBackend(next: PtyBackend | null) {
 export function emitPtyEvent(payload: PtyEventPayload) {
   const event = { payload };
   if (typeof window !== 'undefined') {
-    const store = (window as unknown as { __TEST_PTY_EVENTS?: PtyEventPayload[] }).__TEST_PTY_EVENTS;
+    const store = (window as { __TEST_PTY_EVENTS?: PtyEventPayload[] }).__TEST_PTY_EVENTS;
     if (Array.isArray(store)) {
       store.push(payload);
     } else {
-      (window as unknown as { __TEST_PTY_EVENTS?: PtyEventPayload[] }).__TEST_PTY_EVENTS = [payload];
+      (window as { __TEST_PTY_EVENTS?: PtyEventPayload[] }).__TEST_PTY_EVENTS = [payload];
     }
   }
   for (const handler of listeners) {

@@ -1,0 +1,3 @@
+kind: internal
+area: build
+change: Update vendored anti-slop and enforce type-assertion and accumulator-copy checks through existing lint.
