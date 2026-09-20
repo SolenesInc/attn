@@ -32,28 +32,35 @@ func PullRequestWatchCoalesceKey(prID string) string { return "pull-request-watc
 
 func PullRequestWatchOutageCoalesceKey(prID string) string { return "pull-request-outage:" + prID }
 
-func (s *Store) WatchPullRequest(sessionID, prID string, mode prreadiness.Mode, reviewer string, at time.Time) (bool, error) {
+func (s *Store) WatchPullRequest(rec SessionPullRequestRecord, mode prreadiness.Mode, reviewer string, at time.Time) (bool, bool, error) {
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
-		return false, err
+		return false, false, err
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
-		return false, errors.New("store has no database")
+		return false, false, errors.New("store has no database")
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	defer tx.Rollback()
+	recorded, err := recordSessionPullRequest(tx, rec, at)
+	if err != nil {
+		return false, false, err
+	}
 
 	var currentMode, currentReviewer, cursorJSON string
-	err = tx.QueryRow(`SELECT mode, reviewer, cursor_json FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID).Scan(&currentMode, &currentReviewer, &cursorJSON)
+	err = tx.QueryRow(`SELECT mode, reviewer, cursor_json FROM pull_request_watches WHERE session_id=? AND pr_id=?`, rec.SessionID, rec.PRID).Scan(&currentMode, &currentReviewer, &cursorJSON)
 	if err == nil && currentMode == string(mode) && strings.EqualFold(currentReviewer, reviewer) {
-		return false, nil
+		if err := tx.Commit(); err != nil {
+			return false, false, err
+		}
+		return recorded, false, nil
 	}
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return false, err
+		return false, false, err
 	}
 	cursor := prreadiness.Cursor{}
 	if err == nil {
@@ -64,7 +71,7 @@ func (s *Store) WatchPullRequest(sessionID, prID string, mode prreadiness.Mode, 
 	}
 	encoded, err := json.Marshal(cursor)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	stamp := at.UTC().Format(sortableTimeFormat)
 	if _, err := tx.Exec(`
@@ -73,20 +80,23 @@ func (s *Store) WatchPullRequest(sessionID, prID string, mode prreadiness.Mode, 
 		ON CONFLICT(session_id,pr_id) DO UPDATE SET
 			mode=excluded.mode, reviewer=excluded.reviewer, created_at=excluded.created_at,
 			cursor_json=excluded.cursor_json, last_success_at='', last_error='', feedback_error='', outage_active=0
-	`, sessionID, prID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
-		return false, err
+	`, rec.SessionID, rec.PRID, string(mode), strings.TrimSpace(reviewer), stamp, string(encoded)); err != nil {
+		return false, false, err
 	}
-	if err := clearUnreadPullRequestStateItems(tx, sessionID, prID); err != nil {
-		return false, err
+	if err := clearUnreadPullRequestStateItems(tx, rec.SessionID, rec.PRID); err != nil {
+		return false, false, err
 	}
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET readiness_state='', readiness_reason='', settling_until='',
 			watch_health='', watch_error='', watch_last_checked_at='', status_checked_at=''
 		WHERE session_id=? AND pr_id=?
-	`, sessionID, prID); err != nil {
-		return false, err
+	`, rec.SessionID, rec.PRID); err != nil {
+		return false, false, err
 	}
-	return true, tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return false, false, err
+	}
+	return recorded, true, nil
 }
 
 func (s *Store) StopPullRequestWatch(sessionID, prID string) (bool, error) {

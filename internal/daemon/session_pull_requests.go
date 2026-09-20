@@ -140,11 +140,7 @@ func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mod
 	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
 		return err
 	}
-	recorded, err := d.store.RecordSessionPullRequest(rec, time.Now())
-	if err != nil {
-		return fmt.Errorf("record pull request %s: %w", rec.PRID, err)
-	}
-	changed, err := d.store.WatchPullRequest(rec.SessionID, rec.PRID, mode, reviewer, time.Now())
+	recorded, changed, err := d.store.WatchPullRequest(rec, mode, reviewer, time.Now())
 	if err != nil {
 		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
 	}

@@ -31,6 +31,17 @@ func TestEvaluateModes(t *testing.T) {
 			o.ReviewOpinions = []ReviewOpinion{{Actor: "octo", State: "APPROVED"}}
 			return o
 		}(), wantState: StateReady, wantReason: "selected_reviewer_approved"},
+		{name: "selected bot approval", mode: ModeFormalReview, reviewer: "dependabot", observation: func() Observation {
+			o := greenObservation()
+			o.ReviewOpinions = []ReviewOpinion{{Actor: "dependabot[bot]", State: "APPROVED"}}
+			return o
+		}(), wantState: StateReady, wantReason: "selected_reviewer_approved"},
+		{name: "selected reviewer requested again", mode: ModeFormalReview, reviewer: "octo", observation: func() Observation {
+			o := greenObservation()
+			o.ReviewOpinions = []ReviewOpinion{{Actor: "octo", State: "APPROVED"}}
+			o.RequestedReviewers = []string{"octo"}
+			return o
+		}(), wantState: StateWaiting, wantReason: "selected_reviewer_requested"},
 		{name: "changes requested", mode: ModeFormalReview, observation: func() Observation { o := greenObservation(); o.ReviewDecision = "CHANGES_REQUESTED"; return o }(), wantState: StateWaiting, wantReason: "changes_requested"},
 	}
 	for _, test := range tests {

@@ -58,8 +58,12 @@ func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.
 		return false, errors.New("store has no database")
 	}
 
+	return recordSessionPullRequest(s.db, rec, now)
+}
+
+func recordSessionPullRequest(ex execer, rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	stamp := now.Format(time.RFC3339Nano)
-	result, err := s.db.Exec(`
+	result, err := ex.Exec(`
 		INSERT OR IGNORE INTO session_pull_requests
 			(session_id, pr_id, repository, number, url, created_at, state, last_activity_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`,

@@ -26,6 +26,7 @@ func TestFetchPullRequestReadinessPaginatesFactsAndSelectedOpinion(t *testing.T)
 				"reactions":{"nodes":[{"id":"r1","content":"THUMBS_UP","user":{"__typename":"Bot","id":"b1","login":"chatgpt-codex-connector"}}],"pageInfo":{"hasNextPage":true,"endCursor":"r"}},
 				"latestOpinionatedReviews":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"o"}},
 				"reviews":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"h"}},
+				"reviewRequests":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"q"}},
 				"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"c"}}}}}]}
 			}}}}`), nil
 		case strings.Contains(query, "query PullRequestReactions"):
@@ -34,6 +35,8 @@ func TestFetchPullRequestReadinessPaginatesFactsAndSelectedOpinion(t *testing.T)
 			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","latestOpinionatedReviews":{"nodes":[{"id":"v1","state":"APPROVED","bodyText":"looks good","submittedAt":"2026-09-20T12:00:00Z","author":{"__typename":"User","id":"u1","login":"victor"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
 		case strings.Contains(query, "query PullRequestReviews"):
 			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","reviews":{"nodes":[{"id":"v1","state":"APPROVED","bodyText":"looks good","submittedAt":"2026-09-20T12:00:00Z","author":{"__typename":"User","id":"u1","login":"victor"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestReviewRequests"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","reviewRequests":{"nodes":[{"requestedReviewer":{"__typename":"User","login":"octo"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
 		case strings.Contains(query, "query PullRequestChecks"):
 			return []byte(`{
 				"data":{"repository":{"pullRequest":{
@@ -55,8 +58,8 @@ func TestFetchPullRequestReadinessPaginatesFactsAndSelectedOpinion(t *testing.T)
 	if got.MergeStateStatus != "HAS_HOOKS" || !got.CodexThumbsUp || !got.CodexEyes {
 		t.Fatalf("observation = %+v", got)
 	}
-	if len(got.ReviewOpinions) != 1 || got.ReviewOpinions[0].State != "APPROVED" || got.ReviewOpinions[0].Body != "looks good" || len(got.Checks) != 1 || got.Checks[0].State != "failure" {
-		t.Fatalf("opinions/checks = %+v / %+v", got.ReviewOpinions, got.Checks)
+	if len(got.ReviewOpinions) != 1 || got.ReviewOpinions[0].State != "APPROVED" || got.ReviewOpinions[0].Body != "looks good" || len(got.RequestedReviewers) != 1 || got.RequestedReviewers[0] != "octo" || len(got.Checks) != 1 || got.Checks[0].State != "failure" {
+		t.Fatalf("opinions/requests/checks = %+v / %+v / %+v", got.ReviewOpinions, got.RequestedReviewers, got.Checks)
 	}
 }
 
@@ -86,6 +89,7 @@ func TestReadinessPaginationQueriesIncludeHead(t *testing.T) {
 		"reactions": pullRequestReactionPageQuery,
 		"opinions":  pullRequestOpinionPageQuery,
 		"reviews":   pullRequestReviewPageQuery,
+		"requests":  pullRequestReviewRequestPageQuery,
 		"checks":    pullRequestCheckPageQuery,
 	}
 	for name, query := range queries {

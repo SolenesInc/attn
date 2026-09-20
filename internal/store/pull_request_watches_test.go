@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 	base := time.Date(2026, 9, 21, 8, 0, 0, 0, time.UTC)
 	prID := "github.com:victorarias/attn#303"
 	recordPR(t, s, "s1", prID, 303, base)
-	changed, err := s.WatchPullRequest("s1", prID, prreadiness.ModeGreen, "", base)
+	_, changed, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeGreen, "", base)
 	if err != nil || !changed {
 		t.Fatalf("first watch = %t, %v", changed, err)
 	}
@@ -37,7 +38,7 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 		t.Fatal(err)
 	}
 
-	changed, err = s.WatchPullRequest("s1", prID, prreadiness.ModeFormalReview, "victor", base.Add(2*time.Second))
+	_, changed, err = s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeFormalReview, "victor", base.Add(2*time.Second))
 	if err != nil || !changed {
 		t.Fatalf("reconfigure = %t, %v", changed, err)
 	}
@@ -48,7 +49,7 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 	if deliveries, err := s.UnreadAgentMailboxDeliveries("s1"); err != nil || len(deliveries) != 1 || deliveries[0].Item.ID != "feedback" {
 		t.Fatalf("feedback after reconfiguration = %+v, %v", deliveries, err)
 	}
-	changed, err = s.WatchPullRequest("s1", prID, prreadiness.ModeFormalReview, "VICTOR", base.Add(3*time.Second))
+	_, changed, err = s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeFormalReview, "VICTOR", base.Add(3*time.Second))
 	if err != nil || changed {
 		t.Fatalf("idempotent watch = %t, %v", changed, err)
 	}
@@ -56,7 +57,7 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 	if stopped, err := s.StopPullRequestWatch("s1", prID); err != nil || !stopped {
 		t.Fatalf("stop = %t, %v", stopped, err)
 	}
-	if changed, err := s.WatchPullRequest("s1", prID, prreadiness.ModeFormalReview, "victor", base.Add(4*time.Second)); err != nil || !changed {
+	if _, changed, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeFormalReview, "victor", base.Add(4*time.Second)); err != nil || !changed {
 		t.Fatalf("rearm = %t, %v", changed, err)
 	}
 	rearmed, _ := s.PullRequestWatch("s1", prID)
@@ -65,12 +66,49 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 	}
 }
 
+func TestWatchPullRequestRecordsAndInstallsAtomically(t *testing.T) {
+	for _, preexisting := range []bool{false, true} {
+		t.Run(fmt.Sprintf("preexisting=%t", preexisting), func(t *testing.T) {
+			s := newSessionPRStore(t)
+			now := time.Date(2026, 9, 21, 8, 30, 0, 0, time.UTC)
+			prID := "github.com:victorarias/attn#303"
+			rec := SessionPullRequestRecord{
+				SessionID: "s1", PRID: prID, Repository: "github.com/victorarias/attn", Number: 303,
+				URL: "https://github.com/victorarias/attn/pull/303",
+			}
+			if preexisting {
+				recordPR(t, s, rec.SessionID, rec.PRID, rec.Number, now)
+			}
+			if _, err := s.db.Exec(`
+				CREATE TRIGGER reject_watch_projection BEFORE UPDATE OF readiness_state ON session_pull_requests
+				BEGIN SELECT RAISE(ABORT, 'projection unavailable'); END
+			`); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, _, err := s.WatchPullRequest(rec, prreadiness.ModeGreen, "", now.Add(time.Second)); err == nil || !strings.Contains(err.Error(), "projection unavailable") {
+				t.Fatalf("watch error = %v", err)
+			}
+			if _, ok := s.PullRequestWatch(rec.SessionID, rec.PRID); ok {
+				t.Fatal("failed watch left a watch row")
+			}
+			records := s.ListSessionPullRequests(rec.SessionID)
+			if preexisting && len(records) != 1 {
+				t.Fatalf("preexisting record removed: %+v", records)
+			}
+			if !preexisting && len(records) != 0 {
+				t.Fatalf("failed watch left a pull request record: %+v", records)
+			}
+		})
+	}
+}
+
 func TestPullRequestWatchReconcileRollsBackProjectionCursorAndMailboxTogether(t *testing.T) {
 	s := newSessionPRStore(t)
 	now := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
 	prID := "github.com:victorarias/attn#303"
 	recordPR(t, s, "s1", prID, 303, now)
-	if _, err := s.WatchPullRequest("s1", prID, prreadiness.ModeGreen, "", now); err != nil {
+	if _, _, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeGreen, "", now); err != nil {
 		t.Fatal(err)
 	}
 	watch, _ := s.PullRequestWatch("s1", prID)
@@ -106,7 +144,7 @@ func TestPullRequestWatchOutageCoalescesAndSuccessfulReconcileRecoversSilently(t
 	now := time.Date(2026, 9, 21, 10, 0, 0, 0, time.UTC)
 	prID := "github.com:victorarias/attn#303"
 	recordPR(t, s, "s1", prID, 303, now)
-	if _, err := s.WatchPullRequest("s1", prID, prreadiness.ModeGreen, "", now); err != nil {
+	if _, _, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeGreen, "", now); err != nil {
 		t.Fatal(err)
 	}
 	watch, _ := s.PullRequestWatch("s1", prID)

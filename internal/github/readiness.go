@@ -26,6 +26,7 @@ type readinessActor struct {
 	TypeName string `json:"__typename"`
 	ID       string `json:"id"`
 	Login    string `json:"login"`
+	Slug     string `json:"slug"`
 }
 
 type readinessReaction struct {
@@ -40,6 +41,10 @@ type readinessReview struct {
 	BodyText    string         `json:"bodyText"`
 	SubmittedAt time.Time      `json:"submittedAt"`
 	Author      readinessActor `json:"author"`
+}
+
+type readinessReviewRequest struct {
+	RequestedReviewer readinessActor `json:"requestedReviewer"`
 }
 
 type readinessCheck struct {
@@ -60,19 +65,20 @@ type readinessConnection[T any] struct {
 }
 
 type readinessPullRequest struct {
-	Number           int                                    `json:"number"`
-	URL              string                                 `json:"url"`
-	Title            string                                 `json:"title"`
-	State            string                                 `json:"state"`
-	IsDraft          bool                                   `json:"isDraft"`
-	Merged           bool                                   `json:"merged"`
-	HeadRefOID       string                                 `json:"headRefOid"`
-	HeadRefName      string                                 `json:"headRefName"`
-	MergeStateStatus string                                 `json:"mergeStateStatus"`
-	ReviewDecision   string                                 `json:"reviewDecision"`
-	Reactions        readinessConnection[readinessReaction] `json:"reactions"`
-	LatestOpinions   readinessConnection[readinessReview]   `json:"latestOpinionatedReviews"`
-	Reviews          readinessConnection[readinessReview]   `json:"reviews"`
+	Number           int                                         `json:"number"`
+	URL              string                                      `json:"url"`
+	Title            string                                      `json:"title"`
+	State            string                                      `json:"state"`
+	IsDraft          bool                                        `json:"isDraft"`
+	Merged           bool                                        `json:"merged"`
+	HeadRefOID       string                                      `json:"headRefOid"`
+	HeadRefName      string                                      `json:"headRefName"`
+	MergeStateStatus string                                      `json:"mergeStateStatus"`
+	ReviewDecision   string                                      `json:"reviewDecision"`
+	Reactions        readinessConnection[readinessReaction]      `json:"reactions"`
+	LatestOpinions   readinessConnection[readinessReview]        `json:"latestOpinionatedReviews"`
+	Reviews          readinessConnection[readinessReview]        `json:"reviews"`
+	ReviewRequests   readinessConnection[readinessReviewRequest] `json:"reviewRequests"`
 	Commits          struct {
 		Nodes []struct {
 			Commit struct {
@@ -89,8 +95,9 @@ query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     number url title state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
     reactions(first:100){nodes{id content user{__typename id login}} pageInfo{hasNextPage endCursor}}
-    latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
-    reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+	latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+	reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+	reviewRequests(first:100){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
     commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
       nodes{__typename ... on CheckRun{id name status conclusion detailsUrl} ... on StatusContext{id context state targetUrl}}
       pageInfo{hasNextPage endCursor}
@@ -119,6 +126,14 @@ query PullRequestReviews($owner:String!,$name:String!,$number:Int!,$cursor:Strin
   repository(owner:$owner,name:$name){pullRequest(number:$number){
     headRefOid
     reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestReviewRequestPageQuery = `
+query PullRequestReviewRequests($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    headRefOid
+    reviewRequests(first:100,after:$cursor){nodes{requestedReviewer{__typename ... on Bot{login} ... on User{login} ... on Mannequin{login} ... on Team{slug} ... on EnterpriseTeam{slug}}} pageInfo{hasNextPage endCursor}}
   }}}
 }`
 
@@ -231,6 +246,14 @@ func appendReadinessPages(ctx context.Context, transport QueryTransport, base ma
 		pr.Reviews.Nodes = append(pr.Reviews.Nodes, page.Reviews.Nodes...)
 		pr.Reviews.PageInfo = page.Reviews.PageInfo
 	}
+	for pr.ReviewRequests.PageInfo.HasNextPage {
+		page, err := nextReadinessPage(ctx, transport, pullRequestReviewRequestPageQuery, base, pr.HeadRefOID, pr.ReviewRequests.PageInfo)
+		if err != nil {
+			return fmt.Errorf("fetch pull request review requests: %w", err)
+		}
+		pr.ReviewRequests.Nodes = append(pr.ReviewRequests.Nodes, page.ReviewRequests.Nodes...)
+		pr.ReviewRequests.PageInfo = page.ReviewRequests.PageInfo
+	}
 	contexts := checkContexts(pr)
 	for contexts != nil && contexts.PageInfo.HasNextPage {
 		page, err := nextReadinessPage(ctx, transport, pullRequestCheckPageQuery, base, pr.HeadRefOID, contexts.PageInfo)
@@ -308,6 +331,12 @@ func buildReadinessObservation(pr *readinessPullRequest) *prreadiness.Observatio
 		observation.ReviewOpinions = append(observation.ReviewOpinions,
 			selectReviewOpinion(pr.LatestOpinions.Nodes, pr.Reviews.Nodes, actors[key]))
 	}
+	for _, request := range pr.ReviewRequests.Nodes {
+		if actor := canonicalActor(request.RequestedReviewer); actor != "" {
+			observation.RequestedReviewers = append(observation.RequestedReviewers, actor)
+		}
+	}
+	sort.Strings(observation.RequestedReviewers)
 	if contexts := checkContexts(pr); contexts != nil {
 		for _, check := range contexts.Nodes {
 			name, state, target := "status:"+check.Context, statusState(check.State), check.TargetURL
@@ -323,6 +352,9 @@ func buildReadinessObservation(pr *readinessPullRequest) *prreadiness.Observatio
 
 func canonicalActor(actor readinessActor) string {
 	login := strings.TrimSpace(actor.Login)
+	if login == "" {
+		login = strings.TrimSpace(actor.Slug)
+	}
 	if actor.TypeName == "Bot" && !strings.HasSuffix(strings.ToLower(login), "[bot]") {
 		login += "[bot]"
 	}

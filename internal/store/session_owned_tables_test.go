@@ -31,7 +31,7 @@ var sessionOwnedTableSeeds = map[string]func(*testing.T, *Store, string){
 	},
 	"pull_request_watches": func(t *testing.T, s *Store, sessionID string) {
 		t.Helper()
-		if _, err := s.WatchPullRequest(sessionID, "github.com:victorarias/attn#"+sessionID, prreadiness.ModeGreen, "", time.Now()); err != nil {
+		if _, _, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: sessionID, PRID: "github.com:victorarias/attn#" + sessionID}, prreadiness.ModeGreen, "", time.Now()); err != nil {
 			t.Fatalf("watch pull request for %s: %v", sessionID, err)
 		}
 	},

@@ -72,23 +72,24 @@ type ReviewOpinion struct {
 }
 
 type Observation struct {
-	Number           int             `json:"number"`
-	URL              string          `json:"url"`
-	Title            string          `json:"title"`
-	State            string          `json:"state"`
-	Draft            bool            `json:"draft"`
-	Merged           bool            `json:"merged"`
-	HeadSHA          string          `json:"head_sha"`
-	HeadRef          string          `json:"head_ref"`
-	MergeStateStatus string          `json:"merge_state_status"`
-	ReviewDecision   string          `json:"review_decision,omitempty"`
-	CodexThumbsUp    bool            `json:"codex_thumbs_up"`
-	CodexEyes        bool            `json:"codex_eyes"`
-	ReviewOpinions   []ReviewOpinion `json:"review_opinions,omitempty"`
-	Checks           []Check         `json:"checks,omitempty"`
-	Feedback         []FeedbackItem  `json:"feedback,omitempty"`
-	Threads          []ThreadState   `json:"threads,omitempty"`
-	FeedbackComplete bool            `json:"feedback_complete"`
+	Number             int             `json:"number"`
+	URL                string          `json:"url"`
+	Title              string          `json:"title"`
+	State              string          `json:"state"`
+	Draft              bool            `json:"draft"`
+	Merged             bool            `json:"merged"`
+	HeadSHA            string          `json:"head_sha"`
+	HeadRef            string          `json:"head_ref"`
+	MergeStateStatus   string          `json:"merge_state_status"`
+	ReviewDecision     string          `json:"review_decision,omitempty"`
+	CodexThumbsUp      bool            `json:"codex_thumbs_up"`
+	CodexEyes          bool            `json:"codex_eyes"`
+	ReviewOpinions     []ReviewOpinion `json:"review_opinions,omitempty"`
+	RequestedReviewers []string        `json:"requested_reviewers,omitempty"`
+	Checks             []Check         `json:"checks,omitempty"`
+	Feedback           []FeedbackItem  `json:"feedback,omitempty"`
+	Threads            []ThreadState   `json:"threads,omitempty"`
+	FeedbackComplete   bool            `json:"feedback_complete"`
 }
 
 type Cursor struct {
@@ -186,6 +187,9 @@ func Evaluate(observation Observation, mode Mode, reviewer string, cursor Cursor
 			default:
 				return Evaluation{State: StateUnknown, Reason: "review_decision_unknown", Description: "GitHub returned an unknown review decision"}, cursor
 			}
+		}
+		if reviewerRequested(observation.RequestedReviewers, reviewer) {
+			return Evaluation{State: StateWaiting, Reason: "selected_reviewer_requested", Description: "waiting for " + reviewer + " to review the pull request"}, cursor
 		}
 		opinion := reviewOpinion(observation.ReviewOpinions, reviewer)
 		switch strings.ToUpper(strings.TrimSpace(opinion.State)) {
@@ -356,11 +360,28 @@ func currentAction(observation Observation, evaluation Evaluation) (string, []st
 
 func reviewOpinion(opinions []ReviewOpinion, reviewer string) ReviewOpinion {
 	for _, opinion := range opinions {
-		if strings.EqualFold(opinion.Actor, reviewer) {
+		if sameActor(opinion.Actor, reviewer) {
 			return opinion
 		}
 	}
 	return ReviewOpinion{Actor: reviewer}
+}
+
+func reviewerRequested(requested []string, reviewer string) bool {
+	for _, actor := range requested {
+		if sameActor(actor, reviewer) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameActor(left, right string) bool {
+	normalize := func(value string) string {
+		value = strings.ToLower(strings.TrimSpace(value))
+		return strings.TrimSuffix(value, "[bot]")
+	}
+	return normalize(left) == normalize(right)
 }
 
 func compactDetails(values ...string) []string {
