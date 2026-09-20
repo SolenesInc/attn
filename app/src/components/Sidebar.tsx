@@ -32,7 +32,6 @@ function SidebarExpanded() {
     crew,
     onWakeCrewMember,
     onSleepCrewMember,
-    onManageCrew,
     openCrewMemberActions,
     onSettleTurn,
     onOpenSnooze,
@@ -82,13 +81,14 @@ function SidebarExpanded() {
         <span className="sidebar-home-shortcut">{formatShortcut('session.goToDashboard')}</span>
       </button>
 
+      <SidebarCrewManage />
+
       {queue && (
         <QueueBands
           bands={queue}
           crew={crew}
           onWakeCrewMember={onWakeCrewMember}
           onSleepCrewMember={onSleepCrewMember}
-          onManageCrew={onManageCrew}
           onOpenCrewMemberActions={openCrewMemberActions}
           selectedId={selectedId}
           onSelectSession={onSelectSession}
@@ -147,6 +147,17 @@ function SidebarExpanded() {
       <SidebarFooter />
       <SidebarPopovers />
     </div>
+  );
+}
+
+function SidebarCrewManage() {
+  const { crew, onManageCrew } = useSidebarContext();
+  if (!crew?.length || !onManageCrew) return null;
+  return (
+    <button type="button" className="sidebar-crew-manage" data-testid="manage-crew" onClick={onManageCrew}>
+      <span>Manage crew</span>
+      <span className="sidebar-crew-count">{crew.length}</span>
+    </button>
   );
 }
 

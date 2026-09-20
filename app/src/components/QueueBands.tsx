@@ -53,7 +53,6 @@ interface QueueBandsProps {
   crew?: CrewMemberView[];
   onWakeCrewMember?: (member: string) => void;
   onSleepCrewMember?: (member: string) => void;
-  onManageCrew?: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onOpenCrewMemberActions?: (member: string, event: ReactMouseEvent<HTMLButtonElement>) => void;
   selectedId: string | null;
   onSelectSession: (id: string) => void;
@@ -263,7 +262,6 @@ export function QueueBands({
   crew,
   onWakeCrewMember,
   onSleepCrewMember,
-  onManageCrew,
   onOpenCrewMemberActions,
   selectedId,
   onSelectSession,
@@ -352,11 +350,6 @@ export function QueueBands({
           <div className="queue-band-header">
             <span>Pinned</span>
             <span className="queue-band-count">{bands.pinned.length + crewRows.length}</span>
-            {crewRows.length > 0 && onManageCrew && (
-              <button type="button" className="queue-band-manage" data-testid="manage-crew" onClick={onManageCrew}>
-                Manage crew
-              </button>
-            )}
           </div>
           {crewRows.map((crewRow) => (
             <CrewRowView

@@ -86,6 +86,25 @@ describe('sidebar harness identity', () => {
     expect(within(screen.getByTestId('sidebar-session-codex')).getByRole('img', { name: 'Codex' })).toBeInTheDocument();
   });
 
+  it.each([false, true])('keeps crew management reachable when queue mode is %s', (queueMode) => {
+    const data = sidebarData(false, true);
+    const onManageCrew = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        {...data}
+        crew={[{ id: 'fern' }, { id: 'sleeping' }]}
+        queue={queueMode ? buildQueueBands(data.workspaces) : null}
+        onManageCrew={onManageCrew}
+      />,
+    );
+
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent('Manage crew');
+    expect(screen.getByTestId('manage-crew')).toHaveTextContent('2');
+    fireEvent.click(screen.getByTestId('manage-crew'));
+    expect(onManageCrew).toHaveBeenCalledOnce();
+  });
+
   it('hides every harness logo while preserving queue row hover text', () => {
     const data = sidebarData(false, true);
     render(
