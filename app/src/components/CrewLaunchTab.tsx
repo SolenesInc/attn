@@ -50,9 +50,10 @@ function CommitOnBlurInput({ value, onCommit, onKeyDown, ...rest }: Omit<InputHT
   );
 }
 
-function RestartState({ member, attempt, onResend, onReview }: {
+function RestartState({ member, attempt, isConnected, onResend, onReview }: {
   member: CrewMember;
   attempt?: CrewRestartAttempt;
+  isConnected: boolean;
   onResend: () => void;
   onReview: () => void;
 }) {
@@ -62,7 +63,13 @@ function RestartState({ member, attempt, onResend, onReview }: {
     <div className={`crew-restart-state is-${notice.tone}`} role="status">
       <span>{notice.text}</span>
       {notice.action && (
-        <button type="button" onClick={notice.action.kind === 'resend' ? onResend : onReview}>{notice.action.label}</button>
+        <button
+          type="button"
+          disabled={notice.action.kind === 'resend' && (!isConnected || Boolean(attempt?.sending))}
+          onClick={notice.action.kind === 'resend' ? onResend : onReview}
+        >
+          {notice.action.label}
+        </button>
       )}
     </div>
   );
@@ -318,7 +325,13 @@ export function CrewLaunchTab({
         models={models}
       />
       <RestartSection member={member} edit={edit} restart={restart} isConnected={isConnected} onRestart={onRestart} />
-      <RestartState member={member} attempt={restart} onResend={onResendRestart} onReview={onReviewRestart} />
+      <RestartState
+        member={member}
+        attempt={restart}
+        isConnected={isConnected}
+        onResend={onResendRestart}
+        onReview={onReviewRestart}
+      />
     </>
   );
 }

@@ -475,7 +475,10 @@ func TestCrewRestart_ReconcileKeepsAFiledRestartQueuedWhileTheSuccessorProbeFail
 	}
 
 	delete(runtime.infoErr, successor)
-	d.reconcileCrewRestarts()
+	replayed := crewRestartCall(t, d, "alder", "probe-flake")
+	if !replayed.Ok {
+		t.Fatalf("replay restart: %v", protocol.Deref(replayed.Error))
+	}
 	after := memberByID(t, crewList(t, d), "alder")
 	if after.Restart == nil || after.Restart.State != protocol.CrewRestartStateCompleted ||
 		protocol.Deref(after.Restart.SuccessorSessionID) != successor {

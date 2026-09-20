@@ -279,6 +279,38 @@ describe('CrewPanel', () => {
     expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
   });
 
+  it.each([CrewRestartState.Queued, CrewRestartState.Requested])(
+    'retries an authoritative %s restart after the panel reloads',
+    async (state) => {
+      const sendCrewRestart = vi.fn()
+        .mockRejectedValueOnce(new Error('Successor probe unavailable'))
+        .mockResolvedValueOnce({ success: true, conflict: false });
+      renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 10, {
+        binding_session: 'session-trellis',
+        resolved_agent: 'claude',
+        restart: {
+          request_id: '13131313-1313-4313-8313-131313131313',
+          session_id: 'session-trellis',
+          state,
+        },
+      })] });
+
+      expect(await screen.findByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry restart' }));
+      await screen.findByText('Successor probe unavailable');
+      fireEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+
+      await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
+      expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
+      expect(sendCrewRestart).toHaveBeenCalledWith({
+        member: 'trellis',
+        requestId: '13131313-1313-4313-8313-131313131313',
+        expectedSessionId: 'session-trellis',
+        expectedRevision: 10,
+      });
+    },
+  );
+
   it('keeps the panel behind the restart confirmation out of the tab order', async () => {
     renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
     fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));

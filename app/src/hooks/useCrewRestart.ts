@@ -74,7 +74,15 @@ export function useCrewRestart(
   const read = useCallback((member: CrewMember) => currentAttempt(member, attempts[member.id]), [attempts]);
 
   const resend = useCallback((member: CrewMember) => {
-    const attempt = read(member);
+    const pending = member.restart?.state === 'queued' || member.restart?.state === 'requested'
+      ? member.restart
+      : undefined;
+    const attempt = read(member) ?? (pending ? {
+      requestId: pending.request_id,
+      expectedSessionId: pending.session_id,
+      expectedRevision: member.revision,
+      sending: false,
+    } : undefined);
     if (attempt) deliver(member.id, attempt);
   }, [deliver, read]);
 
