@@ -799,6 +799,41 @@ func TestPullRequestWatchReportsNewFindingsWhileChecksRemainFailed(t *testing.T)
 	}
 }
 
+func TestPullRequestWatchDeliversHumanReviewerCommentsAndInlineFindings(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	if response := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: "https://github.com/o/r/pull/71", Reviewer: "human",
+	}); !response.Ok {
+		t.Fatalf("arm watch: %+v", response)
+	}
+	now := time.Now()
+	ready := watchedReadiness("head", prreadiness.ChecksGreen, "CHANGES_REQUESTED")
+	ready.Evidence.Reviews[0].Author = "human"
+	ready.Evidence.Reviews[0].Body = ""
+	ready.Evidence.Reviews[0].Findings = []prreadiness.Finding{{ID: "inline", Author: "human", Body: "Fix the guard", Location: "a.go:7"}}
+	ready.Evidence.Comments = []prreadiness.Comment{
+		{ID: "conversation", Author: "human", Body: "Please update the docs", CreatedAt: now},
+		{ID: "inline", Author: "human", Body: "Fix the guard", CreatedAt: now},
+	}
+	serveHost(d, "github.com", &fakePRHost{readiness: ready})
+	d.refreshSessionPullRequests(now)
+	deliveries, _, err := d.store.ReadAgentMailbox("s1", 20, now)
+	if err != nil || len(deliveries) != 2 {
+		t.Fatalf("feedback and findings = %+v, %v", deliveries, err)
+	}
+	var prompts string
+	for _, delivery := range deliveries {
+		prompts += delivery.Item.Prompt
+	}
+	if strings.Count(prompts, "Please update the docs") != 1 || strings.Count(prompts, "Fix the guard") != 1 {
+		t.Fatalf("missing or duplicate reviewer feedback: %s", prompts)
+	}
+	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+	if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
+		t.Fatalf("reviewer feedback repeated: %+v, %v", unread, err)
+	}
+}
+
 func TestPullRequestWatchDeduplicatesReadinessAndRetainsDistinctFindings(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"
@@ -888,13 +923,34 @@ func TestPullRequestWatchExposesPersistentFailureWithoutStorming(t *testing.T) {
 }
 
 func TestPullRequestWatchUsesGraphQLRateLimitResource(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
-	host := &fakePRHost{limited: true, limitReset: time.Now().Add(time.Hour)}
-	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Now())
-	if host.limitedFor != "graphql" {
-		t.Fatalf("rate-limit resource = %q, want graphql", host.limitedFor)
+	for _, initiallyLimited := range []bool{true, false} {
+		t.Run(fmt.Sprintf("limited-before-fetch=%t", initiallyLimited), func(t *testing.T) {
+			d := newPRDaemonForTest(t, "s1")
+			watchPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
+			host := &fakePRHost{limited: initiallyLimited, readyErr: github.ErrRateLimited, limitReset: time.Now().Add(time.Hour)}
+			serveHost(d, "github.com", host)
+			now := time.Now()
+			for i := 0; i < pullRequestWatchFailureThreshold; i++ {
+				d.refreshSessionPullRequests(now.Add(time.Duration(i) * protocol.HeatHotInterval))
+				host.limited = true
+			}
+			if host.limitedFor != "graphql" {
+				t.Fatalf("rate-limit resource = %q, want graphql", host.limitedFor)
+			}
+			wantReads := 0
+			if !initiallyLimited {
+				wantReads = 1
+			}
+			if host.readyReads != wantReads {
+				t.Fatalf("queried rate-limited GitHub %d times", host.readyReads)
+			}
+			if watch := d.store.PullRequestWatches()[0]; !strings.Contains(watch.LastError, "rate limited") {
+				t.Fatalf("rate limit not visible: %+v", watch)
+			}
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 {
+				t.Fatalf("rate-limit outage notification = %+v, %v", unread, err)
+			}
+		})
 	}
 }
 

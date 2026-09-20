@@ -118,9 +118,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 	for _, group := range groups {
 		resource := sessionPullRequestResource(group)
 		limitKey := group.host + "\x00" + resource
-		if _, limited := limitedRequests[limitKey]; limited {
-			continue
-		}
+		resetAt, limited := limitedRequests[limitKey]
 		host, ok := d.sessionPRHostFor(group.host)
 		if !ok {
 			d.logf("session pull requests: no GitHub client for host %s, %s stays as recorded", group.host, group.prID)
@@ -128,10 +126,14 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 			d.markSessionPullRequestChecked(group.prID, now)
 			continue
 		}
-		if limited, resetAt := host.IsRateLimited(resource); limited {
+		if !limited {
+			limited, resetAt = host.IsRateLimited(resource)
+		}
+		if limited {
 			d.logf("session pull requests: %s rate limited until %s", group.host, resetAt.Format(time.RFC3339))
 			limitedRequests[limitKey] = resetAt
 			recordSessionPullRequestLimit(limitedResources, resource, resetAt)
+			changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, fmt.Errorf("GitHub %s rate limited until %s", resource, resetAt.Format(time.RFC3339)), now)...)
 			continue
 		}
 
@@ -141,6 +143,7 @@ func (d *Daemon) refreshSessionPullRequests(now time.Time) (fetched, changed int
 				d.logf("session pull requests: %s rate limited mid-refresh, stopping there: %v", group.host, err)
 				limitedRequests[limitKey] = resetAt
 				recordSessionPullRequestLimit(limitedResources, resource, resetAt)
+				changedSessions = append(changedSessions, d.recordPullRequestWatchFailures(group, err, now)...)
 				continue
 			}
 			d.logf("session pull requests: refresh %s: %v", group.prID, err)
@@ -541,7 +544,7 @@ type watchObservation struct {
 func pullRequestWatchAction(
 	readiness *github.PullRequestReadiness, evaluation prreadiness.Evaluation, watch store.PullRequestWatch,
 ) watchObservation {
-	feedback, cursor := pullRequestWatchFeedback(readiness.Evidence, watch)
+	feedback, cursor := pullRequestWatchFeedback(readiness.Evidence, evaluation, watch)
 	if readiness.Snapshot.State != sessionPullRequestOpen {
 		state := sessionPullRequestStateFromSnapshot(readiness.Snapshot)
 		return watchObservation{Kind: state, Details: []string{"pull request is " + state}, Feedback: cursor, Comments: feedback}
@@ -601,7 +604,16 @@ func uniquePullRequestWatchFindings(groups ...[]prreadiness.Finding) []prreadine
 	return findings
 }
 
-func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
+func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadiness.Evaluation, watch store.PullRequestWatch) ([]prreadiness.Comment, store.PullRequestFeedbackCursor) {
+	represented := make(map[string]bool)
+	for _, finding := range uniquePullRequestWatchFindings(evaluation.Findings, evaluation.Unresolved) {
+		represented[finding.ID] = true
+	}
+	for _, review := range evidence.Reviews {
+		if samePullRequestWatchActor(review.Author, watch.Reviewer) && review.SubmittedAt.Equal(evaluation.ReviewSubmitted) {
+			represented[review.ID] = true
+		}
+	}
 	seenAt, err := time.Parse(time.RFC3339Nano, watch.FeedbackSeenAt)
 	if err != nil {
 		seenAt, _ = time.Parse(time.RFC3339Nano, watch.CreatedAt)
@@ -614,7 +626,7 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, watch store.PullReq
 	nextIDs := append([]string(nil), watch.FeedbackSeenIDs...)
 	var feedback []prreadiness.Comment
 	for _, comment := range evidence.Comments {
-		if comment.Bot || samePullRequestWatchActor(comment.Author, watch.Reviewer) || comment.CreatedAt.Before(seenAt) ||
+		if comment.Bot || represented[comment.ID] || comment.CreatedAt.Before(seenAt) ||
 			(comment.CreatedAt.Equal(seenAt) && seenIDs[comment.ID]) {
 			continue
 		}

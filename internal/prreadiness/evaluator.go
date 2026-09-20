@@ -126,6 +126,7 @@ func Evaluate(evidence Evidence, reviewer string) Evaluation {
 			switch strings.ToUpper(strings.TrimSpace(current.State)) {
 			case "CHANGES_REQUESTED":
 				result.ReviewState = ReviewChangesRequested
+				result.Findings = append(result.Findings, current.Findings...)
 			case "APPROVED":
 				result.ReviewState = ReviewApproved
 			case "COMMENTED":
