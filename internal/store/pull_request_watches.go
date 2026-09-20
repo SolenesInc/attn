@@ -219,35 +219,54 @@ type PullRequestWatchReconcile struct {
 	At            time.Time
 }
 
-func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]agentmailbox.Delivery, error) {
+func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]agentmailbox.Delivery, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	encoded, err := json.Marshal(update.Cursor)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	tx, err := s.db.Begin()
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer tx.Rollback()
 	var mode, reviewer, createdAt string
 	if err := tx.QueryRow(`SELECT mode, reviewer, created_at FROM pull_request_watches WHERE session_id=? AND pr_id=?`, update.SessionID, update.PRID).Scan(&mode, &reviewer, &createdAt); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if mode != string(update.Mode) || !strings.EqualFold(reviewer, update.Reviewer) || createdAt != update.CreatedAt {
-		return nil, sql.ErrNoRows
+		return nil, false, sql.ErrNoRows
 	}
 	stamp := update.At.UTC().Format(sortableTimeFormat)
-	if _, err := tx.Exec(`
-		UPDATE pull_request_watches SET cursor_json=?, last_success_at=?, last_error='', feedback_error=?, outage_active=0
-		WHERE session_id=? AND pr_id=?
-	`, string(encoded), stamp, update.FeedbackError, update.SessionID, update.PRID); err != nil {
-		return nil, err
-	}
 	settling := ""
 	if update.Evaluation.SettlingUntil != nil {
 		settling = update.Evaluation.SettlingUntil.UTC().Format(sortableTimeFormat)
+	}
+	var previousStatus SessionPullRequestStatus
+	var previousReadinessState, previousReadinessReason, previousSettling, previousHealth, previousHealthError string
+	if err := tx.QueryRow(`
+		SELECT title, draft, state, ci_status, review_status, mergeable_state, head_sha, head_branch,
+			readiness_state, readiness_reason, settling_until, watch_health, watch_error
+		FROM session_pull_requests WHERE session_id=? AND pr_id=?
+	`, update.SessionID, update.PRID).Scan(
+		&previousStatus.Title, &previousStatus.Draft, &previousStatus.State, &previousStatus.CIStatus,
+		&previousStatus.ReviewStatus, &previousStatus.MergeableState, &previousStatus.HeadSHA, &previousStatus.HeadBranch,
+		&previousReadinessState, &previousReadinessReason, &previousSettling, &previousHealth, &previousHealthError,
+	); err != nil {
+		return nil, false, err
+	}
+	projectionChanged := previousStatus != update.Status ||
+		previousReadinessState != update.Evaluation.State || previousReadinessReason != update.Evaluation.Reason ||
+		previousSettling != settling || previousHealth != update.Health || previousHealthError != update.HealthError
+	recovered := update.Health == "current"
+	if _, err := tx.Exec(`
+		UPDATE pull_request_watches SET cursor_json=?, last_success_at=?,
+			last_error=CASE WHEN ? THEN '' ELSE last_error END,
+			feedback_error=?, outage_active=CASE WHEN ? THEN 0 ELSE outage_active END
+		WHERE session_id=? AND pr_id=?
+	`, string(encoded), stamp, recovered, update.FeedbackError, recovered, update.SessionID, update.PRID); err != nil {
+		return nil, false, err
 	}
 	if _, err := tx.Exec(`
 		UPDATE session_pull_requests SET title=?, draft=?, state=?, ci_status=?, review_status=?, mergeable_state=?,
@@ -258,18 +277,20 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 		update.Status.MergeableState, update.Status.HeadSHA, update.Status.HeadBranch, stamp, stamp,
 		update.Evaluation.State, update.Evaluation.Reason, settling, update.Health, update.HealthError, stamp,
 		update.SessionID, update.PRID); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	if _, err := tx.Exec(`
-		DELETE FROM agent_mailbox_items WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND read_at=''
-	`, update.SessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchOutageCoalesceKey(update.PRID)); err != nil {
-		return nil, err
+	if recovered {
+		if _, err := tx.Exec(`
+			DELETE FROM agent_mailbox_items WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND read_at=''
+		`, update.SessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchOutageCoalesceKey(update.PRID)); err != nil {
+			return nil, false, err
+		}
 	}
 	if update.ClearAction {
 		if _, err := tx.Exec(`
 			DELETE FROM agent_mailbox_items WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND read_at=''
 		`, update.SessionID, agentmailbox.KindMaintenancePrompt, PullRequestWatchCoalesceKey(update.PRID)); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	deliveries := make([]agentmailbox.Delivery, 0, len(update.MailboxItems))
@@ -279,12 +300,12 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 				DELETE FROM agent_mailbox_items
 				WHERE recipient_session_id=? AND kind=? AND coalesce_key=? AND id<>? AND read_at=''
 			`, item.RecipientSessionID, item.Kind, item.CoalesceKey, item.ID); err != nil {
-				return nil, err
+				return nil, false, err
 			}
 		}
 		inserted, err := insertPullRequestMailboxItem(tx, item)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if inserted {
 			deliveries = append(deliveries, agentmailbox.Delivery{Item: item})
@@ -292,13 +313,13 @@ func (s *Store) ReconcilePullRequestWatch(update PullRequestWatchReconcile) ([]a
 	}
 	if update.Terminal {
 		if _, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id=? AND pr_id=?`, update.SessionID, update.PRID); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return deliveries, nil
+	return deliveries, projectionChanged, nil
 }
 
 func (s *Store) RecordPullRequestWatchFailure(sessionID, prID, createdAt string, mode prreadiness.Mode, reviewer, message string, outage agentmailbox.Item, at time.Time) (*agentmailbox.Delivery, error) {

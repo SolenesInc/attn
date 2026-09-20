@@ -551,7 +551,7 @@ func (d *Daemon) processPullRequestWatches(
 			items = append(items, pullRequestWatchMailboxItem(watch, action.ID, coalesceKey, kind, details, now))
 		}
 		terminal := transition.Evaluation.State == prreadiness.StateMerged || transition.Evaluation.State == prreadiness.StateClosed
-		deliveries, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
+		deliveries, projectionChanged, err := d.store.ReconcilePullRequestWatch(store.PullRequestWatchReconcile{
 			SessionID: watch.SessionID, PRID: watch.PRID, CreatedAt: watch.CreatedAt,
 			Mode: watch.Mode, Reviewer: watch.Reviewer, Cursor: transition.Cursor,
 			Status: status, Evaluation: transition.Evaluation,
@@ -572,7 +572,9 @@ func (d *Daemon) processPullRequestWatches(
 		if transition.Evaluation.SettlingUntil != nil {
 			d.schedulePullRequestSettle(watch, *transition.Evaluation.SettlingUntil, now)
 		}
-		changed = append(changed, watch.SessionID)
+		if projectionChanged {
+			changed = append(changed, watch.SessionID)
+		}
 	}
 	return changed
 }

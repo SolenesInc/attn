@@ -20,7 +20,7 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 		t.Fatalf("first watch = %t, %v", changed, err)
 	}
 	watch, _ := s.PullRequestWatch("s1", prID)
-	_, err = s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
+	_, _, err = s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
 		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
 		Cursor: prreadiness.Cursor{
 			Initialized: true, HeadSHA: "head-a", HeadObservedAt: base,
@@ -78,7 +78,7 @@ func TestPullRequestWatchReconcileRollsBackProjectionCursorAndMailboxTogether(t 
 		t.Fatal(err)
 	}
 	item := testPullRequestMailboxItem("ready", "s1", prID, now)
-	_, err := s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
+	_, _, err := s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
 		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
 		Cursor:     prreadiness.Cursor{Initialized: true, HeadSHA: "head-a", LastAction: "ready"},
 		Status:     SessionPullRequestStatus{State: "open", HeadSHA: "head-a"},
@@ -122,23 +122,58 @@ func TestPullRequestWatchOutageCoalescesAndSuccessfulReconcileRecoversSilently(t
 	}
 	ready := testPullRequestMailboxItem("ready", "s1", prID, now.Add(3*time.Second))
 	ready.CoalesceKey = PullRequestWatchCoalesceKey(prID)
-	_, err = s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
+	_, changed, err := s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
 		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
 		Cursor:     prreadiness.Cursor{Initialized: true, HeadSHA: "head-a", LastAction: "ready"},
 		Status:     SessionPullRequestStatus{State: "open", HeadSHA: "head-a"},
 		Evaluation: prreadiness.Evaluation{State: prreadiness.StateReady, Reason: "green"},
-		Health:     "current", MailboxItems: []agentmailbox.Item{ready}, At: now.Add(3 * time.Second),
+		Health:     "delayed", HealthError: "feedback: review threads unavailable", FeedbackError: "review threads unavailable",
+		MailboxItems: []agentmailbox.Item{ready}, At: now.Add(3 * time.Second),
 	})
-	if err != nil {
-		t.Fatal(err)
+	if err != nil || !changed {
+		t.Fatalf("partial recovery = changed:%t, %v", changed, err)
+	}
+	afterPartial, _ := s.PullRequestWatch("s1", prID)
+	if !afterPartial.OutageActive || afterPartial.LastError != "still unavailable" {
+		t.Fatalf("watch after partial recovery = %+v", afterPartial)
 	}
 	deliveries, err := s.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 2 {
+		t.Fatalf("mailbox after partial recovery = %+v, %v", deliveries, err)
+	}
+
+	_, changed, err = s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
+		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
+		Cursor:     prreadiness.Cursor{Initialized: true, HeadSHA: "head-a", LastAction: "ready"},
+		Status:     SessionPullRequestStatus{State: "open", HeadSHA: "head-a"},
+		Evaluation: prreadiness.Evaluation{State: prreadiness.StateReady, Reason: "green"},
+		Health:     "current", MailboxItems: []agentmailbox.Item{ready}, At: now.Add(4 * time.Second),
+	})
+	if err != nil || !changed {
+		t.Fatalf("full recovery = changed:%t, %v", changed, err)
+	}
+	deliveries, err = s.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(deliveries) != 1 || deliveries[0].Item.ID != "ready" {
 		t.Fatalf("mailbox after recovery = %+v, %v", deliveries, err)
 	}
 	records := s.ListSessionPullRequests("s1")
 	if records[0].WatchHealth != "current" || records[0].WatchError != "" {
 		t.Fatalf("projection after recovery = %+v", records[0])
+	}
+	afterRecovery, _ := s.PullRequestWatch("s1", prID)
+	if afterRecovery.OutageActive || afterRecovery.LastError != "" {
+		t.Fatalf("watch after recovery = %+v", afterRecovery)
+	}
+
+	_, changed, err = s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
+		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
+		Cursor:     prreadiness.Cursor{Initialized: true, HeadSHA: "head-a", LastAction: "ready"},
+		Status:     SessionPullRequestStatus{State: "open", HeadSHA: "head-a"},
+		Evaluation: prreadiness.Evaluation{State: prreadiness.StateReady, Reason: "green"},
+		Health:     "current", MailboxItems: []agentmailbox.Item{ready}, At: now.Add(5 * time.Second),
+	})
+	if err != nil || changed {
+		t.Fatalf("unchanged poll = changed:%t, %v", changed, err)
 	}
 }
 

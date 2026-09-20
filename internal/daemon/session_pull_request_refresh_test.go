@@ -678,6 +678,22 @@ func TestFeedbackFailureDoesNotInvalidateReadyState(t *testing.T) {
 	}
 }
 
+func TestUnchangedWatchedPullRequestPollDoesNotBroadcast(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	host := &fakePRHost{readiness: readinessObservation()}
+	serveHost(d, "github.com", host)
+	prID := "github.com:victorarias/attn#71"
+	base := time.Date(2026, 9, 21, 14, 30, 0, 0, time.UTC)
+
+	d.refreshSessionPullRequestsContext(context.Background(), base, prID)
+	afterFirst := len(docFacts(t, d, FactSessionPullRequestChanged))
+	d.refreshSessionPullRequestsContext(context.Background(), base.Add(time.Second), prID)
+	if afterSecond := len(docFacts(t, d, FactSessionPullRequestChanged)); afterSecond != afterFirst {
+		t.Fatalf("unchanged poll published %d additional facts", afterSecond-afterFirst)
+	}
+}
+
 func TestTerminalObservationNotifiesThenStopsTheWatch(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
