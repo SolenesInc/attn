@@ -579,6 +579,11 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if response := sendPRCommand(t, d, protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: "s1", URL: "https://github.com/victorarias/attn/pull/71", Reviewer: "another-reviewer",
+	}); !response.Ok {
+		t.Fatalf("change reviewer after interrupted delivery: %+v", response)
+	}
 	d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
 	unread, err := d.store.UnreadAgentMailboxDeliveries("s1")
 	if err != nil || len(unread) != 2 {
@@ -589,7 +594,7 @@ func TestPullRequestWatchRetriesFeedbackEnqueueAfterRestart(t *testing.T) {
 	}
 }
 
-func TestPullRequestWatchExplicitStopClearsFeedback(t *testing.T) {
+func TestPullRequestWatchLifecyclePreservesFeedbackUntilStopped(t *testing.T) {
 	url := "https://github.com/victorarias/attn/pull/71"
 	for name, command := range map[string]any{
 		"unwatch":         protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url},
@@ -610,8 +615,18 @@ func TestPullRequestWatchExplicitStopClearsFeedback(t *testing.T) {
 			if response := sendPRCommand(t, d, command); !response.Ok {
 				t.Fatalf("command failed: %+v", response)
 			}
-			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 0 {
-				t.Fatalf("explicit stop left feedback: %+v, %v", unread, err)
+			wantUnread := 0
+			if name == "reviewer change" {
+				wantUnread = 1
+			}
+			if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != wantUnread {
+				t.Fatalf("unread feedback after %s = %+v, %v", name, unread, err)
+			}
+			if name == "reviewer change" {
+				d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval))
+				if unread, err := d.store.UnreadAgentMailboxDeliveries("s1"); err != nil || len(unread) != 1 || !strings.Contains(unread[0].Item.Prompt, "human: feedback") {
+					t.Fatalf("reviewer change lost or repeated human feedback: %+v, %v", unread, err)
+				}
 			}
 			if watches := d.store.PullRequestWatches(); name != "reviewer change" && len(watches) != 0 {
 				t.Fatalf("stopped watch remains: %+v", watches)

@@ -58,9 +58,7 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 			last_success_at = '',
 			last_error = '',
 			error_since = '',
-			failure_count = 0,
-			feedback_seen_at = excluded.feedback_seen_at,
-			feedback_seen_ids = '[]'
+			failure_count = 0
 	`, sessionID, prID, reviewer, at.UTC().Format(sortableTimeFormat), at.UTC().Format(sortableTimeFormat))
 	if err != nil {
 		return false, err

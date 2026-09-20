@@ -648,7 +648,7 @@ func pullRequestWatchFeedback(evidence prreadiness.Evidence, evaluation prreadin
 func (d *Daemon) notifyPullRequestWatchFeedback(watch store.PullRequestWatch, comments []prreadiness.Comment, now time.Time) error {
 	for _, comment := range comments {
 		id := uuid.NewSHA1(uuid.NameSpaceURL, []byte(strings.Join([]string{
-			"pull-request-feedback", watch.SessionID, watch.PRID, watch.CreatedAt, comment.ID,
+			"pull-request-feedback", watch.SessionID, watch.PRID, comment.ID,
 		}, "\x00"))).String()
 		if err := d.queuePullRequestWatchNotification(watch, id, "", "human feedback", []string{comment.Author + ": " + strings.TrimSpace(comment.Body)}, now); err != nil {
 			return err
