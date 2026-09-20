@@ -1095,7 +1095,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdPullRequestForget:
 		d.handlePullRequestForgetWS(msg.(*protocol.PullRequestForgetMessage))
 	case protocol.CmdPullRequestWatch:
-		d.handlePullRequestWatchWS(msg.(*protocol.PullRequestWatchMessage))
+		d.handlePullRequestWatchWS(client, msg.(*protocol.PullRequestWatchMessage))
 	case protocol.CmdPullRequestUnwatch:
 		d.handlePullRequestUnwatchWS(client, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdCancelCountdown:
@@ -1448,16 +1448,20 @@ func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg inte
 	if !ok {
 		return false
 	}
+	if cmd == protocol.CmdPullRequestWatch {
+		request := msg.(*protocol.PullRequestWatchMessage)
+		d.sendToClient(client, protocol.PullRequestWatchResultMessage{
+			Event: protocol.EventPullRequestWatchResult, RequestID: protocol.Deref(request.RequestID),
+			Success: false, Error: protocol.Ptr("remote pull request watches are unsupported; run this command on the owning daemon"),
+		})
+		return true
+	}
 	if cmd == protocol.CmdPullRequestUnwatch {
 		request := msg.(*protocol.PullRequestUnwatchMessage)
 		d.sendToClient(client, protocol.PullRequestUnwatchResultMessage{
 			Event: protocol.EventPullRequestUnwatchResult, RequestID: protocol.Deref(request.RequestID),
 			Success: false, Error: protocol.Ptr("remote pull request watches are unsupported; run this command on the owning daemon"),
 		})
-		return true
-	}
-	if cmd == protocol.CmdPullRequestWatch {
-		d.sendCommandError(client, cmd, "remote pull request watches are unsupported; run this command on the owning daemon")
 		return true
 	}
 	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {

@@ -2,206 +2,210 @@ package github
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
-	"sync/atomic"
 	"testing"
-
-	"github.com/victorarias/attn/internal/prreadiness"
+	"time"
 )
 
-func readinessPayload(extra string) []byte {
-	return []byte(`{"data":{"repository":{"pullRequest":{
-    "number":71,"url":"https://github.com/o/r/pull/71","title":"ready","bodyText":"",
-    "isDraft":false,"state":"OPEN","merged":false,"mergeStateStatus":"CLEAN",
-    "headRefOid":"abcdef1234567890","headRefName":"feature","baseRefOid":"base","baseRefName":"next",
-    "author":{"login":"author"},"headRepository":{"nameWithOwner":"o/r"},"baseRepository":{"nameWithOwner":"o/r"},
-    "reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]},
-    "commits":{"nodes":[{"commit":{"committedDate":"2026-09-19T10:00:00Z","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":false},"nodes":[{"__typename":"CheckRun","name":"test","status":"COMPLETED","conclusion":"SUCCESS","detailsUrl":"https://ci.example.test/run/1"}]}}}}]},
-    "reviews":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"review","state":"COMMENTED","bodyText":"Reviewed commit: abcdef1","submittedAt":"2026-09-19T10:01:00Z","author":{"login":"chatgpt-codex-connector"},"commit":{"oid":"abcdef1234567890"},"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]}}]},
-    "comments":{"pageInfo":{"hasNextPage":false},"nodes":[]},
-    "reactions":{"pageInfo":{"hasNextPage":false},"nodes":[]},
-    "reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}` + extra + `
-  }}}}`)
+type readinessTransportFunc func(string, map[string]any) ([]byte, error)
+
+func (f readinessTransportFunc) GraphQL(_ context.Context, query string, variables map[string]any) ([]byte, error) {
+	return f(query, variables)
 }
 
-func TestParsePullRequestReadinessBuildsExactHeadEvidence(t *testing.T) {
-	payload := strings.Replace(string(readinessPayload("")),
-		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
-		`"comments":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"inline","bodyText":"Check this guard","path":"watch.go","line":42,"author":{"__typename":"User","login":"human"}}]}`, 1)
-	payload = strings.Replace(payload,
-		`"reactions":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
-		`"reactions":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"reaction","content":"THUMBS_UP","createdAt":"2026-09-19T09:00:00Z","user":{"login":"chatgpt-codex-connector"}}]}`, 1)
-	result, err := ParsePullRequestReadiness([]byte(payload))
-	if err != nil {
-		t.Fatalf("parse readiness: %v", err)
-	}
-	if result.HeadSHA != "abcdef1234567890" || result.CheckState != prreadiness.ChecksGreen {
-		t.Fatalf("result = %+v", result)
-	}
-	if len(result.Checks) != 1 || result.Checks[0].URL != "https://ci.example.test/run/1" {
-		t.Fatalf("check URL = %+v", result.Checks)
-	}
-	if got := prreadiness.Evaluate(*result, "chatgpt-codex-connector[bot]", nil); got.Ready || got.ReviewState != prreadiness.ReviewChangesRequested || len(got.Findings) != 1 {
-		t.Fatalf("evaluation = %+v", got)
-	}
-	if len(result.Comments) != 2 || result.Comments[0].Kind != prreadiness.CommentReview ||
-		result.Comments[1].Kind != prreadiness.CommentInline ||
-		result.Comments[1].Location != "watch.go:42" || result.Comments[1].Bot {
-		t.Fatalf("human inline evidence lost context: %+v", result.Comments)
-	}
-	if len(result.Reactions) != 1 || result.Reactions[0].ID != "reaction" {
-		t.Fatalf("reaction identity was not retained: %+v", result.Reactions)
-	}
-}
+func TestFetchPullRequestReadinessPaginatesFactsAndSelectedOpinion(t *testing.T) {
+	transport := readinessTransportFunc(func(query string, variables map[string]any) ([]byte, error) {
+		switch {
+		case strings.Contains(query, "query PullRequestReadiness"):
+			return []byte(`{"data":{"repository":{"pullRequest":{
+				"number":7,"url":"https://ghe.example/acme/widgets/pull/7","title":"Ship","state":"OPEN","isDraft":false,"merged":false,
+				"headRefOid":"abc","headRefName":"topic","mergeStateStatus":"HAS_HOOKS","reviewDecision":"APPROVED",
+				"reactions":{"nodes":[{"id":"r1","content":"THUMBS_UP","user":{"__typename":"Bot","id":"b1","login":"chatgpt-codex-connector"}}],"pageInfo":{"hasNextPage":true,"endCursor":"r"}},
+				"latestOpinionatedReviews":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"o"}},
+				"reviews":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"h"}},
+				"commits":{"nodes":[{"commit":{"statusCheckRollup":{"contexts":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"c"}}}}}]}
+			}}}}`), nil
+		case strings.Contains(query, "query PullRequestReactions"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","reactions":{"nodes":[{"id":"r2","content":"EYES","user":{"__typename":"Bot","id":"b1","login":"chatgpt-codex-connector"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestOpinions"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","latestOpinionatedReviews":{"nodes":[{"id":"v1","state":"APPROVED","bodyText":"looks good","submittedAt":"2026-09-20T12:00:00Z","author":{"__typename":"User","id":"u1","login":"victor"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestReviews"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"abc","reviews":{"nodes":[{"id":"v1","state":"APPROVED","bodyText":"looks good","submittedAt":"2026-09-20T12:00:00Z","author":{"__typename":"User","id":"u1","login":"victor"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestChecks"):
+			return []byte(`{
+				"data":{"repository":{"pullRequest":{
+					"headRefOid":"abc",
+					"commits":{"nodes":[{"commit":{"statusCheckRollup":{
+						"contexts":{"nodes":[{"__typename":"CheckRun","id":"check-1","name":"test","status":"COMPLETED","conclusion":"FAILURE","detailsUrl":"https://ci"}],"pageInfo":{"hasNextPage":false,"endCursor":""}}
+					}}}]}
+				}}}
+			}`), nil
+		default:
+			return nil, errors.New("unexpected query")
+		}
+	})
 
-func TestParsePullRequestReadinessUsesCommentIdentityForThreads(t *testing.T) {
-	body := strings.Replace(string(readinessPayload("")),
-		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
-		`"reviewThreads":{"pageInfo":{"hasNextPage":false},"nodes":[{"id":"thread-id","isResolved":false,"comments":{"nodes":[{"id":"comment-id","bodyText":"finding","createdAt":"2026-09-19T10:02:00Z","path":"watch.go","line":42,"author":{"login":"chatgpt-codex-connector"}}]}}]}`, 1)
-	result, err := ParsePullRequestReadiness([]byte(body))
-	if err != nil {
-		t.Fatalf("parse readiness: %v", err)
-	}
-	if len(result.Threads) != 1 || result.Threads[0].ID != "comment-id" {
-		t.Fatalf("threads = %+v", result.Threads)
-	}
-}
-
-func TestParsePullRequestReadinessRejectsTruncatedPages(t *testing.T) {
-	body := strings.Replace(string(readinessPayload("")),
-		`"reviews":{"pageInfo":{"hasNextPage":false}`,
-		`"reviews":{"pageInfo":{"hasNextPage":true}`, 1)
-	_, err := ParsePullRequestReadiness([]byte(body))
-	if !errors.Is(err, ErrReadinessTruncated) {
-		t.Fatalf("error = %v, want ErrReadinessTruncated", err)
-	}
-}
-
-func TestGraphQLURLSupportsDotcomAndEnterprise(t *testing.T) {
-	for _, tc := range []struct{ base, want string }{
-		{"https://api.github.com", "https://api.github.com/graphql"},
-		{"https://ghe.example.test/api/v3", "https://ghe.example.test/api/graphql"},
-	} {
-		client := &Client{baseURL: tc.base}
-		if got := client.graphQLURL(); got != tc.want {
-			t.Errorf("graphQLURL(%q) = %q, want %q", tc.base, got, tc.want)
-		}
-	}
-}
-
-func TestFetchPullRequestReadinessPaginatesAndKeepsOneHead(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Variables map[string]any `json:"variables"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
-		}
-		call := calls.Add(1)
-		if call == 1 {
-			if _, ok := request.Variables["reviewCursor"]; ok {
-				t.Fatalf("first request has review cursor: %v", request.Variables)
-			}
-			body := strings.Replace(string(readinessPayload("")),
-				`"reviews":{"pageInfo":{"hasNextPage":false}`,
-				`"reviews":{"pageInfo":{"hasNextPage":true,"endCursor":"reviews-1"}`, 1)
-			_, _ = w.Write([]byte(body))
-			return
-		}
-		if request.Variables["reviewCursor"] != "reviews-1" {
-			t.Fatalf("review cursor = %v", request.Variables["reviewCursor"])
-		}
-		body := strings.Replace(string(readinessPayload("")), `"id":"review"`, `"id":"second-review"`, 1)
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
-	client, err := NewClient(server.URL, "test-token")
+	got, err := FetchPullRequestReadiness(context.Background(), transport, "acme/widgets", 7)
 	if err != nil {
 		t.Fatal(err)
 	}
-	result, err := client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
-	if err != nil {
-		t.Fatal(err)
+	if got.MergeStateStatus != "HAS_HOOKS" || !got.CodexThumbsUp || !got.CodexEyes {
+		t.Fatalf("observation = %+v", got)
 	}
-	evaluation := prreadiness.Evaluate(*result, "chatgpt-codex-connector[bot]", nil)
-	if calls.Load() != 2 || len(result.Reviews) != 2 || !evaluation.Ready {
-		t.Fatalf("calls = %d, reviews = %d, evaluation = %+v", calls.Load(), len(result.Reviews), evaluation)
-	}
-	if result.Reviews[0].ID != "review" || result.Reviews[1].ID != "second-review" {
-		t.Fatalf("reviews from both pages were not retained: %+v", result.Reviews)
+	if len(got.ReviewOpinions) != 1 || got.ReviewOpinions[0].State != "APPROVED" || got.ReviewOpinions[0].Body != "looks good" || len(got.Checks) != 1 || got.Checks[0].State != "failure" {
+		t.Fatalf("opinions/checks = %+v / %+v", got.ReviewOpinions, got.Checks)
 	}
 }
 
-func TestFetchPullRequestReadinessPaginatesReviewRequests(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var request struct {
-			Query     string         `json:"query"`
-			Variables map[string]any `json:"variables"`
+func TestFetchPullRequestReadinessRejectsHeadChangeDuringPagination(t *testing.T) {
+	transport := readinessTransportFunc(func(query string, _ map[string]any) ([]byte, error) {
+		if strings.Contains(query, "query PullRequestReadiness") {
+			return []byte(`{"data":{"repository":{"pullRequest":{
+				"number":7,"state":"OPEN","headRefOid":"head-a","mergeStateStatus":"CLEAN",
+				"reactions":{"nodes":[],"pageInfo":{"hasNextPage":true,"endCursor":"r"}},
+				"latestOpinionatedReviews":{"nodes":[],"pageInfo":{}},"reviews":{"nodes":[],"pageInfo":{}},
+				"commits":{"nodes":[]}
+			}}}}`), nil
 		}
-		if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-			t.Fatal(err)
+		if strings.Contains(query, "query PullRequestReactions") {
+			return []byte(`{"data":{"repository":{"pullRequest":{"headRefOid":"head-b","reactions":{"nodes":[],"pageInfo":{}}}}}}`), nil
 		}
-		if !strings.Contains(request.Query, "detailsUrl") || !strings.Contains(request.Query, "targetUrl") {
-			t.Fatalf("readiness query omits check URLs: %s", request.Query)
-		}
-		body := string(readinessPayload(""))
-		if calls.Add(1) == 1 {
-			if _, ok := request.Variables["requestCursor"]; ok {
-				t.Fatalf("first request has request cursor: %v", request.Variables)
-			}
-			body = strings.Replace(body,
-				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
-				`"reviewRequests":{"pageInfo":{"hasNextPage":true,"endCursor":"requests-1"},"nodes":[{"requestedReviewer":{"__typename":"User","login":"alice"}}]}`, 1)
-		} else {
-			if request.Variables["requestCursor"] != "requests-1" {
-				t.Fatalf("request cursor = %v", request.Variables["requestCursor"])
-			}
-			body = strings.Replace(body,
-				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[]}`,
-				`"reviewRequests":{"pageInfo":{"hasNextPage":false},"nodes":[{"requestedReviewer":{"__typename":"User","login":"bob"}}]}`, 1)
-		}
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
-	client, err := NewClient(server.URL, "test-token")
-	if err != nil {
-		t.Fatal(err)
-	}
-	result, err := client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if calls.Load() != 2 || strings.Join(result.RequestedReviewers, ",") != "alice,bob" {
-		t.Fatalf("calls = %d, requested reviewers = %v", calls.Load(), result.RequestedReviewers)
-	}
-}
-
-func TestFetchPullRequestReadinessRejectsHeadChangeBetweenPages(t *testing.T) {
-	var calls atomic.Int32
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		body := string(readinessPayload(""))
-		if calls.Add(1) == 1 {
-			body = strings.Replace(body,
-				`"reviews":{"pageInfo":{"hasNextPage":false}`,
-				`"reviews":{"pageInfo":{"hasNextPage":true,"endCursor":"reviews-1"}`, 1)
-		} else {
-			body = strings.Replace(body, "abcdef1234567890", "fedcba0987654321", 1)
-		}
-		_, _ = w.Write([]byte(body))
-	}))
-	t.Cleanup(server.Close)
-	client, err := NewClient(server.URL, "test-token")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.FetchPullRequestReadiness(context.Background(), "o/r", 71)
+		return nil, errors.New("unexpected query")
+	})
+	_, err := FetchPullRequestReadiness(context.Background(), transport, "acme/widgets", 7)
 	if !errors.Is(err, ErrReadinessHeadChanged) {
-		t.Fatalf("error = %v, want ErrReadinessHeadChanged", err)
+		t.Fatalf("error = %v, want %v", err, ErrReadinessHeadChanged)
 	}
+}
+
+func TestReadinessPaginationQueriesIncludeHead(t *testing.T) {
+	queries := map[string]string{
+		"reactions": pullRequestReactionPageQuery,
+		"opinions":  pullRequestOpinionPageQuery,
+		"reviews":   pullRequestReviewPageQuery,
+		"checks":    pullRequestCheckPageQuery,
+	}
+	for name, query := range queries {
+		if !strings.Contains(query, "headRefOid") {
+			t.Errorf("%s pagination query does not request headRefOid", name)
+		}
+	}
+}
+
+func TestSelectedOpinionCannotResurrectApprovalAfterDismissal(t *testing.T) {
+	candidate := readinessReview{ID: "approved", State: "APPROVED", SubmittedAt: mustTime(t, "2026-09-20T12:00:00Z"), Author: readinessActor{TypeName: "User", Login: "victor"}}
+	dismissed := readinessReview{ID: "dismissed", State: "DISMISSED", SubmittedAt: mustTime(t, "2026-09-20T12:01:00Z"), Author: readinessActor{TypeName: "User", Login: "victor"}}
+	got := selectReviewOpinion([]readinessReview{candidate}, []readinessReview{candidate, dismissed}, "victor")
+	if got.State != "DISMISSED" {
+		t.Fatalf("opinion = %+v", got)
+	}
+}
+
+func TestFetchPullRequestFeedbackPaginatesCommentsThreadsAndReplies(t *testing.T) {
+	transport := readinessTransportFunc(func(query string, variables map[string]any) ([]byte, error) {
+		switch {
+		case strings.Contains(query, "query PullRequestFeedback"):
+			return []byte(`{"data":{"repository":{"pullRequest":{
+				"comments":{"nodes":[{"id":"c1","bodyText":"one","createdAt":"2026-09-20T12:00:00Z","author":{"__typename":"User","login":"a"}}],"pageInfo":{"hasNextPage":true,"endCursor":"c"}},
+				"reviews":{"nodes":[{"id":"v1","state":"CHANGES_REQUESTED","bodyText":"fix one","submittedAt":"2026-09-20T12:01:30Z","author":{"__typename":"User","login":"victor"}}],"pageInfo":{"hasNextPage":true,"endCursor":"v"}},
+				"reviewThreads":{"nodes":[{"id":"t1","isResolved":true,"comments":{"nodes":[{"id":"i1","bodyText":"inline","createdAt":"2026-09-20T12:01:00Z","path":"x.go","line":4,"author":{"__typename":"User","login":"b"}}],"pageInfo":{"hasNextPage":true,"endCursor":"i"}}}],"pageInfo":{"hasNextPage":true,"endCursor":"t"}}
+			}}}}`), nil
+		case strings.Contains(query, "query PullRequestComments"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"comments":{"nodes":[{"id":"c2","bodyText":"two","createdAt":"2026-09-20T12:02:00Z","author":{"__typename":"User","login":"c"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestThreads"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviewThreads":{"nodes":[{"id":"t2","isResolved":false,"comments":{"nodes":[],"pageInfo":{"hasNextPage":false,"endCursor":""}}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestReviewBodies"):
+			return []byte(`{"data":{"repository":{"pullRequest":{"reviews":{"nodes":[{"id":"v2","state":"COMMENTED","bodyText":"note two","submittedAt":"2026-09-20T12:02:30Z","author":{"__typename":"User","login":"d"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}}`), nil
+		case strings.Contains(query, "query PullRequestThreadComments"):
+			if variables["id"] != "t1" {
+				t.Fatalf("thread id = %v", variables["id"])
+			}
+			return []byte(`{"data":{"node":{"comments":{"nodes":[{"id":"r1","bodyText":"reply","createdAt":"2026-09-20T12:03:00Z","path":"x.go","line":4,"author":{"__typename":"User","login":"d"}}],"pageInfo":{"hasNextPage":false,"endCursor":""}}}}}`), nil
+		default:
+			return nil, errors.New("unexpected query")
+		}
+	})
+	feedback, threads, err := FetchPullRequestFeedback(context.Background(), transport, "acme/widgets", 7)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(feedback) != 6 || feedback[0].Kind != "comment" || feedback[1].Kind != "inline_comment" || feedback[2].Kind != "review" || feedback[2].Body != "fix one" || feedback[4].Kind != "review" || feedback[5].Kind != "reply" {
+		t.Fatalf("feedback = %+v", feedback)
+	}
+	if len(threads) != 2 || threads[0].ID != "t1" || !threads[0].Resolved || threads[1].ID != "t2" {
+		t.Fatalf("threads = %+v", threads)
+	}
+}
+
+func TestFeedbackFailureIsIndependentFromReadiness(t *testing.T) {
+	transport := readinessTransportFunc(func(query string, _ map[string]any) ([]byte, error) {
+		if strings.Contains(query, "query PullRequestReadiness") {
+			return []byte(`{"data":{"repository":{"pullRequest":{"number":1,"state":"OPEN","headRefOid":"h","mergeStateStatus":"CLEAN","reactions":{"pageInfo":{}},"latestOpinionatedReviews":{"pageInfo":{}},"reviews":{"pageInfo":{}},"commits":{"nodes":[]}}}}}`), nil
+		}
+		return nil, errors.New("comments unavailable")
+	})
+	if _, err := FetchPullRequestReadiness(context.Background(), transport, "a/b", 1); err != nil {
+		t.Fatalf("readiness failed: %v", err)
+	}
+	if _, _, err := FetchPullRequestFeedback(context.Background(), transport, "a/b", 1); err == nil {
+		t.Fatal("feedback unexpectedly succeeded")
+	}
+}
+
+func TestGraphQLURLRoutesGitHubAndEnterprise(t *testing.T) {
+	for _, test := range []struct{ base, want string }{
+		{"https://api.github.com", "https://api.github.com/graphql"},
+		{"https://ghe.example/api/v3", "https://ghe.example/api/graphql"},
+	} {
+		client := &Client{baseURL: test.base}
+		if got := client.graphQLURL(); got != test.want {
+			t.Errorf("graphQLURL(%q) = %q, want %q", test.base, got, test.want)
+		}
+	}
+}
+
+func TestGraphQLRequestsResolvedEndpoint(t *testing.T) {
+	for _, test := range []struct{ base, want string }{
+		{"https://api.github.com", "https://api.github.com/graphql"},
+		{"https://ghe.example/api/v3", "https://ghe.example/api/graphql"},
+	} {
+		t.Run(test.base, func(t *testing.T) {
+			client, err := NewClient(test.base, "token")
+			if err != nil {
+				t.Fatal(err)
+			}
+			client.httpClient = &http.Client{Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
+				if got := request.URL.String(); got != test.want {
+					t.Fatalf("request URL = %q, want %q", got, test.want)
+				}
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(`{}`)),
+					Request:    request,
+				}, nil
+			})}
+			if _, err := client.GraphQL(context.Background(), "query Test { viewer { id } }", nil); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return f(request)
+}
+
+func mustTime(t *testing.T, value string) time.Time {
+	t.Helper()
+	parsed, err := time.Parse(time.RFC3339, value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return parsed
 }

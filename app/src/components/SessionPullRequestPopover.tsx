@@ -3,7 +3,6 @@ import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
-import { useOptionalDaemonApi } from '../contexts/DaemonApiContext';
 import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import {
@@ -43,64 +42,7 @@ function Value({ description }: { description: SessionPullRequestDescription }) 
   );
 }
 
-function PullRequestDetails({ current }: { current: SessionPullRequest }) {
-  const githubPollingOffReason = useGitHubPollingOffReason();
-  return (
-    <dl className="session-pr-popover__kv">
-      <dt>state</dt>
-      <dd><span className="session-pr-popover__value">{current.state}</span></dd>
-      {sessionPullRequestAwaitsStatus(current) ? (
-        <>
-          <dt>status</dt>
-          <dd>
-            <span className="session-pr-popover__value">
-              {githubPollingOffReason ? 'GitHub polling is off for this profile' : 'waiting for GitHub'}
-            </span>
-          </dd>
-        </>
-      ) : (
-        <>
-          <dt>checks</dt>
-          <dd><Value description={describeSessionPullRequestChecks(current)} /></dd>
-          <dt>review</dt>
-          <dd><Value description={describeSessionPullRequestReview(current)} /></dd>
-          <dt>merge</dt>
-          <dd><Value description={describeSessionPullRequestMerge(current)} /></dd>
-        </>
-      )}
-      <dt>opened</dt>
-      <dd>
-        <span className="session-pr-popover__value">
-          {[formatAge(current.created_at), new Date(current.created_at).toLocaleString()]
-            .filter(Boolean).join(' · ')}
-        </span>
-      </dd>
-      {current.watching && (
-        <>
-          <dt>watching</dt>
-          <dd>
-            <span className="session-pr-popover__value">
-              {(current.watch_recipients ?? []).join(', ') || 'this session'}
-            </span>
-          </dd>
-          <dt>last check</dt>
-          <dd>
-            <span className="session-pr-popover__value">
-              {current.watch_error
-                ? `delayed · ${current.watch_error}`
-                : current.watch_last_checked_at
-                  ? formatAge(current.watch_last_checked_at)
-                  : 'waiting for first check'}
-            </span>
-          </dd>
-        </>
-      )}
-    </dl>
-  );
-}
-
 export function SessionPullRequestPopover({
-	sessionId,
   pullRequests,
   anchor,
   autoFocus,
@@ -108,7 +50,6 @@ export function SessionPullRequestPopover({
   onPointerEnter,
   onPointerLeave,
 }: {
-	sessionId?: string;
   pullRequests: readonly SessionPullRequest[];
   anchor: PopoverAnchor;
   autoFocus: boolean;
@@ -116,16 +57,14 @@ export function SessionPullRequestPopover({
   onPointerEnter: () => void;
   onPointerLeave: () => void;
 }) {
-  const [stoppingWatchURL, setStoppingWatchURL] = useState('');
-  const [stopWatchError, setStopWatchError] = useState<{ url: string; message: string } | null>(null);
   const cardRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState(anchor);
   const [selected, setSelected] = useState(0);
-  const daemonApi = useOptionalDaemonApi();
 
   // Escape only belongs to a popover the user clicked into. A hover popover
   // that grabbed it would eat the terminal's Escape, which agents live on.
   useEscapeStack(onClose, autoFocus);
+  const githubPollingOffReason = useGitHubPollingOffReason();
 
   useLayoutEffect(() => {
     const card = cardRef.current;
@@ -156,19 +95,6 @@ export function SessionPullRequestPopover({
 
   const current = pullRequests[Math.min(selected, pullRequests.length - 1)];
   if (!current) return null;
-
-  const stopWatching = () => {
-	if (!sessionId || !daemonApi) return;
-    const url = current.url;
-    setStoppingWatchURL(url);
-    setStopWatchError(null);
-	daemonApi.sendPullRequestUnwatch(sessionId, url)
-      .catch((error) => setStopWatchError({
-        url,
-        message: error instanceof Error ? error.message : String(error),
-      }))
-      .finally(() => setStoppingWatchURL((pendingURL) => pendingURL === url ? '' : pendingURL));
-  };
 
   const open = (pr: SessionPullRequest) => {
     openUrl(pr.url).catch((error) => {
@@ -201,6 +127,7 @@ export function SessionPullRequestPopover({
 
   const identity = `${sessionPullRequestRepositoryName(current.repository)}#${current.number}`;
   const summary = describeSessionPullRequest(current);
+  const awaitingStatus = sessionPullRequestAwaitsStatus(current);
 
   return createPortal(
     <div
@@ -229,21 +156,36 @@ export function SessionPullRequestPopover({
         <span className="session-pr-popover__identity">{identity}</span>
       </header>
 
-      <PullRequestDetails current={current} />
-
-      {current.watching && (
-        <button
-          type="button"
-          className="session-pr-popover__stop-watch"
-		  disabled={!daemonApi || !sessionId || stoppingWatchURL === current.url}
-          onClick={stopWatching}
-        >
-          {stoppingWatchURL === current.url ? 'Stopping…' : 'Stop watching for this session'}
-        </button>
-      )}
-      {stopWatchError?.url === current.url && (
-        <p className="session-pr-popover__stop-error" role="alert">{stopWatchError.message}</p>
-      )}
+      <dl className="session-pr-popover__kv">
+        <dt>state</dt>
+        <dd><span className="session-pr-popover__value">{current.state}</span></dd>
+        {awaitingStatus ? (
+          <>
+            <dt>status</dt>
+            <dd>
+              <span className="session-pr-popover__value">
+                {githubPollingOffReason ? 'GitHub polling is off for this profile' : 'waiting for GitHub'}
+              </span>
+            </dd>
+          </>
+        ) : (
+          <>
+            <dt>checks</dt>
+            <dd><Value description={describeSessionPullRequestChecks(current)} /></dd>
+            <dt>review</dt>
+            <dd><Value description={describeSessionPullRequestReview(current)} /></dd>
+            <dt>merge</dt>
+            <dd><Value description={describeSessionPullRequestMerge(current)} /></dd>
+          </>
+        )}
+        <dt>opened</dt>
+        <dd>
+          <span className="session-pr-popover__value">
+            {[formatAge(current.created_at), new Date(current.created_at).toLocaleString()]
+              .filter(Boolean).join(' · ')}
+          </span>
+        </dd>
+      </dl>
 
       {pullRequests.length > 1 && (
         <ul className="session-pr-popover__list" aria-label="Pull requests from this session">

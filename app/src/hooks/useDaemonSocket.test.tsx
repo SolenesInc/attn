@@ -46,20 +46,6 @@ class FakeWebSocket {
   }
 }
 
-function renderSocket(overrides: Partial<Parameters<typeof useDaemonSocket>[0]> = {}) {
-  return renderHook(() =>
-    useDaemonSocket({
-      onSessionsUpdate: vi.fn(),
-      onWorkspacesUpdate: vi.fn(),
-      onPRsUpdate: vi.fn(),
-      onReposUpdate: vi.fn(),
-      onAuthorsUpdate: vi.fn(),
-      wsUrl: 'ws://localhost:9999/ws',
-      ...overrides,
-    }),
-  );
-}
-
 async function waitForOpenSocket(): Promise<FakeWebSocket> {
   await waitFor(() => {
     expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
@@ -119,7 +105,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('waits for session_exited before resolving ptyKill', async () => {
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     await waitFor(() => {
       expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
@@ -151,7 +146,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('resolves or rejects ptyReload from its daemon result', async () => {
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const successfulReload = ptyReload({ id: 'reload-success', cols: 120, rows: 40 });
@@ -177,9 +181,17 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('forwards session_exited to onSessionExited with exit code and signal', async () => {
     const onSessionExited = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionExited,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        onSessionExited,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -194,9 +206,17 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('reattaches with relaunch_restore on runtime_respawned without treating it as an exit', async () => {
     const onSessionExited = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionExited,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        onSessionExited,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     ws.sent = [];
@@ -242,7 +262,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('advertises and handles in-app browser control', async () => {
     vi.mocked(invoke).mockResolvedValue('{"title":"Fixture"}');
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     await waitFor(() => {
@@ -283,7 +312,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('stores daemon git operation lifecycle events by operation id', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -334,7 +372,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('sends force option for delete worktree requests', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -362,7 +409,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('preserves forceable delete worktree failure details on rejection', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const promise = result.current.sendDeleteWorktree('/tmp/repo--feature');
@@ -395,7 +451,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       return true;
     });
 
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -422,9 +487,17 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('serializes endpoint actions so concurrent updates do not collide', async () => {
-    const { result, unmount } = renderSocket({
-      onEndpointsUpdate: vi.fn(),
-    });
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onEndpointsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -448,9 +521,17 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('resolves plugin list and priority actions from daemon events', async () => {
     const onPluginsUpdate = vi.fn();
-    const { result, unmount } = renderSocket({
-      onPluginsUpdate,
-    });
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onPluginsUpdate,
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const listPlugins = result.current.sendListPlugins();
@@ -543,9 +624,17 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('reports daemon-discovered GitHub hosts from snapshots and refresh events', async () => {
     const onGitHubHostsUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onGitHubHostsUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        onGitHubHostsUpdate,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => {
@@ -572,7 +661,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('resolves automation definitions from a correlated automation_definitions_result, ignoring a mismatched request_id', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const request = result.current.listAutomationDefinitions();
@@ -619,7 +717,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('rejects setAutomationEnabled with the daemon error string on failure', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const request = result.current.setAutomationEnabled('d1', false);
@@ -642,7 +749,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('resolves runAutomationNow with the run summary', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const request = result.current.runAutomationNow('d1', 'req-1');
@@ -674,7 +790,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('rejects runAutomationNow with AutomationActionTimeoutError when no result arrives within 30s', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     await waitForOpenSocket();
 
@@ -694,7 +819,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('bumps useAutomationsStore changedTick on automations_changed', async () => {
     useAutomationsStore.getState().reset();
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const before = useAutomationsStore.getState().changedTick;
@@ -709,9 +843,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('keeps shell sessions in daemon session updates', async () => {
     const onSessionsUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => {
@@ -774,9 +915,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('preserves workspace layout when a state update omits layout payload', async () => {
     const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onWorkspacesUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate,
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const layout = {
@@ -864,13 +1012,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
     (window as Window & { __TEST_PTY_EVENTS?: Array<{ event: string; id: string; cols?: number; rows?: number; source?: string }> }).__TEST_PTY_EVENTS = [];
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-      onWorkspacesUpdate,
-      onPRsUpdate,
-      onReposUpdate,
-      onAuthorsUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate,
+        onPRsUpdate,
+        onReposUpdate,
+        onAuthorsUpdate,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -937,7 +1088,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('ignores an attach result after the runtime was detached', async () => {
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     const initialState = {
       event: 'initial_state',
@@ -1000,7 +1160,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('sends measured geometry only with a revive attach policy', async () => {
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     act(() => {
       ws.emit({
@@ -1055,7 +1224,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('includes the owning workspace when spawning a new agent session', async () => {
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const spawnPromise = ptySpawn({
@@ -1093,7 +1271,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('ignores workspace action results without workspace ownership', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const closePromise = result.current.sendWorkspaceClosePane('workspace-1', 'pane-1');
@@ -1147,7 +1334,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('sends set_workspace_rank with neighbour ids and resolves on the action result', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const rankPromise = result.current.sendSetWorkspaceRank('workspace-1', 'workspace-0', 'workspace-2');
@@ -1187,7 +1383,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('omits empty neighbour ids when moving a workspace to an edge', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const rankPromise = result.current.sendSetWorkspaceRank('workspace-1', undefined, 'workspace-2');
@@ -1227,7 +1432,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('sends move_leaf_to_new_workspace and resolves on the leaf-keyed action result', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const movePromise = result.current.sendWorkspaceMoveLeafToNewWorkspace('workspace-1', 'pane-7');
@@ -1282,7 +1496,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('correlates concurrent split resize results by split id', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     result.current.sendSessionSelected('session-selected');
     result.current.sendWorkspaceSelected('workspace-selected');
@@ -1340,7 +1563,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('drops terminal pointer activity until the daemon is ready', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
 
     result.current.sendTerminalPointerActivity('session-pointer');
@@ -1378,7 +1610,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('correlates overlapping resize results for the same split by request id', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     const first = result.current.sendWorkspaceSetSplitRatio('workspace-1', 'split-a', 0.3);
     const second = result.current.sendWorkspaceSetSplitRatio('workspace-1', 'split-a', 0.7);
@@ -1431,7 +1672,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('correlates overlapping tile updates by request id', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     const first = result.current.sendWorkspaceUpdateTile('workspace-1', 'tile-browser', 'https://first.example');
     const second = result.current.sendWorkspaceUpdateTile('workspace-1', 'tile-browser', 'https://second.example');
@@ -1484,7 +1734,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('prunes cached tile content when its layout leaf or workspace disappears', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const ws = await waitForOpenSocket();
     act(() => {
       ws.emit({
@@ -1564,7 +1823,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('refetches persisted tile content after websocket reconnect', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
     const workspace = {
       id: 'workspace-1',
       title: 'one',
@@ -1641,13 +1909,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const onPRsUpdate = vi.fn();
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-      onWorkspacesUpdate,
-      onPRsUpdate,
-      onReposUpdate,
-      onAuthorsUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate,
+        onPRsUpdate,
+        onReposUpdate,
+        onAuthorsUpdate,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -1729,7 +2000,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         reason?: string;
       }>;
     }).__TEST_PTY_EVENTS = [];
-    const { unmount } = renderSocket();
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => {
@@ -1846,10 +2126,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   it('retains workspaces when one agent session disappears', async () => {
     const onSessionsUpdate = vi.fn();
     const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-      onWorkspacesUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate,
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -1910,10 +2196,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   it('invalidates a closed session layout but retains the workspace until workspace_unregistered', async () => {
     const onSessionsUpdate = vi.fn();
     const onWorkspacesUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-      onWorkspacesUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate,
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -2022,9 +2314,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
 
   it('updates a renamed session in place without duplicating the sidebar row', async () => {
     const onSessionsUpdate = vi.fn();
-    const { unmount } = renderSocket({
-      onSessionsUpdate,
-    });
+    const { unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     const session = {
@@ -2057,13 +2356,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     const onPRsUpdate = vi.fn();
     const onReposUpdate = vi.fn();
     const onAuthorsUpdate = vi.fn();
-    const { result, unmount } = renderSocket({
-      onSessionsUpdate,
-      onWorkspacesUpdate,
-      onPRsUpdate,
-      onReposUpdate,
-      onAuthorsUpdate,
-    });
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate,
+        onWorkspacesUpdate,
+        onPRsUpdate,
+        onReposUpdate,
+        onAuthorsUpdate,
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => {
@@ -2113,7 +2415,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('queues sendSetTerminalTheme until initial_state, then flushes it fire-and-forget', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
 
@@ -2153,7 +2464,16 @@ describe('useDaemonSocket PTY kill sequencing', () => {
   });
 
   it('re-pushes the last terminal theme on reconnect without a new sendSetTerminalTheme call', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => {
@@ -2237,7 +2557,16 @@ describe('useDaemonSocket settings refresh', () => {
   });
 
   it('requests a fresh settings snapshot', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
 
     const ws = await waitForOpenSocket();
     act(() => result.current.sendGetSettings());
@@ -2264,6 +2593,19 @@ describe('useDaemonSocket workflow runs', () => {
     vi.clearAllMocks();
     useWorkflowRunsStore.getState().reset();
   });
+
+  function renderSocket() {
+    return renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+  }
 
   it('populates the store on workflow_run_updated', async () => {
     const { unmount } = renderSocket();
@@ -2356,13 +2698,26 @@ describe('useDaemonSocket fs surface', () => {
     vi.clearAllMocks();
   });
 
+  function renderFsHook(extra: Record<string, unknown> = {}) {
+    return renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+        ...extra,
+      }),
+    );
+  }
 
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
 
   it('sends fs_list and resolves entries, converting is_dir to isDir', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendFsList('knowledge');
@@ -2389,7 +2744,7 @@ describe('useDaemonSocket fs surface', () => {
   });
 
   it('omits path from fs_list when listing the root', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendFsList();
@@ -2404,7 +2759,7 @@ describe('useDaemonSocket fs surface', () => {
   });
 
   it('resolves fs_read with the file content and hash', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendFsRead('notes/todo.txt');
@@ -2423,7 +2778,7 @@ describe('useDaemonSocket fs surface', () => {
   });
 
   it('rejects fs_read on a failed result', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendFsRead('gone.txt');
@@ -2436,7 +2791,7 @@ describe('useDaemonSocket fs surface', () => {
   });
 
   it('resolves fs_write, mapping current_hash to currentHash on a conflict', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const ok = result.current.sendFsWrite('a.txt', 'v1');
@@ -2467,7 +2822,7 @@ describe('useDaemonSocket fs surface', () => {
   });
 
   it('sends and resolves fs rename and delete actions', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderFsHook();
     const ws = await waitForOpenSocket();
 
     const rename = result.current.sendFsRename('tickets/tk/plan.md', 'tickets/tk/implementation.md');
@@ -2488,7 +2843,7 @@ describe('useDaemonSocket fs surface', () => {
 
   it('invokes onFsChanged with origin, paths, and root', async () => {
     const onFsChanged = vi.fn();
-    const { unmount } = renderSocket({ onFsChanged });
+    const { unmount } = renderFsHook({ onFsChanged });
     const ws = await waitForOpenSocket();
 
     act(() => {
@@ -2512,13 +2867,25 @@ describe('useDaemonSocket seed resume request/result', () => {
     vi.clearAllMocks();
   });
 
+  function renderSeedHook() {
+    return renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+  }
 
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
 
   it('resolves sendSeedResume with the session to focus on a successful result', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderSeedHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendSeedResume('s-1');
@@ -2543,7 +2910,7 @@ describe('useDaemonSocket seed resume request/result', () => {
   });
 
   it('sends a guarded Handover and resolves its delegated session', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderSeedHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendSeedHandover({
@@ -2581,7 +2948,7 @@ describe('useDaemonSocket seed resume request/result', () => {
   });
 
   it('resolves sendSeedResume with alreadyRunning when the tender was still tracked', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderSeedHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendSeedResume('s-1');
@@ -2600,7 +2967,7 @@ describe('useDaemonSocket seed resume request/result', () => {
   });
 
   it('rejects sendSeedResume when seed_resume_result reports failure', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderSeedHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendSeedResume('missing');
@@ -2635,7 +3002,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
   // Take the socket this render created, by index: the newest instance may be a reconnect leaked from an earlier test.
   async function renderAndOpen(extra: Record<string, unknown> = {}) {
     const before = FakeWebSocket.instances.length;
-    const rendered = renderSocket(extra);
+    const rendered = renderNotebookHook(extra);
     await waitFor(() => {
       expect(FakeWebSocket.instances.length).toBeGreaterThan(before);
     });
@@ -2646,6 +3013,19 @@ describe('useDaemonSocket notebook and annotation events', () => {
     return { ...rendered, ws };
   }
 
+  function renderNotebookHook(extra: Record<string, unknown> = {}) {
+    return renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+        ...extra,
+      }),
+    );
+  }
 
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
@@ -3329,13 +3709,25 @@ describe('useDaemonSocket app commands', () => {
     vi.clearAllMocks();
   });
 
+  function renderAppHook() {
+    return renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+  }
 
   function lastSent(ws: FakeWebSocket): { cmd: string; request_id: string; [k: string]: unknown } {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
 
   it('sends the payload as JSON text and resolves with the handler’s answer', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderAppHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendAppCommand('reviewer', 'approve', { id: 'tk-1' });
@@ -3354,7 +3746,7 @@ describe('useDaemonSocket app commands', () => {
   });
 
   it('carries no payload for a command that takes none, and resolves undefined when it answers nothing', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderAppHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendAppCommand('reviewer', 'refresh');
@@ -3368,7 +3760,7 @@ describe('useDaemonSocket app commands', () => {
   });
 
   it('rejects with the daemon’s refusal, which is what the tile shows', async () => {
-    const { result, unmount } = renderSocket();
+    const { result, unmount } = renderAppHook();
     const ws = await waitForOpenSocket();
 
     const promise = result.current.sendAppCommand('reviewer', 'approve');

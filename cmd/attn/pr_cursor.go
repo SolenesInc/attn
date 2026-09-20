@@ -13,11 +13,12 @@ import (
 )
 
 type prWaitCursor struct {
-	prreadiness.Cursor
-	UpdatedAt *time.Time `json:"updated_at,omitempty"`
+	Mode         prreadiness.Mode   `json:"mode"`
+	Reviewer     string             `json:"reviewer,omitempty"`
+	Readiness    prreadiness.Cursor `json:"readiness"`
+	OutageActive bool               `json:"outage_active,omitempty"`
+	UpdatedAt    time.Time          `json:"updated_at,omitempty"`
 }
-
-const prCursorMaxAge = 30 * 24 * time.Hour
 
 func cursorPath(dir string, opts prWaitOptions) string {
 	host := opts.Host
@@ -49,7 +50,7 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	if dir == "" {
 		return nil
 	}
-	cursor.UpdatedAt = &now
+	cursor.UpdatedAt = now.UTC()
 	path := cursorPath(dir, opts)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -79,6 +80,8 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	return nil
 }
 
+const prCursorMaxAge = 30 * 24 * time.Hour
+
 func prunePRWaitCursors(dir string, now time.Time) {
 	cutoff := now.Add(-prCursorMaxAge)
 	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
@@ -86,7 +89,7 @@ func prunePRWaitCursors(dir string, now time.Time) {
 			return nil
 		}
 		if info, statErr := entry.Info(); statErr == nil && info.ModTime().Before(cutoff) {
-			os.Remove(path)
+			_ = os.Remove(path)
 		}
 		return nil
 	})

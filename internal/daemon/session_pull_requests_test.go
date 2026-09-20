@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -209,23 +208,6 @@ func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 		t.Fatalf("add endpoint: %v", err)
 	}
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-	client.setIdentity("app-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
-	d.handleClientMessage(client, []byte(`{"cmd":"pull_request_unwatch","id":"s-remote","url":"https://github.com/o/r/pull/1","request_id":"remote-unwatch"}`))
-	var result protocol.PullRequestUnwatchResultMessage
-	readNotebookWSEvent(t, client.send, &result)
-	if result.RequestID != "remote-unwatch" || result.Success || !strings.Contains(protocol.Deref(result.Error), "unsupported") {
-		t.Fatalf("remote stop did not return a correlated refusal: %+v", result)
-	}
-	for _, msg := range []any{
-		protocol.PullRequestWatchMessage{Cmd: protocol.CmdPullRequestWatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1", Reviewer: "reviewer"},
-		protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: "s-remote", URL: "https://github.com/o/r/pull/1"},
-	} {
-		resp := sendPRCommand(t, d, msg)
-		if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "remote pull request watches are unsupported") {
-			t.Fatalf("remote watch falsely succeeded: %+v", resp)
-		}
-	}
 
 	for _, msg := range []any{
 		protocol.PullRequestCreatedMessage{
@@ -263,22 +245,6 @@ func TestForwardedPullRequestCommandsLandOnTheOwner(t *testing.T) {
 	}
 }
 
-func TestPullRequestUnwatchWSResultCorrelatesFailure(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-	d.handlePullRequestUnwatchWS(client, &protocol.PullRequestUnwatchMessage{
-		Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: "https://github.com/victorarias/attn/pull/71",
-		RequestID: protocol.Ptr("unwatch-1"),
-	})
-
-	var result protocol.PullRequestUnwatchResultMessage
-	readNotebookWSEvent(t, client.send, &result)
-	if result.RequestID != "unwatch-1" || result.Success || result.Error == nil ||
-		!strings.Contains(*result.Error, "not watching") {
-		t.Fatalf("unwatch result = %+v", result)
-	}
-}
-
 func TestPullRequestForgetIsTheWayOut(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	url := "https://github.com/victorarias/attn/pull/71"
@@ -309,73 +275,6 @@ func TestPullRequestForgetIsTheWayOut(t *testing.T) {
 	}
 }
 
-func TestPullRequestWatchMembershipReprojectsEveryRecordedSession(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	registerSessionForPRTest(t, d, "s2")
-	registerSessionForPRTest(t, d, "s3")
-	url := "https://github.com/victorarias/attn/pull/71"
-	otherURL := "https://github.com/victorarias/attn/pull/72"
-	for _, command := range []protocol.PullRequestCreatedMessage{
-		{Cmd: protocol.CmdPullRequestCreated, ID: "s1", URL: url},
-		{Cmd: protocol.CmdPullRequestCreated, ID: "s2", URL: url},
-		{Cmd: protocol.CmdPullRequestCreated, ID: "s3", URL: otherURL},
-	} {
-		if resp := sendPRCommand(t, d, command); !resp.Ok {
-			t.Fatalf("record response = %+v", resp)
-		}
-	}
-
-	assertUpdates := func(t *testing.T, cap *broadcastCapture, wantRecipients []string, forgotten bool) {
-		t.Helper()
-		for _, sessionID := range []string{"s1", "s2"} {
-			events := sessionUpdates(cap, sessionID)
-			if len(events) != 1 {
-				t.Fatalf("%s session updates = %d, want one", sessionID, len(events))
-			}
-			prs := events[0].Session.PullRequests
-			if forgotten && sessionID == "s1" {
-				if len(prs) != 0 {
-					t.Fatalf("forgotten session pull requests = %+v, want none", prs)
-				}
-				continue
-			}
-			if len(prs) != 1 || !slices.Equal(prs[0].WatchRecipients, wantRecipients) {
-				t.Fatalf("%s pull requests = %+v, want recipients %v", sessionID, prs, wantRecipients)
-			}
-		}
-		if events := sessionUpdates(cap, "s3"); len(events) != 0 {
-			t.Fatalf("unrelated session updates = %d, want none", len(events))
-		}
-	}
-
-	cap := captureBroadcasts(d)
-	watchPRForRefresh(t, d, "s1", url)
-	assertUpdates(t, cap, []string{"workspace-s1"}, false)
-
-	quiet := captureBroadcasts(d)
-	watchPRForRefresh(t, d, "s1", url)
-	if events := quiet.snapshot(); len(events) != 0 {
-		t.Fatalf("unchanged watch broadcasts = %+v", events)
-	}
-
-	cap = captureBroadcasts(d)
-	if resp := sendPRCommand(t, d, protocol.PullRequestUnwatchMessage{
-		Cmd: protocol.CmdPullRequestUnwatch, ID: "s1", URL: url,
-	}); !resp.Ok {
-		t.Fatalf("unwatch response = %+v", resp)
-	}
-	assertUpdates(t, cap, nil, false)
-
-	watchPRForRefresh(t, d, "s1", url)
-	cap = captureBroadcasts(d)
-	if resp := sendPRCommand(t, d, protocol.PullRequestForgetMessage{
-		Cmd: protocol.CmdPullRequestForget, ID: "s1", URL: url,
-	}); !resp.Ok {
-		t.Fatalf("forget response = %+v", resp)
-	}
-	assertUpdates(t, cap, nil, true)
-}
-
 func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	registerSessionForPRTest(t, d, "s2")
@@ -384,8 +283,6 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 	}); !resp.Ok {
 		t.Fatalf("record response = %+v", resp)
 	}
-	registerSessionForPRTest(t, d, "s3")
-	watchPRForRefresh(t, d, "s3", "https://github.com/victorarias/attn/pull/71")
 
 	for _, session := range d.sessionsForBroadcast(d.store.List("")) {
 		switch session.ID {
@@ -393,14 +290,9 @@ func TestSessionsForBroadcastCarryTheirPullRequests(t *testing.T) {
 			if len(session.PullRequests) != 0 {
 				t.Errorf("s1 pull requests = %+v, want none", session.PullRequests)
 			}
-		case "s2", "s3":
+		case "s2":
 			if len(session.PullRequests) != 1 || session.PullRequests[0].Number != 71 {
-				t.Fatalf("%s pull requests = %+v, want the recorded one", session.ID, session.PullRequests)
-			}
-			pr := session.PullRequests[0]
-			if protocol.Deref(pr.Watching) != (session.ID == "s3") ||
-				len(pr.WatchRecipients) != 1 || pr.WatchRecipients[0] != "workspace-s3" {
-				t.Errorf("%s watch metadata = %+v", session.ID, pr)
+				t.Errorf("s2 pull requests = %+v, want the recorded one", session.PullRequests)
 			}
 		}
 	}

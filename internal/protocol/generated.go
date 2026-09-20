@@ -6953,11 +6953,37 @@ type PullRequestWatchMessage struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Mode corresponds to the JSON schema field "mode".
+	Mode PullRequestWatchMode `json:"mode"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
 	// Reviewer corresponds to the JSON schema field "reviewer".
-	Reviewer string `json:"reviewer"`
+	Reviewer *string `json:"reviewer,omitempty,omitzero"`
 
 	// URL corresponds to the JSON schema field "url".
 	URL string `json:"url"`
+}
+
+type PullRequestWatchMode string
+
+const PullRequestWatchModeCodex PullRequestWatchMode = "codex"
+const PullRequestWatchModeFormalReview PullRequestWatchMode = "formal-review"
+const PullRequestWatchModeGreen PullRequestWatchMode = "green"
+
+type PullRequestWatchResultMessage struct {
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
 }
 
 type QueryAuthorsMessage struct {
@@ -9324,7 +9350,7 @@ type SessionMessagesGetResultMessage struct {
 
 type SessionPullRequest struct {
 	// CIStatus corresponds to the JSON schema field "ci_status".
-	CIStatus *SessionPullRequestCheckStatus `json:"ci_status,omitempty,omitzero"`
+	CIStatus *string `json:"ci_status,omitempty,omitzero"`
 
 	// CreatedAt corresponds to the JSON schema field "created_at".
 	CreatedAt string `json:"created_at"`
@@ -9335,11 +9361,20 @@ type SessionPullRequest struct {
 	// Number corresponds to the JSON schema field "number".
 	Number int `json:"number"`
 
+	// ReadinessReason corresponds to the JSON schema field "readiness_reason".
+	ReadinessReason *string `json:"readiness_reason,omitempty,omitzero"`
+
+	// ReadinessState corresponds to the JSON schema field "readiness_state".
+	ReadinessState *string `json:"readiness_state,omitempty,omitzero"`
+
 	// Repository corresponds to the JSON schema field "repository".
 	Repository string `json:"repository"`
 
 	// ReviewStatus corresponds to the JSON schema field "review_status".
-	ReviewStatus *SessionPullRequestReviewStatus `json:"review_status,omitempty,omitzero"`
+	ReviewStatus *string `json:"review_status,omitempty,omitzero"`
+
+	// SettlingUntil corresponds to the JSON schema field "settling_until".
+	SettlingUntil *string `json:"settling_until,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State string `json:"state"`
@@ -9356,33 +9391,25 @@ type SessionPullRequest struct {
 	// WatchError corresponds to the JSON schema field "watch_error".
 	WatchError *string `json:"watch_error,omitempty,omitzero"`
 
+	// WatchHealth corresponds to the JSON schema field "watch_health".
+	WatchHealth *string `json:"watch_health,omitempty,omitzero"`
+
 	// WatchLastCheckedAt corresponds to the JSON schema field
 	// "watch_last_checked_at".
 	WatchLastCheckedAt *string `json:"watch_last_checked_at,omitempty,omitzero"`
 
+	// WatchMode corresponds to the JSON schema field "watch_mode".
+	WatchMode *PullRequestWatchMode `json:"watch_mode,omitempty,omitzero"`
+
 	// WatchRecipients corresponds to the JSON schema field "watch_recipients".
 	WatchRecipients []string `json:"watch_recipients,omitempty,omitzero"`
+
+	// WatchReviewer corresponds to the JSON schema field "watch_reviewer".
+	WatchReviewer *string `json:"watch_reviewer,omitempty,omitzero"`
 
 	// Watching corresponds to the JSON schema field "watching".
 	Watching *bool `json:"watching,omitempty,omitzero"`
 }
-
-type SessionPullRequestCheckStatus string
-
-const SessionPullRequestCheckStatusFailure SessionPullRequestCheckStatus = "failure"
-const SessionPullRequestCheckStatusNone SessionPullRequestCheckStatus = "none"
-const SessionPullRequestCheckStatusPending SessionPullRequestCheckStatus = "pending"
-const SessionPullRequestCheckStatusSuccess SessionPullRequestCheckStatus = "success"
-
-type SessionPullRequestReviewStatus string
-
-const SessionPullRequestReviewStatusApproved SessionPullRequestReviewStatus = "approved"
-const SessionPullRequestReviewStatusChangesRequested SessionPullRequestReviewStatus = "changes_requested"
-const SessionPullRequestReviewStatusNone SessionPullRequestReviewStatus = "none"
-const SessionPullRequestReviewStatusPending SessionPullRequestReviewStatus = "pending"
-const SessionPullRequestReviewStatusUnavailable SessionPullRequestReviewStatus = "unavailable"
-const SessionPullRequestReviewStatusUnresolvedThreads SessionPullRequestReviewStatus = "unresolved_threads"
-const SessionPullRequestReviewStatusWaiting SessionPullRequestReviewStatus = "waiting"
 
 type SessionRegisteredMessage struct {
 	// Event corresponds to the JSON schema field "event".

@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"strings"
 	"testing"
 	"time"
@@ -149,7 +148,7 @@ func TestSettle_ARefreshOnlySweepsWhenSomethingMoved(t *testing.T) {
 	setPRState(t, d, "merged", "Harvest on merge")
 	armOnSettlePR(t, d, seed.ID)
 
-	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 0 || changed != 0 {
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want a tick with nothing to do", fetched, changed)
 	}
 	if status := show(t, d, seed.ID).Seed.Status; status != garden.StatusPlanted {
@@ -173,7 +172,7 @@ func TestSettle_TheRefreshHarvestsWhenTheMergeLands(t *testing.T) {
 		Number: 113, State: "closed", Merged: true, Title: "Harvest a seed when its pull request merges",
 	}})
 
-	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 1 || changed != 1 {
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land", fetched, changed)
 	}
 	got := show(t, d, seed.ID).Seed
@@ -182,69 +181,6 @@ func TestSettle_TheRefreshHarvestsWhenTheMergeLands(t *testing.T) {
 	}
 	if !strings.HasPrefix(protocol.Deref(got.Reason), "PR #113 merged: ") {
 		t.Fatalf("harvest reason = %q, want the merged pull request and its title", protocol.Deref(got.Reason))
-	}
-}
-
-func TestSettle_RefreshFinalizesCommittedGroupsOnCancellation(t *testing.T) {
-	tests := []struct {
-		name   string
-		result func(context.CancelFunc) (*github.PullRequestSnapshot, error)
-	}{
-		{
-			name: "fetch returns cancellation",
-			result: func(cancel context.CancelFunc) (*github.PullRequestSnapshot, error) {
-				cancel()
-				return nil, context.Canceled
-			},
-		},
-		{
-			name: "fetch succeeds after cancellation",
-			result: func(cancel context.CancelFunc) (*github.PullRequestSnapshot, error) {
-				cancel()
-				return openSnapshot("Ignored", "clean", "ignored"), nil
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			d := newGardenDaemon(t)
-			seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "settles before cancellation"})
-			if _, err := d.store.RecordSessionPullRequest(store.SessionPullRequestRecord{
-				SessionID: "sess-a", PRID: "github.com:victorarias/attn#114", Repository: "github.com/victorarias/attn",
-				Number: 114, URL: "https://github.com/victorarias/attn/pull/114",
-			}, time.Now().Add(-time.Minute)); err != nil {
-				t.Fatal(err)
-			}
-			recordSettlePR(t, d, "sess-a")
-			armOnSettlePR(t, d, seed.ID)
-
-			ctx, cancel := context.WithCancel(context.Background())
-			host := &fakePRHost{snapshotFunc: func(_ context.Context, _ string, number int) (*github.PullRequestSnapshot, error) {
-				if number == 114 {
-					return tt.result(cancel)
-				}
-				return &github.PullRequestSnapshot{
-					Number: 113, State: "closed", Merged: true, Title: "Merge before cancellation",
-				}, nil
-			}}
-			serveHost(d, "github.com", host)
-			before := len(docFacts(t, d, FactSessionPullRequestChanged))
-			if fetched, changed := d.refreshSessionPullRequests(ctx, time.Now()); fetched != 1 || changed != 1 {
-				t.Fatalf("refresh = (%d,%d), want (1,1)", fetched, changed)
-			}
-			if got := show(t, d, seed.ID).Seed; got.Status != garden.StatusHarvested {
-				t.Fatalf("committed merge did not settle seed: %+v", got)
-			}
-			facts := docFacts(t, d, FactSessionPullRequestChanged)[before:]
-			if len(facts) != 1 || facts[0].Subject != "sess-a" {
-				t.Fatalf("committed refresh facts = %+v", facts)
-			}
-			for _, rec := range d.store.ListSessionPullRequests("sess-a") {
-				if rec.Number == 114 && (rec.Title != "" || rec.StatusFetchedAt != "") {
-					t.Fatalf("cancelled group was committed: %+v", rec)
-				}
-			}
-		})
 	}
 }
 
@@ -266,7 +202,7 @@ func TestSettle_TheRefreshHarvestsAfterTheArmingSessionCloses(t *testing.T) {
 		Number: 113, State: "closed", Merged: true, Title: "Keep harvest-on-merge alive",
 	}})
 
-	if fetched, changed := d.refreshSessionPullRequests(context.Background(), time.Now()); fetched != 1 || changed != 1 {
+	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
 		t.Fatalf("refresh = (%d fetched, %d changed), want the merge to land after the session closed", fetched, changed)
 	}
 	got := show(t, d, seed.ID).Seed

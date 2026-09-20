@@ -677,8 +677,7 @@ commands:
   workflow <command>                run, inspect, and resume durable workflows
   automation <command>              manage and run durable automations
   preflight                         diagnose tools, paths, routing, and launch settings
-  pr wait-ready <pr>                wait for exact-head checks and approval
-  pr record|ls|forget <url>         pull requests this session opened
+  pr <command>                      watch or inspect pull request readiness
   list                              list sessions and workspaces
   activity [clear <id>]             what each agent is doing right now
   worktree <command>                every tracked worktree, the sweep and the keep pin

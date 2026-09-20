@@ -131,21 +131,10 @@ model PullRequestProvenance {
 // SessionPullRequest is a pull request an agent opened from inside a session,
 // reported by the tool-use hook or `attn pr record`. Status fields stay absent
 // until the refresh job has fetched them from GitHub once.
-enum SessionPullRequestCheckStatus {
-  success,
-  failure,
-  pending,
-  none,
-}
-
-enum SessionPullRequestReviewStatus {
-  none,
-  pending,
-  waiting,
-  approved,
-  changes_requested,
-  unavailable,
-  unresolved_threads,
+enum PullRequestWatchMode {
+  green,
+  codex,
+  formal_review: "formal-review",
 }
 
 model SessionPullRequest {
@@ -155,14 +144,20 @@ model SessionPullRequest {
   title?: string;
   created_at: string;           // ISO timestamp the session reported it
   state: string;                // draft | open | merged | closed
-  ci_status?: SessionPullRequestCheckStatus;
-  review_status?: SessionPullRequestReviewStatus;
+  ci_status?: string;           // success, failure, pending, none — the PR vocabulary
+  review_status?: string;       // approved, changes_requested, pending, none
   mergeable_state?: string;     // clean, blocked, dirty, unstable
   status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
   watching?: boolean;
   watch_recipients?: string[];
-  watch_last_checked_at?: string;
+  watch_mode?: PullRequestWatchMode;
+  watch_reviewer?: string;
+  readiness_state?: string;     // ready | waiting | blocked | merged | closed | unknown
+  readiness_reason?: string;
+  settling_until?: string;
+  watch_health?: string;        // current | delayed
   watch_error?: string;
+  watch_last_checked_at?: string;
 }
 
 // AutomationProvenance is a derived read model. The daemon joins existing
@@ -1037,7 +1032,16 @@ model PullRequestWatchMessage {
   cmd: "pull_request_watch";
   id: string;
   url: string;
-  reviewer: string;
+  mode: PullRequestWatchMode;
+  reviewer?: string;
+  request_id?: string;
+}
+
+model PullRequestWatchResultMessage {
+  event: "pull_request_watch_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
 }
 
 model PullRequestUnwatchMessage {
@@ -7705,6 +7709,7 @@ alias DaemonEvent =
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage
+  | PullRequestWatchResultMessage
   | PullRequestUnwatchResultMessage
   | PRsUpdatedMessage
   | ReposUpdatedMessage

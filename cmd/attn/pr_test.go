@@ -3,11 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -15,219 +11,201 @@ import (
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
-type fakeReadinessSource struct {
-	results []*prReadiness
-	calls   int
-	after   error
+type fakePRSource struct {
+	observation  *prreadiness.Observation
+	feedback     []prreadiness.FeedbackItem
+	threads      []prreadiness.ThreadState
+	readinessErr error
+	feedbackErr  error
 }
 
-func (f *fakeReadinessSource) Fetch(context.Context, prWaitOptions) (*prReadiness, error) {
-	index := f.calls
-	f.calls++
-	if index >= len(f.results) {
-		if f.after != nil {
-			return nil, f.after
+func (source fakePRSource) Readiness(context.Context, prWaitOptions) (*prreadiness.Observation, error) {
+	if source.readinessErr != nil {
+		return nil, source.readinessErr
+	}
+	copy := *source.observation
+	return &copy, nil
+}
+
+func (source fakePRSource) Feedback(context.Context, prWaitOptions) ([]prreadiness.FeedbackItem, []prreadiness.ThreadState, error) {
+	return source.feedback, source.threads, source.feedbackErr
+}
+
+func readyPR() *prreadiness.Observation {
+	return &prreadiness.Observation{Number: 7, URL: "https://github.com/acme/widgets/pull/7", State: "open", HeadSHA: "abcdef012345", MergeStateStatus: "CLEAN"}
+}
+
+func waitOptions() prWaitOptions {
+	return prWaitOptions{Host: "github.com", Owner: "acme", Name: "widgets", Number: 7, Mode: prreadiness.ModeGreen, Timeout: time.Minute, Interval: time.Second}
+}
+
+func TestParsePRWaitArgsModesAndHosts(t *testing.T) {
+	tests := []struct {
+		args       []string
+		wantMode   prreadiness.Mode
+		wantHost   string
+		wantReview string
+	}{
+		{args: []string{"7", "--repo", "acme/widgets"}, wantMode: prreadiness.ModeGreen, wantHost: "github.com"},
+		{args: []string{"https://ghe.example/acme/widgets/pull/7", "--mode", "codex"}, wantMode: prreadiness.ModeCodex, wantHost: "ghe.example"},
+		{args: []string{"7", "--repo", "ghe.example/acme/widgets", "--mode", "formal-review", "--reviewer", "victor"}, wantMode: prreadiness.ModeFormalReview, wantHost: "ghe.example", wantReview: "victor"},
+	}
+	for _, test := range tests {
+		got, err := parsePRWaitArgs(test.args)
+		if err != nil {
+			t.Fatalf("parse %v: %v", test.args, err)
 		}
-		index = len(f.results) - 1
+		if got.Mode != test.wantMode || got.Host != test.wantHost || got.Reviewer != test.wantReview {
+			t.Fatalf("parse %v = %+v", test.args, got)
+		}
 	}
-	return f.results[index], nil
+	if _, err := parsePRWaitArgs([]string{"7", "--repo", "acme/widgets", "--reviewer", "victor"}); err == nil {
+		t.Fatal("green accepted --reviewer")
+	}
 }
 
-func cliObservation(observation prreadiness.Observation, reviewer string) *prReadiness {
-	return readinessForCLI(observation, prWaitOptions{Reviewer: reviewer})
+func TestObservePRReturnsCurrentReadinessAndBaselinesFeedback(t *testing.T) {
+	now := time.Now()
+	source := fakePRSource{observation: readyPR(), feedback: []prreadiness.FeedbackItem{{ID: "old", Kind: "comment", Author: "a", CreatedAt: now.Add(-time.Hour)}}}
+	result := observePR(context.Background(), source, waitOptions(), prWaitCursor{}, now)
+	if result.Outcome != outcomeReady || len(result.Actions) != 1 {
+		t.Fatalf("result = %+v", result)
+	}
+	if len(result.Cursor.Readiness.SeenFeedbackIDs) != 1 {
+		t.Fatalf("cursor = %+v", result.Cursor)
+	}
+	if result.BeforeOutputCursor.Readiness.LastAction != "" {
+		t.Fatalf("before-output cursor acknowledged ready: %+v", result.BeforeOutputCursor)
+	}
 }
 
-func TestWaitForPRActionableUsesSharedTransitionAndPersistsBaseline(t *testing.T) {
-	at := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
-	first := prreadiness.Observation{
-		Number: 303, URL: "https://github.com/SolenesInc/attn/pull/303", State: "open", HeadSHA: "head",
-		MergeableState: "clean", CheckState: prreadiness.ChecksPending,
-		RequestedReviewers: []string{"reviewer"},
-		Comments:           []prreadiness.Comment{{ID: "existing", Author: "human", CreatedAt: at}},
+func TestObservePRResumesFeedbackAndReopenedThreads(t *testing.T) {
+	now := time.Now()
+	opts := waitOptions()
+	firstSource := fakePRSource{
+		observation: readyPR(),
+		feedback:    []prreadiness.FeedbackItem{{ID: "old", Kind: "comment", Author: "a"}},
+		threads:     []prreadiness.ThreadState{{ID: "thread", Resolved: true}},
 	}
-	second := first
-	second.Comments = append(second.Comments, prreadiness.Comment{
-		ID: "new", Author: "human", Body: "Please fix this", CreatedAt: at.Add(time.Minute),
-	})
-	var persisted []prreadiness.Cursor
-	opts := prWaitOptions{
-		Number: 303, Reviewer: "reviewer", Interval: 0,
-		persistCursor: func(cursor prreadiness.Cursor) error {
-			persisted = append(persisted, cursor)
-			return nil
+	first := observePR(context.Background(), firstSource, opts, prWaitCursor{}, now)
+	secondSource := fakePRSource{
+		observation: readyPR(),
+		feedback: []prreadiness.FeedbackItem{
+			{ID: "old", Kind: "comment", Author: "a"},
+			{ID: "reply", Kind: "reply", Author: "b", Body: "answer"},
 		},
+		threads: []prreadiness.ThreadState{{ID: "thread", Resolved: false}},
 	}
-	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{
-		results: []*prReadiness{cliObservation(first, opts.Reviewer), cliObservation(second, opts.Reviewer)},
-	}, opts, prWaitCursor{}, io.Discard)
-	if err != nil || result.Outcome != outcomeComment || len(result.Observation.Comments) != 1 ||
-		result.Observation.Comments[0].ID != "new" {
-		t.Fatalf("result = %+v, err=%v", result, err)
-	}
-	if len(persisted) == 0 || !persisted[0].Initialized || !containsString(persisted[0].SeenCommentIDs, "existing") ||
-		containsString(persisted[0].SeenCommentIDs, "new") {
-		t.Fatalf("baseline was not persisted before delivery: %+v", persisted)
-	}
-	if !containsString(result.Cursor.SeenCommentIDs, "new") {
-		t.Fatalf("next cursor did not advance delivered feedback: %+v", result.Cursor)
+	second := observePR(context.Background(), secondSource, opts, first.Cursor, now.Add(time.Minute))
+	if len(second.Outcomes) != 2 || second.Outcomes[0] != outcomeReply || second.Outcomes[1] != outcomeThreadReopened {
+		t.Fatalf("outcomes = %+v actions=%+v", second.Outcomes, second.Actions)
 	}
 }
 
-func TestWaitForPRActionableReportsHeldRereviewVerdict(t *testing.T) {
-	observation := prreadiness.Observation{
-		Number: 303, State: "open", HeadSHA: "head", MergeableState: "clean", CheckState: prreadiness.ChecksGreen,
-		RequestedReviewers: []string{"reviewer"},
-		Reviews: []prreadiness.Review{{
-			ID: "approval", Author: "reviewer", State: "APPROVED", CommitOID: "head", SubmittedAt: time.Now(),
-		}},
+func TestObservePROutagesCoalesceAndRecoverSilently(t *testing.T) {
+	now := time.Now()
+	opts := waitOptions()
+	failing := fakePRSource{readinessErr: errors.New("rate limited")}
+	first := observePR(context.Background(), failing, opts, prWaitCursor{}, now)
+	if first.Outcome != outcomeMonitoringOutage || !first.Cursor.OutageActive {
+		t.Fatalf("first = %+v", first)
 	}
-	var progress bytes.Buffer
-	result, err := waitForPRActionable(context.Background(), &fakeReadinessSource{
-		results: []*prReadiness{cliObservation(observation, "reviewer")}, after: context.DeadlineExceeded,
-	}, prWaitOptions{Number: 303, Reviewer: "reviewer"}, prWaitCursor{}, &progress)
-	if err != nil || result.Outcome != outcomeTimeout || result.Observation.ReviewState != prreadiness.ReviewWaiting ||
-		!strings.Contains(progress.String(), "verdict predates the pending re-review request") {
-		t.Fatalf("result=%+v err=%v progress=%q", result, err, progress.String())
+	second := observePR(context.Background(), failing, opts, first.Cursor, now.Add(time.Minute))
+	if second.Outcome != "" {
+		t.Fatalf("repeated outage = %+v", second)
 	}
-}
-
-func TestWaitForPRActionableRanksConcurrentEvents(t *testing.T) {
-	at := time.Date(2026, 9, 20, 10, 0, 0, 0, time.UTC)
-	observation := prreadiness.Observation{
-		Number: 303, State: "open", HeadSHA: "head", MergeableState: "clean",
-		CheckState: prreadiness.ChecksFailed,
-		Checks:     []prreadiness.Check{{Name: "CI", State: prreadiness.ChecksFailed}},
-		Comments:   []prreadiness.Comment{{ID: "new", Author: "human", CreatedAt: at.Add(time.Minute)}},
-	}
-	cursor := prWaitCursor{Cursor: prreadiness.Cursor{
-		Initialized: true, Reviewer: "reviewer", HeadSHA: "head", SeenCommentIDs: []string{"old"},
-	}}
-	result, err := waitForPRActionable(
-		context.Background(), &fakeReadinessSource{results: []*prReadiness{cliObservation(observation, "reviewer")}},
-		prWaitOptions{Number: 303, Reviewer: "reviewer"}, cursor, io.Discard,
-	)
-	if err != nil || result.Outcome != outcomeChecksFailed ||
-		strings.Join(outcomesToStrings(result.Events), ",") != "checks_failed,comment" {
-		t.Fatalf("result = %+v, err=%v", result, err)
+	recovered := observePR(context.Background(), fakePRSource{observation: readyPR()}, opts, second.Cursor, now.Add(2*time.Minute))
+	if recovered.Cursor.OutageActive || recovered.Outcome != outcomeReady {
+		t.Fatalf("recovery = %+v", recovered)
 	}
 }
 
-func outcomesToStrings(outcomes []prOutcome) []string {
-	values := make([]string, 0, len(outcomes))
-	for _, outcome := range outcomes {
-		values = append(values, string(outcome))
-	}
-	return values
-}
-
-func TestReportPROutcomeWritesPlainTextAndJSON(t *testing.T) {
-	observation := cliObservation(prreadiness.Observation{
-		Number: 303, URL: "https://github.com/SolenesInc/attn/pull/303", State: "open", HeadSHA: "abcdef1234567890",
-		CheckState: prreadiness.ChecksFailed,
-		Checks:     []prreadiness.Check{{Name: "check:CI", State: prreadiness.ChecksFailed, URL: "https://example.test/ci"}},
-	}, "reviewer")
-	wait := prWaitResult{Observation: observation, Outcome: outcomeChecksFailed, Events: []prOutcome{outcomeChecksFailed}}
-	var plain bytes.Buffer
-	if code := reportPROutcome(wait, prWaitOptions{}, &plain); code != prWaitExitChecksFailed ||
-		!strings.Contains(plain.String(), "check:CI https://example.test/ci") {
-		t.Fatalf("plain report = %q, code=%d", plain.String(), code)
-	}
-	var encoded bytes.Buffer
-	if code := reportPROutcome(wait, prWaitOptions{JSON: true}, &encoded); code != prWaitExitChecksFailed {
-		t.Fatalf("json code = %d", code)
-	}
-	var payload map[string]any
-	if err := json.Unmarshal(encoded.Bytes(), &payload); err != nil || payload["outcome"] != "checks_failed" {
-		t.Fatalf("json report = %q, err=%v", encoded.String(), err)
+func TestFeedbackFailureLeavesReadinessUsableAndVisible(t *testing.T) {
+	result := observePR(context.Background(), fakePRSource{observation: readyPR(), feedbackErr: errors.New("threads unavailable")}, waitOptions(), prWaitCursor{}, time.Now())
+	if result.Outcome != outcomeReady || result.Health != "delayed" || !strings.Contains(result.HealthError, "threads unavailable") {
+		t.Fatalf("result = %+v", result)
 	}
 }
 
-func TestDescribePROutcomeDistinguishesUnresolvedThreads(t *testing.T) {
-	result := &prReadiness{
-		HeadSHA: "abcdef1234567890", Reviewer: "reviewer", ReviewState: prreadiness.ReviewUnresolved,
+func TestFeedbackRecoveryPreservesSinceCutoff(t *testing.T) {
+	now := time.Now()
+	opts := waitOptions()
+	opts.Since = now.Add(-time.Minute)
+	observation := readyPR()
+	observation.MergeStateStatus = "BLOCKED"
+	first := observePR(context.Background(), fakePRSource{
+		observation: observation,
+		feedbackErr: errors.New("threads unavailable"),
+	}, opts, prWaitCursor{}, now)
+	if !first.Cursor.Readiness.FeedbackBaselinePending {
+		t.Fatalf("first cursor = %+v", first.Cursor)
 	}
-	if got := describePROutcome(result, outcomeChangesRequested, prWaitOptions{}); got != "unresolved review threads block abcdef123456" {
-		t.Fatalf("description = %q", got)
+	second := observePR(context.Background(), fakePRSource{
+		observation: observation,
+		feedback: []prreadiness.FeedbackItem{
+			{ID: "old", Kind: "comment", CreatedAt: now.Add(-time.Hour)},
+			{ID: "new", Kind: "review", CreatedAt: now},
+		},
+	}, opts, first.Cursor, now.Add(time.Second))
+	if second.Outcome != outcomeComment || len(second.Actions) != 1 || second.Actions[0].ID != "feedback:new" {
+		t.Fatalf("recovery result = %+v", second)
 	}
 }
 
-func TestPRWaitCursorRoundTripsCanonicalState(t *testing.T) {
+func TestSinceReportsOnlyNewFeedback(t *testing.T) {
+	now := time.Now()
+	opts := waitOptions()
+	opts.Since = now.Add(-time.Minute)
+	observation := readyPR()
+	observation.MergeStateStatus = "BLOCKED"
+	result := observePR(context.Background(), fakePRSource{
+		observation: observation,
+		feedback: []prreadiness.FeedbackItem{
+			{ID: "old", Kind: "comment", Author: "a", CreatedAt: now.Add(-time.Hour)},
+			{ID: "new", Kind: "comment", Author: "b", CreatedAt: now},
+		},
+	}, opts, prWaitCursor{}, now)
+	if result.Outcome != outcomeComment || len(result.Actions) != 1 || result.Actions[0].Feedback.ID != "new" {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
+func TestReportPROutcomeIncludesModeStateHealthAndDeadline(t *testing.T) {
+	deadline := time.Now().Add(time.Minute).UTC()
+	result := prWaitResult{
+		Outcome: outcomeReady, Outcomes: []prOutcome{outcomeReady}, Observation: readyPR(),
+		Evaluation: prreadiness.Evaluation{State: "ready", Reason: "green", Description: "ready", SettlingUntil: &deadline},
+		Health:     "ok",
+	}
+	opts := waitOptions()
+	opts.JSON = true
+	var output bytes.Buffer
+	if code := reportPROutcome(result, opts, &output); code != 0 {
+		t.Fatalf("exit = %d", code)
+	}
+	for _, want := range []string{`"mode": "green"`, `"state": "ready"`, `"health": "ok"`, `"head": "abcdef012345"`} {
+		if !strings.Contains(output.String(), want) {
+			t.Fatalf("output %q missing %q", output.String(), want)
+		}
+	}
+}
+
+func TestCursorRoundTripPreservesModeTemporalAndDeliveryState(t *testing.T) {
 	dir := t.TempDir()
-	opts := prWaitOptions{Host: "github.com", Owner: "SolenesInc", Name: "attn", Number: 303}
-	saved := prWaitCursor{Cursor: prreadiness.Cursor{
-		Initialized: true, Reviewer: "reviewer", HeadSHA: "head",
-		SignalBaselineIDs: []string{"signal"}, SeenCommentIDs: []string{"comment"},
-		DeliveredFeedbackIDs: []string{"feedback"}, SeenVerdictIDs: []string{"verdict"}, LastActionKey: "action",
-	}}
-	if err := savePRWaitCursor(dir, opts, saved, time.Unix(10, 0)); err != nil {
+	opts := waitOptions()
+	now := time.Now().UTC().Truncate(time.Second)
+	cursor := prWaitCursor{
+		Mode: prreadiness.ModeCodex, OutageActive: true,
+		Readiness: prreadiness.Cursor{Initialized: true, HeadSHA: "head", HeadObservedAt: now, SeenFeedbackIDs: []string{"f"}, ThreadStates: map[string]bool{"t": true}},
+	}
+	if err := savePRWaitCursor(dir, opts, cursor, now); err != nil {
 		t.Fatal(err)
 	}
-	loaded, err := loadPRWaitCursor(dir, opts)
-	if err != nil || loaded.HeadSHA != "head" || loaded.LastActionKey != "action" ||
-		strings.Join(loaded.SeenCommentIDs, ",") != "comment" ||
-		strings.Join(loaded.DeliveredFeedbackIDs, ",") != "feedback" {
-		t.Fatalf("loaded = %+v, err=%v", loaded, err)
-	}
-	data, err := os.ReadFile(cursorPath(dir, opts))
+	got, err := loadPRWaitCursor(dir, opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, obsolete := range []string{"comment_ids", "verdict_at", "reaction_head", "failure_head"} {
-		if bytes.Contains(data, []byte(`"`+obsolete+`"`)) {
-			t.Fatalf("cursor retained obsolete field %q: %s", obsolete, data)
-		}
-	}
-}
-
-func TestPRWaitCursorWithoutDirectoryIsInert(t *testing.T) {
-	if err := savePRWaitCursor("", prWaitOptions{Number: 1}, prWaitCursor{}, time.Unix(1, 0)); err != nil {
-		t.Fatal(err)
-	}
-	if loaded, err := loadPRWaitCursor("", prWaitOptions{Number: 1}); err != nil || loaded.Initialized {
-		t.Fatalf("loaded = %+v, err=%v", loaded, err)
-	}
-}
-
-func TestParsePRWaitArgs(t *testing.T) {
-	opts, err := parsePRWaitArgs([]string{
-		"https://github.com/SolenesInc/attn/pull/303", "--reviewer", "chatgpt-codex-connector[bot]",
-		"--timeout", "2m", "--interval", "3s", "--since", "2026-09-20T10:00:00Z", "--json",
-	})
-	if err != nil || opts.Owner != "solenesinc" || opts.Name != "attn" || opts.Number != 303 ||
-		opts.Timeout != 2*time.Minute || opts.Interval != 3*time.Second || !opts.JSON || opts.Since.IsZero() {
-		t.Fatalf("opts = %+v, err=%v", opts, err)
-	}
-	if _, err := parsePRWaitArgs([]string{"303", "--reviewer", "reviewer"}); err == nil {
-		t.Fatal("number without --repo succeeded")
-	}
-}
-
-func TestResolvePRSelfLoginIsSkippableAndFailureTolerant(t *testing.T) {
-	original := ghSelfLogin
-	t.Cleanup(func() { ghSelfLogin = original })
-	ghSelfLogin = func(context.Context, string) (string, error) { return "", errors.New("offline") }
-	var stderr bytes.Buffer
-	if got := resolvePRSelfLogin(context.Background(), prWaitOptions{}, &stderr); got != "" ||
-		!strings.Contains(stderr.String(), "own comments will be reported") {
-		t.Fatalf("login = %q, stderr=%q", got, stderr.String())
-	}
-	stderr.Reset()
-	if got := resolvePRSelfLogin(context.Background(), prWaitOptions{IncludeSelf: true}, &stderr); got != "" || stderr.Len() != 0 {
-		t.Fatalf("include-self login = %q, stderr=%q", got, stderr.String())
-	}
-}
-
-func TestExecutePRCommandShowsSubcommandHelp(t *testing.T) {
-	var output bytes.Buffer
-	if code := executePRCommand([]string{"wait-ready", "--help"}, &output, io.Discard); code != 0 ||
-		!strings.Contains(output.String(), "attn pr wait-ready") {
-		t.Fatalf("help = %q, code=%d", output.String(), code)
-	}
-}
-
-func TestCursorPathUsesRepositoryIdentity(t *testing.T) {
-	path := cursorPath("/tmp/state", prWaitOptions{Host: "ghe.example", Owner: "o", Name: "r", Number: 7})
-	if path != filepath.Join("/tmp/state", "ghe.example", "o", "r", "7.json") {
-		t.Fatalf("path = %q", path)
+	if got.Mode != cursor.Mode || !got.OutageActive || got.Readiness.HeadSHA != "head" || !got.Readiness.ThreadStates["t"] {
+		t.Fatalf("cursor = %+v", got)
 	}
 }

@@ -139,7 +139,6 @@ import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
-import { handlePullRequestDaemonEvent } from './daemonPullRequestEvents';
 
 export type DaemonSession = GeneratedSession;
 
@@ -313,7 +312,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '316';
+export const PROTOCOL_VERSION = '317';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -2879,7 +2878,6 @@ export function useDaemonSocket({
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
-            if (handlePullRequestDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
               onWorktreeSwept: (entry) => useWorktreeStore.getState().swept(entry),
@@ -5110,14 +5108,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'trigger_nudge', session_id: sessionId }));
   }, []);
 
-  const sendPullRequestUnwatch = useCallback((sessionId: string, url: string): Promise<void> => {
-    return sendRequest<true>(
-      'pull_request_unwatch',
-      { id: sessionId, url },
-      'Stopping the pull request watch timed out',
-    ).then(() => undefined);
-  }, [sendRequest]);
-
   const sendSettleTurn = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -5585,7 +5575,6 @@ export function useDaemonSocket({
     sendAutoModeEnvNotes,
     sendBusSetConsumerEnabled,
     sendTriggerNudge,
-    sendPullRequestUnwatch,
     sendSettleTurn,
     sendSnoozeTurn,
     sendWakeTurn,

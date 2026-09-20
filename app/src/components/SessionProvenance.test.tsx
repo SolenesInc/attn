@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { SessionPullRequestCheckStatus, type SessionPullRequest } from '../types/generated';
+import type { SessionPullRequest } from '../types/generated';
 import { SessionProvenance } from './SessionProvenance';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
@@ -106,7 +106,7 @@ describe('SessionProvenance', () => {
   });
 
   it('puts the automation run and the session PR on the same line', () => {
-    render(<SessionProvenance automation={provenance} pullRequests={[pr({ ci_status: SessionPullRequestCheckStatus.Failure })]} />);
+    render(<SessionProvenance automation={provenance} pullRequests={[pr({ ci_status: 'failure' })]} />);
 
     expect(screen.getByText('Automation')).toBeInTheDocument();
     expect(screen.getByText('PR')).toBeInTheDocument();
@@ -114,17 +114,10 @@ describe('SessionProvenance', () => {
     expect(screen.getByText('checks failed')).toBeInTheDocument();
   });
 
-  it('shows watching separately from review and CI state', () => {
-    render(<SessionProvenance pullRequests={[pr({ watching: true, ci_status: SessionPullRequestCheckStatus.Pending })]} />);
-
-    expect(screen.getByText('checks running')).toBeInTheDocument();
-    expect(screen.getByText('Watching')).toBeInTheDocument();
-  });
-
   it('shows the newest open PR, not the newer merged one', () => {
     render(<SessionProvenance pullRequests={[
       pr({ number: 74, state: 'merged', created_at: '2026-08-30T14:00:00Z' }),
-      pr({ number: 71, state: 'open', ci_status: SessionPullRequestCheckStatus.Pending, created_at: '2026-08-30T10:00:00Z' }),
+      pr({ number: 71, state: 'open', ci_status: 'pending', created_at: '2026-08-30T10:00:00Z' }),
     ]} />);
 
     expect(screen.getByText('attn#71')).toBeInTheDocument();
@@ -147,7 +140,7 @@ describe('SessionProvenance', () => {
 
   it('opens the popover from the PR entry and lists every PR of the session', () => {
     render(<SessionProvenance interactive pullRequests={[
-      pr({ number: 74, state: 'open', ci_status: SessionPullRequestCheckStatus.Pending, created_at: '2026-08-30T14:00:00Z' }),
+      pr({ number: 74, state: 'open', ci_status: 'pending', created_at: '2026-08-30T14:00:00Z' }),
       pr({ number: 71, state: 'merged', created_at: '2026-08-30T10:00:00Z' }),
     ]} />);
 

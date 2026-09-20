@@ -1,12 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
-import {
-  BuiltinDelegationRole,
-  SessionPullRequestCheckStatus,
-  SessionPullRequestReviewStatus,
-  type SessionDelegationRole,
-} from '../types/generated';
+import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { buildWorkspaceViewModels, type WorkspaceWithSessions } from '../utils/workspaceViewModels';
 
@@ -243,7 +238,7 @@ describe('Sidebar', () => {
     }
 
     it('shows the newest open pull request beside the name, not under it', () => {
-      const row = renderRow([pr(71, 'open', { ci_status: SessionPullRequestCheckStatus.Failure })]);
+      const row = renderRow([pr(71, 'open', { ci_status: 'failure' })]);
 
       const headline = row.querySelector('.sidebar-session-headline');
       const entry = headline?.querySelector('.sidebar-session-pr');
@@ -255,7 +250,7 @@ describe('Sidebar', () => {
     });
 
     it('keeps the status out of the row and in the tooltip, so the name keeps its width', () => {
-      const row = renderRow([pr(71, 'open', { review_status: SessionPullRequestReviewStatus.ChangesRequested })]);
+      const row = renderRow([pr(71, 'open', { review_status: 'changes_requested' })]);
 
       const entry = row.querySelector('.sidebar-session-pr');
       expect(entry?.textContent).toBe('#71');
@@ -296,7 +291,7 @@ describe('Sidebar', () => {
 
     it('keeps the whole number beside a long name, which is the half that truncates', () => {
       const row = renderRow(
-        [pr(71, 'open', { ci_status: SessionPullRequestCheckStatus.Pending })],
+        [pr(71, 'open', { ci_status: 'pending' })],
         'delegate: rebuild the entire attention ledger projection pipeline',
       );
 

@@ -13,221 +13,141 @@ import (
 	"github.com/victorarias/attn/internal/prreadiness"
 )
 
-var ErrReadinessTruncated = errors.New("pull request readiness exceeds a GitHub page")
-var ErrReadinessHeadChanged = errors.New("pull request head changed while reading readiness")
-
 type QueryTransport interface {
 	GraphQL(context.Context, string, map[string]any) ([]byte, error)
 }
 
 type readinessPageInfo struct {
-	HasNextPage     bool   `json:"hasNextPage"`
-	HasPreviousPage bool   `json:"hasPreviousPage"`
-	EndCursor       string `json:"endCursor"`
+	HasNextPage bool   `json:"hasNextPage"`
+	EndCursor   string `json:"endCursor"`
 }
 
-type readinessComment struct {
-	ID           string    `json:"id"`
-	BodyText     string    `json:"bodyText"`
-	CreatedAt    time.Time `json:"createdAt"`
-	Path         string    `json:"path"`
-	Line         *int      `json:"line"`
-	OriginalLine *int      `json:"originalLine"`
-	Author       struct {
-		TypeName string `json:"__typename"`
-		Login    string `json:"login"`
-	} `json:"author"`
-	PullRequestReview *struct {
-		Commit struct {
-			OID string `json:"oid"`
-		} `json:"commit"`
-	} `json:"pullRequestReview"`
+type readinessActor struct {
+	TypeName string `json:"__typename"`
+	ID       string `json:"id"`
+	Login    string `json:"login"`
 }
 
-type readinessComments struct {
-	PageInfo readinessPageInfo  `json:"pageInfo"`
-	Nodes    []readinessComment `json:"nodes"`
+type readinessReaction struct {
+	ID      string         `json:"id"`
+	Content string         `json:"content"`
+	User    readinessActor `json:"user"`
 }
 
 type readinessReview struct {
-	ID          string    `json:"id"`
-	State       string    `json:"state"`
-	BodyText    string    `json:"bodyText"`
-	SubmittedAt time.Time `json:"submittedAt"`
-	Author      struct {
-		TypeName string `json:"__typename"`
-		Login    string `json:"login"`
-	} `json:"author"`
-	Commit struct {
-		OID string `json:"oid"`
-	} `json:"commit"`
-	Comments readinessComments `json:"comments"`
+	ID          string         `json:"id"`
+	State       string         `json:"state"`
+	BodyText    string         `json:"bodyText"`
+	SubmittedAt time.Time      `json:"submittedAt"`
+	Author      readinessActor `json:"author"`
 }
 
 type readinessCheck struct {
 	TypeName   string `json:"__typename"`
+	ID         string `json:"id"`
 	Name       string `json:"name"`
+	Context    string `json:"context"`
 	Status     string `json:"status"`
 	Conclusion string `json:"conclusion"`
+	State      string `json:"state"`
 	DetailsURL string `json:"detailsUrl"`
 	TargetURL  string `json:"targetUrl"`
-	Context    string `json:"context"`
-	State      string `json:"state"`
 }
 
-type readinessReaction struct {
-	ID        string    `json:"id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"createdAt"`
-	User      struct {
-		Login string `json:"login"`
-	} `json:"user"`
-}
-
-type readinessThread struct {
-	ID         string            `json:"id"`
-	IsResolved bool              `json:"isResolved"`
-	Comments   readinessComments `json:"comments"`
+type readinessConnection[T any] struct {
+	Nodes    []T               `json:"nodes"`
+	PageInfo readinessPageInfo `json:"pageInfo"`
 }
 
 type readinessPullRequest struct {
-	ReviewRequests struct {
-		PageInfo readinessPageInfo `json:"pageInfo"`
-		Nodes    []struct {
-			RequestedReviewer struct {
-				TypeName string `json:"__typename"`
-				Login    string `json:"login"`
-			} `json:"requestedReviewer"`
-		} `json:"nodes"`
-	} `json:"reviewRequests"`
-	Number           int    `json:"number"`
-	URL              string `json:"url"`
-	Title            string `json:"title"`
-	BodyText         string `json:"bodyText"`
-	IsDraft          bool   `json:"isDraft"`
-	State            string `json:"state"`
-	Merged           bool   `json:"merged"`
-	MergeStateStatus string `json:"mergeStateStatus"`
-	HeadRefOID       string `json:"headRefOid"`
-	HeadRefName      string `json:"headRefName"`
-	BaseRefOID       string `json:"baseRefOid"`
-	BaseRefName      string `json:"baseRefName"`
-	Author           struct {
-		Login string `json:"login"`
-	} `json:"author"`
-	HeadRepository struct {
-		NameWithOwner string `json:"nameWithOwner"`
-	} `json:"headRepository"`
-	BaseRepository struct {
-		NameWithOwner string `json:"nameWithOwner"`
-	} `json:"baseRepository"`
-	Commits struct {
+	Number           int                                    `json:"number"`
+	URL              string                                 `json:"url"`
+	Title            string                                 `json:"title"`
+	State            string                                 `json:"state"`
+	IsDraft          bool                                   `json:"isDraft"`
+	Merged           bool                                   `json:"merged"`
+	HeadRefOID       string                                 `json:"headRefOid"`
+	HeadRefName      string                                 `json:"headRefName"`
+	MergeStateStatus string                                 `json:"mergeStateStatus"`
+	ReviewDecision   string                                 `json:"reviewDecision"`
+	Reactions        readinessConnection[readinessReaction] `json:"reactions"`
+	LatestOpinions   readinessConnection[readinessReview]   `json:"latestOpinionatedReviews"`
+	Reviews          readinessConnection[readinessReview]   `json:"reviews"`
+	Commits          struct {
 		Nodes []struct {
 			Commit struct {
 				StatusCheckRollup *struct {
-					Contexts struct {
-						PageInfo readinessPageInfo `json:"pageInfo"`
-						Nodes    []readinessCheck  `json:"nodes"`
-					} `json:"contexts"`
+					Contexts readinessConnection[readinessCheck] `json:"contexts"`
 				} `json:"statusCheckRollup"`
 			} `json:"commit"`
 		} `json:"nodes"`
 	} `json:"commits"`
-	Reviews struct {
-		PageInfo readinessPageInfo `json:"pageInfo"`
-		Nodes    []readinessReview `json:"nodes"`
-	} `json:"reviews"`
-	Comments struct {
-		PageInfo readinessPageInfo  `json:"pageInfo"`
-		Nodes    []readinessComment `json:"nodes"`
-	} `json:"comments"`
-	Reactions struct {
-		PageInfo readinessPageInfo   `json:"pageInfo"`
-		Nodes    []readinessReaction `json:"nodes"`
-	} `json:"reactions"`
-	ReviewThreads struct {
-		PageInfo readinessPageInfo `json:"pageInfo"`
-		Nodes    []readinessThread `json:"nodes"`
-	} `json:"reviewThreads"`
-}
-
-type readinessResponse struct {
-	Data struct {
-		Repository struct {
-			PullRequest *readinessPullRequest `json:"pullRequest"`
-		} `json:"repository"`
-	} `json:"data"`
-	Errors []struct {
-		Message string `json:"message"`
-	} `json:"errors"`
 }
 
 const pullRequestReadinessQuery = `
-query($owner:String!,$name:String!,$number:Int!,$requestCursor:String,$checkCursor:String,$reviewCursor:String,$commentCursor:String,$reactionCursor:String,$threadCursor:String){
+query PullRequestReadiness($owner:String!,$name:String!,$number:Int!){
   repository(owner:$owner,name:$name){pullRequest(number:$number){
-    number url title bodyText isDraft state merged mergeStateStatus headRefOid headRefName
-    author{login} baseRefOid baseRefName
-    headRepository{nameWithOwner} baseRepository{nameWithOwner}
-    reviewRequests(first:100,after:$requestCursor){pageInfo{hasNextPage endCursor} nodes{requestedReviewer{__typename ... on User{login}}}}
-    commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100,after:$checkCursor){
-      pageInfo{hasNextPage endCursor} nodes{__typename ... on CheckRun{name status conclusion detailsUrl} ... on StatusContext{context state targetUrl}}
+    number url title state isDraft merged headRefOid headRefName mergeStateStatus reviewDecision
+    reactions(first:100){nodes{id content user{__typename id login}} pageInfo{hasNextPage endCursor}}
+    latestOpinionatedReviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){
+      nodes{__typename ... on CheckRun{id name status conclusion detailsUrl} ... on StatusContext{id context state targetUrl}}
+      pageInfo{hasNextPage endCursor}
     }}}}}
-    reviews(first:100,after:$reviewCursor){pageInfo{hasNextPage endCursor} nodes{id state bodyText submittedAt author{__typename login} commit{oid}
-      comments(first:100){pageInfo{hasNextPage endCursor} nodes{id bodyText createdAt path line originalLine author{__typename login}}}}}
-    comments(first:100,after:$commentCursor){pageInfo{hasNextPage endCursor} nodes{id bodyText createdAt author{__typename login}}}
-		reactions(first:100,after:$reactionCursor){pageInfo{hasNextPage endCursor} nodes{id content createdAt user{login}}}
-    reviewThreads(first:100,after:$threadCursor){pageInfo{hasNextPage endCursor} nodes{id isResolved comments(first:1){
-      nodes{id bodyText createdAt path line originalLine author{__typename login} pullRequestReview{commit{oid}}}
-    }}}
-  }}}
-`
-
-const pullRequestReviewCommentsQuery = `
-query($owner:String!,$name:String!,$number:Int!,$id:ID!,$cursor:String!){
-  repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid}}
-  node(id:$id){... on PullRequestReview{comments(first:100,after:$cursor){
-    pageInfo{hasNextPage endCursor} nodes{id bodyText createdAt path line originalLine author{__typename login}}
   }}}
 }`
 
+const pullRequestReactionPageQuery = `
+query PullRequestReactions($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    headRefOid
+    reactions(first:100,after:$cursor){nodes{id content user{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestOpinionPageQuery = `
+query PullRequestOpinions($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    headRefOid
+    latestOpinionatedReviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestReviewPageQuery = `
+query PullRequestReviews($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    headRefOid
+    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestCheckPageQuery = `
+query PullRequestChecks($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid commits(last:1){nodes{commit{statusCheckRollup{
+    contexts(first:100,after:$cursor){
+      nodes{__typename ... on CheckRun{id name status conclusion detailsUrl} ... on StatusContext{id context state targetUrl}}
+      pageInfo{hasNextPage endCursor}
+    }
+  }}}}}}
+}`
+
+var ErrReadinessHeadChanged = errors.New("pull request head changed while reading readiness")
+
 func FetchPullRequestReadiness(ctx context.Context, transport QueryTransport, repo string, number int) (*prreadiness.Observation, error) {
-	owner, name, ok := strings.Cut(strings.Trim(repo, "/"), "/")
-	if !ok || owner == "" || name == "" {
-		return nil, fmt.Errorf("invalid repository %q", repo)
+	owner, name, err := splitRepository(repo)
+	if err != nil {
+		return nil, err
 	}
 	variables := map[string]any{"owner": owner, "name": name, "number": number}
-	var combined *readinessPullRequest
-	for {
-		body, err := transport.GraphQL(ctx, pullRequestReadinessQuery, variables)
-		if err != nil {
-			return nil, fmt.Errorf("fetch pull request readiness: %w", err)
-		}
-		current, err := decodePullRequestReadiness(body)
-		if err != nil {
-			return nil, err
-		}
-		if combined == nil {
-			combined = current
-		} else {
-			if current.HeadRefOID != combined.HeadRefOID {
-				return nil, ErrReadinessHeadChanged
-			}
-			mergeReadinessPage(combined, current)
-		}
-		more, err := advanceReadinessCursors(variables, current)
-		if err != nil {
-			return nil, err
-		}
-		if !more {
-			break
-		}
+	pr, err := fetchReadinessPage(ctx, transport, pullRequestReadinessQuery, variables)
+	if err != nil {
+		return nil, err
 	}
-	for i := range combined.Reviews.Nodes {
-		if err := fetchRemainingReviewComments(ctx, transport, owner, name, number, combined.HeadRefOID, &combined.Reviews.Nodes[i]); err != nil {
-			return nil, err
-		}
+	if err := appendReadinessPages(ctx, transport, variables, pr); err != nil {
+		return nil, err
 	}
-	return buildPullRequestReadiness(combined), nil
+	return buildReadinessObservation(pr), nil
 }
 
 func (c *Client) FetchPullRequestReadiness(ctx context.Context, repo string, number int) (*prreadiness.Observation, error) {
@@ -236,113 +156,6 @@ func (c *Client) FetchPullRequestReadiness(ctx context.Context, repo string, num
 
 func (c *Client) GraphQL(ctx context.Context, query string, variables map[string]any) ([]byte, error) {
 	return c.doRequestContext(ctx, "POST", c.graphQLURL(), map[string]any{"query": query, "variables": variables})
-}
-
-func fetchRemainingReviewComments(
-	ctx context.Context,
-	transport QueryTransport,
-	owner, name string,
-	number int,
-	head string,
-	review *readinessReview,
-) error {
-	for review.Comments.PageInfo.HasNextPage {
-		cursor := review.Comments.PageInfo.EndCursor
-		if cursor == "" {
-			return ErrReadinessTruncated
-		}
-		body, err := transport.GraphQL(ctx, pullRequestReviewCommentsQuery, map[string]any{
-			"owner": owner, "name": name, "number": number, "id": review.ID, "cursor": cursor,
-		})
-		if err != nil {
-			return fmt.Errorf("fetch pull request review comments: %w", err)
-		}
-		var payload struct {
-			Data struct {
-				Repository struct {
-					PullRequest *struct {
-						HeadRefOID string `json:"headRefOid"`
-					} `json:"pullRequest"`
-				} `json:"repository"`
-				Node *struct {
-					Comments readinessComments `json:"comments"`
-				} `json:"node"`
-			} `json:"data"`
-			Errors []struct {
-				Message string `json:"message"`
-			} `json:"errors"`
-		}
-		if err := json.Unmarshal(body, &payload); err != nil {
-			return fmt.Errorf("parse pull request review comments: %w", err)
-		}
-		if len(payload.Errors) > 0 {
-			return errors.New(payload.Errors[0].Message)
-		}
-		if payload.Data.Repository.PullRequest == nil || payload.Data.Node == nil {
-			return errors.New("GitHub returned no pull request review comments")
-		}
-		if payload.Data.Repository.PullRequest.HeadRefOID != head {
-			return ErrReadinessHeadChanged
-		}
-		review.Comments.Nodes = append(review.Comments.Nodes, payload.Data.Node.Comments.Nodes...)
-		review.Comments.PageInfo = payload.Data.Node.Comments.PageInfo
-		if review.Comments.PageInfo.HasNextPage && review.Comments.PageInfo.EndCursor == cursor {
-			return ErrReadinessTruncated
-		}
-	}
-	return nil
-}
-
-func advanceReadinessCursors(variables map[string]any, pr *readinessPullRequest) (bool, error) {
-	connections := []struct {
-		name string
-		info readinessPageInfo
-	}{
-		{"requestCursor", pr.ReviewRequests.PageInfo},
-		{"reviewCursor", pr.Reviews.PageInfo},
-		{"commentCursor", pr.Comments.PageInfo},
-		{"reactionCursor", pr.Reactions.PageInfo},
-		{"threadCursor", pr.ReviewThreads.PageInfo},
-	}
-	if len(pr.Commits.Nodes) > 0 && pr.Commits.Nodes[0].Commit.StatusCheckRollup != nil {
-		connections = append(connections, struct {
-			name string
-			info readinessPageInfo
-		}{"checkCursor", pr.Commits.Nodes[0].Commit.StatusCheckRollup.Contexts.PageInfo})
-	}
-	more := false
-	for _, connection := range connections {
-		previous, _ := variables[connection.name].(string)
-		if connection.info.EndCursor != "" {
-			variables[connection.name] = connection.info.EndCursor
-		}
-		if !connection.info.HasNextPage {
-			continue
-		}
-		if connection.info.EndCursor == "" {
-			return false, ErrReadinessTruncated
-		}
-		if connection.info.EndCursor == previous {
-			return false, ErrReadinessTruncated
-		}
-		more = true
-	}
-	return more, nil
-}
-
-func mergeReadinessPage(target, page *readinessPullRequest) {
-	target.ReviewRequests.Nodes = append(target.ReviewRequests.Nodes, page.ReviewRequests.Nodes...)
-	target.Reviews.Nodes = append(target.Reviews.Nodes, page.Reviews.Nodes...)
-	target.Comments.Nodes = append(target.Comments.Nodes, page.Comments.Nodes...)
-	target.Reactions.Nodes = append(target.Reactions.Nodes, page.Reactions.Nodes...)
-	target.ReviewThreads.Nodes = append(target.ReviewThreads.Nodes, page.ReviewThreads.Nodes...)
-	if len(target.Commits.Nodes) > 0 && len(page.Commits.Nodes) > 0 {
-		targetRollup := target.Commits.Nodes[0].Commit.StatusCheckRollup
-		pageRollup := page.Commits.Nodes[0].Commit.StatusCheckRollup
-		if targetRollup != nil && pageRollup != nil {
-			targetRollup.Contexts.Nodes = append(targetRollup.Contexts.Nodes, pageRollup.Contexts.Nodes...)
-		}
-	}
 }
 
 func (c *Client) graphQLURL() string {
@@ -358,7 +171,238 @@ func (c *Client) graphQLURL() string {
 	return parsed.String()
 }
 
-func (c readinessComment) location() string {
+func splitRepository(repo string) (string, string, error) {
+	parts := strings.Split(strings.Trim(repo, "/"), "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", fmt.Errorf("repository %q must be owner/name", repo)
+	}
+	return parts[0], parts[1], nil
+}
+
+func fetchReadinessPage(ctx context.Context, transport QueryTransport, query string, variables map[string]any) (*readinessPullRequest, error) {
+	body, err := transport.GraphQL(ctx, query, variables)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Data struct {
+			Repository struct {
+				PullRequest *readinessPullRequest `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, fmt.Errorf("parse pull request readiness: %w", err)
+	}
+	if len(payload.Errors) > 0 {
+		return nil, errors.New(payload.Errors[0].Message)
+	}
+	if payload.Data.Repository.PullRequest == nil {
+		return nil, errors.New("GitHub returned no pull request")
+	}
+	return payload.Data.Repository.PullRequest, nil
+}
+
+func appendReadinessPages(ctx context.Context, transport QueryTransport, base map[string]any, pr *readinessPullRequest) error {
+	for pr.Reactions.PageInfo.HasNextPage {
+		page, err := nextReadinessPage(ctx, transport, pullRequestReactionPageQuery, base, pr.HeadRefOID, pr.Reactions.PageInfo)
+		if err != nil {
+			return fmt.Errorf("fetch pull request reactions: %w", err)
+		}
+		pr.Reactions.Nodes = append(pr.Reactions.Nodes, page.Reactions.Nodes...)
+		pr.Reactions.PageInfo = page.Reactions.PageInfo
+	}
+	for pr.LatestOpinions.PageInfo.HasNextPage {
+		page, err := nextReadinessPage(ctx, transport, pullRequestOpinionPageQuery, base, pr.HeadRefOID, pr.LatestOpinions.PageInfo)
+		if err != nil {
+			return fmt.Errorf("fetch pull request opinions: %w", err)
+		}
+		pr.LatestOpinions.Nodes = append(pr.LatestOpinions.Nodes, page.LatestOpinions.Nodes...)
+		pr.LatestOpinions.PageInfo = page.LatestOpinions.PageInfo
+	}
+	for pr.Reviews.PageInfo.HasNextPage {
+		page, err := nextReadinessPage(ctx, transport, pullRequestReviewPageQuery, base, pr.HeadRefOID, pr.Reviews.PageInfo)
+		if err != nil {
+			return fmt.Errorf("fetch pull request review history: %w", err)
+		}
+		pr.Reviews.Nodes = append(pr.Reviews.Nodes, page.Reviews.Nodes...)
+		pr.Reviews.PageInfo = page.Reviews.PageInfo
+	}
+	contexts := checkContexts(pr)
+	for contexts != nil && contexts.PageInfo.HasNextPage {
+		page, err := nextReadinessPage(ctx, transport, pullRequestCheckPageQuery, base, pr.HeadRefOID, contexts.PageInfo)
+		if err != nil {
+			return fmt.Errorf("fetch pull request checks: %w", err)
+		}
+		pageContexts := checkContexts(page)
+		if pageContexts == nil {
+			return errors.New("GitHub returned no check page")
+		}
+		contexts.Nodes = append(contexts.Nodes, pageContexts.Nodes...)
+		contexts.PageInfo = pageContexts.PageInfo
+	}
+	return nil
+}
+
+func nextReadinessPage(ctx context.Context, transport QueryTransport, query string, base map[string]any, headSHA string, info readinessPageInfo) (*readinessPullRequest, error) {
+	if info.EndCursor == "" {
+		return nil, errors.New("GitHub pagination has no end cursor")
+	}
+	variables := make(map[string]any, len(base)+1)
+	for key, value := range base {
+		variables[key] = value
+	}
+	variables["cursor"] = info.EndCursor
+	page, err := fetchReadinessPage(ctx, transport, query, variables)
+	if err != nil {
+		return nil, err
+	}
+	if page.HeadRefOID != headSHA {
+		return nil, ErrReadinessHeadChanged
+	}
+	return page, nil
+}
+
+func checkContexts(pr *readinessPullRequest) *readinessConnection[readinessCheck] {
+	if len(pr.Commits.Nodes) == 0 || pr.Commits.Nodes[0].Commit.StatusCheckRollup == nil {
+		return nil
+	}
+	return &pr.Commits.Nodes[0].Commit.StatusCheckRollup.Contexts
+}
+
+func buildReadinessObservation(pr *readinessPullRequest) *prreadiness.Observation {
+	observation := &prreadiness.Observation{
+		Number: pr.Number, URL: pr.URL, Title: pr.Title,
+		State: strings.ToLower(pr.State), Draft: pr.IsDraft, Merged: pr.Merged,
+		HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName,
+		MergeStateStatus: strings.ToUpper(pr.MergeStateStatus),
+		ReviewDecision:   strings.ToUpper(pr.ReviewDecision),
+	}
+	for _, reaction := range pr.Reactions.Nodes {
+		if canonicalActor(reaction.User) != prreadiness.CodexActor {
+			continue
+		}
+		switch strings.ToUpper(reaction.Content) {
+		case "THUMBS_UP":
+			observation.CodexThumbsUp = true
+		case "EYES":
+			observation.CodexEyes = true
+		}
+	}
+	actors := make(map[string]string)
+	for _, review := range pr.LatestOpinions.Nodes {
+		actor := canonicalActor(review.Author)
+		if actor != "" {
+			actors[strings.ToLower(actor)] = actor
+		}
+	}
+	actorKeys := make([]string, 0, len(actors))
+	for key := range actors {
+		actorKeys = append(actorKeys, key)
+	}
+	sort.Strings(actorKeys)
+	for _, key := range actorKeys {
+		observation.ReviewOpinions = append(observation.ReviewOpinions,
+			selectReviewOpinion(pr.LatestOpinions.Nodes, pr.Reviews.Nodes, actors[key]))
+	}
+	if contexts := checkContexts(pr); contexts != nil {
+		for _, check := range contexts.Nodes {
+			name, state, target := "status:"+check.Context, statusState(check.State), check.TargetURL
+			if check.TypeName == "CheckRun" {
+				name, state, target = "check:"+check.Name, checkRunState(check.Status, check.Conclusion), check.DetailsURL
+			}
+			observation.Checks = append(observation.Checks, prreadiness.Check{ID: check.ID, Name: name, State: state, URL: target})
+		}
+		sort.Slice(observation.Checks, func(i, j int) bool { return observation.Checks[i].Name < observation.Checks[j].Name })
+	}
+	return observation
+}
+
+func canonicalActor(actor readinessActor) string {
+	login := strings.TrimSpace(actor.Login)
+	if actor.TypeName == "Bot" && !strings.HasSuffix(strings.ToLower(login), "[bot]") {
+		login += "[bot]"
+	}
+	return login
+}
+
+func selectReviewOpinion(current, history []readinessReview, reviewer string) prreadiness.ReviewOpinion {
+	var candidate *readinessReview
+	for i := range current {
+		if strings.EqualFold(canonicalActor(current[i].Author), reviewer) {
+			if candidate != nil {
+				return prreadiness.ReviewOpinion{Actor: reviewer, State: "UNKNOWN"}
+			}
+			candidate = &current[i]
+		}
+	}
+	if candidate == nil {
+		return prreadiness.ReviewOpinion{Actor: reviewer}
+	}
+	opinion := prreadiness.ReviewOpinion{Actor: canonicalActor(candidate.Author), State: strings.ToUpper(candidate.State), Body: candidate.BodyText}
+	for _, review := range history {
+		if review.ID == candidate.ID || !strings.EqualFold(canonicalActor(review.Author), reviewer) {
+			continue
+		}
+		state := strings.ToUpper(review.State)
+		if state != "APPROVED" && state != "CHANGES_REQUESTED" && state != "DISMISSED" {
+			continue
+		}
+		if review.SubmittedAt.IsZero() || review.SubmittedAt.Equal(candidate.SubmittedAt) {
+			opinion.State = "UNKNOWN"
+			return opinion
+		}
+		if review.SubmittedAt.After(candidate.SubmittedAt) {
+			if state == "DISMISSED" {
+				opinion.State = "DISMISSED"
+			} else {
+				opinion.State = "UNKNOWN"
+			}
+			return opinion
+		}
+	}
+	return opinion
+}
+
+func checkRunState(status, conclusion string) string {
+	if !strings.EqualFold(status, "COMPLETED") {
+		return "pending"
+	}
+	switch strings.ToUpper(conclusion) {
+	case "SUCCESS", "NEUTRAL", "SKIPPED":
+		return "success"
+	case "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE":
+		return "failure"
+	default:
+		return "pending"
+	}
+}
+
+func statusState(state string) string {
+	switch strings.ToUpper(state) {
+	case "SUCCESS":
+		return "success"
+	case "FAILURE", "ERROR":
+		return "failure"
+	default:
+		return "pending"
+	}
+}
+
+type feedbackComment struct {
+	ID           string         `json:"id"`
+	BodyText     string         `json:"bodyText"`
+	CreatedAt    time.Time      `json:"createdAt"`
+	Path         string         `json:"path"`
+	Line         *int           `json:"line"`
+	OriginalLine *int           `json:"originalLine"`
+	Author       readinessActor `json:"author"`
+}
+
+func (c feedbackComment) location() string {
 	if c.Path == "" {
 		return ""
 	}
@@ -372,156 +416,223 @@ func (c readinessComment) location() string {
 	return fmt.Sprintf("%s:%d", c.Path, *line)
 }
 
-func decodePullRequestReadiness(body []byte) (*readinessPullRequest, error) {
-	var payload readinessResponse
+type feedbackThread struct {
+	ID         string                               `json:"id"`
+	IsResolved bool                                 `json:"isResolved"`
+	Comments   readinessConnection[feedbackComment] `json:"comments"`
+}
+
+type feedbackPullRequest struct {
+	Comments      readinessConnection[feedbackComment] `json:"comments"`
+	Reviews       readinessConnection[readinessReview] `json:"reviews"`
+	ReviewThreads readinessConnection[feedbackThread]  `json:"reviewThreads"`
+}
+
+const pullRequestFeedbackQuery = `
+query PullRequestFeedback($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    comments(first:100){nodes{id bodyText createdAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    reviews(first:100){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+    reviewThreads(first:100){nodes{id isResolved comments(first:100){
+      nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+      pageInfo{hasNextPage endCursor}
+    }} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestFeedbackReviewPageQuery = `
+query PullRequestReviewBodies($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    reviews(first:100,after:$cursor){nodes{id state bodyText submittedAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}
+}`
+
+const pullRequestCommentPageQuery = `
+query PullRequestComments($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    comments(first:100,after:$cursor){nodes{id bodyText createdAt author{__typename id login}} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestThreadPageQuery = `
+query PullRequestThreads($owner:String!,$name:String!,$number:Int!,$cursor:String!){
+  repository(owner:$owner,name:$name){pullRequest(number:$number){
+    reviewThreads(first:100,after:$cursor){nodes{id isResolved comments(first:100){
+      nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+      pageInfo{hasNextPage endCursor}
+    }} pageInfo{hasNextPage endCursor}}
+  }}}
+}`
+
+const pullRequestThreadCommentsPageQuery = `
+query PullRequestThreadComments($id:ID!,$cursor:String!){
+  node(id:$id){... on PullRequestReviewThread{comments(first:100,after:$cursor){
+    nodes{id bodyText createdAt path line originalLine author{__typename id login}}
+    pageInfo{hasNextPage endCursor}
+  }}}
+}`
+
+func FetchPullRequestFeedback(ctx context.Context, transport QueryTransport, repo string, number int) ([]prreadiness.FeedbackItem, []prreadiness.ThreadState, error) {
+	owner, name, err := splitRepository(repo)
+	if err != nil {
+		return nil, nil, err
+	}
+	base := map[string]any{"owner": owner, "name": name, "number": number}
+	pr, err := fetchFeedbackPage(ctx, transport, pullRequestFeedbackQuery, base)
+	if err != nil {
+		return nil, nil, err
+	}
+	for pr.Comments.PageInfo.HasNextPage {
+		page, err := nextFeedbackPage(ctx, transport, pullRequestCommentPageQuery, base, pr.Comments.PageInfo)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fetch pull request comments: %w", err)
+		}
+		pr.Comments.Nodes = append(pr.Comments.Nodes, page.Comments.Nodes...)
+		pr.Comments.PageInfo = page.Comments.PageInfo
+	}
+	for pr.Reviews.PageInfo.HasNextPage {
+		page, err := nextFeedbackPage(ctx, transport, pullRequestFeedbackReviewPageQuery, base, pr.Reviews.PageInfo)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fetch pull request review bodies: %w", err)
+		}
+		pr.Reviews.Nodes = append(pr.Reviews.Nodes, page.Reviews.Nodes...)
+		pr.Reviews.PageInfo = page.Reviews.PageInfo
+	}
+	for pr.ReviewThreads.PageInfo.HasNextPage {
+		page, err := nextFeedbackPage(ctx, transport, pullRequestThreadPageQuery, base, pr.ReviewThreads.PageInfo)
+		if err != nil {
+			return nil, nil, fmt.Errorf("fetch pull request threads: %w", err)
+		}
+		pr.ReviewThreads.Nodes = append(pr.ReviewThreads.Nodes, page.ReviewThreads.Nodes...)
+		pr.ReviewThreads.PageInfo = page.ReviewThreads.PageInfo
+	}
+	for i := range pr.ReviewThreads.Nodes {
+		thread := &pr.ReviewThreads.Nodes[i]
+		for thread.Comments.PageInfo.HasNextPage {
+			if thread.Comments.PageInfo.EndCursor == "" {
+				return nil, nil, errors.New("GitHub thread pagination has no end cursor")
+			}
+			body, err := transport.GraphQL(ctx, pullRequestThreadCommentsPageQuery, map[string]any{"id": thread.ID, "cursor": thread.Comments.PageInfo.EndCursor})
+			if err != nil {
+				return nil, nil, fmt.Errorf("fetch pull request thread comments: %w", err)
+			}
+			var payload struct {
+				Data struct {
+					Node *struct {
+						Comments readinessConnection[feedbackComment] `json:"comments"`
+					} `json:"node"`
+				} `json:"data"`
+				Errors []struct {
+					Message string `json:"message"`
+				} `json:"errors"`
+			}
+			if err := json.Unmarshal(body, &payload); err != nil {
+				return nil, nil, err
+			}
+			if len(payload.Errors) > 0 {
+				return nil, nil, errors.New(payload.Errors[0].Message)
+			}
+			if payload.Data.Node == nil {
+				return nil, nil, errors.New("GitHub returned no review thread")
+			}
+			thread.Comments.Nodes = append(thread.Comments.Nodes, payload.Data.Node.Comments.Nodes...)
+			thread.Comments.PageInfo = payload.Data.Node.Comments.PageInfo
+		}
+	}
+	return buildFeedback(pr), buildThreads(pr), nil
+}
+
+func (c *Client) FetchPullRequestFeedback(ctx context.Context, repo string, number int) ([]prreadiness.FeedbackItem, []prreadiness.ThreadState, error) {
+	return FetchPullRequestFeedback(ctx, c, repo, number)
+}
+
+func fetchFeedbackPage(ctx context.Context, transport QueryTransport, query string, variables map[string]any) (*feedbackPullRequest, error) {
+	body, err := transport.GraphQL(ctx, query, variables)
+	if err != nil {
+		return nil, err
+	}
+	var payload struct {
+		Data struct {
+			Repository struct {
+				PullRequest *feedbackPullRequest `json:"pullRequest"`
+			} `json:"repository"`
+		} `json:"data"`
+		Errors []struct {
+			Message string `json:"message"`
+		} `json:"errors"`
+	}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		return nil, fmt.Errorf("parse pull request readiness: %w", err)
+		return nil, err
 	}
 	if len(payload.Errors) > 0 {
 		return nil, errors.New(payload.Errors[0].Message)
 	}
-	if payload.Data.Repository.PullRequest == nil || payload.Data.Repository.PullRequest.HeadRefOID == "" {
-		return nil, errors.New("GitHub returned no pull request head")
+	if payload.Data.Repository.PullRequest == nil {
+		return nil, errors.New("GitHub returned no pull request feedback")
 	}
 	return payload.Data.Repository.PullRequest, nil
 }
 
-func ParsePullRequestReadiness(body []byte) (*prreadiness.Observation, error) {
-	pr, err := decodePullRequestReadiness(body)
-	if err != nil {
-		return nil, err
+func nextFeedbackPage(ctx context.Context, transport QueryTransport, query string, base map[string]any, info readinessPageInfo) (*feedbackPullRequest, error) {
+	if info.EndCursor == "" {
+		return nil, errors.New("GitHub pagination has no end cursor")
 	}
-	if hasMoreReadinessPages(pr) {
-		return nil, fmt.Errorf("%w; readiness cannot be verified without truncation (100-item verification window)", ErrReadinessTruncated)
+	variables := make(map[string]any, len(base)+1)
+	for key, value := range base {
+		variables[key] = value
 	}
-	return buildPullRequestReadiness(pr), nil
+	variables["cursor"] = info.EndCursor
+	return fetchFeedbackPage(ctx, transport, query, variables)
 }
 
-func hasMoreReadinessPages(pr *readinessPullRequest) bool {
-	if pr.ReviewRequests.PageInfo.HasPreviousPage || pr.Reviews.PageInfo.HasPreviousPage || pr.Comments.PageInfo.HasPreviousPage ||
-		pr.ReviewRequests.PageInfo.HasNextPage ||
-		pr.Reviews.PageInfo.HasNextPage || pr.Comments.PageInfo.HasNextPage ||
-		pr.Reactions.PageInfo.HasNextPage || pr.ReviewThreads.PageInfo.HasNextPage {
-		return true
-	}
-	if len(pr.Commits.Nodes) > 0 && pr.Commits.Nodes[0].Commit.StatusCheckRollup != nil &&
-		pr.Commits.Nodes[0].Commit.StatusCheckRollup.Contexts.PageInfo.HasNextPage {
-		return true
-	}
-	for _, review := range pr.Reviews.Nodes {
-		if review.Comments.PageInfo.HasNextPage {
-			return true
-		}
-	}
-	return false
-}
-
-func buildPullRequestReadiness(pr *readinessPullRequest) *prreadiness.Observation {
-	result := &prreadiness.Observation{
-		Number: pr.Number, URL: pr.URL, Title: pr.Title, State: strings.ToLower(pr.State),
-		HeadSHA: pr.HeadRefOID, HeadRef: pr.HeadRefName, Draft: pr.IsDraft, Merged: pr.Merged,
-		MergeableState: strings.ToLower(pr.MergeStateStatus), CheckState: prreadiness.ChecksNone,
-	}
-	for _, request := range pr.ReviewRequests.Nodes {
-		if request.RequestedReviewer.TypeName == "User" {
-			result.RequestedReviewers = append(result.RequestedReviewers, request.RequestedReviewer.Login)
-		}
-	}
-	if len(pr.Commits.Nodes) > 0 {
-		commit := pr.Commits.Nodes[0].Commit
-		if commit.StatusCheckRollup != nil {
-			result.CheckState = prreadiness.ChecksGreen
-			if len(commit.StatusCheckRollup.Contexts.Nodes) == 0 {
-				result.CheckState = prreadiness.ChecksNone
-			}
-			for _, check := range commit.StatusCheckRollup.Contexts.Nodes {
-				label, url := "status:"+check.Context, check.TargetURL
-				state := readinessStatusState(check.State)
-				if check.TypeName == "CheckRun" {
-					label, url = "check:"+check.Name, check.DetailsURL
-					state = readinessCheckRunState(check.Status, check.Conclusion)
-				}
-				result.Checks = append(result.Checks, prreadiness.Check{Name: label, State: state, URL: url})
-				if state == prreadiness.ChecksFailed {
-					result.CheckState = prreadiness.ChecksFailed
-				} else if state != prreadiness.ChecksGreen && result.CheckState != prreadiness.ChecksFailed {
-					result.CheckState = prreadiness.ChecksPending
-				}
-			}
-		}
-	}
-	addComment := func(comment readinessComment, kind, reviewState string) {
-		item := prreadiness.Comment{
-			ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText,
-			Kind: kind, ReviewState: reviewState,
-			Location:  comment.location(),
-			CreatedAt: comment.CreatedAt, Bot: comment.Author.TypeName != "User",
-		}
-		result.Comments = append(result.Comments, item)
-	}
-	for _, review := range pr.Reviews.Nodes {
-		item := prreadiness.Review{ID: review.ID, Author: review.Author.Login, State: review.State,
-			Body: review.BodyText, CommitOID: review.Commit.OID, SubmittedAt: review.SubmittedAt}
-		if strings.TrimSpace(review.BodyText) != "" {
-			addComment(readinessComment{
-				ID: review.ID, Author: review.Author, BodyText: review.BodyText, CreatedAt: review.SubmittedAt,
-			}, "review", strings.ToUpper(review.State))
-		}
-		for _, comment := range review.Comments.Nodes {
-			item.Findings = append(item.Findings, prreadiness.Finding{
-				ID: comment.ID, Author: comment.Author.Login, Body: comment.BodyText, Location: comment.location(),
-			})
-			addComment(comment, "inline", "")
-		}
-		result.Reviews = append(result.Reviews, item)
-	}
+func buildFeedback(pr *feedbackPullRequest) []prreadiness.FeedbackItem {
+	items := make([]prreadiness.FeedbackItem, 0, len(pr.Comments.Nodes)+len(pr.Reviews.Nodes))
 	for _, comment := range pr.Comments.Nodes {
-		addComment(comment, "issue", "")
+		items = append(items, feedbackItem(comment, "comment"))
 	}
-	for _, reaction := range pr.Reactions.Nodes {
-		result.Reactions = append(result.Reactions, prreadiness.Reaction{
-			ID: reaction.ID, Author: reaction.User.Login, Content: reaction.Content, CreatedAt: reaction.CreatedAt,
+	for _, review := range pr.Reviews.Nodes {
+		if strings.TrimSpace(review.BodyText) == "" {
+			continue
+		}
+		items = append(items, prreadiness.FeedbackItem{
+			ID: review.ID, Kind: "review", Author: canonicalActor(review.Author), Body: review.BodyText, CreatedAt: review.SubmittedAt,
 		})
 	}
 	for _, thread := range pr.ReviewThreads.Nodes {
-		if len(thread.Comments.Nodes) == 0 {
-			continue
+		for index, comment := range thread.Comments.Nodes {
+			kind := "reply"
+			if index == 0 {
+				kind = "inline_comment"
+			}
+			items = append(items, feedbackItem(comment, kind))
 		}
-		comment := thread.Comments.Nodes[0]
-		commitOID := ""
-		if comment.PullRequestReview != nil {
-			commitOID = comment.PullRequestReview.Commit.OID
-		}
-		result.Threads = append(result.Threads, prreadiness.Thread{
-			ID: comment.ID, Author: comment.Author.Login, Resolved: thread.IsResolved,
-			Body: comment.BodyText, Location: comment.location(), CommitOID: commitOID,
-		})
 	}
-	sort.Slice(result.Checks, func(i, j int) bool { return result.Checks[i].Name < result.Checks[j].Name })
-	return result
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].CreatedAt.Equal(items[j].CreatedAt) {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].CreatedAt.Before(items[j].CreatedAt)
+	})
+	return items
 }
 
-func readinessCheckRunState(status, conclusion string) prreadiness.CheckState {
-	if !strings.EqualFold(status, "COMPLETED") {
-		return prreadiness.ChecksPending
-	}
-	switch strings.ToUpper(conclusion) {
-	case "SUCCESS", "NEUTRAL", "SKIPPED":
-		return prreadiness.ChecksGreen
-	case "FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE":
-		return prreadiness.ChecksFailed
-	default:
-		return prreadiness.ChecksPending
+func feedbackItem(comment feedbackComment, kind string) prreadiness.FeedbackItem {
+	return prreadiness.FeedbackItem{
+		ID: comment.ID, Kind: kind, Author: canonicalActor(comment.Author), Body: comment.BodyText,
+		Location: comment.location(), CreatedAt: comment.CreatedAt,
 	}
 }
 
-func readinessStatusState(state string) prreadiness.CheckState {
-	switch strings.ToUpper(state) {
-	case "SUCCESS":
-		return prreadiness.ChecksGreen
-	case "FAILURE", "ERROR":
-		return prreadiness.ChecksFailed
-	default:
-		return prreadiness.ChecksPending
+func buildThreads(pr *feedbackPullRequest) []prreadiness.ThreadState {
+	threads := make([]prreadiness.ThreadState, 0, len(pr.ReviewThreads.Nodes))
+	for _, thread := range pr.ReviewThreads.Nodes {
+		state := prreadiness.ThreadState{ID: thread.ID, Resolved: thread.IsResolved}
+		if len(thread.Comments.Nodes) > 0 {
+			first := thread.Comments.Nodes[0]
+			state.Author, state.Body, state.Location = canonicalActor(first.Author), first.BodyText, first.location()
+		}
+		threads = append(threads, state)
 	}
+	sort.Slice(threads, func(i, j int) bool { return threads[i].ID < threads[j].ID })
+	return threads
 }

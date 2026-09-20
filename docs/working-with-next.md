@@ -27,7 +27,8 @@ Retarget ordinary PRs aimed at `main`; `Main route` rejects them.
 - After merge, `Acceptance` tests the resulting exact `next` SHA for release eligibility.
 
 Use a [PR watch or blocking wait](../README.md#watching-pull-requests) for combined
-checks, reviews, and feedback; do not poll those separately. Readiness does not
+checks, reviews, and feedback; use `--mode codex` for attn's normal review signal
+and do not poll those separately. Readiness does not
 replace the merge gates above or the user's permission to merge.
 
 ## Releases, hotfixes, and syncs

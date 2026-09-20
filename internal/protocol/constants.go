@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "316"
+const ProtocolVersion = "317"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -345,10 +345,11 @@ const (
 	EventNotebookChanged                 = "notebook_changed"
 	EventSessionTodosUpdated             = "session_todos_updated"
 	EventSessionsUpdated                 = "sessions_updated"
+	EventPullRequestWatchResult          = "pull_request_watch_result"
+	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
 	EventRenameResult                    = "rename_result"
 	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
-	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
 	EventGardenSeedsUpdated              = "garden_seeds_updated"
 	EventGardenReviewUpdated             = "garden_review_updated"
 	EventAppsUpdated                     = "apps_updated"

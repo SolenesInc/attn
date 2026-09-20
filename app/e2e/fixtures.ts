@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as net from 'net';
 import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './profileEnv';
-import { waitForDaemonReady } from './daemonReadiness';
+import { waitForDaemonSocket } from './daemonReadiness';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
 
 class MockGitHubServer {
@@ -98,9 +98,21 @@ class MockGitHubServer {
   }
 }
 
+// The teardown kill interpolates this port, so it must stay scoped to this run's
+// own daemon and never a peer agent's.
 const { daemonPort: TEST_DAEMON_PORT } = e2ePorts();
 const MOCK_GH_HOST = 'mock.github.local';
 const TEST_DAEMON_WS_URL = `ws://127.0.0.1:${TEST_DAEMON_PORT}/ws`;
+
+async function killTestDaemons(): Promise<void> {
+  try {
+    await new Promise<void>((resolve) => {
+      spawn('pkill', ['-f', `ATTN_WS_PORT=${TEST_DAEMON_PORT}`], { stdio: 'ignore' }).on('close', () => resolve());
+    });
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  } catch {
+  }
+}
 
 function createFakeAgentStubs(): { binDir: string; cleanup: () => void } {
   const binDir = fs.mkdtempSync(path.join(os.tmpdir(), 'attn-e2e-stubs-'));
@@ -163,7 +175,6 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       ATTN_TOOL_HOME: tempDir,
       CODEX_HOME: path.join(tempDir, '.codex'),
       ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
-      ATTN_DAEMON_READY_FD: '3',
       ATTN_WS_PORT: TEST_DAEMON_PORT,
       ATTN_SOCKET_PATH: socketPath,
       ATTN_DB_PATH: dbPath,
@@ -173,7 +184,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       ATTN_MOCK_GH_TOKEN: 'test-token',
       ATTN_MOCK_GH_HOST: MOCK_GH_HOST,
     },
-    stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+    stdio: 'pipe',
   });
 
   let stdout = '';
@@ -190,7 +201,7 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
     console.log(`[Daemon] Process exited with code ${code}, signal ${signal}`);
   });
 
-  await waitForDaemonReady(proc, () => daemonStartDebugInfo(tempDir, stdout, stderr));
+  await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
   console.log(`Daemon started with socket at ${socketPath}`);
 
   return {
@@ -255,7 +266,6 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         ATTN_TOOL_HOME: tempDir,
         CODEX_HOME: path.join(tempDir, '.codex'),
         ATTN_CLIENT_TOKEN: E2E_CLIENT_TOKEN,
-        ATTN_DAEMON_READY_FD: '3',
         ATTN_WS_PORT: TEST_DAEMON_PORT,
         ATTN_SOCKET_PATH: socketPath,
         ATTN_DB_PATH: dbPath,
@@ -265,7 +275,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
         ATTN_MOCK_GH_TOKEN: 'test-token',
         ATTN_MOCK_GH_HOST: MOCK_GH_HOST,
       },
-      stdio: ['pipe', 'pipe', 'pipe', 'pipe'],
+      stdio: 'pipe',
     });
 
     proc.stdout?.on('data', (data) => {
@@ -283,7 +293,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       proc = null;
     });
 
-    await waitForDaemonReady(proc, () => daemonStartDebugInfo(tempDir, stdout, stderr));
+    await waitForDaemonSocket(proc, socketPath, () => daemonStartDebugInfo(tempDir, stdout, stderr));
     console.log(`[Managed daemon] started with socket ${socketPath}`);
   };
 
@@ -561,6 +571,8 @@ export const test = base.extend<Fixtures>({
     let daemon: { proc: ChildProcess; socketPath: string; tempDir: string; stop: () => void } | null = null;
 
     const startFn = async () => {
+      await killTestDaemons();
+
       daemon = await startDaemon(mockGitHub.url);
       return {
         wsUrl: TEST_DAEMON_WS_URL,
@@ -581,6 +593,7 @@ export const test = base.extend<Fixtures>({
 
     const fixture: DaemonFixture = {
       start: async () => {
+        await killTestDaemons();
         await managed.start();
         started = true;
         return {

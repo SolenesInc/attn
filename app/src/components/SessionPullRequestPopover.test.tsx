@@ -1,21 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import {
-  SessionPullRequestCheckStatus,
-  SessionPullRequestReviewStatus,
-  type SessionPullRequest,
-} from '../types/generated';
+import type { SessionPullRequest } from '../types/generated';
 import { writeClipboardText } from '../utils/clipboardBridge';
 import { SessionPullRequestPopover } from './SessionPullRequestPopover';
 import { GitHubPollingProvider } from '../contexts/GitHubPollingContext';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
 vi.mock('../utils/clipboardBridge', () => ({ writeClipboardText: vi.fn(async () => {}) }));
-const sendPullRequestUnwatch = vi.hoisted(() => vi.fn());
-vi.mock('../contexts/DaemonApiContext', () => ({
-  useOptionalDaemonApi: () => ({ sendPullRequestUnwatch }),
-}));
 
 function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
   return {
@@ -26,17 +18,16 @@ function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
     created_at: '2026-08-30T12:00:00Z',
     state: 'open',
     status_fetched_at: '2026-08-30T12:05:00Z',
-    ci_status: SessionPullRequestCheckStatus.Failure,
-    review_status: SessionPullRequestReviewStatus.Waiting,
+    ci_status: 'failure',
+    review_status: 'pending',
     mergeable_state: 'clean',
     ...overrides,
   };
 }
 
-function show(pullRequests: SessionPullRequest[], autoFocus = true, sessionId?: string) {
+function show(pullRequests: SessionPullRequest[], autoFocus = true) {
   return render(
     <SessionPullRequestPopover
-	  sessionId={sessionId}
       pullRequests={pullRequests}
       anchor={{ top: 40, left: 40 }}
       autoFocus={autoFocus}
@@ -48,10 +39,7 @@ function show(pullRequests: SessionPullRequest[], autoFocus = true, sessionId?: 
 }
 
 describe('SessionPullRequestPopover', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    sendPullRequestUnwatch.mockResolvedValue(undefined);
-  });
+  beforeEach(() => vi.clearAllMocks());
 
   it('spells out every dimension the daemon knows', () => {
     show([pr()]);
@@ -86,37 +74,6 @@ describe('SessionPullRequestPopover', () => {
 
     expect(screen.getByText('GitHub polling is off for this profile')).toBeInTheDocument();
     expect(screen.queryByText('waiting for GitHub')).not.toBeInTheDocument();
-  });
-
-  it('shows monitor health and stops only this session watch', async () => {
-    show([pr({
-      watching: true,
-      watch_recipients: ['builder', 'reviewer'],
-      watch_last_checked_at: '2026-08-30T12:06:00Z',
-    })], true, 'session-1');
-
-    expect(screen.getByText('builder, reviewer')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
-    expect(sendPullRequestUnwatch).toHaveBeenCalledWith(
-      'session-1',
-      'https://github.com/victorarias/attn/pull/71',
-    );
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Stop watching for this session' })).toBeEnabled());
-  });
-
-  it('shows an honest delayed monitor state', () => {
-    show([pr({ watching: true, watch_error: 'review API unavailable' })]);
-
-    expect(screen.getByText('delayed · review API unavailable')).toBeInTheDocument();
-  });
-
-  it('shows why stopping the watch failed', async () => {
-    sendPullRequestUnwatch.mockRejectedValueOnce(new Error('session is no longer watching this pull request'));
-    show([pr({ watching: true })], true, 'session-1');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Stop watching for this session' }));
-
-    expect(await screen.findByRole('alert')).toHaveTextContent('session is no longer watching this pull request');
   });
 
   it('opens the PR on GitHub from its title', () => {

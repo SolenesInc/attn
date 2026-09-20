@@ -1,12 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import {
-  SessionPullRequestCheckStatus,
-  SessionPullRequestReviewStatus,
-  type SessionPullRequest,
-} from '../types/generated';
+import type { SessionPullRequest } from '../types/generated';
 import {
   describeSessionPullRequest,
-  describeSessionPullRequestReview,
   pickSessionPullRequest,
   sortSessionPullRequests,
 } from './sessionPullRequest';
@@ -68,82 +63,43 @@ describe('sortSessionPullRequests', () => {
 });
 
 describe('describeSessionPullRequest', () => {
-  it.each([
-	[SessionPullRequestReviewStatus.UnresolvedThreads, 'unresolved review threads', 'unresolved review threads', 'warn'],
-	[SessionPullRequestReviewStatus.Waiting, 'in review', 'waiting on a reviewer', 'neutral'],
-	[SessionPullRequestReviewStatus.Pending, 'in review', 'waiting on a reviewer', 'neutral'],
-  ])('describes watched review status %s', (review_status, summary, review, tone) => {
-	const watched = pr({ review_status, ci_status: SessionPullRequestCheckStatus.Success });
-    expect(describeSessionPullRequest(watched)).toEqual({ label: summary, tone });
-    expect(describeSessionPullRequestReview(watched)).toEqual({ label: review, tone });
-  });
-
   it('reports the strongest blocker first', () => {
     expect(describeSessionPullRequest(pr({
       mergeable_state: 'dirty',
-	  ci_status: SessionPullRequestCheckStatus.Failure,
-	  review_status: SessionPullRequestReviewStatus.ChangesRequested,
+      ci_status: 'failure',
+      review_status: 'changes_requested',
     }))).toEqual({ label: 'conflicts', tone: 'bad' });
 
     expect(describeSessionPullRequest(pr({
-	  ci_status: SessionPullRequestCheckStatus.Failure,
-	  review_status: SessionPullRequestReviewStatus.ChangesRequested,
+      ci_status: 'failure',
+      review_status: 'changes_requested',
     }))).toEqual({ label: 'checks failed', tone: 'bad' });
 
     expect(describeSessionPullRequest(pr({
-	  ci_status: SessionPullRequestCheckStatus.Pending,
-	  review_status: SessionPullRequestReviewStatus.ChangesRequested,
+      ci_status: 'pending',
+      review_status: 'changes_requested',
     }))).toEqual({ label: 'changes requested', tone: 'warn' });
 
-	expect(describeSessionPullRequest(pr({ ci_status: SessionPullRequestCheckStatus.Pending })))
+    expect(describeSessionPullRequest(pr({ ci_status: 'pending' })))
       .toEqual({ label: 'checks running', tone: 'warn' });
   });
 
   it('separates a landed pull request from a live one', () => {
-	expect(describeSessionPullRequest(pr({ state: 'merged', ci_status: SessionPullRequestCheckStatus.Failure })))
+    expect(describeSessionPullRequest(pr({ state: 'merged', ci_status: 'failure' })))
       .toEqual({ label: 'merged', tone: 'merged' });
     expect(describeSessionPullRequest(pr({ state: 'closed' })))
       .toEqual({ label: 'closed', tone: 'neutral' });
   });
 
-  it('requires green checks and clean mergeability before saying ready to merge', () => {
-    expect(describeSessionPullRequest(pr({
-      review_status: SessionPullRequestReviewStatus.Approved,
-      ci_status: SessionPullRequestCheckStatus.Success,
-      mergeable_state: 'clean',
-    }))).toEqual({ label: 'ready to merge', tone: 'ok' });
-    for (const notReady of [
-      pr({ review_status: SessionPullRequestReviewStatus.Approved, mergeable_state: 'clean' }),
-      pr({ review_status: SessionPullRequestReviewStatus.Approved, ci_status: SessionPullRequestCheckStatus.Success }),
-      pr({
-        review_status: SessionPullRequestReviewStatus.Approved,
-        ci_status: SessionPullRequestCheckStatus.None,
-        mergeable_state: 'clean',
-      }),
-      pr({
-        review_status: SessionPullRequestReviewStatus.Approved,
-        ci_status: SessionPullRequestCheckStatus.Success,
-        mergeable_state: 'unknown',
-      }),
-      pr({
-        review_status: SessionPullRequestReviewStatus.Approved,
-        ci_status: SessionPullRequestCheckStatus.Success,
-        mergeable_state: 'blocked',
-      }),
-      pr({
-        review_status: SessionPullRequestReviewStatus.Approved,
-        ci_status: SessionPullRequestCheckStatus.Success,
-        mergeable_state: 'unstable',
-      }),
-    ]) {
-      expect(describeSessionPullRequest(notReady)).toEqual({ label: 'approved', tone: 'ok' });
-    }
+  it('holds "ready to merge" back while the merge is still blocked', () => {
+    expect(describeSessionPullRequest(pr({ review_status: 'approved', mergeable_state: 'clean' })))
+      .toEqual({ label: 'ready to merge', tone: 'ok' });
+    expect(describeSessionPullRequest(pr({ review_status: 'approved', mergeable_state: 'blocked' })))
+      .toEqual({ label: 'approved', tone: 'ok' });
   });
 
   it('says nothing it cannot know before the first GitHub fetch', () => {
     expect(describeSessionPullRequest(pr())).toEqual({ label: 'open', tone: 'neutral' });
-    expect(describeSessionPullRequestReview(pr({ review_status: SessionPullRequestReviewStatus.None })))
-      .toEqual({ label: 'none requested', tone: 'neutral' });
     expect(describeSessionPullRequest(pr({ state: 'draft' })))
       .toEqual({ label: 'draft', tone: 'neutral' });
   });

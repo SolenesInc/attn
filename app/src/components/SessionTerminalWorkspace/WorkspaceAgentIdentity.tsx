@@ -37,7 +37,6 @@ export function WorkspaceAgentIdentity({ agentPane, paneSession, paneTitle }: Wo
           )}
         </span>
         <SessionProvenance
-		  sessionId={agentPane.sessionId}
           automation={paneSession?.automation}
           pullRequests={paneSession?.pullRequests}
           interactive

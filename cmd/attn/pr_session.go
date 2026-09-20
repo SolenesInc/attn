@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 func sessionPRClient() *client.Client {
@@ -22,18 +23,18 @@ func sessionPRClient() *client.Client {
 type sessionPRArgs struct {
 	sessionID string
 	url       string
+	mode      prreadiness.Mode
 	reviewer  string
 	asJSON    bool
 }
-
-const defaultPRWatchReviewer = "chatgpt-codex-connector[bot]"
 
 func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 	fs := flag.NewFlagSet("pr "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	session := fs.String("session", "", "session id (defaults to ATTN_SESSION_ID)")
 	asJSON := fs.Bool("json", false, "print the result as JSON")
-	reviewer := fs.String("reviewer", defaultPRWatchReviewer, "reviewer login whose exact-head review gates readiness")
+	modeValue := fs.String("mode", string(prreadiness.ModeGreen), "green, codex, or formal-review")
+	reviewer := fs.String("reviewer", "", "reviewer login (formal-review only)")
 
 	var positional []string
 	for rest := args; ; {
@@ -47,9 +48,13 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 		rest = fs.Args()[1:]
 	}
 
+	mode, err := prreadiness.ParseMode(*modeValue)
+	if err != nil {
+		return sessionPRArgs{}, err
+	}
 	parsed := sessionPRArgs{
 		sessionID: strings.TrimSpace(*session), asJSON: *asJSON,
-		reviewer: strings.TrimSpace(*reviewer),
+		mode: mode, reviewer: strings.TrimSpace(*reviewer),
 	}
 	if parsed.sessionID == "" {
 		parsed.sessionID = strings.TrimSpace(os.Getenv("ATTN_SESSION_ID"))
@@ -68,6 +73,11 @@ func parseSessionPRArgs(command string, args []string) (sessionPRArgs, error) {
 			parsed.url = positional[0]
 		}
 		return parsed, nil
+	}
+	if command == "watch" {
+		if err := prreadiness.ValidateConfig(parsed.mode, parsed.reviewer); err != nil {
+			return parsed, err
+		}
 	}
 	if len(positional) != 1 {
 		return parsed, errors.New("needs exactly one pull request url")
@@ -98,11 +108,9 @@ func watchOrUnwatchSessionPR(command string, parsed sessionPRArgs, stdout, stder
 	c := sessionPRClient()
 	var err error
 	if command == "watch" {
-		if parsed.reviewer == "" {
-			fmt.Fprintln(stderr, "pr watch: --reviewer must not be empty")
-			return prWaitExitUsage
+		if err = prreadiness.ValidateConfig(parsed.mode, parsed.reviewer); err == nil {
+			err = c.WatchSessionPullRequest(parsed.sessionID, parsed.url, protocol.PullRequestWatchMode(parsed.mode), parsed.reviewer)
 		}
-		err = c.WatchSessionPullRequest(parsed.sessionID, parsed.url, parsed.reviewer)
 	} else {
 		err = c.UnwatchSessionPullRequest(parsed.sessionID, parsed.url)
 	}
@@ -111,7 +119,7 @@ func watchOrUnwatchSessionPR(command string, parsed sessionPRArgs, stdout, stder
 		return prWaitExitError
 	}
 	if command == "watch" {
-		fmt.Fprintf(stdout, "watching %s for session %s; updates arrive in the agent inbox\n", parsed.url, parsed.sessionID)
+		fmt.Fprintf(stdout, "watching %s in %s mode for session %s; updates arrive in the agent inbox\n", parsed.url, parsed.mode, parsed.sessionID)
 	} else {
 		fmt.Fprintf(stdout, "stopped watching %s for session %s\n", parsed.url, parsed.sessionID)
 	}
@@ -149,6 +157,7 @@ func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, std
 		fmt.Fprintf(stderr, "pr ls: unknown session %s\n", sessionID)
 		return prWaitExitError
 	}
+
 	entries := make([]protocol.SessionPullRequest, 0, len(found.PullRequests))
 	for _, pr := range found.PullRequests {
 		if watchesOnly && !protocol.Deref(pr.Watching) {
@@ -175,25 +184,19 @@ func listSessionPRs(sessionID, url string, watchesOnly, asJSON bool, stdout, std
 
 	if len(entries) == 0 {
 		if watchesOnly {
-			fmt.Fprintf(stdout, "session %s has no armed pull request monitors\n", sessionID)
+			fmt.Fprintf(stdout, "session %s has no watched pull requests\n", sessionID)
 		} else {
 			fmt.Fprintf(stdout, "session %s has opened no pull requests\n", sessionID)
 		}
 		return 0
 	}
 	w := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "PULL REQUEST\tSTATE\tCHECKS\tREVIEW\tWATCH\tURL")
+	fmt.Fprintln(w, "PULL REQUEST\tSTATE\tMODE\tREADINESS\tHEALTH\tURL")
 	for _, pr := range entries {
-		watch := "-"
-		if protocol.Deref(pr.Watching) {
-			watch = "watching"
-			if pr.WatchError != nil {
-				watch = "error"
-			}
-		}
 		fmt.Fprintf(w, "%s#%d\t%s\t%s\t%s\t%s\t%s\n",
 			pr.Repository, pr.Number, pr.State,
-			orDash(string(protocol.Deref(pr.CIStatus))), orDash(string(protocol.Deref(pr.ReviewStatus))), watch, pr.URL)
+			orDash(string(protocol.Deref(pr.WatchMode))), orDash(protocol.Deref(pr.ReadinessState)),
+			orDash(protocol.Deref(pr.WatchHealth)), pr.URL)
 	}
 	w.Flush()
 	return 0

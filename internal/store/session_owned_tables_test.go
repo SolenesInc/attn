@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 var sessionOwnedTableSeeds = map[string]func(*testing.T, *Store, string){
@@ -30,7 +31,7 @@ var sessionOwnedTableSeeds = map[string]func(*testing.T, *Store, string){
 	},
 	"pull_request_watches": func(t *testing.T, s *Store, sessionID string) {
 		t.Helper()
-		if _, err := s.WatchPullRequest(sessionID, "github.com:victorarias/attn#"+sessionID, "reviewer", time.Now()); err != nil {
+		if _, err := s.WatchPullRequest(sessionID, "github.com:victorarias/attn#"+sessionID, prreadiness.ModeGreen, "", time.Now()); err != nil {
 			t.Fatalf("watch pull request for %s: %v", sessionID, err)
 		}
 	},

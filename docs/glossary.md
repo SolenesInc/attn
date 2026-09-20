@@ -32,7 +32,7 @@
 - Session repository: the repository where a session ran.
 - Launch prompt: the opening message sent to a new agent.
 - Session pull request: a PR an agent opened during a session.
-- [PR watch](../README.md#watching-pull-requests): a durable subscription delivering PR updates to a session's agent mailbox.
+- [PR watch](../README.md#watching-pull-requests): a durable, mode-configured subscription delivering PR readiness and feedback updates to a session's agent mailbox.
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
