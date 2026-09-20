@@ -67,6 +67,14 @@ func (s *Store) WatchPullRequest(sessionID, prID, reviewer string, at time.Time)
 }
 
 func (s *Store) UnwatchPullRequest(sessionID, prID string) (bool, error) {
+	return s.unwatchPullRequest(sessionID, prID, false)
+}
+
+func (s *Store) StopPullRequestWatch(sessionID, prID string) (bool, error) {
+	return s.unwatchPullRequest(sessionID, prID, true)
+}
+
+func (s *Store) unwatchPullRequest(sessionID, prID string, clearInbox bool) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -77,6 +85,14 @@ func (s *Store) UnwatchPullRequest(sessionID, prID string) (bool, error) {
 		return false, err
 	}
 	defer tx.Rollback()
+	if clearInbox {
+		if _, err := tx.Exec(`
+			DELETE FROM agent_mailbox_items
+			WHERE recipient_session_id = ? AND kind = ? AND source_id = ? AND read_at = ''
+		`, sessionID, agentmailbox.KindMaintenancePrompt, prID); err != nil {
+			return false, err
+		}
+	}
 	result, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
 	if err != nil {
 		return false, err

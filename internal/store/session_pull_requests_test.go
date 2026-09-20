@@ -105,17 +105,28 @@ func TestPullRequestWatchReviewerResetIsAtomic(t *testing.T) {
 		WHEN NEW.review_status = '' BEGIN SELECT RAISE(FAIL, 'injected unwatch reset failure'); END`); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := s.UnwatchPullRequest("s1", prID); err == nil || changed {
+	if _, _, err := s.EnqueueMaintenancePromptOnce(
+		"watch-notice", "s1", prID, "watch", "review finding", now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if changed, err := s.StopPullRequestWatch("s1", prID); err == nil || changed {
 		t.Fatalf("failed unwatch changed the watch: changed=%v err=%v", changed, err)
 	}
 	if _, found := s.PullRequestWatch("s1", prID); !found {
 		t.Fatal("failed unwatch deleted the watch")
 	}
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || !ids["watch-notice"] {
+		t.Fatalf("failed unwatch deleted the inbox item: ids=%v err=%v", ids, err)
+	}
 	if _, err := s.db.Exec("DROP TRIGGER reject_unwatch_reset"); err != nil {
 		t.Fatal(err)
 	}
-	if changed, err := s.UnwatchPullRequest("s1", prID); err != nil || !changed {
+	if changed, err := s.StopPullRequestWatch("s1", prID); err != nil || !changed {
 		t.Fatalf("retry unwatch: changed=%v err=%v", changed, err)
+	}
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || len(ids) != 0 {
+		t.Fatalf("successful unwatch retained inbox items: ids=%v err=%v", ids, err)
 	}
 	if pr, found := s.SessionPullRequestByID(prID); !found || pr.ReviewStatus != "" || pr.StatusCheckedAt != "" {
 		t.Fatalf("successful unwatch retained watch-owned state: %+v", pr)
@@ -167,6 +178,46 @@ func TestRecordSessionPullRequestIsIdempotentPerSession(t *testing.T) {
 	}
 	if got := s.ListSessionPullRequests("s2"); len(got) != 1 {
 		t.Errorf("s2 = %+v, want its row untouched", got)
+	}
+}
+
+func TestForgetSessionPullRequestIsAtomic(t *testing.T) {
+	s := newSessionPRStore(t)
+	now := time.Now()
+	prID := "github.com:victorarias/attn#71"
+	recordPR(t, s, "s1", prID, 71, now)
+	if _, err := s.WatchPullRequest("s1", prID, "reviewer", now); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.EnqueueMaintenancePromptOnce(
+		"watch-notice", "s1", prID, "watch", "review finding", now,
+	); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`CREATE TRIGGER reject_forget BEFORE DELETE ON session_pull_requests
+		BEGIN SELECT RAISE(FAIL, 'injected forget failure'); END`); err != nil {
+		t.Fatal(err)
+	}
+	if forgotten, err := s.ForgetSessionPullRequest("s1", prID); err == nil || forgotten {
+		t.Fatalf("failed forget changed the pull request: forgotten=%v err=%v", forgotten, err)
+	}
+	if _, found := s.PullRequestWatch("s1", prID); !found {
+		t.Fatal("failed forget deleted the watch")
+	}
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || !ids["watch-notice"] {
+		t.Fatalf("failed forget deleted the inbox item: ids=%v err=%v", ids, err)
+	}
+	if _, err := s.db.Exec("DROP TRIGGER reject_forget"); err != nil {
+		t.Fatal(err)
+	}
+	if forgotten, err := s.ForgetSessionPullRequest("s1", prID); err != nil || !forgotten {
+		t.Fatalf("retry forget: forgotten=%v err=%v", forgotten, err)
+	}
+	if _, found := s.PullRequestWatch("s1", prID); found {
+		t.Fatal("successful forget retained the watch")
+	}
+	if ids, err := s.MaintenanceMailboxItemIDs("s1", prID); err != nil || len(ids) != 0 {
+		t.Fatalf("successful forget retained inbox items: ids=%v err=%v", ids, err)
 	}
 }
 

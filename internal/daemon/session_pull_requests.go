@@ -167,16 +167,14 @@ func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) e
 }
 
 func (d *Daemon) unwatchSessionPullRequestLocked(rec store.SessionPullRequestRecord) error {
-	if err := d.clearPullRequestWatchInbox(rec.SessionID, rec.PRID); err != nil {
-		return err
-	}
-	changed, err := d.store.UnwatchPullRequest(rec.SessionID, rec.PRID)
+	changed, err := d.store.StopPullRequestWatch(rec.SessionID, rec.PRID)
 	if err != nil {
 		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
 	}
 	if !changed {
 		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
 	}
+	d.refreshAgentMailboxUnread(rec.SessionID)
 	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
 	return nil
 }
@@ -195,12 +193,6 @@ func (d *Daemon) recordSessionPullRequest(rec store.SessionPullRequestRecord) er
 func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) error {
 	d.sessionPullRequestWatchMu.Lock()
 	defer d.sessionPullRequestWatchMu.Unlock()
-	if err := d.clearPullRequestWatchInbox(rec.SessionID, rec.PRID); err != nil {
-		return err
-	}
-	if _, err := d.store.UnwatchPullRequest(rec.SessionID, rec.PRID); err != nil {
-		return fmt.Errorf("forget pull request watch %s: %w", rec.PRID, err)
-	}
 	forgotten, err := d.store.ForgetSessionPullRequest(rec.SessionID, rec.PRID)
 	if err != nil {
 		return fmt.Errorf("forget pull request %s: %w", rec.PRID, err)
@@ -208,15 +200,8 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 	if !forgotten {
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
+	d.refreshAgentMailboxUnread(rec.SessionID)
 	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
-	return nil
-}
-
-func (d *Daemon) clearPullRequestWatchInbox(sessionID, prID string) error {
-	if err := d.store.DeleteUnreadMaintenanceMailboxItemsBySource(sessionID, prID); err != nil {
-		return fmt.Errorf("clear pull request watch inbox item %s: %w", prID, err)
-	}
-	d.refreshAgentMailboxUnread(sessionID)
 	return nil
 }
 

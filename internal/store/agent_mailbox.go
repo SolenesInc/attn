@@ -471,13 +471,3 @@ func (s *Store) DeleteUnreadMaintenanceMailboxItem(recipientSessionID, coalesceK
 	changed, err := result.RowsAffected()
 	return changed > 0, err
 }
-
-func (s *Store) DeleteUnreadMaintenanceMailboxItemsBySource(recipientSessionID, sourceID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err := s.db.Exec(`
-		DELETE FROM agent_mailbox_items
-		WHERE recipient_session_id = ? AND kind = ? AND source_id = ? AND read_at = ''
-	`, recipientSessionID, agentmailbox.KindMaintenancePrompt, sourceID)
-	return err
-}

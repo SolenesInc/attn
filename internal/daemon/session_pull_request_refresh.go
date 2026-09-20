@@ -536,10 +536,18 @@ func samePullRequestWatchGeneration(left, right store.PullRequestWatch) bool {
 }
 
 func (d *Daemon) deliverPullRequestTransition(watch store.PullRequestWatch, events []prreadiness.Event, now time.Time) error {
-	delivered, err := d.store.MaintenanceMailboxItemIDs(watch.SessionID, watch.PRID)
-	if err != nil {
-		d.logf("pull request watch: load delivered feedback for %s/%s: %v", watch.SessionID, watch.PRID, err)
-		return err
+	var delivered map[string]bool
+	for _, event := range events {
+		if event.Kind != prreadiness.EventAction && event.Kind != prreadiness.EventFeedback {
+			continue
+		}
+		var err error
+		delivered, err = d.store.MaintenanceMailboxItemIDs(watch.SessionID, watch.PRID)
+		if err != nil {
+			d.logf("pull request watch: load delivered feedback for %s/%s: %v", watch.SessionID, watch.PRID, err)
+			return err
+		}
+		break
 	}
 	for _, event := range events {
 		switch event.Kind {

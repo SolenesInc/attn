@@ -109,6 +109,13 @@ func serveHost(d *Daemon, host string, served *fakePRHost) {
 	}
 }
 
+func TestEmptyPullRequestTransitionDoesNotReadMailbox(t *testing.T) {
+	d := &Daemon{}
+	if err := d.deliverPullRequestTransition(store.PullRequestWatch{}, nil, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func recordPRForRefresh(t *testing.T, d *Daemon, sessionID, url string) {
 	t.Helper()
 	if resp := sendPRCommand(t, d, protocol.PullRequestCreatedMessage{

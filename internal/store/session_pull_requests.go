@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/victorarias/attn/internal/agentmailbox"
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -354,7 +355,22 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 		return false, errors.New("store has no database")
 	}
 
-	result, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(`
+		DELETE FROM agent_mailbox_items
+		WHERE recipient_session_id = ? AND kind = ? AND source_id = ? AND read_at = ''
+	`, sessionID, agentmailbox.KindMaintenancePrompt, prID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(
+		`DELETE FROM pull_request_watches WHERE session_id = ? AND pr_id = ?`, sessionID, prID); err != nil {
+		return false, err
+	}
+	result, err := tx.Exec(
 		`DELETE FROM session_pull_requests WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
 	if err != nil {
 		return false, err
@@ -363,7 +379,10 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return affected > 0, nil
+	if affected == 0 {
+		return false, nil
+	}
+	return true, tx.Commit()
 }
 
 func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error) {
