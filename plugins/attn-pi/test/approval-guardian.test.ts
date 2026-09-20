@@ -165,6 +165,7 @@ test("the backoff doubles and stays inside its jitter band", () => {
 type Answer = { text?: string; stopReason?: string; errorMessage?: string; toolCall?: string };
 
 function guardian(answers: Answer[], overrides: Record<string, unknown> = {}) {
+  const { authOverride, ...rest } = overrides;
   const calls: { model: unknown; context: any; options: any }[] = [];
   const usage: GuardianUsageEntry[] = [];
   const notices: { text: string; level: string }[] = [];
@@ -196,7 +197,7 @@ function guardian(answers: Answer[], overrides: Record<string, unknown> = {}) {
     registry: {
       find: () => undefined,
       getProvider: () => provider as never,
-      getApiKeyAndHeaders: async () => ({ ok: true, apiKey: "test-key" }),
+      getApiKeyAndHeaders: (authOverride ?? (() => ({ ok: true, apiKey: "test-key" }))) as never,
       getProviderAuth: async () => undefined,
     },
     model: () => ({ provider: "anthropic", id: "claude-test", reasoning: true } as never),
@@ -209,7 +210,7 @@ function guardian(answers: Answer[], overrides: Record<string, unknown> = {}) {
     now: () => clock,
     sleep: async (ms) => { slept.push(ms); clock += ms; },
     jitter: () => 0.5,
-    ...overrides,
+    ...rest,
   });
   return {
     reviewer, usage, notices, slept, tools, calls,
@@ -458,4 +459,51 @@ test("assistant replies stay complete so pi-ai can estimate the context", async 
   expect(await reviewer.review(command, { cwd: "/w" })).toEqual({ type: "approved" });
 
   expect(notices.some((notice) => notice.text.includes("failed"))).toBe(false);
+});
+
+test("the review forwards the session id to the provider", async () => {
+  const it = guardian([{ text: '{"outcome":"allow"}' }]);
+  expect(await it.review()).toEqual({ type: "approved" });
+  expect(it.calls[0]!.options.sessionId).toBe("session-1");
+});
+
+test("an attribution hook decides the headers, keeping the auth headers as overrides", async () => {
+  const it = guardian([{ text: '{"outcome":"allow"}' }], {
+    attributionHeaders: (model, sessionId, authHeaders) => ({
+      ...authHeaders, "x-opencode-session": sessionId, "x-opencode-client": "pi",
+    }),
+    authOverride: () => ({ ok: true, apiKey: "test-key", headers: { "x-auth": "key" } }),
+  });
+  expect(await it.review()).toEqual({ type: "approved" });
+  expect(it.calls[0]!.options.headers).toEqual({
+    "x-auth": "key",
+    "x-opencode-session": "session-1",
+    "x-opencode-client": "pi",
+  });
+});
+
+async function attributionHarness(model: Record<string, unknown>, sessionId: string) {
+  const it = guardian([{ text: '{"outcome":"allow"}' }], {
+    attributionHeaders: (receivedModel, receivedSessionId, authHeaders) => ({
+      ...authHeaders, seen: `${receivedModel.provider}/${receivedModel.id}@${receivedSessionId}`,
+    }),
+    model: () => model as never,
+    sessionId: () => sessionId,
+    authOverride: () => ({ ok: true, apiKey: "test-key", headers: { "x-auth": "key" } }),
+  });
+  const decision = await it.review();
+  return { decision, headers: it.calls[0]!.options.headers, options: it.calls[0]!.options };
+}
+
+test("the hook sees the resolved model and session", async () => {
+  const it = await attributionHarness({ provider: "opencode-go", id: "glm" }, "session-7");
+  expect(it.decision).toEqual({ type: "approved" });
+  expect(it.headers).toMatchObject({ seen: "opencode-go/glm@session-7" });
+});
+
+test("without a hook the auth headers pass through untouched", async () => {
+  const it = guardian([{ text: '{"outcome":"allow"}' }], { authOverride: () => ({ ok: true, apiKey: "test-key", headers: { "x-auth": "key" } }) });
+  expect(await it.review()).toEqual({ type: "approved" });
+  expect(it.calls[0]!.options.headers).toEqual({ "x-auth": "key" });
+  expect(it.calls[0]!.options.sessionId).toBe("session-1");
 });

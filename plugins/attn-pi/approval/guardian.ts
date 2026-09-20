@@ -121,6 +121,11 @@ export type GuardianOptions = {
   sessionId: () => string;
   /** runTool must stay read-only, sandboxed, and offline: the Guardian looks, never changes anything. */
   runTool: GuardianToolRun;
+  attributionHeaders?: (
+    model: ModelLike,
+    sessionId: string,
+    requestHeaders?: Record<string, string | null> | undefined,
+  ) => Record<string, string | null> | undefined;
   onUsage: (entry: GuardianUsageEntry) => void;
   notify: (message: string, level: "info" | "warning" | "error") => void;
   now?: () => number;
@@ -258,10 +263,11 @@ export class GuardianReviewer implements Reviewer {
     if (!provider) throw new GuardianTransportError(`provider ${JSON.stringify(model.provider)} is not configured`);
     const transcript = this.options.transcript();
     const conversation = this.conversation;
+    const sessionId = this.options.sessionId();
     const prompt = buildGuardianPrompt({
       request,
       transcript,
-      sessionId: this.options.sessionId(),
+      sessionId,
       ...(conversation ? { alreadyReviewed: conversation.reviewedEntryCount } : {}),
       followupReminder: conversation !== undefined && !conversation.reminded,
     });
@@ -279,7 +285,7 @@ export class GuardianReviewer implements Reviewer {
       const bound = signalFor(ctx, deadline, now);
       let result: CompletionResultLike;
       try {
-        result = await complete(provider, target, this.options.systemPrompt(), messages, auth, bound.signal, review.effort);
+        result = await complete(provider, target, this.options.systemPrompt(), messages, auth, bound.signal, review.effort, sessionId, this.options.attributionHeaders);
       } finally {
         bound.release();
       }
@@ -374,6 +380,8 @@ async function complete(
   auth: { apiKey?: string; headers?: Record<string, string | null>; env?: Record<string, string> },
   signal?: AbortSignal,
   effort?: string,
+  sessionId?: string,
+  attributionHeaders?: GuardianOptions["attributionHeaders"],
 ): Promise<CompletionResultLike> {
   const context = {
     systemPrompt: credentials.text(systemPrompt),
@@ -382,8 +390,9 @@ async function complete(
   } as Parameters<ProviderLike["streamSimple"]>[1];
   const options = {
     ...(model.reasoning && effort && effort !== "off" ? { reasoning: effort } : {}),
+    ...(sessionId ? { sessionId } : {}),
     apiKey: auth.apiKey,
-    headers: auth.headers,
+    headers: attributionHeaders?.(model, sessionId ?? "", auth.headers) ?? auth.headers,
     env: auth.env,
     signal,
   } as Parameters<ProviderLike["streamSimple"]>[2];

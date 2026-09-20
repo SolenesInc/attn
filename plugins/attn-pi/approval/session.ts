@@ -4,6 +4,7 @@ import { renderEnvironment } from "../automode/environment";
 import type { DenialLedgerLike } from "../automode/ledger";
 import { commandEnvironment, sandboxSpecFor, wrapCommand, type ProxyAddress, type SandboxConfig } from "../sandbox/index";
 import type { Decider } from "../netproxy/index";
+import { createAttributionHeaders, guardianAttributionSettings } from "./attribution";
 import { loadApprovalConfig, type ApprovalConfig, type ApprovalPolicy, type RawApprovalConfig, type SandboxMode } from "./config";
 import { GuardianReviewer, type GuardianUsageEntry } from "./guardian";
 import { guardianSettings, readGuardianSelection, resolveGuardian, type GuardianControl, type GuardianSelection } from "./guardian-selection";
@@ -208,6 +209,7 @@ export class PiApproval {
       systemPrompt: () => systemPrompt,
       transcript: () => transcriptFromSession(this.context?.sessionManager.buildContextEntries() ?? []),
       sessionId: () => this.context?.sessionManager.getSessionId() ?? "",
+      attributionHeaders: createAttributionHeaders(guardianAttributionSettings(ctx.cwd)),
       runTool: (command, signal) => this.inspect(command, signal),
       onUsage: (entry: GuardianUsageEntry) => pi.appendEntry("attn-guardian-usage", entry),
       notify: (text, level) => this.context?.ui?.notify(text, level),
