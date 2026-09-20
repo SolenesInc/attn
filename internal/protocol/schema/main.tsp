@@ -149,7 +149,6 @@ model SessionPullRequest {
   mergeable_state?: string;     // clean, blocked, dirty, unstable
   status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
   watching?: boolean;
-  watch_recipients?: string[];
   watch_mode?: PullRequestWatchMode;
   watch_reviewer?: string;
   readiness_state?: string;     // ready | waiting | blocked | merged | closed | unknown

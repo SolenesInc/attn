@@ -9401,9 +9401,6 @@ type SessionPullRequest struct {
 	// WatchMode corresponds to the JSON schema field "watch_mode".
 	WatchMode *PullRequestWatchMode `json:"watch_mode,omitempty,omitzero"`
 
-	// WatchRecipients corresponds to the JSON schema field "watch_recipients".
-	WatchRecipients []string `json:"watch_recipients,omitempty,omitzero"`
-
 	// WatchReviewer corresponds to the JSON schema field "watch_reviewer".
 	WatchReviewer *string `json:"watch_reviewer,omitempty,omitzero"`
 

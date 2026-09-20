@@ -2466,7 +2466,6 @@ export interface PullRequestElement {
     watch_health?:          string;
     watch_last_checked_at?: string;
     watch_mode?:            PullRequestWatchMode;
-    watch_recipients?:      string[];
     watch_reviewer?:        string;
     watching?:              boolean;
     [property: string]: any;
@@ -9329,7 +9328,6 @@ export interface SessionPullRequest {
     watch_health?:          string;
     watch_last_checked_at?: string;
     watch_mode?:            PullRequestWatchMode;
-    watch_recipients?:      string[];
     watch_reviewer?:        string;
     watching?:              boolean;
     [property: string]: any;
@@ -18150,7 +18148,6 @@ const typeMap: any = {
         { json: "watch_health", js: "watch_health", typ: u(undefined, "") },
         { json: "watch_last_checked_at", js: "watch_last_checked_at", typ: u(undefined, "") },
         { json: "watch_mode", js: "watch_mode", typ: u(undefined, r("PullRequestWatchMode")) },
-        { json: "watch_recipients", js: "watch_recipients", typ: u(undefined, a("")) },
         { json: "watch_reviewer", js: "watch_reviewer", typ: u(undefined, "") },
         { json: "watching", js: "watching", typ: u(undefined, true) },
     ], "any"),
@@ -22534,7 +22531,6 @@ const typeMap: any = {
         { json: "watch_health", js: "watch_health", typ: u(undefined, "") },
         { json: "watch_last_checked_at", js: "watch_last_checked_at", typ: u(undefined, "") },
         { json: "watch_mode", js: "watch_mode", typ: u(undefined, r("PullRequestWatchMode")) },
-        { json: "watch_recipients", js: "watch_recipients", typ: u(undefined, a("")) },
         { json: "watch_reviewer", js: "watch_reviewer", typ: u(undefined, "") },
         { json: "watching", js: "watching", typ: u(undefined, true) },
     ], "any"),

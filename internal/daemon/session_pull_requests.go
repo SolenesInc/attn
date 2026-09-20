@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -272,21 +271,13 @@ func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequ
 		entry.WatchLastCheckedAt = pullRequestField(rec.WatchLastCheckedAt)
 		watches := watchesByPR[rec.PRID]
 		if len(watches) > 0 {
-			recipients := make([]string, 0, len(watches))
 			for _, watch := range watches {
-				label := shortSessionID(watch.SessionID)
-				if session := d.store.Get(watch.SessionID); session != nil {
-					label = d.sessionOriginName(session)
-				}
-				recipients = append(recipients, label)
 				if watch.SessionID == rec.SessionID {
 					entry.Watching = protocol.Ptr(true)
 					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
 					entry.WatchReviewer = pullRequestField(watch.Reviewer)
 				}
 			}
-			sort.Strings(recipients)
-			entry.WatchRecipients = recipients
 		}
 		out = append(out, entry)
 	}
