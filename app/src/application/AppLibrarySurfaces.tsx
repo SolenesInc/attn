@@ -51,6 +51,7 @@ export function AppLibrarySurfaces() {
     sendFsReadAsset,
     sendNotebookBacklinks,
     sendNotebookToChief,
+    connectionGeneration,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -92,6 +93,7 @@ export function AppLibrarySurfaces() {
         yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
         sessions={{
           listSessions: sendSessionList,
+          connectionGeneration,
           workspaceNames: workspaceNamesById,
           liveSessionIds: liveGardenSessions,
           seedForSession,

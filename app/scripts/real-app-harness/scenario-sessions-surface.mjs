@@ -80,8 +80,15 @@ function buildRepositories(root) {
   git(other, 'add', 'README.md');
   git(other, 'commit', '-q', '-m', 'fixture');
 
-  for (const dir of [repo, other]) writeMockAgentFixture(dir, { name: 'sessions surface mock', turns: [] });
-  return { repo, other };
+  const slowWorktree = path.join(root, 'ledger-slow-worktree');
+  const fastWorktree = path.join(root, 'other-fast-worktree');
+  git(repo, 'worktree', 'add', '-q', '-b', 'sessions-slow', slowWorktree);
+  git(other, 'worktree', 'add', '-q', '-b', 'sessions-fast', fastWorktree);
+
+  for (const dir of [repo, other, slowWorktree, fastWorktree]) {
+    writeMockAgentFixture(dir, { name: 'sessions surface mock', turns: [] });
+  }
+  return { repo, other, slowWorktree, fastWorktree };
 }
 
 async function waitForSessions(client, predicate, description, timeoutMs = 15_000) {
@@ -157,7 +164,10 @@ async function main() {
   runner.registerCleanup('remove_git_gate', () => fs.rmSync(eligibilityGit.gate, { force: true }));
 
   try {
-    const { repo, other } = await runner.step('build_repositories', () => buildRepositories(runner.sessionDir));
+    const { repo, other, slowWorktree, fastWorktree } = await runner.step(
+      'build_repositories',
+      () => buildRepositories(runner.sessionDir),
+    );
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
@@ -169,7 +179,7 @@ async function main() {
     });
 
     await runner.step('create_sessions_in_two_repositories', async () => {
-      await Promise.all([['one', repo], ['two', repo], ['elsewhere', other], ['quick', other]].map(async ([name, cwd]) => {
+      await Promise.all([['one', repo], ['two', slowWorktree], ['elsewhere', other], ['quick', fastWorktree]].map(async ([name, cwd]) => {
         sessions[name] = await createSessionAndWaitForInitialPane({
           client,
           observer,
@@ -240,6 +250,8 @@ async function main() {
       runner.assert(fastMs >= 1_000 && fastMs < slowMs,
         'the fast repository remains delayed but settles before the slow repository', { slowMs, fastMs });
       runner.writeJson('eligibility-git-delays.json', { slowMs, fastMs });
+      git(repo, 'worktree', 'remove', '--force', slowWorktree);
+      git(other, 'worktree', 'remove', '--force', fastWorktree);
     });
 
     await runner.step('closed_rows_arrive_then_settle_independently', async () => {

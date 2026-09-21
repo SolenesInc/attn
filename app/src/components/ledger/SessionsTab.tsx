@@ -37,6 +37,7 @@ export interface SessionSeedLink {
 
 export interface SessionsTabProps {
   listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  connectionGeneration?: number;
   workspaceNames: Record<string, string>;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
@@ -63,6 +64,7 @@ const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle
 
 export function SessionsTab({
   listSessions,
+  connectionGeneration = 0,
   workspaceNames,
   liveSessionIds,
   seedForSession,
@@ -86,6 +88,7 @@ export function SessionsTab({
   const ledger = useSessionLedger({
     enabled: true,
     list: listSessions,
+    connectionGeneration,
     now,
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,

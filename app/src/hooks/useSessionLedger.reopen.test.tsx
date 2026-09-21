@@ -120,4 +120,23 @@ describe('useSessionLedger streamed reopen eligibility', () => {
       error: 'git unavailable',
     });
   });
+
+  it('reissues the streamed page after reconnect', async () => {
+    const entry = closedEntry('s1');
+    const list = vi.fn(async () => ({ entries: [entry], omitted: 0 }));
+    const seen: { view: SessionLedgerView | null } = { view: null };
+    function Harness({ generation }: { generation: number }) {
+      const view = useSessionLedger({ enabled: true, list, connectionGeneration: generation, now });
+      useEffect(() => { seen.view = view; });
+      return null;
+    }
+    const view = render(<Harness generation={1} />);
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
+
+    view.rerender(<Harness generation={2} />);
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true }));
+  });
 });

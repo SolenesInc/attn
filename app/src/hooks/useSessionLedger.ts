@@ -48,6 +48,7 @@ export type ReopenResolution =
 export interface UseSessionLedgerOptions {
   enabled: boolean;
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  connectionGeneration?: number;
   pageSize?: number;
   now?: () => Date;
   initialFilters?: SessionLedgerFilters;
@@ -122,6 +123,7 @@ export function closeBelongsInView(
 export function useSessionLedger({
   enabled,
   list,
+  connectionGeneration = 0,
   pageSize = SESSION_PAGE_SIZE,
   now = systemNow,
   initialFilters = EMPTY_SESSION_FILTERS,
@@ -221,7 +223,7 @@ export function useSessionLedger({
       });
     // `query` holds a fresh `now`, so depending on it would refetch every render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, filters, filterError, list, pageSize, replacePageResolutions, reloadNonce]);
+  }, [enabled, filters, filterError, list, connectionGeneration, pageSize, replacePageResolutions, reloadNonce]);
 
   const reload = useCallback(() => {
     early.current.clear();

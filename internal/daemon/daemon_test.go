@@ -2799,7 +2799,7 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	}
 
 	client := &wsClient{
-		send:            make(chan outboundMessage, 4),
+		send:            make(chan outboundMessage, 16),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
 	d.wsHub.clients[client] = true
@@ -2819,14 +2819,16 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	}
 
 	var event map[string]interface{}
-	for i := 0; i < 3; i++ {
-		event = readOutboundEvent(t, client)
-		if asString(event["event"]) == protocol.EventSessionUnregistered {
-			break
+	deadline := time.After(time.Second)
+	for asString(event["event"]) != protocol.EventSessionUnregistered {
+		select {
+		case outbound := <-client.send:
+			if err := json.Unmarshal(outbound.payload, &event); err != nil {
+				t.Fatalf("decode outbound event: %v", err)
+			}
+		case <-deadline:
+			t.Fatalf("timed out waiting for session_unregistered; last event: %+v", event)
 		}
-	}
-	if asString(event["event"]) != protocol.EventSessionUnregistered {
-		t.Fatalf("unexpected event after unregister: %+v", event)
 	}
 	if asString(event["session"].(map[string]interface{})["id"]) != session.ID {
 		t.Fatalf("session_unregistered id = %v, want %s", event["session"], session.ID)
