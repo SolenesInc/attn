@@ -61,6 +61,7 @@ func TestWireTraceFlowGolden(t *testing.T) {
 		t.Fatalf("create workspace dir: %v", err)
 	}
 	client := newWorkspaceProtocolTestClient()
+	d.wsHub.add(client)
 
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "One", Directory: workspaceDir,
