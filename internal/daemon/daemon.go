@@ -1416,7 +1416,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateUpdatedAt: now,
 				LastSeen:       now,
 			}
-			_ = d.worktreeMaintenance.RunForeground(context.Background(), "register recovered session", func(context.Context) error {
+			_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
 				d.store.Add(recoveredSession)
 				return nil
 			})
@@ -2814,17 +2814,17 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(ctx context.Context) error {
-		d.handleRegisterForeground(ctx, conn, msg)
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		d.handleRegisterProtected(protection, conn, msg)
 		return nil
 	})
 }
 
-func (d *Daemon) handleRegisterForeground(ctx context.Context, conn net.Conn, msg *protocol.RegisterMessage) {
+func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection, conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
-	branchInfo, _ := d.readBranchInfo(ctx, gitTaskSessionIdentity, gitInteractive, msg.Dir)
+	branchInfo, _ := d.readBranchInfo(protection.Context(), gitTaskSessionIdentity, gitInteractive, msg.Dir)
 
 	nowStr := string(protocol.TimestampNow())
 	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)

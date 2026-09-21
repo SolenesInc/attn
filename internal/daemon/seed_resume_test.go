@@ -428,7 +428,7 @@ func TestSeedResumeBindingIsAtomicWhenTheSeedChangesDuringLaunch(t *testing.T) {
 	})
 	editSeed(t, d, seed.ID, "new body")
 
-	err = d.bindResumedSeed(seed, doc, "resumed-session", d.store.Get("resumed-session").Directory, "codex", "native-resume")
+	err = d.bindResumedSeed(testForegroundCleanupProtection(), seed, doc, "resumed-session", d.store.Get("resumed-session").Directory, "codex", "native-resume")
 	if err == nil || !strings.Contains(err.Error(), "changed while its conversation was resuming") {
 		t.Fatalf("bindResumedSeed error = %v, want guarded conflict", err)
 	}

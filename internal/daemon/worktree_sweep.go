@@ -66,7 +66,7 @@ func (d *Daemon) registerWorktreeSweepCron(runner *jobs.Runner) {
 
 func (d *Daemon) worktreeSweepHandler(ctx context.Context, _ *jobs.Job) (any, error) {
 	refreshed, removed, kept, err := d.runWorktreeSweep(ctx, time.Now())
-	if errors.Is(err, errWorktreeSweepPreempted) {
+	if errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
 		err = nil
 	}
 	return map[string]any{"refreshed": refreshed, "removed": removed, "kept": kept}, err
@@ -188,48 +188,47 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			d.captureGardenExecutionsInDirectory(wt.Path)
-			seeds := d.seedsForWorktree(wt)
-			deleteErr := lease.TryDelete(
-				func(finalCtx context.Context) error {
-					if err := d.finalWorktreeSweepGitCheck(finalCtx, candidate); err != nil {
-						return err
+			var seeds []string
+			deleteErr := lease.TryAutomaticRemoval(func(protection automaticWorktreeCleanupProtection) error {
+				if err := d.finalWorktreeSweepGitCheck(protection.Context(), candidate); err != nil {
+					return err
+				}
+				if err := d.finalWorktreeSweepProtectionCheck(candidate); err != nil {
+					return err
+				}
+				d.captureGardenExecutionsInDirectory(wt.Path)
+				seeds = d.seedsForWorktree(wt)
+				deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
+				handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
+				if providerErr != nil {
+					if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
+						return providerErr
 					}
-					return d.finalWorktreeSweepProtectionCheck(candidate)
-				},
-				func(commitCtx context.Context) error {
-					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
-					handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
-					if providerErr != nil {
-						if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
-							return providerErr
-						}
-						d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
-					} else if !handled {
-						if err := d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) error {
-							if err := client.DeleteWorktree(runCtx, wt.MainRepo, wt.Path, false); err != nil {
-								return err
-							}
-							if deleteBranch {
-								if err := client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true); err != nil {
-									d.logf("worktree sweep: worktree removed but branch %s remains: %v", wt.Branch, err)
-								}
-							}
-							return nil
-						}); err != nil {
+					d.deleteWorktreeBranch(protection.Context(), wt.MainRepo, wt.Branch, deleteBranch)
+				} else if !handled {
+					if err := d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) error {
+						if err := client.DeleteWorktree(runCtx, wt.MainRepo, wt.Path, false); err != nil {
 							return err
 						}
-					} else {
-						if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
-							return errors.New("worktree delete provider reported success but the worktree still exists")
+						if deleteBranch {
+							if err := client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true); err != nil {
+								d.logf("worktree sweep: worktree removed but branch %s remains: %v", wt.Branch, err)
+							}
 						}
-						d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
+						return nil
+					}); err != nil {
+						return err
 					}
-					d.finalizeDeletedWorktree(wt.Path)
-					return nil
-				},
-			)
-			if errors.Is(deleteErr, errWorktreeSweepPreempted) {
+				} else {
+					if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
+						return errors.New("worktree delete provider reported success but the worktree still exists")
+					}
+					d.deleteWorktreeBranch(protection.Context(), wt.MainRepo, wt.Branch, deleteBranch)
+				}
+				d.finalizeDeletedWorktree(protection, wt.Path)
+				return nil
+			})
+			if errors.Is(deleteErr, errAutomaticWorktreeCleanupPreempted) {
 				return refreshed, removed, kept, deleteErr
 			}
 			if deleteErr != nil {

@@ -18,7 +18,7 @@ func TestReconcileListedWorktreesDropsPrunableRows(t *testing.T) {
 	missing := "/repo/missing"
 	d.store.AddWorktree(&store.Worktree{Path: missing, MainRepo: repo, Branch: "feature", CreatedAt: time.Now()})
 
-	listed := d.reconcileListedWorktrees(repo, []attngit.WorktreeEntry{
+	listed := d.reconcileListedWorktrees(testForegroundCleanupProtection(), repo, []attngit.WorktreeEntry{
 		{Path: repo, Branch: "main"},
 		{Path: missing, Branch: "feature", Prunable: true},
 	})

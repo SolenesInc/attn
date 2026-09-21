@@ -623,7 +623,7 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 
 	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
 	consumeDelegatedPrompt(t, backend)
-	d.registerCreatedWorktree(repo, worktree, "feature/handover")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), repo, worktree, "feature/handover")
 	now := string(protocol.TimestampNow())
 	oldSessionID := "old-worktree-session"
 	d.store.Add(&protocol.Session{

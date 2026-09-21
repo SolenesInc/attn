@@ -87,7 +87,7 @@ func TestReopenEligibilityAndLaunchShareOneMaintenanceLease(t *testing.T) {
 	leaseHeldDuringEligibility := false
 	d.gitExec = gitExecutorFunc(func(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
 		if task.Kind == gitTaskReopen && !leaseHeldDuringEligibility {
-			leaseHeldDuringEligibility = worktreeMaintenanceLeaseHeld(d)
+			leaseHeldDuringEligibility = worktreeAutomaticCleanupExcluded(d)
 		}
 		return run(ctx, gitClient)
 	})
@@ -96,7 +96,7 @@ func TestReopenEligibilityAndLaunchShareOneMaintenanceLease(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !leaseHeldDuringEligibility {
-		t.Fatal("reopen eligibility ran before acquiring the foreground maintenance lease")
+		t.Fatal("reopen eligibility ran before acquiring the foreground automatic cleanup exclusion")
 	}
 }
 

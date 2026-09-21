@@ -366,16 +366,16 @@ func (d *Daemon) reopenSession(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(protectedCtx context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionForeground(protectedCtx, sessionID, action, directory)
+		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, directory)
 		return reopenErr
 	})
 	return outcome, err
 }
 
-func (d *Daemon) reopenSessionForeground(
-	protectedCtx context.Context, sessionID string, action protocol.SessionReopenAction, directory string,
+func (d *Daemon) reopenSessionProtected(
+	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -397,11 +397,11 @@ func (d *Daemon) reopenSessionForeground(
 	var err error
 	if key.ClosedAt == "" {
 		verdict, err = resolver.ResolveEntry(
-			protectedCtx, *entry, d.scheduledReopenGit(gitInteractive),
+			protection.Context(), *entry, d.scheduledReopenGit(gitInteractive),
 		)
 	} else {
 		verdict, err = resolver.ResolveClosed(
-			protectedCtx, key, d.scheduledReopenGit(gitInteractive),
+			protection.Context(), key, d.scheduledReopenGit(gitInteractive),
 		)
 	}
 	if err != nil {
@@ -422,7 +422,7 @@ func (d *Daemon) reopenSessionForeground(
 	if !verdict.offers(action) {
 		return nil, reopenRefusal(&verdict, action)
 	}
-	return d.performReopenLocked(protectedCtx, key, &verdict, action, directory)
+	return d.performReopenLocked(protection, key, &verdict, action, directory)
 }
 
 func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenAction) error {
@@ -442,7 +442,7 @@ func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenA
 }
 
 func (d *Daemon) performReopenLocked(
-	protectedCtx context.Context,
+	protection foregroundCleanupProtection,
 	key reopenKey,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
@@ -477,7 +477,7 @@ func (d *Daemon) performReopenLocked(
 		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
 			plan.FreshConversation = true
 		}
-		path, resolved, err := d.recreateReopenWorktreeForeground(protectedCtx, key, action)
+		path, resolved, err := d.recreateReopenWorktreeProtected(protection, key, action)
 		if err != nil {
 			return nil, err
 		}
@@ -492,7 +492,7 @@ func (d *Daemon) performReopenLocked(
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
-	outcome, err := d.reopenSessionRuntimeLocked(plan, rollback, nil)
+	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -517,8 +517,8 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) s
 	return worktree
 }
 
-func (d *Daemon) recreateReopenWorktreeForeground(
-	protectedCtx context.Context,
+func (d *Daemon) recreateReopenWorktreeProtected(
+	protection foregroundCleanupProtection,
 	key reopenKey,
 	action protocol.SessionReopenAction,
 ) (string, *sessionReopenVerdict, error) {
@@ -526,7 +526,7 @@ func (d *Daemon) recreateReopenWorktreeForeground(
 	var authoritative *sessionReopenVerdict
 	var createdPath, createdBranch string
 	resolved, err := resolver.ResolveClosed(
-		protectedCtx, key, d.scheduledReopenGit(gitInteractive),
+		protection.Context(), key, d.scheduledReopenGit(gitInteractive),
 	)
 	if err != nil {
 		return "", nil, err
@@ -535,7 +535,7 @@ func (d *Daemon) recreateReopenWorktreeForeground(
 		return "", &resolved, reopenRefusal(&resolved, action)
 	}
 	authoritative = &resolved
-	plan, err := d.reopenWorktreeProviderPlan(protectedCtx, &resolved, action)
+	plan, err := d.reopenWorktreeProviderPlan(protection.Context(), &resolved, action)
 	if err != nil {
 		return "", authoritative, err
 	}
@@ -552,7 +552,7 @@ func (d *Daemon) recreateReopenWorktreeForeground(
 		createdPath, createdBranch = providerPath, providerBranch
 	} else {
 		createdPath, createdBranch = plan.path, plan.branch
-		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{
+		mutationErr := d.gitExecution().Run(protection.Context(), gitTask{
 			Kind: gitTaskWorktreeMutation, Lane: gitInteractive,
 		}, func(ctx context.Context, client *attngit.Client) error {
 			branch, createErr := mutateReopenWorktreeAdmitted(ctx, client, &resolved, action, plan.startingFrom)
@@ -565,7 +565,7 @@ func (d *Daemon) recreateReopenWorktreeForeground(
 			return createdPath, authoritative, mutationErr
 		}
 	}
-	d.registerCreatedWorktree(plan.repository, createdPath, createdBranch)
+	d.registerCreatedWorktree(protection, plan.repository, createdPath, createdBranch)
 	return createdPath, authoritative, d.dispatchWorktreeAfterCreateHooks(plan.repository, createdPath, createdBranch)
 }
 
@@ -661,24 +661,34 @@ func (d *Daemon) reopenSessionRuntime(
 	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
 	var outcome *sessionRuntimeReopened
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session runtime", func(context.Context) error {
-		lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
-		lifecycleLock.Lock()
-		defer lifecycleLock.Unlock()
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var reopenErr error
-		outcome, reopenErr = d.reopenSessionRuntimeLocked(plan, rollback, afterSpawn)
+		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan, rollback, afterSpawn)
 		return reopenErr
 	})
 	return outcome, err
 }
 
-func (d *Daemon) reopenSessionRuntimeLocked(
+func (d *Daemon) reopenSessionRuntimeWithProtection(
+	protection foregroundCleanupProtection,
+	plan sessionReopenPlan,
+	rollback *delegationRollback,
+	afterSpawn func() error,
+) (*sessionRuntimeReopened, error) {
+	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
+	lifecycleLock.Lock()
+	defer lifecycleLock.Unlock()
+	return d.reopenSessionRuntimeProtected(protection, plan, rollback, afterSpawn)
+}
+
+func (d *Daemon) reopenSessionRuntimeProtected(
+	protection foregroundCleanupProtection,
 	plan sessionReopenPlan,
 	rollback *delegationRollback,
 	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
 	fail := func(cause error) (*sessionRuntimeReopened, error) {
-		return nil, rollback.fail(cause)
+		return nil, rollback.fail(protection, cause)
 	}
 
 	entry := d.store.SessionLedgerEntry(plan.SessionID)
@@ -786,7 +796,7 @@ func (d *Daemon) reopenSessionRuntimeLocked(
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
+	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}
@@ -810,7 +820,7 @@ func (d *Daemon) reopenSessionRuntimeLocked(
 }
 
 func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
 		r.d.dissociateSessionFromWorkspace(sessionID)
@@ -823,7 +833,7 @@ func (r *delegationRollback) onSessionRespawned(
 	priorIntent store.LaunchIntent,
 	hadPriorIntent bool,
 ) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		if err := r.d.terminateSessionRuntimeChecked(prior.ID, syscall.SIGTERM); err != nil {
 			return err
 		}
@@ -849,7 +859,7 @@ func (r *delegationRollback) onSessionRespawned(
 }
 
 func (r *delegationRollback) onConversationForgotten(sessionID string, prior store.SessionConversation) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		if strings.TrimSpace(prior.NativeID) == "" {
 			return nil
 		}

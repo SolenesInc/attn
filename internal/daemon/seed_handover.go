@@ -106,15 +106,16 @@ func (d *Daemon) bindSeedHandover(
 ) (*protocol.SeedNote, error) {
 	observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
 	var note *protocol.SeedNote
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "handover seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		note, err = d.bindSeedHandoverForeground(msg, operationID, sessionID, directory, agent, observed, fromChief)
+		note, err = d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, directory, agent, observed, fromChief)
 		return err
 	})
 	return note, err
 }
 
-func (d *Daemon) bindSeedHandoverForeground(
+func (d *Daemon) bindSeedHandoverProtected(
+	_ foregroundCleanupProtection,
 	msg *resolvedDelegationLaunch,
 	operationID, sessionID, directory, agent string,
 	observed garden.Dispatch,

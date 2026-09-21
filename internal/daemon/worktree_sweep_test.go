@@ -267,7 +267,7 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 		finalizedUnderLease = true
 		if d.worktreeMaintenance.gate.TryLock() {
 			d.worktreeMaintenance.gate.Unlock()
-			t.Error("swept worktree finalized after releasing the maintenance lease")
+			t.Error("swept worktree finalized after releasing the automatic cleanup exclusion")
 		}
 	}
 

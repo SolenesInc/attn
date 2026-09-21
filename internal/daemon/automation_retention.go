@@ -186,14 +186,14 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	if resolved.Worktree == "" {
 		return nil
 	}
-	if _, err := os.Stat(resolved.Worktree); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
+	return d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(protection automaticWorktreeCleanupProtection) error {
+		if _, err := os.Stat(resolved.Worktree); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
 		}
-		return err
-	}
-	return d.worktreeMaintenance.RunForeground(context.Background(), "remove automation worktree", func(protectedCtx context.Context) error {
-		return d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) error {
+		return d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) error {
 			return client.DeleteWorktree(ctx, resolved.MainRepository, resolved.Worktree, false)
 		})
 	})

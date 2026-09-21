@@ -508,14 +508,14 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
 	var result *spawnRejection
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
-		result = d.runSpawnPipelineForeground(msg, policy)
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		result = d.runSpawnPipelineProtected(protection, msg, policy)
 		return nil
 	})
 	return result
 }
 
-func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
+func (d *Daemon) runSpawnPipelineProtected(_ foregroundCleanupProtection, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
 		return rejection

@@ -11,16 +11,16 @@ import (
 
 func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
 	var createdPath string
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree from branch", func(protectedCtx context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var createErr error
-		createdPath, createErr = d.doCreateWorktreeFromBranchForeground(protectedCtx, msg)
+		createdPath, createErr = d.doCreateWorktreeFromBranchProtected(protection, msg)
 		return createErr
 	})
 	return createdPath, err
 }
 
-func (d *Daemon) doCreateWorktreeFromBranchForeground(protectedCtx context.Context, msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
-	mainRepo, err := d.resolveMainRepo(protectedCtx, gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
+func (d *Daemon) doCreateWorktreeFromBranchProtected(protection foregroundCleanupProtection, msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
+	mainRepo, err := d.resolveMainRepo(protection.Context(), gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
 	if err != nil {
 		return "", err
 	}
@@ -50,7 +50,7 @@ func (d *Daemon) doCreateWorktreeFromBranchForeground(protectedCtx context.Conte
 	if handled {
 		localBranch = providerBranch
 	} else {
-		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
+		mutationErr := d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 			if pruneErr := client.PruneWorktrees(ctx, mainRepo); pruneErr != nil {
 				return pruneErr
 			}
@@ -68,7 +68,7 @@ func (d *Daemon) doCreateWorktreeFromBranchForeground(protectedCtx context.Conte
 		}
 		createdPath = path
 	}
-	d.registerCreatedWorktree(mainRepo, createdPath, localBranch)
+	d.registerCreatedWorktree(protection, mainRepo, createdPath, localBranch)
 	return createdPath, d.dispatchWorktreeAfterCreateHooks(mainRepo, createdPath, localBranch)
 }
 
@@ -123,9 +123,9 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 		}
 		var info repoInfo
 		var worktrees []protocol.Worktree
-		err := d.worktreeMaintenance.RunForeground(context.Background(), "get repository info", func(protectedCtx context.Context) error {
+		err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 			var infoErr error
-			info, infoErr = gitValue(protectedCtx, d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
+			info, infoErr = gitValue(protection.Context(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
 				currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
 				if runErr != nil {
 					return repoInfo{}, runErr
@@ -138,7 +138,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			if infoErr != nil {
 				return infoErr
 			}
-			worktrees = d.reconcileListedWorktrees(repo, info.worktrees)
+			worktrees = d.reconcileListedWorktrees(protection, repo, info.worktrees)
 			return nil
 		})
 		if err != nil {

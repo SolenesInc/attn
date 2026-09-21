@@ -1111,7 +1111,7 @@ func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testi
 	deleteDone := make(chan error, 1)
 	go func() {
 		deleteDone <- fixture.d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
-			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error {
+			return lease.TryAutomaticRemoval(func(automaticWorktreeCleanupProtection) error {
 				close(deleteEntered)
 				<-lease.Context().Done()
 				foregroundWaiting <- context.Cause(lease.Context())
@@ -1126,7 +1126,7 @@ func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testi
 	go func() {
 		continued <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
 	}()
-	if err := <-foregroundWaiting; !errors.Is(err, errWorktreeSweepPreempted) {
+	if err := <-foregroundWaiting; !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
 		t.Fatalf("sweep cancellation = %v, want foreground preemption", err)
 	}
 	select {

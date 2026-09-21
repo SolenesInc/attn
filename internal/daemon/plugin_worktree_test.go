@@ -17,11 +17,11 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func worktreeMaintenanceLeaseHeld(d *Daemon) bool {
+func worktreeAutomaticCleanupExcluded(d *Daemon) bool {
 	err := d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
-		return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error { return nil })
+		return lease.TryAutomaticRemoval(func(automaticWorktreeCleanupProtection) error { return nil })
 	})
-	return errors.Is(err, errWorktreeSweepPreempted)
+	return errors.Is(err, errAutomaticWorktreeCleanupPreempted)
 }
 
 func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T) {
@@ -33,8 +33,8 @@ func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T
 
 	providerPath := filepath.Join(tmpDir, "provider-created")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
-		if !worktreeMaintenanceLeaseHeld(d) {
-			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
+		if !worktreeAutomaticCleanupExcluded(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without automatic cleanup exclusion"}
 		}
 		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
 			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
@@ -354,8 +354,8 @@ func TestDoCreateWorktreeFromBranch_ProviderHandledRegistersValidatedWorktree(t 
 
 	providerPath := filepath.Join(tmpDir, "provider-existing-branch")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
-		if !worktreeMaintenanceLeaseHeld(d) {
-			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
+		if !worktreeAutomaticCleanupExcluded(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without automatic cleanup exclusion"}
 		}
 		if params.Branch != "feature/existing" {
 			t.Fatalf("provider branch=%q, want feature/existing", params.Branch)
@@ -509,7 +509,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
 	d.ensureGardenCollections()
 	logPath := attachPluginTestLogger(t, d)
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-delete")
 
 	client, done := startPluginPipe(t, d, "custom-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -645,7 +645,7 @@ func TestDoDeleteWorktree_ProviderDeclineFallsBackToBuiltInGit(t *testing.T) {
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
 	logPath := attachPluginTestLogger(t, d)
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/declined-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/declined-delete")
 
 	client, done := startPluginPipe(t, d, "declining-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -691,7 +691,7 @@ func TestDoDeleteWorktree_ProviderDirtyWorktreeErrorIsForceable(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-dirty-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-dirty-delete")
 
 	client, done := startPluginPipe(t, d, "dirty-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -738,7 +738,7 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-error-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-error-delete")
 
 	client, done := startPluginPipe(t, d, "failing-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -795,7 +795,7 @@ func TestDoDeleteWorktree_ProviderDeleteBeforeErrorFinalizesOnce(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete-before-error")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-delete-before-error")
 	client, done := startPluginPipe(t, d, "delete-before-error-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
 

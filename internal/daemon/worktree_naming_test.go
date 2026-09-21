@@ -99,11 +99,26 @@ func TestDoDeleteWorktree_BroadcastsGitOperationLifecycle(t *testing.T) {
 	worktreePath = canonicalPathDaemon(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	lookupUnderLease := false
+	executor := d.gitExecution().(*coordinatedGitExecutor)
+	executor.enqueueObserver = func(task gitTask) {
+		if task.Kind != gitTaskWorktreeObserve || lookupUnderLease {
+			return
+		}
+		lookupUnderLease = true
+		if d.worktreeMaintenance.gate.TryLock() {
+			d.worktreeMaintenance.gate.Unlock()
+			t.Error("worktree deletion resolved its target before acquiring the automatic cleanup exclusion")
+		}
+	}
 	cap := captureBroadcasts(d)
 	endpointID := "endpoint-1"
 
 	if err := d.doDeleteWorktree(worktreePath, protocol.Ptr(endpointID), deleteWorktreeOptions{}); err != nil {
 		t.Fatalf("doDeleteWorktree failed: %v", err)
+	}
+	if !lookupUnderLease {
+		t.Fatal("worktree deletion did not inspect its unregistered target")
 	}
 
 	var started, finished protocol.WebSocketEvent
@@ -171,7 +186,7 @@ func TestDoDeleteWorktree_NormalDeleteFailurePreservesAttnState(t *testing.T) {
 	}
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/dirty")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/dirty")
 	addWorktreeSession(t, d, "session-dirty", worktreePath, mainDir, "feat/dirty")
 
 	err := d.doDeleteWorktree(worktreePath, nil, deleteWorktreeOptions{})
@@ -215,7 +230,7 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
 	d.ensureGardenCollections()
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/dirty-force")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/dirty-force")
 	addWorktreeSession(t, d, "session-force", worktreePath, mainDir, "feat/dirty-force")
 	finalizedUnderLease := false
 	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
@@ -225,7 +240,7 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 		finalizedUnderLease = true
 		if d.worktreeMaintenance.gate.TryLock() {
 			d.worktreeMaintenance.gate.Unlock()
-			t.Error("worktree deletion finalized after releasing the maintenance lease")
+			t.Error("worktree deletion finalized after releasing the automatic cleanup exclusion")
 		}
 	}
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{

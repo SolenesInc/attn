@@ -82,7 +82,9 @@ func TestWireTraceProducerGolden(t *testing.T) {
 			finish := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, workspaceDir, nil)
 			finish(nil)
 		}},
-		{"worktree_created", func() { d.registerCreatedWorktree(workspaceDir, worktreeDir, "feature") }},
+		{"worktree_created", func() {
+			d.registerCreatedWorktree(testForegroundCleanupProtection(), workspaceDir, worktreeDir, "feature")
+		}},
 		{"worktree_deleted", func() { d.publishFact(FactWorktreeDeleted, worktreeDir, nil) }},
 		{"worktrees_updated", func() {
 			d.publishFact(FactWorktreeListReconciled, workspaceDir, []protocol.Worktree{{

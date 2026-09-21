@@ -186,9 +186,9 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 		return
 	}
 	var result *protocol.DelegateResult
-	launchErr := d.worktreeMaintenance.RunForeground(context.Background(), "run delegation", func(protectedCtx context.Context) error {
+	launchErr := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var delegateErr error
-		result, delegateErr = d.delegateOperationForeground(protectedCtx, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+		result, delegateErr = d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
 		return delegateErr
 	})
 	if launchErr != nil {

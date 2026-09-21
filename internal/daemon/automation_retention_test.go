@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -227,6 +228,25 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	}
 	if _, err := os.Stat(artifactPath); !os.IsNotExist(err) {
 		t.Fatalf("expected the occurrence artifact to be removed, stat err=%v", err)
+	}
+}
+
+func TestAutomationRetentionRemovalYieldsToForegroundWork(t *testing.T) {
+	worktree := t.TempDir()
+	d := &Daemon{store: store.New(), wsHub: newWSHub()}
+	run := store.AutomationRun{
+		ID:                   "run-protected",
+		ResolvedLocationJSON: automationResolvedLocationJSON(t, t.TempDir(), worktree),
+	}
+
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
+		return d.removeAutomationRunWorktree(run)
+	})
+	if !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		t.Fatalf("removal error = %v, want automatic cleanup preemption", err)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("automatic retention removed foreground worktree: %v", err)
 	}
 }
 

@@ -250,8 +250,8 @@ func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.Sp
 	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
 }
 
-func (d *Daemon) handleSpawnSessionWithPolicyForeground(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	if rejection := d.runSpawnPipelineForeground(msg, policy); rejection != nil {
+func (d *Daemon) handleSpawnSessionWithPolicyProtected(protection foregroundCleanupProtection, client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
+	if rejection := d.runSpawnPipelineProtected(protection, msg, policy); rejection != nil {
 		d.sendSpawnRejection(client, msg.ID, rejection)
 		return
 	}

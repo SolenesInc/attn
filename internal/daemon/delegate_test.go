@@ -208,9 +208,9 @@ func TestDelegateDefaultsToNewWorktreeForGitRepository(t *testing.T) {
 	consumeDelegatedPrompt(t, backend)
 	leaseHeldThroughLaunch := false
 	d.delegationFinalizeHook = func() error {
-		leaseHeldThroughLaunch = worktreeMaintenanceLeaseHeld(d)
+		leaseHeldThroughLaunch = worktreeAutomaticCleanupExcluded(d)
 		if !leaseHeldThroughLaunch {
-			return errors.New("delegation released the maintenance lease before finalization")
+			return errors.New("delegation released the automatic cleanup exclusion before finalization")
 		}
 		return nil
 	}
@@ -238,7 +238,7 @@ func TestDelegateDefaultsToNewWorktreeForGitRepository(t *testing.T) {
 		t.Fatalf("delegated session = %+v, want generated branch", session)
 	}
 	if !leaseHeldThroughLaunch {
-		t.Fatal("delegation preparation and launch did not share one maintenance lease")
+		t.Fatal("delegation preparation and launch did not share one automatic cleanup exclusion")
 	}
 }
 
