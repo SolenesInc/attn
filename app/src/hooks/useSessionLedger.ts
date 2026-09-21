@@ -199,6 +199,7 @@ export function useSessionLedger({
     if (!enabled || filterError) return;
     const seq = ++readSeq.current;
     setLoading(true);
+    setLoadingMore(false);
     setError(null);
     list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {

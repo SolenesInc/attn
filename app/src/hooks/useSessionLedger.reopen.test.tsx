@@ -139,4 +139,32 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true }));
   });
+
+  it('clears a superseded load-more state after reconnect', async () => {
+    const entry = closedEntry('s1');
+    let releaseLoadMore: ((page: SessionLedgerPage) => void) | undefined;
+    const list = vi.fn((query: SessionLedgerQuery) => {
+      if (query.before) {
+        return new Promise<SessionLedgerPage>((resolve) => { releaseLoadMore = resolve; });
+      }
+      return Promise.resolve({ entries: [entry], omitted: 1, next_before: 'older' });
+    });
+    const seen: { view: SessionLedgerView | null } = { view: null };
+    function Harness({ generation }: { generation: number }) {
+      const view = useSessionLedger({ enabled: true, list, connectionGeneration: generation, now });
+      useEffect(() => { seen.view = view; });
+      return null;
+    }
+    const view = render(<Harness generation={1} />);
+    await waitFor(() => expect(seen.view?.loading).toBe(false));
+
+    act(() => { seen.view?.loadMore(); });
+    await waitFor(() => expect(seen.view?.loadingMore).toBe(true));
+    view.rerender(<Harness generation={2} />);
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(seen.view?.loadingMore).toBe(false));
+    await act(async () => { releaseLoadMore?.({ entries: [], omitted: 0 }); });
+    expect(seen.view?.loadingMore).toBe(false);
+  });
 });
