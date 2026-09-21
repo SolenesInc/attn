@@ -175,6 +175,7 @@ async function main() {
           label: `${name}-${runner.runId}`,
           agent: 'claude',
           sessionWaitMs: 30_000,
+          waitForInitialPaneVisible: false,
         });
       }));
       const registered = await observer.waitFor(
