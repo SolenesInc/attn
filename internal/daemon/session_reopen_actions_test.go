@@ -122,8 +122,8 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if mutation.Completed != 1 {
 		t.Errorf("worktree mutation callbacks = %d, want one authoritative callback", mutation.Completed)
 	}
-	if mutation.ChildCommands < 4 {
-		t.Errorf("worktree mutation child commands = %d, want inspection, prune and create on one admitted client", mutation.ChildCommands)
+	if mutation.ChildCommands < 3 {
+		t.Errorf("worktree mutation child commands = %d, want prune, repository resolution and creation on one admitted client", mutation.ChildCommands)
 	}
 }
 
