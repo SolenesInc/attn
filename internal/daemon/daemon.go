@@ -2046,7 +2046,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
 		d.publishFact(FactSessionClosed, sessionID, entry)
-		if entry != nil {
+		if entry != nil && d.wsHub != nil && d.wsHub.ClientCount() > 0 {
 			key := reopenKey{SessionID: entry.ID, ClosedAt: strings.TrimSpace(protocol.Deref(entry.ClosedAt))}
 			if broker := d.sessionReopenBroker(); broker != nil {
 				broker.ResolveForClose(key)

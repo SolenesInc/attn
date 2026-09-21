@@ -20,11 +20,14 @@ func (d *Daemon) readRepoRoot(ctx context.Context, kind gitTaskKind, lane gitLan
 
 func (d *Daemon) resolveMainRepo(ctx context.Context, kind gitTaskKind, lane gitLane, path string) (string, error) {
 	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane}, func(runCtx context.Context, client *attngit.Client) (string, error) {
-		_, err := client.GetRepoRoot(runCtx, path)
+		resolved, err := client.ResolveRepoDir(runCtx, path)
 		if err != nil {
 			return "", err
 		}
-		return client.ResolveMainRepoPath(runCtx, path), nil
+		if _, err := client.GetRepoRoot(runCtx, resolved); err != nil {
+			return "", err
+		}
+		return client.ResolveMainRepoPath(runCtx, resolved), nil
 	})
 }
 

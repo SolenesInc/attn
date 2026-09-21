@@ -235,6 +235,7 @@ func TestReopenBrokerFailuresSettleAndStaleGenerationsStaySilent(t *testing.T) {
 func TestSessionCloseProjectsTheRowBeforeStartingResolution(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	addLedgerTestSession(t, d, "closing", t.TempDir())
+	d.wsHub.add(newWorkspaceProtocolTestClient())
 	broker := installTestReopenBroker(t, d, 1)
 	var projected atomic.Bool
 	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
@@ -252,6 +253,20 @@ func TestSessionCloseProjectsTheRowBeforeStartingResolution(t *testing.T) {
 	}
 	d.closeSession("closing", store.SessionClose{By: store.SessionClosedByUser})
 	<-resolved
+}
+
+func TestSessionCloseDoesNotStartResolutionWithoutAWebSocketClient(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	addLedgerTestSession(t, d, "headless", t.TempDir())
+
+	d.closeSession("headless", store.SessionClose{By: store.SessionClosedByUser})
+
+	d.reopenBrokerMu.Lock()
+	broker := d.reopenBrokerInstance
+	d.reopenBrokerMu.Unlock()
+	if broker != nil {
+		t.Fatal("headless close initialized the reopen broker")
+	}
 }
 
 func TestReopenBrokerWorkerReceiptForFiftyRows(t *testing.T) {
