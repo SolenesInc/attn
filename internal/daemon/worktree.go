@@ -289,13 +289,11 @@ func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opt
 		deleteBranch := branch != "" && !d.gardenKeepsBranch(mainRepo, branch)
 		handled, providerErr := d.dispatchWorktreeDeleteProvider(mainRepo, path, branch, opts.Force)
 		if providerErr != nil {
-			if d.worktreeDeletionHappened(protectedCtx, mainRepo, path) {
-				d.deleteWorktreeBranch(protectedCtx, mainRepo, branch, deleteBranch)
-				return nil
+			if !d.worktreeDeletionHappened(protectedCtx, mainRepo, path) {
+				return d.classifyDeleteWorktreeProviderError(path, opts.Force, providerErr)
 			}
-			return d.classifyDeleteWorktreeProviderError(path, opts.Force, providerErr)
-		}
-		if !handled {
+			d.deleteWorktreeBranch(protectedCtx, mainRepo, branch, deleteBranch)
+		} else if !handled {
 			var branchDeleteErr error
 			deleteErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 				if runErr := client.DeleteWorktree(ctx, mainRepo, path, opts.Force); runErr != nil {
@@ -314,22 +312,21 @@ func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opt
 			} else if deleteBranch {
 				d.logf("Deleted branch %s along with worktree", branch)
 			}
-			return nil
-		}
-		if !d.worktreeDeletionHappened(protectedCtx, mainRepo, path) {
-			return &deleteWorktreeError{
-				err:  errors.New("worktree delete provider reported success but the worktree still exists"),
-				kind: deleteWorktreeFailureProviderError,
+		} else {
+			if !d.worktreeDeletionHappened(protectedCtx, mainRepo, path) {
+				return &deleteWorktreeError{
+					err:  errors.New("worktree delete provider reported success but the worktree still exists"),
+					kind: deleteWorktreeFailureProviderError,
+				}
 			}
+			d.deleteWorktreeBranch(protectedCtx, mainRepo, branch, deleteBranch)
 		}
-		d.deleteWorktreeBranch(protectedCtx, mainRepo, branch, deleteBranch)
+		d.finalizeDeletedWorktree(path)
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-
-	d.finalizeDeletedWorktree(path)
 	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
 	return nil
 }

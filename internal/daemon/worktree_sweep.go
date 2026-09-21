@@ -198,17 +198,15 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 					return d.finalWorktreeSweepProtectionCheck(candidate)
 				},
 				func(commitCtx context.Context) error {
+					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
 					handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
 					if providerErr != nil {
-						if d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
-							d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch))
-							return nil
+						if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
+							return providerErr
 						}
-						return providerErr
-					}
-					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
-					if !handled {
-						return d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) error {
+						d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
+					} else if !handled {
+						if err := d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) error {
 							if err := client.DeleteWorktree(runCtx, wt.MainRepo, wt.Path, false); err != nil {
 								return err
 							}
@@ -218,12 +216,16 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 								}
 							}
 							return nil
-						})
+						}); err != nil {
+							return err
+						}
+					} else {
+						if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
+							return errors.New("worktree delete provider reported success but the worktree still exists")
+						}
+						d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
 					}
-					if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
-						return errors.New("worktree delete provider reported success but the worktree still exists")
-					}
-					d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
+					d.finalizeDeletedWorktree(wt.Path)
 					return nil
 				},
 			)
@@ -235,7 +237,8 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				kept++
 				continue
 			}
-			d.completeSweptWorktreeRemoval(wt, seeds, verdict, now)
+			d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
+			d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
 			removed++
 		}
 	}
@@ -428,12 +431,6 @@ func (d *Daemon) recordSweptWorktreeFailure(wt *store.Worktree, err error, now t
 	}
 	entry.ID = d.store.AppendWorktreeSweepLog(entry, now)
 	d.publishFact(FactWorktreeSwept, wt.Path, protocolSweepEntry(entry))
-}
-
-func (d *Daemon) completeSweptWorktreeRemoval(wt *store.Worktree, seeds []string, verdict sweepVerdict, now time.Time) {
-	d.finalizeDeletedWorktree(wt.Path)
-	d.recordWorktreeRemoval(wt, seeds, deleteWorktreeOptions{RemovalAction: "removed", RemovalReason: verdict.Reason}, now)
-	d.logf("worktree sweep: reclaimed %s (%s)", wt.Path, verdict.Reason)
 }
 
 func (d *Daemon) recordWorktreeRemoval(

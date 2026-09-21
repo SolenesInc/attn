@@ -259,10 +259,24 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	executor := d.gitExecution().(*coordinatedGitExecutor)
 	var tasks []gitTask
 	executor.enqueueObserver = func(task gitTask) { tasks = append(tasks, task) }
+	finalizedUnderLease := false
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		if event.Event != protocol.EventWorktreeDeleted {
+			return
+		}
+		finalizedUnderLease = true
+		if d.worktreeMaintenance.gate.TryLock() {
+			d.worktreeMaintenance.gate.Unlock()
+			t.Error("swept worktree finalized after releasing the maintenance lease")
+		}
+	}
 
 	_, removed, _ := d.worktreeSweepPass(now)
 	if removed != 1 {
 		t.Fatalf("removed %d worktrees, want 1", removed)
+	}
+	if !finalizedUnderLease {
+		t.Fatal("worktree sweep did not publish its finalization event")
 	}
 	if _, err := os.Stat(reclaimed); !os.IsNotExist(err) {
 		t.Errorf("reclaimed worktree still on disk: %v", err)

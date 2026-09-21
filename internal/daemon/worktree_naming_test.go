@@ -217,6 +217,17 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 	d.ensureGardenCollections()
 	d.registerCreatedWorktree(mainDir, worktreePath, "feat/dirty-force")
 	addWorktreeSession(t, d, "session-force", worktreePath, mainDir, "feat/dirty-force")
+	finalizedUnderLease := false
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		if event.Event != protocol.EventWorktreeDeleted {
+			return
+		}
+		finalizedUnderLease = true
+		if d.worktreeMaintenance.gate.TryLock() {
+			d.worktreeMaintenance.gate.Unlock()
+			t.Error("worktree deletion finalized after releasing the maintenance lease")
+		}
+	}
 	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-session-force", Title: "dirty-force", Directory: worktreePath,
 	})
@@ -224,6 +235,9 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 
 	if err := d.doDeleteWorktree(worktreePath, nil, deleteWorktreeOptions{Force: true}); err != nil {
 		t.Fatalf("doDeleteWorktree force failed: %v", err)
+	}
+	if !finalizedUnderLease {
+		t.Fatal("worktree deletion did not publish its finalization event")
 	}
 	if wt := d.store.GetWorktree(worktreePath); wt != nil {
 		t.Fatal("worktree store row remains after force delete")
