@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/automation"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -50,6 +52,36 @@ func (d *Daemon) handlePullRequestForget(conn net.Conn, msg *protocol.PullReques
 	d.sendOK(conn)
 }
 
+func (d *Daemon) handlePullRequestWatch(conn net.Conn, msg *protocol.PullRequestWatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil && d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		err = errors.New("remote pull request watches are unsupported; run this command on the owning daemon")
+	}
+	if err == nil {
+		err = d.watchSessionPullRequest(rec, prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
+	}
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
+
+func (d *Daemon) handlePullRequestUnwatch(conn net.Conn, msg *protocol.PullRequestUnwatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil && d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		err = errors.New("remote pull request watches are unsupported; run this command on the owning daemon")
+	}
+	if err == nil {
+		err = d.unwatchSessionPullRequest(rec)
+	}
+	if err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
+	d.sendOK(conn)
+}
+
 func (d *Daemon) handlePullRequestCreatedWS(msg *protocol.PullRequestCreatedMessage) {
 	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
 	if err == nil {
@@ -67,6 +99,86 @@ func (d *Daemon) handlePullRequestForgetWS(msg *protocol.PullRequestForgetMessag
 	}
 	if err != nil {
 		d.logf("forwarded pull request forget: %v", err)
+	}
+}
+
+func (d *Daemon) handlePullRequestWatchWS(client *wsClient, msg *protocol.PullRequestWatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil && d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		err = errors.New("remote pull request watches are unsupported; run this command on the owning daemon")
+	}
+	if err == nil {
+		err = d.watchSessionPullRequest(rec, prreadiness.Mode(msg.Mode), protocol.Deref(msg.Reviewer))
+	}
+	result := protocol.PullRequestWatchResultMessage{
+		Event: protocol.EventPullRequestWatchResult, RequestID: protocol.Deref(msg.RequestID), Success: err == nil,
+	}
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) handlePullRequestUnwatchWS(client *wsClient, msg *protocol.PullRequestUnwatchMessage) {
+	rec, err := d.sessionPullRequestIdentity(msg.ID, msg.URL)
+	if err == nil && d.sessionOwnerEndpoint(rec.SessionID) != "" {
+		err = errors.New("remote pull request watches are unsupported; run this command on the owning daemon")
+	}
+	if err == nil {
+		err = d.unwatchSessionPullRequest(rec)
+	}
+	result := protocol.PullRequestUnwatchResultMessage{
+		Event: protocol.EventPullRequestUnwatchResult, RequestID: protocol.Deref(msg.RequestID), Success: err == nil,
+	}
+	if err != nil {
+		result.Error = protocol.Ptr(err.Error())
+	}
+	d.sendToClient(client, result)
+}
+
+func (d *Daemon) watchSessionPullRequest(rec store.SessionPullRequestRecord, mode prreadiness.Mode, reviewer string) error {
+	if err := prreadiness.ValidateConfig(mode, reviewer); err != nil {
+		return err
+	}
+	recorded, changed, err := d.store.WatchPullRequest(rec, mode, reviewer, time.Now())
+	if err != nil {
+		return fmt.Errorf("watch pull request %s: %w", rec.PRID, err)
+	}
+	if changed {
+		d.refreshAgentMailboxUnread(rec.SessionID)
+		d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+		d.schedulePullRequestRefreshNow(rec.SessionID, rec.PRID)
+	} else if recorded {
+		d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	}
+	return nil
+}
+
+func (d *Daemon) unwatchSessionPullRequest(rec store.SessionPullRequestRecord) error {
+	changed, err := d.store.StopPullRequestWatch(rec.SessionID, rec.PRID)
+	if err != nil {
+		return fmt.Errorf("unwatch pull request %s: %w", rec.PRID, err)
+	}
+	if !changed {
+		return fmt.Errorf("session %s is not watching pull request %s", rec.SessionID, rec.PRID)
+	}
+	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
+	return nil
+}
+
+func (d *Daemon) publishSessionPullRequestMembershipChanged(prID string, extraSessionIDs ...string) {
+	sessionIDs, err := d.store.SessionPullRequestSessionIDs(prID)
+	if err != nil {
+		d.logf("session pull requests: list sessions for %s membership change: %v", prID, err)
+	}
+	sessionIDs = append(sessionIDs, extraSessionIDs...)
+	seen := make(map[string]bool, len(sessionIDs))
+	for _, sessionID := range sessionIDs {
+		if sessionID != "" && !seen[sessionID] {
+			seen[sessionID] = true
+			d.publishFact(FactSessionPullRequestChanged, sessionID, sessionPullRequestFact{PRID: prID})
+		}
 	}
 }
 
@@ -89,7 +201,8 @@ func (d *Daemon) forgetSessionPullRequest(rec store.SessionPullRequestRecord) er
 	if !forgotten {
 		return fmt.Errorf("session %s has no pull request %s recorded", rec.SessionID, rec.PRID)
 	}
-	d.publishFact(FactSessionPullRequestChanged, rec.SessionID, sessionPullRequestFact{PRID: rec.PRID})
+	d.refreshAgentMailboxUnread(rec.SessionID)
+	d.publishSessionPullRequestMembershipChanged(rec.PRID, rec.SessionID)
 	return nil
 }
 
@@ -116,7 +229,15 @@ func (d *Daemon) sessionPullRequestIdentity(id, url string) (store.SessionPullRe
 	}, nil
 }
 
-func sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) []protocol.SessionPullRequest {
+func (d *Daemon) pullRequestWatchesByPR() map[string][]store.PullRequestWatch {
+	byPR := make(map[string][]store.PullRequestWatch)
+	for _, watch := range d.store.PullRequestWatches() {
+		byPR[watch.PRID] = append(byPR[watch.PRID], watch)
+	}
+	return byPR
+}
+
+func (d *Daemon) sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord, watchesByPR map[string][]store.PullRequestWatch) []protocol.SessionPullRequest {
 	if len(records) == 0 {
 		return nil
 	}
@@ -130,10 +251,30 @@ func sessionPullRequestsForBroadcast(records []store.SessionPullRequestRecord) [
 			State:      sessionPullRequestState(rec),
 		}
 		entry.Title = pullRequestField(rec.Title)
-		entry.CIStatus = pullRequestField(rec.CIStatus)
-		entry.ReviewStatus = pullRequestField(rec.ReviewStatus)
+		if rec.CIStatus != "" {
+			entry.CIStatus = protocol.Ptr(rec.CIStatus)
+		}
+		if rec.ReviewStatus != "" {
+			entry.ReviewStatus = protocol.Ptr(rec.ReviewStatus)
+		}
 		entry.MergeableState = pullRequestField(rec.MergeableState)
 		entry.StatusFetchedAt = pullRequestField(rec.StatusFetchedAt)
+		entry.ReadinessState = pullRequestField(rec.ReadinessState)
+		entry.ReadinessReason = pullRequestField(rec.ReadinessReason)
+		entry.SettlingUntil = pullRequestField(rec.SettlingUntil)
+		entry.WatchHealth = pullRequestField(rec.WatchHealth)
+		entry.WatchError = pullRequestField(rec.WatchError)
+		entry.WatchLastCheckedAt = pullRequestField(rec.WatchLastCheckedAt)
+		watches := watchesByPR[rec.PRID]
+		if len(watches) > 0 {
+			for _, watch := range watches {
+				if watch.SessionID == rec.SessionID {
+					entry.Watching = protocol.Ptr(true)
+					entry.WatchMode = protocol.Ptr(protocol.PullRequestWatchMode(watch.Mode))
+					entry.WatchReviewer = pullRequestField(watch.Reviewer)
+				}
+			}
+		}
 		out = append(out, entry)
 	}
 	return out
@@ -154,7 +295,7 @@ func pullRequestField(value string) *string {
 }
 
 func (d *Daemon) sessionPullRequestsForSession(sessionID string) []protocol.SessionPullRequest {
-	return sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID))
+	return d.sessionPullRequestsForBroadcast(d.store.ListSessionPullRequests(sessionID), d.pullRequestWatchesByPR())
 }
 
 func (d *Daemon) forwardedToSessionOwner(conn net.Conn, sessionID string, msg any) bool {

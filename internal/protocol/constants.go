@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "314"
+const ProtocolVersion = "317"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -165,6 +165,8 @@ const (
 	CmdFilesEdited                           = "files_edited"
 	CmdPullRequestCreated                    = "pull_request_created"
 	CmdPullRequestForget                     = "pull_request_forget"
+	CmdPullRequestWatch                      = "pull_request_watch"
+	CmdPullRequestUnwatch                    = "pull_request_unwatch"
 	CmdQuery                                 = "query"
 	CmdHeartbeat                             = "heartbeat"
 	CmdSessionSelected                       = "session_selected"
@@ -343,6 +345,8 @@ const (
 	EventNotebookChanged                 = "notebook_changed"
 	EventSessionTodosUpdated             = "session_todos_updated"
 	EventSessionsUpdated                 = "sessions_updated"
+	EventPullRequestWatchResult          = "pull_request_watch_result"
+	EventPullRequestUnwatchResult        = "pull_request_unwatch_result"
 	EventRenameResult                    = "rename_result"
 	EventChiefOfStaffResult              = "chief_of_staff_result"
 	EventSessionContextWindowCapResult   = "session_context_window_cap_result"
@@ -1504,6 +1508,20 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdPullRequestForget:
 		var msg PullRequestForgetMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdPullRequestWatch:
+		var msg PullRequestWatchMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdPullRequestUnwatch:
+		var msg PullRequestUnwatchMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

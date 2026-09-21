@@ -11,23 +11,29 @@ import (
 )
 
 type SessionPullRequestRecord struct {
-	SessionID       string
-	PRID            string
-	Repository      string
-	Number          int
-	URL             string
-	CreatedAt       string
-	Title           string
-	Draft           bool
-	State           string
-	CIStatus        string
-	ReviewStatus    string
-	MergeableState  string
-	HeadSHA         string
-	HeadBranch      string
-	StatusFetchedAt string
-	LastActivityAt  string
-	StatusCheckedAt string
+	SessionID          string
+	PRID               string
+	Repository         string
+	Number             int
+	URL                string
+	CreatedAt          string
+	Title              string
+	Draft              bool
+	State              string
+	CIStatus           string
+	ReviewStatus       string
+	MergeableState     string
+	HeadSHA            string
+	HeadBranch         string
+	StatusFetchedAt    string
+	LastActivityAt     string
+	StatusCheckedAt    string
+	ReadinessState     string
+	ReadinessReason    string
+	SettlingUntil      string
+	WatchHealth        string
+	WatchError         string
+	WatchLastCheckedAt string
 }
 
 type SessionPullRequestStatus struct {
@@ -43,7 +49,7 @@ type SessionPullRequestStatus struct {
 
 const sessionPullRequestColumns = `session_id, pr_id, repository, number, url, created_at, title, draft,
 	state, ci_status, review_status, mergeable_state, head_sha, head_branch, status_fetched_at, last_activity_at,
-	status_checked_at`
+	status_checked_at, readiness_state, readiness_reason, settling_until, watch_health, watch_error, watch_last_checked_at`
 
 func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	s.mu.Lock()
@@ -52,8 +58,12 @@ func (s *Store) RecordSessionPullRequest(rec SessionPullRequestRecord, now time.
 		return false, errors.New("store has no database")
 	}
 
+	return recordSessionPullRequest(s.db, rec, now)
+}
+
+func recordSessionPullRequest(ex execer, rec SessionPullRequestRecord, now time.Time) (bool, error) {
 	stamp := now.Format(time.RFC3339Nano)
-	result, err := s.db.Exec(`
+	result, err := ex.Exec(`
 		INSERT OR IGNORE INTO session_pull_requests
 			(session_id, pr_id, repository, number, url, created_at, state, last_activity_at)
 		VALUES (?, ?, ?, ?, ?, ?, 'open', ?)`,
@@ -235,6 +245,28 @@ func (s *Store) UpdateSessionPullRequestStatus(prID string, status SessionPullRe
 	return err
 }
 
+func (s *Store) UpdateUnwatchedSessionPullRequestStatus(prID string, status SessionPullRequestStatus, at time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.db == nil {
+		return errors.New("store has no database")
+	}
+
+	stamp := at.Format(time.RFC3339Nano)
+	_, err := s.db.Exec(`
+		UPDATE session_pull_requests AS pr
+		SET title = ?, draft = ?, state = ?, ci_status = ?, review_status = ?,
+			mergeable_state = ?, head_sha = ?, head_branch = ?,
+			status_fetched_at = ?, status_checked_at = ?
+		WHERE pr_id = ? AND NOT EXISTS (
+			SELECT 1 FROM pull_request_watches AS watch
+			WHERE watch.session_id = pr.session_id AND watch.pr_id = pr.pr_id
+		)`,
+		status.Title, status.Draft, status.State, status.CIStatus, status.ReviewStatus,
+		status.MergeableState, status.HeadSHA, status.HeadBranch, stamp, stamp, prID)
+	return err
+}
+
 func (s *Store) MarkSessionPullRequestChecked(prID string, at time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -268,7 +300,18 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 		return false, errors.New("store has no database")
 	}
 
-	result, err := s.db.Exec(
+	tx, err := s.db.Begin()
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback()
+	if err := clearUnreadPullRequestItems(tx, sessionID, prID); err != nil {
+		return false, err
+	}
+	if _, err := tx.Exec(`DELETE FROM pull_request_watches WHERE session_id=? AND pr_id=?`, sessionID, prID); err != nil {
+		return false, err
+	}
+	result, err := tx.Exec(
 		`DELETE FROM session_pull_requests WHERE session_id = ? AND pr_id = ?`, sessionID, prID)
 	if err != nil {
 		return false, err
@@ -277,7 +320,10 @@ func (s *Store) ForgetSessionPullRequest(sessionID, prID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return affected > 0, nil
+	if affected == 0 {
+		return false, nil
+	}
+	return true, tx.Commit()
 }
 
 func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error) {
@@ -288,7 +334,8 @@ func scanSessionPullRequests(rows *sql.Rows) ([]SessionPullRequestRecord, error)
 			&rec.SessionID, &rec.PRID, &rec.Repository, &rec.Number, &rec.URL, &rec.CreatedAt,
 			&rec.Title, &rec.Draft, &rec.State, &rec.CIStatus, &rec.ReviewStatus,
 			&rec.MergeableState, &rec.HeadSHA, &rec.HeadBranch, &rec.StatusFetchedAt, &rec.LastActivityAt,
-			&rec.StatusCheckedAt,
+			&rec.StatusCheckedAt, &rec.ReadinessState, &rec.ReadinessReason, &rec.SettlingUntil,
+			&rec.WatchHealth, &rec.WatchError, &rec.WatchLastCheckedAt,
 		); err != nil {
 			return nil, err
 		}

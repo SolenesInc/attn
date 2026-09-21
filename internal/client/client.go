@@ -599,6 +599,23 @@ func (c *Client) ForgetSessionPullRequest(id, url string) error {
 	return err
 }
 
+func (c *Client) WatchSessionPullRequest(id, url string, mode protocol.PullRequestWatchMode, reviewer string) error {
+	msg := protocol.PullRequestWatchMessage{
+		Cmd: protocol.CmdPullRequestWatch, ID: id, URL: url, Mode: mode,
+	}
+	if strings.TrimSpace(reviewer) != "" {
+		msg.Reviewer = protocol.Ptr(strings.TrimSpace(reviewer))
+	}
+	_, err := c.send(msg)
+	return err
+}
+
+func (c *Client) UnwatchSessionPullRequest(id, url string) error {
+	msg := protocol.PullRequestUnwatchMessage{Cmd: protocol.CmdPullRequestUnwatch, ID: id, URL: url}
+	_, err := c.send(msg)
+	return err
+}
+
 func (c *Client) StartDelegation(msg protocol.DelegateMessage) (*protocol.DelegationOperation, error) {
 	requestID := strings.TrimSpace(msg.RequestID)
 	if requestID == "" {

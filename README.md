@@ -205,6 +205,34 @@ Your agents can work as a team:
 - **In-app browser.** `attn browser open <url>` docks a real browser an agent
   can drive; log in once and it persists.
 
+### Watching pull requests
+
+Run `attn pr watch <url>` from an agent session to receive readiness, failed checks,
+review findings, human comments and replies, reopened review threads, and monitoring
+outages in its inbox. Watches survive restarts; unchanged observations do not
+repeatedly ping the agent. Feedback present at the first successful check is the
+baseline, and changing modes keeps that feedback history. Unwatching and rearming
+starts a new baseline.
+
+The default `green` mode is ready when the PR is open, non-draft, and GitHub reports
+`CLEAN` or `HAS_HOOKS`. Use `--mode codex` to additionally require the exact Codex
+app actor's 👍 and no 👀 after a 30-second settling window. Reactions are a best-effort
+signal because GitHub does not attach them to a commit. Use `--mode formal-review`
+for GitHub's aggregate approval, or add `--reviewer <login>` to require that actor's
+current formal opinion. Comments, threads, changes requested, and failed checks are
+feedback worth surfacing, not extra readiness gates. A watch never changes GitHub
+state or grants merge authority.
+
+Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
+that session's unread watch notifications. Closing or merging the PR ends the watch.
+Run commands on the session's owning daemon;
+remote watch forwarding is unsupported. For development profiles, enable
+[GitHub polling](docs/profiles.md#github-polling).
+
+Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
+--mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
+resume, and exit codes.
+
 ### The Chief
 
 Running five agents shouldn't turn you into a full-time dispatcher. The Chief is

@@ -1246,6 +1246,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{147, "record structured task failure diagnostics", ""},
 	{148, "durable Garden seed event handling", ``},
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
+	{150, "durable pull request readiness watches", ``},
 }
 
 const migration99SQL = `
@@ -1828,6 +1829,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 150 {
+			if err := applyMigration150(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
@@ -1876,6 +1882,51 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration150(tx *sql.Tx) error {
+	if _, err := tx.Exec(`
+		CREATE TABLE IF NOT EXISTS pull_request_watches (
+			session_id       TEXT NOT NULL,
+			pr_id            TEXT NOT NULL,
+			mode             TEXT NOT NULL,
+			reviewer         TEXT NOT NULL DEFAULT '',
+			created_at       TEXT NOT NULL,
+			cursor_json      TEXT NOT NULL DEFAULT '{}',
+			last_success_at  TEXT NOT NULL DEFAULT '',
+			last_error       TEXT NOT NULL DEFAULT '',
+			feedback_error   TEXT NOT NULL DEFAULT '',
+			outage_active    INTEGER NOT NULL DEFAULT 0,
+			PRIMARY KEY (session_id, pr_id)
+		);
+		CREATE INDEX IF NOT EXISTS idx_pull_request_watches_pr
+			ON pull_request_watches(pr_id, session_id);
+	`); err != nil {
+		return err
+	}
+	columns := []struct {
+		name string
+		sql  string
+	}{
+		{"readiness_state", `ALTER TABLE session_pull_requests ADD COLUMN readiness_state TEXT NOT NULL DEFAULT ''`},
+		{"readiness_reason", `ALTER TABLE session_pull_requests ADD COLUMN readiness_reason TEXT NOT NULL DEFAULT ''`},
+		{"settling_until", `ALTER TABLE session_pull_requests ADD COLUMN settling_until TEXT NOT NULL DEFAULT ''`},
+		{"watch_health", `ALTER TABLE session_pull_requests ADD COLUMN watch_health TEXT NOT NULL DEFAULT ''`},
+		{"watch_error", `ALTER TABLE session_pull_requests ADD COLUMN watch_error TEXT NOT NULL DEFAULT ''`},
+		{"watch_last_checked_at", `ALTER TABLE session_pull_requests ADD COLUMN watch_last_checked_at TEXT NOT NULL DEFAULT ''`},
+	}
+	for _, column := range columns {
+		has, err := columnExists(tx, "session_pull_requests", column.name)
+		if err != nil {
+			return err
+		}
+		if !has {
+			if _, err := tx.Exec(column.sql); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 

@@ -376,6 +376,7 @@ type Daemon struct {
 	conversationUnsubHooks func()
 	sessionPRUnsubHooks    func()
 	sessionPRHosts         func(host string) (sessionPRHost, bool)
+	sessionPRRefreshMu     sync.Mutex
 	beforeSeedMoveWrite    func(seedID string)
 
 	harvestWhenMu        sync.Mutex
@@ -2705,6 +2706,10 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handlePullRequestCreated(conn, msg.(*protocol.PullRequestCreatedMessage))
 	case protocol.CmdPullRequestForget:
 		d.handlePullRequestForget(conn, msg.(*protocol.PullRequestForgetMessage))
+	case protocol.CmdPullRequestWatch:
+		d.handlePullRequestWatch(conn, msg.(*protocol.PullRequestWatchMessage))
+	case protocol.CmdPullRequestUnwatch:
+		d.handlePullRequestUnwatch(conn, msg.(*protocol.PullRequestUnwatchMessage))
 	case protocol.CmdWorkflowRunUpsert:
 		d.handleWorkflowRunUpsert(conn, msg.(*protocol.WorkflowRunUpsertMessage))
 	case protocol.CmdWorkflowCallUpsert:
@@ -3257,12 +3262,13 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	rolesBySession := d.sessionDelegationRoles()
 	bySession, _ := d.latestAutomationProvenance()
 	pullRequestsBySession := d.store.ListSessionPullRequestsBySession()
+	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
 		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
-			decorated.PullRequests = sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID])
+			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID], pullRequestWatchesByPR)
 			out = append(out, *decorated)
 		}
 	}

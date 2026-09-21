@@ -11,10 +11,29 @@ func TestPRHelpNamesTheSessionCommands(t *testing.T) {
 	if code := executePRCommand([]string{"--help"}, &stdout, &stdout); code != 0 {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
-	for _, want := range []string{"record <url>", "ls [--session", "forget <url>", "wait-ready"} {
+	for _, want := range []string{"record <url>", "ls [--session", "forget <url>", "watch <url>", "unwatch <url>", "status [<url>]", "wait-ready"} {
 		if !strings.Contains(stdout.String(), want) {
 			t.Errorf("help does not mention %q:\n%s", want, stdout.String())
 		}
+	}
+}
+
+func TestSessionPRWatchArgsValidateModeAndReviewer(t *testing.T) {
+	t.Setenv("ATTN_SESSION_ID", "s1")
+	url := "https://github.com/victorarias/attn/pull/303"
+	parsed, err := parseSessionPRArgs("watch", []string{url, "--mode", "formal-review", "--reviewer", "victor"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsed.mode != "formal-review" || parsed.reviewer != "victor" {
+		t.Fatalf("parsed = %+v", parsed)
+	}
+	var stdout, stderr bytes.Buffer
+	if code := executeSessionPRCommand("watch", []string{url, "--mode", "codex", "--reviewer", "victor"}, &stdout, &stderr); code != prWaitExitUsage {
+		t.Fatalf("exit = %d, stderr=%q", code, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "only valid with --mode formal-review") {
+		t.Fatalf("stderr = %q", stderr.String())
 	}
 }
 

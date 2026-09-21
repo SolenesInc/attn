@@ -82,6 +82,9 @@ satisfy the full requirement?
   through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
 - Reply on the thread with what changed, and resolve it. When no change is needed,
   reply with the reason.
+- Use `attn pr watch <url> --mode codex` for the repository's normal durable PR
+  monitor. It is a best-effort attention signal, not merge permission or a
+  substitute for the exact-head gates above.
 
 ## Commands and verification
 

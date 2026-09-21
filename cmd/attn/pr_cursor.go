@@ -6,63 +6,19 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/victorarias/attn/internal/prreadiness"
 )
 
 type prWaitCursor struct {
-	CommentIDs    []string  `json:"comment_ids,omitempty"`
-	VerdictAt     time.Time `json:"verdict_at,omitempty"`
-	FailureHead   string    `json:"failure_head,omitempty"`
-	FailureChecks []string  `json:"failure_checks,omitempty"`
-	UpdatedAt     time.Time `json:"updated_at,omitempty"`
+	Mode         prreadiness.Mode   `json:"mode"`
+	Reviewer     string             `json:"reviewer,omitempty"`
+	Readiness    prreadiness.Cursor `json:"readiness"`
+	OutageActive bool               `json:"outage_active,omitempty"`
+	UpdatedAt    time.Time          `json:"updated_at,omitempty"`
 }
-
-func (c prWaitCursor) MarshalJSON() ([]byte, error) {
-	type payload struct {
-		CommentIDs    []string   `json:"comment_ids,omitempty"`
-		VerdictAt     *time.Time `json:"verdict_at,omitempty"`
-		FailureHead   string     `json:"failure_head,omitempty"`
-		FailureChecks []string   `json:"failure_checks,omitempty"`
-		UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-	}
-	out := payload{CommentIDs: c.CommentIDs, FailureHead: c.FailureHead, FailureChecks: c.FailureChecks}
-	if !c.VerdictAt.IsZero() {
-		out.VerdictAt = &c.VerdictAt
-	}
-	if !c.UpdatedAt.IsZero() {
-		out.UpdatedAt = &c.UpdatedAt
-	}
-	return json.Marshal(out)
-}
-
-func (c prWaitCursor) empty() bool {
-	return len(c.CommentIDs) == 0 && c.VerdictAt.IsZero() && c.FailureHead == ""
-}
-
-func (c prWaitCursor) seenComments() map[string]bool {
-	seen := make(map[string]bool, len(c.CommentIDs))
-	for _, id := range c.CommentIDs {
-		seen[id] = true
-	}
-	return seen
-}
-
-func (c prWaitCursor) sameFailure(head string, checks []prCheck) bool {
-	if c.FailureHead != head {
-		return false
-	}
-	names := failedCheckNames(checks)
-	sort.Strings(names)
-	previous := append([]string(nil), c.FailureChecks...)
-	sort.Strings(previous)
-	return strings.Join(names, "\n") == strings.Join(previous, "\n")
-}
-
-const prCursorFileLimit = 500
-
-const prCursorMaxAge = 30 * 24 * time.Hour
 
 func cursorPath(dir string, opts prWaitOptions) string {
 	host := opts.Host
@@ -94,10 +50,7 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	if dir == "" {
 		return nil
 	}
-	if len(cursor.CommentIDs) > prCursorFileLimit {
-		cursor.CommentIDs = cursor.CommentIDs[len(cursor.CommentIDs)-prCursorFileLimit:]
-	}
-	cursor.UpdatedAt = now
+	cursor.UpdatedAt = now.UTC()
 	path := cursorPath(dir, opts)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
@@ -127,6 +80,8 @@ func savePRWaitCursor(dir string, opts prWaitOptions, cursor prWaitCursor, now t
 	return nil
 }
 
+const prCursorMaxAge = 30 * 24 * time.Hour
+
 func prunePRWaitCursors(dir string, now time.Time) {
 	cutoff := now.Add(-prCursorMaxAge)
 	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, err error) error {
@@ -134,7 +89,7 @@ func prunePRWaitCursors(dir string, now time.Time) {
 			return nil
 		}
 		if info, statErr := entry.Info(); statErr == nil && info.ModTime().Before(cutoff) {
-			os.Remove(path)
+			_ = os.Remove(path)
 		}
 		return nil
 	})

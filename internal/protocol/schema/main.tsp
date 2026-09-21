@@ -131,6 +131,12 @@ model PullRequestProvenance {
 // SessionPullRequest is a pull request an agent opened from inside a session,
 // reported by the tool-use hook or `attn pr record`. Status fields stay absent
 // until the refresh job has fetched them from GitHub once.
+enum PullRequestWatchMode {
+  green,
+  codex,
+  formal_review: "formal-review",
+}
+
 model SessionPullRequest {
   repository: string;           // host/owner/repository, same convention as PullRequestProvenance
   number: int32;
@@ -142,6 +148,15 @@ model SessionPullRequest {
   review_status?: string;       // approved, changes_requested, pending, none
   mergeable_state?: string;     // clean, blocked, dirty, unstable
   status_fetched_at?: string;   // ISO timestamp of the last GitHub fetch; absent until the first one
+  watching?: boolean;
+  watch_mode?: PullRequestWatchMode;
+  watch_reviewer?: string;
+  readiness_state?: string;     // ready | waiting | blocked | merged | closed | unknown
+  readiness_reason?: string;
+  settling_until?: string;
+  watch_health?: string;        // current | delayed
+  watch_error?: string;
+  watch_last_checked_at?: string;
 }
 
 // AutomationProvenance is a derived read model. The daemon joins existing
@@ -1010,6 +1025,36 @@ model PullRequestForgetMessage {
   cmd: "pull_request_forget";
   id: string;
   url: string;
+}
+
+model PullRequestWatchMessage {
+  cmd: "pull_request_watch";
+  id: string;
+  url: string;
+  mode: PullRequestWatchMode;
+  reviewer?: string;
+  request_id?: string;
+}
+
+model PullRequestWatchResultMessage {
+  event: "pull_request_watch_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
+}
+
+model PullRequestUnwatchMessage {
+  cmd: "pull_request_unwatch";
+  id: string;
+  url: string;
+  request_id?: string;
+}
+
+model PullRequestUnwatchResultMessage {
+  event: "pull_request_unwatch_result";
+  request_id: string;
+  success: boolean;
+  error?: string;
 }
 
 model DelegationSelection {
@@ -7663,6 +7708,8 @@ alias DaemonEvent =
   | WorkspaceTileContentMessage
   | OpenSeedResultMessage
   | BrowserControlResponseMessage
+  | PullRequestWatchResultMessage
+  | PullRequestUnwatchResultMessage
   | PRsUpdatedMessage
   | ReposUpdatedMessage
   | AuthorsUpdatedMessage

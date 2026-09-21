@@ -1,0 +1,3 @@
+kind: added
+area: pull requests
+change: Let agents use the CLI to arm durable PR readiness watches that deliver readiness and feedback through their inbox.

@@ -120,7 +120,11 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 		return nil, ErrSelfRateLimited
 	}
 
-	url := c.baseURL + path
+	requestURL := path
+	parsedURL, err := url.Parse(path)
+	if err != nil || !parsedURL.IsAbs() {
+		requestURL = c.baseURL + path
+	}
 
 	var bodyReader io.Reader
 	if body != nil {
@@ -131,7 +135,7 @@ func (c *Client) doRequestContext(ctx context.Context, method, path string, body
 		bodyReader = bytes.NewReader(jsonBody)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, bodyReader)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,20 +12,43 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
 )
 
 type fakePRHost struct {
-	snapshot   *github.PullRequestSnapshot
-	review     string
-	err        error
-	reviewErr  error
-	limited    bool
-	limitReset time.Time
-	snapshots  int
-	reviews    int
+	snapshot       *github.PullRequestSnapshot
+	review         string
+	err            error
+	reviewErr      error
+	limited        bool
+	limitReset     time.Time
+	snapshots      int
+	reviews        int
+	readiness      *prreadiness.Observation
+	feedback       []prreadiness.FeedbackItem
+	threads        []prreadiness.ThreadState
+	readyErr       error
+	feedbackErr    error
+	readinessCalls int
+	feedbackCalls  int
+}
+
+func (f *fakePRHost) FetchPullRequestReadiness(context.Context, string, int) (*prreadiness.Observation, error) {
+	f.readinessCalls++
+	if f.readyErr != nil {
+		return nil, f.readyErr
+	}
+	copy := *f.readiness
+	return &copy, nil
+}
+
+func (f *fakePRHost) FetchPullRequestFeedback(context.Context, string, int) ([]prreadiness.FeedbackItem, []prreadiness.ThreadState, error) {
+	f.feedbackCalls++
+	return append([]prreadiness.FeedbackItem(nil), f.feedback...), append([]prreadiness.ThreadState(nil), f.threads...), f.feedbackErr
 }
 
 func (f *fakePRHost) FetchPullRequestSnapshot(string, int) (*github.PullRequestSnapshot, error) {
@@ -450,6 +474,23 @@ func TestSessionPullRequestRefreshSkipsSessionsWithNoRuntime(t *testing.T) {
 	}
 }
 
+func TestSessionPullRequestRefreshKeepsWatchingRecoverableSessions(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	host := &fakePRHost{readiness: readinessObservation()}
+	serveHost(d, "github.com", host)
+	if !d.store.UpdateState("s1", string(protocol.SessionStateRecoverable)) {
+		t.Fatal("could not put the session in the recoverable state")
+	}
+
+	if fetched, _ := d.refreshSessionPullRequests(time.Now()); fetched != 1 {
+		t.Fatalf("fetched = %d, want the durable watch to remain active", fetched)
+	}
+	if host.readinessCalls != 1 {
+		t.Fatalf("readiness calls = %d, want one", host.readinessCalls)
+	}
+}
+
 func TestSessionPullRequestRefreshFetchesOncePerPullRequest(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	registerSessionForPRTest(t, d, "s2")
@@ -495,5 +536,183 @@ func TestSessionPullRequestReheatsWhenTheInboxSeesTheSamePullRequest(t *testing.
 	d.reheatSessionPullRequest(bus.Event{Name: FactPRUpdated, Subject: "github.com:victorarias/attn#71"})
 	if fetched, _ := d.refreshSessionPullRequests(now.Add(protocol.HeatHotInterval)); fetched != 1 {
 		t.Fatal("the inbox's report did not put the row back on the hot cadence")
+	}
+}
+
+func readinessObservation() *prreadiness.Observation {
+	return &prreadiness.Observation{
+		Number: 71, URL: "https://github.com/victorarias/attn/pull/71", Title: "Ready to ship",
+		State: "open", HeadSHA: "head-a", HeadRef: "pr-readiness", MergeStateStatus: "CLEAN",
+	}
+}
+
+func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadiness.Mode, reviewer string) {
+	t.Helper()
+	rec, err := d.sessionPullRequestIdentity(sessionID, "https://github.com/victorarias/attn/pull/71")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.watchSessionPullRequest(rec, mode, reviewer); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWatchedPullRequestSharesOneObservationAcrossConsumerModes(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	registerSessionForPRTest(t, d, "s2")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	watchPRForRefresh(t, d, "s2", prreadiness.ModeFormalReview, "victor")
+	observation := readinessObservation()
+	observation.ReviewOpinions = []prreadiness.ReviewOpinion{{Actor: "victor", State: "APPROVED"}}
+	observation.ReviewDecision = "REVIEW_REQUIRED"
+	host := &fakePRHost{readiness: observation}
+	serveHost(d, "github.com", host)
+
+	if fetched, _ := d.refreshSessionPullRequests(time.Date(2026, 9, 21, 11, 0, 0, 0, time.UTC)); fetched != 1 {
+		t.Fatalf("fetched = %d, want one shared acquisition", fetched)
+	}
+	if host.readinessCalls != 1 || host.feedbackCalls != 1 || host.snapshots != 0 || host.reviews != 0 {
+		t.Fatalf("calls = readiness:%d feedback:%d snapshots:%d reviews:%d", host.readinessCalls, host.feedbackCalls, host.snapshots, host.reviews)
+	}
+	for _, test := range []struct {
+		session string
+		mode    protocol.PullRequestWatchMode
+	}{
+		{"s1", protocol.PullRequestWatchModeGreen},
+		{"s2", protocol.PullRequestWatchModeFormalReview},
+	} {
+		entry := onlySessionPullRequest(t, d, test.session)
+		if !protocol.Deref(entry.Watching) || protocol.Deref(entry.WatchMode) != test.mode || protocol.Deref(entry.ReadinessState) != prreadiness.StateReady {
+			t.Errorf("%s projection = %+v", test.session, entry)
+		}
+		if protocol.Deref(entry.MergeableState) != "clean" || protocol.Deref(entry.ReviewStatus) != "pending" {
+			t.Errorf("%s normalized status = merge:%v review:%v", test.session, entry.MergeableState, entry.ReviewStatus)
+		}
+		deliveries, err := d.store.UnreadAgentMailboxDeliveries(test.session)
+		if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "ready") {
+			t.Errorf("%s mailbox = %+v, %v", test.session, deliveries, err)
+		}
+	}
+}
+
+func TestCodexWatchSchedulesAndHonorsItsSettlingDeadline(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	runner := jobs.New(jobs.Options{Store: newTestJobStore(t, d), Now: func() time.Time { return now }})
+	if err := runner.RegisterWith(sessionPullRequestSettleKind, d.sessionPullRequestSettleHandler, jobs.HandlerConfig{}); err != nil {
+		t.Fatal(err)
+	}
+	d.setJobQueue(runner)
+	t.Cleanup(func() { d.setJobQueue(nil) })
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeCodex, "")
+	observation := readinessObservation()
+	observation.CodexThumbsUp = true
+	host := &fakePRHost{readiness: observation}
+	serveHost(d, "github.com", host)
+
+	d.refreshSessionPullRequestsContext(context.Background(), now, "github.com:victorarias/attn#71")
+	entry := onlySessionPullRequest(t, d, "s1")
+	if protocol.Deref(entry.ReadinessState) != prreadiness.StateWaiting || protocol.Deref(entry.ReadinessReason) != "codex_settling" {
+		t.Fatalf("settling projection = %+v", entry)
+	}
+	job, err := runner.GetByKey(sessionPullRequestSettleKind, "github.com:victorarias/attn#71")
+	if err != nil || job == nil || !job.ScheduledAt.Equal(now.Add(prreadiness.CodexSettle)) {
+		t.Fatalf("settle job = %+v, %v", job, err)
+	}
+
+	d.refreshSessionPullRequestsContext(context.Background(), now.Add(prreadiness.CodexSettle), "github.com:victorarias/attn#71")
+	if entry = onlySessionPullRequest(t, d, "s1"); protocol.Deref(entry.ReadinessState) != prreadiness.StateReady {
+		t.Fatalf("deadline projection = %+v", entry)
+	}
+}
+
+func TestWatchedPullRequestOutageCoalescesAndRecoveryIsSilent(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	host := &fakePRHost{readyErr: fmt.Errorf("GitHub unavailable")}
+	serveHost(d, "github.com", host)
+	base := time.Date(2026, 9, 21, 13, 0, 0, 0, time.UTC)
+	prID := "github.com:victorarias/attn#71"
+
+	d.refreshSessionPullRequestsContext(context.Background(), base, prID)
+	d.refreshSessionPullRequestsContext(context.Background(), base.Add(time.Second), prID)
+	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "monitoring is delayed") {
+		t.Fatalf("outage mailbox = %+v, %v", deliveries, err)
+	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 10, base.Add(1500*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	host.readyErr = nil
+	host.readiness = readinessObservation()
+	d.refreshSessionPullRequestsContext(context.Background(), base.Add(2*time.Second), prID)
+	deliveries, err = d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "ready") {
+		t.Fatalf("recovered mailbox = %+v, %v", deliveries, err)
+	}
+	entry := onlySessionPullRequest(t, d, "s1")
+	if protocol.Deref(entry.WatchHealth) != "current" || entry.WatchError != nil {
+		t.Fatalf("recovered projection = %+v", entry)
+	}
+	if _, _, err := d.store.ReadAgentMailbox("s1", 10, base.Add(2500*time.Millisecond)); err != nil {
+		t.Fatal(err)
+	}
+	host.readyErr = fmt.Errorf("GitHub unavailable again")
+	d.refreshSessionPullRequestsContext(context.Background(), base.Add(3*time.Second), prID)
+	deliveries, err = d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "monitoring is delayed") {
+		t.Fatalf("recurring outage mailbox = %+v, %v", deliveries, err)
+	}
+}
+
+func TestFeedbackFailureDoesNotInvalidateReadyState(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	host := &fakePRHost{readiness: readinessObservation(), feedbackErr: fmt.Errorf("review threads unavailable")}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(time.Date(2026, 9, 21, 14, 0, 0, 0, time.UTC))
+
+	entry := onlySessionPullRequest(t, d, "s1")
+	if protocol.Deref(entry.ReadinessState) != prreadiness.StateReady || protocol.Deref(entry.WatchHealth) != "delayed" || !strings.Contains(protocol.Deref(entry.WatchError), "feedback") {
+		t.Fatalf("projection = %+v", entry)
+	}
+}
+
+func TestUnchangedWatchedPullRequestPollDoesNotBroadcast(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	host := &fakePRHost{readiness: readinessObservation()}
+	serveHost(d, "github.com", host)
+	prID := "github.com:victorarias/attn#71"
+	base := time.Date(2026, 9, 21, 14, 30, 0, 0, time.UTC)
+
+	d.refreshSessionPullRequestsContext(context.Background(), base, prID)
+	afterFirst := len(docFacts(t, d, FactSessionPullRequestChanged))
+	d.refreshSessionPullRequestsContext(context.Background(), base.Add(time.Second), prID)
+	if afterSecond := len(docFacts(t, d, FactSessionPullRequestChanged)); afterSecond != afterFirst {
+		t.Fatalf("unchanged poll published %d additional facts", afterSecond-afterFirst)
+	}
+}
+
+func TestTerminalObservationNotifiesThenStopsTheWatch(t *testing.T) {
+	d := newPRDaemonForTest(t, "s1")
+	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
+	observation := readinessObservation()
+	observation.State = "closed"
+	observation.Merged = true
+	host := &fakePRHost{readiness: observation}
+	serveHost(d, "github.com", host)
+	d.refreshSessionPullRequests(time.Date(2026, 9, 21, 15, 0, 0, 0, time.UTC))
+
+	entry := onlySessionPullRequest(t, d, "s1")
+	if protocol.Deref(entry.Watching) || entry.State != "merged" || protocol.Deref(entry.ReadinessState) != prreadiness.StateMerged {
+		t.Fatalf("terminal projection = %+v", entry)
+	}
+	if _, ok := d.store.PullRequestWatch("s1", "github.com:victorarias/attn#71"); ok {
+		t.Fatal("terminal watch still exists")
+	}
+	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
+	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "merged") {
+		t.Fatalf("terminal mailbox = %+v, %v", deliveries, err)
 	}
 }
