@@ -136,10 +136,11 @@ export function useSessionLedger({
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMoreSeq, setLoadingMoreSeq] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const readSeq = useRef(0);
+  const loadingMore = loadingMoreSeq === readSeq.current;
   const early = useRef(new Map<string, ReopenResolution>());
   useEffect(() => {
     if (!enabled) early.current.clear();
@@ -199,7 +200,6 @@ export function useSessionLedger({
     if (!enabled || filterError) return;
     const seq = ++readSeq.current;
     setLoading(true);
-    setLoadingMore(false);
     setError(null);
     list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {
@@ -234,7 +234,7 @@ export function useSessionLedger({
   const loadMore = useCallback(() => {
     if (!nextBefore || loadingMore || filterError) return;
     const seq = readSeq.current;
-    setLoadingMore(true);
+    setLoadingMoreSeq(seq);
     list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
       .then((page) => {
         if (seq !== readSeq.current) return;
@@ -247,7 +247,7 @@ export function useSessionLedger({
         if (seq === readSeq.current) setError(failure.message);
       })
       .finally(() => {
-        if (seq === readSeq.current) setLoadingMore(false);
+        if (seq === readSeq.current) setLoadingMoreSeq(null);
       });
   }, [nextBefore, loadingMore, filterError, list, pageSize, appendPageResolutions, now]);
 
