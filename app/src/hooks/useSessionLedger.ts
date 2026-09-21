@@ -165,10 +165,12 @@ export function useSessionLedger({
   }, [resolutionForEntry]);
 
   const appendPageResolutions = useCallback((pageEntries: SessionLedgerEntry[]) => {
+    const additions: Record<string, ReopenResolution | null> = {};
+    for (const entry of pageEntries) additions[entry.id] = resolutionForEntry(entry);
     setResolutions((current) => {
       const next = { ...current };
       for (const entry of pageEntries) {
-        const resolution = resolutionForEntry(entry);
+        const resolution = additions[entry.id];
         if (resolution) next[entry.id] = resolution;
         else delete next[entry.id];
       }
@@ -250,6 +252,7 @@ export function useSessionLedger({
     // Read outside the updater: React may replay one, and the clock would move under it.
     const dropsFromView = filtersRef.current.scope === 'live';
     const belongs = closeBelongsInView(entry, filtersRef.current, now());
+    const resolution = resolutionForEntry(entry);
     setEntries((current) => {
       const at = current.findIndex((row) => row.id === entry.id);
       if (at >= 0) {
@@ -263,7 +266,7 @@ export function useSessionLedger({
     setResolutions((current) => {
       const next = { ...current };
       if (dropsFromView || !belongs || !entry.closed_at) delete next[entry.id];
-      else next[entry.id] = resolutionForEntry(entry) ?? { closedAt: entry.closed_at, state: 'pending' };
+      else next[entry.id] = resolution ?? { closedAt: entry.closed_at, state: 'pending' };
       return next;
     });
   }, [now, resolutionForEntry]);

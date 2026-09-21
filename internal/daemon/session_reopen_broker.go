@@ -284,6 +284,7 @@ func (b *sessionReopenBroker) finish(job *reopenBrokerJob, verdict sessionReopen
 		message.Error = protocol.Ptr(resolveErr.Error())
 	} else {
 		message.Reopen = verdict.toProtocol()
+		b.daemon.publishFact(FactSessionReopenRefreshed, job.key.SessionID, message.Reopen)
 	}
 	if broadcast {
 		b.daemon.broadcastMessage(&message)

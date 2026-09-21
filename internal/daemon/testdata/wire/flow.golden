@@ -210,7 +210,24 @@
 {
   "event": "sessions_updated"
 }
---- 16 session_reopen_resolved
+--- 16 session_reopen_refreshed
+{
+  "event": "session_reopen_refreshed",
+  "reopen": {
+    "actions": [
+      "start_fresh_same_place"
+    ],
+    "checking": false,
+    "directory_state": "present",
+    "pane_plan": "add",
+    "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
+    "reopenable": false,
+    "workspace_id": "workspace-sess-1",
+    "workspace_plan": "create"
+  },
+  "session_id": "sess-1"
+}
+--- 17 session_reopen_resolved
 {
   "closed_at": "<timestamp>",
   "event": "session_reopen_resolved",

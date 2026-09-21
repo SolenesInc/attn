@@ -493,6 +493,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	d.ensureGardenCollections()
 	logPath := attachPluginTestLogger(t, d)
 	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete")
 
@@ -532,6 +533,9 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 			t.Fatalf("provider-deleted worktree still listed: %#v", worktree)
 		}
 	}
+	if git.RefExists(mainDir, "feat/provider-delete") {
+		t.Fatal("provider-deleted worktree branch remains")
+	}
 	assertLogContains(t, logPath,
 		"worktree provider plugin=custom-delete-provider surface=worktree.delete status=handled",
 		"path="+worktreePath,
@@ -542,6 +546,43 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("delete provider connection did not close")
+	}
+}
+
+func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	d.ensureGardenCollections()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+	worktreePath := repo.worktree("provider-swept", "feat/provider-swept", base)
+	d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+	client, done := startPluginPipe(t, d, "sweep-delete-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if params.Path != worktreePath {
+			t.Fatalf("provider delete path=%q, want %q", params.Path, worktreePath)
+		}
+		if err := git.DeleteWorktree(repo.main, worktreePath, false); err != nil {
+			t.Fatal(err)
+		}
+		return worktreeDeleteProviderResult{Status: providerStatusHandled}
+	})
+
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
+		t.Fatalf("sweep removed %d worktrees, want 1", removed)
+	}
+	waitForProviderResponse(t, responseDone)
+	if git.RefExists(repo.main, "feat/provider-swept") {
+		t.Fatal("provider-handled sweep left the branch behind")
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweep delete provider connection did not close")
 	}
 }
 

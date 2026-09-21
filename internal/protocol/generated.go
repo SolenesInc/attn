@@ -9073,6 +9073,9 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
+
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9482,6 +9485,17 @@ type SessionReopenMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
+type SessionReopenRefreshedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen SessionReopen `json:"reopen"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`

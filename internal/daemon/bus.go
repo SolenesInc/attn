@@ -17,6 +17,7 @@ const (
 	FactSessionRenamed                = "session.renamed"
 	FactSessionUnregistered           = "session.unregistered"
 	FactSessionClosed                 = "session.closed"
+	FactSessionReopenRefreshed        = "session.reopen.refreshed"
 	FactSessionTodosChanged           = "session.todos.changed"
 	FactSessionAssistantWindowChanged = "session.assistant_window.changed"
 	FactSessionRespawned              = "session.respawned"
@@ -334,6 +335,10 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSessionClosed},
 			apply:  projectSessionClosed,
+		},
+		{
+			filter: bus.Filter{FactSessionReopenRefreshed},
+			apply:  projectSessionReopenRefreshed,
 		},
 		{
 			filter: bus.Filter{FactGitOperationStarted, FactGitOperationFinished},

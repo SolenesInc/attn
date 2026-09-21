@@ -75,6 +75,9 @@ func (s *worktreeSweepLease) TryDelete(
 		return errWorktreeSweepPreempted
 	}
 	defer s.coordinator.gate.Unlock()
+	if cause := context.Cause(s.ctx); cause != nil {
+		return cause
+	}
 
 	ctx := context.WithoutCancel(s.ctx)
 	if err := finalCheck(ctx); err != nil {

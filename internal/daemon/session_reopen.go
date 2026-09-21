@@ -470,7 +470,7 @@ func (d *Daemon) performReopenLocked(
 		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
 			plan.FreshConversation = true
 		}
-		path, resolved, err := d.recreateReopenWorktree(key, verdict, action)
+		path, resolved, err := d.recreateReopenWorktree(key, action)
 		if err != nil {
 			return nil, err
 		}
@@ -512,85 +512,59 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) s
 
 func (d *Daemon) recreateReopenWorktree(
 	key reopenKey,
-	initial *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
 ) (string, *sessionReopenVerdict, error) {
-	providerPlan, err := d.reopenWorktreeProviderPlan(context.Background(), initial, action)
-	if err != nil {
-		return "", nil, err
-	}
-	if err := d.dispatchWorktreeBeforeCreateHooks(
-		providerPlan.repository,
-		providerPlan.branch,
-		providerPlan.startingFrom,
-		providerPlan.path,
-	); err != nil {
-		return "", nil, err
-	}
-
 	resolver := sessionReopenResolver{daemon: d}
-	providerVerdict, err := resolver.ResolveClosed(
-		context.Background(), key, d.scheduledReopenGit(gitInteractive),
-	)
-	if err != nil {
-		return "", nil, err
-	}
-	if !providerVerdict.offers(action) {
-		return "", nil, reopenRefusal(&providerVerdict, action)
-	}
-	providerPlan, err = d.reopenWorktreeProviderPlan(context.Background(), &providerVerdict, action)
-	if err != nil {
-		return "", nil, err
-	}
-	providerPath, providerBranch, handled, err := d.dispatchWorktreeCreateProvider(
-		providerPlan.repository,
-		providerPlan.branch,
-		providerPlan.startingFrom,
-		providerPlan.path,
-	)
-	if err != nil {
-		return "", nil, err
-	}
-	if handled {
-		d.registerCreatedWorktree(providerPlan.repository, providerPath, providerBranch)
-		if err := d.dispatchWorktreeAfterCreateHooks(providerPlan.repository, providerPath, providerBranch); err != nil {
-			return providerPath, &providerVerdict, err
+	var authoritative *sessionReopenVerdict
+	var createdPath, createdBranch string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "recreate reopen worktree", func(protectedCtx context.Context) error {
+		resolved, resolveErr := resolver.ResolveClosed(
+			protectedCtx, key, d.scheduledReopenGit(gitInteractive),
+		)
+		if resolveErr != nil {
+			return resolveErr
 		}
-		return providerPath, &providerVerdict, nil
-	}
-
-	var authoritative sessionReopenVerdict
-	createdBranch := providerPlan.branch
-	err = d.gitExecution().Run(context.Background(), gitTask{
-		Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: providerPlan.repository,
-	}, func(ctx context.Context, client *attngit.Client) error {
-		return d.worktreeMaintenance.RunForeground(ctx, "recreate reopen worktree", func(protectedCtx context.Context) error {
-			resolved, resolveErr := resolver.ResolveClosed(
-				protectedCtx, key, admittedReopenGit{client: client},
-			)
-			if resolveErr != nil {
-				return resolveErr
+		if !resolved.offers(action) {
+			return reopenRefusal(&resolved, action)
+		}
+		authoritative = &resolved
+		plan, planErr := d.reopenWorktreeProviderPlan(protectedCtx, &resolved, action)
+		if planErr != nil {
+			return planErr
+		}
+		if hookErr := d.dispatchWorktreeBeforeCreateHooks(plan.repository, plan.branch, plan.startingFrom, plan.path); hookErr != nil {
+			return hookErr
+		}
+		providerPath, providerBranch, handled, providerErr := d.dispatchWorktreeCreateProvider(
+			plan.repository, plan.branch, plan.startingFrom, plan.path,
+		)
+		if providerErr != nil {
+			return providerErr
+		}
+		if handled {
+			createdPath, createdBranch = providerPath, providerBranch
+		} else {
+			createdPath, createdBranch = plan.path, plan.branch
+			mutationErr := d.gitExecution().Run(protectedCtx, gitTask{
+				Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: plan.repository,
+			}, func(ctx context.Context, client *attngit.Client) error {
+				branch, err := mutateReopenWorktreeAdmitted(ctx, client, &resolved, action, plan.startingFrom)
+				if err == nil {
+					createdBranch = branch
+				}
+				return err
+			})
+			if mutationErr != nil {
+				return mutationErr
 			}
-			if !resolved.offers(action) {
-				return reopenRefusal(&resolved, action)
-			}
-			authoritative = resolved
-			branch, mutateErr := mutateReopenWorktreeAdmitted(protectedCtx, client, &resolved, action)
-			if mutateErr == nil {
-				createdBranch = branch
-			}
-			return mutateErr
-		})
+		}
+		d.registerCreatedWorktree(plan.repository, createdPath, createdBranch)
+		return d.dispatchWorktreeAfterCreateHooks(plan.repository, createdPath, createdBranch)
 	})
 	if err != nil {
-		return "", nil, err
+		return createdPath, authoritative, err
 	}
-	path := authoritative.RecreatePath
-	d.registerCreatedWorktree(providerPlan.repository, path, createdBranch)
-	if err := d.dispatchWorktreeAfterCreateHooks(providerPlan.repository, path, createdBranch); err != nil {
-		return path, &authoritative, err
-	}
-	return path, &authoritative, nil
+	return createdPath, authoritative, nil
 }
 
 type reopenWorktreePlan struct {
@@ -639,6 +613,7 @@ func mutateReopenWorktreeAdmitted(
 	client *attngit.Client,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
+	startingFrom string,
 ) (string, error) {
 	repository := strings.TrimSpace(verdict.Execution.RepositoryRoot)
 	branch := strings.TrimSpace(verdict.Execution.Branch)
@@ -650,20 +625,14 @@ func mutateReopenWorktreeAdmitted(
 	}
 	switch action {
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen:
-		return branch, client.CreateWorktreeFromBranch(ctx, repository, branch, path)
+		return branch, client.CreateWorktreeFromBranch(ctx, repository, startingFrom, path)
 	case protocol.SessionReopenActionFetchRecreateAndReopen:
-		if verdict.Inspection.Remote == "" {
+		if startingFrom == "" {
 			return "", fmt.Errorf("no remote carries branch %s any more", branch)
 		}
-		return client.CreateWorktreeFromRemoteBranch(
-			ctx, repository, verdict.Inspection.Remote+"/"+branch, path,
-		)
+		return client.CreateWorktreeFromRemoteBranch(ctx, repository, startingFrom, path)
 	case protocol.SessionReopenActionStartFreshDefaultBranch:
-		base, err := client.GetDefaultBranch(ctx, repository)
-		if err != nil || strings.TrimSpace(base) == "" {
-			return "", fmt.Errorf("%s has no default branch to start from: %w", repository, err)
-		}
-		return branch, client.CreateWorktreeFromPoint(ctx, repository, branch, path, base)
+		return branch, client.CreateWorktreeFromPoint(ctx, repository, branch, path, startingFrom)
 	default:
 		return "", fmt.Errorf("%q does not recreate a worktree", action)
 	}

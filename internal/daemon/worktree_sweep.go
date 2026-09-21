@@ -190,35 +190,39 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			}
 			d.captureGardenExecutionsInDirectory(wt.Path)
 			seeds := d.seedsForWorktree(wt)
-			handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
-			if providerErr != nil {
-				d.recordSweptWorktreeFailure(wt, providerErr, now)
-				kept++
-				continue
-			}
-			if handled {
-				d.completeSweptWorktreeRemoval(wt, seeds, verdict, now)
-				removed++
-				continue
-			}
-			deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
 			var branchDeleteErr error
-			deleteErr := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(_ context.Context, client *attngit.Client) error {
-				return lease.TryDelete(
-					func(finalCtx context.Context) error {
-						return d.finalWorktreeSweepCheckAdmitted(finalCtx, client, candidate)
-					},
-					func(commitCtx context.Context) error {
-						if err := client.DeleteWorktree(commitCtx, wt.MainRepo, wt.Path, false); err != nil {
-							return err
-						}
-						if deleteBranch {
-							branchDeleteErr = client.DeleteBranch(commitCtx, wt.MainRepo, wt.Branch, true)
-						}
-						return nil
-					},
-				)
-			})
+			deleteErr := lease.TryDelete(
+				func(finalCtx context.Context) error {
+					if err := d.finalWorktreeSweepGitCheck(finalCtx, candidate); err != nil {
+						return err
+					}
+					return d.finalWorktreeSweepProtectionCheck(candidate)
+				},
+				func(commitCtx context.Context) error {
+					handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
+					if providerErr != nil {
+						return providerErr
+					}
+					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
+					if !handled {
+						return d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+							if err := client.DeleteWorktree(runCtx, wt.MainRepo, wt.Path, false); err != nil {
+								return err
+							}
+							if deleteBranch {
+								branchDeleteErr = client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true)
+							}
+							return nil
+						})
+					}
+					if deleteBranch {
+						branchDeleteErr = d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+							return client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true)
+						})
+					}
+					return nil
+				},
+			)
 			if errors.Is(deleteErr, errWorktreeSweepPreempted) {
 				return refreshed, removed, kept, deleteErr
 			}
@@ -274,8 +278,10 @@ func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, 
 	return sweepVerdict{}, false
 }
 
-func (d *Daemon) finalWorktreeSweepCheckAdmitted(ctx context.Context, client *attngit.Client, candidate worktreeSweepCandidate) error {
-	states, err := client.ListWorktreeStates(ctx, candidate.repo)
+func (d *Daemon) finalWorktreeSweepGitCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
+	states, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: candidate.repo}, func(runCtx context.Context, client *attngit.Client) ([]attngit.WorktreeState, error) {
+		return client.ListWorktreeStates(runCtx, candidate.repo)
+	})
 	if err != nil {
 		return err
 	}
@@ -290,6 +296,10 @@ func (d *Daemon) finalWorktreeSweepCheckAdmitted(ctx context.Context, client *at
 	if !matched {
 		return errors.New("worktree identity changed before deletion")
 	}
+	return nil
+}
+
+func (d *Daemon) finalWorktreeSweepProtectionCheck(candidate worktreeSweepCandidate) error {
 	wt := d.store.GetWorktree(candidate.state.Path)
 	if wt == nil || wt.Pinned() || len(d.liveSessionsByWorktree(candidate.repo)[wt.Path]) > 0 || len(d.openSeedsByWorktree(candidate.repo)[wt.Path]) > 0 {
 		return errors.New("worktree gained protection before deletion")

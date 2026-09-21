@@ -7,5 +7,5 @@ notes: >
   arrow, and Space opens a detail block that reads the directory, branch and
   landing place. A verdict that arrives still checking its branch settles in
   place when the daemon's check finishes, a refusal reads on the row, and a
-  busy row says so until the daemon answers. Protocol 318 adds
-  session_reopen over the WebSocket and the session_reopen_resolved event.
+  busy row says so until the daemon answers. Protocol 298 adds
+  session_reopen over the WebSocket and the session_reopen_refreshed event.

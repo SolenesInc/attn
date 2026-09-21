@@ -44,16 +44,19 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 		return providerPath, nil
 	}
 
-	err = d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
-		return d.worktreeMaintenance.RunForeground(ctx, "create worktree from branch", func(protectedCtx context.Context) error {
+	err = d.worktreeMaintenance.RunForeground(context.Background(), "create worktree from branch", func(protectedCtx context.Context) error {
+		return d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+			if pruneErr := client.PruneWorktrees(ctx, mainRepo); pruneErr != nil {
+				return pruneErr
+			}
 			if isRemote {
-				createdBranch, createErr := client.CreateWorktreeFromRemoteBranch(protectedCtx, mainRepo, branch, path)
+				createdBranch, createErr := client.CreateWorktreeFromRemoteBranch(ctx, mainRepo, branch, path)
 				if createErr == nil {
 					localBranch = createdBranch
 				}
 				return createErr
 			}
-			return client.CreateWorktreeFromBranch(protectedCtx, mainRepo, branch, path)
+			return client.CreateWorktreeFromBranch(ctx, mainRepo, branch, path)
 		})
 	})
 	if err != nil {

@@ -468,7 +468,7 @@ func (d *Daemon) branchCanBeRecreated(execution garden.Dispatch) (string, bool, 
 		return "", false, "the saved branch no longer exists"
 	}
 	for _, worktree := range inspection.worktrees {
-		if strings.TrimSpace(worktree.Branch) == branch {
+		if !worktree.Prunable && strings.TrimSpace(worktree.Branch) == branch {
 			return "", false, "the saved branch is already checked out"
 		}
 	}

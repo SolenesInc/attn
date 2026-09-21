@@ -155,11 +155,18 @@ func (d *Daemon) reopenVerdictsForPage(
 	var wg sync.WaitGroup
 	var firstErr error
 	var errOnce sync.Once
+	workers := make(chan struct{}, productionSessionReopenWorkers)
 	for resultIndex, entryIndex := range closed {
 		resultIndex, entry := resultIndex, entries[entryIndex]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			select {
+			case workers <- struct{}{}:
+				defer func() { <-workers }()
+			case <-resolveCtx.Done():
+				return
+			}
 			verdict, err := resolver.ResolveEntry(resolveCtx, entry, gitView)
 			if err != nil {
 				errOnce.Do(func() {
@@ -272,6 +279,18 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 		reply.Error = protocol.Ptr(fmt.Sprintf("this daemon never ran session %s", strings.TrimSpace(msg.SessionID)))
 	}
 	d.sendToClient(client, reply)
+}
+
+func projectSessionReopenRefreshed(d *Daemon, event bus.Event) {
+	reopen, ok := decodeFact[protocol.SessionReopen](d, event)
+	if !ok {
+		return
+	}
+	d.wsHub.BroadcastValue(&protocol.SessionReopenRefreshedMessage{
+		Event:     protocol.EventSessionReopenRefreshed,
+		SessionID: event.Subject,
+		Reopen:    reopen,
+	})
 }
 
 func projectSessionClosed(d *Daemon, event bus.Event) {

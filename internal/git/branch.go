@@ -60,6 +60,9 @@ func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, er
 
 	checkedOut := make(map[string]bool)
 	for _, wt := range worktrees {
+		if wt.Prunable {
+			continue
+		}
 		if wt.Branch != "" {
 			checkedOut[wt.Branch] = true
 		}
@@ -99,6 +102,9 @@ func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([
 
 	checkedOut := make(map[string]bool)
 	for _, wt := range worktrees {
+		if wt.Prunable {
+			continue
+		}
 		if wt.Branch != "" {
 			checkedOut[wt.Branch] = true
 		}

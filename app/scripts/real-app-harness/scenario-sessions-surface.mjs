@@ -167,7 +167,7 @@ async function main() {
     });
 
     await runner.step('create_sessions_in_two_repositories', async () => {
-      for (const [name, cwd] of [['one', repo], ['two', repo], ['elsewhere', other], ['quick', other]]) {
+      await Promise.all([['one', repo], ['two', repo], ['elsewhere', other], ['quick', other]].map(async ([name, cwd]) => {
         sessions[name] = await createSessionAndWaitForInitialPane({
           client,
           observer,
@@ -176,7 +176,7 @@ async function main() {
           agent: 'claude',
           sessionWaitMs: 30_000,
         });
-      }
+      }));
       const registered = await observer.waitFor(
         () => {
           const session = observer.getSession(sessions.one);
@@ -243,14 +243,15 @@ async function main() {
       runner.assert(rowFor(before, sessions.two).actions.includes('Focus'),
         'a live row offers Focus', { row: rowFor(before, sessions.two) });
 
-      await client.request('close_session', { sessionId: sessions.two });
-      await client.request('close_session', { sessionId: sessions.quick });
+      await Promise.all([
+        client.request('close_session', { sessionId: sessions.two }),
+        client.request('close_session', { sessionId: sessions.quick }),
+      ]);
       const pending = await waitForSessions(client, (s) => (
         rowFor(s, sessions.two)?.state === 'closed'
         && rowFor(s, sessions.two)?.refreshing
         && rowFor(s, sessions.quick)?.state === 'closed'
-        && rowFor(s, sessions.quick)?.refreshing
-      ), 'both closed rows to arrive before their Git metadata', 2_000);
+      ), 'both closed rows to arrive while the slow row is waiting for Git metadata', 2_000);
       const row = rowFor(pending, sessions.two);
       runner.assert(row.when.includes('closed by you'), 'the row names who closed it', { row });
       runner.assert(!row.actions.includes('Focus'), 'a closed row stops offering Focus', { row });

@@ -7373,11 +7373,18 @@ model SessionReopenResolvedMessage {
   error?: string;
 }
 
+model SessionReopenRefreshedMessage {
+  event: "session_reopen_refreshed";
+  session_id: string;
+  reopen: SessionReopen;
+}
+
 // session_unregistered says the live session left; this says where it went, so
 // an open ledger surface updates in place instead of re-listing.
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
+  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7791,6 +7798,7 @@ alias DaemonEvent =
   | SessionListResultMessage
   | SessionShowResultMessage
   | SessionReopenResultMessage
+  | SessionReopenRefreshedMessage
   | SessionReopenResolvedMessage
   | SessionClosedMessage
   | NotificationListResultMessage

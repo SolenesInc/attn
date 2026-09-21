@@ -3,6 +3,7 @@ package git
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -156,6 +157,44 @@ func TestListBranchesWithCommits(t *testing.T) {
 	_, err = time.Parse(time.RFC3339, featureBBranch.CommitTime)
 	if err != nil {
 		t.Errorf("Expected ISO timestamp for feature-b commit time, got %q: %v", featureBBranch.CommitTime, err)
+	}
+}
+
+func TestBranchListsOfferBranchFromPrunableWorktreeWithoutMutatingMetadata(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	repo := filepath.Join(root, "main")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "init", "-b", "main")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "init")
+	worktree := filepath.Join(root, "missing")
+	runGit(t, repo, "worktree", "add", "-b", "feature-stale", worktree)
+	if err := os.RemoveAll(worktree); err != nil {
+		t.Fatal(err)
+	}
+
+	branches, err := ListBranches(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(branches, "feature-stale") {
+		t.Fatalf("available branches = %v, want feature-stale", branches)
+	}
+	withCommits, err := ListBranchesWithCommits(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(withCommits, func(branch BranchWithCommit) bool { return branch.Name == "feature-stale" }) {
+		t.Fatalf("available branches with commits = %v, want feature-stale", withCommits)
+	}
+	observed, err := ObserveWorktrees(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(observed, func(entry WorktreeEntry) bool { return entry.Branch == "feature-stale" && entry.Prunable }) {
+		t.Fatalf("branch reads mutated stale metadata: %+v", observed)
 	}
 }
 

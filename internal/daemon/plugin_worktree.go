@@ -240,6 +240,9 @@ func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktre
 		return "", "", fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, worktree := range worktrees {
+		if worktree.Prunable {
+			continue
+		}
 		if git.CanonicalizePath(worktree.Path) != path {
 			continue
 		}
@@ -261,6 +264,9 @@ func (d *Daemon) currentWorktreePathSet(mainRepo string) (map[string]bool, error
 	}
 	paths := make(map[string]bool, len(worktrees))
 	for _, worktree := range worktrees {
+		if worktree.Prunable {
+			continue
+		}
 		paths[git.CanonicalizePath(worktree.Path)] = true
 	}
 	return paths, nil
@@ -275,7 +281,7 @@ func (d *Daemon) validateDeletedProviderWorktree(mainRepo, path string) error {
 		return fmt.Errorf("list worktrees: %w", err)
 	}
 	for _, worktree := range worktrees {
-		if git.CanonicalizePath(worktree.Path) == expectedPath {
+		if !worktree.Prunable && git.CanonicalizePath(worktree.Path) == expectedPath {
 			return fmt.Errorf("deleted path %q is still a worktree of %q", expectedPath, mainRepo)
 		}
 	}

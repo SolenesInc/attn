@@ -192,9 +192,9 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 		}
 		return err
 	}
-	return d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: resolved.MainRepository}, func(ctx context.Context, client *git.Client) error {
-		return d.worktreeMaintenance.RunForeground(ctx, "remove automation worktree", func(protectedCtx context.Context) error {
-			return client.DeleteWorktree(protectedCtx, resolved.MainRepository, resolved.Worktree, false)
+	return d.worktreeMaintenance.RunForeground(context.Background(), "remove automation worktree", func(protectedCtx context.Context) error {
+		return d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: resolved.MainRepository}, func(ctx context.Context, client *git.Client) error {
+			return client.DeleteWorktree(ctx, resolved.MainRepository, resolved.Worktree, false)
 		})
 	})
 }

@@ -166,10 +166,10 @@ func TestGitExecutorCancellationSaturationNestedAndShutdown(t *testing.T) {
 
 	queuedCtx, cancelQueued := context.WithCancelCause(context.Background())
 	queuedResult := make(chan error, 1)
+	unexpectedQueuedRun := errors.New("canceled queued callback ran")
 	go func() {
 		queuedResult <- executor.Run(queuedCtx, gitTask{Kind: gitTaskBranch}, func(context.Context, *attngit.Client) error {
-			t.Fatal("canceled queued callback ran")
-			return nil
+			return unexpectedQueuedRun
 		})
 	}()
 	<-enqueued
@@ -258,11 +258,11 @@ func TestGitExecutorShutdownCancelsRunningAndQueuedWork(t *testing.T) {
 
 	queued := make(chan error, 1)
 	queuedSeen := make(chan gitTask, 1)
+	unexpectedQueuedRun := errors.New("queued callback ran during shutdown")
 	executor.enqueueObserver = func(task gitTask) { queuedSeen <- task }
 	go func() {
 		queued <- executor.Run(context.Background(), gitTask{Kind: gitTaskFileDiff}, func(context.Context, *attngit.Client) error {
-			t.Fatal("queued callback ran during shutdown")
-			return nil
+			return unexpectedQueuedRun
 		})
 	}()
 	<-queuedSeen
