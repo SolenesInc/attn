@@ -66,10 +66,10 @@
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "sessions-surface": {
-        "run": "https://github.com/SolenesInc/attn/actions/runs/34544718832",
+        "run": "https://github.com/SolenesInc/attn/actions/runs/35620970792",
         "job": "App acceptance shard 2/4",
-        "recordedAt": "2026-09-11",
-        "seconds": 23.6,
+        "recordedAt": "2026-09-21",
+        "seconds": 36.8,
         "runnerClass": "github-hosted 4vcpu/16GB"
       },
       "terminal-annotations": {
@@ -139,7 +139,7 @@
     "session-close-ledger": 9.9,
     "session-reopen": 6.2,
     "session-usage": 10,
-    "sessions-surface": 23.6,
+    "sessions-surface": 36.8,
     "terminal-annotations": 21.0,
     "terminal-block-resize": 10.6,
     "terminal-context-menu": 9.7,
