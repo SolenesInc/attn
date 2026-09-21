@@ -6,6 +6,7 @@ import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
 import { useSessionLedger } from './useSessionLedger';
 import type { SessionLedgerView } from './useSessionLedger';
+import { createSessionLedgerTestConnection } from './sessionLedgerTestConnection';
 
 const NOW = new Date('2026-09-05T14:30:00Z');
 const now = () => NOW;
@@ -38,14 +39,15 @@ function reopen(reason: string): SessionReopen {
 }
 
 function renderLedger(list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>) {
+  const transport = createSessionLedgerTestConnection(list);
   const seen: { view: SessionLedgerView | null } = { view: null };
   function Harness() {
-    const view = useSessionLedger({ enabled: true, list, now });
+    const view = useSessionLedger({ enabled: true, connection: transport.connection, now });
     useEffect(() => { seen.view = view; });
     return null;
   }
   render(<Harness />);
-  return seen;
+  return Object.assign(seen, transport);
 }
 
 describe('useSessionLedger streamed reopen eligibility', () => {
@@ -72,16 +74,16 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
 
     await act(async () => {
-      seen.view?.recordResolution({
+      seen.emit({ type: 'reopen-resolved', resolution: {
         sessionId: 's1', closedAt: '2026-09-04T13:00:00Z', success: true, reopen: reopen('stale'),
-      });
+      } });
     });
     expect(seen.view?.resolutions.s1).toEqual({ closedAt: entry.closed_at, state: 'pending' });
 
     await act(async () => {
-      seen.view?.recordResolution({
+      seen.emit({ type: 'reopen-resolved', resolution: {
         sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('current'),
-      });
+      } });
     });
     expect(seen.view?.resolutions.s1).toMatchObject({ state: 'ready', reopen: { reason: 'current' } });
   });
@@ -94,9 +96,9 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      seen.view?.recordResolution({
+      seen.emit({ type: 'reopen-resolved', resolution: {
         sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('arrived first'),
-      });
+      } });
       release?.({ entries: [entry], omitted: 0 });
     });
     await waitFor(() => expect(seen.view?.resolutions.s1).toMatchObject({
@@ -110,9 +112,9 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
 
     await act(async () => {
-      seen.view?.recordResolution({
+      seen.emit({ type: 'reopen-resolved', resolution: {
         sessionId: 's1', closedAt: entry.closed_at!, success: false, error: 'git unavailable',
-      });
+      } });
     });
     expect(seen.view?.resolutions.s1).toEqual({
       closedAt: entry.closed_at,
@@ -124,20 +126,29 @@ describe('useSessionLedger streamed reopen eligibility', () => {
   it('reissues the streamed page after reconnect', async () => {
     const entry = closedEntry('s1');
     const list = vi.fn(async () => ({ entries: [entry], omitted: 0 }));
+    const transport = createSessionLedgerTestConnection(list);
     const seen: { view: SessionLedgerView | null } = { view: null };
     function Harness({ generation }: { generation: number }) {
-      const view = useSessionLedger({ enabled: true, list, connectionGeneration: generation, now });
+      const connection = { ...transport.connection, generation };
+      const view = useSessionLedger({ enabled: true, connection, now });
       useEffect(() => { seen.view = view; });
       return null;
     }
     const view = render(<Harness generation={1} />);
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
+    await act(async () => {
+      transport.emit({ type: 'reopen-resolved', resolution: {
+        sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('before reconnect'),
+      } });
+    });
+    expect(seen.view?.resolutions.s1?.state).toBe('ready');
 
     view.rerender(<Harness generation={2} />);
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true }));
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
   });
 
   it('clears a superseded load-more state after reconnect', async () => {
@@ -149,9 +160,11 @@ describe('useSessionLedger streamed reopen eligibility', () => {
       }
       return Promise.resolve({ entries: [entry], omitted: 1, next_before: 'older' });
     });
+    const transport = createSessionLedgerTestConnection(list);
     const seen: { view: SessionLedgerView | null } = { view: null };
     function Harness({ generation }: { generation: number }) {
-      const view = useSessionLedger({ enabled: true, list, connectionGeneration: generation, now });
+      const connection = { ...transport.connection, generation };
+      const view = useSessionLedger({ enabled: true, connection, now });
       useEffect(() => { seen.view = view; });
       return null;
     }
@@ -166,5 +179,71 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(seen.view?.loadingMore).toBe(false));
     await act(async () => { releaseLoadMore?.({ entries: [], omitted: 0 }); });
     expect(seen.view?.loadingMore).toBe(false);
+  });
+
+  it('keeps rows visible but pending when a refresh fails', async () => {
+    const entry = closedEntry('s1');
+    let rejectRefresh: ((error: Error) => void) | undefined;
+    const list = vi.fn()
+      .mockResolvedValueOnce({ entries: [entry], omitted: 1, next_before: 'older' })
+      .mockImplementationOnce(() => new Promise<SessionLedgerPage>((_resolve, reject) => {
+        rejectRefresh = reject;
+      }));
+    const seen = renderLedger(list);
+    await waitFor(() => expect(seen.view?.entries).toEqual([entry]));
+    act(() => seen.emit({ type: 'reopen-resolved', resolution: {
+      sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('ready'),
+    } }));
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('ready'));
+
+    act(() => seen.view?.reload());
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
+    expect(seen.view?.entries).toEqual([entry]);
+    await act(async () => rejectRefresh?.(new Error('connection lost')));
+
+    await waitFor(() => expect(seen.view?.error).toBe('connection lost'));
+    expect(seen.view?.entries).toEqual([entry]);
+    expect(seen.view?.resolutions.s1?.state).toBe('pending');
+    expect(seen.view?.omitted).toBe(0);
+    act(() => seen.view?.loadMore());
+    expect(list).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not load an old cursor while a replacement page is pending', async () => {
+    const entry = closedEntry('s1');
+    let releaseRefresh: ((page: SessionLedgerPage) => void) | undefined;
+    const list = vi.fn()
+      .mockResolvedValueOnce({ entries: [entry], omitted: 1, next_before: 'older' })
+      .mockImplementationOnce(() => new Promise<SessionLedgerPage>((resolve) => {
+        releaseRefresh = resolve;
+      }));
+    const seen = renderLedger(list);
+    await waitFor(() => expect(seen.view?.loading).toBe(false));
+
+    act(() => seen.view?.reload());
+    await waitFor(() => expect(seen.view?.loading).toBe(true));
+    act(() => seen.view?.loadMore());
+
+    expect(list).toHaveBeenCalledTimes(2);
+    await act(async () => releaseRefresh?.({ entries: [entry], omitted: 0 }));
+    await waitFor(() => expect(seen.view?.loading).toBe(false));
+  });
+
+  it('ignores a response from the connection superseded by reconnect', async () => {
+    const oldEntry = closedEntry('old');
+    const freshEntry = closedEntry('fresh');
+    const releases: Array<(page: SessionLedgerPage) => void> = [];
+    const list = vi.fn(() => new Promise<SessionLedgerPage>((resolve) => { releases.push(resolve); }));
+    const seen = renderLedger(list);
+    await waitFor(() => expect(releases).toHaveLength(1));
+
+    act(() => seen.setConnected(false));
+    act(() => seen.setConnected(true, 2));
+    await waitFor(() => expect(releases).toHaveLength(2));
+    await act(async () => releases[1]?.({ entries: [freshEntry], omitted: 0 }));
+    await waitFor(() => expect(seen.view?.entries).toEqual([freshEntry]));
+    await act(async () => releases[0]?.({ entries: [oldEntry], omitted: 0 }));
+
+    expect(seen.view?.entries).toEqual([freshEntry]);
   });
 });

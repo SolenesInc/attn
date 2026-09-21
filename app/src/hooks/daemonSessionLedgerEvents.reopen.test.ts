@@ -15,31 +15,37 @@ const reopen = {
 
 describe('session ledger daemon events for reopen', () => {
   it('hands a terminal verdict to the surface by close generation', () => {
-    const onSessionReopenResolved = vi.fn();
+    const onUpdate = vi.fn();
     const handled = handleSessionLedgerDaemonEvent(
       { event: 'session_reopen_resolved', session_id: 's1', closed_at: '2026-09-05T10:00:00Z', success: true, reopen },
-      { pending: new Map(), onSessionReopenResolved },
+      { pending: new Map(), onUpdate },
     );
     expect(handled).toBe(true);
-    expect(onSessionReopenResolved).toHaveBeenCalledWith({
-      sessionId: 's1',
-      closedAt: '2026-09-05T10:00:00Z',
-      success: true,
-      reopen,
+    expect(onUpdate).toHaveBeenCalledWith({
+      type: 'reopen-resolved',
+      resolution: {
+        sessionId: 's1',
+        closedAt: '2026-09-05T10:00:00Z',
+        success: true,
+        reopen,
+      },
     });
   });
 
   it('hands a terminal failure to the surface', () => {
-    const onSessionReopenResolved = vi.fn();
+    const onUpdate = vi.fn();
     handleSessionLedgerDaemonEvent(
       { event: 'session_reopen_resolved', session_id: 's1', closed_at: '2026-09-05T10:00:00Z', success: false, error: 'git unavailable' },
-      { pending: new Map(), onSessionReopenResolved },
+      { pending: new Map(), onUpdate },
     );
-    expect(onSessionReopenResolved).toHaveBeenCalledWith({
-      sessionId: 's1',
-      closedAt: '2026-09-05T10:00:00Z',
-      success: false,
-      error: 'git unavailable',
+    expect(onUpdate).toHaveBeenCalledWith({
+      type: 'reopen-resolved',
+      resolution: {
+        sessionId: 's1',
+        closedAt: '2026-09-05T10:00:00Z',
+        success: false,
+        error: 'git unavailable',
+      },
     });
   });
 

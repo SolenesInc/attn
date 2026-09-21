@@ -19,13 +19,10 @@ import {
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
-import type { Presentation, SessionLedgerEntry } from './types/generated';
-import type { SessionReopenResolutionNotice } from './hooks/daemonSessionLedgerEvents';
+import type { Presentation } from './types/generated';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
-
-const SESSION_RESOLUTION_NOTICE_LIMIT = 100;
 
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -58,12 +55,6 @@ function App() {
     useReleaseUpdates();
 
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
-  const [sessionCloseNotice, setSessionCloseNotice] = useState<{
-    entry: SessionLedgerEntry;
-    nonce: number;
-  }>();
-  const [sessionResolutionNotice, setSessionResolutionNotice] = useState<SessionReopenResolutionNotice>();
-
   const {
     daemonSessions,
     setDaemonSessions,
@@ -154,24 +145,6 @@ function App() {
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
     onSessionExited: handleSessionExited,
-    onSessionClosed: (entry) =>
-      setSessionCloseNotice((prev) => ({ entry, nonce: (prev?.nonce ?? 0) + 1 })),
-    onSessionReopenResolved: (resolution) =>
-      setSessionResolutionNotice((prev) => {
-        const resolutions = { ...prev?.resolutions };
-        const arrivalNonceBySession = { ...prev?.arrivalNonceBySession };
-        const nonce = (prev?.nonce ?? 0) + 1;
-        delete resolutions[resolution.sessionId];
-        delete arrivalNonceBySession[resolution.sessionId];
-        resolutions[resolution.sessionId] = resolution;
-        arrivalNonceBySession[resolution.sessionId] = nonce;
-        const expired = Object.keys(resolutions).slice(0, -SESSION_RESOLUTION_NOTICE_LIMIT);
-        for (const sessionId of expired) {
-          delete resolutions[sessionId];
-          delete arrivalNonceBySession[sessionId];
-        }
-        return { resolutions, arrivalNonceBySession, nonce };
-      }),
   });
 
   const {
@@ -259,8 +232,6 @@ function App() {
             notificationsChangeSignal={notificationsChangeSignal}
             fsChangeSignals={fsChangeSignals}
             notebookTaskChangeSignal={notebookTaskChangeSignal}
-            sessionCloseNotice={sessionCloseNotice}
-            sessionResolutionNotice={sessionResolutionNotice}
             registerSessionExitHandler={registerSessionExitHandler}
           />
         </DaemonApiProvider>

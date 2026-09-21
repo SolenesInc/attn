@@ -1,10 +1,17 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { SettingsProvider } from '../../contexts/SettingsContext';
-import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
+import type {
+  SessionLedgerConnectionEvent,
+  SessionLedgerPage,
+  SessionLedgerQuery,
+  SessionLedgerUpdate,
+  SessionReopenResolutionEvent,
+} from '../../hooks/daemonSessionLedgerEvents';
+import type { SessionLedgerConnection } from '../../hooks/useSessionLedger';
 import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../../types/generated';
 import { SessionReopenAction, SessionState } from '../../types/generated';
 import { SessionsTab } from './SessionsTab';
@@ -16,6 +23,19 @@ export const NOW = new Date('2026-09-05T14:30:00Z');
 export const now = () => NOW;
 
 type TabOnly<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
+
+interface ResolutionNotice {
+  resolutions: Record<string, SessionReopenResolutionEvent>;
+  arrivalNonceBySession: Record<string, number>;
+  nonce: number;
+}
+
+type SessionsTabTestProps = Partial<Omit<TabOnly<SessionsTabProps>, 'connection'>> & {
+  listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  connectionGeneration?: number;
+  closeNotice?: { entry: SessionLedgerEntry; nonce: number };
+  resolutionNotice?: ResolutionNotice;
+};
 
 export const rows = () => within(screen.getByRole('listbox', { name: 'Rows' }));
 
@@ -31,19 +51,69 @@ function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLI
 }
 
 export function renderSessionsTab(
-  props: Partial<TabOnly<SessionsTabProps>> & Pick<SessionsTabProps, 'listSessions'>,
+  props: SessionsTabTestProps,
   settings: { values?: Record<string, string>; setSetting?: Mock<(key: string, value: string) => void> } = {},
 ) {
   const setSetting = settings.setSetting ?? vi.fn<(key: string, value: string) => void>();
-  const tree = (next: Partial<TabOnly<SessionsTabProps>>) => (
+  const listeners = new Set<(event: SessionLedgerConnectionEvent) => void>();
+  let listSessions = props.listSessions;
+  const connection: SessionLedgerConnection = {
+    list: (query) => listSessions(query),
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    connected: true,
+    generation: props.connectionGeneration ?? 1,
+  };
+  const emit = (event: SessionLedgerUpdate) => {
+    for (const listener of listeners) listener({ ...event, connectionGeneration: connection.generation } as SessionLedgerConnectionEvent);
+  };
+  function Notices({ closeNotice, resolutionNotice }: Pick<SessionsTabTestProps, 'closeNotice' | 'resolutionNotice'>) {
+    const closeNonce = useRef<number | undefined>(undefined);
+    const resolutionNonce = useRef<number | undefined>(undefined);
+    useEffect(() => {
+      if (!closeNotice || closeNonce.current === closeNotice.nonce) return;
+      closeNonce.current = closeNotice.nonce;
+      emit({ type: 'closed', entry: closeNotice.entry });
+    }, [closeNotice]);
+    useEffect(() => {
+      if (!resolutionNotice || resolutionNonce.current === resolutionNotice.nonce) return;
+      const previous = resolutionNonce.current;
+      resolutionNonce.current = resolutionNotice.nonce;
+      for (const [sessionId, resolution] of Object.entries(resolutionNotice.resolutions)) {
+        if (previous !== undefined && resolutionNotice.arrivalNonceBySession[sessionId] <= previous) continue;
+        emit({ type: 'reopen-resolved', resolution });
+      }
+    }, [resolutionNotice]);
+    return null;
+  }
+  const tree = (next: Partial<SessionsTabTestProps>) => {
+    const merged = { ...props, ...next };
+    listSessions = merged.listSessions;
+    connection.generation = merged.connectionGeneration ?? connection.generation;
+    const { listSessions: _list, connectionGeneration: _generation, closeNotice, resolutionNotice, ...tab } = merged;
+    return (
     <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
       <Host>
-        {(host) => <SessionsTab workspaceNames={{}} {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
+        {(host) => (
+          <>
+            <SessionsTab workspaceNames={{}} {...tab} connection={connection} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />
+            <Notices closeNotice={closeNotice} resolutionNotice={resolutionNotice} />
+          </>
+        )}
       </Host>
     </SettingsProvider>
-  );
+    );
+  };
   const view = render(tree({}));
-  return { ...view, setSetting, rerender: (next: Partial<TabOnly<SessionsTabProps>>) => view.rerender(tree(next)) };
+  return {
+    ...view,
+    setSetting,
+    connection,
+    emit,
+    rerender: (next: Partial<SessionsTabTestProps>) => view.rerender(tree(next)),
+  };
 }
 
 export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = {}) {

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import type { SessionLedgerPage } from '../../hooks/daemonSessionLedgerEvents';
 import { SessionReopenAction } from '../../types/generated';
 import { closedEntry, entry, judged, listing, liveEntry, page, renderSessionsTab, rows, verdict } from './testSupport';
 
@@ -198,20 +199,37 @@ describe('SessionsTab settles rows in place', () => {
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps a notice that beat its page and applies it when the row arrives', async () => {
-    const { list } = listing([
-      page({ entries: [closedEntry('s1')], next_before: 'older', omitted: 1 }),
-      page({ entries: [closedEntry('elsewhere')] }),
-    ]);
-    const { rerender } = renderSessionsTab({ listSessions: list });
+  it('reconciles a resolution that arrives while its page is loading', async () => {
+    let release: ((page: SessionLedgerPage) => void) | undefined;
+    const list = vi.fn((query: { before?: string }) => query.before
+      ? new Promise<SessionLedgerPage>((resolve) => { release = resolve; })
+      : Promise.resolve(page({ entries: [closedEntry('s1')], next_before: 'older', omitted: 1 })));
+    const view = renderSessionsTab({ listSessions: list });
     await rows().findByText('run s1');
-    rerender({ resolutionNotice: { resolutions: { elsewhere: resolved('elsewhere', goneEverywhere) }, arrivalNonceBySession: { elsewhere: 1 }, nonce: 1 } });
 
-    fireEvent.click(screen.getByRole('button', { name: '1 older ↓' }));
+    fireEvent.click(await screen.findByRole('button', { name: '1 older ↓' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    act(() => view.emit({ type: 'reopen-resolved', resolution: resolved('elsewhere', goneEverywhere) }));
+    await act(async () => { release?.(page({ entries: [closedEntry('elsewhere')] })); });
     await rows().findByText('run elsewhere');
     fireEvent.click(rows().getByText('run elsewhere'));
     await waitFor(() => expect(within(inspector()).getByText(/branch feat\/x is gone/)).toBeTruthy());
     expect(within(inspector()).queryByText('checking reopen eligibility…')).toBeNull();
+  });
+
+  it('hides stale pagination while replacing the current page', async () => {
+    let release: ((page: SessionLedgerPage) => void) | undefined;
+    const list = vi.fn()
+      .mockResolvedValueOnce(page({ entries: [closedEntry('s1')], next_before: 'older', omitted: 1 }))
+      .mockImplementationOnce(() => new Promise<SessionLedgerPage>((resolve) => { release = resolve; }));
+    const view = renderSessionsTab({ listSessions: list });
+    await rows().findByText('run s1');
+
+    view.rerender({ connectionGeneration: 2 });
+
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('button', { name: '1 older ↓' })).toBeNull();
+    await act(async () => release?.(page({ entries: [closedEntry('s1')] })));
   });
 });
 

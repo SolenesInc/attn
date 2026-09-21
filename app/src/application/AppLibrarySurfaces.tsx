@@ -42,6 +42,7 @@ export function AppLibrarySurfaces() {
     refreshWorktrees,
     gitOperations,
     sendSessionList,
+    subscribeSessionLedger,
     getWorktreeSweepLog,
     setWorktreeKeep,
     sendFsList,
@@ -52,6 +53,7 @@ export function AppLibrarySurfaces() {
     sendNotebookBacklinks,
     sendNotebookToChief,
     connectionGeneration,
+    isConnected,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -77,7 +79,7 @@ export function AppLibrarySurfaces() {
     handleSendSeedToChief,
   } = useAppGardenActionsContext();
   const { handleReopenSession } = useSessionLifecycleContext();
-  const { sessionCloseNotice, sessionResolutionNotice, notificationsChangeSignal } = useAppInputs();
+  const { notificationsChangeSignal } = useAppInputs();
   const { notebookBrowserListFiles, notebookRootChangeSignal } = useAppNotebookSurfaceContext();
   const { notebookChiefActive } = useAppSessionsContext();
   const seeds = useDaemonStore((state) => state.seeds);
@@ -92,16 +94,18 @@ export function AppLibrarySurfaces() {
         onClose={() => setSessionsOpen(false)}
         yieldsFocus={locationPickerOpen && locationPickerPurpose === 'reopen'}
         sessions={{
-          listSessions: sendSessionList,
-          connectionGeneration,
+          connection: {
+            list: sendSessionList,
+            subscribe: subscribeSessionLedger,
+            connected: isConnected,
+            generation: connectionGeneration,
+          },
           workspaceNames: workspaceNamesById,
           liveSessionIds: liveGardenSessions,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
-          closeNotice: sessionCloseNotice,
-          resolutionNotice: sessionResolutionNotice,
         }}
         worktrees={{
           listWorktrees,

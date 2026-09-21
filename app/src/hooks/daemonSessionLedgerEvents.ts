@@ -39,16 +39,17 @@ export interface SessionReopenResolutionEvent {
   error?: string;
 }
 
-export interface SessionReopenResolutionNotice {
-  resolutions: Record<string, SessionReopenResolutionEvent>;
-  arrivalNonceBySession: Record<string, number>;
-  nonce: number;
-}
+export type SessionLedgerUpdate =
+  | { type: 'closed'; entry: SessionLedgerEntry }
+  | { type: 'reopen-resolved'; resolution: SessionReopenResolutionEvent };
+
+export type SessionLedgerConnectionEvent =
+  | { type: 'connection'; connected: boolean; connectionGeneration: number }
+  | (SessionLedgerUpdate & { connectionGeneration: number });
 
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
-  onSessionClosed?: (entry: SessionLedgerEntry) => void;
-  onSessionReopenResolved?: (resolution: SessionReopenResolutionEvent) => void;
+  onUpdate?: (update: SessionLedgerUpdate) => void;
 }
 
 type SessionLedgerEvent = {
@@ -102,19 +103,22 @@ export function handleSessionLedgerDaemonEvent(
       const reopen = event.reopen as SessionReopen | undefined;
       const error = typeof event.error === 'string' ? event.error : undefined;
       if (sessionId && closedAt && ((event.success === true && reopen) || (event.success === false && error))) {
-        context.onSessionReopenResolved?.({
-          sessionId,
-          closedAt,
-          success: event.success === true,
-          ...(reopen ? { reopen } : {}),
-          ...(error ? { error } : {}),
+        context.onUpdate?.({
+          type: 'reopen-resolved',
+          resolution: {
+            sessionId,
+            closedAt,
+            success: event.success === true,
+            ...(reopen ? { reopen } : {}),
+            ...(error ? { error } : {}),
+          },
         });
       }
       return true;
     }
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
-      if (entry) context.onSessionClosed?.(entry);
+      if (entry) context.onUpdate?.({ type: 'closed', entry });
       return true;
     }
     default:

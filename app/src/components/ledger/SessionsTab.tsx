@@ -1,13 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionLedgerEntry } from '../../types/generated';
-import type {
-  SessionLedgerPage,
-  SessionLedgerQuery,
-  SessionReopenResolutionNotice,
-} from '../../hooks/daemonSessionLedgerEvents';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
-import type { ReopenResolution, SessionLedgerFilters } from '../../hooks/useSessionLedger';
+import type { ReopenResolution, SessionLedgerConnection, SessionLedgerFilters } from '../../hooks/useSessionLedger';
 import {
   SESSION_FILTERS_SETTING_KEY,
   parseSessionFilters,
@@ -36,8 +31,7 @@ export interface SessionSeedLink {
 }
 
 export interface SessionsTabProps {
-  listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
-  connectionGeneration?: number;
+  connection: SessionLedgerConnection;
   workspaceNames: Record<string, string>;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
@@ -45,8 +39,6 @@ export interface SessionsTabProps {
   onOpenSeed?: (seedId: string) => void;
   onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
   onShowWorktree?: (path: string) => void;
-  closeNotice?: { entry: SessionLedgerEntry; nonce: number };
-  resolutionNotice?: SessionReopenResolutionNotice;
   requestedDir?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
   now: () => Date;
@@ -63,8 +55,7 @@ const WORKING_STATES = new Set(['working', 'running', 'busy']);
 const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle']);
 
 export function SessionsTab({
-  listSessions,
-  connectionGeneration = 0,
+  connection,
   workspaceNames,
   liveSessionIds,
   seedForSession,
@@ -72,8 +63,6 @@ export function SessionsTab({
   onOpenSeed,
   onReopen,
   onShowWorktree,
-  closeNotice,
-  resolutionNotice,
   requestedDir,
   queryRef,
   now,
@@ -87,13 +76,12 @@ export function SessionsTab({
   }, [setSetting]);
   const ledger = useSessionLedger({
     enabled: true,
-    list: listSessions,
-    connectionGeneration,
+    connection,
     now,
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, verdicts, resolutions, recordClose, recordResolution, reload } = ledger;
+  const { filters, setFilters, entries, verdicts, resolutions, reload } = ledger;
 
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
@@ -130,23 +118,6 @@ export function SessionsTab({
     if (!requestedDir) return;
     setText(`dir:${requestedDir.path}`);
   }, [requestedDir]);
-
-  useEffect(() => {
-    if (!closeNotice) return;
-    recordClose(closeNotice.entry);
-  }, [closeNotice, recordClose]);
-
-  const consumedResolutionNonce = useRef<number | undefined>(undefined);
-  useEffect(() => {
-    if (!resolutionNotice) return;
-    const previousNonce = consumedResolutionNonce.current;
-    if (previousNonce === resolutionNotice.nonce) return;
-    consumedResolutionNonce.current = resolutionNotice.nonce;
-    for (const [sessionId, resolution] of Object.entries(resolutionNotice.resolutions)) {
-      if (previousNonce !== undefined && resolutionNotice.arrivalNonceBySession[sessionId] <= previousNonce) continue;
-      recordResolution(resolution);
-    }
-  }, [resolutionNotice, recordResolution]);
 
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
@@ -249,14 +220,14 @@ export function SessionsTab({
         {closed > 0 && <span>{closed} closed</span>}
         {shown !== entries.length && <span>{entries.length - shown} hidden by the query</span>}
         {ledger.omitted > 0 && (
-          <button type="button" className="ledger-status-link" onClick={ledger.loadMore} disabled={ledger.loadingMore}>
+          <button type="button" className="ledger-status-link" onClick={ledger.loadMore} disabled={ledger.loading || ledger.loadingMore}>
             {ledger.loadingMore ? 'loading…' : `${ledger.omitted} older ↓`}
           </button>
         )}
         {copied && <span className="ledger-status-flash">copied</span>}
       </>,
     );
-  }, [shown, live, entries.length, ledger.omitted, ledger.loadMore, ledger.loadingMore, copied, onStatus]);
+  }, [shown, live, entries.length, ledger.omitted, ledger.loadMore, ledger.loading, ledger.loadingMore, copied, onStatus]);
 
   const chips = useMemo<Chip[]>(() => {
     const tokens = text.trim().split(/\s+/).filter(Boolean);

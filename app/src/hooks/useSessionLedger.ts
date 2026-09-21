@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../types/generated';
 import type {
+  SessionLedgerConnectionEvent,
   SessionLedgerPage,
   SessionLedgerQuery,
   SessionReopenResolutionEvent,
+  SessionLedgerUpdate,
 } from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
@@ -38,7 +40,6 @@ export const SESSION_PAGE_SIZE = 50;
 const systemNow = () => new Date();
 
 const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
-const EARLY_RESOLUTION_LIMIT = 100;
 
 export type ReopenResolution =
   | { closedAt: string; state: 'pending' }
@@ -47,12 +48,18 @@ export type ReopenResolution =
 
 export interface UseSessionLedgerOptions {
   enabled: boolean;
-  list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
-  connectionGeneration?: number;
+  connection: SessionLedgerConnection;
   pageSize?: number;
   now?: () => Date;
   initialFilters?: SessionLedgerFilters;
   onFiltersChange?: (filters: SessionLedgerFilters) => void;
+}
+
+export interface SessionLedgerConnection {
+  list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+  subscribe: (listener: (event: SessionLedgerConnectionEvent) => void) => () => void;
+  connected: boolean;
+  generation: number;
 }
 
 export interface SessionLedgerView {
@@ -69,8 +76,6 @@ export interface SessionLedgerView {
   filterError: string | null;
   reload: () => void;
   loadMore: () => void;
-  recordClose: (entry: SessionLedgerEntry) => void;
-  recordResolution: (resolution: SessionReopenResolutionEvent) => void;
 }
 
 export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
@@ -120,10 +125,67 @@ export function closeBelongsInView(
   return true;
 }
 
+function pendingResolutions(entries: SessionLedgerEntry[]): Record<string, ReopenResolution> {
+  const next: Record<string, ReopenResolution> = {};
+  for (const entry of entries) {
+    if (entry.closed_at) next[entry.id] = { closedAt: entry.closed_at, state: 'pending' };
+  }
+  return next;
+}
+
+function eventResolution(event: SessionReopenResolutionEvent): ReopenResolution {
+  return event.success && event.reopen
+    ? { closedAt: event.closedAt, state: 'ready', reopen: event.reopen }
+    : { closedAt: event.closedAt, state: 'failed', error: event.error ?? 'Eligibility could not be checked' };
+}
+
+function applyUpdateToEntries(
+  entries: SessionLedgerEntry[],
+  update: SessionLedgerUpdate,
+  filters: SessionLedgerFilters,
+  at: Date,
+): SessionLedgerEntry[] {
+  if (update.type !== 'closed') return entries;
+  const entry = update.entry;
+  const dropsFromView = filters.scope === 'live';
+  const belongs = closeBelongsInView(entry, filters, at);
+  const existing = entries.findIndex((row) => row.id === entry.id);
+  if (existing >= 0) {
+    const next = entries.slice();
+    next[existing] = entry;
+    return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
+  }
+  return belongs ? [entry, ...entries] : entries;
+}
+
+function applyUpdateToResolutions(
+  resolutions: Record<string, ReopenResolution>,
+  update: SessionLedgerUpdate,
+  filters: SessionLedgerFilters,
+  at: Date,
+): Record<string, ReopenResolution> {
+  if (update.type === 'reopen-resolved') {
+    const event = update.resolution;
+    if (resolutions[event.sessionId]?.closedAt !== event.closedAt) return resolutions;
+    return { ...resolutions, [event.sessionId]: eventResolution(event) };
+  }
+  const entry = update.entry;
+  const belongs = closeBelongsInView(entry, filters, at);
+  const next = { ...resolutions };
+  if (filters.scope === 'live' || !belongs || !entry.closed_at) delete next[entry.id];
+  else next[entry.id] = { closedAt: entry.closed_at, state: 'pending' };
+  return next;
+}
+
+interface ActiveRead {
+  epoch: number;
+  generation: number;
+  updates: SessionLedgerUpdate[];
+}
+
 export function useSessionLedger({
   enabled,
-  list,
-  connectionGeneration = 0,
+  connection,
   pageSize = SESSION_PAGE_SIZE,
   now = systemNow,
   initialFilters = EMPTY_SESSION_FILTERS,
@@ -136,55 +198,71 @@ export function useSessionLedger({
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMoreSeq, setLoadingMoreSeq] = useState<number | null>(null);
+  const [loadingMoreRequest, setLoadingMoreRequest] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const readSeq = useRef(0);
-  const loadingMore = loadingMoreSeq === readSeq.current;
-  const early = useRef(new Map<string, ReopenResolution>());
+  const [lifecycle, setLifecycle] = useState({
+    connected: connection.connected,
+    generation: connection.generation,
+  });
+  const lifecycleRef = useRef(lifecycle);
+  const entriesRef = useRef(entries);
+  const readEpoch = useRef(0);
+  const requestSequence = useRef(0);
+  const activeReads = useRef(new Map<number, ActiveRead>());
+  const loadingMore = loadingMoreRequest !== null;
+
   useEffect(() => {
-    if (!enabled) early.current.clear();
-  }, [enabled]);
-
-  const resolutionForEntry = useCallback((entry: SessionLedgerEntry): ReopenResolution | null => {
-    const closedAt = entry.closed_at ?? '';
-    if (!closedAt) return null;
-    const key = `${entry.id}\u0000${closedAt}`;
-    const arrived = early.current.get(key);
-    if (arrived) {
-      early.current.delete(key);
-      return arrived;
-    }
-    return { closedAt, state: 'pending' };
-  }, []);
-
-  const replacePageResolutions = useCallback((pageEntries: SessionLedgerEntry[]) => {
-    const next: Record<string, ReopenResolution> = {};
-    for (const entry of pageEntries) {
-      const resolution = resolutionForEntry(entry);
-      if (resolution) next[entry.id] = resolution;
-    }
-    setResolutions(next);
-  }, [resolutionForEntry]);
-
-  const appendPageResolutions = useCallback((pageEntries: SessionLedgerEntry[]) => {
-    const additions: Record<string, ReopenResolution | null> = {};
-    for (const entry of pageEntries) additions[entry.id] = resolutionForEntry(entry);
-    setResolutions((current) => {
-      const next = { ...current };
-      for (const entry of pageEntries) {
-        const resolution = additions[entry.id];
-        if (resolution) next[entry.id] = resolution;
-        else delete next[entry.id];
-      }
-      return next;
-    });
-  }, [resolutionForEntry]);
-  // Written after commit: a render React discards must not steer the committed surface.
+    entriesRef.current = entries;
+  }, [entries]);
   const filtersRef = useRef(filters);
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
+
+  const markVisibleEligibilityPending = useCallback(() => {
+    setResolutions(pendingResolutions(entriesRef.current));
+  }, []);
+
+  useEffect(() => {
+    const next = { connected: connection.connected, generation: connection.generation };
+    lifecycleRef.current = next;
+    setLifecycle((current) => current.connected === next.connected && current.generation === next.generation
+      ? current
+      : next);
+  }, [connection.connected, connection.generation]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    return connection.subscribe((event) => {
+      if (event.type === 'connection') {
+        const next = { connected: event.connected, generation: event.connectionGeneration };
+        lifecycleRef.current = next;
+        setLifecycle(next);
+        if (!event.connected) {
+          readEpoch.current += 1;
+          activeReads.current.clear();
+          setLoading(false);
+          setLoadingMoreRequest(null);
+          markVisibleEligibilityPending();
+        }
+        return;
+      }
+      if (!lifecycleRef.current.connected
+        || event.connectionGeneration !== lifecycleRef.current.generation) return;
+      const update: SessionLedgerUpdate = event.type === 'closed'
+        ? { type: 'closed', entry: event.entry }
+        : { type: 'reopen-resolved', resolution: event.resolution };
+      for (const read of activeReads.current.values()) {
+        if (read.epoch === readEpoch.current && read.generation === event.connectionGeneration) {
+          read.updates.push(update);
+        }
+      }
+      const at = now();
+      setEntries((current) => applyUpdateToEntries(current, update, filtersRef.current, at));
+      setResolutions((current) => applyUpdateToResolutions(current, update, filtersRef.current, at));
+    });
+  }, [connection.subscribe, enabled, markVisibleEligibilityPending, now]);
 
   const reportedRef = useRef(filters);
   useEffect(() => {
@@ -197,100 +275,94 @@ export function useSessionLedger({
   const filterError = 'error' in query ? query.error : null;
 
   useEffect(() => {
-    if (!enabled || filterError) return;
-    const seq = ++readSeq.current;
+    const epoch = ++readEpoch.current;
+    activeReads.current.clear();
+    setLoadingMoreRequest(null);
+    setNextBefore(null);
+    setOmitted(0);
+    markVisibleEligibilityPending();
+    if (!enabled || filterError || !lifecycle.connected) {
+      setLoading(false);
+      return;
+    }
+    const request = ++requestSequence.current;
+    const read: ActiveRead = { epoch, generation: lifecycle.generation, updates: [] };
+    activeReads.current.set(request, read);
     setLoading(true);
     setError(null);
-    list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
+    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {
-        if (seq !== readSeq.current) return;
-        setEntries(page.entries ?? []);
-        replacePageResolutions(page.entries ?? []);
+        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
+        const at = now();
+        let nextEntries = page.entries ?? [];
+        let nextResolutions = pendingResolutions(nextEntries);
+        for (const update of read.updates) {
+          nextEntries = applyUpdateToEntries(nextEntries, update, filters, at);
+          nextResolutions = applyUpdateToResolutions(nextResolutions, update, filters, at);
+        }
+        entriesRef.current = nextEntries;
+        setEntries(nextEntries);
+        setResolutions(nextResolutions);
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (seq !== readSeq.current) return;
-        setEntries([]);
-        setResolutions({});
-        setFacets(null);
-        setOmitted(0);
-        setNextBefore(null);
+        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
         setError(failure.message);
       })
       .finally(() => {
-        if (seq === readSeq.current) setLoading(false);
+        activeReads.current.delete(request);
+        if (epoch === readEpoch.current) setLoading(false);
       });
-    // `query` holds a fresh `now`, so depending on it would refetch every render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, filters, filterError, list, connectionGeneration, pageSize, replacePageResolutions, reloadNonce]);
+    return () => {
+      if (readEpoch.current === epoch) readEpoch.current += 1;
+      activeReads.current.clear();
+    };
+  }, [enabled, filters, query, filterError, connection.list, lifecycle, pageSize, reloadNonce, markVisibleEligibilityPending, now]);
 
   const reload = useCallback(() => {
-    early.current.clear();
+    readEpoch.current += 1;
+    activeReads.current.clear();
+    setLoadingMoreRequest(null);
+    markVisibleEligibilityPending();
     setReloadNonce((n) => n + 1);
-  }, []);
+  }, [markVisibleEligibilityPending]);
 
   const loadMore = useCallback(() => {
-    if (!nextBefore || loadingMore || filterError) return;
-    const seq = readSeq.current;
-    setLoadingMoreSeq(seq);
-    list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
+    if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
+    const epoch = readEpoch.current;
+    const request = ++requestSequence.current;
+    const read: ActiveRead = { epoch, generation: lifecycleRef.current.generation, updates: [] };
+    activeReads.current.set(request, read);
+    setLoadingMoreRequest(request);
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
       .then((page) => {
-        if (seq !== readSeq.current) return;
-        setEntries((current) => [...current, ...(page.entries ?? [])]);
-        appendPageResolutions(page.entries ?? []);
+        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
+        const at = now();
+        setEntries((current) => {
+          const present = new Set(current.map((entry) => entry.id));
+          let next = [...current, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
+          for (const update of read.updates) next = applyUpdateToEntries(next, update, filtersRef.current, at);
+          entriesRef.current = next;
+          return next;
+        });
+        setResolutions((current) => {
+          let next = { ...current, ...pendingResolutions(page.entries ?? []) };
+          for (const update of read.updates) next = applyUpdateToResolutions(next, update, filtersRef.current, at);
+          return next;
+        });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (seq === readSeq.current) setError(failure.message);
+        if (epoch === readEpoch.current) setError(failure.message);
       })
       .finally(() => {
-        if (seq === readSeq.current) setLoadingMoreSeq(null);
+        activeReads.current.delete(request);
+        setLoadingMoreRequest((current) => current === request ? null : current);
       });
-  }, [nextBefore, loadingMore, filterError, list, pageSize, appendPageResolutions, now]);
-
-  const recordClose = useCallback((entry: SessionLedgerEntry) => {
-    // Read outside the updater: React may replay one, and the clock would move under it.
-    const dropsFromView = filtersRef.current.scope === 'live';
-    const belongs = closeBelongsInView(entry, filtersRef.current, now());
-    const resolution = resolutionForEntry(entry);
-    setEntries((current) => {
-      const at = current.findIndex((row) => row.id === entry.id);
-      if (at >= 0) {
-        const next = current.slice();
-        next[at] = entry;
-        return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
-      }
-      if (!belongs) return current;
-      return [entry, ...current];
-    });
-    setResolutions((current) => {
-      const next = { ...current };
-      if (dropsFromView || !belongs || !entry.closed_at) delete next[entry.id];
-      else next[entry.id] = resolution ?? { closedAt: entry.closed_at, state: 'pending' };
-      return next;
-    });
-  }, [now, resolutionForEntry]);
-
-  const recordResolution = useCallback((event: SessionReopenResolutionEvent) => {
-    const resolution: ReopenResolution = event.success && event.reopen
-      ? { closedAt: event.closedAt, state: 'ready', reopen: event.reopen }
-      : { closedAt: event.closedAt, state: 'failed', error: event.error ?? 'Eligibility could not be checked' };
-    const key = `${event.sessionId}\u0000${event.closedAt}`;
-    early.current.delete(key);
-    early.current.set(key, resolution);
-    while (early.current.size > EARLY_RESOLUTION_LIMIT) {
-      const oldest = early.current.keys().next().value;
-      if (typeof oldest !== 'string') break;
-      early.current.delete(oldest);
-    }
-    setResolutions((current) => {
-      if (current[event.sessionId]?.closedAt !== event.closedAt) return current;
-      return { ...current, [event.sessionId]: resolution };
-    });
-  }, []);
+  }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
   const verdicts = useMemo(() => {
     const next: Record<string, ReopenVerdictView> = {};
@@ -314,7 +386,5 @@ export function useSessionLedger({
     filterError,
     reload,
     loadMore,
-    recordClose,
-    recordResolution,
   };
 }

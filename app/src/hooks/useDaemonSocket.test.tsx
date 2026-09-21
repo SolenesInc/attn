@@ -3031,6 +3031,25 @@ describe('useDaemonSocket notebook and annotation events', () => {
     return JSON.parse(ws.sent[ws.sent.length - 1]);
   }
 
+  it('routes ledger updates only while the ledger is subscribed', async () => {
+    const { result, unmount, ws } = await renderAndOpen();
+    const listener = vi.fn();
+    const unsubscribe = result.current.subscribeSessionLedger(listener);
+    const entry = { id: 's1', closed_at: '2026-09-05T10:00:00Z' };
+
+    act(() => ws.emit({ event: 'session_closed', session_ledger_entry: entry }));
+    expect(listener).toHaveBeenCalledWith({
+      type: 'closed',
+      entry,
+      connectionGeneration: 1,
+    });
+
+    unsubscribe();
+    act(() => ws.emit({ event: 'session_reopen_resolved', session_id: 's1', closed_at: entry.closed_at, success: false, error: 'gone' }));
+    expect(listener).toHaveBeenCalledTimes(1);
+    unmount();
+  });
+
   it('resolves session_messages_get with the annotatable window', async () => {
     const { result, unmount, ws } = await renderAndOpen();
 

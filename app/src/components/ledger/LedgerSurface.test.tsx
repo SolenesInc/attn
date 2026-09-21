@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { LedgerSurface } from './LedgerSurface';
 import type { LedgerTab } from './LedgerSurface';
 import { closedEntry, judged, listing, liveEntry, now, page, rows } from './testSupport';
 import { useWorktreeStore } from '../../store/worktrees';
+import { createSessionLedgerTestConnection } from '../../hooks/sessionLedgerTestConnection';
 
 function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onFocusSession?: (id: string) => void; onSelectSession?: (id: string) => void } = {}) {
   useWorktreeStore.getState().clear();
@@ -11,6 +12,7 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
   const { list } = listing([page({
     entries: [liveEntry('live'), closedEntry('wt', { is_worktree: true, directory: '/projects/attn--feat-one' })],
   })]);
+  const transport = createSessionLedgerTestConnection(list);
   const props = (current: LedgerTab) => ({
     isOpen: true,
     tab: current,
@@ -18,19 +20,10 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     onClose: extra.onClose ?? vi.fn(),
     now,
     sessions: {
-      listSessions: list,
+      connection: transport.connection,
       workspaceNames: {},
       onFocusSession: extra.onFocusSession ?? vi.fn(),
       onReopen: vi.fn(),
-      resolutionNotice: {
-        resolutions: {
-          wt: {
-            sessionId: 'wt', closedAt: '2026-09-05T10:00:00Z', success: true, reopen: judged('wt').reopen,
-          },
-        },
-        arrivalNonceBySession: { wt: 1 },
-        nonce: 1,
-      },
     },
     worktrees: {
       listWorktrees: vi.fn().mockResolvedValue({ worktrees: [{ path: '/projects/attn--feat-one', branch: 'feat/one', main_repo: '/projects/attn' }], repositories: [{ main_repo: '/projects/attn' }], omitted: 0 }),
@@ -44,6 +37,12 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     },
   });
   const view = render(<LedgerSurface {...props(tab)} />);
+  act(() => transport.emit({
+    type: 'reopen-resolved',
+    resolution: {
+      sessionId: 'wt', closedAt: '2026-09-05T10:00:00Z', success: true, reopen: judged('wt').reopen,
+    },
+  }));
   return { onTabChange, retab: (next: LedgerTab) => view.rerender(<LedgerSurface {...props(next)} />) };
 }
 
