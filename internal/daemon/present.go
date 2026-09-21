@@ -131,7 +131,7 @@ func (d *Daemon) handlePresentOpen(conn net.Conn, msg *protocol.PresentOpenMessa
 		headSHA string
 		issues  []present.AnchorIssue
 	}
-	pinned, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: m.Frame.Repo}, func(ctx context.Context, client *attngit.Client) (pinnedPresentation, error) {
+	pinned, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (pinnedPresentation, error) {
 		baseSHA, headSHA, runErr := present.PinWithGit(ctx, client, m)
 		if runErr != nil {
 			return pinnedPresentation{}, runErr
@@ -272,7 +272,7 @@ func (d *Daemon) handlePresentFeedback(conn net.Conn, msg *protocol.PresentFeedb
 	if round.Verdict != nil {
 		verdict = *round.Verdict
 	}
-	markdown, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: pres.RepoPath}, func(ctx context.Context, client *attngit.Client) (string, error) {
+	markdown, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (string, error) {
 		return present.RenderFeedbackWithGit(ctx, client, pres.RepoPath, pres.Title, round.Seq, round.BaseSHA, round.HeadSHA, submittedAt, verdict, feedbackComments), nil
 	})
 	if err != nil {
@@ -358,7 +358,7 @@ func (d *Daemon) handleGetPresentationRound(client *wsClient, msg *protocol.GetP
 		stats   map[string][2]int
 		changed []protocol.PresentFile
 	}
-	view, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive, Effect: gitRead, Scope: pres.RepoPath}, func(ctx context.Context, client *attngit.Client) (roundGitView, error) {
+	view, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPresent, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (roundGitView, error) {
 		protoRound, runErr := roundToProto(ctx, client, round, pres.RepoPath)
 		if runErr != nil {
 			return roundGitView{}, runErr

@@ -17,13 +17,6 @@ const (
 	gitDeferred
 )
 
-type gitEffect uint8
-
-const (
-	gitRead gitEffect = iota
-	gitWrite
-)
-
 type gitTaskKind string
 
 const (
@@ -48,10 +41,8 @@ const (
 )
 
 type gitTask struct {
-	Kind   gitTaskKind
-	Lane   gitLane
-	Effect gitEffect
-	Scope  string
+	Kind gitTaskKind
+	Lane gitLane
 }
 
 type gitExecutor interface {
@@ -273,6 +264,7 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 	})
 	defer func() {
 		recovered := recover()
+		canceled := context.Cause(item.runCtx) != nil
 		if item.stopCancel != nil {
 			item.stopCancel()
 		}
@@ -281,7 +273,7 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 		if recovered != nil {
 			finishErr = errGitCallbackPanic
 		}
-		e.finish(item, time.Since(started), childCommands, finishErr)
+		e.finish(item, time.Since(started), childCommands, finishErr, canceled)
 		if recovered != nil {
 			panic(recovered)
 		}
@@ -399,7 +391,7 @@ func (e *coordinatedGitExecutor) admitLocked(item *queuedGitTask) {
 	close(item.admitted)
 }
 
-func (e *coordinatedGitExecutor) finish(item *queuedGitTask, runDuration time.Duration, childCommands int, runErr error) {
+func (e *coordinatedGitExecutor) finish(item *queuedGitTask, runDuration time.Duration, childCommands int, runErr error, canceled bool) {
 	e.mu.Lock()
 	delete(e.running, item)
 	e.active--
@@ -413,7 +405,7 @@ func (e *coordinatedGitExecutor) finish(item *queuedGitTask, runDuration time.Du
 	stats.RunDuration += runDuration
 	if runErr != nil {
 		stats.Failed++
-		if errors.Is(runErr, context.Canceled) || context.Cause(item.runCtx) != nil {
+		if canceled || errors.Is(runErr, context.Canceled) {
 			stats.Canceled++
 		}
 	}

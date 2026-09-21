@@ -889,7 +889,7 @@ func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 		return false, source, fmt.Errorf("resolve source for Git tracking check: %w", err)
 	}
 	dir := filepath.Dir(resolvedSource)
-	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(ctx context.Context, client *attngit.Client) (struct {
+	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (struct {
 		tracked bool
 		display string
 	}, error) {

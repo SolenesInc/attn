@@ -53,8 +53,8 @@ func TestGitExecutorCapsAndReservedInteractiveCapacity(t *testing.T) {
 	releaseDeferred := make(chan struct{})
 	releaseQueuedDeferred := make(chan struct{})
 	releaseInteractive := make(chan struct{})
-	deferredTask := gitTask{Kind: gitTaskReopen, Lane: gitDeferred, Effect: gitRead}
-	interactiveTask := gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead}
+	deferredTask := gitTask{Kind: gitTaskReopen, Lane: gitDeferred}
+	interactiveTask := gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}
 
 	first := runBlockedGitTask(executor, deferredTask, started, releaseDeferred, "deferred-1")
 	<-enqueued
@@ -224,6 +224,10 @@ func TestGitExecutorRunningCancellationAndPanicReleaseCapacity(t *testing.T) {
 	if err := <-result; !errors.Is(err, cause) {
 		t.Fatalf("running cancellation=%v", err)
 	}
+	stats := executor.Snapshot().ByKind[gitTaskStatus]
+	if stats.Completed != 1 || stats.Failed != 1 || stats.Canceled != 1 {
+		t.Fatalf("canceled status stats=%+v", stats)
+	}
 
 	func() {
 		defer func() {
@@ -237,6 +241,10 @@ func TestGitExecutorRunningCancellationAndPanicReleaseCapacity(t *testing.T) {
 	}()
 	if err := executor.Run(context.Background(), gitTask{Kind: gitTaskStatus}, func(context.Context, *attngit.Client) error { return nil }); err != nil {
 		t.Fatalf("capacity after panic: %v", err)
+	}
+	stats = executor.Snapshot().ByKind[gitTaskStatus]
+	if stats.Completed != 3 || stats.Failed != 2 || stats.Canceled != 1 {
+		t.Fatalf("final status stats=%+v", stats)
 	}
 }
 
@@ -281,7 +289,7 @@ func TestGitExecutorShutdownCancelsRunningAndQueuedWork(t *testing.T) {
 
 func TestGitExecutorMeasurementsCountLogicalWorkAndChildren(t *testing.T) {
 	executor := testGitExecutor(t, testGitConfig())
-	task := gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead, Scope: "/private/repository/path"}
+	task := gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}
 	if err := executor.Run(context.Background(), task, func(ctx context.Context, client *attngit.Client) error {
 		_, err := client.Output(ctx, attngit.OpMetadata, "", "--version")
 		return err
@@ -291,6 +299,20 @@ func TestGitExecutorMeasurementsCountLogicalWorkAndChildren(t *testing.T) {
 	snapshot := executor.Snapshot()
 	stats := snapshot.ByKind[gitTaskRepositoryInfo]
 	if stats.Completed != 1 || stats.ChildCommands != 1 || stats.Failed != 0 {
+		t.Fatalf("repository info stats=%+v", stats)
+	}
+}
+
+func TestGitExecutorFailureIsNotCountedAsCancellation(t *testing.T) {
+	executor := testGitExecutor(t, testGitConfig())
+	failure := errors.New("git failed")
+	if err := executor.Run(context.Background(), gitTask{Kind: gitTaskRepositoryInfo}, func(context.Context, *attngit.Client) error {
+		return failure
+	}); !errors.Is(err, failure) {
+		t.Fatalf("run error=%v", err)
+	}
+	stats := executor.Snapshot().ByKind[gitTaskRepositoryInfo]
+	if stats.Completed != 1 || stats.Failed != 1 || stats.Canceled != 0 {
 		t.Fatalf("repository info stats=%+v", stats)
 	}
 }
@@ -317,7 +339,7 @@ func TestGitExecutorSaturationReceipt(t *testing.T) {
 	deferredResults := make(chan error, 50)
 	for range 50 {
 		go func() {
-			deferredResults <- executor.Run(context.Background(), gitTask{Kind: gitTaskReopen, Lane: gitDeferred, Effect: gitRead}, func(context.Context, *attngit.Client) error {
+			deferredResults <- executor.Run(context.Background(), gitTask{Kind: gitTaskReopen, Lane: gitDeferred}, func(context.Context, *attngit.Client) error {
 				<-release
 				return nil
 			})
@@ -335,7 +357,7 @@ func TestGitExecutorSaturationReceipt(t *testing.T) {
 	latencies := make(chan latency, 3)
 	go func() {
 		started := time.Now()
-		err := executor.Run(context.Background(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *attngit.Client) error {
+		err := executor.Run(context.Background(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) error {
 			if _, err := client.GetBranchInfo(ctx, repo); err != nil {
 				return err
 			}

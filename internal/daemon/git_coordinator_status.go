@@ -118,7 +118,7 @@ func parseGitDiffNumstat(output string) map[string]diffStats {
 }
 
 func getGitStatusForSubscription(ctx context.Context, executor gitExecutor, dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
-	return gitValue(ctx, executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(runCtx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
+	return gitValue(ctx, executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
 		return getGitStatusWithOptionsAdmitted(runCtx, client, dir, gitStatusOptions{
 			mode:         mode,
 			fullTimeout:  gitStatusFullBudget,
@@ -133,7 +133,7 @@ func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitSt
 		return nil, err
 	}
 	defer executor.Close(nil)
-	return gitValue(context.Background(), executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive, Effect: gitRead, Scope: dir}, func(ctx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
+	return gitValue(context.Background(), executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
 		return getGitStatusWithOptionsAdmitted(ctx, client, dir, opts)
 	})
 }

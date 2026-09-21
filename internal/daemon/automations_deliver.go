@@ -532,7 +532,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			mainRepo  string
 			remoteURL string
 		}
-		override, gitErr := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitRead, Scope: source.Path}, func(runCtx context.Context, client *attngit.Client) (overrideInfo, error) {
+		override, gitErr := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (overrideInfo, error) {
 			mainRepo, runErr := client.ValidateLocalClone(runCtx, source.Path, identity)
 			if runErr != nil {
 				return overrideInfo{}, runErr
@@ -557,7 +557,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 		}
 		target := filepath.Join(root, "automation", "repos", attngit.RepositoryCacheKey(identity), "repo")
 		cloneURL := "https://" + identity + ".git"
-		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: target}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+		mainRepo, err = gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) (string, error) {
 			mainRepo, _, runErr := client.EnsureManagedClone(runCtx, cloneURL, target, identity, authorization)
 			return mainRepo, runErr
 		})
@@ -565,7 +565,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 			return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: fmt.Errorf("managed repository cache: %w", err)}
 		}
 	}
-	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: mainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		return client.EnsurePullRequestRevision(runCtx, mainRepo, "origin", pr.Number, pr.HeadSHA, authorization)
 	}); err != nil {
 		return automation.PreparedLocation{}, &retryableAutomationDeliveryError{cause: err}
@@ -598,7 +598,7 @@ func (d *Daemon) prepareAutomationLocation(ctx context.Context, req automation.W
 		}
 		sessionPersisted = true
 	}
-	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred, Effect: gitWrite, Scope: mainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+	if err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(runCtx context.Context, client *attngit.Client) error {
 		_, runErr := client.EnsureAutomationSessionWorktree(runCtx, mainRepo, worktree, pr.HeadSHA, authorization, sessionPersisted)
 		return runErr
 	}); err != nil {

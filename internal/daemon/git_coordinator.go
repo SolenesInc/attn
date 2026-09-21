@@ -107,7 +107,7 @@ func readFileDiff(directory, path, baseRef, headRef string, staged bool) (fileDi
 }
 
 func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key fileDiffCacheKey) (fileDiffContent, error) {
-	content, err := gitValue(ctx, executor, gitTask{Kind: gitTaskFileDiff, Lane: gitInteractive, Effect: gitRead, Scope: key.directory}, func(runCtx context.Context, client *attngit.Client) (fileDiffContent, error) {
+	content, err := gitValue(ctx, executor, gitTask{Kind: gitTaskFileDiff, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) (fileDiffContent, error) {
 		content := fileDiffContent{}
 		origOutput, origErr := client.Output(runCtx, attngit.OpDiff, key.directory, "show", key.baseRef+":"+key.path)
 		if origErr == nil {

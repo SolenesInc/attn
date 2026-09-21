@@ -553,7 +553,7 @@ func (d *Daemon) recreateReopenWorktreeForeground(
 	} else {
 		createdPath, createdBranch = plan.path, plan.branch
 		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{
-			Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: plan.repository,
+			Kind: gitTaskWorktreeMutation, Lane: gitInteractive,
 		}, func(ctx context.Context, client *attngit.Client) error {
 			branch, createErr := mutateReopenWorktreeAdmitted(ctx, client, &resolved, action, plan.startingFrom)
 			if createErr == nil {
@@ -596,7 +596,7 @@ func (d *Daemon) reopenWorktreeProviderPlan(
 		plan.startingFrom = verdict.Inspection.Remote + "/" + plan.branch
 	case protocol.SessionReopenActionStartFreshDefaultBranch:
 		base, err := gitValue(ctx, d.gitExecution(), gitTask{
-			Kind: gitTaskReopen, Lane: gitInteractive, Effect: gitRead, Scope: plan.repository,
+			Kind: gitTaskReopen, Lane: gitInteractive,
 		}, func(runCtx context.Context, client *attngit.Client) (string, error) {
 			return client.GetDefaultBranch(runCtx, plan.repository)
 		})

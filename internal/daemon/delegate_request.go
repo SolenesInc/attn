@@ -145,7 +145,7 @@ func (d *Daemon) resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (s
 		return "", err
 	}
 	base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
-	commit, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
+	commit, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
 	if err != nil || strings.TrimSpace(string(commit)) == "" {
 		return "", fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
 	}
@@ -251,7 +251,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	repoRoot = attngit.CanonicalizePath(repoRoot)
 	switch msg.Checkout.Kind {
 	case protocol.DelegateCheckoutKindReuse:
-		branchOutput, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive, Effect: gitRead, Scope: directory}, attngit.OpMetadata, directory, "symbolic-ref", "--short", "HEAD")
+		branchOutput, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, attngit.OpMetadata, directory, "symbolic-ref", "--short", "HEAD")
 		branch := strings.TrimSpace(string(branchOutput))
 		if err != nil || branch == "" {
 			return nil, fmt.Errorf("cannot reuse detached or unreadable checkout %s: %v", repoRoot, err)
@@ -291,7 +291,7 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 			base := strings.TrimSpace(protocol.Deref(msg.Checkout.From))
 			resolvedCommit := strings.TrimSpace(reservedBaseCommit)
 			if resolvedCommit == "" {
-				commit, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
+				commit, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, attngit.OpMetadata, mainRepo, "rev-parse", "--verify", base+"^{commit}")
 				if err != nil || strings.TrimSpace(string(commit)) == "" {
 					return nil, fmt.Errorf("base ref %q is unavailable; fetch it explicitly or choose another ref", base)
 				}

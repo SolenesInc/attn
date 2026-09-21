@@ -7,19 +7,19 @@ import (
 )
 
 func (d *Daemon) readBranchInfo(ctx context.Context, kind gitTaskKind, lane gitLane, dir string) (*attngit.BranchInfo, error) {
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane, Effect: gitRead, Scope: dir}, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane}, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
 		return client.GetBranchInfo(runCtx, dir)
 	})
 }
 
 func (d *Daemon) readRepoRoot(ctx context.Context, kind gitTaskKind, lane gitLane, dir string) (string, error) {
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane, Effect: gitRead, Scope: dir}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane}, func(runCtx context.Context, client *attngit.Client) (string, error) {
 		return client.GetRepoRoot(runCtx, dir)
 	})
 }
 
 func (d *Daemon) resolveMainRepo(ctx context.Context, kind gitTaskKind, lane gitLane, path string) (string, error) {
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane, Effect: gitRead, Scope: path}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane}, func(runCtx context.Context, client *attngit.Client) (string, error) {
 		_, err := client.GetRepoRoot(runCtx, path)
 		if err != nil {
 			return "", err
@@ -35,7 +35,7 @@ func (d *Daemon) gitOutput(ctx context.Context, task gitTask, op attngit.Operati
 }
 
 func (d *Daemon) refExists(ctx context.Context, kind gitTaskKind, lane gitLane, repo, ref string) (bool, error) {
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *attngit.Client) (bool, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: kind, Lane: lane}, func(runCtx context.Context, client *attngit.Client) (bool, error) {
 		return client.RefExists(runCtx, repo, ref)
 	})
 }

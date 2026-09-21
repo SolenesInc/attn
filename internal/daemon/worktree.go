@@ -19,7 +19,7 @@ import (
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 	var result []protocol.Worktree
 	_ = d.worktreeMaintenance.RunForeground(context.Background(), "list worktrees", func(protectedCtx context.Context) error {
-		gitWorktrees, err := gitValue(protectedCtx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+		gitWorktrees, err := gitValue(protectedCtx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
 			return client.ObserveWorktrees(ctx, mainRepo)
 		})
 		if err != nil {
@@ -135,7 +135,7 @@ func (d *Daemon) doCreateWorktreeForeground(protectedCtx context.Context, msg *p
 	if handled {
 		createdBranch = providerBranch
 	} else {
-		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 			if remote, branch, ok := strings.Cut(startingFrom, "/"); ok {
 				if remotes, remotesErr := client.ListRemotes(ctx, mainRepo); remotesErr == nil && slices.Contains(remotes, remote) {
 					if fetchErr := client.FetchRemoteBranch(ctx, mainRepo, remote, branch); fetchErr != nil {
@@ -189,7 +189,7 @@ func (d *Daemon) discoverWorktree(path string) *store.Worktree {
 		mainRepo string
 		entries  []git.WorktreeEntry
 	}
-	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: path}, func(ctx context.Context, client *git.Client) (discovery, error) {
+	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (discovery, error) {
 		root, rootErr := client.GetRepoRoot(ctx, path)
 		if rootErr != nil {
 			return discovery{}, rootErr
@@ -297,7 +297,7 @@ func (d *Daemon) doDeleteWorktreeForeground(path string, endpointID *string, opt
 		}
 		if !handled {
 			var branchDeleteErr error
-			deleteErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+			deleteErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 				if runErr := client.DeleteWorktree(ctx, mainRepo, path, opts.Force); runErr != nil {
 					return runErr
 				}
@@ -338,7 +338,7 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return true
 	}
-	states, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
+	states, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
 		return client.ListWorktreeStates(runCtx, mainRepo)
 	})
 	if err != nil {
@@ -360,7 +360,7 @@ func (d *Daemon) deleteWorktreeBranch(ctx context.Context, mainRepo, branch stri
 		d.logf("Preserved branch %s because an open seed can continue from it", branch)
 		return
 	}
-	err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(runCtx context.Context, client *git.Client) error {
+	err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
 		return client.DeleteBranch(runCtx, mainRepo, branch, true)
 	})
 	if err != nil {

@@ -96,7 +96,7 @@ func (d *Daemon) indexRoot(root string, cap int, extensions []string) ([]string,
 }
 
 func (d *Daemon) indexRootViaGit(root string, cap int, extensions []string) (files []string, truncated bool, ok bool, admissionErr error) {
-	out, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskFileIndex, Lane: gitInteractive, Effect: gitRead, Scope: root}, func(ctx context.Context, client *git.Client) ([]byte, error) {
+	out, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskFileIndex, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]byte, error) {
 		return client.Output(ctx, git.OpMetadata, root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 	})
 	if err != nil {

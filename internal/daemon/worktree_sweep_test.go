@@ -292,7 +292,7 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	}
 	mutationIndex := -1
 	for i, task := range tasks {
-		if task.Kind != gitTaskWorktreeMutation || task.Effect != gitWrite {
+		if task.Kind != gitTaskWorktreeMutation {
 			continue
 		}
 		mutationIndex = i

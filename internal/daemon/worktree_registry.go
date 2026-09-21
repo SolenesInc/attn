@@ -67,7 +67,7 @@ func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, erro
 		if mapped {
 			continue
 		}
-		root, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: session.Directory}, func(runCtx context.Context, client *git.Client) (string, error) {
+		root, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (string, error) {
 			return client.RepositoryRoot(runCtx, session.Directory)
 		})
 		if err != nil {
@@ -154,7 +154,7 @@ func (d *Daemon) listWorktreeStatesContext(ctx context.Context, repo string) ([]
 	if d.worktreeListStates != nil {
 		return d.worktreeListStates(ctx, repo)
 	}
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
 		return client.ListWorktreeStates(runCtx, repo)
 	})
 }
@@ -180,7 +180,7 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 		treeErr        error
 	}
 	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
-	observed, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *git.Client) (gitFacts, error) {
+	observed, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (gitFacts, error) {
 		integrationSHA, resolveErr := client.Output(runCtx, git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}")
 		if resolveErr != nil {
 			return gitFacts{}, fmt.Errorf("resolve integration ref %s: %w", facts.integrationBranch, resolveErr)
@@ -247,7 +247,7 @@ func (d *Daemon) sessionActivityByWorktree(liveSessions map[string][]string) map
 }
 
 func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo string, now time.Time) error {
-	identity, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *git.Client) ([2]string, error) {
+	identity, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([2]string, error) {
 		host, ownerRepo, runErr := client.OriginHostOwnerRepo(runCtx, repo)
 		return [2]string{host, ownerRepo}, runErr
 	})
@@ -325,7 +325,7 @@ func (d *Daemon) integrationBranchContext(ctx context.Context, repo string, now 
 			return d.resolveIntegrationRefContext(ctx, repo, record.Branch)
 		}
 	}
-	branch, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *git.Client) (string, error) {
+	branch, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (string, error) {
 		return client.GetDefaultBranch(runCtx, repo)
 	})
 	if context.Cause(ctx) != nil {
@@ -342,7 +342,7 @@ func (d *Daemon) resolveIntegrationRefContext(ctx context.Context, repo, branch 
 	if strings.HasPrefix(branch, "origin/") {
 		return branch, nil
 	}
-	exists, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: repo}, func(runCtx context.Context, client *git.Client) (bool, error) {
+	exists, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (bool, error) {
 		return client.RefExists(runCtx, repo, "origin/"+branch)
 	})
 	if err != nil {
@@ -393,7 +393,7 @@ func sameObservation(before, after *store.Worktree) bool {
 }
 
 func (d *Daemon) observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
-	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: state.Path}, func(runCtx context.Context, client *git.Client) (store.WorktreeObservation, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (store.WorktreeObservation, error) {
 		return observeWorktreeWithClient(runCtx, client, facts, state, now)
 	})
 }

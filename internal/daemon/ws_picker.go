@@ -217,7 +217,7 @@ func (d *Daemon) handleBrowseDirectoryWS(client *wsClient, msg *protocol.BrowseD
 
 func (d *Daemon) handleInspectPathWS(client *wsClient, msg *protocol.InspectPathMessage) {
 	go func() {
-		inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive, Effect: gitRead, Scope: msg.Path}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
+		inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskPicker, Lane: gitInteractive}, func(ctx context.Context, gitClient *git.Client) (*protocol.PathInspection, error) {
 			return inspectPickerPath(ctx, gitClient, msg.Path)
 		})
 		if err != nil {

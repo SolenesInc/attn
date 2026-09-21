@@ -233,7 +233,7 @@ func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktre
 		return "", "", fmt.Errorf("handled create result is missing branch")
 	}
 
-	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
 		return client.ObserveWorktrees(ctx, mainRepo)
 	})
 	if err != nil {
@@ -256,7 +256,7 @@ func (d *Daemon) validateCreatedProviderWorktree(mainRepo string, result worktre
 }
 
 func (d *Daemon) currentWorktreePathSet(mainRepo string) (map[string]bool, error) {
-	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
 		return client.ObserveWorktrees(ctx, mainRepo)
 	})
 	if err != nil {
@@ -274,7 +274,7 @@ func (d *Daemon) currentWorktreePathSet(mainRepo string) (map[string]bool, error
 
 func (d *Daemon) validateDeletedProviderWorktree(mainRepo, path string) error {
 	expectedPath := git.CanonicalizePath(path)
-	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+	worktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
 		return client.ObserveWorktrees(ctx, mainRepo)
 	})
 	if err != nil {

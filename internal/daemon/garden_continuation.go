@@ -100,7 +100,7 @@ func (d *Daemon) observedGardenExecution(session *protocol.Session, resumeID str
 	if execution.HostKind != garden.HostLocal || execution.Cwd == "" {
 		return execution
 	}
-	observed, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred, Effect: gitRead, Scope: execution.Cwd}, func(ctx context.Context, client *attngit.Client) (struct {
+	observed, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitDeferred}, func(ctx context.Context, client *attngit.Client) (struct {
 		checkoutRoot string
 		mainRepo     string
 		branch       string
@@ -444,7 +444,7 @@ func (d *Daemon) branchCanBeRecreated(execution garden.Dispatch) (string, bool, 
 	if _, err := os.Stat(repo); err != nil {
 		return "", false, "the saved repository is unavailable"
 	}
-	inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *attngit.Client) (struct {
+	inspection, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskGarden, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (struct {
 		exists    bool
 		worktrees []attngit.WorktreeEntry
 	}, error) {

@@ -289,7 +289,7 @@ func (r *delegationRollback) onSessionSpawned(sessionID string) {
 }
 
 func (d *Daemon) delegationWorktreeOwnerPath(worktreePath string) (string, error) {
-	out, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive, Effect: gitRead, Scope: worktreePath}, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
+	out, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
 	if err != nil {
 		return "", fmt.Errorf("resolve delegation worktree owner marker: %w", err)
 	}
@@ -878,7 +878,7 @@ func (d *Daemon) delegateOperationForeground(protectedCtx context.Context, msg *
 		if requestedPath := strings.TrimSpace(protocol.Deref(msg.Worktree.Path)); requestedPath != "" && worktreePath != git.CanonicalizePath(requestedPath) {
 			return nil, fmt.Errorf("worktree provider returned %s, expected requested path %s; checkout was left in place", worktreePath, requestedPath)
 		}
-		actualBranch, branchErr := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive, Effect: gitRead, Scope: worktreePath}, func(ctx context.Context, client *git.Client) (string, error) {
+		actualBranch, branchErr := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (string, error) {
 			return client.GetCurrentBranch(ctx, worktreePath)
 		})
 		if branchErr != nil || actualBranch != msg.Worktree.Branch {

@@ -13,7 +13,7 @@ func (d *Daemon) detectAutoModeEnvironment(cwd string) map[string][]string {
 		slots      map[string][]string
 		identities []string
 	}
-	detectedResult, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive, Effect: gitRead, Scope: cwd}, func(ctx context.Context, client *attngit.Client) (detection, error) {
+	detectedResult, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (detection, error) {
 		slots, identities := automode.DetectFromRepoWithGit(ctx, client, cwd)
 		return detection{slots: slots, identities: identities}, nil
 	})
@@ -99,7 +99,7 @@ func (d *Daemon) autoModeConfigForSession(
 func (d *Daemon) autoModeConfigWithRepositoryRules(
 	cfg automode.Config, cwd string,
 ) (automode.Config, automode.RepositoryRules, error) {
-	repository, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive, Effect: gitRead, Scope: cwd}, func(ctx context.Context, client *attngit.Client) (automode.RepositoryRules, error) {
+	repository, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutoMode, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (automode.RepositoryRules, error) {
 		return automode.LoadRepositoryRulesWithGit(ctx, client, cwd)
 	})
 	if err != nil {

@@ -108,7 +108,7 @@ func (d *Daemon) scheduledReopenGit(lane gitLane) scheduledReopenGit {
 
 func (g scheduledReopenGit) BranchInfo(ctx context.Context, directory string) (*attngit.BranchInfo, error) {
 	return gitValue(ctx, g.daemon.gitExecution(), gitTask{
-		Kind: gitTaskReopen, Lane: g.lane, Effect: gitRead, Scope: directory,
+		Kind: gitTaskReopen, Lane: g.lane,
 	}, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
 		return client.GetBranchInfo(runCtx, directory)
 	})
@@ -132,7 +132,7 @@ func (g scheduledReopenGit) BranchAvailability(
 	}
 	return g.daemon.reopenBranchSharedCalls().Do(ctx, key, func(sharedCtx context.Context) (branchInspection, error) {
 		return gitValue(sharedCtx, g.daemon.gitExecution(), gitTask{
-			Kind: gitTaskReopen, Lane: g.lane, Effect: gitRead, Scope: key.Repository,
+			Kind: gitTaskReopen, Lane: g.lane,
 		}, func(runCtx context.Context, client *attngit.Client) (branchInspection, error) {
 			return g.inspect(runCtx, client, key.Repository, key.Branch)
 		})
