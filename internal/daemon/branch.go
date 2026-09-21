@@ -121,15 +121,25 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			defaultBranch string
 			worktrees     []git.WorktreeEntry
 		}
-		info, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
-			currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
-			if runErr != nil {
-				return repoInfo{}, runErr
+		var info repoInfo
+		var worktrees []protocol.Worktree
+		err := d.worktreeMaintenance.RunForeground(context.Background(), "get repository info", func(protectedCtx context.Context) error {
+			var infoErr error
+			info, infoErr = gitValue(protectedCtx, d.gitExecution(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive, Effect: gitRead, Scope: repo}, func(ctx context.Context, client *git.Client) (repoInfo, error) {
+				currentBranch, runErr := client.GetCurrentBranch(ctx, repo)
+				if runErr != nil {
+					return repoInfo{}, runErr
+				}
+				commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
+				defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
+				listedWorktrees, _ := client.ObserveWorktrees(ctx, repo)
+				return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees}, nil
+			})
+			if infoErr != nil {
+				return infoErr
 			}
-			commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
-			defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
-			worktrees, _ := client.ObserveWorktrees(ctx, repo)
-			return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: worktrees}, nil
+			worktrees = d.reconcileListedWorktrees(repo, info.worktrees)
+			return nil
 		})
 		if err != nil {
 			d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
@@ -144,8 +154,6 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 		if info.defaultBranch == "" {
 			info.defaultBranch = "main"
 		}
-		worktrees := d.reconcileListedWorktrees(repo, info.worktrees)
-
 		d.sendToClient(client, &protocol.GetRepoInfoResultMessage{
 			Event:      protocol.EventGetRepoInfoResult,
 			EndpointID: msg.EndpointID,

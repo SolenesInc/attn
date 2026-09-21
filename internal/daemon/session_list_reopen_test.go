@@ -179,6 +179,7 @@ func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatalf("delete the shared worktree directory: %v", err)
 	}
+	d.closeSessionReopenBroker()
 
 	started := make(chan struct{})
 	release := make(chan struct{})

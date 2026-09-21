@@ -17,13 +17,19 @@ import (
 )
 
 func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
-	gitWorktrees, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
-		return client.ObserveWorktrees(ctx, mainRepo)
+	var result []protocol.Worktree
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "list worktrees", func(protectedCtx context.Context) error {
+		gitWorktrees, err := gitValue(protectedCtx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: mainRepo}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
+			return client.ObserveWorktrees(ctx, mainRepo)
+		})
+		if err != nil {
+			result = d.reconcileListedWorktrees(mainRepo, nil)
+			return nil
+		}
+		result = d.reconcileListedWorktrees(mainRepo, gitWorktrees)
+		return nil
 	})
-	if err != nil {
-		return d.reconcileListedWorktrees(mainRepo, nil)
-	}
-	return d.reconcileListedWorktrees(mainRepo, gitWorktrees)
+	return result
 }
 
 func (d *Daemon) reconcileListedWorktrees(mainRepo string, gitWorktrees []git.WorktreeEntry) []protocol.Worktree {

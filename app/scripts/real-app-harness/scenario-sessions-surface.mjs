@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
+import { readProcessEnvironment } from './agentTripwire.mjs';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
@@ -15,7 +16,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -43,7 +44,7 @@ function prepareEligibilityGit(root) {
   const executable = path.join(binDir, 'git');
   const gate = path.join(root, 'eligibility-git-enabled');
   fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(executable, '#!/bin/sh\nif [ -f "$ATTN_SESSIONS_GIT_GATE" ]; then\n  case "$PWD" in\n    "$ATTN_SESSIONS_GIT_SLOW") sleep 3 ;;\n    "$ATTN_SESSIONS_GIT_FAST") sleep 1 ;;\n  esac\nfi\nexport PATH="$ATTN_SESSIONS_GIT_BASE_PATH"\nexec "$ATTN_SESSIONS_REAL_GIT" "$@"\n', { mode: 0o755 });
+  fs.writeFileSync(executable, '#!/bin/sh\nif [ -f "$ATTN_SESSIONS_GIT_GATE" ]; then\n  case "$(pwd -P)" in\n    "$ATTN_SESSIONS_GIT_SLOW") sleep 3 ;;\n    "$ATTN_SESSIONS_GIT_FAST") sleep 1 ;;\n  esac\nfi\nexport PATH="$ATTN_SESSIONS_GIT_BASE_PATH"\nexec "$ATTN_SESSIONS_REAL_GIT" "$@"\n', { mode: 0o755 });
   return {
     executable,
     gate,
@@ -131,6 +132,7 @@ async function main() {
   const profile = currentHarnessProfile();
   assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
+  const dataDir = dataDirForProfile(profile);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSIONS-SURFACE',
     tier: 'tier1-local-shell',
@@ -221,6 +223,9 @@ async function main() {
     });
 
     await runner.step('slow_git_metadata_is_controlled', async () => {
+      const daemonPid = Number(fs.readFileSync(path.join(dataDir, 'attn.pid'), 'utf8').trim());
+      runner.assert(readProcessEnvironment(daemonPid).includes(`PATH=${path.dirname(eligibilityGit.executable)}${path.delimiter}`),
+        'the daemon must resolve Git through the eligibility wrapper');
       fs.writeFileSync(eligibilityGit.gate, 'enabled\n');
       const probe = async (cwd) => {
         const startedAt = performance.now();
