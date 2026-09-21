@@ -1003,7 +1003,7 @@ func (d *Daemon) Start() error {
 		d.logf("%v", err)
 		return err
 	}
-	go d.runHTTPServer()
+	go d.runHTTPServer(d.httpListener)
 	d.maybeStartDiagServer()
 	d.removeLegacyEmbeddedTailscaleState()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
@@ -2174,9 +2174,9 @@ func (d *Daemon) listenHTTP() error {
 	return nil
 }
 
-func (d *Daemon) runHTTPServer() {
+func (d *Daemon) runHTTPServer(listener net.Listener) {
 	d.logf("WebSocket server starting on ws://%s/ws", d.httpServer.Addr)
-	if err := d.httpServer.Serve(d.httpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := d.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		d.logf("HTTP server error: %v", err)
 	}
 }
@@ -4144,9 +4144,15 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	sessions := d.store.List("")
 	prs := d.store.ListPRs("")
 	dataDir, socketPath, routingPathError := healthRoutingPaths()
+	status := "starting"
+	select {
+	case <-d.Started():
+		status = "ok"
+	default:
+	}
 
 	health := map[string]interface{}{
-		"status":             "ok",
+		"status":             status,
 		"version":            buildinfo.Version,
 		"build_time":         buildinfo.BuildTime,
 		"protocol":           protocol.ProtocolVersion,

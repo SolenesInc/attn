@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -3388,6 +3389,31 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 	}
 	if socketPath, ok := health["socket_path"].(string); !ok || socketPath == "" {
 		t.Errorf("socket_path = %v, want non-empty string", health["socket_path"])
+	}
+}
+
+func TestDaemon_HealthDoesNotReportReadyBeforeStartupCompletes(t *testing.T) {
+	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
+	request := httptest.NewRequest(http.MethodGet, "/health", nil)
+
+	readStatus := func() string {
+		recorder := httptest.NewRecorder()
+		d.handleHealth(recorder, request)
+		var health struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(recorder.Result().Body).Decode(&health); err != nil {
+			t.Fatalf("decode health: %v", err)
+		}
+		return health.Status
+	}
+
+	if status := readStatus(); status != "starting" {
+		t.Fatalf("health status before startup = %q, want starting", status)
+	}
+	d.signalStarted()
+	if status := readStatus(); status != "ok" {
+		t.Fatalf("health status after startup = %q, want ok", status)
 	}
 }
 

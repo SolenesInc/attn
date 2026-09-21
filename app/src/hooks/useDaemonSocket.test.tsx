@@ -46,10 +46,10 @@ class FakeWebSocket {
   }
 }
 
-async function waitForOpenSocket(): Promise<FakeWebSocket> {
+async function waitForOpenSocket(timeout = 1_000): Promise<FakeWebSocket> {
   await waitFor(() => {
     expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
-  });
+  }, { timeout });
   const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
   expect(ws).toBeDefined();
   await waitFor(() => {
@@ -512,7 +512,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     });
     expect(FakeWebSocket.instances).toHaveLength(0);
 
-    await waitForOpenSocket();
+    await waitForOpenSocket(2_000);
     await waitFor(() => {
       expect(result.current.connectionError).toBeNull();
     });
