@@ -1119,12 +1119,15 @@ export function useDaemonSocket({
 
   const ensureDaemonRunning = useCallback(async () => {
     if (!isTauri()) {
-      return;
+      return true;
     }
     try {
       await invoke('ensure_daemon');
+      return true;
     } catch (err) {
       console.error('[Daemon] Failed to ensure daemon is running:', err);
+      setConnectionError(err instanceof Error ? err.message : String(err));
+      return false;
     }
   }, []);
 
@@ -1206,7 +1209,14 @@ export function useDaemonSocket({
       return;
     }
 
-    await ensureDaemonRunning();
+    if (!await ensureDaemonRunning()) {
+      const delay = reconnectDelayRef.current;
+      reconnectDelayRef.current = Math.min(delay * 1.5, MAX_RECONNECT_DELAY_MS);
+      reconnectTimeoutRef.current = window.setTimeout(() => {
+        void connect();
+      }, delay);
+      return;
+    }
 
     if (BUILD_PROFILE !== '' && !profileCheckedRef.current) {
       try {

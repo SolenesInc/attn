@@ -486,6 +486,41 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
+  it('shows daemon ensure failures, skips the socket attempt, and retries', async () => {
+    const startupError = 'start background jobs: acquire runner lock /tmp/attn/.runner.lock: already held';
+    let ensureAttempts = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === 'ensure_daemon' && ensureAttempts++ === 0) {
+        throw new Error(startupError);
+      }
+      return true;
+    });
+
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.connectionError).toBe(startupError);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    await waitForOpenSocket();
+    await waitFor(() => {
+      expect(result.current.connectionError).toBeNull();
+    });
+    expect(ensureAttempts).toBe(2);
+
+    unmount();
+  });
+
   it('serializes endpoint actions so concurrent updates do not collide', async () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({

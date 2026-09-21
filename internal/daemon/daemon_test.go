@@ -26,6 +26,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/github/mockserver"
+	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -354,6 +355,46 @@ func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
 	case <-d.startedCh:
 		t.Fatal("daemon reported itself started while another process held the WebSocket port; the bind failure must be fatal, not logged")
 	}
+}
+
+func TestDaemon_Start_FailsBeforeReadyWhenRunnerLockIsHeld(t *testing.T) {
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	useFreeWSPort(t)
+	dir := shortTempDir(t)
+	holder, err := jobs.AcquireDirLock(dir, nil)
+	if err != nil {
+		t.Fatalf("hold runner lock: %v", err)
+	}
+
+	d := NewForTesting(filepath.Join(dir, "test.sock"))
+	err = d.Start()
+	if err == nil {
+		t.Fatal("Start() succeeded while the runner lock was held")
+	}
+	for _, want := range []string{"start background jobs", holder.Path(), jobs.ErrAlreadyRunning.Error()} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("Start() error = %q, want it to name %q", err, want)
+		}
+	}
+	select {
+	case <-d.Started():
+		t.Fatal("daemon reported itself started while background jobs could not start")
+	default:
+	}
+
+	pidProbe := &Daemon{pidPath: d.pidPath}
+	if err := pidProbe.acquirePIDLock(); err != nil {
+		t.Fatalf("failed startup retained daemon ownership: %v", err)
+	}
+	pidProbe.releasePIDLock()
+
+	holder.Release()
+	runnerProbe, err := jobs.AcquireDirLock(dir, nil)
+	if err != nil {
+		t.Fatalf("runner lock remained unavailable after holder release: %v", err)
+	}
+	runnerProbe.Release()
+	d.Stop()
 }
 
 func TestDaemon_PrunesSessionsWithoutLivePTYOnStart(t *testing.T) {

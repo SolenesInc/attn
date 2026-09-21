@@ -781,6 +781,9 @@ func (d *Daemon) Start() error {
 		if startSucceeded {
 			return
 		}
+		if runner := d.jobQueueRef(); runner != nil {
+			runner.Stop()
+		}
 		d.sessionInputs().stopRetries()
 		d.stopAgentMailboxDoorbells()
 		d.stopInstalledPlugins()
@@ -1024,7 +1027,9 @@ func (d *Daemon) Start() error {
 	go d.runEvidenceResolveLoop()
 	go d.runModelCaptureLoop()
 
-	d.startJobQueue()
+	if err := d.startJobQueue(); err != nil {
+		return err
+	}
 	if waitForLegacyTicketRecovery {
 		if err := d.enqueueLegacyTicketRecovery(); err != nil {
 			return fmt.Errorf("enqueue legacy ticket recovery: %w", err)

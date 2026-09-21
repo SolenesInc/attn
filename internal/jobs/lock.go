@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 )
 
@@ -14,74 +15,90 @@ var ErrAlreadyRunning = errors.New("jobs: another runner already owns this store
 
 const lockFileName = ".runner.lock"
 
-func AcquireDirLock(dir string, log LogFunc) (string, error) {
+type DirLock struct {
+	file *os.File
+	path string
+	log  LogFunc
+	once sync.Once
+}
+
+func AcquireDirLock(dir string, log LogFunc) (*DirLock, error) {
 	if log == nil {
 		log = func(string, ...interface{}) {}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", err
+		return nil, err
 	}
 	path := filepath.Join(dir, lockFileName)
-	for {
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-		if err == nil {
-			if _, werr := f.WriteString(strconv.Itoa(os.Getpid())); werr != nil {
-				_ = f.Close()
-				_ = os.Remove(path)
-				return "", werr
-			}
-			if cerr := f.Close(); cerr != nil {
-				return "", cerr
-			}
-			return path, nil
-		}
-		if !errors.Is(err, os.ErrExist) {
-			return "", err
-		}
-		if pid, alive := lockHolderAlive(path); alive {
-			return "", fmt.Errorf("%w (held by pid %d)", ErrAlreadyRunning, pid)
-		}
-		if rmErr := os.Remove(path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
-			return "", rmErr
-		}
-		log("jobs: reclaimed stale runner lock at %s", path)
-	}
-}
-
-func ReleaseDirLock(path string, log LogFunc) {
-	if path == "" {
-		return
-	}
-	if log == nil {
-		log = func(string, ...interface{}) {}
-	}
-	if pid, _ := lockHolderAlive(path); pid != 0 && pid != os.Getpid() {
-		return
-	}
-	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		log("jobs: release runner lock %s: %v", path, err)
-	}
-}
-
-func lockHolderAlive(path string) (pid int, alive bool) {
-	data, err := os.ReadFile(path)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
-		return 0, false
+		return nil, fmt.Errorf("open runner lock %s: %w", path, err)
 	}
-	pid, err = strconv.Atoi(strings.TrimSpace(string(data)))
-	if err != nil || pid <= 0 {
-		return 0, false
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		pid := lockHolderPID(f)
+		_ = f.Close()
+		if errors.Is(err, syscall.EWOULDBLOCK) {
+			if pid > 0 {
+				return nil, fmt.Errorf("acquire runner lock %s: %w (held by pid %d)", path, ErrAlreadyRunning, pid)
+			}
+			return nil, fmt.Errorf("acquire runner lock %s: %w (holder pid unknown)", path, ErrAlreadyRunning)
+		}
+		return nil, fmt.Errorf("acquire runner lock %s: %w", path, err)
 	}
-	if pid == os.Getpid() {
-		return pid, true
+
+	lock := &DirLock{file: f, path: path, log: log}
+	if err := f.Truncate(0); err != nil {
+		lock.Release()
+		return nil, fmt.Errorf("truncate runner lock %s: %w", path, err)
 	}
-	return pid, processAlive(pid)
+	if _, err := f.Seek(0, 0); err != nil {
+		lock.Release()
+		return nil, fmt.Errorf("seek runner lock %s: %w", path, err)
+	}
+	if _, err := f.WriteString(strconv.Itoa(os.Getpid())); err != nil {
+		lock.Release()
+		return nil, fmt.Errorf("write runner lock %s: %w", path, err)
+	}
+	if err := f.Sync(); err != nil {
+		lock.Release()
+		return nil, fmt.Errorf("sync runner lock %s: %w", path, err)
+	}
+	return lock, nil
 }
 
-func processAlive(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	if err == nil {
-		return true
+func (l *DirLock) Path() string {
+	if l == nil {
+		return ""
 	}
-	return errors.Is(err, syscall.EPERM)
+	return l.path
+}
+
+func (l *DirLock) Release() {
+	if l == nil {
+		return
+	}
+	l.once.Do(func() {
+		if err := syscall.Flock(int(l.file.Fd()), syscall.LOCK_UN); err != nil {
+			l.log("jobs: unlock runner lock %s: %v", l.path, err)
+		}
+		if err := l.file.Close(); err != nil {
+			l.log("jobs: close runner lock %s: %v", l.path, err)
+		}
+	})
+}
+
+func lockHolderPID(f *os.File) int {
+	if _, err := f.Seek(0, 0); err != nil {
+		return 0
+	}
+	data := make([]byte, 64)
+	n, err := f.Read(data)
+	if err != nil && n == 0 {
+		return 0
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data[:n])))
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
 }
