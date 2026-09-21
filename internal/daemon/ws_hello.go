@@ -42,7 +42,10 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 
 func (d *Daemon) admitClient(client *wsClient) {
 	client.admitted.Do(func() {
-		d.wsHub.add(client)
+		if !d.wsHub.add(client) {
+			client.abortTransport()
+			return
+		}
 		d.logf("WebSocket client connected (%d total)", d.wsHub.ClientCount())
 		d.scheduleInitialState(client)
 	})

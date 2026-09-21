@@ -2,12 +2,16 @@ package daemonctl
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -69,7 +73,7 @@ func TestWaitForMatchingDaemonReconcilesAConcurrentStartup(t *testing.T) {
 			close(firstAttempt)
 			return healthResponse{}, errors.New("not ready")
 		}
-		return healthResponse{Protocol: protocol.ProtocolVersion}, nil
+		return healthResponse{Status: "ok", Protocol: protocol.ProtocolVersion}, nil
 	}
 	previousFingerprint := buildinfo.SourceFingerprint
 	buildinfo.SourceFingerprint = "unknown"
@@ -93,7 +97,7 @@ func TestWaitForMatchingDaemonRejectsAHealthyDaemonWithoutItsUnixSocket(t *testi
 		context.Background(),
 		make(chan time.Time),
 		func(context.Context) (healthResponse, error) {
-			return healthResponse{Protocol: protocol.ProtocolVersion}, nil
+			return healthResponse{Status: "ok", Protocol: protocol.ProtocolVersion}, nil
 		},
 		func() bool { return false },
 		func() (bool, error) { return false, nil },
@@ -101,6 +105,126 @@ func TestWaitForMatchingDaemonRejectsAHealthyDaemonWithoutItsUnixSocket(t *testi
 	if err == nil || !strings.Contains(err.Error(), "missing its Unix listener") {
 		t.Fatalf("waitForMatchingDaemon() error = %v, want missing Unix listener rejection", err)
 	}
+}
+
+func TestWaitForMatchingDaemonWaitsForReadyStatus(t *testing.T) {
+	retry := make(chan time.Time)
+	firstAttempt := make(chan struct{})
+	fetches := 0
+	fetch := func(context.Context) (healthResponse, error) {
+		fetches++
+		if fetches == 1 {
+			close(firstAttempt)
+			return healthResponse{Status: "starting", Protocol: protocol.ProtocolVersion}, nil
+		}
+		return healthResponse{Status: "ok", Protocol: protocol.ProtocolVersion}, nil
+	}
+	previousFingerprint := buildinfo.SourceFingerprint
+	buildinfo.SourceFingerprint = "unknown"
+	t.Cleanup(func() { buildinfo.SourceFingerprint = previousFingerprint })
+	go func() {
+		<-firstAttempt
+		retry <- time.Time{}
+	}()
+
+	if err := waitForMatchingDaemon(context.Background(), retry, fetch, func() bool { return true }, func() (bool, error) { return false, nil }); err != nil {
+		t.Fatalf("waitForMatchingDaemon() error = %v", err)
+	}
+	if fetches != 2 {
+		t.Fatalf("fetch count = %d, want 2", fetches)
+	}
+}
+
+func TestEnsureReplacesStartingDaemonAfterItsLockIsReleased(t *testing.T) {
+	tests := []struct {
+		name      string
+		readyLine string
+		wantError string
+	}{
+		{name: "replacement starts", readyLine: "ready"},
+		{name: "replacement startup fails", readyLine: "error:replacement runner failed", wantError: "replacement runner failed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			binaryPath := prepareStartingDaemonReplacementTest(t, tt.readyLine)
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+
+			result, err := ensure(ctx, binaryPath)
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("ensure() error = %v, want %q", err, tt.wantError)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ensure() error = %v", err)
+			}
+			if result.Status != "started" {
+				t.Fatalf("ensure() status = %q, want started", result.Status)
+			}
+		})
+	}
+}
+
+func prepareStartingDaemonReplacementTest(t *testing.T, readyLine string) string {
+	t.Helper()
+	tcpListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := strconv.Itoa(tcpListener.Addr().(*net.TCPAddr).Port)
+	dir, err := os.MkdirTemp("", "attn-ensure-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_DATA_DIR", dir)
+	t.Setenv("ATTN_SOCKET_PATH", "")
+	t.Setenv("ATTN_DB_PATH", "")
+	t.Setenv("ATTN_CONFIG_PATH", "")
+	t.Setenv("ATTN_WS_PORT", port)
+	t.Setenv("ATTN_TEST_READY_LINE", readyLine)
+	config.ReloadForTesting()
+
+	unixListener, err := net.Listen("unix", config.SocketPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	pidLock, err := os.OpenFile(config.PIDPath(), os.O_RDWR|os.O_CREATE, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Flock(int(pidLock.Fd()), syscall.LOCK_EX); err != nil {
+		t.Fatal(err)
+	}
+
+	var shutdownOnce sync.Once
+	server := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Connection", "close")
+		_ = json.NewEncoder(w).Encode(healthResponse{Status: "starting", Protocol: protocol.ProtocolVersion})
+		w.(http.Flusher).Flush()
+		shutdownOnce.Do(func() {
+			_ = tcpListener.Close()
+			_ = unixListener.Close()
+			_ = syscall.Flock(int(pidLock.Fd()), syscall.LOCK_UN)
+		})
+	})}
+	go server.Serve(tcpListener)
+	t.Cleanup(func() {
+		_ = server.Close()
+		_ = unixListener.Close()
+		_ = syscall.Flock(int(pidLock.Fd()), syscall.LOCK_UN)
+		_ = pidLock.Close()
+	})
+
+	binaryPath := filepath.Join(t.TempDir(), "replacement-daemon")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$ATTN_TEST_READY_LINE\" >&3\n"
+	if err := os.WriteFile(binaryPath, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return binaryPath
 }
 
 func TestWaitForMatchingDaemonRetriesWhenThePIDLockIsReleased(t *testing.T) {

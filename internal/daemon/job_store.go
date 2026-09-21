@@ -16,6 +16,7 @@ type sqlJobStore struct {
 	store   *store.Store
 	lockDir string
 	log     jobs.LogFunc
+	lock    *jobs.DirLock
 }
 
 func (d *Daemon) newSQLJobStore() *sqlJobStore {
@@ -35,8 +36,22 @@ func jobSubject(job *jobs.Job) string {
 
 func (a *sqlJobStore) Init() error { return nil }
 
-func (a *sqlJobStore) AcquireLock() (string, error) { return jobs.AcquireDirLock(a.lockDir, a.log) }
-func (a *sqlJobStore) ReleaseLock(token string)     { jobs.ReleaseDirLock(token, a.log) }
+func (a *sqlJobStore) AcquireLock() (string, error) {
+	lock, err := jobs.AcquireDirLock(a.lockDir, a.log)
+	if err != nil {
+		return "", err
+	}
+	a.lock = lock
+	return lock.Path(), nil
+}
+
+func (a *sqlJobStore) ReleaseLock(token string) {
+	if a.lock == nil || token != a.lock.Path() {
+		return
+	}
+	a.lock.Release()
+	a.lock = nil
+}
 
 func (a *sqlJobStore) RecoverOrphans(now time.Time) (int, error) {
 	return a.store.RecoverRunningJobs(now)

@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -252,10 +253,9 @@ func TestSnoozeFailsOpenWhileJobQueueStartFails(t *testing.T) {
 		acquiring: make(chan struct{}),
 		release:   make(chan struct{}),
 	}
-	startDone := make(chan struct{})
+	startDone := make(chan error, 1)
 	go func() {
-		d.startJobQueueWithStore(store)
-		close(startDone)
+		startDone <- d.startJobQueueWithStore(store)
 	}()
 	<-store.acquiring
 	if runner := d.jobQueueRef(); runner == nil || !runner.Disabled() {
@@ -266,7 +266,9 @@ func TestSnoozeFailsOpenWhileJobQueueStartFails(t *testing.T) {
 	moveTo(d, "s1", protocol.StateIdle)
 	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
 	close(store.release)
-	<-startDone
+	if err := <-startDone; !errors.Is(err, jobs.ErrAlreadyRunning) {
+		t.Fatalf("startJobQueueWithStore() error = %v, want ErrAlreadyRunning", err)
+	}
 
 	if !owed(t, d, "s1") {
 		t.Error("the unscheduled snooze left the idle session settled")

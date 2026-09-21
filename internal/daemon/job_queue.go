@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -31,15 +32,15 @@ func (d *Daemon) setJobQueue(runner *jobs.Runner) {
 	d.jobQueueMu.Unlock()
 }
 
-func (d *Daemon) startJobQueue() {
+func (d *Daemon) startJobQueue() error {
 	var queueStore jobs.Store
 	if d.store != nil {
 		queueStore = d.newSQLJobStore()
 	}
-	d.startJobQueueWithStore(queueStore)
+	return d.startJobQueueWithStore(queueStore)
 }
 
-func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
+func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) error {
 	d.importLegacyTasks()
 	opts := jobs.Options{Log: d.logf, Store: queueStore}
 	runner := jobs.New(opts)
@@ -139,13 +140,13 @@ func (d *Daemon) startJobQueueWithStore(queueStore jobs.Store) {
 		go d.failGardenReviewJob(j)
 	})
 	if err := runner.Start(); err != nil {
-		d.logf("jobs: THE JOB QUEUE DID NOT START: %v — no background work and no periodic ticks will run until the daemon is restarted", err)
-		return
+		return fmt.Errorf("start background jobs: %w", err)
 	}
 	d.setJobQueue(runner)
 	d.reconcileSnoozeWakeJobs()
 	d.resumeGardenReviews()
 	d.settleHarvestConditions()
+	return nil
 }
 
 func ensureJSONEOF(decoder *json.Decoder) error {

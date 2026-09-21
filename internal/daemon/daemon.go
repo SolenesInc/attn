@@ -128,6 +128,7 @@ type Daemon struct {
 	crewCharterMu                     sync.Mutex
 	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
+	stopOnce                          sync.Once
 	logger                            *logging.Logger
 	debugLogging                      bool
 	ghRegistry                        *github.ClientRegistry
@@ -781,24 +782,7 @@ func (d *Daemon) Start() error {
 		if startSucceeded {
 			return
 		}
-		d.sessionInputs().stopRetries()
-		d.stopAgentMailboxDoorbells()
-		d.stopInstalledPlugins()
-		if d.httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = d.httpServer.Shutdown(ctx)
-			cancel()
-		}
-		if d.httpListener != nil {
-			_ = d.httpListener.Close()
-			d.httpListener = nil
-		}
-		if d.listener != nil {
-			_ = d.listener.Close()
-			d.listener = nil
-			os.Remove(d.socketPath)
-		}
-		d.releasePIDLock()
+		d.Stop()
 	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
@@ -984,7 +968,7 @@ func (d *Daemon) Start() error {
 	d.registerAppConsumers()
 
 	d.wsHub.logf = d.logf
-	go d.wsHub.run()
+	go d.wsHub.runUntil(d.done)
 
 	go d.startWorkflowBroadcastLoop(d.doneContext())
 
@@ -1000,7 +984,7 @@ func (d *Daemon) Start() error {
 		d.logf("%v", err)
 		return err
 	}
-	go d.runHTTPServer()
+	go d.runHTTPServer(d.httpListener)
 	d.maybeStartDiagServer()
 	d.removeLegacyEmbeddedTailscaleState()
 	go d.ensureTailscaleServeFromSettingsAndBroadcast()
@@ -1024,7 +1008,9 @@ func (d *Daemon) Start() error {
 	go d.runEvidenceResolveLoop()
 	go d.runModelCaptureLoop()
 
-	d.startJobQueue()
+	if err := d.startJobQueue(); err != nil {
+		return err
+	}
 	if waitForLegacyTicketRecovery {
 		if err := d.enqueueLegacyTicketRecovery(); err != nil {
 			return fmt.Errorf("enqueue legacy ticket recovery: %w", err)
@@ -1654,8 +1640,13 @@ func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.Sessio
 }
 
 func (d *Daemon) Stop() {
+	d.stopOnce.Do(d.stop)
+}
+
+func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
@@ -1689,8 +1680,9 @@ func (d *Daemon) Stop() {
 	}
 	if d.listener != nil {
 		d.listener.Close()
+		d.listener = nil
+		os.Remove(d.socketPath)
 	}
-	os.Remove(d.socketPath)
 	d.releasePIDLock()
 	if d.logger != nil {
 		d.logger.Close()
@@ -2169,9 +2161,9 @@ func (d *Daemon) listenHTTP() error {
 	return nil
 }
 
-func (d *Daemon) runHTTPServer() {
+func (d *Daemon) runHTTPServer(listener net.Listener) {
 	d.logf("WebSocket server starting on ws://%s/ws", d.httpServer.Addr)
-	if err := d.httpServer.Serve(d.httpListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	if err := d.httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		d.logf("HTTP server error: %v", err)
 	}
 }
@@ -4139,9 +4131,15 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 	sessions := d.store.List("")
 	prs := d.store.ListPRs("")
 	dataDir, socketPath, routingPathError := healthRoutingPaths()
+	status := "starting"
+	select {
+	case <-d.Started():
+		status = "ok"
+	default:
+	}
 
 	health := map[string]interface{}{
-		"status":             "ok",
+		"status":             status,
 		"version":            buildinfo.Version,
 		"build_time":         buildinfo.BuildTime,
 		"protocol":           protocol.ProtocolVersion,
