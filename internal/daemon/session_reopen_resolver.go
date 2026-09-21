@@ -21,6 +21,7 @@ type reopenKey struct {
 type reopenBranchKey struct {
 	Repository string
 	Branch     string
+	Lane       gitLane
 }
 
 type reopenGit interface {
@@ -127,6 +128,7 @@ func (g scheduledReopenGit) BranchAvailability(
 	key := reopenBranchKey{
 		Repository: attngit.CanonicalizePath(repository),
 		Branch:     strings.TrimSpace(branch),
+		Lane:       g.lane,
 	}
 	return g.daemon.reopenBranchSharedCalls().Do(ctx, key, func(sharedCtx context.Context) (branchInspection, error) {
 		return gitValue(sharedCtx, g.daemon.gitExecution(), gitTask{
