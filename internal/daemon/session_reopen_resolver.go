@@ -146,28 +146,6 @@ func (d *Daemon) reopenBranchSharedCalls() *sharedCalls[reopenBranchKey, branchI
 	return d.reopenBranches
 }
 
-type admittedReopenGit struct {
-	client *attngit.Client
-}
-
-func (g admittedReopenGit) BranchInfo(ctx context.Context, directory string) (*attngit.BranchInfo, error) {
-	return g.client.GetBranchInfo(ctx, directory)
-}
-
-func (g admittedReopenGit) BranchAvailability(
-	ctx context.Context,
-	repository string,
-	branch string,
-) (branchInspection, error) {
-	if _, err := os.Stat(repository); err != nil {
-		if os.IsNotExist(err) {
-			return branchInspection{State: branchStateGone, RepoMissing: true}, nil
-		}
-		return branchInspection{}, fmt.Errorf("inspect repository %s: %w", repository, err)
-	}
-	return inspectReopenBranchAdmitted(ctx, g.client, repository, branch)
-}
-
 func inspectReopenBranchAdmitted(
 	ctx context.Context,
 	client *attngit.Client,
