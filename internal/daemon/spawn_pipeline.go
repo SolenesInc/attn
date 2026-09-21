@@ -341,12 +341,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	branchInfo, _ := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitInteractive, req.cwd)
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
-	var persistErr error
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register spawned session", func(context.Context) error {
-		persistErr = d.store.AddCheckedUnlessTeardown(session)
-		return persistErr
-	})
-	if persistErr != nil {
+	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
 			d.abortPluginSessionLaunch(msg.ID, "launch_failed")
 		}
@@ -354,7 +349,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			d.clearChiefOfStaffIfSession(msg.ID)
 		}
 		plan.rollback(d, msg.ID)
-		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", persistErr)}
+		return &spawnOutcome{err: fmt.Errorf("persist session launch intent: %w", err)}
 	}
 	plan.priorIntent, plan.hadPriorIntent = d.store.LaunchIntent(session.ID)
 	intent := launchIntentFromSpawnOptions(plan.spawnOpts, plan.isChief)
@@ -512,7 +507,12 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
-	return d.runSpawnPipelineForeground(msg, policy)
+	var result *spawnRejection
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
+		result = d.runSpawnPipelineForeground(msg, policy)
+		return nil
+	})
+	return result
 }
 
 func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {

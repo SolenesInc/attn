@@ -573,7 +573,7 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 		spawnMsg.Effort = protocol.Ptr(effort)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawnMsg, internalSpawnPolicy{})
+	d.handleSpawnSessionWithPolicy(spawnClient, spawnMsg, internalSpawnPolicy{})
 	_, err := readInternalActionResult(spawnClient)
 	return err
 }

@@ -778,7 +778,7 @@ func (d *Daemon) reopenSessionRuntimeLocked(
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
+	d.handleSpawnSessionWithPolicy(spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}

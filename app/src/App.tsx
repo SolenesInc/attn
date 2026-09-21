@@ -24,6 +24,9 @@ import type { SessionReopenResolutionEvent } from './hooks/daemonSessionLedgerEv
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
+
+const SESSION_RESOLUTION_NOTICE_LIMIT = 100;
+
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
@@ -157,10 +160,14 @@ function App() {
     onSessionClosed: (entry) =>
       setSessionCloseNotice((prev) => ({ entry, nonce: (prev?.nonce ?? 0) + 1 })),
     onSessionReopenResolved: (resolution) =>
-      setSessionResolutionNotice((prev) => ({
-        resolutions: { ...prev?.resolutions, [resolution.sessionId]: resolution },
-        nonce: (prev?.nonce ?? 0) + 1,
-      })),
+      setSessionResolutionNotice((prev) => {
+        const resolutions = { ...prev?.resolutions };
+        delete resolutions[resolution.sessionId];
+        resolutions[resolution.sessionId] = resolution;
+        const expired = Object.keys(resolutions).slice(0, -SESSION_RESOLUTION_NOTICE_LIMIT);
+        for (const sessionId of expired) delete resolutions[sessionId];
+        return { resolutions, nonce: (prev?.nonce ?? 0) + 1 };
+      }),
   });
 
   const {
