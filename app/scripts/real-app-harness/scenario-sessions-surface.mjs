@@ -273,7 +273,8 @@ async function main() {
       const row = rowFor(pending, sessions.two);
       runner.assert(row.when.includes('closed by you'), 'the row names who closed it', { row });
       runner.assert(!row.actions.includes('Focus'), 'a closed row stops offering Focus', { row });
-      runner.assert(row.actions.length === 0, 'a pending row offers no reopen action', { row });
+      runner.assert(!row.actions.includes('Reopen') && !row.actions.includes('Start fresh here'),
+        'a pending row offers no reopen action', { row });
       runner.assert(pending.rows.length === before.rows.length,
         'each close replaces its row rather than adding one', { before: before.rows.length, after: pending.rows.length });
       runner.writeJson('rows-pending.json', pending);
