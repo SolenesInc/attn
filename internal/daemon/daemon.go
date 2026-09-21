@@ -128,6 +128,7 @@ type Daemon struct {
 	crewCharterMu                     sync.Mutex
 	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
+	stopOnce                          sync.Once
 	logger                            *logging.Logger
 	debugLogging                      bool
 	ghRegistry                        *github.ClientRegistry
@@ -781,27 +782,7 @@ func (d *Daemon) Start() error {
 		if startSucceeded {
 			return
 		}
-		if runner := d.jobQueueRef(); runner != nil {
-			runner.Stop()
-		}
-		d.sessionInputs().stopRetries()
-		d.stopAgentMailboxDoorbells()
-		d.stopInstalledPlugins()
-		if d.httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-			_ = d.httpServer.Shutdown(ctx)
-			cancel()
-		}
-		if d.httpListener != nil {
-			_ = d.httpListener.Close()
-			d.httpListener = nil
-		}
-		if d.listener != nil {
-			_ = d.listener.Close()
-			d.listener = nil
-			os.Remove(d.socketPath)
-		}
-		d.releasePIDLock()
+		d.Stop()
 	}()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
@@ -987,7 +968,7 @@ func (d *Daemon) Start() error {
 	d.registerAppConsumers()
 
 	d.wsHub.logf = d.logf
-	go d.wsHub.run()
+	go d.wsHub.runUntil(d.done)
 
 	go d.startWorkflowBroadcastLoop(d.doneContext())
 
@@ -1659,8 +1640,13 @@ func sessionStateFromRecoveredInfo(info ptybackend.SessionInfo) (protocol.Sessio
 }
 
 func (d *Daemon) Stop() {
+	d.stopOnce.Do(d.stop)
+}
+
+func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
 	d.stopFsWatchers()
@@ -1694,8 +1680,9 @@ func (d *Daemon) Stop() {
 	}
 	if d.listener != nil {
 		d.listener.Close()
+		d.listener = nil
+		os.Remove(d.socketPath)
 	}
-	os.Remove(d.socketPath)
 	d.releasePIDLock()
 	if d.logger != nil {
 		d.logger.Close()

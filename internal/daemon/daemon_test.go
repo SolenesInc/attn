@@ -382,6 +382,17 @@ func TestDaemon_Start_FailsBeforeReadyWhenRunnerLockIsHeld(t *testing.T) {
 		t.Fatal("daemon reported itself started while background jobs could not start")
 	default:
 	}
+	select {
+	case <-d.done:
+	default:
+		t.Fatal("failed startup did not stop daemon services")
+	}
+	if _, statErr := os.Stat(d.socketPath); !os.IsNotExist(statErr) {
+		t.Fatalf("failed startup left socket behind: %v", statErr)
+	}
+	if _, acceptErr := d.httpListener.Accept(); !errors.Is(acceptErr, net.ErrClosed) {
+		t.Fatalf("failed startup left WebSocket listener open: %v", acceptErr)
+	}
 
 	pidProbe := &Daemon{pidPath: d.pidPath}
 	if err := pidProbe.acquirePIDLock(); err != nil {
@@ -395,6 +406,7 @@ func TestDaemon_Start_FailsBeforeReadyWhenRunnerLockIsHeld(t *testing.T) {
 		t.Fatalf("runner lock remained unavailable after holder release: %v", err)
 	}
 	runnerProbe.Release()
+
 	d.Stop()
 }
 
