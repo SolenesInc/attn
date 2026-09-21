@@ -40,7 +40,7 @@ func passingProber(t *testing.T) prober {
 		appProtocol:   func(context.Context, string) (string, error) { return protocol.ProtocolVersion, nil },
 		daemonHealth: func(context.Context, string) (daemonHealth, error) {
 			return daemonHealth{
-				Protocol: protocol.ProtocolVersion, Profile: config.ProfileLabel(),
+				Status: "ok", Protocol: protocol.ProtocolVersion, Profile: config.ProfileLabel(),
 				DataDir: dataDir, SocketPath: socketPath, Port: config.WSPort(),
 			}, nil
 		},
@@ -119,6 +119,20 @@ func TestRunPassesWithConsistentEnvironment(t *testing.T) {
 	if report.Launch.Model.Value != "gpt-test" || report.Launch.Effort.Value != "high" {
 		t.Fatalf("launch = %+v", report.Launch)
 	}
+	assertCheck(t, report, "routing.daemon", StatusPass, "")
+	assertCheck(t, report, "protocol.app_daemon", StatusPass, "")
+}
+
+func TestRunFailsReadinessWhileDaemonIsStarting(t *testing.T) {
+	p := passingProber(t)
+	inner := p.daemonHealth
+	p.daemonHealth = func(ctx context.Context, port string) (daemonHealth, error) {
+		health, err := inner(ctx, port)
+		health.Status = "starting"
+		return health, err
+	}
+	report := run(context.Background(), Options{Agent: "codex", WorkingDir: t.TempDir()}, p)
+	assertCheck(t, report, "daemon.readiness", StatusFail, `daemon status is "starting"`)
 	assertCheck(t, report, "routing.daemon", StatusPass, "")
 	assertCheck(t, report, "protocol.app_daemon", StatusPass, "")
 }
