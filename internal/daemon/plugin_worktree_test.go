@@ -17,7 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func worktreeProviderHoldsMaintenanceLease(d *Daemon) bool {
+func worktreeMaintenanceLeaseHeld(d *Daemon) bool {
 	err := d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
 		return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error { return nil })
 	})
@@ -33,7 +33,7 @@ func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T
 
 	providerPath := filepath.Join(tmpDir, "provider-created")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
-		if !worktreeProviderHoldsMaintenanceLease(d) {
+		if !worktreeMaintenanceLeaseHeld(d) {
 			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
 		}
 		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
@@ -354,7 +354,7 @@ func TestDoCreateWorktreeFromBranch_ProviderHandledRegistersValidatedWorktree(t 
 
 	providerPath := filepath.Join(tmpDir, "provider-existing-branch")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
-		if !worktreeProviderHoldsMaintenanceLease(d) {
+		if !worktreeMaintenanceLeaseHeld(d) {
 			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
 		}
 		if params.Branch != "feature/existing" {
@@ -590,6 +590,43 @@ func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
 	waitForProviderResponse(t, responseDone)
 	if git.RefExists(repo.main, "feat/provider-swept") {
 		t.Fatal("provider-handled sweep left the branch behind")
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweep delete provider connection did not close")
+	}
+}
+
+func TestWorktreeSweepFinalizesProviderDeletionReportedAsError(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	d.ensureGardenCollections()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+	worktreePath := repo.worktree("provider-error-after-delete", "feat/provider-error-after-delete", base)
+	d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+	client, done := startPluginPipe(t, d, "sweep-delete-error-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+	responseDone := respondToDeleteProviderCall(t, client, func(worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := git.DeleteWorktree(repo.main, worktreePath, false); err != nil {
+			t.Fatal(err)
+		}
+		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "provider lost its response after deletion"}
+	})
+
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
+		t.Fatalf("sweep removed %d worktrees, want 1", removed)
+	}
+	waitForProviderResponse(t, responseDone)
+	if d.store.GetWorktree(worktreePath) != nil {
+		t.Fatal("provider-deleted worktree remained in the daemon registry")
+	}
+	if git.RefExists(repo.main, "feat/provider-error-after-delete") {
+		t.Fatal("provider-deleted worktree branch remains")
 	}
 
 	_ = client.Close()

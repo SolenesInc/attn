@@ -94,7 +94,17 @@ func (d *Daemon) reconcileListedWorktrees(mainRepo string, gitWorktrees []git.Wo
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
-	mainRepo, err := d.resolveMainRepo(context.Background(), gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
+	var createdPath string
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree", func(protectedCtx context.Context) error {
+		var createErr error
+		createdPath, createErr = d.doCreateWorktreeForeground(protectedCtx, msg)
+		return createErr
+	})
+	return createdPath, err
+}
+
+func (d *Daemon) doCreateWorktreeForeground(protectedCtx context.Context, msg *protocol.CreateWorktreeMessage) (string, error) {
+	mainRepo, err := d.resolveMainRepo(protectedCtx, gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
 	if err != nil {
 		return "", err
 	}
@@ -107,55 +117,48 @@ func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, 
 	path = git.CanonicalizePath(path)
 
 	startingFrom := protocol.Deref(msg.StartingFrom)
-	createdPath := ""
 	createdBranch := msg.Branch
-	createErr := d.worktreeMaintenance.RunForeground(context.Background(), "create worktree", func(protectedCtx context.Context) error {
-		if hookErr := d.dispatchWorktreeBeforeCreateHooks(mainRepo, msg.Branch, startingFrom, requestedPath); hookErr != nil {
-			return hookErr
-		}
-		providerPath, providerBranch, handled, providerErr := d.dispatchWorktreeCreateProvider(mainRepo, msg.Branch, startingFrom, requestedPath)
-		if providerErr != nil {
-			return providerErr
-		}
-		if handled {
-			createdPath = providerPath
-			createdBranch = providerBranch
-		} else {
-			mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
-				if remote, branch, ok := strings.Cut(startingFrom, "/"); ok {
-					if remotes, remotesErr := client.ListRemotes(ctx, mainRepo); remotesErr == nil && slices.Contains(remotes, remote) {
-						if fetchErr := client.FetchRemoteBranch(ctx, mainRepo, remote, branch); fetchErr != nil {
-							d.logf("Warning: could not fetch %s before creating worktree: %v", startingFrom, fetchErr)
-						}
-					}
-				}
-				if startingFrom != "" {
-					exists, existsErr := client.RefExists(ctx, mainRepo, startingFrom)
-					if existsErr != nil {
-						return existsErr
-					}
-					if !exists {
-						d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
-						startingFrom = ""
-					}
-				}
-				if startingFrom != "" {
-					return client.CreateWorktreeFromPoint(ctx, mainRepo, msg.Branch, path, startingFrom)
-				}
-				return client.CreateWorktree(ctx, mainRepo, msg.Branch, path)
-			})
-			if mutationErr != nil {
-				return mutationErr
-			}
-			createdPath = path
-		}
-		d.registerCreatedWorktree(mainRepo, createdPath, createdBranch)
-		return d.dispatchWorktreeAfterCreateHooks(mainRepo, createdPath, createdBranch)
-	})
-	if createErr != nil {
-		return createdPath, createErr
+	if hookErr := d.dispatchWorktreeBeforeCreateHooks(mainRepo, msg.Branch, startingFrom, requestedPath); hookErr != nil {
+		return "", hookErr
 	}
-	return createdPath, nil
+	providerPath, providerBranch, handled, providerErr := d.dispatchWorktreeCreateProvider(mainRepo, msg.Branch, startingFrom, requestedPath)
+	if providerErr != nil {
+		return "", providerErr
+	}
+	createdPath := providerPath
+	if handled {
+		createdBranch = providerBranch
+	} else {
+		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+			if remote, branch, ok := strings.Cut(startingFrom, "/"); ok {
+				if remotes, remotesErr := client.ListRemotes(ctx, mainRepo); remotesErr == nil && slices.Contains(remotes, remote) {
+					if fetchErr := client.FetchRemoteBranch(ctx, mainRepo, remote, branch); fetchErr != nil {
+						d.logf("Warning: could not fetch %s before creating worktree: %v", startingFrom, fetchErr)
+					}
+				}
+			}
+			if startingFrom != "" {
+				exists, existsErr := client.RefExists(ctx, mainRepo, startingFrom)
+				if existsErr != nil {
+					return existsErr
+				}
+				if !exists {
+					d.logf("Worktree start ref %q not resolvable in %s; falling back to current HEAD", startingFrom, mainRepo)
+					startingFrom = ""
+				}
+			}
+			if startingFrom != "" {
+				return client.CreateWorktreeFromPoint(ctx, mainRepo, msg.Branch, path, startingFrom)
+			}
+			return client.CreateWorktree(ctx, mainRepo, msg.Branch, path)
+		})
+		if mutationErr != nil {
+			return "", mutationErr
+		}
+		createdPath = path
+	}
+	d.registerCreatedWorktree(mainRepo, createdPath, createdBranch)
+	return createdPath, d.dispatchWorktreeAfterCreateHooks(mainRepo, createdPath, createdBranch)
 }
 
 func (d *Daemon) registerCreatedWorktree(mainRepo, path, branch string) {

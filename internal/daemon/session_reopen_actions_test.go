@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -76,6 +77,26 @@ func TestARefusedReopenNamesTheActionsItOffersInstead(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), string(protocol.SessionReopenActionRecreateWorktreeAndReopen)) {
 		t.Errorf("refusal %q does not name the action offered instead", err)
+	}
+}
+
+func TestReopenEligibilityAndLaunchShareOneMaintenanceLease(t *testing.T) {
+	d, _, _ := closedWorktreeWithDeletedDirectory(t, "guarded", "feat/guarded", false)
+	reopenDaemonWithBackend(t, d)
+	gitClient := attngit.NewClient()
+	leaseHeldDuringEligibility := false
+	d.gitExec = gitExecutorFunc(func(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
+		if task.Kind == gitTaskReopen && !leaseHeldDuringEligibility {
+			leaseHeldDuringEligibility = worktreeMaintenanceLeaseHeld(d)
+		}
+		return run(ctx, gitClient)
+	})
+
+	if _, err := d.reopenSession("guarded", protocol.SessionReopenActionRecreateWorktreeAndReopen, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !leaseHeldDuringEligibility {
+		t.Fatal("reopen eligibility ran before acquiring the foreground maintenance lease")
 	}
 }
 

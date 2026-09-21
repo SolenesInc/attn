@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -184,7 +185,12 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
 		return
 	}
-	result, launchErr := d.delegateOperationForeground(runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+	var result *protocol.DelegateResult
+	launchErr := d.worktreeMaintenance.RunForeground(context.Background(), "run delegation", func(protectedCtx context.Context) error {
+		var delegateErr error
+		result, delegateErr = d.delegateOperationForeground(protectedCtx, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
+		return delegateErr
+	})
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return

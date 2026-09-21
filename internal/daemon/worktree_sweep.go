@@ -190,7 +190,6 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			}
 			d.captureGardenExecutionsInDirectory(wt.Path)
 			seeds := d.seedsForWorktree(wt)
-			var branchDeleteErr error
 			deleteErr := lease.TryDelete(
 				func(finalCtx context.Context) error {
 					if err := d.finalWorktreeSweepGitCheck(finalCtx, candidate); err != nil {
@@ -201,6 +200,10 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				func(commitCtx context.Context) error {
 					handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, false)
 					if providerErr != nil {
+						if d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
+							d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch))
+							return nil
+						}
 						return providerErr
 					}
 					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
@@ -210,16 +213,17 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 								return err
 							}
 							if deleteBranch {
-								branchDeleteErr = client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true)
+								if err := client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true); err != nil {
+									d.logf("worktree sweep: worktree removed but branch %s remains: %v", wt.Branch, err)
+								}
 							}
 							return nil
 						})
 					}
-					if deleteBranch {
-						branchDeleteErr = d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
-							return client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true)
-						})
+					if !d.worktreeDeletionHappened(commitCtx, wt.MainRepo, wt.Path) {
+						return errors.New("worktree delete provider reported success but the worktree still exists")
 					}
+					d.deleteWorktreeBranch(commitCtx, wt.MainRepo, wt.Branch, deleteBranch)
 					return nil
 				},
 			)
@@ -230,9 +234,6 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				d.recordSweptWorktreeFailure(wt, deleteErr, now)
 				kept++
 				continue
-			}
-			if branchDeleteErr != nil {
-				d.logf("worktree sweep: worktree removed but branch %s remains: %v", wt.Branch, branchDeleteErr)
 			}
 			d.completeSweptWorktreeRemoval(wt, seeds, verdict, now)
 			removed++

@@ -365,11 +365,17 @@ type sessionReopenOutcome struct {
 func (d *Daemon) reopenSession(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
-	return d.reopenSessionForeground(sessionID, action, directory)
+	var outcome *sessionReopenOutcome
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(protectedCtx context.Context) error {
+		var reopenErr error
+		outcome, reopenErr = d.reopenSessionForeground(protectedCtx, sessionID, action, directory)
+		return reopenErr
+	})
+	return outcome, err
 }
 
 func (d *Daemon) reopenSessionForeground(
-	sessionID string, action protocol.SessionReopenAction, directory string,
+	protectedCtx context.Context, sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -391,11 +397,11 @@ func (d *Daemon) reopenSessionForeground(
 	var err error
 	if key.ClosedAt == "" {
 		verdict, err = resolver.ResolveEntry(
-			context.Background(), *entry, d.scheduledReopenGit(gitInteractive),
+			protectedCtx, *entry, d.scheduledReopenGit(gitInteractive),
 		)
 	} else {
 		verdict, err = resolver.ResolveClosed(
-			context.Background(), key, d.scheduledReopenGit(gitInteractive),
+			protectedCtx, key, d.scheduledReopenGit(gitInteractive),
 		)
 	}
 	if err != nil {
@@ -416,7 +422,7 @@ func (d *Daemon) reopenSessionForeground(
 	if !verdict.offers(action) {
 		return nil, reopenRefusal(&verdict, action)
 	}
-	return d.performReopenLocked(key, &verdict, action, directory)
+	return d.performReopenLocked(protectedCtx, key, &verdict, action, directory)
 }
 
 func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenAction) error {
@@ -436,6 +442,7 @@ func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenA
 }
 
 func (d *Daemon) performReopenLocked(
+	protectedCtx context.Context,
 	key reopenKey,
 	verdict *sessionReopenVerdict,
 	action protocol.SessionReopenAction,
@@ -470,7 +477,7 @@ func (d *Daemon) performReopenLocked(
 		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
 			plan.FreshConversation = true
 		}
-		path, resolved, err := d.recreateReopenWorktree(key, action)
+		path, resolved, err := d.recreateReopenWorktreeForeground(protectedCtx, key, action)
 		if err != nil {
 			return nil, err
 		}
@@ -510,61 +517,56 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) s
 	return worktree
 }
 
-func (d *Daemon) recreateReopenWorktree(
+func (d *Daemon) recreateReopenWorktreeForeground(
+	protectedCtx context.Context,
 	key reopenKey,
 	action protocol.SessionReopenAction,
 ) (string, *sessionReopenVerdict, error) {
 	resolver := sessionReopenResolver{daemon: d}
 	var authoritative *sessionReopenVerdict
 	var createdPath, createdBranch string
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "recreate reopen worktree", func(protectedCtx context.Context) error {
-		resolved, resolveErr := resolver.ResolveClosed(
-			protectedCtx, key, d.scheduledReopenGit(gitInteractive),
-		)
-		if resolveErr != nil {
-			return resolveErr
-		}
-		if !resolved.offers(action) {
-			return reopenRefusal(&resolved, action)
-		}
-		authoritative = &resolved
-		plan, planErr := d.reopenWorktreeProviderPlan(protectedCtx, &resolved, action)
-		if planErr != nil {
-			return planErr
-		}
-		if hookErr := d.dispatchWorktreeBeforeCreateHooks(plan.repository, plan.branch, plan.startingFrom, plan.path); hookErr != nil {
-			return hookErr
-		}
-		providerPath, providerBranch, handled, providerErr := d.dispatchWorktreeCreateProvider(
-			plan.repository, plan.branch, plan.startingFrom, plan.path,
-		)
-		if providerErr != nil {
-			return providerErr
-		}
-		if handled {
-			createdPath, createdBranch = providerPath, providerBranch
-		} else {
-			createdPath, createdBranch = plan.path, plan.branch
-			mutationErr := d.gitExecution().Run(protectedCtx, gitTask{
-				Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: plan.repository,
-			}, func(ctx context.Context, client *attngit.Client) error {
-				branch, err := mutateReopenWorktreeAdmitted(ctx, client, &resolved, action, plan.startingFrom)
-				if err == nil {
-					createdBranch = branch
-				}
-				return err
-			})
-			if mutationErr != nil {
-				return mutationErr
-			}
-		}
-		d.registerCreatedWorktree(plan.repository, createdPath, createdBranch)
-		return d.dispatchWorktreeAfterCreateHooks(plan.repository, createdPath, createdBranch)
-	})
+	resolved, err := resolver.ResolveClosed(
+		protectedCtx, key, d.scheduledReopenGit(gitInteractive),
+	)
 	if err != nil {
-		return createdPath, authoritative, err
+		return "", nil, err
 	}
-	return createdPath, authoritative, nil
+	if !resolved.offers(action) {
+		return "", &resolved, reopenRefusal(&resolved, action)
+	}
+	authoritative = &resolved
+	plan, err := d.reopenWorktreeProviderPlan(protectedCtx, &resolved, action)
+	if err != nil {
+		return "", authoritative, err
+	}
+	if err := d.dispatchWorktreeBeforeCreateHooks(plan.repository, plan.branch, plan.startingFrom, plan.path); err != nil {
+		return "", authoritative, err
+	}
+	providerPath, providerBranch, handled, err := d.dispatchWorktreeCreateProvider(
+		plan.repository, plan.branch, plan.startingFrom, plan.path,
+	)
+	if err != nil {
+		return "", authoritative, err
+	}
+	if handled {
+		createdPath, createdBranch = providerPath, providerBranch
+	} else {
+		createdPath, createdBranch = plan.path, plan.branch
+		mutationErr := d.gitExecution().Run(protectedCtx, gitTask{
+			Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: plan.repository,
+		}, func(ctx context.Context, client *attngit.Client) error {
+			branch, createErr := mutateReopenWorktreeAdmitted(ctx, client, &resolved, action, plan.startingFrom)
+			if createErr == nil {
+				createdBranch = branch
+			}
+			return createErr
+		})
+		if mutationErr != nil {
+			return createdPath, authoritative, mutationErr
+		}
+	}
+	d.registerCreatedWorktree(plan.repository, createdPath, createdBranch)
+	return createdPath, authoritative, d.dispatchWorktreeAfterCreateHooks(plan.repository, createdPath, createdBranch)
 }
 
 type reopenWorktreePlan struct {
@@ -658,10 +660,16 @@ func (d *Daemon) reopenSessionRuntime(
 	rollback *delegationRollback,
 	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
-	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
-	lifecycleLock.Lock()
-	defer lifecycleLock.Unlock()
-	return d.reopenSessionRuntimeLocked(plan, rollback, afterSpawn)
+	var outcome *sessionRuntimeReopened
+	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session runtime", func(context.Context) error {
+		lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
+		lifecycleLock.Lock()
+		defer lifecycleLock.Unlock()
+		var reopenErr error
+		outcome, reopenErr = d.reopenSessionRuntimeLocked(plan, rollback, afterSpawn)
+		return reopenErr
+	})
+	return outcome, err
 }
 
 func (d *Daemon) reopenSessionRuntimeLocked(
@@ -778,7 +786,7 @@ func (d *Daemon) reopenSessionRuntimeLocked(
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicy(spawnClient, spawn, policy)
+	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}
