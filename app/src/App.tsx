@@ -20,7 +20,7 @@ import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import type { Presentation, SessionLedgerEntry } from './types/generated';
-import type { SessionReopenResolutionEvent } from './hooks/daemonSessionLedgerEvents';
+import type { SessionReopenResolutionNotice } from './hooks/daemonSessionLedgerEvents';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
@@ -62,10 +62,7 @@ function App() {
     entry: SessionLedgerEntry;
     nonce: number;
   }>();
-  const [sessionResolutionNotice, setSessionResolutionNotice] = useState<{
-    resolutions: Record<string, SessionReopenResolutionEvent>;
-    nonce: number;
-  }>();
+  const [sessionResolutionNotice, setSessionResolutionNotice] = useState<SessionReopenResolutionNotice>();
 
   const {
     daemonSessions,
@@ -162,11 +159,18 @@ function App() {
     onSessionReopenResolved: (resolution) =>
       setSessionResolutionNotice((prev) => {
         const resolutions = { ...prev?.resolutions };
+        const arrivalNonceBySession = { ...prev?.arrivalNonceBySession };
+        const nonce = (prev?.nonce ?? 0) + 1;
         delete resolutions[resolution.sessionId];
+        delete arrivalNonceBySession[resolution.sessionId];
         resolutions[resolution.sessionId] = resolution;
+        arrivalNonceBySession[resolution.sessionId] = nonce;
         const expired = Object.keys(resolutions).slice(0, -SESSION_RESOLUTION_NOTICE_LIMIT);
-        for (const sessionId of expired) delete resolutions[sessionId];
-        return { resolutions, nonce: (prev?.nonce ?? 0) + 1 };
+        for (const sessionId of expired) {
+          delete resolutions[sessionId];
+          delete arrivalNonceBySession[sessionId];
+        }
+        return { resolutions, arrivalNonceBySession, nonce };
       }),
   });
 

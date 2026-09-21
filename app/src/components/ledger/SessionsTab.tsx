@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionLedgerEntry } from '../../types/generated';
 import type {
   SessionLedgerPage,
   SessionLedgerQuery,
-  SessionReopenResolutionEvent,
+  SessionReopenResolutionNotice,
 } from '../../hooks/daemonSessionLedgerEvents';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
 import type { ReopenResolution, SessionLedgerFilters } from '../../hooks/useSessionLedger';
@@ -46,7 +46,7 @@ export interface SessionsTabProps {
   onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
   onShowWorktree?: (path: string) => void;
   closeNotice?: { entry: SessionLedgerEntry; nonce: number };
-  resolutionNotice?: { resolutions: Record<string, SessionReopenResolutionEvent>; nonce: number };
+  resolutionNotice?: SessionReopenResolutionNotice;
   requestedDir?: { path: string; nonce: number } | null;
   queryRef: React.RefObject<HTMLInputElement | null>;
   now: () => Date;
@@ -136,9 +136,16 @@ export function SessionsTab({
     recordClose(closeNotice.entry);
   }, [closeNotice, recordClose]);
 
+  const consumedResolutionNonce = useRef<number | undefined>(undefined);
   useEffect(() => {
     if (!resolutionNotice) return;
-    for (const resolution of Object.values(resolutionNotice.resolutions)) recordResolution(resolution);
+    const previousNonce = consumedResolutionNonce.current;
+    if (previousNonce === resolutionNotice.nonce) return;
+    consumedResolutionNonce.current = resolutionNotice.nonce;
+    for (const [sessionId, resolution] of Object.entries(resolutionNotice.resolutions)) {
+      if (previousNonce !== undefined && resolutionNotice.arrivalNonceBySession[sessionId] <= previousNonce) continue;
+      recordResolution(resolution);
+    }
   }, [resolutionNotice, recordResolution]);
 
   const visible = useMemo(() => entries.filter((entry) => {

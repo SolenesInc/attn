@@ -28,6 +28,7 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
             sessionId: 'wt', closedAt: '2026-09-05T10:00:00Z', success: true, reopen: judged('wt').reopen,
           },
         },
+        arrivalNonceBySession: { wt: 1 },
         nonce: 1,
       },
     },

@@ -14,7 +14,7 @@ import {
 import { type OpenPRProgress } from '../hooks/useOpenPR';
 import { type Session, type TerminalWorkspaceState } from '../store/sessions';
 import type { Presentation, SessionLedgerEntry } from '../types/generated';
-import type { SessionReopenResolutionEvent } from '../hooks/daemonSessionLedgerEvents';
+import type { SessionReopenResolutionNotice } from '../hooks/daemonSessionLedgerEvents';
 import { type SessionAgent } from '../types/sessionAgent';
 import { hasPane } from '../types/workspace';
 import { crewDisplayName } from '../utils/crewName';
@@ -249,6 +249,6 @@ export interface AppContentProps {
   fsChangeSignals: Record<string, number>;
   notebookTaskChangeSignal: number;
   sessionCloseNotice?: { entry: SessionLedgerEntry; nonce: number };
-  sessionResolutionNotice?: { resolutions: Record<string, SessionReopenResolutionEvent>; nonce: number };
+  sessionResolutionNotice?: SessionReopenResolutionNotice;
   registerSessionExitHandler: (handler: ((info: SessionExitInfo) => void) | null) => void;
 }

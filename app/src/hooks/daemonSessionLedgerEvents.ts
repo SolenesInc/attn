@@ -39,6 +39,12 @@ export interface SessionReopenResolutionEvent {
   error?: string;
 }
 
+export interface SessionReopenResolutionNotice {
+  resolutions: Record<string, SessionReopenResolutionEvent>;
+  arrivalNonceBySession: Record<string, number>;
+  nonce: number;
+}
+
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
   onSessionClosed?: (entry: SessionLedgerEntry) => void;

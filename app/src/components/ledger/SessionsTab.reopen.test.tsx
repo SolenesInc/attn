@@ -21,10 +21,14 @@ const resolved = (sessionId: string, reopen = verdict(), closedAt = '2026-09-05T
   reopen,
 });
 
-const resolutionNotice = (items: ReturnType<typeof judged>[], nonce = 1) => ({
-  resolutions: Object.fromEntries(items.map((item) => [item.session_id, resolved(item.session_id, item.reopen)])),
-  nonce,
-});
+const resolutionNotice = (items: ReturnType<typeof judged>[], nonce = 1) => {
+  const resolutions = Object.fromEntries(items.map((item) => [item.session_id, resolved(item.session_id, item.reopen)]));
+  return {
+    resolutions,
+    arrivalNonceBySession: Object.fromEntries(Object.keys(resolutions).map((sessionId) => [sessionId, nonce])),
+    nonce,
+  };
+};
 
 describe('SessionsTab verdicts', () => {
   it('settles every closed row and reads the verdict in the inspector', async () => {
@@ -59,7 +63,7 @@ describe('SessionsTab verdicts', () => {
     expect(row('run s1').querySelector('.ledger-glyph.is-refreshing')).toBeTruthy();
     expect(within(row('run s1')).queryByRole('button', { name: 'Reopen' })).toBeNull();
 
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'its branch is still here' })) }, nonce: 1 } });
+    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'its branch is still here' })) }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
 
     await waitFor(() => expect(within(inspector()).queryByText('checking reopen eligibility…')).toBeNull());
     expect(within(inspector()).getByText('its branch is still here')).toBeTruthy();
@@ -84,7 +88,7 @@ describe('SessionsTab verdicts', () => {
     await rows().findByText('run s1');
     rerender({ resolutionNotice: { resolutions: { s1: {
       sessionId: 's1', closedAt: '2026-09-05T10:00:00Z', success: false, error: 'git unavailable',
-    } }, nonce: 1 } });
+    } }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
 
     await within(inspector()).findByText('Eligibility could not be checked.');
     expect(within(inspector()).getByText('git unavailable')).toBeTruthy();
@@ -119,13 +123,59 @@ describe('SessionsTab verdicts', () => {
 });
 
 describe('SessionsTab settles rows in place', () => {
+  it('does not replay retained verdicts when a fresh resolution arrives after reload', async () => {
+    const entries = [closedEntry('s1'), closedEntry('s2')];
+    const { list } = listing([page({ entries }), page({ entries })]);
+    const oldS1 = resolved('s1', verdict({ reason: 'old s1 verdict' }));
+    const oldS2 = resolved('s2', verdict({ reason: 'old s2 verdict' }));
+    const failedS1 = {
+      sessionId: 's1', closedAt: '2026-09-05T10:00:00Z', success: false, error: 'old failure',
+    };
+    const { rerender } = renderSessionsTab({
+      listSessions: list,
+      resolutionNotice: {
+        resolutions: { s1: oldS1, s2: oldS2 },
+        arrivalNonceBySession: { s1: 1, s2: 1 },
+        nonce: 1,
+      },
+    });
+
+    fireEvent.click(await rows().findByText('run s1'));
+    await within(inspector()).findByText('old s1 verdict');
+    rerender({
+      resolutionNotice: {
+        resolutions: { s1: failedS1, s2: oldS2 },
+        arrivalNonceBySession: { s1: 2, s2: 1 },
+        nonce: 2,
+      },
+    });
+    fireEvent.click(await within(inspector()).findByRole('button', { name: 'Reload' }));
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+    await within(inspector()).findByText('checking reopen eligibility…');
+
+    rerender({
+      resolutionNotice: {
+        resolutions: {
+          s1: failedS1,
+          s2: resolved('s2', verdict({ reason: 'fresh s2 verdict' })),
+        },
+        arrivalNonceBySession: { s1: 2, s2: 3 },
+        nonce: 3,
+      },
+    });
+
+    await within(inspector()).findByText('checking reopen eligibility…');
+    expect(within(inspector()).queryByText('old failure')).toBeNull();
+    expect(within(inspector()).queryByRole('button', { name: 'Reload' })).toBeNull();
+  });
+
   it('replaces a live row when the daemon says it closed, and judges it without re-listing', async () => {
     const { list } = listing([page({ entries: [liveEntry('s1')] })]);
     const { rerender } = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await screen.findByRole('button', { name: 'Focus' });
     rerender({ closeNotice: { entry: closedEntry('s1'), nonce: 1 } });
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'the worktree is still there' })) }, nonce: 2 } });
+    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'the worktree is still there' })) }, arrivalNonceBySession: { s1: 2 }, nonce: 2 } });
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Focus' })).toBeNull());
     expect(screen.getAllByRole('option')).toHaveLength(1);
@@ -141,7 +191,7 @@ describe('SessionsTab settles rows in place', () => {
 
     await rows().findByText('run s1');
     expect(within(row('run s1')).queryByRole('button', { name: 'Reopen' })).toBeNull();
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'it is there' })) }, nonce: 1 } });
+    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'it is there' })) }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
 
     await within(row('run s1')).findByRole('button', { name: 'Reopen' });
     expect(within(inspector()).getByText('it is there')).toBeTruthy();
@@ -155,7 +205,7 @@ describe('SessionsTab settles rows in place', () => {
     ]);
     const { rerender } = renderSessionsTab({ listSessions: list });
     await rows().findByText('run s1');
-    rerender({ resolutionNotice: { resolutions: { elsewhere: resolved('elsewhere', goneEverywhere) }, nonce: 1 } });
+    rerender({ resolutionNotice: { resolutions: { elsewhere: resolved('elsewhere', goneEverywhere) }, arrivalNonceBySession: { elsewhere: 1 }, nonce: 1 } });
 
     fireEvent.click(screen.getByRole('button', { name: '1 older ↓' }));
     await rows().findByText('run elsewhere');
