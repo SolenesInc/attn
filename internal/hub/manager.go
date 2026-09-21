@@ -180,6 +180,10 @@ func (m *Manager) Stop() {
 	shutdownTargets := make([]isolatedShutdownTarget, 0)
 	seenTargets := make(map[string]struct{})
 	m.mu.Lock()
+	if !m.started {
+		m.mu.Unlock()
+		return
+	}
 	if m.cancel != nil {
 		m.cancel()
 	}

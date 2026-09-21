@@ -353,9 +353,10 @@ type outboundMessage struct {
 
 type wsHub struct {
 	clients           map[*wsClient]bool
+	connections       map[*wsClient]struct{}
 	broadcast         chan outboundMessage
-	unregister        chan *wsClient
 	mu                sync.RWMutex
+	stopped           bool
 	evictions         map[string]evictionRecord
 	evictionMu        sync.Mutex
 	logf              func(format string, args ...interface{})
@@ -376,10 +377,10 @@ const (
 
 func newWSHub() *wsHub {
 	return &wsHub{
-		clients:    make(map[*wsClient]bool),
-		broadcast:  make(chan outboundMessage, 256),
-		unregister: make(chan *wsClient),
-		logf:       func(format string, args ...interface{}) {},
+		clients:     make(map[*wsClient]bool),
+		connections: make(map[*wsClient]struct{}),
+		broadcast:   make(chan outboundMessage, 256),
+		logf:        func(format string, args ...interface{}) {},
 	}
 }
 
@@ -399,15 +400,14 @@ func previewBinaryForLog(data []byte) string {
 }
 
 func (h *wsHub) run() {
+	h.runUntil(nil)
+}
+
+func (h *wsHub) runUntil(done <-chan struct{}) {
 	for {
 		select {
-		case client := <-h.unregister:
-			h.mu.Lock()
-			delete(h.clients, client)
-			client.closeSendChannel()
-			client.stopGitStatusPoll()
-			h.mu.Unlock()
-
+		case <-done:
+			return
 		case message := <-h.broadcast:
 			h.mu.Lock()
 			var toRemove []*wsClient
@@ -433,9 +433,48 @@ func (h *wsHub) run() {
 	}
 }
 
-func (h *wsHub) add(client *wsClient) {
+func (h *wsHub) closeAll() {
 	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.stopped = true
+	for client := range h.connections {
+		delete(h.connections, client)
+		delete(h.clients, client)
+		client.closeSendChannel()
+		client.stopGitStatusPoll()
+		if client.conn != nil {
+			client.abortTransport()
+		}
+	}
+}
+
+func (h *wsHub) track(client *wsClient) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		return false
+	}
+	h.connections[client] = struct{}{}
+	return true
+}
+
+func (h *wsHub) add(client *wsClient) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.stopped {
+		return false
+	}
+	h.connections[client] = struct{}{}
 	h.clients[client] = true
+	return true
+}
+
+func (h *wsHub) remove(client *wsClient) {
+	h.mu.Lock()
+	delete(h.connections, client)
+	delete(h.clients, client)
+	client.closeSendChannel()
+	client.stopGitStatusPoll()
 	h.mu.Unlock()
 }
 
@@ -683,6 +722,10 @@ func (d *Daemon) handleWS(w http.ResponseWriter, r *http.Request) {
 		attachedRemote:     make(map[string]struct{}),
 		pendingRemote:      make(map[string]struct{}),
 	}
+	if !d.wsHub.track(client) {
+		client.abortTransport()
+		return
+	}
 
 	d.logf("WebSocket connection accepted, awaiting client_hello")
 
@@ -860,7 +903,7 @@ func (d *Daemon) wsReadPump(client *wsClient) {
 		d.dropDocSubscriptions(client)
 		d.detachAllSessions(client)
 		close(client.recv)
-		d.wsHub.unregister <- client
+		d.wsHub.remove(client)
 		client.conn.Close(websocket.StatusNormalClosure, "")
 		d.logf("WebSocket client disconnected (%d remaining)", d.wsHub.ClientCount())
 	}()

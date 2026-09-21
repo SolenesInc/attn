@@ -74,6 +74,7 @@ type Report struct {
 func (r Report) OK() bool { return r.Status != StatusFail }
 
 type daemonHealth struct {
+	Status           string `json:"status"`
 	Protocol         string `json:"protocol"`
 	Profile          string `json:"profile"`
 	DataDir          string `json:"data_dir"`
@@ -208,9 +209,15 @@ func run(ctx context.Context, opts Options, p prober) Report {
 
 	health, healthErr := p.daemonHealth(ctx, routing.WSPort)
 	if healthErr != nil {
+		add(fail("daemon.readiness", fmt.Sprintf("daemon health is unavailable: %v", healthErr), "Start the daemon for the active profile and rerun preflight."))
 		add(fail("routing.daemon", fmt.Sprintf("daemon health is unavailable on 127.0.0.1:%s: %v", routing.WSPort, healthErr), "Start the daemon for the active profile and verify the selected port is reachable."))
 		add(fail("protocol.app_daemon", "app/daemon protocol compatibility could not be verified", "Start the selected profile's daemon and rerun preflight."))
 	} else {
+		if status := strings.TrimSpace(health.Status); status != "ok" {
+			add(fail("daemon.readiness", fmt.Sprintf("daemon status is %q", status), "Wait for daemon startup to finish, then rerun preflight."))
+		} else {
+			add(pass("daemon.readiness", "daemon startup is complete"))
+		}
 		actualPort := fmt.Sprint(health.Port)
 		if health.RoutingPathError != "" {
 			add(fail("routing.daemon", "daemon could not canonicalize its routing paths: "+health.RoutingPathError, "Use absolute daemon routing paths or fix inaccessible symlink ancestors, then restart this profile's daemon."))

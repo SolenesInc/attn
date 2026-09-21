@@ -93,6 +93,25 @@ func ensure(ctx context.Context, binaryPath string) (EnsureResult, error) {
 
 	health, err := fetchHealth(ctx)
 	if err == nil && daemonMatchesCurrentBinary(health) {
+		if !daemonIsReady(health) {
+			ticker := time.NewTicker(100 * time.Millisecond)
+			defer ticker.Stop()
+			if err := waitForMatchingDaemon(ctx, ticker.C, fetchHealth, func() bool {
+				return isSocketLive(config.SocketPath())
+			}, pidLockAvailable); err != nil {
+				if !errors.Is(err, errDaemonLockReleased) {
+					return EnsureResult{}, err
+				}
+				contended, startErr := startDaemon(ctx, binaryPath)
+				if startErr != nil {
+					return EnsureResult{}, startErr
+				}
+				if contended {
+					return EnsureResult{Status: "already_running"}, nil
+				}
+				return EnsureResult{Status: "started"}, nil
+			}
+		}
 		return EnsureResult{Status: "already_running"}, nil
 	}
 
@@ -172,6 +191,10 @@ func daemonMatchesCurrentBinary(health healthResponse) bool {
 		return normalizedFingerprint(health.SourceFingerprint) == currentFingerprint
 	}
 	return strings.TrimSpace(health.Protocol) == protocol.ProtocolVersion
+}
+
+func daemonIsReady(health healthResponse) bool {
+	return strings.TrimSpace(health.Status) == "ok"
 }
 
 func profileMatchesCurrent(health healthResponse) bool {
@@ -350,20 +373,23 @@ func waitForMatchingDaemon(
 	for {
 		health, err := fetch(ctx)
 		if err == nil {
-			if daemonMatchesCurrentBinary(health) && socketLive() {
+			if !daemonMatchesCurrentBinary(health) {
+				return fmt.Errorf("competing daemon does not match current binary")
+			}
+			if daemonIsReady(health) && socketLive() {
 				return nil
 			}
-			if daemonMatchesCurrentBinary(health) {
+			if daemonIsReady(health) {
 				return fmt.Errorf("competing daemon is missing its Unix listener")
 			}
-			return fmt.Errorf("competing daemon does not match current binary")
-		}
-		available, lockErr := lockAvailable()
-		if lockErr != nil {
-			return lockErr
-		}
-		if available {
-			return errDaemonLockReleased
+		} else {
+			available, lockErr := lockAvailable()
+			if lockErr != nil {
+				return lockErr
+			}
+			if available {
+				return errDaemonLockReleased
+			}
 		}
 		select {
 		case <-ctx.Done():
@@ -378,7 +404,7 @@ func matchingDaemonIsLive(ctx context.Context) bool {
 		return false
 	}
 	health, err := fetchHealth(ctx)
-	return err == nil && daemonMatchesCurrentBinary(health) && isSocketLive(config.SocketPath())
+	return err == nil && daemonMatchesCurrentBinary(health) && daemonIsReady(health) && isSocketLive(config.SocketPath())
 }
 
 func removeStaleSocketFiles() error {
