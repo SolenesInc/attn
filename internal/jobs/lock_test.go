@@ -47,6 +47,30 @@ func TestAcquireDirLockAdoptsLegacyPIDFile(t *testing.T) {
 	}
 }
 
+func TestAcquireDirLockRejectsSymlink(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target")
+	const original = "keep me"
+	if err := os.WriteFile(target, []byte(original), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+	if err := os.Symlink(target, filepath.Join(dir, lockFileName)); err != nil {
+		t.Fatalf("create lock symlink: %v", err)
+	}
+
+	if lock, err := AcquireDirLock(dir, nil); err == nil {
+		lock.Release()
+		t.Fatal("AcquireDirLock() accepted a symlink")
+	}
+	data, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target: %v", err)
+	}
+	if string(data) != original {
+		t.Fatalf("target content = %q, want %q", data, original)
+	}
+}
+
 func TestAcquireDirLockExcludesCompetingOwnerAndReleaseKeepsPath(t *testing.T) {
 	dir := t.TempDir()
 	first, err := AcquireDirLock(dir, nil)

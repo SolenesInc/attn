@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
 var ErrAlreadyRunning = errors.New("jobs: another runner already owns this store")
@@ -30,10 +32,11 @@ func AcquireDirLock(dir string, log LogFunc) (*DirLock, error) {
 		return nil, err
 	}
 	path := filepath.Join(dir, lockFileName)
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
+	fd, err := unix.Open(path, unix.O_CREAT|unix.O_RDWR|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0o644)
 	if err != nil {
 		return nil, fmt.Errorf("open runner lock %s: %w", path, err)
 	}
+	f := os.NewFile(uintptr(fd), path)
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		pid := lockHolderPID(f)
 		_ = f.Close()
