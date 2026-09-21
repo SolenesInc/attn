@@ -205,7 +205,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 					}
 					deleteBranch := wt.Branch != "" && !d.gardenKeepsBranch(wt.MainRepo, wt.Branch)
 					if !handled {
-						return d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+						return d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
 							if err := client.DeleteWorktree(runCtx, wt.MainRepo, wt.Path, false); err != nil {
 								return err
 							}
@@ -216,7 +216,7 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 						})
 					}
 					if deleteBranch {
-						branchDeleteErr = d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitDeferred, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
+						branchDeleteErr = d.gitExecution().Run(commitCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: wt.MainRepo}, func(runCtx context.Context, client *attngit.Client) error {
 							return client.DeleteBranch(runCtx, wt.MainRepo, wt.Branch, true)
 						})
 					}
@@ -279,7 +279,7 @@ func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, 
 }
 
 func (d *Daemon) finalWorktreeSweepGitCheck(ctx context.Context, candidate worktreeSweepCandidate) error {
-	states, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred, Effect: gitRead, Scope: candidate.repo}, func(runCtx context.Context, client *attngit.Client) ([]attngit.WorktreeState, error) {
+	states, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive, Effect: gitRead, Scope: candidate.repo}, func(runCtx context.Context, client *attngit.Client) ([]attngit.WorktreeState, error) {
 		return client.ListWorktreeStates(runCtx, candidate.repo)
 	})
 	if err != nil {

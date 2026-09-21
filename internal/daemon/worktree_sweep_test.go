@@ -256,6 +256,9 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	reclaimed := repo.worktree("reclaimed", "feat/reclaimed", base)
 	held := repo.worktree("held", "feat/held", base)
 	d.store.Add(&protocol.Session{ID: "session-held", Directory: held})
+	executor := d.gitExecution().(*coordinatedGitExecutor)
+	var tasks []gitTask
+	executor.enqueueObserver = func(task gitTask) { tasks = append(tasks, task) }
 
 	_, removed, _ := d.worktreeSweepPass(now)
 	if removed != 1 {
@@ -286,6 +289,23 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	}
 	if !strings.Contains(entries[0].Reason, "merged") {
 		t.Errorf("sweep log reason = %q, want it to name the merged signal", entries[0].Reason)
+	}
+	mutationIndex := -1
+	for i, task := range tasks {
+		if task.Kind != gitTaskWorktreeMutation || task.Effect != gitWrite {
+			continue
+		}
+		mutationIndex = i
+		if task.Lane != gitInteractive {
+			t.Errorf("worktree deletion used %s lane, want interactive", task.Lane)
+		}
+	}
+	if mutationIndex < 1 {
+		t.Fatalf("git tasks = %+v, want final identity check followed by deletion", tasks)
+	}
+	finalCheck := tasks[mutationIndex-1]
+	if finalCheck.Kind != gitTaskWorktreeObserve || finalCheck.Lane != gitInteractive {
+		t.Errorf("final identity check = %+v, want interactive worktree observation", finalCheck)
 	}
 }
 
