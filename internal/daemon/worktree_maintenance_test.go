@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,6 +15,14 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
+
+type gitExecutorFunc func(context.Context, gitTask, func(context.Context, *attngit.Client) error) error
+
+func (f gitExecutorFunc) Run(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
+	return f(ctx, task, run)
+}
+
+func (gitExecutorFunc) Close(error) {}
 
 func TestWorktreeMaintenanceForegroundPreemptsObservation(t *testing.T) {
 	var coordinator worktreeMaintenanceCoordinator
@@ -84,6 +93,29 @@ func TestWorktreeMaintenanceForegroundPreemptsBlockedOriginLookup(t *testing.T) 
 	}
 	if err := <-finished; !errors.Is(err, errWorktreeSweepPreempted) {
 		t.Fatalf("blocked origin lookup error = %v, want preemption cause", err)
+	}
+}
+
+func TestSessionRegistrationAcquiresWorktreeMaintenanceBeforeGitIdentity(t *testing.T) {
+	d := sweepDaemon(t)
+	leaseHeld := false
+	d.gitExec = gitExecutorFunc(func(ctx context.Context, _ gitTask, _ func(context.Context, *attngit.Client) error) error {
+		err := d.worktreeMaintenance.RunSweep(ctx, func(lease *worktreeSweepLease) error {
+			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error { return nil })
+		})
+		leaseHeld = errors.Is(err, errWorktreeSweepPreempted)
+		if !leaseHeld {
+			return fmt.Errorf("session identity ran without the foreground maintenance lease")
+		}
+		return nil
+	})
+	conn := &syncConn{}
+	d.handleRegister(conn, &protocol.RegisterMessage{
+		ID: "bare-cli", Label: protocol.Ptr("bare-cli"), Dir: t.TempDir(),
+		Agent: protocol.Ptr(protocol.SessionAgentCodex), WorkspaceID: "workspace-bare-cli",
+	})
+	if !leaseHeld {
+		t.Fatal("session registration inspected Git before acquiring the foreground maintenance lease")
 	}
 }
 

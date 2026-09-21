@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +17,13 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
+func worktreeProviderHoldsMaintenanceLease(d *Daemon) bool {
+	err := d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
+		return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error { return nil })
+	})
+	return errors.Is(err, errWorktreeSweepPreempted)
+}
+
 func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T) {
 	tmpDir, mainDir := initProviderTestRepo(t)
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
@@ -25,6 +33,9 @@ func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T
 
 	providerPath := filepath.Join(tmpDir, "provider-created")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
+		if !worktreeProviderHoldsMaintenanceLease(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
+		}
 		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
 			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
 		}
@@ -343,6 +354,9 @@ func TestDoCreateWorktreeFromBranch_ProviderHandledRegistersValidatedWorktree(t 
 
 	providerPath := filepath.Join(tmpDir, "provider-existing-branch")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
+		if !worktreeProviderHoldsMaintenanceLease(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without maintenance lease"}
+		}
 		if params.Branch != "feature/existing" {
 			t.Fatalf("provider branch=%q, want feature/existing", params.Branch)
 		}

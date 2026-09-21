@@ -29,45 +29,44 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 	}
 	path = git.ExpandPath(path)
 
-	if err := d.dispatchWorktreeBeforeCreateHooks(mainRepo, localBranch, branch, requestedPath); err != nil {
-		return "", err
-	}
-	providerPath, providerBranch, handled, err := d.dispatchWorktreeCreateProvider(mainRepo, localBranch, branch, requestedPath)
-	if err != nil {
-		return "", err
-	}
-	if handled {
-		d.registerCreatedWorktree(mainRepo, providerPath, providerBranch)
-		if err := d.dispatchWorktreeAfterCreateHooks(mainRepo, providerPath, providerBranch); err != nil {
-			return providerPath, err
-		}
-		return providerPath, nil
-	}
-
+	createdPath := ""
 	err = d.worktreeMaintenance.RunForeground(context.Background(), "create worktree from branch", func(protectedCtx context.Context) error {
-		return d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
-			if pruneErr := client.PruneWorktrees(ctx, mainRepo); pruneErr != nil {
-				return pruneErr
-			}
-			if isRemote {
-				createdBranch, createErr := client.CreateWorktreeFromRemoteBranch(ctx, mainRepo, branch, path)
-				if createErr == nil {
-					localBranch = createdBranch
+		if hookErr := d.dispatchWorktreeBeforeCreateHooks(mainRepo, localBranch, branch, requestedPath); hookErr != nil {
+			return hookErr
+		}
+		providerPath, providerBranch, handled, providerErr := d.dispatchWorktreeCreateProvider(mainRepo, localBranch, branch, requestedPath)
+		if providerErr != nil {
+			return providerErr
+		}
+		if handled {
+			createdPath = providerPath
+			localBranch = providerBranch
+		} else {
+			mutationErr := d.gitExecution().Run(protectedCtx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive, Effect: gitWrite, Scope: mainRepo}, func(ctx context.Context, client *git.Client) error {
+				if pruneErr := client.PruneWorktrees(ctx, mainRepo); pruneErr != nil {
+					return pruneErr
 				}
-				return createErr
+				if isRemote {
+					createdBranch, createErr := client.CreateWorktreeFromRemoteBranch(ctx, mainRepo, branch, path)
+					if createErr == nil {
+						localBranch = createdBranch
+					}
+					return createErr
+				}
+				return client.CreateWorktreeFromBranch(ctx, mainRepo, branch, path)
+			})
+			if mutationErr != nil {
+				return mutationErr
 			}
-			return client.CreateWorktreeFromBranch(ctx, mainRepo, branch, path)
-		})
+			createdPath = path
+		}
+		d.registerCreatedWorktree(mainRepo, createdPath, localBranch)
+		return d.dispatchWorktreeAfterCreateHooks(mainRepo, createdPath, localBranch)
 	})
 	if err != nil {
-		return "", err
+		return createdPath, err
 	}
-
-	d.registerCreatedWorktree(mainRepo, path, localBranch)
-	if err := d.dispatchWorktreeAfterCreateHooks(mainRepo, path, localBranch); err != nil {
-		return path, err
-	}
-	return path, nil
+	return createdPath, nil
 }
 
 func (d *Daemon) handleCreateWorktreeFromBranchWS(client *wsClient, msg *protocol.CreateWorktreeFromBranchMessage) {

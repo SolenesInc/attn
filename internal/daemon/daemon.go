@@ -2814,14 +2814,17 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	d.handleRegisterForeground(conn, msg)
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(ctx context.Context) error {
+		d.handleRegisterForeground(ctx, conn, msg)
+		return nil
+	})
 }
 
-func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
+func (d *Daemon) handleRegisterForeground(ctx context.Context, conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
-	branchInfo, _ := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitInteractive, msg.Dir)
+	branchInfo, _ := d.readBranchInfo(ctx, gitTaskSessionIdentity, gitInteractive, msg.Dir)
 
 	nowStr := string(protocol.TimestampNow())
 	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
@@ -2869,11 +2872,7 @@ func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterM
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
-	var persistErr error
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
-		persistErr = d.store.AddCheckedUnlessTeardown(session)
-		return persistErr
-	})
+	persistErr := d.store.AddCheckedUnlessTeardown(session)
 	if persistErr != nil {
 		d.releaseCrewBindingIfSession(session.ID)
 		d.sendError(conn, persistErr.Error())
