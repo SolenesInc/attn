@@ -162,7 +162,6 @@ function applyUpdateToResolutions(
   resolutions: Record<string, ReopenResolution>,
   update: SessionLedgerUpdate,
   filters: SessionLedgerFilters,
-  at: Date,
 ): Record<string, ReopenResolution> {
   if (update.type === 'reopen-resolved') {
     const event = update.resolution;
@@ -170,10 +169,21 @@ function applyUpdateToResolutions(
     return { ...resolutions, [event.sessionId]: eventResolution(event) };
   }
   const entry = update.entry;
-  const belongs = closeBelongsInView(entry, filters, at);
   const next = { ...resolutions };
-  if (filters.scope === 'live' || !belongs || !entry.closed_at) delete next[entry.id];
+  // Entries keep a listed row even when its close falls outside the range, so it must still settle.
+  if (filters.scope === 'live' || !entry.closed_at) delete next[entry.id];
   else next[entry.id] = { closedAt: entry.closed_at, state: 'pending' };
+  return next;
+}
+
+function failPendingResolutions(
+  resolutions: Record<string, ReopenResolution>,
+  error: string,
+): Record<string, ReopenResolution> {
+  const next: Record<string, ReopenResolution> = {};
+  for (const [id, resolution] of Object.entries(resolutions)) {
+    next[id] = resolution.state === 'pending' ? { closedAt: resolution.closedAt, state: 'failed', error } : resolution;
+  }
   return next;
 }
 
@@ -260,7 +270,7 @@ export function useSessionLedger({
       }
       const at = now();
       setEntries((current) => applyUpdateToEntries(current, update, filtersRef.current, at));
-      setResolutions((current) => applyUpdateToResolutions(current, update, filtersRef.current, at));
+      setResolutions((current) => applyUpdateToResolutions(current, update, filtersRef.current));
     });
   }, [connection.subscribe, enabled, markVisibleEligibilityPending, now]);
 
@@ -280,11 +290,11 @@ export function useSessionLedger({
     setLoadingMoreRequest(null);
     setNextBefore(null);
     setOmitted(0);
-    markVisibleEligibilityPending();
     if (!enabled || filterError || !lifecycle.connected) {
       setLoading(false);
       return;
     }
+    markVisibleEligibilityPending();
     const request = ++requestSequence.current;
     const read: ActiveRead = { epoch, generation: lifecycle.generation, updates: [] };
     activeReads.current.set(request, read);
@@ -298,7 +308,7 @@ export function useSessionLedger({
         let nextResolutions = pendingResolutions(nextEntries);
         for (const update of read.updates) {
           nextEntries = applyUpdateToEntries(nextEntries, update, filters, at);
-          nextResolutions = applyUpdateToResolutions(nextResolutions, update, filters, at);
+          nextResolutions = applyUpdateToResolutions(nextResolutions, update, filters);
         }
         entriesRef.current = nextEntries;
         setEntries(nextEntries);
@@ -310,6 +320,8 @@ export function useSessionLedger({
       .catch((failure: Error) => {
         if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
         setError(failure.message);
+        // No verdict is coming for these rows; a pending row would spin until reload.
+        setResolutions((current) => failPendingResolutions(current, failure.message));
       })
       .finally(() => {
         activeReads.current.delete(request);
@@ -325,9 +337,8 @@ export function useSessionLedger({
     readEpoch.current += 1;
     activeReads.current.clear();
     setLoadingMoreRequest(null);
-    markVisibleEligibilityPending();
     setReloadNonce((n) => n + 1);
-  }, [markVisibleEligibilityPending]);
+  }, []);
 
   const loadMore = useCallback(() => {
     if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
@@ -349,7 +360,7 @@ export function useSessionLedger({
         });
         setResolutions((current) => {
           let next = { ...current, ...pendingResolutions(page.entries ?? []) };
-          for (const update of read.updates) next = applyUpdateToResolutions(next, update, filtersRef.current, at);
+          for (const update of read.updates) next = applyUpdateToResolutions(next, update, filtersRef.current);
           return next;
         });
         setOmitted(page.omitted ?? 0);

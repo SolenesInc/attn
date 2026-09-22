@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { SessionReopenAction, SessionState } from '../types/generated';
 import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
-import { useSessionLedger } from './useSessionLedger';
-import type { SessionLedgerView } from './useSessionLedger';
+import { EMPTY_SESSION_FILTERS, useSessionLedger } from './useSessionLedger';
+import type { SessionLedgerFilters, SessionLedgerView } from './useSessionLedger';
 import { createSessionLedgerTestConnection } from './sessionLedgerTestConnection';
 
 const NOW = new Date('2026-09-05T14:30:00Z');
@@ -38,11 +38,14 @@ function reopen(reason: string): SessionReopen {
   };
 }
 
-function renderLedger(list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>) {
+function renderLedger(
+  list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>,
+  initialFilters: SessionLedgerFilters = EMPTY_SESSION_FILTERS,
+) {
   const transport = createSessionLedgerTestConnection(list);
   const seen: { view: SessionLedgerView | null } = { view: null };
   function Harness() {
-    const view = useSessionLedger({ enabled: true, connection: transport.connection, now });
+    const view = useSessionLedger({ enabled: true, connection: transport.connection, now, initialFilters });
     useEffect(() => { seen.view = view; });
     return null;
   }
@@ -181,7 +184,7 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     expect(seen.view?.loadingMore).toBe(false);
   });
 
-  it('keeps rows visible but pending when a refresh fails', async () => {
+  it('keeps rows visible, failed and retryable when a refresh fails', async () => {
     const entry = closedEntry('s1');
     let rejectRefresh: ((error: Error) => void) | undefined;
     const list = vi.fn()
@@ -203,7 +206,7 @@ describe('useSessionLedger streamed reopen eligibility', () => {
 
     await waitFor(() => expect(seen.view?.error).toBe('connection lost'));
     expect(seen.view?.entries).toEqual([entry]);
-    expect(seen.view?.resolutions.s1?.state).toBe('pending');
+    expect(seen.view?.resolutions.s1).toEqual({ closedAt: entry.closed_at, state: 'failed', error: 'connection lost' });
     expect(seen.view?.omitted).toBe(0);
     act(() => seen.view?.loadMore());
     expect(list).toHaveBeenCalledTimes(2);
@@ -245,5 +248,62 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await act(async () => releases[0]?.({ entries: [oldEntry], omitted: 0 }));
 
     expect(seen.view?.entries).toEqual([freshEntry]);
+  });
+
+  it('settles a listed row that closes after a past range instead of leaving it without a verdict', async () => {
+    const live: SessionLedgerEntry = {
+      ...closedEntry('s1'),
+      closed_at: undefined,
+      closed_by: undefined,
+      last_seen: new Date(NOW.getTime() - 26 * 3600e3).toISOString(),
+    };
+    const seen = renderLedger(async () => ({ entries: [live], omitted: 0 }), {
+      ...EMPTY_SESSION_FILTERS, scope: 'all', range: 'yesterday',
+    });
+    await waitFor(() => expect(seen.view?.entries.map((entry) => entry.id)).toEqual(['s1']));
+
+    const closedAt = '2026-09-05T14:00:00Z';
+    await act(async () => {
+      seen.emit({ type: 'closed', entry: { ...live, closed_at: closedAt, closed_by: 'user' } });
+    });
+    expect(seen.view?.resolutions.s1).toEqual({ closedAt, state: 'pending' });
+    await act(async () => {
+      seen.emit({ type: 'reopen-resolved', resolution: { sessionId: 's1', closedAt, success: true, reopen: reopen('back') } });
+    });
+    expect(seen.view?.resolutions.s1?.state).toBe('ready');
+  });
+
+  it('turns rows a failed read left pending into retryable failures', async () => {
+    let fail = false;
+    const entry = closedEntry('s1');
+    const seen = renderLedger(async () => {
+      if (fail) throw new Error('timeout');
+      return { entries: [entry], omitted: 0 };
+    });
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
+
+    fail = true;
+    await act(async () => { seen.view?.reload(); });
+    await waitFor(() => expect(seen.view?.error).toBe('timeout'));
+    expect(seen.view?.entries.map((row) => row.id)).toEqual(['s1']);
+    expect(seen.view?.resolutions.s1).toEqual({ closedAt: entry.closed_at, state: 'failed', error: 'timeout' });
+  });
+
+  it('does not mark rows pending while the filter is invalid and no read is issued', async () => {
+    const entry = closedEntry('s1');
+    const list = vi.fn(async () => ({ entries: [entry], omitted: 0 }));
+    const seen = renderLedger(list);
+    await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
+    await act(async () => {
+      seen.emit({ type: 'reopen-resolved', resolution: { sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('ok') } });
+    });
+    expect(seen.view?.resolutions.s1?.state).toBe('ready');
+
+    await act(async () => {
+      seen.view?.setFilters((filters) => ({ ...filters, range: 'custom', customFrom: 'not a date', customTo: '' }));
+    });
+    expect(seen.view?.filterError).toBeTruthy();
+    expect(list).toHaveBeenCalledTimes(1);
+    expect(seen.view?.resolutions.s1?.state).toBe('ready');
   });
 });
