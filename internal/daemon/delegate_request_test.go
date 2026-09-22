@@ -60,13 +60,16 @@ func TestDelegationRequestIDRejectsDifferentNormalizedInput(t *testing.T) {
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 	first := explicitOperationMessage(d, "same-key", sourceID, "First brief", "first")
-	if _, err := d.startDelegation(&first); err != nil {
+	started, err := d.startDelegation(&first)
+	if err != nil {
 		t.Fatal(err)
 	}
 	second := explicitOperationMessage(d, "same-key", sourceID, "Different brief", "first")
 	if _, err := d.startDelegation(&second); !errors.Is(err, store.ErrDelegationRequestConflict) {
 		t.Fatalf("error=%v, want request conflict", err)
 	}
+	// The first operation keeps writing under the temp dirs; settle it before cleanup removes them.
+	waitDelegationOperation(t, d, started.OperationID)
 }
 
 func TestResolveDelegateRuntimeUsesExactRequestedBaseCommit(t *testing.T) {
