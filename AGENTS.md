@@ -97,7 +97,7 @@ satisfy the full requirement?
 - `make test-scripts`: Shell script tests
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
-- `scripts/pre-commit.sh`: formats staged Go and Rust; usable as a git pre-commit hook
+- `scripts/pre-commit.sh`: formats staged Go and `app/src-tauri` Rust; usable as a git pre-commit hook
 
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
 
