@@ -28,7 +28,8 @@ and run commands from the repository root.
   `writeMockAgentFixture` in the session cwd before launch; no fixture means a
   silent agent. Real providers need `allowRealAgents` and a reason.
 - The agent tripwire fails any scenario that runs a real agent or headless model task.
-- Every run talks to the mock GitHub (`scripts/mock-github.mjs`), never github.com.
+- Non-production runs talk to the mock GitHub (`scripts/mock-github.mjs`), never
+  github.com. Production runs keep the real github.com.
   Seed custom PRs through `/__control/seed`.
 - Build child environments with `profileCliEnv`, never `{ ...process.env }`.
 - Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
