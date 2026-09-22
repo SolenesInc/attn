@@ -193,7 +193,8 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 			}
 			return err
 		}
-		return d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) error {
+		// Foreground work waits on the gate held here, so never queue behind deferred work.
+		return d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskAutomation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 			return client.DeleteWorktree(ctx, resolved.MainRepository, resolved.Worktree, false)
 		})
 	})

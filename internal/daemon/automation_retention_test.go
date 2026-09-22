@@ -297,3 +297,30 @@ func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
 		t.Fatalf("expected a soft-deleted definition's old run to still be reached and pruned, got %#v err=%v", got, err)
 	}
 }
+
+func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *testing.T) {
+	root := t.TempDir()
+	mainRepo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDaemon(t, mainRepo, "init")
+	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	worktree := filepath.Join(root, "repo--retained")
+	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/retained", worktree)
+
+	executor := testGitExecutor(t, testGitConfig())
+	var lanes []gitLane
+	executor.enqueueObserver = func(task gitTask) { lanes = append(lanes, task.Lane) }
+	d := &Daemon{gitExec: executor}
+	run := store.AutomationRun{ID: "run-retained", ResolvedLocationJSON: automationResolvedLocationJSON(t, mainRepo, worktree)}
+	if err := d.removeAutomationRunWorktree(run); err != nil {
+		t.Fatal(err)
+	}
+	if len(lanes) != 1 || lanes[0] != gitInteractive {
+		t.Fatalf("lanes=%v, want one interactive delete so foreground work never waits on the deferred queue", lanes)
+	}
+	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+		t.Fatalf("worktree still present: %v", err)
+	}
+}
