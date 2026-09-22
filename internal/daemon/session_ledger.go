@@ -178,7 +178,6 @@ func (d *Daemon) reopenVerdictsForPage(
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// A row whose inspection failed carries no verdict; one bad repository must not hide the page.
 	resolved := make([]protocol.SessionReopenEntry, 0, len(verdicts))
 	for _, verdict := range verdicts {
 		if verdict != nil {

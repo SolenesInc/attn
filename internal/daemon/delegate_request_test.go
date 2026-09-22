@@ -68,7 +68,6 @@ func TestDelegationRequestIDRejectsDifferentNormalizedInput(t *testing.T) {
 	if _, err := d.startDelegation(&second); !errors.Is(err, store.ErrDelegationRequestConflict) {
 		t.Fatalf("error=%v, want request conflict", err)
 	}
-	// The first operation keeps writing under the temp dirs; settle it before cleanup removes them.
 	waitDelegationOperation(t, d, started.OperationID)
 }
 

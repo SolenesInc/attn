@@ -348,7 +348,6 @@ func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
 		t.Fatalf("safety = %v err=%v, want OK", block, err)
 	}
 
-	// A reopen lands between the safety check and the gated removal.
 	s.Add(&protocol.Session{
 		ID: run.SessionID, Label: "auto", Agent: string(protocol.SessionAgentCodex), Directory: worktree, State: protocol.SessionStateWorking,
 		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,

@@ -172,6 +172,17 @@ func (d *Daemon) automationRunActivityBlock(run store.AutomationRun) (automation
 	return automationRunCleanupOK, nil
 }
 
+func (d *Daemon) requireAutomationRunStillInactive(run store.AutomationRun) error {
+	block, err := d.automationRunActivityBlock(run)
+	if err != nil {
+		return err
+	}
+	if block != automationRunCleanupOK {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	return nil
+}
+
 func automationRunWorktreePath(run store.AutomationRun) (string, error) {
 	if strings.TrimSpace(run.ResolvedLocationJSON) == "" {
 		return "", nil
@@ -195,11 +206,8 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 		return nil
 	}
 	return d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(protection automaticWorktreeCleanupProtection) error {
-		// The safety check ran before the gate; a reopen since then may have revived the run.
-		if block, err := d.automationRunActivityBlock(run); err != nil {
+		if err := d.requireAutomationRunStillInactive(run); err != nil {
 			return err
-		} else if block != automationRunCleanupOK {
-			return errAutomaticWorktreeCleanupPreempted
 		}
 		if _, err := os.Stat(resolved.Worktree); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
@@ -207,8 +215,8 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 			}
 			return err
 		}
-		// Foreground work waits on the gate held here, so never queue behind deferred work.
-		return d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskAutomation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
+		gatedDelete := gitTask{Kind: gitTaskAutomation, Lane: gitInteractive}
+		return d.gitExecution().Run(protection.Context(), gatedDelete, func(ctx context.Context, client *git.Client) error {
 			return client.DeleteWorktree(ctx, resolved.MainRepository, resolved.Worktree, false)
 		})
 	})

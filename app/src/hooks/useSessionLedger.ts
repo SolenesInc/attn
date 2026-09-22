@@ -170,9 +170,9 @@ function applyUpdateToResolutions(
   }
   const entry = update.entry;
   const next = { ...resolutions };
-  // Entries keep a listed row even when its close falls outside the range, so it must still settle.
-  if (filters.scope === 'live' || !entry.closed_at) delete next[entry.id];
-  else next[entry.id] = { closedAt: entry.closed_at, state: 'pending' };
+  const closedAtAwaitingVerdict = filters.scope === 'live' ? undefined : entry.closed_at;
+  if (closedAtAwaitingVerdict) next[entry.id] = { closedAt: closedAtAwaitingVerdict, state: 'pending' };
+  else delete next[entry.id];
   return next;
 }
 
@@ -320,7 +320,6 @@ export function useSessionLedger({
       .catch((failure: Error) => {
         if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
         setError(failure.message);
-        // No verdict is coming for these rows; a pending row would spin until reload.
         setResolutions((current) => failPendingResolutions(current, failure.message));
       })
       .finally(() => {

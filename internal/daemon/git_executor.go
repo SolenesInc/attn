@@ -253,7 +253,6 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 		}
 		<-item.admitted
 	}
-	// Close can drain the queue between ctx.Done and cancelQueued; such an item never ran.
 	if item.err != nil {
 		return item.err
 	}

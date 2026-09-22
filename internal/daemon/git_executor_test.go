@@ -288,8 +288,6 @@ func TestGitExecutorShutdownCancelsRunningAndQueuedWork(t *testing.T) {
 	}
 }
 
-// closeOnCauseContext runs onCause the first time context.Cause inspects it after
-// cancellation, landing Close between Run choosing ctx.Done and cancelQueued.
 type closeOnCauseContext struct {
 	context.Context
 	once    sync.Once
