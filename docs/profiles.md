@@ -3,10 +3,10 @@
 A profile isolates data, socket, ports, app, and bundle id.
 
 ```bash
-eval "$(attn profile-env <name>)"   # fish: attn profile-env <name> | source
+eval "$(attn profile-env <name>)"   # fish: attn profile-env --fish <name> | source
 attn profile                        # show the selection
 attn profile list --json
-eval "$(attn profile-env --unset)"
+eval "$(attn profile-env --unset)"  # fish: attn profile-env --fish --unset | source
 ```
 
 Tooling reads paths from `attn profile resolve --field <field>` instead of
