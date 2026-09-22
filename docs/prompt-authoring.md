@@ -48,12 +48,10 @@ Save representative inputs in `internal/prompts/scenarios/ID.json`. `values` sup
 scenario.
 
 ```sh
-go run ./cmd/prompt-editor check
 go run ./cmd/prompt-editor compare --base next --json
-go run ./cmd/prompt-editor context crew/priming --include crew/wake --base next --json
 ```
 
-Add `--scenario ID` to narrow `check` or `compare`. Comparison defaults to merge-base;
+Add `--scenario ID` to narrow `compare`. Comparison defaults to merge-base;
 use `--mode tip` for the selected revision itself.
 
 Rerun `context` after edits and read the full results against the intended behavior.
@@ -124,13 +122,9 @@ scenario, source and base with `draft focus` before capturing it. The review
 opens that frozen selection. Existing draft tabs follow navigation only when the
 user enables **Follow shared focus**. Read comments with `review get` or `watch`.
 
-## Verify before finishing
+## Verify
 
-- Run `make check-prompts`, `go test ./internal/prompts` and tests for affected
-  runtime adapters. Check representative scenarios and their base comparisons.
-- Update [compatibility fixtures](../internal/prompttest/README.md) only for
-  intentional wording changes; never regenerate them to make tests pass.
-- For delivery changes, run the affected packaged-app scenarios, including
-  `prompt-composition`. Rendering tests do not verify delivery.
-- For editor changes, run `make test-prompt-editor`. It needs app dependencies
-  and Playwright Chromium.
+CI runs the catalog and scenario checks, prompt and editor tests, and the
+`prompt-composition` delivery scenario. Locally, `compare` and `context` are
+the review. Update [compatibility fixtures](../internal/prompttest/README.md)
+only for intentional wording changes; never regenerate them to make tests pass.

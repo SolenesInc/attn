@@ -11,7 +11,7 @@ change: Auto-settle advances to the next agent with an outstanding turn.
 ```
 
 Describe what users observe; invisible work uses `kind: internal`. Optional
-fields: `symptom`, `notes`. Validate with `go run ./cmd/changelog-check`.
+fields: `symptom`, `notes`. CI validates fragments.
 
 ## Release
 

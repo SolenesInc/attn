@@ -47,8 +47,9 @@ Lifecycle, protocol, PTY, background-runner, timing, and other app-observable
 changes need green packaged-app CI on the PR head, with scenarios covering the
 change. Report missing coverage and ask before merging.
 
-Reproduce CI failures locally in a non-production profile. Verify with the
-installed build, not whatever `attn` is on `PATH`:
+CI runs the scenario matrix; run scenarios locally only to reproduce a CI
+failure or develop a scenario, in a non-production profile. Check the installed
+build first, not whatever `attn` is on `PATH`:
 
 ```bash
 "$(./attn profile resolve --field appDaemon)" preflight
