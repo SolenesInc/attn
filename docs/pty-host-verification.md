@@ -88,22 +88,6 @@ it, a test verifies that the current daemon recovers, resizes, feeds, and
 removes its sessions, and rejects that build as a new default without disturbing
 them. Running it in CI is tracked in #315.
 
-## Host lifecycle tests
-
-`internal/ptybackend` covers the lifecycle with a real host and a 200 ms idle
-timer: a session receives input, closes, the host retires, and a relaunched
-host accepts input and resize. The original code failed this sequence with
-`daemon identity or control token mismatch`. Other tests cover a bundle
-replaced after the daemon started, promotion while sessions keep their host and
-child PIDs and a live output stream, a failing build with one notification and
-no recheck after restart, keystrokes reaching the child in order across a daemon
-replacement, and an abandoned validation terminal removed at recovery. Unit
-tests against a fake host refuse stale credentials for a replacement host and
-never resend input the host already received; others keep an interrupted check
-from counting as a failure, refuse a rejected build when nothing else passed,
-and distrust a last-known-good build checked in another environment. Each of
-these unit tests fails when its fix is removed.
-
 Profile cleanup authenticates each live host, verifies its PID, and asks it to
 stop its children before deleting profile data. The live cleanup test covers two
 host builds with four PTYs, refuses forged tokens and mismatched PIDs, and keeps
