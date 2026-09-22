@@ -123,8 +123,10 @@ publish-ghostty-vt-wasm:
 	./scripts/publish-ghostty-vt-wasm.sh
 
 git-hooks:
-	@git rev-parse --git-dir >/dev/null 2>&1 || exit 0; \
-	git config --get core.hooksPath >/dev/null || git config core.hooksPath .githooks
+	@hooks="$$(git rev-parse --git-common-dir 2>/dev/null)/hooks" || exit 0; \
+	git config --get core.hooksPath >/dev/null && exit 0; \
+	ls "$$hooks" 2>/dev/null | grep -qv '\.sample$$' && exit 0; \
+	git config core.hooksPath .githooks || [ "$$(git config --get core.hooksPath)" = .githooks ]
 
 build: git-hooks generate-prompts $(NATIVE_VT_DEP)
 	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) $(BUILD_DIR)
