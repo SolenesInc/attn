@@ -127,17 +127,8 @@ const (
 )
 
 func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automationRunCleanupBlock, error) {
-	if run.SessionID != "" && d.store.Get(run.SessionID) != nil {
-		return automationRunCleanupLiveSession, nil
-	}
-	if run.SessionID != "" {
-		bound, err := d.store.AutomationSessionHasContinuityBinding(run.SessionID)
-		if err != nil {
-			return automationRunCleanupOK, err
-		}
-		if bound {
-			return automationRunCleanupBoundThread, nil
-		}
+	if block, err := d.automationRunActivityBlock(run); err != nil || block != automationRunCleanupOK {
+		return block, err
 	}
 	worktree, err := automationRunWorktreePath(run)
 	if err != nil {
@@ -160,6 +151,23 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 	}
 	if !clean {
 		return automationRunCleanupDirtyWorktree, nil
+	}
+	return automationRunCleanupOK, nil
+}
+
+func (d *Daemon) automationRunActivityBlock(run store.AutomationRun) (automationRunCleanupBlock, error) {
+	if run.SessionID == "" {
+		return automationRunCleanupOK, nil
+	}
+	if d.store.Get(run.SessionID) != nil {
+		return automationRunCleanupLiveSession, nil
+	}
+	bound, err := d.store.AutomationSessionHasContinuityBinding(run.SessionID)
+	if err != nil {
+		return automationRunCleanupOK, err
+	}
+	if bound {
+		return automationRunCleanupBoundThread, nil
 	}
 	return automationRunCleanupOK, nil
 }
@@ -187,6 +195,12 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 		return nil
 	}
 	return d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(protection automaticWorktreeCleanupProtection) error {
+		// The safety check ran before the gate; a reopen since then may have revived the run.
+		if block, err := d.automationRunActivityBlock(run); err != nil {
+			return err
+		} else if block != automationRunCleanupOK {
+			return errAutomaticWorktreeCleanupPreempted
+		}
 		if _, err := os.Stat(resolved.Worktree); err != nil {
 			if errors.Is(err, os.ErrNotExist) {
 				return nil

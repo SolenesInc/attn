@@ -61,6 +61,9 @@ type wsClient struct {
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
+	// Guarded by the reopen broker's mutex; set once the client is removed from it.
+	reopenRemoved bool
+
 	gitStatusDir        string
 	gitStatusStop       chan struct{}
 	gitStatusRefresh    chan gitStatusRefreshRequest

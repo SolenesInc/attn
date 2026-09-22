@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -205,7 +206,7 @@ func TestReopenBrokerCoalescesAndCancelsAfterTheFinalInterest(t *testing.T) {
 	}
 }
 
-func TestReopenBrokerFailuresSettleAndStaleGenerationsStaySilent(t *testing.T) {
+func TestReopenBrokerFailuresAndStaleGenerationsSettle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	synctest.Test(t, func(t *testing.T) {
 		broker := installTestReopenBroker(t, d, 2)
@@ -220,16 +221,35 @@ func TestReopenBrokerFailuresSettleAndStaleGenerationsStaySilent(t *testing.T) {
 		}
 		broker.CommitPage(broker.BeginPage(client, false), []reopenKey{failed, stale})
 		synctest.Wait()
-		resolved := nextReopenResolution(t, client)
-		if resolved.Success || protocol.Deref(resolved.Error) != "git unavailable" {
-			t.Fatalf("resolved=%+v, want terminal failure", resolved)
+		settled := map[string]protocol.SessionReopenResolvedMessage{}
+		for len(client.send) > 0 {
+			resolved := nextReopenResolution(t, client)
+			settled[resolved.SessionID] = resolved
 		}
-		select {
-		case message := <-client.send:
-			t.Fatalf("stale generation emitted %s", message.payload)
-		default:
+		if got := settled["failed"]; got.Success || protocol.Deref(got.Error) != "git unavailable" {
+			t.Fatalf("failed=%+v, want terminal failure", got)
+		}
+		if got, ok := settled["stale"]; !ok || got.Success || got.ClosedAt != stale.ClosedAt || !strings.Contains(protocol.Deref(got.Error), "reload") {
+			t.Fatalf("stale=%+v, want a terminal failure for the listed generation", got)
 		}
 	})
+}
+
+func TestReopenBrokerIgnoresAPageFromARemovedClient(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	broker := installTestReopenBroker(t, d, 1)
+	client := newWorkspaceProtocolTestClient()
+	d.removeSessionReopenClient(client)
+
+	broker.CommitPage(broker.BeginPage(client, false), []reopenKey{{SessionID: "late", ClosedAt: "late-close"}})
+
+	broker.mu.Lock()
+	_, registered := broker.clients[client]
+	jobs := len(broker.jobs)
+	broker.mu.Unlock()
+	if registered || jobs != 0 {
+		t.Fatalf("removed client registered=%v with %d jobs; a list buffered at disconnect leaks it", registered, jobs)
+	}
 }
 
 func TestSessionCloseProjectsTheRowBeforeStartingResolution(t *testing.T) {

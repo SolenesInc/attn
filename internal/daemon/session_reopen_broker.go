@@ -105,6 +105,10 @@ func newSessionReopenBroker(daemon *Daemon, workers int) *sessionReopenBroker {
 func (b *sessionReopenBroker) BeginPage(client *wsClient, appendPage bool) reopenPageIntent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if client.reopenRemoved {
+		// A list still buffered at disconnect must not re-register the client.
+		return reopenPageIntent{Client: client}
+	}
 	state := b.clients[client]
 	if state == nil {
 		state = &reopenBrokerClient{keys: make(map[reopenKey]struct{})}
@@ -157,6 +161,7 @@ func (b *sessionReopenBroker) ResolveForClose(key reopenKey) {
 func (b *sessionReopenBroker) RemoveClient(client *wsClient) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	client.reopenRemoved = true
 	state := b.clients[client]
 	if state == nil {
 		return
@@ -271,7 +276,7 @@ func (b *sessionReopenBroker) finish(job *reopenBrokerJob, verdict sessionReopen
 	b.mu.Unlock()
 	job.cancel()
 
-	if errors.Is(resolveErr, errStaleReopenGeneration) || errors.Is(resolveErr, context.Canceled) {
+	if errors.Is(resolveErr, context.Canceled) {
 		return
 	}
 	message := protocol.SessionReopenResolvedMessage{
@@ -280,7 +285,10 @@ func (b *sessionReopenBroker) finish(job *reopenBrokerJob, verdict sessionReopen
 		ClosedAt:  job.key.ClosedAt,
 		Success:   resolveErr == nil,
 	}
-	if resolveErr != nil {
+	// Every listed generation gets a terminal event, or its row stays pending.
+	if errors.Is(resolveErr, errStaleReopenGeneration) {
+		message.Error = protocol.Ptr("the session changed after this row was listed; reload to see it")
+	} else if resolveErr != nil {
 		message.Error = protocol.Ptr(resolveErr.Error())
 	} else {
 		message.Reopen = verdict.toProtocol()

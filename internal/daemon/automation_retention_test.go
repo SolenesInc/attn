@@ -324,3 +324,40 @@ func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *te
 		t.Fatalf("worktree still present: %v", err)
 	}
 }
+
+func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
+	root := t.TempDir()
+	mainRepo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGitDaemon(t, mainRepo, "init")
+	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	worktree := filepath.Join(root, "repo--auto")
+	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/auto", worktree)
+
+	s := store.New()
+	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	def, err := d.automationApply(fmt.Sprintf(manualAutomationYAML, t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	run := claimTerminalAutomationRun(t, s, def, "race-1", old, automationResolvedLocationJSON(t, mainRepo, worktree))
+	if block, err := d.automationRunCleanupSafety(*run); err != nil || block != automationRunCleanupOK {
+		t.Fatalf("safety = %v err=%v, want OK", block, err)
+	}
+
+	// A reopen lands between the safety check and the gated removal.
+	s.Add(&protocol.Session{
+		ID: run.SessionID, Label: "auto", Agent: string(protocol.SessionAgentCodex), Directory: worktree, State: protocol.SessionStateWorking,
+		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
+	})
+
+	if err := d.removeAutomationRunWorktree(*run); !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		t.Fatalf("remove err=%v, want preempted by the revived session", err)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("retention deleted the worktree of live session %s: %v", run.SessionID, err)
+	}
+}
