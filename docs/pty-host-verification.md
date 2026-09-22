@@ -215,28 +215,10 @@ Detached/attached instruction medians changed by less than 1%. Idle samples used
 337.91/471.29 ms after, but a single pair does not establish a speedup. These
 checks support roughly unchanged resource use, not an optimization claim.
 
-## Linux optimization round
+## Linux measurements
 
 On Linux amd64 with four CPUs, the current host used 7.2–7.7 MiB PSS with 32
 empty PTYs and about 16 MiB after the floods, with 37 threads (103 with 32
 subscribers). An 8 MiB flood cost 320 ms of host CPU detached and 390 ms
 attached; two idle seconds cost less than one 10 ms tick. The last host before
 this change measured the same within noise.
-
-Kept after alternating measurements:
-
-- Idle shells no longer repeat an unchanged prompt state every second. The
-  daemon already ignored those repeats. With 16 idle shells, host CPU fell from
-  3.2 to 1.1 ms and daemon CPU from 5.8 to 1.9 ms per 10 s.
-- The daemon decodes each host frame once instead of three times. Decoding an
-  8 MiB attached stream fell from 74.5 to 41.1 ms, with 5x fewer allocations;
-  small frames decode 3.5x faster.
-- Output bytes decode straight from JSON, cutting 27% of the allocated bytes
-  per attached stream with an unchanged wire format.
-
-Rejected: a single malloc arena saved 2 MiB PSS at 32 PTYs but cost 3–7% flood
-CPU and wall time. Scanning for terminal queries only from escape bytes cut
-detached flood CPU from 320 to 60 ms but again disconnected attached streams
-when the 256-event subscriber queue filled. Bounded backpressure kept every
-attached transfer but cost 10–16% flood CPU on its own; the pair has not been
-measured together.
