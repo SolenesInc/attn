@@ -65,7 +65,6 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 	if rejection.FallbackID != "" {
 		impact = "New terminals keep using the last shared host build that passed."
 	}
-	d.logf("shared PTY host %s (%s) failed validation: %s", rejection.Source, rejection.ArtifactID, rejection.Reason)
 	if d.store == nil {
 		return
 	}
