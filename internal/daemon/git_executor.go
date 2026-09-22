@@ -247,14 +247,15 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 
 	select {
 	case <-item.admitted:
-		if item.err != nil {
-			return item.err
-		}
 	case <-ctx.Done():
 		if e.cancelQueued(item, context.Cause(ctx)) {
 			return context.Cause(ctx)
 		}
 		<-item.admitted
+	}
+	// Close can drain the queue between ctx.Done and cancelQueued; such an item never ran.
+	if item.err != nil {
+		return item.err
 	}
 
 	started := time.Now()

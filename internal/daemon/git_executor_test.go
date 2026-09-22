@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -284,6 +285,49 @@ func TestGitExecutorShutdownCancelsRunningAndQueuedWork(t *testing.T) {
 	}
 	if err := <-queued; !errors.Is(err, shutdown) {
 		t.Fatalf("queued shutdown error=%v", err)
+	}
+}
+
+// closeOnCauseContext runs onCause the first time context.Cause inspects it after
+// cancellation, landing Close between Run choosing ctx.Done and cancelQueued.
+type closeOnCauseContext struct {
+	context.Context
+	once    sync.Once
+	onCause func()
+}
+
+func (c *closeOnCauseContext) Value(key any) any {
+	if c.Err() != nil {
+		c.once.Do(c.onCause)
+	}
+	return c.Context.Value(key)
+}
+
+func TestGitExecutorShutdownRacingQueuedCancellationReturnsTheShutdown(t *testing.T) {
+	executor := testGitExecutor(t, testGitConfig())
+	started := make(chan string, 2)
+	release := make(chan struct{})
+	defer close(release)
+	runBlockedGitTask(executor, gitTask{Kind: gitTaskStatus}, started, release, "one")
+	runBlockedGitTask(executor, gitTask{Kind: gitTaskBranch}, started, release, "two")
+	<-started
+	<-started
+
+	shutdown := errors.New("daemon stopping")
+	parent, cancel := context.WithCancel(context.Background())
+	ctx := &closeOnCauseContext{Context: parent, onCause: func() { executor.Close(shutdown) }}
+	queuedSeen := make(chan gitTask, 1)
+	executor.enqueueObserver = func(task gitTask) { queuedSeen <- task }
+	queued := make(chan error, 1)
+	go func() {
+		queued <- executor.Run(ctx, gitTask{Kind: gitTaskFileDiff}, func(context.Context, *attngit.Client) error {
+			return errors.New("queued callback ran during shutdown")
+		})
+	}()
+	<-queuedSeen
+	cancel()
+	if err := <-queued; !errors.Is(err, shutdown) {
+		t.Fatalf("queued error=%v, want the shutdown cause", err)
 	}
 }
 
