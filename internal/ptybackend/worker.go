@@ -2594,30 +2594,30 @@ func readMatchingResponse(dec *json.Decoder, reqID string) (ptyworker.ResponseEn
 	}
 }
 
+type workerFrame struct {
+	ptyworker.EventEnvelope
+	ID     string              `json:"id"`
+	OK     bool                `json:"ok"`
+	Result json.RawMessage     `json:"result,omitempty"`
+	Error  *ptyworker.RPCError `json:"error,omitempty"`
+}
+
 func readFrame(dec *json.Decoder) (string, ptyworker.ResponseEnvelope, ptyworker.EventEnvelope, error) {
-	var raw map[string]json.RawMessage
-	if err := dec.Decode(&raw); err != nil {
+	var frame workerFrame
+	if err := dec.Decode(&frame); err != nil {
 		return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
 	}
-	var typ string
-	if t, ok := raw["type"]; ok {
-		_ = json.Unmarshal(t, &typ)
-	}
-	switch typ {
+	switch frame.Type {
 	case "res":
-		data, _ := json.Marshal(raw)
-		var res ptyworker.ResponseEnvelope
-		if err := json.Unmarshal(data, &res); err != nil {
-			return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
-		}
-		return "res", res, ptyworker.EventEnvelope{}, nil
+		return "res", ptyworker.ResponseEnvelope{
+			Type:   frame.Type,
+			ID:     frame.ID,
+			OK:     frame.OK,
+			Result: frame.Result,
+			Error:  frame.Error,
+		}, ptyworker.EventEnvelope{}, nil
 	case "evt":
-		data, _ := json.Marshal(raw)
-		var evt ptyworker.EventEnvelope
-		if err := json.Unmarshal(data, &evt); err != nil {
-			return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
-		}
-		return "evt", ptyworker.ResponseEnvelope{}, evt, nil
+		return "evt", ptyworker.ResponseEnvelope{}, frame.EventEnvelope, nil
 	default:
 		return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, errors.New("unknown frame type")
 	}
@@ -2629,15 +2629,11 @@ func convertWorkerEvent(evt ptyworker.EventEnvelope) (OutputEvent, bool) {
 		if evt.Data == nil {
 			return OutputEvent{}, false
 		}
-		data, err := base64.StdEncoding.DecodeString(*evt.Data)
-		if err != nil {
-			return OutputEvent{}, false
-		}
 		seq := uint32(0)
 		if evt.Seq != nil {
 			seq = *evt.Seq
 		}
-		return OutputEvent{Kind: OutputEventKindOutput, Data: data, Seq: seq}, true
+		return OutputEvent{Kind: OutputEventKindOutput, Data: evt.Data, Seq: seq}, true
 	case ptyworker.EventDesync:
 		reason := ""
 		if evt.Reason != nil {

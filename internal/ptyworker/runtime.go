@@ -883,13 +883,12 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 					previewWorkerBytesForLog(data),
 				)
 			}
-			encoded := base64.StdEncoding.EncodeToString(data)
 			ok := c.sendEvent(EventEnvelope{
 				Type:      "evt",
 				Event:     EventOutput,
 				SessionID: c.runtime.cfg.SessionID,
 				Seq:       &seq,
-				Data:      &encoded,
+				Data:      data,
 			})
 			if !ok {
 				c.runtime.logf(

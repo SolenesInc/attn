@@ -46,3 +46,15 @@ func TestReadMatchingResponseStopsOnInvalidOrEndedStream(t *testing.T) {
 		})
 	}
 }
+
+func TestReadFrameDecodesOutputEvent(t *testing.T) {
+	dec := json.NewDecoder(strings.NewReader(`{"type":"evt","event":"output","session_id":"s1","seq":7,"data":"aGk="}`))
+	kind, _, evt, err := readFrame(dec)
+	if err != nil || kind != "evt" || evt.SessionID != "s1" {
+		t.Fatalf("kind = %q, event = %+v, err = %v", kind, evt, err)
+	}
+	out, ok := convertWorkerEvent(evt)
+	if !ok || out.Seq != 7 || string(out.Data) != "hi" {
+		t.Fatalf("output = %+v, ok = %v", out, ok)
+	}
+}
