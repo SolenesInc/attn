@@ -147,14 +147,10 @@ func (d *Daemon) reopenVerdictsForPage(
 			closed = append(closed, i)
 		}
 	}
-	verdicts := make([]protocol.SessionReopenEntry, len(closed))
+	verdicts := make([]*protocol.SessionReopenEntry, len(closed))
 	resolver := sessionReopenResolver{daemon: d}
 	gitView := d.scheduledReopenGit(gitInteractive)
-	resolveCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	var wg sync.WaitGroup
-	var firstErr error
-	var errOnce sync.Once
 	workers := make(chan struct{}, productionSessionReopenWorkers)
 	for resultIndex, entryIndex := range closed {
 		resultIndex, entry := resultIndex, entries[entryIndex]
@@ -164,28 +160,32 @@ func (d *Daemon) reopenVerdictsForPage(
 			select {
 			case workers <- struct{}{}:
 				defer func() { <-workers }()
-			case <-resolveCtx.Done():
+			case <-ctx.Done():
 				return
 			}
-			verdict, err := resolver.ResolveEntry(resolveCtx, entry, gitView)
+			verdict, err := resolver.ResolveEntry(ctx, entry, gitView)
 			if err != nil {
-				errOnce.Do(func() {
-					firstErr = fmt.Errorf("resolve reopen eligibility for session %s: %w", entry.ID, err)
-					cancel()
-				})
+				d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
 				return
 			}
-			verdicts[resultIndex] = protocol.SessionReopenEntry{
+			verdicts[resultIndex] = &protocol.SessionReopenEntry{
 				SessionID: entry.ID,
 				Reopen:    *verdict.toProtocol(),
 			}
 		}()
 	}
 	wg.Wait()
-	if firstErr != nil {
-		return nil, firstErr
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
-	return verdicts, nil
+	// A row whose inspection failed carries no verdict; one bad repository must not hide the page.
+	resolved := make([]protocol.SessionReopenEntry, 0, len(verdicts))
+	for _, verdict := range verdicts {
+		if verdict != nil {
+			resolved = append(resolved, *verdict)
+		}
+	}
+	return resolved, nil
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
@@ -199,10 +199,10 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		context.Background(), *entry, d.scheduledReopenGit(gitInteractive),
 	)
 	if err != nil {
-		d.sendError(conn, fmt.Sprintf("resolve reopen eligibility for session %s: %v", entry.ID, err))
-		return
+		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
+	} else {
+		result.Reopen = verdict.toProtocol()
 	}
-	result.Reopen = verdict.toProtocol()
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionShowResult: result})
 }
 

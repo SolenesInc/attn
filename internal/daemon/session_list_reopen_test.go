@@ -122,6 +122,34 @@ func TestAListedVerdictIsTheOneAShowWouldGive(t *testing.T) {
 	}
 }
 
+func TestARowWhoseRepositoryIsNoLongerGitStillListsAndShows(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	t.Cleanup(d.stopEventBus)
+	repo, _, root := newReopenRepo(t)
+	closeWorktreeRow(t, d, repo, root, "healthy", "feat/healthy")
+	writeCodexRolloutFixture(t, "conv-not-git")
+	closeReopenSession(t, d, reopenSession{
+		ID: "not-git", Directory: filepath.Join(t.TempDir(), "missing"), Branch: "feat/not-git",
+		Repo: t.TempDir(), Agent: "codex", Resume: "conv-not-git",
+	})
+
+	page := sessionListResult(t, d, protocol.SessionListMessage{
+		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
+	})
+	if len(page.Entries) != 2 {
+		t.Fatalf("the page lists %d rows, want both", len(page.Entries))
+	}
+	listedVerdict(t, page, "healthy")
+	for _, entry := range page.Reopen {
+		if entry.SessionID == "not-git" {
+			t.Fatalf("the uninspectable row carries a verdict: %+v", entry.Reopen)
+		}
+	}
+	if shown := sessionShowResult(t, d, "not-git"); shown.Entry.ID != "not-git" || shown.Reopen != nil {
+		t.Fatalf("session_show = %+v, want the entry without a verdict", shown)
+	}
+}
+
 func TestAPageWithoutTheAskCarriesNoVerdicts(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	t.Cleanup(d.stopEventBus)
