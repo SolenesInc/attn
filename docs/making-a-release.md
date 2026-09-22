@@ -24,7 +24,9 @@ From a clean, current `next` with green Acceptance:
 
 This opens a frozen `release/vX.Y.Z` PR to `main`. Merge it once `PR gate` and
 `App acceptance` are green. `main` then earns Acceptance, gets tagged, and
-publishes. If `main` moves before merging, prepare the candidate again.
+publishes. A `--hold` candidate stops after Acceptance: no tag, no release, and
+that version is never published. If `main` moves before merging, prepare the
+candidate again.
 
 If the automated app acceptance cannot cover the candidate, record a manual
 receipt with the command printed in the candidate PR.

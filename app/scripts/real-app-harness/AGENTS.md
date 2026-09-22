@@ -30,7 +30,9 @@ and run commands from the repository root.
 - Scenarios run the mock agent, not real models. Script its turns with
   `writeMockAgentFixture` in the session cwd before launch; no fixture means a
   silent agent. Real providers need `allowRealAgents` and a reason.
-- The agent tripwire fails any scenario that runs a real agent or headless model task.
+- The agent tripwire fails a scenario that runs a real agent or headless model
+  task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
+  every agent and turns headless tasks back on.
 - Non-production runs talk to the mock GitHub (`scripts/mock-github.mjs`), never
   github.com. Production runs keep the real github.com.
   Seed custom PRs through `/__control/seed`.
