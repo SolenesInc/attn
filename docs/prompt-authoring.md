@@ -5,7 +5,7 @@ We embed all prompts into the binary, and have an editor and workflow for making
 
 ## Assess the instructions before editing
 
-Follow the ../cmd/prompt-editor/authoring.md for every
+Follow the workflow in `cmd/prompt-editor/authoring.md` for every
 prompt change. `context` returns that workflow with the complete relevant
 instructions. Start from an event, source, scenario or shared draft:
 
@@ -128,5 +128,9 @@ user enables **Follow shared focus**. Read comments with `review get` or `watch`
 
 - Run `make check-prompts`, `go test ./internal/prompts` and tests for affected
   runtime adapters. Check representative scenarios and their base comparisons.
+- Update [compatibility fixtures](../internal/prompttest/README.md) only for
+  intentional wording changes; never regenerate them to make tests pass.
+- For delivery changes, run the affected packaged-app scenarios, including
+  `prompt-composition`. Rendering tests do not verify delivery.
 - For editor changes, run `make test-prompt-editor`. It needs app dependencies
   and Playwright Chromium.

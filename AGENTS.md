@@ -31,7 +31,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Never kill by name, pattern, or worktree path. Kill only a PID captured at
   spawn, or a port/socket owner confirmed by working directory.
 - Production ~/.attn is read-only. Copy data out; never run a test daemon
-  against it, open it read-write, or clean it. 
+  against it, open it read-write, or clean it.
 - Using attn CLI to interact with ~/.attn is allowed.
 - Non-production builds, installs, launches, and restarts are pre-authorized.
   Production `make`, `make install`, and `make install-daemon` need Victor's
@@ -87,14 +87,14 @@ satisfy the full requirement?
   reply with the reason.
 - Use `attn pr watch <url> --mode codex` after pushing a PR to wait for CI/review. Do not loop for updates.
 - When addressing comments, avoid patchwork fixes. Understand the root cause of the issue captured
-  by the reviewer, and address it holistic, if necessary by refactoring the system.
+  by the reviewer, and address it holistically, if necessary by refactoring the system.
 
 ## Commands and verification
 
 - `make test`: Go tests
 - `make test-frontend`
 - `make test-e2e`: Browser tests
-- `make test-scripts`: Shells scripts tests
+- `make test-scripts`: Shell script tests
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
 
@@ -104,7 +104,7 @@ satisfy the full requirement?
 
 - Only write high value unit tests, and for critical parts of the codebase. Low value unit tests are not necessary. Do not write tests for script helpers or test helpers.
 - Prefer fast integration tests.
-- Do not copy production code into tests or test compile-time guarantees. 
+- Do not copy production code into tests or test compile-time guarantees.
 - Use the [test contracts](docs/maintainer-contracts.md#test-safety)
 when choosing time, property, or network-failure test helpers.
 
@@ -136,7 +136,7 @@ Read the relevant entry when the task touches its subject. When changing or work
 - Changelog fragments, releases, hotfixes, or syncing `main` into `next` => docs/making-a-release.md
 - Installing, launching, or verifying profiles => docs/profiles.md
 - Frontend code or shortcuts => app/AGENTS.md
-- Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md         
+- Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md
 - Pi driver or auto-mode permissions  => plugins/attn-pi/AGENTS.md
 
 ## Diagnostics
@@ -146,4 +146,4 @@ Read the relevant entry when the task touches its subject. When changing or work
 - Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
-- Restarting the app or daemon have no impact on the underlying agents.
+- Restarting the app or daemon has no impact on the underlying agents.
