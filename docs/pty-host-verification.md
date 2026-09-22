@@ -163,7 +163,10 @@ The fixture waits for a real terminal status reply before acknowledging a
 transfer. Attached transfers additionally require the completion marker and
 exactly 8,388,608 output bytes; a disconnect fails the experiment.
 
-Measurements below are from macOS 26.6.2 on an Apple M5 Max. Physical footprint,
+On Linux the probe reads proportional set size, resident size, and CPU clock
+ticks from `/proc`; it reports no instruction counts, and CPU time has the
+kernel's tick resolution. Measurements below are from macOS 26.6.2 on an Apple
+M5 Max. Physical footprint,
 resident size, CPU counters, instructions, and thread counts come from `libproc`.
 CPU time is host user plus system time, converted from Mach ticks with
 `mach_timebase_info`, consistent with the counters populated by
