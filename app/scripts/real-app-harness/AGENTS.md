@@ -23,8 +23,10 @@ and run commands from the repository root.
 - New scenario files get a `scenarioCatalog.mjs` entry. After a shape change,
   update its weight in `scenario-durations.json` from a green run.
 - Drive the app like a user, through `createWindowDriver({ appPath, client })`.
-  It never takes focus or moves the pointer; a scenario that needs real focus
-  calls `driver.activateApp()` and says why.
+  On macOS it sends input without taking focus or moving the pointer, except
+  `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
+  pointer. A scenario that needs real focus calls `driver.activateApp()` and
+  says why.
 - Scenarios run the mock agent, not real models. Script its turns with
   `writeMockAgentFixture` in the session cwd before launch; no fixture means a
   silent agent. Real providers need `allowRealAgents` and a reason.

@@ -28,8 +28,9 @@ Linux VM, see [Local Linux runner](linux-runner.md).
 
 ## GitHub polling
 
-Named profiles do not poll GitHub, so they cannot spend production's API budget.
-To test GitHub features, start the daemon with `ATTN_GITHUB_POLLING=on`.
+Named profiles do not poll GitHub with your `gh` credentials, so they cannot
+spend production's API budget. To test against real GitHub, start the daemon
+with `ATTN_GITHUB_POLLING=on`; harness runs use the mock GitHub without it.
 
 ## Iterate on the pi plugin
 
