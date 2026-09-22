@@ -84,14 +84,12 @@ const (
 	deferredRecoveryRetryInterval = 10 * time.Second
 	deferredRecoveryRPCTimeout    = 5 * time.Second
 	workerStartupProbeTimeout     = 20 * time.Second
-	sharedHostValidationTimeout   = 5 * time.Second
 
 	warnPersistenceDegraded       = "persistence_degraded"
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
 	warnPTYBackendFallback        = "pty_backend_fallback"
-	warnPTYHostArtifactRejected   = "pty_host_artifact_rejected"
 	warnPTYBackendUnsupported     = "pty_backend_unsupported"
 	warnGHNotInstalled            = "gh_not_installed"
 	warnGHVersionTooOld           = "gh_version_too_old"
@@ -1009,7 +1007,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
-		d.validateSharedPTYHostAfterRecovery()
+		go d.validateSharedPTYHostAfterRecovery()
 		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()

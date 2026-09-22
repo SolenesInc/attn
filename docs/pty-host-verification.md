@@ -24,11 +24,12 @@ recorded, so ordinary restarts do not repeat the check. A build that passes
 becomes the last-known-good build.
 
 At startup the daemon recovers existing sessions first, then checks a newly
-installed build before clients receive their first state. Until it passes, new
+installed build in the background. Until it passes, new
 sessions use the last-known-good build, or Go when none has passed yet, as on
 the first start after this change. A build that fails is not checked again
-until it changes or the setting is turned on again, and one warning names it.
-A check cut short by its five-second limit or daemon shutdown is not a failure;
+until it changes or the setting is turned on again, and one in-app
+notification names it. A check cut short by its time limit or daemon shutdown
+is not a failure;
 the next start repeats it. A missing or failing bundle leaves new sessions on
 the last-known-good build; with none, they use Go and Settings reports the
 fallback. Validation terminals left behind by a daemon exit are removed at the
@@ -67,8 +68,8 @@ temporary data directories. No installed daemon or real provider is involved.
    build passes its check, start another agent. Verify that it uses a different
    host PID while every earlier agent and worker keeps its PID.
 6. Resize the old shell. Restart with a build that fails its check: exactly one
-   warning names it and a new agent uses the last-known-good host. Restart with
-   the same build: it is not checked again and no warning appears.
+   notification names it and a new agent uses the last-known-good host. Restart with
+   the same build: it is not checked again and no second notification appears.
 7. Restart with the host executable missing. A new agent still uses the
    last-known-good host; with the setting off, the next launch uses Go. Every
    earlier session keeps working. Close every pane.
@@ -94,8 +95,8 @@ timer: a session receives input, closes, the host retires, and a relaunched
 host accepts input and resize. The original code failed this sequence with
 `daemon identity or control token mismatch`. Other tests cover a bundle
 replaced after the daemon started, promotion while sessions keep their host and
-child PIDs and a live output stream, a failing build with one warning and no
-recheck after restart, keystrokes reaching the child in order across a daemon
+child PIDs and a live output stream, a failing build with one notification and
+no recheck after restart, keystrokes reaching the child in order across a daemon
 replacement, and an abandoned validation terminal removed at recovery. Unit
 tests against a fake host refuse stale credentials for a replacement host and
 never resend input the host already received; others keep an interrupted check

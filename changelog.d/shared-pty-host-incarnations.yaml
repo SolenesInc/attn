@@ -13,5 +13,5 @@ notes: >-
   becomes the default only after a throwaway terminal round trip passes; until
   then, and if it fails, new terminals use the last build that passed, or
   dedicated workers when none has passed yet, such as on the first start after
-  this update. One warning names a rejected build. Keystrokes are never sent
+  this update. One in-app notification names a rejected build. Keystrokes are never sent
   twice when a host connection drops mid-request.

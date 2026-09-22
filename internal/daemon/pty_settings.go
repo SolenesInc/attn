@@ -6,8 +6,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) setSharedPTYHostEnabled(enabled bool) error {
@@ -56,15 +58,34 @@ func (d *Daemon) newSharedPTYHost() (*ptybackend.WorkerBackend, error) {
 	})
 }
 
+const notificationKindPTYHostRejected = "pty_host_rejected"
+
 func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifactRejection) {
-	outcome := "Shared terminals are unavailable until a working host is installed."
+	impact := "New terminals keep using dedicated workers until a working shared host is installed."
 	if rejection.FallbackID != "" {
-		outcome = "New terminals keep using the last-known-good shared host."
+		impact = "New terminals keep using the last shared host build that passed."
 	}
-	d.addWarning(warnPTYHostArtifactRejected, fmt.Sprintf(
-		"Shared PTY host %s (%s) failed validation: %s. %s",
-		rejection.Source, rejection.ArtifactID, rejection.Reason, outcome,
-	))
+	d.logf("shared PTY host %s (%s) failed validation: %s", rejection.Source, rejection.ArtifactID, rejection.Reason)
+	if d.store == nil {
+		return
+	}
+	record, err := d.store.AddNotification(store.NotificationRecord{
+		Kind:       notificationKindPTYHostRejected,
+		Severity:   store.NotificationWarning,
+		Title:      "Shared PTY host update failed its check",
+		Body:       impact,
+		Detail:     rejection.Source,
+		Trigger:    "attn checked a newly installed shared PTY host with a throwaway terminal.",
+		Impact:     impact,
+		Cause:      rejection.Reason,
+		SourceKind: "pty_host",
+		SourceID:   rejection.ArtifactID,
+	}, time.Now())
+	if err != nil {
+		d.logf("notifications: add shared PTY host rejection for %s: %v", rejection.ArtifactID, err)
+		return
+	}
+	d.publishFact(FactNotificationCreated, record.ID, nil)
 }
 
 func (d *Daemon) validateSharedPTYHostAfterRecovery() {
@@ -77,7 +98,7 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 		return
 	}
 	if host.SharedCandidatePending() || !host.SharedArtifactReady() {
-		ctx, cancel := context.WithTimeout(d.doneContext(), sharedHostValidationTimeout)
+		ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
 		if err := host.ValidateSharedCandidate(ctx, false); err != nil {
 			d.logf("shared PTY host candidate validation: %v", err)
 		}

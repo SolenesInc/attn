@@ -128,6 +128,7 @@ done
 		t.Fatal(err)
 	}
 	current = start(newBinary, hostBinary)
+	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "mixed-restart")
 	current.setSharedSetting(false)
@@ -165,6 +166,7 @@ done
 	current = start(newBinary, nextHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
+	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.spawn("next-agent", "codex", fixture)
 	next := current.identity("next-agent", true)
 	identities["next-agent"] = next
@@ -184,8 +186,9 @@ done
 	}
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
-	if got := current.warningCount(warnPTYHostArtifactRejected); got != 1 {
-		t.Fatalf("rejection warnings = %d, want exactly one: %v", got, current.warnings)
+	current.waitForLog("failed validation", nil)
+	if got := current.notificationCount(notificationKindPTYHostRejected); got != 1 {
+		t.Fatalf("rejection notifications = %d, want exactly one", got)
 	}
 	assertAll(current, "rejected-candidate")
 	current.spawn("last-known-good-agent", "codex", fixture)
@@ -201,8 +204,8 @@ done
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "unchanged-rejected-candidate")
-	if got := current.warningCount(warnPTYHostArtifactRejected); got != 0 || bytes.Contains(current.logSinceStart(), []byte("failed validation")) {
-		t.Fatalf("restart revalidated an unchanged rejected candidate: warnings=%v", current.warnings)
+	if got := current.notificationCount(notificationKindPTYHostRejected); got != 1 {
+		t.Fatalf("restart rechecked an unchanged rejected build: %d rejection notifications", got)
 	}
 	current.stop()
 
@@ -231,7 +234,6 @@ type upgradeDaemon struct {
 	port       int
 	logOffset  int64
 	instanceID string
-	warnings   []any
 	cmd        *exec.Cmd
 	done       chan error
 	ws         *websocket.Conn
@@ -341,13 +343,15 @@ func (d *upgradeDaemon) connect() {
 	if d.instanceID == "" {
 		d.t.Fatal("initial_state has no daemon instance identity")
 	}
-	d.warnings, _ = initial["warnings"].([]any)
 }
 
-func (d *upgradeDaemon) warningCount(code string) int {
+func (d *upgradeDaemon) notificationCount(kind string) int {
+	d.t.Helper()
+	result := d.command(map[string]any{"cmd": "notification_list", "request_id": "pty-host-notifications"}, "notification_list_result", "")
+	notifications, _ := result["notifications"].([]any)
 	count := 0
-	for _, warning := range d.warnings {
-		if entry, ok := warning.(map[string]any); ok && entry["code"] == code {
+	for _, notification := range notifications {
+		if entry, ok := notification.(map[string]any); ok && entry["kind"] == kind {
 			count++
 		}
 	}
