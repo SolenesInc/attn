@@ -1007,7 +1007,11 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
-		go d.validateSharedPTYHostAfterRecovery()
+		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
+			go d.validateSharedPTYHostAfterRecovery()
+		} else {
+			d.validateSharedPTYHostAfterRecovery()
+		}
 		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
