@@ -69,18 +69,19 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 
 func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	host := d.sharedPTYHost
-	if host == nil || !shouldRunWorkerStartupProbe() || !host.SharedCandidatePending() {
+	if host == nil || !shouldRunWorkerStartupProbe() {
 		return
 	}
 	migrating, routed := d.ptyBackend.(*ptybackend.MigratingBackend)
 	if routed && !parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled)) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
-	err := host.ValidateSharedCandidate(ctx, false)
-	cancel()
-	if err != nil {
-		d.logf("shared PTY host candidate validation: %v", err)
+	if host.SharedCandidatePending() || !host.SharedArtifactReady() {
+		ctx, cancel := context.WithTimeout(d.doneContext(), sharedHostValidationTimeout)
+		if err := host.ValidateSharedCandidate(ctx, false); err != nil {
+			d.logf("shared PTY host candidate validation: %v", err)
+		}
+		cancel()
 	}
 	if !routed {
 		return

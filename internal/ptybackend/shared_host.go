@@ -216,7 +216,7 @@ func (b *WorkerBackend) releaseSharedIncarnationIfUnused(inc hostIncarnation) {
 	b.closeSharedControl(inc)
 	b.sharedMonitorMu.Lock()
 	monitor := b.sharedMonitors[inc]
-	released := monitor != nil && !monitor.fallback && b.dropSharedHostMonitorIfUnusedLocked(monitor)
+	released := monitor != nil && b.dropSharedHostMonitorIfUnusedLocked(monitor)
 	b.sharedMonitorMu.Unlock()
 	if released {
 		monitor.stopOnce.Do(func() { close(monitor.stop) })
@@ -570,11 +570,6 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	if err != nil {
 		return err
 	}
-	artifact, err := b.launchArtifact()
-	if err != nil {
-		prepared.CleanupExcept(-1)
-		return err
-	}
 	params := ptyhost.SpawnParams{
 		SessionID:   opts.ID,
 		Agent:       prepared.Agent,
@@ -600,7 +595,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		Effort:            opts.Effort,
 		UnattendedLaunch:  opts.UnattendedLaunch,
 	}
-	result, spawned, err := b.spawnOnSharedHost(ctx, artifact, params)
+	result, spawned, err := b.spawnOnSharedHost(ctx, nil, params)
 	switch {
 	case !spawned:
 		prepared.CleanupExcept(-1)
@@ -610,7 +605,7 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	return err
 }
 
-func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact ptyhost.Artifact, params ptyhost.SpawnParams) (result *ptyhost.SpawnResult, spawned bool, err error) {
+func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost.Artifact, params ptyhost.SpawnParams) (result *ptyhost.SpawnResult, spawned bool, err error) {
 	for attempt := 0; ; attempt++ {
 		host, err := b.ensureSharedHost(ctx, artifact)
 		if err != nil {
@@ -673,13 +668,20 @@ func isRetiringSharedHost(err error) bool {
 		strings.Contains(err.Error(), "host is shutting down")
 }
 
-func (b *WorkerBackend) ensureSharedHost(ctx context.Context, artifact ptyhost.Artifact) (ptyhost.HostRegistry, error) {
+func (b *WorkerBackend) ensureSharedHost(ctx context.Context, artifact *ptyhost.Artifact) (ptyhost.HostRegistry, error) {
 	b.hostMu.Lock()
 	defer b.hostMu.Unlock()
+	if artifact == nil {
+		launch, err := b.launchArtifact()
+		if err != nil {
+			return ptyhost.HostRegistry{}, err
+		}
+		artifact = &launch
+	}
 	if host, ok := b.liveSharedHost(ctx, artifact.ID); ok {
 		return host, nil
 	}
-	return b.startSharedHost(ctx, artifact)
+	return b.startSharedHost(ctx, *artifact)
 }
 
 func (b *WorkerBackend) liveSharedHost(ctx context.Context, artifactID string) (ptyhost.HostRegistry, bool) {
@@ -769,7 +771,7 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 			lastErr = readErr
 		}
 		if !pidAlive(pid) {
-			return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host exited before ready: %w", lastErr)
+			return ptyhost.HostRegistry{}, fmt.Errorf("%w: shared PTY host exited before ready: %w", errArtifactRejected, lastErr)
 		}
 		timer := time.NewTimer(spawnReadyPollInterval)
 		select {

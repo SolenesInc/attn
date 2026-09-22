@@ -8,6 +8,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
@@ -20,7 +21,10 @@ const (
 	sharedHostProbeContract = 1
 	sharedHostProbeCols     = 97
 	sharedHostProbeRows     = 31
+	sharedHostProbePrefix   = "probe-"
 )
+
+var errArtifactRejected = errors.New("shared PTY host build is broken")
 
 type SharedArtifactRejection struct {
 	ArtifactID string
@@ -40,19 +44,33 @@ func (b *WorkerBackend) loadSharedArtifacts() {
 	b.candidate.source = b.cfg.BinaryPath
 	b.candidate.id, b.candidate.err = ptyhost.HashArtifact(b.cfg.BinaryPath)
 	if b.candidate.err == nil {
-		receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
-		if err == nil && receipt.Passed && receipt.Environment == sharedArtifactEnvironment() {
-			if artifact, stored := ptyhost.StoredArtifact(b.artifactsDir, b.candidate.id); stored {
-				b.pinned, b.pinnedValidated = artifact, true
-				return
-			}
-		}
-	}
-	if id := ptyhost.LastKnownGood(b.artifactsDir); id != "" {
-		if artifact, stored := ptyhost.StoredArtifact(b.artifactsDir, id); stored {
+		if artifact, ok := b.passedArtifact(b.candidate.id); ok {
 			b.pinned, b.pinnedValidated = artifact, true
+			return
 		}
 	}
+	if artifact, ok := b.passedArtifact(ptyhost.LastKnownGood(b.artifactsDir)); ok {
+		b.pinned, b.pinnedValidated = artifact, true
+	}
+}
+
+func (b *WorkerBackend) passedArtifact(id string) (ptyhost.Artifact, bool) {
+	if id == "" {
+		return ptyhost.Artifact{}, false
+	}
+	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, id)
+	if err != nil || !receipt.Passed || receipt.Environment != sharedArtifactEnvironment() {
+		return ptyhost.Artifact{}, false
+	}
+	return ptyhost.StoredArtifact(b.artifactsDir, id)
+}
+
+func (b *WorkerBackend) candidateRejection() (string, bool) {
+	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
+	if err != nil || receipt.Passed || receipt.Environment != sharedArtifactEnvironment() {
+		return "", false
+	}
+	return receipt.Reason, true
 }
 
 func sharedArtifactEnvironment() ptyhost.ArtifactEnvironment {
@@ -95,6 +113,9 @@ func (b *WorkerBackend) launchArtifact() (ptyhost.Artifact, error) {
 	if pinned.ID != "" {
 		return pinned, nil
 	}
+	if reason, rejected := b.candidateRejection(); rejected {
+		return ptyhost.Artifact{}, fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, reason)
+	}
 	return b.importCandidate()
 }
 
@@ -109,33 +130,39 @@ func (b *WorkerBackend) importCandidate() (ptyhost.Artifact, error) {
 	return artifact, nil
 }
 
+func (b *WorkerBackend) abandonedSharedProbe(sessionID string) bool {
+	if b.kind != workerRuntimeSharedHost || !strings.HasPrefix(sessionID, sharedHostProbePrefix) {
+		return false
+	}
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.sessions[sessionID] == nil
+}
+
 func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bool) error {
 	b.validateMu.Lock()
 	defer b.validateMu.Unlock()
 	if b.candidate.err != nil {
 		return b.candidate.err
 	}
-	environment := sharedArtifactEnvironment()
-	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
-	recorded := err == nil && receipt.Environment == environment
-	if recorded && !receipt.Passed && !explicit {
-		return fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, receipt.Reason)
+	if reason, rejected := b.candidateRejection(); rejected && !explicit {
+		return fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, reason)
 	}
 	artifact, err := b.importCandidate()
 	if err != nil {
 		return err
 	}
-	if recorded && receipt.Passed {
-		return b.promoteSharedArtifact(artifact)
+	if passed, ok := b.passedArtifact(artifact.ID); ok {
+		return b.promoteSharedArtifact(passed)
 	}
 
 	started := time.Now()
 	probeErr := b.probeSharedArtifact(ctx, artifact)
-	if probeErr != nil && errors.Is(ctx.Err(), context.Canceled) {
-		return probeErr
+	if probeErr != nil && !errors.Is(probeErr, errArtifactRejected) {
+		return fmt.Errorf("shared PTY host %s could not be checked: %w", artifact.ID, probeErr)
 	}
-	receipt = ptyhost.ArtifactReceipt{
-		Environment: environment,
+	receipt := ptyhost.ArtifactReceipt{
+		Environment: sharedArtifactEnvironment(),
 		Passed:      probeErr == nil,
 		CheckedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 	}
@@ -193,6 +220,8 @@ func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, reason s
 }
 
 func (b *WorkerBackend) collectSharedArtifacts() {
+	b.hostMu.Lock()
+	defer b.hostMu.Unlock()
 	keep := map[string]bool{b.candidate.id: true, ptyhost.LastKnownGood(b.artifactsDir): true}
 	b.artifactMu.Lock()
 	keep[b.pinned.ID] = true
@@ -212,29 +241,24 @@ func (b *WorkerBackend) collectSharedArtifacts() {
 	}
 }
 
-func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhost.Artifact) (err error) {
-	host, err := b.ensureSharedHost(ctx, artifact)
+func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhost.Artifact) error {
+	host, err := b.ensureSharedHost(ctx, &artifact)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err != nil {
-			b.retireIdleSharedHost(incarnationOfHost(host))
-		}
-	}()
 	info, err := b.sharedHostInfo(ctx, incarnationOfHost(host))
 	if err != nil {
 		return err
 	}
 	if !slices.Contains(info.Capabilities, ptyhost.CapabilityProbeChild) {
-		return errors.New("host does not provide the validation probe")
+		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
 	}
 
 	suffix, err := randomToken(6)
 	if err != nil {
 		return err
 	}
-	id := "probe-" + suffix
+	id := sharedHostProbePrefix + suffix
 	workdir := os.TempDir()
 	params := ptyhost.SpawnParams{
 		SessionID: id,
@@ -249,7 +273,7 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 			CWD:        workdir,
 		}},
 	}
-	if _, _, err := b.spawnOnSharedHost(ctx, artifact, params); err != nil {
+	if _, _, err := b.spawnOnSharedHost(ctx, &artifact, params); err != nil {
 		return fmt.Errorf("spawn probe: %w", err)
 	}
 	removed := false
@@ -268,7 +292,7 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 	}
 	defer stream.Close()
 	if !attached.Running {
-		return errors.New("probe child exited before answering")
+		return fmt.Errorf("%w: probe child exited before answering", errArtifactRejected)
 	}
 	if _, err := b.Resize(ctx, id, sharedHostProbeCols, sharedHostProbeRows, 0, 0); err != nil {
 		return fmt.Errorf("resize probe: %w", err)
@@ -300,7 +324,7 @@ func awaitProbeOutput(ctx context.Context, stream Stream, output *bytes.Buffer, 
 		select {
 		case event, ok := <-stream.Events():
 			if !ok {
-				return fmt.Errorf("probe output ended before %q (output %q)", want, tail(output.Bytes()))
+				return fmt.Errorf("%w: probe output ended before %q (output %q)", errArtifactRejected, want, tail(output.Bytes()))
 			}
 			if event.Kind == OutputEventKindOutput {
 				output.Write(event.Data)
@@ -318,16 +342,4 @@ func tail(data []byte) []byte {
 		return data
 	}
 	return data[len(data)-limit:]
-}
-
-func (b *WorkerBackend) retireIdleSharedHost(inc hostIncarnation) {
-	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
-	defer cancel()
-	info, err := b.sharedHostInfo(ctx, inc)
-	if err != nil || len(info.SessionIDs) > 0 {
-		return
-	}
-	if err := b.callSharedHost(ctx, inc, ptyhost.MethodShutdown, map[string]any{}, nil); err != nil {
-		b.cfg.Logf("stop rejected shared PTY host at %s: %v", inc.socketPath, err)
-	}
 }

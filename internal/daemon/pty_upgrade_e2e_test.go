@@ -128,7 +128,6 @@ done
 		t.Fatal(err)
 	}
 	current = start(newBinary, hostBinary)
-	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "mixed-restart")
 	current.setSharedSetting(false)
@@ -166,7 +165,6 @@ done
 	current = start(newBinary, nextHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
-	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.spawn("next-agent", "codex", fixture)
 	next := current.identity("next-agent", true)
 	identities["next-agent"] = next
@@ -186,8 +184,6 @@ done
 	}
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
-	current.waitForLog("failed validation", nil)
-	current.connect()
 	if got := current.warningCount(warnPTYHostArtifactRejected); got != 1 {
 		t.Fatalf("rejection warnings = %d, want exactly one: %v", got, current.warnings)
 	}
@@ -205,7 +201,6 @@ done
 	current = start(newBinary, brokenHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "unchanged-rejected-candidate")
-	current.connect()
 	if got := current.warningCount(warnPTYHostArtifactRejected); got != 0 || bytes.Contains(current.logSinceStart(), []byte("failed validation")) {
 		t.Fatalf("restart revalidated an unchanged rejected candidate: warnings=%v", current.warnings)
 	}

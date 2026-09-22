@@ -24,11 +24,15 @@ recorded, so ordinary restarts do not repeat the check. A build that passes
 becomes the last-known-good build.
 
 At startup the daemon recovers existing sessions first, then checks a newly
-installed build. Until it passes, new sessions use the last-known-good build.
-A build that fails is not checked again until it changes or the setting is
-turned on again, and one warning names it. A missing or failing bundle leaves
-new sessions on the last-known-good build; with none, they use Go and Settings
-reports the fallback.
+installed build before clients receive their first state. Until it passes, new
+sessions use the last-known-good build, or Go when none has passed yet, as on
+the first start after this change. A build that fails is not checked again
+until it changes or the setting is turned on again, and one warning names it.
+A check cut short by its five-second limit or daemon shutdown is not a failure;
+the next start repeats it. A missing or failing bundle leaves new sessions on
+the last-known-good build; with none, they use Go and Settings reports the
+fallback. Validation terminals left behind by a daemon exit are removed at the
+next recovery.
 
 Every host process gets its own socket and control token. A host retires 45
 seconds after its last terminal closes, and the next launch starts a fresh one.
@@ -77,10 +81,11 @@ executable hash to test a new build; it does not claim compatibility with an
 arbitrary future host protocol.
 
 The CI job runs the upgrade and shared-host integration tests on macOS and
-Linux. It also builds the oldest retained host (the last build before host
-checks) and verifies that the current daemon recovers, resizes, feeds, and
+Linux. `scripts/build-retained-pty-host.sh` builds the oldest retained host (the
+last build before host checks); with `ATTN_TEST_RETAINED_PTY_HOST` pointing at
+it, a test verifies that the current daemon recovers, resizes, feeds, and
 removes its sessions, and rejects that build as a new default without disturbing
-them.
+them. Running it in CI is tracked in #315.
 
 ## Host lifecycle tests
 
@@ -90,10 +95,13 @@ host accepts input and resize. The original code failed this sequence with
 `daemon identity or control token mismatch`. Other tests cover a bundle
 replaced after the daemon started, promotion while sessions keep their host and
 child PIDs and a live output stream, a failing build with one warning and no
-recheck after restart, and keystrokes sent across a daemon replacement arriving
-exactly once. Unit tests against a fake host refuse stale credentials for a
-replacement host and never resend input the host already received. Each fails
-when its fix is removed.
+recheck after restart, keystrokes reaching the child in order across a daemon
+replacement, and an abandoned validation terminal removed at recovery. Unit
+tests against a fake host refuse stale credentials for a replacement host and
+never resend input the host already received; others keep an interrupted check
+from counting as a failure, refuse a rejected build when nothing else passed,
+and distrust a last-known-good build checked in another environment. Each of
+these unit tests fails when its fix is removed.
 
 Profile cleanup authenticates each live host, verifies its PID, and asks it to
 stop its children before deleting profile data. The live cleanup test covers two

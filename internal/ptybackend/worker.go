@@ -1097,6 +1097,13 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 			b.quarantineRegistry(path, "rpc_unavailable")
 			continue
 		}
+		if b.abandonedSharedProbe(session.SessionID) {
+			if err := b.callResultSharedOneShot(ctx, session, ptyworker.MethodRemove, map[string]any{}, nil); err != nil {
+				b.cfg.Logf("remove abandoned shared PTY host probe %s: %v", session.SessionID, err)
+			}
+			report.Pruned++
+			continue
+		}
 		target := session
 		b.mu.Lock()
 		if existing := b.sessions[session.SessionID]; existing != nil {

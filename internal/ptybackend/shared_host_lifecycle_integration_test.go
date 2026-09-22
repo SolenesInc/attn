@@ -337,7 +337,7 @@ func TestSharedHost_RejectedCandidateKeepsLastKnownGood(t *testing.T) {
 	}
 }
 
-func TestSharedHost_KeystrokesSurviveDaemonReplacementExactlyOnce(t *testing.T) {
+func TestSharedHost_KeystrokesReachTheChildAcrossDaemonReplacement(t *testing.T) {
 	binary, root := sharedHostTestRoot(t, "attn-host-typist-")
 	stopHostsAtCleanup(t, root)
 	cfg := WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-typist", BinaryPath: binary}
@@ -390,7 +390,7 @@ func TestSharedHost_KeystrokesSurviveDaemonReplacementExactlyOnce(t *testing.T) 
 	}
 	received.Write(collectStreamUntil(t, stream, keys[half:]))
 	if got := strings.TrimPrefix(received.String(), "__TYPIST_READY__"); got != keys {
-		t.Fatalf("child received %q, want every keystroke exactly once: %q", got, keys)
+		t.Fatalf("child received %q, want every keystroke in order: %q", got, keys)
 	}
 	if err := second.Remove(context.Background(), "typist"); err != nil {
 		t.Fatal(err)
@@ -482,7 +482,7 @@ func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := backend.ensureSharedHost(context.Background(), artifact)
+	host, err := backend.ensureSharedHost(context.Background(), &artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -495,5 +495,36 @@ func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *
 	t.Cleanup(func() { buildinfo.SnapshotFormat = previous })
 	if err := backend.Probe(context.Background()); err != nil {
 		t.Fatalf("validation with native snapshots: %v", err)
+	}
+}
+
+func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-abandoned-")
+	stopHostsAtCleanup(t, root)
+	cfg := WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-abandoned", BinaryPath: binary}
+	first, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	spawnCat(t, first, sharedHostProbePrefix+"left-behind", root)
+	spawnCat(t, first, "user-terminal", root)
+	if err := first.Shutdown(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	second, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = second.Shutdown(context.Background()) })
+	report, err := second.Recover(context.Background())
+	if err != nil || report.Recovered != 1 || report.Pruned != 1 {
+		t.Fatalf("recover = %+v, %v; want the user terminal recovered and the probe pruned", report, err)
+	}
+	if ids := second.SessionIDs(context.Background()); len(ids) != 1 || ids[0] != "user-terminal" {
+		t.Fatalf("recovered sessions = %v", ids)
+	}
+	if err := second.Remove(context.Background(), "user-terminal"); err != nil {
+		t.Fatal(err)
 	}
 }

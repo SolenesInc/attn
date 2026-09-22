@@ -84,6 +84,7 @@ const (
 	deferredRecoveryRetryInterval = 10 * time.Second
 	deferredRecoveryRPCTimeout    = 5 * time.Second
 	workerStartupProbeTimeout     = 20 * time.Second
+	sharedHostValidationTimeout   = 5 * time.Second
 
 	warnPersistenceDegraded       = "persistence_degraded"
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
@@ -1008,7 +1009,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
-		go d.validateSharedPTYHostAfterRecovery()
+		d.validateSharedPTYHostAfterRecovery()
 		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()

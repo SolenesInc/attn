@@ -11,6 +11,7 @@ symptom: >-
 notes: >-
   Each daemon pins the host build it started with. A newly installed build
   becomes the default only after a throwaway terminal round trip passes; until
-  then, and if it fails, new terminals keep using the last build that passed, and
-  one warning names the rejected build. Keystrokes are never sent twice when a
-  host connection drops mid-request.
+  then, and if it fails, new terminals use the last build that passed, or
+  dedicated workers when none has passed yet, such as on the first start after
+  this update. One warning names a rejected build. Keystrokes are never sent
+  twice when a host connection drops mid-request.
