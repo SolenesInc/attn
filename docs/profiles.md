@@ -1,201 +1,68 @@
 # Profiles
 
-## Select and inspect
-
 A profile isolates data, socket, ports, app, and bundle id.
-Select it through `profile-env` to clear inherited routing overrides:
 
 ```bash
-eval "$(attn profile-env <name>)" # bash/zsh
-attn profile-env <name> | source # fish
-attn profile
+eval "$(attn profile-env <name>)"   # fish: attn profile-env <name> | source
+attn profile                        # show the selection
 attn profile list --json
-attn profile resolve --json
+eval "$(attn profile-env --unset)"
 ```
 
-- Check the `[attn profile=…]` banner before lifecycle commands.
-- Build/test tooling reads `attn profile resolve --field <field>`; do not
-  duplicate path/port derivation from `internal/config`.
-- `ATTN_DATA_DIR` overrides runtime paths. `profile resolve` and `profile clean`
-  still use canonical profile paths. Use bare `ATTN_DATA_DIR` for test scoping.
-- `ATTN_PROFILE` plus another profile's routing paths/port is rejected.
-  Reselect with `profile-env`; never bypass the check.
-- Clear selection with `eval "$(attn profile-env --unset)"`.
-
-## GitHub polling
-
-A named profile's daemon does not poll GitHub with your `gh` credentials, so a
-handful of dev profiles cannot spend the production daemon's API budget. The
-daemon logs one line saying polling is off and how to enable it, and the app
-shows the same reason in Settings, the Dashboard PR card, and a session's PR
-popover. `attn pr` commands that call `gh` themselves keep working.
-
-To test GitHub features in a named profile, start its daemon with the opt-in:
-
-```bash
-ATTN_GITHUB_POLLING=on attn daemon ensure
-ATTN_GITHUB_POLLING=on make run PROFILE=<name>
-```
-
-The harness's mock GitHub (`ATTN_MOCK_GH_URL`) is not gated; the default profile
-polls as before.
+Tooling reads paths from `attn profile resolve --field <field>` instead of
+deriving them. Tests scope with bare `ATTN_DATA_DIR`.
 
 ## Build and install
 
 Follow [production safety](../AGENTS.md#you-are-probably-running-inside-attn).
-Select the named profile before installing; `ATTN_PROFILE` must match `PROFILE`.
 
 | Change | Dev | Named profile |
 | --- | --- | --- |
-| Go-only | `make install-daemon-dev` | `make install-daemon PROFILE=<name>` |
-| App, plugins, protocol, bundle metadata | `make dev` | `make install PROFILE=<name>` |
+| Go only | `make install-daemon-dev` | `make install-daemon PROFILE=<name>` |
+| Anything else | `make dev` | `make install PROFILE=<name>` |
 
-Use a full build when unsure or when the daemon-only build misses the change.
-A named profile compiles the Rust shell with the `fast` cargo profile (release
-code paths, `app-core` unoptimized); the default profile, releases, and CI
-acceptance builds use `release`. `ATTN_APP_CARGO_PROFILE=release make install
-PROFILE=<name>` builds a named profile the shipping way.
-Open a named app with `make run PROFILE=<name>`.
-Full macOS builds/installs run outside the sandbox for keychain-backed signing;
-ad-hoc signing loses persistent permissions.
-On Linux, `make install PROFILE=<name>` stages an unprivileged application tree.
-`make install-staged PROFILE=<name>` installs a tree another build already staged
-without rebuilding it; the `App acceptance` CI shards download one build's tree
-and install it that way before running their slice of the serial matrix.
+Open a named app with `make run PROFILE=<name>`. Named profiles build a faster,
+less optimized shell; `ATTN_APP_CARGO_PROFILE=release` builds the shipping way.
+Full macOS installs run outside the sandbox so signing keeps permissions. For a
+Linux VM, see [Local Linux runner](linux-runner.md).
 
-For a local Linux VM, see [Local Linux runner](linux-runner.md). It builds and
-verifies named profiles through Lima, OrbStack, or an existing SSH machine.
+## GitHub polling
 
-## Linux deep links
+Named profiles do not poll GitHub, so they cannot spend production's API budget.
+To test GitHub features, start the daemon with `ATTN_GITHUB_POLLING=on`.
 
-macOS registers the profile's resolved `<deepLinkScheme>://` on the app bundle
-itself (`attn://` for the default profile; `attn-dev://` or `attn-<name>://`
-for others — see `DeepLinkSchemeForProfile`). Elsewhere, `make install` also
-runs `attn profile register-scheme --profile <name>`: it writes
-`<appName>-handler.desktop` under `~/.local/share/applications` (or
-`$XDG_DATA_HOME/applications`) and refreshes the desktop database
-(`update-desktop-database`, `xdg-mime`). Missing tools are reported, not
-fatal: the entry is still written. Rerun `register-scheme` by hand after
-moving the installed executable.
-
-`attn profile resolve --field desktopEntry` reports the handler path (empty
-off Linux); `attn profile resolve --field deepLinkScheme` reports the scheme;
-`attn profile clean <name>` removes the entry along with everything else.
-
-Launching the app (bare `attn`, or `attn -s <label>`) builds a
-`<deepLinkScheme>://spawn?...` deep link (`attn://spawn?...` for the default
-profile). On Linux this launches the profile's own app executable, which, via
-tauri-plugin-single-instance, hands the URL to an already-running instance
-instead of opening a second window.
-
-## Iterate on a bundled plugin
-
-A change under `plugins/attn-pi` does not need `make install`. Link the
-checkout into the profile's plugin dir instead of copying it:
+## Iterate on the pi plugin
 
 ```bash
-attn plugin uninstall attn-pi                     # the bundled copy blocks a user plugin of the same name
+attn plugin uninstall attn-pi
 attn plugin link --path <checkout>/plugins/attn-pi
-attn plugin list                                  # shows the plugin with its link_target
 ```
 
-`link` symlinks the source directory, runs `bun install` there, and starts the
-driver from it. The manifest's `entrypoint` is a source file run with bun, so
-the driver resolves the suite relative to the checkout. Every
-new pi session runs what is on disk; sessions already running keep the code
-they loaded, and a change to the driver itself (`src/`) needs a daemon restart
-or an uninstall and link. `attn plugin uninstall attn-pi` drops the link, never
-the checkout, and `attn plugin install-bundled attn-pi` restores the bundled
-copy.
-
-The driver also reads one environment variable before falling back to the
-bundled build, for pointing a bundled install at a checkout without linking:
-
-| Variable | Points the driver at |
-| --- | --- |
-| `ATTN_PI_SUITE_PATH` | the pi extension, e.g. `<checkout>/plugins/attn-pi/suite/index.ts` |
-
-The daemon builds the driver's environment from its own environment plus the
-login-shell environment it captured at start, so export the variable, then
-restart the non-production daemon once.
-
-`scripts/build-bundled-plugins.sh` stages fresh bundles in seconds, and a daemon
-started by hand with `ATTN_BUNDLED_PLUGIN_DIR` pointed at that stage dir serves
-them. The app scrubs that variable as a routing override, so it does not reach
-an app-launched daemon.
+New pi sessions run the checkout; driver changes (`src/`) need a daemon restart.
+`attn plugin install-bundled attn-pi` restores the bundled copy.
 
 ## Verification requirements
 
-Require passing packaged-app CI on the current PR head for lifecycle, protocol,
-PTY, background-runner, timing and app-observable changes, including daemon
-state/broadcasts and PR/git flows. Reuse or extend scenarios to cover the changed
-behavior on relevant platforms. Report missing or skipped required coverage and
-ask before merging.
+Lifecycle, protocol, PTY, background-runner, timing, and other app-observable
+changes need green packaged-app CI on the PR head, with scenarios covering the
+change. Report missing coverage and ask before merging.
 
-Run real-app scenarios locally in a non-production profile when reproducing CI
-failures and iterating on fixes. Use CI results, logs and screenshots as routine
-evidence; recordings are optional when motion helps explain an interaction.
-
-## Verify the installed build
-
-Run the selected profile's bundled CLI, with the scenario's launch settings:
+Reproduce CI failures locally in a non-production profile. Verify with the
+installed build, not whatever `attn` is on `PATH`:
 
 ```bash
-profile_cli="$(./attn profile resolve --field appDaemon)"
-"$profile_cli" preflight
-"$profile_cli" preflight --agent codex --model <model> --effort high --json
+"$(./attn profile resolve --field appDaemon)" preflight
 ```
 
-Fix tool/path/routing/daemon/protocol failures before collecting evidence.
-A different `attn` on `PATH` does not verify the installed build.
-Read [harness guidance](../app/scripts/real-app-harness/AGENTS.md) before
-packaged-app scenarios or recordings; those scenarios run serially.
-Go and frontend e2e suites may run concurrently in distinct worktree profiles.
+Before running scenarios, read the [harness guide](../app/scripts/real-app-harness/AGENTS.md).
 
 ## Clean up
 
-After merging a PR, handing off work, or otherwise moving on, clean up any attn
-test profiles you created with `attn profile clean <name>`.
-It stops workers, plugins, daemon, and app before removing
-the bundle/data and the app's local data dir (Tauri's `app_local_data_dir`:
-automation manifest, frontend debug logs, WebKit state). Never delete the data
-directory first: the worker registry is needed for cleanup. Inspect any
-unconfirmed PIDs the command leaves running.
-
-The app goes first and clean waits for its pid (`<data-dir>/app.pid`, written by
-the Tauri shell) to be gone — a macOS quit request only asks — escalating to
-SIGTERM then SIGKILL if it will not leave. Ownership is rebuilt from the live
-process before every signal: a pid that is not this profile's app executable is
-never signalled, and one that is alive but cannot be identified stops the clean
-rather than being assumed dead. The shell rewrites `app.pid` on every launch, so
-a marker naming a different pid, or one that reappears after the stop, is a
-relaunch and aborts the clean. Whenever the app cannot be confirmed gone, clean
-removes nothing and names the pid: quit it yourself and re-run. `--force` covers
-the production profile, never a live app.
-
-The last gap a marker cannot close — a launch between the final check and the
-removals — is closed by `~/.attn.locks/app-<profile>.lock`. Every app process
-takes it *shared* at startup and the kernel holds it for that process's
-lifetime, so app instances never block each other and the Linux no-bus fallback
-can still open a second instance to deliver a deep link. Clean takes it
-*exclusive* once the old app is gone and holds it through the last removal, so
-it can only run when no app instance of that profile is left. Whoever loses
-gives way: an app launched into a clean waits up to 3s for it to finish and then
-refuses to start rather than run unlocked, and a clean that finds the lock held
-aborts before touching anything. Taking the lock is mandatory for the app: it
-will not write `app.pid` or open a window without it, and the reason goes to
-stderr. The lock file itself is never removed, and cannot go stale: kernel
-ownership disappears with the process.
-
-Use `attn profile stop-app --profile <name>` to stop only the app; it returns
-once the app is gone.
-`attn profile list --json` reports the install's origin worktree and live workers,
-and `appLocalDataDir`/`hasAppLocalData` so a profile whose data dir and app are
-already gone still shows up while its app local data lingers.
-Installs record `<data-dir>/origin.json`; manual installs can use
-`attn profile set-origin <name> --worktree <dir>`.
+When you move on, run `attn profile clean <name>` for profiles you created.
+Never delete a data directory by hand; cleanup needs its worker registry.
+If clean reports a live app or PID, quit it and rerun.
 
 ## UI automation
 
-Named profiles expose a localhost/token bridge through `ui-automation.json`.
-Production requires explicit `ATTN_AUTOMATION=1`.
+Named profiles expose a localhost automation bridge. Production needs
+`ATTN_AUTOMATION=1`.

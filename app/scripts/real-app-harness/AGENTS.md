@@ -1,411 +1,55 @@
 # Real-app harness
 
-Follow the [verification requirements](../../../docs/profiles.md#verification-requirements)
-and [profile setup](../../../docs/profiles.md#build-and-install).
-Run commands from the repository root.
+Packaged-app scenarios. Set up a profile per [profiles](../../../docs/profiles.md)
+and run commands from the repository root.
 
-## Running scenarios
+## Running
 
-- Scenarios share one display; run serially. Batch with
-  `pnpm --dir app run real-app:serial-matrix`.
-- Hunt a CI flake with
-  `gh workflow run acceptance-soak.yml --ref next -f scenarios=terminal-annotations,terminal-block-resize`.
-  Its job summary lists every iteration and runner class; artifacts retain
-  evidence only for failed iterations.
-- `--shard <index>/<count>` runs one balanced slice, which is how CI spreads the
-  matrix across runners. The weights are `scenario-durations.json`, seconds a
-  green run recorded; a scenario with no entry there fails the plan by name.
-  Remeasure from a green `matrix-digest.txt` when a scenario changes shape.
-- A scenario that cannot run on a platform says so in its catalog entry:
-  `skipOn: { linux: '<reason>' }`, or `{ reason, unlessEnv }` when an
-  environment variable proves the runner has what it needs (the remote `tr*`
-  probes run on Linux once `ATTN_HARNESS_REMOTE_SSH_TARGET` names a target).
-  The matrix digest lists every skip with its reason. A scenario that fails
-  on Linux for a product reason is a finding, not a skip.
-- A second run waits for the active one's lock, naming the holder. It waits as
-  long as the holder is alive and heartbeating (a matrix can hold for hours) and
-  gives up on a wedged holder (5 min without a heartbeat);
-  `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait (0 fails fast).
-- Profile: `ATTN_HARNESS_PROFILE` overrides `ATTN_PROFILE`, which defaults to `dev`.
-  Production needs `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and explicit approval.
-- `profileCliEnv` drops the routing overrides the shell inherited, so run the
-  harness from inside an attn session without unsetting anything. Build every
-  child's environment with it, never `{ ...process.env }`; only an override you
-  pass it deliberately survives.
-- Install the current checkout; source fingerprint mismatches fail.
-- Linux VM runner: `pnpm --dir app real-app:linux provision` sets up Lima.
-  Select `--provider orb` or `--provider ssh --target user@host` for other tools;
-  see [linux-runner.md](../../../docs/linux-runner.md).
-- Remote scenario target: set `ATTN_HARNESS_REMOTE_SSH_TARGET` to a reachable
-  SSH alias. The legacy default remains `attn-remote@orb`; provision it with
-  `pnpm --dir app run real-app:provision-remote`.
-  Provisioning installs the mock-agent command and four tripwire shims; it does
-  not need provider credentials. The `tr*` probes are remote by definition; a
-  scenario whose remote leg is optional runs it only once
-  `ATTN_HARNESS_REMOTE_SSH_TARGET` names a target, so it never probes by default.
-
-## Coverage that left the catalog
-
-A scenario is dropped only when every assertion it made has a named twin at a
-cheaper layer. Look here before re-adding one; the twin is the place to change.
-
-- `workspace-move-leaf` — `internal/daemon/workspace_moveleaf_protocol_test.go`
-  (8 cases, including `TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership`),
-  `internal/workspacelayout/moveleaf_test.go` (9 cases), and the `rapid` property
-  `TestLayoutStaysAWellFormedTreeUnderRandomOperations`. Those stop at the
-  daemon, so `App.moveLeaf.test.tsx` carries the render half: it feeds
-  `workspace_layout_updated` and `session_state_changed` through
-  `useDaemonSocket` and asserts both panes mount in the target workspace while
-  the emptied source unmounts.
-- `editor-workspace-root` — `NotebookTile.test.tsx:245`/`:273` gate the
-  backlinks rail off-root and pass it through on-root, `NotebookSurface.test.tsx:122`/`:132`
-  assert the rail's absence and presence, and `internal/notebook/layout_test.go`
-  `TestDefaultRoot` owns the per-profile root the scenario recomputed by hand.
-- `delegate-workspace-placement` — `internal/daemon/delegate_test.go`
-  `TestDelegateNoWorktreeReusesSourceCheckoutInMixedWorkspace` and
-  `TestDelegateRejectsConflictingRepositoryPlacement` assert the same fields and
-  the same error substrings.
-- `app-reconcile` — `internal/daemon/app_reconcile_test.go` and
-  `app_autodisable_test.go` own the reconcile state machine; the scaffold brief
-  is `TestScaffoldAgentsMDTeachesReconcile` in `internal/appbuild`.
-
-## Annotation coverage by boundary
-
-`terminal-annotations` retains grid-to-message anchoring, saves in the real daemon,
-app relaunch, annotations across turns, native pointer/keyboard handoff, note
-persistence and delivery into the agent. Its detailed editor interaction proofs run
-independently in `app/e2e/terminal-annotations.spec.ts`, through production
-`SessionTerminalWorkspace`, `AnnotatedTerminal` and `GhosttyTerminal`.
-
-| Behavior | Browser proof |
-| --- | --- |
-| Comment focus during workspace updates | `panel editing owns the keyboard through workspace updates` |
-| Async message completion during typing | `message delivery while editing preserves keyboard ownership` |
-| Workspace-scoped focus | `another workspace can take focus while an annotation draft is open` |
-| Terminal/editor pointer handoff and intact draft | `pointer focus moves between terminal and editor without losing text` |
-| Editor geometry and panel avoidance | `popup placement respects its pane and panel` |
-| Dragging and keyboard movement | `pointer dragging preserves the draft and pane bounds`, `keyboard movement preserves pane bounds` |
-| Saved comments, reopening, wrapping rows and remove control | `a wrapping comment keeps the remove control beside its row` |
-| Note editing and intact annotation set | `note editing preserves the marks` |
-
-The browser fixture controls API response delivery without implementing daemon
-persistence. Removing the annotation focus guard must fail the typing proof;
-making that guard global must fail the workspace-switch proof. Keep real terminal
-focus in these tests. A mocked terminal div cannot establish keyboard ownership.
-
-For native clicks, arm `arm_native_pointer_witness` with the expected DOM selector
-before posting OS input, then await `wait_native_pointer_witness`. The receipt
-reports the first trusted mouseup's coordinates and target, including a wrong
-target. A missing receipt fails through the automation client's request deadline.
-Synthetic `dom_click` events do not satisfy it. Check the receipt before asserting
-focus so a delivery failure identifies the actual boundary that failed.
-
-## Scenarios that were merged into another id
-
-A family that rebuilt the same world to assert one more thing now shares one
-launch. The id on the left is gone; its assertions run inside the id on the
-right. Change the assertion there, not by re-adding the old scenario.
-
-| gone | now asserted by |
-| --- | --- |
-| `workspace-shell-lifecycle` | `workspace-switching` (three shells, and a split close that leaves the survivors' scrollback) |
-| `workspace-close-last-session-switches-back` | `workspace-close-one-session-keeps-selection` (both branches of the selection-after-close rule) |
-| `notebook-tile-finder` | `notebook-editor-undo` |
-| `present-flow` | `present-submit-closes-window` (one presentation: the waiting CLI opens it, the window's own confirm hides it and settles the round) |
-| `garden-seed-handoff`, `garden-delegation-reporting` | `garden-plot-dispatch` |
-| `garden-seed-nudges`, `peer-message-read-receipts` | `garden-seed-read-receipts` |
-| `nudge-trigger`, `settle-typing-hold` (pointer leg) | `countdown-cancel` |
-| `automode-no-model` | `automode-environment` |
-| `tr401-local-codex`, `tr401-codex-initial-pane`, `tr402-local-codex`, `tr402-local-claude` | `tr401-local-claude` (one window, three phases, both agent vocabularies as two sessions) |
-| `tr204-local-claude`, `terminal-scrollback-colors`, `snapshot-scrollback-restore` | `tr201-local-claude` |
-| `codex-resume` (restart leg), `recoverable-auto-revive` (repaint) | `crash-recovery` |
-| `terminal-osc8-link`, `terminal-seed-preview` (CLI round trip, unknown id) | `terminal-md-link` |
-
-Traps these merges depend on, which a later edit can silently break:
-
-- `tr401-local-claude` holds two sessions, not two agent panes. `split_pane`
-  always makes a shell pane; an agent pane comes only from `create_session`.
-- `tr201-local-claude` seeds colours, then numbered rows, then styled rows, then
-  the typed token. Style and token reads take the viewport, so they must be last;
-  the colours assertion needs top-of-history, so it must be first.
-- `garden-plot-dispatch` runs its frame toggle and its tile drill last: a mounted
-  tile folds the terminal pane, and the full-window frame breaks the dock trail
-  the earlier steps assert on.
-- `terminal-md-link` runs the OSC 8 legs last, because a Cmd+click that reaches
-  the system browser takes the foreground away from attn.
-
-## Scenario files with no catalog entry
-
-A scenario file with no `scenarioCatalog.mjs` entry is invisible to the Linux
-`App acceptance` matrix: nobody runs it, and nobody notices when it rots. Each
-one below carries a verdict naming the blocker, so adding it later is a known
-piece of work rather than a rediscovery.
-
-- `scenario-automation-pr-continuity.mjs` — fix, then catalog; it is the
-  strongest candidate of the four. It is event-triggered through `refresh_prs`
-  rather than scheduled, so it holds no cron wait, and only it proves one
-  reviewer binding surviving a changed head, a resume, a daemon restart and a
-  lost worktree. Two blockers, both found by running it: `seedCodexRollout`
-  copies a rollout out of the developer's own `~/.codex/sessions`, which is
-  empty on a fresh runner and is somebody's real conversation besides — the
-  mock agent's `resumable` fixture places a transcript where the daemon's
-  finders walk and owes nothing to the host. And the daemon now refuses
-  continuity with `cannot resume the stopped session without a recorded
-  transcript`, because closing the session leaves `sessions.resume_session_id`
-  empty, so `set_session_resume_id` before a `close_session` no longer
-  survives. Whether that clearing is intended is the open question; the
-  scenario is the only thing asserting it.
-- `scenario-reload-not-crash.mjs`: blocked on a contract choice. The mock-agent
-  port proves a real worker death still stamps the bound ticket `crashed`, but
-  the required `allowRealAgents: false` runner also sets
-  `ATTN_HEADLESS_TASKS=off`, so the daemon refuses reconciliation before it can
-  mint the task this scenario must assert. Cataloging it requires either a
-  no-model reconciliation fixture or an explicit decision that the refusal is
-  the contract under the harness tripwire.
-- `scenario-legacy-ticket-recovery.mjs` — hand-run, on purpose. It needs a
-  second packaged bundle the acceptance job does not build
-  (`make build-default-profile-harness`, profile `legacy-recovery`), and its
-  subject is the one-time v2 legacy-ticket-to-seed recovery, already held by 19
-  Go tests in `internal/daemon/legacy_ticket_recovery_test.go` and
-  `internal/store/legacy_ticket_recovery_test.go`. What only it proves is the
-  recovered seeds and the warning notification rendering in the packaged app
-  under default-profile packaging, and that a restart re-runs create-only. Run
-  it by hand when `LegacyTicketRecoveryVersion` moves or either recovery file
-  changes.
-- `scenario-pi-security.mjs` — rewrite, then catalog. It opens by promoting a
-  model through the removed auto mode model list (`attn automode model`,
-  `config.models`) and then drives the removed classifier (a stub judge role
-  found by a classifier marker in the system prompt), so no step past that
-  promotion can pass. The rewrite must still prove credential filtering, the
-  Seatbelt/bubblewrap sandbox, the security panel, and cache/write grants.
-  Garden seed s-f4bna3.
-- `scenario-pi-automode.mjs` — rewrite, then catalog. Same blocker as
-  `scenario-pi-security.mjs`: the removed model list and the removed
-  classifier (`classifier-intent` denials, the circuit breaker, prompt strings
-  such as "Auto-mode access review"), now that auto mode is a Guardian
-  reviewer instead. The rewrite must prove a session under auto mode ending in
-  a Guardian decision, a denial reaching the TUI, `attn automode denials`, and
-  the notification feed. Garden seed s-f4bna3.
-- `scenario-agent-split-blank-probe.mjs`: keep out of the matrix. It records
-  render traces around the blank-pane defect but has no pass condition, launches
-  a real provider, and says in its own header to delete it with the temporary
-  tracing. Catalog it only if it becomes a deterministic regression assertion.
-- `scenario-chief-ticket-watch.mjs`: keep out of the matrix. It is the only
-  end-to-end probe of a chief deciding to watch and react to a legacy ticket,
-  but it asks a real model to make that decision and waits up to four minutes
-  for prose. Catalog it only after a mock fixture can express the decision and
-  the claim still matters beside the Garden dispatch and read-receipt scenarios.
-- `scenario-tr402.mjs`: port, then catalog. Its remote real-Codex path is not
-  armed by the harness and leaves its session, endpoint and remote root behind.
-- `scenario-offset-soak.mjs`: hand-run only. Its hand-written soak lacks
-  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
-- `scenario-perf-baseline.mjs`: hand-run only. Its hand-written soak lacks
-  signal-safe teardown and Mock GitHub isolation; port both before cataloging.
-- `scenario-perf-cold-warm.mjs`: hand-run only. Its hand-written soak lacks
-  signal-safe teardown and Mock GitHub isolation, and can erase the worker
-  registry before asynchronous workers exit. Port those boundaries before
-  cataloging.
-- `scenario-perf-leak-soak.mjs`: rewrite, then catalog. Its unconditional
-  settling waits outlive the soak runner; replace them with observed signals.
-- `scenario-notebook-link-nav.mjs`: port, then catalog. Only it drives relative
-  note links, heading jumps and a parent-relative image through the packaged
-  editor. Its hand-written runner has no agent tripwire, mock-GitHub receipt or
-  standard verdict. Move it to `createScenarioRunner` before adding it.
-- `scenario-notebook-tile-close.mjs`: port, then catalog. Only it proves the
-  native close shortcut undocks the focused Notebook tile without closing its
-  terminal or session. Its hand-written runner has no standard receipts; the
-  port must also declare the platform shortcut behavior.
-- `scenario-reveal-overflow.mjs`: port, then catalog. It catches a hidden pane
-  retaining the taller window geometry when revealed after a shrink. The
-  hand-written runner and unmeasured 600 ms convergence deadline block the
-  matrix; replace that deadline with a measured tripwire during the port.
-- `scenario-terminal-build-upgrade.mjs`: hand-run when the terminal upgrade
-  path changes. Only it installs a second daemon build over the running profile
-  and proves `execve` keeps the worker, child and PTY. That install mutates the
-  packaged tree shared by a matrix shard, so it must stay outside the sweep.
-- `scenario-terminal-kitty-image.mjs`: fix, then catalog. It uniquely checks
-  kitty placement pixels, signed z-order, scroll anchoring, delete and the
-  escape hatch. A local catalog run passed placement and scroll, then timed out
-  because the program delete left the placement live; `s-m715j1` owns that
-  finding.
-- `scenario-webgl-recovery.mjs`: port, then catalog. Only it forces a WebGL
-  context loss, checks the recovery event sequence and proves the rebuilt
-  renderer accepts new output. Its hand-written runner lacks the standard
-  tripwire, mock-GitHub and verdict receipts.
-
-A new scenario file lands with a catalog entry, or with its verdict added here.
+- Scenarios share one display and run serially:
+  `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
+- The profile comes from `ATTN_HARNESS_PROFILE`, then `ATTN_PROFILE`, then `dev`.
+  Production needs `--run-against-prod` and explicit approval.
+- Install the current checkout first; a stale build fails its fingerprint check.
+- Hunt CI flakes with
+  `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
+- Linux VM: `pnpm --dir app real-app:linux provision` ([linux-runner](../../../docs/linux-runner.md)).
+  Remote scenarios need `ATTN_HARNESS_REMOTE_SSH_TARGET`.
+- Platform skips go in the catalog entry as `skipOn` with a reason. A product
+  failure on Linux is a finding, not a skip.
 
 ## Writing scenarios
 
-- Exercise actual app actions/order; update scenarios when product flows change.
-- Build the driver with the automation client: `createWindowDriver({ appPath,
-  client })`. Keys, text, clicks, drags and pointer moves then become NSEvents
-  the app sends to its own window (`native_key`, `native_text`, `native_mouse`),
-  so a run never activates attn, never moves the real pointer, and works while
-  the window is parked. A window that never becomes key has limits WebKit
-  sets: it delivers no mouse moves (no hover, no `pointermove`), matches no
-  `:focus`, and reports `document.hasFocus()` false; assert focus through
-  `dom_active_element` instead. A scenario whose subject needs those calls
-  `driver.activateApp()` and sets `ATTN_HARNESS_ALWAYS_ON_TOP=0`, and
-  `focusFreeSweep.test.mjs` fails such a file unless it states why. Scroll and
-  `driver.menu` still go through macOS.
-- The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
-  for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
-  and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
-  restoring what it found. Sessions need both halves — the env reaches the daemon,
-  the setting reaches each spawn.
-- `focus_pane` selects the session id you hand it and then focuses a pane inside
-  that view. To move the selection onto a pane owned by a *different* session,
-  select that session; asking `focus_pane` for it selects the wrong one and any
-  poll on `activeSessionId` waits out its timeout.
-- A scenario needing a real provider says so with `allowRealAgents` and states why.
-  That list shrinks; adding to it needs a reason in the catalog entry.
-- Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
-  session starts. No fixture is a silent agent, not a broken one: the pane paints
-  the splash and every prompt closes its turn with no reply.
-- A turn with `submitHook: false` models injected input that no user submitted.
-  It still records the turn and runs the stop hook, but emits no prompt-submit hook.
-- A brief delivered on argv (`-- <prompt>`, how every delegation, crew wake and
-  automation launch starts an agent) is the mock's first turn, matched against the
-  same fixture. Its resume flags land in the transcript's `session_meta`.
-- A fixture marked `resumable` places the transcript where the daemon's finders
-  walk — codex at launch under the codex sessions tree, claude on its first turn
-  under the tool home's project folder — so a resume launch finds it, replays the
-  earlier turns into the pane and appends to that same file. Codex `/new` binds a
-  successor rollout.
-- Actions beyond `reply`/`delay`/`touch`/`wait_for_file`/`attn`: `capture` lifts a
-  value out of the prompt (`pattern`, `name`) for `{{name}}` in a later `attn` or
-  `exec` argument, and `exec` runs a command into the pane and the transcript,
-  failing the turn on a non-zero exit unless `allowFailure`.
-- The mock ends every turn with the real Stop hook and a `<!-- attn:state=… -->`
-  marker; an action's `state` sets it (default: `waiting_input` after a reply,
-  `idle` when the turn was silent). Arming turns headless tasks off, which is what
-  makes the daemon read that marker instead of a model.
-- Crew fixtures use synthetic names and `claude-haiku-4-5` unless stronger reasoning is required.
-- Read the live daemon DB through `queryDaemonDb` in `common.mjs`. A bare
-  `sqlite3` call has no busy timeout and dies on the first write it races.
-- Resolve pane ids from app/daemon state. Assert empty workspaces are removed.
-  Shortcuts use registry ids.
-- Keep OS-specific install paths, launch, observation, and quit behavior in
-  `platform.mjs`. Use automation-manifest or spawned PIDs; verify manifest PIDs
-  still run the installed executable before signalling them.
-
-## Agent tripwire
-
-`agentTripwire.mjs` shims `claude`, `codex`, `copilot` and `pi` so a scenario
-that must call no model fails when a real agent binary is exec'd. A shim appends
-`<scenario>\t<argv>` to `<run-dir>/agent-tripwire.ledger` and exits 97; the runner
-fails the scenario on a non-empty ledger and prints the lines.
-
-- The shims reach the app, the daemon it spawns, and the harness's own `attn`
-  calls two ways: the shim dir first on `PATH`, and `ATTN_<AGENT>_EXECUTABLE`
-  pins. Sessions need the pins — the login shell rebuilds `PATH` (see
-  `internal/pty/manager.go`), so only the pins survive that hop.
-- `claude` and `codex` pin at the mock agent rather than at their shim, so an
-  armed scenario gets a working agent instead of a dead session. Their shims stay
-  on `PATH`, so a name-resolved exec still lands in the ledger. `copilot` and `pi`
-  have no mock and pin at their shims.
-- Pi's bare version probe passes through. Its exact offline, no-session catalog
-  argv gets a controlled empty response for one `get_available_models` request.
-  Real Pi never starts; every other request or model-capable invocation is blocked.
-- A command a scenario types by hand into a shell pane resolves on the login
-  `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
-  covers every agent attn itself launches, not that.
-- The daemon outlives a scenario, so the shim dir is stable and a `current-run`
-  pointer file attributes execs to the scenario running now.
-  `ensureDaemonCarriesTripwire` stops a daemon that predates the tripwire
-  (never on a production target) so the app relaunch brings up an armed one.
-- Every `createScenarioRunner` caller declares what it may run: a
-  `scenarioCatalog.mjs` entry carrying its `runnerId`, or `allowRealAgents` in
-  the runner options, which wins over the catalog. `false` arms everything,
-  `true` allows all four, an array names the ones the scenario needs. A runner
-  id neither covers fails at construction rather than defaulting to permissive.
-  Every arming logs what it allowed. A pi scenario carries `['pi']` because the
-  attn-pi plugin execs `pi --version` as its health probe, then runs `pi` against
-  the loopback stub. Claude, Codex, and Copilot stay armed.
-- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses
-  classification, titling and every other headless LLM task (`internal/headless`)
-  instead of enqueueing one. Without it the ledger check races the daemon: a
-  debounced headless task's `claude --print` can land after `summary.json`, and
-  the single `current-run` pointer stamps it with whichever scenario is armed by
-  then. A scenario that allows real agents keeps headless tasks on.
-- `summary.json` carries `headlessTasks`, read from the environment of the
-  daemon the scenario ran against, so a green run states the switch was in force
-  rather than leaving it assumed. Counting `headless task refused` lines instead
-  does not work: the daemon logs them as a scenario tears its sessions down, in
-  the same second `summary.json` is written.
-- An armed scenario fails closed on both ends. At arm time, a running daemon
-  whose environment cannot be read, or one this harness may not stop (a
-  production target is never restarted), fails the scenario before it starts,
-  naming the pid, what was read and what was expected. At the end, `ok: true`
-  requires the daemon's environment to carry both this run's
-  `ATTN_AGENT_TRIPWIRE` marker and `ATTN_HEADLESS_TASKS=off`; a switch reading
-  `on`, `no daemon` or `unreadable`, or a marker from another run, fails the
-  scenario with the value in the digest. A scenario allowing real agents keeps
-  the old warn-and-continue: it has nothing to prove.
-- Remote probe scenarios arm a second tripwire on the fixture VM. Their launch
-  environment puts the provisioned shim directory first, pins all four agent
-  executables, and sets `ATTN_HEADLESS_TASKS=off`. Each scenario saves the
-  remote daemon's environment receipt and copies the remote ledger into its
-  local artifacts before it can pass. TR-502 and TR-504 launch the provisioned
-  mock through the same command name on macOS and Linux.
-
-## Mock GitHub
-
-`scripts/mock-github.mjs` is the GitHub every harness run talks to. The daemon's
-`refreshGitHubHosts` returns the moment `ATTN_MOCK_GH_URL` is set: it registers
-that one host, drops every other, and never runs `gh` discovery, so the switch
-alone keeps a run off github.com.
-
-- `createScenarioRunner` ensures the server and puts `ATTN_MOCK_GH_URL`,
-  `ATTN_MOCK_GH_TOKEN` and `ATTN_MOCK_GH_HOST` in the environment the app launch
-  carries into the daemon. `open` drops env, so naming them forces the
-  spawn-style launch.
-- The receipt is the live daemon, not the harness's own intent: `finishSuccess`
-  reads `ATTN_MOCK_GH_URL` out of the running daemon's environment, fails the
-  scenario unless it is exactly the URL this run started, and records what it
-  read in `summary.json`. `missing`, `no daemon` and another run's URL each fail
-  by name.
-- The port is `attn profile resolve --field mockGitHubPort`, so one server serves
-  a whole matrix and a daemon between scenarios keeps working. A daemon carrying
-  another URL is stopped the way a daemon predating the tripwire is.
-- `--ensure` identifies a running server by a hash of the server source and its
-  fixture. A match is reset to fixture state, so no scenario inherits the last
-  one's `/__control` mutations; a mismatch — an interrupted run's server from
-  another checkout — is stopped and replaced.
-- The serial matrix starts it before the first scenario and stops it after the
-  last. By hand: `pnpm --dir app run real-app:mock-github status|ensure|stop`.
-- A production target is skipped: a mock there would empty the user's live PRs.
-- `fixtures/github-snapshot.json` is the default seed — 14 synthetic PRs, sized
-  to keep an app-launch detail fetch (2 requests each, plus 3 searches) inside
-  the client's 60-request burst. A scenario wanting its own set posts to
-  `/__control/seed`; `/__control/requested` and `/__control/head` drive the
-  automation scenarios' review request and head SHA.
+- New scenario files get a `scenarioCatalog.mjs` entry. After a shape change,
+  update its weight in `scenario-durations.json` from a green run.
+- Drive the app like a user, through `createWindowDriver({ appPath, client })`.
+  It never takes focus or moves the pointer; a scenario that needs real focus
+  calls `driver.activateApp()` and says why.
+- Scenarios run the mock agent, not real models. Script its turns with
+  `writeMockAgentFixture` in the session cwd before launch; no fixture means a
+  silent agent. Real providers need `allowRealAgents` and a reason.
+- The agent tripwire fails any scenario that runs a real agent or headless model task.
+- Every run talks to the mock GitHub (`scripts/mock-github.mjs`), never github.com.
+  Seed custom PRs through `/__control/seed`.
+- Build child environments with `profileCliEnv`, never `{ ...process.env }`.
+- Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
+- Signal only PIDs from the automation manifest or spawned processes. Keep
+  OS-specific behavior in `platform.mjs`.
 
 ## Reading results
 
-- Read the last `ATTN_VERDICT ` stdout line; hand-rolled `main()` scenarios omit it.
-- Inspect captured pane text and native screenshots before diagnosing failures.
-- Dark/locked screens block input. Check `pmset -g log | rg "Display is turned"`.
-- Linux input needs `DISPLAY` and `xdotool`; run scenarios through `xvfb-run` in CI.
-  A Linux runner also needs `sqlite3`, `fish`, `bash`, `zsh`, `pi`, `xclip` on PATH, and
-  `attn plugin install-bundled attn-pi` run once in the profile.
-- Use `capture_screenshot_data` for DOM pixels. WebGL terminal evidence needs a
-  native window capture (`import -window` on Linux).
+- The verdict is the last `ATTN_VERDICT ` stdout line; `summary.json` has the rest.
+- Check pane text and native screenshots before diagnosing. WebGL terminals need
+  native window captures.
+- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`,
+  and `pi`, plus `attn plugin install-bundled attn-pi`.
 
 ## Recordings
 
-Record a non-production profile; watch for private data before publishing to the
-public evidence repository:
+Record a non-production profile and check clips for private data before publishing:
 
 ```bash
 ./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4
 ./scripts/pr-evidence.sh publish clip.mp4
 ```
 
-`publish` uploads MP4/GIF and prints PR Markdown. Re-record private content;
-keep clips around 20 seconds and heed the 10MB GIF warning.
-`ATTN_HARNESS_RECORD=1` writes `recording-NN.mp4` segments to scenario artifacts.
-Install/update the recorder with `make install-window-recorder`; its stable
-bundle preserves macOS Screen Recording permission.
-Recording is unsupported on Linux; the harness names that and continues.
+`ATTN_HARNESS_RECORD=1` records scenario segments. Recording is macOS-only.
