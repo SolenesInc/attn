@@ -24,10 +24,11 @@ func (d *Daemon) resolveMainRepo(ctx context.Context, kind gitTaskKind, lane git
 		if err != nil {
 			return "", err
 		}
-		if _, err := client.GetRepoRoot(runCtx, resolved); err != nil {
+		root, err := client.GetRepoRoot(runCtx, resolved)
+		if err != nil {
 			return "", err
 		}
-		return client.ResolveMainRepoPath(runCtx, resolved), nil
+		return client.ResolveMainRepoPath(runCtx, root), nil
 	})
 }
 
