@@ -91,12 +91,13 @@ satisfy the full requirement?
 
 ## Commands and verification
 
-- `make test`: Go tests
-- `make test-frontend`
-- `make test-e2e`: Browser tests
+- `make test`: Go tests (`make test-v` verbose, `make test-watch` on file changes)
+- `make test-frontend` (`pnpm --dir app test:ui` for the Vitest UI)
+- `make test-e2e`: Browser tests (`pnpm --dir app e2e:headed` to watch them)
 - `make test-scripts`: Shell script tests
 - `pnpm --dir app run dev`: Runs the frontend/app dev server
 - `make lint`: Overall linter
+- `scripts/pre-commit.sh`: formats staged Go and Rust; usable as a git pre-commit hook
 
 `make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
 
@@ -138,12 +139,20 @@ Read the relevant entry when the task touches its subject. When changing or work
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md
 - Pi driver or auto-mode permissions  => plugins/attn-pi/AGENTS.md
+- CPU, memory, or benchmarks => docs/perf-testing.md
+- Terminal input that stops working => docs/diagnosing-terminal-input.md
+- Shared Rust PTY host => docs/pty-host-verification.md
 
 ## Diagnostics
 
-- Daemon: `<data-dir>/daemon.log`.
+- Daemon: `<data-dir>/daemon.log`, or `attn debug daemon-log --since 10m --grep PATTERN`.
 - Dedicated PTY worker: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
 - Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
+- `attn debug incidents|diagnostics|input`: frontend terminal logs; `attn debug ls` lists them.
+- `attn state explain <session>`: why a session has its state, claim by claim.
+- `attn bus status`: event-log consumers, lag, and retention.
+- `go run ./scripts/wsctl`: drives a non-production daemon over WebSocket (sessions, input, screen).
+- `attn db restore`: restores the database from a rotating backup while the daemon is stopped.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
 - Restarting the app or daemon has no impact on the underlying agents.
