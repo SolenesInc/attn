@@ -31,12 +31,16 @@ const CONNECTION_STACK_BYTES: usize = 256 * 1024;
 #[derive(Clone)]
 pub struct Config {
     pub daemon_instance_id: String,
-    pub generation: String,
+    pub artifact: String,
+    pub incarnation: String,
     pub socket_path: String,
     pub registry_dir: String,
     pub host_registry_path: String,
     pub control_token: String,
+    pub idle_timeout: Duration,
 }
+
+pub const CAPABILITIES: &[&str] = &[crate::probe_child::CAPABILITY];
 
 #[derive(Serialize)]
 struct HostRegistry<'a> {
@@ -49,6 +53,7 @@ struct HostRegistry<'a> {
     started_at: String,
     snapshot_format: &'static str,
     generation: &'a str,
+    incarnation: &'a str,
 }
 
 pub struct Host {
@@ -190,7 +195,8 @@ impl Host {
             executable,
             started_at: unix_timestamp().to_string(),
             snapshot_format: env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"),
-            generation: &self.cfg.generation,
+            generation: &self.cfg.artifact,
+            incarnation: &self.cfg.incarnation,
         };
         write_json_atomic(&self.cfg.host_registry_path, &registry)
     }
@@ -312,11 +318,12 @@ impl Host {
             return;
         };
         let host = Arc::downgrade(self);
+        let idle_timeout = self.cfg.idle_timeout;
         let _ = thread::Builder::new()
             .name("pty-host-idle".to_owned())
             .stack_size(64 * 1024)
             .spawn(move || {
-                thread::sleep(std::time::Duration::from_secs(45));
+                thread::sleep(idle_timeout);
                 let Some(host) = host.upgrade() else {
                     return;
                 };
@@ -347,7 +354,8 @@ impl Host {
         json!({
             "host_pid": std::process::id(),
             "session_ids": ids,
-            "snapshot_format": env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT")
+            "snapshot_format": env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"),
+            "capabilities": CAPABILITIES
         })
     }
 
@@ -951,7 +959,7 @@ fn remove_session(host: &Weak<Host>, session_id: &str) {
 fn validate_config(cfg: &Config) -> Result<(), String> {
     for (name, value) in [
         ("daemon instance id", &cfg.daemon_instance_id),
-        ("generation", &cfg.generation),
+        ("generation", &cfg.artifact),
         ("socket path", &cfg.socket_path),
         ("registry directory", &cfg.registry_dir),
         ("host registry path", &cfg.host_registry_path),

@@ -5,13 +5,34 @@ Settings → Terminal → PTY Backend. New and explicitly reloaded sessions use 
 selected backend; changing the setting never moves or stops a running session.
 Turning it off returns future launches to dedicated Go workers.
 
-Enabling probes the host before saving the setting. A failed probe or save
-leaves the previous selection intact. On restart, a saved opt-in is probed again;
-if the host is unavailable, new launches use Go and Settings reports the fallback.
-Recovery always handles both backends, even with the experiment off or the host
-executable missing. A host binary change starts a new generation without moving
-sessions out of the old one. Explicit `ATTN_PTY_BACKEND` overrides disable the
-Settings control.
+Enabling checks the host before saving the setting. A failed check or save
+leaves the previous selection intact. Recovery always handles both backends,
+even with the experiment off or the host executable missing. Explicit
+`ATTN_PTY_BACKEND` overrides disable the Settings control.
+
+## Host builds
+
+A daemon pins the host build it found when it started. Replacing the app bundle
+while the daemon runs changes nothing until the next daemon start. Checked
+builds live under `<data-dir>/pty-hosts/<daemon-instance>/artifacts/`.
+
+A build is checked once per environment with a throwaway terminal. The host
+runs its built-in probe child, which has no shell, `PATH`, or user
+configuration. The daemon resizes it and sends a nonce through the normal input
+path; the child must answer with the nonce and the new size. The result is
+recorded, so ordinary restarts do not repeat the check. A build that passes
+becomes the last-known-good build.
+
+At startup the daemon recovers existing sessions first, then checks a newly
+installed build. Until it passes, new sessions use the last-known-good build.
+A build that fails is not checked again until it changes or the setting is
+turned on again, and one warning names it. A missing or failing bundle leaves
+new sessions on the last-known-good build; with none, they use Go and Settings
+reports the fallback.
+
+Every host process gets its own socket and control token. A host retires 45
+seconds after its last terminal closes, and the next launch starts a fresh one.
+A host from an older build keeps serving its sessions until they end.
 
 ## Reproduce the upgrade test
 
@@ -32,40 +53,54 @@ temporary data directories. No installed daemon or real provider is involved.
 3. Confirm the default is off and a new agent still uses Go. Enable the setting,
    start an agent on Rust, and reload one old agent onto that same Rust host.
    Check that its native conversation ID resumes and other processes stay put.
-4. Restart with the opt-in saved and recover the mixed population. Disable it,
+4. Delete the recorded host builds and restart with the opt-in saved, as on
+   the first start after this update; the bundled build passes its check and
+   becomes active. Recover the mixed population. Disable it,
    explicitly reload the promoted agent back onto Go, launch another Go agent,
    and restart again. Both populations retain their remaining PIDs and exchange
    fresh input/output; another new launch still uses Go.
-5. Re-enable, change the host executable identity, and start another agent. Verify that it
-   uses a different host PID while every earlier agent and worker keeps its PID.
-6. Resize the old shell. Restart with the host executable missing; confirm the
-   reported fallback, a new Go launch, and working sessions on both old host
-   generations. Close every pane.
+5. Re-enable, change the host executable identity, and restart. Once the new
+   build passes its check, start another agent. Verify that it uses a different
+   host PID while every earlier agent and worker keeps its PID.
+6. Resize the old shell. Restart with a build that fails its check: exactly one
+   warning names it and a new agent uses the last-known-good host. Restart with
+   the same build: it is not checked again and no warning appears.
+7. Restart with the host executable missing. A new agent still uses the
+   last-known-good host; with the setting off, the next launch uses Go. Every
+   earlier session keeps working. Close every pane.
 
 Readiness comes from filesystem events and the daemon's `initial_state` message.
 Every survival assertion uses a unique input challenge, the registry's child and
 worker PIDs, and the fixture agent's own PID. Fixed sleeps are not correctness
 barriers. Deadlines only terminate stalled tests. A wrapper changes the host
-executable hash for generation testing; it does not claim compatibility with an
+executable hash to test a new build; it does not claim compatibility with an
 arbitrary future host protocol.
 
-The complete opt-in matrix passed three consecutive macOS runs and three Linux
-ARM64 runs on 2026-09-04, with release-format stamps and the pinned old daemon.
-The CI job runs the upgrade and shared-host integration tests on macOS and Linux.
+The CI job runs the upgrade and shared-host integration tests on macOS and
+Linux. It also builds the oldest retained host (the last build before host
+checks) and verifies that the current daemon recovers, resizes, feeds, and
+removes its sessions, and rejects that build as a new default without disturbing
+them.
+
+## Host lifecycle tests
+
+`internal/ptybackend` covers the lifecycle with a real host and a 200 ms idle
+timer: a session receives input, closes, the host retires, and a relaunched
+host accepts input and resize. The original code failed this sequence with
+`daemon identity or control token mismatch`. Other tests cover a bundle
+replaced after the daemon started, promotion while sessions keep their host and
+child PIDs and a live output stream, a failing build with one warning and no
+recheck after restart, and keystrokes sent across a daemon replacement arriving
+exactly once. Unit tests against a fake host refuse stale credentials for a
+replacement host and never resend input the host already received. Each fails
+when its fix is removed.
 
 Profile cleanup authenticates each live host, verifies its PID, and asks it to
 stop its children before deleting profile data. The live cleanup test covers two
-generations with four PTYs, refuses forged tokens and mismatched PIDs, and keeps
+host builds with four PTYs, refuses forged tokens and mismatched PIDs, and keeps
 an unreachable host's registry for a later attempt. It passed three repeats on
 macOS with the race detector and three on Linux ARM64. Shell-close coverage
 checks that termination begins with SIGHUP.
-
-Idle retirement and spawn admission share one host-state lock. Six Rust tests
-cover retirement closing admission, pending spawns, stale timers after failed
-spawns, shutdown, duplicate reservations, and invalid session IDs. The
-retirement test failed against the original admission and retirement logic.
-Removing the admission gate or the pending-spawn check also fails the matching
-test; both deliberate mutations were reverted.
 
 All 22 Rust tests, clippy, the macOS backend suite with the race detector, and
 the Linux shared-host and mixed-backend suites passed. Setting tests cover probe

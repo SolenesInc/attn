@@ -124,7 +124,11 @@ done
 	assertAll(current, "after-reload")
 	current.stop()
 
+	if err := os.RemoveAll(ptyhost.ArtifactsDir(root, current.instanceID)); err != nil {
+		t.Fatal(err)
+	}
 	current = start(newBinary, hostBinary)
+	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "mixed-restart")
 	current.setSharedSetting(false)
@@ -162,6 +166,7 @@ done
 	current = start(newBinary, nextHost)
 	current.assertSharedSetting(true, true)
 	assertAll(current, "host-upgrade")
+	current.waitForLog("shared PTY host artifact promoted", nil)
 	current.spawn("next-agent", "codex", fixture)
 	next := current.identity("next-agent", true)
 	identities["next-agent"] = next
@@ -175,9 +180,47 @@ done
 	current.probe("legacy-shell", identities["legacy-shell"].ChildPID, "resized")
 	current.stop()
 
+	brokenHost := filepath.Join(root, "broken-pty-host")
+	if err := os.WriteFile(brokenHost, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	current = start(newBinary, brokenHost)
+	current.assertSharedSetting(true, true)
+	current.waitForLog("failed validation", nil)
+	current.connect()
+	if got := current.warningCount(warnPTYHostArtifactRejected); got != 1 {
+		t.Fatalf("rejection warnings = %d, want exactly one: %v", got, current.warnings)
+	}
+	assertAll(current, "rejected-candidate")
+	current.spawn("last-known-good-agent", "codex", fixture)
+	lastKnownGood := current.identity("last-known-good-agent", true)
+	identities["last-known-good-agent"] = lastKnownGood
+	sharedSessions["last-known-good-agent"] = true
+	if lastKnownGood.WorkerPID != next.WorkerPID {
+		t.Fatalf("launch after a rejected candidate used host %d, want last-known-good host %d", lastKnownGood.WorkerPID, next.WorkerPID)
+	}
+	current.probe("last-known-good-agent", lastKnownGood.ChildPID, "last-known-good")
+	current.stop()
+
+	current = start(newBinary, brokenHost)
+	current.assertSharedSetting(true, true)
+	assertAll(current, "unchanged-rejected-candidate")
+	current.connect()
+	if got := current.warningCount(warnPTYHostArtifactRejected); got != 0 || bytes.Contains(current.logSinceStart(), []byte("failed validation")) {
+		t.Fatalf("restart revalidated an unchanged rejected candidate: warnings=%v", current.warnings)
+	}
+	current.stop()
+
 	current = start(newBinary, filepath.Join(root, "missing-host"))
-	current.assertSharedSetting(true, false)
-	assertAll(current, "unavailable-host-restart")
+	current.assertSharedSetting(true, true)
+	assertAll(current, "missing-bundle-restart")
+	current.spawn("missing-bundle-agent", "codex", fixture)
+	identities["missing-bundle-agent"] = current.identity("missing-bundle-agent", true)
+	sharedSessions["missing-bundle-agent"] = true
+	if identities["missing-bundle-agent"].WorkerPID != next.WorkerPID {
+		t.Fatal("a missing bundle host moved new launches off the last-known-good host")
+	}
+	current.setSharedSetting(false)
 	current.spawn("fallback-agent", "codex", fixture)
 	identities["fallback-agent"] = current.identity("fallback-agent", false)
 	assertAll(current, "fallback-new-agent")
@@ -190,7 +233,10 @@ done
 type upgradeDaemon struct {
 	t          *testing.T
 	root       string
+	port       int
+	logOffset  int64
 	instanceID string
+	warnings   []any
 	cmd        *exec.Cmd
 	done       chan error
 	ws         *websocket.Conn
@@ -205,17 +251,8 @@ func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon 
 	if err != nil {
 		t.Fatal(err)
 	}
-	watcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer watcher.Close()
-	if err := watcher.Add(root); err != nil {
-		t.Fatal(err)
-	}
-	logPath := filepath.Join(root, "daemon.log")
 	var offset int64
-	if info, err := os.Stat(logPath); err == nil {
+	if info, err := os.Stat(filepath.Join(root, "daemon.log")); err == nil {
 		offset = info.Size()
 	}
 	cmd := exec.Command(binary, "daemon")
@@ -237,48 +274,89 @@ func startUpgradeDaemon(t *testing.T, root, binary, host string) *upgradeDaemon 
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	d := &upgradeDaemon{t: t, root: root, cmd: cmd, done: make(chan error, 1)}
+	d := &upgradeDaemon{t: t, root: root, port: port, logOffset: offset, cmd: cmd, done: make(chan error, 1)}
 	go func() { d.done <- cmd.Wait() }()
 	t.Cleanup(d.stop)
+	d.waitForLog("WebSocket server starting", &stderr)
+	d.connect()
+	t.Logf("daemon binary=%s pid=%d ready instance=%s", binary, cmd.Process.Pid, d.instanceID)
+	return d
+}
+
+func (d *upgradeDaemon) waitForLog(line string, stderr *bytes.Buffer) {
+	d.t.Helper()
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		d.t.Fatal(err)
+	}
+	defer watcher.Close()
+	if err := watcher.Add(d.root); err != nil {
+		d.t.Fatal(err)
+	}
 	deadline := time.NewTimer(30 * time.Second)
 	defer deadline.Stop()
 	for {
-		data, _ := os.ReadFile(logPath)
-		if int64(len(data)) >= offset && bytes.Contains(data[offset:], []byte("WebSocket server starting")) {
-			break
+		data := d.logSinceStart()
+		if bytes.Contains(data, []byte(line)) {
+			return
 		}
 		select {
 		case <-watcher.Events:
 		case err := <-watcher.Errors:
 			if !os.IsNotExist(err) {
-				t.Fatalf("daemon log watch: %v", err)
+				d.t.Fatalf("daemon log watch: %v", err)
 			}
 		case err := <-d.done:
 			d.stopped = true
-			t.Fatalf("daemon exited before readiness: %v\n%s\n%s", err, stderr.String(), data)
+			d.t.Fatalf("daemon exited while waiting for %q: %v\n%s\n%s", line, err, stderr, data)
 		case <-deadline.C:
-			t.Fatalf("daemon readiness timeout\n%s", data)
+			d.t.Fatalf("daemon log never showed %q\n%s", line, data)
 		}
+	}
+}
+
+func (d *upgradeDaemon) logSinceStart() []byte {
+	data, _ := os.ReadFile(filepath.Join(d.root, "daemon.log"))
+	if int64(len(data)) < d.logOffset {
+		return nil
+	}
+	return data[d.logOffset:]
+}
+
+func (d *upgradeDaemon) connect() {
+	d.t.Helper()
+	if d.ws != nil {
+		_ = d.ws.CloseNow()
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	d.ws, _, err = websocket.Dial(ctx, fmt.Sprintf("ws://127.0.0.1:%d/ws", port), nil)
+	ws, _, err := websocket.Dial(ctx, fmt.Sprintf("ws://127.0.0.1:%d/ws", d.port), nil)
 	if err != nil {
-		t.Fatal(err)
+		d.t.Fatal(err)
 	}
+	d.ws = ws
 	d.ws.SetReadLimit(16 << 20)
-	token, err := os.ReadFile(filepath.Join(root, "client-token"))
+	token, err := os.ReadFile(filepath.Join(d.root, "client-token"))
 	if err != nil {
-		t.Fatal(err)
+		d.t.Fatal(err)
 	}
 	d.write(map[string]any{"cmd": "client_hello", "client_kind": "pty-upgrade-test", "version": "test", "capabilities": []string{"workspace_sessions", "binary_pty_output"}, "client_token": strings.TrimSpace(string(token))})
 	initial := d.event("initial_state", "")
 	d.instanceID, _ = initial["daemon_instance_id"].(string)
 	if d.instanceID == "" {
-		t.Fatal("initial_state has no daemon instance identity")
+		d.t.Fatal("initial_state has no daemon instance identity")
 	}
-	t.Logf("daemon binary=%s pid=%d ready instance=%s", binary, cmd.Process.Pid, d.instanceID)
-	return d
+	d.warnings, _ = initial["warnings"].([]any)
+}
+
+func (d *upgradeDaemon) warningCount(code string) int {
+	count := 0
+	for _, warning := range d.warnings {
+		if entry, ok := warning.(map[string]any); ok && entry["code"] == code {
+			count++
+		}
+	}
+	return count
 }
 
 func (d *upgradeDaemon) stop() {

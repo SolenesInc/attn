@@ -13,6 +13,9 @@ const (
 	MethodHostInfo = "host_info"
 	MethodWatchAll = "watch_all"
 	MethodShutdown = "shutdown"
+
+	CapabilityProbeChild = "probe_child"
+	ProbeChildFlag       = "--probe-child"
 )
 
 type SpawnParams struct {
@@ -49,4 +52,5 @@ type HostInfoResult struct {
 	HostPID        int      `json:"host_pid"`
 	SessionIDs     []string `json:"session_ids"`
 	SnapshotFormat string   `json:"snapshot_format"`
+	Capabilities   []string `json:"capabilities,omitempty"`
 }

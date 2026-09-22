@@ -79,6 +79,8 @@ type WorkerBackendConfig struct {
 	OwnerNonce       string
 	Logf             func(format string, args ...interface{})
 	OnTerminalBuild  func(sessionID, snapshotFormat string)
+
+	OnSharedArtifactRejected func(SharedArtifactRejection)
 }
 
 type workerRuntimeKind uint8
@@ -141,11 +143,18 @@ type WorkerBackend struct {
 	hostMu sync.Mutex
 
 	sharedControlMu sync.Mutex
-	sharedControls  map[string]*sharedHostControl
+	sharedControls  map[hostIncarnation]*sharedHostControl
 
 	sharedMonitorMu sync.Mutex
-	sharedMonitors  map[string]*sharedHostMonitor
+	sharedMonitors  map[hostIncarnation]*sharedHostMonitor
 	sharedStopping  bool
+
+	artifactsDir    string
+	candidate       sharedCandidate
+	validateMu      sync.Mutex
+	artifactMu      sync.Mutex
+	pinned          ptyhost.Artifact
+	pinnedValidated bool
 }
 
 func (s *workerSession) notePollFailure(now time.Time) (logUnreachable bool, evict bool) {
@@ -245,8 +254,11 @@ func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerB
 		binaryPath:         cfg.BinaryPath,
 		binaryPathExplicit: binaryPathExplicit,
 		sessions:           make(map[string]*workerSession),
-		sharedControls:     make(map[string]*sharedHostControl),
-		sharedMonitors:     make(map[string]*sharedHostMonitor),
+		sharedControls:     make(map[hostIncarnation]*sharedHostControl),
+		sharedMonitors:     make(map[hostIncarnation]*sharedHostMonitor),
+	}
+	if kind == workerRuntimeSharedHost {
+		b.loadSharedArtifacts()
 	}
 	if err := os.MkdirAll(b.registryDir(), 0700); err != nil {
 		return nil, fmt.Errorf("create worker registry dir: %w", err)
@@ -276,21 +288,10 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 		b.cfg.Logf("worker binary missing at %s, not re-resolving explicit path", binaryPath)
 		return binaryPath
 	}
-	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
-
 	if b.kind == workerRuntimeSharedHost {
-		for _, candidate := range sharedHostBinaryCandidates() {
-			if isExecutableFile(candidate) {
-				b.cfg.Logf("PTY host binary re-resolved to %s", candidate)
-				b.binaryPathMu.Lock()
-				b.binaryPath = candidate
-				b.binaryPathMu.Unlock()
-				return candidate
-			}
-		}
-		b.cfg.Logf("PTY host binary re-resolve failed, using original %s", binaryPath)
 		return binaryPath
 	}
+	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
 
 	candidates := make([]string, 0, 4)
 	if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
@@ -418,6 +419,14 @@ func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.O
 func (b *WorkerBackend) Probe(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if b.kind == workerRuntimeSharedHost {
+		err := b.ValidateSharedCandidate(ctx, true)
+		if err != nil && b.SharedArtifactReady() {
+			b.cfg.Logf("shared PTY host keeps its last-known-good artifact: %v", err)
+			return nil
+		}
+		return err
 	}
 
 	suffix, err := randomToken(6)
@@ -943,9 +952,7 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 			b.stopMonitor(session)
 			b.stopPoller(session)
 			b.closePersistentControlConn(session, "remove_missing")
-			b.mu.Lock()
-			delete(b.sessions, sessionID)
-			b.mu.Unlock()
+			b.forgetSession(session)
 			b.pruneSessionFiles(sessionID, session.RegistryPath, session.SocketPath)
 			b.reapWorkerPID(workerPID, sessionID)
 		}
@@ -954,11 +961,20 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 	b.stopMonitor(session)
 	b.stopPoller(session)
 	b.closePersistentControlConn(session, "remove")
-	b.mu.Lock()
-	delete(b.sessions, sessionID)
-	b.mu.Unlock()
+	b.forgetSession(session)
 	b.reapWorkerPID(workerPID, sessionID)
 	return nil
+}
+
+func (b *WorkerBackend) forgetSession(session *workerSession) {
+	b.mu.Lock()
+	if b.sessions[session.SessionID] == session {
+		delete(b.sessions, session.SessionID)
+	}
+	b.mu.Unlock()
+	if b.kind == workerRuntimeSharedHost {
+		b.releaseSharedIncarnationIfUnused(incarnationOf(session))
+	}
 }
 
 func (b *WorkerBackend) SessionIDs(_ context.Context) []string {
@@ -1499,14 +1515,16 @@ func (b *WorkerBackend) getSession(sessionID string) (*workerSession, error) {
 		return nil, probeErr
 	}
 	b.mu.Lock()
-	if existing := b.sessions[sessionID]; existing != nil {
-		session = existing
-	} else {
+	existing := b.sessions[sessionID]
+	if existing == nil {
 		b.sessions[sessionID] = session
-		b.startPoller(session)
-		b.startMonitor(session)
 	}
 	b.mu.Unlock()
+	if existing != nil {
+		return existing, nil
+	}
+	b.startPoller(session)
+	b.startMonitor(session)
 	return session, nil
 }
 
@@ -1807,7 +1825,7 @@ func (b *WorkerBackend) connectWithIdentity(
 			_ = conn.Close()
 			return nil, nil, nil, fmt.Errorf("decode hello result: %w", err)
 		}
-		if !ptyworker.IsCompatibleVersion(hello.RPCMajor, hello.RPCMinor) {
+		if !b.compatibleRPCVersion(hello.RPCMajor, hello.RPCMinor) {
 			_ = conn.Close()
 			return nil, nil, nil, fmt.Errorf(
 				"worker rpc version incompatible: got=%d.%d supported=%d.%d..%d.%d",
@@ -1832,6 +1850,13 @@ func (b *WorkerBackend) connectWithIdentity(
 	}
 	_ = conn.SetDeadline(time.Time{})
 	return conn, enc, dec, nil
+}
+
+func (b *WorkerBackend) compatibleRPCVersion(major, minor int) bool {
+	if b.kind == workerRuntimeSharedHost {
+		return major == ptyworker.RPCMajor
+	}
+	return ptyworker.IsCompatibleVersion(major, minor)
 }
 
 func (b *WorkerBackend) rpcError(sessionID string, rpcErr *ptyworker.RPCError) error {
@@ -1871,11 +1896,7 @@ func unixSocketPathFits(path string) bool {
 
 func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 	if b.kind == workerRuntimeSharedHost {
-		generation, err := ptyhost.Generation(b.resolveBinaryPath(), buildinfo.SnapshotFormat)
-		if err != nil {
-			return "", err
-		}
-		return ptyhost.SocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, generation)
+		return "", errors.New("shared PTY host sockets belong to host incarnations")
 	}
 	root := b.sockDir()
 
@@ -2133,9 +2154,7 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 	b.stopMonitor(session)
 	b.stopPoller(session)
 	b.closePersistentControlConn(session, "force_evict")
-	b.mu.Lock()
-	delete(b.sessions, session.SessionID)
-	b.mu.Unlock()
+	b.forgetSession(session)
 	b.pruneSessionFiles(session.SessionID, session.RegistryPath, session.SocketPath)
 	b.reapWorkerPID(workerPID, session.SessionID)
 }

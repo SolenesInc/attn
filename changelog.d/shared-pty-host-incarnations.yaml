@@ -1,0 +1,16 @@
+kind: fixed
+area: terminals
+change: >-
+  Terminals on the experimental shared PTY host keep accepting input and resizes
+  after an idle host retires and a new one starts, and app updates switch new
+  terminals to a new host only after it passes a live check.
+symptom: >-
+  With the shared PTY host enabled, a new terminal could show the harness prompt
+  and then reject every keystroke and resize with "daemon identity or control
+  token mismatch".
+notes: >-
+  Each daemon pins the host build it started with. A newly installed build
+  becomes the default only after a throwaway terminal round trip passes; until
+  then, and if it fails, new terminals keep using the last build that passed, and
+  one warning names the rejected build. Keystrokes are never sent twice when a
+  host connection drops mid-request.

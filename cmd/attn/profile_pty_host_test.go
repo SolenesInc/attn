@@ -127,7 +127,7 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 func TestProfileCleanPreservesUnreachableSharedHostRegistry(t *testing.T) {
 	r := stoppedProfile(t)
 	path := ptyhost.HostRegistryPath(r.DataDir, "d-unknown", "unknown")
-	if err := ptyhost.WriteHostRegistryAtomic(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", Generation: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
+	if err := ptyhost.WriteHostRegistryAtomic(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", ArtifactID: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer

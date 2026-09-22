@@ -9,33 +9,52 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-type sharedHostControl struct {
-	mu           sync.Mutex
+var sharedHostIdleTimeout time.Duration
+
+type hostIncarnation struct {
 	socketPath   string
 	controlToken string
-	conn         net.Conn
-	enc          *json.Encoder
-	dec          *json.Decoder
+}
+
+func incarnationOf(session *workerSession) hostIncarnation {
+	return hostIncarnation{socketPath: filepath.Clean(session.SocketPath), controlToken: session.ControlToken}
+}
+
+func incarnationOfHost(host ptyhost.HostRegistry) hostIncarnation {
+	return hostIncarnation{socketPath: filepath.Clean(host.SocketPath), controlToken: host.ControlToken}
+}
+
+func (inc hostIncarnation) endpoint() *workerSession {
+	return &workerSession{SocketPath: inc.socketPath, ControlToken: inc.controlToken}
+}
+
+type sharedHostControl struct {
+	mu          sync.Mutex
+	incarnation hostIncarnation
+	retired     bool
+	conn        net.Conn
+	enc         *json.Encoder
+	dec         *json.Decoder
 }
 
 type sharedHostMonitor struct {
-	socketPath   string
-	controlToken string
-	stop         chan struct{}
-	done         chan struct{}
-	stopOnce     sync.Once
-	fallback     bool
-	stopping     bool
+	incarnation hostIncarnation
+	stop        chan struct{}
+	done        chan struct{}
+	stopOnce    sync.Once
+	fallback    bool
+	stopping    bool
 }
 
 func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *workerSession, method string, params, result any) error {
@@ -71,42 +90,45 @@ func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *wo
 func (b *WorkerBackend) callResultSharedPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
-	control := b.sharedControl(session)
-	control.mu.Lock()
+	control := b.lockSharedControl(incarnationOf(session))
 	defer control.mu.Unlock()
 
 	if err := b.ensureSharedControlLocked(rpcCtx, control); err != nil {
 		return false, err
 	}
-	err := b.callResultOnSharedControlLocked(rpcCtx, control, session.SessionID, method, params, result)
-	if err == nil || !isRetryablePersistentConnError(err) || rpcCtx.Err() != nil {
+	delivered, err := b.callResultOnSharedControlLocked(rpcCtx, control, session.SessionID, method, params, result)
+	if err == nil || delivered || !isRetryablePersistentConnError(err) || rpcCtx.Err() != nil {
 		return false, err
 	}
-	b.closeSharedControlLocked(control)
 	if err := b.ensureSharedControlLocked(rpcCtx, control); err != nil {
 		return true, err
 	}
-	return true, b.callResultOnSharedControlLocked(rpcCtx, control, session.SessionID, method, params, result)
+	_, err = b.callResultOnSharedControlLocked(rpcCtx, control, session.SessionID, method, params, result)
+	return true, err
 }
 
-func (b *WorkerBackend) sharedControl(session *workerSession) *sharedHostControl {
-	key := filepath.Clean(session.SocketPath)
-	b.sharedControlMu.Lock()
-	defer b.sharedControlMu.Unlock()
-	if control := b.sharedControls[key]; control != nil {
-		return control
+func (b *WorkerBackend) lockSharedControl(inc hostIncarnation) *sharedHostControl {
+	for {
+		b.sharedControlMu.Lock()
+		control := b.sharedControls[inc]
+		if control == nil {
+			control = &sharedHostControl{incarnation: inc}
+			b.sharedControls[inc] = control
+		}
+		b.sharedControlMu.Unlock()
+		control.mu.Lock()
+		if !control.retired {
+			return control
+		}
+		control.mu.Unlock()
 	}
-	control := &sharedHostControl{socketPath: session.SocketPath, controlToken: session.ControlToken}
-	b.sharedControls[key] = control
-	return control
 }
 
 func (b *WorkerBackend) ensureSharedControlLocked(ctx context.Context, control *sharedHostControl) error {
 	if control.conn != nil && control.enc != nil && control.dec != nil {
 		return nil
 	}
-	host := &workerSession{SocketPath: control.socketPath, ControlToken: control.controlToken}
-	conn, enc, dec, err := b.connectWithIdentity(ctx, host, b.cfg.DaemonInstanceID, control.controlToken)
+	conn, enc, dec, err := b.connectAuthed(ctx, control.incarnation.endpoint())
 	if err != nil {
 		return err
 	}
@@ -118,36 +140,36 @@ func (b *WorkerBackend) ensureSharedControlLocked(ctx context.Context, control *
 	return nil
 }
 
-func (b *WorkerBackend) callResultOnSharedControlLocked(ctx context.Context, control *sharedHostControl, sessionID, method string, params, result any) error {
+func (b *WorkerBackend) callResultOnSharedControlLocked(ctx context.Context, control *sharedHostControl, sessionID, method string, params, result any) (delivered bool, err error) {
 	if control.conn == nil || control.enc == nil || control.dec == nil {
-		return errors.New("shared PTY host control connection is not initialized")
+		return false, errors.New("shared PTY host control connection is not initialized")
 	}
 	conn := control.conn
 	if err := applyConnDeadline(conn, ctx); err != nil {
 		b.closeSharedControlLocked(control)
-		return err
+		return false, err
 	}
 	defer func() { _ = conn.SetDeadline(time.Time{}) }()
 
 	reqID := b.nextReqID(method)
 	if err := writeRequestForSession(control.enc, reqID, method, sessionID, params); err != nil {
 		b.closeSharedControlLocked(control)
-		return err
+		return false, err
 	}
 	res, err := readMatchingResponse(control.dec, reqID)
 	if err != nil {
 		b.closeSharedControlLocked(control)
-		return err
+		return true, err
 	}
 	if !res.OK {
-		return b.rpcError(sessionID, res.Error)
+		return true, b.rpcError(sessionID, res.Error)
 	}
 	if result != nil {
 		if err := json.Unmarshal(res.Result, result); err != nil {
-			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
+			return true, fmt.Errorf("decode shared PTY host %s result: %w", method, err)
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func (b *WorkerBackend) closeSharedControlLocked(control *sharedHostControl) {
@@ -163,37 +185,52 @@ func (b *WorkerBackend) closeSharedControls() {
 	for _, control := range b.sharedControls {
 		controls = append(controls, control)
 	}
-	b.sharedControls = make(map[string]*sharedHostControl)
+	b.sharedControls = make(map[hostIncarnation]*sharedHostControl)
 	b.sharedControlMu.Unlock()
 	for _, control := range controls {
 		control.mu.Lock()
+		control.retired = true
 		b.closeSharedControlLocked(control)
 		control.mu.Unlock()
 	}
 }
 
-func (b *WorkerBackend) closeSharedControl(socketPath string) {
-	key := filepath.Clean(socketPath)
+func (b *WorkerBackend) closeSharedControl(inc hostIncarnation) {
 	b.sharedControlMu.Lock()
-	control := b.sharedControls[key]
-	delete(b.sharedControls, key)
+	control := b.sharedControls[inc]
+	delete(b.sharedControls, inc)
 	b.sharedControlMu.Unlock()
 	if control == nil {
 		return
 	}
 	control.mu.Lock()
+	control.retired = true
 	b.closeSharedControlLocked(control)
 	control.mu.Unlock()
 }
 
+func (b *WorkerBackend) releaseSharedIncarnationIfUnused(inc hostIncarnation) {
+	if len(b.sharedHostSessions(inc)) > 0 {
+		return
+	}
+	b.closeSharedControl(inc)
+	b.sharedMonitorMu.Lock()
+	monitor := b.sharedMonitors[inc]
+	released := monitor != nil && !monitor.fallback && b.dropSharedHostMonitorIfUnusedLocked(monitor)
+	b.sharedMonitorMu.Unlock()
+	if released {
+		monitor.stopOnce.Do(func() { close(monitor.stop) })
+	}
+}
+
 func (b *WorkerBackend) startSharedHostMonitor(session *workerSession) {
-	key := filepath.Clean(session.SocketPath)
+	inc := incarnationOf(session)
 	b.sharedMonitorMu.Lock()
 	if b.sharedStopping {
 		b.sharedMonitorMu.Unlock()
 		return
 	}
-	monitor := b.sharedMonitors[key]
+	monitor := b.sharedMonitors[inc]
 	if monitor != nil {
 		if monitor.stopping {
 			b.sharedMonitorMu.Unlock()
@@ -209,22 +246,20 @@ func (b *WorkerBackend) startSharedHostMonitor(session *workerSession) {
 		return
 	}
 	monitor = &sharedHostMonitor{
-		socketPath:   session.SocketPath,
-		controlToken: session.ControlToken,
-		stop:         make(chan struct{}),
-		done:         make(chan struct{}),
+		incarnation: inc,
+		stop:        make(chan struct{}),
+		done:        make(chan struct{}),
 	}
-	b.sharedMonitors[key] = monitor
+	b.sharedMonitors[inc] = monitor
 	b.sharedMonitorMu.Unlock()
 	go b.serveSharedHostMonitor(monitor)
 }
 
 func (b *WorkerBackend) serveSharedHostMonitor(monitor *sharedHostMonitor) {
 	defer func() {
-		key := filepath.Clean(monitor.socketPath)
 		b.sharedMonitorMu.Lock()
-		if b.sharedMonitors[key] == monitor && !monitor.fallback {
-			delete(b.sharedMonitors, key)
+		if b.sharedMonitors[monitor.incarnation] == monitor && !monitor.fallback {
+			delete(b.sharedMonitors, monitor.incarnation)
 		}
 		b.sharedMonitorMu.Unlock()
 		close(monitor.done)
@@ -243,7 +278,7 @@ func (b *WorkerBackend) serveSharedHostMonitor(monitor *sharedHostMonitor) {
 			return
 		}
 		if errors.Is(err, errLifecycleWatchUnsupported) || errors.Is(err, errLifecycleWatchHandshakeTimeout) {
-			b.cfg.Logf("shared PTY host lifecycle stream unavailable at %s; falling back to per-session streams", monitor.socketPath)
+			b.cfg.Logf("shared PTY host lifecycle stream unavailable at %s; falling back to per-session streams", monitor.incarnation.socketPath)
 			b.installSharedHostMonitorFallback(monitor)
 			return
 		}
@@ -256,11 +291,11 @@ func (b *WorkerBackend) serveSharedHostMonitor(monitor *sharedHostMonitor) {
 		if b.dropSharedHostMonitorIfUnused(monitor) {
 			return
 		}
-		sessions := b.sharedHostSessions(monitor.socketPath)
-		b.cfg.Logf("shared PTY host lifecycle stream disconnected at %s: %v", monitor.socketPath, err)
+		sessions := b.sharedHostSessions(monitor.incarnation)
+		b.cfg.Logf("shared PTY host lifecycle stream disconnected at %s: %v", monitor.incarnation.socketPath, err)
 		alive, probeErr := b.sharedHostLikelyAlive(monitor, sessions)
 		if !alive {
-			b.notifySharedHostLost(monitor.socketPath)
+			b.notifySharedHostLost(monitor.incarnation)
 			return
 		}
 		if probeErr == nil {
@@ -268,8 +303,8 @@ func (b *WorkerBackend) serveSharedHostMonitor(monitor *sharedHostMonitor) {
 		} else if unreachableAt.IsZero() {
 			unreachableAt = time.Now()
 		} else if time.Since(unreachableAt) >= pollerUnreachableAfter {
-			b.cfg.Logf("shared PTY host remained unreachable at %s: %v", monitor.socketPath, probeErr)
-			b.notifySharedHostLost(monitor.socketPath)
+			b.cfg.Logf("shared PTY host remained unreachable at %s: %v", monitor.incarnation.socketPath, probeErr)
+			b.notifySharedHostLost(monitor.incarnation)
 			return
 		}
 
@@ -285,8 +320,7 @@ func (b *WorkerBackend) serveSharedHostMonitor(monitor *sharedHostMonitor) {
 
 func (b *WorkerBackend) runSharedHostMonitor(monitor *sharedHostMonitor) error {
 	callCtx, cancel := withDefaultRPCTimeout(context.Background())
-	host := &workerSession{SocketPath: monitor.socketPath, ControlToken: monitor.controlToken}
-	conn, enc, dec, err := b.connectWithIdentity(callCtx, host, b.cfg.DaemonInstanceID, monitor.controlToken)
+	conn, enc, dec, err := b.connectAuthed(callCtx, monitor.incarnation.endpoint())
 	cancel()
 	if err != nil {
 		return err
@@ -354,21 +388,20 @@ func (b *WorkerBackend) runSharedHostMonitor(monitor *sharedHostMonitor) error {
 			}
 		}
 		if frameType == "evt" {
-			b.handleSharedLifecycleEvent(monitor.socketPath, evt)
+			b.handleSharedLifecycleEvent(monitor.incarnation, evt)
 		}
 	}
 }
 
 func (b *WorkerBackend) installSharedHostMonitorFallback(monitor *sharedHostMonitor) {
-	key := filepath.Clean(monitor.socketPath)
 	b.sharedMonitorMu.Lock()
-	if b.sharedStopping || monitor.stopping || b.sharedMonitors[key] != monitor {
+	if b.sharedStopping || monitor.stopping || b.sharedMonitors[monitor.incarnation] != monitor {
 		b.sharedMonitorMu.Unlock()
 		return
 	}
 	monitor.fallback = true
 	b.sharedMonitorMu.Unlock()
-	for _, session := range b.sharedHostSessions(monitor.socketPath) {
+	for _, session := range b.sharedHostSessions(monitor.incarnation) {
 		b.startSessionMonitor(session)
 	}
 }
@@ -381,7 +414,7 @@ func (b *WorkerBackend) closeSharedMonitors() {
 		monitor.stopping = true
 		monitors = append(monitors, monitor)
 	}
-	b.sharedMonitors = make(map[string]*sharedHostMonitor)
+	b.sharedMonitors = make(map[hostIncarnation]*sharedHostMonitor)
 	b.sharedMonitorMu.Unlock()
 	for _, monitor := range monitors {
 		monitor.stopOnce.Do(func() { close(monitor.stop) })
@@ -390,37 +423,29 @@ func (b *WorkerBackend) closeSharedMonitors() {
 }
 
 func (b *WorkerBackend) dropSharedHostMonitorIfUnused(monitor *sharedHostMonitor) bool {
-	key := filepath.Clean(monitor.socketPath)
 	b.sharedMonitorMu.Lock()
 	defer b.sharedMonitorMu.Unlock()
-	if b.sharedStopping || monitor.stopping || b.sharedMonitors[key] != monitor {
+	return b.dropSharedHostMonitorIfUnusedLocked(monitor)
+}
+
+func (b *WorkerBackend) dropSharedHostMonitorIfUnusedLocked(monitor *sharedHostMonitor) bool {
+	if b.sharedStopping || monitor.stopping || b.sharedMonitors[monitor.incarnation] != monitor {
 		return true
 	}
-
-	b.mu.RLock()
-	hasSession := false
-	for _, session := range b.sessions {
-		if filepath.Clean(session.SocketPath) == key {
-			hasSession = true
-			break
-		}
-	}
-	b.mu.RUnlock()
-	if hasSession {
+	if len(b.sharedHostSessions(monitor.incarnation)) > 0 {
 		return false
 	}
 	monitor.stopping = true
-	delete(b.sharedMonitors, key)
+	delete(b.sharedMonitors, monitor.incarnation)
 	return true
 }
 
-func (b *WorkerBackend) sharedHostSessions(socketPath string) []*workerSession {
-	key := filepath.Clean(socketPath)
+func (b *WorkerBackend) sharedHostSessions(inc hostIncarnation) []*workerSession {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	sessions := make([]*workerSession, 0)
 	for _, session := range b.sessions {
-		if filepath.Clean(session.SocketPath) == key {
+		if incarnationOf(session) == inc {
 			sessions = append(sessions, session)
 		}
 	}
@@ -433,7 +458,7 @@ func (b *WorkerBackend) sharedHostLikelyAlive(monitor *sharedHostMonitor, sessio
 			return false, nil
 		}
 	}
-	if _, err := os.Stat(monitor.socketPath); err != nil {
+	if _, err := os.Stat(monitor.incarnation.socketPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return false, nil
 		}
@@ -441,22 +466,17 @@ func (b *WorkerBackend) sharedHostLikelyAlive(monitor *sharedHostMonitor, sessio
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), livenessRPCTimeout)
 	defer cancel()
-	err := b.probeSharedHost(ctx, ptyhost.HostRegistry{
-		DaemonInstanceID: b.cfg.DaemonInstanceID,
-		SocketPath:       monitor.socketPath,
-		ControlToken:     monitor.controlToken,
-	})
-	return true, err
+	return true, b.probeSharedHost(ctx, monitor.incarnation)
 }
 
-func (b *WorkerBackend) handleSharedLifecycleEvent(socketPath string, evt ptyworker.EventEnvelope) {
+func (b *WorkerBackend) handleSharedLifecycleEvent(inc hostIncarnation, evt ptyworker.EventEnvelope) {
 	if evt.SessionID == "" {
 		return
 	}
 	b.mu.RLock()
 	session := b.sessions[evt.SessionID]
 	b.mu.RUnlock()
-	if session == nil || filepath.Clean(session.SocketPath) != filepath.Clean(socketPath) {
+	if session == nil || incarnationOf(session) != inc {
 		return
 	}
 	b.handleLifecycleEvent(session, evt)
@@ -503,9 +523,9 @@ func (b *WorkerBackend) syncSharedSessionLifecycle(session *workerSession) {
 	}
 }
 
-func (b *WorkerBackend) notifySharedHostLost(socketPath string) {
-	sessions := b.sharedHostSessions(socketPath)
-	b.closeSharedControl(socketPath)
+func (b *WorkerBackend) notifySharedHostLost(inc hostIncarnation) {
+	sessions := b.sharedHostSessions(inc)
+	b.closeSharedControl(inc)
 	for _, session := range sessions {
 		b.notifySharedHostSessionLost(session)
 	}
@@ -550,42 +570,11 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	if err != nil {
 		return err
 	}
-	ownedLaunch := false
-	defer func() {
-		if !ownedLaunch {
-			prepared.CleanupExcept(-1)
-		}
-	}()
-
-	host, err := b.ensureSharedHost(ctx)
+	artifact, err := b.launchArtifact()
 	if err != nil {
+		prepared.CleanupExcept(-1)
 		return err
 	}
-	session := &workerSession{
-		SessionID:    opts.ID,
-		SocketPath:   host.SocketPath,
-		RegistryPath: ptyhost.SessionRegistryPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, opts.ID),
-		ControlToken: host.ControlToken,
-		WorkerPID:    host.HostPID,
-		LifecycleID:  opts.LifecycleID,
-	}
-	b.mu.Lock()
-	if _, exists := b.sessions[opts.ID]; exists {
-		b.mu.Unlock()
-		return fmt.Errorf("session %s already exists", opts.ID)
-	}
-	b.sessions[opts.ID] = session
-	b.mu.Unlock()
-	ready := false
-	defer func() {
-		if ready {
-			return
-		}
-		b.mu.Lock()
-		delete(b.sessions, opts.ID)
-		b.mu.Unlock()
-	}()
-
 	params := ptyhost.SpawnParams{
 		SessionID:   opts.ID,
 		Agent:       prepared.Agent,
@@ -611,72 +600,130 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		Effort:            opts.Effort,
 		UnattendedLaunch:  opts.UnattendedLaunch,
 	}
-	var result ptyhost.SpawnResult
-	if err := b.callSharedHost(ctx, host, ptyhost.MethodSpawn, params, &result); err != nil {
-		if _, probeErr := b.callInfo(ctx, session); probeErr != nil {
-			return err
-		}
-		ownedLaunch = true
-	} else {
-		ownedLaunch = true
+	result, spawned, err := b.spawnOnSharedHost(ctx, artifact, params)
+	switch {
+	case !spawned:
+		prepared.CleanupExcept(-1)
+	case result != nil:
 		prepared.CleanupExcept(result.AttemptIndex)
-		session.WorkerPID = result.HostPID
 	}
+	return err
+}
+
+func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact ptyhost.Artifact, params ptyhost.SpawnParams) (result *ptyhost.SpawnResult, spawned bool, err error) {
+	for attempt := 0; ; attempt++ {
+		host, err := b.ensureSharedHost(ctx, artifact)
+		if err != nil {
+			return nil, false, err
+		}
+		session := &workerSession{
+			SessionID:    params.SessionID,
+			SocketPath:   host.SocketPath,
+			RegistryPath: ptyhost.SessionRegistryPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, params.SessionID),
+			ControlToken: host.ControlToken,
+			WorkerPID:    host.HostPID,
+			LifecycleID:  params.LifecycleID,
+		}
+		b.mu.Lock()
+		if _, exists := b.sessions[params.SessionID]; exists {
+			b.mu.Unlock()
+			return nil, false, fmt.Errorf("session %s already exists", params.SessionID)
+		}
+		b.sessions[params.SessionID] = session
+		b.mu.Unlock()
+
+		result, spawned, err := b.spawnSharedSession(ctx, host, session, params)
+		if err == nil {
+			return result, true, nil
+		}
+		b.mu.Lock()
+		delete(b.sessions, params.SessionID)
+		b.mu.Unlock()
+		b.releaseSharedIncarnationIfUnused(incarnationOf(session))
+		if spawned || attempt > 0 || !isRetiringSharedHost(err) {
+			return result, spawned, err
+		}
+		b.cfg.Logf("shared PTY host %s retired before spawning %s; starting another", host.SocketPath, params.SessionID)
+	}
+}
+
+func (b *WorkerBackend) spawnSharedSession(ctx context.Context, host ptyhost.HostRegistry, session *workerSession, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, bool, error) {
+	var result ptyhost.SpawnResult
+	if err := b.callSharedHost(ctx, incarnationOfHost(host), ptyhost.MethodSpawn, params, &result); err != nil {
+		if _, probeErr := b.callInfo(ctx, session); probeErr != nil {
+			return nil, false, err
+		}
+		return nil, true, b.startSharedSession(ctx, session, 0)
+	}
+	session.WorkerPID = result.HostPID
+	return &result, true, b.startSharedSession(ctx, session, result.ChildPID)
+}
+
+func (b *WorkerBackend) startSharedSession(ctx context.Context, session *workerSession, childPID int) error {
 	if _, err := b.callInfo(ctx, session); err != nil {
 		return fmt.Errorf("shared PTY session did not become ready: %w", err)
 	}
-	ready = true
-	b.startPoller(session)
 	b.startMonitor(session)
-	b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", opts.ID, session.WorkerPID, result.ChildPID)
+	b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", session.SessionID, session.WorkerPID, childPID)
 	return nil
 }
 
-func (b *WorkerBackend) ensureSharedHost(ctx context.Context) (ptyhost.HostRegistry, error) {
+func isRetiringSharedHost(err error) bool {
+	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) ||
+		strings.Contains(err.Error(), "host is shutting down")
+}
+
+func (b *WorkerBackend) ensureSharedHost(ctx context.Context, artifact ptyhost.Artifact) (ptyhost.HostRegistry, error) {
 	b.hostMu.Lock()
 	defer b.hostMu.Unlock()
+	if host, ok := b.liveSharedHost(ctx, artifact.ID); ok {
+		return host, nil
+	}
+	return b.startSharedHost(ctx, artifact)
+}
 
-	binary := b.resolveBinaryPath()
-	generation, err := ptyhost.Generation(binary, buildinfo.SnapshotFormat)
+func (b *WorkerBackend) liveSharedHost(ctx context.Context, artifactID string) (ptyhost.HostRegistry, bool) {
+	paths, _ := filepath.Glob(filepath.Join(ptyhost.HostRegistryDir(b.cfg.DataRoot, b.cfg.DaemonInstanceID), "*.json"))
+	for _, path := range paths {
+		entry, err := ptyhost.ReadHostRegistry(path)
+		if err != nil || entry.ArtifactID != artifactID || b.validateSharedHostEntry(entry) != nil {
+			continue
+		}
+		if !pidAlive(entry.HostPID) {
+			_ = os.Remove(path)
+			_ = os.Remove(entry.SocketPath)
+			continue
+		}
+		if b.probeSharedHost(ctx, incarnationOfHost(entry)) == nil {
+			return entry, true
+		}
+	}
+	return ptyhost.HostRegistry{}, false
+}
+
+func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Artifact) (ptyhost.HostRegistry, error) {
+	incarnation, socketPath, err := b.newSharedHostIncarnation()
 	if err != nil {
 		return ptyhost.HostRegistry{}, err
 	}
-	registryPath := ptyhost.HostRegistryPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, generation)
-	expectedSocket, err := ptyhost.SocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, generation)
-	if err != nil {
-		return ptyhost.HostRegistry{}, err
-	}
-	if entry, readErr := ptyhost.ReadHostRegistry(registryPath); readErr == nil {
-		if err := b.validateCurrentSharedHostEntry(entry, generation, expectedSocket); err != nil {
-			return ptyhost.HostRegistry{}, err
-		}
-		if pidAlive(entry.HostPID) {
-			if err := b.probeSharedHost(ctx, entry); err != nil {
-				return ptyhost.HostRegistry{}, fmt.Errorf("live shared PTY host is unreachable: %w", err)
-			}
-			return entry, nil
-		}
-		_ = os.Remove(registryPath)
-		_ = os.Remove(expectedSocket)
-	} else if !errors.Is(readErr, os.ErrNotExist) {
-		return ptyhost.HostRegistry{}, fmt.Errorf("read shared PTY host registry: %w", readErr)
-	} else if _, statErr := os.Stat(expectedSocket); statErr == nil {
-		return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY socket exists without a host registry: %s", expectedSocket)
-	}
-
+	registryPath := ptyhost.HostRegistryPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, incarnation)
 	token, err := randomToken(32)
 	if err != nil {
 		return ptyhost.HostRegistry{}, err
 	}
 	args := []string{
 		"--daemon-instance-id", b.cfg.DaemonInstanceID,
-		"--generation", generation,
-		"--socket-path", expectedSocket,
+		"--generation", artifact.ID,
+		"--incarnation", incarnation,
+		"--socket-path", socketPath,
 		"--registry-dir", ptyhost.RegistryDir(b.cfg.DataRoot, b.cfg.DaemonInstanceID),
 		"--host-registry-path", registryPath,
 		"--control-token", token,
 	}
-	cmd := exec.Command(binary, args...)
+	if sharedHostIdleTimeout > 0 {
+		args = append(args, "--idle-timeout-ms", strconv.FormatInt(sharedHostIdleTimeout.Milliseconds(), 10))
+	}
+	cmd := exec.Command(artifact.Path, args...)
 	logPath := ptyhost.LogPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID)
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
 		return ptyhost.HostRegistry{}, err
@@ -697,6 +744,7 @@ func (b *WorkerBackend) ensureSharedHost(ctx context.Context) (ptyhost.HostRegis
 			b.cfg.Logf("shared PTY host exited: pid=%d err=%v", pid, waitErr)
 		}
 	}()
+	b.cfg.Logf("shared PTY host starting: artifact=%s incarnation=%s pid=%d", artifact.ID, incarnation, pid)
 
 	deadline := time.Now().Add(spawnReadyTimeout)
 	var lastErr error
@@ -707,11 +755,12 @@ func (b *WorkerBackend) ensureSharedHost(ctx context.Context) (ptyhost.HostRegis
 		}
 		entry, readErr := ptyhost.ReadHostRegistry(registryPath)
 		if readErr == nil && entry.HostPID == pid && entry.ControlToken == token {
-			if entryErr := b.validateCurrentSharedHostEntry(entry, generation, expectedSocket); entryErr != nil {
+			if entry.ArtifactID != artifact.ID || filepath.Clean(entry.SocketPath) != filepath.Clean(socketPath) ||
+				b.validateSharedHostEntry(entry) != nil {
 				b.stopSharedHostPID(pid)
-				return ptyhost.HostRegistry{}, entryErr
+				return ptyhost.HostRegistry{}, errors.New("shared PTY host registry identity mismatch")
 			}
-			if probeErr := b.probeSharedHost(ctx, entry); probeErr == nil {
+			if probeErr := b.probeSharedHost(ctx, incarnationOfHost(entry)); probeErr == nil {
 				return entry, nil
 			} else {
 				lastErr = probeErr
@@ -735,21 +784,28 @@ func (b *WorkerBackend) ensureSharedHost(ctx context.Context) (ptyhost.HostRegis
 	return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host did not become ready: %w", lastErr)
 }
 
-func (b *WorkerBackend) validateCurrentSharedHostEntry(entry ptyhost.HostRegistry, generation, expectedSocket string) error {
-	if entry.DaemonInstanceID != b.cfg.DaemonInstanceID || entry.Generation != generation || filepath.Clean(entry.SocketPath) != filepath.Clean(expectedSocket) {
-		return errors.New("shared PTY host registry identity mismatch")
+func (b *WorkerBackend) newSharedHostIncarnation() (incarnation, socketPath string, err error) {
+	for range 4 {
+		incarnation, err = randomToken(8)
+		if err != nil {
+			return "", "", err
+		}
+		socketPath, err = ptyhost.SocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, incarnation)
+		if err != nil {
+			return "", "", err
+		}
+		if _, statErr := os.Lstat(socketPath); errors.Is(statErr, os.ErrNotExist) {
+			return incarnation, socketPath, nil
+		}
 	}
-	return validateSharedHostSnapshotFormat(entry.SnapshotFormat, buildinfo.SnapshotFormat)
+	return "", "", errors.New("no free shared PTY host socket path")
 }
 
-func validateSharedHostSnapshotFormat(hostFormat, daemonFormat string) error {
-	if daemonFormat == "unknown" {
-		return nil
+func (b *WorkerBackend) validateSharedHostEntry(entry ptyhost.HostRegistry) error {
+	if entry.DaemonInstanceID != b.cfg.DaemonInstanceID {
+		return errors.New("shared PTY host registry identity mismatch")
 	}
-	if hostFormat != daemonFormat {
-		return fmt.Errorf("shared PTY host snapshot format mismatch: host=%q daemon=%q", hostFormat, daemonFormat)
-	}
-	return nil
+	return ptyhost.ValidateSocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, entry.SocketPath)
 }
 
 func (b *WorkerBackend) stopSharedHostPID(pid int) {
@@ -759,38 +815,17 @@ func (b *WorkerBackend) stopSharedHostPID(pid int) {
 	_ = syscall.Kill(pid, syscall.SIGTERM)
 }
 
-func (b *WorkerBackend) probeSharedHost(ctx context.Context, entry ptyhost.HostRegistry) error {
-	var result ptyhost.HostInfoResult
-	return b.callSharedHost(ctx, entry, ptyhost.MethodHostInfo, map[string]any{}, &result)
+func (b *WorkerBackend) probeSharedHost(ctx context.Context, inc hostIncarnation) error {
+	_, err := b.sharedHostInfo(ctx, inc)
+	return err
 }
 
-func (b *WorkerBackend) callSharedHost(ctx context.Context, host ptyhost.HostRegistry, method string, params, result any) error {
-	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
-	defer cancel()
-	session := &workerSession{SocketPath: host.SocketPath, ControlToken: host.ControlToken}
-	conn, enc, dec, err := b.connectWithIdentity(rpcCtx, session, b.cfg.DaemonInstanceID, host.ControlToken)
-	if err != nil {
-		return err
-	}
-	defer conn.Close()
-	if err := applyConnDeadline(conn, rpcCtx); err != nil {
-		return err
-	}
-	reqID := b.nextReqID(method)
-	if err := writeRequest(enc, reqID, method, params); err != nil {
-		return err
-	}
-	res, err := readMatchingResponse(dec, reqID)
-	if err != nil {
-		return err
-	}
-	if !res.OK {
-		return b.rpcError("", res.Error)
-	}
-	if result != nil {
-		if err := json.Unmarshal(res.Result, result); err != nil {
-			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
-		}
-	}
-	return nil
+func (b *WorkerBackend) sharedHostInfo(ctx context.Context, inc hostIncarnation) (ptyhost.HostInfoResult, error) {
+	var result ptyhost.HostInfoResult
+	err := b.callSharedHost(ctx, inc, ptyhost.MethodHostInfo, map[string]any{}, &result)
+	return result, err
+}
+
+func (b *WorkerBackend) callSharedHost(ctx context.Context, inc hostIncarnation, method string, params, result any) error {
+	return b.callResultSharedOneShot(ctx, inc.endpoint(), method, params, result)
 }

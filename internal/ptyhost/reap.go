@@ -25,7 +25,7 @@ func ReapDataDir(dataDir string) []procreap.ReapResult {
 		if err != nil {
 			result.Outcome, result.Err = procreap.ReapUnreadable, err
 		} else {
-			result.ID, result.PID = entry.Generation, entry.HostPID
+			result.PID = entry.HostPID
 			switch {
 			case entry.HostPID <= 0:
 				result.Outcome, result.Err = procreap.ReapUnreadable, errors.New("missing host PID")
@@ -48,8 +48,8 @@ func ReapDataDir(dataDir string) []procreap.ReapResult {
 }
 
 func shutdownHost(dataDir, registryPath string, entry HostRegistry) error {
-	if entry.DaemonInstanceID == "" || entry.Generation == "" || entry.ControlToken == "" ||
-		filepath.Clean(registryPath) != HostRegistryPath(dataDir, entry.DaemonInstanceID, entry.Generation) {
+	if entry.DaemonInstanceID == "" || entry.ControlToken == "" ||
+		filepath.Dir(filepath.Clean(registryPath)) != HostRegistryDir(dataDir, entry.DaemonInstanceID) {
 		return errors.New("invalid host registry identity")
 	}
 	if err := ValidateSocketPath(dataDir, entry.DaemonInstanceID, entry.SocketPath); err != nil {

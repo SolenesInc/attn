@@ -3,7 +3,9 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"os"
 	"strconv"
+	"strings"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -41,4 +43,57 @@ func (d *Daemon) sharedPTYHostSettings() (enabled, active bool) {
 		active = d.ptyBackendMode() == "shared"
 	}
 	return enabled, active
+}
+
+func (d *Daemon) newSharedPTYHost() (*ptybackend.WorkerBackend, error) {
+	return ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
+		DataRoot:                 d.dataRoot,
+		DaemonInstanceID:         d.daemonInstanceID,
+		BinaryPath:               strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
+		Logf:                     d.logf,
+		OnTerminalBuild:          d.handleTerminalBuildChanged,
+		OnSharedArtifactRejected: d.handleSharedArtifactRejected,
+	})
+}
+
+func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifactRejection) {
+	outcome := "Shared terminals are unavailable until a working host is installed."
+	if rejection.FallbackID != "" {
+		outcome = "New terminals keep using the last-known-good shared host."
+	}
+	d.addWarning(warnPTYHostArtifactRejected, fmt.Sprintf(
+		"Shared PTY host %s (%s) failed validation: %s. %s",
+		rejection.Source, rejection.ArtifactID, rejection.Reason, outcome,
+	))
+}
+
+func (d *Daemon) validateSharedPTYHostAfterRecovery() {
+	host := d.sharedPTYHost
+	if host == nil || !shouldRunWorkerStartupProbe() || !host.SharedCandidatePending() {
+		return
+	}
+	migrating, routed := d.ptyBackend.(*ptybackend.MigratingBackend)
+	if routed && !parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled)) {
+		return
+	}
+	ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
+	err := host.ValidateSharedCandidate(ctx, false)
+	cancel()
+	if err != nil {
+		d.logf("shared PTY host candidate validation: %v", err)
+	}
+	if !routed {
+		return
+	}
+	d.ptySettingsChangeMu.Lock()
+	defer d.ptySettingsChangeMu.Unlock()
+	d.ptySettingsMu.Lock()
+	enabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
+	active := enabled && host.SharedArtifactReady()
+	changed := migrating.SharedForNewSessions() != active
+	migrating.SetSharedForNewSessions(active)
+	d.ptySettingsMu.Unlock()
+	if changed {
+		d.publishSettingsFact(FactSettingChanged, SettingSharedPTYHostActive)
+	}
 }
