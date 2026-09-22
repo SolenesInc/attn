@@ -25,7 +25,7 @@ Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`
 ## The app SDK
 
 After editing `sdk/attn-app/src`, run `make generate-sdk` and commit
-`internal/appbuild/sdkdist/`.
+`internal/appbuild/sdkdist/`. CI checks freshness, as does `make check-sdk`.
 Keep `appbuild.ReactTypesVersion` aligned with the frontend lockfile.
 Views import React through `@victorarias/attn-app` to share attn's instance.
 

@@ -51,7 +51,7 @@ scenario.
 go run ./cmd/prompt-editor compare --base next --json
 ```
 
-Add `--scenario ID` to narrow `compare`. Comparison defaults to merge-base;
+Add `--scenario ID` to narrow `compare`. `check` validates the catalog and scenarios. Comparison defaults to merge-base;
 use `--mode tip` for the selected revision itself.
 
 Rerun `context` after edits and read the full results against the intended behavior.
@@ -126,5 +126,6 @@ user enables **Follow shared focus**. Read comments with `review get` or `watch`
 
 CI runs the catalog and scenario checks, prompt and editor tests, and the
 `prompt-composition` delivery scenario. Locally, `compare` and `context` are
-the review. Update [compatibility fixtures](../internal/prompttest/README.md)
+the review; `make check-prompts` and `make test-prompt-editor` run the CI checks
+when you want them sooner. Update [compatibility fixtures](../internal/prompttest/README.md)
 only for intentional wording changes; never regenerate them to make tests pass.
