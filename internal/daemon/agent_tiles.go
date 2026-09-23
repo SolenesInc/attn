@@ -135,7 +135,12 @@ func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, ti
 	if _, docked := tileLeafByID(desktop.Tree, tileID); docked {
 		update, err := d.checkedDesktopTileUpdate(desktop.ID, desktopTileUpdate{tileID: tileID, params: tile.params, sessionID: tile.sessionID})
 		return func(desktop profiles.Desktop) (profiles.Desktop, error) {
-			return applyDesktopTileUpdate(desktop, update)
+			updated, err := applyDesktopTileUpdate(desktop, update)
+			if err != nil {
+				return updated, err
+			}
+			updated.Tree, _ = layouttree.UpdateTileSessionID(updated.Tree, tileID, tile.sessionID)
+			return updated, nil
 		}, err
 	}
 	dock, err := d.resolvedDesktopTileDock(desktop.ID, desktopTileDock{

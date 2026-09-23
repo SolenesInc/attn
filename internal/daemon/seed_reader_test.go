@@ -133,6 +133,19 @@ func TestAStandaloneSeedOpensOnTheCurrentDesktopWithoutBindingTheFocusedAgent(t 
 	if again, againTile, err := d.openSeedTile(seed.ID, "", true); err != nil || again != desktop.ID || againTile != tileID {
 		t.Fatalf("second standalone open = (%q, %q, %v), want the same tile", again, againTile, err)
 	}
+
+	if _, _, err := d.openSeedTile(seed.ID, "session-1", false); err != nil {
+		t.Fatal(err)
+	}
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "session-1" {
+		t.Fatalf("seed opened by session-1 bound %q, want session-1", tile.TileSessionID)
+	}
+	if _, _, err := d.openSeedTile(seed.ID, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "" {
+		t.Fatalf("standalone reopen kept the binding %q, want none", tile.TileSessionID)
+	}
 }
 
 func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
