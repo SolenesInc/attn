@@ -52,15 +52,8 @@ const STATE_GROUPS: { state: UISessionState; label: string; testId: string }[] =
   { state: 'unknown', label: 'Unknown / error', testId: 'session-group-unknown' },
 ];
 
-type DashboardWorkspace = {
-  id: string;
-  title: string;
-  sessions: DashboardSession[];
-};
-
 interface DashboardProps {
   sessions: DashboardSession[];
-  mutedWorkspaces?: DashboardWorkspace[];
   prs: DaemonPR[];
   isLoading: boolean;
   isRefreshing?: boolean;
@@ -74,7 +67,6 @@ interface DashboardProps {
   onRefreshPRs?: () => void;
   onOpenPR?: (pr: DaemonPR) => void;
   onOpenSettings: () => void;
-  onMutedGroupClick?: () => void;
   queueModeEnabled?: boolean;
   crewQueueEnabled?: boolean;
   followNextTurn?: boolean;
@@ -84,7 +76,6 @@ interface DashboardProps {
 
 export function Dashboard({
   sessions,
-  mutedWorkspaces = [],
   prs,
   isLoading,
   isRefreshing,
@@ -98,7 +89,6 @@ export function Dashboard({
   onRefreshPRs,
   onOpenPR,
   onOpenSettings,
-  onMutedGroupClick,
   queueModeEnabled = false,
   crewQueueEnabled = false,
   followNextTurn = false,
@@ -474,7 +464,7 @@ export function Dashboard({
             </button>
           </div>
           <div className="card-body">
-            {sessions.length === 0 && mutedWorkspaces.length === 0 ? (
+            {sessions.length === 0 ? (
               <div className="card-empty">No active sessions</div>
             ) : (
               <>
@@ -523,15 +513,6 @@ export function Dashboard({
                     {snoozedExpanded && snoozedSessions.map((s) => (
                       renderSessionRow(s, { wake: formatWakeTime(s.turnSnoozedUntil, now) })
                     ))}
-                  </div>
-                )}
-                {mutedWorkspaces.length > 0 && (
-                  <div
-                    className="session-group muted-summary clickable"
-                    data-testid="session-group-muted"
-                    onClick={onMutedGroupClick}
-                  >
-                    <div className="group-label dim">Muted Workspaces ({mutedWorkspaces.length})</div>
                   </div>
                 )}
               </>

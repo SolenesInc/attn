@@ -18,16 +18,14 @@ type EnrichedSession = ReturnType<typeof useAppSessions>['enrichedLocalSessions'
 
 interface Options {
   settings: AppContentProps['settings'];
-  unmutedWorkspaceViews: WorkspaceWithSessions<EnrichedSession>[];
-  workspaceViews: WorkspaceWithSessions<EnrichedSession>[];
+  desktopViews: WorkspaceWithSessions<EnrichedSession>[];
   unmutedEnrichedSessions: EnrichedSession[];
   enrichedLocalSessions: EnrichedSession[];
   activeSessionId: string | null;
 }
 export function useAttentionQueue({
   settings,
-  unmutedWorkspaceViews,
-  workspaceViews,
+  desktopViews,
   unmutedEnrichedSessions,
   enrichedLocalSessions,
   activeSessionId,
@@ -44,23 +42,23 @@ export function useAttentionQueue({
   const queueBands = useMemo(
     () =>
       queueModeEnabled
-        ? buildQueueBands(unmutedWorkspaceViews, { crewInQueue: crewQueueEnabled })
+        ? buildQueueBands(desktopViews, { crewInQueue: crewQueueEnabled })
         : null,
-    [queueModeEnabled, crewQueueEnabled, unmutedWorkspaceViews],
+    [queueModeEnabled, crewQueueEnabled, desktopViews],
   );
 
-  const activeWorkspaceForCommands = useMemo(
+  const activeGroupForCommands = useMemo(
     () =>
-      workspaceViews.find((workspace) =>
-        workspace.sessions.some((session) => session.id === activeSessionId),
+      desktopViews.find((group) =>
+        group.sessions.some((session) => session.id === activeSessionId),
       ) ?? null,
-    [workspaceViews, activeSessionId],
+    [desktopViews, activeSessionId],
   );
   const activeSessionForCommands = useMemo(
     () =>
-      activeWorkspaceForCommands?.sessions.find((session) => session.id === activeSessionId) ??
+      activeGroupForCommands?.sessions.find((session) => session.id === activeSessionId) ??
       null,
-    [activeWorkspaceForCommands, activeSessionId],
+    [activeGroupForCommands, activeSessionId],
   );
   const activeSessionQueueEligible = Boolean(
     activeSessionForCommands &&
@@ -130,7 +128,7 @@ export function useAttentionQueue({
     queueModeEnabled,
     crewQueueEnabled,
     queueBands,
-    activeWorkspaceForCommands,
+    activeGroupForCommands,
     activeSessionForCommands,
     activeSessionQueueEligible,
     wantsAttention,

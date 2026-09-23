@@ -5,7 +5,8 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { AppActionMenu } from './AppActionMenu';
 import {
   useAttentionQueueContext,
-  useWorkspaceTilesContext,
+  useDesktopRuntimeContext,
+  useDesktopTilesContext,
 } from './AppContexts';
 
 export function AppNavigationMenus() {
@@ -15,8 +16,9 @@ export function AppNavigationMenus() {
     loadOpenerRecents,
     loadOpenerIndex,
     setMarkdownOpenerOpen,
-  } = useWorkspaceTilesContext();
+  } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
+  const { focusDesktopLeaf } = useDesktopRuntimeContext();
   const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
@@ -38,6 +40,9 @@ export function AppNavigationMenus() {
               return;
             }
             void sendOpenMarkdown(path, bindTo)
+              .then(({ desktopId, tileId }) => {
+                if (desktopId && tileId) focusDesktopLeaf(desktopId, tileId);
+              })
               .catch((error) => {
                 console.error(
                   '[MarkdownOpener] in-app open failed, falling back to OS open:',

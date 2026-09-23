@@ -9,12 +9,10 @@ import type { DockItem, LocalSession, SidebarProps, SidebarWorkspace } from './s
 import { useSidebarDrag } from './useSidebarDrag';
 
 const EMPTY_DOCK_ITEMS: DockItem[] = [];
-const EMPTY_WORKSPACES: SidebarWorkspace[] = [];
 const EMPTY_TILE_CONTENTS: Record<string, TileContentState> = {};
 
 export function useSidebarState({
   workspaces,
-  visualOrder,
   visualIndexByWorkspaceId,
   selectedId,
   selectedWorkspaceId,
@@ -40,11 +38,6 @@ export function useSidebarState({
   onOpenSnooze,
   onWakeTurn,
   onScreenSessionIds,
-  mutedWorkspaces = EMPTY_WORKSPACES,
-  mutedExpanded: mutedExpandedProp,
-  onMutedExpandedChange,
-  onMuteWorkspace,
-  onPinWorkspace,
   onRenameSession,
   onRenameWorkspace,
   onChangeChiefOfStaff,
@@ -85,7 +78,6 @@ export function useSidebarState({
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
       : isAttentionSessionState(session.state);
 
-  const [mutedExpandedLocal, setMutedExpandedLocal] = useState(false);
   const [snoozedExpanded, setSnoozedExpanded] = useState(false);
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(
     () => new Set(),
@@ -145,23 +137,18 @@ export function useSidebarState({
       anchor: { top: rect.bottom + 4, left: rect.right - 190 },
     });
   };
-  const mutedExpanded = mutedExpandedProp ?? mutedExpandedLocal;
-  const setMutedExpanded = (v: boolean) => {
-    setMutedExpandedLocal(v);
-    onMutedExpandedChange?.(v);
-  };
 
   const automationGroups = useMemo(
-    () => groupAutomationSessions([...workspaces, ...mutedWorkspaces]),
-    [workspaces, mutedWorkspaces],
+    () => groupAutomationSessions(workspaces),
+    [workspaces],
   );
   const allSessions = useMemo(() => {
     const byId = new Map<string, LocalSession>();
-    for (const workspace of [...workspaces, ...mutedWorkspaces]) {
+    for (const workspace of workspaces) {
       for (const session of workspace.sessions) byId.set(session.id, session);
     }
     return [...byId.values()];
-  }, [workspaces, mutedWorkspaces]);
+  }, [workspaces]);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
   const rowDelegation = (session: LocalSession) => ({
     delegates: delegates.get(session.id) ?? [],
@@ -202,26 +189,17 @@ export function useSidebarState({
   };
 
   const isWorkspaceVisible = (workspace: SidebarWorkspace) =>
-    workspace.pinned ||
     !isSessionless(workspace) ||
     workspace.hasUnresolvedAgentPanes ||
     showSessionless;
   // Queue mode renders every ordinary agent as a flat row in a band, so drawing
   // its workspace group too would show the same agent twice.
   const isTreeWorkspace = (workspace: SidebarWorkspace) =>
-    !queue || workspace.pinned || isSessionless(workspace);
+    !queue || isSessionless(workspace);
   const visibleWorkspaces = workspaces.flatMap((candidate) => {
     const workspace = withoutChiefRow(withoutAutomationRows(candidate));
     return isWorkspaceVisible(workspace) && isTreeWorkspace(workspace) ? [workspace] : [];
   });
-  const visibleMutedWorkspaces = mutedWorkspaces
-    .map((workspace) => withoutChiefRow(withoutAutomationRows(workspace)))
-    .filter((workspace) => workspace.children.length > 0 || workspace.hasUnresolvedAgentPanes);
-  const visibleVisualOrder = visualOrder.filter(isWorkspaceVisible);
-  const visibleVisualIndexByWorkspaceId = new Map(
-    visibleVisualOrder.map((workspace, index) => [workspace.id, index]),
-  );
-
   const canAcceptLeafDrag = (workspace: SidebarWorkspace) =>
     Boolean(
       leafDrag &&
@@ -241,8 +219,8 @@ export function useSidebarState({
     }
     return ' workspace-group--drag-target';
   };
-  const visualIndexOfWorkspace = (id: string) =>
-    visibleVisualIndexByWorkspaceId.get(id) ?? visualIndexByWorkspaceId.get(id) ?? -1;
+  const visibleVisualOrder = workspaces.filter(isWorkspaceVisible);
+  const visualIndexOfWorkspace = (id: string) => visualIndexByWorkspaceId.get(id) ?? -1;
 
   const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
   const {
@@ -289,8 +267,6 @@ export function useSidebarState({
     onOpenSnooze,
     onWakeTurn,
     onScreenSessionIds,
-    onMuteWorkspace,
-    onPinWorkspace,
     onRenameSession,
     onRenameWorkspace,
     onChangeChiefOfStaff,
@@ -337,15 +313,12 @@ export function useSidebarState({
     openRename,
     openSessionActions,
     openCrewMemberActions,
-    mutedExpanded,
-    setMutedExpanded,
     automationGroups,
     allSessions,
     delegates,
     rowDelegation,
     toggleAutomationGroup,
     visibleWorkspaces,
-    visibleMutedWorkspaces,
     visibleVisualOrder,
     canAcceptLeafDrag,
     workspaceDragClass,

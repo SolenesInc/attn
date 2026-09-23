@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Desktop, Profile } from '../types/generated';
+import type { Desktop, MigrationPhase, Profile } from '../types/generated';
 import { persistSelectedProfileId } from '../utils/selectedProfile';
 
 export interface ProfilesState {
@@ -8,6 +8,8 @@ export interface ProfilesState {
   currentDesktopId: string | null;
   desktops: Desktop[];
   previousDesktopId: string | null;
+  migrationPhase: MigrationPhase | null;
+  migrationPhaseChanged: (phase: MigrationPhase | null) => void;
   enterScope: (profiles: Profile[] | undefined, selectedProfileId: string | undefined, desktops: Desktop[] | undefined) => void;
   profilesChanged: (profiles: Profile[]) => void;
   arrangementArrived: (profile: Profile, desktops: Desktop[]) => void;
@@ -38,6 +40,9 @@ function arrangementOf(state: Arrangement, profile: Profile, desktops: Desktop[]
 export const useProfilesStore = create<ProfilesState>((set) => ({
   profiles: [],
   ...NO_ARRANGEMENT,
+  migrationPhase: null,
+
+  migrationPhaseChanged: (migrationPhase) => set({ migrationPhase }),
 
   enterScope: (profiles, selectedProfileId, desktops) =>
     set(() => {

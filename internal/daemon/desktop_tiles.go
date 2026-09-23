@@ -154,9 +154,18 @@ func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 		return params, nil
 	case layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
 		return d.validatedTileParams(kind, params)
-	default:
-		return "", profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed or notebook", kind)
 	}
+	if isAppViewTileKind(kind) {
+		return params, nil
+	}
+	return "", profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed, notebook or an app view (%s<app>/<view>)", kind, appViewTileKindPrefix)
+}
+
+const appViewTileKindPrefix = "app:"
+
+func isAppViewTileKind(kind string) bool {
+	app, view, ok := strings.Cut(strings.TrimPrefix(kind, appViewTileKindPrefix), "/")
+	return strings.HasPrefix(kind, appViewTileKindPrefix) && ok && app != "" && view != ""
 }
 
 func (d *Daemon) validatedTileParams(kind, params string) (string, error) {

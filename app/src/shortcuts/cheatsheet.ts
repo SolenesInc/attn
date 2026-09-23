@@ -20,14 +20,13 @@ function fromId(id: ShortcutId): string[] {
 export function buildCheatsheet(): CheatsheetCategory[] {
   return [
     {
-      title: 'Workspaces & Sessions',
+      title: 'Desktops & Sessions',
       rows: [
-        { label: 'New session in this workspace', combos: [fromId('session.new')] },
+        { label: 'New session on this desktop', combos: [fromId('session.new')] },
         { label: 'New session, split sideways', combos: [fromId('session.newHorizontal')] },
-        { label: 'New workspace', combos: [fromId('session.newWorkspace')] },
         { label: 'Close session (or focused pane)', combos: [fromId('session.close')] },
         {
-          label: 'Previous / next workspace',
+          label: 'Previous / next desktop',
           combos: [fromId('session.prev'), fromId('session.next')],
         },
         {
@@ -35,7 +34,14 @@ export function buildCheatsheet(): CheatsheetCategory[] {
           combos: [fromId('session.historyBack'), fromId('session.historyForward')],
         },
         { label: 'Jump to this session\'s dispatcher', combos: [fromId('session.orchestrator')] },
-        { label: 'Jump to workspace 1–9', combos: [[...modifierTokens('workspace.select1'), '1–9']] },
+        {
+          label: 'Switch to desktop 1–9',
+          combos: [[...modifierTokens('desktop.select1'), '1–9']],
+          note: 'The digit of the current desktop goes back to the previous one.',
+        },
+        { label: 'Send the focused pane to desktop 1–9', combos: [[...modifierTokens('desktop.send1'), '1–9']] },
+        { label: 'Desktop overview', combos: [fromId('desktop.overview')] },
+        { label: 'Switch profile', combos: [fromId('profile.switch')] },
         { label: 'Go to dashboard (home)', combos: [fromId('session.goToDashboard')] },
         { label: 'Toggle grid view', combos: [fromId('view.toggleGrid')] },
         { label: 'Jump to next waiting session', combos: [fromId('session.jumpToWaiting')] },

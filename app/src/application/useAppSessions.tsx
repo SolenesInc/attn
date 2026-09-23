@@ -1,13 +1,11 @@
 import { useEffect, useMemo } from 'react';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { useProfilesStore } from '../store/profiles';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
 import { sessionAttentionFields } from '../navigation/sessionNavigation';
-import {
-  buildWorkspaceViewModels,
-  filterSessionsRepresentedInWorkspaceLayouts,
-} from '../utils/workspaceViewModels';
+import { buildDesktopViewModels } from '../utils/workspaceViewModels';
 import { AppContentProps } from './appSupport';
 interface Options {
   activeSessionId: string | null;
@@ -33,7 +31,7 @@ export function useAppSessions({
   const enrichedLocalSessions = sessions.map((s) => {
     const daemonSession = daemonSessions.find((ds) => ds.id === s.id);
     const rawState = daemonSession?.state ?? s.state;
-    const paneStatus = s.workspace.agents.find((pane) => pane.sessionId === s.id)?.status;
+    const paneStatus = s.desktop.agents.find((pane) => pane.sessionId === s.id)?.status;
     const paneState =
       paneStatus === 'failed' ? 'unknown' : paneStatus === 'spawning' ? 'launching' : null;
     const endpointId = daemonSession?.endpoint_id ?? s.endpointId;
@@ -83,9 +81,10 @@ export function useAppSessions({
     [daemonSessions],
   );
 
-  const visibleEnrichedSessions = filterSessionsRepresentedInWorkspaceLayouts(
-    daemonWorkspaces,
-    enrichedLocalSessions,
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const desktops = useProfilesStore((state) => state.desktops);
+  const visibleEnrichedSessions = enrichedLocalSessions.filter(
+    (session) => session.profileId === selectedProfileId,
   );
 
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -141,37 +140,17 @@ export function useAppSessions({
     [daemonSessions],
   );
 
-  const workspaceViews = useMemo(
-    () => buildWorkspaceViewModels(daemonWorkspaces, visibleEnrichedSessions),
-    [daemonWorkspaces, visibleEnrichedSessions],
-  );
-  const unmutedWorkspaceViews = useMemo(
-    () =>
-      workspaceViews.filter(
-        (workspace) =>
-          !workspace.muted &&
-          (workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes),
-      ),
-    [workspaceViews],
-  );
-  const mutedWorkspaceViews = useMemo(
-    () =>
-      workspaceViews.filter(
-        (workspace) =>
-          workspace.muted &&
-          (workspace.pinned || workspace.sessions.length > 0 || workspace.hasUnresolvedAgentPanes),
-      ),
-    [workspaceViews],
+  const desktopViews = useMemo(
+    () => buildDesktopViewModels(desktops, visibleEnrichedSessions),
+    [desktops, visibleEnrichedSessions],
   );
   const unmutedEnrichedSessions = useMemo(
-    () => unmutedWorkspaceViews.flatMap((workspace) => workspace.sessions),
-    [unmutedWorkspaceViews],
+    () => desktopViews.flatMap((group) => group.sessions),
+    [desktopViews],
   );
 
   return {
-    workspaceViews,
-    unmutedWorkspaceViews,
-    mutedWorkspaceViews,
+    desktopViews,
     unmutedEnrichedSessions,
     activeEndpoint,
     activeRemoteSession,

@@ -8,7 +8,6 @@ import { HomeIcon } from './SidebarIcons';
 import type { SidebarProps } from './sidebarTypes';
 import {
   SidebarAutomationGroups,
-  SidebarMutedWorkspaces,
   SidebarWorkspaceList,
 } from './SidebarWorkspaces';
 import { useSidebarState } from './useSidebarState';
@@ -128,7 +127,6 @@ function SidebarExpanded() {
         )}
       </div>
 
-      {/* Above muted: *not yet* is nearer to your attention than *not ever*. */}
       {queue && onWakeTurn && (
         <QueueSnoozedSection
           rows={queue.snoozed}
@@ -141,7 +139,6 @@ function SidebarExpanded() {
         />
       )}
 
-      <SidebarMutedWorkspaces />
       <SidebarFooter />
       <SidebarPopovers />
     </div>

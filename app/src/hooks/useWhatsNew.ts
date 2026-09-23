@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
-export const WHATS_NEW_ID = 'workspaces-2026-05';
+export const WHATS_NEW_ID = 'desktops-2026-09';
 export const WHATS_NEW_STORAGE_KEY = 'attn.whats_new.last_seen';
 
 function readLastSeen(): string | null {

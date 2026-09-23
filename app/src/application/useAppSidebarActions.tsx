@@ -52,7 +52,7 @@ export function useAppSidebarActions() {
   const { keybindings } = useAppAppearanceContext();
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const { activeWorkspaceId } = useNavigationContext();
+  const { currentDesktopId } = useNavigationContext();
   const isZedEditorConfigured = useMemo(() => {
     const editor = (settings.editor_executable || '').trim().toLowerCase();
     if (!editor) {
@@ -211,8 +211,8 @@ export function useAppSidebarActions() {
     ],
   );
 
-  const activeSessionZoomed = activeWorkspaceId
-    ? Boolean(zoomModeBySessionId[activeWorkspaceId])
+  const activeSessionZoomed = currentDesktopId
+    ? Boolean(zoomModeBySessionId[currentDesktopId])
     : false;
 
   const dockActions = useMemo<

@@ -37,5 +37,5 @@ import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 export function workspaceShortcut(index: number): string | null {
   if (index < 0 || index >= 9) return null;
-  return formatShortcut(`workspace.select${index + 1}` as ShortcutId);
+  return formatShortcut(`desktop.select${index + 1}` as ShortcutId);
 }

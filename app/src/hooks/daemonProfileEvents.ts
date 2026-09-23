@@ -1,4 +1,5 @@
 import type {
+  MigrationChangedMessage,
   ProfileActionResultMessage,
   ProfileArrangementChangedMessage,
   ProfileErrorCode,
@@ -25,6 +26,7 @@ type ProfileEvent =
   | ({ event: 'profile_action_result' } & ProfileActionResult)
   | ({ event: 'profiles_changed' } & ProfilesChangedMessage)
   | ({ event: 'profile_arrangement_changed' } & ProfileArrangementChangedMessage)
+  | ({ event: 'migration_changed' } & MigrationChangedMessage)
   | { event?: string };
 
 function settleProfileAction(pending: PendingRequests, result: ProfileActionResult): void {
@@ -52,6 +54,9 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
       return true;
     }
+    case 'migration_changed':
+      useProfilesStore.getState().migrationPhaseChanged((data as MigrationChangedMessage).state.phase ?? null);
+      return true;
     default:
       return false;
   }

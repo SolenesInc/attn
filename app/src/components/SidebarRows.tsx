@@ -65,7 +65,6 @@ export function TileSidebarRow({
   tile,
   content,
   selected,
-  muted = false,
   onSelect,
   onClose,
   onReload,
@@ -74,7 +73,6 @@ export function TileSidebarRow({
   tile: TileLeaf;
   content?: TileContentState;
   selected: boolean;
-  muted?: boolean;
   onSelect: () => void;
   onClose: () => void;
   onReload: () => void;
@@ -83,7 +81,7 @@ export function TileSidebarRow({
   const title = deriveTileTitle(tile, content, appViewTitle);
   return (
     <div
-      className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''} ${muted ? 'muted-session' : ''}`.trim()}
+      className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
       data-testid={`sidebar-tile-${workspaceId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
     >
@@ -98,36 +96,34 @@ export function TileSidebarRow({
         aria-hidden="true"
       />
       <span className="session-label">{title}</span>
-      {!muted && (
-        <div className="session-actions">
-          {tile.tileKind === 'browser' && (
-            <button
-              className="session-action-btn reload-session-btn"
-              data-testid={`reload-tile-${workspaceId}-${tile.tileId}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onReload();
-              }}
-              title="Reload browser"
-              aria-label={`Reload ${title}`}
-            >
-              ↻
-            </button>
-          )}
+      <div className="session-actions">
+        {tile.tileKind === 'browser' && (
           <button
-            className="session-action-btn close-session-btn"
-            data-testid={`close-tile-${workspaceId}-${tile.tileId}`}
+            className="session-action-btn reload-session-btn"
+            data-testid={`reload-tile-${workspaceId}-${tile.tileId}`}
             onClick={(event) => {
               event.stopPropagation();
-              onClose();
+              onReload();
             }}
-            title="Close tile"
-            aria-label={`Close ${title}`}
+            title="Reload browser"
+            aria-label={`Reload ${title}`}
           >
-            ×
+            ↻
           </button>
-        </div>
-      )}
+        )}
+        <button
+          className="session-action-btn close-session-btn"
+          data-testid={`close-tile-${workspaceId}-${tile.tileId}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          title="Close tile"
+          aria-label={`Close ${title}`}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }

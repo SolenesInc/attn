@@ -182,7 +182,6 @@ export function createMockDaemonApi(methods: Partial<DaemonApi>): DaemonApi {
     rateLimit: null,
     warnings: [],
     gitOperations: {},
-    tileContents: {},
     ...methods,
   };
   return new Proxy(api, {

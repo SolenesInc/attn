@@ -85,7 +85,7 @@ import {
 } from '../pty/runtimeLifecycle';
 import { createPtyTransportState } from '../pty/transportState';
 import { enqueuePerKey } from '../pty/attachQueue';
-import { parseLayoutJSON, tileContentKey, tileIdsFromLayoutJSON, type TerminalDockEdge, type TileContentState } from '../types/workspace';
+import { parseLayoutJSON, tileContentKey, tileIdsFromLayoutJSON, type TileContentState } from '../types/workspace';
 import { isSuspiciousTerminalSize } from '../utils/terminalDebug';
 import { crewDisplayName } from '../utils/crewName';
 import { collectWorkspaceLayoutDiagnostics } from '../utils/workspaceDiagnostics';
@@ -728,24 +728,6 @@ function isValidWorkspaceActionResult(data: WebSocketEvent): data is WebSocketEv
   return Boolean(data.action && data.workspace_id);
 }
 
-function pruneTileContentsForWorkspace(
-  contents: Record<string, TileContentState>,
-  workspaceId: string,
-  activeTileIds: string[] = [],
-): Record<string, TileContentState> {
-  const prefix = `${workspaceId}::`;
-  const activeKeys = new Set(activeTileIds.map((tileId) => tileContentKey(workspaceId, tileId)));
-  let changed = false;
-  const next: Record<string, TileContentState> = {};
-  for (const [key, value] of Object.entries(contents)) {
-    if (key.startsWith(prefix) && !activeKeys.has(key)) {
-      changed = true;
-      continue;
-    }
-    next[key] = value;
-  }
-  return changed ? next : contents;
-}
 
 function contentOnCurrentDesktop(
   contents: Record<string, TileContentState>,
@@ -760,36 +742,7 @@ function contentOnCurrentDesktop(
   return kept.length === Object.keys(contents).length ? contents : Object.fromEntries(kept);
 }
 
-function pruneTileContentsForWorkspaces(
-  contents: Record<string, TileContentState>,
-  workspaces: DaemonWorkspace[],
-): Record<string, TileContentState> {
-  const activeKeys = new Set<string>();
-  for (const workspace of workspaces) {
-    for (const tileId of tileIdsFromLayoutJSON(workspace.layout?.layout_json || '')) {
-      activeKeys.add(tileContentKey(workspace.id, tileId));
-    }
-  }
-  let changed = false;
-  const next: Record<string, TileContentState> = {};
-  for (const [key, value] of Object.entries(contents)) {
-    if (!activeKeys.has(key)) {
-      changed = true;
-      continue;
-    }
-    next[key] = value;
-  }
-  return changed ? next : contents;
-}
 
-function requestTileContentsForWorkspaces(ws: WebSocket, workspaces: DaemonWorkspace[]) {
-  if (ws.readyState !== WebSocket.OPEN) return;
-  for (const workspace of workspaces) {
-    for (const tileId of tileIdsFromLayoutJSON(workspace.layout?.layout_json || '', 'markdown')) {
-      ws.send(JSON.stringify({ cmd: 'workspace_tile_content_get', workspace_id: workspace.id, tile_id: tileId }));
-    }
-  }
-}
 
 const ATTACH_RETRY_TIMEOUT_MS = 3_000;
 const ATTACH_RETRY_DELAY_MS = 150;
@@ -993,7 +946,6 @@ export function useDaemonSocket({
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
-  const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const scopedDesktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
@@ -1450,10 +1402,10 @@ export function useDaemonSocket({
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
+            useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-            setTileContents((prev) => pruneTileContentsForWorkspaces(prev, nextWorkspaces));
             pruneAttachedPtySessions(nextSessions, nextWorkspaces);
             const nextPRs = data.prs || [];
             prsRef.current = nextPRs;
@@ -1485,7 +1437,6 @@ export function useDaemonSocket({
             setHasReceivedInitialState(true);
             useAutomationsStore.getState().bumpChanged();
             flushQueuedCommands(ws);
-            requestTileContentsForWorkspaces(ws, nextWorkspaces);
             if (lastTerminalThemeRef.current && ws.readyState === WebSocket.OPEN) {
               const theme = lastTerminalThemeRef.current;
               ws.send(JSON.stringify({
@@ -1523,11 +1474,6 @@ export function useDaemonSocket({
               ));
               workspacesRef.current = nextWorkspaces;
               callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-              setTileContents((prev) => pruneTileContentsForWorkspace(
-                prev,
-                workspaceID,
-                tileIdsFromLayoutJSON(workspaceLayout.layout_json || ''),
-              ));
               pruneAttachedPtySessions(sessionsRef.current, nextWorkspaces);
             }
             break;
@@ -1693,20 +1639,6 @@ export function useDaemonSocket({
             break;
           }
 
-          case 'workspace_tile_content': {
-            if (typeof data.workspace_id === 'string' && typeof data.tile_id === 'string') {
-              const key = tileContentKey(data.workspace_id, data.tile_id);
-              setTileContents((prev) => ({
-                ...prev,
-                [key]: {
-                  path: typeof data.path === 'string' ? data.path : '',
-                  content: typeof data.content === 'string' ? data.content : '',
-                  error: typeof data.error === 'string' ? data.error : undefined,
-                },
-              }));
-            }
-            break;
-          }
 
           case 'browser_control_request': {
             const browserContainerId = typeof data.desktop_id === 'string' ? data.desktop_id : data.workspace_id;
@@ -2062,7 +1994,6 @@ export function useDaemonSocket({
               const nextWorkspaces = workspacesRef.current.filter((workspace) => workspace.id !== data.workspace!.id);
               workspacesRef.current = nextWorkspaces;
               callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
-              setTileContents((prev) => pruneTileContentsForWorkspace(prev, data.workspace!.id));
             }
             break;
 
@@ -3613,167 +3544,14 @@ export function useDaemonSocket({
     );
   }, [sendWorkspaceCommand]);
 
-  const sendWorkspaceSetSplitRatio = useCallback((workspaceId: string, splitId: string, ratio: number) => {
-    const requestId = nextRequestID('workspace_split_ratio');
-    return sendWorkspaceCommand(
-      'workspace_layout_set_split_ratio',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_set_split_ratio',
-        workspace_id: workspaceId,
-        split_id: splitId,
-        ratio,
-        request_id: requestId,
-      },
-      splitId,
-      requestId,
-    );
-  }, [nextRequestID, sendWorkspaceCommand]);
 
-  const sendWorkspaceDockTile = useCallback((
-    workspaceId: string,
-    tileId: string,
-    tileKind: string,
-    options: { anchorPaneId?: string; edge?: TerminalDockEdge; ratio?: number; tileParams?: string } = {},
-  ) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_dock_tile',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_dock_tile',
-        workspace_id: workspaceId,
-        anchor_pane_id: options.anchorPaneId ?? '',
-        tile_id: tileId,
-        tile_kind: tileKind,
-        edge: options.edge ?? 'right',
-        ...(options.ratio != null ? { ratio: options.ratio } : {}),
-        ...(options.tileParams != null ? { tile_params: options.tileParams } : {}),
-      },
-      tileId,
-    );
-  }, [sendWorkspaceCommand]);
 
-  const sendWorkspaceUndockTile = useCallback((workspaceId: string, tileId: string) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_undock_tile',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_undock_tile',
-        workspace_id: workspaceId,
-        tile_id: tileId,
-      },
-      tileId,
-    );
-  }, [sendWorkspaceCommand]);
 
-  const sendWorkspaceUpdateTile = useCallback((
-    workspaceId: string,
-    tileId: string,
-    tileParams: string,
-    tileSessionId?: string,
-  ) => {
-    const requestId = nextRequestID('workspace_update_tile');
-    return sendWorkspaceCommand(
-      'workspace_layout_update_tile',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_update_tile',
-        workspace_id: workspaceId,
-        tile_id: tileId,
-        tile_params: tileParams,
-        ...(tileSessionId ? { tile_session_id: tileSessionId } : {}),
-        request_id: requestId,
-      },
-      tileId,
-      requestId,
-    );
-  }, [nextRequestID, sendWorkspaceCommand]);
 
-  const sendWorkspaceMoveLeaf = useCallback((
-    workspaceId: string,
-    leafId: string,
-    options: { anchorId?: string; edge?: TerminalDockEdge; ratio?: number } = {},
-  ) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_move_leaf',
-      workspaceId,
-      {
-        cmd: 'workspace_layout_move_leaf',
-        workspace_id: workspaceId,
-        leaf_id: leafId,
-        anchor_id: options.anchorId ?? '',
-        edge: options.edge ?? 'right',
-        ...(options.ratio != null ? { ratio: options.ratio } : {}),
-      },
-      leafId,
-    );
-  }, [sendWorkspaceCommand]);
 
-  const sendWorkspaceMoveLeafToWorkspace = useCallback((
-    sourceWorkspaceId: string,
-    targetWorkspaceId: string,
-    leafId: string,
-    options: { anchorId?: string; edge?: TerminalDockEdge; ratio?: number } = {},
-  ) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_move_leaf_to_workspace',
-      sourceWorkspaceId,
-      {
-        cmd: 'workspace_layout_move_leaf_to_workspace',
-        source_workspace_id: sourceWorkspaceId,
-        target_workspace_id: targetWorkspaceId,
-        leaf_id: leafId,
-        anchor_id: options.anchorId ?? '',
-        edge: options.edge ?? 'left',
-        ...(options.ratio != null ? { ratio: options.ratio } : {}),
-      },
-      leafId,
-    );
-  }, [sendWorkspaceCommand]);
 
-  const sendWorkspaceMoveLeafToNewWorkspace = useCallback((
-    sourceWorkspaceId: string,
-    leafId: string,
-    options: { anchorId?: string; edge?: TerminalDockEdge; ratio?: number } = {},
-  ) => {
-    return sendWorkspaceCommand(
-      'workspace_layout_move_leaf_to_new_workspace',
-      sourceWorkspaceId,
-      {
-        cmd: 'workspace_layout_move_leaf_to_new_workspace',
-        source_workspace_id: sourceWorkspaceId,
-        leaf_id: leafId,
-        anchor_id: options.anchorId ?? '',
-        edge: options.edge ?? 'left',
-        ...(options.ratio != null ? { ratio: options.ratio } : {}),
-      },
-      leafId,
-    );
-  }, [sendWorkspaceCommand]);
 
-  const sendSetWorkspaceRank = useCallback((
-    workspaceId: string,
-    prevWorkspaceId?: string,
-    nextWorkspaceId?: string,
-  ) => {
-    return sendWorkspaceCommand(
-      'set_workspace_rank',
-      workspaceId,
-      {
-        cmd: 'set_workspace_rank',
-        workspace_id: workspaceId,
-        ...(prevWorkspaceId ? { prev_workspace_id: prevWorkspaceId } : {}),
-        ...(nextWorkspaceId ? { next_workspace_id: nextWorkspaceId } : {}),
-      },
-    );
-  }, [sendWorkspaceCommand]);
 
-  const requestTileContent = useCallback((workspaceId: string, tileId: string) => {
-    sendOrQueueCommand(
-      { cmd: 'workspace_tile_content_get', workspace_id: workspaceId, tile_id: tileId },
-      { waitForInitialState: true },
-    );
-  }, [sendOrQueueCommand]);
 
   const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ desktopId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
@@ -4167,25 +3945,7 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'mute_author', author }));
   }, []);
 
-  const sendMuteWorkspace = useCallback((workspaceId: string, endpointId?: string) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
-      cmd: 'mute_workspace',
-      workspace_id: workspaceId,
-      ...(endpointId ? { endpoint_id: endpointId } : {}),
-    }));
-  }, []);
 
-  const sendPinWorkspace = useCallback((workspaceId: string, pinned: boolean) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
-      cmd: 'pin_workspace',
-      workspace_id: workspaceId,
-      pinned,
-    }));
-  }, []);
 
   const sendRefreshPRs = useCallback((): Promise<PRActionResult> => {
     const key = 'refresh_prs';
@@ -4273,28 +4033,6 @@ export function useDaemonSocket({
     });
   }, [sendOrQueueCommand]);
 
-  const sendRenameWorkspace = useCallback((workspaceId: string, title: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const trimmed = title.trim();
-      if (!workspaceId || !trimmed) {
-        reject(new Error('Workspace name cannot be empty'));
-        return;
-      }
-      const key = `rename_workspace:${workspaceId}`;
-      pendingActionsRef.current.set(key, { resolve: () => resolve(), reject });
-      sendOrQueueCommand(
-        { cmd: 'rename_workspace', workspace_id: workspaceId, title: trimmed },
-        { waitForInitialState: true },
-      );
-      window.setTimeout(() => {
-        if (!pendingActionsRef.current.has(key)) {
-          return;
-        }
-        pendingActionsRef.current.delete(key);
-        reject(new Error(`Rename timed out for workspace ${workspaceId}`));
-      }, 10_000);
-    });
-  }, [sendOrQueueCommand]);
 
   const sendSetChiefOfStaff = useCallback((sessionId: string, chiefOfStaff: boolean): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -5479,6 +5217,7 @@ export function useDaemonSocket({
       tileSessionId?: string;
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
+      tileShare?: number;
     }) =>
       sendProfileCommand('desktop_dock_tile', {
         desktop_id: dock.desktopId,
@@ -5489,6 +5228,7 @@ export function useDaemonSocket({
         ...(dock.tileParams ? { tile_params: dock.tileParams } : {}),
         ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
         ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
+        ...(dock.tileShare ? { tile_share: dock.tileShare } : {}),
       }),
     [sendProfileCommand],
   );
@@ -5505,6 +5245,16 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopSetSplitRatio = useCallback(
+    (desktopId: string, splitId: string, ratio: number, expectedRevision: number) =>
+      sendProfileCommand('desktop_set_split_ratio', {
+        desktop_id: desktopId,
+        split_id: splitId,
+        ratio,
+        expected_revision: expectedRevision,
+      }),
+    [sendProfileCommand],
+  );
   const sendDesktopRemoveLeaf = useCallback(
     (desktopId: string, leafId: string, expectedRevision: number) =>
       sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
@@ -5531,6 +5281,7 @@ export function useDaemonSocket({
     sendDesktopDockTile,
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
+    sendDesktopSetSplitRatio,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,
@@ -5550,8 +5301,6 @@ export function useDaemonSocket({
     sendMutePR,
     sendMuteRepo,
     sendMuteAuthor,
-    sendMuteWorkspace,
-    sendPinWorkspace,
     sendRefreshPRs,
     sendFetchPRDetails,
     sendClearSessions,
@@ -5559,7 +5308,6 @@ export function useDaemonSocket({
     sendRegisterWorkspace,
     sendUnregisterWorkspace,
     sendRenameSession,
-    sendRenameWorkspace,
     sendSetChiefOfStaff,
     sendSetSessionContextWindowCap,
     sendPRVisited,
@@ -5659,17 +5407,7 @@ export function useDaemonSocket({
     sendWorkspaceClosePane,
     sendWorkspaceFocusPane,
     sendWorkspaceRenamePane,
-    sendWorkspaceSetSplitRatio,
-    sendWorkspaceDockTile,
-    sendWorkspaceUndockTile,
-    sendWorkspaceUpdateTile,
-    sendWorkspaceMoveLeaf,
-    sendWorkspaceMoveLeafToWorkspace,
-    sendWorkspaceMoveLeafToNewWorkspace,
-    sendSetWorkspaceRank,
-    tileContents,
     desktopTileContents,
-    requestTileContent,
     sendOpenMarkdown,
     sendOpenSeed,
     sendSeedDocumentGet,

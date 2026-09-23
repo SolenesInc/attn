@@ -45,7 +45,7 @@ export function useAppDiagnostics({
     const workspaceById = new Map(daemonWorkspaces.map((workspace) => [workspace.id, workspace]));
     const panes = new Map<string, DiagnosticPaneDescriptor>();
     for (const session of sessions) {
-      for (const pane of session.workspace.agents) {
+      for (const pane of session.desktop.agents) {
         if (panes.has(pane.id)) continue;
         panes.set(pane.id, {
           paneId: pane.id,
@@ -100,7 +100,7 @@ export function useAppDiagnostics({
         id: session.workspaceId,
         label: workspace?.title || session.workspaceId,
         directory: shortenDiagnosticPath(workspace?.directory || session.cwd),
-        layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
+        layout: collectWorkspaceLayoutDiagnostics(session.desktop.layoutTree),
       });
     }
     const { beginDiagnosticCapture } = await import('../utils/diagnosticReport');

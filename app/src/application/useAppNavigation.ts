@@ -2,11 +2,12 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
-import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
-import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
-import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
-import { hasLeaf, workspaceSnapshotFromDaemonWorkspace } from '../types/workspace';
+import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
+import { useProfilesStore } from '../store/profiles';
+import { useSessionStore } from '../store/sessions';
+import { hasLeaf } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
+import { orderedDesktops } from '../utils/desktops';
 import { oldestWantedTurn } from '../utils/queueBands';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
@@ -14,39 +15,31 @@ import {
   readWorkspaceSelectionStyle,
   type WorkspaceSelectionStyle,
 } from '../utils/workspaceSelectionStyle';
-import {
-  AppContentProps,
-  persistShowSessionlessWorkspaces,
-  readShowSessionlessWorkspaces,
-} from './appSupport';
+import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 import type { useAttentionQueue } from './useAttentionQueue';
 
 interface Options {
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
-  daemonWorkspaces: AppContentProps['daemonWorkspaces'];
-  workspaceViews: ReturnType<typeof useAppSessions>['workspaceViews'];
+  desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
-  focusWorkspaceLeaf: ReturnType<typeof useSessionWorkspaceController>['focusWorkspaceLeaf'];
+  focusDesktopLeaf: ReturnType<typeof useDesktopRuntimeController>['focusDesktopLeaf'];
 }
 export function useAppNavigation({
   activeSessionId,
   daemonSessions,
-  daemonWorkspaces,
-  workspaceViews,
+  desktopViews,
   unmutedEnrichedSessions,
   attentionQueue,
-  focusWorkspaceLeaf,
+  focusDesktopLeaf,
 }: Options) {
   const {
     view,
     setView,
     followNextTurn,
     setFollowNextTurn,
-    selectedSessionlessWorkspaceId,
-    selectSessionlessWorkspace,
     selectedTile,
     setSelectedTile,
     utilityFocusRequestToken,
@@ -54,11 +47,14 @@ export function useAppNavigation({
     goToDashboard,
     goHomeAwaitingNextTurn,
   } = useSessionStore();
-  const {
-    sendWorkspaceUndockTile,
-    sendSetWorkspaceRank,
-  } = useDaemonApi();
-  const activeWorkspaceIdRef = useRef<string | null>(null);
+  const { sendDesktopSetCurrent, sendDesktopRemoveLeaf } = useDaemonApi();
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
+  const desktops = useProfilesStore((state) => state.desktops);
+  const currentDesktopIdRef = useRef<string | null>(currentDesktopId);
+  useEffect(() => {
+    currentDesktopIdRef.current = currentDesktopId;
+  }, [currentDesktopId]);
 
   const {
     selectAgent,
@@ -70,7 +66,6 @@ export function useAppNavigation({
 
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
-
 
   const { wantsAttention } = attentionQueue;
 
@@ -85,9 +80,6 @@ export function useAppNavigation({
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
   }, [activeSessionId, setView]);
 
-  const [showSessionlessWorkspaces, setShowSessionlessWorkspaces] = useState<boolean>(
-    readShowSessionlessWorkspaces,
-  );
   const [workspaceSelectionStyle, setWorkspaceSelectionStyle] = useState<WorkspaceSelectionStyle>(
     readWorkspaceSelectionStyle,
   );
@@ -95,99 +87,31 @@ export function useAppNavigation({
     persistWorkspaceSelectionStyle(style);
     setWorkspaceSelectionStyle(style);
   }, []);
-  useEffect(() => {
-    persistShowSessionlessWorkspaces(showSessionlessWorkspaces);
-  }, [showSessionlessWorkspaces]);
-
-  const handleToggleShowSessionlessWorkspaces = useCallback(() => {
-    setShowSessionlessWorkspaces((prev) => {
-      const next = !prev;
-      return next;
-    });
-  }, []);
-  const sidebarWorkspaceViews = useMemo(
-    () =>
-      workspaceViews.filter(
-        (workspace) =>
-          !workspace.muted &&
-          (workspace.pinned ||
-            workspace.sessions.length > 0 ||
-            workspace.hasUnresolvedAgentPanes ||
-            showSessionlessWorkspaces),
-      ),
-    [workspaceViews, showSessionlessWorkspaces],
-  );
-  const workspaceSelection = useWorkspaceSelectionController(
-    workspaceViews,
-    activeSessionId,
-    selectedSessionlessWorkspaceId,
-  );
-  const activeWorkspaceId = workspaceSelection.activeWorkspaceId;
 
   useEffect(() => {
     probeUiAfterSwitch({
       sessionId: activeSessionId,
-      workspaceId: activeWorkspaceId,
+      workspaceId: currentDesktopId,
       view,
     });
-  }, [activeSessionId, activeWorkspaceId, view]);
+  }, [activeSessionId, currentDesktopId, view]);
 
-  useEffect(() => {
-    activeWorkspaceIdRef.current = activeWorkspaceId;
-  }, [activeWorkspaceId]);
-
-  const daemonWorkspaceStateById = useMemo(() => {
-    const map = new Map<string, TerminalWorkspaceState>();
-    const unresolvedWorkspaceIds = new Set(
-      workspaceViews
-        .filter((workspace) => workspace.hasUnresolvedAgentPanes)
-        .map((workspace) => workspace.id),
-    );
-    for (const workspace of daemonWorkspaces) {
-      if (!workspace.layout) {
-        continue;
-      }
-      const { workspace: state } = workspaceSnapshotFromDaemonWorkspace(workspace.layout);
-      if (
-        state.layoutTree &&
-        (state.agents.length === 0 || unresolvedWorkspaceIds.has(workspace.id))
-      ) {
-        map.set(workspace.id, state);
-      }
-    }
-    return map;
-  }, [daemonWorkspaces, workspaceViews]);
-
-  const visualWorkspaces = sidebarWorkspaceViews;
-  const visualIndexByWorkspaceId = useMemo(() => {
-    return new Map(visualWorkspaces.map((workspace, index) => [workspace.id, index]));
-  }, [visualWorkspaces]);
-
-  const handleSelectWorkspace = useCallback(
-    (workspaceId: string) => {
-      const workspace =
-        sidebarWorkspaceViews.find((entry) => entry.id === workspaceId) ||
-        workspaceViews.find((entry) => entry.id === workspaceId);
-      if (!workspace) {
-        return;
-      }
-      const sessionId = workspace.firstSessionId;
-      if (sessionId) {
-        handleSelectSession(sessionId);
-        return;
-      }
-      selectSessionlessWorkspace(workspace.id);
+  const handleSelectDesktop = useCallback(
+    (desktopId: string) => {
+      setView('session');
+      if (!selectedProfileId || desktopId === currentDesktopIdRef.current) return;
+      void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
     },
-    [handleSelectSession, selectSessionlessWorkspace, sidebarWorkspaceViews, workspaceViews],
+    [selectedProfileId, sendDesktopSetCurrent, setView],
   );
 
   const selectTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      handleSelectWorkspace(workspaceId);
-      setSelectedTile({ workspaceId, tileId });
-      window.requestAnimationFrame(() => focusWorkspaceLeaf(workspaceId, tileId));
+    (desktopId: string, tileId: string) => {
+      handleSelectDesktop(desktopId);
+      setSelectedTile({ desktopId, tileId });
+      window.requestAnimationFrame(() => focusDesktopLeaf(desktopId, tileId));
     },
-    [focusWorkspaceLeaf, handleSelectWorkspace, setSelectedTile],
+    [focusDesktopLeaf, handleSelectDesktop, setSelectedTile],
   );
 
   const selectTileRef = useRef(selectTile);
@@ -195,7 +119,7 @@ export function useAppNavigation({
     selectTileRef.current = selectTile;
   }, [selectTile]);
   const pendingTileSelectionRef = useRef<{ key: string; unsubscribe: () => void } | null>(null);
-  const [crewSeedTile, setCrewSeedTile] = useState<{ workspaceId: string; tileId: string } | null>(
+  const [crewSeedTile, setCrewSeedTile] = useState<{ desktopId: string; tileId: string } | null>(
     null,
   );
 
@@ -207,96 +131,68 @@ export function useAppNavigation({
     [],
   );
 
-  const handleSelectTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      const key = `${workspaceId}:${tileId}`;
-      pendingTileSelectionRef.current?.unsubscribe();
-      pendingTileSelectionRef.current = null;
-      const tileExists = () => {
-        const layout = useSessionStore.getState().daemonWorkspaceLayouts[workspaceId]?.workspace.layoutTree;
-        return layout ? hasLeaf(layout, tileId) : false;
-      };
-      if (tileExists()) {
-        selectTileRef.current(workspaceId, tileId);
-        return;
-      }
-      const unsubscribe = useSessionStore.subscribe(() => {
-        if (!tileExists()) return;
-        unsubscribe();
-        if (pendingTileSelectionRef.current?.key === key) pendingTileSelectionRef.current = null;
-        window.requestAnimationFrame(() => selectTileRef.current(workspaceId, tileId));
-      });
-      pendingTileSelectionRef.current = { key, unsubscribe };
-    },
-    [],
-  );
+  const handleSelectTile = useCallback((desktopId: string, tileId: string) => {
+    const key = `${desktopId}:${tileId}`;
+    pendingTileSelectionRef.current?.unsubscribe();
+    pendingTileSelectionRef.current = null;
+    const tileExists = () => {
+      const layout = useSessionStore.getState().desktopSnapshots[desktopId]?.workspace.layoutTree;
+      return layout ? hasLeaf(layout, tileId) : false;
+    };
+    if (tileExists()) {
+      selectTileRef.current(desktopId, tileId);
+      return;
+    }
+    const unsubscribe = useSessionStore.subscribe(() => {
+      if (!tileExists()) return;
+      unsubscribe();
+      if (pendingTileSelectionRef.current?.key === key) pendingTileSelectionRef.current = null;
+      window.requestAnimationFrame(() => selectTileRef.current(desktopId, tileId));
+    });
+    pendingTileSelectionRef.current = { key, unsubscribe };
+  }, []);
 
   const handleCloseTile = useCallback(
-    (workspaceId: string, tileId: string) => {
-      const clearIfClosed = <T extends { workspaceId: string; tileId: string } | null>(current: T) =>
-        current?.workspaceId === workspaceId && current.tileId === tileId ? null : current;
-      const pendingKey = `${workspaceId}:${tileId}`;
+    (desktopId: string, tileId: string) => {
+      const clearIfClosed = <T extends { desktopId: string; tileId: string } | null>(current: T) =>
+        current?.desktopId === desktopId && current.tileId === tileId ? null : current;
+      const pendingKey = `${desktopId}:${tileId}`;
       if (pendingTileSelectionRef.current?.key === pendingKey) {
         pendingTileSelectionRef.current.unsubscribe();
         pendingTileSelectionRef.current = null;
       }
       setCrewSeedTile(clearIfClosed);
       setSelectedTile(clearIfClosed);
-      void sendWorkspaceUndockTile(workspaceId, tileId).catch(() => {});
+      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === desktopId);
+      if (!desktop) return;
+      void sendDesktopRemoveLeaf(desktopId, tileId, desktop.revision).catch(() => {});
     },
-    [sendWorkspaceUndockTile, setSelectedTile],
+    [sendDesktopRemoveLeaf, setSelectedTile],
   );
 
-  const handleReloadTile = useCallback((workspaceId: string, tileId: string) => {
-    void controlBrowserHost(workspaceId, tileId, 'reload').catch((error) => {
+  const handleReloadTile = useCallback((desktopId: string, tileId: string) => {
+    void controlBrowserHost(desktopId, tileId, 'reload').catch((error) => {
       console.warn('[App] Failed to reload browser tile:', error);
     });
   }, []);
 
-  const handleWorkspaceReorder = useCallback(
-    (args: { workspaceId: string; prevWorkspaceId?: string; nextWorkspaceId?: string }) => {
-      void sendSetWorkspaceRank(args.workspaceId, args.prevWorkspaceId, args.nextWorkspaceId).catch(
-        () => {},
-      );
+  const desktopOrder = useMemo(() => orderedDesktops(desktops), [desktops]);
+  const handleStepDesktop = useCallback(
+    (step: 1 | -1) => {
+      if (!currentDesktopId || desktopOrder.length === 0) return;
+      const index = desktopOrder.findIndex((desktop) => desktop.id === currentDesktopId);
+      if (index < 0) return;
+      const next = desktopOrder[(index + step + desktopOrder.length) % desktopOrder.length];
+      handleSelectDesktop(next.id);
     },
-    [sendSetWorkspaceRank],
+    [currentDesktopId, desktopOrder, handleSelectDesktop],
   );
-
-  const handleSelectWorkspaceByIndex = useCallback(
-    (index: number) => {
-      const workspace = visualWorkspaces[index];
-      if (workspace) {
-        handleSelectWorkspace(workspace.id);
-      }
-    },
-    [visualWorkspaces, handleSelectWorkspace],
-  );
-
-  const handlePrevWorkspace = useCallback(() => {
-    if (!activeWorkspaceId || visualWorkspaces.length === 0) return;
-    const currentIndex = visualIndexByWorkspaceId.get(activeWorkspaceId);
-    if (currentIndex === undefined) return;
-    const prevIndex = currentIndex > 0 ? currentIndex - 1 : visualWorkspaces.length - 1;
-    handleSelectWorkspace(visualWorkspaces[prevIndex].id);
-  }, [activeWorkspaceId, visualWorkspaces, visualIndexByWorkspaceId, handleSelectWorkspace]);
-
-  const handleNextWorkspace = useCallback(() => {
-    if (!activeWorkspaceId || visualWorkspaces.length === 0) return;
-    const currentIndex = visualIndexByWorkspaceId.get(activeWorkspaceId);
-    if (currentIndex === undefined) return;
-    const nextIndex = currentIndex < visualWorkspaces.length - 1 ? currentIndex + 1 : 0;
-    handleSelectWorkspace(visualWorkspaces[nextIndex].id);
-  }, [activeWorkspaceId, visualWorkspaces, visualIndexByWorkspaceId, handleSelectWorkspace]);
 
   const handleNavigateOutOfSession = useCallback(
     (direction: 'left' | 'right' | 'up' | 'down') => {
-      if (direction === 'left' || direction === 'up') {
-        handlePrevWorkspace();
-        return;
-      }
-      handleNextWorkspace();
+      handleStepDesktop(direction === 'left' || direction === 'up' ? -1 : 1);
     },
-    [handleNextWorkspace, handlePrevWorkspace],
+    [handleStepDesktop],
   );
 
   const handleSelectOrchestrator = useCallback(() => {
@@ -308,7 +204,6 @@ export function useAppNavigation({
 
   return {
     handleJumpToWaiting,
-    workspaceSelection,
     view,
     setView,
     followNextTurn,
@@ -325,28 +220,18 @@ export function useAppNavigation({
     goToDashboard,
     goHomeAwaitingNextTurn,
     toggleGridMode,
-    workspaceViews,
-    showSessionlessWorkspaces,
-    handleToggleShowSessionlessWorkspaces,
+    desktopViews,
     workspaceSelectionStyle,
     handleWorkspaceSelectionStyleChange,
-    sidebarWorkspaceViews,
-    activeWorkspaceId,
-    activeWorkspaceIdRef,
-    daemonWorkspaceStateById,
-    visualWorkspaces,
-    visualIndexByWorkspaceId,
-    handleSelectWorkspace,
+    currentDesktopId,
+    currentDesktopIdRef,
+    handleSelectDesktop,
     handleSelectTile,
     handleCloseTile,
     handleReloadTile,
     selectedTile,
     crewSeedTile,
     setCrewSeedTile,
-    handleWorkspaceReorder,
-    handleSelectWorkspaceByIndex,
-    handlePrevWorkspace,
-    handleNextWorkspace,
     handleNavigateOutOfSession,
     handleSelectOrchestrator,
   };

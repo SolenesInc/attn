@@ -231,6 +231,10 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	if got := w.tile("tile-web").TileParams; got != "https://example.com/docs" {
 		t.Fatalf("a valid browser dock stored params %q", got)
 	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-app", "tile_kind": "app:kanban/board", "tile_params": `{"board":"work"}`, "edge": "right"})
+	if tile := w.tile("tile-app"); tile.TileKind != "app:kanban/board" || tile.TileParams != `{"board":"work"}` {
+		t.Fatalf("an app view dock stored %+v", tile)
+	}
 
 	notes := filepath.Join(t.TempDir(), "notes.md")
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})

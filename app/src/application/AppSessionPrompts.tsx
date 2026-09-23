@@ -13,7 +13,7 @@ import {
   useChiefOfStaffContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
-  useWorkspaceTilesContext,
+  useDesktopTilesContext,
 } from './AppContexts';
 
 export function AppSessionPrompts() {
@@ -48,7 +48,7 @@ export function AppSessionPrompts() {
   const { pendingSessionClose, handleConfirmSessionClose, handleCancelSessionClose } =
     useSessionLifecycleContext();
   const { appViewParamsPrompt, dockAppViewTile, setAppViewParamsPrompt } =
-    useWorkspaceTilesContext();
+    useDesktopTilesContext();
   return (
     <>
       <LocationPicker
