@@ -3,6 +3,7 @@ package sessioncost
 var builtInRateCards = map[string]RateCard{
 	"claude-fable-5-1":          withCacheRead(anthropicRates(10, 50), 0.25),
 	"claude-fable-5":            anthropicRates(10, 50),
+	"claude-opus-5-5":           withCacheRead(anthropicRates(4, 20), 0.2),
 	"claude-opus-5":             anthropicRates(5, 25),
 	"claude-opus-4-8":           anthropicRates(5, 25),
 	"claude-opus-4-6":           anthropicRates(5, 25),
@@ -20,6 +21,8 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-5.6-luna":  openAIRates(0.2, 1.2, 0.02, 0.25),
 
 	"gpt-6-astra": openAIRates(10, 50, 1, 12.5),
+	"gpt-6-sol":   openAIRates(2, 10, 0.2, 2.5),
+	"gpt-6-luna":  openAIRates(0.1, 0.5, 0.01, 0.125),
 }
 
 func anthropicRates(input, output float64) RateCard {

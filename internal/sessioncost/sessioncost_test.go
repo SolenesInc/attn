@@ -197,6 +197,12 @@ func TestPriceBuiltInCacheRates(t *testing.T) {
 			want:  92.75,
 		},
 		{
+			name:  "Opus 5.5 discounted cache read",
+			model: "claude-opus-5-5",
+			usage: Usage{InputTokens: 1_000_000, OutputTokens: 1_000_000, CacheReadInputTokens: 1_000_000, CacheWrite5mInputTokens: 1_000_000, CacheWrite1hInputTokens: 1_000_000},
+			want:  37.2,
+		},
+		{
 			name:  "Astra standard input output and cache rates",
 			model: "gpt-6-astra",
 			usage: Usage{InputTokens: 1_000_000, OutputTokens: 2_000_000, CacheReadInputTokens: 3_000_000, CacheWrite5mInputTokens: 4_000_000, CacheWrite1hInputTokens: 5_000_000},
@@ -227,6 +233,7 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"claude-opus-4-6",
 		"claude-opus-4-8",
 		"claude-opus-5",
+		"claude-opus-5-5",
 		"claude-sonnet-5",
 		"gpt-5-codex",
 		"gpt-5.4-mini",
@@ -235,6 +242,8 @@ func TestBuiltInCoverageForObservedModelIDs(t *testing.T) {
 		"gpt-5.6-sol",
 		"gpt-5.6-terra",
 		"gpt-6-astra",
+		"gpt-6-luna",
+		"gpt-6-sol",
 	}
 	for _, model := range priced {
 		t.Run(model, func(t *testing.T) {

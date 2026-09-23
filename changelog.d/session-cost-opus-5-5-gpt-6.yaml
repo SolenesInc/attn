@@ -1,0 +1,9 @@
+kind: added
+area: sessions
+change: >
+  Session cost knows Claude Opus 5.5 (claude-opus-5-5), GPT-6 Sol (gpt-6-sol),
+  and GPT-6 Luna (gpt-6-luna). Opus 5.5 bills $4 input and $20 output per
+  million tokens, with cache reads at $0.20, which is 5% of input instead of the
+  usual 10%. Sol bills $2 input, $10 output, $0.20 cached input, and $2.50 cache
+  writes. Luna bills $0.10 input, $0.50 output, $0.01 cached input, and $0.125
+  cache writes. Before this, sessions on these models showed no price.
