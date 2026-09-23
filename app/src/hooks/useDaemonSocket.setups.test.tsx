@@ -196,6 +196,7 @@ describe('useDaemonSocket setups', () => {
     const { ws } = await connect();
 
     act(() => {
+      ws.emit({ event: 'setups_changed', setups: [setup('set-work', 'w1')] });
       ws.emit({
         event: 'setup_arrangement_changed',
         setup: setup('set-work', 'w1'),
@@ -205,6 +206,32 @@ describe('useDaemonSocket setups', () => {
 
     expect(useSetupsStore.getState().selectedSetupId).toBe('set-work');
     expect(useSetupsStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1', 'w2']);
+    expect(window.localStorage.getItem(SELECTED_SETUP_STORAGE_KEY)).toBe('set-work');
+  });
+
+  it('ignores a late arrangement of the setup it just left', async () => {
+    const { ws, result } = await connect();
+
+    let selection!: Promise<unknown>;
+    act(() => {
+      selection = result.current.sendSetupSelect('set-work');
+    });
+    const [command] = ws.commands('setup_select');
+    act(() => {
+      ws.emit({
+        event: 'setup_action_result',
+        request_id: command.request_id,
+        action: 'setup_select',
+        success: true,
+        setup: setup('set-work', 'w1'),
+        desktops: [desktop('w1', 'set-work', 1)],
+      });
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd2'), desktops: [desktop('d2', 'set-default', 2)] });
+    });
+    await selection;
+
+    expect(useSetupsStore.getState().selectedSetupId).toBe('set-work');
+    expect(useSetupsStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1']);
     expect(window.localStorage.getItem(SELECTED_SETUP_STORAGE_KEY)).toBe('set-work');
   });
 

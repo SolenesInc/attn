@@ -276,6 +276,15 @@ func (c *wsClient) wantsTileContent(workspaceID, tileID string) bool {
 	return ok
 }
 
+func (c *wsClient) dropTileContentSubscription(container, tileID string) {
+	if c == nil {
+		return
+	}
+	c.tileContentMu.Lock()
+	defer c.tileContentMu.Unlock()
+	delete(c.tileContentSubscriptions, tileContentSubscriptionKey(container, tileID))
+}
+
 func (c *wsClient) tileContentSubscriptionKeys() []string {
 	if c == nil {
 		return nil

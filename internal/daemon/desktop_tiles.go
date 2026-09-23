@@ -209,6 +209,11 @@ func (d *Daemon) desktopMarkdownTilePath(desktopID, tileID string) (string, erro
 	if err != nil {
 		return "", err
 	}
+	return markdownTilePathOn(desktop, tileID)
+}
+
+func markdownTilePathOn(desktop setups.Desktop, tileID string) (string, error) {
+	desktopID := desktop.ID
 	tile, found := tileLeafByID(desktop.Tree, tileID)
 	if !found {
 		return "", setups.Errorf(setups.CodeNotFound, "tile %s does not belong to desktop %s", tileID, desktopID)
@@ -239,7 +244,14 @@ func (d *Daemon) handleDesktopTileContentGet(client *wsClient, msg *protocol.Des
 		d.sendCommandError(client, msg.Cmd, err.Error())
 		return
 	}
-	path, err := d.desktopMarkdownTilePath(msg.DesktopID, msg.TileID)
+	desktop, err := d.store.GetDesktop(msg.DesktopID)
+	if err == nil && desktop.SetupID != client.selectedSetup() {
+		err = setups.Errorf(setups.CodeCrossSetup, "desktop %s belongs to setup %s, not the setup this client is on", desktop.ID, desktop.SetupID)
+	}
+	path := ""
+	if err == nil {
+		path, err = markdownTilePathOn(desktop, msg.TileID)
+	}
 	if err != nil {
 		d.sendCommandError(client, msg.Cmd, err.Error())
 		return
@@ -262,47 +274,75 @@ func (d *Daemon) broadcastDesktopTileContent(ref markdownTileRef, content string
 	})
 }
 
-func (d *Daemon) subscribedDesktopTiles() map[string]map[string]struct{} {
-	subscribed := make(map[string]map[string]struct{})
+type desktopSubscriber struct {
+	client *wsClient
+	setup  string
+	keys   []string
+}
+
+func (d *Daemon) desktopSubscribers() []desktopSubscriber {
+	var subscribers []desktopSubscriber
 	if d.wsHub == nil {
-		return subscribed
+		return subscribers
 	}
 	d.wsHub.ForEachClient(func(client *wsClient) {
-		for _, key := range client.tileContentSubscriptionKeys() {
-			container, tileID, _ := strings.Cut(key, "\x00")
-			desktopID, ok := desktopIDFromTileContainer(container)
-			if !ok {
-				continue
-			}
-			if subscribed[desktopID] == nil {
-				subscribed[desktopID] = make(map[string]struct{})
-			}
-			subscribed[desktopID][tileID] = struct{}{}
+		if keys := client.tileContentSubscriptionKeys(); len(keys) > 0 {
+			subscribers = append(subscribers, desktopSubscriber{client: client, setup: client.selectedSetup(), keys: keys})
 		}
 	})
-	return subscribed
+	return subscribers
+}
+
+type desktopReads struct {
+	d    *Daemon
+	seen map[string]*setups.Desktop
+}
+
+func (r *desktopReads) get(desktopID string) (*setups.Desktop, bool) {
+	if desktop, read := r.seen[desktopID]; read {
+		return desktop, true
+	}
+	desktop, err := r.d.store.GetDesktop(desktopID)
+	var setupErr *setups.Error
+	switch {
+	case err == nil:
+		r.seen[desktopID] = &desktop
+	case errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound:
+		r.seen[desktopID] = nil
+	default:
+		return nil, false
+	}
+	return r.seen[desktopID], true
+}
+
+func subscribedMarkdownPath(desktop *setups.Desktop, setupID, tileID string) (string, bool) {
+	if desktop == nil || desktop.SetupID != setupID {
+		return "", false
+	}
+	tile, found := tileLeafByID(desktop.Tree, tileID)
+	path := strings.TrimSpace(tile.TileParams)
+	return path, found && tile.TileKind == string(layouttree.TileKindMarkdown) && path != ""
 }
 
 func (d *Daemon) addSubscribedDesktopMarkdownTiles(desired map[string]markdownTileRef) {
-	for desktopID, tileIDs := range d.subscribedDesktopTiles() {
-		desktop, err := d.store.GetDesktop(desktopID)
-		if setupErr := (*setups.Error)(nil); errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound {
-			d.pruneDesktopTileContentSubscriptions(desktopID, nil)
-			continue
-		}
-		if err != nil {
-			continue
-		}
-		for _, leaf := range layouttree.TileLeaves(desktop.Tree) {
-			path := strings.TrimSpace(leaf.TileParams)
-			if _, wanted := tileIDs[leaf.TileID]; !wanted || leaf.TileKind != string(layouttree.TileKindMarkdown) || path == "" {
+	reads := &desktopReads{d: d, seen: make(map[string]*setups.Desktop)}
+	for _, subscriber := range d.desktopSubscribers() {
+		for _, key := range subscriber.keys {
+			container, tileID, _ := strings.Cut(key, "\x00")
+			desktopID, isDesktop := desktopIDFromTileContainer(container)
+			if !isDesktop {
 				continue
 			}
-			desired[tileContentSubscriptionKey(desktopTileContainer(desktopID), leaf.TileID)] = markdownTileRef{desktopID: desktopID, tileID: leaf.TileID, path: path}
+			desktop, known := reads.get(desktopID)
+			if !known {
+				continue
+			}
+			path, live := subscribedMarkdownPath(desktop, subscriber.setup, tileID)
+			if !live {
+				subscriber.client.dropTileContentSubscription(container, tileID)
+				continue
+			}
+			desired[key] = markdownTileRef{desktopID: desktopID, tileID: tileID, path: path}
 		}
 	}
-}
-
-func (d *Daemon) pruneDesktopTileContentSubscriptions(desktopID string, tree *layouttree.Node) {
-	d.pruneTileContentSubscriptionsForLayout(desktopTileContainer(desktopID), tree)
 }

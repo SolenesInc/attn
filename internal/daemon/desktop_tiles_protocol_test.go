@@ -204,15 +204,15 @@ func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {
 	}
 
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopRemoveLeaf, "leaf_id": "tile-md"})
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("removing the tile left subscriptions %v", keys)
-	}
 	if err := os.WriteFile(notes, []byte("# third, after the tile left"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	w.d.pollMarkdownOnce()
 	if late := tileContents(t, w.client); len(late) != 0 {
 		t.Fatalf("a removed tile still streamed %+v", late)
+	}
+	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
+		t.Fatalf("removing the tile left subscriptions %v", keys)
 	}
 }
 
@@ -258,5 +258,35 @@ func TestDeletingASetupDropsItsTileSubscriptions(t *testing.T) {
 
 	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
 		t.Fatalf("deleting the setup left subscriptions %v", keys)
+	}
+}
+
+func TestSwitchingSetupsDropsTileSubscriptionsOfTheOldSetup(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
+	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
+	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "elsewhere"})
+
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": other.Setup.ID})
+	drainClientPayloads(t, w.client)
+	if err := os.WriteFile(notes, []byte("# edited after the switch"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.d.pollMarkdownOnce()
+
+	if late := tileContents(t, w.client); len(late) != 0 {
+		t.Fatalf("a client on another setup still got %+v", late)
+	}
+	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
+		t.Fatalf("switching setups left subscriptions %v", keys)
+	}
+
+	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
+	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
+		t.Fatalf("a client subscribed to a desktop outside its setup: %v", keys)
 	}
 }

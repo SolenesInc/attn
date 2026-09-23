@@ -69,10 +69,11 @@ export const useSetupsStore = create<SetupsState>((set) => ({
 
   arrangementChanged: (setup, desktops, deletedDesktopIds) =>
     set((state) => {
-      const setups = withSetup(state.setups, setup);
       if (setup.id !== state.selectedSetupId) {
-        return scopeTo(setups, setup.id, desktops);
+        const selectedStillLive = state.setups.some((entry) => entry.id === state.selectedSetupId);
+        return selectedStillLive ? state : scopeTo(withSetup(state.setups, setup), setup.id, desktops);
       }
+      const setups = withSetup(state.setups, setup);
       const merged = mergeDesktops(state.desktops, desktops, deletedDesktopIds);
       return { setups, desktops: merged, ...followCurrentDesktop(state, setups, merged) };
     }),
