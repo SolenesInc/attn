@@ -136,6 +136,7 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 	})
 	addAndSpawnSessionPane(t, d, client, sourceWorkspaceID, "s-source", "pane-source", "", sourceCwd)
 	addAndSpawnSessionPane(t, d, client, targetWorkspaceID, "s-target", "pane-target", "", targetCwd)
+	trace := wireRecorder(d)
 
 	d.handleWorkspaceLayoutMoveLeafToWorkspace(client, &protocol.WorkspaceLayoutMoveLeafToWorkspaceMessage{
 		Cmd:               protocol.CmdWorkspaceLayoutMoveLeafToWorkspace,
@@ -163,6 +164,18 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 	}
 	if sourceWorkspace := d.store.GetWorkspace(sourceWorkspaceID); sourceWorkspace != nil {
 		t.Fatalf("empty source workspace still exists: %+v", sourceWorkspace)
+	}
+	refreshed := false
+	for i, name := range trace.EventNames() {
+		if name != protocol.EventSessionStateChanged {
+			continue
+		}
+		var event protocol.WebSocketEvent
+		decodeInto(t, trace.Payloads()[i], &event)
+		refreshed = refreshed || (event.Session != nil && event.Session.ID == "s-source" && event.Session.WorkspaceID == targetWorkspaceID)
+	}
+	if !refreshed {
+		t.Fatalf("no session snapshot told clients s-source moved to %s; events=%v", targetWorkspaceID, trace.EventNames())
 	}
 }
 

@@ -904,6 +904,7 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 			d.workspaces.associateSession(movedPane.SessionID, targetWorkspaceID, movedPane.Title)
 		}
 		d.store.AssignSessionWorkspace(movedPane.SessionID, targetWorkspaceID)
+		d.projectSessionEvent(protocol.EventSessionStateChanged, movedPane.SessionID)
 	}
 
 	if sourceEmpty {
