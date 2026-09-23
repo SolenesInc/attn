@@ -606,7 +606,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	_ = good.Shutdown(context.Background())
 
 	mute := filepath.Join(root, "mute-probe-host")
-	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then exit 0; fi\nexec '" + binary + "' \"$@\"\n"
+	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then read nonce; exit 0; fi\nexec '" + binary + "' \"$@\"\n"
 	if err := os.WriteFile(mute, []byte(script), 0o700); err != nil {
 		t.Fatal(err)
 	}

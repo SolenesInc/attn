@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"runtime"
 	"slices"
@@ -295,6 +296,11 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	}
 	defer owner.Close()
 	defer b.releaseSharedIncarnationIfUnused(inc)
+	exited, watch, err := b.watchProbeExit(ctx, probe)
+	if err != nil {
+		return fmt.Errorf("watch probe: %w", err)
+	}
+	defer watch.Close()
 
 	attached, stream, err := b.attachSession(ctx, probe, "artifact-probe")
 	if err != nil {
@@ -312,7 +318,7 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	}
 	answer := fmt.Sprintf("ATTN-PROBE %s %dx%d", nonce, sharedHostProbeCols, sharedHostProbeRows)
 	var output bytes.Buffer
-	if err := awaitProbeOutput(ctx, stream, &output, answer); err != nil {
+	if err := awaitProbeOutput(ctx, stream, exited, &output, answer); err != nil {
 		return err
 	}
 	if err := stream.Close(); err != nil {
@@ -321,7 +327,31 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	return nil
 }
 
-func awaitProbeOutput(ctx context.Context, stream Stream, output *bytes.Buffer, want string) error {
+func (b *WorkerBackend) watchProbeExit(ctx context.Context, probe *workerSession) (<-chan struct{}, net.Conn, error) {
+	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
+	defer cancel()
+	conn, enc, dec, err := b.connectAuthed(rpcCtx, probe)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := b.completeSharedCall(rpcCtx, conn, enc, dec, probe, ptyworker.MethodWatch, map[string]any{}, nil); err != nil {
+		_ = conn.Close()
+		return nil, nil, err
+	}
+	exited := make(chan struct{})
+	go func() {
+		defer close(exited)
+		for {
+			frameType, _, evt, err := readFrame(dec)
+			if err != nil || frameType == "evt" && evt.Event == ptyworker.EventExit {
+				return
+			}
+		}
+	}()
+	return exited, conn, nil
+}
+
+func awaitProbeOutput(ctx context.Context, stream Stream, exited <-chan struct{}, output *bytes.Buffer, want string) error {
 	for !bytes.Contains(output.Bytes(), []byte(want)) {
 		select {
 		case event, ok := <-stream.Events():
@@ -331,6 +361,8 @@ func awaitProbeOutput(ctx context.Context, stream Stream, output *bytes.Buffer, 
 			if event.Kind == OutputEventKindOutput {
 				output.Write(event.Data)
 			}
+		case <-exited:
+			return fmt.Errorf("probe child exited before %q (output %q)", want, tail(output.Bytes()))
 		case <-ctx.Done():
 			return fmt.Errorf("probe output never showed %q (output %q): %w", want, tail(output.Bytes()), ctx.Err())
 		}
