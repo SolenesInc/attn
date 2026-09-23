@@ -118,7 +118,7 @@ func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, setupID str
 
 func TestSetupArrangementSurvivesRestart(t *testing.T) {
 	s, restart := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
+	setup, first := mustCreateSetup(t, s, "Main")
 	if first.ShortcutSlot != 1 || setup.CurrentDesktopID != first.ID {
 		t.Fatalf("new setup = %+v with desktop %+v, want its first desktop current in slot 1", setup, first)
 	}
@@ -179,7 +179,7 @@ func ratioedWithActive(desktop setups.Desktop, paneID string) setups.Desktop {
 
 func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
+	setup, desktop := mustCreateSetup(t, s, "Main")
 	addSetupSession(t, s, "agent-a", setup.ID)
 	addSetupSession(t, s, "agent-b", setup.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
@@ -209,7 +209,7 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 
 func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
+	setup, first := mustCreateSetup(t, s, "Main")
 	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -235,7 +235,7 @@ func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 
 func TestAnAgentHasAtMostOnePlacementAcrossTheDaemon(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
+	setup, first := mustCreateSetup(t, s, "Main")
 	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -297,7 +297,7 @@ func TestLayoutWritesNeverChangeMembership(t *testing.T) {
 
 func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
+	setup, desktop := mustCreateSetup(t, s, "Main")
 	addSetupSession(t, s, "agent-a", setup.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
@@ -338,7 +338,7 @@ func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 
 func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 	s, restart := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
+	setup, first := mustCreateSetup(t, s, "Main")
 	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -405,7 +405,7 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 
 func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
+	setup, desktop := mustCreateSetup(t, s, "Main")
 	addSetupSession(t, s, "agent-a", setup.ID)
 	addSetupSession(t, s, "agent-b", setup.ID)
 	seenByBoth := desktop.Revision
@@ -435,6 +435,13 @@ func TestSetupIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	s, restart := openSetupStore(t)
 	work, _ := mustCreateSetup(t, s, "Work")
 	home, _ := mustCreateSetup(t, s, "Home")
+	converted, err := s.MostRecentlyUsedSetup()
+	if err != nil || converted.Name != DefaultSetupName {
+		t.Fatalf("converted setup = %+v, %v; want %s", converted, err, DefaultSetupName)
+	}
+	if _, err := s.DeleteSetup(converted.ID, converted.Revision, home.ID); err != nil {
+		t.Fatalf("deleting the converted Default setup: %v", err)
+	}
 	addSetupSession(t, s, "live-agent", work.ID)
 	addSetupSession(t, s, "closed-agent", work.ID)
 	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
@@ -442,7 +449,7 @@ func TestSetupIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	}
 	wantCode(t, s.AssignSessionSetup("closed-agent", work.ID), setups.CodeSessionClosed)
 
-	_, _, err := s.CreateSetup("  Home ")
+	_, _, err = s.CreateSetup("  Home ")
 	wantCode(t, err, setups.CodeNameTaken)
 	_, err = s.RenameSetup(work.ID, "Home", work.Revision)
 	wantCode(t, err, setups.CodeNameTaken)
@@ -532,7 +539,7 @@ func TestMovingAnAgentToAnotherSetupRemovesItsPlacementOnly(t *testing.T) {
 
 func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
 	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
+	setup, first := mustCreateSetup(t, s, "Main")
 	_, second, _ := s.CreateDesktop(setup.ID, "", 0, true)
 	_, third, _ := s.CreateDesktop(setup.ID, "", 0, true)
 	addSetupSession(t, s, "agent-a", setup.ID)
@@ -591,29 +598,5 @@ func TestMostRecentlyUsedSetupFollowsSelection(t *testing.T) {
 	recent, err := s.MostRecentlyUsedSetup()
 	if err != nil || recent.ID != home.ID {
 		t.Fatalf("most recently used setup = %+v, %v; want %s", recent, err, home.ID)
-	}
-}
-
-func TestSetupMigrationStateIsRevisioned(t *testing.T) {
-	s, restart := openSetupStore(t)
-	if _, found, err := s.GetSetupMigration(); err != nil || found {
-		t.Fatalf("fresh migration state found=%v err=%v, want none", found, err)
-	}
-	first, err := s.SaveSetupMigration(setups.MigrationState{SchemaVersion: 150, Phase: "placement_required", ImportedGroups: `[{"id":"g1"}]`}, 0)
-	if err != nil {
-		t.Fatalf("SaveSetupMigration: %v", err)
-	}
-	first.Draft = `{"g1":"keep"}`
-	second, err := s.SaveSetupMigration(first, first.Revision)
-	if err != nil {
-		t.Fatalf("saving a draft: %v", err)
-	}
-	_, err = s.SaveSetupMigration(first, first.Revision)
-	wantCode(t, err, setups.CodeStaleRevision)
-
-	s = restart()
-	got, found, err := s.GetSetupMigration()
-	if err != nil || !found || !reflect.DeepEqual(got, second) {
-		t.Fatalf("migration state after restart = %+v found=%v err=%v, want %+v", got, found, err, second)
 	}
 }

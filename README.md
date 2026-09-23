@@ -115,6 +115,13 @@ brew update && brew upgrade --cask victorarias/attn/attn
 
 The app nudges you when a new release exists.
 
+The daemon upgrades its database when it starts, in one transaction after a
+snapshot in `~/.attn/backups/`. If the upgrade fails, the daemon exits, leaves
+the database and its schema version as they were, and writes
+`~/.attn/migration-failure.json` naming the error, the database, the snapshot
+and the log; the next successful start removes it. Other `attn` commands never
+upgrade the database and refuse to open one the daemon has not upgraded yet.
+
 ## Prerequisites
 
 - macOS (Apple Silicon)

@@ -3463,6 +3463,98 @@ model SetupArrangementChangedMessage {
   deleted_desktop_ids?: string[];
 }
 
+// ============================================================================
+// Workspace migration
+// ============================================================================
+
+enum MigrationPhase {
+  placement_required,
+  complete,
+}
+
+model MigrationGroup {
+  group_id: string;             // The legacy workspace id
+  title: string;
+  directory: string;
+  source_desktop_id: string;
+  confirmed: boolean;
+  tree_json: string;            // Surviving panes and tiles as arranged on the source desktop
+  panes: DesktopPane[];
+}
+
+model MigrationDraftDesktop {
+  key: string;                  // The desktop id, or slot-N for a free shortcut slot
+  desktop_id?: string;
+  shortcut_slot?: int32;        // 1-9; absent for an extra desktop
+  tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
+}
+
+model MigrationState {
+  phase: MigrationPhase;
+  revision: safeint;
+  setup_id: string;
+  groups: MigrationGroup[];
+  desktops: MigrationDraftDesktop[];
+  can_undo: boolean;
+  suggestion_available: boolean;
+}
+
+model MigrationGetMessage {
+  cmd: "migration_get";
+  request_id: string;
+}
+
+model MigrationKeepMessage {
+  cmd: "migration_keep";
+  request_id: string;
+  expected_revision: safeint;
+  group_ids: string[];
+}
+
+model MigrationMoveMessage {
+  cmd: "migration_move";
+  request_id: string;
+  expected_revision: safeint;
+  group_id: string;
+  target_key: string;
+  anchor_group_id?: string;     // Absent places the group beside the whole desktop
+  edge: LayoutDockEdge;
+  share?: float64;              // The moved group's share of the new split, in (0,1); absent means half
+}
+
+model MigrationSuggestMessage {
+  cmd: "migration_suggest";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationUndoMessage {
+  cmd: "migration_undo";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationFinishMessage {
+  cmd: "migration_finish";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationResultMessage {
+  event: "migration_result";
+  request_id: string;
+  action: string;               // Echo of the command name
+  success: boolean;
+  error?: string;
+  error_code?: SetupErrorCode;
+  state?: MigrationState;
+}
+
+model MigrationChangedMessage {
+  event: "migration_changed";
+  state: MigrationState;
+}
+
 model RegisterWorkspaceMessage {
   cmd: "register_workspace";
   id: string;
@@ -3539,6 +3631,7 @@ model InitialStateMessage {
   endpoints?: EndpointInfo[];
   workspaces?: Workspace[];
   setups?: Setup[];
+  migration_phase?: MigrationPhase;
   // The setup this connection is scoped to, and its desktops.
   selected_setup_id?: string;
   desktops?: Desktop[];
@@ -7927,6 +8020,8 @@ alias DaemonEvent =
   | SetupActionResultMessage
   | SetupsChangedMessage
   | SetupArrangementChangedMessage
+  | MigrationResultMessage
+  | MigrationChangedMessage
   | RenameResultMessage
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage
