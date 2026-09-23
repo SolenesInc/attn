@@ -9236,9 +9236,6 @@ type SessionListMessage struct {
 	// Reopen corresponds to the JSON schema field "reopen".
 	Reopen *bool `json:"reopen,omitempty,omitzero"`
 
-	// ReopenDelivery corresponds to the JSON schema field "reopen_delivery".
-	ReopenDelivery *SessionReopenDelivery `json:"reopen_delivery,omitempty,omitzero"`
-
 	// Repository corresponds to the JSON schema field "repository".
 	Repository *string `json:"repository,omitempty,omitzero"`
 
@@ -9426,9 +9423,6 @@ type SessionReopen struct {
 	// BranchState corresponds to the JSON schema field "branch_state".
 	BranchState *string `json:"branch_state,omitempty,omitzero"`
 
-	// Checking corresponds to the JSON schema field "checking".
-	Checking bool `json:"checking"`
-
 	// DirectoryState corresponds to the JSON schema field "directory_state".
 	DirectoryState string `json:"directory_state"`
 
@@ -9459,11 +9453,6 @@ const SessionReopenActionReopen SessionReopenAction = "reopen"
 const SessionReopenActionStartFreshDefaultBranch SessionReopenAction = "start_fresh_default_branch"
 const SessionReopenActionStartFreshElsewhere SessionReopenAction = "start_fresh_elsewhere"
 const SessionReopenActionStartFreshSamePlace SessionReopenAction = "start_fresh_same_place"
-
-type SessionReopenDelivery string
-
-const SessionReopenDeliveryInline SessionReopenDelivery = "inline"
-const SessionReopenDeliveryStream SessionReopenDelivery = "stream"
 
 type SessionReopenEntry struct {
 	// Reopen corresponds to the JSON schema field "reopen".

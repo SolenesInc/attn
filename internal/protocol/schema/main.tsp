@@ -853,11 +853,6 @@ model SessionTranscriptMessage {
 // Live sessions by default, `closed` for the closed ones alone, `all` for both.
 // Newest first, where newest means the close for a closed session and the last
 // sighting for a live one.
-enum SessionReopenDelivery {
-  inline,
-  stream,
-}
-
 model SessionListMessage {
   cmd: "session_list";
   request_id?: string; // set by the WS frontend to correlate the result event
@@ -875,11 +870,11 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
-  // Request reopen eligibility for every closed row of this page.
+  // Request reopen eligibility for every closed row of this page. Over the
+  // socket the verdicts arrive inline in the result. Over WebSocket the page
+  // arrives without them, followed by one terminal session_reopen_resolved
+  // event per closed generation.
   reopen?: boolean;
-  // Absent means inline. Stream delivery is available only over WebSocket and
-  // sends one terminal session_reopen_resolved event per closed generation.
-  reopen_delivery?: SessionReopenDelivery;
 }
 
 // Reads one ledger row, live or closed, by exact session id.
@@ -7063,8 +7058,6 @@ model SessionReopen {
   // Offered actions, best first. Empty means nothing here brings it back.
   actions: SessionReopenAction[];
   warning?: string;
-  // A branch check is running; ask again for a sharper verdict.
-  checking: boolean;
   // present | missing | unavailable | unknown | remote
   directory_state: string;
   // local | remote_only | gone | merged | unknown

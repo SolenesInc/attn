@@ -29,11 +29,7 @@ type reopenGit interface {
 	BranchAvailability(context.Context, string, string) (branchInspection, error)
 }
 
-type sessionReopenResolver struct {
-	daemon *Daemon
-}
-
-func (r sessionReopenResolver) ResolveEntry(
+func (d *Daemon) resolveReopen(
 	ctx context.Context,
 	entry protocol.SessionLedgerEntry,
 	gitView reopenGit,
@@ -41,40 +37,40 @@ func (r sessionReopenResolver) ResolveEntry(
 	verdict := sessionReopenVerdict{
 		SessionID: entry.ID,
 		Entry:     &entry,
-		Execution: r.daemon.reopenExecutionFromLedger(&entry),
+		Execution: d.reopenExecutionFromLedger(&entry),
 		Live:      protocol.Deref(entry.ClosedAt) == "",
 	}
 	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
-	r.daemon.planReopenPlacement(&verdict)
+	d.planReopenPlacement(&verdict)
 
 	if verdict.Live {
 		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)
 		return verdict, nil
 	}
-	if !decideReopenHost(&verdict, r.daemon.endpointInfos()) {
+	if !decideReopenHost(&verdict, d.endpointInfos()) {
 		return verdict, nil
 	}
-	_, hasLaunchIntent := r.daemon.store.LaunchIntent(entry.ID)
-	if err := r.daemon.decideReopenPlace(ctx, &verdict, hasLaunchIntent, gitView); err != nil {
+	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
+	if err := d.decideReopenPlace(ctx, &verdict, hasLaunchIntent, gitView); err != nil {
 		return sessionReopenVerdict{}, err
 	}
 	return verdict, nil
 }
 
-func (r sessionReopenResolver) ResolveClosed(
+func (d *Daemon) resolveClosedReopen(
 	ctx context.Context,
 	key reopenKey,
 	gitView reopenGit,
 ) (sessionReopenVerdict, error) {
-	entry := r.daemon.store.SessionLedgerEntry(strings.TrimSpace(key.SessionID))
+	entry := d.store.SessionLedgerEntry(strings.TrimSpace(key.SessionID))
 	if !reopenGenerationMatches(entry, key) {
 		return sessionReopenVerdict{}, staleReopenGenerationError(key)
 	}
-	verdict, err := r.ResolveEntry(ctx, *entry, gitView)
+	verdict, err := d.resolveReopen(ctx, *entry, gitView)
 	if err != nil {
 		return sessionReopenVerdict{}, err
 	}
-	if !reopenGenerationMatches(r.daemon.store.SessionLedgerEntry(key.SessionID), key) {
+	if !reopenGenerationMatches(d.store.SessionLedgerEntry(key.SessionID), key) {
 		return sessionReopenVerdict{}, staleReopenGenerationError(key)
 	}
 	return verdict, nil

@@ -71,27 +71,3 @@ func TestSessionReopenPrintsWhatItDid(t *testing.T) {
 		t.Errorf("a live session must be reported as running, not reopened:\n%s", printed)
 	}
 }
-
-func TestTheVerdictSaysAWorktreeCheckIsStillRunning(t *testing.T) {
-	var out bytes.Buffer
-	fprintSessionReopenVerdict(&out, "sess-1", &protocol.SessionReopen{
-		Reopenable:     false,
-		Reason:         protocol.Ptr("the worktree directory is gone"),
-		Checking:       true,
-		Actions:        []protocol.SessionReopenAction{},
-		DirectoryState: "missing",
-		WorkspaceID:    "workspace-sess-1",
-		WorkspacePlan:  "create",
-		PanePlan:       "add",
-	})
-	printed := out.String()
-	if !strings.Contains(printed, "reopen     no: the worktree directory is gone") {
-		t.Errorf("the verdict does not carry its reason:\n%s", printed)
-	}
-	if !strings.Contains(printed, "checking   a branch check is running") {
-		t.Errorf("the verdict does not say a check is still running:\n%s", printed)
-	}
-	if !strings.Contains(printed, "actions    none") {
-		t.Errorf("a verdict with nothing on offer must say so:\n%s", printed)
-	}
-}

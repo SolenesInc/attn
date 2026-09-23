@@ -217,7 +217,6 @@
     "actions": [
       "start_fresh_same_place"
     ],
-    "checking": false,
     "directory_state": "present",
     "pane_plan": "add",
     "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
@@ -235,7 +234,6 @@
     "actions": [
       "start_fresh_same_place"
     ],
-    "checking": false,
     "directory_state": "present",
     "pane_plan": "add",
     "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",

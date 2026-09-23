@@ -5,5 +5,7 @@ symptom: A slow Git metadata lookup held back the entire Sessions page and every
 notes: >
   The stored page now renders first, each closed generation receives one
   terminal result, and slow repositories no longer hold up faster rows.
-  Protocol 318 adds streamed reopen delivery and the
-  session_reopen_resolved event while preserving the existing refreshed event.
+  Protocol 318 streams reopen eligibility over WebSocket through the new
+  session_reopen_resolved event, keeps inline verdicts on the Unix socket,
+  preserves the existing refreshed event, and drops the unused checking flag
+  from reopen verdicts.

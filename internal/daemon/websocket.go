@@ -61,8 +61,6 @@ type wsClient struct {
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
-	removedFromReopenBroker bool
-
 	gitStatusDir        string
 	gitStatusStop       chan struct{}
 	gitStatusRefresh    chan gitStatusRefreshRequest
@@ -832,6 +830,7 @@ func (d *Daemon) sendOutboundBlocking(client *wsClient, message outboundMessage,
 }
 
 func (d *Daemon) wsMsgPump(client *wsClient) {
+	defer d.removeSessionReopenClient(client)
 	for data := range client.recv {
 		if client.sendChannelClosed() {
 			continue
@@ -899,7 +898,6 @@ func (d *Daemon) wsPingLoop(client *wsClient, done <-chan struct{}) {
 func (d *Daemon) wsReadPump(client *wsClient) {
 	defer func() {
 		d.dropPendingInitialState(client)
-		d.removeSessionReopenClient(client)
 		d.cleanupRemoteGitStatusSubscription(client)
 		d.dropFsWatchClient(client)
 		d.dropDocSubscriptions(client)
@@ -1025,7 +1023,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSessionList:
 		list := msg.(*protocol.SessionListMessage)
 		var intent *reopenPageIntent
-		if stream, streamErr := sessionListStream(list); streamErr == nil && stream {
+		if protocol.Deref(list.Reopen) {
 			if broker := d.sessionReopenBroker(); broker != nil {
 				pageIntent := broker.BeginPage(client, strings.TrimSpace(protocol.Deref(list.Before)) != "")
 				intent = &pageIntent

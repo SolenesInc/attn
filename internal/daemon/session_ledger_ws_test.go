@@ -131,27 +131,6 @@ func TestSessionListRefusesAWindowThatCouldHoldNothing(t *testing.T) {
 	}
 }
 
-func TestStreamedSessionListRequiresReopenAndWebSocket(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	client := newWorkspaceProtocolTestClient()
-	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
-		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-stream"),
-		ReopenDelivery: protocol.Ptr(protocol.SessionReopenDeliveryStream),
-	}, nil)
-
-	reply := onlySessionListResult(t, client)
-	if reply.Success || !strings.Contains(protocol.Deref(reply.Error), "requires reopen=true") {
-		t.Fatalf("reply=%+v, want stream-without-reopen refusal", reply)
-	}
-
-	_, err := d.sessionLedgerPage(&protocol.SessionListMessage{
-		Reopen: protocol.Ptr(true), ReopenDelivery: protocol.Ptr(protocol.SessionReopenDeliveryStream),
-	}, false)
-	if err == nil || !strings.Contains(err.Error(), "only over WebSocket") {
-		t.Fatalf("stream over the CLI err=%v, want WebSocket-only refusal", err)
-	}
-}
-
 func TestSessionShowOverTheWebSocketNamesASessionItNeverRan(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	client := newWorkspaceProtocolTestClient()

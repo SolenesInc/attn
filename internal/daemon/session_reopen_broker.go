@@ -61,7 +61,6 @@ type reopenBrokerJob struct {
 	cancel                context.CancelFunc
 	interests             map[*wsClient]struct{}
 	broadcastOnCompletion bool
-	started               bool
 }
 
 type sessionReopenBroker struct {
@@ -95,7 +94,7 @@ func newSessionReopenBroker(daemon *Daemon, workers int) *sessionReopenBroker {
 		jobs:    make(map[reopenKey]*reopenBrokerJob),
 	}
 	b.resolve = func(ctx context.Context, key reopenKey) (sessionReopenVerdict, error) {
-		return (sessionReopenResolver{daemon: daemon}).ResolveClosed(ctx, key, daemon.scheduledReopenGit(gitDeferred))
+		return daemon.resolveClosedReopen(ctx, key, daemon.scheduledReopenGit(gitDeferred))
 	}
 	for range workers {
 		b.workerWg.Add(1)
@@ -107,9 +106,6 @@ func newSessionReopenBroker(daemon *Daemon, workers int) *sessionReopenBroker {
 func (b *sessionReopenBroker) BeginPage(client *wsClient, appendPage bool) reopenPageIntent {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if client.removedFromReopenBroker {
-		return reopenPageIntent{Client: client}
-	}
 	state := b.clients[client]
 	if state == nil {
 		state = &reopenBrokerClient{keys: make(map[reopenKey]struct{})}
@@ -162,7 +158,6 @@ func (b *sessionReopenBroker) ResolveForClose(key reopenKey) {
 func (b *sessionReopenBroker) RemoveClient(client *wsClient) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	client.removedFromReopenBroker = true
 	state := b.clients[client]
 	if state == nil {
 		return
@@ -253,7 +248,6 @@ func (b *sessionReopenBroker) nextJob() *reopenBrokerJob {
 		if b.jobs[job.key] != job || job.ctx.Err() != nil {
 			continue
 		}
-		job.started = true
 		return job
 	}
 	return nil

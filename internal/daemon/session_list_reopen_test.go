@@ -270,9 +270,6 @@ func TestAPageReturnsACompleteBranchVerdict(t *testing.T) {
 	verdict := listedVerdict(t, sessionListResult(t, d, protocol.SessionListMessage{
 		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
 	}), "sharpening")
-	if verdict.Checking {
-		t.Errorf("the synchronous page returned a preliminary verdict: %+v", verdict)
-	}
 	if state := protocol.Deref(verdict.BranchState); state != branchStateLocal {
 		t.Errorf("branch_state = %q, want %q once the check landed", state, branchStateLocal)
 	}

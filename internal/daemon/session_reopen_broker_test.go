@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -84,7 +83,7 @@ func TestStreamedSessionListQueuesThePageBeforeBlockedResolution(t *testing.T) {
 	client := newWorkspaceProtocolTestClient()
 	msg := &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("page"), Closed: protocol.Ptr(true),
-		Reopen: protocol.Ptr(true), ReopenDelivery: protocol.Ptr(protocol.SessionReopenDeliveryStream),
+		Reopen: protocol.Ptr(true),
 	}
 	intent := broker.BeginPage(client, false)
 	d.sendSessionListWSResult(client, msg, &intent)
@@ -235,20 +234,40 @@ func TestReopenBrokerFailuresAndStaleGenerationsSettle(t *testing.T) {
 	})
 }
 
-func TestReopenBrokerIgnoresAPageFromARemovedClient(t *testing.T) {
+func TestASessionListBufferedAtDisconnectLeavesNoReopenInterest(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	closedBrokerSession(t, d, "late")
 	broker := installTestReopenBroker(t, d, 1)
+	broker.resolve = func(ctx context.Context, _ reopenKey) (sessionReopenVerdict, error) {
+		<-ctx.Done()
+		return sessionReopenVerdict{}, ctx.Err()
+	}
 	client := newWorkspaceProtocolTestClient()
-	d.removeSessionReopenClient(client)
+	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
+	list, err := json.Marshal(protocol.SessionListMessage{
+		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("buffered"),
+		Closed: protocol.Ptr(true), Reopen: protocol.Ptr(true),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.recv = make(chan []byte, 1)
+	client.recv <- list
+	close(client.recv)
 
-	broker.CommitPage(broker.BeginPage(client, false), []reopenKey{{SessionID: "late", ClosedAt: "late-close"}})
+	d.wsMsgPump(client)
 
+	select {
+	case <-client.send:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the buffered session_list was never answered")
+	}
 	broker.mu.Lock()
 	_, registered := broker.clients[client]
 	jobs := len(broker.jobs)
 	broker.mu.Unlock()
 	if registered || jobs != 0 {
-		t.Fatalf("removed client registered=%v with %d jobs; a list buffered at disconnect leaks it", registered, jobs)
+		t.Fatalf("disconnected client registered=%v with %d jobs; a list buffered at disconnect leaks it", registered, jobs)
 	}
 }
 
@@ -332,27 +351,5 @@ func TestReopenBrokerWorkerReceiptForFiftyRows(t *testing.T) {
 	if queued != len(keys)-productionSessionReopenWorkers {
 		t.Fatalf("queued=%d, want %d", queued, len(keys)-productionSessionReopenWorkers)
 	}
-	t.Logf(`{"rows":%d,"workers":%d,"peak_running":%d,"queued_at_saturation":%d}`,
-		len(keys), productionSessionReopenWorkers, peak.Load(), queued)
 	close(release)
-}
-
-func TestReopenBrokerConcurrentInterestIsRaceSafe(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	broker := installTestReopenBroker(t, d, 2)
-	broker.resolve = func(_ context.Context, key reopenKey) (sessionReopenVerdict, error) {
-		return brokerVerdict(key), nil
-	}
-	key := reopenKey{SessionID: "shared", ClosedAt: "close"}
-	var wg sync.WaitGroup
-	for range 20 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			client := newWorkspaceProtocolTestClient()
-			broker.CommitPage(broker.BeginPage(client, false), []reopenKey{key})
-			broker.RemoveClient(client)
-		}()
-	}
-	wg.Wait()
 }

@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"golang.org/x/sync/errgroup"
 )
 
 func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.SessionLedgerQuery, error) {
@@ -62,24 +62,6 @@ func ledgerInstantArg(name, raw string) (time.Time, error) {
 	return at, nil
 }
 
-func sessionListStream(msg *protocol.SessionListMessage) (bool, error) {
-	delivery := protocol.SessionReopenDeliveryInline
-	if msg.ReopenDelivery != nil {
-		delivery = *msg.ReopenDelivery
-	}
-	switch delivery {
-	case protocol.SessionReopenDeliveryInline:
-		return false, nil
-	case protocol.SessionReopenDeliveryStream:
-		if !protocol.Deref(msg.Reopen) {
-			return false, errors.New("stream reopen delivery requires reopen=true")
-		}
-		return true, nil
-	default:
-		return false, fmt.Errorf("unknown reopen delivery %q", delivery)
-	}
-}
-
 func (d *Daemon) sessionLedgerStoredPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
 	query, err := ledgerQuery(msg, wantFacets)
 	if err != nil {
@@ -108,22 +90,12 @@ func (d *Daemon) sessionLedgerStoredPage(msg *protocol.SessionListMessage, wantF
 }
 
 func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
-	stream, err := sessionListStream(msg)
-	if err != nil {
-		return nil, err
-	}
-	if stream {
-		return nil, errors.New("stream reopen delivery is available only over WebSocket")
-	}
 	result, err := d.sessionLedgerStoredPage(msg, wantFacets)
 	if err != nil {
 		return nil, err
 	}
 	if protocol.Deref(msg.Reopen) {
-		result.Reopen, err = d.reopenVerdictsForPage(context.Background(), result.Entries)
-		if err != nil {
-			return nil, err
-		}
+		result.Reopen = d.reopenVerdictsForPage(result.Entries)
 	}
 	return result, nil
 }
@@ -137,54 +109,33 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionListResult: result})
 }
 
-func (d *Daemon) reopenVerdictsForPage(
-	ctx context.Context,
-	entries []protocol.SessionLedgerEntry,
-) ([]protocol.SessionReopenEntry, error) {
-	closed := make([]int, 0, len(entries))
-	for i := range entries {
-		if protocol.Deref(entries[i].ClosedAt) != "" {
-			closed = append(closed, i)
-		}
-	}
-	verdicts := make([]*protocol.SessionReopenEntry, len(closed))
-	resolver := sessionReopenResolver{daemon: d}
+func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
+	verdicts := make([]*protocol.SessionReopenEntry, len(entries))
 	gitView := d.scheduledReopenGit(gitInteractive)
-	var wg sync.WaitGroup
-	workers := make(chan struct{}, productionSessionReopenWorkers)
-	for resultIndex, entryIndex := range closed {
-		resultIndex, entry := resultIndex, entries[entryIndex]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			select {
-			case workers <- struct{}{}:
-				defer func() { <-workers }()
-			case <-ctx.Done():
-				return
-			}
-			verdict, err := resolver.ResolveEntry(ctx, entry, gitView)
+	var group errgroup.Group
+	group.SetLimit(productionSessionReopenWorkers)
+	for i, entry := range entries {
+		if protocol.Deref(entry.ClosedAt) == "" {
+			continue
+		}
+		group.Go(func() error {
+			verdict, err := d.resolveReopen(context.Background(), entry, gitView)
 			if err != nil {
 				d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
-				return
+				return nil
 			}
-			verdicts[resultIndex] = &protocol.SessionReopenEntry{
-				SessionID: entry.ID,
-				Reopen:    *verdict.toProtocol(),
-			}
-		}()
+			verdicts[i] = &protocol.SessionReopenEntry{SessionID: entry.ID, Reopen: *verdict.toProtocol()}
+			return nil
+		})
 	}
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
+	_ = group.Wait()
 	resolved := make([]protocol.SessionReopenEntry, 0, len(verdicts))
 	for _, verdict := range verdicts {
 		if verdict != nil {
 			resolved = append(resolved, *verdict)
 		}
 	}
-	return resolved, nil
+	return resolved
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
@@ -194,9 +145,7 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		return
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
-	verdict, err := (sessionReopenResolver{daemon: d}).ResolveEntry(
-		context.Background(), *entry, d.scheduledReopenGit(gitInteractive),
-	)
+	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit(gitInteractive))
 	if err != nil {
 		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
 	} else {
@@ -210,15 +159,7 @@ func (d *Daemon) sendSessionListWSResult(
 	msg *protocol.SessionListMessage,
 	intent *reopenPageIntent,
 ) {
-	stream, err := sessionListStream(msg)
-	var result *protocol.SessionListResult
-	if err == nil {
-		if stream {
-			result, err = d.sessionLedgerStoredPage(msg, true)
-		} else {
-			result, err = d.sessionLedgerPage(msg, true)
-		}
-	}
+	result, err := d.sessionLedgerStoredPage(msg, true)
 	reply := protocol.SessionListResultMessage{
 		Event:     protocol.EventSessionListResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -228,7 +169,7 @@ func (d *Daemon) sendSessionListWSResult(
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	}
-	if !d.sendToClient(client, reply) || err != nil || !stream || intent == nil {
+	if !d.sendToClient(client, reply) || err != nil || intent == nil {
 		return
 	}
 	if broker := d.sessionReopenBroker(); broker != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ func TestInteractiveReopenInspectionDoesNotJoinDeferredWork(t *testing.T) {
 
 	results := make(chan error, 2)
 	for _, lane := range []gitLane{gitDeferred, gitInteractive} {
-		lane := lane
 		go func() {
 			_, err := d.scheduledReopenGit(lane).BranchAvailability(context.Background(), repository, "feature")
 			results <- err
@@ -108,15 +108,14 @@ func TestSessionReopenResolverPolicyMatrix(t *testing.T) {
 			reason:    "repository is gone",
 		},
 	}
-	resolver := sessionReopenResolver{daemon: d}
 	for _, tc := range cases {
 		t.Run(tc.sessionID, func(t *testing.T) {
 			entry := d.store.SessionLedgerEntry(tc.sessionID)
-			verdict, err := resolver.ResolveEntry(context.Background(), *entry, gitView)
+			verdict, err := d.resolveReopen(context.Background(), *entry, gitView)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got, want := actionNames(verdict.Actions), actionNames(tc.actions); !stringSlicesEqual(got, want) {
+			if got, want := actionNames(verdict.Actions), actionNames(tc.actions); !slices.Equal(got, want) {
 				t.Errorf("actions = %v, want %v", got, want)
 			}
 			if !strings.Contains(verdict.Reason, tc.reason) {
@@ -135,9 +134,8 @@ func TestSessionReopenResolverDistinguishesOperationalFailureFromRefusal(t *test
 		Repo: repository, Agent: "codex", Resume: "conv-resolver-failure",
 	})
 	entry := d.store.SessionLedgerEntry("resolver-failure")
-	resolver := sessionReopenResolver{daemon: d}
 	errGitUnavailable := errors.New("git unavailable")
-	_, err := resolver.ResolveEntry(context.Background(), *entry, stubReopenGit{
+	_, err := d.resolveReopen(context.Background(), *entry, stubReopenGit{
 		branchAvailability: func(context.Context, string, string) (branchInspection, error) {
 			return branchInspection{}, errGitUnavailable
 		},
@@ -146,7 +144,7 @@ func TestSessionReopenResolverDistinguishesOperationalFailureFromRefusal(t *test
 		t.Fatalf("operational error = %v, want %v", err, errGitUnavailable)
 	}
 
-	verdict, err := resolver.ResolveEntry(context.Background(), *entry, stubReopenGit{
+	verdict, err := d.resolveReopen(context.Background(), *entry, stubReopenGit{
 		branchAvailability: func(context.Context, string, string) (branchInspection, error) {
 			return branchInspection{State: branchStateGone, RepoMissing: true}, nil
 		},
@@ -167,7 +165,7 @@ func TestSessionReopenResolverKeepsAnAdvisoryBranchWarningFailureNonfatal(t *tes
 		Agent: "codex", Resume: "conv-warning-failure",
 	})
 	entry := d.store.SessionLedgerEntry("warning-failure")
-	verdict, err := (sessionReopenResolver{daemon: d}).ResolveEntry(context.Background(), *entry, stubReopenGit{
+	verdict, err := d.resolveReopen(context.Background(), *entry, stubReopenGit{
 		branchInfo: func(context.Context, string) (*attngit.BranchInfo, error) {
 			return nil, errors.New("branch warning unavailable")
 		},
@@ -194,7 +192,7 @@ func TestSessionReopenResolverRejectsAChangedCloseGeneration(t *testing.T) {
 	release := make(chan struct{})
 	result := make(chan error, 1)
 	go func() {
-		_, err := (sessionReopenResolver{daemon: d}).ResolveClosed(context.Background(), key, stubReopenGit{
+		_, err := d.resolveClosedReopen(context.Background(), key, stubReopenGit{
 			branchAvailability: func(context.Context, string, string) (branchInspection, error) {
 				close(started)
 				<-release
@@ -209,18 +207,6 @@ func TestSessionReopenResolverRejectsAChangedCloseGeneration(t *testing.T) {
 	}
 	close(release)
 	if err := <-result; !errors.Is(err, errStaleReopenGeneration) {
-		t.Fatalf("ResolveClosed() error = %v, want %v", err, errStaleReopenGeneration)
+		t.Fatalf("resolveClosedReopen() error = %v, want %v", err, errStaleReopenGeneration)
 	}
-}
-
-func stringSlicesEqual(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
 }
