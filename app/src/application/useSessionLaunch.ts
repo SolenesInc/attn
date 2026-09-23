@@ -143,7 +143,11 @@ export function useSessionLaunch({
           throw new Error('Session spawn arguments were not prepared.');
         }
         await ptySpawn({
-          args: { ...spawnArgs, placement: target.placement, ...(base ? { spawned_from: base.id } : {}) },
+          args: {
+            ...spawnArgs,
+            ...(endpointId ? {} : { placement: target.placement }),
+            ...(base ? { spawned_from: base.id } : {}),
+          },
         });
         selectCreatedSession(sessionId);
       } catch (error) {

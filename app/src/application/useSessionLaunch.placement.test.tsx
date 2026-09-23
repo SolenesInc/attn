@@ -97,3 +97,28 @@ describe('useSessionLaunch placement', () => {
     expect(result.current.locationPickerPurpose).toBe('session');
   });
 });
+
+describe('useSessionLaunch on a remote endpoint', () => {
+  beforeEach(() => {
+    vi.mocked(ptySpawn).mockClear();
+    useSessionStore.setState({ sessions: [], activeSessionId: null });
+  });
+
+  it('sends no home desktop placement for an agent started on another daemon', async () => {
+    await useSessionStore.getState().createSession('focused', '/repo/focused', 'agent-a', 'codex', undefined, false, undefined);
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([['pane-a', 'agent-a']], 'pane-a')],
+    });
+    const { result } = renderLaunch();
+
+    await act(async () => {
+      await result.current.createSplitSession('codex', 'vertical', undefined, { cwd: '/remote/repo', endpointId: 'outpost-1' });
+    });
+
+    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
+    expect(args.endpoint_id).toBe('outpost-1');
+    expect(args.placement).toBeUndefined();
+  });
+});

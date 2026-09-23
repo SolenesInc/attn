@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
+import { useSelectedAgentFocus } from './useSelectedAgentFocus';
 import { useWorkspaceSelectionController } from '../hooks/useWorkspaceSelectionController';
 import type { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { useSessionStore, type TerminalWorkspaceState } from '../store/sessions';
@@ -70,6 +71,8 @@ export function useAppNavigation({
 
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
+
+  useSelectedAgentFocus(view === 'session' ? activeSessionId : null);
 
   const { wantsAttention } = attentionQueue;
 
