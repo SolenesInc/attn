@@ -59,6 +59,9 @@ type wsClient struct {
 	capabilities      map[string]struct{}
 	identityMu        sync.RWMutex
 
+	arrangementMu sync.Mutex
+	shownTiles    []desktopMarkdownTile
+
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
@@ -505,19 +508,19 @@ func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsCl
 }
 
 func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
-	h.sendRawTextToMatchingClients(payload, match, maxSlowCount)
+	h.sendRawTextToMatchingClients(payload, match, maxSlowCount, nil)
 }
 
-func (h *wsHub) SendSnapshotToMatchingClients(message interface{}, match func(*wsClient) bool) {
+func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func(*wsClient) bool, shown func(*wsClient) []desktopMarkdownTile) {
 	data, err := json.Marshal(message)
 	if err != nil {
-		h.logf("WebSocket snapshot send marshal error: %v", err)
+		h.logf("WebSocket arrangement send marshal error: %v", err)
 		return
 	}
-	h.sendRawTextToMatchingClients(data, match, 1)
+	h.sendRawTextToMatchingClients(data, match, 1, shown)
 }
 
-func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int) {
+func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int, shown func(*wsClient) []desktopMarkdownTile) {
 	if len(payload) == 0 {
 		return
 	}
@@ -533,7 +536,7 @@ func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClien
 		if match != nil && !match(client) {
 			continue
 		}
-		if client.trySend(message) {
+		if client.trySendArrangement(message, shown) {
 			client.slowCount = 0
 			continue
 		}
@@ -780,13 +783,13 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
-	d.fillInitialProfileState(client, event)
+	shown := d.fillInitialProfileState(client, event)
 	d.fillInitialMigrationPhase(event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return
 	}
-	_ = d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
+	client.trySendArrangement(outboundMessage{kind: messageKindText, payload: data}, func(*wsClient) []desktopMarkdownTile { return shown })
 	d.nudgeDesktopTileContent()
 
 	go d.fetchAllPRDetails()

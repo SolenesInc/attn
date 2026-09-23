@@ -320,17 +320,15 @@ describe('useDaemonSocket profiles', () => {
     expect(result.current.desktopTileContents).toEqual({});
   });
 
-  it('keeps content that arrives before the arrangement of its desktop', async () => {
+  it('ignores content for a desktop that is not current', async () => {
     const { ws, result } = await connect();
 
     act(() => {
-      ws.emit({ event: 'desktop_tile_content', desktop_id: 'w1', tile_id: 'tile-md', tile_kind: 'markdown', path: '/notes/plan.md', content: '# Plan' });
-    });
-    act(() => {
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-work', 'w1'), desktops: [desktop('w1', 'set-work', 1, MARKDOWN_TILE)] });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1), desktop('d2', 'set-default', 2, MARKDOWN_TILE)] });
+      ws.emit({ event: 'desktop_tile_content', desktop_id: 'd2', tile_id: 'tile-md', tile_kind: 'markdown', path: '/notes/plan.md', content: '# Plan' });
     });
 
-    expect(result.current.desktopTileContents[tileContentKey('w1', 'tile-md')]).toMatchObject({ content: '# Plan' });
+    expect(result.current.desktopTileContents).toEqual({});
   });
 
   it('keeps content only for the current desktop', async () => {

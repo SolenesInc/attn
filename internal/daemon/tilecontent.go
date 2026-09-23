@@ -669,10 +669,10 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 		case <-done:
 			return
 		case <-d.desktopTiles.nudge:
-			d.deliverDesktopTileContent(true)
+			d.deliverDesktopTileContent()
 		case <-ticker.C:
 			d.pollMarkdownOnce()
-			d.deliverDesktopTileContent(false)
+			d.deliverDesktopTileContent()
 		}
 	}
 }

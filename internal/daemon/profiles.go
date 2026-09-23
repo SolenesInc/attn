@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
@@ -133,40 +132,38 @@ func (d *Daemon) scopeClientToProfile(client *wsClient, requestedProfileID strin
 	client.selectProfile("")
 }
 
-func (d *Daemon) protocolArrangement(profileID string) ([]protocol.Desktop, error) {
-	_, desktops, err := d.store.ProfileArrangement(profileID)
-	if err != nil {
-		return nil, fmt.Errorf("reading the arrangement of profile %s: %w", profileID, err)
-	}
-	wire, err := protocolDesktops(desktops)
-	if err != nil {
-		return nil, fmt.Errorf("encoding the arrangement of profile %s: %w", profileID, err)
-	}
-	return wire, nil
-}
-
-func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.InitialStateMessage) {
+func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.InitialStateMessage) []desktopMarkdownTile {
 	live, err := d.liveProtocolProfiles()
 	if err != nil {
 		var profileErr *profiles.Error
 		if !errors.As(err, &profileErr) || profileErr.Code != profiles.CodeUnavailable {
 			d.logf("initial state: listing profiles: %v", err)
 		}
-		return
+		return nil
 	}
 	event.Profiles = live
 	selected := client.selectedProfile()
 	if selected == "" {
-		return
+		return nil
 	}
-	wire, err := d.protocolArrangement(selected)
+	profile, desktops, err := d.store.ProfileArrangement(selected)
 	if err != nil {
-		d.logf("initial state: %v, so the client starts on no profile", err)
+		d.logf("initial state: reading the arrangement of profile %s: %v, so the client starts on no profile", selected, err)
 		client.selectProfile("")
-		return
+		return nil
+	}
+	wire, err := protocolDesktops(desktops)
+	if err != nil {
+		d.logf("initial state: encoding the arrangement of profile %s: %v, so the client starts on no profile", selected, err)
+		client.selectProfile("")
+		return nil
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
+	if d.requireHome("profiles and desktops") != nil {
+		return nil
+	}
+	return markdownTilesOnCurrentDesktop(profile, desktops)
 }
 
 func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, run func() (profileActionOutcome, error)) {
@@ -439,7 +436,8 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 		Profile:  protocolProfile(profile),
 		Desktops: wire,
 	}
-	d.wsHub.SendSnapshotToMatchingClients(message, func(client *wsClient) bool {
+	shown := markdownTilesOnCurrentDesktop(profile, desktops)
+	d.wsHub.SendArrangementToMatchingClients(message, func(client *wsClient) bool {
 		return client.selectedProfile() == profile.ID
-	})
+	}, func(*wsClient) []desktopMarkdownTile { return shown })
 }

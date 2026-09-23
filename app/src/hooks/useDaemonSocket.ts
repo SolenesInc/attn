@@ -1696,7 +1696,8 @@ export function useDaemonSocket({
                 content: typeof data.content === 'string' ? data.content : '',
                 error: typeof data.error === 'string' ? data.error : undefined,
               };
-              setDesktopTileContents((prev) => ({ ...prev, [key]: content }));
+              const { desktops, currentDesktopId } = useProfilesStore.getState();
+              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: content }, desktops, currentDesktopId));
             }
             break;
           }
