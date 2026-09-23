@@ -8,16 +8,16 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profilemigration"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/rankkey"
-	"github.com/victorarias/attn/internal/setupmigration"
-	"github.com/victorarias/attn/internal/setups"
 )
 
-const SetupConversionSchemaVersion = 153
+const ProfileConversionSchemaVersion = 153
 
-const DefaultSetupName = "Default"
+const DefaultProfileName = "Default"
 
-var setupStampedTables = []string{
+var profileStampedTables = []string{
 	"delegation_operations",
 	"chief_of_staff_dispatches",
 	"automation_definitions",
@@ -59,8 +59,8 @@ type legacyInput struct {
 }
 
 type convertedWorkspaces struct {
-	Manifest setupmigration.Manifest
-	Desktops []setups.Desktop
+	Manifest profilemigration.Manifest
+	Desktops []profiles.Desktop
 }
 
 type placementCandidate struct {
@@ -78,31 +78,31 @@ type workspaceConversion struct {
 	active    string
 }
 
-func applySetupConversion(tx *sql.Tx) error {
+func applyProfileConversion(tx *sql.Tx) error {
 	var one int
-	converted, err := rowFound(tx.QueryRow(`SELECT 1 FROM setup_migration WHERE id = 1`), &one)
+	converted, err := rowFound(tx.QueryRow(`SELECT 1 FROM profile_migration WHERE id = 1`), &one)
 	if err != nil || converted {
 		return err
 	}
 	var existing int
-	if err := tx.QueryRow(`SELECT count(*) FROM setups`).Scan(&existing); err != nil {
+	if err := tx.QueryRow(`SELECT count(*) FROM profiles`).Scan(&existing); err != nil {
 		return err
 	}
 	if existing > 0 {
-		return fmt.Errorf("the workspace conversion expects no setups, but %d already exist without a recorded conversion", existing)
+		return fmt.Errorf("the workspace conversion expects no profiles, but %d already exist without a recorded conversion", existing)
 	}
-	if err := addSetupStampColumns(tx); err != nil {
+	if err := addProfileStampColumns(tx); err != nil {
 		return err
 	}
 	input, err := readLegacyWorkspaces(tx)
 	if err != nil {
 		return err
 	}
-	result, err := convertLegacyWorkspaces(input, newSetupEntityID)
+	result, err := convertLegacyWorkspaces(input, newProfileEntityID)
 	if err != nil {
 		return err
 	}
-	return writeSetupConversion(tx, result)
+	return writeProfileConversion(tx, result)
 }
 
 func existingTables(tx *sql.Tx, names ...string) ([]string, error) {
@@ -119,21 +119,21 @@ func existingTables(tx *sql.Tx, names ...string) ([]string, error) {
 	return present, nil
 }
 
-func addSetupStampColumns(tx *sql.Tx) error {
-	tables, err := existingTables(tx, setupStampedTables...)
+func addProfileStampColumns(tx *sql.Tx) error {
+	tables, err := existingTables(tx, profileStampedTables...)
 	if err != nil {
 		return err
 	}
 	for _, table := range tables {
-		has, err := columnExists(tx, table, "setup_id")
+		has, err := columnExists(tx, table, "profile_id")
 		if err != nil {
 			return err
 		}
 		if has {
 			continue
 		}
-		if _, err := tx.Exec(`ALTER TABLE ` + table + ` ADD COLUMN setup_id TEXT NOT NULL DEFAULT ''`); err != nil {
-			return fmt.Errorf("adding setup_id to %s: %w", table, err)
+		if _, err := tx.Exec(`ALTER TABLE ` + table + ` ADD COLUMN profile_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("adding profile_id to %s: %w", table, err)
 		}
 	}
 	return nil
@@ -262,7 +262,7 @@ func decodeLegacyTree(ws legacyWorkspace, layout legacyLayout, newID func(string
 }
 
 func (c *convertedWorkspaces) dropPane(workspaceID, paneID, sessionID, reason string) {
-	c.Manifest.DroppedPanes = append(c.Manifest.DroppedPanes, setupmigration.DroppedPane{WorkspaceID: workspaceID, PaneID: paneID, SessionID: sessionID, Reason: reason})
+	c.Manifest.DroppedPanes = append(c.Manifest.DroppedPanes, profilemigration.DroppedPane{WorkspaceID: workspaceID, PaneID: paneID, SessionID: sessionID, Reason: reason})
 }
 
 func (c *convertedWorkspaces) retainedAgents(input legacyInput, ws legacyWorkspace, rank int, tree layouttree.Node) (layouttree.Node, []placementCandidate) {
@@ -273,11 +273,11 @@ func (c *convertedWorkspaces) retainedAgents(input legacyInput, ws legacyWorkspa
 		reason := ""
 		switch {
 		case !hasRow:
-			reason = setupmigration.DropReasonNoPaneRow
+			reason = profilemigration.DropReasonNoPaneRow
 		case pane.SessionID == "" || !hasSession:
-			reason = setupmigration.DropReasonNoSession
+			reason = profilemigration.DropReasonNoSession
 		case session.ClosedAt != "":
-			reason = setupmigration.DropReasonSessionClosed
+			reason = profilemigration.DropReasonSessionClosed
 		}
 		if reason != "" {
 			c.dropPane(ws.ID, paneID, pane.SessionID, reason)
@@ -313,7 +313,7 @@ func convertLegacyWorkspaces(input legacyInput, newID func(string) string) (conv
 	for rank, ws := range input.Workspaces {
 		layout, ok := input.Layouts[ws.ID]
 		if !ok {
-			result.Manifest.DroppedWorkspaces = append(result.Manifest.DroppedWorkspaces, setupmigration.DroppedWorkspace{WorkspaceID: ws.ID, Title: ws.Title, Reason: setupmigration.DropReasonEmpty})
+			result.Manifest.DroppedWorkspaces = append(result.Manifest.DroppedWorkspaces, profilemigration.DroppedWorkspace{WorkspaceID: ws.ID, Title: ws.Title, Reason: profilemigration.DropReasonEmpty})
 			continue
 		}
 		tree, err := decodeLegacyTree(ws, layout, newID)
@@ -327,7 +327,7 @@ func convertLegacyWorkspaces(input legacyInput, newID func(string) string) (conv
 	kept, dropped := newestPlacements(candidates)
 	for _, candidate := range dropped {
 		winner := kept[candidate.sessionID]
-		result.Manifest.DroppedPlacements = append(result.Manifest.DroppedPlacements, setupmigration.DroppedPlacement{
+		result.Manifest.DroppedPlacements = append(result.Manifest.DroppedPlacements, profilemigration.DroppedPlacement{
 			SessionID: candidate.sessionID, WorkspaceID: candidate.workspaceID, PaneID: candidate.paneID,
 			KeptWorkspaceID: winner.workspaceID, KeptPaneID: winner.paneID,
 		})
@@ -346,18 +346,18 @@ func (c convertedWorkspaces) buildDesktops(input legacyInput, retained []workspa
 	for _, conversion := range retained {
 		ws := conversion.workspace
 		if len(layouttree.PaneIDs(conversion.tree)) == 0 {
-			reason := setupmigration.DropReasonEmpty
+			reason := profilemigration.DropReasonEmpty
 			if len(layouttree.TileIDs(conversion.tree)) > 0 {
-				reason = setupmigration.DropReasonDocumentOnly
+				reason = profilemigration.DropReasonDocumentOnly
 			}
-			c.Manifest.DroppedWorkspaces = append(c.Manifest.DroppedWorkspaces, setupmigration.DroppedWorkspace{WorkspaceID: ws.ID, Title: ws.Title, Reason: reason})
+			c.Manifest.DroppedWorkspaces = append(c.Manifest.DroppedWorkspaces, profilemigration.DroppedWorkspace{WorkspaceID: ws.ID, Title: ws.Title, Reason: reason})
 			continue
 		}
 		slot := 0
-		if len(c.Desktops) < setups.LastShortcutSlot {
+		if len(c.Desktops) < profiles.LastShortcutSlot {
 			slot = len(c.Desktops) + 1
 		}
-		desktop := setups.Desktop{ID: newID("desktop"), ShortcutSlot: slot, Tree: conversion.tree, ActivePaneID: conversion.active, Revision: 1}
+		desktop := profiles.Desktop{ID: newID("desktop"), ShortcutSlot: slot, Tree: conversion.tree, ActivePaneID: conversion.active, Revision: 1}
 		for _, legacyID := range layouttree.PaneIDs(conversion.tree) {
 			pane := input.Panes[ws.ID][legacyID]
 			paneID := legacyID
@@ -367,18 +367,18 @@ func (c convertedWorkspaces) buildDesktops(input legacyInput, retained []workspa
 				if desktop.ActivePaneID == legacyID {
 					desktop.ActivePaneID = paneID
 				}
-				c.Manifest.RenamedPanes = append(c.Manifest.RenamedPanes, setupmigration.RenamedPane{WorkspaceID: ws.ID, From: legacyID, To: paneID})
+				c.Manifest.RenamedPanes = append(c.Manifest.RenamedPanes, profilemigration.RenamedPane{WorkspaceID: ws.ID, From: legacyID, To: paneID})
 			}
 			usedPaneIDs[paneID] = true
 			placed[pane.SessionID] = true
 			desktop.Panes = append(desktop.Panes, legacyDesktopPane(desktop.ID, paneID, pane, input.Sessions[pane.SessionID]))
 		}
-		desktop = setups.Settle(desktop)
-		if err := setups.CheckDesktop(desktop); err != nil {
+		desktop = profiles.Settle(desktop)
+		if err := profiles.CheckDesktop(desktop); err != nil {
 			return c, fmt.Errorf("legacy workspace %s (%q) does not convert to a valid desktop: %w", ws.ID, ws.Title, err)
 		}
 		c.Desktops = append(c.Desktops, desktop)
-		c.Manifest.Groups = append(c.Manifest.Groups, setupmigration.Group{
+		c.Manifest.Groups = append(c.Manifest.Groups, profilemigration.Group{
 			ID: ws.ID, Title: ws.Title, Directory: ws.Directory, DesktopID: desktop.ID, ShortcutSlot: slot,
 			LeafIDs: append(layouttree.PaneIDs(desktop.Tree), layouttree.TileIDs(desktop.Tree)...),
 		})
@@ -390,55 +390,55 @@ func (c convertedWorkspaces) buildDesktops(input legacyInput, retained []workspa
 	}
 	sort.Strings(c.Manifest.UnplacedSessions)
 	if len(c.Desktops) == 0 {
-		c.Desktops = append(c.Desktops, setups.Desktop{ID: newID("desktop"), ShortcutSlot: setups.FirstShortcutSlot, Revision: 1})
+		c.Desktops = append(c.Desktops, profiles.Desktop{ID: newID("desktop"), ShortcutSlot: profiles.FirstShortcutSlot, Revision: 1})
 	}
 	return c, nil
 }
 
-func legacyDesktopPane(desktopID, paneID string, pane legacyPane, session legacySession) setups.Pane {
+func legacyDesktopPane(desktopID, paneID string, pane legacyPane, session legacySession) profiles.Pane {
 	title := strings.TrimSpace(session.Label)
 	if title == "" {
 		title = strings.TrimSpace(pane.Title)
 	}
-	status := setups.PaneStatus(pane.Status)
+	status := profiles.PaneStatus(pane.Status)
 	switch status {
-	case setups.PaneStatusSpawning, setups.PaneStatusReady, setups.PaneStatusFailed:
+	case profiles.PaneStatusSpawning, profiles.PaneStatusReady, profiles.PaneStatusFailed:
 	default:
-		status = setups.PaneStatusReady
+		status = profiles.PaneStatusReady
 	}
-	return setups.Pane{PaneID: paneID, DesktopID: desktopID, Kind: setups.PaneKindAgent, SessionID: pane.SessionID, Title: title, Status: status, Error: pane.Error}
+	return profiles.Pane{PaneID: paneID, DesktopID: desktopID, Kind: profiles.PaneKindAgent, SessionID: pane.SessionID, Title: title, Status: status, Error: pane.Error}
 }
 
-func writeSetupConversion(tx *sql.Tx, result convertedWorkspaces) error {
+func writeProfileConversion(tx *sql.Tx, result convertedWorkspaces) error {
 	now := time.Now().UTC().Format(sortableTimeFormat)
-	setupID := newSetupEntityID("setup")
-	result.Manifest.SetupID = setupID
+	profileID := newProfileEntityID("profile")
+	result.Manifest.ProfileID = profileID
 	if _, err := tx.Exec(`
-		INSERT INTO setups (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
-		VALUES (?, ?, ?, '', 1, ?, '')`, setupID, DefaultSetupName, result.Desktops[0].ID, now); err != nil {
-		return fmt.Errorf("creating the Default setup: %w", err)
+		INSERT INTO profiles (id, name, current_desktop_id, last_used_at, revision, created_at, deleted_at)
+		VALUES (?, ?, ?, '', 1, ?, '')`, profileID, DefaultProfileName, result.Desktops[0].ID, now); err != nil {
+		return fmt.Errorf("creating the Default profile: %w", err)
 	}
-	if _, err := tx.Exec(`UPDATE sessions SET setup_id = ?`, setupID); err != nil {
-		return fmt.Errorf("stamping sessions with the Default setup: %w", err)
+	if _, err := tx.Exec(`UPDATE sessions SET profile_id = ?`, profileID); err != nil {
+		return fmt.Errorf("stamping sessions with the Default profile: %w", err)
 	}
-	tables, err := existingTables(tx, setupStampedTables...)
+	tables, err := existingTables(tx, profileStampedTables...)
 	if err != nil {
 		return err
 	}
 	for _, table := range tables {
-		if _, err := tx.Exec(`UPDATE `+table+` SET setup_id = ?`, setupID); err != nil {
-			return fmt.Errorf("stamping %s with the Default setup: %w", table, err)
+		if _, err := tx.Exec(`UPDATE `+table+` SET profile_id = ?`, profileID); err != nil {
+			return fmt.Errorf("stamping %s with the Default profile: %w", table, err)
 		}
 	}
 	orderKeys := rankkey.Seed(len(result.Desktops))
 	for i := range result.Desktops {
 		desktop := &result.Desktops[i]
-		desktop.SetupID = setupID
+		desktop.ProfileID = profileID
 		desktop.OrderKey = orderKeys[i]
 		if _, err := tx.Exec(`
-			INSERT INTO desktops (id, setup_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
+			INSERT INTO desktops (id, profile_id, name, shortcut_slot, order_key, tree_json, active_pane_id, revision, created_at, updated_at)
 			VALUES (?, ?, '', ?, ?, '', '', 1, ?, ?)`,
-			desktop.ID, setupID, slotValue(desktop.ShortcutSlot), desktop.OrderKey, now, now); err != nil {
+			desktop.ID, profileID, slotValue(desktop.ShortcutSlot), desktop.OrderKey, now, now); err != nil {
 			return fmt.Errorf("creating desktop for slot %d: %w", desktop.ShortcutSlot, err)
 		}
 		desktop.Revision = 0
@@ -446,25 +446,25 @@ func writeSetupConversion(tx *sql.Tx, result convertedWorkspaces) error {
 			return fmt.Errorf("writing the converted desktop %s: %w", desktop.ID, err)
 		}
 	}
-	return recordSetupConversion(tx, result.Manifest)
+	return recordProfileConversion(tx, result.Manifest)
 }
 
-func recordSetupConversion(tx *sql.Tx, manifest setupmigration.Manifest) error {
-	phase, draft := setupmigration.PhaseComplete, ""
+func recordProfileConversion(tx *sql.Tx, manifest profilemigration.Manifest) error {
+	phase, draft := profilemigration.PhaseComplete, ""
 	if len(manifest.Groups) > 0 {
-		phase = setupmigration.PhasePlacementRequired
-		encoded, err := setupmigration.EncodePlan(setupmigration.InitialPlan(manifest))
+		phase = profilemigration.PhasePlacementRequired
+		encoded, err := profilemigration.EncodePlan(profilemigration.InitialPlan(manifest))
 		if err != nil {
 			return err
 		}
 		draft = encoded
 	}
-	encodedManifest, err := setupmigration.EncodeManifest(manifest)
+	encodedManifest, err := profilemigration.EncodeManifest(manifest)
 	if err != nil {
 		return err
 	}
 	_, err = tx.Exec(`
-		INSERT INTO setup_migration (id, schema_version, phase, revision, imported_groups, draft)
-		VALUES (1, ?, ?, 1, ?, ?)`, SetupConversionSchemaVersion, phase, encodedManifest, draft)
+		INSERT INTO profile_migration (id, schema_version, phase, revision, imported_groups, draft)
+		VALUES (1, ?, ?, 1, ?, ?)`, ProfileConversionSchemaVersion, phase, encodedManifest, draft)
 	return err
 }

@@ -1248,8 +1248,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
-	{152, "create setups, desktops and their panes beside the workspace tables", `
-		CREATE TABLE IF NOT EXISTS setups (
+	{152, "create profiles, desktops and their panes beside the workspace tables", `
+		CREATE TABLE IF NOT EXISTS profiles (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
 			current_desktop_id TEXT NOT NULL DEFAULT '',
@@ -1258,10 +1258,10 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			created_at TEXT NOT NULL,
 			deleted_at TEXT NOT NULL DEFAULT ''
 		);
-		CREATE UNIQUE INDEX IF NOT EXISTS idx_setups_live_name ON setups(name) WHERE deleted_at = '';
+		CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_live_name ON profiles(name) WHERE deleted_at = '';
 		CREATE TABLE IF NOT EXISTS desktops (
 			id TEXT PRIMARY KEY,
-			setup_id TEXT NOT NULL,
+			profile_id TEXT NOT NULL,
 			name TEXT NOT NULL DEFAULT '',
 			shortcut_slot INTEGER,
 			order_key TEXT NOT NULL,
@@ -1271,9 +1271,9 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL
 		);
-		CREATE INDEX IF NOT EXISTS idx_desktops_setup ON desktops(setup_id, order_key);
+		CREATE INDEX IF NOT EXISTS idx_desktops_profile ON desktops(profile_id, order_key);
 		CREATE UNIQUE INDEX IF NOT EXISTS idx_desktops_shortcut_slot
-			ON desktops(setup_id, shortcut_slot) WHERE shortcut_slot IS NOT NULL;
+			ON desktops(profile_id, shortcut_slot) WHERE shortcut_slot IS NOT NULL;
 		CREATE TABLE IF NOT EXISTS desktop_panes (
 			pane_id TEXT PRIMARY KEY,
 			desktop_id TEXT NOT NULL,
@@ -1286,7 +1286,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			updated_at TEXT NOT NULL
 		);
 		CREATE INDEX IF NOT EXISTS idx_desktop_panes_desktop ON desktop_panes(desktop_id);
-		CREATE TABLE IF NOT EXISTS setup_migration (
+		CREATE TABLE IF NOT EXISTS profile_migration (
 			id INTEGER PRIMARY KEY CHECK (id = 1),
 			schema_version INTEGER NOT NULL,
 			phase TEXT NOT NULL,
@@ -1295,7 +1295,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			draft TEXT NOT NULL DEFAULT ''
 		);
 	`},
-	{SetupConversionSchemaVersion, "convert legacy workspaces into the Default setup and its desktops", ""},
+	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", ""},
 }
 
 const migration99SQL = `
@@ -1955,8 +1955,8 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == SetupConversionSchemaVersion {
-			if err := applySetupConversion(tx); err != nil {
+		} else if m.version == ProfileConversionSchemaVersion {
+			if err := applyProfileConversion(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -2434,16 +2434,16 @@ func applyMigration152(tx *sql.Tx, migrationSQL string) error {
 	if _, err := tx.Exec(migrationSQL); err != nil {
 		return err
 	}
-	hasSetupID, err := columnExists(tx, "sessions", "setup_id")
+	hasProfileID, err := columnExists(tx, "sessions", "profile_id")
 	if err != nil {
 		return err
 	}
-	if !hasSetupID {
-		if _, err := tx.Exec(`ALTER TABLE sessions ADD COLUMN setup_id TEXT NOT NULL DEFAULT ''`); err != nil {
+	if !hasProfileID {
+		if _, err := tx.Exec(`ALTER TABLE sessions ADD COLUMN profile_id TEXT NOT NULL DEFAULT ''`); err != nil {
 			return err
 		}
 	}
-	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_setup_id ON sessions(setup_id)`)
+	_, err = tx.Exec(`CREATE INDEX IF NOT EXISTS idx_sessions_profile_id ON sessions(profile_id)`)
 	return err
 }
 

@@ -36,10 +36,10 @@
 - PR inbox: pull requests waiting on the user.
 - Provenance line: shows where a session came from and what it produced.
 
-- Setup: a named set of agents and the desktops that arrange them. Every agent belongs to one setup. Renaming keeps its identity.
-- Desktop: one arrangement of panes and tiles inside a setup. A setup always has at least one, and up to nine hold a shortcut slot.
+- Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
+- Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
-- Current desktop: the desktop a setup shows. Every client on that setup shares it.
+- Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Active pane: the pane a desktop has selected. Every client shares it.
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
 

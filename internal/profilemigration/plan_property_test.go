@@ -1,4 +1,4 @@
-package setupmigration
+package profilemigration
 
 import (
 	"fmt"
@@ -7,7 +7,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 func drawEdge(t *rapid.T) Edge {
@@ -40,17 +40,17 @@ func applyRandomEdit(t *rapid.T, w *world, plan Plan, launched *int) Plan {
 	case 6:
 		*launched++
 		paneID := fmt.Sprintf("launched-%d", *launched)
-		slot := rapid.IntRange(0, setups.LastShortcutSlot).Draw(t, "new desktop slot")
+		slot := rapid.IntRange(0, profiles.LastShortcutSlot).Draw(t, "new desktop slot")
 		for _, d := range w.desktops {
 			if slot != 0 && d.ShortcutSlot == slot {
 				return plan
 			}
 		}
-		w.desktops = append(w.desktops, setups.Desktop{ID: fmt.Sprintf("desktop-new-%d", *launched), ShortcutSlot: slot, Tree: layouttree.DefaultLayout(paneID), ActivePaneID: paneID, Panes: []setups.Pane{agentPane(paneID)}})
+		w.desktops = append(w.desktops, profiles.Desktop{ID: fmt.Sprintf("desktop-new-%d", *launched), ShortcutSlot: slot, Tree: layouttree.DefaultLayout(paneID), ActivePaneID: paneID, Panes: []profiles.Pane{agentPane(paneID)}})
 		return plan.Reconcile(w.desktops).Retire(w.live())
 	case 7:
 		d := &w.desktops[rapid.IntRange(0, len(w.desktops)-1).Draw(t, "reslotted")]
-		slot := rapid.IntRange(0, setups.LastShortcutSlot).Draw(t, "slot")
+		slot := rapid.IntRange(0, profiles.LastShortcutSlot).Draw(t, "slot")
 		for _, other := range w.desktops {
 			if slot != 0 && other.ShortcutSlot == slot {
 				return plan
@@ -144,7 +144,7 @@ func TestFinishNeverLosesDuplicatesOrResurrectsALeaf(t *testing.T) {
 		}
 		after := make(map[string]int)
 		for _, d := range outcome.Desktops {
-			if err := setups.CheckDesktop(d); err != nil {
+			if err := profiles.CheckDesktop(d); err != nil {
 				t.Fatalf("finish produced an invalid desktop: %v", err)
 			}
 			for _, id := range layouttree.PaneIDs(d.Tree) {

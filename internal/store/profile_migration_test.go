@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setupmigration"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profilemigration"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
-func convertAgentWorkspaces(t *testing.T, count int) (*legacyFixture, *Store, SetupMigrationView) {
+func convertAgentWorkspaces(t *testing.T, count int) (*legacyFixture, *Store, ProfileMigrationView) {
 	t.Helper()
 	f := newLegacyFixture(t)
 	for i := 1; i <= count; i++ {
@@ -21,29 +21,29 @@ func convertAgentWorkspaces(t *testing.T, count int) (*legacyFixture, *Store, Se
 	return f, s, view
 }
 
-func edit(t *testing.T, s *Store, revision int64, change func(setupmigration.Plan, []setupmigration.GroupState) (setupmigration.Plan, error)) SetupMigrationView {
+func edit(t *testing.T, s *Store, revision int64, change func(profilemigration.Plan, []profilemigration.GroupState) (profilemigration.Plan, error)) ProfileMigrationView {
 	t.Helper()
-	view, err := s.EditSetupMigration(revision, change)
+	view, err := s.EditProfileMigration(revision, change)
 	if err != nil {
-		t.Fatalf("EditSetupMigration: %v", err)
+		t.Fatalf("EditProfileMigration: %v", err)
 	}
 	return view
 }
 
-func keepAll(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
+func keepAll(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
 	return plan.Keep(live, plan.Unconfirmed(live))
 }
 
 func TestTheSharedDraftSurvivesRestartAndRefusesStaleEdits(t *testing.T) {
 	f, s, view := convertAgentWorkspaces(t, 11)
-	moved := edit(t, s, view.State.Revision, func(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
-		return plan.Move(live, "ws-10", view.Manifest.Groups[0].DesktopID, "", setupmigration.EdgeRight, 0)
+	moved := edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
+		return plan.Move(live, "ws-10", view.Manifest.Groups[0].DesktopID, "", profilemigration.EdgeRight, 0)
 	})
 	if moved.State.Revision != view.State.Revision+1 {
 		t.Fatalf("revision %d after one edit from %d", moved.State.Revision, view.State.Revision)
 	}
-	_, err := s.EditSetupMigration(view.State.Revision, keepAll)
-	wantCode(t, err, setups.CodeStaleRevision)
+	_, err := s.EditProfileMigration(view.State.Revision, keepAll)
+	wantCode(t, err, profiles.CodeStaleRevision)
 
 	if err := s.Close(); err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestTheSharedDraftSurvivesRestartAndRefusesStaleEdits(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	resumed, err := reopened.SetupMigration()
+	resumed, err := reopened.ProfileMigration()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	_, s, view := convertAgentWorkspaces(t, 11)
 	first, second := view.Manifest.Groups[0], view.Manifest.Groups[1]
 	extra := view.Manifest.Groups[9]
-	addSetupSession(t, s, "delegated-child", view.Manifest.SetupID)
+	addProfileSession(t, s, "delegated-child", view.Manifest.ProfileID)
 	source, err := s.GetDesktop(second.DesktopID)
 	if err != nil {
 		t.Fatal(err)
@@ -74,24 +74,24 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 	if _, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: second.DesktopID, ExpectedRevision: source.Revision, SessionID: "delegated-child", AnchorPaneID: "pane-agent-02", Direction: layouttree.DirectionVertical}); err != nil {
 		t.Fatalf("placing a delegated child during the picker: %v", err)
 	}
-	view = edit(t, s, view.State.Revision, func(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
-		return plan.Move(live, second.ID, first.DesktopID, "", setupmigration.EdgeRight, 0)
+	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
+		return plan.Move(live, second.ID, first.DesktopID, "", profilemigration.EdgeRight, 0)
 	})
-	view = edit(t, s, view.State.Revision, func(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
-		return plan.Move(live, extra.ID, view.Manifest.Groups[4].DesktopID, "", setupmigration.EdgeRight, 0)
+	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
+		return plan.Move(live, extra.ID, view.Manifest.Groups[4].DesktopID, "", profilemigration.EdgeRight, 0)
 	})
-	_, err = s.FinishSetupMigration(view.State.Revision)
-	wantCode(t, err, setups.CodeInvalid)
+	_, err = s.FinishProfileMigration(view.State.Revision)
+	wantCode(t, err, profiles.CodeInvalid)
 	view = edit(t, s, view.State.Revision, keepAll)
 
-	finish, err := s.FinishSetupMigration(view.State.Revision)
+	finish, err := s.FinishProfileMigration(view.State.Revision)
 	if err != nil || !finish.Finished {
-		t.Fatalf("FinishSetupMigration = %+v, %v", finish, err)
+		t.Fatalf("FinishProfileMigration = %+v, %v", finish, err)
 	}
-	if finish.View.State.Phase != setupmigration.PhaseComplete {
+	if finish.View.State.Phase != profilemigration.PhaseComplete {
 		t.Fatalf("phase after finish = %s", finish.View.State.Phase)
 	}
-	_, desktops, err := s.SetupArrangement(view.Manifest.SetupID)
+	_, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,23 +108,23 @@ func TestFinishAppliesTheDraftOnceAndKeepsAgentsLaunchedMeanwhile(t *testing.T) 
 		t.Fatalf("the emptied extra desktop %s survived the finish", extra.DesktopID)
 	}
 
-	again, err := s.FinishSetupMigration(view.State.Revision)
-	if err != nil || again.Finished || again.View.State.Phase != setupmigration.PhaseComplete {
+	again, err := s.FinishProfileMigration(view.State.Revision)
+	if err != nil || again.Finished || again.View.State.Phase != profilemigration.PhaseComplete {
 		t.Fatalf("a repeated finish = %+v, %v; want success without changes", again, err)
 	}
-	_, err = s.EditSetupMigration(again.View.State.Revision, keepAll)
-	wantCode(t, err, setups.CodeInvalid)
+	_, err = s.EditProfileMigration(again.View.State.Revision, keepAll)
+	wantCode(t, err, profiles.CodeInvalid)
 }
 
 func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 	_, s, view := convertAgentWorkspaces(t, 3)
-	view = edit(t, s, view.State.Revision, func(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
-		return plan.Move(live, "ws-03", view.Manifest.Groups[0].DesktopID, "", setupmigration.EdgeBottom, 0)
+	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
+		return plan.Move(live, "ws-03", view.Manifest.Groups[0].DesktopID, "", profilemigration.EdgeBottom, 0)
 	})
 	if _, err := s.CloseSession("agent-03", SessionClose{}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	view, err := s.SetupMigration()
+	view, err := s.ProfileMigration()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -132,10 +132,10 @@ func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 		t.Fatalf("%d groups wait for placement after closing agent-03, want 2", len(view.Live))
 	}
 	view = edit(t, s, view.State.Revision, keepAll)
-	if _, err := s.FinishSetupMigration(view.State.Revision); err != nil {
+	if _, err := s.FinishProfileMigration(view.State.Revision); err != nil {
 		t.Fatal(err)
 	}
-	_, desktops, err := s.SetupArrangement(view.Manifest.SetupID)
+	_, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,28 +151,28 @@ func TestAClosedImportRetiresAndFinishDoesNotBringItBack(t *testing.T) {
 	}
 }
 
-func TestTheSetupHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
+func TestTheProfileHoldingAPendingMigrationCannotBeDeleted(t *testing.T) {
 	_, s, view := convertAgentWorkspaces(t, 2)
-	other, _, err := s.CreateSetup("Work")
+	other, _, err := s.CreateProfile("Work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	converted, err := s.GetSetup(view.Manifest.SetupID)
+	converted, err := s.GetProfile(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.DeleteSetup(converted.ID, converted.Revision, other.ID)
-	wantCode(t, err, setups.CodeInvalid)
+	_, err = s.DeleteProfile(converted.ID, converted.Revision, other.ID)
+	wantCode(t, err, profiles.CodeInvalid)
 
 	view = edit(t, s, view.State.Revision, keepAll)
-	if _, err := s.FinishSetupMigration(view.State.Revision); err != nil {
+	if _, err := s.FinishProfileMigration(view.State.Revision); err != nil {
 		t.Fatal(err)
 	}
-	converted, err = s.GetSetup(view.Manifest.SetupID)
+	converted, err = s.GetProfile(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.DeleteSetup(converted.ID, converted.Revision, other.ID); err != nil {
+	if _, err := s.DeleteProfile(converted.ID, converted.Revision, other.ID); err != nil {
 		t.Fatalf("deleting Default after the migration finished: %v", err)
 	}
 }
@@ -186,14 +186,14 @@ func TestFinishKeepsADesktopOrderChangedDuringThePicker(t *testing.T) {
 	if _, err := s.ReorderDesktop(third.ID, "", view.Manifest.Groups[0].DesktopID, third.Revision); err != nil {
 		t.Fatalf("moving desktop 3 first: %v", err)
 	}
-	view = edit(t, s, view.State.Revision, func(plan setupmigration.Plan, live []setupmigration.GroupState) (setupmigration.Plan, error) {
-		return plan.Move(live, "ws-02", "slot-4", "", setupmigration.EdgeRight, 0)
+	view = edit(t, s, view.State.Revision, func(plan profilemigration.Plan, live []profilemigration.GroupState) (profilemigration.Plan, error) {
+		return plan.Move(live, "ws-02", "slot-4", "", profilemigration.EdgeRight, 0)
 	})
 	view = edit(t, s, view.State.Revision, keepAll)
-	if _, err := s.FinishSetupMigration(view.State.Revision); err != nil {
+	if _, err := s.FinishProfileMigration(view.State.Revision); err != nil {
 		t.Fatal(err)
 	}
-	_, desktops, err := s.SetupArrangement(view.Manifest.SetupID)
+	_, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}

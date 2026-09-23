@@ -53,11 +53,11 @@ const (
 	FactWorkspaceLayoutChanged      = "workspace.layout.changed"
 	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
 
-	FactSetupCreated            = "setup.created"
-	FactSetupRenamed            = "setup.renamed"
-	FactSetupDeleted            = "setup.deleted"
-	FactSetupArrangementChanged = "setup.arrangement.changed"
-	FactSetupMigrationChanged   = "setup.migration.changed"
+	FactProfileCreated            = "profile.created"
+	FactProfileRenamed            = "profile.renamed"
+	FactProfileDeleted            = "profile.deleted"
+	FactProfileArrangementChanged = "profile.arrangement.changed"
+	FactProfileMigrationChanged   = "profile.migration.changed"
 
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
@@ -285,15 +285,15 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
 		},
 		{
-			filter: bus.Filter{FactSetupCreated, FactSetupRenamed, FactSetupDeleted, FactSetupArrangementChanged},
-			apply:  func(d *Daemon, _ bus.Event) { d.projectSetupsChanged() },
+			filter: bus.Filter{FactProfileCreated, FactProfileRenamed, FactProfileDeleted, FactProfileArrangementChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectProfilesChanged() },
 		},
 		{
-			filter: bus.Filter{FactSetupArrangementChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectSetupArrangementChanged(ev) },
+			filter: bus.Filter{FactProfileArrangementChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectProfileArrangementChanged(ev) },
 		},
 		{
-			filter: bus.Filter{FactSetupMigrationChanged, FactSetupArrangementChanged, FactSessionClosed, FactSessionUnregistered},
+			filter: bus.Filter{FactProfileMigrationChanged, FactProfileArrangementChanged, FactSessionClosed, FactSessionUnregistered},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectMigrationChanged(ev) },
 		},
 		{

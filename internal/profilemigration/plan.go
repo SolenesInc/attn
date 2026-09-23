@@ -1,4 +1,4 @@
-package setupmigration
+package profilemigration
 
 import (
 	"encoding/json"
@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 type Node struct {
@@ -60,7 +60,7 @@ func InitialPlan(m Manifest) Plan {
 		bySlot[group.ShortcutSlot] = desktop
 	}
 	plan := Plan{Arrangement: Arrangement{Confirmed: []string{}}}
-	for slot := setups.FirstShortcutSlot; slot <= setups.LastShortcutSlot; slot++ {
+	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		desktop, ok := bySlot[slot]
 		if !ok {
 			desktop = Desktop{Key: virtualSlotKey(slot), ShortcutSlot: slot}
@@ -214,7 +214,7 @@ func mergeTrees(first, second *Node) *Node {
 	return &Node{Direction: layouttree.DirectionVertical, Ratio: layouttree.DefaultSplitRatio, Children: []Node{*first, *second}}
 }
 
-func (a Arrangement) reconcile(current []setups.Desktop) Arrangement {
+func (a Arrangement) reconcile(current []profiles.Desktop) Arrangement {
 	byID := desktopsByID(current)
 	bySlot := make(map[int]string)
 	for _, desktop := range current {
@@ -259,8 +259,8 @@ func withEveryShortcutSlot(desktops []Desktop, heldBy map[int]string) []Desktop 
 		}
 		bySlot[desktop.ShortcutSlot] = desktop
 	}
-	ordered := make([]Desktop, 0, setups.LastShortcutSlot+len(extras))
-	for slot := setups.FirstShortcutSlot; slot <= setups.LastShortcutSlot; slot++ {
+	ordered := make([]Desktop, 0, profiles.LastShortcutSlot+len(extras))
+	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		desktop, represented := bySlot[slot]
 		if !represented {
 			desktop = Desktop{Key: virtualSlotKey(slot), ShortcutSlot: slot}
@@ -273,7 +273,7 @@ func withEveryShortcutSlot(desktops []Desktop, heldBy map[int]string) []Desktop 
 	return append(ordered, extras...)
 }
 
-func (p Plan) Reconcile(current []setups.Desktop) Plan {
+func (p Plan) Reconcile(current []profiles.Desktop) Plan {
 	out := Plan{Arrangement: p.Arrangement.reconcile(current)}
 	for _, snapshot := range p.History {
 		out.History = append(out.History, snapshot.reconcile(current))
@@ -288,7 +288,7 @@ func (p Plan) begin() Plan {
 
 func requireLive(live map[string]GroupState, groupID string) error {
 	if _, ok := live[groupID]; !ok {
-		return setups.Errorf(setups.CodeNotFound, "imported group %q is not waiting for placement; it was closed or never imported", groupID)
+		return profiles.Errorf(profiles.CodeNotFound, "imported group %q is not waiting for placement; it was closed or never imported", groupID)
 	}
 	return nil
 }
@@ -296,7 +296,7 @@ func requireLive(live map[string]GroupState, groupID string) error {
 func (p Plan) Keep(live []GroupState, groupIDs []string) (Plan, error) {
 	set := liveSet(live)
 	if len(groupIDs) == 0 {
-		return p, setups.Errorf(setups.CodeInvalid, "keep names no imported group")
+		return p, profiles.Errorf(profiles.CodeInvalid, "keep names no imported group")
 	}
 	next := p.begin()
 	for _, id := range groupIDs {
@@ -319,7 +319,7 @@ func splitSides(edge Edge) (layouttree.Direction, bool, error) {
 	case EdgeBottom:
 		return layouttree.DirectionHorizontal, false, nil
 	}
-	return "", false, setups.Errorf(setups.CodeInvalid, "edge %q is not one of left, right, top, bottom", edge)
+	return "", false, profiles.Errorf(profiles.CodeInvalid, "edge %q is not one of left, right, top, bottom", edge)
 }
 
 func join(existing *Node, groupID string, edge Edge, share float64) (*Node, error) {
@@ -335,7 +335,7 @@ func join(existing *Node, groupID string, edge Edge, share float64) (*Node, erro
 		share = layouttree.DefaultSplitRatio
 	}
 	if !(share > 0 && share < 1) {
-		return nil, setups.Errorf(setups.CodeInvalid, "share %v is outside (0,1); both sides of a split need space", share)
+		return nil, profiles.Errorf(profiles.CodeInvalid, "share %v is outside (0,1); both sides of a split need space", share)
 	}
 	if before {
 		return &Node{Direction: direction, Ratio: share, Children: []Node{*incoming, *existing}}, nil
@@ -370,7 +370,7 @@ func (n *Node) joinBeside(anchor, groupID string, edge Edge, share float64) (*No
 func (a *Arrangement) insert(groupID, targetKey, anchorGroupID string, edge Edge, share float64) error {
 	index := a.desktopIndex(targetKey)
 	if index < 0 {
-		return setups.Errorf(setups.CodeNotFound, "desktop %q is not in the draft; it may have been an extra desktop that only held the group being moved", targetKey)
+		return profiles.Errorf(profiles.CodeNotFound, "desktop %q is not in the draft; it may have been an extra desktop that only held the group being moved", targetKey)
 	}
 	target := &a.Desktops[index]
 	if anchorGroupID == "" || target.Tree == nil {
@@ -386,7 +386,7 @@ func (a *Arrangement) insert(groupID, targetKey, anchorGroupID string, edge Edge
 		return err
 	}
 	if !found {
-		return setups.Errorf(setups.CodeNotFound, "group %q is not on desktop %q, so nothing can be placed beside it there", anchorGroupID, targetKey)
+		return profiles.Errorf(profiles.CodeNotFound, "group %q is not on desktop %q, so nothing can be placed beside it there", anchorGroupID, targetKey)
 	}
 	target.Tree = joined
 	return nil
@@ -398,7 +398,7 @@ func (p Plan) Move(live []GroupState, groupID, targetKey, anchorGroupID string, 
 		return p, err
 	}
 	if anchorGroupID == groupID {
-		return p, setups.Errorf(setups.CodeInvalid, "group %q cannot be placed beside itself", groupID)
+		return p, profiles.Errorf(profiles.CodeInvalid, "group %q cannot be placed beside itself", groupID)
 	}
 	next := p.begin()
 	next.remove(groupID)
@@ -451,11 +451,11 @@ func (p Plan) SuggestionAvailable() bool {
 
 func (p Plan) Suggest(live []GroupState) (Plan, error) {
 	if p.Suggested {
-		return p, setups.Errorf(setups.CodeInvalid, "the suggestion was already applied; undo it to suggest again")
+		return p, profiles.Errorf(profiles.CodeInvalid, "the suggestion was already applied; undo it to suggest again")
 	}
 	extras := p.unconfirmedExtras()
 	if len(extras) == 0 {
-		return p, setups.Errorf(setups.CodeInvalid, "every extra desktop is already confirmed, so there is nothing to suggest")
+		return p, profiles.Errorf(profiles.CodeInvalid, "every extra desktop is already confirmed, so there is nothing to suggest")
 	}
 	set := liveSet(live)
 	next := p.begin()
@@ -479,7 +479,7 @@ func (p Plan) CanUndo() bool {
 
 func (p Plan) Undo() (Plan, error) {
 	if !p.CanUndo() {
-		return p, setups.Errorf(setups.CodeInvalid, "there is nothing to undo")
+		return p, profiles.Errorf(profiles.CodeInvalid, "there is nothing to undo")
 	}
 	last := len(p.History) - 1
 	return Plan{Arrangement: p.History[last].clone(), History: slices.Clone(p.History[:last])}, nil
@@ -522,15 +522,15 @@ func (p Plan) Check(live []GroupState) error {
 	slots := make(map[int]bool)
 	for _, desktop := range p.Desktops {
 		if keys[desktop.Key] || desktop.Key == "" {
-			return setups.Errorf(setups.CodeInvalid, "draft desktop key %q is empty or repeated", desktop.Key)
+			return profiles.Errorf(profiles.CodeInvalid, "draft desktop key %q is empty or repeated", desktop.Key)
 		}
 		keys[desktop.Key] = true
 		if desktop.ShortcutSlot != 0 {
-			if err := setups.ValidateShortcutSlot(desktop.ShortcutSlot); err != nil {
+			if err := profiles.ValidateShortcutSlot(desktop.ShortcutSlot); err != nil {
 				return err
 			}
 			if slots[desktop.ShortcutSlot] {
-				return setups.Errorf(setups.CodeInvalid, "draft holds shortcut slot %d twice", desktop.ShortcutSlot)
+				return profiles.Errorf(profiles.CodeInvalid, "draft holds shortcut slot %d twice", desktop.ShortcutSlot)
 			}
 			slots[desktop.ShortcutSlot] = true
 		}
@@ -538,27 +538,27 @@ func (p Plan) Check(live []GroupState) error {
 			continue
 		}
 		if err := desktop.Tree.check(desktop.Key); err != nil {
-			return setups.Errorf(setups.CodeInvalid, "draft tree invalid at %v", err)
+			return profiles.Errorf(profiles.CodeInvalid, "draft tree invalid at %v", err)
 		}
 		for _, id := range desktop.Tree.groups() {
 			if previous, dup := placed[id]; dup {
-				return setups.Errorf(setups.CodeInvalid, "draft places group %s on %s and %s", id, previous, desktop.Key)
+				return profiles.Errorf(profiles.CodeInvalid, "draft places group %s on %s and %s", id, previous, desktop.Key)
 			}
 			placed[id] = desktop.Key
 		}
 	}
-	for slot := setups.FirstShortcutSlot; slot <= setups.LastShortcutSlot; slot++ {
+	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
 		if !slots[slot] {
-			return setups.Errorf(setups.CodeInvalid, "draft has no desktop for shortcut slot %d", slot)
+			return profiles.Errorf(profiles.CodeInvalid, "draft has no desktop for shortcut slot %d", slot)
 		}
 	}
 	for _, group := range live {
 		if _, ok := placed[group.ID]; !ok {
-			return setups.Errorf(setups.CodeInvalid, "draft does not place imported group %s", group.ID)
+			return profiles.Errorf(profiles.CodeInvalid, "draft does not place imported group %s", group.ID)
 		}
 	}
 	if len(placed) != len(live) {
-		return setups.Errorf(setups.CodeInvalid, "draft places %d groups but %d are waiting for placement", len(placed), len(live))
+		return profiles.Errorf(profiles.CodeInvalid, "draft places %d groups but %d are waiting for placement", len(placed), len(live))
 	}
 	return nil
 }

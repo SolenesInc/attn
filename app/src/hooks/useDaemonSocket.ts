@@ -139,7 +139,7 @@ import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
-import { readSelectedSetupId } from '../utils/selectedSetup';
+import { readSelectedProfileId } from '../utils/selectedProfile';
 
 export type DaemonSession = GeneratedSession;
 
@@ -313,7 +313,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '320';
+export const PROTOCOL_VERSION = '321';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1303,7 +1303,7 @@ export function useDaemonSocket({
           ],
           client_token: clientToken || undefined,
           browser_host_token: browserHostToken || undefined,
-          setup_id: readSelectedSetupId(),
+          profile_id: readSelectedProfileId(),
         }),
       );
 

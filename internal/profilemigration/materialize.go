@@ -1,31 +1,31 @@
-package setupmigration
+package profilemigration
 
 import (
 	"fmt"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 type Outcome struct {
-	Desktops []setups.Desktop
+	Desktops []profiles.Desktop
 	Deleted  []string
 }
 
 type materializer struct {
 	live       map[string]GroupState
-	current    map[string]setups.Desktop
-	panes      map[string]setups.Pane
+	current    map[string]profiles.Desktop
+	panes      map[string]profiles.Pane
 	claimed    map[string]bool
 	homeKept   map[string]bool
 	newSplitID func() string
 }
 
-func newMaterializer(live []GroupState, current []setups.Desktop, newSplitID func() string) *materializer {
+func newMaterializer(live []GroupState, current []profiles.Desktop, newSplitID func() string) *materializer {
 	m := &materializer{
 		live:       liveSet(live),
 		current:    desktopsByID(current),
-		panes:      make(map[string]setups.Pane),
+		panes:      make(map[string]profiles.Pane),
 		claimed:    make(map[string]bool),
 		homeKept:   make(map[string]bool),
 		newSplitID: newSplitID,
@@ -124,7 +124,7 @@ func renameTileCollisions(node layouttree.Node, taken map[string]bool) layouttre
 	return node
 }
 
-func (m *materializer) finalDesktop(existing setups.Desktop, slot int, tree layouttree.Node) setups.Desktop {
+func (m *materializer) finalDesktop(existing profiles.Desktop, slot int, tree layouttree.Node) profiles.Desktop {
 	desktop := existing
 	desktop.ShortcutSlot = slot
 	taken := make(map[string]bool)
@@ -136,22 +136,22 @@ func (m *materializer) finalDesktop(existing setups.Desktop, slot int, tree layo
 	for _, id := range layouttree.PaneIDs(desktop.Tree) {
 		desktop.Panes = append(desktop.Panes, m.panes[id])
 	}
-	return setups.Settle(desktop)
+	return profiles.Settle(desktop)
 }
 
-func Materialize(plan Plan, live []GroupState, current []setups.Desktop, newSplitID func() string) (Outcome, error) {
+func Materialize(plan Plan, live []GroupState, current []profiles.Desktop, newSplitID func() string) (Outcome, error) {
 	if err := plan.Check(live); err != nil {
 		return Outcome{}, err
 	}
 	if pending := plan.Unconfirmed(live); len(pending) > 0 {
-		return Outcome{}, setups.Errorf(setups.CodeInvalid, "%d imported group(s) still need a confirmation before finishing: %v", len(pending), pending)
+		return Outcome{}, profiles.Errorf(profiles.CodeInvalid, "%d imported group(s) still need a confirmation before finishing: %v", len(pending), pending)
 	}
 	m := newMaterializer(live, current, newSplitID)
 	var outcome Outcome
 	inPlan := make(map[string]bool)
 	for _, planned := range plan.Desktops {
 		tree := m.tree(planned.Tree, planned.DesktopID)
-		existing := setups.Desktop{}
+		existing := profiles.Desktop{}
 		if planned.DesktopID != "" {
 			inPlan[planned.DesktopID] = true
 			existing = m.current[planned.DesktopID]
@@ -175,7 +175,7 @@ func Materialize(plan Plan, live []GroupState, current []setups.Desktop, newSpli
 	}
 	for _, desktop := range outcome.Desktops {
 		if err := layouttree.Validate(desktop.Tree); err != nil {
-			return Outcome{}, setups.Errorf(setups.CodeInvalid, "finishing the migration would write an invalid desktop %q: %v", desktop.ID, err)
+			return Outcome{}, profiles.Errorf(profiles.CodeInvalid, "finishing the migration would write an invalid desktop %q: %v", desktop.ID, err)
 		}
 	}
 	return outcome, nil

@@ -1,4 +1,4 @@
-package setupmigration
+package profilemigration
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ const (
 )
 
 type Manifest struct {
-	SetupID           string             `json:"setup_id"`
+	ProfileID         string             `json:"profile_id"`
 	Groups            []Group            `json:"groups"`
 	DroppedWorkspaces []DroppedWorkspace `json:"dropped_workspaces,omitempty"`
 	DroppedPlacements []DroppedPlacement `json:"dropped_placements,omitempty"`

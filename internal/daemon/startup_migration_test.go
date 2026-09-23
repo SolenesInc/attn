@@ -24,7 +24,7 @@ func writeLegacyDatabase(t *testing.T, path string, agents int, schemaVersion in
 		t.Fatalf("OpenDB: %v", err)
 	}
 	defer db.Close()
-	statements := []string{`DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM setups; DELETE FROM setup_migration; UPDATE sessions SET setup_id = ''`}
+	statements := []string{`DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM profiles; DELETE FROM profile_migration; UPDATE sessions SET profile_id = ''`}
 	for i := 1; i <= agents; i++ {
 		statements = append(statements, fmt.Sprintf(`
 			INSERT INTO sessions (id, label, directory, state_since, state_updated_at, last_seen, workspace_id)
@@ -156,22 +156,22 @@ func TestAFailedConversionStopsStartupAndLeavesAMarkerUntilAGoodStart(t *testing
 	if _, err := os.Stat(MigrationFailurePath(dir)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the marker survived a good start (%v)", err)
 	}
-	view, err := next.store.SetupMigration()
+	view, err := next.store.ProfileMigration()
 	if err != nil || !view.PlacementRequired() || len(view.Live) != 2 {
 		t.Fatalf("migration after the repaired start = %+v, %v; want two groups waiting for placement", view.State, err)
 	}
 }
 
-func newMigratingTestDaemon(t *testing.T, agents int) *setupsTestDaemon {
+func newMigratingTestDaemon(t *testing.T, agents int) *profilesTestDaemon {
 	t.Helper()
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	w := &setupsTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db")}
-	writeLegacyDatabase(t, w.dbPath, agents, store.SetupConversionSchemaVersion-1)
+	w := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db")}
+	writeLegacyDatabase(t, w.dbPath, agents, store.ProfileConversionSchemaVersion-1)
 	w.start()
 	return w
 }
 
-func (w *setupsTestDaemon) migrate(client *wsClient, command map[string]any) protocol.MigrationResultMessage {
+func (w *profilesTestDaemon) migrate(client *wsClient, command map[string]any) protocol.MigrationResultMessage {
 	w.t.Helper()
 	if _, ok := command["request_id"]; !ok {
 		command["request_id"] = "req-" + command["cmd"].(string)
@@ -199,7 +199,7 @@ func (w *setupsTestDaemon) migrate(client *wsClient, command map[string]any) pro
 	return *result
 }
 
-func (w *setupsTestDaemon) mustMigrate(client *wsClient, command map[string]any) protocol.MigrationState {
+func (w *profilesTestDaemon) mustMigrate(client *wsClient, command map[string]any) protocol.MigrationState {
 	w.t.Helper()
 	result := w.migrate(client, command)
 	if !result.Success || result.State == nil {
@@ -243,11 +243,11 @@ func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 	}
 
 	stale := w.migrate(b, map[string]any{"cmd": protocol.CmdMigrationKeep, "expected_revision": state.Revision, "group_ids": []string{"ws-1"}})
-	if stale.Success || stale.ErrorCode == nil || *stale.ErrorCode != protocol.SetupErrorCodeStaleRevision {
+	if stale.Success || stale.ErrorCode == nil || *stale.ErrorCode != protocol.ProfileErrorCodeStaleRevision {
 		t.Fatalf("a stale keep = %+v, want stale_revision", stale)
 	}
 	early := w.migrate(b, map[string]any{"cmd": protocol.CmdMigrationFinish, "expected_revision": moved.Revision})
-	if early.Success || early.ErrorCode == nil || *early.ErrorCode != protocol.SetupErrorCodeInvalid {
+	if early.Success || early.ErrorCode == nil || *early.ErrorCode != protocol.ProfileErrorCodeInvalid {
 		t.Fatalf("finishing with unconfirmed groups = %+v, want invalid", early)
 	}
 	kept := w.mustMigrate(b, map[string]any{"cmd": protocol.CmdMigrationKeep, "expected_revision": moved.Revision, "group_ids": []string{"ws-1", "ws-3"}})
@@ -264,8 +264,8 @@ func TestTwoClientsShareOneMigrationDraftAndEitherMayFinish(t *testing.T) {
 			var changed protocol.MigrationChangedMessage
 			decodeInto(t, payload, &changed)
 			sawComplete = changed.State.Phase == protocol.MigrationPhaseComplete
-		case protocol.EventSetupArrangementChanged:
-			var changed protocol.SetupArrangementChangedMessage
+		case protocol.EventProfileArrangementChanged:
+			var changed protocol.ProfileArrangementChangedMessage
 			decodeInto(t, payload, &changed)
 			for _, desktop := range changed.Desktops {
 				if desktop.ID == target && len(desktop.Panes) == 2 {

@@ -51,13 +51,13 @@ type wsClient struct {
 	tileContentPending       map[string]time.Time
 	tileContentMu            sync.RWMutex
 
-	admitted        sync.Once
-	clientKind      string
-	clientVersion   string
-	clientID        string
-	selectedSetupID string
-	capabilities    map[string]struct{}
-	identityMu      sync.RWMutex
+	admitted          sync.Once
+	clientKind        string
+	clientVersion     string
+	clientID          string
+	selectedProfileID string
+	capabilities      map[string]struct{}
+	identityMu        sync.RWMutex
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -767,7 +767,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
-	d.fillInitialSetupState(client, event)
+	d.fillInitialProfileState(client, event)
 	d.fillInitialMigrationPhase(event)
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -989,14 +989,14 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	}
 
 	switch cmd {
-	case protocol.CmdSetupCreate:
-		d.handleSetupCreate(client, msg.(*protocol.SetupCreateMessage))
-	case protocol.CmdSetupRename:
-		d.handleSetupRename(client, msg.(*protocol.SetupRenameMessage))
-	case protocol.CmdSetupDelete:
-		d.handleSetupDelete(client, msg.(*protocol.SetupDeleteMessage))
-	case protocol.CmdSetupSelect:
-		d.handleSetupSelect(client, msg.(*protocol.SetupSelectMessage))
+	case protocol.CmdProfileCreate:
+		d.handleProfileCreate(client, msg.(*protocol.ProfileCreateMessage))
+	case protocol.CmdProfileRename:
+		d.handleProfileRename(client, msg.(*protocol.ProfileRenameMessage))
+	case protocol.CmdProfileDelete:
+		d.handleProfileDelete(client, msg.(*protocol.ProfileDeleteMessage))
+	case protocol.CmdProfileSelect:
+		d.handleProfileSelect(client, msg.(*protocol.ProfileSelectMessage))
 	case protocol.CmdMigrationGet:
 		d.handleMigrationGet(client, msg.(*protocol.MigrationGetMessage))
 	case protocol.CmdMigrationKeep:

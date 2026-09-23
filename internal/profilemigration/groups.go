@@ -1,14 +1,14 @@
-package setupmigration
+package profilemigration
 
 import (
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 type GroupState struct {
 	Group
 	Tree  layouttree.Node
-	Panes []setups.Pane
+	Panes []profiles.Pane
 }
 
 func (g GroupState) LeafCount() int {
@@ -28,15 +28,15 @@ func Prune(tree layouttree.Node, keep map[string]bool) layouttree.Node {
 	return tree
 }
 
-func desktopsByID(desktops []setups.Desktop) map[string]setups.Desktop {
-	byID := make(map[string]setups.Desktop, len(desktops))
+func desktopsByID(desktops []profiles.Desktop) map[string]profiles.Desktop {
+	byID := make(map[string]profiles.Desktop, len(desktops))
 	for _, desktop := range desktops {
 		byID[desktop.ID] = desktop
 	}
 	return byID
 }
 
-func survivingLeaves(group Group, source setups.Desktop) map[string]bool {
+func survivingLeaves(group Group, source profiles.Desktop) map[string]bool {
 	present := make(map[string]bool)
 	for _, id := range leafIDs(source.Tree) {
 		present[id] = true
@@ -50,7 +50,7 @@ func survivingLeaves(group Group, source setups.Desktop) map[string]bool {
 	return surviving
 }
 
-func LiveGroups(m Manifest, current []setups.Desktop) []GroupState {
+func LiveGroups(m Manifest, current []profiles.Desktop) []GroupState {
 	byID := desktopsByID(current)
 	var live []GroupState
 	for _, group := range m.Groups {

@@ -1,4 +1,4 @@
-package setupmigration
+package profilemigration
 
 import (
 	"fmt"
@@ -7,27 +7,27 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 type world struct {
 	manifest Manifest
-	desktops []setups.Desktop
+	desktops []profiles.Desktop
 }
 
-func agentPane(id string) setups.Pane {
-	return setups.Pane{PaneID: id, Kind: setups.PaneKindAgent, SessionID: "session-" + id, Status: setups.PaneStatusReady}
+func agentPane(id string) profiles.Pane {
+	return profiles.Pane{PaneID: id, Kind: profiles.PaneKindAgent, SessionID: "session-" + id, Status: profiles.PaneStatusReady}
 }
 
 func newWorld(groups int) *world {
 	w := &world{}
 	for i := 1; i <= groups; i++ {
 		slot := 0
-		if i <= setups.LastShortcutSlot {
+		if i <= profiles.LastShortcutSlot {
 			slot = i
 		}
 		paneID := fmt.Sprintf("pane-%d", i)
-		desktop := setups.Desktop{ID: fmt.Sprintf("desktop-%d", i), SetupID: "setup", ShortcutSlot: slot, Tree: layouttree.DefaultLayout(paneID), ActivePaneID: paneID, Panes: []setups.Pane{agentPane(paneID)}, Revision: 1}
+		desktop := profiles.Desktop{ID: fmt.Sprintf("desktop-%d", i), ProfileID: "profile", ShortcutSlot: slot, Tree: layouttree.DefaultLayout(paneID), ActivePaneID: paneID, Panes: []profiles.Pane{agentPane(paneID)}, Revision: 1}
 		w.desktops = append(w.desktops, desktop)
 		w.manifest.Groups = append(w.manifest.Groups, Group{ID: fmt.Sprintf("group-%d", i), DesktopID: desktop.ID, ShortcutSlot: slot, LeafIDs: []string{paneID}})
 	}
@@ -38,7 +38,7 @@ func (w *world) live() []GroupState {
 	return LiveGroups(w.manifest, w.desktops)
 }
 
-func (w *world) desktop(id string) *setups.Desktop {
+func (w *world) desktop(id string) *profiles.Desktop {
 	for i := range w.desktops {
 		if w.desktops[i].ID == id {
 			return &w.desktops[i]
@@ -56,7 +56,7 @@ func (w *world) splitBeside(desktopID, anchor, paneID string) {
 func (w *world) closePane(desktopID, paneID string) {
 	d := w.desktop(desktopID)
 	d.Tree, _ = layouttree.Remove(d.Tree, paneID)
-	var kept []setups.Pane
+	var kept []profiles.Pane
 	for _, p := range d.Panes {
 		if p.PaneID != paneID {
 			kept = append(kept, p)
@@ -293,7 +293,7 @@ func TestAFreeSlotTakenDuringTheDraftReceivesTheGroupsMovedThere(t *testing.T) {
 	plan := must(t)(InitialPlan(w.manifest).Move(live, "group-8", "slot-9", "", EdgeRight, 0))
 	plan = must(t)(plan.Keep(live, plan.Unconfirmed(live)))
 
-	w.desktops = append(w.desktops, setups.Desktop{ID: "desktop-new", SetupID: "setup", ShortcutSlot: 9, Tree: layouttree.DefaultLayout("pane-launched"), ActivePaneID: "pane-launched", Panes: []setups.Pane{agentPane("pane-launched")}})
+	w.desktops = append(w.desktops, profiles.Desktop{ID: "desktop-new", ProfileID: "profile", ShortcutSlot: 9, Tree: layouttree.DefaultLayout("pane-launched"), ActivePaneID: "pane-launched", Panes: []profiles.Pane{agentPane("pane-launched")}})
 	live = w.live()
 	outcome, err := Materialize(plan.Reconcile(w.desktops).Retire(live), live, w.desktops, counter())
 	if err != nil {

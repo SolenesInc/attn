@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-type setupsTestDaemon struct {
+type profilesTestDaemon struct {
 	t      *testing.T
 	d      *Daemon
 	dbPath string
@@ -18,20 +18,20 @@ type setupsTestDaemon struct {
 	homeDaemonID string
 }
 
-func newSetupsTestDaemon(t *testing.T) *setupsTestDaemon {
+func newProfilesTestDaemon(t *testing.T) *profilesTestDaemon {
 	t.Helper()
-	return newSetupsTestDaemonEnrolledAt(t, "")
+	return newProfilesTestDaemonEnrolledAt(t, "")
 }
 
-func newSetupsTestDaemonEnrolledAt(t *testing.T, homeDaemonID string) *setupsTestDaemon {
+func newProfilesTestDaemonEnrolledAt(t *testing.T, homeDaemonID string) *profilesTestDaemon {
 	t.Helper()
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
-	world := &setupsTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db"), homeDaemonID: homeDaemonID}
+	world := &profilesTestDaemon{t: t, dbPath: filepath.Join(t.TempDir(), "attn.db"), homeDaemonID: homeDaemonID}
 	world.start()
 	return world
 }
 
-func (w *setupsTestDaemon) start() {
+func (w *profilesTestDaemon) start() {
 	w.t.Helper()
 	persistent, err := store.NewWithDB(w.dbPath)
 	if err != nil {
@@ -43,7 +43,7 @@ func (w *setupsTestDaemon) start() {
 	w.t.Cleanup(func() { persistent.Close() })
 }
 
-func (w *setupsTestDaemon) restart() {
+func (w *profilesTestDaemon) restart() {
 	w.t.Helper()
 	if err := w.d.store.Close(); err != nil {
 		w.t.Fatalf("close store: %v", err)
@@ -51,7 +51,7 @@ func (w *setupsTestDaemon) restart() {
 	w.start()
 }
 
-func (w *setupsTestDaemon) connect(rememberedSetupID string) (*wsClient, protocol.InitialStateMessage) {
+func (w *profilesTestDaemon) connect(rememberedProfileID string) (*wsClient, protocol.InitialStateMessage) {
 	w.t.Helper()
 	client := newWorkspaceProtocolTestClient()
 	hello := &protocol.ClientHelloMessage{
@@ -60,8 +60,8 @@ func (w *setupsTestDaemon) connect(rememberedSetupID string) (*wsClient, protoco
 		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
 		ClientToken:  protocol.Ptr("the-token"),
 	}
-	if rememberedSetupID != "" {
-		hello.SetupID = protocol.Ptr(rememberedSetupID)
+	if rememberedProfileID != "" {
+		hello.ProfileID = protocol.Ptr(rememberedProfileID)
 	}
 	w.d.handleClientHello(client, hello)
 	var initial protocol.InitialStateMessage
@@ -78,7 +78,7 @@ func (w *setupsTestDaemon) connect(rememberedSetupID string) (*wsClient, protoco
 	return client, initial
 }
 
-func (w *setupsTestDaemon) send(client *wsClient, command map[string]any) protocol.SetupActionResultMessage {
+func (w *profilesTestDaemon) send(client *wsClient, command map[string]any) protocol.ProfileActionResultMessage {
 	w.t.Helper()
 	if _, ok := command["request_id"]; !ok {
 		command["request_id"] = "req-" + command["cmd"].(string)
@@ -88,11 +88,11 @@ func (w *setupsTestDaemon) send(client *wsClient, command map[string]any) protoc
 		w.t.Fatalf("marshal command: %v", err)
 	}
 	w.d.handleClientMessage(client, data)
-	var result protocol.SetupActionResultMessage
+	var result protocol.ProfileActionResultMessage
 	var others [][]byte
 	found := false
 	for _, payload := range drainClientPayloads(w.t, client) {
-		if !found && eventName(w.t, payload) == protocol.EventSetupActionResult {
+		if !found && eventName(w.t, payload) == protocol.EventProfileActionResult {
 			decodeInto(w.t, payload, &result)
 			found = true
 			continue
@@ -100,7 +100,7 @@ func (w *setupsTestDaemon) send(client *wsClient, command map[string]any) protoc
 		others = append(others, payload)
 	}
 	if !found {
-		w.t.Fatalf("%s was not answered with setup_action_result", command["cmd"])
+		w.t.Fatalf("%s was not answered with profile_action_result", command["cmd"])
 	}
 	if result.RequestID != command["request_id"] {
 		w.t.Fatalf("result answers request %q, want %q", result.RequestID, command["request_id"])
@@ -111,7 +111,7 @@ func (w *setupsTestDaemon) send(client *wsClient, command map[string]any) protoc
 	return result
 }
 
-func (w *setupsTestDaemon) mustSend(client *wsClient, command map[string]any) protocol.SetupActionResultMessage {
+func (w *profilesTestDaemon) mustSend(client *wsClient, command map[string]any) protocol.ProfileActionResultMessage {
 	w.t.Helper()
 	result := w.send(client, command)
 	if !result.Success {
@@ -120,7 +120,7 @@ func (w *setupsTestDaemon) mustSend(client *wsClient, command map[string]any) pr
 	return result
 }
 
-func (w *setupsTestDaemon) agent(sessionID, setupID string) {
+func (w *profilesTestDaemon) agent(sessionID, profileID string) {
 	w.t.Helper()
 	w.d.store.Add(&protocol.Session{
 		ID:        sessionID,
@@ -129,8 +129,8 @@ func (w *setupsTestDaemon) agent(sessionID, setupID string) {
 		State:     protocol.SessionStateIdle,
 		Agent:     protocol.SessionAgentClaude,
 	})
-	if err := w.d.store.AssignSessionSetup(sessionID, setupID); err != nil {
-		w.t.Fatalf("assign %s to setup %s: %v", sessionID, setupID, err)
+	if err := w.d.store.AssignSessionProfile(sessionID, profileID); err != nil {
+		w.t.Fatalf("assign %s to profile %s: %v", sessionID, profileID, err)
 	}
 }
 
@@ -150,35 +150,35 @@ func decodeInto(t *testing.T, payload []byte, target any) {
 	}
 }
 
-func arrangementChanges(t *testing.T, client *wsClient) []protocol.SetupArrangementChangedMessage {
+func arrangementChanges(t *testing.T, client *wsClient) []protocol.ProfileArrangementChangedMessage {
 	t.Helper()
-	var changes []protocol.SetupArrangementChangedMessage
+	var changes []protocol.ProfileArrangementChangedMessage
 	for _, payload := range drainClientPayloads(t, client) {
-		if eventName(t, payload) != protocol.EventSetupArrangementChanged {
+		if eventName(t, payload) != protocol.EventProfileArrangementChanged {
 			continue
 		}
-		var change protocol.SetupArrangementChangedMessage
+		var change protocol.ProfileArrangementChangedMessage
 		decodeInto(t, payload, &change)
 		changes = append(changes, change)
 	}
 	return changes
 }
 
-func setupsChanges(t *testing.T, client *wsClient) []protocol.SetupsChangedMessage {
+func profilesChanges(t *testing.T, client *wsClient) []protocol.ProfilesChangedMessage {
 	t.Helper()
-	var changes []protocol.SetupsChangedMessage
+	var changes []protocol.ProfilesChangedMessage
 	for _, payload := range drainClientPayloads(t, client) {
-		if eventName(t, payload) != protocol.EventSetupsChanged {
+		if eventName(t, payload) != protocol.EventProfilesChanged {
 			continue
 		}
-		var change protocol.SetupsChangedMessage
+		var change protocol.ProfilesChangedMessage
 		decodeInto(t, payload, &change)
 		changes = append(changes, change)
 	}
 	return changes
 }
 
-func wantErrorCode(t *testing.T, result protocol.SetupActionResultMessage, want protocol.SetupErrorCode) {
+func wantErrorCode(t *testing.T, result protocol.ProfileActionResultMessage, want protocol.ProfileErrorCode) {
 	t.Helper()
 	if result.Success {
 		t.Fatalf("%s succeeded, want error code %s", result.Action, want)
@@ -192,57 +192,57 @@ func wantErrorCode(t *testing.T, result protocol.SetupActionResultMessage, want 
 }
 
 func TestFirstClientOnAFreshDaemonIsScopedToDefaultAndCanCreateAnother(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	client, initial := w.connect("")
-	if len(initial.Setups) != 1 || initial.Setups[0].Name != "Default" || protocol.Deref(initial.SelectedSetupID) != initial.Setups[0].ID || len(initial.Desktops) != 1 {
-		t.Fatalf("a fresh daemon announced setups=%v selected=%v desktops=%v, want only Default with one desktop", initial.Setups, initial.SelectedSetupID, initial.Desktops)
+	if len(initial.Profiles) != 1 || initial.Profiles[0].Name != "Default" || protocol.Deref(initial.SelectedProfileID) != initial.Profiles[0].ID || len(initial.Desktops) != 1 {
+		t.Fatalf("a fresh daemon announced profiles=%v selected=%v desktops=%v, want only Default with one desktop", initial.Profiles, initial.SelectedProfileID, initial.Desktops)
 	}
 	if initial.MigrationPhase == nil || *initial.MigrationPhase != protocol.MigrationPhaseComplete {
 		t.Fatalf("a fresh daemon reported migration phase %v, want complete", initial.MigrationPhase)
 	}
 
-	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	if created.Setup == nil || len(created.Desktops) != 1 {
-		t.Fatalf("setup_create returned setup=%v desktops=%v, want the setup and its first desktop", created.Setup, created.Desktops)
+	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	if created.Profile == nil || len(created.Desktops) != 1 {
+		t.Fatalf("profile_create returned profile=%v desktops=%v, want the profile and its first desktop", created.Profile, created.Desktops)
 	}
 	first := created.Desktops[0]
-	if created.Setup.CurrentDesktopID != first.ID || protocol.Deref(first.ShortcutSlot) != 1 {
-		t.Fatalf("first desktop %+v is not current in slot 1 of %+v", first, created.Setup)
+	if created.Profile.CurrentDesktopID != first.ID || protocol.Deref(first.ShortcutSlot) != 1 {
+		t.Fatalf("first desktop %+v is not current in slot 1 of %+v", first, created.Profile)
 	}
-	if got := setupsChanges(t, client); len(got) != 1 || len(got[0].Setups) != 2 {
-		t.Fatalf("setup_create broadcast %+v, want one setups_changed with Default and the new setup", got)
+	if got := profilesChanges(t, client); len(got) != 1 || len(got[0].Profiles) != 2 {
+		t.Fatalf("profile_create broadcast %+v, want one profiles_changed with Default and the new profile", got)
 	}
 
-	selected := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": created.Setup.ID})
-	if len(selected.Desktops) != 1 || selected.Setup.LastUsedAt == nil {
-		t.Fatalf("setup_select returned %+v, want the arrangement and a last_used_at", selected)
+	selected := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
+	if len(selected.Desktops) != 1 || selected.Profile.LastUsedAt == nil {
+		t.Fatalf("profile_select returned %+v, want the arrangement and a last_used_at", selected)
 	}
 
 	_, again := w.connect("")
-	if protocol.Deref(again.SelectedSetupID) != created.Setup.ID || len(again.Desktops) != 1 {
-		t.Fatalf("a client with no remembered setup got selected=%v desktops=%d, want the most recently used setup", again.SelectedSetupID, len(again.Desktops))
+	if protocol.Deref(again.SelectedProfileID) != created.Profile.ID || len(again.Desktops) != 1 {
+		t.Fatalf("a client with no remembered profile got selected=%v desktops=%d, want the most recently used profile", again.SelectedProfileID, len(again.Desktops))
 	}
 }
 
-func TestHelloScopesTheClientToItsRememberedSetup(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestHelloScopesTheClientToItsRememberedProfile(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	bootstrap, _ := w.connect("")
-	work := w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "work"}).Setup
-	home := w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "home"}).Setup
-	w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": home.ID})
-	before, err := w.d.store.GetSetup(work.ID)
+	work := w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "work"}).Profile
+	home := w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "home"}).Profile
+	w.mustSend(bootstrap, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": home.ID})
+	before, err := w.d.store.GetProfile(work.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	_, remembered := w.connect(work.ID)
-	if protocol.Deref(remembered.SelectedSetupID) != work.ID {
-		t.Fatalf("hello remembering %s was scoped to %v", work.ID, remembered.SelectedSetupID)
+	if protocol.Deref(remembered.SelectedProfileID) != work.ID {
+		t.Fatalf("hello remembering %s was scoped to %v", work.ID, remembered.SelectedProfileID)
 	}
-	if len(remembered.Setups) != 3 {
-		t.Fatalf("initial_state lists %d setups, want Default, work and home", len(remembered.Setups))
+	if len(remembered.Profiles) != 3 {
+		t.Fatalf("initial_state lists %d profiles, want Default, work and home", len(remembered.Profiles))
 	}
-	after, err := w.d.store.GetSetup(work.ID)
+	after, err := w.d.store.GetProfile(work.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,29 +250,29 @@ func TestHelloScopesTheClientToItsRememberedSetup(t *testing.T) {
 		t.Fatalf("connecting changed last_used_at from %q to %q; only a selection may", before.LastUsedAt, after.LastUsedAt)
 	}
 
-	_, unknown := w.connect("setup-that-never-existed")
-	if protocol.Deref(unknown.SelectedSetupID) != home.ID {
-		t.Fatalf("hello remembering an unknown setup was scoped to %v, want the most recently used %s", unknown.SelectedSetupID, home.ID)
+	_, unknown := w.connect("profile-that-never-existed")
+	if protocol.Deref(unknown.SelectedProfileID) != home.ID {
+		t.Fatalf("hello remembering an unknown profile was scoped to %v, want the most recently used %s", unknown.SelectedProfileID, home.ID)
 	}
 
 	w.mustSend(bootstrap, map[string]any{
-		"cmd": protocol.CmdSetupDelete, "setup_id": work.ID, "expected_revision": work.Revision, "destination_setup_id": home.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": work.ID, "expected_revision": work.Revision, "destination_profile_id": home.ID,
 	})
 	_, deleted := w.connect(work.ID)
-	if protocol.Deref(deleted.SelectedSetupID) != home.ID || len(deleted.Setups) != 2 {
-		t.Fatalf("hello remembering a deleted setup got selected=%v setups=%d, want %s among Default and home", deleted.SelectedSetupID, len(deleted.Setups), home.ID)
+	if protocol.Deref(deleted.SelectedProfileID) != home.ID || len(deleted.Profiles) != 2 {
+		t.Fatalf("hello remembering a deleted profile got selected=%v profiles=%d, want %s among Default and home", deleted.SelectedProfileID, len(deleted.Profiles), home.ID)
 	}
 }
 
 func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	first, _ := w.connect("")
-	setup := w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	setupID, desktopOne := setup.Setup.ID, setup.Desktops[0]
-	desktopTwo := w.mustSend(first, map[string]any{"cmd": protocol.CmdDesktopCreate, "setup_id": setupID}).Desktops[0]
-	other := w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "elsewhere"}).Setup
-	w.agent("agent-a", setupID)
-	w.agent("agent-b", setupID)
+	profile := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	profileID, desktopOne := profile.Profile.ID, profile.Desktops[0]
+	desktopTwo := w.mustSend(first, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
+	other := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"}).Profile
+	w.agent("agent-a", profileID)
+	w.agent("agent-b", profileID)
 	placedA := w.mustSend(first, map[string]any{
 		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": desktopTwo.ID, "expected_revision": desktopTwo.Revision, "session_id": "agent-a",
 	})
@@ -283,20 +283,20 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	paneB := protocol.Deref(placedB.PaneID)
 	revisionBeforeSelection := placedB.Desktops[0].Revision
 
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": setupID})
-	second, _ := w.connect(setupID)
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
+	second, _ := w.connect(profileID)
 	outsider, _ := w.connect(other.ID)
 	drainClientPayloads(t, first)
 
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "setup_id": setupID, "desktop_id": desktopTwo.ID})
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": profileID, "desktop_id": desktopTwo.ID})
 	w.mustSend(first, map[string]any{"cmd": protocol.CmdDesktopSetActivePane, "desktop_id": desktopTwo.ID, "pane_id": paneB})
 
 	seen := arrangementChanges(t, second)
 	if len(seen) != 2 {
 		t.Fatalf("the second connection saw %d arrangement changes, want 2", len(seen))
 	}
-	if seen[0].Setup.CurrentDesktopID != desktopTwo.ID {
-		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Setup.CurrentDesktopID, desktopTwo.ID)
+	if seen[0].Profile.CurrentDesktopID != desktopTwo.ID {
+		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Profile.CurrentDesktopID, desktopTwo.ID)
 	}
 	if len(seen[1].Desktops) != 1 || seen[1].Desktops[0].ActivePaneID != paneB {
 		t.Fatalf("the second connection saw %+v, want desktop %s with active pane %s", seen[1].Desktops, desktopTwo.ID, paneB)
@@ -308,20 +308,20 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 		t.Fatalf("the selecting connection saw %d arrangement changes, want 2", len(own))
 	}
 	if leaked := arrangementChanges(t, outsider); len(leaked) != 0 {
-		t.Fatalf("a connection on another setup saw %d arrangement changes", len(leaked))
+		t.Fatalf("a connection on another profile saw %d arrangement changes", len(leaked))
 	}
 
 	wrong := w.send(first, map[string]any{"cmd": protocol.CmdDesktopSetActivePane, "desktop_id": desktopOne.ID, "pane_id": paneB})
-	wantErrorCode(t, wrong, protocol.SetupErrorCodeNotFound)
+	wantErrorCode(t, wrong, protocol.ProfileErrorCodeNotFound)
 
 	w.restart()
-	_, initial := w.connect(setupID)
-	if protocol.Deref(initial.SelectedSetupID) != setupID {
-		t.Fatalf("after a restart the client was scoped to %v", initial.SelectedSetupID)
+	_, initial := w.connect(profileID)
+	if protocol.Deref(initial.SelectedProfileID) != profileID {
+		t.Fatalf("after a restart the client was scoped to %v", initial.SelectedProfileID)
 	}
 	var current string
-	for _, s := range initial.Setups {
-		if s.ID == setupID {
+	for _, s := range initial.Profiles {
+		if s.ID == profileID {
 			current = s.CurrentDesktopID
 		}
 	}
@@ -340,12 +340,12 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 }
 
 func TestSecondClientWithAStaleRevisionRereadsAndRetries(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	first, _ := w.connect("")
-	created := w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
+	created := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	desktop := created.Desktops[0]
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": created.Setup.ID})
-	second, initial := w.connect(created.Setup.ID)
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
+	second, initial := w.connect(created.Profile.ID)
 	secondsRevision := initial.Desktops[0].Revision
 	drainClientPayloads(t, first)
 
@@ -355,7 +355,7 @@ func TestSecondClientWithAStaleRevisionRereadsAndRetries(t *testing.T) {
 	stale := w.send(second, map[string]any{
 		"cmd": protocol.CmdDesktopRename, "desktop_id": desktop.ID, "name": "scratch", "expected_revision": secondsRevision,
 	})
-	wantErrorCode(t, stale, protocol.SetupErrorCodeStaleRevision)
+	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
 
 	seen := arrangementChanges(t, second)
 	if len(seen) != 1 || seen[0].Desktops[0].Name != "review" {
@@ -370,14 +370,14 @@ func TestSecondClientWithAStaleRevisionRereadsAndRetries(t *testing.T) {
 }
 
 func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	setupID, source := created.Setup.ID, created.Desktops[0]
-	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "setup_id": setupID}).Desktops[0]
-	w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": setupID})
-	watcher, _ := w.connect(setupID)
-	w.agent("agent-a", setupID)
+	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	profileID, source := created.Profile.ID, created.Desktops[0]
+	target := w.mustSend(client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": profileID}).Desktops[0]
+	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": profileID})
+	watcher, _ := w.connect(profileID)
+	w.agent("agent-a", profileID)
 	placed := w.mustSend(client, map[string]any{
 		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": source.ID, "expected_revision": source.Revision, "session_id": "agent-a",
 	})
@@ -389,7 +389,7 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": source.ID, "target_desktop_id": target.ID, "leaf_id": paneID,
 		"edge": "right", "expected_source_revision": source.Revision, "expected_target_revision": target.Revision + 7,
 	})
-	wantErrorCode(t, stale, protocol.SetupErrorCodeStaleRevision)
+	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
 	if seen := arrangementChanges(t, watcher); len(seen) != 0 {
 		t.Fatalf("a refused move still sent %d arrangement changes", len(seen))
 	}
@@ -422,18 +422,18 @@ func TestMoveBetweenDesktopsArrivesAsOneMessageAndFailsWhole(t *testing.T) {
 	}
 }
 
-func TestLayoutCommandsNeverChangeWhichSetupAnAgentBelongsTo(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestLayoutCommandsNeverChangeWhichProfileAnAgentBelongsTo(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	mine := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "mine"})
-	theirs := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "theirs"})
-	w.agent("their-agent", theirs.Setup.ID)
-	w.agent("my-agent", mine.Setup.ID)
+	mine := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "mine"})
+	theirs := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "theirs"})
+	w.agent("their-agent", theirs.Profile.ID)
+	w.agent("my-agent", mine.Profile.ID)
 
 	foreign := w.send(client, map[string]any{
 		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": mine.Desktops[0].Revision, "session_id": "their-agent",
 	})
-	wantErrorCode(t, foreign, protocol.SetupErrorCodeCrossSetup)
+	wantErrorCode(t, foreign, protocol.ProfileErrorCodeCrossProfile)
 
 	placed := w.mustSend(client, map[string]any{
 		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": mine.Desktops[0].Revision, "session_id": "my-agent",
@@ -443,106 +443,106 @@ func TestLayoutCommandsNeverChangeWhichSetupAnAgentBelongsTo(t *testing.T) {
 		"leaf_id": protocol.Deref(placed.PaneID), "edge": "left",
 		"expected_source_revision": placed.Desktops[0].Revision, "expected_target_revision": theirs.Desktops[0].Revision,
 	})
-	wantErrorCode(t, across, protocol.SetupErrorCodeCrossSetup)
+	wantErrorCode(t, across, protocol.ProfileErrorCodeCrossProfile)
 
 	twice := w.send(client, map[string]any{
 		"cmd": protocol.CmdDesktopPlaceSession, "desktop_id": mine.Desktops[0].ID, "expected_revision": placed.Desktops[0].Revision, "session_id": "my-agent",
 	})
-	wantErrorCode(t, twice, protocol.SetupErrorCodeAlreadyPlaced)
-	if got, err := w.d.store.SessionSetupID("my-agent"); err != nil || got != mine.Setup.ID {
-		t.Fatalf("my-agent belongs to %q (err %v), want %s", got, err, mine.Setup.ID)
+	wantErrorCode(t, twice, protocol.ProfileErrorCodeAlreadyPlaced)
+	if got, err := w.d.store.SessionProfileID("my-agent"); err != nil || got != mine.Profile.ID {
+		t.Fatalf("my-agent belongs to %q (err %v), want %s", got, err, mine.Profile.ID)
 	}
 }
 
-func TestSetupNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestProfileNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	attn := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"}).Setup
-	side := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "side"}).Setup
+	attn := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"}).Profile
+	side := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "side"}).Profile
 
-	wantErrorCode(t, w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"}), protocol.SetupErrorCodeNameTaken)
+	wantErrorCode(t, w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"}), protocol.ProfileErrorCodeNameTaken)
 	wantErrorCode(t, w.send(client, map[string]any{
-		"cmd": protocol.CmdSetupRename, "setup_id": side.ID, "name": "attn", "expected_revision": side.Revision,
-	}), protocol.SetupErrorCodeNameTaken)
+		"cmd": protocol.CmdProfileRename, "profile_id": side.ID, "name": "attn", "expected_revision": side.Revision,
+	}), protocol.ProfileErrorCodeNameTaken)
 
 	renamed := w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdSetupRename, "setup_id": attn.ID, "name": "attention", "expected_revision": attn.Revision,
-	}).Setup
+		"cmd": protocol.CmdProfileRename, "profile_id": attn.ID, "name": "attention", "expected_revision": attn.Revision,
+	}).Profile
 	if renamed.ID != attn.ID {
-		t.Fatalf("renaming changed the setup id from %s to %s", attn.ID, renamed.ID)
+		t.Fatalf("renaming changed the profile id from %s to %s", attn.ID, renamed.ID)
 	}
 	w.mustSend(client, map[string]any{
-		"cmd": protocol.CmdSetupDelete, "setup_id": renamed.ID, "expected_revision": renamed.Revision, "destination_setup_id": side.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": renamed.ID, "expected_revision": renamed.Revision, "destination_profile_id": side.ID,
 	})
-	reborn := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attention"}).Setup
+	reborn := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attention"}).Profile
 	if reborn.ID == attn.ID {
-		t.Fatalf("a new setup reused the deleted setup's id %s", attn.ID)
+		t.Fatalf("a new profile reused the deleted profile's id %s", attn.ID)
 	}
-	live, err := w.d.store.ListSetups(false)
+	live, err := w.d.store.ListProfiles(false)
 	if err != nil || len(live) != 3 {
-		t.Fatalf("%d live setups (err %v), want Default, side and attention", len(live), err)
+		t.Fatalf("%d live profiles (err %v), want Default, side and attention", len(live), err)
 	}
 	wantErrorCode(t, w.send(client, map[string]any{
-		"cmd": protocol.CmdSetupDelete, "setup_id": reborn.ID, "expected_revision": reborn.Revision, "destination_setup_id": reborn.ID,
-	}), protocol.SetupErrorCodeDestinationSame)
+		"cmd": protocol.CmdProfileDelete, "profile_id": reborn.ID, "expected_revision": reborn.Revision, "destination_profile_id": reborn.ID,
+	}), protocol.ProfileErrorCodeDestinationSame)
 }
 
-func TestSetupCommandWithoutARequestIDIsRefused(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestProfileCommandWithoutARequestIDIsRefused(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	result := w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn", "request_id": ""})
-	wantErrorCode(t, result, protocol.SetupErrorCodeInvalid)
+	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn", "request_id": ""})
+	wantErrorCode(t, result, protocol.ProfileErrorCodeInvalid)
 }
 
-func TestOutpostRefusesSetupCommandsByName(t *testing.T) {
-	w := newSetupsTestDaemonEnrolledAt(t, "d-0123456789abcdef0123456789abcdef")
+func TestOutpostRefusesProfileCommandsByName(t *testing.T) {
+	w := newProfilesTestDaemonEnrolledAt(t, "d-0123456789abcdef0123456789abcdef")
 	client, _ := w.connect("")
-	result := w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	wantErrorCode(t, result, protocol.SetupErrorCodeUnavailable)
-	if live, err := w.d.store.ListSetups(false); err != nil || len(live) != 1 {
-		t.Fatalf("a refused create left %d setups (err %v), want only Default", len(live), err)
+	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	wantErrorCode(t, result, protocol.ProfileErrorCodeUnavailable)
+	if live, err := w.d.store.ListProfiles(false); err != nil || len(live) != 1 {
+		t.Fatalf("a refused create left %d profiles (err %v), want only Default", len(live), err)
 	}
 }
 
-func TestSelectingASetupTellsEveryClientItWasUsed(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestSelectingAProfileTellsEveryClientItWasUsed(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	first, _ := w.connect("")
-	work := w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "work"}).Setup
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "home"})
+	work := w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "work"}).Profile
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "home"})
 	second, _ := w.connect("")
 	drainClientPayloads(t, second)
 
-	w.mustSend(first, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": work.ID})
+	w.mustSend(first, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": work.ID})
 
-	seen := setupsChanges(t, second)
+	seen := profilesChanges(t, second)
 	if len(seen) != 1 {
-		t.Fatalf("the other client saw %d setups_changed, want 1", len(seen))
+		t.Fatalf("the other client saw %d profiles_changed, want 1", len(seen))
 	}
-	for _, setup := range seen[0].Setups {
-		if setup.ID == work.ID && setup.LastUsedAt == nil {
+	for _, profile := range seen[0].Profiles {
+		if profile.ID == work.ID && profile.LastUsedAt == nil {
 			t.Fatal("the other client was told of the selection without its last_used_at")
 		}
 	}
 }
 
-func TestDeletingASetupLandsItsClientsOnTheDestination(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+func TestDeletingAProfileLandsItsClientsOnTheDestination(t *testing.T) {
+	w := newProfilesTestDaemon(t)
 	deleter, _ := w.connect("")
-	doomed := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "doomed"}).Setup
-	kept := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "kept"})
-	w.mustSend(deleter, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": doomed.ID})
+	doomed := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
+	kept := w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "kept"})
+	w.mustSend(deleter, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.ID})
 	bystander, _ := w.connect(doomed.ID)
 	drainClientPayloads(t, deleter)
 
 	deleted := w.mustSend(deleter, map[string]any{
-		"cmd": protocol.CmdSetupDelete, "setup_id": doomed.ID, "expected_revision": doomed.Revision, "destination_setup_id": kept.Setup.ID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": kept.Profile.ID,
 	})
-	if deleted.Setup.ID != kept.Setup.ID || len(deleted.Desktops) != 1 {
-		t.Fatalf("setup_delete answered %+v, want the destination and its arrangement", deleted)
+	if deleted.Profile.ID != kept.Profile.ID || len(deleted.Desktops) != 1 {
+		t.Fatalf("profile_delete answered %+v, want the destination and its arrangement", deleted)
 	}
 	landed := arrangementChanges(t, bystander)
-	if len(landed) != 1 || landed[0].Setup.ID != kept.Setup.ID || len(landed[0].Desktops) != 1 {
-		t.Fatalf("a client on the deleted setup was sent %+v, want the destination's whole arrangement", landed)
+	if len(landed) != 1 || landed[0].Profile.ID != kept.Profile.ID || len(landed[0].Desktops) != 1 {
+		t.Fatalf("a client on the deleted profile was sent %+v, want the destination's whole arrangement", landed)
 	}
 
 	w.mustSend(deleter, map[string]any{
@@ -554,30 +554,30 @@ func TestDeletingASetupLandsItsClientsOnTheDestination(t *testing.T) {
 }
 
 func TestTheResultReachesItsSenderBeforeTheBroadcast(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	data, err := json.Marshal(map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn", "request_id": "r1"})
+	data, err := json.Marshal(map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn", "request_id": "r1"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	w.d.handleClientMessage(client, data)
 
 	payloads := drainClientPayloads(t, client)
-	if len(payloads) != 2 || eventName(t, payloads[0]) != protocol.EventSetupActionResult || eventName(t, payloads[1]) != protocol.EventSetupsChanged {
+	if len(payloads) != 2 || eventName(t, payloads[0]) != protocol.EventProfileActionResult || eventName(t, payloads[1]) != protocol.EventProfilesChanged {
 		names := make([]string, 0, len(payloads))
 		for _, payload := range payloads {
 			names = append(names, eventName(t, payload))
 		}
-		t.Fatalf("setup_create sent %v, want setup_action_result then setups_changed", names)
+		t.Fatalf("profile_create sent %v, want profile_action_result then profiles_changed", names)
 	}
 }
 
 func TestAStorageFailureIsNotReportedAsUnavailable(t *testing.T) {
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
 	if err := w.d.store.Close(); err != nil {
 		t.Fatal(err)
 	}
-	result := w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	wantErrorCode(t, result, protocol.SetupErrorCodeInternal)
+	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	wantErrorCode(t, result, protocol.ProfileErrorCodeInternal)
 }

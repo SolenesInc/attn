@@ -6,21 +6,21 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
-func placedPair(t *testing.T) (*Store, setups.Setup, setups.Desktop, string, string) {
+func placedPair(t *testing.T) (*Store, profiles.Profile, profiles.Desktop, string, string) {
 	t.Helper()
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "attn")
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "attn")
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	_, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 	_, paneB := mustPlace(t, s, desktop.ID, "agent-b")
-	return s, setup, desktop, paneA, paneB
+	return s, profile, desktop, paneA, paneB
 }
 
-func wantOnlyPane(t *testing.T, s *Store, desktopID, paneID string) setups.Desktop {
+func wantOnlyPane(t *testing.T, s *Store, desktopID, paneID string) profiles.Desktop {
 	t.Helper()
 	desktop, err := s.GetDesktop(desktopID)
 	if err != nil {
@@ -49,22 +49,22 @@ func TestEndingASessionTakesItsPaneOffTheDesktop(t *testing.T) {
 	}
 	for _, ending := range endings {
 		t.Run(ending.name, func(t *testing.T) {
-			s, setup, desktop, _, paneB := placedPair(t)
+			s, profile, desktop, _, paneB := placedPair(t)
 			ending.end(t, s)
 
 			if _, placed, err := s.SessionPlacement("agent-a"); err != nil || placed {
 				t.Fatalf("agent-a is still placed after it ended (placed=%v, err=%v)", placed, err)
 			}
 			wantOnlyPane(t, s, desktop.ID, paneB)
-			addSetupSession(t, s, "agent-c", setup.ID)
+			addProfileSession(t, s, "agent-c", profile.ID)
 			mustPlace(t, s, desktop.ID, "agent-c")
-			assertStoredDesktopsHoldTheirInvariants(t, s, setup.ID)
+			assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
 		})
 	}
 }
 
 func TestClearingSessionsEmptiesEveryDesktop(t *testing.T) {
-	s, setup, desktop, _, _ := placedPair(t)
+	s, profile, desktop, _, _ := placedPair(t)
 	s.ClearSessions()
 
 	emptied, err := s.GetDesktop(desktop.ID)
@@ -74,7 +74,7 @@ func TestClearingSessionsEmptiesEveryDesktop(t *testing.T) {
 	if len(emptied.Panes) != 0 || emptied.ActivePaneID != "" || !layouttree.LayoutEmpty(emptied.Tree) {
 		t.Fatalf("after clearing sessions the desktop still holds %+v", emptied)
 	}
-	addSetupSession(t, s, "agent-c", setup.ID)
+	addProfileSession(t, s, "agent-c", profile.ID)
 	mustPlace(t, s, desktop.ID, "agent-c")
 }
 
@@ -92,7 +92,7 @@ func TestRemovingADirectorysSessionsTakesTheirPanesOffTheDesktop(t *testing.T) {
 }
 
 func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
-	s, setup, desktop, paneA, paneB := placedPair(t)
+	s, profile, desktop, paneA, paneB := placedPair(t)
 	for _, id := range []string{"agent-a", "agent-b"} {
 		if _, err := s.db.Exec(`UPDATE sessions SET closed_at = '2026-01-01T00:00:00Z' WHERE id = ?`, id); err != nil {
 			t.Fatal(err)
@@ -113,7 +113,7 @@ func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 	if _, err := s.db.Exec(`DELETE FROM sessions WHERE id = 'agent-b'`); err != nil {
 		t.Fatal(err)
 	}
-	addSetupSession(t, s, "agent-c", setup.ID)
+	addProfileSession(t, s, "agent-c", profile.ID)
 	mustPlace(t, s, desktop.ID, "agent-c")
 	current, err = s.GetDesktop(desktop.ID)
 	if err != nil {
@@ -124,20 +124,20 @@ func TestAPaneWhoseSessionVanishedNeverBlocksItsDesktop(t *testing.T) {
 	}
 	_ = paneA
 
-	addSetupSession(t, s, "agent-d", setup.ID)
+	addProfileSession(t, s, "agent-d", profile.ID)
 	if _, err := s.CloseSession("agent-d", SessionClose{}, time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	current, _ = s.GetDesktop(desktop.ID)
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: current.Revision, SessionID: "agent-d"})
-	wantCode(t, err, setups.CodeSessionClosed)
+	wantCode(t, err, profiles.CodeSessionClosed)
 }
 
 func TestPlacingWithAShareKeepsThatShare(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "attn")
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "attn")
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	first, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
 	placed, _, err := s.PlaceSession(SessionPlacementRequest{
@@ -157,14 +157,14 @@ func TestPlacingWithAShareKeepsThatShare(t *testing.T) {
 }
 
 func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, source := mustCreateSetup(t, s, "attn")
-	_, target, err := s.CreateDesktop(setup.ID, "", 0, true)
+	s, _ := openProfileStore(t)
+	profile, source := mustCreateProfile(t, s, "attn")
+	_, target, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	source, paneA := mustPlace(t, s, source.ID, "agent-a")
 	target, _ = mustPlace(t, s, target.ID, "agent-b")
 	if _, err := s.db.Exec(`UPDATE desktop_panes SET status = 'melted' WHERE session_id = 'agent-b'`); err != nil {
@@ -175,7 +175,7 @@ func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
 		SourceDesktopID: source.ID, TargetDesktopID: target.ID, LeafID: paneA, Direction: layouttree.DirectionVertical,
 		ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
 	})
-	wantCode(t, err, setups.CodeInvalid)
+	wantCode(t, err, profiles.CodeInvalid)
 
 	after := wantOnlyPane(t, s, source.ID, paneA)
 	if after.Revision != source.Revision {
@@ -187,22 +187,22 @@ func TestAMoveWhoseTargetWriteFailsLeavesTheSourceUntouched(t *testing.T) {
 }
 
 func TestShortcutSlotsOutsideOneToNineAreRefusedByName(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "attn")
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "attn")
 	for _, slot := range []int{-1, 10} {
-		_, _, err := s.CreateDesktop(setup.ID, "", slot, false)
-		refusal := wantCode(t, err, setups.CodeInvalid)
-		if refusal.Message != setups.ValidateShortcutSlot(slot).Error() {
+		_, _, err := s.CreateDesktop(profile.ID, "", slot, false)
+		refusal := wantCode(t, err, profiles.CodeInvalid)
+		if refusal.Message != profiles.ValidateShortcutSlot(slot).Error() {
 			t.Fatalf("slot %d refused with %q", slot, refusal.Message)
 		}
 		_, err = s.SetDesktopShortcutSlot(desktop.ID, slot, desktop.Revision)
-		wantCode(t, err, setups.CodeInvalid)
+		wantCode(t, err, profiles.CodeInvalid)
 	}
-	if err := setups.ValidateShortcutSlot(10); err == nil || err.Error() != "shortcut slot 10 is outside 1-9" {
+	if err := profiles.ValidateShortcutSlot(10); err == nil || err.Error() != "shortcut slot 10 is outside 1-9" {
 		t.Fatalf("slot 10 refusal = %v, want it to name the slot and the 1-9 range", err)
 	}
-	for slot := setups.FirstShortcutSlot; slot <= setups.LastShortcutSlot; slot++ {
-		if err := setups.ValidateShortcutSlot(slot); err != nil {
+	for slot := profiles.FirstShortcutSlot; slot <= profiles.LastShortcutSlot; slot++ {
+		if err := profiles.ValidateShortcutSlot(slot); err != nil {
 			t.Fatalf("slot %d refused: %v", slot, err)
 		}
 	}

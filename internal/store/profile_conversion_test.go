@@ -13,8 +13,8 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/layouttree"
-	"github.com/victorarias/attn/internal/setupmigration"
-	"github.com/victorarias/attn/internal/setups"
+	"github.com/victorarias/attn/internal/profilemigration"
+	"github.com/victorarias/attn/internal/profiles"
 )
 
 type legacyFixture struct {
@@ -40,9 +40,9 @@ func newLegacyFixture(t *testing.T) *legacyFixture {
 	}
 	f := &legacyFixture{t: t, path: path, db: db}
 	f.exec(`
-		DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM setups; DELETE FROM setup_migration;
-		UPDATE sessions SET setup_id = '';
-		DELETE FROM schema_migrations WHERE version >= ?;`, SetupConversionSchemaVersion)
+		DELETE FROM desktop_panes; DELETE FROM desktops; DELETE FROM profiles; DELETE FROM profile_migration;
+		UPDATE sessions SET profile_id = '';
+		DELETE FROM schema_migrations WHERE version >= ?;`, ProfileConversionSchemaVersion)
 	t.Cleanup(func() { f.db.Close() })
 	return f
 }
@@ -112,19 +112,19 @@ func (f *legacyFixture) convert() (*Store, SchemaUpgrade, error) {
 	return s, upgrade, err
 }
 
-func (f *legacyFixture) mustConvert() (*Store, SetupMigrationView, []setups.Desktop) {
+func (f *legacyFixture) mustConvert() (*Store, ProfileMigrationView, []profiles.Desktop) {
 	f.t.Helper()
 	s, _, err := f.convert()
 	if err != nil {
 		f.t.Fatalf("conversion: %v", err)
 	}
-	view, err := s.SetupMigration()
+	view, err := s.ProfileMigration()
 	if err != nil {
-		f.t.Fatalf("SetupMigration: %v", err)
+		f.t.Fatalf("ProfileMigration: %v", err)
 	}
-	_, desktops, err := s.SetupArrangement(view.Manifest.SetupID)
+	_, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
-		f.t.Fatalf("SetupArrangement: %v", err)
+		f.t.Fatalf("ProfileArrangement: %v", err)
 	}
 	return s, view, desktops
 }
@@ -141,7 +141,7 @@ func pane(id string) layouttree.Node {
 	return layouttree.DefaultLayout(id)
 }
 
-func slotsOf(desktops []setups.Desktop) []int {
+func slotsOf(desktops []profiles.Desktop) []int {
 	var slots []int
 	for _, desktop := range desktops {
 		slots = append(slots, desktop.ShortcutSlot)
@@ -149,7 +149,7 @@ func slotsOf(desktops []setups.Desktop) []int {
 	return slots
 }
 
-func placements(desktops []setups.Desktop) map[string]string {
+func placements(desktops []profiles.Desktop) map[string]string {
 	placed := make(map[string]string)
 	for _, desktop := range desktops {
 		for _, pane := range desktop.Panes {
@@ -223,14 +223,14 @@ func TestConversionOfARealInstallKeepsEveryLiveAgentWhereItWas(t *testing.T) {
 	}
 	s, view, desktops := f.mustConvert()
 
-	if view.State.Phase != setupmigration.PhasePlacementRequired || view.State.SchemaVersion != SetupConversionSchemaVersion {
-		t.Fatalf("migration state = %+v, want placement_required from conversion %d", view.State, SetupConversionSchemaVersion)
+	if view.State.Phase != profilemigration.PhasePlacementRequired || view.State.SchemaVersion != ProfileConversionSchemaVersion {
+		t.Fatalf("migration state = %+v, want placement_required from conversion %d", view.State, ProfileConversionSchemaVersion)
 	}
 	if len(view.Manifest.Groups) != 5 || len(view.Manifest.DroppedWorkspaces) != 15 {
 		t.Fatalf("groups=%d dropped=%d, want the 5 workspaces with live agents and 15 document-only ones", len(view.Manifest.Groups), len(view.Manifest.DroppedWorkspaces))
 	}
 	for _, dropped := range view.Manifest.DroppedWorkspaces {
-		if dropped.Reason != setupmigration.DropReasonDocumentOnly {
+		if dropped.Reason != profilemigration.DropReasonDocumentOnly {
 			t.Fatalf("dropped %+v, want only document-only cleanup", dropped)
 		}
 	}
@@ -259,25 +259,25 @@ func TestConversionOfARealInstallKeepsEveryLiveAgentWhereItWas(t *testing.T) {
 	if placed := placements(desktops); len(placed) != open {
 		t.Fatalf("%d agents placed, want every one of the %d open sessions", len(placed), open)
 	}
-	setup, err := s.GetSetup(view.Manifest.SetupID)
-	if err != nil || setup.Name != DefaultSetupName || setup.CurrentDesktopID != desktops[0].ID {
-		t.Fatalf("setup = %+v, %v; want Default on the highest-ranked desktop", setup, err)
+	profile, err := s.GetProfile(view.Manifest.ProfileID)
+	if err != nil || profile.Name != DefaultProfileName || profile.CurrentDesktopID != desktops[0].ID {
+		t.Fatalf("profile = %+v, %v; want Default on the highest-ranked desktop", profile, err)
 	}
 	var unstamped int
-	if err := s.db.QueryRow(`SELECT count(*) FROM sessions WHERE setup_id != ?`, setup.ID).Scan(&unstamped); err != nil || unstamped != 0 {
-		t.Fatalf("%d sessions (closed ones included) lack the Default setup (%v)", unstamped, err)
+	if err := s.db.QueryRow(`SELECT count(*) FROM sessions WHERE profile_id != ?`, profile.ID).Scan(&unstamped); err != nil || unstamped != 0 {
+		t.Fatalf("%d sessions (closed ones included) lack the Default profile (%v)", unstamped, err)
 	}
 }
 
 func TestConversionOfAFreshInstallCompletesWithOneEmptyDesktop(t *testing.T) {
-	s, _ := openSetupStore(t)
-	view, err := s.SetupMigration()
-	if err != nil || view.State.Phase != setupmigration.PhaseComplete || len(view.Manifest.Groups) != 0 {
+	s, _ := openProfileStore(t)
+	view, err := s.ProfileMigration()
+	if err != nil || view.State.Phase != profilemigration.PhaseComplete || len(view.Manifest.Groups) != 0 {
 		t.Fatalf("fresh migration = %+v, %v; want complete with nothing imported", view.State, err)
 	}
-	setup, desktops, err := s.SetupArrangement(view.Manifest.SetupID)
-	if err != nil || setup.Name != DefaultSetupName || len(desktops) != 1 || desktops[0].ShortcutSlot != 1 || !layouttree.LayoutEmpty(desktops[0].Tree) {
-		t.Fatalf("fresh arrangement = %+v %+v, %v; want Default with one empty desktop in slot 1", setup, desktops, err)
+	profile, desktops, err := s.ProfileArrangement(view.Manifest.ProfileID)
+	if err != nil || profile.Name != DefaultProfileName || len(desktops) != 1 || desktops[0].ShortcutSlot != 1 || !layouttree.LayoutEmpty(desktops[0].Tree) {
+		t.Fatalf("fresh arrangement = %+v %+v, %v; want Default with one empty desktop in slot 1", profile, desktops, err)
 	}
 }
 
@@ -334,18 +334,18 @@ func TestConversionPreservesMixedTreesRatiosAndPendingAgents(t *testing.T) {
 	if desktop.ActivePaneID != "pane-live" {
 		t.Fatalf("active pane = %q, want the first live pane after the closed one left", desktop.ActivePaneID)
 	}
-	statuses := map[string]setups.PaneStatus{}
+	statuses := map[string]profiles.PaneStatus{}
 	for _, p := range desktop.Panes {
 		statuses[p.SessionID] = p.Status
 	}
-	if !reflect.DeepEqual(statuses, map[string]setups.PaneStatus{"live": setups.PaneStatusReady, "pending": setups.PaneStatusSpawning}) {
+	if !reflect.DeepEqual(statuses, map[string]profiles.PaneStatus{"live": profiles.PaneStatusReady, "pending": profiles.PaneStatusSpawning}) {
 		t.Fatalf("panes = %+v, want the live and the pending agent", desktop.Panes)
 	}
 	reasons := map[string]string{}
 	for _, dropped := range view.Manifest.DroppedPanes {
 		reasons[dropped.PaneID] = dropped.Reason
 	}
-	if !reflect.DeepEqual(reasons, map[string]string{"pane-closed": setupmigration.DropReasonSessionClosed, "pane-ghost": setupmigration.DropReasonNoPaneRow}) {
+	if !reflect.DeepEqual(reasons, map[string]string{"pane-closed": profilemigration.DropReasonSessionClosed, "pane-ghost": profilemigration.DropReasonNoPaneRow}) {
 		t.Fatalf("dropped panes = %+v", view.Manifest.DroppedPanes)
 	}
 }
@@ -382,7 +382,7 @@ func TestConversionKeepsTheNewestOfDuplicatePlacementsAndRenamesCollidingPanes(t
 	if placed["twice"] != desktops[1].ID {
 		t.Fatalf("the agent placed twice landed on %s, want the newer placement on %s", placed["twice"], desktops[1].ID)
 	}
-	if !reflect.DeepEqual(view.Manifest.DroppedPlacements, []setupmigration.DroppedPlacement{{
+	if !reflect.DeepEqual(view.Manifest.DroppedPlacements, []profilemigration.DroppedPlacement{{
 		SessionID: "twice", WorkspaceID: "older", PaneID: "pane-a", KeptWorkspaceID: "newer", KeptPaneID: "pane-b",
 	}}) {
 		t.Fatalf("dropped placements = %+v", view.Manifest.DroppedPlacements)
@@ -406,9 +406,9 @@ func TestConversionStampsLaunchesRunsAndDefinitionsWithDefault(t *testing.T) {
 	f.exec(`INSERT INTO automation_definitions (id, name, enabled, revision, spec_json, created_at, updated_at) VALUES ('auto', 'nightly', 1, 1, '{}', 'now', 'now')`)
 	s, view, _ := f.mustConvert()
 	for _, table := range []string{"delegation_operations", "automation_definitions"} {
-		var setupID string
-		if err := s.db.QueryRow(`SELECT setup_id FROM ` + table).Scan(&setupID); err != nil || setupID != view.Manifest.SetupID {
-			t.Fatalf("%s setup_id = %q (%v), want Default %s", table, setupID, err, view.Manifest.SetupID)
+		var profileID string
+		if err := s.db.QueryRow(`SELECT profile_id FROM ` + table).Scan(&profileID); err != nil || profileID != view.Manifest.ProfileID {
+			t.Fatalf("%s profile_id = %q (%v), want Default %s", table, profileID, err, view.Manifest.ProfileID)
 		}
 	}
 }
@@ -439,9 +439,9 @@ func TestAFailedConversionLeavesTheDatabaseAsItWas(t *testing.T) {
 	if err != nil || version != 149 {
 		t.Fatalf("schema version after the failure = %d (%v), want 149 unchanged", version, err)
 	}
-	var setupRows int
-	if err := db.QueryRow(`SELECT count(*) FROM setups`).Scan(&setupRows); err != nil || setupRows != 0 {
-		t.Fatalf("%d setups after the failure (%v), want none", setupRows, err)
+	var profileRows int
+	if err := db.QueryRow(`SELECT count(*) FROM profiles`).Scan(&profileRows); err != nil || profileRows != 0 {
+		t.Fatalf("%d profiles after the failure (%v), want none", profileRows, err)
 	}
 
 	if _, err := db.Exec(`DELETE FROM workspace_layouts WHERE workspace_id = 'broken'`); err != nil {
@@ -470,11 +470,11 @@ func TestReopeningAConvertedDatabaseChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer reopened.Close()
-	again, err := reopened.SetupMigration()
+	again, err := reopened.ProfileMigration()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, desktopsAgain, err := reopened.SetupArrangement(view.Manifest.SetupID)
+	_, desktopsAgain, err := reopened.ProfileArrangement(view.Manifest.ProfileID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -485,7 +485,7 @@ func TestReopeningAConvertedDatabaseChangesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	var migrationRuns int
-	if err := reopened.db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version = ?`, SetupConversionSchemaVersion).Scan(&migrationRuns); err != nil || migrationRuns != 1 {
+	if err := reopened.db.QueryRow(`SELECT count(*) FROM schema_migrations WHERE version = ?`, ProfileConversionSchemaVersion).Scan(&migrationRuns); err != nil || migrationRuns != 1 {
 		t.Fatalf("the conversion migration recorded %d times (%v)", migrationRuns, err)
 	}
 }
@@ -497,8 +497,8 @@ func TestOpenCurrentRefusesAnOlderSchemaWithoutUpgradingIt(t *testing.T) {
 	}
 	_, err := OpenCurrent(f.path)
 	var behind *SchemaBehindError
-	if !errors.As(err, &behind) || behind.Current != SetupConversionSchemaVersion-1 || behind.Required != LatestSchemaVersion() {
-		t.Fatalf("OpenCurrent = %v, want a refusal naming v%d and v%d", err, SetupConversionSchemaVersion-1, LatestSchemaVersion())
+	if !errors.As(err, &behind) || behind.Current != ProfileConversionSchemaVersion-1 || behind.Required != LatestSchemaVersion() {
+		t.Fatalf("OpenCurrent = %v, want a refusal naming v%d and v%d", err, ProfileConversionSchemaVersion-1, LatestSchemaVersion())
 	}
 	if !strings.Contains(err.Error(), "attn daemon ensure") {
 		t.Fatalf("refusal %q does not say how to upgrade", err)
@@ -508,8 +508,8 @@ func TestOpenCurrentRefusesAnOlderSchemaWithoutUpgradingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if version, err := getCurrentVersion(db); err != nil || version != SetupConversionSchemaVersion-1 {
-		t.Fatalf("schema version = %d (%v), want v%d untouched", version, err, SetupConversionSchemaVersion-1)
+	if version, err := getCurrentVersion(db); err != nil || version != ProfileConversionSchemaVersion-1 {
+		t.Fatalf("schema version = %d (%v), want v%d untouched", version, err, ProfileConversionSchemaVersion-1)
 	}
 	if entries, _ := os.ReadDir(BackupDirForDatabase(f.path)); len(entries) != 0 {
 		t.Fatalf("OpenCurrent wrote backups %v", entries)

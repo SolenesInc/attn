@@ -25,7 +25,7 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 	clientID := strings.TrimSpace(protocol.Deref(msg.ClientID))
 	client.setClientID(clientID)
 	client.updateReadLimit()
-	d.scopeClientToSetup(client, protocol.Deref(msg.SetupID))
+	d.scopeClientToProfile(client, protocol.Deref(msg.ProfileID))
 	d.logf(
 		"client hello: kind=%q version=%q client_id=%q capabilities=%v",
 		msg.ClientKind,

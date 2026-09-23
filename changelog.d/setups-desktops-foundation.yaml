@@ -1,3 +1,0 @@
-kind: internal
-area: workspaces
-change: The daemon stores setups, desktops and panes and speaks their commands; no client uses them yet.

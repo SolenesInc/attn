@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "320"
+const ProtocolVersion = "321"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -294,10 +294,10 @@ const (
 )
 
 const (
-	CmdSetupCreate            = "setup_create"
-	CmdSetupRename            = "setup_rename"
-	CmdSetupDelete            = "setup_delete"
-	CmdSetupSelect            = "setup_select"
+	CmdProfileCreate          = "profile_create"
+	CmdProfileRename          = "profile_rename"
+	CmdProfileDelete          = "profile_delete"
+	CmdProfileSelect          = "profile_select"
 	CmdDesktopCreate          = "desktop_create"
 	CmdDesktopRename          = "desktop_rename"
 	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
@@ -321,11 +321,11 @@ const (
 )
 
 const (
-	EventSetupActionResult       = "setup_action_result"
-	EventSetupsChanged           = "setups_changed"
-	EventSetupArrangementChanged = "setup_arrangement_changed"
-	EventMigrationResult         = "migration_result"
-	EventMigrationChanged        = "migration_changed"
+	EventProfileActionResult       = "profile_action_result"
+	EventProfilesChanged           = "profiles_changed"
+	EventProfileArrangementChanged = "profile_arrangement_changed"
+	EventMigrationResult           = "migration_result"
+	EventMigrationChanged          = "migration_changed"
 )
 
 const (
