@@ -72,7 +72,37 @@ int main(int argc, char **argv) {
            usage.ri_phys_footprint, usage.ri_resident_size, cpu_ns, usage.ri_instructions, task.pti_threadnum);
     return 0;
 #else
-    fputs("physical footprint sampling requires macOS\n", stderr);
-    return 2;
+    int pid = atoi(argv[1]);
+    if (pid <= 0) return 1;
+    char path[64], line[256];
+    uint64_t physical_kb = 0, resident_kb = 0;
+    int threads = 0;
+    snprintf(path, sizeof(path), "/proc/%d/smaps_rollup", pid);
+    FILE *rollup = fopen(path, "r");
+    if (!rollup) {
+        perror("smaps_rollup");
+        return 1;
+    }
+    while (fgets(line, sizeof(line), rollup)) {
+        sscanf(line, "Pss: %" SCNu64, &physical_kb);
+        sscanf(line, "Rss: %" SCNu64, &resident_kb);
+    }
+    fclose(rollup);
+    snprintf(path, sizeof(path), "/proc/%d/status", pid);
+    FILE *status = fopen(path, "r");
+    if (!status) return 1;
+    while (fgets(line, sizeof(line), status)) sscanf(line, "Threads: %d", &threads);
+    fclose(status);
+    snprintf(path, sizeof(path), "/proc/%d/stat", pid);
+    FILE *stat = fopen(path, "r");
+    if (!stat || !fgets(line, sizeof(line), stat)) return 1;
+    fclose(stat);
+    char *fields = strrchr(line, ')');
+    unsigned long long user_ticks = 0, system_ticks = 0;
+    if (!fields || sscanf(fields + 2, "%*c %*d %*d %*d %*d %*d %*u %*u %*u %*u %*u %llu %llu", &user_ticks, &system_ticks) != 2) return 1;
+    uint64_t cpu_ns = (uint64_t)(user_ticks + system_ticks) * 1000000000ULL / (uint64_t)sysconf(_SC_CLK_TCK);
+    printf("{\"physical_bytes\":%" PRIu64 ",\"resident_bytes\":%" PRIu64 ",\"cpu_ns\":%" PRIu64 ",\"instructions\":0,\"threads\":%d}\n",
+           physical_kb * 1024, resident_kb * 1024, cpu_ns, threads);
+    return 0;
 #endif
 }

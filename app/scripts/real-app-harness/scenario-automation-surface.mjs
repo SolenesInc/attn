@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
@@ -89,7 +89,7 @@ async function waitForDaemonReady(binary, daemonEnv) {
     } catch {
       return null;
     }
-  }, 'profile daemon', RESTART_READY_TIMEOUT_MS);
+  }, 'instance daemon', RESTART_READY_TIMEOUT_MS);
 }
 
 function createFixture(root) {
@@ -192,16 +192,16 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-automation-surface.mjs');
     return;
   }
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('automation surface scenario requires a named non-production profile');
-  const resources = resolveHarnessResources(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('automation surface scenario requires a named non-production instance');
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SURFACE',
     allowRealAgents: false,
     tier: 'tier2-local-fake-agent',
     prefix: 'automation-surface',
-    metadata: { profile, panel: 'profile-level Automations dock panel' },
+    metadata: { instance, panel: 'instance-level Automations dock panel' },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -224,7 +224,7 @@ async function main() {
   let manualSeedSettled = false;
 
   try {
-    daemonEnv = profileEnv(profile);
+    daemonEnv = instanceEnv(instance);
     fixturePath = createFixture(runner.sessionDir);
     probe = createCodexProbe(runner.sessionDir);
 
@@ -359,7 +359,7 @@ async function main() {
         manualSeed,
       });
       manualSeedID = manualSeed.id;
-      await closeProbeSession(client, observer, dataDirForProfile(profile), manualSessionID, fixturePath);
+      await closeProbeSession(client, observer, dataDirForInstance(instance), manualSessionID, fixturePath);
       manualSessionID = '';
       run(binary, ['seed', 'wither', manualSeedID, '-m', 'Automation surface harness fixture complete'], daemonEnv);
       manualSeedSettled = true;
@@ -381,10 +381,10 @@ async function main() {
       );
     });
 
-    await runner.finishSuccess({ profile, manualID, scheduledID, firstRunId, fixturePath });
+    await runner.finishSuccess({ instance, manualID, scheduledID, firstRunId, fixturePath });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    await runner.finishFailure(error, { profile, manualID, scheduledID, firstRunId, fixturePath });
+    await runner.finishFailure(error, { instance, manualID, scheduledID, firstRunId, fixturePath });
     throw error;
   } finally {
     if (daemonEnv) {
@@ -418,7 +418,7 @@ async function main() {
       await closeProbeSession(
         client,
         observer,
-        dataDirForProfile(profile),
+        dataDirForInstance(instance),
         sessionID,
         fixturePath,
       ).catch(() => {});
@@ -438,7 +438,7 @@ async function main() {
     }
     await client.quitApp().catch(() => {});
     await observer.close().catch(() => {});
-    try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
+    try { run(binary, ['daemon', 'ensure'], instanceEnv(instance)); } catch {}
     await runner.close();
   }
 }

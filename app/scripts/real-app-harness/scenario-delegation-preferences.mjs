@@ -6,14 +6,14 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint } from './perfMeasure.mjs';
 import { MOCK_AGENT_MODEL } from './mockAgent.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
-const profile = currentHarnessProfile();
-if (!profile) throw new Error('Delegation preferences verification requires a named profile');
+const instance = currentHarnessInstance();
+if (!instance) throw new Error('Delegation preferences verification requires a named instance');
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationPreferences', tier: 'local', prefix: 'delegation-preferences', allowRealAgents: false });
 process.env.ATTN_HARNESS_SKILL_SYNC = '1';
 process.env.ATTN_TOOL_HOME = path.join(runner.runDir, 'tool-home');
@@ -22,7 +22,7 @@ const observer = new DaemonObserver(options);
 const root = '[data-testid="delegation-settings"]';
 const toggle = '.settings-content-head [role="switch"][aria-label="Delegation preferences"]';
 const popover = 'dialog[aria-label="Choose a model"]';
-const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) }) });
+const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPathForInstance(instance) }) });
 const roles = () => JSON.parse(runAttn(['delegate', 'roles', '--json']));
 const click = selector => client.request('dom_click', { selector });
 const type = (selector, text) => client.request('dom_type', { selector, text });
@@ -97,11 +97,11 @@ try {
     runner.assert(roles().roles.length === 0, 'roles lookup is empty before opt-in');
     await screenshot('01-disabled.png'); await hold();
   });
-  await runner.step('profile_rejects_install_then_configure_custom_builder', async () => {
+  await runner.step('instance_rejects_install_then_configure_custom_builder', async () => {
     await click(toggle);
     await until(async () => (await preferences()).enabled, 'delegation preferences enabled');
     await click(`${root} .delegation-empty .settings-action.primary`);
-    await until(async () => (await text()).includes('installation is disabled for profile'), 'profile-safe workflow install refusal');
+    await until(async () => (await text()).includes('installation is disabled for instance'), 'instance-safe workflow install refusal');
     runner.assert((await preferences()).roles.length === 0, 'failed workflow installation leaves saved roles unchanged');
     await click(`${root} .delegation-empty .settings-action:not(.primary)`);
     await until(() => exists('input[id^="name-role-"]'), 'new custom role opens its editor');
@@ -202,7 +202,7 @@ try {
     source = undefined;
     await delay(3000);
     const appPid = client.readManifest().pid;
-    const daemonPid = readLiveDaemonPid(profile);
+    const daemonPid = readLiveDaemonPid(instance);
     const before = await snapshot(appPid, daemonPid, webkitBaseline);
     const pids = new Set(Object.values(before.byClass).flatMap(value => value.pids.map(value => value.pid)));
     const samples = [];

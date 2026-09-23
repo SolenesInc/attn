@@ -1,0 +1,574 @@
+{
+ "workspaces": [
+  {
+   "id": "workspace-u-1",
+   "title": "workspace 1",
+   "directory": "/fixture/project-1",
+   "rank": "zx",
+   "created_at": "2026-07-24T22:19:14.108053000Z"
+  },
+  {
+   "id": "u-2",
+   "title": "workspace 2",
+   "directory": "/fixture/project-2",
+   "rank": "zzzzzzzz",
+   "created_at": "2026-08-09T21:50:48.285523000Z"
+  },
+  {
+   "id": "workspace-u-3",
+   "title": "workspace 3",
+   "directory": "/fixture/project-3",
+   "rank": "zzzzzzzzr",
+   "created_at": "2026-08-10T22:10:55.294875000Z"
+  },
+  {
+   "id": "workspace-crew-keel",
+   "title": "workspace 4",
+   "directory": "/fixture/project-4",
+   "rank": "zzzzzzzzv",
+   "created_at": "2026-08-17T14:48:42.099518000Z"
+  },
+  {
+   "id": "workspace-u-4",
+   "title": "workspace 5",
+   "directory": "/fixture/project-5",
+   "rank": "zzzzzzzzzzzzzzzzy",
+   "created_at": "2026-08-21T10:58:45.041719000Z"
+  },
+  {
+   "id": "workspace-u-5",
+   "title": "workspace 6",
+   "directory": "/fixture/project-6",
+   "rank": "zzzzzzzzzzzzzzzzzv",
+   "created_at": "2026-08-21T23:58:05.901412000Z"
+  },
+  {
+   "id": "workspace-u-6",
+   "title": "workspace 7",
+   "directory": "/fixture/project-7",
+   "rank": "zzzzzzzzzzzzzzzzzzi",
+   "created_at": "2026-08-22T21:36:25.485696000Z"
+  },
+  {
+   "id": "workspace-u-7",
+   "title": "workspace 8",
+   "directory": "/fixture/project-8",
+   "rank": "zzzzzzzzzzzzzzzzzzv",
+   "created_at": "2026-08-23T00:59:58.345854000Z"
+  },
+  {
+   "id": "workspace-u-8",
+   "title": "workspace 9",
+   "directory": "/fixture/project-9",
+   "rank": "zzzzzzzzzzzzzzzzzzzz",
+   "created_at": "2026-08-29T19:24:33.925631000Z"
+  },
+  {
+   "id": "workspace-u-9",
+   "title": "workspace 10",
+   "directory": "/fixture/project-10",
+   "rank": "zzzzzzzzzzzzzzzzzzzzv",
+   "created_at": "2026-08-29T21:13:56.513841000Z"
+  },
+  {
+   "id": "workspace-u-10",
+   "title": "workspace 11",
+   "directory": "/fixture/project-11",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzy",
+   "created_at": "2026-09-01T22:11:54.913287000Z"
+  },
+  {
+   "id": "workspace-u-11",
+   "title": "workspace 12",
+   "directory": "/fixture/project-12",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzr",
+   "created_at": "2026-09-05T18:50:22.008238000Z"
+  },
+  {
+   "id": "workspace-u-12",
+   "title": "workspace 13",
+   "directory": "/fixture/project-13",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzr",
+   "created_at": "2026-09-06T10:18:23.072949000Z"
+  },
+  {
+   "id": "workspace-u-13",
+   "title": "workspace 14",
+   "directory": "/fixture/project-14",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzi",
+   "created_at": "2026-09-06T22:33:06.037168000Z"
+  },
+  {
+   "id": "workspace-u-14",
+   "title": "workspace 15",
+   "directory": "/fixture/project-15",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzi",
+   "created_at": "2026-09-11T19:11:52.405313000Z"
+  },
+  {
+   "id": "workspace-u-15",
+   "title": "workspace 16",
+   "directory": "/fixture/project-16",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzx",
+   "created_at": "2026-09-11T21:28:02.776791000Z"
+  },
+  {
+   "id": "workspace-u-16",
+   "title": "workspace 17",
+   "directory": "/fixture/project-17",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzr",
+   "created_at": "2026-09-13T19:04:43.587331000Z"
+  },
+  {
+   "id": "workspace-u-17",
+   "title": "workspace 18",
+   "directory": "/fixture/project-18",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzr",
+   "created_at": "2026-09-17T19:44:57.808736000Z"
+  },
+  {
+   "id": "u-18",
+   "title": "workspace 19",
+   "directory": "/fixture/project-19",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+   "created_at": "2026-09-20T14:53:38.480856000Z"
+  },
+  {
+   "id": "workspace-u-19",
+   "title": "workspace 20",
+   "directory": "/fixture/project-20",
+   "rank": "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzi",
+   "created_at": "2026-09-21T09:05:55.286830000Z"
+  }
+ ],
+ "layouts": [
+  {
+   "workspace_id": "workspace-u-1",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-1\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-1\"}"
+  },
+  {
+   "workspace_id": "u-2",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-2\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-20\"}"
+  },
+  {
+   "workspace_id": "workspace-u-3",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-3\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-3\"}"
+  },
+  {
+   "workspace_id": "workspace-crew-keel",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-4\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-21\"}"
+  },
+  {
+   "workspace_id": "workspace-u-4",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-5\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-4\"}"
+  },
+  {
+   "workspace_id": "workspace-u-5",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"split\",\"split_id\":\"split-u-22\",\"direction\":\"vertical\",\"ratio\":0.6799999999999999,\"ratio_locked\":true,\"children\":[{\"type\":\"tile\",\"tile_id\":\"tile-6\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-5\"},{\"type\":\"tile\",\"tile_id\":\"tile-7\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-5\"}]}"
+  },
+  {
+   "workspace_id": "workspace-u-6",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-8\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-6\"}"
+  },
+  {
+   "workspace_id": "workspace-u-7",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-9\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-7\"}"
+  },
+  {
+   "workspace_id": "workspace-u-8",
+   "active_pane_id": "pane-u-8",
+   "layout_json": "{\"type\":\"split\",\"split_id\":\"split-u-23\",\"direction\":\"vertical\",\"ratio\":0.6758715986394558,\"ratio_locked\":true,\"ratio_mode\":\"preferred\",\"children\":[{\"type\":\"pane\",\"pane_id\":\"pane-u-8\"},{\"type\":\"tile\",\"tile_id\":\"tile-10\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-8\"}]}"
+  },
+  {
+   "workspace_id": "workspace-u-9",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-11\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-9\"}"
+  },
+  {
+   "workspace_id": "workspace-u-10",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-12\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-24\"}"
+  },
+  {
+   "workspace_id": "workspace-u-11",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-13\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-11\"}"
+  },
+  {
+   "workspace_id": "workspace-u-12",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-14\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-12\"}"
+  },
+  {
+   "workspace_id": "workspace-u-13",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-15\",\"tile_kind\":\"seed\",\"tile_params\":\"s-fixture\",\"tile_session_id\":\"u-25\"}"
+  },
+  {
+   "workspace_id": "workspace-u-14",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-16\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-14\"}"
+  },
+  {
+   "workspace_id": "workspace-u-15",
+   "active_pane_id": "",
+   "layout_json": "{\"type\":\"tile\",\"tile_id\":\"tile-17\",\"tile_kind\":\"markdown\",\"tile_params\":\"/fixture/doc.md\",\"tile_session_id\":\"u-15\"}"
+  },
+  {
+   "workspace_id": "workspace-u-16",
+   "active_pane_id": "pane-u-26",
+   "layout_json": "{\"type\":\"split\",\"split_id\":\"split-u-27\",\"direction\":\"vertical\",\"ratio\":0.5,\"ratio_mode\":\"automatic\",\"children\":[{\"type\":\"pane\",\"pane_id\":\"pane-u-28\"},{\"type\":\"pane\",\"pane_id\":\"pane-u-26\"}]}"
+  },
+  {
+   "workspace_id": "workspace-u-17",
+   "active_pane_id": "pane-u-17",
+   "layout_json": "{\"type\":\"pane\",\"pane_id\":\"pane-u-17\"}"
+  },
+  {
+   "workspace_id": "u-18",
+   "active_pane_id": "pane-u-29",
+   "layout_json": "{\"type\":\"pane\",\"pane_id\":\"pane-u-29\"}"
+  },
+  {
+   "workspace_id": "workspace-u-19",
+   "active_pane_id": "pane-u-19",
+   "layout_json": "{\"type\":\"pane\",\"pane_id\":\"pane-u-19\"}"
+  }
+ ],
+ "panes": [
+  {
+   "workspace_id": "workspace-u-8",
+   "pane_id": "pane-u-8",
+   "runtime_id": "u-8",
+   "session_id": "u-8",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-08-29T19:24:33.941172000Z",
+   "updated_at": "2026-09-13T18:20:39.046460000Z"
+  },
+  {
+   "workspace_id": "workspace-u-17",
+   "pane_id": "pane-u-17",
+   "runtime_id": "u-17",
+   "session_id": "u-17",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-09-17T19:44:57.897400000Z",
+   "updated_at": "2026-09-20T14:53:38.562902000Z"
+  },
+  {
+   "workspace_id": "u-18",
+   "pane_id": "pane-u-29",
+   "runtime_id": "u-29",
+   "session_id": "u-29",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-09-20T21:20:49.778106000Z",
+   "updated_at": "2026-09-20T21:46:18.609234000Z"
+  },
+  {
+   "workspace_id": "workspace-u-19",
+   "pane_id": "pane-u-19",
+   "runtime_id": "u-19",
+   "session_id": "u-19",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-09-21T09:05:55.313504000Z",
+   "updated_at": "2026-09-21T09:05:55.589823000Z"
+  },
+  {
+   "workspace_id": "workspace-u-16",
+   "pane_id": "pane-u-28",
+   "runtime_id": "u-28",
+   "session_id": "u-28",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-09-16T21:16:59.306749000Z",
+   "updated_at": "2026-09-23T09:24:39.601793000Z"
+  },
+  {
+   "workspace_id": "workspace-u-16",
+   "pane_id": "pane-u-26",
+   "runtime_id": "u-26",
+   "session_id": "u-26",
+   "kind": "agent",
+   "title": "Agent",
+   "status": "ready",
+   "error": "",
+   "created_at": "2026-09-23T09:24:39.236439000Z",
+   "updated_at": "2026-09-23T09:24:39.601793000Z"
+  }
+ ],
+ "sessions": [
+  {
+   "id": "u-11",
+   "label": "agent 37",
+   "workspace_id": "workspace-u-11",
+   "closed_at": "2026-09-06T10:13:43.193362Z"
+  },
+  {
+   "id": "u-12",
+   "label": "agent 38",
+   "workspace_id": "workspace-u-12",
+   "closed_at": "2026-09-06T15:35:55.587122Z"
+  },
+  {
+   "id": "u-13",
+   "label": "agent 12",
+   "workspace_id": "workspace-u-13",
+   "closed_at": "2026-09-08T12:16:29.83131Z"
+  },
+  {
+   "id": "u-14",
+   "label": "agent 36",
+   "workspace_id": "workspace-u-14",
+   "closed_at": "2026-09-11T19:42:43.624611Z"
+  },
+  {
+   "id": "u-15",
+   "label": "agent 35",
+   "workspace_id": "workspace-u-15",
+   "closed_at": "2026-09-11T22:40:59.471171Z"
+  },
+  {
+   "id": "u-16",
+   "label": "agent 21",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-16T21:19:57.617683Z"
+  },
+  {
+   "id": "u-17",
+   "label": "agent 14",
+   "workspace_id": "workspace-u-17",
+   "closed_at": ""
+  },
+  {
+   "id": "u-19",
+   "label": "agent 42",
+   "workspace_id": "workspace-u-19",
+   "closed_at": ""
+  },
+  {
+   "id": "u-25",
+   "label": "agent 13",
+   "workspace_id": "workspace-u-13",
+   "closed_at": "2026-09-10T20:00:56.893574Z"
+  },
+  {
+   "id": "u-26",
+   "label": "agent 34",
+   "workspace_id": "workspace-u-16",
+   "closed_at": ""
+  },
+  {
+   "id": "u-28",
+   "label": "agent 23",
+   "workspace_id": "workspace-u-16",
+   "closed_at": ""
+  },
+  {
+   "id": "u-29",
+   "label": "agent 10",
+   "workspace_id": "u-18",
+   "closed_at": ""
+  },
+  {
+   "id": "u-30",
+   "label": "agent 1",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T21:39:33.955184Z"
+  },
+  {
+   "id": "u-31",
+   "label": "agent 2",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:12:39.937105Z"
+  },
+  {
+   "id": "u-32",
+   "label": "agent 3",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:03:58.192665Z"
+  },
+  {
+   "id": "u-33",
+   "label": "agent 4",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:01:37.848721Z"
+  },
+  {
+   "id": "u-34",
+   "label": "agent 5",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:10:48.670148Z"
+  },
+  {
+   "id": "u-35",
+   "label": "agent 6",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:22:34.237301Z"
+  },
+  {
+   "id": "u-36",
+   "label": "agent 7",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:40:38.152437Z"
+  },
+  {
+   "id": "u-37",
+   "label": "agent 8",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T20:39:37.79558Z"
+  },
+  {
+   "id": "u-38",
+   "label": "agent 9",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T21:39:43.109538Z"
+  },
+  {
+   "id": "u-39",
+   "label": "agent 11",
+   "workspace_id": "u-18",
+   "closed_at": "2026-09-20T21:46:18.660638Z"
+  },
+  {
+   "id": "u-40",
+   "label": "agent 15",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-17T20:16:58.148043Z"
+  },
+  {
+   "id": "u-41",
+   "label": "agent 16",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-19T23:52:14.7451Z"
+  },
+  {
+   "id": "u-42",
+   "label": "agent 17",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-19T22:39:35.928307Z"
+  },
+  {
+   "id": "u-43",
+   "label": "agent 18",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-20T14:32:59.334744Z"
+  },
+  {
+   "id": "u-44",
+   "label": "agent 19",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-19T23:51:31.090066Z"
+  },
+  {
+   "id": "u-45",
+   "label": "agent 20",
+   "workspace_id": "workspace-u-17",
+   "closed_at": "2026-09-20T10:17:38.5837Z"
+  },
+  {
+   "id": "u-46",
+   "label": "agent 22",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-15T19:33:59.995002Z"
+  },
+  {
+   "id": "u-47",
+   "label": "agent 24",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-17T20:52:09.559749Z"
+  },
+  {
+   "id": "u-48",
+   "label": "agent 25",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-17T20:56:05.478829Z"
+  },
+  {
+   "id": "u-49",
+   "label": "agent 26",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-18T19:25:35.465887Z"
+  },
+  {
+   "id": "u-50",
+   "label": "agent 27",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-18T19:19:13.933927Z"
+  },
+  {
+   "id": "u-51",
+   "label": "agent 28",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-18T19:21:55.507443Z"
+  },
+  {
+   "id": "u-52",
+   "label": "agent 29",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-18T19:32:12.680788Z"
+  },
+  {
+   "id": "u-53",
+   "label": "agent 30",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-19T12:32:02.064833Z"
+  },
+  {
+   "id": "u-54",
+   "label": "agent 31",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-18T19:39:01.465781Z"
+  },
+  {
+   "id": "u-55",
+   "label": "agent 32",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-23T09:13:26.646008Z"
+  },
+  {
+   "id": "u-56",
+   "label": "agent 33",
+   "workspace_id": "workspace-u-16",
+   "closed_at": "2026-09-23T09:13:28.175139Z"
+  },
+  {
+   "id": "u-57",
+   "label": "agent 40",
+   "workspace_id": "workspace-u-8",
+   "closed_at": "2026-09-13T10:16:57.750884Z"
+  },
+  {
+   "id": "u-58",
+   "label": "agent 41",
+   "workspace_id": "workspace-u-8",
+   "closed_at": "2026-09-13T18:20:39.048591Z"
+  },
+  {
+   "id": "u-8",
+   "label": "agent 39",
+   "workspace_id": "workspace-u-8",
+   "closed_at": ""
+  }
+ ]
+}

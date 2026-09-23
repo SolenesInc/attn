@@ -11,7 +11,7 @@ gh pr create --base next
 
 - Open PRs ready for review with a scoped conventional-commit title and a
   [changelog fragment](making-a-release.md#changelog-fragments).
-- Meet the [verification requirements](profiles.md#verification-requirements).
+- Meet the [verification requirements](instances.md#verification-requirements).
 - Squash-merge only with green checks, approval, and a mergeable exact head,
   and only with the user's permission.
 - The slopradar comment is information for the reviewer, never a gate.

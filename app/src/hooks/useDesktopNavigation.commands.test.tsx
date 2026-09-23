@@ -3,18 +3,18 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DaemonApiProvider } from '../contexts/DaemonApiContext';
 import { createMockDaemonApi } from '../test/mocks/daemon';
-import { useSetupsStore } from '../store/setups';
-import type { Desktop, Setup } from '../types/generated';
-import { SetupCommandError } from './daemonSetupEvents';
+import { useProfilesStore } from '../store/profiles';
+import type { Desktop, Profile } from '../types/generated';
+import { ProfileCommandError } from './daemonProfileEvents';
 import { FRESH_ARRANGEMENT_TRIPWIRE_MS, useDesktopNavigation } from './useDesktopNavigation';
 
-const SETUP: Setup = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
+const PROFILE: Profile = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
 const TREE_WITH_PANE = (paneId: string) => JSON.stringify({ type: 'pane', pane_id: paneId });
 
 function desktop(id: string, overrides: Partial<Desktop> = {}): Desktop {
   return {
     id,
-    setup_id: SETUP.id,
+    profile_id: PROFILE.id,
     name: '',
     order_key: id,
     tree_json: '',
@@ -26,16 +26,16 @@ function desktop(id: string, overrides: Partial<Desktop> = {}): Desktop {
 }
 
 function seedStore(desktops: Desktop[], previousDesktopId: string | null = null, currentDesktopId = 'd1') {
-  useSetupsStore.setState({
-    setups: [{ ...SETUP, current_desktop_id: currentDesktopId }],
-    selectedSetupId: SETUP.id,
+  useProfilesStore.setState({
+    profiles: [{ ...PROFILE, current_desktop_id: currentDesktopId }],
+    selectedProfileId: PROFILE.id,
     desktops,
     previousDesktopId,
     selection: null,
   });
 }
 
-const ok = { request_id: 'r', action: 'x', success: true, event: 'setup_action_result' };
+const ok = { request_id: 'r', action: 'x', success: true, event: 'profile_action_result' };
 
 function renderNavigation() {
   const api = {
@@ -45,7 +45,7 @@ function renderNavigation() {
     sendDesktopDelete: vi.fn().mockResolvedValue(ok),
     sendDesktopSetShortcutSlot: vi.fn().mockResolvedValue(ok),
     sendDesktopCreate: vi.fn().mockResolvedValue(ok),
-    sendSetupSelect: vi.fn().mockResolvedValue(ok),
+    sendProfileSelect: vi.fn().mockResolvedValue(ok),
   };
   const showNotice = vi.fn();
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -56,7 +56,7 @@ function renderNavigation() {
 }
 
 function staleRevision() {
-  return new SetupCommandError({
+  return new ProfileCommandError({
     ...ok,
     action: 'desktop_move_leaf',
     success: false,
@@ -73,7 +73,7 @@ async function settle() {
 
 describe('useDesktopNavigation', () => {
   beforeEach(() => {
-    useSetupsStore.setState({ setups: [], selectedSetupId: null, desktops: [], previousDesktopId: null, selection: null });
+    useProfilesStore.setState({ profiles: [], selectedProfileId: null, desktops: [], previousDesktopId: null, selection: null });
   });
 
   it('switches to the desktop on a slot', () => {
@@ -150,7 +150,7 @@ describe('useDesktopNavigation', () => {
     expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
 
     act(() => {
-      useSetupsStore.setState((state) => ({
+      useProfilesStore.setState((state) => ({
         desktops: state.desktops.map((entry) => (entry.id === 'd2' ? { ...entry, revision: 8 } : entry)),
       }));
     });

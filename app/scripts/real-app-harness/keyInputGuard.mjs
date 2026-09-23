@@ -2,10 +2,10 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import {
   appExecutableInAppTree,
-  defaultAppPathForProfile,
-  manifestPathForProfile,
-  profileForAppPath,
-} from './harnessProfile.mjs';
+  defaultAppPathForInstance,
+  manifestPathForInstance,
+  instanceForAppPath,
+} from './harnessInstance.mjs';
 
 export const ALWAYS_ON_TOP_VAR = 'ATTN_HARNESS_ALWAYS_ON_TOP';
 
@@ -76,13 +76,13 @@ export function formatKeyInputFailure({ action, pid, reason, fix }) {
   return `[key-input] ${action} cannot reach attn (app pid ${pid}): ${reason} ${fix}`;
 }
 
-// The manifest travels with the bundle id the profile baked in; the executable
+// The manifest travels with the bundle id the instance baked in; the executable
 // is a file inside whatever tree `--app-path` pointed the run at.
 export function createKeyInputGuard({
-  appPath = defaultAppPathForProfile(),
+  appPath = defaultAppPathForInstance(),
   platform = process.platform,
   appExecutable = appExecutableInAppTree(appPath, platform),
-  manifestPath = manifestPathForProfile(profileForAppPath(appPath)),
+  manifestPath = manifestPathForInstance(instanceForAppPath(appPath)),
   readCommand = readAppCommand,
   readAppPid = appPidFromManifest,
 } = {}) {

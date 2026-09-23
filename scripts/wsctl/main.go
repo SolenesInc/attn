@@ -66,7 +66,7 @@ func main() {
 func usage() {
 	fmt.Fprintf(os.Stderr, `wsctl — dev helper for driving the attn daemon over WebSocket.
 
-URL: %s (ATTN_WS_URL > ATTN_PROFILE-derived port > dev; prod needs an explicit ATTN_WS_URL)
+URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit ATTN_WS_URL)
 
 Commands:
   add-workspace --title T --dir D [--id I]
@@ -82,16 +82,16 @@ Commands:
 }
 
 func wsURL() string {
-	return resolveWSURL(os.Getenv("ATTN_WS_URL"), os.Getenv("ATTN_PROFILE"))
+	return resolveWSURL(os.Getenv("ATTN_WS_URL"), os.Getenv("ATTN_INSTANCE"))
 }
 
-func resolveWSURL(explicitURL, profile string) string {
+func resolveWSURL(explicitURL, instance string) string {
 	if u := strings.TrimSpace(explicitURL); u != "" {
 		return u
 	}
-	p := strings.ToLower(strings.TrimSpace(profile))
+	p := strings.ToLower(strings.TrimSpace(instance))
 	if p != "" && p != "default" {
-		return "ws://localhost:" + config.WSPortForProfile(p) + "/ws"
+		return "ws://localhost:" + config.WSPortForInstance(p) + "/ws"
 	}
 	return defaultWSURL
 }

@@ -12,13 +12,13 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-const profileRoleChiefOfStaff = "chief_of_staff"
+const instanceRoleChiefOfStaff = "chief_of_staff"
 
 func (d *Daemon) chiefOfStaffSessionID() string {
 	if d.store == nil {
 		return ""
 	}
-	return strings.TrimSpace(d.store.GetProfileRole(profileRoleChiefOfStaff))
+	return strings.TrimSpace(d.store.GetInstanceRole(instanceRoleChiefOfStaff))
 }
 
 func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
@@ -79,7 +79,7 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	if d.store == nil || strings.TrimSpace(sessionID) == "" {
 		return
 	}
-	if err := d.store.ClearProfileRole(profileRoleChiefOfStaff, sessionID); err != nil {
+	if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
 		d.logf("clear chief of staff role failed for session %s: %v", sessionID, err)
 	}
 }
@@ -130,7 +130,7 @@ func (d *Daemon) maybeAssignChiefOnSpawn(sessionID, agent string, requested bool
 		d.logf("create-as-chief: a chief (%s) already exists; ignoring request for session %s", current, sessionID)
 		return false
 	}
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sessionID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
 		d.logf("create-as-chief: set chief role failed for session %s: %v", sessionID, err)
 		return false
 	}
@@ -215,11 +215,11 @@ func (d *Daemon) handleSetChiefOfStaff(client *wsClient, msg *protocol.SetChiefO
 	}()
 
 	if msg.ChiefOfStaff {
-		if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sessionID); err != nil {
+		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
 			d.sendChiefOfStaffResult(client, sessionID, true, previousSessionID, err)
 			return
 		}
-	} else if err := d.store.ClearProfileRole(profileRoleChiefOfStaff, sessionID); err != nil {
+	} else if err := d.store.ClearInstanceRole(instanceRoleChiefOfStaff, sessionID); err != nil {
 		d.sendChiefOfStaffResult(client, sessionID, false, previousSessionID, err)
 		return
 	}

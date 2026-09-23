@@ -5,10 +5,10 @@ import path from 'node:path';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
-import { profileForAppPath, assertProductionRunAllowed } from './harnessProfile.mjs';
+import { instanceForAppPath, assertProductionRunAllowed } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildColdWarmVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
-import { delay, captureWebKitPids, snapshot, readLiveDaemonPid, closeSessions, fillAllPanes, teardownProfileState } from './perfMeasure.mjs';
+import { delay, captureWebKitPids, snapshot, readLiveDaemonPid, closeSessions, fillAllPanes, teardownInstanceState } from './perfMeasure.mjs';
 
 function parseArgs(argv) {
   const filtered = argv.filter((arg) => arg !== '--');
@@ -50,20 +50,20 @@ async function main() {
     console.log('  --record-baseline         Overwrite both the cold and warm per-machine baselines');
     console.log('                            with this run\'s RSS instead of comparing against them');
     console.log('');
-    console.log('Requires a dedicated non-prod profile: run `make install PROFILE=perf` once, then');
-    console.log('drive this scenario with ATTN_HARNESS_PROFILE=perf.');
+    console.log('Requires a dedicated non-prod instance: run `make install INSTANCE=perf` once, then');
+    console.log('drive this scenario with ATTN_HARNESS_INSTANCE=perf.');
     return;
   }
 
   const startedAt = Date.now();
-  const profile = profileForAppPath(options.appPath);
+  const instance = instanceForAppPath(options.appPath);
   assertProductionRunAllowed({ appPath: options.appPath, wsUrl: options.wsUrl });
-  if (!profile || profile === 'dev') {
+  if (!instance || instance === 'dev') {
     throw new Error(
-      'scenario-perf-cold-warm needs a DEDICATED non-prod profile, distinct from the shared dev '
+      'scenario-perf-cold-warm needs a DEDICATED non-prod instance, distinct from the shared dev '
       + 'sibling -- each phase wipes its data dir, so it must never be prod (~/.attn) or the dev '
-      + 'world (~/.attn-dev) that attn-on-attn iteration depends on. Set ATTN_HARNESS_PROFILE=perf '
-      + 'and run `make install PROFILE=perf` once if you haven\'t already.',
+      + 'world (~/.attn-dev) that attn-on-attn iteration depends on. Set ATTN_HARNESS_INSTANCE=perf '
+      + 'and run `make install INSTANCE=perf` once if you haven\'t already.',
     );
   }
 
@@ -71,7 +71,7 @@ async function main() {
   const client = new UiAutomationClient({ appPath: options.appPath });
 
   async function runPhase({ warmup }) {
-    await teardownProfileState({ client, profile });
+    await teardownInstanceState({ client, instance });
     const webkitBaseline = await captureWebKitPids();
 
     await client.launchFreshApp();
@@ -83,7 +83,7 @@ async function main() {
     await observer.connect();
     try {
       const appPid = client.readManifest().pid;
-      const daemonPid = readLiveDaemonPid(profile);
+      const daemonPid = readLiveDaemonPid(instance);
       if (!daemonPid) {
         console.warn('[perf] WARNING: no live daemon pid file found; daemon + pty-worker RSS are NOT included in this phase');
       }

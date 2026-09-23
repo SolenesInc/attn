@@ -2,8 +2,8 @@ name: Build App acceptance tree
 description: Build and pack the application tree used by App acceptance runners.
 
 inputs:
-  profile:
-    description: Non-production profile to package
+  instance:
+    description: Non-production instance to package
     required: true
 
 outputs:
@@ -27,13 +27,14 @@ runs:
         brew install openssl@3
         echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - name: Set up Go and Node.js
+      uses: ./.github/actions/setup-toolchains
       with:
-        go-version-file: go.mod
+        go: 'true'
         # setup-go's key is content-only, so every Go job shares it and the
         # first one to finish seals it. This action owns its entry below.
-        cache: false
+        go-cache: 'false'
+        node: 'true'
 
     - name: Resolve Go cache paths
       id: go-cache-paths
@@ -55,11 +56,6 @@ runs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: '1.95.0'
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '26'
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
@@ -92,10 +88,10 @@ runs:
       shell: bash
       env:
         CI: 'true'
-        # Acceptance tests what ships, not the unoptimized app-core named profiles get locally.
+        # Acceptance tests what ships, not the unoptimized app-core named instances get locally.
         ATTN_APP_CARGO_PROFILE: release
         MACOS_CODESIGN_IDENTITY: ${{ runner.os == 'macOS' && '-' || '' }}
-      run: make build-app PROFILE="${{ inputs.profile }}"
+      run: make build-app INSTANCE="${{ inputs.instance }}"
 
     - name: Save Go build cache
       if: steps.go-cache.outputs.cache-hit != 'true'
@@ -111,7 +107,7 @@ runs:
       id: pack
       shell: bash
       run: |
-        app_name="$(./attn profile resolve --profile "${{ inputs.profile }}" --field appName)"
+        app_name="$(./attn instance resolve --instance "${{ inputs.instance }}" --field appName)"
         case "$RUNNER_OS" in
           Linux) app_tree="app/src-tauri/target/staged/linux-tree/$app_name" ;;
           macOS) app_tree="app/src-tauri/target/staged/$app_name.app" ;;

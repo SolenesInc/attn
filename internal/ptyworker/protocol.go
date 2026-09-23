@@ -81,7 +81,7 @@ type EventEnvelope struct {
 	Event      string  `json:"event"`
 	SessionID  string  `json:"session_id"`
 	Seq        *uint32 `json:"seq,omitempty"`
-	Data       *string `json:"data,omitempty"`
+	Data       []byte  `json:"data,omitempty"`
 	Reason     *string `json:"reason,omitempty"`
 	Cols       *uint16 `json:"cols,omitempty"`
 	Rows       *uint16 `json:"rows,omitempty"`

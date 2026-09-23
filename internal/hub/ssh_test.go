@@ -25,8 +25,8 @@ func TestRemoteShellCommandExportsRemoteOverrideEnv(t *testing.T) {
 			t.Fatalf("remoteShellCommand() missing %q in %q", fragment, command)
 		}
 	}
-	if strings.Contains(command, "ATTN_PROFILE") {
-		t.Fatalf("remoteShellCommand(\"\") leaked ATTN_PROFILE: %q", command)
+	if strings.Contains(command, "ATTN_INSTANCE") {
+		t.Fatalf("remoteShellCommand(\"\") leaked ATTN_INSTANCE: %q", command)
 	}
 }
 
@@ -79,13 +79,13 @@ func TestRemoteShellCommandOmitsKittyLimitWhenUnset(t *testing.T) {
 	}
 }
 
-func TestRemoteShellCommandExportsProfileWhenSet(t *testing.T) {
+func TestRemoteShellCommandExportsInstanceWhenSet(t *testing.T) {
 	command := remoteShellCommand("dev", "printf ready")
-	if !strings.Contains(command, "export ATTN_PROFILE=") {
-		t.Fatalf("remoteShellCommand(\"dev\") missing ATTN_PROFILE export: %q", command)
+	if !strings.Contains(command, "export ATTN_INSTANCE=") {
+		t.Fatalf("remoteShellCommand(\"dev\") missing ATTN_INSTANCE export: %q", command)
 	}
 	if !strings.Contains(command, "dev") {
-		t.Fatalf("remoteShellCommand(\"dev\") missing profile name: %q", command)
+		t.Fatalf("remoteShellCommand(\"dev\") missing instance name: %q", command)
 	}
 }
 
@@ -102,7 +102,7 @@ func TestRemoteAttnCommandHonorsRemoteBinaryOverride(t *testing.T) {
 	}
 }
 
-func TestRemoteAttnCommandUsesProfileBinary(t *testing.T) {
+func TestRemoteAttnCommandUsesInstanceBinary(t *testing.T) {
 	command := remoteAttnCommand("dev", "ws-relay")
 	if !strings.Contains(command, "$HOME/.local/bin/attn-dev") {
 		t.Fatalf("remoteAttnCommand(\"dev\") = %q, want attn-dev binary path", command)
@@ -111,8 +111,8 @@ func TestRemoteAttnCommandUsesProfileBinary(t *testing.T) {
 
 func TestRemoteBinaryName(t *testing.T) {
 	cases := []struct {
-		profile string
-		want    string
+		instance string
+		want     string
 	}{
 		{"", "attn"},
 		{"  ", "attn"},
@@ -120,10 +120,10 @@ func TestRemoteBinaryName(t *testing.T) {
 		{"foo", "attn-foo"},
 	}
 	for _, c := range cases {
-		t.Run(c.profile, func(t *testing.T) {
-			got := remoteBinaryName(c.profile)
+		t.Run(c.instance, func(t *testing.T) {
+			got := remoteBinaryName(c.instance)
 			if got != c.want {
-				t.Fatalf("remoteBinaryName(%q) = %q, want %q", c.profile, got, c.want)
+				t.Fatalf("remoteBinaryName(%q) = %q, want %q", c.instance, got, c.want)
 			}
 		})
 	}

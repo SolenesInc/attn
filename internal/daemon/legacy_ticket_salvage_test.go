@@ -22,7 +22,7 @@ import (
 
 func newLegacySalvageDaemon(t *testing.T) (*Daemon, *store.Store, string) {
 	t.Helper()
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	makeRecoveryHome(t, dataRoot)
 	target, err := store.NewWithDB(filepath.Join(t.TempDir(), "attn.db"))

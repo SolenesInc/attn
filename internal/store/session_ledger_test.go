@@ -480,8 +480,9 @@ func TestNothingAfterAReopenCanInflateAFinalizedTotal(t *testing.T) {
 
 func TestEverySessionWriterCarriesTheClosedRowPredicate(t *testing.T) {
 	exempt := map[string]string{
-		"sqlite.go":         "migrations run over rows that predate the column",
-		"session_ledger.go": "closing and reopening are the writers of closed_at",
+		"sqlite.go":             "migrations run over rows that predate the column",
+		"profile_conversion.go": "the one-time conversion stamps closed history with its profile",
+		"session_ledger.go":     "closing and reopening are the writers of closed_at",
 	}
 	sources, err := filepath.Glob("*.go")
 	if err != nil {

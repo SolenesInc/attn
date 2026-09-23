@@ -89,7 +89,7 @@ export interface Session {
   readonly pull_requests?: readonly SessionPullRequest[]
   readonly repository?: string
   readonly seed_id?: string
-  readonly setup_id: string
+  readonly profile_id: string
   readonly state: "idle" | "launching" | "pending_approval" | "recoverable" | "scheduled" | "unknown" | "waiting_input" | "working"
   readonly state_reason?: string
   readonly state_since: string
@@ -124,7 +124,7 @@ export interface EndpointInfo {
   readonly enabled?: boolean
   readonly id: string
   readonly name: string
-  readonly profile?: string
+  readonly instance?: string
   readonly session_count?: number
   readonly ssh_target: string
   readonly status: string

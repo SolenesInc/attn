@@ -325,7 +325,7 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 }
 
 func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "bindclash")
+	t.Setenv("ATTN_INSTANCE", "bindclash")
 	addr := net.JoinHostPort(config.WSBindAddress(), useFreeWSPort(t))
 
 	foreign, err := net.Listen("tcp", addr)
@@ -2987,53 +2987,6 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneWithoutPromotingAnotherPane
 	}
 }
 
-func TestDaemon_NewAddsWarningWhenPersistenceFallsBackToMemory(t *testing.T) {
-	t.Setenv("ATTN_DB_PATH", filepath.Join("/dev/null", "attn.db"))
-
-	d := New(filepath.Join(t.TempDir(), "test.sock"))
-	defer d.store.Close()
-
-	warnings := d.getWarnings()
-	if len(warnings) == 0 {
-		t.Fatal("expected warning when DB open fails and daemon falls back to in-memory")
-	}
-
-	found := false
-	for _, warning := range warnings {
-		if warning.Code != "persistence_degraded" {
-			continue
-		}
-		found = true
-		if !strings.Contains(warning.Message, "Running in-memory only") {
-			t.Fatalf("warning message missing in-memory note: %q", warning.Message)
-		}
-		if !strings.Contains(warning.Message, "See daemon log in "+config.LogPath()) {
-			t.Fatalf("warning message missing daemon log path: %q", warning.Message)
-		}
-		if !strings.Contains(warning.Message, "/dev/null/attn.db") {
-			t.Fatalf("warning message missing DB path: %q", warning.Message)
-		}
-	}
-	if !found {
-		t.Fatalf("expected persistence_degraded warning, got: %+v", warnings)
-	}
-
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "fallback-store-session",
-		Label:          "fallback-store-session",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      t.TempDir(),
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	if got := d.store.Get("fallback-store-session"); got == nil {
-		t.Fatal("expected in-memory fallback store to remain usable")
-	}
-}
-
 func TestDaemon_HandleClientMessage_ClearWarnings(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.addWarning("one", "first warning")
@@ -3391,8 +3344,8 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 	if got := resp.Header.Get("Cache-Control"); got != "no-store, max-age=0" {
 		t.Errorf("health Cache-Control = %q, want no-store, max-age=0", got)
 	}
-	if health["profile"] != "default" {
-		t.Errorf("profile = %v, want %q", health["profile"], "default")
+	if health["instance"] != "default" {
+		t.Errorf("instance = %v, want %q", health["instance"], "default")
 	}
 	if health["port"] != wsPort {
 		t.Errorf("port = %v, want %q", health["port"], wsPort)

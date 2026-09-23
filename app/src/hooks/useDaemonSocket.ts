@@ -94,10 +94,10 @@ import { recordPtyCommand, recordWsBinaryPtyOutput, recordWsJsonParse } from '..
 import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../utils/terminalInputLatency';
 import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
-import { resolveDaemonWebSocketURL, type DaemonEndpointProfile } from '../utils/daemonEndpoint';
+import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
-import { handleSetupDaemonEvent, type SetupActionResult } from './daemonSetupEvents';
-import { useSetupsStore } from '../store/setups';
+import { handleProfileDaemonEvent, type ProfileActionResult } from './daemonProfileEvents';
+import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -136,14 +136,14 @@ import {
   type PendingKeyedRequests,
   type PendingRequests,
 } from './daemonPendingRequests';
-import { BUILD_PROFILE, daemonProfileMatches, fetchDaemonHealthProfile, profileMismatchMessage } from '../utils/buildProfile';
+import { BUILD_INSTANCE, daemonInstanceMatches, fetchDaemonHealthInstance, instanceMismatchMessage } from '../utils/buildInstance';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
 import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useAutoModePushStore } from '../store/autoMode';
 import { useAutomationsStore } from '../store/automations';
 import { useWorktreeStore } from '../store/worktrees';
 import { handleWorktreeDaemonEvent } from './daemonWorktreeEvents';
-import { readSelectedSetupId } from '../utils/selectedSetup';
+import { readSelectedProfileId } from '../utils/selectedProfile';
 
 export type DaemonSession = GeneratedSession;
 
@@ -251,7 +251,7 @@ export interface PathInspection {
   is_directory: boolean;
   repo_root?: string;
 }
-export type { DaemonEndpointProfile };
+export type { DaemonEndpointInstance };
 
 export { PRRole, HeatState };
 
@@ -317,7 +317,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '319';
+export const PROTOCOL_VERSION = '322';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -624,7 +624,7 @@ interface UseDaemonSocketOptions {
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;
   onSessionExited?: (info: SessionExitInfo) => void;
-  endpoint?: DaemonEndpointProfile;
+  endpoint?: DaemonEndpointInstance;
   wsUrl?: string;
 }
 
@@ -982,8 +982,8 @@ export function useDaemonSocket({
     cursor: string;
     ansi_palette: string[];
   } | null>(null);
-  const profileMismatchRef = useRef<boolean>(false);
-  const profileCheckedRef = useRef<boolean>(false);
+  const instanceMismatchRef = useRef<boolean>(false);
+  const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
@@ -994,7 +994,7 @@ export function useDaemonSocket({
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
-  const scopedDesktops = useSetupsStore((state) => state.desktops);
+  const scopedDesktops = useProfilesStore((state) => state.desktops);
   useEffect(() => {
     setDesktopTileContents((prev) => pruneDesktopTileContents(prev, scopedDesktops));
   }, [scopedDesktops]);
@@ -1231,7 +1231,7 @@ export function useDaemonSocket({
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
-    if (profileMismatchRef.current) {
+    if (instanceMismatchRef.current) {
       return;
     }
 
@@ -1245,18 +1245,18 @@ export function useDaemonSocket({
       return;
     }
 
-    if (BUILD_PROFILE !== '' && !profileCheckedRef.current) {
+    if (BUILD_INSTANCE !== '' && !instanceCheckedRef.current) {
       try {
-        const health = await fetchDaemonHealthProfile(resolvedWsUrl);
-        if (!daemonProfileMatches(health.profile)) {
-          profileMismatchRef.current = true;
-          setConnectionError(profileMismatchMessage(health.profile));
+        const health = await fetchDaemonHealthInstance(resolvedWsUrl);
+        if (!daemonInstanceMatches(health.instance)) {
+          instanceMismatchRef.current = true;
+          setConnectionError(instanceMismatchMessage(health.instance));
           circuitOpenRef.current = true;
           return;
         }
-        profileCheckedRef.current = true;
+        instanceCheckedRef.current = true;
       } catch (err) {
-        console.warn('[Daemon] profile pre-check failed, proceeding without it:', err);
+        console.warn('[Daemon] instance pre-check failed, proceeding without it:', err);
       }
     }
 
@@ -1329,7 +1329,7 @@ export function useDaemonSocket({
           ],
           client_token: clientToken || undefined,
           browser_host_token: browserHostToken || undefined,
-          setup_id: readSelectedSetupId(),
+          profile_id: readSelectedProfileId(),
         }),
       );
 
@@ -1454,7 +1454,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
-            useSetupsStore.getState().enterScope(data.setups, data.selected_setup_id, data.desktops);
+            useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
@@ -1694,7 +1694,7 @@ export function useDaemonSocket({
               };
               setDesktopTileContents((prev) => pruneDesktopTileContents(
                 { ...prev, [key]: content },
-                useSetupsStore.getState().desktops,
+                useProfilesStore.getState().desktops,
               ));
             }
             break;
@@ -2932,7 +2932,7 @@ export function useDaemonSocket({
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
-            if (handleSetupDaemonEvent(data, pending)) break;
+            if (handleProfileDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -4508,7 +4508,7 @@ export function useDaemonSocket({
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'set_plugin_priority', name, priority }, 'Set plugin priority timed out', 30000);
   }, [sendKeyedRequest]);
 
-  const sendAddEndpoint = useCallback((name: string, sshTarget: string, profile?: string): Promise<EndpointActionResult> => {
+  const sendAddEndpoint = useCallback((name: string, sshTarget: string, instance?: string): Promise<EndpointActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4522,9 +4522,9 @@ export function useDaemonSocket({
       const key = 'endpoint_action:add:pending';
       pendingActionsRef.current.set(key, { resolve, reject });
       const payload: Record<string, unknown> = { cmd: 'add_endpoint', name, ssh_target: sshTarget };
-      const trimmed = (profile ?? '').trim();
+      const trimmed = (instance ?? '').trim();
       if (trimmed !== '') {
-        payload.profile = trimmed;
+        payload.instance = trimmed;
       }
       ws.send(JSON.stringify(payload));
       setTimeout(() => {
@@ -4538,7 +4538,7 @@ export function useDaemonSocket({
 
   const sendUpdateEndpoint = useCallback((
     endpointId: string,
-    updates: { name?: string; ssh_target?: string; enabled?: boolean; profile?: string }
+    updates: { name?: string; ssh_target?: string; enabled?: boolean; instance?: string }
   ): Promise<EndpointActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -5500,51 +5500,51 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
   }, []);
 
-  const sendSetupCommand = useCallback(
+  const sendProfileCommand = useCallback(
     (cmd: string, body: Record<string, unknown>) =>
-      sendRequest<SetupActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
+      sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
     [sendRequest],
   );
 
-  const sendSetupSelect = useCallback(
-    (setupId: string) => {
-      useSetupsStore.getState().selectionStarted(setupId);
-      return sendSetupCommand('setup_select', { setup_id: setupId });
+  const sendProfileSelect = useCallback(
+    (profileId: string) => {
+      useProfilesStore.getState().selectionStarted(profileId);
+      return sendProfileCommand('profile_select', { profile_id: profileId });
     },
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopCreate = useCallback(
-    (setupId: string) => sendSetupCommand('desktop_create', { setup_id: setupId }),
-    [sendSetupCommand],
+    (profileId: string) => sendProfileCommand('desktop_create', { profile_id: profileId }),
+    [sendProfileCommand],
   );
 
   const sendDesktopDelete = useCallback(
     (desktopId: string, expectedRevision: number) =>
-      sendSetupCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
-    [sendSetupCommand],
+      sendProfileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
+    [sendProfileCommand],
   );
 
   const sendDesktopSetShortcutSlot = useCallback(
     (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
-      sendSetupCommand('desktop_set_shortcut_slot', {
+      sendProfileCommand('desktop_set_shortcut_slot', {
         desktop_id: desktopId,
         expected_revision: expectedRevision,
         ...(shortcutSlot === null ? {} : { shortcut_slot: shortcutSlot }),
       }),
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopSetCurrent = useCallback(
-    (setupId: string, desktopId: string) =>
-      sendSetupCommand('desktop_set_current', { setup_id: setupId, desktop_id: desktopId }),
-    [sendSetupCommand],
+    (profileId: string, desktopId: string) =>
+      sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
+    [sendProfileCommand],
   );
 
   const sendDesktopSetActivePane = useCallback(
     (desktopId: string, paneId: string) =>
-      sendSetupCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
-    [sendSetupCommand],
+      sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
+    [sendProfileCommand],
   );
 
   const sendDesktopMoveLeaf = useCallback(
@@ -5557,7 +5557,7 @@ export function useDaemonSocket({
       expectedSourceRevision: number;
       expectedTargetRevision: number;
     }) =>
-      sendSetupCommand('desktop_move_leaf', {
+      sendProfileCommand('desktop_move_leaf', {
         source_desktop_id: move.sourceDesktopId,
         target_desktop_id: move.targetDesktopId,
         leaf_id: move.leafId,
@@ -5566,18 +5566,18 @@ export function useDaemonSocket({
         expected_source_revision: move.expectedSourceRevision,
         expected_target_revision: move.expectedTargetRevision,
       }),
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopPlaceSession = useCallback(
     (placement: { desktopId: string; sessionId: string; expectedRevision: number; anchorPaneId?: string }) =>
-      sendSetupCommand('desktop_place_session', {
+      sendProfileCommand('desktop_place_session', {
         desktop_id: placement.desktopId,
         session_id: placement.sessionId,
         expected_revision: placement.expectedRevision,
         ...(placement.anchorPaneId ? { anchor_pane_id: placement.anchorPaneId } : {}),
       }),
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopDockTile = useCallback(
@@ -5591,7 +5591,7 @@ export function useDaemonSocket({
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
     }) =>
-      sendSetupCommand('desktop_dock_tile', {
+      sendProfileCommand('desktop_dock_tile', {
         desktop_id: dock.desktopId,
         expected_revision: dock.expectedRevision,
         tile_id: dock.tileId,
@@ -5601,25 +5601,25 @@ export function useDaemonSocket({
         ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
         ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
       }),
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopUpdateTile = useCallback(
     (update: { desktopId: string; expectedRevision: number; tileId: string; tileParams?: string; tileSessionId?: string }) =>
-      sendSetupCommand('desktop_update_tile', {
+      sendProfileCommand('desktop_update_tile', {
         desktop_id: update.desktopId,
         expected_revision: update.expectedRevision,
         tile_id: update.tileId,
         ...(update.tileParams ? { tile_params: update.tileParams } : {}),
         ...(update.tileSessionId ? { tile_session_id: update.tileSessionId } : {}),
       }),
-    [sendSetupCommand],
+    [sendProfileCommand],
   );
 
   const sendDesktopRemoveLeaf = useCallback(
     (desktopId: string, leafId: string, expectedRevision: number) =>
-      sendSetupCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
-    [sendSetupCommand],
+      sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
+    [sendProfileCommand],
   );
 
   const sendDesktopTileContentGet = useCallback(
@@ -5637,7 +5637,7 @@ export function useDaemonSocket({
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     connectionError,
     migrationFailure,
-    sendSetupSelect,
+    sendProfileSelect,
     sendDesktopCreate,
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,

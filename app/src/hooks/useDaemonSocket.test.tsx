@@ -730,12 +730,12 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       ws.emit({
         event: 'github_hosts_updated',
         github_hosts: ['ghe.example.test', 'github.com'],
-        github_polling_off_reason: 'GitHub polling is off for profile dev.',
+        github_polling_off_reason: 'GitHub polling is off for instance dev.',
       });
     });
 
     expect(onGitHubHostsUpdate).toHaveBeenNthCalledWith(1, ['github.com'], null);
-    expect(onGitHubHostsUpdate).toHaveBeenNthCalledWith(2, ['ghe.example.test', 'github.com'], 'GitHub polling is off for profile dev.');
+    expect(onGitHubHostsUpdate).toHaveBeenNthCalledWith(2, ['ghe.example.test', 'github.com'], 'GitHub polling is off for instance dev.');
     unmount();
   });
 

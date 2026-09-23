@@ -1,14 +1,14 @@
 # Real-app harness
 
-Packaged-app scenarios. Set up a profile per [profiles](../../../docs/profiles.md)
+Packaged-app scenarios. Set up an instance per [instances](../../../docs/instances.md)
 and run commands from the repository root.
 
 ## Running
 
 - Scenarios share one display and run serially:
   `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
-- The profile comes from `ATTN_HARNESS_PROFILE`, then `ATTN_PROFILE`, then `dev`.
-  Production needs an empty `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and
+- The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
+  Production needs an empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and
   explicit approval.
 - Install the current checkout first; a stale build fails its fingerprint check.
 - Hunt CI flakes with
@@ -36,11 +36,11 @@ and run commands from the repository root.
   task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
   every agent and turns headless tasks back on.
 - Those scenarios talk to the mock GitHub (`scripts/mock-github.mjs`) on
-  non-production profiles; production keeps the real github.com. Seed custom
+  non-production instances; production keeps the real github.com. Seed custom
   PRs through `/__control/seed`.
 - Hand-run scripts outside `createScenarioRunner` have none of these guards and
   may launch real providers; read one before running it.
-- Build child environments with `profileCliEnv`, never `{ ...process.env }`.
+- Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
 - Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
 - Signal only PIDs from the automation manifest or spawned processes. Keep
   OS-specific behavior in `platform.mjs`.
@@ -56,10 +56,10 @@ and run commands from the repository root.
 
 ## Recordings
 
-Record a non-production profile and check clips for private data before publishing:
+Record a non-production instance and check clips for private data before publishing:
 
 ```bash
-./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4
+./scripts/pr-evidence.sh record --instance <name> --seconds 20 --out clip.mp4
 ./scripts/pr-evidence.sh publish clip.mp4
 ```
 

@@ -1,5 +1,5 @@
 import { test, expect } from './fixtures';
-import { E2E_CLIENT_TOKEN } from './profileEnv';
+import { E2E_CLIENT_TOKEN } from './instanceEnv';
 
 const realPtyEnabled = process.env.VITE_FORCE_REAL_PTY === '1';
 

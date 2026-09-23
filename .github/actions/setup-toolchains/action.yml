@@ -1,0 +1,78 @@
+name: Set up toolchains
+description: >-
+  Install Go from go.mod and Node.js from .tool-versions. setup-go and
+  setup-node spend the repository's hourly API quota on their version
+  manifests whenever the runner lacks the version, so the installed toolchains
+  are restored from the Actions cache first and both actions find them locally.
+inputs:
+  go:
+    description: Install Go.
+    required: false
+    default: 'false'
+  go-cache:
+    description: Let setup-go cache modules and builds.
+    required: false
+    default: 'true'
+  node:
+    description: Install Node.js.
+    required: false
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - name: Read toolchain pins
+      id: pins
+      shell: bash
+      working-directory: ${{ github.workspace }}
+      run: |
+        echo "go=$(awk '/^go / { print $2 }' go.mod)" >> "$GITHUB_OUTPUT"
+        echo "node=$(awk '/^nodejs / { print $2 }' .tool-versions)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore Go toolchain
+      id: go
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.tool_cache }}/go/${{ steps.pins.outputs.go }}
+        key: toolchain-go-${{ steps.pins.outputs.go }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Set up Go
+      if: inputs.go == 'true'
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ steps.pins.outputs.go }}
+        cache: ${{ inputs.go-cache }}
+
+    - name: Save Go toolchain
+      if: >-
+        inputs.go == 'true' && steps.go.outputs.cache-hit != 'true' &&
+        github.event_name == 'push' &&
+        (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.tool_cache }}/go/${{ steps.pins.outputs.go }}
+        key: ${{ steps.go.outputs.cache-primary-key }}
+
+    - name: Restore Node.js toolchain
+      id: node
+      if: inputs.node == 'true'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.tool_cache }}/node/${{ steps.pins.outputs.node }}
+        key: toolchain-node-${{ steps.pins.outputs.node }}-${{ runner.os }}-${{ runner.arch }}
+
+    - name: Set up Node.js
+      if: inputs.node == 'true'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ steps.pins.outputs.node }}
+
+    - name: Save Node.js toolchain
+      if: >-
+        inputs.node == 'true' && steps.node.outputs.cache-hit != 'true' &&
+        github.event_name == 'push' &&
+        (github.ref == 'refs/heads/next' || github.ref == 'refs/heads/main')
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.tool_cache }}/node/${{ steps.pins.outputs.node }}
+        key: ${{ steps.node.outputs.cache-primary-key }}

@@ -115,6 +115,13 @@ brew update && brew upgrade --cask victorarias/attn/attn
 
 The app nudges you when a new release exists.
 
+The daemon upgrades its database when it starts, in one transaction after a
+snapshot in `~/.attn/backups/`. If the upgrade fails, the daemon exits, leaves
+the database and its schema version as they were, and writes
+`~/.attn/migration-failure.json` naming the error, the database, the snapshot
+and the log; the next successful start removes it. Other `attn` commands never
+upgrade the database and refuse to open one the daemon has not upgraded yet.
+
 ## Prerequisites
 
 - macOS (Apple Silicon)
@@ -226,8 +233,8 @@ state or grants merge authority.
 Inspect with `attn pr status`; stop with `attn pr unwatch <url>`. Stopping clears
 that session's unread watch notifications. Closing or merging the PR ends the watch.
 Run commands on the session's owning daemon;
-remote watch forwarding is unsupported. For development profiles, enable
-[GitHub polling](docs/profiles.md#github-polling).
+remote watch forwarding is unsupported. For development instances, enable
+[GitHub polling](docs/instances.md#github-polling).
 
 Prefer a blocking terminal workflow? Use `attn pr wait-ready <pr> --repo <owner/repo>
 --mode <green|codex|formal-review>`. Its `--help` explains reviewers, baselining,
@@ -344,14 +351,14 @@ git clone https://github.com/victorarias/attn.git && cd attn
 
 Developing attn while running attn? `make dev` gives you a fully isolated dev
 sibling (own bundle, data dir, and port) so rebuilds never touch your live copy.
-The full dev-loop, profile, and harness targets live in
-**[docs/profiles.md](docs/profiles.md)** and [AGENTS.md](AGENTS.md).
+The full dev-loop, instance, and harness targets live in
+**[docs/instances.md](docs/instances.md)** and [AGENTS.md](AGENTS.md).
 
 ## Docs
 
 | | |
 |---|---|
-| [Profiles](docs/profiles.md) | Run multiple isolated attn worlds side by side |
+| [Instances](docs/instances.md) | Run multiple isolated attn worlds side by side |
 | [Release](docs/making-a-release.md) | Maintainer runbook |
 
 ## Status

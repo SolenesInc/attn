@@ -80,7 +80,7 @@ func TestDelegationPreferencesSettingsRoundTripAndConflict(t *testing.T) {
 func TestAddAttnRolesInstallsWorkflowBeforeSavingReferences(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	d := newDaemonForTest(t)
 	d.store.SetSetting(canonicalExecutableSettingKey("codex"), os.Args[0])
 	for _, harness := range []string{"claude", "copilot", "pi"} {
@@ -116,7 +116,7 @@ func TestAddAttnRolesInstallsWorkflowBeforeSavingReferences(t *testing.T) {
 func TestAddAttnRolesReportsPathsWhenWorkflowInstallIsPartial(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	d := newDaemonForTest(t)
 	for _, harness := range []string{"codex", "claude"} {
 		d.store.SetSetting(canonicalExecutableSettingKey(harness), os.Args[0])

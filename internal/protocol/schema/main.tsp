@@ -206,7 +206,7 @@ model Session {
   directory: string;
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
   workspace_id: string;         // Owning workspace
-  setup_id: string;
+  profile_id: string;
   workspace_muted?: boolean;    // True when the owning workspace is hidden from normal sidebar/attention surfaces
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
@@ -217,7 +217,7 @@ model Session {
   state_updated_at: string;     // ISO timestamp, always set
   last_model_request_at?: string; // ISO timestamp of the newest positively observed model request. Unlike state_updated_at, evidence refreshes and classifications never move it.
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
-  chief_of_staff?: boolean;     // True when this session holds the profile-wide coordinator role
+  chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (assignee of a chief-authored ticket)
   ticket_unread?: boolean;      // True when this session has unread ticket events (drives the incoming-nudge indicator)
@@ -692,19 +692,19 @@ model WorkspaceLayout {
 }
 
 
-// Why a setup, desktop or pane command was refused. stale_revision means the
+// Why a profile, desktop or pane command was refused. stale_revision means the
 // command named a revision older than the stored one: re-read the broadcast
 // state and retry against its revision.
-enum SetupErrorCode {
+enum ProfileErrorCode {
   invalid,
   not_found,
   stale_revision,
   name_taken,
   slot_taken,
-  last_setup,
+  last_profile,
   last_desktop,
-  setup_deleted,
-  cross_setup,
+  profile_deleted,
+  cross_profile,
   already_placed,
   session_closed,
   destination_same,
@@ -712,10 +712,10 @@ enum SetupErrorCode {
   internal,
 }
 
-// A setup groups agents and desktops and owns one arrangement shared by every
+// A profile groups agents and desktops and owns one arrangement shared by every
 // client. revision counts changes to its name and to its set of desktops;
 // current_desktop_id and last_used_at are selection and never move it.
-model Setup {
+model Profile {
   id: string;
   name: string;
   current_desktop_id: string;
@@ -739,7 +739,7 @@ model DesktopPane {
 // this desktop, or is empty when the desktop has no panes.
 model Desktop {
   id: string;
-  setup_id: string;
+  profile_id: string;
   name: string;
   shortcut_slot?: int32;        // 1-9; absent for a desktop past the shortcut range
   order_key: string;
@@ -769,7 +769,7 @@ model EndpointInfo {
   ssh_target: string;
   status: string;
   enabled?: boolean;
-  profile?: string;
+  instance?: string;
   status_message?: string;
   session_count?: int32;
   capabilities?: EndpointCapabilities;
@@ -788,7 +788,7 @@ model ClientHelloMessage {
   client_kind: string;          // e.g. "tauri-app", "remote-web"
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
-  // Per-profile credential from <data-dir>/client-token, minted by the daemon.
+  // Per-instance credential from <data-dir>/client-token, minted by the daemon.
   // The WebSocket port has no file permissions of its own, so this is what a
   // local client proves before the daemon records its identity, registers it
   // for broadcasts, or sends it initial_state.
@@ -798,11 +798,11 @@ model ClientHelloMessage {
   // what lets the daemon tell a reconnecting client why it was hung up on
   // (client_eviction_notice); a client that omits it simply gets no notice.
   client_id?: string;
-  // The setup this client last selected, remembered by the client alone. The
+  // The profile this client last selected, remembered by the client alone. The
   // daemon scopes arrangement broadcasts to it; absent, deleted or unknown, the
-  // daemon scopes the client to the most recently used setup instead and says
-  // which in initial_state.selected_setup_id.
-  setup_id?: string;
+  // daemon scopes the client to the most recently used profile instead and says
+  // which in initial_state.selected_profile_id.
+  profile_id?: string;
 }
 
 model RegisterMessage {
@@ -1573,7 +1573,7 @@ model TicketAttachResultMessage {
 
 
 // ============================================================================
-// Notebook (durable, profile-wide markdown: a dated journal + a PARA knowledge
+// Notebook (durable, instance-wide markdown: a dated journal + a PARA knowledge
 // base).
 // Filesystem-canonical: edits use hash-CAS on file bytes, not a revision table.
 // These messages are the frontend's WebSocket path; the user-facing `attn
@@ -2078,7 +2078,7 @@ model AddEndpointMessage {
   cmd: "add_endpoint";
   name: string;
   ssh_target: string;
-  profile?: string;
+  instance?: string;
 }
 
 model RemoveEndpointMessage {
@@ -2092,7 +2092,7 @@ model UpdateEndpointMessage {
   name?: string;
   ssh_target?: string;
   enabled?: boolean;
-  profile?: string;
+  instance?: string;
 }
 
 model ListEndpointsMessage {
@@ -3288,48 +3288,48 @@ model BrowserControlResponseMessage {
 }
 
 // ============================================================================
-// Setups and desktops
+// Profiles and desktops
 // ============================================================================
-// Every command answers its sender with one setup_action_result carrying the
-// same request_id. Stored changes reach every client through setups_changed
-// and setup_arrangement_changed, the sender included.
+// Every command answers its sender with one profile_action_result carrying the
+// same request_id. Stored changes reach every client through profiles_changed
+// and profile_arrangement_changed, the sender included.
 
-model SetupCreateMessage {
-  cmd: "setup_create";
+model ProfileCreateMessage {
+  cmd: "profile_create";
   request_id: string;
   name: string;
 }
 
-model SetupRenameMessage {
-  cmd: "setup_rename";
+model ProfileRenameMessage {
+  cmd: "profile_rename";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   name: string;
   expected_revision: safeint;
 }
 
-// Live agents of the deleted setup move to destination_setup_id without a
-// placement. The last setup cannot be deleted.
-model SetupDeleteMessage {
-  cmd: "setup_delete";
+// Live agents of the deleted profile move to destination_profile_id without a
+// placement. The last profile cannot be deleted.
+model ProfileDeleteMessage {
+  cmd: "profile_delete";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   expected_revision: safeint;
-  destination_setup_id: string;
+  destination_profile_id: string;
 }
 
-// Scopes this connection to a setup and records it as the most recently used.
-// The result carries the setup and all of its desktops.
-model SetupSelectMessage {
-  cmd: "setup_select";
+// Scopes this connection to a profile and records it as the most recently used.
+// The result carries the profile and all of its desktops.
+model ProfileSelectMessage {
+  cmd: "profile_select";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
 }
 
 model DesktopCreateMessage {
   cmd: "desktop_create";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   name?: string;
   // Absent, the desktop takes the lowest free slot of 1-9, or none when all are held.
   shortcut_slot?: int32;
@@ -3352,7 +3352,7 @@ model DesktopSetShortcutSlotMessage {
   expected_revision: safeint;
 }
 
-// Places the desktop between two neighbours of the same setup; an absent
+// Places the desktop between two neighbours of the same profile; an absent
 // neighbour means the start or the end.
 model DesktopReorderMessage {
   cmd: "desktop_reorder";
@@ -3364,7 +3364,7 @@ model DesktopReorderMessage {
 }
 
 // Agents placed on the desktop lose their placement and stay open. The last
-// desktop of a setup cannot be deleted.
+// desktop of a profile cannot be deleted.
 model DesktopDeleteMessage {
   cmd: "desktop_delete";
   request_id: string;
@@ -3376,7 +3376,7 @@ model DesktopDeleteMessage {
 model DesktopSetCurrentMessage {
   cmd: "desktop_set_current";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   desktop_id: string;
 }
 
@@ -3388,7 +3388,7 @@ model DesktopSetActivePaneMessage {
   pane_id: string;
 }
 
-// Gives an unplaced agent of the desktop's setup a pane, split beside
+// Gives an unplaced agent of the desktop's profile a pane, split beside
 // anchor_pane_id or, absent, beside the active pane. The new pane becomes active.
 model DesktopPlaceSessionMessage {
   cmd: "desktop_place_session";
@@ -3402,7 +3402,7 @@ model DesktopPlaceSessionMessage {
 }
 
 // Moves a pane or tile beside anchor_id, within one desktop or between two
-// desktops of one setup. An absent anchor_id docks against the target's root.
+// desktops of one profile. An absent anchor_id docks against the target's root.
 // Both revisions are checked and both desktops change in one transaction.
 model DesktopMoveLeafMessage {
   cmd: "desktop_move_leaf";
@@ -3475,33 +3475,125 @@ model DesktopTileContentMessage {
   error?: string;
 }
 
-model SetupActionResultMessage {
-  event: "setup_action_result";
+model ProfileActionResultMessage {
+  event: "profile_action_result";
   request_id: string;
   action: string;               // Echo of the command name
   success: boolean;
   error?: string;
-  error_code?: SetupErrorCode;
-  setup?: Setup;
-  desktops?: Desktop[];         // The desktops the command changed; every desktop for setup_select
+  error_code?: ProfileErrorCode;
+  profile?: Profile;
+  desktops?: Desktop[];         // The desktops the command changed; every desktop for profile_select
   pane_id?: string;             // The pane desktop_place_session created
 }
 
-// Every live setup, sent to every client when one is created, renamed or deleted.
-model SetupsChangedMessage {
-  event: "setups_changed";
-  setups: Setup[];
+// Every live profile, sent to every client when one is created, renamed or deleted.
+model ProfilesChangedMessage {
+  event: "profiles_changed";
+  profiles: Profile[];
 }
 
-// Sent to every client scoped to the setup after any change to its desktops or
+// Sent to every client scoped to the profile after any change to its desktops or
 // its selection. desktops holds each changed desktop in full; a move between
 // two desktops arrives as one message. A client keeps a desktop it already
 // holds at a higher revision.
-model SetupArrangementChangedMessage {
-  event: "setup_arrangement_changed";
-  setup: Setup;
+model ProfileArrangementChangedMessage {
+  event: "profile_arrangement_changed";
+  profile: Profile;
   desktops: Desktop[];
   deleted_desktop_ids?: string[];
+}
+
+// ============================================================================
+// Workspace migration
+// ============================================================================
+
+enum MigrationPhase {
+  placement_required,
+  complete,
+}
+
+model MigrationGroup {
+  group_id: string;             // The legacy workspace id
+  title: string;
+  directory: string;
+  source_desktop_id: string;
+  confirmed: boolean;
+  tree_json: string;            // Surviving panes and tiles as arranged on the source desktop
+  panes: DesktopPane[];
+}
+
+model MigrationDraftDesktop {
+  key: string;                  // The desktop id, or slot-N for a free shortcut slot
+  desktop_id?: string;
+  shortcut_slot?: int32;        // 1-9; absent for an extra desktop
+  tree_json: string;            // Split tree of {"group": id} leaves; ratio is the first child's share; empty when nothing is placed
+}
+
+model MigrationState {
+  phase: MigrationPhase;
+  revision: safeint;
+  profile_id: string;
+  groups: MigrationGroup[];
+  desktops: MigrationDraftDesktop[];
+  can_undo: boolean;
+  suggestion_available: boolean;
+}
+
+model MigrationGetMessage {
+  cmd: "migration_get";
+  request_id: string;
+}
+
+model MigrationKeepMessage {
+  cmd: "migration_keep";
+  request_id: string;
+  expected_revision: safeint;
+  group_ids: string[];
+}
+
+model MigrationMoveMessage {
+  cmd: "migration_move";
+  request_id: string;
+  expected_revision: safeint;
+  group_id: string;
+  target_key: string;
+  anchor_group_id?: string;     // Absent places the group beside the whole desktop
+  edge: LayoutDockEdge;
+  share?: float64;              // The moved group's share of the new split, in (0,1); absent means half
+}
+
+model MigrationSuggestMessage {
+  cmd: "migration_suggest";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationUndoMessage {
+  cmd: "migration_undo";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationFinishMessage {
+  cmd: "migration_finish";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationResultMessage {
+  event: "migration_result";
+  request_id: string;
+  action: string;               // Echo of the command name
+  success: boolean;
+  error?: string;
+  error_code?: ProfileErrorCode;
+  state?: MigrationState;
+}
+
+model MigrationChangedMessage {
+  event: "migration_changed";
+  state: MigrationState;
 }
 
 model RegisterWorkspaceMessage {
@@ -3553,7 +3645,7 @@ model SetSessionContextWindowCapMessage {
   cap: int32;
 }
 
-// Assign or remove the profile-wide chief-of-staff role. Assigning a new
+// Assign or remove the instance-wide chief-of-staff role. Assigning a new
 // session transfers the singleton role from the previous holder.
 model SetChiefOfStaffMessage {
   cmd: "set_chief_of_staff";
@@ -3579,15 +3671,16 @@ model InitialStateMessage {
   sessions?: Session[];
   endpoints?: EndpointInfo[];
   workspaces?: Workspace[];
-  setups?: Setup[];
-  // The setup this connection is scoped to, and its desktops.
-  selected_setup_id?: string;
+  profiles?: Profile[];
+  migration_phase?: MigrationPhase;
+  // The profile this connection is scoped to, and its desktops.
+  selected_profile_id?: string;
   desktops?: Desktop[];
   prs?: PR[];
   repos?: RepoState[];
   authors?: AuthorState[];
   github_hosts?: string[];
-  // Set while the daemon refuses to poll GitHub for this profile; empty when polling is on.
+  // Set while the daemon refuses to poll GitHub for this instance; empty when polling is on.
   github_polling_off_reason?: string;
   settings?: Record<string>;
   warnings?: DaemonWarning[];
@@ -7965,10 +8058,12 @@ alias DaemonEvent =
   | WorkspaceLayoutMessage
   | WorkspaceLayoutUpdatedMessage
   | WorkspaceLayoutActionResultMessage
-  | SetupActionResultMessage
-  | SetupsChangedMessage
-  | SetupArrangementChangedMessage
+  | ProfileActionResultMessage
+  | ProfilesChangedMessage
+  | ProfileArrangementChangedMessage
   | DesktopTileContentMessage
+  | MigrationResultMessage
+  | MigrationChangedMessage
   | RenameResultMessage
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage

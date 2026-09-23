@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "319"
+const ProtocolVersion = "322"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -294,10 +294,10 @@ const (
 )
 
 const (
-	CmdSetupCreate            = "setup_create"
-	CmdSetupRename            = "setup_rename"
-	CmdSetupDelete            = "setup_delete"
-	CmdSetupSelect            = "setup_select"
+	CmdProfileCreate          = "profile_create"
+	CmdProfileRename          = "profile_rename"
+	CmdProfileDelete          = "profile_delete"
+	CmdProfileSelect          = "profile_select"
 	CmdDesktopCreate          = "desktop_create"
 	CmdDesktopRename          = "desktop_rename"
 	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"
@@ -315,10 +315,21 @@ const (
 )
 
 const (
-	EventSetupActionResult       = "setup_action_result"
-	EventSetupsChanged           = "setups_changed"
-	EventSetupArrangementChanged = "setup_arrangement_changed"
-	EventDesktopTileContent      = "desktop_tile_content"
+	CmdMigrationGet     = "migration_get"
+	CmdMigrationKeep    = "migration_keep"
+	CmdMigrationMove    = "migration_move"
+	CmdMigrationSuggest = "migration_suggest"
+	CmdMigrationUndo    = "migration_undo"
+	CmdMigrationFinish  = "migration_finish"
+)
+
+const (
+	EventProfileActionResult       = "profile_action_result"
+	EventProfilesChanged           = "profiles_changed"
+	EventProfileArrangementChanged = "profile_arrangement_changed"
+	EventDesktopTileContent        = "desktop_tile_content"
+	EventMigrationResult           = "migration_result"
+	EventMigrationChanged          = "migration_changed"
 )
 
 const (

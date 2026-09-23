@@ -17,7 +17,7 @@ import { createScenarioRunner } from './scenarioRunner.mjs';
 import { cleanupSessionViaAppClose } from './scenarioCleanup.mjs';
 import { buildPresentFixtureRepo } from './presentFixtureRepo.mjs';
 import { getPresentations, getPresentationRound } from './presentDaemon.mjs';
-import { currentHarnessProfile, defaultDaemonPortForProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, defaultDaemonPortForInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 // The em dash (U+2014) must match the native window title set in
@@ -51,11 +51,11 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
-function startWaitingPresent(attnBin, profile, { cwd, sessionId }) {
+function startWaitingPresent(attnBin, instance, { cwd, sessionId }) {
   const child = spawn(attnBin, ['present', '--wait', '--json'], {
     cwd,
-    env: profileCliEnv(profile, {
-      ATTN_SOCKET_PATH: socketPathForProfile(profile),
+    env: instanceCliEnv(instance, {
+      ATTN_SOCKET_PATH: socketPathForInstance(instance),
       ATTN_SESSION_ID: sessionId,
     }),
     stdio: ['ignore', 'pipe', 'pipe'],
@@ -90,13 +90,13 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
+  const instance = currentHarnessInstance();
+  if (!instance) {
     throw new Error(
-      'the present-submit-closes-window scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile',
+      'the present-submit-closes-window scenario does not run against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance',
     );
   }
-  const port = defaultDaemonPortForProfile(profile);
+  const port = defaultDaemonPortForInstance(instance);
   const attnBin = resolveAttnBin();
 
   const runner = createScenarioRunner(options, {
@@ -141,7 +141,7 @@ async function main() {
 
     presentationId = await runner.step('a_waiting_present_opens_a_presentation', async () => {
       const existingIds = new Set((await getPresentations({ port })).map((p) => p.id));
-      waitingPresent = startWaitingPresent(attnBin, profile, { cwd: repoDir, sessionId });
+      waitingPresent = startWaitingPresent(attnBin, instance, { cwd: repoDir, sessionId });
       runner.registerCleanup('stop_waiting_present', () => waitingPresent?.kill());
       const opened = await Promise.race([
         pollFor(async () => {

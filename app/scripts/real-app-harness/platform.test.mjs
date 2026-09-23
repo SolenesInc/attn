@@ -153,7 +153,7 @@ describe('LinuxDriver.waitForMainWindow', () => {
     expect(run.mock.calls.length).toBeGreaterThan(1);
   });
 
-  it('finds the profile window by its exact title without a pid', async () => {
+  it('finds the instance window by its exact title without a pid', async () => {
     const run = vi.fn().mockResolvedValue({ stdout: '31457282\n' });
     const driver = new LinuxDriver({
       appPath: '/home/someone/.local/share/attn-dev',
@@ -317,7 +317,7 @@ describe('launched app environment', () => {
     fs.rmSync(root, { recursive: true, force: true });
   });
 
-  it('hands the app the named profile instead of the shell routing it inherited', async () => {
+  it('hands the app the named instance instead of the shell routing it inherited', async () => {
     const { appPath, dumpPath } = writeEnvDumpingApp(root, 'attn-agent7');
 
     const launched = await appPlatform.launchApp({
@@ -327,7 +327,7 @@ describe('launched app environment', () => {
     await new Promise((resolve) => launched.child.on('exit', resolve));
     const childEnv = readEnvDump(dumpPath);
 
-    expect(childEnv.ATTN_PROFILE).toBe('agent7');
+    expect(childEnv.ATTN_INSTANCE).toBe('agent7');
     expect(childEnv.ATTN_HARNESS_ALWAYS_ON_TOP).toBe('1');
     expect(childEnv.ATTN_DB_PATH).toBe(path.join(root, 'chosen.db'));
     for (const key of ['ATTN_DATA_DIR', 'ATTN_WS_PORT', 'ATTN_SOCKET_PATH', 'ATTN_CONFIG_PATH', 'ATTN_PLUGIN_DIR']) {

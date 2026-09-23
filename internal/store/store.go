@@ -36,7 +36,7 @@ type Store struct {
 	teardownIntents        map[string]SessionTeardownIntent
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
-	profileRoles           map[string]string
+	instanceRoles          map[string]string
 	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
 }
@@ -90,7 +90,7 @@ func newMapBackedStore() *Store {
 		sessionCloses:   make(map[string]sessionCloseMark),
 		sessionCosts:    make(map[string]SessionCostState),
 		agentMetadata:   make(map[string]string),
-		profileRoles:    make(map[string]string),
+		instanceRoles:   make(map[string]string),
 		workspaces:      make(map[string]workspacelayout.WorkspaceLayout),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
@@ -136,7 +136,20 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func NewWithDB(dbPath string) (*Store, error) {
-	db, err := OpenDB(dbPath)
+	store, _, err := Open(dbPath)
+	return store, err
+}
+
+func Open(dbPath string) (*Store, SchemaUpgrade, error) {
+	db, upgrade, err := openUpgradedDB(dbPath)
+	if err != nil {
+		return nil, upgrade, err
+	}
+	return &Store{db: db, dbPath: dbPath, durable: true}, upgrade, nil
+}
+
+func OpenCurrent(dbPath string) (*Store, error) {
+	db, err := openCurrentDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -148,15 +161,6 @@ func (s *Store) DatabasePath() string {
 		return ""
 	}
 	return s.dbPath
-}
-
-func NewWithPersistence(path string) *Store {
-	dbPath := config.DBPath()
-	store, err := NewWithDB(dbPath)
-	if err != nil {
-		return New()
-	}
-	return store
 }
 
 func DefaultStatePath() string {
@@ -318,7 +322,7 @@ func (s *Store) Get(id string) *protocol.Session {
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, setup_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -326,7 +330,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&session.Directory,
 		&endpointID,
 		&workspaceID,
-		&session.SetupID,
+		&session.ProfileID,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -482,11 +486,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, setup_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, setup_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -510,7 +514,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.Directory,
 			&endpointID,
 			&workspaceID,
-			&session.SetupID,
+			&session.ProfileID,
 			&branch,
 			&isWorktree,
 			&mainRepo,
@@ -2131,7 +2135,7 @@ func (s *Store) GetAllSettings() map[string]string {
 	return result
 }
 
-func (s *Store) GetProfileRole(role string) string {
+func (s *Store) GetInstanceRole(role string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -2140,12 +2144,12 @@ func (s *Store) GetProfileRole(role string) string {
 		return ""
 	}
 	if s.db == nil {
-		return strings.TrimSpace(s.profileRoles[role])
+		return strings.TrimSpace(s.instanceRoles[role])
 	}
 
 	var sessionID string
 	if err := s.db.QueryRow(
-		"SELECT session_id FROM profile_roles WHERE role = ?",
+		"SELECT session_id FROM instance_roles WHERE role = ?",
 		role,
 	).Scan(&sessionID); err != nil {
 		return ""
@@ -2153,7 +2157,7 @@ func (s *Store) GetProfileRole(role string) string {
 	return strings.TrimSpace(sessionID)
 }
 
-func (s *Store) SetProfileRole(role, sessionID string) error {
+func (s *Store) SetInstanceRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2166,15 +2170,15 @@ func (s *Store) SetProfileRole(role, sessionID string) error {
 		return fmt.Errorf("session id cannot be empty")
 	}
 	if s.db == nil {
-		if s.profileRoles == nil {
-			s.profileRoles = make(map[string]string)
+		if s.instanceRoles == nil {
+			s.instanceRoles = make(map[string]string)
 		}
-		s.profileRoles[role] = sessionID
+		s.instanceRoles[role] = sessionID
 		return nil
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO profile_roles (role, session_id) VALUES (?, ?)
+		INSERT INTO instance_roles (role, session_id) VALUES (?, ?)
 		ON CONFLICT(role) DO UPDATE SET session_id = excluded.session_id`,
 		role,
 		sessionID,
@@ -2182,7 +2186,7 @@ func (s *Store) SetProfileRole(role, sessionID string) error {
 	return err
 }
 
-func (s *Store) ClearProfileRole(role, sessionID string) error {
+func (s *Store) ClearInstanceRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2192,14 +2196,14 @@ func (s *Store) ClearProfileRole(role, sessionID string) error {
 		return fmt.Errorf("role cannot be empty")
 	}
 	if s.db == nil {
-		if strings.TrimSpace(s.profileRoles[role]) == sessionID {
-			delete(s.profileRoles, role)
+		if strings.TrimSpace(s.instanceRoles[role]) == sessionID {
+			delete(s.instanceRoles, role)
 		}
 		return nil
 	}
 
 	_, err := s.db.Exec(
-		"DELETE FROM profile_roles WHERE role = ? AND session_id = ?",
+		"DELETE FROM instance_roles WHERE role = ? AND session_id = ?",
 		role,
 		sessionID,
 	)

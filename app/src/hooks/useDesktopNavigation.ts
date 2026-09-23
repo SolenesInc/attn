@@ -1,8 +1,8 @@
 import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useSetupsStore } from '../store/setups';
+import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
-import { SetupCommandError } from './daemonSetupEvents';
+import { ProfileCommandError } from './daemonProfileEvents';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
@@ -10,7 +10,7 @@ type ShowNotice = (message: string) => void;
 export const FRESH_ARRANGEMENT_TRIPWIRE_MS = 5_000;
 
 function revisionOf(desktopId: string): number | null {
-  return useSetupsStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.revision ?? null;
+  return useProfilesStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.revision ?? null;
 }
 
 function arrangementAdvanced(seen: Map<string, number>): boolean {
@@ -26,7 +26,7 @@ function waitForArrangementAfter(seen: Map<string, number>): Promise<void> {
         `Another window changed this desktop and its new layout did not arrive within ${FRESH_ARRANGEMENT_TRIPWIRE_MS / 1000}s. Try again.`,
       ));
     }, FRESH_ARRANGEMENT_TRIPWIRE_MS);
-    const unsubscribe = useSetupsStore.subscribe(() => {
+    const unsubscribe = useProfilesStore.subscribe(() => {
       if (!arrangementAdvanced(seen)) return;
       window.clearTimeout(timer);
       unsubscribe();
@@ -35,9 +35,9 @@ function waitForArrangementAfter(seen: Map<string, number>): Promise<void> {
   });
 }
 
-function currentDesktopOf(state: ReturnType<typeof useSetupsStore.getState>): Desktop | undefined {
-  const setup = state.setups.find((entry) => entry.id === state.selectedSetupId);
-  return state.desktops.find((desktop) => desktop.id === setup?.current_desktop_id);
+function currentDesktopOf(state: ReturnType<typeof useProfilesStore.getState>): Desktop | undefined {
+  const profile = state.profiles.find((entry) => entry.id === state.selectedProfileId);
+  return state.desktops.find((desktop) => desktop.id === profile?.current_desktop_id);
 }
 
 function failureMessage(err: unknown): string {
@@ -52,18 +52,18 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,
     sendDesktopCreate,
-    sendSetupSelect,
+    sendProfileSelect,
   } = useDaemonApi();
-  const setups = useSetupsStore((state) => state.setups);
-  const selectedSetupId = useSetupsStore((state) => state.selectedSetupId);
-  const desktops = useSetupsStore((state) => state.desktops);
-  const selectedSetup = useMemo(
-    () => setups.find((setup) => setup.id === selectedSetupId),
-    [selectedSetupId, setups],
+  const profiles = useProfilesStore((state) => state.profiles);
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const desktops = useProfilesStore((state) => state.desktops);
+  const selectedProfile = useMemo(
+    () => profiles.find((profile) => profile.id === selectedProfileId),
+    [selectedProfileId, profiles],
   );
   const currentDesktop = useMemo(
-    () => desktops.find((desktop) => desktop.id === selectedSetup?.current_desktop_id),
-    [desktops, selectedSetup],
+    () => desktops.find((desktop) => desktop.id === selectedProfile?.current_desktop_id),
+    [desktops, selectedProfile],
   );
 
   const report = useCallback(
@@ -75,16 +75,16 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const switchToDesktop = useCallback(
     (desktopId: string) => {
-      const state = useSetupsStore.getState();
-      if (!state.selectedSetupId || currentDesktopOf(state)?.id === desktopId) return;
-      report(sendDesktopSetCurrent(state.selectedSetupId, desktopId));
+      const state = useProfilesStore.getState();
+      if (!state.selectedProfileId || currentDesktopOf(state)?.id === desktopId) return;
+      report(sendDesktopSetCurrent(state.selectedProfileId, desktopId));
     },
     [report, sendDesktopSetCurrent],
   );
 
   const switchToSlot = useCallback(
     (slot: number) => {
-      const state = useSetupsStore.getState();
+      const state = useProfilesStore.getState();
       const target = desktopInSlot(state.desktops, slot);
       if (!target) {
         showNotice(`No desktop on ${slotShortcut(slot)}. Give one a shortcut from the overview.`);
@@ -101,7 +101,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const moveActivePane = useCallback(
     async (targetDesktopId: string, retryOnStale: boolean): Promise<void> => {
-      const state = useSetupsStore.getState();
+      const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
@@ -121,7 +121,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
           expectedTargetRevision: target.revision,
         });
       } catch (err) {
-        if (retryOnStale && err instanceof SetupCommandError && err.code === 'stale_revision') {
+        if (retryOnStale && err instanceof ProfileCommandError && err.code === 'stale_revision') {
           await waitForArrangementAfter(new Map([[source.id, source.revision], [target.id, target.revision]]));
           return moveActivePane(targetDesktopId, false);
         }
@@ -139,7 +139,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const sendActivePaneToSlot = useCallback(
     (slot: number) => {
-      const target = desktopInSlot(useSetupsStore.getState().desktops, slot);
+      const target = desktopInSlot(useProfilesStore.getState().desktops, slot);
       if (!target) {
         showNotice(`No desktop on ${slotShortcut(slot)} to send to. Give one a shortcut from the overview.`);
         return;
@@ -151,7 +151,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const deleteDesktop = useCallback(
     (desktopId: string) => {
-      const state = useSetupsStore.getState();
+      const state = useProfilesStore.getState();
       const desktop = state.desktops.find((entry) => entry.id === desktopId);
       if (!desktop) return;
       if (!isEmptyDesktop(desktop)) {
@@ -165,7 +165,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
 
   const giveShortcutSlot = useCallback(
     (desktopId: string) => {
-      const state = useSetupsStore.getState();
+      const state = useProfilesStore.getState();
       const desktop = state.desktops.find((entry) => entry.id === desktopId);
       if (!desktop || desktop.shortcut_slot) return;
       const slot = firstFreeSlot(state.desktops);
@@ -179,28 +179,28 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   );
 
   const createDesktop = useCallback(() => {
-    const setupId = useSetupsStore.getState().selectedSetupId;
-    if (!setupId) return;
+    const profileId = useProfilesStore.getState().selectedProfileId;
+    if (!profileId) return;
     report(
-      sendDesktopCreate(setupId).then((result) => {
+      sendDesktopCreate(profileId).then((result) => {
         const created = result.desktops?.[0];
-        if (created) return sendDesktopSetCurrent(setupId, created.id);
+        if (created) return sendDesktopSetCurrent(profileId, created.id);
         return undefined;
       }),
     );
   }, [report, sendDesktopCreate, sendDesktopSetCurrent]);
 
-  const selectSetup = useCallback(
-    (setupId: string) => {
-      if (setupId === useSetupsStore.getState().selectedSetupId) return;
-      report(sendSetupSelect(setupId));
+  const selectProfile = useCallback(
+    (profileId: string) => {
+      if (profileId === useProfilesStore.getState().selectedProfileId) return;
+      report(sendProfileSelect(profileId));
     },
-    [report, sendSetupSelect],
+    [report, sendProfileSelect],
   );
 
   return {
-    setups,
-    selectedSetup,
+    profiles,
+    selectedProfile,
     desktops,
     currentDesktop,
     switchToDesktop,
@@ -210,6 +210,6 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     deleteDesktop,
     giveShortcutSlot,
     createDesktop,
-    selectSetup,
+    selectProfile,
   };
 }

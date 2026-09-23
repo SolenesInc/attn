@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-actual_sha="${1:?usage: app-acceptance.sh <actual-sha> <candidate-sha> <outcome> <profile> <scenarios> <evidence>}"
+actual_sha="${1:?usage: app-acceptance.sh <actual-sha> <candidate-sha> <outcome> <instance> <scenarios> <evidence>}"
 candidate_sha="${2:?candidate SHA is required}"
 outcome="${3:?outcome is required}"
-profile="${4:?profile is required}"
+instance="${4:?instance is required}"
 scenarios="${5:?scenarios are required}"
 evidence="${6:?evidence is required}"
 
@@ -31,7 +31,7 @@ cat >"$receipt" <<EOF
 | --- | --- |
 | Candidate | \`${candidate_sha}\` |
 | Outcome | \`${outcome}\` |
-| Profile | \`${profile}\` |
+| Instance | \`${instance}\` |
 | Scenarios | ${scenarios} |
 | Evidence | ${evidence} |
 EOF

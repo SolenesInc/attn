@@ -2,8 +2,8 @@ name: Install App acceptance tree
 description: Prepare a runner and install a packaged App acceptance tree.
 
 inputs:
-  profile:
-    description: Non-production profile to install
+  instance:
+    description: Non-production instance to install
     required: true
   archive:
     description: Path to the packed application tree
@@ -27,16 +27,12 @@ runs:
       shell: bash
       run: brew install fish
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
+    - name: Set up Go and Node.js
+      uses: ./.github/actions/setup-toolchains
       with:
-        node-version: '26'
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-        cache: false
+        go: 'true'
+        go-cache: 'false'
+        node: 'true'
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
@@ -51,7 +47,7 @@ runs:
       shell: bash
       run: |
         tar -xzf "${{ inputs.archive }}"
-        make install-staged PROFILE="${{ inputs.profile }}"
+        make install-staged INSTANCE="${{ inputs.instance }}"
         ./attn plugin install-bundled attn-pi
         echo "$PWD/plugins/attn-pi/node_modules/.bin" >> "$GITHUB_PATH"
 

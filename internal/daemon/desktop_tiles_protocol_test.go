@@ -10,23 +10,23 @@ import (
 )
 
 type desktopTilesWorld struct {
-	*setupsTestDaemon
-	client  *wsClient
-	setupID string
-	desktop protocol.Desktop
+	*profilesTestDaemon
+	client    *wsClient
+	profileID string
+	desktop   protocol.Desktop
 }
 
 func newDesktopTilesWorld(t *testing.T) *desktopTilesWorld {
 	t.Helper()
-	w := newSetupsTestDaemon(t)
+	w := newProfilesTestDaemon(t)
 	client, _ := w.connect("")
-	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
-	w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": created.Setup.ID})
+	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
 	drainClientPayloads(t, client)
-	return &desktopTilesWorld{setupsTestDaemon: w, client: client, setupID: created.Setup.ID, desktop: created.Desktops[0]}
+	return &desktopTilesWorld{profilesTestDaemon: w, client: client, profileID: created.Profile.ID, desktop: created.Desktops[0]}
 }
 
-func (w *desktopTilesWorld) apply(command map[string]any) protocol.SetupActionResultMessage {
+func (w *desktopTilesWorld) apply(command map[string]any) protocol.ProfileActionResultMessage {
 	w.t.Helper()
 	command["desktop_id"] = w.desktop.ID
 	command["expected_revision"] = w.desktop.Revision
@@ -69,7 +69,7 @@ func tileContents(t *testing.T, client *wsClient) []protocol.DesktopTileContentM
 
 func TestATileDockedOnAnEmptyDesktopBecomesItsWholeTree(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	second, _ := w.connect(w.setupID)
+	second, _ := w.connect(w.profileID)
 
 	w.apply(map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "tile_params": "{}", "edge": "right",
@@ -86,7 +86,7 @@ func TestATileDockedOnAnEmptyDesktopBecomesItsWholeTree(t *testing.T) {
 
 func TestATileDocksBesideTheActivePaneAndReDockingKeepsItsParams(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	w.agent("agent-a", w.setupID)
+	w.agent("agent-a", w.profileID)
 	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
 	paneID := protocol.Deref(placed.PaneID)
 	notes := filepath.Join(t.TempDir(), "notes.md")
@@ -115,31 +115,31 @@ func TestATileDocksBesideTheActivePaneAndReDockingKeepsItsParams(t *testing.T) {
 
 func TestDockingATileRefusesAStaleRevisionAndAPaneID(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	w.agent("agent-a", w.setupID)
+	w.agent("agent-a", w.profileID)
 	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
 
 	stale := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision - 1,
 		"tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right",
 	})
-	wantErrorCode(t, stale, protocol.SetupErrorCodeStaleRevision)
+	wantErrorCode(t, stale, protocol.ProfileErrorCodeStaleRevision)
 
 	clash := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
 		"tile_id": protocol.Deref(placed.PaneID), "tile_kind": "notebook", "edge": "right",
 	})
-	wantErrorCode(t, clash, protocol.SetupErrorCodeInvalid)
+	wantErrorCode(t, clash, protocol.ProfileErrorCodeInvalid)
 
 	unknownSession := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
 		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": "/notes.md", "tile_session_id": "agent-that-never-was", "edge": "right",
 	})
-	wantErrorCode(t, unknownSession, protocol.SetupErrorCodeNotFound)
+	wantErrorCode(t, unknownSession, protocol.ProfileErrorCodeNotFound)
 }
 
 func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	w.agent("agent-a", w.setupID)
+	w.agent("agent-a", w.profileID)
 	notes := filepath.Join(t.TempDir(), "notes.md")
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-web", "tile_kind": "browser", "tile_params": "https://example.com", "edge": "right"})
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
@@ -153,19 +153,19 @@ func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
 		"tile_id": "tile-web", "tile_params": "javascript:alert(1)",
 	})
-	wantErrorCode(t, badURL, protocol.SetupErrorCodeInvalid)
+	wantErrorCode(t, badURL, protocol.ProfileErrorCodeInvalid)
 
 	markdownPath := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
 		"tile_id": "tile-md", "tile_params": "/elsewhere.md",
 	})
-	wantErrorCode(t, markdownPath, protocol.SetupErrorCodeInvalid)
+	wantErrorCode(t, markdownPath, protocol.ProfileErrorCodeInvalid)
 
 	unknownSession := w.send(w.client, map[string]any{
 		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
 		"tile_id": "tile-md", "tile_session_id": "agent-that-never-was",
 	})
-	wantErrorCode(t, unknownSession, protocol.SetupErrorCodeNotFound)
+	wantErrorCode(t, unknownSession, protocol.ProfileErrorCodeNotFound)
 
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopUpdateTile, "tile_id": "tile-md", "tile_session_id": "agent-a"})
 	if tile := w.tile("tile-md"); tile.TileSessionID != "agent-a" || tile.TileParams != notes {
@@ -180,7 +180,7 @@ func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {
 		t.Fatal(err)
 	}
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
-	bystander, _ := w.connect(w.setupID)
+	bystander, _ := w.connect(w.profileID)
 	drainClientPayloads(t, w.client)
 
 	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
@@ -216,15 +216,15 @@ func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {
 	}
 }
 
-func TestSessionsCarryTheirSetupOnTheWire(t *testing.T) {
+func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	w.agent("agent-a", w.setupID)
+	w.agent("agent-a", w.profileID)
 
-	_, initial := w.connect(w.setupID)
+	_, initial := w.connect(w.profileID)
 	for _, session := range initial.Sessions {
 		if session.ID == "agent-a" {
-			if session.SetupID != w.setupID {
-				t.Fatalf("agent-a reached the client with setup %q, want %q", session.SetupID, w.setupID)
+			if session.ProfileID != w.profileID {
+				t.Fatalf("agent-a reached the client with profile %q, want %q", session.ProfileID, w.profileID)
 			}
 			return
 		}
@@ -232,10 +232,10 @@ func TestSessionsCarryTheirSetupOnTheWire(t *testing.T) {
 	t.Fatalf("initial_state did not list agent-a: %+v", initial.Sessions)
 }
 
-func TestDeletingASetupDropsItsTileSubscriptions(t *testing.T) {
+func TestDeletingAProfileDropsItsTileSubscriptions(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "doomed"})
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": doomed.Setup.ID})
+	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
 	w.desktop = doomed.Desktops[0]
 	notes := filepath.Join(t.TempDir(), "notes.md")
 	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
@@ -246,22 +246,22 @@ func TestDeletingASetupDropsItsTileSubscriptions(t *testing.T) {
 	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 1 {
 		t.Fatalf("subscribing gave keys %v", keys)
 	}
-	current, err := w.d.store.GetSetup(doomed.Setup.ID)
+	current, err := w.d.store.GetProfile(doomed.Profile.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	w.mustSend(w.client, map[string]any{
-		"cmd": protocol.CmdSetupDelete, "setup_id": doomed.Setup.ID, "expected_revision": current.Revision, "destination_setup_id": w.setupID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision, "destination_profile_id": w.profileID,
 	})
 	w.d.pollMarkdownOnce()
 
 	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("deleting the setup left subscriptions %v", keys)
+		t.Fatalf("deleting the profile left subscriptions %v", keys)
 	}
 }
 
-func TestSwitchingSetupsDropsTileSubscriptionsOfTheOldSetup(t *testing.T) {
+func TestSwitchingProfilesDropsTileSubscriptionsOfTheOldProfile(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	notes := filepath.Join(t.TempDir(), "notes.md")
 	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
@@ -269,9 +269,9 @@ func TestSwitchingSetupsDropsTileSubscriptionsOfTheOldSetup(t *testing.T) {
 	}
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
 	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
-	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "elsewhere"})
+	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
 
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": other.Setup.ID})
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": other.Profile.ID})
 	drainClientPayloads(t, w.client)
 	if err := os.WriteFile(notes, []byte("# edited after the switch"), 0o600); err != nil {
 		t.Fatal(err)
@@ -279,14 +279,14 @@ func TestSwitchingSetupsDropsTileSubscriptionsOfTheOldSetup(t *testing.T) {
 	w.d.pollMarkdownOnce()
 
 	if late := tileContents(t, w.client); len(late) != 0 {
-		t.Fatalf("a client on another setup still got %+v", late)
+		t.Fatalf("a client on another profile still got %+v", late)
 	}
 	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("switching setups left subscriptions %v", keys)
+		t.Fatalf("switching profiles left subscriptions %v", keys)
 	}
 
 	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
 	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("a client subscribed to a desktop outside its setup: %v", keys)
+		t.Fatalf("a client subscribed to a desktop outside its profile: %v", keys)
 	}
 }

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -22,8 +22,8 @@ async function poll(read, description) {
 
 async function main() {
   const options = parseCommonArgs(process.argv.slice(2));
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('Crew header verification requires a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('Crew header verification requires a named instance');
   const runner = createScenarioRunner(options, {
     scenarioId: 'CrewSeedHeader', tier: 'local', prefix: 'crew-seed-header', allowRealAgents: false,
   });
@@ -35,9 +35,9 @@ async function main() {
   let lastHandoffAt = 0;
   let memberRegistered = false;
   const member = `fern-${Date.now().toString(36)}`;
-  const home = path.join(dataDirForProfile(profile), 'crew', member);
+  const home = path.join(dataDirForInstance(instance), 'crew', member);
   const run = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
-    encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SESSION_ID: '' }),
+    encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SESSION_ID: '' }),
   });
   const json = (args) => {
     const output = run(args);

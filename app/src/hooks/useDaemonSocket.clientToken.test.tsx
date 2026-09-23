@@ -75,7 +75,7 @@ describe('useDaemonSocket client token', () => {
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(true);
     vi.mocked(invoke).mockImplementation(async (cmd: string) =>
-      cmd === 'get_client_token' ? 'profile-token' : '',
+      cmd === 'get_client_token' ? 'instance-token' : '',
     );
   });
 
@@ -84,13 +84,13 @@ describe('useDaemonSocket client token', () => {
     vi.restoreAllMocks();
   });
 
-  it('presents the profile token in client_hello', async () => {
+  it('presents the instance token in client_hello', async () => {
     const { unmount } = renderSocket();
     const ws = await waitForOpenSocket();
 
     await waitFor(() => {
       const hello = ws.sent.map((entry) => JSON.parse(entry)).find((entry) => entry.cmd === 'client_hello');
-      expect(hello?.client_token).toBe('profile-token');
+      expect(hello?.client_token).toBe('instance-token');
     });
 
     unmount();

@@ -164,7 +164,7 @@ export function SessionPullRequestPopover({
             <dt>status</dt>
             <dd>
               <span className="session-pr-popover__value">
-                {githubPollingOffReason ? 'GitHub polling is off for this profile' : 'waiting for GitHub'}
+                {githubPollingOffReason ? 'GitHub polling is off for this instance' : 'waiting for GitHub'}
               </span>
             </dd>
           </>

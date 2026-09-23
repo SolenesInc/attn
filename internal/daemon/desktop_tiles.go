@@ -6,8 +6,8 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/setups"
 )
 
 const desktopTileContainerPrefix = "desktop:"
@@ -29,7 +29,7 @@ func tileLeafByID(tree layouttree.Node, tileID string) (layouttree.TileLeaf, boo
 	return layouttree.TileLeaf{}, false
 }
 
-func dockAnchor(desktop setups.Desktop, requested, tileID string) string {
+func dockAnchor(desktop profiles.Desktop, requested, tileID string) string {
 	for _, candidate := range []string{strings.TrimSpace(requested), desktop.ActivePaneID} {
 		if candidate != "" && candidate != tileID && (layouttree.HasPane(desktop.Tree, candidate) || layouttree.HasTile(desktop.Tree, candidate)) {
 			return candidate
@@ -53,12 +53,12 @@ type desktopTileDock struct {
 	share     float64
 }
 
-func dockTileOnDesktop(desktop setups.Desktop, dock desktopTileDock) (setups.Desktop, error) {
+func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles.Desktop, error) {
 	if dock.tileID == "" || dock.tileKind == "" {
-		return desktop, setups.Errorf(setups.CodeInvalid, "docking a tile needs tile_id and tile_kind")
+		return desktop, profiles.Errorf(profiles.CodeInvalid, "docking a tile needs tile_id and tile_kind")
 	}
 	if layouttree.HasPane(desktop.Tree, dock.tileID) {
-		return desktop, setups.Errorf(setups.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
+		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
 	}
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
 	if dock.params == "" && docked {
@@ -86,14 +86,14 @@ func dockTileOnDesktop(desktop setups.Desktop, dock desktopTileDock) (setups.Des
 	}
 	next, ok := layouttree.DockTile(desktop.Tree, anchor, direction, before, newWorkspaceLayoutEntityID("split"), dock.tileID, dock.tileKind, dock.params, dock.sessionID, firstChildShare)
 	if !ok {
-		return desktop, setups.Errorf(setups.CodeInvalid, "tile %s could not dock beside %s on desktop %s", dock.tileID, anchor, desktop.ID)
+		return desktop, profiles.Errorf(profiles.CodeInvalid, "tile %s could not dock beside %s on desktop %s", dock.tileID, anchor, desktop.ID)
 	}
 	desktop.Tree = next
 	return desktop, nil
 }
 
 func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDockTileMessage) {
-	d.runSetupAction(client, msg.Cmd, msg.RequestID, func() (setupActionOutcome, error) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		dock := desktopTileDock{
 			tileID:    strings.TrimSpace(msg.TileID),
 			tileKind:  strings.TrimSpace(msg.TileKind),
@@ -104,9 +104,9 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 			share:     protocol.Deref(msg.TileShare),
 		}
 		if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
-			return setupActionOutcome{}, setups.Errorf(setups.CodeNotFound, "session %s does not exist", dock.sessionID)
+			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", dock.sessionID)
 		}
-		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop setups.Desktop) (setups.Desktop, error) {
+		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			return dockTileOnDesktop(desktop, dock)
 		})
 		return d.desktopChanged(desktop), err
@@ -118,7 +118,7 @@ func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
 	case string(layouttree.TileKindBrowser):
 		url, err := validateBrowserURL(params)
 		if err != nil {
-			return "", setups.Errorf(setups.CodeInvalid, "%v", err)
+			return "", profiles.Errorf(profiles.CodeInvalid, "%v", err)
 		}
 		return url, nil
 	case string(layouttree.TileKindNotebook):
@@ -128,11 +128,11 @@ func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
 			return "", err
 		}
 		if _, _, err := d.readSeed(params); err != nil {
-			return "", setups.Errorf(setups.CodeNotFound, "%v", err)
+			return "", profiles.Errorf(profiles.CodeNotFound, "%v", err)
 		}
 		return params, nil
 	default:
-		return "", setups.Errorf(setups.CodeInvalid, "tile parameters cannot be updated for tile kind %q", kind)
+		return "", profiles.Errorf(profiles.CodeInvalid, "tile parameters cannot be updated for tile kind %q", kind)
 	}
 }
 
@@ -144,7 +144,7 @@ type desktopTileUpdate struct {
 
 func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUpdate) (desktopTileUpdate, error) {
 	if update.tileID == "" || (update.params == "" && update.sessionID == "") {
-		return update, setups.Errorf(setups.CodeInvalid, "updating a tile needs tile_id and tile_params or tile_session_id")
+		return update, profiles.Errorf(profiles.CodeInvalid, "updating a tile needs tile_id and tile_params or tile_session_id")
 	}
 	desktop, err := d.store.GetDesktop(desktopID)
 	if err != nil {
@@ -152,14 +152,14 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	}
 	tile, found := tileLeafByID(desktop.Tree, update.tileID)
 	if !found {
-		return update, setups.Errorf(setups.CodeNotFound, "tile %s does not belong to desktop %s", update.tileID, desktopID)
+		return update, profiles.Errorf(profiles.CodeNotFound, "tile %s does not belong to desktop %s", update.tileID, desktopID)
 	}
 	if update.sessionID != "" && d.store.Get(update.sessionID) == nil {
-		return update, setups.Errorf(setups.CodeNotFound, "session %s does not exist", update.sessionID)
+		return update, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", update.sessionID)
 	}
 	if tile.TileKind == string(layouttree.TileKindMarkdown) {
 		if update.sessionID == "" {
-			return update, setups.Errorf(setups.CodeInvalid, "a markdown tile keeps its file; only its session can change")
+			return update, profiles.Errorf(profiles.CodeInvalid, "a markdown tile keeps its file; only its session can change")
 		}
 		update.params = ""
 		return update, nil
@@ -172,7 +172,7 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	return update, nil
 }
 
-func applyDesktopTileUpdate(desktop setups.Desktop, update desktopTileUpdate) (setups.Desktop, error) {
+func applyDesktopTileUpdate(desktop profiles.Desktop, update desktopTileUpdate) (profiles.Desktop, error) {
 	next, found := desktop.Tree, true
 	if update.params != "" {
 		next, found = layouttree.UpdateTileParams(next, update.tileID, update.params)
@@ -181,23 +181,23 @@ func applyDesktopTileUpdate(desktop setups.Desktop, update desktopTileUpdate) (s
 		next, found = layouttree.UpdateTileSessionID(next, update.tileID, update.sessionID)
 	}
 	if !found {
-		return desktop, setups.Errorf(setups.CodeNotFound, "tile %s does not belong to desktop %s", update.tileID, desktop.ID)
+		return desktop, profiles.Errorf(profiles.CodeNotFound, "tile %s does not belong to desktop %s", update.tileID, desktop.ID)
 	}
 	desktop.Tree = next
 	return desktop, nil
 }
 
 func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.DesktopUpdateTileMessage) {
-	d.runSetupAction(client, msg.Cmd, msg.RequestID, func() (setupActionOutcome, error) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		update, err := d.checkedDesktopTileUpdate(msg.DesktopID, desktopTileUpdate{
 			tileID:    strings.TrimSpace(msg.TileID),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
 			sessionID: strings.TrimSpace(protocol.Deref(msg.TileSessionID)),
 		})
 		if err != nil {
-			return setupActionOutcome{}, err
+			return profileActionOutcome{}, err
 		}
-		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop setups.Desktop) (setups.Desktop, error) {
+		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			return applyDesktopTileUpdate(desktop, update)
 		})
 		return d.desktopChanged(desktop), err
@@ -212,14 +212,14 @@ func (d *Daemon) desktopMarkdownTilePath(desktopID, tileID string) (string, erro
 	return markdownTilePathOn(desktop, tileID)
 }
 
-func markdownTilePathOn(desktop setups.Desktop, tileID string) (string, error) {
+func markdownTilePathOn(desktop profiles.Desktop, tileID string) (string, error) {
 	desktopID := desktop.ID
 	tile, found := tileLeafByID(desktop.Tree, tileID)
 	if !found {
-		return "", setups.Errorf(setups.CodeNotFound, "tile %s does not belong to desktop %s", tileID, desktopID)
+		return "", profiles.Errorf(profiles.CodeNotFound, "tile %s does not belong to desktop %s", tileID, desktopID)
 	}
 	if tile.TileKind != string(layouttree.TileKindMarkdown) {
-		return "", setups.Errorf(setups.CodeInvalid, "tile %s is a %s tile; only markdown tiles have content", tileID, tile.TileKind)
+		return "", profiles.Errorf(profiles.CodeInvalid, "tile %s is a %s tile; only markdown tiles have content", tileID, tile.TileKind)
 	}
 	return strings.TrimSpace(tile.TileParams), nil
 }
@@ -240,13 +240,13 @@ func desktopTileContentMessage(desktopID, tileID, path, content string, readErr 
 }
 
 func (d *Daemon) handleDesktopTileContentGet(client *wsClient, msg *protocol.DesktopTileContentGetMessage) {
-	if err := d.requireHome("setups and desktops"); err != nil {
+	if err := d.requireHome("profiles and desktops"); err != nil {
 		d.sendCommandError(client, msg.Cmd, err.Error())
 		return
 	}
 	desktop, err := d.store.GetDesktop(msg.DesktopID)
-	if err == nil && desktop.SetupID != client.selectedSetup() {
-		err = setups.Errorf(setups.CodeCrossSetup, "desktop %s belongs to setup %s, not the setup this client is on", desktop.ID, desktop.SetupID)
+	if err == nil && desktop.ProfileID != client.selectedProfile() {
+		err = profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not the profile this client is on", desktop.ID, desktop.ProfileID)
 	}
 	path := ""
 	if err == nil {
@@ -275,9 +275,9 @@ func (d *Daemon) broadcastDesktopTileContent(ref markdownTileRef, content string
 }
 
 type desktopSubscriber struct {
-	client *wsClient
-	setup  string
-	keys   []string
+	client  *wsClient
+	profile string
+	keys    []string
 }
 
 func (d *Daemon) desktopSubscribers() []desktopSubscriber {
@@ -287,7 +287,7 @@ func (d *Daemon) desktopSubscribers() []desktopSubscriber {
 	}
 	d.wsHub.ForEachClient(func(client *wsClient) {
 		if keys := client.tileContentSubscriptionKeys(); len(keys) > 0 {
-			subscribers = append(subscribers, desktopSubscriber{client: client, setup: client.selectedSetup(), keys: keys})
+			subscribers = append(subscribers, desktopSubscriber{client: client, profile: client.selectedProfile(), keys: keys})
 		}
 	})
 	return subscribers
@@ -295,19 +295,19 @@ func (d *Daemon) desktopSubscribers() []desktopSubscriber {
 
 type desktopReads struct {
 	d    *Daemon
-	seen map[string]*setups.Desktop
+	seen map[string]*profiles.Desktop
 }
 
-func (r *desktopReads) get(desktopID string) (*setups.Desktop, bool) {
+func (r *desktopReads) get(desktopID string) (*profiles.Desktop, bool) {
 	if desktop, read := r.seen[desktopID]; read {
 		return desktop, true
 	}
 	desktop, err := r.d.store.GetDesktop(desktopID)
-	var setupErr *setups.Error
+	var profileErr *profiles.Error
 	switch {
 	case err == nil:
 		r.seen[desktopID] = &desktop
-	case errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound:
+	case errors.As(err, &profileErr) && profileErr.Code == profiles.CodeNotFound:
 		r.seen[desktopID] = nil
 	default:
 		return nil, false
@@ -315,8 +315,8 @@ func (r *desktopReads) get(desktopID string) (*setups.Desktop, bool) {
 	return r.seen[desktopID], true
 }
 
-func subscribedMarkdownPath(desktop *setups.Desktop, setupID, tileID string) (string, bool) {
-	if desktop == nil || desktop.SetupID != setupID {
+func subscribedMarkdownPath(desktop *profiles.Desktop, profileID, tileID string) (string, bool) {
+	if desktop == nil || desktop.ProfileID != profileID {
 		return "", false
 	}
 	tile, found := tileLeafByID(desktop.Tree, tileID)
@@ -325,7 +325,7 @@ func subscribedMarkdownPath(desktop *setups.Desktop, setupID, tileID string) (st
 }
 
 func (d *Daemon) addSubscribedDesktopMarkdownTiles(desired map[string]markdownTileRef) {
-	reads := &desktopReads{d: d, seen: make(map[string]*setups.Desktop)}
+	reads := &desktopReads{d: d, seen: make(map[string]*profiles.Desktop)}
 	for _, subscriber := range d.desktopSubscribers() {
 		for _, key := range subscriber.keys {
 			container, tileID, _ := strings.Cut(key, "\x00")
@@ -337,7 +337,7 @@ func (d *Daemon) addSubscribedDesktopMarkdownTiles(desired map[string]markdownTi
 			if !known {
 				continue
 			}
-			path, live := subscribedMarkdownPath(desktop, subscriber.setup, tileID)
+			path, live := subscribedMarkdownPath(desktop, subscriber.profile, tileID)
 			if !live {
 				subscriber.client.dropTileContentSubscription(container, tileID)
 				continue

@@ -53,28 +53,44 @@ type NotificationAction struct {
 }
 
 func (s *Store) AddNotification(rec NotificationRecord, now time.Time) (NotificationRecord, error) {
-	if s.db == nil {
-		return NotificationRecord{}, fmt.Errorf("store: no database")
-	}
 	rec.ID = uuid.NewString()
+	rec, _, err := s.insertNotification("INSERT", rec, now)
+	return rec, err
+}
+
+func (s *Store) EnsureNotification(rec NotificationRecord, now time.Time) (NotificationRecord, bool, error) {
+	if rec.ID == "" {
+		return NotificationRecord{}, false, fmt.Errorf("store: ensure notification needs an id")
+	}
+	return s.insertNotification("INSERT OR IGNORE", rec, now)
+}
+
+func (s *Store) insertNotification(insert string, rec NotificationRecord, now time.Time) (NotificationRecord, bool, error) {
+	if s.db == nil {
+		return NotificationRecord{}, false, fmt.Errorf("store: no database")
+	}
 	rec.CreatedAt = now.UTC()
 	rec.ReadAt = time.Time{}
 	rec.Severity = NormalizeNotificationSeverity(string(rec.Severity))
 	actionsJSON, err := json.Marshal(rec.Actions)
 	if err != nil {
-		return NotificationRecord{}, fmt.Errorf("store: encode notification actions: %w", err)
+		return NotificationRecord{}, false, fmt.Errorf("store: encode notification actions: %w", err)
 	}
-	_, err = s.db.Exec(
-		`INSERT INTO notifications (id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at)
+	result, err := s.db.Exec(
+		insert+` INTO notifications (id, kind, severity, title, body, detail, trigger, impact, cause, diagnostic, actions_json, source_kind, source_id, created_at, read_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')`,
 		rec.ID, rec.Kind, string(rec.Severity), rec.Title, rec.Body, rec.Detail,
 		rec.Trigger, rec.Impact, rec.Cause, rec.Diagnostic, string(actionsJSON), rec.SourceKind, rec.SourceID,
 		rec.CreatedAt.Format(sortableTimeFormat),
 	)
 	if err != nil {
-		return NotificationRecord{}, fmt.Errorf("store: add notification: %w", err)
+		return NotificationRecord{}, false, fmt.Errorf("store: add notification: %w", err)
 	}
-	return rec, nil
+	inserted, err := result.RowsAffected()
+	if err != nil {
+		return NotificationRecord{}, false, fmt.Errorf("store: add notification: %w", err)
+	}
+	return rec, inserted == 1, nil
 }
 
 func (s *Store) ListNotifications() ([]NotificationRecord, error) {

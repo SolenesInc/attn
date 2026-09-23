@@ -86,7 +86,6 @@ const (
 	deferredRecoveryRPCTimeout    = 5 * time.Second
 	workerStartupProbeTimeout     = 20 * time.Second
 
-	warnPersistenceDegraded       = "persistence_degraded"
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
@@ -157,6 +156,7 @@ type Daemon struct {
 	ptyBackend                        ptybackend.Backend
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
+	sharedPTYHost                     *ptybackend.WorkerBackend
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[string]bool
 	watchersMu                        sync.Mutex
@@ -590,28 +590,6 @@ func New(socketPath string) *Daemon {
 		logger.Infof(format, args...)
 	})
 
-	dbPath := config.DBPath()
-	sessionStore, err := store.NewWithDB(dbPath)
-	var startupWarnings []protocol.DaemonWarning
-	if err != nil {
-		logger.Infof("Failed to open DB at %s: %v (using in-memory)", dbPath, err)
-		sessionStore = store.New()
-		startupWarnings = append(startupWarnings, protocol.DaemonWarning{
-			Code: warnPersistenceDegraded,
-			Message: fmt.Sprintf(
-				"Persistence degraded: unable to open durable state at %s. Running in-memory only; session state will not survive daemon restarts. See daemon log in %s for details.",
-				dbPath,
-				config.LogPath(),
-			),
-		})
-	}
-
-	legacyPath := config.StatePath()
-	if _, err := os.Stat(legacyPath); err == nil {
-		os.Remove(legacyPath)
-		logger.Infof("Removed legacy state file: %s", legacyPath)
-	}
-
 	dataRoot := filepath.Dir(socketPath)
 	pidPath := filepath.Join(dataRoot, "attn.pid")
 	manager := pty.NewManager(logger.Infof)
@@ -620,7 +598,6 @@ func New(socketPath string) *Daemon {
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
-		store:               sessionStore,
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
@@ -629,7 +606,6 @@ func New(socketPath string) *Daemon {
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
 		gitCoord:            newGitCoordinator(),
-		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
@@ -651,7 +627,6 @@ func New(socketPath string) *Daemon {
 	}
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
-	d.ensureEventBus()
 	d.sessionTitleExec = d.execSessionTitle
 	return d
 }
@@ -738,6 +713,14 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 	return d
 }
 
+func (d *Daemon) removeLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if _, err := os.Stat(legacyPath); err == nil {
+		os.Remove(legacyPath)
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
+}
+
 func (d *Daemon) Start() error {
 	if err := d.resolveAppRuntimeTripwires(); err != nil {
 		return fmt.Errorf("resolve app runtime tripwires: %w", err)
@@ -776,6 +759,9 @@ func (d *Daemon) Start() error {
 		d.plugins = newPluginRegistry()
 	}
 	startSucceeded := false
+	if err := enrollment.RefuseOutpost(d.dataRoot); err != nil {
+		return err
+	}
 	if err := d.acquirePIDLock(); err != nil {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
@@ -785,13 +771,6 @@ func (d *Daemon) Start() error {
 		}
 		d.Stop()
 	}()
-	d.ensurePluginSupervisor()
-	d.applyHeadlessContextWindowCap()
-	d.applyHeadlessTasksMode()
-	if err := d.startEventBus(); err != nil {
-		return fmt.Errorf("start event bus: %w", err)
-	}
-	d.loadWorkspacesFromStore()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -799,6 +778,17 @@ func (d *Daemon) Start() error {
 		}
 		d.daemonInstanceID = instanceID
 	}
+	if err := d.openStore(); err != nil {
+		return err
+	}
+	d.removeLegacyStateFile()
+	d.ensurePluginSupervisor()
+	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
+	if err := d.startEventBus(); err != nil {
+		return fmt.Errorf("start event bus: %w", err)
+	}
+	d.loadWorkspacesFromStore()
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
@@ -870,18 +860,13 @@ func (d *Daemon) Start() error {
 			}
 		}
 	case "shared":
-		sharedBackend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
+		sharedBackend, err := d.newSharedPTYHost()
 		if err != nil {
 			d.logf("failed to initialize shared PTY host: %v; falling back to embedded", err)
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize shared PTY host (%v). Falling back to embedded.", err))
 		} else {
 			d.ptyBackend = sharedBackend
+			d.sharedPTYHost = sharedBackend
 			d.logf("using PTY backend: shared")
 		}
 	case "migrating":
@@ -897,13 +882,7 @@ func (d *Daemon) Start() error {
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize legacy PTY workers (%v). Falling back to embedded.", legacyErr))
 			break
 		}
-		sharedBackend, sharedErr := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
+		sharedBackend, sharedErr := d.newSharedPTYHost()
 		if sharedErr != nil {
 			d.ptyBackend = legacyBackend
 			d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", sharedErr)
@@ -911,20 +890,14 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		useSharedForNew := false
 		sharedEnabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
-		if sharedEnabled && shouldRunWorkerStartupProbe() {
-			probeCtx, cancelProbe := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
-			probeErr := sharedBackend.Probe(probeCtx)
-			cancelProbe()
-			if probeErr != nil {
-				d.logf("shared PTY host startup probe failed: %v; new sessions remain on legacy workers", probeErr)
-				d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host probe failed (%v). New terminals will keep using dedicated workers.", probeErr))
-			} else {
-				useSharedForNew = true
-			}
-		} else if sharedEnabled && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
+		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
+		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
+		}
+		if candidateErr := sharedBackend.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
+			d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
 		}
 		migratingBackend, err := ptybackend.NewMigrating(legacyBackend, sharedBackend, useSharedForNew)
 		if err != nil {
@@ -933,6 +906,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 		d.ptyBackend = migratingBackend
+		d.sharedPTYHost = sharedBackend
 		if useSharedForNew {
 			d.logf("using PTY backend: migrating (existing=owner, new=shared)")
 		} else {
@@ -1023,6 +997,11 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
+			go d.validateSharedPTYHostAfterRecovery()
+		} else {
+			d.validateSharedPTYHostAfterRecovery()
+		}
 		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()
@@ -2149,13 +2128,13 @@ func (d *Daemon) listenHTTP() error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf(
-			"refusing to start: cannot bind the WebSocket address %s for profile %q: %w. "+
-				"attn derives that port from the profile name, so the usual owner is a daemon for the same profile running somewhere else — "+
+			"refusing to start: cannot bind the WebSocket address %s for instance %q: %w. "+
+				"attn derives that port from the instance name, so the usual owner is a daemon for the same instance running somewhere else — "+
 				"notably on a VM whose listener OrbStack forwards onto host localhost while the host port is free. "+
 				"Starting anyway would leave this daemon split-brained: the app routes by WebSocket port and would attach to the foreign listener, "+
 				"the CLI routes by the unix socket and would talk to this process, and every command sent from the app would silently miss these sessions. "+
-				"Free %s (stop whatever holds it, including a forwarding VM) or run this daemon under another profile with ATTN_PROFILE",
-			addr, config.ProfileLabel(), err, addr,
+				"Free %s (stop whatever holds it, including a forwarding VM) or run this daemon under another instance with ATTN_INSTANCE",
+			addr, config.InstanceLabel(), err, addr,
 		)
 	}
 	d.httpListener = listener
@@ -4152,7 +4131,7 @@ func (d *Daemon) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"ws_clients":         d.wsHub.ClientCount(),
 		"github_available":   d.githubAvailable(),
 		"github_polling_off": gitHubPollingOffReason(),
-		"profile":            config.ProfileLabel(),
+		"instance":           config.InstanceLabel(),
 		"data_dir":           dataDir,
 		"socket_path":        socketPath,
 		"port":               config.WSPort(),

@@ -48,8 +48,8 @@ type Bootstrapper struct {
 	version     string
 	versionErr  error
 
-	makeReady      func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error)
-	shipAppRuntime func(ctx context.Context, sshTarget, profile string, ready readyRemote) error
+	makeReady      func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error)
+	shipAppRuntime func(ctx context.Context, sshTarget, instance string, ready readyRemote) error
 }
 
 func NewBootstrapper(logf func(format string, args ...interface{})) *Bootstrapper {
@@ -68,9 +68,9 @@ type readyRemote struct {
 	remoteInstallPath string
 }
 
-func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile, homeDaemonID string) error {
+func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, instance, homeDaemonID string) error {
 	readyCtx, cancelReady := context.WithTimeout(ctx, remoteReadyBudget)
-	ready, err := b.makeReady(readyCtx, sshTarget, profile, homeDaemonID)
+	ready, err := b.makeReady(readyCtx, sshTarget, instance, homeDaemonID)
 	cancelReady()
 	if err != nil {
 		return err
@@ -78,14 +78,14 @@ func (b *Bootstrapper) EnsureRemoteReady(ctx context.Context, sshTarget, profile
 
 	shipCtx, cancelShip := context.WithTimeout(ctx, appRuntimeShipBudget)
 	defer cancelShip()
-	if err := b.shipAppRuntime(shipCtx, sshTarget, profile, ready); err != nil {
+	if err := b.shipAppRuntime(shipCtx, sshTarget, instance, ready); err != nil {
 		b.logf("%v", err)
 	}
 	return nil
 }
 
-func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
-	platform, err := b.detectRemotePlatform(ctx, sshTarget, profile)
+func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
+	platform, err := b.detectRemotePlatform(ctx, sshTarget, instance)
 	if err != nil {
 		return readyRemote{}, fmt.Errorf("detect remote platform for %s: %w", sshTarget, err)
 	}
@@ -95,7 +95,7 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		return readyRemote{}, fmt.Errorf("determine local version: %w", err)
 	}
 
-	remoteVersion, err := b.remoteVersion(ctx, sshTarget, profile)
+	remoteVersion, err := b.remoteVersion(ctx, sshTarget, instance)
 	if err != nil {
 		return readyRemote{}, fmt.Errorf("check remote version on %s: %w", sshTarget, err)
 	}
@@ -116,7 +116,7 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		if err != nil {
 			return readyRemote{}, fmt.Errorf("hash local binary for %s: %w", sshTarget, err)
 		}
-		remoteHash, err := b.remoteBinarySHA256(ctx, sshTarget, profile)
+		remoteHash, err := b.remoteBinarySHA256(ctx, sshTarget, instance)
 		if err != nil {
 			return readyRemote{}, fmt.Errorf("hash remote binary on %s: %w", sshTarget, err)
 		}
@@ -126,49 +126,49 @@ func (b *Bootstrapper) makeRemoteReady(ctx context.Context, sshTarget, profile, 
 		}
 	}
 
-	remoteInstallPath, err := b.resolveRemoteInstall(ctx, sshTarget, profile)
+	remoteInstallPath, err := b.resolveRemoteInstall(ctx, sshTarget, instance)
 	if err != nil {
 		return readyRemote{}, fmt.Errorf("resolve the install path on %s: %w", sshTarget, err)
 	}
 	ready := readyRemote{platform: platform, version: localVersion, remoteInstallPath: remoteInstallPath}
 
 	if shouldInstall {
-		if err := b.installRemoteBinary(ctx, sshTarget, profile, localBinary, remoteInstallPath); err != nil {
+		if err := b.installRemoteBinary(ctx, sshTarget, instance, localBinary, remoteInstallPath); err != nil {
 			return ready, fmt.Errorf("install attn on %s: %w", sshTarget, err)
 		}
 		binariesUpdated = true
 	}
 
-	_, hostWasMissing, hostErr := b.ensureRemotePTYHost(ctx, sshTarget, profile, platform, localVersion, remoteInstallPath)
+	_, hostWasMissing, hostErr := b.ensureRemotePTYHost(ctx, sshTarget, instance, platform, localVersion, remoteInstallPath)
 	if hostErr != nil {
 		b.logf("%v", hostErr)
 	} else if hostWasMissing {
 		binariesUpdated = true
 	}
 
-	if err := b.enrollRemote(ctx, sshTarget, profile, homeDaemonID); err != nil {
+	if err := b.enrollRemote(ctx, sshTarget, instance, homeDaemonID); err != nil {
 		return ready, err
 	}
 
-	if err := b.ensureRemoteDaemonRunning(ctx, sshTarget, profile, binariesUpdated); err != nil {
+	if err := b.ensureRemoteDaemonRunning(ctx, sshTarget, instance, binariesUpdated); err != nil {
 		return ready, fmt.Errorf("ensure remote daemon on %s: %w", sshTarget, err)
 	}
 	return ready, nil
 }
 
-func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
-	updated, err := b.ensureRemoteAppRuntime(ctx, sshTarget, profile, ready.platform, ready.version, ready.remoteInstallPath)
+func (b *Bootstrapper) shipRemoteAppRuntime(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
+	updated, err := b.ensureRemoteAppRuntime(ctx, sshTarget, instance, ready.platform, ready.version, ready.remoteInstallPath)
 	if err != nil {
 		return err
 	}
 	if !updated {
 		return nil
 	}
-	return b.bounceRemoteAppRuntime(ctx, sshTarget, profile)
+	return b.bounceRemoteAppRuntime(ctx, sshTarget, instance)
 }
 
-func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, profile string) error {
-	stdout, _, code, err := runSSHExit(ctx, sshTarget, profile, remoteAttnCommand(profile, "app", "runtime", "status", "--json"))
+func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, instance string) error {
+	stdout, _, code, err := runSSHExit(ctx, sshTarget, instance, remoteAttnCommand(instance, "app", "runtime", "status", "--json"))
 	if err != nil || code != 0 {
 		return fmt.Errorf("could not ask %s whether its app runtime is running, so the sidecar it just received is not in use yet; `attn app runtime restart` there picks it up", sshTarget)
 	}
@@ -183,7 +183,7 @@ func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, pr
 	if status.Runtime == nil || !status.Runtime.Running {
 		return nil
 	}
-	if _, _, code, err := runSSHExit(ctx, sshTarget, profile, remoteAttnCommand(profile, "app", "runtime", "restart")); err != nil || code != 0 {
+	if _, _, code, err := runSSHExit(ctx, sshTarget, instance, remoteAttnCommand(instance, "app", "runtime", "restart")); err != nil || code != 0 {
 		return fmt.Errorf("the app runtime on %s is still running the previous sidecar; `attn app runtime restart` there picks up the new one", sshTarget)
 	}
 	b.logf("restarted the app runtime on %s onto the sidecar just installed", sshTarget)
@@ -192,11 +192,11 @@ func (b *Bootstrapper) bounceRemoteAppRuntime(ctx context.Context, sshTarget, pr
 
 const enrollmentRefusedExitCode = 3
 
-func withoutProfileBanner(message string) string {
+func withoutInstanceBanner(message string) string {
 	lines := strings.Split(message, "\n")
 	kept := lines[:0]
 	for _, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "[attn profile=") {
+		if strings.HasPrefix(strings.TrimSpace(line), "[attn instance=") {
 			continue
 		}
 		kept = append(kept, line)
@@ -204,16 +204,16 @@ func withoutProfileBanner(message string) string {
 	return strings.TrimSpace(strings.Join(kept, "\n"))
 }
 
-func remoteEnrollScript(profile, homeDaemonID string) string {
-	return remoteAttnCommand(profile, "enrollment", "enroll", "--home", homeDaemonID, "--json")
+func remoteEnrollScript(instance, homeDaemonID string) string {
+	return remoteAttnCommand(instance, "enrollment", "enroll", "--home", homeDaemonID, "--json")
 }
 
-func (b *Bootstrapper) enrollRemote(ctx context.Context, sshTarget, profile, homeDaemonID string) error {
+func (b *Bootstrapper) enrollRemote(ctx context.Context, sshTarget, instance, homeDaemonID string) error {
 	if strings.TrimSpace(homeDaemonID) == "" {
 		b.logf("skipping enrollment of %s: this daemon is not a home daemon", sshTarget)
 		return nil
 	}
-	stdout, stderr, code, err := runSSHExit(ctx, sshTarget, profile, remoteEnrollScript(profile, homeDaemonID))
+	stdout, stderr, code, err := runSSHExit(ctx, sshTarget, instance, remoteEnrollScript(instance, homeDaemonID))
 	if err != nil {
 		b.logf("enrollment check on %s could not run: %v", sshTarget, err)
 		return nil
@@ -234,7 +234,7 @@ func (b *Bootstrapper) enrollRemote(ctx context.Context, sshTarget, profile, hom
 		if message == "" {
 			message = stdout
 		}
-		return fmt.Errorf("%s is enrolled to another home: %s", sshTarget, withoutProfileBanner(message))
+		return fmt.Errorf("%s is enrolled to another home: %s", sshTarget, withoutInstanceBanner(message))
 	default:
 		detail := stderr
 		if detail == "" {
@@ -255,8 +255,8 @@ func shouldInstallRemoteBinary(localVersion, remoteVersion string, preferSourceB
 	return false
 }
 
-func (b *Bootstrapper) detectRemotePlatform(ctx context.Context, sshTarget, profile string) (RemotePlatform, error) {
-	out, err := runSSH(ctx, sshTarget, profile, "uname -sm")
+func (b *Bootstrapper) detectRemotePlatform(ctx context.Context, sshTarget, instance string) (RemotePlatform, error) {
+	out, err := runSSH(ctx, sshTarget, instance, "uname -sm")
 	if err != nil {
 		return RemotePlatform{}, err
 	}
@@ -295,8 +295,8 @@ func remoteLinuxPlatform(machine string) (RemotePlatform, error) {
 	}
 }
 
-func (b *Bootstrapper) remoteVersion(ctx context.Context, sshTarget, profile string) (string, error) {
-	binName := remoteBinaryName(profile)
+func (b *Bootstrapper) remoteVersion(ctx context.Context, sshTarget, instance string) (string, error) {
+	binName := remoteBinaryName(instance)
 	script := fmt.Sprintf(`
 ATTN_BIN="${ATTN_REMOTE_ATTN_BIN:-$HOME/.local/bin/%s}"
 if [ ! -x "$ATTN_BIN" ] && [ -z "${ATTN_REMOTE_ATTN_BIN:-}" ]; then
@@ -308,7 +308,7 @@ if [ -z "$ATTN_BIN" ] || [ ! -x "$ATTN_BIN" ]; then
 fi
 "$ATTN_BIN" --version 2>/dev/null || printf NOT_FOUND
 `, binName, binName)
-	out, err := runSSH(ctx, sshTarget, profile, script)
+	out, err := runSSH(ctx, sshTarget, instance, script)
 	if err != nil {
 		return "", err
 	}
@@ -497,16 +497,16 @@ func (b *Bootstrapper) buildAppRuntimeFromSource(ctx context.Context, platform R
 	return nil
 }
 
-func remoteAppRuntimePath(remoteInstallPath, profile string) string {
-	return filepath.Join(filepath.Dir(remoteInstallPath), apps.RuntimeHostBinaryNameForProfile(profile))
+func remoteAppRuntimePath(remoteInstallPath, instance string) string {
+	return filepath.Join(filepath.Dir(remoteInstallPath), apps.RuntimeHostBinaryNameForInstance(instance))
 }
 
-func remotePTYHostPath(remoteInstallPath, profile string) string {
-	return filepath.Join(filepath.Dir(remoteInstallPath), ptyhost.BinaryNameForProfile(profile))
+func remotePTYHostPath(remoteInstallPath, instance string) string {
+	return filepath.Join(filepath.Dir(remoteInstallPath), ptyhost.BinaryNameForInstance(instance))
 }
 
-func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, bool, error) {
-	remotePath := remotePTYHostPath(remoteInstallPath, profile)
+func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, instance string, platform RemotePlatform, version, remoteInstallPath string) (bool, bool, error) {
+	remotePath := remotePTYHostPath(remoteInstallPath, instance)
 	localPath, err := b.ensureLocalPTYHost(ctx, platform, version)
 	if err != nil {
 		return false, false, fmt.Errorf(
@@ -517,7 +517,7 @@ func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profi
 	if err != nil {
 		return false, false, fmt.Errorf("hash the local PTY host %s: %w", localPath, err)
 	}
-	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, profile, shellQuote(remotePath))
+	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, instance, shellQuote(remotePath))
 	if err != nil {
 		return false, false, fmt.Errorf("hash the PTY host on %s at %s: %w", sshTarget, remotePath, err)
 	}
@@ -525,7 +525,7 @@ func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profi
 		return false, false, nil
 	}
 	wasMissing := remoteHash == ""
-	if err := b.uploadRemoteFile(ctx, sshTarget, profile, localPath, remotePath); err != nil {
+	if err := b.uploadRemoteFile(ctx, sshTarget, instance, localPath, remotePath); err != nil {
 		return false, wasMissing, fmt.Errorf(
 			"the shared PTY host could not be installed on %s at %s: %w. New terminals there stay on dedicated Go workers",
 			sshTarget, remotePath, err)
@@ -534,8 +534,8 @@ func (b *Bootstrapper) ensureRemotePTYHost(ctx context.Context, sshTarget, profi
 	return true, wasMissing, nil
 }
 
-func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, profile string, platform RemotePlatform, version, remoteInstallPath string) (bool, error) {
-	remotePath := remoteAppRuntimePath(remoteInstallPath, profile)
+func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, instance string, platform RemotePlatform, version, remoteInstallPath string) (bool, error) {
+	remotePath := remoteAppRuntimePath(remoteInstallPath, instance)
 
 	localPath, err := b.ensureLocalAppRuntime(ctx, platform, version)
 	if err != nil {
@@ -548,7 +548,7 @@ func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, pr
 	if err != nil {
 		return false, fmt.Errorf("hash the local app runtime host %s: %w", localPath, err)
 	}
-	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, profile, shellQuote(remotePath))
+	remoteHash, err := b.remoteFileSHA256(ctx, sshTarget, instance, shellQuote(remotePath))
 	if err != nil {
 		return false, fmt.Errorf("hash the app runtime host on %s at %s: %w", sshTarget, remotePath, err)
 	}
@@ -556,7 +556,7 @@ func (b *Bootstrapper) ensureRemoteAppRuntime(ctx context.Context, sshTarget, pr
 		return false, nil
 	}
 
-	if err := b.uploadRemoteFile(ctx, sshTarget, profile, localPath, remotePath); err != nil {
+	if err := b.uploadRemoteFile(ctx, sshTarget, instance, localPath, remotePath); err != nil {
 		return false, fmt.Errorf(
 			"the app runtime host could not be installed on %s at %s: %w. That daemon keeps whatever host it already resolves — an unsuffixed %s beside it, or none, in which case its apps park",
 			sshTarget, remotePath, err, apps.RuntimeHostBinaryName)
@@ -624,8 +624,8 @@ printf NO_HASH_TOOL
 `, pathExpr)
 }
 
-func (b *Bootstrapper) runRemoteSHA256(ctx context.Context, sshTarget, profile, script string) (string, error) {
-	out, err := runSSH(ctx, sshTarget, profile, script)
+func (b *Bootstrapper) runRemoteSHA256(ctx context.Context, sshTarget, instance, script string) (string, error) {
+	out, err := runSSH(ctx, sshTarget, instance, script)
 	if err != nil {
 		return "", err
 	}
@@ -640,19 +640,19 @@ func (b *Bootstrapper) runRemoteSHA256(ctx context.Context, sshTarget, profile, 
 	}
 }
 
-func (b *Bootstrapper) remoteFileSHA256(ctx context.Context, sshTarget, profile, pathExpr string) (string, error) {
-	return b.runRemoteSHA256(ctx, sshTarget, profile, remoteSHA256Script(pathExpr))
+func (b *Bootstrapper) remoteFileSHA256(ctx context.Context, sshTarget, instance, pathExpr string) (string, error) {
+	return b.runRemoteSHA256(ctx, sshTarget, instance, remoteSHA256Script(pathExpr))
 }
 
-func (b *Bootstrapper) remoteBinarySHA256(ctx context.Context, sshTarget, profile string) (string, error) {
-	binName := remoteBinaryName(profile)
+func (b *Bootstrapper) remoteBinarySHA256(ctx context.Context, sshTarget, instance string) (string, error) {
+	binName := remoteBinaryName(instance)
 	resolve := fmt.Sprintf(`
 ATTN_BIN="${ATTN_REMOTE_ATTN_BIN:-$HOME/.local/bin/%s}"
 if [ ! -x "$ATTN_BIN" ] && [ -z "${ATTN_REMOTE_ATTN_BIN:-}" ]; then
   ATTN_BIN="$(command -v %s 2>/dev/null || true)"
 fi
 `, binName, binName)
-	return b.runRemoteSHA256(ctx, sshTarget, profile, resolve+remoteSHA256Script(`"$ATTN_BIN"`))
+	return b.runRemoteSHA256(ctx, sshTarget, instance, resolve+remoteSHA256Script(`"$ATTN_BIN"`))
 }
 
 func (b *Bootstrapper) localBinaryCacheKey(version string) (string, bool, error) {
@@ -765,10 +765,10 @@ func ensureNativeVTArchive(ctx context.Context, root string, platform RemotePlat
 	return nil
 }
 
-func resolveRemoteInstallPath(remoteHome, override, profile string) string {
+func resolveRemoteInstallPath(remoteHome, override, instance string) string {
 	path := strings.TrimSpace(override)
 	if path == "" {
-		return filepath.Join(remoteHome, ".local", "bin", remoteBinaryName(profile))
+		return filepath.Join(remoteHome, ".local", "bin", remoteBinaryName(instance))
 	}
 	if strings.HasPrefix(path, "~/") {
 		return filepath.Join(remoteHome, path[2:])
@@ -776,26 +776,26 @@ func resolveRemoteInstallPath(remoteHome, override, profile string) string {
 	return path
 }
 
-func (b *Bootstrapper) resolveRemoteInstall(ctx context.Context, sshTarget, profile string) (string, error) {
-	remoteHome, err := runSSH(ctx, sshTarget, profile, `printf '%s' "$HOME"`)
+func (b *Bootstrapper) resolveRemoteInstall(ctx context.Context, sshTarget, instance string) (string, error) {
+	remoteHome, err := runSSH(ctx, sshTarget, instance, `printf '%s' "$HOME"`)
 	if err != nil {
 		return "", err
 	}
-	return resolveRemoteInstallPath(strings.TrimSpace(remoteHome), os.Getenv("ATTN_REMOTE_ATTN_BIN"), profile), nil
+	return resolveRemoteInstallPath(strings.TrimSpace(remoteHome), os.Getenv("ATTN_REMOTE_ATTN_BIN"), instance), nil
 }
 
-func (b *Bootstrapper) installRemoteBinary(ctx context.Context, sshTarget, profile, localBinary, remoteInstallPath string) error {
-	attnDir := remoteAttnDirShell(profile)
-	if _, err := runSSH(ctx, sshTarget, profile, fmt.Sprintf("mkdir -p %s", attnDir)); err != nil {
+func (b *Bootstrapper) installRemoteBinary(ctx context.Context, sshTarget, instance, localBinary, remoteInstallPath string) error {
+	attnDir := remoteAttnDirShell(instance)
+	if _, err := runSSH(ctx, sshTarget, instance, fmt.Sprintf("mkdir -p %s", attnDir)); err != nil {
 		return err
 	}
-	return b.uploadRemoteFile(ctx, sshTarget, profile, localBinary, remoteInstallPath)
+	return b.uploadRemoteFile(ctx, sshTarget, instance, localBinary, remoteInstallPath)
 }
 
-func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile, localPath, remotePath string) error {
+func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, instance, localPath, remotePath string) error {
 	remoteDir := filepath.Dir(remotePath)
 	remoteTmpPath := filepath.Join("/tmp", fmt.Sprintf("%s.%d.%d.tmp", filepath.Base(remotePath), os.Getpid(), time.Now().UnixNano()))
-	if _, err := runSSH(ctx, sshTarget, profile, fmt.Sprintf("mkdir -p %s", shellQuote(remoteDir))); err != nil {
+	if _, err := runSSH(ctx, sshTarget, instance, fmt.Sprintf("mkdir -p %s", shellQuote(remoteDir))); err != nil {
 		return err
 	}
 	file, err := os.Open(localPath)
@@ -811,7 +811,7 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 	defer func() {
 		cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 		defer cancel()
-		if _, err := runSSH(cleanupCtx, sshTarget, profile, fmt.Sprintf("rm -f %s", shellQuote(remoteTmpPath))); err != nil {
+		if _, err := runSSH(cleanupCtx, sshTarget, instance, fmt.Sprintf("rm -f %s", shellQuote(remoteTmpPath))); err != nil {
 			b.logf("could not remove the staging file %s on %s: %v", remoteTmpPath, sshTarget, err)
 		}
 	}()
@@ -819,7 +819,7 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 	cmd := exec.CommandContext(
 		ctx,
 		"ssh",
-		append(sshBaseArgs(sshTarget), remoteShellCommand(profile, fmt.Sprintf("cat > %s", shellQuote(remoteTmpPath))))...,
+		append(sshBaseArgs(sshTarget), remoteShellCommand(instance, fmt.Sprintf("cat > %s", shellQuote(remoteTmpPath))))...,
 	)
 	cmd.Stdin = file
 	out, err := cmd.CombinedOutput()
@@ -830,7 +830,7 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 	probe, err := runSSH(
 		ctx,
 		sshTarget,
-		profile,
+		instance,
 		fmt.Sprintf("if [ -f %s ]; then wc -c < %s; else printf MISSING; fi", shellQuote(remoteTmpPath), shellQuote(remoteTmpPath)),
 	)
 	if err != nil {
@@ -846,24 +846,24 @@ func (b *Bootstrapper) uploadRemoteFile(ctx context.Context, sshTarget, profile,
 	_, err = runSSH(
 		ctx,
 		sshTarget,
-		profile,
+		instance,
 		fmt.Sprintf("install -m 755 %s %s", shellQuote(remoteTmpPath), shellQuote(remotePath)),
 	)
 	return err
 }
 
-func remoteAttnDirShell(profile string) string {
-	if strings.TrimSpace(profile) == "" {
+func remoteAttnDirShell(instance string) string {
+	if strings.TrimSpace(instance) == "" {
 		return `"$HOME/.attn"`
 	}
-	return `"$HOME/.attn-${ATTN_PROFILE}"`
+	return `"$HOME/.attn-${ATTN_INSTANCE}"`
 }
 
 func remoteSocketConfigScript() string {
 	return `
-attn_profile="${ATTN_PROFILE:-}"
-if [ -n "$attn_profile" ]; then
-  attn_dir="$HOME/.attn-$attn_profile"
+attn_instance="${ATTN_INSTANCE:-}"
+if [ -n "$attn_instance" ]; then
+  attn_dir="$HOME/.attn-$attn_instance"
 else
   attn_dir="$HOME/.attn"
 fi
@@ -896,11 +896,11 @@ func remoteHarnessCleanupEnabled() bool {
 		isRemoteHarnessOverridePath(os.Getenv("ATTN_REMOTE_ATTN_BIN"))
 }
 
-func remoteRoutingProfile(profile string) string {
+func remoteRoutingInstance(instance string) string {
 	if remoteHarnessCleanupEnabled() {
 		return ""
 	}
-	return strings.TrimSpace(profile)
+	return strings.TrimSpace(instance)
 }
 
 type remoteDaemonState struct {
@@ -910,8 +910,8 @@ type remoteDaemonState struct {
 	PID      string
 }
 
-func (b *Bootstrapper) probeRemoteDaemon(ctx context.Context, sshTarget, profile string) (remoteDaemonState, error) {
-	port := config.WSPortForProfile(profile)
+func (b *Bootstrapper) probeRemoteDaemon(ctx context.Context, sshTarget, instance string) (remoteDaemonState, error) {
+	port := config.WSPortForInstance(instance)
 	script := remoteSocketConfigScript() + fmt.Sprintf(`
 listener_pid="$(ss -H -ltnp "( sport = :${ATTN_WS_PORT:-%s} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
 if [ -n "$listener_pid" ]; then
@@ -929,7 +929,7 @@ if [ -S "$socket_path" ] && [ -f "$pid_path" ]; then
 fi
 printf 'stopped\n'
 `, port)
-	out, err := runSSH(ctx, sshTarget, profile, script)
+	out, err := runSSH(ctx, sshTarget, instance, script)
 	if err != nil {
 		return remoteDaemonState{}, err
 	}
@@ -963,28 +963,28 @@ printf 'stopped\n'
 	}
 }
 
-func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget, profile string, binariesUpdated bool) error {
-	state, err := b.probeRemoteDaemon(ctx, sshTarget, profile)
+func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget, instance string, binariesUpdated bool) error {
+	state, err := b.probeRemoteDaemon(ctx, sshTarget, instance)
 	if err != nil {
 		return err
 	}
 
 	if state.Stale {
-		if _, err := runSSH(ctx, sshTarget, profile, removeStaleRemoteSocketScript()); err != nil {
+		if _, err := runSSH(ctx, sshTarget, instance, removeStaleRemoteSocketScript()); err != nil {
 			return err
 		}
 		state = remoteDaemonState{}
 	}
 
 	if (state.Running || state.Starting) && binariesUpdated {
-		if err := b.restartRemoteDaemon(ctx, sshTarget, profile, state.PID); err != nil {
+		if err := b.restartRemoteDaemon(ctx, sshTarget, instance, state.PID); err != nil {
 			return err
 		}
 		state = remoteDaemonState{}
 	}
 
 	if !state.Running && !state.Starting {
-		if err := b.startRemoteDaemon(ctx, sshTarget, profile); err != nil {
+		if err := b.startRemoteDaemon(ctx, sshTarget, instance); err != nil {
 			return err
 		}
 	}
@@ -992,7 +992,7 @@ func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget,
 	deadline := time.Now().Add(remoteDaemonReadyTimeout)
 	for time.Now().Before(deadline) {
 		probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		current, err := b.probeRemoteDaemon(probeCtx, sshTarget, profile)
+		current, err := b.probeRemoteDaemon(probeCtx, sshTarget, instance)
 		cancel()
 		if err == nil && current.Running {
 			return nil
@@ -1002,9 +1002,9 @@ func (b *Bootstrapper) ensureRemoteDaemonRunning(ctx context.Context, sshTarget,
 	return fmt.Errorf("daemon did not become ready")
 }
 
-func startRemoteDaemonScript(profile string) string {
-	binName := remoteBinaryName(profile)
-	attnDir := remoteAttnDirShell(profile)
+func startRemoteDaemonScript(instance string) string {
+	binName := remoteBinaryName(instance)
+	attnDir := remoteAttnDirShell(instance)
 	return fmt.Sprintf(`
 mkdir -p %s
 ATTN_BIN="${ATTN_REMOTE_ATTN_BIN:-$HOME/.local/bin/%s}"
@@ -1019,18 +1019,18 @@ nohup setsid "$ATTN_BIN" daemon </dev/null >>%s/daemon.log 2>&1 &
 `, attnDir, binName, binName, attnDir)
 }
 
-func (b *Bootstrapper) startRemoteDaemon(ctx context.Context, sshTarget, profile string) error {
+func (b *Bootstrapper) startRemoteDaemon(ctx context.Context, sshTarget, instance string) error {
 	_, err := runSSH(
 		ctx,
 		sshTarget,
-		profile,
-		startRemoteDaemonScript(profile),
+		instance,
+		startRemoteDaemonScript(instance),
 	)
 	return err
 }
 
-func stopRemoteDaemonScript(profile string) string {
-	port := config.WSPortForProfile(profile)
+func stopRemoteDaemonScript(instance string) string {
+	port := config.WSPortForInstance(instance)
 	return remoteSocketConfigScript() + fmt.Sprintf(`
 listener_pid="$(ss -H -ltnp "( sport = :${ATTN_WS_PORT:-%s} )" 2>/dev/null | sed -n 's/.*pid=\([0-9][0-9]*\).*/\1/p' | head -n 1)"
 pid_file_pid=""
@@ -1055,24 +1055,24 @@ rm -f "$socket_path"
 `, port)
 }
 
-func (b *Bootstrapper) StopRemoteDaemon(ctx context.Context, sshTarget, profile string) error {
+func (b *Bootstrapper) StopRemoteDaemon(ctx context.Context, sshTarget, instance string) error {
 	if !remoteHarnessCleanupEnabled() {
 		return nil
 	}
-	_, err := runSSH(ctx, sshTarget, profile, stopRemoteDaemonScript(profile))
+	_, err := runSSH(ctx, sshTarget, instance, stopRemoteDaemonScript(instance))
 	return err
 }
 
-func (b *Bootstrapper) restartRemoteDaemon(ctx context.Context, sshTarget, profile, pid string) error {
+func (b *Bootstrapper) restartRemoteDaemon(ctx context.Context, sshTarget, instance, pid string) error {
 	if strings.TrimSpace(pid) != "" {
-		_, _ = runSSH(ctx, sshTarget, profile, fmt.Sprintf("kill %s 2>/dev/null || true", shellQuote(pid)))
+		_, _ = runSSH(ctx, sshTarget, instance, fmt.Sprintf("kill %s 2>/dev/null || true", shellQuote(pid)))
 		time.Sleep(500 * time.Millisecond)
-		_, _ = runSSH(ctx, sshTarget, profile, fmt.Sprintf("kill -9 %s 2>/dev/null || true", shellQuote(pid)))
+		_, _ = runSSH(ctx, sshTarget, instance, fmt.Sprintf("kill -9 %s 2>/dev/null || true", shellQuote(pid)))
 	}
-	if _, err := runSSH(ctx, sshTarget, profile, removeStaleRemoteSocketScript()); err != nil {
+	if _, err := runSSH(ctx, sshTarget, instance, removeStaleRemoteSocketScript()); err != nil {
 		return err
 	}
-	return b.startRemoteDaemon(ctx, sshTarget, profile)
+	return b.startRemoteDaemon(ctx, sshTarget, instance)
 }
 
 func removeStaleRemoteSocketScript() string {

@@ -208,7 +208,7 @@ describe('GardenReviewPanel', () => {
         id: 'n-review1',
         seed_id: 's-review1',
         kind: 'note',
-        body: 'Reviewed the **live profile**.',
+        body: 'Reviewed the **live instance**.',
         author_session: '',
         author_member: 'alder',
         created_at: '2026-08-30T09:01:00Z',
@@ -217,7 +217,7 @@ describe('GardenReviewPanel', () => {
     }));
     render(<GardenReviewPanel {...options} />);
 
-    expect(await screen.findByText('live profile', { selector: 'strong' })).toBeInTheDocument();
+    expect(await screen.findByText('live instance', { selector: 'strong' })).toBeInTheDocument();
     expect(screen.getByText('Log').closest('details')?.open).toBe(true);
   });
 

@@ -7,7 +7,7 @@ import { DesktopOverview } from './DesktopOverview';
 function desktop(id: string, overrides: Partial<Desktop> = {}): Desktop {
   return {
     id,
-    setup_id: 'set-default',
+    profile_id: 'set-default',
     name: '',
     order_key: id,
     tree_json: '',
@@ -43,7 +43,7 @@ const DESKTOPS = [
 
 function renderOverview(overrides: Partial<Parameters<typeof DesktopOverview>[0]> = {}) {
   const props = {
-    setupName: 'Default',
+    profileName: 'Default',
     desktops: DESKTOPS,
     currentDesktopId: 'd1',
     canSendActivePane: true,

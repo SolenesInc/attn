@@ -30,8 +30,8 @@ tauri-plugin-deep-link = "2"
 [target.'cfg(target_os = "linux")'.dependencies]
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
-# Named profiles build with this (scripts/build-app-profile.sh): release code paths,
-# but the crate we edit skips LLVM optimization. Releases and the default profile stay `release`.
+# Named instances build with this (scripts/build-app-instance.sh): release code paths,
+# but the crate we edit skips LLVM optimization. Releases and the default instance stay `release`.
 [profile.fast]
 inherits = "release"
 

@@ -114,11 +114,11 @@ func TestRuntimeHostBinaryNameMatchesTheBuild(t *testing.T) {
 	}
 }
 
-func TestRuntimeHostBinaryNameForProfile(t *testing.T) {
-	if got := RuntimeHostBinaryNameForProfile(""); got != "attn-app-runtime" {
-		t.Errorf("default profile = %q", got)
+func TestRuntimeHostBinaryNameForInstance(t *testing.T) {
+	if got := RuntimeHostBinaryNameForInstance(""); got != "attn-app-runtime" {
+		t.Errorf("default instance = %q", got)
 	}
-	if got := RuntimeHostBinaryNameForProfile("dev"); got != "attn-app-runtime-dev" {
-		t.Errorf("named profile = %q", got)
+	if got := RuntimeHostBinaryNameForInstance("dev"); got != "attn-app-runtime-dev" {
+		t.Errorf("named instance = %q", got)
 	}
 }

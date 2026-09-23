@@ -1,14 +1,14 @@
 # Notebook
 
 Load this reference when you read or maintain the attn Notebook — the durable,
-profile-wide markdown store — especially when your session is the chief of staff.
+instance-wide markdown store — especially when your session is the chief of staff.
 The Notebook outlives any single workspace.
 
 The Notebook is plain markdown on disk, and you maintain it by **editing the files
 directly with native tools** (Read/Write/Edit, plus `ls`/`grep` over the tree).
 There is no `attn notebook` CLI. The notebook root is given to you in your
 operating guidance (the chief-of-staff launch injection); it is
-`~/attn-notebook` by default (per-profile variants append the profile name). Paths
+`~/attn-notebook` by default (per-instance variants append the instance name). Paths
 below are written relative to that `<root>`.
 
 ## Orient First
@@ -94,4 +94,4 @@ points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/in
 record durable decisions in the knowledge base as you make them, and keep the
 day's journal current with your cross-workspace view. Write at a chief-of-staff
 altitude — what moved across workspaces, what you delegated and decided — not a
-per-workspace play-by-play. You remain profile-wide.
+per-workspace play-by-play. You remain instance-wide.

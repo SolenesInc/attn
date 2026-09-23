@@ -12,9 +12,9 @@ interface ImportMetaEnv {
   readonly VITE_ATTN_SOURCE_DIRTY_PATHS_BASE64?: string;
   readonly VITE_ATTN_GIT_COMMIT?: string;
   readonly VITE_ATTN_BUILD_TIME?: string;
-  readonly VITE_ATTN_BUILD_PROFILE?: string;
+  readonly VITE_ATTN_BUILD_INSTANCE?: string;
   // Only for a bundle running outside Tauri; vite.config.ts fills it in from the
-  // profile's client-token file.
+  // instance's client-token file.
   readonly VITE_CLIENT_TOKEN?: string;
 }
 

@@ -1,9 +1,9 @@
 mod browser_alerts;
 mod browser_host;
+mod instance;
 mod migration_failure;
 mod native_input;
 mod native_input_diagnostics;
-mod profile;
 mod ui_automation;
 
 use std::env;
@@ -25,7 +25,7 @@ fn daemon_socket_path() -> Option<PathBuf> {
         }
     }
 
-    Some(profile::data_dir().ok()?.join("attn.sock"))
+    Some(instance::data_dir().ok()?.join("attn.sock"))
 }
 
 fn daemon_pid_path() -> Option<PathBuf> {
@@ -521,8 +521,8 @@ fn parent_process_id() -> Option<u32> {
 }
 
 #[derive(Debug, serde::Serialize)]
-struct BuildProfileInfo {
-    profile: &'static str,
+struct BuildInstanceInfo {
+    instance: &'static str,
     label: &'static str,
     expected_port: &'static str,
     bundle_identifier: &'static str,
@@ -530,23 +530,23 @@ struct BuildProfileInfo {
 
 /// The frontend compares this with the daemon's at startup; a mismatch is fatal.
 #[tauri::command]
-fn get_build_profile() -> BuildProfileInfo {
-    BuildProfileInfo {
-        profile: profile::build_profile(),
-        label: profile::build_profile_label(),
-        expected_port: profile::default_port_for_build_profile(),
-        bundle_identifier: profile::bundle_identifier(),
+fn get_build_instance() -> BuildInstanceInfo {
+    BuildInstanceInfo {
+        instance: instance::build_instance(),
+        label: instance::build_instance_label(),
+        expected_port: instance::default_port_for_build_instance(),
+        bundle_identifier: instance::bundle_identifier(),
     }
 }
 
 #[tauri::command]
 fn get_browser_host_token(_caller: browser_host::TrustedMainWebview) -> Result<String, String> {
-    profile::ensure_browser_host_token()
+    instance::ensure_browser_host_token()
 }
 
 #[tauri::command]
 fn get_client_token() -> Result<String, String> {
-    profile::read_client_token()
+    instance::read_client_token()
 }
 
 #[tauri::command]
@@ -1212,9 +1212,9 @@ fn open_in_editor(
 
 pub fn run(context: tauri::Context<tauri::Wry>, browser_runtime_js: &'static str) {
     browser_host::set_browser_runtime_js(browser_runtime_js);
-    // Must run before anything reads ATTN_PROFILE / ATTN_WS_PORT (including
+    // Must run before anything reads ATTN_INSTANCE / ATTN_WS_PORT (including
     // any spawned `attn daemon` child that inherits our env).
-    profile::apply_build_profile_env();
+    instance::apply_build_instance_env();
 
     // Disable "press and hold for accents" so a held key in the terminal repeats.
     // Scoped to the running bundle so a dev install never overwrites the prod pref.
@@ -1223,7 +1223,7 @@ pub fn run(context: tauri::Context<tauri::Wry>, browser_runtime_js: &'static str
         let _ = Command::new("defaults")
             .args([
                 "write",
-                profile::bundle_identifier(),
+                instance::bundle_identifier(),
                 "ApplePressAndHoldEnabled",
                 "-bool",
                 "false",
@@ -1235,7 +1235,7 @@ pub fn run(context: tauri::Context<tauri::Wry>, browser_runtime_js: &'static str
     // synchronously on first render rather than racing a command roundtrip.
     let automation_init_script = format!(
         "window.__ATTN_AUTOMATION_ENABLED = {};",
-        profile::automation_enabled()
+        instance::automation_enabled()
     );
     let native_dialog_capture_script = r#"
 Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
@@ -1322,7 +1322,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
             open_in_editor,
             open_safe_markdown_target,
             open_safe_seed_artifact_target,
-            get_build_profile,
+            get_build_instance,
             get_browser_host_token,
             get_client_token,
             open_presentation_window,
@@ -1338,10 +1338,10 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             use tauri::Manager;
-            // Fail closed: an app that starts unlocked can have its profile deleted out
-            // from under it by a `profile clean` that is already past its last check.
-            profile::hold_app_lock()?;
-            profile::write_app_pid_file();
+            // Fail closed: an app that starts unlocked can have its instance deleted out
+            // from under it by a `instance clean` that is already past its last check.
+            instance::hold_app_lock()?;
+            instance::write_app_pid_file();
             native_input_diagnostics::install();
             ui_automation::maybe_start(&app.handle().clone());
             // Harness-only: visible so WKWebView does not throttle for occlusion, never
@@ -1404,7 +1404,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         })
         .run(|_handle, event| {
             if matches!(event, tauri::RunEvent::Exit) {
-                profile::remove_app_pid_file();
+                instance::remove_app_pid_file();
             }
         });
 }

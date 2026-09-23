@@ -51,13 +51,13 @@ type wsClient struct {
 	tileContentPending       map[string]time.Time
 	tileContentMu            sync.RWMutex
 
-	admitted        sync.Once
-	clientKind      string
-	clientVersion   string
-	clientID        string
-	selectedSetupID string
-	capabilities    map[string]struct{}
-	identityMu      sync.RWMutex
+	admitted          sync.Once
+	clientKind        string
+	clientVersion     string
+	clientID          string
+	selectedProfileID string
+	capabilities      map[string]struct{}
+	identityMu        sync.RWMutex
 
 	presence   clientPresence
 	presenceMu sync.RWMutex
@@ -649,7 +649,7 @@ func isTrustedTauriOrigin(origin string) bool {
 		(parsed.Scheme == "http" && host == "tauri.localhost") {
 		return true
 	}
-	return config.Profile() == "dev" &&
+	return config.Instance() == "dev" &&
 		parsed.Scheme == "http" &&
 		strings.EqualFold(parsed.Hostname(), "localhost") &&
 		parsed.Port() == "1420"
@@ -767,7 +767,8 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
-	d.fillInitialSetupState(client, event)
+	d.fillInitialProfileState(client, event)
+	d.fillInitialMigrationPhase(event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return
@@ -988,14 +989,26 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	}
 
 	switch cmd {
-	case protocol.CmdSetupCreate:
-		d.handleSetupCreate(client, msg.(*protocol.SetupCreateMessage))
-	case protocol.CmdSetupRename:
-		d.handleSetupRename(client, msg.(*protocol.SetupRenameMessage))
-	case protocol.CmdSetupDelete:
-		d.handleSetupDelete(client, msg.(*protocol.SetupDeleteMessage))
-	case protocol.CmdSetupSelect:
-		d.handleSetupSelect(client, msg.(*protocol.SetupSelectMessage))
+	case protocol.CmdProfileCreate:
+		d.handleProfileCreate(client, msg.(*protocol.ProfileCreateMessage))
+	case protocol.CmdProfileRename:
+		d.handleProfileRename(client, msg.(*protocol.ProfileRenameMessage))
+	case protocol.CmdProfileDelete:
+		d.handleProfileDelete(client, msg.(*protocol.ProfileDeleteMessage))
+	case protocol.CmdProfileSelect:
+		d.handleProfileSelect(client, msg.(*protocol.ProfileSelectMessage))
+	case protocol.CmdMigrationGet:
+		d.handleMigrationGet(client, msg.(*protocol.MigrationGetMessage))
+	case protocol.CmdMigrationKeep:
+		d.handleMigrationKeep(client, msg.(*protocol.MigrationKeepMessage))
+	case protocol.CmdMigrationMove:
+		d.handleMigrationMove(client, msg.(*protocol.MigrationMoveMessage))
+	case protocol.CmdMigrationSuggest:
+		d.handleMigrationSuggest(client, msg.(*protocol.MigrationSuggestMessage))
+	case protocol.CmdMigrationUndo:
+		d.handleMigrationUndo(client, msg.(*protocol.MigrationUndoMessage))
+	case protocol.CmdMigrationFinish:
+		d.handleMigrationFinish(client, msg.(*protocol.MigrationFinishMessage))
 	case protocol.CmdDesktopCreate:
 		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
 	case protocol.CmdDesktopRename:

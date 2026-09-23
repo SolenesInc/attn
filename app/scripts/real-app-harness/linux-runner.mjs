@@ -12,8 +12,8 @@ const key = createHash('sha256').update(fs.realpathSync(repo)).digest('hex').sli
 
 export function parseArgs(argv, env = process.env) {
   const options = { provider: env.ATTN_LINUX_PROVIDER || 'lima', name: env.ATTN_LINUX_VM || 'attn-linux',
-    target: env.ATTN_LINUX_SSH_TARGET, sshConfig: env.ATTN_LINUX_SSH_CONFIG, profile: `linux-${key}` };
-  const values = { '--provider': 'provider', '--name': 'name', '--target': 'target', '--ssh-config': 'sshConfig', '--profile': 'profile', '--out': 'out' };
+    target: env.ATTN_LINUX_SSH_TARGET, sshConfig: env.ATTN_LINUX_SSH_CONFIG, instance: `linux-${key}` };
+  const values = { '--provider': 'provider', '--name': 'name', '--target': 'target', '--ssh-config': 'sshConfig', '--instance': 'instance', '--out': 'out' };
   const positional = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -28,13 +28,13 @@ export function parseArgs(argv, env = process.env) {
   }
   if (positional.length > 1) throw new Error('Put guest command arguments after --');
   options.action = positional[0] || 'status';
-  if (!/^[a-z][a-z0-9-]{0,39}$/.test(options.profile) || ['default', 'prod', 'production'].includes(options.profile)) {
-    throw new Error('--profile must name a non-production profile');
+  if (!/^[a-z][a-z0-9-]{0,39}$/.test(options.instance) || ['default', 'prod', 'production'].includes(options.instance)) {
+    throw new Error('--instance must name a non-production instance');
   }
   return options;
 }
 
-export function guestCommand(root, profile, argv) {
+export function guestCommand(root, instance, argv) {
   if (!argv?.length) throw new Error('run needs a command after --');
   return `set -euo pipefail
 root=${quote(root)}
@@ -46,7 +46,7 @@ mkdir -p "$root/artifacts" "$root/bin"
 install -m 0755 app/scripts/real-app-harness/ci-xdg-open "$root/bin/xdg-open"
 env -i HOME="$HOME" USER="$(id -un)" LANG=C.UTF-8 \
   PATH="$root/bin:$PWD/plugins/attn-pi/node_modules/.bin:$HOME/.local/bin:$HOME/.bun/bin:$HOME/.cargo/bin:/usr/local/bin:/usr/bin:/bin" \
-  ATTN_PROFILE=${quote(profile)} ATTN_HARNESS_PROFILE=${quote(profile)} CI=true \
+  ATTN_INSTANCE=${quote(instance)} ATTN_HARNESS_INSTANCE=${quote(instance)} CI=true \
   ATTN_REAL_APP_ARTIFACTS_DIR="$root/artifacts" \
   ${argv.map(quote).join(' ')} 9>&-
 `;
@@ -83,17 +83,17 @@ Actions:
   provision   Sync and install Ubuntu runner toolchains, sandbox and fixtures
   fixtures    Sync and install only remote scenario tools and mock agents
   run         Run a command in the synced Linux checkout; preserve its exit code
-  build       Sync and install the packaged app in the named guest profile
+  build       Sync and install the packaged app in the named guest instance
   test        Run the serial app matrix under Xvfb; collect artifacts even on failure
   artifacts   Copy the guest artifacts directory to --out
-  clean       Remove the installed guest profile using its own CLI
+  clean       Remove the installed guest instance using its own CLI
 
 Options:
   --provider lima|orb|ssh     Default: ATTN_LINUX_PROVIDER or lima
   --name <name>              Default: ATTN_LINUX_VM or attn-linux
   --target user@host         Required for ssh; ATTN_LINUX_SSH_TARGET
   --ssh-config <file>        Optional SSH config for ssh; ATTN_LINUX_SSH_CONFIG
-  --profile <name>           Default: linux-<checkout hash>; never production
+  --instance <name>           Default: linux-<checkout hash>; never production
   --out <directory>          Local artifacts destination
 
 Examples:
@@ -124,7 +124,7 @@ Examples:
   }
   const root = guestRoot(provider);
   const destination = path.resolve(options.out || path.join(os.tmpdir(), 'attn-linux-artifacts', options.provider, key));
-  const execute = (args) => provider.ssh(`bash -c ${quote(guestCommand(root, options.profile, args))}`);
+  const execute = (args) => provider.ssh(`bash -c ${quote(guestCommand(root, options.instance, args))}`);
   if (['sync', 'provision', 'fixtures', 'build'].includes(options.action)) syncSource(provider, repo, root);
   if (options.action === 'sync') return;
   if (['provision', 'fixtures'].includes(options.action)) {
@@ -134,7 +134,7 @@ Examples:
     return execute(['node', 'app/scripts/real-app-harness/vm/build.mjs']);
   }
   if (options.action === 'run') return execute(options.commandArgs);
-  if (options.action === 'clean') return execute(['./attn', 'profile', 'clean', options.profile]);
+  if (options.action === 'clean') return execute(['./attn', 'instance', 'clean', options.instance]);
   if (options.action === 'artifacts') return collect(provider, root, destination);
   let testError;
   try {

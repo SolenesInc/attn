@@ -8,11 +8,11 @@ import { appDaemonInTree } from './platform.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { MOCK_GITHUB_URL_VAR } from './mockGitHub.mjs';
 import {
-  currentHarnessProfile,
-  daemonPidFilePathForProfile,
-  defaultAppPathForProfile,
-  profileCliEnv,
-} from './harnessProfile.mjs';
+  currentHarnessInstance,
+  daemonPidFilePathForInstance,
+  defaultAppPathForInstance,
+  instanceCliEnv,
+} from './harnessInstance.mjs';
 
 export const TRIPWIRE_BINARIES = ['claude', 'codex', 'copilot', 'pi'];
 
@@ -223,7 +223,7 @@ export function armAgentTripwire({
   runDir,
   allowRealAgents,
   env = process.env,
-  profile = currentHarnessProfile(),
+  instance = currentHarnessInstance(),
   readReceipt = readDaemonTripwireReceipt,
   log = (message) => console.log(`[agent-tripwire] ${message}`),
 }) {
@@ -231,7 +231,7 @@ export function armAgentTripwire({
   const binaries = armedBinaries(allowRealAgents);
   const armed = headlessTasksOff(binaries);
   const ledgerPath = path.join(runDir, TRIPWIRE_LEDGER_NAME);
-  const pidPath = daemonPidFilePathForProfile(profile);
+  const pidPath = daemonPidFilePathForInstance(instance);
   const marker = tripwireMarker({ dir, binaries });
 
   writeTripwireShims({ dir, binaries });
@@ -262,7 +262,7 @@ export function armAgentTripwire({
     pidPath,
     marker,
     read: () => readTripwireLedger(ledgerPath),
-    readReceipt: () => (armed ? readReceipt({ profile, marker }) : null),
+    readReceipt: () => (armed ? readReceipt({ instance, marker }) : null),
   };
 }
 
@@ -295,8 +295,8 @@ function livingDaemonPid(pidPath) {
 // environment is the receipt that they were in force for the whole run.
 export function readDaemonTripwireReceipt({
   marker = null,
-  profile = currentHarnessProfile(),
-  pidPath = daemonPidFilePathForProfile(profile),
+  instance = currentHarnessInstance(),
+  pidPath = daemonPidFilePathForInstance(instance),
   readEnvironment = readProcessEnvironment,
 } = {}) {
   const pid = livingDaemonPid(pidPath);
@@ -355,9 +355,9 @@ export function ensureDaemonCarriesTripwire({
   marker,
   armed = false,
   mockGitHubURL = null,
-  profile = currentHarnessProfile(),
-  appPath = defaultAppPathForProfile(profile),
-  pidPath = daemonPidFilePathForProfile(profile),
+  instance = currentHarnessInstance(),
+  appPath = defaultAppPathForInstance(instance),
+  pidPath = daemonPidFilePathForInstance(instance),
   log = (message) => console.log(`[agent-tripwire] ${message}`),
   readEnvironment = readProcessEnvironment,
   run = execFileSync,
@@ -388,7 +388,7 @@ export function ensureDaemonCarriesTripwire({
   }
 
   try {
-    assertFreshWorldTargetSafe({ profile, appPath });
+    assertFreshWorldTargetSafe({ instance, appPath });
   } catch (error) {
     if (armed) {
       refuse(`the daemon predates this tripwire and the target refuses a restart (${error?.message || error}); a production daemon is never restarted`);
@@ -401,7 +401,7 @@ export function ensureDaemonCarriesTripwire({
   log(`daemon pid ${pid} predates ${stale} — stopping it so the app relaunch brings one up armed.`);
   run(appDaemonInTree(appPath), ['daemon', 'stop'], {
     encoding: 'utf8',
-    env: profileCliEnv(profile),
+    env: instanceCliEnv(instance),
     stdio: 'pipe',
   });
   return { restarted: true, reason: 'daemon stopped' };

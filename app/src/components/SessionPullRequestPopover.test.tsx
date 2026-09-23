@@ -58,9 +58,9 @@ describe('SessionPullRequestPopover', () => {
     expect(screen.queryByText('none reported')).not.toBeInTheDocument();
   });
 
-  it('says polling is off for this profile instead of waiting forever', () => {
+  it('says polling is off for this instance instead of waiting forever', () => {
     render(
-      <GitHubPollingProvider offReason="GitHub polling is off for profile dev.">
+      <GitHubPollingProvider offReason="GitHub polling is off for instance dev.">
         <SessionPullRequestPopover
           pullRequests={[pr({ status_fetched_at: undefined })]}
           anchor={{ top: 40, left: 40 }}
@@ -72,7 +72,7 @@ describe('SessionPullRequestPopover', () => {
       </GitHubPollingProvider>,
     );
 
-    expect(screen.getByText('GitHub polling is off for this profile')).toBeInTheDocument();
+    expect(screen.getByText('GitHub polling is off for this instance')).toBeInTheDocument();
     expect(screen.queryByText('waiting for GitHub')).not.toBeInTheDocument();
   });
 

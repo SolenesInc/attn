@@ -347,7 +347,7 @@ candidate. If that job cannot cover the candidate, record a manual override:
 gh workflow run app-acceptance.yml \\
   --ref main \\
   -f candidate_sha=${candidate_sha} \\
-  -f profile=<profile> \\
+  -f instance=<instance> \\
   -f scenarios='<scenarios run>' \\
   -f evidence='<recording URL or concise receipt>' \\
   -f outcome=passed

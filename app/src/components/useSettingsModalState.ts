@@ -476,13 +476,13 @@ export function useSettingsModalState({
   const handleAddEndpoint = useCallback(async () => {
     const name = endpointPanel.draft.name.trim();
     const sshTarget = endpointPanel.draft.target.trim();
-    const profile = endpointPanel.draft.profile.trim();
+    const instance = endpointPanel.draft.instance.trim();
     if (!name || !sshTarget) {
       endpointPanel.fail('Endpoint name and SSH target are required.');
       return;
     }
     await endpointPanel.run('new', 'Failed to add endpoint', async () => {
-      await onAddEndpoint(name, sshTarget, profile);
+      await onAddEndpoint(name, sshTarget, instance);
       endpointPanel.clearDraft();
     });
   }, [endpointPanel, onAddEndpoint]);
@@ -493,13 +493,13 @@ export function useSettingsModalState({
       if (!editing) return;
       const name = editing.name.trim();
       const sshTarget = editing.target.trim();
-      const profile = editing.profile.trim();
+      const instance = editing.instance.trim();
       if (!name || !sshTarget) {
         endpointPanel.fail('Endpoint name and SSH target are required.');
         return;
       }
       await endpointPanel.run(endpointId, 'Failed to update endpoint', async () => {
-        await onUpdateEndpoint(endpointId, { name, ssh_target: sshTarget, profile });
+        await onUpdateEndpoint(endpointId, { name, ssh_target: sshTarget, instance });
         endpointPanel.cancelEdit();
       });
     },

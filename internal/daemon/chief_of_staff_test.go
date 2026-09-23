@@ -102,7 +102,7 @@ func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "session-a", "first")
 	addChiefOfStaffTestSession(d, "session-b", "second")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "session-b"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "session-b"); err != nil {
 		t.Fatal(err)
 	}
 

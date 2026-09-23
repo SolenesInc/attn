@@ -16,7 +16,7 @@ func delegateBoundSession(t *testing.T, d *Daemon) string {
 	t.Helper()
 	backend := &fakeSpawnBackend{}
 	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, chiefSessionID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)

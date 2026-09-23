@@ -9,7 +9,7 @@ import {
   parseCommonArgs,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
 import { waitForPaneAttached, waitForPaneShellReady, waitForPaneText } from './scenarioAssertions.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -21,16 +21,16 @@ const STATUS = '[data-testid="settings-shared-pty-host-status"]';
 
 async function main() {
   const options = parseCommonArgs(process.argv.slice(2).filter((arg) => arg !== '--'));
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('PTY host Settings verification requires a named, non-production profile');
-  const dataDir = dataDirForProfile(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('PTY host Settings verification requires a named, non-production instance');
+  const dataDir = dataDirForInstance(instance);
   const daemonBinary = appDaemonInTree(options.appPath);
   const ptyHostBinary = path.join(path.dirname(daemonBinary), 'attn-pty-host');
   const runner = createScenarioRunner(options, {
     scenarioId: 'PTY-HOST-SETTING', tier: 'tier1-local-shell', prefix: 'pty-host-setting',
     allowRealAgents: false,
   });
-  const daemonEnv = profileCliEnv(profile, {
+  const daemonEnv = instanceCliEnv(instance, {
     ATTN_PTY_HOST_BINARY: ptyHostBinary,
     ATTN_WRAPPER_PATH: daemonBinary,
   });
@@ -63,8 +63,8 @@ async function main() {
 
   function identity(runtimeId, shared) {
     const root = path.join(dataDir, shared ? 'pty-hosts' : 'workers');
-    for (const instance of fs.readdirSync(root)) {
-      const file = path.join(root, instance, 'registry', `${runtimeId}.json`);
+    for (const daemonInstance of fs.readdirSync(root)) {
+      const file = path.join(root, daemonInstance, 'registry', `${runtimeId}.json`);
       if (!fs.existsSync(file)) continue;
       const entry = JSON.parse(fs.readFileSync(file, 'utf8'));
       return { worker: entry.worker_pid, child: entry.child_pid };

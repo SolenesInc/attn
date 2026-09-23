@@ -7,9 +7,9 @@ import (
 	"testing"
 )
 
-func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
+func scopeRouting(t *testing.T, instance string, overrides map[string]string) {
 	t.Helper()
-	t.Setenv("ATTN_PROFILE", profile)
+	t.Setenv("ATTN_INSTANCE", instance)
 	for _, name := range routingOverrideEnv {
 		t.Setenv(name, overrides[name])
 		if overrides[name] == "" {
@@ -22,14 +22,14 @@ func scopeRouting(t *testing.T, profile string, overrides map[string]string) {
 	ReloadForTesting()
 }
 
-func TestValidateProfileRouting_NoProfileIsAlwaysLegal(t *testing.T) {
+func TestValidateInstanceRouting_NoInstanceIsAlwaysLegal(t *testing.T) {
 	scopeRouting(t, "", nil)
-	if err := ValidateProfileRouting(); err != nil {
-		t.Fatalf("ATTN_DATA_DIR without ATTN_PROFILE must stay legal, got: %v", err)
+	if err := ValidateInstanceRouting(); err != nil {
+		t.Fatalf("ATTN_DATA_DIR without ATTN_INSTANCE must stay legal, got: %v", err)
 	}
 }
 
-func TestValidateProfileRouting_DefaultProfileHarnessKeepsEveryRouteInsideItsRoot(t *testing.T) {
+func TestValidateInstanceRouting_DefaultInstanceHarnessKeepsEveryRouteInsideItsRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Chmod(root, 0o700); err != nil {
 		t.Fatal(err)
@@ -44,17 +44,17 @@ func TestValidateProfileRouting_DefaultProfileHarnessKeepsEveryRouteInsideItsRoo
 		"ATTN_PLUGIN_DIR":            filepath.Join(root, "plugins"),
 		"ATTN_WS_PORT":               "29150",
 	})
-	if err := ValidateProfileRouting(); err != nil {
-		t.Fatalf("isolated default-profile harness routing was refused: %v", err)
+	if err := ValidateInstanceRouting(); err != nil {
+		t.Fatalf("isolated default-instance harness routing was refused: %v", err)
 	}
 }
 
-func TestValidateProfileRouting_DefaultProfileHarnessRefusesAnInheritedProductionPath(t *testing.T) {
+func TestValidateInstanceRouting_DefaultInstanceHarnessRefusesAnInheritedProductionPath(t *testing.T) {
 	root := t.TempDir()
 	if err := os.Chmod(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	productionDB := filepath.Join(DataDirForProfile(""), "attn.db")
+	productionDB := filepath.Join(DataDirForInstance(""), "attn.db")
 	scopeRouting(t, "", map[string]string{
 		"ATTN_DATA_DIR":              root,
 		"ATTN_HARNESS_DATA_DIR":      root,
@@ -63,9 +63,9 @@ func TestValidateProfileRouting_DefaultProfileHarnessRefusesAnInheritedProductio
 		"ATTN_WS_PORT":               "29150",
 	})
 
-	err := ValidateProfileRouting()
+	err := ValidateInstanceRouting()
 	if err == nil {
-		t.Fatal("default-profile harness accepted a production database override")
+		t.Fatal("default-instance harness accepted a production database override")
 	}
 	for _, want := range []string{"ATTN_DB_PATH", productionDB, root} {
 		if !strings.Contains(err.Error(), want) {
@@ -74,8 +74,8 @@ func TestValidateProfileRouting_DefaultProfileHarnessRefusesAnInheritedProductio
 	}
 }
 
-func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
-	prod := DataDirForProfile("")
+func TestValidateInstanceRouting_LeakedDataDirIsRefused(t *testing.T) {
+	prod := DataDirForInstance("")
 	scopeRouting(t, "fb2lists", map[string]string{
 		"ATTN_DATA_DIR":    prod,
 		"ATTN_SOCKET_PATH": filepath.Join(prod, "attn.sock"),
@@ -85,17 +85,17 @@ func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 		"ATTN_WS_PORT":     "9849",
 	})
 
-	err := ValidateProfileRouting()
+	err := ValidateInstanceRouting()
 	if err == nil {
-		t.Fatal("a profile pointed at another profile's data dir must be refused")
+		t.Fatal("an instance pointed at another instance's data dir must be refused")
 	}
 	message := err.Error()
 	for _, want := range []string{
-		"ATTN_PROFILE=fb2lists",
-		DataDirForProfile("fb2lists"),
-		WSPortForProfile("fb2lists"),
+		"ATTN_INSTANCE=fb2lists",
+		DataDirForInstance("fb2lists"),
+		WSPortForInstance("fb2lists"),
 		prod,
-		"attn profile-env fb2lists",
+		"attn instance-env fb2lists",
 	} {
 		if !strings.Contains(message, want) {
 			t.Errorf("error must name %q; got:\n%s", want, message)
@@ -114,32 +114,32 @@ func TestValidateProfileRouting_LeakedDataDirIsRefused(t *testing.T) {
 	}
 }
 
-func TestValidateProfileRouting_ProfileOwnPathsAgree(t *testing.T) {
-	dir := DataDirForProfile("agent7")
+func TestValidateInstanceRouting_InstanceOwnPathsAgree(t *testing.T) {
+	dir := DataDirForInstance("agent7")
 	scopeRouting(t, "agent7", map[string]string{
 		"ATTN_DATA_DIR":    dir,
 		"ATTN_SOCKET_PATH": filepath.Join(dir, "attn.sock"),
 		"ATTN_DB_PATH":     filepath.Join(dir, "attn.db"),
 		"ATTN_CONFIG_PATH": filepath.Join(dir, "config.json"),
 		"ATTN_PLUGIN_DIR":  filepath.Join(dir, "plugins"),
-		"ATTN_WS_PORT":     WSPortForProfile("agent7"),
+		"ATTN_WS_PORT":     WSPortForInstance("agent7"),
 	})
 
-	if err := ValidateProfileRouting(); err != nil {
-		t.Fatalf("overrides that match the profile must pass, got: %v", err)
+	if err := ValidateInstanceRouting(); err != nil {
+		t.Fatalf("overrides that match the instance must pass, got: %v", err)
 	}
 }
 
-func TestValidateProfileRouting_SingleOverrideNamesOnlyItself(t *testing.T) {
-	dir := DataDirForProfile("agent7")
+func TestValidateInstanceRouting_SingleOverrideNamesOnlyItself(t *testing.T) {
+	dir := DataDirForInstance("agent7")
 	scopeRouting(t, "agent7", map[string]string{
 		"ATTN_DATA_DIR": dir,
-		"ATTN_DB_PATH":  filepath.Join(DataDirForProfile(""), "attn.db"),
+		"ATTN_DB_PATH":  filepath.Join(DataDirForInstance(""), "attn.db"),
 	})
 
-	err := ValidateProfileRouting()
+	err := ValidateInstanceRouting()
 	if err == nil {
-		t.Fatal("a database from another profile must be refused")
+		t.Fatal("a database from another instance must be refused")
 	}
 	message := err.Error()
 	if !strings.Contains(message, "ATTN_DB_PATH") {
@@ -150,16 +150,16 @@ func TestValidateProfileRouting_SingleOverrideNamesOnlyItself(t *testing.T) {
 	}
 }
 
-func TestValidateProfileRouting_WSPortDisagreement(t *testing.T) {
-	dir := DataDirForProfile("agent7")
+func TestValidateInstanceRouting_WSPortDisagreement(t *testing.T) {
+	dir := DataDirForInstance("agent7")
 	scopeRouting(t, "agent7", map[string]string{
 		"ATTN_DATA_DIR": dir,
 		"ATTN_WS_PORT":  "9849",
 	})
 
-	err := ValidateProfileRouting()
+	err := ValidateInstanceRouting()
 	if err == nil {
-		t.Fatal("a port belonging to another profile must be refused")
+		t.Fatal("a port belonging to another instance must be refused")
 	}
 	if !strings.Contains(err.Error(), "ATTN_WS_PORT") {
 		t.Fatalf("error must name ATTN_WS_PORT; got:\n%v", err)
@@ -173,7 +173,7 @@ func TestFormatRoutingConflict_ConfigSourcedValueNamesTheFile(t *testing.T) {
 	})
 
 	message := err.Error()
-	for _, want := range []string{"db_path", configFile, "attn profile clean agent7"} {
+	for _, want := range []string{"db_path", configFile, "attn instance clean agent7"} {
 		if !strings.Contains(message, want) {
 			t.Errorf("error must name %q; got:\n%s", want, message)
 		}
@@ -183,7 +183,7 @@ func TestFormatRoutingConflict_ConfigSourcedValueNamesTheFile(t *testing.T) {
 	}
 }
 
-func TestValidateProfileRouting_SymlinkedDataDirAgrees(t *testing.T) {
+func TestValidateInstanceRouting_SymlinkedDataDirAgrees(t *testing.T) {
 	real := filepath.Join(t.TempDir(), "world")
 	if err := os.MkdirAll(real, 0o755); err != nil {
 		t.Fatal(err)

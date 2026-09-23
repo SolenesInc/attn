@@ -10,7 +10,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
@@ -90,7 +90,7 @@ async function waitForDaemonReady(binary, daemonEnv) {
     } catch {
       return null;
     }
-  }, 'profile daemon', RESTART_READY_TIMEOUT_MS);
+  }, 'instance daemon', RESTART_READY_TIMEOUT_MS);
 }
 
 function fillWithFiles(dir, count) {
@@ -171,16 +171,16 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-worktree-surface.mjs');
     return;
   }
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('worktree surface scenario requires a named non-production profile');
-  const resources = resolveHarnessResources(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('worktree surface scenario requires a named non-production instance');
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'WORKTREE-SURFACE',
     allowRealAgents: false,
     tier: 'tier2-local-fake-agent',
     prefix: 'worktree-surface',
-    metadata: { profile, panel: 'the Worktrees list of the ledger surface', slowRepoFiles: SLOW_REPO_FILES },
+    metadata: { instance, panel: 'the Worktrees list of the ledger surface', slowRepoFiles: SLOW_REPO_FILES },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -193,7 +193,7 @@ async function main() {
   let seed = '';
 
   try {
-    daemonEnv = profileEnv(profile);
+    daemonEnv = instanceEnv(instance);
 
     await runner.step('restart_isolated_daemon', async () => {
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
@@ -337,10 +337,10 @@ async function main() {
       runner.writeJson('worktree-log-cli.json', runJSON(binary, ['worktree', 'log', '--json'], daemonEnv));
     });
 
-    await runner.finishSuccess({ profile, seed, main: fixture?.main });
+    await runner.finishSuccess({ instance, seed, main: fixture?.main });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    await runner.finishFailure(error, { profile, seed, main: fixture?.main });
+    await runner.finishFailure(error, { instance, seed, main: fixture?.main });
     throw error;
   } finally {
     await Promise.all([delegateSession, ownerSession]

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
@@ -25,8 +25,8 @@ async function main() {
   const args = process.argv.slice(2).filter((arg) => arg !== '--');
   if (args.includes('--help')) { printCommonHelp('scenario-garden-seed-header'); return; }
   const options = parseCommonArgs(args);
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('Garden header verification requires a named profile.');
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('Garden header verification requires a named instance.');
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
   const runner = createScenarioRunner(options, { scenarioId: 'GardenSeedHeader', tier: 'local', prefix: 'garden-seed-header', allowRealAgents: false });
@@ -34,7 +34,7 @@ async function main() {
   let agent;
   let seedId;
   const runAttn = (args, sessionId = dispatcher) => execFileSync(appDaemonInTree(options.appPath), args, {
-    encoding: 'utf8', env: profileCliEnv(profile, { ATTN_SESSION_ID: sessionId ?? '' }),
+    encoding: 'utf8', env: instanceCliEnv(instance, { ATTN_SESSION_ID: sessionId ?? '' }),
   });
   try {
     const webkitBaseline = await captureWebKitPids();
@@ -127,7 +127,7 @@ async function main() {
       const samples = [];
       for (let index = 0; index < 2; index += 1) {
         await delay(2000);
-        const current = await snapshot(appPid, readLiveDaemonPid(profile), webkitBaseline);
+        const current = await snapshot(appPid, readLiveDaemonPid(instance), webkitBaseline);
         const pids = new Set(appPids(current));
         const cpu = [];
         for (const { pid, cpuPct } of await readProcessTable()) {

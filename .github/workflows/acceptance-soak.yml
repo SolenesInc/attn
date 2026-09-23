@@ -42,7 +42,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '26'
+          node-version-file: .tool-versions
 
       - name: Validate scenarios and repeat
         id: plan
@@ -58,7 +58,7 @@ jobs:
     needs: plan
     runs-on: ${{ inputs.runner }}
     env:
-      ATTN_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -71,7 +71,7 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
@@ -92,8 +92,8 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ inputs.runner }}
     env:
-      ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -112,7 +112,7 @@ jobs:
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Validate scenario on runner
@@ -141,7 +141,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness/daemon
         run: |
-          data_dir="$(./attn profile resolve --field dataDir)"
+          data_dir="$(./attn instance resolve --field dataDir)"
           mkdir -p "$EVIDENCE_DIR"
           if [ -f "$data_dir/daemon.log" ]; then
             cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon.log"
@@ -162,9 +162,9 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
-      - name: Clean profile
+      - name: Clean instance
         if: always()
-        run: ./attn profile clean "$ATTN_PROFILE"
+        run: ./attn instance clean "$ATTN_INSTANCE"
 
       - name: Report the scenario verdict
         if: always()

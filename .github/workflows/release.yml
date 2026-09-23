@@ -87,7 +87,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '26'
+          node-version-file: .tool-versions
           cache: pnpm
           cache-dependency-path: app/pnpm-lock.yaml
 
@@ -120,7 +120,7 @@ jobs:
 
       # tauri bundles `bundled-plugins/` as the app's `Resources/plugins`, and a
       # checkout has only a .gitkeep there — the compiled plugins are build
-      # output. A source install gets them from scripts/build-app-profile.sh;
+      # output. A source install gets them from scripts/build-app-instance.sh;
       # this is the release's equivalent step.
       - name: Stage bundled plugins
         run: ./scripts/build-bundled-plugins.sh

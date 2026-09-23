@@ -44,11 +44,11 @@ type AddEndpointMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SshTarget corresponds to the JSON schema field "ssh_target".
 	SshTarget string `json:"ssh_target"`
@@ -2343,8 +2343,8 @@ type ClientHelloMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID *string `json:"setup_id,omitempty,omitzero"`
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// Version corresponds to the JSON schema field "version".
 	Version string `json:"version"`
@@ -3575,11 +3575,11 @@ type Desktop struct {
 	// Panes corresponds to the JSON schema field "panes".
 	Panes []DesktopPane `json:"panes"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// Revision corresponds to the JSON schema field "revision".
 	Revision int `json:"revision"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
 
 	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
 	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
@@ -3595,11 +3595,11 @@ type DesktopCreateMessage struct {
 	// Name corresponds to the JSON schema field "name".
 	Name *string `json:"name,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
 
 	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
 	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
@@ -3812,11 +3812,11 @@ type DesktopSetCurrentMessage struct {
 	// DesktopID corresponds to the JSON schema field "desktop_id".
 	DesktopID string `json:"desktop_id"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
 }
 
 type DesktopSetShortcutSlotMessage struct {
@@ -4334,11 +4334,11 @@ type EndpointInfo struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SessionCount corresponds to the JSON schema field "session_count".
 	SessionCount *int `json:"session_count,omitempty,omitzero"`
@@ -5475,6 +5475,12 @@ type InitialStateMessage struct {
 	// outpost of that home.
 	HomeDaemonID *string `json:"home_daemon_id,omitempty,omitzero"`
 
+	// MigrationPhase corresponds to the JSON schema field "migration_phase".
+	MigrationPhase *MigrationPhase `json:"migration_phase,omitempty,omitzero"`
+
+	// Profiles corresponds to the JSON schema field "profiles".
+	Profiles []Profile `json:"profiles,omitempty,omitzero"`
+
 	// ProtocolVersion corresponds to the JSON schema field "protocol_version".
 	ProtocolVersion *string `json:"protocol_version,omitempty,omitzero"`
 
@@ -5490,17 +5496,14 @@ type InitialStateMessage struct {
 	// SeedsTotal corresponds to the JSON schema field "seeds_total".
 	SeedsTotal *int `json:"seeds_total,omitempty,omitzero"`
 
-	// SelectedSetupID corresponds to the JSON schema field "selected_setup_id".
-	SelectedSetupID *string `json:"selected_setup_id,omitempty,omitzero"`
+	// SelectedProfileID corresponds to the JSON schema field "selected_profile_id".
+	SelectedProfileID *string `json:"selected_profile_id,omitempty,omitzero"`
 
 	// Sessions corresponds to the JSON schema field "sessions".
 	Sessions []Session `json:"sessions,omitempty,omitzero"`
 
 	// Settings corresponds to the JSON schema field "settings".
 	Settings RecordString `json:"settings,omitempty,omitzero"`
-
-	// Setups corresponds to the JSON schema field "setups".
-	Setups []Setup `json:"setups,omitempty,omitzero"`
 
 	// SourceFingerprint corresponds to the JSON schema field "source_fingerprint".
 	SourceFingerprint *string `json:"source_fingerprint,omitempty,omitzero"`
@@ -6097,6 +6100,184 @@ type MergePRMessage struct {
 
 	// Method corresponds to the JSON schema field "method".
 	Method string `json:"method"`
+}
+
+type MigrationChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// State corresponds to the JSON schema field "state".
+	State MigrationState `json:"state"`
+}
+
+type MigrationDraftDesktop struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
+	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
+
+	// TreeJson corresponds to the JSON schema field "tree_json".
+	TreeJson string `json:"tree_json"`
+}
+
+type MigrationFinishMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationGroup struct {
+	// Confirmed corresponds to the JSON schema field "confirmed".
+	Confirmed bool `json:"confirmed"`
+
+	// Directory corresponds to the JSON schema field "directory".
+	Directory string `json:"directory"`
+
+	// GroupID corresponds to the JSON schema field "group_id".
+	GroupID string `json:"group_id"`
+
+	// Panes corresponds to the JSON schema field "panes".
+	Panes []DesktopPane `json:"panes"`
+
+	// SourceDesktopID corresponds to the JSON schema field "source_desktop_id".
+	SourceDesktopID string `json:"source_desktop_id"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+
+	// TreeJson corresponds to the JSON schema field "tree_json".
+	TreeJson string `json:"tree_json"`
+}
+
+type MigrationKeepMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// GroupIds corresponds to the JSON schema field "group_ids".
+	GroupIds []string `json:"group_ids"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationMoveMessage struct {
+	// AnchorGroupID corresponds to the JSON schema field "anchor_group_id".
+	AnchorGroupID *string `json:"anchor_group_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Edge corresponds to the JSON schema field "edge".
+	Edge LayoutDockEdge `json:"edge"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// GroupID corresponds to the JSON schema field "group_id".
+	GroupID string `json:"group_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Share corresponds to the JSON schema field "share".
+	Share *float64 `json:"share,omitempty,omitzero"`
+
+	// TargetKey corresponds to the JSON schema field "target_key".
+	TargetKey string `json:"target_key"`
+}
+
+type MigrationPhase string
+
+const MigrationPhaseComplete MigrationPhase = "complete"
+const MigrationPhasePlacementRequired MigrationPhase = "placement_required"
+
+type MigrationResultMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action string `json:"action"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *ProfileErrorCode `json:"error_code,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State *MigrationState `json:"state,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type MigrationState struct {
+	// CanUndo corresponds to the JSON schema field "can_undo".
+	CanUndo bool `json:"can_undo"`
+
+	// Desktops corresponds to the JSON schema field "desktops".
+	Desktops []MigrationDraftDesktop `json:"desktops"`
+
+	// Groups corresponds to the JSON schema field "groups".
+	Groups []MigrationGroup `json:"groups"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase MigrationPhase `json:"phase"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision int `json:"revision"`
+
+	// SuggestionAvailable corresponds to the JSON schema field
+	// "suggestion_available".
+	SuggestionAvailable bool `json:"suggestion_available"`
+}
+
+type MigrationSuggestMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationUndoMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type ModelCapabilitySupport string
@@ -7160,6 +7341,148 @@ type PresentationUpdatedMessage struct {
 
 	// Presentation corresponds to the JSON schema field "presentation".
 	Presentation Presentation `json:"presentation"`
+}
+
+type Profile struct {
+	// CurrentDesktopID corresponds to the JSON schema field "current_desktop_id".
+	CurrentDesktopID string `json:"current_desktop_id"`
+
+	// ID corresponds to the JSON schema field "id".
+	ID string `json:"id"`
+
+	// LastUsedAt corresponds to the JSON schema field "last_used_at".
+	LastUsedAt *string `json:"last_used_at,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision int `json:"revision"`
+}
+
+type ProfileActionResultMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action string `json:"action"`
+
+	// Desktops corresponds to the JSON schema field "desktops".
+	Desktops []Desktop `json:"desktops,omitempty,omitzero"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *ProfileErrorCode `json:"error_code,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile *Profile `json:"profile,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type ProfileArrangementChangedMessage struct {
+	// DeletedDesktopIds corresponds to the JSON schema field "deleted_desktop_ids".
+	DeletedDesktopIds []string `json:"deleted_desktop_ids,omitempty,omitzero"`
+
+	// Desktops corresponds to the JSON schema field "desktops".
+	Desktops []Desktop `json:"desktops"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Profile corresponds to the JSON schema field "profile".
+	Profile Profile `json:"profile"`
+}
+
+type ProfileCreateMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ProfileDeleteMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DestinationProfileID corresponds to the JSON schema field
+	// "destination_profile_id".
+	DestinationProfileID string `json:"destination_profile_id"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ProfileErrorCode string
+
+const ProfileErrorCodeAlreadyPlaced ProfileErrorCode = "already_placed"
+const ProfileErrorCodeCrossProfile ProfileErrorCode = "cross_profile"
+const ProfileErrorCodeDestinationSame ProfileErrorCode = "destination_same"
+const ProfileErrorCodeInternal ProfileErrorCode = "internal"
+const ProfileErrorCodeInvalid ProfileErrorCode = "invalid"
+const ProfileErrorCodeLastDesktop ProfileErrorCode = "last_desktop"
+const ProfileErrorCodeLastProfile ProfileErrorCode = "last_profile"
+const ProfileErrorCodeNameTaken ProfileErrorCode = "name_taken"
+const ProfileErrorCodeNotFound ProfileErrorCode = "not_found"
+const ProfileErrorCodeProfileDeleted ProfileErrorCode = "profile_deleted"
+const ProfileErrorCodeSessionClosed ProfileErrorCode = "session_closed"
+const ProfileErrorCodeSlotTaken ProfileErrorCode = "slot_taken"
+const ProfileErrorCodeStaleRevision ProfileErrorCode = "stale_revision"
+const ProfileErrorCodeUnavailable ProfileErrorCode = "unavailable"
+
+type ProfileRenameMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ProfileSelectMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type ProfilesChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Profiles corresponds to the JSON schema field "profiles".
+	Profiles []Profile `json:"profiles"`
 }
 
 type PtyDesyncMessage struct {
@@ -9220,6 +9543,9 @@ type Session struct {
 	// PinnedAt corresponds to the JSON schema field "pinned_at".
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// PullRequests corresponds to the JSON schema field "pull_requests".
 	PullRequests []SessionPullRequest `json:"pull_requests,omitempty,omitzero"`
 
@@ -9228,9 +9554,6 @@ type Session struct {
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
 
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
@@ -10280,147 +10603,6 @@ type SettleTurnMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type Setup struct {
-	// CurrentDesktopID corresponds to the JSON schema field "current_desktop_id".
-	CurrentDesktopID string `json:"current_desktop_id"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// LastUsedAt corresponds to the JSON schema field "last_used_at".
-	LastUsedAt *string `json:"last_used_at,omitempty,omitzero"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// Revision corresponds to the JSON schema field "revision".
-	Revision int `json:"revision"`
-}
-
-type SetupActionResultMessage struct {
-	// Action corresponds to the JSON schema field "action".
-	Action string `json:"action"`
-
-	// Desktops corresponds to the JSON schema field "desktops".
-	Desktops []Desktop `json:"desktops,omitempty,omitzero"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// ErrorCode corresponds to the JSON schema field "error_code".
-	ErrorCode *SetupErrorCode `json:"error_code,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// PaneID corresponds to the JSON schema field "pane_id".
-	PaneID *string `json:"pane_id,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// Setup corresponds to the JSON schema field "setup".
-	Setup *Setup `json:"setup,omitempty,omitzero"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
-type SetupArrangementChangedMessage struct {
-	// DeletedDesktopIds corresponds to the JSON schema field "deleted_desktop_ids".
-	DeletedDesktopIds []string `json:"deleted_desktop_ids,omitempty,omitzero"`
-
-	// Desktops corresponds to the JSON schema field "desktops".
-	Desktops []Desktop `json:"desktops"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Setup corresponds to the JSON schema field "setup".
-	Setup Setup `json:"setup"`
-}
-
-type SetupCreateMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-}
-
-type SetupDeleteMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DestinationSetupID corresponds to the JSON schema field "destination_setup_id".
-	DestinationSetupID string `json:"destination_setup_id"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
-}
-
-type SetupErrorCode string
-
-const SetupErrorCodeAlreadyPlaced SetupErrorCode = "already_placed"
-const SetupErrorCodeCrossSetup SetupErrorCode = "cross_setup"
-const SetupErrorCodeDestinationSame SetupErrorCode = "destination_same"
-const SetupErrorCodeInternal SetupErrorCode = "internal"
-const SetupErrorCodeInvalid SetupErrorCode = "invalid"
-const SetupErrorCodeLastDesktop SetupErrorCode = "last_desktop"
-const SetupErrorCodeLastSetup SetupErrorCode = "last_setup"
-const SetupErrorCodeNameTaken SetupErrorCode = "name_taken"
-const SetupErrorCodeNotFound SetupErrorCode = "not_found"
-const SetupErrorCodeSessionClosed SetupErrorCode = "session_closed"
-const SetupErrorCodeSetupDeleted SetupErrorCode = "setup_deleted"
-const SetupErrorCodeSlotTaken SetupErrorCode = "slot_taken"
-const SetupErrorCodeStaleRevision SetupErrorCode = "stale_revision"
-const SetupErrorCodeUnavailable SetupErrorCode = "unavailable"
-
-type SetupRenameMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision int `json:"expected_revision"`
-
-	// Name corresponds to the JSON schema field "name".
-	Name string `json:"name"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
-}
-
-type SetupSelectMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID string `json:"request_id"`
-
-	// SetupID corresponds to the JSON schema field "setup_id".
-	SetupID string `json:"setup_id"`
-}
-
-type SetupsChangedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Setups corresponds to the JSON schema field "setups".
-	Setups []Setup `json:"setups"`
-}
-
 type SnoozeTurnMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -11354,11 +11536,11 @@ type UpdateEndpointMessage struct {
 	// EndpointID corresponds to the JSON schema field "endpoint_id".
 	EndpointID string `json:"endpoint_id"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name *string `json:"name,omitempty,omitzero"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SshTarget corresponds to the JSON schema field "ssh_target".
 	SshTarget *string `json:"ssh_target,omitempty,omitzero"`

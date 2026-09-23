@@ -134,19 +134,24 @@ func main() {
 		return
 	}
 
-	if len(os.Args) >= 2 && os.Args[1] == "profile-env" {
-		runProfileEnv()
+	if len(os.Args) >= 2 && (os.Args[1] == "profile" || os.Args[1] == "profile-env") {
+		fmt.Fprintln(os.Stderr, renamedProfileCommandMessage(os.Args[1:]))
+		os.Exit(2)
+	}
+
+	if len(os.Args) >= 2 && os.Args[1] == "instance-env" {
+		runInstanceEnv()
 		return
 	}
 
 	daemonStart := len(os.Args) == 2 && os.Args[1] == "daemon"
 	if !daemonStart {
-		if err := config.ValidateProfile(); err != nil {
+		if err := config.ValidateInstance(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		if !isProfileGroupCommand(os.Args) {
-			if err := config.ValidateProfileRouting(); err != nil {
+		if !isInstanceGroupCommand(os.Args) {
+			if err := config.ValidateInstanceRouting(); err != nil {
 				fmt.Fprintln(os.Stderr, err)
 				os.Exit(1)
 			}
@@ -154,14 +159,14 @@ func main() {
 	}
 
 	if len(os.Args) < 2 {
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runWrapper()
 		return
 	}
 
 	switch os.Args[1] {
 	case "daemon":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runDaemonCommand()
 	case "ws-relay":
 		runWSRelay()
@@ -170,21 +175,21 @@ func main() {
 	case "pty-worker":
 		runPTYWorker()
 	case "workflow":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runWorkflow()
 	case "automation":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runAutomationCommand()
 	case "preflight":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runPreflight()
 	case "pr":
 		runPRCommand()
 	case "plugin":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runPluginCommand()
 	case "list":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runList()
 	case "presence":
 		runPresence()
@@ -193,71 +198,71 @@ func main() {
 	case "prompts":
 		runPrompts()
 	case "activity":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runActivity()
 	case "delegate":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runDelegate()
 	case "ticket":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runTicket()
 	case "session":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runSession()
 	case "agent":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runAgent()
 	case "state":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runState()
 	case "debug":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runDebug()
 	case "db":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runDB()
 	case "bus":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runBus()
 	case "enrollment":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runEnrollment()
 	case "seed":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runSeed()
 	case "crew":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runCrew()
 	case "handoff":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runHandoff(os.Args[2:])
 	case "doc":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runDoc()
 	case "app":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runApp()
 	case "automode":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runAutoMode()
 	case "journal":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runJournal()
 	case "vision-check":
 		runVisionCheck()
 	case "present":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runPresent()
 	case "worktree":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runWorktree()
-	case "profile":
-		runProfile()
+	case "instance":
+		runInstance()
 	case "open":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runOpen()
 	case "browser":
-		maybePrintProfileBanner()
+		maybePrintInstanceBanner()
 		runBrowser()
 	case "help", "-h", "--help":
 		runHelp()
@@ -281,7 +286,7 @@ func main() {
 		runProbeTUI()
 	default:
 		if len(os.Args[1]) > 0 && os.Args[1][0] == '-' {
-			maybePrintProfileBanner()
+			maybePrintInstanceBanner()
 			runWrapper()
 		} else {
 			fmt.Fprintf(os.Stderr, "attn %s: unknown command %q\n\n", buildinfo.Version, os.Args[1])
@@ -324,12 +329,24 @@ func runWorkflowResultMCP(args []string) {
 	}
 }
 
-func maybePrintProfileBanner() {
-	config.PrintProfileBanner(os.Stderr)
+func maybePrintInstanceBanner() {
+	config.PrintInstanceBanner(os.Stderr)
 }
 
-func isProfileGroupCommand(args []string) bool {
-	return len(args) >= 2 && args[1] == "profile"
+func renamedProfileCommandMessage(args []string) string {
+	command := strings.Replace(args[0], "profile", "instance", 1)
+	replacement := []string{command}
+	for _, arg := range args[1:] {
+		if arg == "--profile" {
+			arg = "--instance"
+		}
+		replacement = append(replacement, arg)
+	}
+	return fmt.Sprintf("attn %s was renamed to attn %s. Run: attn %s", args[0], command, strings.Join(replacement, " "))
+}
+
+func isInstanceGroupCommand(args []string) bool {
+	return len(args) >= 2 && args[1] == "instance"
 }
 
 func isVersionCommand(args []string) bool {
@@ -545,10 +562,10 @@ func runDaemon() {
 }
 
 func daemonPreflight() (string, error) {
-	if err := config.ValidateProfile(); err != nil {
+	if err := config.ValidateInstance(); err != nil {
 		return "", err
 	}
-	if err := config.ValidateProfileRouting(); err != nil {
+	if err := config.ValidateInstanceRouting(); err != nil {
 		return "", err
 	}
 	socketPath := config.SocketPath()
@@ -694,8 +711,8 @@ commands:
   vision-check <image> <question>   answer a question about an image (single LLM call)
   daemon <command>                  manage the daemon
 	  daemon ensure|stop                ensure the daemon is running, or stop it
-  profile <status|resolve|list>     show / resolve the active profile's resources
-  profile-env <profile|--unset>     print shell commands for selecting a profile
+  instance <status|resolve|list>    show / resolve the active instance's resources
+  instance-env <instance|--unset>   print shell commands for selecting an instance
   skill [--reference <name>|--list] print the bundled agent skill and its references
   prompts <command>                inspect prompt sources and scenario composition
   version                           print version information

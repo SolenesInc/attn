@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import WebSocket from 'ws';
-import { defaultDaemonPortForProfile, harnessClientHello } from './harnessProfile.mjs';
+import { defaultDaemonPortForInstance, harnessClientHello } from './harnessInstance.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const DAEMON_SOCKET_HOOK_PATH = path.resolve(HARNESS_DIR, '../../src/hooks/useDaemonSocket.ts');
@@ -16,7 +16,7 @@ export function readFrontendProtocolVersion() {
   return match[1];
 }
 
-export async function withDaemonSocket(fn, { port = defaultDaemonPortForProfile() } = {}) {
+export async function withDaemonSocket(fn, { port = defaultDaemonPortForInstance() } = {}) {
   const wsUrl = `ws://localhost:${port}/ws`;
   const ws = new WebSocket(wsUrl);
 

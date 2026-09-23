@@ -8,7 +8,7 @@ import './DesktopOverview.css';
 const GRID_COLUMNS = 3;
 
 interface DesktopOverviewProps {
-  setupName: string;
+  profileName: string;
   desktops: Desktop[];
   currentDesktopId: string | null;
   canSendActivePane: boolean;
@@ -44,7 +44,7 @@ function miniLayout(desktop: Desktop): MiniLeaf[] {
 }
 
 export function DesktopOverview({
-  setupName,
+  profileName,
   desktops,
   currentDesktopId,
   canSendActivePane,
@@ -194,7 +194,7 @@ export function DesktopOverview({
         onKeyDown={handleKeyDown}
       >
         <h2>
-          {setupName} · {desktops.length} {desktops.length === 1 ? 'desktop' : 'desktops'}
+          {profileName} · {desktops.length} {desktops.length === 1 ? 'desktop' : 'desktops'}
         </h2>
         <div className="desktop-overview-hint">
           Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Delete removes an empty desktop · Esc closes

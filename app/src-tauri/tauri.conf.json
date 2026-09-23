@@ -35,6 +35,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "macOS": {
+      "entitlements": "Entitlements.plist"
+    },
     "externalBin": ["binaries/attn", "binaries/attn-pty-host"],
     "resources": {
       "bundled-plugins/": "plugins/",

@@ -1,13 +1,13 @@
 
 import { useCallback, useReducer } from 'react';
 import type { DaemonEndpoint } from '../hooks/useDaemonSocket';
-import { BUILD_PROFILE } from '../utils/buildProfile';
+import { BUILD_INSTANCE } from '../utils/buildInstance';
 import { usePanelAction, type PanelAction } from './settingsPanelAction';
 
 export interface EndpointFields {
   name: string;
   target: string;
-  profile: string;
+  instance: string;
 }
 
 interface EndpointFormState {
@@ -23,7 +23,7 @@ type EndpointFormEvent =
   | { type: 'edit-cancelled' }
   | { type: 'reopened' };
 
-const emptyDraft: EndpointFields = { name: '', target: '', profile: BUILD_PROFILE };
+const emptyDraft: EndpointFields = { name: '', target: '', instance: BUILD_INSTANCE };
 
 function reduce(state: EndpointFormState, event: EndpointFormEvent): EndpointFormState {
   switch (event.type) {
@@ -38,7 +38,7 @@ function reduce(state: EndpointFormState, event: EndpointFormEvent): EndpointFor
           id: event.endpoint.id,
           name: event.endpoint.name,
           target: event.endpoint.ssh_target,
-          profile: event.endpoint.profile || '',
+          instance: event.endpoint.instance || '',
         },
       };
     case 'edit':

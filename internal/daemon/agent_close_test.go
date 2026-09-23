@@ -196,7 +196,7 @@ func TestAgentCloseLetsTheChiefOfStaffCloseAnySession(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	addAgentCloseSession(t, d, "stranger", "Stranger")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -216,7 +216,7 @@ func TestAgentCloseLetsTheChiefOfStaffCloseAnySession(t *testing.T) {
 func TestAgentCloseKeepsTheChiefOfStaffProtectedFromItself(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -405,7 +405,7 @@ func TestAgentCloseRefusesAnAmbiguousPrefix(t *testing.T) {
 	addAgentCloseSession(t, d, "chief", "Chief")
 	addAgentCloseSession(t, d, "dupe-one", "One")
 	addAgentCloseSession(t, d, "dupe-two", "Two")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -526,7 +526,7 @@ func TestAgentCloseLetsTheChiefCloseASessionOnAnotherEndpoint(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -568,7 +568,7 @@ func TestAgentCloseDoesNotWaitOnTheOwningDaemonsEventBus(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	outpost.stopEventBus()
@@ -585,7 +585,7 @@ func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
 	outpost := startAgentCloseOutpost(t, d, remoteAgentCloseSession("remote-worker", "Remote worker"))
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	outpost.setRecovering(true)
@@ -609,7 +609,7 @@ func TestAgentCloseRepeatsWhyTheOwningDaemonRefused(t *testing.T) {
 func TestAgentCloseRefusesWhenTheOwningEndpointCannotTakeIt(t *testing.T) {
 	d := newAgentCloseDaemon(t)
 	addAgentCloseSession(t, d, "chief", "Chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)

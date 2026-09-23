@@ -47,10 +47,10 @@ cache_namespace="$(printf '%s\n%s\n%s\n' "$root" "$($go_bin env GOVERSION)" "$ru
 test_cache_root="${TMPDIR:-/tmp}/attn-go-test-cache/$cache_namespace"
 mkdir -p "$test_cache_root/data"
 export ATTN_DATA_DIR="$test_cache_root/data"
-# ATTN_PROFILE goes too: an explicit data dir with a profile name that resolves
-# elsewhere is the contradiction config.ValidateProfileRouting refuses, and a
-# test run must not inherit which profile the developer's shell happens to hold.
-unset ATTN_DB_PATH ATTN_SOCKET_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_PROFILE
+# ATTN_INSTANCE goes too: an explicit data dir with an instance name that resolves
+# elsewhere is the contradiction config.ValidateInstanceRouting refuses, and a
+# test run must not inherit which instance the developer's shell happens to hold.
+unset ATTN_DB_PATH ATTN_SOCKET_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_INSTANCE
 
 # Tests should exercise Git itself, not an environment-specific command wrapper.
 test_git="$(resolve_test_git)"
