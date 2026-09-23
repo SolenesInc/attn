@@ -27,13 +27,14 @@ runs:
         brew install openssl@3
         echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
 
-    - name: Set up Go
-      uses: actions/setup-go@v5
+    - name: Set up Go and Node.js
+      uses: ./.github/actions/setup-toolchains
       with:
-        go-version-file: go.mod
+        go: 'true'
         # setup-go's key is content-only, so every Go job shares it and the
         # first one to finish seals it. This action owns its entry below.
-        cache: false
+        go-cache: 'false'
+        node: 'true'
 
     - name: Resolve Go cache paths
       id: go-cache-paths
@@ -55,11 +56,6 @@ runs:
       uses: dtolnay/rust-toolchain@master
       with:
         toolchain: '1.95.0'
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '26'
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
