@@ -873,7 +873,8 @@ model SessionListMessage {
   // Request reopen eligibility for every closed row of this page. Over the
   // socket the verdicts arrive inline in the result. Over WebSocket the page
   // arrives without them, followed by one terminal session_reopen_resolved
-  // event per closed generation.
+  // event per closed generation. A WebSocket page without reopen ends the
+  // connection's streamed eligibility, as session_reopen_unsubscribe does.
   reopen?: boolean;
 }
 

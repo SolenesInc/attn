@@ -333,21 +333,33 @@ func TestSessionCloseStartsNoResolutionWhileNoLedgerIsOpen(t *testing.T) {
 	}
 }
 
-func TestSessionCloseStartsNoResolutionAfterTheLedgerUnsubscribes(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addLedgerTestSession(t, d, "after-unsubscribe", t.TempDir())
-	broker := installTestReopenBroker(t, d, 1)
-	client := ledgerClient(d)
-	openLedgerPage(t, d, client)
+func TestSessionCloseStartsNoResolutionAfterTheLedgerDropsReopenInterest(t *testing.T) {
+	for name, dropInterest := range map[string]func(*testing.T, *Daemon, *wsClient){
+		"unsubscribe": func(t *testing.T, d *Daemon, client *wsClient) {
+			sendLedgerCommand(t, d, client, protocol.SessionReopenUnsubscribeMessage{Cmd: protocol.CmdSessionReopenUnsubscribe})
+		},
+		"page without reopen": func(t *testing.T, d *Daemon, client *wsClient) {
+			sendLedgerCommand(t, d, client, protocol.SessionListMessage{Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("live")})
+			<-client.send
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+			addLedgerTestSession(t, d, "after-interest", t.TempDir())
+			broker := installTestReopenBroker(t, d, 1)
+			client := ledgerClient(d)
+			openLedgerPage(t, d, client)
 
-	sendLedgerCommand(t, d, client, protocol.SessionReopenUnsubscribeMessage{Cmd: protocol.CmdSessionReopenUnsubscribe})
-	d.closeSession("after-unsubscribe", store.SessionClose{By: store.SessionClosedByUser})
+			dropInterest(t, d, client)
+			d.closeSession("after-interest", store.SessionClose{By: store.SessionClosedByUser})
 
-	broker.mu.Lock()
-	jobs := len(broker.jobs)
-	broker.mu.Unlock()
-	if jobs != 0 {
-		t.Fatalf("close after the ledger unsubscribed queued %d reopen jobs, want none", jobs)
+			broker.mu.Lock()
+			jobs := len(broker.jobs)
+			broker.mu.Unlock()
+			if jobs != 0 {
+				t.Fatalf("close after the ledger dropped reopen interest queued %d reopen jobs, want none", jobs)
+			}
+		})
 	}
 }
 

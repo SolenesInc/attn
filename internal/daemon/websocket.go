@@ -1028,6 +1028,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 				pageIntent := broker.BeginPage(client, strings.TrimSpace(protocol.Deref(list.Before)) != "")
 				intent = &pageIntent
 			}
+		} else {
+			d.removeSessionReopenClient(client)
 		}
 		go d.sendSessionListWSResult(client, list, intent)
 	case protocol.CmdSessionReopenUnsubscribe:

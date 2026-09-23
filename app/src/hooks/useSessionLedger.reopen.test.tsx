@@ -86,6 +86,13 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     });
   });
 
+  it('asks for no reopen eligibility while listing only live sessions', async () => {
+    const list = vi.fn(async () => ({ entries: [], omitted: 0 }));
+    renderLedger(list, { ...EMPTY_SESSION_FILTERS, scope: 'live' });
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: false }));
+  });
+
   it('reissues the streamed page after reconnect', async () => {
     const list = vi.fn(async () => ({ entries: [closedEntry('s1')], omitted: 0 }));
     const seen = renderLedger(list);

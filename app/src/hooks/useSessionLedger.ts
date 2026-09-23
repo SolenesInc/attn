@@ -277,7 +277,7 @@ export function useSessionLedger({
     setLoading(true);
     setError(null);
     const queryKey = JSON.stringify(query);
-    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
+    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: filters.scope !== 'live' })
       .then((page) => {
         if (superseded()) return;
         const at = now();
@@ -312,7 +312,7 @@ export function useSessionLedger({
     closesDuringReads.current.add(closes);
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoadingMoreRead(closes);
-    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: filtersRef.current.scope !== 'live' })
       .then((page) => {
         if (superseded()) return;
         const at = now();
