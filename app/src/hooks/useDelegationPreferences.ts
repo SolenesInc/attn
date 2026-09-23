@@ -24,6 +24,7 @@ export function useDelegationPreferences(
   const request = useRef(0);
   const deferred = useRef(false);
   const confirmed = useRef<DelegationPreferences | null>(null);
+  const lastEditRevision = useRef<number | null>(null);
 
   const confirm = useCallback((next: DelegationSettingsState) => {
     revision.current = next.preferences.revision;
@@ -70,8 +71,10 @@ export function useDelegationPreferences(
       pending.current = null;
       try {
         const next = await save({ ...value, revision: revision.current }, installWorkflowSkill);
+        lastEditRevision.current = next.preferences.revision;
         if (pending.current) confirm(next); else apply(next);
       } catch (e) {
+        lastEditRevision.current = null;
         pending.current = null;
         setError(message(e));
         rollBack();
@@ -86,6 +89,7 @@ export function useDelegationPreferences(
     setPreferences(value);
     setError('');
     setGeneration(n => n + 1);
+    lastEditRevision.current = null;
     // An install queued behind a running save must survive the edits that collapse into it.
     pending.current = { value, installWorkflowSkill: installWorkflowSkill || (pending.current?.installWorkflowSkill ?? false) };
     if (flight.current) return flight.current;
@@ -104,10 +108,12 @@ export function useDelegationPreferences(
 
   const undo = useCallback(async () => {
     if (flight.current) await flight.current;
+    const edited = lastEditRevision.current;
+    if (edited === null) return;
     setError('');
     setGeneration(n => n + 1);
     try {
-      apply(await rollback(revision.current));
+      apply(await rollback(edited));
     } catch (e) {
       setError(message(e));
       await fetch();

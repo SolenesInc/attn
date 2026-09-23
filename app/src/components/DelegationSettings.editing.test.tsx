@@ -187,6 +187,18 @@ it('renders a configured maintained role by built-in kind when a template shares
   await act(async () => { state = { ...state }; });
 });
 
+it('does not roll back a change made elsewhere when the undone edit failed to save', async () => {
+  const { daemon, getState, bump } = setup([custom]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  bump();
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  await screen.findByRole('alert');
+  await waitFor(() => expect(daemon.getCalls('load').length).toBeGreaterThanOrEqual(2));
+  expect(daemon.getCalls('rollback')).toHaveLength(0);
+  expect(getState().preferences.roles).toHaveLength(1);
+});
+
 it('withdraws undo when a change made elsewhere reloads the table', async () => {
   const { daemon, getState, bump } = setup([custom]);
   fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
