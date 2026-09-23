@@ -996,6 +996,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDelegationPreferencesGet(client, msg.(*protocol.DelegationPreferencesGetMessage))
 	case protocol.CmdDelegationPreferencesSave:
 		d.handleDelegationPreferencesSave(client, msg.(*protocol.DelegationPreferencesSaveMessage))
+	case protocol.CmdDelegationPreferencesRollback:
+		d.handleDelegationPreferencesRollbackWS(client, msg.(*protocol.DelegationPreferencesRollbackMessage))
 	case protocol.CmdDelegateStatus:
 		go d.handleDelegateStatusWS(client, msg.(*protocol.DelegateStatusMessage))
 	case protocol.CmdNotebookList:

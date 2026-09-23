@@ -1248,6 +1248,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
+	{152, "keep every delegation preferences revision", ``},
 }
 
 const migration99SQL = `
@@ -1827,6 +1828,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 148 {
 			if err := applyMigration148(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 152 {
+			if err := applyMigration152(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}

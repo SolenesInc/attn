@@ -30,8 +30,9 @@ export function handleDelegationDaemonEvent(event: DelegationEvent, pending: Pen
     const extract = (value: DelegationEvent): DelegationSettingsState | undefined => value.preferences ? {
       preferences: value.preferences, templates: value.templates ?? [], expandedRoles: value.expanded_roles ?? [], harnesses: value.harnesses ?? [], workflowSkillPaths: value.workflow_skill_paths ?? [],
     } : undefined;
-    if (!settlePendingRequest(pending, 'delegation_preferences_get', event, extract, 'Reading delegation preferences failed')) {
-      settlePendingRequest(pending, 'delegation_preferences_save', event, extract, 'Saving delegation preferences failed');
+    if (!settlePendingRequest(pending, 'delegation_preferences_get', event, extract, 'Reading delegation preferences failed')
+      && !settlePendingRequest(pending, 'delegation_preferences_save', event, extract, 'Saving delegation preferences failed')) {
+      settlePendingRequest(pending, 'delegation_preferences_rollback', event, extract, 'Undoing the delegation change failed');
     }
     return true;
   }

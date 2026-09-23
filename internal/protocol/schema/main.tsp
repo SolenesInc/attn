@@ -1187,6 +1187,49 @@ model DelegationRolesResult {
   guidance: string;
 }
 
+// One saved state of Settings > Delegation. Every change, a rollback included,
+// adds a revision; the newest is live.
+model DelegationPreferencesRevision {
+  preferences: DelegationPreferences;
+  restores?: safeint; // The revision a rollback copied.
+  source_session?: string; // Absent for changes made in Settings.
+  message?: string;
+  created_at?: string; // Absent for the empty table nothing has saved yet.
+  changes: string[]; // What this revision changed in the one live before it.
+}
+
+model DelegationPreferencesShowMessage {
+  cmd: "delegation_preferences_show";
+}
+
+model DelegationPreferencesCommitMessage {
+  cmd: "delegation_preferences_commit";
+  preferences: DelegationPreferences; // Its revision is the one the edit started from.
+  message?: string;
+  source_session?: string;
+}
+
+model DelegationPreferencesHistoryMessage {
+  cmd: "delegation_preferences_history";
+  limit?: safeint;
+}
+
+model DelegationPreferencesHistoryResult {
+  revisions: DelegationPreferencesRevision[]; // Newest first.
+}
+
+// Restores an earlier table as a new revision. Without a revision it steps
+// back to the table that was live before the current one; repeating it keeps
+// walking back.
+model DelegationPreferencesRollbackMessage {
+  cmd: "delegation_preferences_rollback";
+  request_id?: string; // Required from the app, which receives delegation_preferences_result.
+  revision?: safeint;
+  expected_revision?: safeint; // Refuses with a conflict when another revision is live.
+  message?: string;
+  source_session?: string;
+}
+
 enum DelegateAssignmentKind {
   new,
   seed,
@@ -6352,6 +6395,8 @@ model Response {
   delegate_result?: DelegateResult;
   delegation_operation?: DelegationOperation;
   delegation_roles?: DelegationRolesResult;
+  delegation_preferences_revision?: DelegationPreferencesRevision;
+  delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   workspaces?: Workspace[];
   prs?: PR[];

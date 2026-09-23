@@ -61,6 +61,25 @@ paragraphs; the agent reads it to decide. An alternative without a condition
 is saved but never picked. A collapsed row shows how many alternatives it
 carries.
 
+## Changing roles from the CLI
+
+`attn delegate roles --help` lists commands that read and change the same
+table: `show` prints every row, including rows that are off or still need a
+model, and `add`, `set`, `copy`, `rm`, `enable` and `disable` edit one row or
+the whole table. `apply` replaces the table with the JSON `show --json`
+prints, and refuses when the table changed since that export. Agents change
+the table only when the user asks; a model requested for one delegation stays
+a launch override.
+
+Every change, from Settings or the CLI, is a revision. It records the session
+that made it and an optional reason. `attn delegate roles history` lists the
+revisions and what each one changed. `attn delegate roles rollback` restores
+the table that was live before the current one, and repeating it keeps
+walking back. `rollback <revision>` restores any revision, older or newer, so
+rolling forward is restoring a later one. A rollback is itself a revision.
+Settings' Undo rolls back the edit it offers to undo, and only while that edit
+is still the live revision.
+
 ## Agents
 
 Agents call `attn delegate roles` after delegation is authorized. It returns

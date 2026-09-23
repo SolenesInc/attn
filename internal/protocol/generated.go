@@ -3402,12 +3402,39 @@ type DelegationPreferencesChangedMessage struct {
 	Revision int `json:"revision"`
 }
 
+type DelegationPreferencesCommitMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// Preferences corresponds to the JSON schema field "preferences".
+	Preferences DelegationPreferences `json:"preferences"`
+
+	// SourceSession corresponds to the JSON schema field "source_session".
+	SourceSession *string `json:"source_session,omitempty,omitzero"`
+}
+
 type DelegationPreferencesGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type DelegationPreferencesHistoryMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+}
+
+type DelegationPreferencesHistoryResult struct {
+	// Revisions corresponds to the JSON schema field "revisions".
+	Revisions []DelegationPreferencesRevision `json:"revisions"`
 }
 
 type DelegationPreferencesResultMessage struct {
@@ -3439,6 +3466,46 @@ type DelegationPreferencesResultMessage struct {
 	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 }
 
+type DelegationPreferencesRevision struct {
+	// Changes corresponds to the JSON schema field "changes".
+	Changes []string `json:"changes"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt *string `json:"created_at,omitempty,omitzero"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// Preferences corresponds to the JSON schema field "preferences".
+	Preferences DelegationPreferences `json:"preferences"`
+
+	// Restores corresponds to the JSON schema field "restores".
+	Restores *int `json:"restores,omitempty,omitzero"`
+
+	// SourceSession corresponds to the JSON schema field "source_session".
+	SourceSession *string `json:"source_session,omitempty,omitzero"`
+}
+
+type DelegationPreferencesRollbackMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision *int `json:"revision,omitempty,omitzero"`
+
+	// SourceSession corresponds to the JSON schema field "source_session".
+	SourceSession *string `json:"source_session,omitempty,omitzero"`
+}
+
 type DelegationPreferencesSaveMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3452,6 +3519,11 @@ type DelegationPreferencesSaveMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type DelegationPreferencesShowMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 }
 
 type DelegationRole struct {
@@ -7402,6 +7474,14 @@ type Response struct {
 	// DelegationOperation corresponds to the JSON schema field
 	// "delegation_operation".
 	DelegationOperation *DelegationOperation `json:"delegation_operation,omitempty,omitzero"`
+
+	// DelegationPreferencesHistory corresponds to the JSON schema field
+	// "delegation_preferences_history".
+	DelegationPreferencesHistory *DelegationPreferencesHistoryResult `json:"delegation_preferences_history,omitempty,omitzero"`
+
+	// DelegationPreferencesRevision corresponds to the JSON schema field
+	// "delegation_preferences_revision".
+	DelegationPreferencesRevision *DelegationPreferencesRevision `json:"delegation_preferences_revision,omitempty,omitzero"`
 
 	// DelegationRoles corresponds to the JSON schema field "delegation_roles".
 	DelegationRoles *DelegationRolesResult `json:"delegation_roles,omitempty,omitzero"`

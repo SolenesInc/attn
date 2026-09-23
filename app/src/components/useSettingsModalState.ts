@@ -85,6 +85,7 @@ export function useSettingsModalState({
   const {
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
+    sendDelegationPreferencesRollback,
     sendDelegationModels,
     sendGetSettings,
     sendBusStatusGet,
@@ -149,6 +150,7 @@ export function useSettingsModalState({
     isOpen,
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
+    sendDelegationPreferencesRollback,
   );
   const [settingsSearch, setSettingsSearch] = useState('');
   const endpointPanel = useEndpointPanel();

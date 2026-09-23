@@ -6,7 +6,12 @@ import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean };
 const message = (e: unknown) => String(e instanceof Error ? e.message : e);
 
-export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
+export function useDelegationPreferences(
+  active: boolean,
+  load: () => Promise<DelegationSettingsState>,
+  save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>,
+  rollback: (expectedRevision: number) => Promise<DelegationSettingsState>,
+) {
   const [state, setState] = useState<DelegationSettingsState | null>(null);
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
@@ -97,6 +102,18 @@ export function useDelegationPreferences(active: boolean, load: () => Promise<De
     return flight.current;
   }, [drain, fetch]);
 
-  return { state, preferences, busy, error, generation, reload, save: persist };
+  const undo = useCallback(async () => {
+    if (flight.current) await flight.current;
+    setError('');
+    setGeneration(n => n + 1);
+    try {
+      apply(await rollback(revision.current));
+    } catch (e) {
+      setError(message(e));
+      await fetch();
+    }
+  }, [rollback, apply, fetch]);
+
+  return { state, preferences, busy, error, generation, reload, save: persist, undo };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;
