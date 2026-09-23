@@ -154,4 +154,5 @@ Read the relevant entry when the task touches its subject. When changing or work
 - `attn db restore`: restores the database from a rotating backup while the daemon is stopped.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
-- Restarting the app or daemon has no impact on the underlying agents.
+- Restarting the app or daemon has no impact on the underlying agents, unless
+  Settings → Terminal reports the embedded backend: then a daemon restart stops them.
