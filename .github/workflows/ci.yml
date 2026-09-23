@@ -29,6 +29,12 @@ jobs:
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
       app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
     steps:
+      - name: Report API quota
+        continue-on-error: true
+        run: >-
+          gh api rate_limit --jq '.resources.core |
+          "GitHub API quota: \(.used)/\(.limit) used, resets \(.reset | todate)"'
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -53,6 +59,8 @@ jobs:
               - 'scripts/**'
               - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             frontend:
               - 'internal/prompts/**'
               - 'cmd/promptgen/**'
@@ -79,6 +87,8 @@ jobs:
               - 'internal/appbuild/sdkdist/**'
               - 'internal/protocol/schema/**'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             # Every input to the type pipeline plus both of its outputs. The
             # outputs are listed so a hand-edit is gated even when no schema
             # moved — that edit is exactly what this catches.
@@ -88,6 +98,8 @@ jobs:
               - 'app/src/types/generated.ts'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             tauri:
               - 'app/src-tauri/**'
               - 'pty-host/**'
@@ -98,6 +110,7 @@ jobs:
               - 'ghostty-vt-native.lock'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.github/actions/setup-toolchains/**'
             # The plugin tests read Go sources and fixtures verbatim, and attn-pi
             # speaks the daemon's plugin-driver and conversation-host wire.
             plugins:
@@ -107,6 +120,7 @@ jobs:
               - 'scripts/build-bundled-plugins.sh'
               - '.tool-versions'
               - '.github/workflows/ci.yml'
+              - '.github/actions/setup-toolchains/**'
               - 'internal/automode/environment.go'
               - 'internal/hooks/testdata/pull-request-extraction.json'
               - 'internal/hostsession/**'
@@ -151,6 +165,7 @@ jobs:
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
               - 'scripts/build-app-runtime-host.sh'
+              - '.github/actions/setup-toolchains/**'
   changelog:
     name: Changelog
     # Waits on app-acceptance because candidate-gate.sh reads that job's result,
@@ -171,9 +186,9 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
 
       - name: Gate pull request
         if: github.event_name == 'pull_request'
@@ -192,12 +207,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '26'
+          go: 'true'
+          node: 'true'
       - run: make test-scripts
 
   main-route:
@@ -226,15 +239,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '26'
+          go: 'true'
+          node: 'true'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -261,10 +270,10 @@ jobs:
         run: ./scripts/ci-runner-class.sh
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
 
       - name: Resolve Go cache paths
         id: go-cache-paths
@@ -355,10 +364,10 @@ jobs:
           fetch-depth: 0
       - name: Report runner class
         run: ./scripts/ci-runner-class.sh
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
       - name: Resolve Go cache paths
         id: go-cache-paths
         run: |
@@ -409,18 +418,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
+          node: 'true'
 
       - name: Check generated prompt catalogs
         working-directory: .
         run: go run ./cmd/promptgen --check
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '26'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -471,15 +477,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          node-version: '26'
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+          go: 'true'
+          node: 'true'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -564,10 +566,10 @@ jobs:
             librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
 
       - name: Resolve Go cache paths
         id: go-cache-paths
@@ -650,9 +652,9 @@ jobs:
         uses: ./.github/actions/setup-linux-sandbox
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
 
       - name: Read bun pin
         id: bun
@@ -833,9 +835,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: ./.github/actions/setup-toolchains
         with:
-          node-version: '26'
+          node: 'true'
 
       - name: Download shard results
         if: needs.app-acceptance-build.result == 'success'
@@ -1013,6 +1015,12 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     steps:
+      - name: Report API quota
+        continue-on-error: true
+        run: >-
+          gh api rate_limit --jq '.resources.core |
+          "GitHub API quota: \(.used)/\(.limit) used, resets \(.reset | todate)"'
+
       - name: Aggregate checks
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
