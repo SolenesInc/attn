@@ -97,13 +97,11 @@ func (d *Daemon) validateSharedPTYHostAfterRecovery() {
 	if routed && !parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled)) {
 		return
 	}
-	if host.SharedCandidatePending() || !host.SharedArtifactReady() {
-		ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
-		if err := host.ValidateSharedCandidate(ctx, false); err != nil {
-			d.logf("shared PTY host candidate validation: %v", err)
-		}
-		cancel()
+	ctx, cancel := context.WithTimeout(d.doneContext(), workerStartupProbeTimeout)
+	if err := host.ValidateSharedCandidate(ctx, false); err != nil {
+		d.logf("shared PTY host candidate validation: %v", err)
 	}
+	cancel()
 	if !routed {
 		return
 	}

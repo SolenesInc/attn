@@ -115,22 +115,6 @@ func (b *WorkerBackend) SharedCandidateError() error {
 	return b.candidate.err
 }
 
-func (b *WorkerBackend) SharedCandidatePending() bool {
-	if b.candidate.err != nil {
-		return false
-	}
-	if _, rejected := b.candidateRejection(); rejected {
-		return false
-	}
-	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
-	if err != nil || receipt.Environment != sharedArtifactEnvironment() {
-		return true
-	}
-	b.artifactMu.Lock()
-	defer b.artifactMu.Unlock()
-	return receipt.Passed && b.pinned.ID != b.candidate.id
-}
-
 func (b *WorkerBackend) launchArtifact() (ptyhost.Artifact, error) {
 	b.artifactMu.Lock()
 	pinned := b.pinned
@@ -161,6 +145,7 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 	if b.candidate.err != nil {
 		return b.candidate.err
 	}
+	defer b.collectSharedArtifacts()
 	if reason, rejected := b.candidateRejection(); rejected && !explicit {
 		b.reportRejection(reason)
 		return fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, reason)
@@ -201,7 +186,6 @@ func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) {
 	if previous != artifact.ID {
 		b.cfg.Logf("shared PTY host artifact promoted: %s (previous %q)", artifact.ID, previous)
 	}
-	b.collectSharedArtifacts()
 }
 
 func (b *WorkerBackend) recordSharedArtifact(artifact ptyhost.Artifact, probeErr error) error {

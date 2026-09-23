@@ -217,8 +217,8 @@ func TestSharedHost_PromotionLeavesExistingSessionsUninterrupted(t *testing.T) {
 	if report, err := second.Recover(context.Background()); err != nil || report.Recovered != 1 {
 		t.Fatalf("recover = %+v, %v", report, err)
 	}
-	if !second.SharedArtifactReady() || !second.SharedCandidatePending() {
-		t.Fatal("new daemon did not start on its last-known-good artifact with the candidate pending")
+	if pinned, err := second.launchArtifact(); err != nil || pinned.ID == second.candidate.id {
+		t.Fatalf("new daemon launches %s (%v), want its last-known-good artifact while the candidate is unchecked", pinned.ID, err)
 	}
 	_, stream, err := second.Attach(context.Background(), "before", "promotion")
 	if err != nil {
@@ -265,8 +265,8 @@ func TestSharedHost_PromotionLeavesExistingSessionsUninterrupted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !third.SharedArtifactReady() || third.SharedCandidatePending() {
-		t.Fatal("an ordinary restart did not reuse the promotion receipt")
+	if pinned, err := third.launchArtifact(); err != nil || pinned.ID != third.candidate.id {
+		t.Fatalf("an ordinary restart launches %s (%v), want the promoted candidate", pinned.ID, err)
 	}
 	for _, id := range []string{"before", "during", "after"} {
 		if err := second.Remove(context.Background(), id); err != nil {
@@ -328,8 +328,8 @@ func TestSharedHost_RejectedCandidateKeepsLastKnownGood(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if restarted.SharedCandidatePending() {
-		t.Fatal("an unchanged rejected candidate is pending again after restart")
+	if _, rejected := restarted.candidateRejection(); !rejected {
+		t.Fatal("an unchanged rejected candidate is not rejected after restart")
 	}
 	checked := brokenRuns()
 	if err := restarted.ValidateSharedCandidate(context.Background(), false); err == nil || brokenRuns() != checked {
@@ -680,8 +680,8 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
 		t.Fatal("a build whose probe child never answers passed validation")
 	}
-	if rejections != 1 || backend.SharedCandidatePending() {
-		t.Fatalf("a build whose probe child exits was not rejected: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
+	if _, rejected := backend.candidateRejection(); rejections != 1 || !rejected {
+		t.Fatalf("a build whose probe child exits was not rejected: rejections=%d recorded=%v", rejections, rejected)
 	}
 
 	if err := backend.Spawn(context.Background(), SpawnOptions{
@@ -738,8 +738,8 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	if err := <-checked; err == nil {
 		t.Fatal("an interrupted check passed")
 	}
-	if rejections != 0 || !backend.SharedCandidatePending() {
-		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
+	if _, rejected := backend.candidateRejection(); rejections != 0 || rejected {
+		t.Fatalf("an interrupted check was recorded: rejections=%d recorded=%v", rejections, rejected)
 	}
 	requireAbandoned(t, backend, host, probes[0], probeExit)
 }
@@ -764,7 +764,7 @@ func TestSharedHost_CandidateWithTheWrongIdentityIsRejected(t *testing.T) {
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
 		t.Fatal("a host reporting another build passed its check")
 	}
-	if len(reports) != 1 || !strings.Contains(reports[0].Reason, "identity mismatch") || backend.SharedCandidatePending() {
-		t.Fatalf("reports=%+v pending=%v, want one recorded identity rejection", reports, backend.SharedCandidatePending())
+	if _, rejected := backend.candidateRejection(); len(reports) != 1 || !strings.Contains(reports[0].Reason, "identity mismatch") || !rejected {
+		t.Fatalf("reports=%+v recorded=%v, want one recorded identity rejection", reports, rejected)
 	}
 }

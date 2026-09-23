@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -86,8 +87,8 @@ func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	if err := <-checked; err == nil {
 		t.Fatal("a check that never finished passed")
 	}
-	if rejections != 0 || !backend.SharedCandidatePending() {
-		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
+	if _, rejected := backend.candidateRejection(); rejections != 0 || rejected {
+		t.Fatalf("an interrupted check was recorded: rejections=%d recorded=%v", rejections, rejected)
 	}
 	if _, err := backend.launchArtifact(); err == nil || !strings.Contains(err.Error(), "has not passed its check") {
 		t.Fatalf("launch after an interrupted check = %v, want the unchecked build refused", err)
@@ -136,7 +137,7 @@ func TestUndeliveredRejectionIsReportedAgainWithoutRecheck(t *testing.T) {
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
 		t.Fatal("a host that exits at startup passed its check")
 	}
-	if backend.SharedCandidatePending() {
+	if _, rejected := backend.candidateRejection(); !rejected {
 		t.Fatal("a rejection whose report failed was not recorded")
 	}
 
@@ -188,5 +189,52 @@ func TestLastKnownGoodIsTheMostRecentlyPassedBuild(t *testing.T) {
 	artifact, err := backend.launchArtifact()
 	if err != nil || artifact.ID != ids[1] {
 		t.Fatalf("launch artifact = %s, %v; want the most recently passed build %s", artifact.ID, err, ids[1])
+	}
+}
+
+func TestRejectedUpdatesDoNotAccumulate(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
+	dir := ptyhost.ArtifactsDir(root, "d-collect")
+	stored := func(name, body string, passed bool) string {
+		t.Helper()
+		path := filepath.Join(root, name)
+		writeScript(t, path, body)
+		id, err := ptyhost.HashArtifact(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ptyhost.ImportArtifact(dir, path, id); err != nil {
+			t.Fatal(err)
+		}
+		receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: passed, CheckedAt: time.Now().UTC()}
+		if err := ptyhost.WriteArtifactReceipt(dir, id, receipt); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	good := stored("good-host", "exit 0", true)
+	earlierRejection := stored("earlier-broken-host", "exit 2", false)
+	candidate := filepath.Join(root, "broken-host")
+	writeScript(t, candidate, "exit 1")
+	candidateID, err := ptyhost.HashArtifact(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := NewSharedHost(WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-collect", BinaryPath: candidate,
+		OnSharedArtifactRejected: func(SharedArtifactRejection) error { return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host that exits at startup passed its check")
+	}
+	got := ptyhost.StoredArtifactIDs(dir)
+	slices.Sort(got)
+	want := []string{candidateID, good}
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("stored artifacts = %v, want the fallback %s and the current candidate %s (not %s)", got, good, candidateID, earlierRejection)
 	}
 }
