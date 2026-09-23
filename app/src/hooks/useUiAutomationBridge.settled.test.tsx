@@ -36,7 +36,7 @@ const BRIDGE_ARGS = {
   moveDesktopLeaf: vi.fn(async () => undefined),
   closeSession: vi.fn(async () => {}),
   splitPane: vi.fn(async () => undefined),
-  closePane: vi.fn(async () => undefined),
+  closePaneSession: vi.fn(async () => undefined),
   focusPane: vi.fn(),
   typeInSessionPaneViaUI: vi.fn(() => true),
   isSessionPaneInputFocused: vi.fn(() => false),

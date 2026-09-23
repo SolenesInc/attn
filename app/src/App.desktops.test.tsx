@@ -357,6 +357,39 @@ describe('desktop surface', () => {
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-agent-count')).toBe('3');
   });
 
+  it('leaves a selected agent it has not seen yet to its launch placement', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s9');
+    });
+    expect(desktopCommands.sendDesktopPlaceSession).not.toHaveBeenCalled();
+
+    act(() => {
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...agentDesktop('d1', 1, ['s1', 's2', 's9'], 's1'), revision: 2 } : desktop,
+        ),
+        'd1',
+      );
+      useSessionStore.getState().syncFromDaemonSessions([
+        ...['s1', 's2', 's3', 's4', 's9'].map((id) => ({
+          id,
+          label: id,
+          directory: '/tmp/repo',
+          state: 'working',
+          profile_id: TEST_PROFILE_ID,
+          workspace_id: '',
+        })),
+      ]);
+    });
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s9'));
+    expect(desktopCommands.sendDesktopPlaceSession).not.toHaveBeenCalled();
+    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenCalledWith('d1', 'pane-s9');
+  });
+
   it('switches profile before placing an agent that belongs to another profile', async () => {
     useSessionStore.setState((state) => ({
       sessions: [...state.sessions, { ...session('s5'), profileId: 'profile-other' }],

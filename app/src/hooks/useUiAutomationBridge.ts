@@ -99,7 +99,7 @@ interface UseUiAutomationBridgeArgs {
   openDockPanel?: (panelId: string) => void;
   openShortcutEditor?: () => void;
   splitPane: (sessionId: string, targetPaneId: string, direction: TerminalSplitDirection) => Promise<unknown>;
-  closePane: (sessionId: string, paneId: string) => Promise<unknown>;
+  closePaneSession: (sessionId: string) => Promise<unknown>;
   focusPane: (sessionId: string, paneId: string) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
@@ -231,6 +231,31 @@ function serializeSession(session: Session, getActivePaneIdForSession: (session:
     daemonActivePaneId: workspace.daemonActivePaneId,
     panes: workspace.panes,
     workspace,
+  };
+}
+
+function serializeArrangement() {
+  const { selectedProfileId, currentDesktopId, previousDesktopId, desktops } = useProfilesStore.getState();
+  const surfaceOf = (desktopId: string) =>
+    typeof document === 'undefined'
+      ? null
+      : document.querySelector(`[data-session-terminal-workspace="${CSS.escape(desktopId)}"]`);
+  return {
+    selectedProfileId,
+    currentDesktopId,
+    previousDesktopId,
+    desktops: desktops.map((desktop) => {
+      const surface = surfaceOf(desktop.id);
+      return {
+        id: desktop.id,
+        slot: desktop.shortcut_slot ?? null,
+        revision: desktop.revision,
+        activePaneId: desktop.active_pane_id,
+        panes: desktop.panes.map((pane) => ({ paneId: pane.pane_id, sessionId: pane.session_id, kind: pane.kind })),
+        mounted: surface != null,
+        visible: surface?.getAttribute('data-session-visible') === '1',
+      };
+    }),
   };
 }
 
@@ -2161,7 +2186,7 @@ export function useUiAutomationBridge({
   openDockPanel,
   openShortcutEditor,
   splitPane,
-  closePane,
+  closePaneSession,
   focusPane,
   typeInSessionPaneViaUI,
   isSessionPaneInputFocused,
@@ -2197,6 +2222,7 @@ export function useUiAutomationBridge({
           appBuild: APP_BUILD_IDENTITY,
           gridActive: typeof document !== 'undefined' && document.querySelector('.grid-view') != null,
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
+          arrangement: serializeArrangement(),
         };
       case 'dismiss_whats_new': {
         // A fresh instance's one-time What's New modal sits above the workspace and swallows native
@@ -3178,7 +3204,13 @@ export function useUiAutomationBridge({
         if (!sessionId || !paneId) {
           throw new Error('close_pane requires sessionId and paneId');
         }
-        await closePane(sessionId, paneId);
+        const owner = sessions
+          .find((entry) => entry.id === sessionId)
+          ?.desktop.agents.find((pane) => pane.id === paneId)?.sessionId;
+        if (!owner) {
+          throw new Error(`Pane not found: ${paneId} is not on the desktop of session ${sessionId}`);
+        }
+        await closePaneSession(owner);
         return { sessionId, paneId };
       }
       case 'focus_pane': {
@@ -4200,7 +4232,7 @@ export function useUiAutomationBridge({
     }
   }, [
     activeSessionId,
-    closePane,
+    closePaneSession,
     connectionError,
     createSession,
     closeSession,

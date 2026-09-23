@@ -61,8 +61,6 @@ export function useSessionLifecycle({
     [closeSession, daemonSessions, enrichedLocalSessions, sendUnregisterSession, showError],
   );
 
-  const handleClosePane = handleCloseSession;
-
   const handleRequestCloseSession = useCallback(
     (id: string) => {
       if (!sessions.some((entry) => entry.id === id)) return;
@@ -156,7 +154,6 @@ export function useSessionLifecycle({
     handleCloseCurrentSessionShortcut,
     pendingSessionClose,
     handleCloseSession,
-    handleClosePane,
     handleRequestCloseSession,
     handleCancelSessionClose,
     handleConfirmSessionClose,

@@ -69,14 +69,14 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
   const pendingSessionId = useSessionStore((state) => state.pendingSelection?.sessionId ?? null);
   const intentSessionId = view === 'session' ? (pendingSessionId ?? activeSessionId) : null;
   const intentProfileId = useSessionStore(
-    (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? '',
+    (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? null,
   );
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const sentKey = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!intentSessionId) {
+    if (!intentSessionId || intentProfileId === null) {
       sentKey.current = null;
       return;
     }

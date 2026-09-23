@@ -277,7 +277,6 @@ export function useAppController({
   const {
     pendingSessionClose,
     handleCloseSession,
-    handleClosePane,
     handleCloseCurrentSessionShortcut,
   } = sessionLifecycle;
 
@@ -425,7 +424,7 @@ export function useAppController({
     splitPane: (sessionId, paneId, direction) => {
       return createSplitSession('shell', direction, paneId, { baseSessionId: sessionId });
     },
-    closePane: handleClosePane,
+    closePaneSession: handleCloseSession,
     focusPane: (sessionId: string, paneId: string) => {
       const ownerSessionId = sessions.find((session) =>
         session.desktop.agents.some(
