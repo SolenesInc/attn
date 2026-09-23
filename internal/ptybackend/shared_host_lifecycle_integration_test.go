@@ -532,7 +532,11 @@ func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spawnCat(t, first, probeSessionPrefix+"left-behind", root)
+	if err := first.spawn(context.Background(), SpawnOptions{
+		ID: probeSessionPrefix + "left-behind", CWD: root, Agent: "probe", ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	spawnCat(t, first, "user-terminal", root)
 	if err := first.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)

@@ -465,7 +465,7 @@ func (b *WorkerBackend) Probe(ctx context.Context) error {
 	probeSessionID := probeSessionPrefix + suffix
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, probeTimeout)
 	defer cancelSpawn()
-	if err := b.Spawn(spawnCtx, SpawnOptions{
+	if err := b.spawn(spawnCtx, SpawnOptions{
 		ID:    probeSessionID,
 		Agent: "shell",
 		CWD:   os.TempDir(),
@@ -576,6 +576,13 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 }
 
 func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
+	if isProbeSession(opts.ID) {
+		return fmt.Errorf("session id %q uses the reserved %q prefix", opts.ID, probeSessionPrefix)
+	}
+	return b.spawn(ctx, opts)
+}
+
+func (b *WorkerBackend) spawn(ctx context.Context, opts SpawnOptions) error {
 	if b.kind == workerRuntimeSharedHost {
 		return b.spawnShared(ctx, opts)
 	}

@@ -116,3 +116,19 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 		t.Fatalf("spawn with only a rejected build = %v, want a refusal", err)
 	}
 }
+
+func TestSessionsCannotClaimTheProbeNamespace(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
+	for _, construct := range []func(WorkerBackendConfig) (*WorkerBackend, error){NewWorker, NewSharedHost} {
+		backend, err := construct(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-reserved", BinaryPath: "/bin/cat"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		err = backend.Spawn(context.Background(), SpawnOptions{
+			ID: probeSessionPrefix + "mine", CWD: root, Agent: "shell", ExternalCommand: []string{"/bin/cat"},
+		})
+		if err == nil || !strings.Contains(err.Error(), "reserved") {
+			t.Fatalf("%s spawn of a probe-named session = %v, want a refusal", backend.PTYBackendMode(), err)
+		}
+	}
+}
