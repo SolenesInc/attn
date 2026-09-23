@@ -126,7 +126,12 @@ func TestMain(m *testing.M) {
 
 	_ = os.Setenv("ATTN_CLIENT_TOKEN", "daemon-test-client-token")
 
+	mockGitHub := mockserver.New()
+	_ = os.Setenv("ATTN_MOCK_GH_URL", mockGitHub.URL)
+	_ = os.Setenv("ATTN_MOCK_GH_TOKEN", "daemon-test-github-token")
+
 	code := m.Run()
+	mockGitHub.Close()
 	os.RemoveAll(dataDir)
 	os.RemoveAll(toolHomeDir)
 	os.Exit(code)
