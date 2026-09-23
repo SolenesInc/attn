@@ -18,7 +18,7 @@ describe('SetupSwitcher', () => {
   it('selects the highlighted setup even after another client reorders the list', () => {
     const onSelect = vi.fn();
     const { rerender } = render(<SetupSwitcher setups={[WORK, HOME, SIDE]} selectedSetupId="work" onSelect={onSelect} onClose={vi.fn()} />);
-    const menu = screen.getByRole('menu', { name: 'Switch setup' });
+    const menu = screen.getByRole('menu', { name: 'Switch profile' });
 
     fireEvent.keyDown(menu, { key: 'ArrowDown' });
     rerender(
@@ -37,7 +37,7 @@ describe('SetupSwitcher', () => {
   it('falls back to the first setup when the highlighted one is deleted', () => {
     const onSelect = vi.fn();
     const { rerender } = render(<SetupSwitcher setups={[WORK, HOME, SIDE]} selectedSetupId="work" onSelect={onSelect} onClose={vi.fn()} />);
-    const menu = screen.getByRole('menu', { name: 'Switch setup' });
+    const menu = screen.getByRole('menu', { name: 'Switch profile' });
 
     fireEvent.keyDown(menu, { key: 'ArrowUp' });
     rerender(<SetupSwitcher setups={[WORK, HOME]} selectedSetupId="work" onSelect={onSelect} onClose={vi.fn()} />);

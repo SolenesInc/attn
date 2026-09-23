@@ -46,12 +46,12 @@ export function SetupSwitcher({ setups, selectedSetupId, onSelect, onClose }: Se
 
   return (
     <div className="setup-switcher-scrim">
-      <button type="button" className="setup-switcher-dismiss" aria-label="Close the setup list" onClick={onClose} />
+      <button type="button" className="setup-switcher-dismiss" aria-label="Close the profile list" onClick={onClose} />
       <div
         ref={menuRef}
         className="setup-switcher"
         role="menu"
-        aria-label="Switch setup"
+        aria-label="Switch profile"
         tabIndex={-1}
         onKeyDown={handleKeyDown}
       >
