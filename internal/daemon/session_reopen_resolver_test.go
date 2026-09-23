@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
@@ -16,39 +15,6 @@ import (
 type stubReopenGit struct {
 	branchInfo         func(context.Context, string) (*attngit.BranchInfo, error)
 	branchAvailability func(context.Context, string, string) (branchInspection, error)
-}
-
-func TestInteractiveReopenInspectionDoesNotJoinDeferredWork(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	repository := t.TempDir()
-	started := make(chan struct{}, 2)
-	release := make(chan struct{})
-	d.reopenGitMu.Lock()
-	d.reopenInspect = func(context.Context, *attngit.Client, string, string) (branchInspection, error) {
-		started <- struct{}{}
-		<-release
-		return branchInspection{State: branchStateLocal}, nil
-	}
-	d.reopenGitMu.Unlock()
-
-	results := make(chan error, 2)
-	for _, lane := range []gitLane{gitDeferred, gitInteractive} {
-		go func() {
-			_, err := d.scheduledReopenGit(lane).BranchAvailability(context.Background(), repository, "feature")
-			results <- err
-		}()
-		select {
-		case <-started:
-		case <-time.After(5 * time.Second):
-			t.Fatalf("%s inspection joined work in another lane", lane)
-		}
-	}
-	close(release)
-	for range 2 {
-		if err := <-results; err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 func (g stubReopenGit) BranchInfo(ctx context.Context, directory string) (*attngit.BranchInfo, error) {

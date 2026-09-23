@@ -10,10 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/bus"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func sessionListResult(t *testing.T, d *Daemon, msg protocol.SessionListMessage) protocol.SessionListResult {
@@ -207,7 +205,6 @@ func TestRowsOnTheSameBranchShareOneInspection(t *testing.T) {
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatalf("delete the shared worktree directory: %v", err)
 	}
-	d.closeSessionReopenBroker()
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -272,34 +269,5 @@ func TestAPageReturnsACompleteBranchVerdict(t *testing.T) {
 	}), "sharpening")
 	if state := protocol.Deref(verdict.BranchState); state != branchStateLocal {
 		t.Errorf("branch_state = %q, want %q once the check landed", state, branchStateLocal)
-	}
-}
-
-func TestAClosingRowReachesTheAppBeforeItsVerdict(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	t.Cleanup(d.stopEventBus)
-	var pushed []*protocol.WebSocketEvent
-	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) { pushed = append(pushed, event) }
-	directory := t.TempDir()
-	addLedgerTestSession(t, d, "closing", directory)
-	entry := protocol.SessionLedgerEntry{
-		ID: "closing", Label: "closing", Agent: string(protocol.SessionAgentClaude),
-		Directory: directory, WorkspaceID: "ws-closing", State: protocol.SessionStateIdle,
-		LastSeen: protocol.TimestampNow().String(),
-		ClosedAt: protocol.Ptr(protocol.NewTimestamp(time.Now()).String()),
-		ClosedBy: protocol.Ptr(store.SessionClosedByUser),
-	}
-	payload, err := json.Marshal(entry)
-	if err != nil {
-		t.Fatalf("marshal the closed row: %v", err)
-	}
-
-	projectSessionClosed(d, bus.Event{Name: FactSessionClosed, Subject: "closing", Payload: payload})
-
-	if len(pushed) != 1 {
-		t.Fatalf("broadcast %d events, want one session_closed row", len(pushed))
-	}
-	if pushed[0].Event != protocol.EventSessionClosed || pushed[0].SessionLedgerEntry == nil {
-		t.Fatalf("broadcast %+v, want the session_closed row before eligibility resolves", pushed[0])
 	}
 }

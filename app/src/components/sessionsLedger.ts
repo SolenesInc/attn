@@ -95,18 +95,14 @@ export function shortPath(path: string, segments = 2): string {
 }
 
 const ABSOLUTE_PATH = /\/(?:[^\s/,;:]+\/)+[^\s,;:]+/g;
-const REFUSAL = /^[0-9a-f-]{36} cannot be reopened with (\S+): (.*?)(?:\. Offered instead: (\S+))?$/;
 
 export function compactVerdictText(text: string): string {
   return text.replace(ABSOLUTE_PATH, (match) => shortPath(match));
 }
 
-export function compactRefusalText(text: string): string {
-  const match = REFUSAL.exec(text);
-  if (!match) return compactVerdictText(text);
-  const [, action, reason, offered] = match;
-  const verb = `${action.split('_').join(' ')} was refused`;
-  return offered ? `${verb}; it offers ${reopenActionLabel(offered)} instead` : `${verb}: ${compactVerdictText(reason)}`;
+export function refusalNote(actionId: string, offer: ReopenVerdictView): string {
+  const refused = `${reopenActionLabel(actionId)} was refused`;
+  return offer.actions.length > 0 ? `${refused}; it offers ${offer.actions[0].label} instead` : refused;
 }
 
 const REOPEN_ACTION_LABELS: Record<string, string> = {

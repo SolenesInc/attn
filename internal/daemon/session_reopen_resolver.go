@@ -21,7 +21,6 @@ type reopenKey struct {
 type reopenBranchKey struct {
 	Repository string
 	Branch     string
-	Lane       gitLane
 }
 
 type reopenGit interface {
@@ -88,24 +87,23 @@ func staleReopenGenerationError(key reopenKey) error {
 
 type scheduledReopenGit struct {
 	daemon  *Daemon
-	lane    gitLane
 	inspect func(context.Context, *attngit.Client, string, string) (branchInspection, error)
 }
 
-func (d *Daemon) scheduledReopenGit(lane gitLane) scheduledReopenGit {
+var reopenGitTask = gitTask{Kind: gitTaskReopen, Lane: gitInteractive}
+
+func (d *Daemon) scheduledReopenGit() scheduledReopenGit {
 	d.reopenGitMu.Lock()
 	inspect := d.reopenInspect
 	d.reopenGitMu.Unlock()
 	if inspect == nil {
 		inspect = inspectReopenBranchAdmitted
 	}
-	return scheduledReopenGit{daemon: d, lane: lane, inspect: inspect}
+	return scheduledReopenGit{daemon: d, inspect: inspect}
 }
 
 func (g scheduledReopenGit) BranchInfo(ctx context.Context, directory string) (*attngit.BranchInfo, error) {
-	return gitValue(ctx, g.daemon.gitExecution(), gitTask{
-		Kind: gitTaskReopen, Lane: g.lane,
-	}, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
+	return gitValue(ctx, g.daemon.gitExecution(), reopenGitTask, func(runCtx context.Context, client *attngit.Client) (*attngit.BranchInfo, error) {
 		return client.GetBranchInfo(runCtx, directory)
 	})
 }
@@ -124,12 +122,9 @@ func (g scheduledReopenGit) BranchAvailability(
 	key := reopenBranchKey{
 		Repository: attngit.CanonicalizePath(repository),
 		Branch:     strings.TrimSpace(branch),
-		Lane:       g.lane,
 	}
 	return g.daemon.reopenBranchSharedCalls().Do(ctx, key, func(sharedCtx context.Context) (branchInspection, error) {
-		return gitValue(sharedCtx, g.daemon.gitExecution(), gitTask{
-			Kind: gitTaskReopen, Lane: g.lane,
-		}, func(runCtx context.Context, client *attngit.Client) (branchInspection, error) {
+		return gitValue(sharedCtx, g.daemon.gitExecution(), reopenGitTask, func(runCtx context.Context, client *attngit.Client) (branchInspection, error) {
 			return g.inspect(runCtx, client, key.Repository, key.Branch)
 		})
 	})

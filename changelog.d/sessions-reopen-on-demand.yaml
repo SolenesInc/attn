@@ -1,0 +1,12 @@
+kind: changed
+area: sessions
+change: The Sessions list shows closed rows at once and offers Reopen on each; pressing it checks the session, and a refusal turns into the actions the session offers instead.
+symptom: A slow Git metadata lookup held back the entire Sessions page and every closed row on it.
+notes: >
+  Reopen eligibility is no longer computed for every listed row. The daemon
+  resolves it only when the user reopens, so an open Sessions view costs no
+  Git or directory checks, even while automations close sessions. Protocol
+  318 adds the refused verdict to session_reopen_result, drops the verdict
+  from session_closed, and removes the unused checking flag from reopen
+  verdicts. session_list still returns inline verdicts when asked, which
+  `attn session list --reopen` uses.

@@ -55,7 +55,7 @@ func TestTheWebSocketAnswersSessionListWithAPageAndItsFacets(t *testing.T) {
 
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-1"), All: protocol.Ptr(true),
-	}, nil)
+	})
 
 	reply := onlySessionListResult(t, client)
 	if !reply.Success || reply.RequestID != "req-1" {
@@ -86,7 +86,7 @@ func TestAPagedSessionListLeavesTheFacetsBehind(t *testing.T) {
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-1"),
 		All: protocol.Ptr(true), Limit: protocol.Ptr(1),
-	}, nil)
+	})
 	first := onlySessionListResult(t, client)
 	if first.Result == nil || first.Result.NextBefore == nil {
 		t.Fatalf("first page = %+v, want a cursor onto the older rows", first.Result)
@@ -95,7 +95,7 @@ func TestAPagedSessionListLeavesTheFacetsBehind(t *testing.T) {
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-2"),
 		All: protocol.Ptr(true), Limit: protocol.Ptr(1), Before: first.Result.NextBefore,
-	}, nil)
+	})
 	second := onlySessionListResult(t, client)
 	if second.Result == nil || len(second.Result.Entries) != 1 {
 		t.Fatalf("second page = %+v, want the next row", second.Result)
@@ -112,7 +112,7 @@ func TestSessionListRefusesAWindowThatCouldHoldNothing(t *testing.T) {
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-1"),
 		Since: protocol.Ptr("2026-09-05T00:00:00Z"), Until: protocol.Ptr("2026-09-01T00:00:00Z"),
-	}, nil)
+	})
 
 	reply := onlySessionListResult(t, client)
 	if reply.Success || reply.Error == nil {
@@ -124,7 +124,7 @@ func TestSessionListRefusesAWindowThatCouldHoldNothing(t *testing.T) {
 
 	d.sendSessionListWSResult(client, &protocol.SessionListMessage{
 		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("req-2"), Since: protocol.Ptr("yesterday"),
-	}, nil)
+	})
 	bad := onlySessionListResult(t, client)
 	if bad.Success || !strings.Contains(protocol.Deref(bad.Error), "RFC3339") {
 		t.Errorf("reply to a non-instant since = %+v, want it to name the format", bad)
@@ -223,6 +223,9 @@ func TestTheWebSocketAnswersSessionReopenWithTheRefusalAndItsOffers(t *testing.T
 	}
 	if !strings.Contains(*reply.Error, "Offered instead: start_fresh_elsewhere") {
 		t.Errorf("error = %q, want it to name the action offered instead", *reply.Error)
+	}
+	if reply.Reopen == nil || !slices.Equal(reply.Reopen.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}) {
+		t.Errorf("reopen = %+v, want the verdict offering start_fresh_elsewhere so the row can offer it", reply.Reopen)
 	}
 }
 

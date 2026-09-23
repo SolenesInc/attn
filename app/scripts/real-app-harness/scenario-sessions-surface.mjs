@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile, execFileSync } from 'node:child_process';
 import { promisify } from 'node:util';
-import { readProcessEnvironment } from './agentTripwire.mjs';
 import {
   createSessionAndWaitForInitialPane,
   launchFreshAppAndConnect,
@@ -16,7 +15,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -36,27 +35,6 @@ function parseArgs(argv) {
 
 function git(cwd, ...args) {
   return execFileSync('git', args, { cwd, encoding: 'utf8', env: profileCliEnv() }).trim();
-}
-
-function prepareEligibilityGit(root) {
-  const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8', env: profileCliEnv() }).trim();
-  const binDir = path.join(root, 'eligibility-git-bin');
-  const executable = path.join(binDir, 'git');
-  const gate = path.join(root, 'eligibility-git-enabled');
-  fs.mkdirSync(binDir, { recursive: true });
-  fs.writeFileSync(executable, '#!/bin/sh\nif [ -f "$ATTN_SESSIONS_GIT_GATE" ]; then\n  case "$(pwd -P)" in\n    "$ATTN_SESSIONS_GIT_SLOW") sleep 3 ;;\n    "$ATTN_SESSIONS_GIT_FAST") sleep 1 ;;\n  esac\nfi\nexport PATH="$ATTN_SESSIONS_GIT_BASE_PATH"\nexec "$ATTN_SESSIONS_REAL_GIT" "$@"\n', { mode: 0o755 });
-  return {
-    executable,
-    gate,
-    env: {
-      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-      ATTN_SESSIONS_GIT_BASE_PATH: process.env.PATH,
-      ATTN_SESSIONS_GIT_GATE: gate,
-      ATTN_SESSIONS_GIT_SLOW: path.join(root, 'ledger-repo'),
-      ATTN_SESSIONS_GIT_FAST: path.join(root, 'other-repo'),
-      ATTN_SESSIONS_REAL_GIT: realGit,
-    },
-  };
 }
 
 // Two checkouts of one repository plus a plain one elsewhere, so the repository
@@ -80,15 +58,8 @@ function buildRepositories(root) {
   git(other, 'add', 'README.md');
   git(other, 'commit', '-q', '-m', 'fixture');
 
-  const slowWorktree = path.join(root, 'ledger-slow-worktree');
-  const fastWorktree = path.join(root, 'other-fast-worktree');
-  git(repo, 'worktree', 'add', '-q', '-b', 'sessions-slow', slowWorktree);
-  git(other, 'worktree', 'add', '-q', '-b', 'sessions-fast', fastWorktree);
-
-  for (const dir of [repo, other, slowWorktree, fastWorktree]) {
-    writeMockAgentFixture(dir, { name: 'sessions surface mock', turns: [] });
-  }
-  return { repo, other, slowWorktree, fastWorktree };
+  for (const dir of [repo, other]) writeMockAgentFixture(dir, { name: 'sessions surface mock', turns: [] });
+  return { repo, other };
 }
 
 async function waitForSessions(client, predicate, description, timeoutMs = 15_000) {
@@ -139,7 +110,6 @@ async function main() {
   const profile = currentHarnessProfile();
   assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
-  const dataDir = dataDirForProfile(profile);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSIONS-SURFACE',
     tier: 'tier1-local-shell',
@@ -151,8 +121,7 @@ async function main() {
     },
   });
 
-  const eligibilityGit = prepareEligibilityGit(runner.sessionDir);
-  const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: eligibilityGit.env });
+  const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ client });
   const sessions = {};
@@ -161,13 +130,9 @@ async function main() {
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, Object.values(sessions)));
-  runner.registerCleanup('remove_git_gate', () => fs.rmSync(eligibilityGit.gate, { force: true }));
 
   try {
-    const { repo, other, slowWorktree, fastWorktree } = await runner.step(
-      'build_repositories',
-      () => buildRepositories(runner.sessionDir),
-    );
+    const { repo, other } = await runner.step('build_repositories', () => buildRepositories(runner.sessionDir));
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
@@ -179,7 +144,7 @@ async function main() {
     });
 
     await runner.step('create_sessions_in_two_repositories', async () => {
-      await Promise.all([['one', repo], ['two', slowWorktree], ['elsewhere', other], ['quick', fastWorktree]].map(async ([name, cwd]) => {
+      for (const [name, cwd] of [['one', repo], ['two', repo], ['elsewhere', other]]) {
         sessions[name] = await createSessionAndWaitForInitialPane({
           client,
           observer,
@@ -187,9 +152,8 @@ async function main() {
           label: `${name}-${runner.runId}`,
           agent: 'claude',
           sessionWaitMs: 30_000,
-          waitForInitialPaneVisible: false,
         });
-      }));
+      }
       const registered = await observer.waitFor(
         () => {
           const session = observer.getSession(sessions.one);
@@ -232,52 +196,21 @@ async function main() {
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the filter to be lifted');
     });
 
-    await runner.step('arm_slow_git_metadata', async () => {
-      const daemonPid = Number(fs.readFileSync(path.join(dataDir, 'attn.pid'), 'utf8').trim());
-      runner.assert(readProcessEnvironment(daemonPid).includes(`PATH=${path.dirname(eligibilityGit.executable)}${path.delimiter}`),
-        'the daemon must resolve Git through the eligibility wrapper');
-      fs.writeFileSync(eligibilityGit.gate, 'enabled\n');
-      git(repo, 'worktree', 'remove', '--force', slowWorktree);
-      git(other, 'worktree', 'remove', '--force', fastWorktree);
-    });
-
-    await runner.step('closed_rows_arrive_then_settle_independently', async () => {
-      const before = await waitForSessions(client, (s) => (
-        rowFor(s, sessions.two)?.state !== 'closed' && rowFor(s, sessions.quick)?.state !== 'closed'
-      ), 'both sessions to be listed as live before they close');
+    await runner.step('a_close_updates_the_row_in_place', async () => {
+      const before = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.state !== 'closed',
+        'the session to be listed as live before it closes');
       runner.assert(rowFor(before, sessions.two).actions.includes('Focus'),
         'a live row offers Focus', { row: rowFor(before, sessions.two) });
 
-      await Promise.all([
-        client.request('close_session', { sessionId: sessions.two }),
-        client.request('close_session', { sessionId: sessions.quick }),
-      ]);
-      const pending = await waitForSessions(client, (s) => (
-        rowFor(s, sessions.two)?.state === 'closed'
-        && rowFor(s, sessions.two)?.refreshing
-        && rowFor(s, sessions.quick)?.state === 'closed'
-      ), 'both closed rows to arrive while the slow row is waiting for Git metadata', 2_000);
-      const row = rowFor(pending, sessions.two);
+      await client.request('close_session', { sessionId: sessions.two });
+      const after = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.state === 'closed',
+        'the closed session to read as closed without the list being re-opened', 20_000);
+      const row = rowFor(after, sessions.two);
       runner.assert(row.when.includes('closed by you'), 'the row names who closed it', { row });
       runner.assert(!row.actions.includes('Focus'), 'a closed row stops offering Focus', { row });
-      runner.assert(!row.actions.includes('Reopen') && !row.actions.includes('Start fresh here'),
-        'a pending row offers no reopen action', { row });
-      runner.assert(pending.rows.length === before.rows.length,
-        'each close replaces its row rather than adding one', { before: before.rows.length, after: pending.rows.length });
-      runner.writeJson('rows-pending.json', pending);
-
-      const first = await waitForSessions(client, (s) => (
-        !rowFor(s, sessions.quick)?.refreshing
-        && rowFor(s, sessions.quick)?.verdict !== '—'
-        && rowFor(s, sessions.two)?.refreshing
-      ), 'the fast repository to settle while the slow repository remains pending', 12_000);
-      runner.writeJson('rows-first-settled.json', first);
-
-      const settled = await waitForSessions(client, (s) => (
-        !rowFor(s, sessions.two)?.refreshing && rowFor(s, sessions.two)?.verdict !== '—'
-      ), 'the slow repository to settle independently', 12_000);
-      runner.writeJson('rows-settled.json', settled);
-      fs.rmSync(eligibilityGit.gate, { force: true });
+      runner.assert(after.rows.length === before.rows.length,
+        'the close replaces the row rather than adding one', { before: before.rows.length, after: after.rows.length });
+      runner.writeJson('row-after-close.json', after);
       await hold();
     });
 
@@ -298,15 +231,12 @@ async function main() {
       await hold();
     });
 
-    await runner.step('the_closed_row_carries_the_verdict_its_page_was_read_with', async () => {
-      const judged = await waitForSessions(client, (s) => (rowFor(s, sessions.two)?.verdict ?? '') !== '—',
-        'the closed row to carry a reopen verdict');
-      const row = rowFor(judged, sessions.two);
-      runner.assert(row.verdict.length > 0 && row.verdict !== '—',
-        'a closed row must say what it would take to bring it back', { row });
-      const live = rowFor(judged, sessions.one);
-      runner.assert(live.verdict === '—', 'a live row is never judged', { live });
-      runner.writeJson('row-verdicts.json', judged);
+    await runner.step('the_closed_row_offers_reopen', async () => {
+      const offered = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.actions.includes('Reopen'),
+        'the closed row to offer Reopen');
+      const live = rowFor(offered, sessions.one);
+      runner.assert(!live.actions.includes('Reopen'), 'a live row never offers Reopen', { live });
+      runner.writeJson('row-offers.json', offered);
       await hold();
     });
 

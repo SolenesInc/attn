@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SessionLedgerEntry } from '../../types/generated';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
-import type { ReopenResolution, SessionLedgerConnection, SessionLedgerFilters } from '../../hooks/useSessionLedger';
+import type { SessionLedgerConnection, SessionLedgerFilters } from '../../hooks/useSessionLedger';
+import { SessionReopenRefusal } from '../../hooks/daemonSessionLedgerEvents';
 import {
   SESSION_FILTERS_SETTING_KEY,
   parseSessionFilters,
@@ -12,14 +13,14 @@ import { useSettings } from '../../contexts/SettingsContext';
 import {
   branchStateLabel,
   closedBySomeone,
-  compactRefusalText,
   compactVerdictText,
   directoryStateLabel,
   isClosed,
   ledgerInstant,
+  refusalNote,
   reopenPlacement,
 } from '../sessionsLedger';
-import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
+import type { ReopenActionView, ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
@@ -81,7 +82,7 @@ export function SessionsTab({
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, resolutions, reload } = ledger;
+  const { filters, setFilters, entries, reload } = ledger;
 
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
@@ -131,6 +132,11 @@ export function SessionsTab({
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
   const [menuKey, setMenuKey] = useState<string | null>(null);
   const [notices, setNotices] = useState<Record<string, RowNote>>({});
+  const [refusals, setRefusals] = useState<Record<string, Refusal>>({});
+  const verdictFor = useCallback((entry: SessionLedgerEntry): ReopenVerdictView | undefined => {
+    const refusal = refusals[entry.id];
+    return refusal && refusal.closedAt === entry.closed_at ? refusal.verdict : undefined;
+  }, [refusals]);
   const [copied, copy] = useCopied();
 
   const setNotice = useCallback((sessionId: string, note: RowNote | null) => {
@@ -145,12 +151,19 @@ export function SessionsTab({
     });
   }, []);
 
-  const fire = useCallback((sessionId: string, actionId: string) => {
+  const fire = useCallback((entry: SessionLedgerEntry, actionId: string) => {
     if (!onReopen) return;
+    const sessionId = entry.id;
     setMenuKey(null);
     const refuse = (failure: unknown) => {
-      const message = failure instanceof Error ? failure.message : String(failure);
-      setNotice(sessionId, { kind: 'refused', text: compactRefusalText(message) });
+      if (failure instanceof SessionReopenRefusal) {
+        const refusal = { closedAt: entry.closed_at ?? '', verdict: failure.verdict };
+        setRefusals((current) => ({ ...current, [sessionId]: refusal }));
+        setNotice(sessionId, { kind: 'refused', text: refusalNote(actionId, failure.verdict) });
+      } else {
+        const message = failure instanceof Error ? failure.message : String(failure);
+        setNotice(sessionId, { kind: 'refused', text: compactVerdictText(message) });
+      }
       reload();
     };
     setNotice(sessionId, { kind: 'busy', text: 'reopening…' });
@@ -187,13 +200,13 @@ export function SessionsTab({
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
     setNotice(entry.id, null);
-    if (readyVerdict(resolutions[entry.id])) fire(entry.id, verdictId(verbId));
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, resolutions, fire]);
+    fire(entry, verdictId(verbId));
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
-      resolution: resolutions[entry.id],
+      verdict: verdictFor(entry),
       note: notices[entry.id],
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
@@ -201,10 +214,10 @@ export function SessionsTab({
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
-      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && readyVerdict(resolutions[entry.id])?.directoryState !== 'missing',
+      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdictFor(entry)?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, resolutions, notices, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, verdictFor, notices, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -287,7 +300,7 @@ export function SessionsTab({
           ? (
             <SessionInspector
               entry={selected}
-              resolution={resolutions[selected.id]}
+              verdict={verdictFor(selected)}
               note={notices[selected.id]}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
@@ -300,7 +313,6 @@ export function SessionsTab({
               onCopy={copy}
               onVerb={(verbId) => runVerb(selected.id, verbId)}
               actionsAvailable={!!onReopen}
-              onReload={reload}
             />
           )
           : <Inspector title="Nothing selected"><p className="ledger-muted">Pick a row to read it here.</p></Inspector>}
@@ -311,9 +323,12 @@ export function SessionsTab({
 
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
 
-function readyVerdict(resolution: ReopenResolution | undefined): ReopenVerdictView | undefined {
-  return resolution?.state === 'ready' ? resolution.verdict : undefined;
+interface Refusal {
+  closedAt: string;
+  verdict: ReopenVerdictView;
 }
+
+const PLAIN_REOPEN: ReopenActionView = { id: 'reopen', label: 'Reopen' };
 
 function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
@@ -321,7 +336,7 @@ function verdictId(verbId: string): string {
 
 interface RowContext {
   nameText: (text: string) => string;
-  resolution: ReopenResolution | undefined;
+  verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   live: boolean;
   seed: SessionSeedLink | null;
@@ -334,11 +349,11 @@ interface RowContext {
 
 function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const closed = isClosed(entry);
-  const verdict = readyVerdict(context.resolution);
+  const { verdict } = context;
   const verbs: RowVerb[] = [];
   if (context.live) verbs.push({ id: 'focus', label: 'Focus' });
-  if (closed && context.actionsAvailable && verdict) {
-    for (const action of verdict.actions) verbs.push({ id: `act:${action.id}`, label: action.label });
+  if (closed && context.actionsAvailable) {
+    for (const action of verdict?.actions ?? [PLAIN_REOPEN]) verbs.push({ id: `act:${action.id}`, label: action.label });
   }
   if (context.seed) verbs.push({ id: 'seed', label: `Seed · ${context.seed.title}` });
   if (context.canShowWorktree) verbs.push({ id: 'worktree', label: 'Show worktree' });
@@ -352,9 +367,6 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   if (closed) {
     meta.push(`closed by ${closedBySomeone(entry, context.sessionLabel)}${entry.close_reason ? `: ${context.nameText(entry.close_reason)}` : ''}`);
   }
-  if (closed && context.resolution?.state === 'failed') {
-    meta.push(<span className="is-no" key="resolution">eligibility check failed</span>);
-  }
   // A verdict with actions speaks through its verb; only a dead end needs words on the row.
   if (closed && verdict && verdict.actions.length === 0) {
     meta.push(<span className="is-no" title={verdict.summary} key="verdict">{context.nameText(compactVerdictText(verdict.summary))}</span>);
@@ -363,7 +375,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const stampAt = ledgerInstant(entry);
   return {
     key: entry.id,
-    glyph: sessionGlyph(entry, context.live, context.resolution),
+    glyph: sessionGlyph(entry, context.live),
     title: entry.label || 'untitled session',
     meta,
     stamp: { text: relativeStamp(stampAt, context.now), hint: fullStamp(stampAt) },
@@ -375,9 +387,8 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   };
 }
 
-function sessionGlyph(entry: SessionLedgerEntry, live: boolean, resolution: ReopenResolution | undefined): RowGlyph {
-  if (isClosed(entry)) return resolution?.state === 'pending' ? 'refreshing' : 'closed';
-  if (!live) return 'closed';
+function sessionGlyph(entry: SessionLedgerEntry, live: boolean): RowGlyph {
+  if (isClosed(entry) || !live) return 'closed';
   if (WORKING_STATES.has(entry.state)) return 'working';
   if (WAITING_STATES.has(entry.state)) return 'waiting';
   return 'live';
@@ -385,7 +396,7 @@ function sessionGlyph(entry: SessionLedgerEntry, live: boolean, resolution: Reop
 
 interface SessionInspectorProps {
   entry: SessionLedgerEntry;
-  resolution: ReopenResolution | undefined;
+  verdict: ReopenVerdictView | undefined;
   note: RowNote | undefined;
   live: boolean;
   seed: SessionSeedLink | null;
@@ -398,21 +409,20 @@ interface SessionInspectorProps {
   onCopy: (text: string) => void;
   onVerb: (verbId: string) => void;
   actionsAvailable: boolean;
-  onReload: () => void;
 }
 
 function SessionInspector({
-  entry, resolution, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, onReload,
+  entry, verdict, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
-  const verdict = readyVerdict(resolution);
   const busy = note?.kind === 'busy';
+  const actions = verdict?.actions ?? [PLAIN_REOPEN];
   return (
     <Inspector
       title={entry.label || 'untitled session'}
       kicker={(
         <>
-          <span className={`ledger-glyph is-${sessionGlyph(entry, live, resolution)}`} aria-hidden="true" />
+          <span className={`ledger-glyph is-${sessionGlyph(entry, live)}`} aria-hidden="true" />
           <span>{closed ? 'closed' : entry.state}</span>
           <span>·</span>
           <span>{entry.agent}</span>
@@ -448,16 +458,6 @@ function SessionInspector({
       {closed && (
         <div className={`ledger-verdict${verdict ? (verdict.reopenable ? ' is-ok' : ' is-no') : ''}`}>
           <div className="ledger-field-label">Reopen</div>
-          {resolution?.state === 'pending' && <div className="ledger-muted ledger-checking">checking reopen eligibility…</div>}
-          {resolution?.state === 'failed' && (
-            <>
-              <div className="ledger-verdict-text">Eligibility could not be checked.</div>
-              <div className="ledger-muted">{resolution.error}</div>
-              <div className="ledger-verdict-actions">
-                <button type="button" className="ledger-verb is-primary" onClick={onReload}>Reload</button>
-              </div>
-            </>
-          )}
           {verdict && (
             <>
               <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>
@@ -465,26 +465,26 @@ function SessionInspector({
               </div>
               {verdict.warning && <div className="ledger-muted" title={verdict.warning}>{nameText(compactVerdictText(verdict.warning))}</div>}
               <div className="ledger-muted">{reopenPlacement(verdict, workspaceLabel)}</div>
-              {note && note.kind !== 'busy' && (
-                <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
-              )}
-              {actionsAvailable && (
-                <div className="ledger-verdict-actions">
-                  {verdict.actions.map((action, index) => (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
-                      disabled={busy}
-                      onClick={() => onVerb(`act:${action.id}`)}
-                    >
-                      <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
-                    </button>
-                  ))}
-                  {verdict.actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
-                </div>
-              )}
             </>
+          )}
+          {note && note.kind !== 'busy' && (
+            <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
+          )}
+          {actionsAvailable && (
+            <div className="ledger-verdict-actions">
+              {actions.map((action, index) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
+                  disabled={busy}
+                  onClick={() => onVerb(`act:${action.id}`)}
+                >
+                  <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
+                </button>
+              ))}
+              {actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
+            </div>
           )}
         </div>
       )}

@@ -830,7 +830,6 @@ func (d *Daemon) sendOutboundBlocking(client *wsClient, message outboundMessage,
 }
 
 func (d *Daemon) wsMsgPump(client *wsClient) {
-	defer d.removeSessionReopenClient(client)
 	for data := range client.recv {
 		if client.sendChannelClosed() {
 			continue
@@ -1021,19 +1020,7 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		nbTaskRetry := msg.(*protocol.TaskRetryMessage)
 		go d.sendTaskRetryWSResult(client, protocol.Deref(nbTaskRetry.RequestID), nbTaskRetry.TaskID)
 	case protocol.CmdSessionList:
-		list := msg.(*protocol.SessionListMessage)
-		var intent *reopenPageIntent
-		if protocol.Deref(list.Reopen) {
-			if broker := d.sessionReopenBroker(); broker != nil {
-				pageIntent := broker.BeginPage(client, strings.TrimSpace(protocol.Deref(list.Before)) != "")
-				intent = &pageIntent
-			}
-		} else {
-			d.removeSessionReopenClient(client)
-		}
-		go d.sendSessionListWSResult(client, list, intent)
-	case protocol.CmdSessionReopenUnsubscribe:
-		d.removeSessionReopenClient(client)
+		go d.sendSessionListWSResult(client, msg.(*protocol.SessionListMessage))
 	case protocol.CmdSessionShow:
 		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:

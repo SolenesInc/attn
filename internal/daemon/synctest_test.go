@@ -15,7 +15,6 @@ func newBubbleDaemon(t *testing.T) *Daemon {
 func stopDaemonBackground(t *testing.T, d *Daemon) {
 	t.Helper()
 	t.Cleanup(func() {
-		d.closeSessionReopenBroker()
 		d.sessionInputs().stopRetries()
 		d.stopAllTranscriptWatchers()
 		d.stopNudgeCountdowns()

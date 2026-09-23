@@ -392,7 +392,7 @@ func (d *Daemon) reopenSessionProtected(
 				"daemon, is not here. Its seed may still hand the work over from its saved dispatch", sessionID)
 	}
 	key := reopenKey{SessionID: sessionID, ClosedAt: protocol.Deref(entry.ClosedAt)}
-	gitView := d.scheduledReopenGit(gitInteractive)
+	gitView := d.scheduledReopenGit()
 	var verdict sessionReopenVerdict
 	var err error
 	if key.ClosedAt == "" {
@@ -416,25 +416,31 @@ func (d *Daemon) reopenSessionProtected(
 		action = protocol.SessionReopenActionReopen
 	}
 	if !verdict.offers(action) {
-		return nil, reopenRefusal(&verdict, action)
+		d.publishFact(FactSessionReopenRefreshed, sessionID, verdict.toProtocol())
+		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
 	return d.performReopenLocked(protection, &verdict, action, directory)
 }
 
-func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenAction) error {
-	reason := strings.TrimSpace(verdict.Reason)
+type reopenRefusedError struct {
+	verdict *sessionReopenVerdict
+	action  protocol.SessionReopenAction
+}
+
+func (e *reopenRefusedError) Error() string {
+	reason := strings.TrimSpace(e.verdict.Reason)
 	if reason == "" {
 		reason = "the saved execution does not allow it"
 	}
-	if len(verdict.Actions) == 0 {
-		return fmt.Errorf("%s cannot be reopened: %s", verdict.SessionID, reason)
+	if len(e.verdict.Actions) == 0 {
+		return fmt.Sprintf("%s cannot be reopened: %s", e.verdict.SessionID, reason)
 	}
-	offered := make([]string, 0, len(verdict.Actions))
-	for _, offer := range verdict.Actions {
+	offered := make([]string, 0, len(e.verdict.Actions))
+	for _, offer := range e.verdict.Actions {
 		offered = append(offered, string(offer))
 	}
-	return fmt.Errorf("%s cannot be reopened with %s: %s. Offered instead: %s",
-		verdict.SessionID, action, reason, strings.Join(offered, ", "))
+	return fmt.Sprintf("%s cannot be reopened with %s: %s. Offered instead: %s",
+		e.verdict.SessionID, e.action, reason, strings.Join(offered, ", "))
 }
 
 func (d *Daemon) performReopenLocked(

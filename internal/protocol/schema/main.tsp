@@ -870,18 +870,9 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
-  // Request reopen eligibility for every closed row of this page. Over the
-  // socket the verdicts arrive inline in the result. Over WebSocket the page
-  // arrives without them, followed by one terminal session_reopen_resolved
-  // event per closed generation. A WebSocket page without reopen ends the
-  // connection's streamed eligibility, as session_reopen_unsubscribe does.
+  // Request reopen eligibility for every closed row of this page, inline in
+  // the result.
   reopen?: boolean;
-}
-
-// Ends this connection's streamed reopen eligibility: the ledger view closed.
-// Nothing streams again until the next session_list asks for reopen.
-model SessionReopenUnsubscribeMessage {
-  cmd: "session_reopen_unsubscribe";
 }
 
 // Reads one ledger row, live or closed, by exact session id.
@@ -7362,15 +7353,8 @@ model SessionReopenResultMessage {
   success: boolean;
   error?: string;
   result?: SessionReopenResult;
-}
-
-model SessionReopenResolvedMessage {
-  event: "session_reopen_resolved";
-  session_id: string;
-  closed_at: string;
-  success: boolean;
+  // Present when the session refused the action: what it offers instead.
   reopen?: SessionReopen;
-  error?: string;
 }
 
 model SessionReopenRefreshedMessage {
@@ -7384,7 +7368,6 @@ model SessionReopenRefreshedMessage {
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
-  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7613,7 +7596,6 @@ model WebSocketEvent {
   plugin_issues?: PluginIssue[];
   operation?: GitOperation;
   session_ledger_entry?: SessionLedgerEntry;
-  reopen?: SessionReopen;
   branches?: Branch[];
   recent_locations?: RecentLocation[];
   settings?: Record<string>;
@@ -7799,7 +7781,6 @@ alias DaemonEvent =
   | SessionShowResultMessage
   | SessionReopenResultMessage
   | SessionReopenRefreshedMessage
-  | SessionReopenResolvedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

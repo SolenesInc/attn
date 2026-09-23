@@ -9073,9 +9073,6 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
-
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9490,26 +9487,6 @@ type SessionReopenRefreshedMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionReopenResolvedMessage struct {
-	// ClosedAt corresponds to the JSON schema field "closed_at".
-	ClosedAt string `json:"closed_at"`
-
-	// Error corresponds to the JSON schema field "error".
-	Error *string `json:"error,omitempty,omitzero"`
-
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-
-	// Success corresponds to the JSON schema field "success".
-	Success bool `json:"success"`
-}
-
 type SessionReopenResult struct {
 	// Action corresponds to the JSON schema field "action".
 	Action SessionReopenAction `json:"action"`
@@ -9537,6 +9514,9 @@ type SessionReopenResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -9545,11 +9525,6 @@ type SessionReopenResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-}
-
-type SessionReopenUnsubscribeMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
 }
 
 type SessionSelectedMessage struct {
@@ -10979,9 +10954,6 @@ type WebSocketEvent struct {
 
 	// RecentLocations corresponds to the JSON schema field "recent_locations".
 	RecentLocations []RecentLocation `json:"recent_locations,omitempty,omitzero"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

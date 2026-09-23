@@ -140,9 +140,6 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	reopenBrokerMu                    sync.Mutex
-	reopenBrokerInstance              *sessionReopenBroker
-	reopenBrokerStopped               bool
 	sessionPaneAddMu                  sync.Mutex
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader
@@ -1651,7 +1648,6 @@ func (d *Daemon) Stop() {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
-	d.closeSessionReopenBroker()
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
@@ -2037,11 +2033,6 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 		d.invalidateGardenSeedParties("session close")
 		entry := d.store.SessionLedgerEntry(sessionID)
 		d.publishFact(FactSessionClosed, sessionID, entry)
-		if entry != nil {
-			if broker := d.existingSessionReopenBroker(); broker != nil {
-				broker.ResolveForClose(reopenKey{SessionID: entry.ID, ClosedAt: strings.TrimSpace(protocol.Deref(entry.ClosedAt))})
-			}
-		}
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)

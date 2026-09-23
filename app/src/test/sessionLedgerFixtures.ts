@@ -1,5 +1,3 @@
-import type { SessionLedgerUpdate } from '../hooks/daemonSessionLedgerEvents';
-import { reopenVerdictView } from '../components/sessionsLedger';
 import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import { SessionReopenAction, SessionState } from '../types/generated';
 
@@ -45,12 +43,4 @@ export function verdict(overrides: Partial<SessionReopen> = {}): SessionReopen {
     pane_plan: 'add',
     ...overrides,
   };
-}
-
-export function resolved(sessionId: string, reopen = verdict(), closedAt = CLOSED_AT): SessionLedgerUpdate {
-  return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'ready', verdict: reopenVerdictView(reopen) } };
-}
-
-export function unresolvable(sessionId: string, error: string, closedAt = CLOSED_AT): SessionLedgerUpdate {
-  return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'failed', error } };
 }

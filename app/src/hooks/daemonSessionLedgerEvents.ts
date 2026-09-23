@@ -27,16 +27,19 @@ export interface SessionLedgerQuery {
   repository?: string;
   since?: string;
   until?: string;
-  reopen?: boolean;
 }
 
-export type SettledReopenResolution =
-  | { closedAt: string; state: 'ready'; verdict: ReopenVerdictView }
-  | { closedAt: string; state: 'failed'; error: string };
+export class SessionReopenRefusal extends Error {
+  readonly verdict: ReopenVerdictView;
 
-export type SessionLedgerUpdate =
-  | { type: 'closed'; entry: SessionLedgerEntry }
-  | { type: 'reopen-resolved'; sessionId: string; resolution: SettledReopenResolution };
+  constructor(message: string, reopen: SessionReopen) {
+    super(message);
+    this.name = 'SessionReopenRefusal';
+    this.verdict = reopenVerdictView(reopen);
+  }
+}
+
+export type SessionLedgerUpdate = { type: 'closed'; entry: SessionLedgerEntry };
 
 export type SessionLedgerConnectionEvent =
   | { type: 'connection'; connected: boolean; connectionGeneration: number }
@@ -55,9 +58,7 @@ type SessionLedgerEvent = {
   result?: unknown;
   entry?: unknown;
   session_ledger_entry?: unknown;
-  session_id?: unknown;
-  closed_at?: unknown;
-  reopen?: unknown;
+  reopen?: SessionReopen;
 };
 
 export function handleSessionLedgerDaemonEvent(
@@ -90,13 +91,9 @@ export function handleSessionLedgerDaemonEvent(
         event,
         (value) => value.result as SessionReopenResult | undefined,
         'Reopening that session failed',
+        event.reopen ? new SessionReopenRefusal(event.error || 'Reopening that session was refused', event.reopen) : undefined,
       );
       return true;
-    case 'session_reopen_resolved': {
-      const update = reopenResolvedUpdate(event);
-      if (update) context.onUpdate?.(update);
-      return true;
-    }
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
       if (entry) context.onUpdate?.({ type: 'closed', entry });
@@ -105,18 +102,4 @@ export function handleSessionLedgerDaemonEvent(
     default:
       return false;
   }
-}
-
-function reopenResolvedUpdate(event: SessionLedgerEvent): SessionLedgerUpdate | null {
-  const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
-  const closedAt = typeof event.closed_at === 'string' ? event.closed_at : '';
-  if (!sessionId || !closedAt) return null;
-  const reopen = event.reopen as SessionReopen | undefined;
-  if (event.success === true && reopen) {
-    return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'ready', verdict: reopenVerdictView(reopen) } };
-  }
-  if (event.success === false && typeof event.error === 'string' && event.error) {
-    return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'failed', error: event.error } };
-  }
-  return null;
 }

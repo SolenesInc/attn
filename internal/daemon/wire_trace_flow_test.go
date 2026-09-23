@@ -1,14 +1,11 @@
 package daemon
 
 import (
-	"context"
-	"encoding/json"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
@@ -31,37 +28,14 @@ func runDaemonSocketCommand(t *testing.T, fn func(conn net.Conn)) {
 func TestWireTraceFlowGolden(t *testing.T) {
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "test.sock"))
-	t.Cleanup(d.closeSessionReopenBroker)
 	d.ptyBackend = &fakeSpawnBackend{}
-	broker := d.sessionReopenBroker()
-	resolve := broker.resolve
-	releaseReopen := make(chan struct{})
-	broker.resolve = func(ctx context.Context, key reopenKey) (sessionReopenVerdict, error) {
-		select {
-		case <-releaseReopen:
-			return resolve(ctx, key)
-		case <-ctx.Done():
-			return sessionReopenVerdict{}, ctx.Err()
-		}
-	}
-	trace := &WireTrace{}
-	reopenResolved := make(chan struct{}, 1)
-	d.wsHub.wireTap = func(payload []byte) {
-		trace.record(payload)
-		var envelope struct {
-			Event string `json:"event"`
-		}
-		if json.Unmarshal(payload, &envelope) == nil && envelope.Event == protocol.EventSessionReopenResolved {
-			reopenResolved <- struct{}{}
-		}
-	}
+	trace := wireRecorder(d)
 
 	workspaceDir := filepath.Join(dir, "workspace")
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("create workspace dir: %v", err)
 	}
-	client := ledgerClient(d)
-	openLedgerPage(t, d, client)
+	client := newWorkspaceProtocolTestClient()
 
 	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
 		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "One", Directory: workspaceDir,
@@ -96,12 +70,6 @@ func TestWireTraceFlowGolden(t *testing.T) {
 		Cmd: protocol.CmdMuteWorkspace, WorkspaceID: "workspace-1",
 	})
 	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: "sess-1"})
-	close(releaseReopen)
-	select {
-	case <-reopenResolved:
-	case <-time.After(5 * time.Second):
-		t.Fatal("timed out waiting for session reopen resolution")
-	}
 	d.handleUnregisterWorkspace(client, &protocol.UnregisterWorkspaceMessage{
 		Cmd: protocol.CmdUnregisterWorkspace, ID: "workspace-1",
 	})

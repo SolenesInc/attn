@@ -5,7 +5,6 @@ import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
   SessionLedgerQuery,
-  SettledReopenResolution,
 } from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
@@ -37,8 +36,6 @@ export const SESSION_PAGE_SIZE = 50;
 
 const systemNow = () => new Date();
 
-export type ReopenResolution = { closedAt: string; state: 'pending' } | SettledReopenResolution;
-
 export interface UseSessionLedgerOptions {
   enabled: boolean;
   connection: SessionLedgerConnection;
@@ -57,7 +54,6 @@ export interface SessionLedgerView {
   filters: SessionLedgerFilters;
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
-  resolutions: Record<string, ReopenResolution>;
   facets: SessionLedgerFacets | null;
   omitted: number;
   loading: boolean;
@@ -115,14 +111,6 @@ export function closeBelongsInView(
   return true;
 }
 
-type SettledOutcomes = Record<string, SettledReopenResolution>;
-
-const NO_OUTCOMES: SettledOutcomes = {};
-
-function outcomeKey(sessionId: string, closedAt: string): string {
-  return `${sessionId}\u0000${closedAt}`;
-}
-
 function applyClose(
   entries: SessionLedgerEntry[],
   entry: SessionLedgerEntry,
@@ -139,48 +127,11 @@ function applyClose(
 
 interface LedgerRows {
   entries: SessionLedgerEntry[];
-  outcomes: SettledOutcomes;
   facets: SessionLedgerFacets | null;
   listedQuery: string | null;
 }
 
-const NO_ROWS: LedgerRows = { entries: [], outcomes: NO_OUTCOMES, facets: null, listedQuery: null };
-
-function outcomesForListedRows(entries: SessionLedgerEntry[], outcomes: SettledOutcomes): SettledOutcomes {
-  const kept: SettledOutcomes = {};
-  for (const entry of entries) {
-    if (!entry.closed_at) continue;
-    const key = outcomeKey(entry.id, entry.closed_at);
-    const outcome = outcomes[key];
-    if (outcome) kept[key] = outcome;
-  }
-  return kept;
-}
-
-function listRows(rows: LedgerRows, entries: SessionLedgerEntry[]): LedgerRows {
-  return { ...rows, entries, outcomes: outcomesForListedRows(entries, rows.outcomes) };
-}
-
-function isListedGeneration(entries: SessionLedgerEntry[], sessionId: string, closedAt: string): boolean {
-  return entries.some((entry) => entry.id === sessionId && entry.closed_at === closedAt);
-}
-
-function resolutionsForEntries(
-  entries: SessionLedgerEntry[],
-  outcomes: SettledOutcomes,
-  readFailure: string | null,
-): Record<string, ReopenResolution> {
-  const resolutions: Record<string, ReopenResolution> = {};
-  for (const entry of entries) {
-    const closedAt = entry.closed_at;
-    if (!closedAt) continue;
-    resolutions[entry.id] = outcomes[outcomeKey(entry.id, closedAt)]
-      ?? (readFailure === null
-        ? { closedAt, state: 'pending' }
-        : { closedAt, state: 'failed', error: readFailure });
-  }
-  return resolutions;
-}
+const NO_ROWS: LedgerRows = { entries: [], facets: null, listedQuery: null };
 
 export function useSessionLedger({
   enabled,
@@ -191,8 +142,7 @@ export function useSessionLedger({
   onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
-  const [{ entries, outcomes, facets }, setRows] = useState<LedgerRows>(NO_ROWS);
-  const [readFailure, setReadFailure] = useState<string | null>(null);
+  const [rows, setRows] = useState<LedgerRows>(NO_ROWS);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -229,18 +179,10 @@ export function useSessionLedger({
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
-      if (event.type === 'reopen-resolved') {
-        const { sessionId, resolution } = event;
-        const pageMayListIt = closesDuringReads.current.size > 0;
-        setRows((current) => pageMayListIt || isListedGeneration(current.entries, sessionId, resolution.closedAt)
-          ? { ...current, outcomes: { ...current.outcomes, [outcomeKey(sessionId, resolution.closedAt)]: resolution } }
-          : current);
-        return;
-      }
       const entry = event.entry;
       for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
-      setRows((current) => listRows(current, applyClose(current.entries, entry, filtersRef.current, at)));
+      setRows((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
     });
   }, [connection.subscribe, enabled, now]);
 
@@ -253,6 +195,7 @@ export function useSessionLedger({
 
   const query = useMemo(() => sessionLedgerQuery(filters, now()), [filters, now]);
   const filterError = 'error' in query ? query.error : null;
+  const queryKey = useMemo(() => JSON.stringify(query), [query]);
 
   useEffect(() => {
     const epoch = ++readEpoch.current;
@@ -264,8 +207,6 @@ export function useSessionLedger({
       setLoading(false);
       return;
     }
-    setRows((current) => ({ ...current, outcomes: NO_OUTCOMES }));
-    setReadFailure(null);
     if (!lifecycle.connected) {
       setLoading(false);
       return;
@@ -276,21 +217,18 @@ export function useSessionLedger({
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
     setError(null);
-    const queryKey = JSON.stringify(query);
-    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: filters.scope !== 'live' })
+    connection.list({ ...(query as SessionLedgerQuery), limit: pageSize })
       .then((page) => {
         if (superseded()) return;
         const at = now();
         const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
-        setRows((current) => ({ ...listRows(current, listed), facets: page.facets ?? null, listedQuery: queryKey }));
+        setRows({ entries: listed, facets: page.facets ?? null, listedQuery: queryKey });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
         if (superseded()) return;
         setError(failure.message);
-        setReadFailure(failure.message);
-        setRows((current) => (current.listedQuery === queryKey ? current : NO_ROWS));
       })
       .finally(() => {
         closesDuringReads.current.delete(closes);
@@ -300,7 +238,7 @@ export function useSessionLedger({
       if (readEpoch.current === epoch) readEpoch.current += 1;
       closesDuringReads.current.clear();
     };
-  }, [enabled, filters, query, filterError, connection.list, lifecycle, pageSize, reloadNonce, now]);
+  }, [enabled, filters, query, queryKey, filterError, connection.list, lifecycle, pageSize, reloadNonce, now]);
 
   const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
@@ -312,14 +250,14 @@ export function useSessionLedger({
     closesDuringReads.current.add(closes);
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoadingMoreRead(closes);
-    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: filtersRef.current.scope !== 'live' })
+    connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore })
       .then((page) => {
         if (superseded()) return;
         const at = now();
         setRows((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
           const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
-          return listRows(current, closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended));
+          return { ...current, entries: closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended) };
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -333,16 +271,12 @@ export function useSessionLedger({
       });
   }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
-  const resolutions = useMemo(
-    () => resolutionsForEntries(entries, outcomes, readFailure),
-    [entries, outcomes, readFailure],
-  );
+  const { entries, facets } = rows.listedQuery === queryKey ? rows : NO_ROWS;
 
   return {
     filters,
     setFilters,
     entries,
-    resolutions,
     facets,
     omitted,
     loading,

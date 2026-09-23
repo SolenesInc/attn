@@ -15,7 +15,7 @@ describe('SessionsTab query', () => {
     renderSessionsTab({ listSessions: list });
 
     await rows().findByText('run s1');
-    expect(calls).toEqual([{ all: true, limit: 50, reopen: true }]);
+    expect(calls).toEqual([{ all: true, limit: 50 }]);
   });
 
   it('narrows to closed rows without re-reading on every render', async () => {
@@ -25,7 +25,7 @@ describe('SessionsTab query', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ closed: true, limit: 50, reopen: true });
+    expect(calls[1]).toEqual({ closed: true, limit: 50 });
     await act(async () => { await Promise.resolve(); });
     expect(calls).toHaveLength(2);
   });
@@ -38,12 +38,12 @@ describe('SessionsTab query', () => {
     type('today');
     await waitFor(() => expect(calls).toHaveLength(2));
     const today = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate()).toISOString();
-    expect(calls[1]).toEqual({ all: true, limit: 50, since: today, reopen: true });
+    expect(calls[1]).toEqual({ all: true, limit: 50, since: today });
 
     type('yesterday');
     await waitFor(() => expect(calls).toHaveLength(3));
     const yesterday = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 1).toISOString();
-    expect(calls[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today, reopen: true });
+    expect(calls[2]).toEqual({ all: true, limit: 50, since: yesterday, until: today });
 
     type('week');
     await waitFor(() => expect(calls).toHaveLength(4));
@@ -63,7 +63,6 @@ describe('SessionsTab query', () => {
       limit: 50,
       since: new Date(2026, 8, 1).toISOString(),
       until: new Date(2026, 8, 4).toISOString(),
-      reopen: true,
     });
 
     type('from:2026-09-01 to:2026-08-01');
@@ -98,7 +97,7 @@ describe('SessionsTab query', () => {
 
     type('repo:attn ws:attn-work');
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', workspace_id: 'ws-1', reopen: true });
+    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', workspace_id: 'ws-1' });
 
     type('repo:nope');
     const chip = await screen.findByRole('button', { name: /repo:nope/ });
@@ -140,7 +139,7 @@ describe('SessionsTab pagination', () => {
     fireEvent.click(screen.getByRole('button', { name: /3 older/ }));
 
     await rows().findByText('run s2');
-    expect(calls[1]).toEqual({ all: true, limit: 50, before: 's1', reopen: true });
+    expect(calls[1]).toEqual({ all: true, limit: 50, before: 's1' });
     expect(rows().getByText('run s1')).toBeTruthy();
     await waitFor(() => expect(status()).toContain('2 sessions'));
     expect(screen.queryByRole('button', { name: /older/ })).toBeNull();
@@ -161,7 +160,7 @@ describe('SessionsTab filter memory', () => {
     await waitFor(() => expect(calls).toHaveLength(1));
 
     const since = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString();
-    expect(calls[0]).toEqual({ closed: true, since, workspace_id: 'ws-2', repository: '/Users/victor/projects/attn', limit: 50, reopen: true });
+    expect(calls[0]).toEqual({ closed: true, since, workspace_id: 'ws-2', repository: '/Users/victor/projects/attn', limit: 50 });
     expect(query().value).toBe('repo:attn ws:attn 7d');
     expect(setSetting).not.toHaveBeenCalled();
   });
@@ -239,6 +238,6 @@ describe('SessionsTab filter memory', () => {
   ])('opens on the defaults when the setting is %s', async (_label, value) => {
     const { list, calls } = listing([page()]);
     renderSessionsTab({ listSessions: list }, { values: { [SESSION_FILTERS_SETTING_KEY]: value } });
-    await waitFor(() => expect(calls).toEqual([{ all: true, limit: 50, reopen: true }]));
+    await waitFor(() => expect(calls).toEqual([{ all: true, limit: 50 }]));
   });
 });

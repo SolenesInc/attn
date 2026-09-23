@@ -15,6 +15,8 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const sessionListReopenConcurrency = 4
+
 func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.SessionLedgerQuery, error) {
 	scope := store.SessionLedgerLive
 	switch {
@@ -62,7 +64,7 @@ func ledgerInstantArg(name, raw string) (time.Time, error) {
 	return at, nil
 }
 
-func (d *Daemon) sessionLedgerStoredPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
+func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
 	query, err := ledgerQuery(msg, wantFacets)
 	if err != nil {
 		return nil, err
@@ -86,14 +88,6 @@ func (d *Daemon) sessionLedgerStoredPage(msg *protocol.SessionListMessage, wantF
 	if page.NextBefore != "" {
 		result.NextBefore = protocol.Ptr(page.NextBefore)
 	}
-	return result, nil
-}
-
-func (d *Daemon) sessionLedgerPage(msg *protocol.SessionListMessage, wantFacets bool) (*protocol.SessionListResult, error) {
-	result, err := d.sessionLedgerStoredPage(msg, wantFacets)
-	if err != nil {
-		return nil, err
-	}
 	if protocol.Deref(msg.Reopen) {
 		result.Reopen = d.reopenVerdictsForPage(result.Entries)
 	}
@@ -111,9 +105,9 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 
 func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
 	verdicts := make([]*protocol.SessionReopenEntry, len(entries))
-	gitView := d.scheduledReopenGit(gitInteractive)
+	gitView := d.scheduledReopenGit()
 	var group errgroup.Group
-	group.SetLimit(productionSessionReopenWorkers)
+	group.SetLimit(sessionListReopenConcurrency)
 	for i, entry := range entries {
 		if protocol.Deref(entry.ClosedAt) == "" {
 			continue
@@ -145,7 +139,7 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		return
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
-	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit(gitInteractive))
+	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
 	if err != nil {
 		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
 	} else {
@@ -154,12 +148,8 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionShowResult: result})
 }
 
-func (d *Daemon) sendSessionListWSResult(
-	client *wsClient,
-	msg *protocol.SessionListMessage,
-	intent *reopenPageIntent,
-) {
-	result, err := d.sessionLedgerStoredPage(msg, true)
+func (d *Daemon) sendSessionListWSResult(client *wsClient, msg *protocol.SessionListMessage) {
+	result, err := d.sessionLedgerPage(msg, true)
 	reply := protocol.SessionListResultMessage{
 		Event:     protocol.EventSessionListResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -169,23 +159,7 @@ func (d *Daemon) sendSessionListWSResult(
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	}
-	if !d.sendToClient(client, reply) || err != nil || intent == nil {
-		return
-	}
-	if broker := d.sessionReopenBroker(); broker != nil {
-		broker.CommitPage(*intent, reopenKeysForEntries(result.Entries))
-	}
-}
-
-func reopenKeysForEntries(entries []protocol.SessionLedgerEntry) []reopenKey {
-	keys := make([]reopenKey, 0, len(entries))
-	for _, entry := range entries {
-		closedAt := strings.TrimSpace(protocol.Deref(entry.ClosedAt))
-		if closedAt != "" {
-			keys = append(keys, reopenKey{SessionID: entry.ID, ClosedAt: closedAt})
-		}
-	}
-	return keys
+	d.sendToClient(client, reply)
 }
 
 func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.SessionReopenMessage) {
@@ -198,6 +172,10 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		RequestID: protocol.Deref(msg.RequestID),
 	}
 	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	var refused *reopenRefusedError
+	if errors.As(err, &refused) {
+		reply.Reopen = refused.verdict.toProtocol()
+	}
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	} else {

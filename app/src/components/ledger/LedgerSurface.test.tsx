@@ -1,11 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { LedgerSurface } from './LedgerSurface';
 import type { LedgerTab } from './LedgerSurface';
 import { listing, page, rows } from './testSupport';
 import { useWorktreeStore } from '../../store/worktrees';
 import { createSessionLedgerTestConnection } from '../../test/sessionLedgerTestConnection';
-import { closedEntry, liveEntry, now, resolved } from '../../test/sessionLedgerFixtures';
+import { closedEntry, liveEntry, now } from '../../test/sessionLedgerFixtures';
 
 function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onFocusSession?: (id: string) => void; onSelectSession?: (id: string) => void } = {}) {
   useWorktreeStore.getState().clear();
@@ -38,7 +38,6 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     },
   });
   const view = render(<LedgerSurface {...props(tab)} />);
-  act(() => transport.emit(resolved('wt')));
   return { onTabChange, retab: (next: LedgerTab) => view.rerender(<LedgerSurface {...props(next)} />) };
 }
 

@@ -3082,21 +3082,8 @@ describe('useDaemonSocket notebook and annotation events', () => {
     });
 
     unsubscribe();
-    act(() => ws.emit({ event: 'session_reopen_resolved', session_id: 's1', closed_at: entry.closed_at, success: false, error: 'gone' }));
+    act(() => ws.emit({ event: 'session_closed', session_ledger_entry: entry }));
     expect(listener).toHaveBeenCalledTimes(2);
-    unmount();
-  });
-
-  it('releases reopen eligibility when the last ledger listener leaves', async () => {
-    const { result, unmount, ws } = await renderAndOpen();
-    const first = result.current.subscribeSessionLedger(vi.fn());
-    const second = result.current.subscribeSessionLedger(vi.fn());
-    const sentUnsubscribes = () => ws.sent.filter((frame) => JSON.parse(frame).cmd === 'session_reopen_unsubscribe').length;
-
-    first();
-    expect(sentUnsubscribes()).toBe(0);
-    second();
-    expect(sentUnsubscribes()).toBe(1);
     unmount();
   });
 

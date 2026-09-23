@@ -118,7 +118,6 @@ const (
 	CmdSessionInstructions                   = "session_instructions"
 	CmdSessionTranscript                     = "session_transcript"
 	CmdSessionList                           = "session_list"
-	CmdSessionReopenUnsubscribe              = "session_reopen_unsubscribe"
 	CmdSessionShow                           = "session_show"
 	CmdSessionReopen                         = "session_reopen"
 	CmdStateExplain                          = "state_explain"
@@ -387,7 +386,6 @@ const (
 	EventSessionShowResult               = "session_show_result"
 	EventSessionReopenResult             = "session_reopen_result"
 	EventSessionReopenRefreshed          = "session_reopen_refreshed"
-	EventSessionReopenResolved           = "session_reopen_resolved"
 	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"
 	EventNotificationMarkReadResult      = "notification_mark_read_result"
@@ -1181,13 +1179,6 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdSessionList:
 		var msg SessionListMessage
-		if err := json.Unmarshal(data, &msg); err != nil {
-			return "", nil, err
-		}
-		return peek.Cmd, &msg, nil
-
-	case CmdSessionReopenUnsubscribe:
-		var msg SessionReopenUnsubscribeMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}

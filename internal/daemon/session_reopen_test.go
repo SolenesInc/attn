@@ -97,7 +97,7 @@ func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReo
 		t.Fatalf("no ledger row for %s", sessionID)
 	}
 	verdict, err := d.resolveReopen(
-		context.Background(), *entry, d.scheduledReopenGit(gitInteractive),
+		context.Background(), *entry, d.scheduledReopenGit(),
 	)
 	if err != nil {
 		t.Fatalf("resolve reopen verdict for %s: %v", sessionID, err)
