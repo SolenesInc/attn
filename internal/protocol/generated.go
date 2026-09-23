@@ -3437,6 +3437,11 @@ type DelegationPreferencesHistoryResult struct {
 	Revisions []DelegationPreferencesRevision `json:"revisions"`
 }
 
+type DelegationPreferencesOrigin string
+
+const DelegationPreferencesOriginCli DelegationPreferencesOrigin = "cli"
+const DelegationPreferencesOriginSettings DelegationPreferencesOrigin = "settings"
+
 type DelegationPreferencesResultMessage struct {
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
@@ -3475,6 +3480,9 @@ type DelegationPreferencesRevision struct {
 
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
+
+	// Origin corresponds to the JSON schema field "origin".
+	Origin *DelegationPreferencesOrigin `json:"origin,omitempty,omitzero"`
 
 	// Preferences corresponds to the JSON schema field "preferences".
 	Preferences DelegationPreferences `json:"preferences"`

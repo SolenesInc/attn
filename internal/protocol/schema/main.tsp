@@ -1187,9 +1187,15 @@ model DelegationRolesResult {
   guidance: string;
 }
 
+enum DelegationPreferencesOrigin {
+  settings,
+  cli,
+}
+
 model DelegationPreferencesRevision {
   preferences: DelegationPreferences;
   restores?: safeint;
+  origin?: DelegationPreferencesOrigin;
   source_session?: string;
   message?: string;
   created_at?: string;

@@ -71,8 +71,8 @@ prints, and refuses when the table changed since that export. Agents change
 the table only when the user asks; a model requested for one delegation stays
 a launch override.
 
-Every change, from Settings or the CLI, is a revision. It records the session
-that made it and an optional reason. `attn delegate roles history` lists the
+Every change, from Settings or the CLI, is a revision. It records where it was
+made, the agent session that made it, and an optional reason. `attn delegate roles history` lists the
 revisions and what each one changed. `attn delegate roles rollback` restores
 the table that was live before the current one, and repeating it keeps
 walking back. `rollback <revision>` restores any revision, older or newer, so

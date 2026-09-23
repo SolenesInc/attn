@@ -124,7 +124,7 @@ func TestDelegationPreferencesRollbackWalksBackAndRestoresAnyRevision(t *testing
 		cfg := configuredDelegationPreferences()
 		cfg.Revision = i
 		cfg.Roles[0].Name = name
-		if _, err := s.SaveDelegationPreferences(cfg, DelegationPreferencesNote{SourceSession: "session-a", Message: "rename to " + name}); err != nil {
+		if _, err := s.SaveDelegationPreferences(cfg, DelegationPreferencesNote{Origin: "cli", SourceSession: "session-a", Message: "rename to " + name}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -177,7 +177,7 @@ func TestDelegationPreferencesRollbackWalksBackAndRestoresAnyRevision(t *testing
 		t.Fatalf("history pairs each revision with the one before it: %+v", history)
 	}
 	all, err := s.DelegationPreferencesHistory(20)
-	if err != nil || len(all) != 8 || all[7].Previous == nil || all[7].Previous.Revision != 0 || all[7].Message != "rename to First" || all[7].SourceSession != "session-a" {
+	if err != nil || len(all) != 8 || all[7].Previous == nil || all[7].Previous.Revision != 0 || all[7].Message != "rename to First" || all[7].SourceSession != "session-a" || all[7].Origin != "cli" {
 		t.Fatalf("full history: %+v %v", all, err)
 	}
 }

@@ -112,7 +112,7 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 	}
 	var saved store.DelegationPreferencesRevision
 	if err == nil {
-		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, store.DelegationPreferencesNote{})
+		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, store.DelegationPreferencesNote{Origin: string(protocol.DelegationPreferencesOriginSettings)})
 	}
 	if err != nil {
 		result := delegationPreferencesFailure(msg.RequestID, err)
@@ -132,7 +132,7 @@ func (d *Daemon) handleDelegationPreferencesRollbackWS(client *wsClient, msg *pr
 		d.sendToClient(client, delegationPreferencesFailure(requestID, errMissingRequestID))
 		return
 	}
-	restored, err := d.rollbackDelegationPreferences(msg)
+	restored, err := d.rollbackDelegationPreferences(msg, protocol.DelegationPreferencesOriginSettings)
 	if err != nil {
 		d.sendToClient(client, delegationPreferencesFailure(requestID, err))
 		return
@@ -160,7 +160,7 @@ func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.
 	}
 	var saved store.DelegationPreferencesRevision
 	if err == nil {
-		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, delegationPreferencesNote(msg.SourceSession, msg.Message))
+		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, delegationPreferencesNote(protocol.DelegationPreferencesOriginCli, msg.SourceSession, msg.Message))
 	}
 	if err != nil {
 		d.replyDelegationPreferencesError(conn, err)
@@ -188,7 +188,7 @@ func (d *Daemon) handleDelegationPreferencesHistory(conn net.Conn, msg *protocol
 }
 
 func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protocol.DelegationPreferencesRollbackMessage) {
-	restored, err := d.rollbackDelegationPreferences(msg)
+	restored, err := d.rollbackDelegationPreferences(msg, protocol.DelegationPreferencesOriginCli)
 	if err != nil {
 		d.replyDelegationPreferencesError(conn, err)
 		return
@@ -196,8 +196,8 @@ func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protoco
 	d.replyDelegationPreferencesRevision(conn, restored)
 }
 
-func (d *Daemon) rollbackDelegationPreferences(msg *protocol.DelegationPreferencesRollbackMessage) (store.DelegationPreferencesRevision, error) {
-	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, msg.ExpectedRevision, delegationPreferencesNote(msg.SourceSession, msg.Message))
+func (d *Daemon) rollbackDelegationPreferences(msg *protocol.DelegationPreferencesRollbackMessage, origin protocol.DelegationPreferencesOrigin) (store.DelegationPreferencesRevision, error) {
+	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, msg.ExpectedRevision, delegationPreferencesNote(origin, msg.SourceSession, msg.Message))
 	if err == nil {
 		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	}
@@ -211,8 +211,8 @@ func requireWorkflowSkillInstall(current, next delegationprefs.Config) error {
 	return nil
 }
 
-func delegationPreferencesNote(sourceSession, message *string) store.DelegationPreferencesNote {
-	return store.DelegationPreferencesNote{SourceSession: strings.TrimSpace(protocol.Deref(sourceSession)), Message: strings.TrimSpace(protocol.Deref(message))}
+func delegationPreferencesNote(origin protocol.DelegationPreferencesOrigin, sourceSession, message *string) store.DelegationPreferencesNote {
+	return store.DelegationPreferencesNote{Origin: string(origin), SourceSession: strings.TrimSpace(protocol.Deref(sourceSession)), Message: strings.TrimSpace(protocol.Deref(message))}
 }
 
 func (d *Daemon) replyDelegationPreferencesRevision(conn net.Conn, revision store.DelegationPreferencesRevision) {
@@ -232,6 +232,9 @@ func delegationPreferencesRevisionWire(revision store.DelegationPreferencesRevis
 	wire := protocol.DelegationPreferencesRevision{Preferences: revision.Config, Restores: revision.Restores, Changes: []string{"history starts here"}}
 	if revision.Previous != nil {
 		wire.Changes = delegationprefs.Changes(*revision.Previous, revision.Config)
+	}
+	if revision.Origin != "" {
+		wire.Origin = protocol.Ptr(protocol.DelegationPreferencesOrigin(revision.Origin))
 	}
 	if revision.SourceSession != "" {
 		wire.SourceSession = &revision.SourceSession

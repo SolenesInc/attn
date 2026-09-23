@@ -35,7 +35,7 @@ func Changes(before, after Config) []string {
 			changes = append(changes, "removed role "+role.ID)
 		}
 	}
-	if !slices.Equal(sharedRoleOrder(before.Roles, current), sharedRoleOrder(after.Roles, existed)) {
+	if !slices.Equal(sharedOrder(before.Roles, roleID, current), sharedOrder(after.Roles, roleID, existed)) {
 		changes = append(changes, "reordered roles")
 	}
 	if before.Fallback.Selection != after.Fallback.Selection {
@@ -97,8 +97,10 @@ func roleChanges(before, after Role) []string {
 		add("default is now %s", after.DefaultChoiceID)
 	}
 	previous := map[string]Choice{}
+	existed := map[string]bool{}
 	for _, choice := range before.Choices {
 		previous[choice.ID] = choice
+		existed[choice.ID] = true
 	}
 	current := map[string]bool{}
 	for _, choice := range after.Choices {
@@ -127,6 +129,9 @@ func roleChanges(before, after Role) []string {
 			add("removed alternative %s", choice.ID)
 		}
 	}
+	if !slices.Equal(sharedOrder(before.Choices, choiceID, current), sharedOrder(after.Choices, choiceID, existed)) {
+		add("reordered alternatives")
+	}
 	return changes
 }
 
@@ -139,15 +144,19 @@ func defaultSelection(role Role) Selection {
 	return Selection{}
 }
 
-func sharedRoleOrder(roles []Role, other map[string]bool) []string {
+func sharedOrder[T any](items []T, id func(T) string, keep map[string]bool) []string {
 	var ids []string
-	for _, role := range roles {
-		if other[role.ID] {
-			ids = append(ids, role.ID)
+	for _, item := range items {
+		if keep[id(item)] {
+			ids = append(ids, id(item))
 		}
 	}
 	return ids
 }
+
+func roleID(role Role) string { return role.ID }
+
+func choiceID(choice Choice) string { return choice.ID }
 
 func onOff(on bool) string {
 	if on {

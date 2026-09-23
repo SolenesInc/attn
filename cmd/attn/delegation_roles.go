@@ -261,10 +261,14 @@ func writeDelegationRevisionHeader(w io.Writer, revision protocol.DelegationPref
 	if revision.Restores != nil {
 		parts = append(parts, fmt.Sprintf("restores %d", *revision.Restores))
 	}
+	switch protocol.Deref(revision.Origin) {
+	case protocol.DelegationPreferencesOriginSettings:
+		parts = append(parts, "in Settings")
+	case protocol.DelegationPreferencesOriginCli:
+		parts = append(parts, "from the CLI")
+	}
 	if revision.SourceSession != nil {
 		parts = append(parts, "by session "+*revision.SourceSession)
-	} else {
-		parts = append(parts, "in Settings")
 	}
 	fmt.Fprintln(w, strings.Join(parts, " · "))
 	if revision.Message != nil {
@@ -452,7 +456,10 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		if len(positionals) != want {
 			return "", "", usagef("usage: attn delegate roles %s", usage)
 		}
-		role, choice, _ := strings.Cut(positionals[0], "/")
+		role, choice, alternative := strings.Cut(positionals[0], "/")
+		if role == "" || (alternative && choice == "") {
+			return "", "", usagef("%q is not a role or role/alternative", positionals[0])
+		}
 		return role, choice, nil
 	}
 	modelFlags := []string{"agent", "model", "provider", "effort"}
