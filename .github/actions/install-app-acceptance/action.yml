@@ -27,16 +27,12 @@ runs:
       shell: bash
       run: brew install fish
 
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
+    - name: Set up Go and Node.js
+      uses: ./.github/actions/setup-toolchains
       with:
-        node-version: '26'
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: go.mod
-        cache: false
+        go: 'true'
+        go-cache: 'false'
+        node: 'true'
 
     - name: Install pnpm
       uses: pnpm/action-setup@v4
