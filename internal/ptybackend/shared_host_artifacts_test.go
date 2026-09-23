@@ -2,6 +2,7 @@ package ptybackend
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,7 +71,7 @@ func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	var rejections int
 	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-slow", BinaryPath: slow,
-		OnSharedArtifactRejected: func(SharedArtifactRejection) { rejections++ },
+		OnSharedArtifactRejected: func(SharedArtifactRejection) error { rejections++; return nil },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +99,7 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 	var rejections []SharedArtifactRejection
 	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-broken", BinaryPath: broken,
-		OnSharedArtifactRejected: func(r SharedArtifactRejection) { rejections = append(rejections, r) },
+		OnSharedArtifactRejected: func(r SharedArtifactRejection) error { rejections = append(rejections, r); return nil },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -114,5 +115,38 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "was rejected") {
 		t.Fatalf("spawn with only a rejected build = %v, want a refusal", err)
+	}
+}
+
+func TestRejectionIsRecordedOnlyAfterItIsReported(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
+	broken := filepath.Join(root, "broken-host")
+	writeScript(t, broken, "exit 1")
+	cfg := WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-report", BinaryPath: broken,
+		OnSharedArtifactRejected: func(SharedArtifactRejection) error { return errors.New("notification store unavailable") },
+	}
+	backend, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host that exits at startup passed its check")
+	}
+	if !backend.SharedCandidatePending() {
+		t.Fatal("a rejection that could not be reported was recorded")
+	}
+
+	var rejections int
+	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) error { rejections++; return nil }
+	restarted, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host that exits at startup passed its check")
+	}
+	if rejections != 1 || restarted.SharedCandidatePending() {
+		t.Fatalf("after restart: rejections=%d pending=%v, want one report and a recorded rejection", rejections, restarted.SharedCandidatePending())
 	}
 }

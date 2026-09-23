@@ -292,7 +292,7 @@ func TestSharedHost_RejectedCandidateKeepsLastKnownGood(t *testing.T) {
 	}
 	var rejections []SharedArtifactRejection
 	cfg.BinaryPath = broken
-	cfg.OnSharedArtifactRejected = func(r SharedArtifactRejection) { rejections = append(rejections, r) }
+	cfg.OnSharedArtifactRejected = func(r SharedArtifactRejection) error { rejections = append(rejections, r); return nil }
 	daemon, err := NewSharedHost(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -612,7 +612,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	}
 	var rejections int
 	cfg.BinaryPath = mute
-	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) { rejections++ }
+	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) error { rejections++; return nil }
 	backend, err := NewSharedHost(cfg)
 	if err != nil {
 		t.Fatal(err)
@@ -658,7 +658,7 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	var rejections int
 	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-stalled", BinaryPath: stalled,
-		OnSharedArtifactRejected: func(SharedArtifactRejection) { rejections++ },
+		OnSharedArtifactRejected: func(SharedArtifactRejection) error { rejections++; return nil },
 	})
 	if err != nil {
 		t.Fatal(err)

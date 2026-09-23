@@ -80,7 +80,7 @@ type WorkerBackendConfig struct {
 	Logf             func(format string, args ...interface{})
 	OnTerminalBuild  func(sessionID, snapshotFormat string)
 
-	OnSharedArtifactRejected func(SharedArtifactRejection)
+	OnSharedArtifactRejected func(SharedArtifactRejection) error
 }
 
 type workerRuntimeKind uint8

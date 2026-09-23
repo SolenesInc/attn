@@ -694,7 +694,7 @@ func (b *WorkerBackend) startSharedSession(ctx context.Context, session *workerS
 
 func isRetiringSharedHost(err error) bool {
 	return errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, os.ErrNotExist) ||
-		strings.Contains(err.Error(), "host is shutting down")
+		isRetryablePersistentConnError(err) || strings.Contains(err.Error(), "host is shutting down")
 }
 
 func (b *WorkerBackend) ensureSharedHost(ctx context.Context, artifact *ptyhost.Artifact) (ptyhost.HostRegistry, error) {

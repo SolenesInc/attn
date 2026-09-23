@@ -60,13 +60,13 @@ func (d *Daemon) newSharedPTYHost() (*ptybackend.WorkerBackend, error) {
 
 const notificationKindPTYHostRejected = "pty_host_rejected"
 
-func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifactRejection) {
+func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifactRejection) error {
 	impact := "New terminals keep using dedicated workers until a working shared host is installed."
 	if rejection.FallbackID != "" {
 		impact = "New terminals keep using the last shared host build that passed."
 	}
 	if d.store == nil {
-		return
+		return nil
 	}
 	record, err := d.store.AddNotification(store.NotificationRecord{
 		Kind:       notificationKindPTYHostRejected,
@@ -81,10 +81,10 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 		SourceID:   rejection.ArtifactID,
 	}, time.Now())
 	if err != nil {
-		d.logf("notifications: add shared PTY host rejection for %s: %v", rejection.ArtifactID, err)
-		return
+		return err
 	}
 	d.publishFact(FactNotificationCreated, record.ID, nil)
+	return nil
 }
 
 func (d *Daemon) validateSharedPTYHostAfterRecovery() {
