@@ -592,7 +592,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	}
 
 	if err := backend.Spawn(context.Background(), SpawnOptions{
-		ID: "exits-at-once", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/true"}, Cols: 80, Rows: 24,
+		ID: "exits-at-once", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/sh", "-c", "exit 0"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
