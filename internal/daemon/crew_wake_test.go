@@ -114,6 +114,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 	for _, msg := range []*protocol.CrewWakeMessage{
 		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},
 		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent")},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent"), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
 	} {
 		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
 			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)

@@ -207,10 +207,13 @@ func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWak
 
 func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
 	askedProfileID = strings.TrimSpace(askedProfileID)
-	if askedProfileID == "" && strings.TrimSpace(sourceSessionID) != "" {
+	if sourceSessionID = strings.TrimSpace(sourceSessionID); sourceSessionID != "" {
 		profile, err := d.callerProfile(sourceSessionID)
 		if err != nil {
 			return err
+		}
+		if askedProfileID != "" && askedProfileID != profile.ID {
+			return fmt.Errorf("wake %s: session %s belongs to profile %s, not the profile_id %s it sent", name, sourceSessionID, profile.ID, askedProfileID)
 		}
 		askedProfileID = profile.ID
 	}
