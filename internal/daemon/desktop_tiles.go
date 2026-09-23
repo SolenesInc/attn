@@ -94,7 +94,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 
 func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDockTileMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		dock := desktopTileDock{
+		dock, err := d.checkedDesktopTileDock(desktopTileDock{
 			tileID:    strings.TrimSpace(msg.TileID),
 			tileKind:  strings.TrimSpace(msg.TileKind),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
@@ -102,15 +102,39 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 			anchorID:  protocol.Deref(msg.AnchorID),
 			edge:      msg.Edge,
 			share:     protocol.Deref(msg.TileShare),
-		}
-		if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
-			return profileActionOutcome{}, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", dock.sessionID)
+		})
+		if err != nil {
+			return profileActionOutcome{}, err
 		}
 		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			return dockTileOnDesktop(desktop, dock)
 		})
 		return d.desktopChanged(desktop), err
 	})
+}
+
+func (d *Daemon) checkedDesktopTileDock(dock desktopTileDock) (desktopTileDock, error) {
+	if !knownTileKind(dock.tileKind) {
+		return dock, profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed or notebook", dock.tileKind)
+	}
+	if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
+		return dock, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", dock.sessionID)
+	}
+	if dock.params == "" || dock.tileKind == string(layouttree.TileKindMarkdown) {
+		return dock, nil
+	}
+	var err error
+	dock.params, err = d.validatedTileParams(dock.tileKind, dock.params)
+	return dock, err
+}
+
+func knownTileKind(kind string) bool {
+	switch layouttree.TileKind(kind) {
+	case layouttree.TileKindMarkdown, layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
+		return true
+	default:
+		return false
+	}
 }
 
 func (d *Daemon) validatedTileParams(kind, params string) (string, error) {

@@ -173,6 +173,37 @@ func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 	}
 }
 
+func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	before := w.desktop
+
+	for name, command := range map[string]struct {
+		kind, params string
+		want         protocol.ProfileErrorCode
+	}{
+		"a script URL":    {"browser", "javascript:alert(1)", protocol.ProfileErrorCodeInvalid},
+		"a missing seed":  {"seed", "s-thatneverwas", protocol.ProfileErrorCodeNotFound},
+		"an unknown kind": {"spreadsheet", "/tmp/sheet.csv", protocol.ProfileErrorCodeInvalid},
+		"an empty kind":   {"", "https://example.com", protocol.ProfileErrorCodeInvalid},
+	} {
+		refused := w.send(w.client, map[string]any{
+			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+			"tile_id": "tile-new", "tile_kind": command.kind, "tile_params": command.params, "edge": "right",
+		})
+		if refused.Success || refused.ErrorCode == nil || *refused.ErrorCode != command.want {
+			t.Fatalf("docking %s answered %+v, want %s", name, refused, command.want)
+		}
+	}
+	if after, _ := w.d.store.GetDesktop(before.ID); after.Revision != int64(before.Revision) {
+		t.Fatalf("refused docks moved desktop %s from revision %d to %d", before.ID, before.Revision, after.Revision)
+	}
+
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-web", "tile_kind": "browser", "tile_params": "https://example.com/docs", "edge": "right"})
+	if got := w.tile("tile-web").TileParams; got != "https://example.com/docs" {
+		t.Fatalf("a valid browser dock stored params %q", got)
+	}
+}
+
 func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	notes := filepath.Join(t.TempDir(), "notes.md")
