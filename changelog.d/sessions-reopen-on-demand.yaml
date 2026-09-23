@@ -6,7 +6,7 @@ notes: >
   Reopen eligibility is no longer computed for every listed row. The daemon
   resolves it only when the user reopens, so an open Sessions view costs no
   Git or directory checks, even while automations close sessions. Protocol
-  318 adds the refused verdict to session_reopen_result, drops the verdict
+  319 adds the refused verdict to session_reopen_result, drops the verdict
   from session_closed, removes the unused checking flag from reopen verdicts,
   and removes the session.reopen.refreshed fact with its
   session_reopen_refreshed event, which nothing consumed. session_list still returns inline verdicts when asked, which
