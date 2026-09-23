@@ -51,8 +51,6 @@ a pure object literal (no computed values, no function calls). Recognized fields
   - `isolation` — `"worktree"` runs the call in a fresh git worktree and branch of
     the run's repository; the worktree is removed if the agent leaves it clean and
     kept if it left changes. Any other value runs in the run's working directory.
-  - `agentType` — a label recorded with the call in the run journal; it does not
-    change which agent runs.
   - A workflow agent that fails terminally resolves to `null` (it never throws
     past the `agent()` boundary), so guard results you depend on.
 - `parallel(thunks)` — run an array of zero-arg thunks concurrently and resolve to
