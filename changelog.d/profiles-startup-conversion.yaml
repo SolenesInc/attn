@@ -1,0 +1,4 @@
+kind: changed
+area: daemon
+change: A failed database upgrade stops the daemon and leaves ~/.attn/migration-failure.json instead of running without saving anything; other attn commands refuse a database the daemon has not upgraded.
+notes: The daemon also converts workspaces into desktops of a Default profile at startup and keeps a shared, revisioned draft for confirming them; no client uses the draft yet.

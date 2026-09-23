@@ -188,6 +188,10 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventProfilesChanged, protocol.EventProfileArrangementChanged},
 		subject: (*wireWorld).profile,
 	},
+	FactProfileMigrationChanged: {
+		events:  []string{protocol.EventMigrationChanged},
+		subject: (*wireWorld).profile,
+	},
 	FactWorkspaceLayoutRepublished: {
 		events:  []string{protocol.EventWorkspaceLayout},
 		subject: (*wireWorld).workspace,

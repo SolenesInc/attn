@@ -118,7 +118,7 @@ func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, profileID s
 
 func TestProfileArrangementSurvivesRestart(t *testing.T) {
 	s, restart := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Default")
+	profile, first := mustCreateProfile(t, s, "Main")
 	if first.ShortcutSlot != 1 || profile.CurrentDesktopID != first.ID {
 		t.Fatalf("new profile = %+v with desktop %+v, want its first desktop current in slot 1", profile, first)
 	}
@@ -179,7 +179,7 @@ func ratioedWithActive(desktop profiles.Desktop, paneID string) profiles.Desktop
 
 func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "Default")
+	profile, desktop := mustCreateProfile(t, s, "Main")
 	addProfileSession(t, s, "agent-a", profile.ID)
 	addProfileSession(t, s, "agent-b", profile.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
@@ -209,7 +209,7 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 
 func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Default")
+	profile, first := mustCreateProfile(t, s, "Main")
 	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -235,7 +235,7 @@ func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 
 func TestAnAgentHasAtMostOnePlacementAcrossTheDaemon(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Default")
+	profile, first := mustCreateProfile(t, s, "Main")
 	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -297,7 +297,7 @@ func TestLayoutWritesNeverChangeMembership(t *testing.T) {
 
 func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "Default")
+	profile, desktop := mustCreateProfile(t, s, "Main")
 	addProfileSession(t, s, "agent-a", profile.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
@@ -338,7 +338,7 @@ func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 
 func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 	s, restart := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Default")
+	profile, first := mustCreateProfile(t, s, "Main")
 	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
@@ -405,7 +405,7 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 
 func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, desktop := mustCreateProfile(t, s, "Default")
+	profile, desktop := mustCreateProfile(t, s, "Main")
 	addProfileSession(t, s, "agent-a", profile.ID)
 	addProfileSession(t, s, "agent-b", profile.ID)
 	seenByBoth := desktop.Revision
@@ -435,6 +435,13 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	s, restart := openProfileStore(t)
 	work, _ := mustCreateProfile(t, s, "Work")
 	home, _ := mustCreateProfile(t, s, "Home")
+	converted, err := s.MostRecentlyUsedProfile()
+	if err != nil || converted.Name != DefaultProfileName {
+		t.Fatalf("converted profile = %+v, %v; want %s", converted, err, DefaultProfileName)
+	}
+	if _, err := s.DeleteProfile(converted.ID, converted.Revision, home.ID); err != nil {
+		t.Fatalf("deleting the converted Default profile: %v", err)
+	}
 	addProfileSession(t, s, "live-agent", work.ID)
 	addProfileSession(t, s, "closed-agent", work.ID)
 	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
@@ -442,7 +449,7 @@ func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
 	}
 	wantCode(t, s.AssignSessionProfile("closed-agent", work.ID), profiles.CodeSessionClosed)
 
-	_, _, err := s.CreateProfile("  Home ")
+	_, _, err = s.CreateProfile("  Home ")
 	wantCode(t, err, profiles.CodeNameTaken)
 	_, err = s.RenameProfile(work.ID, "Home", work.Revision)
 	wantCode(t, err, profiles.CodeNameTaken)
@@ -532,7 +539,7 @@ func TestMovingAnAgentToAnotherProfileRemovesItsPlacementOnly(t *testing.T) {
 
 func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
 	s, _ := openProfileStore(t)
-	profile, first := mustCreateProfile(t, s, "Default")
+	profile, first := mustCreateProfile(t, s, "Main")
 	_, second, _ := s.CreateDesktop(profile.ID, "", 0, true)
 	_, third, _ := s.CreateDesktop(profile.ID, "", 0, true)
 	addProfileSession(t, s, "agent-a", profile.ID)
@@ -591,29 +598,5 @@ func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
 	recent, err := s.MostRecentlyUsedProfile()
 	if err != nil || recent.ID != home.ID {
 		t.Fatalf("most recently used profile = %+v, %v; want %s", recent, err, home.ID)
-	}
-}
-
-func TestProfileMigrationStateIsRevisioned(t *testing.T) {
-	s, restart := openProfileStore(t)
-	if _, found, err := s.GetProfileMigration(); err != nil || found {
-		t.Fatalf("fresh migration state found=%v err=%v, want none", found, err)
-	}
-	first, err := s.SaveProfileMigration(profiles.MigrationState{SchemaVersion: 150, Phase: "placement_required", ImportedGroups: `[{"id":"g1"}]`}, 0)
-	if err != nil {
-		t.Fatalf("SaveProfileMigration: %v", err)
-	}
-	first.Draft = `{"g1":"keep"}`
-	second, err := s.SaveProfileMigration(first, first.Revision)
-	if err != nil {
-		t.Fatalf("saving a draft: %v", err)
-	}
-	_, err = s.SaveProfileMigration(first, first.Revision)
-	wantCode(t, err, profiles.CodeStaleRevision)
-
-	s = restart()
-	got, found, err := s.GetProfileMigration()
-	if err != nil || !found || !reflect.DeepEqual(got, second) {
-		t.Fatalf("migration state after restart = %+v found=%v err=%v, want %+v", got, found, err, second)
 	}
 }

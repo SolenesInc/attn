@@ -490,6 +490,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if err := ensureNotLastProfile(tx, profile); err != nil {
 			return err
 		}
+		if err := ensureNoPendingMigration(tx, profile); err != nil {
+			return err
+		}
 		destination, err := loadDeletionDestination(tx, profile, destinationID)
 		if err != nil {
 			return err
@@ -1204,45 +1207,4 @@ func (s *Store) MoveSessionToProfile(sessionID, destinationProfileID string) (Se
 		return err
 	})
 	return move, err
-}
-
-func (s *Store) GetProfileMigration() (profiles.MigrationState, bool, error) {
-	var state profiles.MigrationState
-	found := false
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		var err error
-		found, err = rowFound(tx.QueryRow(`SELECT schema_version, phase, revision, imported_groups, draft FROM profile_migration WHERE id = 1`),
-			&state.SchemaVersion, &state.Phase, &state.Revision, &state.ImportedGroups, &state.Draft)
-		return err
-	})
-	return state, found, err
-}
-
-func (s *Store) SaveProfileMigration(state profiles.MigrationState, expectedRevision int64) (profiles.MigrationState, error) {
-	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
-		if strings.TrimSpace(state.Phase) == "" {
-			return profiles.Errorf(profiles.CodeInvalid, "migration phase is empty")
-		}
-		var current int64
-		err := tx.QueryRow(`SELECT revision FROM profile_migration WHERE id = 1`).Scan(&current)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if err := requireRevision("migration", "state", expectedRevision, current); err != nil {
-			return err
-		}
-		state.Revision = current + 1
-		_, err = tx.Exec(`
-			INSERT INTO profile_migration (id, schema_version, phase, revision, imported_groups, draft)
-			VALUES (1, ?, ?, ?, ?, ?)
-			ON CONFLICT(id) DO UPDATE SET
-				schema_version = excluded.schema_version,
-				phase = excluded.phase,
-				revision = excluded.revision,
-				imported_groups = excluded.imported_groups,
-				draft = excluded.draft`,
-			state.SchemaVersion, state.Phase, state.Revision, state.ImportedGroups, state.Draft)
-		return err
-	})
-	return state, err
 }

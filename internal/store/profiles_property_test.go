@@ -16,7 +16,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		s := New()
 		defer s.Close()
-		profile, first, err := s.CreateProfile("Default")
+		profile, first, err := s.CreateProfile("Main")
 		if err != nil {
 			t.Fatalf("CreateProfile: %v", err)
 		}

@@ -191,11 +191,14 @@ func wantErrorCode(t *testing.T, result protocol.ProfileActionResultMessage, wan
 	}
 }
 
-func TestFirstClientOnAnEmptyDaemonCreatesAndSelectsAProfile(t *testing.T) {
+func TestFirstClientOnAFreshDaemonIsScopedToDefaultAndCanCreateAnother(t *testing.T) {
 	w := newProfilesTestDaemon(t)
 	client, initial := w.connect("")
-	if len(initial.Profiles) != 0 || initial.SelectedProfileID != nil || len(initial.Desktops) != 0 {
-		t.Fatalf("an empty daemon announced profiles=%v selected=%v desktops=%v", initial.Profiles, initial.SelectedProfileID, initial.Desktops)
+	if len(initial.Profiles) != 1 || initial.Profiles[0].Name != "Default" || protocol.Deref(initial.SelectedProfileID) != initial.Profiles[0].ID || len(initial.Desktops) != 1 {
+		t.Fatalf("a fresh daemon announced profiles=%v selected=%v desktops=%v, want only Default with one desktop", initial.Profiles, initial.SelectedProfileID, initial.Desktops)
+	}
+	if initial.MigrationPhase == nil || *initial.MigrationPhase != protocol.MigrationPhaseComplete {
+		t.Fatalf("a fresh daemon reported migration phase %v, want complete", initial.MigrationPhase)
 	}
 
 	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
@@ -206,8 +209,8 @@ func TestFirstClientOnAnEmptyDaemonCreatesAndSelectsAProfile(t *testing.T) {
 	if created.Profile.CurrentDesktopID != first.ID || protocol.Deref(first.ShortcutSlot) != 1 {
 		t.Fatalf("first desktop %+v is not current in slot 1 of %+v", first, created.Profile)
 	}
-	if got := profilesChanges(t, client); len(got) != 1 || len(got[0].Profiles) != 1 {
-		t.Fatalf("profile_create broadcast %+v, want one profiles_changed with one profile", got)
+	if got := profilesChanges(t, client); len(got) != 1 || len(got[0].Profiles) != 2 {
+		t.Fatalf("profile_create broadcast %+v, want one profiles_changed with Default and the new profile", got)
 	}
 
 	selected := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
@@ -236,8 +239,8 @@ func TestHelloScopesTheClientToItsRememberedProfile(t *testing.T) {
 	if protocol.Deref(remembered.SelectedProfileID) != work.ID {
 		t.Fatalf("hello remembering %s was scoped to %v", work.ID, remembered.SelectedProfileID)
 	}
-	if len(remembered.Profiles) != 2 {
-		t.Fatalf("initial_state lists %d profiles, want 2", len(remembered.Profiles))
+	if len(remembered.Profiles) != 3 {
+		t.Fatalf("initial_state lists %d profiles, want Default, work and home", len(remembered.Profiles))
 	}
 	after, err := w.d.store.GetProfile(work.ID)
 	if err != nil {
@@ -256,8 +259,8 @@ func TestHelloScopesTheClientToItsRememberedProfile(t *testing.T) {
 		"cmd": protocol.CmdProfileDelete, "profile_id": work.ID, "expected_revision": work.Revision, "destination_profile_id": home.ID,
 	})
 	_, deleted := w.connect(work.ID)
-	if protocol.Deref(deleted.SelectedProfileID) != home.ID || len(deleted.Profiles) != 1 {
-		t.Fatalf("hello remembering a deleted profile got selected=%v profiles=%d, want %s and 1", deleted.SelectedProfileID, len(deleted.Profiles), home.ID)
+	if protocol.Deref(deleted.SelectedProfileID) != home.ID || len(deleted.Profiles) != 2 {
+		t.Fatalf("hello remembering a deleted profile got selected=%v profiles=%d, want %s among Default and home", deleted.SelectedProfileID, len(deleted.Profiles), home.ID)
 	}
 }
 
@@ -476,8 +479,8 @@ func TestProfileNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
 		t.Fatalf("a new profile reused the deleted profile's id %s", attn.ID)
 	}
 	live, err := w.d.store.ListProfiles(false)
-	if err != nil || len(live) != 2 {
-		t.Fatalf("%d live profiles (err %v), want 2", len(live), err)
+	if err != nil || len(live) != 3 {
+		t.Fatalf("%d live profiles (err %v), want Default, side and attention", len(live), err)
 	}
 	wantErrorCode(t, w.send(client, map[string]any{
 		"cmd": protocol.CmdProfileDelete, "profile_id": reborn.ID, "expected_revision": reborn.Revision, "destination_profile_id": reborn.ID,
@@ -496,8 +499,8 @@ func TestOutpostRefusesProfileCommandsByName(t *testing.T) {
 	client, _ := w.connect("")
 	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	wantErrorCode(t, result, protocol.ProfileErrorCodeUnavailable)
-	if live, err := w.d.store.ListProfiles(false); err != nil || len(live) != 0 {
-		t.Fatalf("a refused create left %d profiles (err %v)", len(live), err)
+	if live, err := w.d.store.ListProfiles(false); err != nil || len(live) != 1 {
+		t.Fatalf("a refused create left %d profiles (err %v), want only Default", len(live), err)
 	}
 }
 

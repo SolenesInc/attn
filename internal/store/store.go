@@ -136,7 +136,20 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func NewWithDB(dbPath string) (*Store, error) {
-	db, err := OpenDB(dbPath)
+	store, _, err := Open(dbPath)
+	return store, err
+}
+
+func Open(dbPath string) (*Store, SchemaUpgrade, error) {
+	db, upgrade, err := openUpgradedDB(dbPath)
+	if err != nil {
+		return nil, upgrade, err
+	}
+	return &Store{db: db, dbPath: dbPath, durable: true}, upgrade, nil
+}
+
+func OpenCurrent(dbPath string) (*Store, error) {
+	db, err := openCurrentDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -148,15 +161,6 @@ func (s *Store) DatabasePath() string {
 		return ""
 	}
 	return s.dbPath
-}
-
-func NewWithPersistence(path string) *Store {
-	dbPath := config.DBPath()
-	store, err := NewWithDB(dbPath)
-	if err != nil {
-		return New()
-	}
-	return store
 }
 
 func DefaultStatePath() string {

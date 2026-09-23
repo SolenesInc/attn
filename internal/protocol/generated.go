@@ -5383,6 +5383,9 @@ type InitialStateMessage struct {
 	// outpost of that home.
 	HomeDaemonID *string `json:"home_daemon_id,omitempty,omitzero"`
 
+	// MigrationPhase corresponds to the JSON schema field "migration_phase".
+	MigrationPhase *MigrationPhase `json:"migration_phase,omitempty,omitzero"`
+
 	// Profiles corresponds to the JSON schema field "profiles".
 	Profiles []Profile `json:"profiles,omitempty,omitzero"`
 
@@ -6005,6 +6008,184 @@ type MergePRMessage struct {
 
 	// Method corresponds to the JSON schema field "method".
 	Method string `json:"method"`
+}
+
+type MigrationChangedMessage struct {
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// State corresponds to the JSON schema field "state".
+	State MigrationState `json:"state"`
+}
+
+type MigrationDraftDesktop struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
+	// Key corresponds to the JSON schema field "key".
+	Key string `json:"key"`
+
+	// ShortcutSlot corresponds to the JSON schema field "shortcut_slot".
+	ShortcutSlot *int `json:"shortcut_slot,omitempty,omitzero"`
+
+	// TreeJson corresponds to the JSON schema field "tree_json".
+	TreeJson string `json:"tree_json"`
+}
+
+type MigrationFinishMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationGetMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationGroup struct {
+	// Confirmed corresponds to the JSON schema field "confirmed".
+	Confirmed bool `json:"confirmed"`
+
+	// Directory corresponds to the JSON schema field "directory".
+	Directory string `json:"directory"`
+
+	// GroupID corresponds to the JSON schema field "group_id".
+	GroupID string `json:"group_id"`
+
+	// Panes corresponds to the JSON schema field "panes".
+	Panes []DesktopPane `json:"panes"`
+
+	// SourceDesktopID corresponds to the JSON schema field "source_desktop_id".
+	SourceDesktopID string `json:"source_desktop_id"`
+
+	// Title corresponds to the JSON schema field "title".
+	Title string `json:"title"`
+
+	// TreeJson corresponds to the JSON schema field "tree_json".
+	TreeJson string `json:"tree_json"`
+}
+
+type MigrationKeepMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// GroupIds corresponds to the JSON schema field "group_ids".
+	GroupIds []string `json:"group_ids"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationMoveMessage struct {
+	// AnchorGroupID corresponds to the JSON schema field "anchor_group_id".
+	AnchorGroupID *string `json:"anchor_group_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Edge corresponds to the JSON schema field "edge".
+	Edge LayoutDockEdge `json:"edge"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// GroupID corresponds to the JSON schema field "group_id".
+	GroupID string `json:"group_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// Share corresponds to the JSON schema field "share".
+	Share *float64 `json:"share,omitempty,omitzero"`
+
+	// TargetKey corresponds to the JSON schema field "target_key".
+	TargetKey string `json:"target_key"`
+}
+
+type MigrationPhase string
+
+const MigrationPhaseComplete MigrationPhase = "complete"
+const MigrationPhasePlacementRequired MigrationPhase = "placement_required"
+
+type MigrationResultMessage struct {
+	// Action corresponds to the JSON schema field "action".
+	Action string `json:"action"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *ProfileErrorCode `json:"error_code,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// State corresponds to the JSON schema field "state".
+	State *MigrationState `json:"state,omitempty,omitzero"`
+
+	// Success corresponds to the JSON schema field "success".
+	Success bool `json:"success"`
+}
+
+type MigrationState struct {
+	// CanUndo corresponds to the JSON schema field "can_undo".
+	CanUndo bool `json:"can_undo"`
+
+	// Desktops corresponds to the JSON schema field "desktops".
+	Desktops []MigrationDraftDesktop `json:"desktops"`
+
+	// Groups corresponds to the JSON schema field "groups".
+	Groups []MigrationGroup `json:"groups"`
+
+	// Phase corresponds to the JSON schema field "phase".
+	Phase MigrationPhase `json:"phase"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision int `json:"revision"`
+
+	// SuggestionAvailable corresponds to the JSON schema field
+	// "suggestion_available".
+	SuggestionAvailable bool `json:"suggestion_available"`
+}
+
+type MigrationSuggestMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+}
+
+type MigrationUndoMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
 }
 
 type ModelCapabilitySupport string

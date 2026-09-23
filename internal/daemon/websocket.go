@@ -768,6 +768,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Crew:                   state.Crew,
 	}
 	d.fillInitialProfileState(client, event)
+	d.fillInitialMigrationPhase(event)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return
@@ -996,6 +997,18 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleProfileDelete(client, msg.(*protocol.ProfileDeleteMessage))
 	case protocol.CmdProfileSelect:
 		d.handleProfileSelect(client, msg.(*protocol.ProfileSelectMessage))
+	case protocol.CmdMigrationGet:
+		d.handleMigrationGet(client, msg.(*protocol.MigrationGetMessage))
+	case protocol.CmdMigrationKeep:
+		d.handleMigrationKeep(client, msg.(*protocol.MigrationKeepMessage))
+	case protocol.CmdMigrationMove:
+		d.handleMigrationMove(client, msg.(*protocol.MigrationMoveMessage))
+	case protocol.CmdMigrationSuggest:
+		d.handleMigrationSuggest(client, msg.(*protocol.MigrationSuggestMessage))
+	case protocol.CmdMigrationUndo:
+		d.handleMigrationUndo(client, msg.(*protocol.MigrationUndoMessage))
+	case protocol.CmdMigrationFinish:
+		d.handleMigrationFinish(client, msg.(*protocol.MigrationFinishMessage))
 	case protocol.CmdDesktopCreate:
 		d.handleDesktopCreate(client, msg.(*protocol.DesktopCreateMessage))
 	case protocol.CmdDesktopRename:

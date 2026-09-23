@@ -414,9 +414,9 @@ func busStderrLog(format string, args ...interface{}) {
 }
 
 func openBusStore() (*store.Store, func()) {
-	s, err := store.NewWithDB(config.DBPath())
+	s, err := store.OpenCurrent(config.DBPath())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "bus: opening %s: %v\n", config.DBPath(), err)
+		fmt.Fprintf(os.Stderr, "bus: %v\n", err)
 		os.Exit(1)
 	}
 	return s, func() { _ = s.Close() }

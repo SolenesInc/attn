@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "320"
+const ProtocolVersion = "321"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -312,9 +312,20 @@ const (
 )
 
 const (
+	CmdMigrationGet     = "migration_get"
+	CmdMigrationKeep    = "migration_keep"
+	CmdMigrationMove    = "migration_move"
+	CmdMigrationSuggest = "migration_suggest"
+	CmdMigrationUndo    = "migration_undo"
+	CmdMigrationFinish  = "migration_finish"
+)
+
+const (
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"
 	EventProfileArrangementChanged = "profile_arrangement_changed"
+	EventMigrationResult           = "migration_result"
+	EventMigrationChanged          = "migration_changed"
 )
 
 const (
