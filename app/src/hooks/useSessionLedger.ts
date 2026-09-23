@@ -139,6 +139,32 @@ function applyClose(
   return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
 }
 
+interface LedgerRows {
+  entries: SessionLedgerEntry[];
+  outcomes: SettledOutcomes;
+}
+
+const NO_ROWS: LedgerRows = { entries: [], outcomes: NO_OUTCOMES };
+
+function outcomesForListedRows(entries: SessionLedgerEntry[], outcomes: SettledOutcomes): SettledOutcomes {
+  const kept: SettledOutcomes = {};
+  for (const entry of entries) {
+    if (!entry.closed_at) continue;
+    const key = outcomeKey(entry.id, entry.closed_at);
+    const outcome = outcomes[key];
+    if (outcome) kept[key] = outcome;
+  }
+  return kept;
+}
+
+function listRows(entries: SessionLedgerEntry[], outcomes: SettledOutcomes): LedgerRows {
+  return { entries, outcomes: outcomesForListedRows(entries, outcomes) };
+}
+
+function isListedGeneration(entries: SessionLedgerEntry[], sessionId: string, closedAt: string): boolean {
+  return entries.some((entry) => entry.id === sessionId && entry.closed_at === closedAt);
+}
+
 function resolutionsForEntries(
   entries: SessionLedgerEntry[],
   outcomes: SettledOutcomes,
@@ -165,8 +191,7 @@ export function useSessionLedger({
   onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
-  const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
-  const [outcomes, setOutcomes] = useState<SettledOutcomes>(NO_OUTCOMES);
+  const [{ entries, outcomes }, setRows] = useState<LedgerRows>(NO_ROWS);
   const [readFailure, setReadFailure] = useState<string | null>(null);
   const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
   const [omitted, setOmitted] = useState(0);
@@ -207,13 +232,16 @@ export function useSessionLedger({
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
       if (event.type === 'reopen-resolved') {
         const { sessionId, resolution } = event;
-        setOutcomes((current) => ({ ...current, [outcomeKey(sessionId, resolution.closedAt)]: resolution }));
+        const pageMayListIt = closesDuringReads.current.size > 0;
+        setRows((current) => pageMayListIt || isListedGeneration(current.entries, sessionId, resolution.closedAt)
+          ? { ...current, outcomes: { ...current.outcomes, [outcomeKey(sessionId, resolution.closedAt)]: resolution } }
+          : current);
         return;
       }
       const entry = event.entry;
       for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
-      setEntries((current) => applyClose(current, entry, filtersRef.current, at));
+      setRows((current) => listRows(applyClose(current.entries, entry, filtersRef.current, at), current.outcomes));
     });
   }, [connection.subscribe, enabled, now]);
 
@@ -237,7 +265,7 @@ export function useSessionLedger({
       setLoading(false);
       return;
     }
-    setOutcomes(NO_OUTCOMES);
+    setRows((current) => ({ ...current, outcomes: NO_OUTCOMES }));
     setReadFailure(null);
     if (!lifecycle.connected) {
       setLoading(false);
@@ -253,7 +281,8 @@ export function useSessionLedger({
       .then((page) => {
         if (superseded()) return;
         const at = now();
-        setEntries(closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []));
+        const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
+        setRows((current) => listRows(listed, current.outcomes));
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -287,10 +316,13 @@ export function useSessionLedger({
       .then((page) => {
         if (superseded()) return;
         const at = now();
-        setEntries((current) => {
-          const present = new Set(current.map((entry) => entry.id));
-          const appended = [...current, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
-          return closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended);
+        setRows((current) => {
+          const present = new Set(current.entries.map((entry) => entry.id));
+          const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
+          return listRows(
+            closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended),
+            current.outcomes,
+          );
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);

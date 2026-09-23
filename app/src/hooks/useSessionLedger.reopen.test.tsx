@@ -235,4 +235,15 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     expect(list).toHaveBeenCalledTimes(1);
     expect(seen.view?.resolutions.s1?.state).toBe('ready');
   });
+
+  it('keeps no outcome for a row the page does not list', async () => {
+    const listed = closedEntry('listed', { repository: 'r' });
+    const seen = renderLedger(async () => ({ entries: [listed], omitted: 0 }), { ...EMPTY_SESSION_FILTERS, repository: 'r' });
+    await waitFor(() => expect(seen.view?.loading).toBe(false));
+
+    act(() => seen.emit(resolved('elsewhere')));
+    act(() => seen.emit({ type: 'closed', entry: closedEntry('elsewhere', { repository: 'r' }) }));
+
+    expect(seen.view?.resolutions.elsewhere).toEqual({ closedAt: listed.closed_at, state: 'pending' });
+  });
 });
