@@ -215,6 +215,27 @@ func applySessionCostObservations(sessionID string, state *SessionCostState, obs
 	return changed
 }
 
+func rekeyLongContextObservations(state *SessionCostState) bool {
+	if state.Ledger == nil {
+		return false
+	}
+	changed := false
+	for _, observation := range state.Observations {
+		standard := sessioncost.NewLedgerKey(observation.Model, observation.Purpose)
+		key := observation.ledgerKey()
+		if key == standard {
+			continue
+		}
+		state.Ledger[standard] = state.Ledger[standard].Subtract(observation.Usage)
+		if state.Ledger[standard] == (sessioncost.Usage{}) {
+			delete(state.Ledger, standard)
+		}
+		state.Ledger[key] = state.Ledger[key].Add(observation.Usage)
+		changed = true
+	}
+	return changed
+}
+
 func finalizedSet(ids []string) map[string]struct{} {
 	set := make(map[string]struct{}, len(ids))
 	for _, id := range ids {
