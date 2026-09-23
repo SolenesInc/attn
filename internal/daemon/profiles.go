@@ -375,23 +375,6 @@ func (d *Daemon) handleDesktopSetActivePane(client *wsClient, msg *protocol.Desk
 	})
 }
 
-func (d *Daemon) handleDesktopFocusSession(client *wsClient, msg *protocol.DesktopFocusSessionMessage) {
-	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		profile, focused, err := d.store.FocusSession(msg.SessionID)
-		if err != nil {
-			return profileActionOutcome{}, err
-		}
-		client.selectProfile(profile.ID)
-		outcome := profileActionOutcome{publish: func() {
-			d.publishArrangementChanged(profile.ID)
-		}}.withProfile(profile)
-		if focused != nil {
-			outcome.desktops = []profiles.Desktop{*focused}
-		}
-		return outcome, nil
-	})
-}
-
 func layoutDirection(direction *protocol.LayoutSplitDirection) layouttree.Direction {
 	if direction != nil && *direction == protocol.LayoutSplitDirectionHorizontal {
 		return layouttree.DirectionHorizontal

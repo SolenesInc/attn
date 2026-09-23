@@ -298,7 +298,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       sendWorkspaceClosePane: mockSendWorkspaceClosePane,
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      sendDesktopFocusSession: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),

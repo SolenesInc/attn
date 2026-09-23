@@ -197,7 +197,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopDelete:                         commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopSetCurrent:                     commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopSetActivePane:                  commandMetadata(ScopeHubLocal, false, true),
-	protocol.CmdDesktopFocusSession:                   commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopPlaceSession:                   commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopMoveLeaf:                       commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopRemoveLeaf:                     commandMetadata(ScopeHubLocal, false, true),

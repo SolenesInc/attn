@@ -3383,15 +3383,6 @@ model DesktopSetActivePaneMessage {
   pane_id: string;
 }
 
-// The user selected an agent: its profile becomes this connection's profile and
-// the most recently used one, and when the agent is placed its desktop becomes
-// current and its pane active. Last writer wins, no revision.
-model DesktopFocusSessionMessage {
-  cmd: "desktop_focus_session";
-  request_id: string;
-  session_id: string;
-}
-
 // Gives an unplaced agent of the desktop's profile a pane, split beside
 // anchor_pane_id or, absent, beside the active pane. The new pane becomes active.
 model DesktopPlaceSessionMessage {

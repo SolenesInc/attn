@@ -129,7 +129,6 @@ describe('sessions dock button', () => {
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
       sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      sendDesktopFocusSession: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),

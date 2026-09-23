@@ -302,7 +302,6 @@ const (
 	CmdDesktopDelete          = "desktop_delete"
 	CmdDesktopSetCurrent      = "desktop_set_current"
 	CmdDesktopSetActivePane   = "desktop_set_active_pane"
-	CmdDesktopFocusSession    = "desktop_focus_session"
 	CmdDesktopPlaceSession    = "desktop_place_session"
 	CmdDesktopMoveLeaf        = "desktop_move_leaf"
 	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
