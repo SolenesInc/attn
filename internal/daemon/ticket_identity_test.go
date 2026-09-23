@@ -26,7 +26,7 @@ func TestTicketIdentityRoundTripsForOrdinarySession(t *testing.T) {
 func TestTicketIdentityRoundTripsForChiefSession(t *testing.T) {
 	d, _ := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -57,14 +57,14 @@ func TestTicketIdentityFollowsRoleTransfer(t *testing.T) {
 	addChiefOfStaffTestSession(d, "chief-b", "Chief B")
 	roleIdentity := store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)
 
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief-a"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief-a"); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.ticketSessionForIdentity(roleIdentity); got != "chief-a" {
 		t.Fatalf("role delivers to %q, want chief-a", got)
 	}
 
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief-b"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief-b"); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.ticketSessionForIdentity(roleIdentity); got != "chief-b" {

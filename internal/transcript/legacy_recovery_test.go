@@ -135,7 +135,7 @@ func TestInspectCodexLegacyRecoveryTranscript(t *testing.T) {
 		t.Fatal(err)
 	}
 	if wrongRoot.Production || len(wrongRoot.Receipts) != 1 || wrongRoot.Conversation != "" {
-		t.Fatalf("wrong profile accepted: %#v", wrongRoot)
+		t.Fatalf("wrong instance accepted: %#v", wrongRoot)
 	}
 }
 

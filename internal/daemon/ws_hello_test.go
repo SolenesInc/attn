@@ -209,20 +209,20 @@ func TestClientHelloWithoutTheTokenIsRefusedAndSaysWhere(t *testing.T) {
 	}
 }
 
-func TestClientHelloWithAnotherProfilesTokenIsRefused(t *testing.T) {
+func TestClientHelloWithAnotherInstancesTokenIsRefused(t *testing.T) {
 	t.Setenv("ATTN_DATA_DIR", t.TempDir())
 	client := newWorkspaceProtocolTestClient()
-	d := newHelloTestDaemon(t, "this-profiles-token")
+	d := newHelloTestDaemon(t, "this-instances-token")
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:   "tauri-app",
 		Version:      "test",
 		Capabilities: []string{protocol.CapabilityWorkspaceSessions},
-		ClientToken:  protocol.Ptr("another-profiles-token"),
+		ClientToken:  protocol.Ptr("another-instances-token"),
 	})
 
 	if client.speaksWorkspaceProtocol() {
-		t.Fatal("a neighbouring profile's client was let onto this daemon")
+		t.Fatal("a neighbouring instance's client was let onto this daemon")
 	}
 }
 

@@ -55,7 +55,7 @@ function suitePath(): string {
   return join(import.meta.dir, "..", "suite", "index.ts");
 }
 
-// One path per profile, not per process: a pi session carries this path in its
+// One path per instance, not per process: a pi session carries this path in its
 // environment for life, so a pid-scoped path leaves it dialing a dead socket.
 function relaySocketPath(): string {
   const override = process.env.ATTN_PI_RELAY_SOCKET?.trim();

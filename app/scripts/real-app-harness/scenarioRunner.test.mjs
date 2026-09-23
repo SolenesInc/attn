@@ -339,22 +339,22 @@ describe('createScenarioRunner agent tripwire', () => {
     expect(failure.error).toContain('settings socket closed');
   });
 
-  it('restores the shared profile before sessions and app connections close', async () => {
-    const { runner } = runnerWithTripwire({ scenarioId: 'PROFILE-RESTORE' });
-    const profile = { setting: 'baseline' };
+  it('restores the shared instance before sessions and app connections close', async () => {
+    const { runner } = runnerWithTripwire({ scenarioId: 'INSTANCE-RESTORE' });
+    const instance = { setting: 'baseline' };
     const cleanup = [];
-    runner.registerCleanup('close_observer', () => cleanup.push(`observer:${profile.setting}`));
-    runner.registerCleanup('quit_app', () => cleanup.push(`app:${profile.setting}`));
-    runner.registerCleanup('close_sessions', () => cleanup.push(`sessions:${profile.setting}`));
-    runner.registerCleanup('restore_profile', () => {
-      profile.setting = 'baseline';
+    runner.registerCleanup('close_observer', () => cleanup.push(`observer:${instance.setting}`));
+    runner.registerCleanup('quit_app', () => cleanup.push(`app:${instance.setting}`));
+    runner.registerCleanup('close_sessions', () => cleanup.push(`sessions:${instance.setting}`));
+    runner.registerCleanup('restore_instance', () => {
+      instance.setting = 'baseline';
       cleanup.push('restore');
     });
-    profile.setting = 'scenario';
+    instance.setting = 'scenario';
 
     await runner.finishSuccess();
 
-    expect(profile.setting).toBe('baseline');
+    expect(instance.setting).toBe('baseline');
     expect(cleanup).toEqual(['restore', 'sessions:baseline', 'app:baseline', 'observer:baseline']);
   });
 

@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync, spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
+import { instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import { queueDaemonSettingRestore } from './common.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
@@ -209,7 +209,7 @@ export function rememberedWord(request) {
 
 export const allowEverything = () => ({ verdict: 'allow' });
 
-// The profile's own bundled CLI, not a repo build: bundled plugins resolve
+// The instance's own bundled CLI, not a repo build: bundled plugins resolve
 // relative to the app bundle, so any other daemon reports the pi driver missing.
 export function resolveAttnBinary(appPath) {
   const candidates = [
@@ -257,9 +257,9 @@ export async function waitForPiPreflight({ run, save, timeoutMs = 30_000 }) {
 
 // pi reads its agent dir from the daemon's environment, so a daemon left over
 // from an earlier run is restarted with the stub agent dir before the app connects.
-export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {
+export async function restartDaemonWithStubEnv({ appPath, instance, agentDir }) {
   const attnBin = resolveAttnBinary(appPath);
-  const env = profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPathForProfile(profile) });
+  const env = instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPathForInstance(instance) });
   try {
     execFileSync(attnBin, ['daemon', 'stop'], { encoding: 'utf8', env });
   } catch {
@@ -282,7 +282,7 @@ export async function restartDaemonWithStubEnv({ appPath, profile, agentDir }) {
   }
 }
 
-export async function startStubWorld({ scenario, appPath, profile, agent, judge = allowEverything }) {
+export async function startStubWorld({ scenario, appPath, instance, agent, judge = allowEverything }) {
   const stub = await startPiStubProvider({ agent, judge });
   const agentDir = writeStubAgentDir(path.join(os.tmpdir(), `attn-${scenario}-${process.pid}`), stub.baseUrl);
   const launchEnv = { PI_CODING_AGENT_DIR: agentDir };
@@ -291,7 +291,7 @@ export async function startStubWorld({ scenario, appPath, profile, agent, judge 
     agentDir,
     launchEnv,
     async launch({ client, observer, runner, launchApp, pinModelFor }) {
-      await restartDaemonWithStubEnv({ appPath, profile, agentDir });
+      await restartDaemonWithStubEnv({ appPath, instance, agentDir });
       await launchApp();
       const key = `default_model_${pinModelFor}`;
       queueDaemonSettingRestore(observer, key);

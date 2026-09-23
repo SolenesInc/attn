@@ -18,33 +18,33 @@ func TestAppPathAndExecutablesFollowThePlatformLayout(t *testing.T) {
 	darwin := runtime.GOOS == "darwin"
 	macRoot := filepath.Join(home, "Applications")
 	tests := []struct {
-		profile       string
+		instance      string
 		appPath       string
 		appExecutable string
 		appDaemon     string
 	}{
 		{
-			profile:       "",
+			instance:      "",
 			appPath:       pick(darwin, filepath.Join(macRoot, "attn.app"), filepath.Join(dataHome, "attn")),
 			appExecutable: pick(darwin, filepath.Join(macRoot, "attn.app", "Contents", "MacOS", "app"), filepath.Join(dataHome, "attn", "bin", "attn-app")),
 			appDaemon:     pick(darwin, filepath.Join(macRoot, "attn.app", "Contents", "MacOS", "attn"), filepath.Join(dataHome, "attn", "bin", "attn")),
 		},
 		{
-			profile:       "lx",
+			instance:      "lx",
 			appPath:       pick(darwin, filepath.Join(macRoot, "attn-lx.app"), filepath.Join(dataHome, "attn-lx")),
 			appExecutable: pick(darwin, filepath.Join(macRoot, "attn-lx.app", "Contents", "MacOS", "app"), filepath.Join(dataHome, "attn-lx", "bin", "attn-app")),
 			appDaemon:     pick(darwin, filepath.Join(macRoot, "attn-lx.app", "Contents", "MacOS", "attn"), filepath.Join(dataHome, "attn-lx", "bin", "attn")),
 		},
 	}
 	for _, tc := range tests {
-		if got := AppPathForProfile(tc.profile); got != tc.appPath {
-			t.Errorf("AppPathForProfile(%q) = %s, want %s", tc.profile, got, tc.appPath)
+		if got := AppPathForInstance(tc.instance); got != tc.appPath {
+			t.Errorf("AppPathForInstance(%q) = %s, want %s", tc.instance, got, tc.appPath)
 		}
-		if got := AppExecutableForProfile(tc.profile); got != tc.appExecutable {
-			t.Errorf("AppExecutableForProfile(%q) = %s, want %s", tc.profile, got, tc.appExecutable)
+		if got := AppExecutableForInstance(tc.instance); got != tc.appExecutable {
+			t.Errorf("AppExecutableForInstance(%q) = %s, want %s", tc.instance, got, tc.appExecutable)
 		}
-		if got := AppDaemonBinaryForProfile(tc.profile); got != tc.appDaemon {
-			t.Errorf("AppDaemonBinaryForProfile(%q) = %s, want %s", tc.profile, got, tc.appDaemon)
+		if got := AppDaemonBinaryForInstance(tc.instance); got != tc.appDaemon {
+			t.Errorf("AppDaemonBinaryForInstance(%q) = %s, want %s", tc.instance, got, tc.appDaemon)
 		}
 	}
 }
@@ -59,8 +59,8 @@ func TestAppPathHonorsXDGDataHomeOffDarwin(t *testing.T) {
 		t.Fatalf("UserHomeDir: %v", err)
 	}
 	want := filepath.Join(home, ".local", "share", "attn-lx")
-	if got := AppPathForProfile("lx"); got != want {
-		t.Errorf("AppPathForProfile with no XDG_DATA_HOME = %s, want %s", got, want)
+	if got := AppPathForInstance("lx"); got != want {
+		t.Errorf("AppPathForInstance with no XDG_DATA_HOME = %s, want %s", got, want)
 	}
 }
 

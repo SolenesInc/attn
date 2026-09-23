@@ -755,8 +755,8 @@ export interface ActivityStatusSession {
 
 export interface AddEndpointMessage {
     cmd:        AddEndpointMessageCmd;
+    instance?:  string;
     name:       string;
-    profile?:   string;
     ssh_target: string;
     [property: string]: any;
 }
@@ -4208,8 +4208,8 @@ export interface EndpointInfo {
     capabilities?:   Capabilities;
     enabled?:        boolean;
     id:              string;
+    instance?:       string;
     name:            string;
-    profile?:        string;
     session_count?:  number;
     ssh_target:      string;
     status:          string;
@@ -4242,8 +4242,8 @@ export interface Endpoint {
     capabilities?:   Capabilities;
     enabled?:        boolean;
     id:              string;
+    instance?:       string;
     name:            string;
-    profile?:        string;
     session_count?:  number;
     ssh_target:      string;
     status:          string;
@@ -10361,8 +10361,8 @@ export interface UpdateEndpointMessage {
     cmd:         UpdateEndpointMessageCmd;
     enabled?:    boolean;
     endpoint_id: string;
+    instance?:   string;
     name?:       string;
-    profile?:    string;
     ssh_target?: string;
     [property: string]: any;
 }
@@ -17031,8 +17031,8 @@ const typeMap: any = {
     ], "any"),
     "AddEndpointMessage": o([
         { json: "cmd", js: "cmd", typ: r("AddEndpointMessageCmd") },
+        { json: "instance", js: "instance", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
-        { json: "profile", js: "profile", typ: u(undefined, "") },
         { json: "ssh_target", js: "ssh_target", typ: "" },
     ], "any"),
     "AgentCloseMessage": o([
@@ -19236,8 +19236,8 @@ const typeMap: any = {
         { json: "capabilities", js: "capabilities", typ: u(undefined, r("Capabilities")) },
         { json: "enabled", js: "enabled", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
+        { json: "instance", js: "instance", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
-        { json: "profile", js: "profile", typ: u(undefined, "") },
         { json: "session_count", js: "session_count", typ: u(undefined, 0) },
         { json: "ssh_target", js: "ssh_target", typ: "" },
         { json: "status", js: "status", typ: "" },
@@ -19264,8 +19264,8 @@ const typeMap: any = {
         { json: "capabilities", js: "capabilities", typ: u(undefined, r("Capabilities")) },
         { json: "enabled", js: "enabled", typ: u(undefined, true) },
         { json: "id", js: "id", typ: "" },
+        { json: "instance", js: "instance", typ: u(undefined, "") },
         { json: "name", js: "name", typ: "" },
-        { json: "profile", js: "profile", typ: u(undefined, "") },
         { json: "session_count", js: "session_count", typ: u(undefined, 0) },
         { json: "ssh_target", js: "ssh_target", typ: "" },
         { json: "status", js: "status", typ: "" },
@@ -23147,8 +23147,8 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("UpdateEndpointMessageCmd") },
         { json: "enabled", js: "enabled", typ: u(undefined, true) },
         { json: "endpoint_id", js: "endpoint_id", typ: "" },
+        { json: "instance", js: "instance", typ: u(undefined, "") },
         { json: "name", js: "name", typ: u(undefined, "") },
-        { json: "profile", js: "profile", typ: u(undefined, "") },
         { json: "ssh_target", js: "ssh_target", typ: u(undefined, "") },
     ], "any"),
     "WakeTurnMessage": o([

@@ -327,14 +327,14 @@ func sharedHostBinaryCandidates() []string {
 	if executable, err := os.Executable(); err == nil {
 		dir := filepath.Dir(executable)
 		candidates = append(candidates,
-			filepath.Join(dir, ptyhost.BinaryNameForProfile(config.Profile())),
+			filepath.Join(dir, ptyhost.BinaryNameForInstance(config.Instance())),
 			filepath.Join(dir, ptyhost.BinaryName),
 		)
 	}
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		candidates = append(candidates,
-			filepath.Join(home, ".local", "bin", ptyhost.BinaryNameForProfile(config.Profile())),
+			filepath.Join(home, ".local", "bin", ptyhost.BinaryNameForInstance(config.Instance())),
 			filepath.Join(home, ".local", "bin", ptyhost.BinaryName),
 		)
 	}
@@ -357,7 +357,7 @@ func firstExecutable(candidates []string) string {
 }
 
 func bundledAttnCandidates(home string) []string {
-	candidates := []string{config.AppDaemonBinaryForProfile(config.Profile())}
+	candidates := []string{config.AppDaemonBinaryForInstance(config.Instance())}
 	if runtime.GOOS == "darwin" {
 		if strings.TrimSpace(home) != "" {
 			candidates = append(candidates, filepath.Join(home, "Applications", "attn.app", "Contents", "MacOS", "attn"))

@@ -58,7 +58,7 @@ func TestGardenReviewOffersChiefWithoutAReconstructableHandover(t *testing.T) {
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 	seed := oldUnheldGrowingSeed(t, d, now)
 	addGardenSession(t, d, "chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 

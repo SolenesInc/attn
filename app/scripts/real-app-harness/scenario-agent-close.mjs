@@ -10,7 +10,7 @@ import {
   printCommonHelp,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import {
@@ -95,8 +95,8 @@ async function waitForSessionGone(client, sessionId, timeoutMs) {
   throw new Error(`Session ${sessionId} stayed visible for ${timeoutMs}ms: ${JSON.stringify(ui, null, 2)}`);
 }
 
-function cli(daemonBinary, profile, ...args) {
-  return execFileSync(daemonBinary, args, { encoding: 'utf8', env: profileCliEnv(profile) });
+function cli(daemonBinary, instance, ...args) {
+  return execFileSync(daemonBinary, args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 }
 
 async function main() {
@@ -106,7 +106,7 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
+  const instance = currentHarnessInstance();
   const daemonBinary = appDaemonInTree(options.appPath);
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);
@@ -114,7 +114,7 @@ async function main() {
     scenarioId: 'AgentClose',
     tier: 'local',
     prefix: 'agent-close',
-    metadata: { agent: 'shell', focus: 'an agent closes the session it dispatched', profile },
+    metadata: { agent: 'shell', focus: 'an agent closes the session it dispatched', instance },
   });
 
   let dispatcher = null;
@@ -159,7 +159,7 @@ async function main() {
     });
 
     seed = await runner.step('the_delegate_tends_a_seed', async () => {
-      const listed = cli(daemonBinary, profile, 'seed', 'ls', '--json');
+      const listed = cli(daemonBinary, instance, 'seed', 'ls', '--json');
       const rows = JSON.parse(listed).seeds || [];
       const mine = rows.filter((row) => row.tender_session === delegate);
       runner.assert(mine.length === 1, 'the delegation planted exactly one seed the delegate tends',
@@ -196,15 +196,15 @@ async function main() {
 
     await pace();
     await runner.step('the_ledger_names_the_closer_and_the_reason', async () => {
-      const shown = cli(daemonBinary, profile, 'session', 'show', delegate);
+      const shown = cli(daemonBinary, instance, 'session', 'show', delegate);
       runner.assert(/^state\s+closed$/m.test(shown), 'session show must report the session as closed', { shown });
       runner.assert(shown.includes(dispatcher.sessionId),
         'session show must name the dispatcher as the closer', { shown });
       runner.assert(shown.includes(REASON), 'session show must carry the reason', { shown });
-      const closedList = cli(daemonBinary, profile, 'session', 'list', '--closed');
+      const closedList = cli(daemonBinary, instance, 'session', 'list', '--closed');
       runner.assert(closedList.includes(delegate.slice(0, 8)),
         'session list --closed must list the closed session', { closedList });
-      const live = cli(daemonBinary, profile, 'session', 'list');
+      const live = cli(daemonBinary, instance, 'session', 'list');
       runner.assert(!live.includes(delegate.slice(0, 8)),
         'session list must not show a closed session', { live });
       runner.writeText('session-show.txt', shown);
@@ -213,9 +213,9 @@ async function main() {
 
     await pace();
     await runner.step('the_seed_keeps_its_tender_and_gains_a_note', async () => {
-      const notes = cli(daemonBinary, profile, 'seed', 'notes', seed);
+      const notes = cli(daemonBinary, instance, 'seed', 'notes', seed);
       runner.assert(notes.includes(REASON), 'the close reason must land on the seed’s log', { notes });
-      const shown = cli(daemonBinary, profile, 'seed', 'show', seed);
+      const shown = cli(daemonBinary, instance, 'seed', 'show', seed);
       runner.assert(shown.includes('growing'), 'the close must not move the seed', { shown });
       runner.assert(shown.includes(delegate), 'the closed session must still be the seed’s tender', { shown });
       runner.writeText('seed-notes.txt', notes);
@@ -233,7 +233,7 @@ async function main() {
         text: `attn agent close ${sibling.sessionId} -m "${SELF_REASON}" --source-session ${sibling.sessionId}`,
       });
       const ui = await waitForSessionGone(client, sibling.sessionId, 30_000);
-      const shown = cli(daemonBinary, profile, 'session', 'show', sibling.sessionId);
+      const shown = cli(daemonBinary, instance, 'session', 'show', sibling.sessionId);
       runner.assert(/^state\s+closed$/m.test(shown), 'a session may close itself', { shown });
       runner.assert(shown.includes(SELF_REASON), 'the self close carries its reason', { shown });
       runner.writeJson('sibling-ui-after-self-close.json', ui);

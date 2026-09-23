@@ -324,7 +324,7 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 }
 
 func TestDaemon_Start_FailsWhenWebSocketPortIsAlreadyBound(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "bindclash")
+	t.Setenv("ATTN_INSTANCE", "bindclash")
 	addr := net.JoinHostPort(config.WSBindAddress(), useFreeWSPort(t))
 
 	foreign, err := net.Listen("tcp", addr)
@@ -3390,8 +3390,8 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 	if got := resp.Header.Get("Cache-Control"); got != "no-store, max-age=0" {
 		t.Errorf("health Cache-Control = %q, want no-store, max-age=0", got)
 	}
-	if health["profile"] != "default" {
-		t.Errorf("profile = %v, want %q", health["profile"], "default")
+	if health["instance"] != "default" {
+		t.Errorf("instance = %v, want %q", health["instance"], "default")
 	}
 	if health["port"] != wsPort {
 		t.Errorf("port = %v, want %q", health["port"], wsPort)

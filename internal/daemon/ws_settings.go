@@ -223,19 +223,19 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 				if synced, err := agentdriver.EnsureClaudeSkillInstalled(); err != nil {
 					d.logf("failed to ensure Claude attn skill: %v", err)
 				} else if !synced {
-					d.logf("skipping user-global Claude attn skill sync for profile %q", config.ProfileLabel())
+					d.logf("skipping user-global Claude attn skill sync for instance %q", config.InstanceLabel())
 				}
 			case string(protocol.SessionAgentCodex):
 				if synced, err := agentdriver.EnsureAgentsSkillInstalled(); err != nil {
 					d.logf("failed to ensure ~/.agents attn skill: %v", err)
 				} else if !synced {
-					d.logf("skipping user-global ~/.agents attn skill sync for profile %q", config.ProfileLabel())
+					d.logf("skipping user-global ~/.agents attn skill sync for instance %q", config.InstanceLabel())
 				}
 			case string(protocol.SessionAgentCopilot):
 				if synced, err := agentdriver.EnsureCopilotSkillInstalled(); err != nil {
 					d.logf("failed to ensure Copilot attn skill: %v", err)
 				} else if !synced {
-					d.logf("skipping user-global Copilot attn skill sync for profile %q", config.ProfileLabel())
+					d.logf("skipping user-global Copilot attn skill sync for instance %q", config.InstanceLabel())
 				}
 			}
 		}
@@ -267,7 +267,7 @@ func (d *Daemon) settingsWithAgentAvailability() map[string]interface{} {
 		if _, synced, err := agentdriver.EnsureWorkflowSkillsInstalled(harnesses); err != nil {
 			d.logf("failed to ensure attn-workflow skill: %v", err)
 		} else if !synced {
-			d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
+			d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())
 		}
 	}
 

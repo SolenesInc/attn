@@ -6,7 +6,7 @@ Ctrl+Shift+K on Linux). Choose whether to include recent output from affected
 panes and save the report; it lands in Downloads as `.attn-report.json`.
 
 Without the app, export the input log from another terminal using the affected
-app's `ATTN_PROFILE`:
+app's `ATTN_INSTANCE`:
 
 ```sh
 attn debug input --tail 0 > attn-input-dump.jsonl

@@ -285,19 +285,19 @@ describe('resetAfterIteration', () => {
 
     await resetAfterIteration(
       { freshWorldAfter: true },
-      { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' },
+      { productionTarget: false, instance: 'test', appPath: '/tmp/attn.app' },
       reset,
     );
-    expect(reset).toHaveBeenCalledWith({ profile: 'test', appPath: '/tmp/attn.app' });
+    expect(reset).toHaveBeenCalledWith({ instance: 'test', appPath: '/tmp/attn.app' });
   });
 
   it('keeps unflagged and production iterations intact', async () => {
     const reset = vi.fn();
 
-    await resetAfterIteration({}, { productionTarget: false, profile: 'test', appPath: '/tmp/attn.app' }, reset);
+    await resetAfterIteration({}, { productionTarget: false, instance: 'test', appPath: '/tmp/attn.app' }, reset);
     await resetAfterIteration(
       { freshWorldAfter: true },
-      { productionTarget: true, profile: 'test', appPath: '/tmp/attn.app' },
+      { productionTarget: true, instance: 'test', appPath: '/tmp/attn.app' },
       reset,
     );
     expect(reset).not.toHaveBeenCalled();

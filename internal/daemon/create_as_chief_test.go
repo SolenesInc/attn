@@ -67,7 +67,7 @@ func TestCreateAsChiefSkippedWhenChiefExists(t *testing.T) {
 	d.ptyBackend = &fakeSpawnBackend{}
 	client := newWorkspaceProtocolTestClient()
 
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "incumbent"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "incumbent"); err != nil {
 		t.Fatalf("seed incumbent chief: %v", err)
 	}
 

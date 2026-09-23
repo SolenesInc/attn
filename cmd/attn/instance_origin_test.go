@@ -20,26 +20,26 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func TestProfileOriginRoundTrip(t *testing.T) {
+func TestInstanceOriginRoundTrip(t *testing.T) {
 	dataDir := filepath.Join(t.TempDir(), "not-yet-created")
-	want := profileOrigin{
+	want := instanceOrigin{
 		Worktree:   "/Users/victor/projects/victor/attn--wily-raccoon",
 		Branch:     "wily-raccoon",
 		RecordedAt: "2026-08-02T00:00:00Z",
 	}
-	if err := writeProfileOrigin(dataDir, want); err != nil {
-		t.Fatalf("writeProfileOrigin() error: %v", err)
+	if err := writeInstanceOrigin(dataDir, want); err != nil {
+		t.Fatalf("writeInstanceOrigin() error: %v", err)
 	}
-	got := readProfileOrigin(dataDir)
+	got := readInstanceOrigin(dataDir)
 	if got == nil {
-		t.Fatal("readProfileOrigin() = nil, want the recorded origin")
+		t.Fatal("readInstanceOrigin() = nil, want the recorded origin")
 	}
 	if *got != want {
 		t.Fatalf("origin = %+v, want %+v", *got, want)
 	}
 }
 
-func TestReadProfileOriginAbsentOrUnusable(t *testing.T) {
+func TestReadInstanceOriginAbsentOrUnusable(t *testing.T) {
 	tests := []struct {
 		name    string
 		content string
@@ -58,8 +58,8 @@ func TestReadProfileOriginAbsentOrUnusable(t *testing.T) {
 					t.Fatalf("write: %v", err)
 				}
 			}
-			if got := readProfileOrigin(dataDir); got != nil {
-				t.Fatalf("readProfileOrigin() = %+v, want nil", *got)
+			if got := readInstanceOrigin(dataDir); got != nil {
+				t.Fatalf("readInstanceOrigin() = %+v, want nil", *got)
 			}
 		})
 	}

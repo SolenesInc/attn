@@ -67,10 +67,10 @@ describe('Linux VM adapters', () => {
     expect(guestCommand('/tmp/checkout', 'linux-test', ['printf', literal])).toContain(quote(literal));
   });
 
-  it('separates runner flags from guest argv and refuses production profiles', () => {
-    const options = parseArgs(['run', '--provider', 'ssh', '--target', 'tester@vm', '--', 'printf', '--profile', 'prod'], {});
-    expect(options.commandArgs).toEqual(['printf', '--profile', 'prod']);
-    expect(() => parseArgs(['--profile', 'default'], {})).toThrow('non-production');
+  it('separates runner flags from guest argv and refuses production instances', () => {
+    const options = parseArgs(['run', '--provider', 'ssh', '--target', 'tester@vm', '--', 'printf', '--instance', 'prod'], {});
+    expect(options.commandArgs).toEqual(['printf', '--instance', 'prod']);
+    expect(() => parseArgs(['--instance', 'default'], {})).toThrow('non-production');
     expect(() => parseArgs(['--provider'], {})).toThrow('needs a value');
   });
 });
@@ -87,13 +87,13 @@ it.runIf(process.platform === 'linux')('isolates guest environment, excludes the
       console.log(JSON.stringify({ env: process.env, lock: fs.existsSync('/proc/self/fd/9') ? fs.readlinkSync('/proc/self/fd/9') : '' }));
     `]);
     const result = spawnSync('bash', ['-c', script], {
-      encoding: 'utf8', env: { ...process.env, ATTN_DATA_DIR: '/host-profile', GITHUB_TOKEN: 'fixture-only' },
+      encoding: 'utf8', env: { ...process.env, ATTN_DATA_DIR: '/host-instance', GITHUB_TOKEN: 'fixture-only' },
     });
     expect(result.status, result.stderr).toBe(0);
     const receipt = JSON.parse(result.stdout);
     expect(receipt.env.ATTN_DATA_DIR).toBeUndefined();
     expect(receipt.env.GITHUB_TOKEN).toBeUndefined();
-    expect(receipt.env.ATTN_PROFILE).toBe('linux-test');
+    expect(receipt.env.ATTN_INSTANCE).toBe('linux-test');
     expect(receipt.lock).not.toBe(path.join(root, 'operation.lock'));
     const blocked = spawnSync('flock', ['-n', path.join(root, 'operation.lock'), 'bash', '-c', script], { encoding: 'utf8' });
     expect(blocked.status).toBe(75);

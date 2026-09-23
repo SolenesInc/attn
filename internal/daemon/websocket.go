@@ -648,7 +648,7 @@ func isTrustedTauriOrigin(origin string) bool {
 		(parsed.Scheme == "http" && host == "tauri.localhost") {
 		return true
 	}
-	return config.Profile() == "dev" &&
+	return config.Instance() == "dev" &&
 		parsed.Scheme == "http" &&
 		strings.EqualFold(parsed.Hostname(), "localhost") &&
 		parsed.Port() == "1420"

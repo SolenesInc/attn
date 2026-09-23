@@ -170,7 +170,7 @@ func TestShellSessionsNeverOweATurn(t *testing.T) {
 func TestChiefOfStaffNeverOwesATurn(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "chief", protocol.SessionAgentClaude, "ws1")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatalf("set chief: %v", err)
 	}
 

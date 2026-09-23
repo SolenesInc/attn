@@ -96,7 +96,7 @@ func appRemove(t *testing.T, d *Daemon, name string) protocol.Response {
 func TestAppListReportsVersionAndConsumer(t *testing.T) {
 	d := newDaemonForTest(t)
 	if got := appList(t, d); len(got.Apps) != 0 {
-		t.Fatalf("a fresh profile listed %d app(s)", len(got.Apps))
+		t.Fatalf("a fresh instance listed %d app(s)", len(got.Apps))
 	}
 
 	version := seedApp(t, d, "approval-gate", true)

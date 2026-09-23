@@ -137,7 +137,7 @@ yield without queueing, and a deletion that won the exclusive gate blocks new
 foreground work through finalization. The cron still runs hourly; there is no
 one-minute retry.
 
-A named-profile run on 2026-09-16 held `git rev-list --format=%T` in a shim for
+A named-instance run on 2026-09-16 held `git rev-list --format=%T` in a shim for
 18.291 seconds. A shell-session launch then canceled that probe and completed in
 0.83 seconds wall time, including compilation of the WebSocket driver. Branch
 listing, session reopen and worktree keep all completed afterward. The same

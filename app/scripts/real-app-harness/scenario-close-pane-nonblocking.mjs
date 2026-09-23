@@ -13,7 +13,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
@@ -25,7 +25,7 @@ const CLOSE_BUDGET_MS = 1_000;
 const execFileAsync = promisify(execFile);
 
 function prepareSlowGit(sessionDir) {
-  const env = profileCliEnv();
+  const env = instanceCliEnv();
   const realGit = execFileSync('/bin/sh', ['-c', 'command -v git'], { encoding: 'utf8', env }).trim();
   execFileSync(realGit, ['init', '-q'], { cwd: sessionDir, env });
   const binDir = path.join(sessionDir, 'slow-git-bin');
@@ -86,10 +86,10 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
+  const instance = currentHarnessInstance();
+  assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
-  const dataDir = dataDirForProfile(profile);
+  const dataDir = dataDirForInstance(instance);
   const runner = createScenarioRunner(options, {
     scenarioId: 'CLOSE-PANE-NONBLOCKING',
     tier: 'tier1-local-shell',
@@ -97,7 +97,7 @@ async function main() {
     metadata: {
       agent: 'codex',
       focus: 'a pane disappears despite slow Git and a SIGTERM-ignoring mock agent',
-      profile,
+      instance,
     },
   });
 
@@ -107,7 +107,7 @@ async function main() {
   let sessionId = null;
   let cleanupSessionId = null;
 
-  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session', () => closeScenarioSessions(client, [cleanupSessionId].filter(Boolean)));
@@ -122,7 +122,7 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -151,7 +151,7 @@ async function main() {
       fs.writeFileSync(slowGit.gate, 'enabled\n');
       const start = performance.now();
       await execFileAsync(slowGit.executable, ['rev-parse', '--show-toplevel'], {
-        cwd: runner.sessionDir, env: profileCliEnv(profile, slowGit.env),
+        cwd: runner.sessionDir, env: instanceCliEnv(instance, slowGit.env),
       });
       const elapsedMs = performance.now() - start;
       runner.assert(elapsedMs >= 3_000, 'Git probe must take at least three seconds', { elapsedMs });

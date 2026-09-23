@@ -392,8 +392,8 @@ jobs:
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
-      - name: Verify profile cleanup with live host generations
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
+      - name: Verify instance cleanup with live host generations
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestInstanceClean.*SharedHost' -count=1
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
@@ -690,7 +690,7 @@ jobs:
     # 202s on run 34060183460; 30m leaves room for a cold Rust cache.
     timeout-minutes: 30
     env:
-      ATTN_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -703,7 +703,7 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
@@ -730,8 +730,8 @@ jobs:
     # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
     timeout-minutes: 40
     env:
-      ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -749,7 +749,7 @@ jobs:
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Run serial matrix shard
@@ -766,7 +766,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: |
-          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
           mkdir -p "$EVIDENCE_DIR/daemon"
           if [ -f "$data_dir/daemon.log" ]; then
             cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
@@ -800,9 +800,9 @@ jobs:
           if-no-files-found: error
           path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
 
-      - name: Clean profile
+      - name: Clean instance
         if: always()
-        run: ./attn profile clean "$ATTN_PROFILE"
+        run: ./attn instance clean "$ATTN_INSTANCE"
 
       - name: Report the shard verdict
         if: always()
@@ -916,8 +916,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 40
     env:
-      ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
       ATTN_HARNESS_PARK_VISIBLE_PX: '0'
     steps:
       - name: Configure artifact directory
@@ -934,12 +934,12 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
       - name: Run native clipboard scenario
@@ -961,7 +961,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: |
-          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
           mkdir -p "$EVIDENCE_DIR/daemon"
           if [ -d "$data_dir" ]; then
             find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
@@ -979,9 +979,9 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
-      - name: Clean profile
+      - name: Clean instance
         if: always()
-        run: ./attn profile clean "$ATTN_PROFILE"
+        run: ./attn instance clean "$ATTN_INSTANCE"
 
   release-preflight:
     name: Release preflight

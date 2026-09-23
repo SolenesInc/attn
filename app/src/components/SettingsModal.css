@@ -65,7 +65,7 @@
   text-transform: uppercase;
 }
 
-.settings-profile {
+.settings-instance {
   border-left: 1px solid var(--color-border);
   padding-left: 16px;
   color: var(--color-text-tertiary);
@@ -838,7 +838,7 @@
     min-height: 0;
   }
 
-  .settings-profile {
+  .settings-instance {
     display: none;
   }
 

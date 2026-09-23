@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
-import { currentHarnessProfile, profileCliEnv, profileForAppPath, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv, instanceForAppPath, socketPathForInstance } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
@@ -174,7 +174,7 @@ function warmLiveCount(limit, sessions) {
 function reportSessionState(bin, socketPath, sessionId, state) {
   return new Promise((resolve) => {
     const child = spawn(bin, ['_hook-state', sessionId, state], {
-      env: profileCliEnv(currentHarnessProfile(), { ATTN_SOCKET_PATH: socketPath }),
+      env: instanceCliEnv(currentHarnessInstance(), { ATTN_SOCKET_PATH: socketPath }),
       stdio: ['ignore', 'ignore', 'ignore'],
     });
     child.on('close', () => resolve());
@@ -183,9 +183,9 @@ function reportSessionState(bin, socketPath, sessionId, state) {
 }
 
 async function markSessionsIdle(client, options, sessionIds) {
-  const profile = profileForAppPath(options.appPath);
+  const instance = instanceForAppPath(options.appPath);
   const bin = appDaemonInTree(options.appPath);
-  const socketPath = socketPathForProfile(profile);
+  const socketPath = socketPathForInstance(instance);
   for (const sessionId of sessionIds) {
     await reportSessionState(bin, socketPath, sessionId, 'idle');
   }
@@ -289,10 +289,10 @@ async function main() {
 
   try {
     if (port && options.restartDaemon) {
-      const profile = profileForAppPath(options.appPath);
-      assertDaemonRestartDoesNotHostSession(profile);
-      const killed = await stopDaemon(profile);
-      console.log(`[perf] stopped ${profile || 'production'} daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
+      const instance = instanceForAppPath(options.appPath);
+      assertDaemonRestartDoesNotHostSession(instance);
+      const killed = await stopDaemon(instance);
+      console.log(`[perf] stopped ${instance || 'production'} daemon pid=${killed ?? 'none'} so a fresh one inherits ATTN_PPROF=${port}`);
     }
 
     // Snapshot WebKit pids before relaunch so the new ones are attributable to
@@ -355,9 +355,9 @@ async function main() {
     }
 
     // The daemon is detached/reparented, so its pty-workers are NOT descendants
-    // of the app pid; resolve its pid from the profile pid file.
+    // of the app pid; resolve its pid from the instance pid file.
     if (!daemonPid) {
-      daemonPid = readLiveDaemonPid(profileForAppPath(options.appPath));
+      daemonPid = readLiveDaemonPid(instanceForAppPath(options.appPath));
       if (daemonPid) {
         console.log(`[perf] resolved daemon pid=${daemonPid} from pid file (daemon + pty-workers included)`);
       } else {

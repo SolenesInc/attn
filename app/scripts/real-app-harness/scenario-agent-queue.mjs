@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-// Prereqs: a non-production profile install with the automation layer, and a
+// Prereqs: a non-production instance install with the automation layer, and a
 // built `./attn` (or ATTN_HARNESS_BIN) for the two restart steps.
 
 import fs from 'node:fs';
@@ -21,7 +21,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createWindowDriver } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { ensureClaudePromptReadyViaPty, writeQueueAgentFixture } from './scenarioAgents.mjs';
 import { waitForFirstWorkspacePane, waitForPaneInputFocus } from './scenarioAssertions.mjs';
 import { registeredAgentPid } from './workerRegistry.mjs';
@@ -204,13 +204,13 @@ async function main() {
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const driver = createWindowDriver({ appPath: options.appPath, client });
-  const profile = currentHarnessProfile();
+  const instance = currentHarnessInstance();
   const attnBin = resolveAttnBin();
-  const dataDir = dataDirForProfile(profile);
-  const daemonEnv = profileCliEnv(profile);
+  const dataDir = dataDirForInstance(instance);
+  const daemonEnv = instanceCliEnv(instance);
   const createdSessionIds = [];
 
-  runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, profile });
+  runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, instance });
 
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());

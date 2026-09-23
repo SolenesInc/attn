@@ -10,7 +10,7 @@ describe('deepLinkCommand', () => {
     });
   });
 
-  it('hands the URL to the profile app binary on Linux', () => {
+  it('hands the URL to the instance app binary on Linux', () => {
     expect(deepLinkCommand('attn-dev://spawn?cwd=%2Ftmp', {
       platform: 'linux',
       appExecutable: '/home/u/.local/share/attn-dev/bin/attn-app',

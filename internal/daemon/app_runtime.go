@@ -43,7 +43,7 @@ func resolveAppRuntimeHost() (string, error) {
 		return "", fmt.Errorf("resolving this daemon's own executable to find %s beside it: %w", appRuntimeBinaryName, err)
 	}
 
-	candidates := appRuntimeHostCandidates(executable, config.Profile())
+	candidates := appRuntimeHostCandidates(executable, config.Instance())
 	for _, candidate := range candidates {
 		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
 			return candidate, nil
@@ -54,14 +54,14 @@ func resolveAppRuntimeHost() (string, error) {
 		appRuntimeBinaryName, strings.Join(candidates, " and "), appRuntimeHostOverride)
 }
 
-func appRuntimeHostCandidates(executable, profile string) []string {
+func appRuntimeHostCandidates(executable, instance string) []string {
 	candidates := []string{}
 	binDir := filepath.Dir(executable)
 	if resources := config.InstallResourcesDir(executable); resources != "" {
 		candidates = append(candidates, filepath.Join(resources, "app-runtime", appRuntimeBinaryName))
 	}
-	if profile != "" {
-		candidates = append(candidates, filepath.Join(binDir, apps.RuntimeHostBinaryNameForProfile(profile)))
+	if instance != "" {
+		candidates = append(candidates, filepath.Join(binDir, apps.RuntimeHostBinaryNameForInstance(instance)))
 	}
 	return append(candidates, filepath.Join(binDir, appRuntimeBinaryName))
 }

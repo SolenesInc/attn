@@ -33,10 +33,10 @@ func newDaemonWithRealGitHubHost(t *testing.T) (*Daemon, func() string) {
 	}
 }
 
-func TestRefreshGitHubHosts_NamedProfileDropsRealClientsUntilOptedIn(t *testing.T) {
+func TestRefreshGitHubHosts_NamedInstanceDropsRealClientsUntilOptedIn(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("ATTN_MOCK_GH_URL", "")
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	t.Setenv(GitHubPollingOptInEnv, "")
 	d, readLog := newDaemonWithRealGitHubHost(t)
 
@@ -47,12 +47,12 @@ func TestRefreshGitHubHosts_NamedProfileDropsRealClientsUntilOptedIn(t *testing.
 	}
 
 	if hosts := d.gitHubHosts(); len(hosts) != 0 {
-		t.Fatalf("hosts = %v, want none for a named profile without opt-in", hosts)
+		t.Fatalf("hosts = %v, want none for a named instance without opt-in", hosts)
 	}
 	if warnings := d.getWarnings(); len(warnings) != 0 {
 		t.Fatalf("warnings = %v, want none: the gh CLI must not be consulted", warnings)
 	}
-	want := "GitHub polling is off for profile dev. Start its daemon with ATTN_GITHUB_POLLING=on"
+	want := "GitHub polling is off for instance dev. Start its daemon with ATTN_GITHUB_POLLING=on"
 	if got := readLog(); strings.Count(got, want) != 1 {
 		t.Fatalf("daemon log should say once how to enable polling, got:\n%s", got)
 	}
@@ -62,10 +62,10 @@ func TestRefreshGitHubHosts_NamedProfileDropsRealClientsUntilOptedIn(t *testing.
 	}
 }
 
-func TestRefreshGitHubHosts_OptInRestoresDiscoveryForNamedProfile(t *testing.T) {
+func TestRefreshGitHubHosts_OptInRestoresDiscoveryForNamedInstance(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("ATTN_MOCK_GH_URL", "")
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	t.Setenv(GitHubPollingOptInEnv, "on")
 	d, readLog := newDaemonWithRealGitHubHost(t)
 
@@ -85,10 +85,10 @@ func TestRefreshGitHubHosts_OptInRestoresDiscoveryForNamedProfile(t *testing.T) 
 	}
 }
 
-func TestRefreshGitHubHosts_ProductionProfileStillDiscovers(t *testing.T) {
+func TestRefreshGitHubHosts_ProductionInstanceStillDiscovers(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("ATTN_MOCK_GH_URL", "")
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv(GitHubPollingOptInEnv, "")
 	d, _ := newDaemonWithRealGitHubHost(t)
 

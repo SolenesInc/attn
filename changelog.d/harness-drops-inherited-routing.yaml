@@ -8,6 +8,6 @@ change: >
   survives.
 notes: >
   A shell inside an attn session exports all six, each of which outranks the
-  profile the harness targets, so the fresh-world preflight stopped the hosting
-  session's daemon instead of the profile's and the launched app came up in the
+  instance the harness targets, so the fresh-world preflight stopped the hosting
+  session's daemon instead of the instance's and the launched app came up in the
   wrong world.

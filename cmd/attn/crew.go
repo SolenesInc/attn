@@ -42,7 +42,7 @@ func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
 Manage the Crew. Members' charters and handoffs persist across sessions
-in the active profile's crew directory.
+in the active instance's crew directory.
 Launch as a member with: attn <agent> --member <name>.
 Run crew commands on the home daemon; outposts report which home to use.
 
@@ -405,7 +405,7 @@ func valueOrDash(value string) string {
 
 func printCrewList(w io.Writer, members []protocol.CrewMember) {
 	if len(members) == 0 {
-		fmt.Fprintln(w, "No crew members are registered. A <name>/CHARTER.md home in the active profile's crew directory joins the roster at the daemon's next start.")
+		fmt.Fprintln(w, "No crew members are registered. A <name>/CHARTER.md home in the active instance's crew directory joins the roster at the daemon's next start.")
 		return
 	}
 	fmt.Fprintf(w, "%-12s  %-8s  %-8s  %-20s  %-8s  %-10s  %s\n", "MEMBER", "STATE", "AGENT", "MODEL", "EFFORT", "SESSION", "HOME")

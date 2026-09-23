@@ -89,7 +89,7 @@ func TestEnrollRemote_AlreadyEnrolledIsQuiet(t *testing.T) {
 
 func TestEnrollRemote_RefusalStopsTheSyncAndCarriesTheReason(t *testing.T) {
 	script := "#!/bin/sh\n" +
-		"printf '[attn profile=fence socket=~/.attn-fence/attn.sock port=21320]\\n' >&2\n" +
+		"printf '[attn instance=fence socket=~/.attn-fence/attn.sock port=21320]\\n' >&2\n" +
 		"printf 'this daemon (d-x) is already an outpost of d-other\\n' >&2\nexit 3\n"
 	_, err := enrollWithShim(t, script, testHomeDaemonID)
 	if err == nil {
@@ -100,8 +100,8 @@ func TestEnrollRemote_RefusalStopsTheSyncAndCarriesTheReason(t *testing.T) {
 			t.Fatalf("refusal does not carry %q: %v", want, err)
 		}
 	}
-	if strings.Contains(err.Error(), "[attn profile=") {
-		t.Fatalf("refusal carries the remote's profile banner: %v", err)
+	if strings.Contains(err.Error(), "[attn instance=") {
+		t.Fatalf("refusal carries the remote's instance banner: %v", err)
 	}
 }
 
@@ -127,7 +127,7 @@ func TestEnrollRemote_SkippedWhenTheDialerIsNotAHome(t *testing.T) {
 	}
 }
 
-func TestRemoteEnrollScript_CarriesTheHomeAndTheProfile(t *testing.T) {
+func TestRemoteEnrollScript_CarriesTheHomeAndTheInstance(t *testing.T) {
 	script := remoteEnrollScript("dev", testHomeDaemonID)
 	for _, want := range []string{"attn-dev", "enrollment", "enroll", "--home", testHomeDaemonID, "--json"} {
 		if !strings.Contains(script, want) {

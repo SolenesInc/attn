@@ -66,7 +66,7 @@ type legacyBackupRoot struct {
 }
 
 func (d *Daemon) legacyTicketRecoveryEligible() bool {
-	if config.Profile() != "" || d.store == nil || d.store.DatabasePath() == "" || d.store.DatabasePath() == ":memory:" {
+	if config.Instance() != "" || d.store == nil || d.store.DatabasePath() == "" || d.store.DatabasePath() == ":memory:" {
 		return false
 	}
 	return d.requireHome(garden.Surface) == nil

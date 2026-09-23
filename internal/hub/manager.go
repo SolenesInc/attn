@@ -154,8 +154,8 @@ func infoFromRecord(record store.EndpointRecord) protocol.EndpointInfo {
 		Status:    "disconnected",
 		Enabled:   protocol.Ptr(record.Enabled),
 	}
-	if strings.TrimSpace(record.Profile) != "" {
-		info.Profile = protocol.Ptr(record.Profile)
+	if strings.TrimSpace(record.Instance) != "" {
+		info.Instance = protocol.Ptr(record.Instance)
 	}
 	return info
 }
@@ -192,7 +192,7 @@ func (m *Manager) Stop() {
 			emptied = append(emptied, id)
 		}
 		if target := isolatedRemoteShutdownTarget(runtime.record); target.Target != "" {
-			key := target.Target + "|" + target.Profile
+			key := target.Target + "|" + target.Instance
 			if _, exists := seenTargets[key]; !exists {
 				seenTargets[key] = struct{}{}
 				shutdownTargets = append(shutdownTargets, target)
@@ -225,10 +225,10 @@ func (m *Manager) List() []protocol.EndpointInfo {
 			info.Name = record.Name
 			info.SshTarget = record.SSHTarget
 			info.Enabled = protocol.Ptr(record.Enabled)
-			if strings.TrimSpace(record.Profile) != "" {
-				info.Profile = protocol.Ptr(record.Profile)
+			if strings.TrimSpace(record.Instance) != "" {
+				info.Instance = protocol.Ptr(record.Instance)
 			} else {
-				info.Profile = nil
+				info.Instance = nil
 			}
 		}
 		out = append(out, info)
@@ -242,10 +242,10 @@ func (m *Manager) List() []protocol.EndpointInfo {
 	return out
 }
 
-func (m *Manager) AddEndpoint(name, sshTarget, profile string) (*store.EndpointRecord, error) {
+func (m *Manager) AddEndpoint(name, sshTarget, instance string) (*store.EndpointRecord, error) {
 	name = strings.TrimSpace(name)
 	sshTarget = strings.TrimSpace(sshTarget)
-	profile = strings.TrimSpace(profile)
+	instance = strings.TrimSpace(instance)
 	if name == "" {
 		return nil, fmt.Errorf("endpoint name is required")
 	}
@@ -253,7 +253,7 @@ func (m *Manager) AddEndpoint(name, sshTarget, profile string) (*store.EndpointR
 		return nil, fmt.Errorf("ssh target is required")
 	}
 
-	record, err := m.store.AddEndpoint(name, sshTarget, profile)
+	record, err := m.store.AddEndpoint(name, sshTarget, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -323,10 +323,10 @@ func (m *Manager) UpdateEndpoint(id string, update store.EndpointUpdate) (*store
 	info.Name = record.Name
 	info.SshTarget = record.SSHTarget
 	info.Enabled = protocol.Ptr(record.Enabled)
-	if strings.TrimSpace(record.Profile) != "" {
-		info.Profile = protocol.Ptr(record.Profile)
+	if strings.TrimSpace(record.Instance) != "" {
+		info.Instance = protocol.Ptr(record.Instance)
 	} else {
-		info.Profile = nil
+		info.Instance = nil
 	}
 	if info.Status == "" {
 		info.Status = "disconnected"
@@ -367,8 +367,8 @@ func (m *Manager) RemoveEndpoint(id string) error {
 }
 
 type isolatedShutdownTarget struct {
-	Target  string
-	Profile string
+	Target   string
+	Instance string
 }
 
 func isolatedRemoteShutdownTarget(record store.EndpointRecord) isolatedShutdownTarget {
@@ -379,7 +379,7 @@ func isolatedRemoteShutdownTarget(record store.EndpointRecord) isolatedShutdownT
 	if target == "" {
 		return isolatedShutdownTarget{}
 	}
-	return isolatedShutdownTarget{Target: target, Profile: remoteRoutingProfile(record.Profile)}
+	return isolatedShutdownTarget{Target: target, Instance: remoteRoutingInstance(record.Instance)}
 }
 
 func (m *Manager) stopIsolatedRemoteDaemons(targets []isolatedShutdownTarget) {
@@ -391,7 +391,7 @@ func (m *Manager) stopIsolatedRemoteDaemons(targets []isolatedShutdownTarget) {
 			continue
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		err := m.bootstrapper.StopRemoteDaemon(ctx, target.Target, target.Profile)
+		err := m.bootstrapper.StopRemoteDaemon(ctx, target.Target, target.Instance)
 		cancel()
 		if err != nil {
 			m.logf("remote harness daemon cleanup failed for %s: %v", target.Target, err)
@@ -449,11 +449,11 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		if !ok {
 			return
 		}
-		profile := remoteRoutingProfile(record.Profile)
+		instance := remoteRoutingInstance(record.Instance)
 
 		if m.consumeBootstrapFlag(id) {
 			m.updateStatus(id, "bootstrapping", "Installing remote binary", nil, nil)
-			err := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, profile, m.homeDaemonID())
+			err := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, instance, m.homeDaemonID())
 			if err != nil {
 				m.updateStatus(id, "error", err.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -465,10 +465,10 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 		}
 
 		m.updateStatus(id, "connecting", "Connecting to remote daemon", nil, nil)
-		conn, cmd, err := connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), profile)
+		conn, cmd, err := connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), instance)
 		if err != nil {
 			m.updateStatus(id, "bootstrapping", "Checking remote platform", nil, nil)
-			bootErr := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, profile, m.homeDaemonID())
+			bootErr := m.bootstrapper.EnsureRemoteReady(ctx, record.SSHTarget, instance, m.homeDaemonID())
 			if bootErr != nil {
 				m.updateStatus(id, "error", bootErr.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -478,7 +478,7 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 				continue
 			}
 			m.updateStatus(id, "connecting", "Connecting to remote daemon", nil, nil)
-			conn, cmd, err = connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), profile)
+			conn, cmd, err = connectViaSSH(ctx, record.SSHTarget, config.WSAuthToken(), instance)
 			if err != nil {
 				m.updateStatus(id, "error", err.Error(), nil, nil)
 				if !sleepOrDone(ctx, backoff) {
@@ -489,7 +489,7 @@ func (m *Manager) runEndpointLoop(ctx context.Context, id string) {
 			}
 		}
 
-		clientToken := m.remoteClientToken(ctx, record.SSHTarget, profile)
+		clientToken := m.remoteClientToken(ctx, record.SSHTarget, instance)
 
 		connected := false
 		consumeErr := m.publishConnectionAndSendHello(ctx, id, conn, cmd, clientToken)
@@ -1917,10 +1917,10 @@ func (m *Manager) updateStatus(id, status, message string, caps *protocol.Endpoi
 	info.Name = runtime.record.Name
 	info.SshTarget = runtime.record.SSHTarget
 	info.Enabled = protocol.Ptr(runtime.record.Enabled)
-	if strings.TrimSpace(runtime.record.Profile) != "" {
-		info.Profile = protocol.Ptr(runtime.record.Profile)
+	if strings.TrimSpace(runtime.record.Instance) != "" {
+		info.Instance = protocol.Ptr(runtime.record.Instance)
 	} else {
-		info.Profile = nil
+		info.Instance = nil
 	}
 	info.Status = status
 	if message != "" {

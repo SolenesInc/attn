@@ -1,4 +1,4 @@
-.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-instance-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -8,35 +8,35 @@
 
 BINARY_NAME=attn
 # Prod bundle. Referenced by the parse-time guard message and `sign-app`; every
-# other profile's app path / bundle id / port is derived at build+install time
-# from the single authority (`attn profile resolve`), never hardcoded here.
+# other instance's app path / bundle id / port is derived at build+install time
+# from the single authority (`attn instance resolve`), never hardcoded here.
 APP_BUNDLE=$(HOME)/Applications/attn.app
 APP_BINARY=$(APP_BUNDLE)/Contents/MacOS/attn
-# Which profile to build/install. Empty = the default/prod bundle. A named
-# profile (e.g. `make install PROFILE=agent7`) builds attn-agent7.app /
+# Which instance to build/install. Empty = the default/prod bundle. A named
+# instance (e.g. `make install INSTANCE=agent7`) builds attn-agent7.app /
 # com.attn.manager.agent7 with its own data dir + port. `make dev` ==
-# `make install PROFILE=dev`. See docs/profiles.md.
-PROFILE ?=
-# An explicitly empty command-line PROFILE indicates failed shell profile selection.
+# `make install INSTANCE=dev`. See docs/instances.md.
+INSTANCE ?=
+# An explicitly empty command-line INSTANCE indicates failed shell instance selection.
 # Fail during parsing before any target can silently fall back to the prod bundle.
-ifeq ($(origin PROFILE),command line)
-ifeq (,$(strip $(PROFILE)))
-$(error empty PROFILE= passed on the command line — profile selection failed (e.g. an unset shell variable expanded to nothing), and proceeding would target the PROD bundle. Fix the profile selection (eval "$$(./attn profile-env <name>)") or pass PROFILE=<name> explicitly)
+ifeq ($(origin INSTANCE),command line)
+ifeq (,$(strip $(INSTANCE)))
+$(error empty INSTANCE= passed on the command line — instance selection failed (e.g. an unset shell variable expanded to nothing), and proceeding would target the PROD bundle. Fix the instance selection (eval "$$(./attn instance-env <name>)") or pass INSTANCE=<name> explicitly)
 endif
 endif
 
-# Every variable that outranks ATTN_PROFILE when a path or endpoint resolves —
+# Every variable that outranks ATTN_INSTANCE when a path or endpoint resolves —
 # mirrors config.RoutingOverrideEnv. ATTN_DATA_DIR and ATTN_PLUGIN_DIR were
-# missing here on 2026-08-17, so `install PROFILE=<name>` handed the profile's
+# missing here on 2026-08-17, so `install INSTANCE=<name>` handed the instance's
 # binary the production data dir and it adopted the production daemon.
-PROFILE_ROUTING_VARS = ATTN_DATA_DIR ATTN_SOCKET_PATH ATTN_DB_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_WS_PORT
+INSTANCE_ROUTING_VARS = ATTN_DATA_DIR ATTN_SOCKET_PATH ATTN_DB_PATH ATTN_CONFIG_PATH ATTN_PLUGIN_DIR ATTN_WS_PORT
 # Routing env that must NOT leak from a parent attn terminal into an isolated
-# profile daemon we (re)start. Shared by every non-default profile install.
-PROFILE_DAEMON_UNSET = $(foreach var,$(PROFILE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_DAEMON_MANAGED -u ATTN_PTY_WORKER -u ATTN_SESSION_ID -u ATTN_AGENT
-# An install takes PROFILE=<name> as the intent and drops the inherited routing,
+# instance daemon we (re)start. Shared by every non-default instance install.
+INSTANCE_DAEMON_UNSET = $(foreach var,$(INSTANCE_ROUTING_VARS),-u $(var)) -u ATTN_WRAPPER_PATH -u ATTN_INSIDE_APP -u ATTN_DAEMON_MANAGED -u ATTN_PTY_WORKER -u ATTN_SESSION_ID -u ATTN_AGENT
+# An install takes INSTANCE=<name> as the intent and drops the inherited routing,
 # but the shell it ran from still points somewhere else — say so, because every
-# other attn command in that shell will refuse (config.ValidateProfileRouting).
-WARN_LEAKED_ROUTING = leaked=""; for var in $(PROFILE_ROUTING_VARS); do if printenv "$$var" >/dev/null; then leaked="$$leaked $$var"; fi; done; if [ -n "$$leaked" ]; then echo ">>> ignoring inherited routing env for this install:$$leaked"; echo ">>> this shell still routes elsewhere — select the profile with attn profile-env"; fi
+# other attn command in that shell will refuse (config.ValidateInstanceRouting).
+WARN_LEAKED_ROUTING = leaked=""; for var in $(INSTANCE_ROUTING_VARS); do if printenv "$$var" >/dev/null; then leaked="$$leaked $$var"; fi; done; if [ -n "$$leaked" ]; then echo ">>> ignoring inherited routing env for this install:$$leaked"; echo ">>> this shell still routes elsewhere — select the instance with attn instance-env"; fi
 BUILD_DIR=./cmd/attn
 VERSION ?= $(shell bash ./scripts/version.sh)
 BUILD_TIME ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -248,28 +248,28 @@ test-e2e: $(APP_NODE_MODULES)
 	-pkill -f "vite.*1421" 2>/dev/null || true
 	cd app && pnpm run e2e
 
-# Installing the PROD bundle while ATTN_PROFILE is set is almost always
+# Installing the PROD bundle while ATTN_INSTANCE is set is almost always
 # a mistake — it blows away the live install a developer is using. The
 # guard fires during Make's parse phase so we fail *before* the expensive
 # Tauri build, not after.
 #
 # Includes the default goal (`run`, invoked as bare `make`) — without it,
-# `ATTN_PROFILE=dev make` would silently reinstall the prod bundle.
+# `ATTN_INSTANCE=dev make` would silently reinstall the prod bundle.
 # The empty-goal case (bare `make`) is represented by the current
 # DEFAULT_GOAL ("run"); we substitute that in so the check catches it.
 GUARDED_PROD_TARGETS := run install install-staged install-daemon
 ACTIVE_GOALS := $(if $(MAKECMDGOALS),$(MAKECMDGOALS),$(.DEFAULT_GOAL))
 GUARDED_INVOCATION := $(filter $(GUARDED_PROD_TARGETS),$(ACTIVE_GOALS))
 ifneq (,$(GUARDED_INVOCATION))
-ifneq (,$(ATTN_PROFILE))
-ifeq (,$(PROFILE))
-# Bare (prod) install while a profile is active in the shell — almost always a
+ifneq (,$(ATTN_INSTANCE))
+ifeq (,$(INSTANCE))
+# Bare (prod) install while an instance is active in the shell — almost always a
 # mistake that would clobber the live prod bundle.
-$(error ATTN_PROFILE=$(ATTN_PROFILE) is set but `make $(firstword $(ACTIVE_GOALS))` targets the PROD bundle ($(APP_BUNDLE)). Build that profile with `make $(firstword $(ACTIVE_GOALS)) PROFILE=$(ATTN_PROFILE)`, or target prod explicitly with `env -u ATTN_PROFILE make $(firstword $(ACTIVE_GOALS))`)
-else ifneq ($(ATTN_PROFILE),$(PROFILE))
-# Build/runtime consistency (profiles design, safety #2): you cannot build
+$(error ATTN_INSTANCE=$(ATTN_INSTANCE) is set but `make $(firstword $(ACTIVE_GOALS))` targets the PROD bundle ($(APP_BUNDLE)). Build that instance with `make $(firstword $(ACTIVE_GOALS)) INSTANCE=$(ATTN_INSTANCE)`, or target prod explicitly with `env -u ATTN_INSTANCE make $(firstword $(ACTIVE_GOALS))`)
+else ifneq ($(ATTN_INSTANCE),$(INSTANCE))
+# Build/runtime consistency (instances design, safety #2): you cannot build
 # agent7's app while your shell says you are agent8.
-$(error build/runtime mismatch: ATTN_PROFILE=$(ATTN_PROFILE) but PROFILE=$(PROFILE). Refusing to build a different profile than your shell. Re-run with PROFILE=$(ATTN_PROFILE), or unset ATTN_PROFILE)
+$(error build/runtime mismatch: ATTN_INSTANCE=$(ATTN_INSTANCE) but INSTANCE=$(INSTANCE). Refusing to build a different instance than your shell. Re-run with INSTANCE=$(ATTN_INSTANCE), or unset ATTN_INSTANCE)
 endif
 endif
 endif
@@ -277,45 +277,45 @@ endif
 # LaunchServices only forwards shell overrides named with `open --env`.
 MACOS_OPEN := open$(if $(filter undefined,$(origin ATTN_AUTOMATION)),, --env "ATTN_AUTOMATION=$(ATTN_AUTOMATION)")
 
-# Build + install + open the PROFILE's app (bare `make` = prod). Every path is
-# derived from the single authority so a named profile opens its own bundle.
+# Build + install + open the INSTANCE's app (bare `make` = prod). Every path is
+# derived from the single authority so a named instance opens its own bundle.
 run: install
 	@set -e; \
 	attn="$(CURDIR)/$(OUTPUT)"; \
-	app_path="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appPath)"; \
+	app_path="$$("$$attn" instance resolve --instance "$(INSTANCE)" --field appPath)"; \
 	if [ "$(UNAME_S)" = "Darwin" ]; then \
 		$(MACOS_OPEN) "$$app_path"; \
 	else \
-		app_exec="$$("$$attn" profile resolve --profile "$(PROFILE)" --field appExecutable)"; \
-		data_dir="$$("$$attn" profile resolve --profile "$(PROFILE)" --field dataDir)"; \
+		app_exec="$$("$$attn" instance resolve --instance "$(INSTANCE)" --field appExecutable)"; \
+		data_dir="$$("$$attn" instance resolve --instance "$(INSTANCE)" --field dataDir)"; \
 		mkdir -p "$$data_dir"; \
 		setsid "$$app_exec" </dev/null >>"$$data_dir/app.log" 2>&1 & \
 	fi; \
 	echo "Launched $$app_path"
 
-INSTALL_APP_TREE = PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
-	PROFILE_DAEMON_UNSET="$(PROFILE_DAEMON_UNSET)" PROFILE_ROUTING_VARS="$(PROFILE_ROUTING_VARS)" \
+INSTALL_APP_TREE = INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" WORKTREE="$(CURDIR)" \
+	INSTANCE_DAEMON_UNSET="$(INSTANCE_DAEMON_UNSET)" INSTANCE_ROUTING_VARS="$(INSTANCE_ROUTING_VARS)" \
 	bash ./scripts/install-app-tree.sh
 
-# Install-only (no open). `make install` = prod; `make install PROFILE=agent7`
-# = the isolated agent7 bundle. Resources resolved from `attn profile resolve`.
+# Install-only (no open). `make install` = prod; `make install INSTANCE=agent7`
+# = the isolated agent7 bundle. Resources resolved from `attn instance resolve`.
 install: build-app
 	@$(INSTALL_APP_TREE)
 
 install-staged:
 	@$(INSTALL_APP_TREE)
 
-# Fast path: swap just the Go daemon sidecar into the already-installed PROFILE
-# bundle, re-sign, and restart its daemon. `make install-daemon PROFILE=agent7`.
+# Fast path: swap just the Go daemon sidecar into the already-installed INSTANCE
+# bundle, re-sign, and restart its daemon. `make install-daemon INSTANCE=agent7`.
 install-daemon: ensure-codesign-identity build build-pty-host
 	@set -e; \
-	profile="$(PROFILE)"; \
+	instance="$(INSTANCE)"; \
 	attn="$(CURDIR)/$(OUTPUT)"; \
-	label="$$("$$attn" profile resolve --profile "$$profile" --field label)"; \
-	app_bundle="$$("$$attn" profile resolve --profile "$$profile" --field appPath)"; \
-	app_binary="$$("$$attn" profile resolve --profile "$$profile" --field appDaemon)"; \
+	label="$$("$$attn" instance resolve --instance "$$instance" --field label)"; \
+	app_bundle="$$("$$attn" instance resolve --instance "$$instance" --field appPath)"; \
+	app_binary="$$("$$attn" instance resolve --instance "$$instance" --field appDaemon)"; \
 	if [ ! -d "$$app_bundle" ]; then \
-		echo "No installed app at $$app_bundle; run make install$$([ -n "$$profile" ] && echo " PROFILE=$$profile") first"; \
+		echo "No installed app at $$app_bundle; run make install$$([ -n "$$instance" ] && echo " INSTANCE=$$instance") first"; \
 		exit 1; \
 	fi; \
 	echo ">>> Updating $$label daemon at $$app_binary"; \
@@ -334,12 +334,12 @@ install-daemon: ensure-codesign-identity build build-pty-host
 		codesign --force --sign "$$identity" "$$host_binary"; \
 		codesign --force --sign "$$identity" "$$app_bundle"; \
 	fi; \
-	if [ -n "$$profile" ]; then \
+	if [ -n "$$instance" ]; then \
 		$(WARN_LEAKED_ROUTING); \
-		env $(PROFILE_DAEMON_UNSET) ATTN_PROFILE="$$profile" "$$app_binary" daemon ensure >/dev/null; \
+		env $(INSTANCE_DAEMON_UNSET) ATTN_INSTANCE="$$instance" "$$app_binary" daemon ensure >/dev/null; \
 		: "Same provenance record as the full install: a daemon-only install is"; \
-		: "still this worktree claiming the profile."; \
-		"$$attn" profile set-origin "$$profile" --worktree "$(CURDIR)" >/dev/null || true; \
+		: "still this worktree claiming the instance."; \
+		"$$attn" instance set-origin "$$instance" --worktree "$(CURDIR)" >/dev/null || true; \
 	else \
 		"$$app_binary" daemon ensure >/dev/null; \
 	fi; \
@@ -347,28 +347,28 @@ install-daemon: ensure-codesign-identity build build-pty-host
 
 # `make dev` is THE command for the attn-on-attn inner loop: rebuild, reinstall,
 # restart the dev daemon — without ever touching the prod install. It is now a
-# thin alias for the profile-parameterized targets (PROFILE=dev → attn-dev.app /
-# com.attn.manager.dev / ~/.attn-dev / port 29849). `make install PROFILE=<name>`
+# thin alias for the instance-parameterized targets (INSTANCE=dev → attn-dev.app /
+# com.attn.manager.dev / ~/.attn-dev / port 29849). `make install INSTANCE=<name>`
 # is the general form; these aliases preserve the documented dev commands.
 #
-# These aliases target the dev profile UNCONDITIONALLY, so they clear the
-# inherited ATTN_PROFILE before recursing. Without that, an agent whose shell is
-# scoped to its own profile (e.g. ATTN_PROFILE=agent7 — the documented per-agent
-# setup) would trip the build/runtime-mismatch guard (PROFILE=dev != agent7) on
+# These aliases target the dev instance UNCONDITIONALLY, so they clear the
+# inherited ATTN_INSTANCE before recursing. Without that, an agent whose shell is
+# scoped to its own instance (e.g. ATTN_INSTANCE=agent7 — the documented per-agent
+# setup) would trip the build/runtime-mismatch guard (INSTANCE=dev != agent7) on
 # the very command the docs hand them as the dev escape hatch. `make dev` means
-# "I want the dev sibling, period", independent of the shell's profile.
+# "I want the dev sibling, period", independent of the shell's instance.
 #
-# Run `eval "$(attn profile-env dev)"` (or `attn profile-env --fish dev | source`)
+# Run `eval "$(attn instance-env dev)"` (or `attn instance-env --fish dev | source`)
 # in your shell if you want `attn ...` commands to target the dev daemon
 # by default.
 dev:
-	@env -u ATTN_PROFILE $(MAKE) run PROFILE=dev
+	@env -u ATTN_INSTANCE $(MAKE) run INSTANCE=dev
 
 install-dev:
-	@env -u ATTN_PROFILE $(MAKE) install PROFILE=dev
+	@env -u ATTN_INSTANCE $(MAKE) install INSTANCE=dev
 
 install-daemon-dev:
-	@env -u ATTN_PROFILE $(MAKE) install-daemon PROFILE=dev
+	@env -u ATTN_INSTANCE $(MAKE) install-daemon INSTANCE=dev
 
 # Install the harness recorder outside the checkout so its stable bundle id,
 # signature, and Screen Recording grant survive worktree replacement.
@@ -461,28 +461,28 @@ check-sdk: generate-sdk
 		exit 1; \
 	fi
 
-# Build the packaged app for $(PROFILE) (empty = prod). All bundle metadata is
-# derived from `attn profile resolve` by scripts/build-app-profile.sh: the
-# default build uses the committed tauri.conf.json; a named profile gets a
-# generated tauri.<name>.gen.conf.json overlay and bakes ATTN_BUILD_PROFILE /
+# Build the packaged app for $(INSTANCE) (empty = prod). All bundle metadata is
+# derived from `attn instance resolve` by scripts/build-app-instance.sh: the
+# default build uses the committed tauri.conf.json; a named instance gets a
+# generated tauri.<name>.gen.conf.json overlay and bakes ATTN_BUILD_INSTANCE /
 # ATTN_BUILD_WS_PORT / ATTN_BUILD_BUNDLE_ID into the binary so it can never
-# point at another profile's daemon. UI automation is gated at runtime (see
-# profile::automation_enabled) — a profiled build sees its ATTN_PROFILE and
-# enables automation for any named profile (dev, ticketqa, agent7, …); prod (the
-# empty-profile bundle) stays off unless ATTN_AUTOMATION=1.
+# point at another instance's daemon. UI automation is gated at runtime (see
+# instance::automation_enabled) — an instanced build sees its ATTN_INSTANCE and
+# enables automation for any named instance (dev, ticketqa, agent7, …); prod (the
+# empty-instance bundle) stays off unless ATTN_AUTOMATION=1.
 build-app: ensure-codesign-identity build build-pty-host
-	@PROFILE="$(PROFILE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
+	@INSTANCE="$(INSTANCE)" ATTN_BIN="$(CURDIR)/$(OUTPUT)" \
 		ATTN_PTY_HOST_BIN="$(CURDIR)/$(PTY_HOST_BINARY)" \
 		VERSION='$(VERSION)' SOURCE_FINGERPRINT='$(SOURCE_FINGERPRINT)' \
 		SOURCE_DIRTY_PATHS_BASE64='$(SOURCE_DIRTY_PATHS_BASE64)' \
 		GIT_COMMIT='$(GIT_COMMIT)' BUILD_TIME='$(BUILD_TIME)' \
 		MACOS_CODESIGN_IDENTITY='$(MACOS_CODESIGN_IDENTITY)' \
-		bash ./scripts/build-app-profile.sh
+		bash ./scripts/build-app-instance.sh
 
-# A uniquely identified packaged app whose logical runtime profile is still the
-# empty/default profile. Its runtime refuses any non-owner-only or production root.
-build-default-profile-harness:
-	@env -u ATTN_PROFILE ATTN_BUILD_DEFAULT_PROFILE_HARNESS=1 $(MAKE) build-app PROFILE=legacy-recovery
+# A uniquely identified packaged app whose logical runtime instance is still the
+# empty/default instance. Its runtime refuses any non-owner-only or production root.
+build-default-instance-harness:
+	@env -u ATTN_INSTANCE ATTN_BUILD_DEFAULT_INSTANCE_HARNESS=1 $(MAKE) build-app INSTANCE=legacy-recovery
 
 ensure-codesign-identity:
 	@identity="$(MACOS_CODESIGN_IDENTITY)"; \

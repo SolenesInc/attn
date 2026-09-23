@@ -6,7 +6,7 @@ import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, profileCliEnv, resolveHarnessResources } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { MOCK_AGENT_EXECUTABLE, writeMockAgentFixture } from './mockAgent.mjs';
 import { crewManagementFixture } from './crewManagementFixture.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
@@ -21,15 +21,15 @@ import {
 } from './perfMeasure.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
-const profile = currentHarnessProfile();
-if (!profile) throw new Error('Crew management verification requires a named profile');
+const instance = currentHarnessInstance();
+if (!instance) throw new Error('Crew management verification requires a named instance');
 const runner = createScenarioRunner(options, {
   scenarioId: 'CrewManagement',
   tier: 'local',
   prefix: 'crew-management',
   allowRealAgents: false,
 });
-const resources = resolveHarnessResources(profile);
+const resources = resolveHarnessResources(instance);
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
@@ -52,7 +52,7 @@ let asleepHeld = '';
 
 const runAttn = (args) => execFileSync(appDaemonInTree(options.appPath), args, {
   encoding: 'utf8',
-  env: profileCliEnv(profile),
+  env: instanceCliEnv(instance),
   timeout: 30_000,
 });
 const json = (args) => {
@@ -119,7 +119,7 @@ async function screenshot(name) {
 
 async function sampleIdle(webkitBaseline) {
   const appPid = client.readManifest().pid;
-  const daemonPid = readLiveDaemonPid(profile);
+  const daemonPid = readLiveDaemonPid(instance);
   const before = await snapshot(appPid, daemonPid, webkitBaseline);
   const pids = new Set(Object.values(before.byClass).flatMap((group) => group.pids.map((entry) => entry.pid)));
   const samples = [];
@@ -178,7 +178,7 @@ process.env.ATTN_CODEX_EXECUTABLE = wrapper;
 process.env.ATTN_CLAUDE_EXECUTABLE = wrapper;
 process.env.ATTN_MOCK_AGENT_LAUNCH_RECEIPT = 'wake-received';
 
-runner.registerCleanup('stop_daemon', () => stopDaemon(profile));
+runner.registerCleanup('stop_daemon', () => stopDaemon(instance));
 runner.registerCleanup('close_observer', () => observer.close());
 runner.registerCleanup('quit_app', () => client.quitApp());
 runner.registerCleanup('restore_queue_mode', () => (
@@ -504,7 +504,7 @@ try {
 
   await runner.step('a_disconnected_save_recovers_after_the_socket_reconnects', async () => {
     const disconnected = observer.waitForDisconnect();
-    const stopped = await stopDaemon(profile);
+    const stopped = await stopDaemon(instance);
     runner.assert(Number.isInteger(stopped), 'the scenario stopped its isolated daemon by captured pid', { stopped });
     await disconnected;
     await typeAndCommit('[data-testid="crew-effort"]', 'low');

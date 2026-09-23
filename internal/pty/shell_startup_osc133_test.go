@@ -171,8 +171,8 @@ func TestBashIntegrationLeavesAUserDebugTrapAlone(t *testing.T) {
 		t.Fatalf("create user home: %v", err)
 	}
 	trapLog := filepath.Join(root, "trap-log")
-	profile := "trap 'echo fired >> \"$ATTN_TEST_TRAP_LOG\"' DEBUG\n"
-	if err := os.WriteFile(filepath.Join(userHome, ".bash_profile"), []byte(profile), 0o600); err != nil {
+	bashProfile := "trap 'echo fired >> \"$ATTN_TEST_TRAP_LOG\"' DEBUG\n"
+	if err := os.WriteFile(filepath.Join(userHome, ".bash_profile"), []byte(bashProfile), 0o600); err != nil {
 		t.Fatalf("write user bash profile: %v", err)
 	}
 

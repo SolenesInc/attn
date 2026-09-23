@@ -17,7 +17,7 @@ type EndpointRecord struct {
 	Name      string
 	SSHTarget string
 	Enabled   bool
-	Profile   string
+	Instance  string
 	CreatedAt string
 	UpdatedAt string
 }
@@ -26,15 +26,15 @@ type EndpointUpdate struct {
 	Name      *string
 	SSHTarget *string
 	Enabled   *bool
-	Profile   *string
+	Instance  *string
 }
 
-func (s *Store) AddEndpoint(name, sshTarget, profile string) (*EndpointRecord, error) {
-	canonicalProfile, err := config.NormalizeProfileName(profile)
+func (s *Store) AddEndpoint(name, sshTarget, instance string) (*EndpointRecord, error) {
+	canonicalInstance, err := config.NormalizeInstanceName(instance)
 	if err != nil {
 		return nil, err
 	}
-	profile = canonicalProfile
+	instance = canonicalInstance
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -49,18 +49,18 @@ func (s *Store) AddEndpoint(name, sshTarget, profile string) (*EndpointRecord, e
 		Name:      strings.TrimSpace(name),
 		SSHTarget: strings.TrimSpace(sshTarget),
 		Enabled:   true,
-		Profile:   profile,
+		Instance:  instance,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
 	if _, err := s.db.Exec(`
-		INSERT INTO endpoints (id, name, ssh_target, enabled, profile, created_at, updated_at)
+		INSERT INTO endpoints (id, name, ssh_target, enabled, instance, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		record.ID,
 		record.Name,
 		record.SSHTarget,
 		boolToInt(record.Enabled),
-		record.Profile,
+		record.Instance,
 		record.CreatedAt,
 		record.UpdatedAt,
 	); err != nil {
@@ -80,14 +80,14 @@ func (s *Store) GetEndpoint(id string) *EndpointRecord {
 	var record EndpointRecord
 	var enabled int
 	err := s.db.QueryRow(`
-		SELECT id, name, ssh_target, enabled, profile, created_at, updated_at
+		SELECT id, name, ssh_target, enabled, instance, created_at, updated_at
 		FROM endpoints
 		WHERE id = ?`, id).Scan(
 		&record.ID,
 		&record.Name,
 		&record.SSHTarget,
 		&enabled,
-		&record.Profile,
+		&record.Instance,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
@@ -107,7 +107,7 @@ func (s *Store) ListEndpoints() []EndpointRecord {
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, name, ssh_target, enabled, profile, created_at, updated_at
+		SELECT id, name, ssh_target, enabled, instance, created_at, updated_at
 		FROM endpoints
 		ORDER BY created_at ASC`)
 	if err != nil {
@@ -125,7 +125,7 @@ func (s *Store) ListEndpoints() []EndpointRecord {
 			&record.Name,
 			&record.SSHTarget,
 			&enabled,
-			&record.Profile,
+			&record.Instance,
 			&record.CreatedAt,
 			&record.UpdatedAt,
 		); err != nil {
@@ -142,12 +142,12 @@ func (s *Store) ListEndpoints() []EndpointRecord {
 }
 
 func (s *Store) UpdateEndpoint(id string, update EndpointUpdate) (*EndpointRecord, error) {
-	if update.Profile != nil {
-		canonical, err := config.NormalizeProfileName(*update.Profile)
+	if update.Instance != nil {
+		canonical, err := config.NormalizeInstanceName(*update.Instance)
 		if err != nil {
 			return nil, err
 		}
-		update.Profile = &canonical
+		update.Instance = &canonical
 	}
 
 	s.mu.Lock()
@@ -160,14 +160,14 @@ func (s *Store) UpdateEndpoint(id string, update EndpointUpdate) (*EndpointRecor
 	var record EndpointRecord
 	var enabled int
 	err := s.db.QueryRow(`
-		SELECT id, name, ssh_target, enabled, profile, created_at, updated_at
+		SELECT id, name, ssh_target, enabled, instance, created_at, updated_at
 		FROM endpoints
 		WHERE id = ?`, id).Scan(
 		&record.ID,
 		&record.Name,
 		&record.SSHTarget,
 		&enabled,
-		&record.Profile,
+		&record.Instance,
 		&record.CreatedAt,
 		&record.UpdatedAt,
 	)
@@ -185,19 +185,19 @@ func (s *Store) UpdateEndpoint(id string, update EndpointUpdate) (*EndpointRecor
 	if update.Enabled != nil {
 		record.Enabled = *update.Enabled
 	}
-	if update.Profile != nil {
-		record.Profile = *update.Profile
+	if update.Instance != nil {
+		record.Instance = *update.Instance
 	}
 	record.UpdatedAt = endpointStamp()
 
 	if _, err := s.db.Exec(`
 		UPDATE endpoints
-		SET name = ?, ssh_target = ?, enabled = ?, profile = ?, updated_at = ?
+		SET name = ?, ssh_target = ?, enabled = ?, instance = ?, updated_at = ?
 		WHERE id = ?`,
 		record.Name,
 		record.SSHTarget,
 		boolToInt(record.Enabled),
-		record.Profile,
+		record.Instance,
 		record.UpdatedAt,
 		record.ID,
 	); err != nil {

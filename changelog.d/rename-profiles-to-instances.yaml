@@ -1,0 +1,13 @@
+kind: changed
+area: cli
+change: >
+  Install profiles are now called instances. `attn profile …` is now
+  `attn instance …`, `attn profile-env` is `attn instance-env`, `--profile` is
+  `--instance`, `ATTN_PROFILE` is `ATTN_INSTANCE` (the old variable is no
+  longer read), `make install PROFILE=<name>` is `make install INSTANCE=<name>`,
+  and the banner reads `[attn instance=<name>]`. The old commands print the new
+  spelling and exit. Data directories (`~/.attn`, `~/.attn-<name>`) are
+  unchanged.
+notes: >
+  Update shell rc files, scripts, skills and instruction files that set
+  `ATTN_PROFILE` or call `attn profile`.

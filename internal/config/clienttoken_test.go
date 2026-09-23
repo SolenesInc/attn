@@ -34,7 +34,7 @@ func TestEnsureClientTokenMintsOnceAndKeepsItOwnerOnly(t *testing.T) {
 	}
 }
 
-func TestEnsureClientTokenMintsDistinctTokensPerProfile(t *testing.T) {
+func TestEnsureClientTokenMintsDistinctTokensPerInstance(t *testing.T) {
 	one, err := EnsureClientToken(t.TempDir())
 	if err != nil {
 		t.Fatalf("EnsureClientToken() error = %v", err)
@@ -44,7 +44,7 @@ func TestEnsureClientTokenMintsDistinctTokensPerProfile(t *testing.T) {
 		t.Fatalf("EnsureClientToken() error = %v", err)
 	}
 	if one == two {
-		t.Fatal("two profiles minted the same token; the whole point is that they differ")
+		t.Fatal("two instances minted the same token; the whole point is that they differ")
 	}
 }
 

@@ -45,7 +45,7 @@ already live: in the user's prompt and the agent harness they chose.
 - **The prompt authorizes; the harness enforces.** A definition pins a concrete
   launch specification and location strategy. Automation sessions always use the
   selected harness's automatic approval mode; this is an automation invariant,
-  not a mutable definition option or inherited profile-wide default. attn does not
+  not a mutable definition option or inherited instance-wide default. attn does not
   silently fall back to another agent, model, approval mode, or directory.
 - **Observed data is context, not authority.** Provider payloads such as PR titles,
   bodies, and authors stay structurally separate from the configured prompt. An
@@ -54,8 +54,8 @@ already live: in the user's prompt and the agent harness they chose.
 - **Policy describes lifecycle.** Catch-up, overlap, continuity, and eventual retry
   behavior are declarative. Providers observe facts; they do not launch agents or
   encode ticket behavior.
-- **The profile owns execution.** Definitions are profile-owned and run whenever
-  the profile daemon is alive, even when no chief session is open. The definition's
+- **The instance owns execution.** Definitions are instance-owned and run whenever
+  the instance daemon is alive, even when no chief session is open. The definition's
   `LaunchSpec` chooses how the agent runs and its `LocationSpec` chooses where the
   work is materialized.
 - **Nudges are doorbells.** Delivery to an existing worker persists ticket activity
@@ -66,7 +66,7 @@ already live: in the user's prompt and the agent harness they chose.
 
 ## Scope & non-goals
 
-**In scope:** profile-owned automation definitions; enable, disable, edit, delete,
+**In scope:** instance-owned automation definitions; enable, disable, edit, delete,
 and Run now controls; a configurable prompt; a pinned `LaunchSpec`; a configurable
 `LocationSpec`; schedule and GitHub review-request trigger providers; durable
 occurrences and run history; explicit continuity, catch-up, and overlap policy;
@@ -96,7 +96,7 @@ its requirements clear.
 
 | Term | Meaning |
 |---|---|
-| **Definition** | The profile-owned configuration: trigger, prompt, pinned `LaunchSpec`, `LocationSpec`, policy, enabled state, and revision. |
+| **Definition** | The instance-owned configuration: trigger, prompt, pinned `LaunchSpec`, `LocationSpec`, policy, enabled state, and revision. |
 | **Subject** | The stable thing work is about, such as `host/repo#123` or one maintenance scope. |
 | **Occurrence** | One legitimate trigger cycle, identified by an occurrence key so polling and daemon restarts cannot duplicate it. |
 | **Run** | The durable processing record for an accepted occurrence, including a snapshot of the definition revision and its delivery outcome. |
@@ -108,13 +108,13 @@ review-request cycle be a new run while preserving the same reviewer conversatio
 
 ## Technical direction
 
-The profile daemon owns a small orchestration spine:
+The instance daemon owns a small orchestration spine:
 
 ```text
 schedule adapter ─┐
                   ├─> automation engine ─> work delivery ─> ticket + session
 GitHub adapter  ──┘          │                    │              │
-                             └─ profile SQLite    └─ ticket event ┴─> chief/agent unread + nudge
+                             └─ instance SQLite    └─ ticket event ┴─> chief/agent unread + nudge
 ```
 
 ### Trigger providers
@@ -143,7 +143,7 @@ and recovery. Its external interface should stay small: accept a batch of typed
 observations and return durable run results. Provider-specific configuration and
 ticket/session mechanics stay behind internal seams.
 
-The canonical state belongs in the profile SQLite database. Definitions are
+The canonical state belongs in the instance SQLite database. Definitions are
 revisioned; each run snapshots the effective prompt, `LaunchSpec`, `LocationSpec`,
 and policy so history remains explainable after an edit. Disabling a definition
 stops new runs but does not kill an agent already working. Deleting or replacing a
@@ -209,8 +209,8 @@ for audit even though it is not configurable.
 `LocationSpec` is separate because workspace placement and repository
 materialization are different concerns. PR review uses a fresh detached worktree
 for every session, checked out at the occurrence's snapshotted head SHA. By default,
-attn maintains a profile-owned repository cache and creates session worktrees below
-the profile data directory. A definition may map a repository identity such as
+attn maintains an instance-owned repository cache and creates session worktrees below
+the instance data directory. A definition may map a repository identity such as
 `host/owner/repo` to an existing local clone; this is machine-local configuration in
 the automation definition, never a source-code constant. The override supplies Git
 objects and repository-specific caches, while the resulting review worktree remains
@@ -229,7 +229,7 @@ an untrusted PR cannot modify the configured instruction.
 
 ### Product surface and protocol
 
-Automations deserve a profile-level surface rather than being hidden in Settings.
+Automations deserve an instance-level surface rather than being hidden in Settings.
 The list should make enabled state, trigger summary, pinned launch, last/next run,
 current result, and failures scannable. Editing exposes the prompt and the three
 policy groups directly. Run now enters through the same engine as provider events
@@ -270,7 +270,7 @@ output in an automation log viewer.
 
 Prove the engine-to-delivery spine before adding time or GitHub:
 
-- persist one profile-owned definition and its immutable run snapshot;
+- persist one instance-owned definition and its immutable run snapshot;
 - accept a CLI-driven manual Run now occurrence through the automation engine;
 - validate and use its pinned `LaunchSpec` and explicit initial location;
 - create an automation-authored, chief-owned ticket and visible agent through the

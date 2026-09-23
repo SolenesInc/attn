@@ -8,13 +8,13 @@ import (
 	"strings"
 )
 
-func PrintProfileBanner(w io.Writer) {
-	profile := Profile()
-	if profile == "" {
+func PrintInstanceBanner(w io.Writer) {
+	instance := Instance()
+	if instance == "" {
 		return
 	}
-	fmt.Fprintf(w, "[attn profile=%s socket=%s port=%s]\n",
-		profile,
+	fmt.Fprintf(w, "[attn instance=%s socket=%s port=%s]\n",
+		instance,
 		CollapseHome(SocketPath()),
 		WSPort(),
 	)

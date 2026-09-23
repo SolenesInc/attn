@@ -44,17 +44,17 @@ const appSdkDevChunks = {
   },
 };
 
-// Serve only: `dev:vite` cannot read the profile's client-token file, and a built bundle
-// must never carry it — the same bundle ships everywhere and the token is per-profile.
-function clientTokenFromProfile(): string {
+// Serve only: `dev:vite` cannot read the instance's client-token file, and a built bundle
+// must never carry it — the same bundle ships everywhere and the token is per-instance.
+function clientTokenFromInstance(): string {
   // @ts-expect-error process is a nodejs global
   const env = process.env as Record<string, string | undefined>;
   const explicit = (env.VITE_CLIENT_TOKEN ?? env.ATTN_CLIENT_TOKEN ?? "").trim();
   if (explicit) return explicit;
-  const profile = (env.ATTN_PROFILE ?? "").trim();
+  const instance = (env.ATTN_INSTANCE ?? "").trim();
   const dataDir =
     (env.ATTN_DATA_DIR ?? "").trim() ||
-    resolve(homedir(), profile ? `.attn-${profile}` : ".attn");
+    resolve(homedir(), instance ? `.attn-${instance}` : ".attn");
   try {
     return readFileSync(resolve(dataDir, "client-token"), "utf8").trim();
   } catch {
@@ -68,7 +68,7 @@ export default defineConfig(async ({ command }) => ({
   define: {
     __ATTN_SNAPSHOT_FORMAT__: JSON.stringify(snapshotFormat),
     ...(command === "serve"
-      ? { "import.meta.env.VITE_CLIENT_TOKEN": JSON.stringify(clientTokenFromProfile()) }
+      ? { "import.meta.env.VITE_CLIENT_TOKEN": JSON.stringify(clientTokenFromInstance()) }
       : {}),
   },
   // Multi-page app configuration for test harness

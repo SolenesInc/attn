@@ -8,12 +8,12 @@ import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAsserti
 import { MOCK_AGENT_EXECUTABLE, mockPinnedAgents } from './mockAgent.mjs';
 import {
   assertProductionRunAllowed,
-  currentHarnessProfile,
+  currentHarnessInstance,
   harnessClientHello,
-  defaultAppPathForProfile,
-  defaultWSURLForProfile,
-  profileForAppPath,
-} from './harnessProfile.mjs';
+  defaultAppPathForInstance,
+  defaultWSURLForInstance,
+  instanceForAppPath,
+} from './harnessInstance.mjs';
 
 export const DEFAULT_REMOTE_SSH_TARGET =
   process.env.ATTN_HARNESS_REMOTE_SSH_TARGET || 'attn-remote@orb';
@@ -42,12 +42,12 @@ export function parseCommonArgs(argv) {
 
   const safetyArgv = argv.length > 0 ? argv : process.argv.slice(2);
   const isHelp = options.help || safetyArgv.includes('--help') || safetyArgv.includes('-h');
-  // --help must not resolve the active profile: a named profile resolves via
-  // `attn profile resolve`, which needs ./attn built.
+  // --help must not resolve the active instance: a named instance resolves via
+  // `attn instance resolve`, which needs ./attn built.
   if (isHelp) return options;
 
-  if (!appPathExplicit) options.appPath = defaultAppPathForProfile();
-  if (!wsUrlExplicit) options.wsUrl = defaultWSURLForProfile(profileForAppPath(options.appPath));
+  if (!appPathExplicit) options.appPath = defaultAppPathForInstance();
+  if (!wsUrlExplicit) options.wsUrl = defaultWSURLForInstance(instanceForAppPath(options.appPath));
 
   assertCommonTargetAllowed(options, safetyArgv);
   return options;
@@ -59,13 +59,13 @@ export function assertCommonTargetAllowed(options, argv = process.argv.slice(2))
 }
 
 export function printCommonHelp(scriptName) {
-  const profile = currentHarnessProfile();
-  const label = profile === '' ? 'production' : profile;
+  const instance = currentHarnessInstance();
+  const label = instance === '' ? 'production' : instance;
   let wsUrl;
   let appPath;
   try {
-    wsUrl = defaultWSURLForProfile(profile);
-    appPath = defaultAppPathForProfile(profile);
+    wsUrl = defaultWSURLForInstance(instance);
+    appPath = defaultAppPathForInstance(instance);
   } catch {
     wsUrl = '(unresolved — build ./attn with `make dev`)';
     appPath = '(unresolved — build ./attn with `make dev`)';
@@ -73,7 +73,7 @@ export function printCommonHelp(scriptName) {
 
   console.log(`Usage: pnpm exec node ${scriptName} [options]
 
-Active profile: ${label}  (set ATTN_PROFILE, or ATTN_HARNESS_PROFILE to override; see docs/profiles.md)
+Active instance: ${label}  (set ATTN_INSTANCE, or ATTN_HARNESS_INSTANCE to override; see docs/instances.md)
 
 Options:
   --ws-url <url>             Daemon websocket URL (default: ${wsUrl})
@@ -245,7 +245,7 @@ export async function restoreHarnessSettings({ write = writeDaemonSettings } = {
   return restores.length;
 }
 
-export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForProfile(), timeoutMs = 10_000 } = {}) {
+export async function writeDaemonSettings(entries, { wsUrl = defaultWSURLForInstance(), timeoutMs = 10_000 } = {}) {
   const ws = new WebSocket(wsUrl);
   const wanted = new Map(entries.map((entry) => [entry.key, entry.value]));
   // The daemon coalesces snapshots, so several writes can land as one
@@ -307,7 +307,7 @@ export async function launchFreshAppAndConnect(client, observer, {
   await client.waitForManifest(20_000);
   await client.waitForReady(20_000);
   await client.waitForFrontendResponsive(20_000);
-  // A fresh profile's first launch shows the one-time What's New modal, which
+  // A fresh instance's first launch shows the one-time What's New modal, which
   // swallows native HID clicks; dismiss it so scenarios start on a clean UI.
   await client.request('dismiss_whats_new', {}).catch(() => {});
   await observer.connect();

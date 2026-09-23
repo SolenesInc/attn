@@ -552,7 +552,7 @@ export async function createDiagnosticReport(
       sourceFingerprint,
       gitCommit: import.meta.env.VITE_ATTN_GIT_COMMIT || 'unknown',
       buildTime: import.meta.env.VITE_ATTN_BUILD_TIME || 'unknown',
-      profile: import.meta.env.VITE_ATTN_BUILD_PROFILE || 'default',
+      instance: import.meta.env.VITE_ATTN_BUILD_INSTANCE || 'default',
       snapshotFormat: __ATTN_SNAPSHOT_FORMAT__,
       sourceDirty: sourceFingerprint.startsWith('tree:') ? true : sourceFingerprint.startsWith('git:') ? false : null,
       dirtyPaths: buildDirtyPaths(),

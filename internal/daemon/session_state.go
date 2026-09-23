@@ -48,28 +48,28 @@ type stateOrigin struct {
 	observedAt time.Time
 }
 
-type stateEffectProfile struct {
+type stateEffectInstance struct {
 	touch     bool
 	syncNudge bool
 	broadcast bool
 }
 
-func stateEffectProfileFor(cause sessionStateCause) (stateEffectProfile, bool) {
+func stateEffectInstanceFor(cause sessionStateCause) (stateEffectInstance, bool) {
 	switch cause.(type) {
 	case liveSignal:
-		return stateEffectProfile{touch: true, syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, syncNudge: true, broadcast: true}, true
 	case resolverObservation:
-		return stateEffectProfile{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncNudge: true, broadcast: true}, true
 	case pluginReport:
-		return stateEffectProfile{touch: true, syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{touch: true, syncNudge: true, broadcast: true}, true
 	case startupRecovery:
-		return stateEffectProfile{}, true
+		return stateEffectInstance{}, true
 	case hostExitRecovery:
-		return stateEffectProfile{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncNudge: true, broadcast: true}, true
 	case pluginDriverSilent:
-		return stateEffectProfile{syncNudge: true, broadcast: true}, true
+		return stateEffectInstance{syncNudge: true, broadcast: true}, true
 	default:
-		return stateEffectProfile{}, false
+		return stateEffectInstance{}, false
 	}
 }
 
@@ -96,7 +96,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	if d.store == nil {
 		return false
 	}
-	profile, ok := stateEffectProfileFor(change.cause)
+	instance, ok := stateEffectInstanceFor(change.cause)
 	if !ok {
 		d.logf("state update discarded: session=%s state=%s cause=unknown", change.sessionID, change.state)
 		d.traceStateChange(change, statetrace.OutcomeDiscarded, "unknown_cause")
@@ -105,7 +105,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 
 	d.autoSettleFireMu.Lock()
 	var inputLane *sessionInputLane
-	if profile.syncNudge {
+	if instance.syncNudge {
 		inputLane = d.sessionInputs().lane(change.sessionID)
 		inputLane.mu.Lock()
 	}
@@ -133,14 +133,14 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.enqueueSessionActivity(change.sessionID)
 	}
 
-	if profile.touch {
+	if instance.touch {
 		d.store.Touch(change.sessionID)
 	}
-	if profile.syncNudge {
+	if instance.syncNudge {
 		d.syncNudgeForState(change.sessionID, change.state)
 	}
 	d.syncAutoSettle(change.sessionID, change.state)
-	if profile.broadcast {
+	if instance.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
 	d.drainAgentMailboxAfterStateChange(change.sessionID, change.state)

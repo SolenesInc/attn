@@ -47,7 +47,7 @@ commands:
         copied into place.
 
         path defaults to "latest": the newest rotating attn-<timestamp>.db
-        snapshot in the profile's backups directory. Pass an explicit path to
+        snapshot in the instance's backups directory. Pass an explicit path to
         restore from any snapshot, including a pre-migration one
         (attn-premigration-<version>-<timestamp>.db).
 `)

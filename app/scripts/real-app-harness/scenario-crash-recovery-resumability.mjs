@@ -28,7 +28,7 @@ import {
   ensureCodexInitialPanePromptReady,
 } from './scenarioAgents.mjs';
 import { agentHomeRoots, writeMockAgentFixture } from './mockAgent.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -110,14 +110,14 @@ async function waitFor(description, predicate, timeoutMs) {
   throw new Error(`Timed out waiting for ${description}`);
 }
 
-// SIGKILL only PIDs this profile's registry recorded: never match by name or
+// SIGKILL only PIDs this instance's registry recorded: never match by name or
 // path, or the kill lands on another session.
-function killProfileRuntimeLikeACrash(dataDir, log) {
+function killInstanceRuntimeLikeACrash(dataDir, log) {
   const killed = { workers: [], daemon: null };
   const workersRoot = path.join(dataDir, 'workers');
-  const instances = fs.existsSync(workersRoot) ? fs.readdirSync(workersRoot) : [];
-  for (const instance of instances) {
-    const registryDir = path.join(workersRoot, instance, 'registry');
+  const daemonInstances = fs.existsSync(workersRoot) ? fs.readdirSync(workersRoot) : [];
+  for (const daemonInstance of daemonInstances) {
+    const registryDir = path.join(workersRoot, daemonInstance, 'registry');
     if (!fs.existsSync(registryDir)) continue;
     for (const entry of fs.readdirSync(registryDir)) {
       const raw = fs.readFileSync(path.join(registryDir, entry), 'utf8');
@@ -188,8 +188,8 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  const dataDir = dataDirForProfile(profile);
+  const instance = currentHarnessInstance();
+  const dataDir = dataDirForInstance(instance);
   const runner = createScenarioRunner(options, {
     scenarioId: 'CRASH-REC',
     tier: 'tier2-local-mock-agent',
@@ -204,7 +204,7 @@ async function main() {
   // Daemon lifecycle and CLI reads must run through the exact build under test,
   // not an unrelated ./attn on PATH.
   const attnBin = appDaemonInTree(options.appPath);
-  const daemonEnv = profileCliEnv(profile);
+  const daemonEnv = instanceCliEnv(instance);
 
   const token = `CRASHREC${Date.now()}`;
   const claudeDir = path.join(runner.sessionDir, 'never-prompted');
@@ -308,7 +308,7 @@ async function main() {
     });
 
     const killed = await runner.step('crash_the_machine', async () => {
-      const result = killProfileRuntimeLikeACrash(dataDir, (m) => runner.log(m));
+      const result = killInstanceRuntimeLikeACrash(dataDir, (m) => runner.log(m));
       runner.writeJson('killed.json', result);
       if (result.workers.length === 0) {
         throw new Error('no pty workers were killed; the crash was not reproduced');

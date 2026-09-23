@@ -615,9 +615,9 @@ describe('Dashboard pull requests', () => {
     expect(screen.getByText('No PRs need attention')).toBeInTheDocument();
   });
 
-  it('shows the daemon reason when GitHub polling is off for this profile', () => {
+  it('shows the daemon reason when GitHub polling is off for this instance', () => {
     render(
-      <GitHubPollingProvider offReason="GitHub polling is off for profile dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
+      <GitHubPollingProvider offReason="GitHub polling is off for instance dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
         <Dashboard {...props} />
       </GitHubPollingProvider>,
     );

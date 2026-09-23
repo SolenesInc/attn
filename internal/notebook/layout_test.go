@@ -4,7 +4,7 @@ import "testing"
 
 func TestDefaultRoot(t *testing.T) {
 	tests := []struct {
-		home, profile, want string
+		home, instance, want string
 	}{
 		{"/Users/x", "", "/Users/x/attn-notebook"},
 		{"/Users/x", "default", "/Users/x/attn-notebook"},
@@ -13,8 +13,8 @@ func TestDefaultRoot(t *testing.T) {
 		{"/Users/x", "  dev  ", "/Users/x/attn-notebook-dev"},
 	}
 	for _, tc := range tests {
-		if got := DefaultRoot(tc.home, tc.profile); got != tc.want {
-			t.Errorf("DefaultRoot(%q,%q) = %q, want %q", tc.home, tc.profile, got, tc.want)
+		if got := DefaultRoot(tc.home, tc.instance); got != tc.want {
+			t.Errorf("DefaultRoot(%q,%q) = %q, want %q", tc.home, tc.instance, got, tc.want)
 		}
 	}
 }

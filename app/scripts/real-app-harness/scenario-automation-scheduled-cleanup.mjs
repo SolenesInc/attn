@@ -5,7 +5,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { parseCommonArgs, printCommonHelp, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
@@ -235,7 +235,7 @@ async function waitForDaemonReady(binary, daemonEnv) {
     } catch {
       return null;
     }
-  }, 'profile daemon');
+  }, 'instance daemon');
 }
 
 async function waitForRegisteredAgentExit(dataDir, sessionID, cwd) {
@@ -267,18 +267,18 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-automation-scheduled-cleanup.mjs');
     return;
   }
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('automation scheduled-cleanup scenario requires a named non-production profile');
-  const resources = resolveHarnessResources(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('automation scheduled-cleanup scenario requires a named non-production instance');
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
-  const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
+  const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-SCHEDULED-CLEANUP',
     allowRealAgents: false,
     tier: 'tier2-local',
     prefix: 'automation-scheduled-cleanup',
     metadata: {
-      profile,
+      instance,
       provider: 'local fixture repo',
       legTwo: 'delivery proof: the scheduled brief reaches a launched agent that does the real git work; no model judges what to remove',
       legFour: 'storm-guard re-assertion (fresh continuity); skip-discard-beyond-grace covered by unit tests',
@@ -306,13 +306,13 @@ async function main() {
   let stormGuardSeedSettled = false;
 
   try {
-    daemonEnv = profileEnv(profile);
+    daemonEnv = instanceEnv(instance);
     fixture = createFixture(fixtureRoot);
     writeCleanupFixture(fixtureRoot, fixture);
     probe = createCodexProbe(runner.sessionDir);
 
     await runner.step('restart_isolated_daemon', async () => {
-      await ensureFreshWorld({ profile, appPath: resources.appPath });
+      await ensureFreshWorld({ instance, appPath: resources.appPath });
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
       daemonEnv.ATTN_AUTOMATION_SCHEDULE_INTERVAL = SCHEDULE_TICK_INTERVAL;
       run(binary, ['daemon', 'ensure'], daemonEnv);
@@ -465,7 +465,7 @@ async function main() {
       );
       const closed = await closeDeliveredSessions(
         options.wsUrl,
-        dataDirForProfile(profile),
+        dataDirForInstance(instance),
         fixtureRoot,
         [...sessionIDs],
       );
@@ -486,7 +486,7 @@ async function main() {
       stormGuardApplied = false;
 
       run(binary, ['daemon', 'stop'], daemonEnv);
-      daemonEnv = profileEnv(profile);
+      daemonEnv = instanceEnv(instance);
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await waitForDaemonReady(binary, daemonEnv);
 
@@ -511,9 +511,9 @@ async function main() {
       );
     });
 
-    await runner.finishSuccess({ profile, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
+    await runner.finishSuccess({ instance, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
   } catch (error) {
-    await runner.finishFailure(error, { profile, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
+    await runner.finishFailure(error, { instance, cleanupID, stormGuardID, cleanupSeedID, cleanupSessionID, fixtureRoot });
     throw error;
   } finally {
     const teardownNeeded = cleanupApplied || stormGuardApplied || !sessionsClosed || !cleanupSeedSettled || !stormGuardSeedSettled;
@@ -535,7 +535,7 @@ async function main() {
       try {
         await closeDeliveredSessions(
           options.wsUrl,
-          dataDirForProfile(profile),
+          dataDirForInstance(instance),
           fixtureRoot,
           [...teardownSessionIDs],
         );
@@ -558,7 +558,7 @@ async function main() {
     } catch {}
     try { fs.rmSync(fixtureRoot, { recursive: true, force: true }); } catch {}
     try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
-    try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
+    try { run(binary, ['daemon', 'ensure'], instanceEnv(instance)); } catch {}
     await runner.close();
   }
 }

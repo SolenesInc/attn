@@ -22,7 +22,7 @@ import {
   waitForFirstWorkspacePane,
 } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
-import { harnessClientHello } from './harnessProfile.mjs';
+import { harnessClientHello } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 
 const SETTLE_TIMEOUT_MS = 30_000;

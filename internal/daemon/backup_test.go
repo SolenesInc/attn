@@ -55,7 +55,7 @@ func TestPerformDatabaseBackup_FailedBackupLeavesKeyAbsent(t *testing.T) {
 }
 
 func TestDatabaseBackupPruningWaitsForLegacyRecovery(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	makeRecoveryHome(t, dataRoot)
 	s, err := store.NewWithDB(filepath.Join(dataRoot, "attn.db"))

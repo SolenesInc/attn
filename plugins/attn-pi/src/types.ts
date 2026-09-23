@@ -65,7 +65,7 @@ export type ActivePluginRun = {
 export type DriverRegisterResult = {
   ok: boolean;
   active_runs?: ActivePluginRun[];
-  /** The profile's current auto-mode config, shaped like a spawn's `auto_mode`. The
+  /** The instance's current auto-mode config, shaped like a spawn's `auto_mode`. The
    * driver needs it to bring the network proxy back up before any suite re-dials. */
   auto_mode?: unknown;
 };

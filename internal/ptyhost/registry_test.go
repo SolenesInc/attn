@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-func TestBinaryNameForProfile(t *testing.T) {
-	if got := BinaryNameForProfile(""); got != "attn-pty-host" {
-		t.Fatalf("BinaryNameForProfile(empty) = %q", got)
+func TestBinaryNameForInstance(t *testing.T) {
+	if got := BinaryNameForInstance(""); got != "attn-pty-host" {
+		t.Fatalf("BinaryNameForInstance(empty) = %q", got)
 	}
-	if got := BinaryNameForProfile("dev"); got != "attn-pty-host-dev" {
-		t.Fatalf("BinaryNameForProfile(dev) = %q", got)
+	if got := BinaryNameForInstance("dev"); got != "attn-pty-host-dev" {
+		t.Fatalf("BinaryNameForInstance(dev) = %q", got)
 	}
 }
 
