@@ -233,7 +233,7 @@ describe('SessionsTab row grammar', () => {
     await rows().findByText('run s2');
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
-    expect(within(inspector()).getByText('its profile was deleted; reopening it needs a profile to land in')).toBeTruthy();
+    expect(within(inspector()).getByText('its profile was deleted; reopening lands it in your current profile')).toBeTruthy();
 
     fireEvent.keyDown(row('run s1'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row('run s2'));

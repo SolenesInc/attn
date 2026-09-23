@@ -189,6 +189,11 @@ func (s *Store) ReopenSession(id, profileID string) (SessionCloseRecord, bool, e
 	if profileID == "" {
 		profileID = lifted.ProfileID
 	}
+	if profileID != "" {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		}
+	}
 	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', profile_id = ?
 		WHERE id = ?`, profileID, id); err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)

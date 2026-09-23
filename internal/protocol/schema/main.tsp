@@ -941,7 +941,9 @@ model SessionReopenMessage {
   directory?: string;
   // The profile to reopen into. Required when the session's recorded profile
   // was deleted, and refused when it names another profile than a live
-  // recorded one: membership changes only through a move.
+  // recorded one: membership changes only through a move. Over WebSocket, an
+  // absent profile_id for a deleted recorded profile means the connection's
+  // selected profile.
   profile_id?: string;
 }
 
@@ -5626,6 +5628,9 @@ model SeedResumeMessage {
   "seed_id": string;
   // Present only when Resume resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
+  // Where the agent resumes when its recorded profile was deleted. Required then;
+  // otherwise it must name the recorded profile or be absent.
+  "profile_id"?: string;
 }
 
 // SeedResumeResultMessage replies to seed_resume, correlated by request_id.

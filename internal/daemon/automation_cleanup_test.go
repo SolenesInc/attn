@@ -273,7 +273,7 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 
 	now := time.Now()
 	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-bound-1", OccurrenceID: "occ-bound-1", SeedID: "ticket-bound-1", SessionID: "session-bound-1", ProfileID: defaultProfileID(t, d.store),
+		RunID: "run-bound-1", OccurrenceID: "occ-bound-1", SeedID: "ticket-bound-1", SessionID: "session-bound-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -328,7 +328,7 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 	claim := func(occurrenceKey, continuityKey, suffix, worktree string) *store.AutomationRun {
 		t.Helper()
 		run, _, err := s.ClaimScheduledAutomationRun(def.ID, occurrenceKey, continuityKey, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-			RunID: "run-" + suffix, OccurrenceID: "occ-" + suffix, SeedID: "ticket-" + suffix, SessionID: "session-" + suffix, ProfileID: defaultProfileID(t, s),
+			RunID: "run-" + suffix, OccurrenceID: "occ-" + suffix, SeedID: "ticket-" + suffix, SessionID: "session-" + suffix,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -388,7 +388,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 
 	now := time.Now()
 	liveRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:live", "", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-log-live", OccurrenceID: "occ-log-live", SeedID: "ticket-log-live", SessionID: "session-log-live", ProfileID: defaultProfileID(t, d.store),
+		RunID: "run-log-live", OccurrenceID: "occ-log-live", SeedID: "ticket-log-live", SessionID: "session-log-live",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -402,7 +402,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	})
 
 	boundRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:bound", "singleton", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-log-bound", OccurrenceID: "occ-log-bound", SeedID: "ticket-log-bound", SessionID: "session-log-bound", ProfileID: defaultProfileID(t, d.store),
+		RunID: "run-log-bound", OccurrenceID: "occ-log-bound", SeedID: "ticket-log-bound", SessionID: "session-log-bound",
 	})
 	if err != nil {
 		t.Fatal(err)

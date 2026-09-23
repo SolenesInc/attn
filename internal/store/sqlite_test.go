@@ -2032,7 +2032,7 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1", ProfileID: "",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)

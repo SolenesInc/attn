@@ -282,7 +282,9 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		d.automationMu.Lock()
 		deletion, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), msg.DestinationProfileID)
+		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
@@ -295,13 +297,15 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(deletion.Destination.ID)
 			}
 		})
-		d.moveCrewBetweenProfiles(deletion.Deleted.ID, deletion.Destination.ID)
 		return profileActionOutcome{profile: &deletion.Destination, desktops: destination, publish: func() {
 			d.coalesceSnapshots(func() {
 				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
 				d.publishArrangementChanged(deletion.Destination.ID, profileArrangementChange{DesktopIDs: desktopIDs(destination...)})
 				for _, sessionID := range deletion.MovedSessionIDs {
 					d.publishFact(FactSessionProfileChanged, sessionID, sessionProfileChange{FromProfileID: deletion.Deleted.ID, ToProfileID: deletion.Destination.ID})
+				}
+				for _, memberID := range deletion.MovedCrewIDs {
+					d.publishFact(FactCrewUpdated, memberID, nil)
 				}
 			})
 			if len(deletion.MovedAutomationIDs) > 0 {

@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -203,24 +202,13 @@ func TestInjectedSessionsLandOnTheCurrentDesktopOfTheirProfile(t *testing.T) {
 	}
 }
 
-func TestCrewHomesJoinAProfileWhenImportedAndLegacyMembersAreGivenOne(t *testing.T) {
+func TestImportedCrewJoinTheMostRecentlyUsedProfile(t *testing.T) {
 	d := newCrewDaemon(t)
 	profileID := defaultProfileID(t, d.store)
 	for _, member := range crewList(t, d) {
 		if member.ProfileID != profileID {
 			t.Fatalf("imported member %s has profile %q, want %s", member.ID, member.ProfileID, profileID)
 		}
-	}
-
-	if _, err := d.updateCrewMember("trellis", func(m *crew.Member) (bool, error) {
-		m.ProfileID = ""
-		return true, nil
-	}); err != nil {
-		t.Fatal(err)
-	}
-	d.assignCrewProfiles()
-	if got := memberByID(t, crewList(t, d), "trellis").ProfileID; got != profileID {
-		t.Fatalf("legacy member profile = %q, want %s", got, profileID)
 	}
 }
 
@@ -299,7 +287,7 @@ func TestWebSocketCommandsWithoutAProfileUseTheConnectionsProfile(t *testing.T) 
 	}
 }
 
-func TestDeletingAProfileCarriesItsAutomationsAndCrewToTheDestination(t *testing.T) {
+func TestDeletingAProfileCarriesItsAutomationsToTheDestination(t *testing.T) {
 	d := newCrewDaemon(t)
 	d.ptyBackend = &fakeSpawnBackend{}
 	w := &profilesTestDaemon{t: t, d: d}
@@ -313,12 +301,11 @@ func TestDeletingAProfileCarriesItsAutomationsAndCrewToTheDestination(t *testing
 		t.Fatal(err)
 	}
 	pending, _, err := d.store.ClaimManualAutomationRun(definition.ID, "req-1", "", `{}`, definition.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1", ProfileID: doomed.ID,
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	d.setCrewProfile("trellis", defaultID, doomed.ID)
 
 	w.mustSend(client, map[string]any{
 		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": defaultID,
@@ -329,15 +316,11 @@ func TestDeletingAProfileCarriesItsAutomationsAndCrewToTheDestination(t *testing
 	if run, err := d.store.GetAutomationRun(pending.ID); err != nil || run.ProfileID != defaultID {
 		t.Fatalf("pending run after delete = %+v err=%v, want it in %s", run, err, defaultID)
 	}
-	if got := memberByID(t, crewList(t, d), "trellis").ProfileID; got != defaultID {
-		t.Fatalf("crew member profile after delete = %q, want %s", got, defaultID)
-	}
-	if _, err := d.newAutomationRunReservation(definition); err == nil {
-		t.Fatal("the stale definition value still reserved into the deleted profile")
-	}
-	current, _ := d.store.GetAutomationDefinition(definition.ID)
-	if _, err := d.newAutomationRunReservation(current); err != nil {
-		t.Fatalf("reserving a run after the move: %v", err)
+	later, _, err := d.store.ClaimManualAutomationRun(definition.ID, "req-2", "", `{}`, definition.Revision, `{}`, now, store.AutomationRunReservation{
+		RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2",
+	})
+	if err != nil || later.ProfileID != defaultID {
+		t.Fatalf("a run claimed from the stale definition = %+v err=%v, want it in %s", later, err, defaultID)
 	}
 }
 

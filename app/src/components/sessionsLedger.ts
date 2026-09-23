@@ -155,7 +155,7 @@ export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
 
 export function reopenPlacement(verdict: ReopenVerdictView): string {
   return verdict.profileDeleted
-    ? 'its profile was deleted; reopening it needs a profile to land in'
+    ? 'its profile was deleted; reopening lands it in your current profile'
     : 'lands unplaced in its profile';
 }
 

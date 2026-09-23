@@ -221,8 +221,8 @@ func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID st
 	if err != nil {
 		return err
 	}
-	if member.ProfileID != askedProfileID {
-		return fmt.Errorf("%s belongs to profile %s, not %s; a member wakes only in its own profile", crew.DisplayName(member.ID), member.ProfileID, askedProfileID)
+	if memberProfileID := d.crewProfileID(member.ID); memberProfileID != askedProfileID {
+		return fmt.Errorf("%s belongs to profile %s, not %s; a member wakes only in its own profile", crew.DisplayName(member.ID), memberProfileID, askedProfileID)
 	}
 	return nil
 }
@@ -298,7 +298,7 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 			return awake, nil
 		}
 	}
-	profile, err := d.liveLaunchProfile(member.ProfileID)
+	profile, err := d.liveLaunchProfile(d.crewProfileID(member.ID))
 	if err != nil {
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}

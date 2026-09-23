@@ -32,6 +32,11 @@ func (d *Daemon) ensureCrewCollections() {
 }
 
 func (d *Daemon) importCrewHomes() {
+	d.registerCrewHomes()
+	d.assignCrewProfiles()
+}
+
+func (d *Daemon) registerCrewHomes() {
 	if d.store == nil {
 		return
 	}
@@ -58,17 +63,11 @@ func (d *Daemon) importCrewHomes() {
 			d.logf("crew: import refused stored member %s: %v", crew.DisplayName(member.ID), err)
 		}
 	}
-	profile, err := d.store.MostRecentlyUsedProfile()
-	if err != nil {
-		d.logf("crew: importing homes needs a profile to put them in: %v", err)
-		return
-	}
 	for _, member := range members {
 		if err := d.validateCrewMemberPaths(member); err != nil {
 			d.logf("crew: import refused member %s: %v", crew.DisplayName(member.ID), err)
 			continue
 		}
-		member.ProfileID = profile.ID
 		if _, err := d.writeCrewMember(*schema, member, docstore.ExpectAbsent); err != nil {
 			if docstore.IsConflict(err) {
 				continue
@@ -92,46 +91,27 @@ func (d *Daemon) assignCrewProfiles() {
 		}
 		return
 	}
-	for _, member := range members {
-		if _, err := d.store.LiveProfile(member.ProfileID); member.ProfileID != "" && err == nil {
-			continue
-		}
-		profile, err := d.store.MostRecentlyUsedProfile()
-		if err != nil {
-			d.logf("crew: %s has no live profile and none can be given: %v", crew.DisplayName(member.ID), err)
-			return
-		}
-		d.setCrewProfile(member.ID, member.ProfileID, profile.ID)
+	if len(members) == 0 {
+		return
 	}
-}
-
-func (d *Daemon) moveCrewBetweenProfiles(from, to string) {
-	members, _, err := d.readCrewMembersRaw()
+	profile, err := d.store.MostRecentlyUsedProfile()
 	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("crew: reading members to move them from profile %s to %s: %v", from, to, err)
-		}
+		d.logf("crew: members need a profile and none can be given: %v", err)
 		return
 	}
 	for _, member := range members {
-		if member.ProfileID == from {
-			d.setCrewProfile(member.ID, from, to)
+		if _, err := d.store.EnsureCrewProfile(member.ID, profile.ID); err != nil {
+			d.logf("crew: giving %s a profile: %v", crew.DisplayName(member.ID), err)
 		}
 	}
 }
 
-func (d *Daemon) setCrewProfile(memberID, from, to string) {
-	if _, err := d.updateCrewMember(memberID, func(m *crew.Member) (bool, error) {
-		if m.ProfileID != from {
-			return false, nil
-		}
-		m.ProfileID = to
-		return true, nil
-	}); err != nil {
-		d.logf("crew: moving %s from profile %q to %s: %v", crew.DisplayName(memberID), from, to, err)
-		return
+func (d *Daemon) crewProfileID(memberID string) string {
+	profileID, err := d.store.CrewProfile(memberID)
+	if err != nil {
+		d.logf("crew: reading the profile of %s: %v", crew.DisplayName(memberID), err)
 	}
-	d.logf("crew: %s now belongs to profile %s", crew.DisplayName(memberID), to)
+	return profileID
 }
 
 func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
@@ -542,7 +522,7 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	wire := protocol.CrewMember{
 		ID:            member.ID,
-		ProfileID:     member.ProfileID,
+		ProfileID:     d.crewProfileID(member.ID),
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath,
 		HomeDir:       member.HomeDir,

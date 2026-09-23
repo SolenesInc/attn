@@ -32,7 +32,7 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: defaultProfileID(t, d.store)})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -61,7 +61,7 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", ProfileID: defaultProfileID(t, d.store)})
+	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: defaultProfileID(t, d.store)})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 		t.Fatalf("expected a revision bump for a spec change, got %d both times", def2.Revision)
 	}
 
-	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON1), now.Add(10*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", ProfileID: defaultProfileID(t, d.store)})
+	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON1), now.Add(10*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ func TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: defaultProfileID(t, d.store)})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: defaultProfileID(t, d.store)})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	run2, _, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", ProfileID: defaultProfileID(t, d.store)})
+	run2, _, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +237,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 	if err != nil {
 		t.Fatalf("apply v3 (revert): %v", err)
 	}
-	run3, fresh, err := s.ClaimScheduledAutomationRun(def3.ID, "schedule:3", "singleton", def3.Revision, `{}`, string(snapshotJSON1), now.Add(10*time.Minute), store.AutomationRunReservation{RunID: "run-3", OccurrenceID: "occ-3", SeedID: "ticket-3", SessionID: "session-3", ProfileID: defaultProfileID(t, d.store)})
+	run3, fresh, err := s.ClaimScheduledAutomationRun(def3.ID, "schedule:3", "singleton", def3.Revision, `{}`, string(snapshotJSON1), now.Add(10*time.Minute), store.AutomationRunReservation{RunID: "run-3", OccurrenceID: "occ-3", SeedID: "ticket-3", SessionID: "session-3"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -273,7 +273,7 @@ func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: defaultProfileID(t, d.store)})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, string(snapshotJSON1), now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -305,7 +305,7 @@ func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", ProfileID: defaultProfileID(t, d.store)})
+	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, string(snapshotJSON2), now.Add(5*time.Minute), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}

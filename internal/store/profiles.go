@@ -19,6 +19,7 @@ type ProfileDeletion struct {
 	Destination        profiles.Profile
 	MovedSessionIDs    []string
 	MovedAutomationIDs []string
+	MovedCrewIDs       []string
 }
 
 type DesktopDeletion struct {
@@ -102,16 +103,16 @@ func scanProfile(row rowScanner) (profiles.Profile, error) {
 	return profile, err
 }
 
-func loadProfile(tx *sql.Tx, id string) (profiles.Profile, error) {
-	profile, err := scanProfile(tx.QueryRow(`SELECT `+profileColumns+` FROM profiles WHERE id = ?`, id))
+func loadProfile(q queryer, id string) (profiles.Profile, error) {
+	profile, err := scanProfile(q.QueryRow(`SELECT `+profileColumns+` FROM profiles WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return profiles.Profile{}, profiles.Errorf(profiles.CodeNotFound, "profile %q does not exist", id)
 	}
 	return profile, err
 }
 
-func loadLiveProfile(tx *sql.Tx, id string) (profiles.Profile, error) {
-	profile, err := loadProfile(tx, id)
+func loadLiveProfile(q queryer, id string) (profiles.Profile, error) {
+	profile, err := loadProfile(q, id)
 	if err != nil {
 		return profiles.Profile{}, err
 	}
@@ -517,6 +518,12 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID); err != nil {
 			return err
 		}
+		if result.MovedCrewIDs, err = queryColumn[string](tx, `SELECT member_id FROM crew_profiles WHERE profile_id = ? ORDER BY member_id`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE crew_profiles SET profile_id = ? WHERE profile_id = ?`, destinationID, id); err != nil {
+			return err
+		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
@@ -531,6 +538,37 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		return nil
 	})
 	return result, err
+}
+
+func (s *Store) CrewProfile(memberID string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return "", profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
+	}
+	var profileID string
+	err := s.db.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&profileID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return profileID, err
+}
+
+func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
+	var assigned string
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		err := tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&assigned)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		assigned = profileID
+		_, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID)
+		return err
+	})
+	return assigned, err
 }
 
 func moveProfileAutomations(tx *sql.Tx, from, to string) ([]string, error) {

@@ -152,7 +152,7 @@ func (v *sessionReopenVerdict) destinationProfile(requested string) (string, err
 	requested = strings.TrimSpace(requested)
 	switch {
 	case v.ProfileDeleted && requested == "":
-		return "", fmt.Errorf("session %s belonged to profile %q, which is gone; choose the profile to reopen it into (--profile <id>)", v.SessionID, v.ProfileID)
+		return "", fmt.Errorf("session %s belonged to profile %q, which is gone; name the profile to reopen it into (attn session reopen --profile <id>)", v.SessionID, v.ProfileID)
 	case v.ProfileDeleted:
 		return requested, nil
 	case requested != "" && requested != v.ProfileID:

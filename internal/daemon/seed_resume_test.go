@@ -529,3 +529,30 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 		t.Fatalf("workspace survived a failed resume: %+v", ws)
 	}
 }
+
+func TestSeedResumeNeedsADestinationWhenTheTendersProfileWasDeleted(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-conv-orphan")
+	d.persistResumeSessionID(leafID, "codex-conv-orphan")
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
+	kept := createTestProfile(t, d.store, "Kept")
+	deleteTestProfile(t, d.store, defaultProfileID(t, d.store), kept.ID)
+	since := spawnCount(backend)
+
+	if _, err := d.resumeSeed(seedID); err == nil || !strings.Contains(err.Error(), "Sessions ledger") {
+		t.Fatalf("resume without a destination = %v, want a refusal pointing to the Sessions ledger", err)
+	}
+	if spawnCount(backend) != since {
+		t.Fatal("a refused resume spawned the agent")
+	}
+
+	outcome, err := d.resumeSeedFromReview(seedID, nil, kept.ID)
+	if err != nil {
+		t.Fatalf("resume into %s: %v", kept.ID, err)
+	}
+	if outcome.ProfileID != kept.ID || d.store.Get(leafID).ProfileID != kept.ID {
+		t.Fatalf("resumed into %q (row %q), want %s", outcome.ProfileID, d.store.Get(leafID).ProfileID, kept.ID)
+	}
+}

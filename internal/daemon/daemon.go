@@ -804,7 +804,6 @@ func (d *Daemon) Start() error {
 	}
 	d.ensureCrewCollections()
 	d.importCrewHomes()
-	d.assignCrewProfiles()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
 		return fmt.Errorf("migrate crew ticket identities: %w", err)
 	}

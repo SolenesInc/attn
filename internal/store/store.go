@@ -247,6 +247,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if s.sessionClosedLocked(session.ID) {
 		return fmt.Errorf("add session %s: %w", session.ID, ErrSessionClosed)
 	}
+	if err := s.refuseJoiningDeletedProfileLocked(session); err != nil {
+		return fmt.Errorf("add session %s: %w", session.ID, err)
+	}
 
 	todosJSON, err := json.Marshal(session.Todos)
 	if err != nil {
@@ -309,6 +312,22 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
 	}
 	return nil
+}
+
+func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) error {
+	if session.ProfileID == "" {
+		return nil
+	}
+	var current string
+	err := s.db.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, session.ID).Scan(&current)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if current != "" {
+		return nil
+	}
+	_, err = loadLiveProfile(s.db, session.ProfileID)
+	return err
 }
 
 func (s *Store) Get(id string) *protocol.Session {

@@ -87,7 +87,7 @@ type AutomationProvenanceRecord struct {
 }
 
 type AutomationRunReservation struct {
-	RunID, OccurrenceID, SeedID, SessionID, ProfileID string
+	RunID, OccurrenceID, SeedID, SessionID string
 }
 
 type AutomationReviewRequestCandidate struct {
@@ -208,6 +208,11 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON, profileID string,
 	err = tx.QueryRow(`SELECT revision, spec_json, enabled, deleted_at FROM automation_definitions WHERE id=?`, id).Scan(&revision, &oldSpec, &oldEnabled, &deletedAt)
 	enabled := true
 	activation := err == sql.ErrNoRows
+	if joining := activation || (err == nil && deletedAt != ""); joining && profileID != "" {
+		if _, liveErr := loadLiveProfile(tx, profileID); liveErr != nil {
+			return nil, liveErr
+		}
+	}
 	switch err {
 	case sql.ErrNoRows:
 		revision = 1
@@ -435,7 +440,7 @@ func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID, provider, subjectK
 
 const AutomationBindingReleasedAgentMoved = "agent_moved_profile"
 
-func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey string, ids *AutomationRunReservation, now time.Time) error {
+func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
 	var bound AutomationRunReservation
 	var bindingID, sessionProfileID string
 	err := tx.QueryRow(
@@ -444,7 +449,7 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 	).Scan(&bindingID, &bound.SeedID, &bound.SessionID, &sessionProfileID)
 	nowRaw := formatTicketTime(now)
 	switch {
-	case err == nil && (sessionProfileID == "" || sessionProfileID == ids.ProfileID):
+	case err == nil && (sessionProfileID == "" || sessionProfileID == profileID):
 		ids.SeedID, ids.SessionID = bound.SeedID, bound.SessionID
 		return nil
 	case err == nil:
@@ -457,7 +462,7 @@ func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, co
 	}
 	_, err = tx.Exec(
 		`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,profile_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,'','',?,?,?,?)`,
-		uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, ids.ProfileID, AutomationBindingStatusActive, nowRaw, nowRaw,
+		uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, profileID, AutomationBindingStatusActive, nowRaw, nowRaw,
 	)
 	return err
 }
@@ -594,7 +599,8 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	}
 	var revision int
 	var enabled int
-	if err := tx.QueryRow(`SELECT revision,enabled FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled); err != nil {
+	var profileID string
+	if err := tx.QueryRow(`SELECT revision,enabled,profile_id FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled, &profileID); err != nil {
 		return nil, false, err
 	}
 	if revision != expectedRevision {
@@ -607,7 +613,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -639,7 +645,8 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 		return nil, false, err
 	}
 	var revision, enabled int
-	if err := tx.QueryRow(`SELECT revision,enabled FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled); err != nil {
+	var profileID string
+	if err := tx.QueryRow(`SELECT revision,enabled,profile_id FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled, &profileID); err != nil {
 		return nil, false, err
 	}
 	if revision != expectedRevision {
@@ -657,7 +664,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 		if blocked {
 			return nil, false, errors.New("an earlier scheduled automation run for this definition is still pending")
 		}
-		if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, continuityKey, &ids, observedAt); err != nil {
+		if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, continuityKey, profileID, &ids, observedAt); err != nil {
 			return nil, false, err
 		}
 	}
@@ -665,7 +672,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -982,7 +989,8 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 		}
 	}
 	var revision, enabled int
-	if err := tx.QueryRow(`SELECT revision,enabled FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled); err != nil {
+	var profileID string
+	if err := tx.QueryRow(`SELECT revision,enabled,profile_id FROM automation_definitions WHERE id=? AND deleted_at=''`, definitionID).Scan(&revision, &enabled, &profileID); err != nil {
 		return nil, false, err
 	}
 	if revision != expectedRevision {
@@ -999,14 +1007,14 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 		return nil, false, errors.New("an earlier automation run for this subject is still pending")
 	}
 	ids := reserved
-	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, &ids, observedAt); err != nil {
+	if err := getOrCreateActiveAutomationContinuityBindingTx(tx, definitionID, subjectKey, profileID, &ids, observedAt); err != nil {
 		return nil, false, err
 	}
 	now := formatTicketTime(observedAt)
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'github',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, profileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {

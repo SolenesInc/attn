@@ -1032,7 +1032,7 @@ func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuat
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", ProfileID: def.ProfileID,
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)

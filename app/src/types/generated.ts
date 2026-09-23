@@ -9157,6 +9157,7 @@ export interface SeedRelation {
 
 export interface SeedResumeMessage {
     cmd:         SeedResumeMessageCmd;
+    profile_id?: string;
     request_id?: string;
     review?:     DelegateMessageReview;
     seed_id:     string;
@@ -23181,6 +23182,7 @@ const typeMap: any = {
     ], "any"),
     "SeedResumeMessage": o([
         { json: "cmd", js: "cmd", typ: r("SeedResumeMessageCmd") },
+        { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "review", js: "review", typ: u(undefined, r("DelegateMessageReview")) },
         { json: "seed_id", js: "seed_id", typ: "" },

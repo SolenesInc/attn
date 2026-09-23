@@ -83,16 +83,12 @@ func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, inp
 	return d.store.GetAutomationRun(run.ID)
 }
 func (d *Daemon) newAutomationRunReservation(definition *store.AutomationDefinition) (store.AutomationRunReservation, error) {
-	profile, err := d.liveLaunchProfile(definition.ProfileID)
-	if err != nil {
-		return store.AutomationRunReservation{}, fmt.Errorf("automation %s: %w", definition.ID, err)
-	}
 	runID := uuid.NewString()
 	seedID, err := d.mintAutomationSeedID()
 	if err != nil {
 		return store.AutomationRunReservation{}, err
 	}
-	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString(), ProfileID: profile.ID}, nil
+	return store.AutomationRunReservation{RunID: runID, OccurrenceID: uuid.NewString(), SeedID: seedID, SessionID: uuid.NewString()}, nil
 }
 
 func (d *Daemon) mintAutomationSeedID() (string, error) {

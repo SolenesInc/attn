@@ -391,7 +391,7 @@ func TestContinuityBindingIsNotReclaimedByAnAgentMovedToAnotherProfile(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1", ProfileID: home.ID}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1"}
 	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now, firstIDs)
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
@@ -406,7 +406,7 @@ func TestContinuityBindingIsNotReclaimedByAnAgentMovedToAnotherProfile(t *testin
 		t.Fatal(err)
 	}
 
-	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2", ProfileID: home.ID}
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2"}
 	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs)
 	if err != nil || !created {
 		t.Fatalf("second claim created=%v err=%v", created, err)
@@ -559,13 +559,13 @@ func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdraw
 		t.Fatal(err)
 	}
 	runA, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subjectA, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-a", OccurrenceID: "occ-a", SeedID: "ticket-a", SessionID: "session-a", ProfileID: "",
+		RunID: "run-a", OccurrenceID: "occ-a", SeedID: "ticket-a", SessionID: "session-a",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim A created=%v err=%v", created, err)
 	}
 	runB, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subjectB, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-b", OccurrenceID: "occ-b", SeedID: "ticket-b", SessionID: "session-b", ProfileID: "",
+		RunID: "run-b", OccurrenceID: "occ-b", SeedID: "ticket-b", SessionID: "session-b",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim B created=%v err=%v", created, err)
@@ -631,7 +631,7 @@ func TestListAutomationRunsWithOccurrenceKeysOrdersNewestFirstWithLimit(t *testi
 			RunID:        "run-" + requestID,
 			OccurrenceID: "occ-" + requestID,
 			SeedID:       "ticket-" + requestID,
-			SessionID:    "session-" + requestID, ProfileID: "" + requestID,
+			SessionID:    "session-" + requestID,
 		}
 		run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, at, ids)
 		if err != nil || !created {
@@ -682,7 +682,7 @@ func TestLatestAutomationRunPerDefinitionPicksNewestPerDefinitionAndOmitsZeroRun
 			RunID:        "run-" + defID + "-" + requestID,
 			OccurrenceID: "occ-" + defID + "-" + requestID,
 			SeedID:       "ticket-" + defID + "-" + requestID,
-			SessionID:    "session-" + defID + "-" + requestID, ProfileID: "" + defID + "-" + requestID,
+			SessionID:    "session-" + defID + "-" + requestID,
 		}
 		run, created, err := s.ClaimManualAutomationRun(defID, requestID, "", `{}`, 1, `{}`, at, ids)
 		if err != nil || !created {
@@ -1302,7 +1302,7 @@ func TestOriginAutomationRunIDForSeedSurvivesBindingRotation(t *testing.T) {
 		t.Fatal(err)
 	}
 	first, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", ProfileID: "",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)

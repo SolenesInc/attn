@@ -18,17 +18,18 @@ type seedResumeOutcome struct {
 }
 
 func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
-	return d.resumeSeedFromReview(seedID, nil)
+	return d.resumeSeedFromReview(seedID, nil, "")
 }
 
 func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	profileID string,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
 		var err error
-		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
+		outcome, err = d.resumeSeedFromReviewForeground(seedID, review, profileID)
 		return err
 	})
 	return outcome, err
@@ -37,6 +38,7 @@ func (d *Daemon) resumeSeedFromReview(
 func (d *Daemon) resumeSeedFromReviewForeground(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	requestedProfileID string,
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
@@ -99,6 +101,12 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 		}
 		return nil, fmt.Errorf("%s cannot resume: %s", seedID, reason)
 	}
+	destination := sessionReopenVerdict{SessionID: sessionID}
+	d.planReopenProfile(&destination)
+	profileID, err := destination.destinationProfile(requestedProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("%s cannot resume: %w; reopen its session from the Sessions ledger to choose where it lands", seedID, err)
+	}
 	afterSpawn := func() error {
 		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
 			return err
@@ -110,6 +118,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 		SessionID: sessionID,
 		Directory: execution.Cwd,
 		Title:     seed.Title,
+		ProfileID: profileID,
 	}, d.newDelegationRollback(), afterSpawn)
 	if err != nil {
 		return nil, err
@@ -221,7 +230,7 @@ func (d *Daemon) bindResumedSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review)
+	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review, protocol.Deref(msg.ProfileID))
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,

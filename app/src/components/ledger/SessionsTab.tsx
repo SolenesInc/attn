@@ -405,6 +405,53 @@ function sessionGlyph(entry: SessionLedgerEntry, live: boolean, verdict: ReopenV
   return 'live';
 }
 
+interface ReopenVerdictProps {
+  verdict: ReopenVerdictView | undefined;
+  note: RowNote | undefined;
+  nameText: (text: string) => string;
+  onVerb: (verbId: string) => void;
+  actionsAvailable: boolean;
+}
+
+function ReopenVerdict({ verdict, note, nameText, onVerb, actionsAvailable }: ReopenVerdictProps) {
+  const busy = note?.kind === 'busy';
+  return (
+    <div className={`ledger-verdict${verdict ? (verdict.reopenable ? ' is-ok' : ' is-no') : ''}`}>
+      <div className="ledger-field-label">Reopen</div>
+      {!verdict && <div className="ledger-muted">No verdict yet.</div>}
+      {verdict && (
+        <>
+          <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>
+            {nameText(compactVerdictText(verdict.reason ?? 'It can be reopened where it ran.'))}
+            {verdict.refreshing && <em className="ledger-checking"> checking the branch…</em>}
+          </div>
+          {verdict.warning && <div className="ledger-muted" title={verdict.warning}>{nameText(compactVerdictText(verdict.warning))}</div>}
+          <div className="ledger-muted">{reopenPlacement(verdict)}</div>
+          {note && note.kind !== 'busy' && (
+            <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
+          )}
+          {actionsAvailable && (
+            <div className="ledger-verdict-actions">
+              {verdict.actions.map((action, index) => (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
+                  disabled={busy}
+                  onClick={() => onVerb(`act:${action.id}`)}
+                >
+                  <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
+                </button>
+              ))}
+              {verdict.actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 interface SessionInspectorProps {
   entry: SessionLedgerEntry;
   verdict: ReopenVerdictView | undefined;
@@ -425,7 +472,6 @@ function SessionInspector({
   entry, verdict, note, live, seed, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
-  const busy = note?.kind === 'busy';
   return (
     <Inspector
       title={entry.label || 'untitled session'}
@@ -465,39 +511,7 @@ function SessionInspector({
         </Field>
       )}
       {closed && (
-        <div className={`ledger-verdict${verdict ? (verdict.reopenable ? ' is-ok' : ' is-no') : ''}`}>
-          <div className="ledger-field-label">Reopen</div>
-          {!verdict && <div className="ledger-muted">No verdict yet.</div>}
-          {verdict && (
-            <>
-              <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>
-                {nameText(compactVerdictText(verdict.reason ?? 'It can be reopened where it ran.'))}
-                {verdict.refreshing && <em className="ledger-checking"> checking the branch…</em>}
-              </div>
-              {verdict.warning && <div className="ledger-muted" title={verdict.warning}>{nameText(compactVerdictText(verdict.warning))}</div>}
-              <div className="ledger-muted">{reopenPlacement(verdict)}</div>
-              {note && note.kind !== 'busy' && (
-                <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
-              )}
-              {actionsAvailable && (
-                <div className="ledger-verdict-actions">
-                  {verdict.actions.map((action, index) => (
-                    <button
-                      key={action.id}
-                      type="button"
-                      className={index === 0 ? 'ledger-verb is-primary' : 'ledger-verb'}
-                      disabled={busy}
-                      onClick={() => onVerb(`act:${action.id}`)}
-                    >
-                      <kbd>{index === 0 ? '⏎' : index + 1}</kbd>{busy && index === 0 ? note?.text : action.label}
-                    </button>
-                  ))}
-                  {verdict.actions.length === 0 && <span className="ledger-muted">Nothing here brings it back.</span>}
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <ReopenVerdict verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
       )}
       {live && (
         <div className="ledger-verdict-actions">

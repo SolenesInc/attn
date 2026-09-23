@@ -685,3 +685,49 @@ func TestReopeningIntoAnotherProfileIsUndoneWithTheClose(t *testing.T) {
 		t.Fatalf("closed row profile = %q err=%v, want %s back as history", got, err, home.ID)
 	}
 }
+
+func TestNothingJoinsADeletedProfileAndItsCrewMoveWithIt(t *testing.T) {
+	s, _ := openProfileStore(t)
+	doomed, _ := mustCreateProfile(t, s, "Doomed")
+	kept, _ := mustCreateProfile(t, s, "Kept")
+	if assigned, err := s.EnsureCrewProfile("mira", doomed.ID); err != nil || assigned != doomed.ID {
+		t.Fatalf("EnsureCrewProfile = %q, %v; want %s", assigned, err, doomed.ID)
+	}
+	if assigned, err := s.EnsureCrewProfile("mira", kept.ID); err != nil || assigned != doomed.ID {
+		t.Fatalf("a second EnsureCrewProfile = %q, %v; want the first assignment %s kept", assigned, err, doomed.ID)
+	}
+	addProfileSession(t, s, "closed-agent", doomed.ID)
+	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	deletion, err := s.DeleteProfile(doomed.ID, doomed.Revision, kept.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(deletion.MovedCrewIDs, []string{"mira"}) {
+		t.Fatalf("moved crew = %v, want [mira]", deletion.MovedCrewIDs)
+	}
+	if profileID, _ := s.CrewProfile("mira"); profileID != kept.ID {
+		t.Fatalf("mira's profile after the delete = %q, want %s", profileID, kept.ID)
+	}
+
+	_, err = s.EnsureCrewProfile("nell", doomed.ID)
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	now := string(protocol.TimestampNow())
+	err = s.AddChecked(&protocol.Session{
+		ID: "late-spawn", Label: "late", Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: doomed.ID,
+		State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	if s.Get("late-spawn") != nil {
+		t.Fatal("a session joined the deleted profile")
+	}
+	_, err = s.UpsertAutomationDefinition("late-automation", "Late", `{}`, doomed.ID, time.Now())
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	_, _, err = s.ReopenSession("closed-agent", "")
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	if _, reopened, err := s.ReopenSession("closed-agent", kept.ID); err != nil || !reopened {
+		t.Fatalf("reopening into the kept profile: reopened=%v err=%v", reopened, err)
+	}
+}
