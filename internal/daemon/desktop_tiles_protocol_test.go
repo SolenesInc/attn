@@ -129,6 +129,12 @@ func TestDockingATileRefusesAStaleRevisionAndAPaneID(t *testing.T) {
 		"tile_id": protocol.Deref(placed.PaneID), "tile_kind": "notebook", "edge": "right",
 	})
 	wantErrorCode(t, clash, protocol.SetupErrorCodeInvalid)
+
+	unknownSession := w.send(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": "/notes.md", "tile_session_id": "agent-that-never-was", "edge": "right",
+	})
+	wantErrorCode(t, unknownSession, protocol.SetupErrorCodeNotFound)
 }
 
 func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
@@ -224,4 +230,33 @@ func TestSessionsCarryTheirSetupOnTheWire(t *testing.T) {
 		}
 	}
 	t.Fatalf("initial_state did not list agent-a: %+v", initial.Sessions)
+}
+
+func TestDeletingASetupDropsItsTileSubscriptions(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "doomed"})
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": doomed.Setup.ID})
+	w.desktop = doomed.Desktops[0]
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
+	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
+	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 1 {
+		t.Fatalf("subscribing gave keys %v", keys)
+	}
+	current, err := w.d.store.GetSetup(doomed.Setup.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w.mustSend(w.client, map[string]any{
+		"cmd": protocol.CmdSetupDelete, "setup_id": doomed.Setup.ID, "expected_revision": current.Revision, "destination_setup_id": w.setupID,
+	})
+	w.d.pollMarkdownOnce()
+
+	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
+		t.Fatalf("deleting the setup left subscriptions %v", keys)
+	}
 }

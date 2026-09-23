@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -101,6 +102,9 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 			anchorID:  protocol.Deref(msg.AnchorID),
 			edge:      msg.Edge,
 			share:     protocol.Deref(msg.TileShare),
+		}
+		if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
+			return setupActionOutcome{}, setups.Errorf(setups.CodeNotFound, "session %s does not exist", dock.sessionID)
 		}
 		desktop, err := d.store.UpdateDesktopArrangement(msg.DesktopID, int64(msg.ExpectedRevision), func(desktop setups.Desktop) (setups.Desktop, error) {
 			return dockTileOnDesktop(desktop, dock)
@@ -282,6 +286,10 @@ func (d *Daemon) subscribedDesktopTiles() map[string]map[string]struct{} {
 func (d *Daemon) addSubscribedDesktopMarkdownTiles(desired map[string]markdownTileRef) {
 	for desktopID, tileIDs := range d.subscribedDesktopTiles() {
 		desktop, err := d.store.GetDesktop(desktopID)
+		if setupErr := (*setups.Error)(nil); errors.As(err, &setupErr) && setupErr.Code == setups.CodeNotFound {
+			d.pruneDesktopTileContentSubscriptions(desktopID, nil)
+			continue
+		}
 		if err != nil {
 			continue
 		}

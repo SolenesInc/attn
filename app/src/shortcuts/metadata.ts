@@ -63,7 +63,6 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'workspace.select6': { label: 'Switch to desktop 6', category: 'sessions' },
   'workspace.select7': { label: 'Switch to desktop 7', category: 'sessions' },
   'workspace.select8': { label: 'Switch to desktop 8', category: 'sessions' },
-  // The workspace.select ids key the user's saved rebindings; they switch desktops.
   'workspace.select9': { label: 'Switch to desktop 9', category: 'sessions' },
   'desktop.send1': { label: 'Send focused pane to desktop 1', category: 'sessions' },
   'desktop.send2': { label: 'Send focused pane to desktop 2', category: 'sessions' },
