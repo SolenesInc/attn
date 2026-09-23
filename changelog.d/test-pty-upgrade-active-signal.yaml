@@ -1,0 +1,3 @@
+kind: internal
+area: pty
+change: Wait for shared host activation in the macOS and Linux upgrade test.
