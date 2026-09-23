@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -61,8 +61,12 @@ func TestLastKnownGoodFromAnotherEnvironmentIsNotTrusted(t *testing.T) {
 
 func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	root := sharedArtifactTestRoot(t)
+	started := filepath.Join(root, "started")
+	if err := syscall.Mkfifo(started, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	slow := filepath.Join(root, "slow-host")
-	writeScript(t, slow, "exec sleep 30")
+	writeScript(t, slow, "echo started > '"+started+"'\nexec sleep 30")
 	var rejections int
 	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-slow", BinaryPath: slow,
@@ -71,9 +75,15 @@ func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	if err := backend.ValidateSharedCandidate(ctx, false); err == nil {
+	checked := make(chan error, 1)
+	go func() { checked <- backend.ValidateSharedCandidate(ctx, false) }()
+	if _, err := os.ReadFile(started); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if err := <-checked; err == nil {
 		t.Fatal("a check that never finished passed")
 	}
 	if rejections != 0 || !backend.SharedCandidatePending() {
