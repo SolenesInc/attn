@@ -468,6 +468,32 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 			t.Fatalf("Remove(%s): %v", id, err)
 		}
 	}
+	if err := current.ValidateSharedCandidate(context.Background(), true); err == nil {
+		t.Fatal("pre-probe artifact passed validation")
+	}
+	if !waitForPIDsGone(3*time.Second, hostPID) {
+		t.Fatal("an empty host rejected before its probe kept running")
+	}
+}
+
+func TestSharedHost_UnusedHostRetiresOnItsOwn(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-unused-")
+	stopHostsAtCleanup(t, root)
+	previousIdle := sharedHostIdleTimeout
+	sharedHostIdleTimeout = 200 * time.Millisecond
+	t.Cleanup(func() { sharedHostIdleTimeout = previousIdle })
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-unused", BinaryPath: binary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	host, err := backend.ensureSharedHost(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !waitForPIDsGone(5*time.Second, host.HostPID) {
+		t.Fatal("a host that never received a terminal did not retire")
+	}
 }
 
 func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *testing.T) {

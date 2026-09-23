@@ -251,6 +251,7 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 		return err
 	}
 	if !slices.Contains(info.Capabilities, ptyhost.CapabilityProbeChild) {
+		b.stopUnusedRejectedHost(artifact, incarnationOfHost(host), info)
 		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
 	}
 
@@ -342,4 +343,18 @@ func tail(data []byte) []byte {
 		return data
 	}
 	return data[len(data)-limit:]
+}
+
+func (b *WorkerBackend) stopUnusedRejectedHost(artifact ptyhost.Artifact, inc hostIncarnation, info ptyhost.HostInfoResult) {
+	b.artifactMu.Lock()
+	pinned := b.pinned.ID == artifact.ID
+	b.artifactMu.Unlock()
+	if pinned || len(info.SessionIDs) > 0 {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+	defer cancel()
+	if err := b.callSharedHost(ctx, inc, ptyhost.MethodShutdown, map[string]any{}, nil); err != nil {
+		b.cfg.Logf("stop rejected shared PTY host at %s: %v", inc.socketPath, err)
+	}
 }

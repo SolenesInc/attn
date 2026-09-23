@@ -153,6 +153,7 @@ impl Host {
         });
         host.write_registry()?;
         host.start_shell_poller()?;
+        host.schedule_idle_if_empty();
         eprintln!(
             "PTY host ready: pid={} socket={} format={}",
             std::process::id(),
