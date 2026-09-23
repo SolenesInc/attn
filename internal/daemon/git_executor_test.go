@@ -2,14 +2,10 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
 )
@@ -69,9 +65,11 @@ func TestGitExecutorCapsAndReservedInteractiveCapacity(t *testing.T) {
 	if got := <-started; got != "interactive" {
 		t.Fatalf("reserved slot admitted %q, want interactive", got)
 	}
-	snapshot := executor.Snapshot()
-	if snapshot.Active != 2 || snapshot.DeferredActive != 1 || snapshot.QueuedDeferred != 1 {
-		t.Fatalf("snapshot=%+v", snapshot)
+	executor.mu.Lock()
+	active, deferredActive, queuedDeferred := executor.active, executor.deferredActive, len(executor.deferred)
+	executor.mu.Unlock()
+	if active != 2 || deferredActive != 1 || queuedDeferred != 1 {
+		t.Fatalf("active=%d deferredActive=%d queuedDeferred=%d", active, deferredActive, queuedDeferred)
 	}
 	close(releaseDeferred)
 	if err := <-first; err != nil {
@@ -225,10 +223,6 @@ func TestGitExecutorRunningCancellationAndPanicReleaseCapacity(t *testing.T) {
 	if err := <-result; !errors.Is(err, cause) {
 		t.Fatalf("running cancellation=%v", err)
 	}
-	stats := executor.Snapshot().ByKind[gitTaskStatus]
-	if stats.Completed != 1 || stats.Failed != 1 || stats.Canceled != 1 {
-		t.Fatalf("canceled status stats=%+v", stats)
-	}
 
 	func() {
 		defer func() {
@@ -243,9 +237,11 @@ func TestGitExecutorRunningCancellationAndPanicReleaseCapacity(t *testing.T) {
 	if err := executor.Run(context.Background(), gitTask{Kind: gitTaskStatus}, func(context.Context, *attngit.Client) error { return nil }); err != nil {
 		t.Fatalf("capacity after panic: %v", err)
 	}
-	stats = executor.Snapshot().ByKind[gitTaskStatus]
-	if stats.Completed != 3 || stats.Failed != 2 || stats.Canceled != 1 {
-		t.Fatalf("final status stats=%+v", stats)
+	executor.mu.Lock()
+	active := executor.active
+	executor.mu.Unlock()
+	if active != 0 {
+		t.Fatalf("active after panic and completion = %d, want 0", active)
 	}
 }
 
@@ -327,137 +323,6 @@ func TestGitExecutorShutdownRacingQueuedCancellationReturnsTheShutdown(t *testin
 	if err := <-queued; !errors.Is(err, shutdown) {
 		t.Fatalf("queued error=%v, want the shutdown cause", err)
 	}
-}
-
-func TestGitExecutorMeasurementsCountLogicalWorkAndChildren(t *testing.T) {
-	executor := testGitExecutor(t, testGitConfig())
-	task := gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}
-	if err := executor.Run(context.Background(), task, func(ctx context.Context, client *attngit.Client) error {
-		_, err := client.Output(ctx, attngit.OpMetadata, "", "--version")
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	snapshot := executor.Snapshot()
-	stats := snapshot.ByKind[gitTaskRepositoryInfo]
-	if stats.Completed != 1 || stats.ChildCommands != 1 || stats.Failed != 0 {
-		t.Fatalf("repository info stats=%+v", stats)
-	}
-}
-
-func TestGitExecutorFailureIsNotCountedAsCancellation(t *testing.T) {
-	executor := testGitExecutor(t, testGitConfig())
-	failure := errors.New("git failed")
-	if err := executor.Run(context.Background(), gitTask{Kind: gitTaskRepositoryInfo}, func(context.Context, *attngit.Client) error {
-		return failure
-	}); !errors.Is(err, failure) {
-		t.Fatalf("run error=%v", err)
-	}
-	stats := executor.Snapshot().ByKind[gitTaskRepositoryInfo]
-	if stats.Completed != 1 || stats.Failed != 1 || stats.Canceled != 0 {
-		t.Fatalf("repository info stats=%+v", stats)
-	}
-}
-
-func TestGitExecutorSaturationReceipt(t *testing.T) {
-	repo := t.TempDir()
-	runGit(t, repo, "init", "-b", "main")
-	runGit(t, repo, "config", "user.email", "test@example.com")
-	runGit(t, repo, "config", "user.name", "Test")
-	tracked := filepath.Join(repo, "tracked.txt")
-	if err := os.WriteFile(tracked, []byte("before\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runGit(t, repo, "add", "tracked.txt")
-	runGit(t, repo, "commit", "-m", "initial")
-	if err := os.WriteFile(tracked, []byte("after\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	executor := testGitExecutor(t, productionGitExecutorConfig)
-	enqueued := make(chan gitTask, 64)
-	executor.enqueueObserver = func(task gitTask) { enqueued <- task }
-	release := make(chan struct{})
-	deferredResults := make(chan error, 50)
-	for range 50 {
-		go func() {
-			deferredResults <- executor.Run(context.Background(), gitTask{Kind: gitTaskReopen, Lane: gitDeferred}, func(context.Context, *attngit.Client) error {
-				<-release
-				return nil
-			})
-		}()
-	}
-	for range 50 {
-		<-enqueued
-	}
-
-	type latency struct {
-		Kind    gitTaskKind   `json:"kind"`
-		Elapsed time.Duration `json:"elapsed"`
-		Err     error         `json:"-"`
-	}
-	latencies := make(chan latency, 3)
-	go func() {
-		started := time.Now()
-		err := executor.Run(context.Background(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) error {
-			if _, err := client.GetBranchInfo(ctx, repo); err != nil {
-				return err
-			}
-			if _, err := client.GetHeadCommit(ctx, repo); err != nil {
-				return err
-			}
-			if _, err := client.GetDefaultBranch(ctx, repo); err != nil {
-				return err
-			}
-			_, err := client.ObserveWorktrees(ctx, repo)
-			return err
-		})
-		latencies <- latency{Kind: gitTaskRepositoryInfo, Elapsed: time.Since(started), Err: err}
-	}()
-	go func() {
-		started := time.Now()
-		_, _, err := newGitStatusReader(executor).Status(context.Background(), repo, gitStatusModeFull)
-		latencies <- latency{Kind: gitTaskStatus, Elapsed: time.Since(started), Err: err}
-	}()
-	go func() {
-		started := time.Now()
-		_, err := newFileDiffReader(executor).FileDiff(context.Background(), repo, "tracked.txt", "HEAD", "", false)
-		latencies <- latency{Kind: gitTaskFileDiff, Elapsed: time.Since(started), Err: err}
-	}()
-	receiptLatencies := make(map[gitTaskKind]string, 3)
-	for range 3 {
-		result := <-latencies
-		if result.Err != nil {
-			t.Fatal(result.Err)
-		}
-		receiptLatencies[result.Kind] = result.Elapsed.String()
-	}
-	snapshot := executor.Snapshot()
-	close(release)
-	for range 50 {
-		if err := <-deferredResults; err != nil {
-			t.Fatal(err)
-		}
-	}
-	receipt := struct {
-		DeferredBatch             int                    `json:"deferred_batch"`
-		Config                    gitExecutorConfig      `json:"config"`
-		ActiveHighWater           int                    `json:"active_high_water"`
-		DeferredActiveHighWater   int                    `json:"deferred_active_high_water"`
-		InteractiveQueueHighWater int                    `json:"interactive_queue_high_water"`
-		DeferredQueueHighWater    int                    `json:"deferred_queue_high_water"`
-		InteractiveLatency        map[gitTaskKind]string `json:"interactive_latency"`
-	}{
-		DeferredBatch: 50, Config: productionGitExecutorConfig,
-		ActiveHighWater: snapshot.ActiveHighWater, DeferredActiveHighWater: snapshot.DeferredActiveHighWater,
-		InteractiveQueueHighWater: snapshot.InteractiveQueueHighWater, DeferredQueueHighWater: snapshot.DeferredQueueHighWater,
-		InteractiveLatency: receiptLatencies,
-	}
-	encoded, err := json.Marshal(receipt)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Log(string(encoded))
 }
 
 func TestSharedCallsFanOutAndLastWaiterCancellation(t *testing.T) {

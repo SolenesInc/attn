@@ -147,7 +147,6 @@ type Daemon struct {
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader
 	fileDiff                          *fileDiffReader
-	gitExecMu                         sync.Mutex
 	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)

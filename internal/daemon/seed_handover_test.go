@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -37,8 +38,8 @@ func handoverRequest(d *Daemon, seed garden.Seed, requestID, sourceSessionID, ha
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed.ID), Handover: &protocol.DelegateHandover{Note: protocol.Ptr(handoff)}},
 		Cwd:        cwd, Agent: protocol.Ptr("codex"),
 	}
-	if _, err := attngit.GetRepoRoot(cwd); err == nil {
-		branch, branchErr := attngit.GetCurrentBranch(cwd)
+	if _, err := attngit.NewClient().GetRepoRoot(context.Background(), cwd); err == nil {
+		branch, branchErr := attngit.NewClient().GetCurrentBranch(context.Background(), cwd)
 		if branchErr == nil && branch != "" {
 			msg.Checkout = &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: branch}
 		}
@@ -644,7 +645,7 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	if err := d.doDeleteWorktree(worktree, nil, deleteWorktreeOptions{Force: true}); err != nil {
 		t.Fatalf("delete worktree: %v", err)
 	}
-	if !attngit.RefExists(repo, "feature/handover") {
+	if exists, _ := attngit.NewClient().RefExists(context.Background(), repo, "feature/handover"); !exists {
 		t.Fatal("worktree deletion removed a branch still owned by an open seed")
 	}
 	seed, _, err := d.readSeed(seedWire.ID)
@@ -672,7 +673,7 @@ func TestSeedHandoverRecreatesTheSavedBranchAfterWorktreeDeletion(t *testing.T) 
 	if done.Result.Directory != wantDirectory || !protocol.Deref(done.Result.WorktreeCreated) {
 		t.Fatalf("result = %+v, want recreated directory %s", done.Result, wantDirectory)
 	}
-	if branch, err := attngit.GetCurrentBranch(wantRoot); err != nil || branch != "feature/handover" {
+	if branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), wantRoot); err != nil || branch != "feature/handover" {
 		t.Fatalf("recreated branch = %q, %v", branch, err)
 	}
 }

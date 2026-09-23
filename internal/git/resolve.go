@@ -8,10 +8,6 @@ import (
 	"strings"
 )
 
-func ResolveRepoDir(repoDir string) (string, error) {
-	return defaultClient.ResolveRepoDir(context.Background(), repoDir)
-}
-
 func (c *Client) ResolveRepoDir(ctx context.Context, repoDir string) (string, error) {
 	expanded := ExpandPath(repoDir)
 	if c.isGitRepo(ctx, expanded) {
@@ -79,20 +75,6 @@ func (c *Client) originRepoName(ctx context.Context, path string) string {
 	return repoNameFromRemote(strings.TrimSpace(string(out)))
 }
 
-func OriginOwnerRepo(path string) string {
-	_, slug, _ := defaultClient.OriginHostOwnerRepo(context.Background(), path)
-	return slug
-}
-
-func OriginHostOwnerRepo(path string) (host, ownerRepo string) {
-	host, ownerRepo, _ = defaultClient.OriginHostOwnerRepo(context.Background(), path)
-	return host, ownerRepo
-}
-
-func OriginHostOwnerRepoContext(ctx context.Context, path string) (host, ownerRepo string, err error) {
-	return defaultClient.OriginHostOwnerRepo(ctx, path)
-}
-
 func (c *Client) OriginHostOwnerRepo(ctx context.Context, path string) (host, ownerRepo string, err error) {
 	out, err := c.Output(ctx, OpMetadata, path, "remote", "get-url", "origin")
 	if err != nil {
@@ -152,10 +134,6 @@ func repoNameFromRemote(remote string) string {
 		return ""
 	}
 	return parts[len(parts)-1]
-}
-
-func RemoteHostOwnerRepos(dir string) []string {
-	return defaultClient.RemoteHostOwnerRepos(context.Background(), dir)
 }
 
 func (c *Client) RemoteHostOwnerRepos(ctx context.Context, dir string) []string {

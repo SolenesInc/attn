@@ -127,17 +127,6 @@ func getGitStatusForSubscription(ctx context.Context, executor gitExecutor, dir 
 	})
 }
 
-func getGitStatusWithOptions(dir string, opts gitStatusOptions) (*protocol.GitStatusUpdateMessage, error) {
-	executor, err := newDirectGitExecutor()
-	if err != nil {
-		return nil, err
-	}
-	defer executor.Close(nil)
-	return gitValue(context.Background(), executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
-		return getGitStatusWithOptionsAdmitted(ctx, client, dir, opts)
-	})
-}
-
 func getGitStatusWithOptionsAdmitted(ctx context.Context, client *attngit.Client, dir string, opts gitStatusOptions) (*protocol.GitStatusUpdateMessage, error) {
 	mode := opts.mode
 	if mode == "" {

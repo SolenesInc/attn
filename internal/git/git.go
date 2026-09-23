@@ -22,10 +22,6 @@ type BranchInfo struct {
 	Repository string
 }
 
-func GetBranchInfo(dir string) (*BranchInfo, error) {
-	return defaultClient.GetBranchInfo(context.Background(), dir)
-}
-
 func (c *Client) GetBranchInfo(ctx context.Context, dir string) (*BranchInfo, error) {
 	info := &BranchInfo{}
 
@@ -65,10 +61,6 @@ func (c *Client) getCurrentBranch(ctx context.Context, dir string) (string, erro
 	return strings.TrimSpace(string(out)), nil
 }
 
-func GetRepoRoot(dir string) (string, error) {
-	return defaultClient.GetRepoRoot(context.Background(), dir)
-}
-
 func (c *Client) GetRepoRoot(ctx context.Context, dir string) (string, error) {
 	out, err := c.Output(ctx, OpMetadata, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
@@ -86,10 +78,6 @@ func sameDirectory(left string, right string) bool {
 	return os.SameFile(leftInfo, rightInfo)
 }
 
-func ResolvePickerRepoTarget(dir string) (repoRoot string, ok bool, err error) {
-	return defaultClient.ResolvePickerRepoTarget(context.Background(), dir)
-}
-
 func (c *Client) ResolvePickerRepoTarget(ctx context.Context, dir string) (repoRoot string, ok bool, err error) {
 	resolvedDir := CanonicalizePath(dir)
 	worktreeRoot, err := c.GetRepoRoot(ctx, resolvedDir)
@@ -103,10 +91,6 @@ func (c *Client) ResolvePickerRepoTarget(ctx context.Context, dir string) (repoR
 		return CanonicalizePath(mainRepo), true, nil
 	}
 	return resolvedDir, true, nil
-}
-
-func GetHeadCommit(dir string) (string, error) {
-	return defaultClient.GetHeadCommit(context.Background(), dir)
 }
 
 func (c *Client) GetHeadCommit(ctx context.Context, dir string) (string, error) {

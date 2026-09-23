@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"sort"
@@ -107,7 +108,7 @@ func TestGetBranchDiffFiles_CommittedChanges(t *testing.T) {
 	runGit(t, dir, "add", "new-file.go")
 	runGit(t, dir, "commit", "-m", "add new file")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -140,7 +141,7 @@ func TestGetBranchDiffFiles_UncommittedChanges(t *testing.T) {
 
 	writeFile(t, dir, "existing.go", "package main\n\n// modified\n")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -175,7 +176,7 @@ func TestGetBranchDiffFiles_MixedChanges(t *testing.T) {
 	writeFile(t, dir, "file1.go", "package main\n// uncommitted\n")
 	writeFile(t, dir, "file2.go", "package util\n// uncommitted\n")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -221,7 +222,7 @@ func TestGetBranchDiffFiles_DeletedFile(t *testing.T) {
 	runGit(t, dir, "add", "to-delete.go")
 	runGit(t, dir, "commit", "-m", "delete file")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -247,7 +248,7 @@ func TestGetBranchDiffFiles_UntrackedFile(t *testing.T) {
 
 	writeFile(t, dir, "untracked.go", "package main\n")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -274,7 +275,7 @@ func TestGetBranchDiffFiles_NoChanges(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 	runGit(t, dir, "branch", "base-point")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -292,7 +293,7 @@ func TestGetBranchDiffFiles_InvalidBaseRef(t *testing.T) {
 
 	writeFile(t, dir, "file.go", "package main\n")
 
-	files, err := GetBranchDiffFiles(dir, "nonexistent-ref")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "nonexistent-ref")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}
@@ -313,7 +314,7 @@ func TestGetBranchDiffFiles_LineStats(t *testing.T) {
 	runGit(t, dir, "add", "stats.go")
 	runGit(t, dir, "commit", "-m", "add stats file")
 
-	files, err := GetBranchDiffFiles(dir, "base-point")
+	files, err := NewClient().GetBranchDiffFiles(context.Background(), dir, "base-point")
 	if err != nil {
 		t.Fatalf("GetBranchDiffFiles failed: %v", err)
 	}

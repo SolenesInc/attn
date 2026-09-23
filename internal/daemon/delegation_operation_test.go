@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -187,7 +188,7 @@ func TestExplicitSeedDispatchRequiresHandoverBeforeCreatingWorktree(t *testing.T
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("refused dispatch created worktree %s: %v", path, err)
 	}
-	if attngit.RefExists(repo, "feat/unexpected") {
+	if exists, _ := attngit.NewClient().RefExists(context.Background(), repo, "feat/unexpected"); exists {
 		t.Fatal("refused dispatch created its branch")
 	}
 }
@@ -198,7 +199,7 @@ func TestConcurrentReuseDelegationsRequireExplicitSharing(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	setupDelegationSource(t, d, backend)
-	branch, err := attngit.GetCurrentBranch(repo)
+	branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), repo)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -107,6 +107,12 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if !ok {
 		t.Fatalf("git executor = %T, want coordinated executor", d.gitExecution())
 	}
+	mutations := 0
+	executor.enqueueObserver = func(task gitTask) {
+		if task.Kind == gitTaskWorktreeMutation {
+			mutations++
+		}
+	}
 	before := spawnCount(backend)
 
 	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "")
@@ -120,7 +126,7 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if info, err := os.Stat(worktree); err != nil || !info.IsDir() {
 		t.Fatalf("the worktree is not back at %s: %v", worktree, err)
 	}
-	if branch, err := attngit.GetCurrentBranch(worktree); err != nil || branch != "feat/recreate" {
+	if branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), worktree); err != nil || branch != "feat/recreate" {
 		t.Errorf("the recreated worktree is on %q (%v), want feat/recreate", branch, err)
 	}
 	if d.store.SessionClosed("recreate") {
@@ -139,12 +145,8 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if spawn.ResumeSessionID != "conv-recreate" {
 		t.Errorf("resume id = %q, want the saved conversation conv-recreate", spawn.ResumeSessionID)
 	}
-	mutation := executor.Snapshot().ByKind[gitTaskWorktreeMutation]
-	if mutation.Completed != 1 {
-		t.Errorf("worktree mutation callbacks = %d, want one authoritative callback", mutation.Completed)
-	}
-	if mutation.ChildCommands < 3 {
-		t.Errorf("worktree mutation child commands = %d, want prune, repository resolution and creation on one admitted client", mutation.ChildCommands)
+	if mutations != 1 {
+		t.Errorf("worktree mutation admissions = %d, want one authoritative admission", mutations)
 	}
 }
 
@@ -163,7 +165,7 @@ func TestFetchingTheBranchBackRecreatesTheWorktreeFromTheRemote(t *testing.T) {
 		t.Fatalf("fetch_recreate_and_reopen: %v", err)
 	}
 
-	if branch, err := attngit.GetCurrentBranch(worktree); err != nil || branch != "feat/fetch" {
+	if branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), worktree); err != nil || branch != "feat/fetch" {
 		t.Errorf("the recreated worktree is on %q (%v), want feat/fetch", branch, err)
 	}
 	if d.store.SessionClosed("fetch") {

@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -109,7 +110,7 @@ func TestAcceptedDelegationBasePinsTheRequestedRef(t *testing.T) {
 		Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feature/pinned-base", From: protocol.Ptr("HEAD"),
 	}
 
-	d := &Daemon{}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 	got, err := d.resolveAcceptedDelegationBase(&msg)
 	if err != nil {
 		t.Fatal(err)
@@ -198,7 +199,7 @@ func TestResolveDelegateRuntimeRejectsDetachedReuse(t *testing.T) {
 
 func mustGitOutput(t *testing.T, repo string, args ...string) []byte {
 	t.Helper()
-	out, err := attngit.Output(attngit.OpMetadata, repo, args...)
+	out, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, args...)
 	if err != nil {
 		t.Fatalf("git %v: %v", args, err)
 	}

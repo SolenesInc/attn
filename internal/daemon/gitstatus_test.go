@@ -66,9 +66,9 @@ func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
 		t.Fatalf("dirty working tree: %v", err)
 	}
 
-	content, err := readFileDiff(dir, "src/file.ts", shaV1, shaV2, false)
+	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaV1, headRef: shaV2})
 	if err != nil {
-		t.Fatalf("readFileDiff: %v", err)
+		t.Fatalf("readFileDiffCoordinated: %v", err)
 	}
 	if content.original != "v1" {
 		t.Errorf("original = %q, want %q", content.original, "v1")
@@ -81,9 +81,9 @@ func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
 func TestReadFileDiff_HeadRefFileDoesNotExist(t *testing.T) {
 	dir, shaEmpty, _, _ := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
 
-	content, err := readFileDiff(dir, "src/file.ts", shaEmpty, shaEmpty, false)
+	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaEmpty, headRef: shaEmpty})
 	if err != nil {
-		t.Fatalf("readFileDiff: %v", err)
+		t.Fatalf("readFileDiffCoordinated: %v", err)
 	}
 	if content.original != "" {
 		t.Errorf("original = %q, want empty (file absent at base_ref)", content.original)
@@ -358,7 +358,7 @@ func TestGitStatusCoordinatorSharesInFlightStatusForRepoAndMode(t *testing.T) {
 			getGitStatusForDaemon = previousGetGitStatus
 		}()
 
-		d := &Daemon{}
+		d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 		results := make(chan *protocol.GitStatusUpdateMessage, 2)
 		for i := 0; i < 2; i++ {
 			go func() {
@@ -398,11 +398,11 @@ func TestTrackedOnlyStatusResultStaysLimited(t *testing.T) {
 		runGitStatusCommandForDaemon = previousRunGitStatusCommand
 	}()
 
-	status, err := getGitStatusWithOptions("/repo", gitStatusOptions{
+	status, err := getGitStatusWithOptionsAdmitted(context.Background(), attngit.NewClient(), "/repo", gitStatusOptions{
 		mode: gitStatusModeTrackedOnly,
 	})
 	if err != nil {
-		t.Fatalf("getGitStatusWithOptions failed: %v", err)
+		t.Fatalf("getGitStatusWithOptionsAdmitted failed: %v", err)
 	}
 	if !protocol.Deref(status.Limited) {
 		t.Fatal("tracked-only status limited = false, want true")
@@ -427,12 +427,12 @@ func TestGetGitStatusWithOptionsFallsBackToTrackedOnlyAfterFullTimeout(t *testin
 		runGitStatusCommandForDaemon = previousRunGitStatusCommand
 	}()
 
-	status, err := getGitStatusWithOptions("/repo", gitStatusOptions{
+	status, err := getGitStatusWithOptionsAdmitted(context.Background(), attngit.NewClient(), "/repo", gitStatusOptions{
 		mode:        gitStatusModeFull,
 		fullTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		t.Fatalf("getGitStatusWithOptions failed: %v", err)
+		t.Fatalf("getGitStatusWithOptionsAdmitted failed: %v", err)
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("status command calls = %d, want 2", calls.Load())
@@ -496,7 +496,7 @@ func TestGitCoordinatorSharesInFlightFileDiff(t *testing.T) {
 			readFileDiffForDaemon = previousReadFileDiff
 		}()
 
-		d := &Daemon{}
+		d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 		results := make(chan fileDiffContent, 2)
 		for i := 0; i < 2; i++ {
 			go func() {

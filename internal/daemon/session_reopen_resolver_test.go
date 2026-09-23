@@ -23,11 +23,13 @@ func TestInteractiveReopenInspectionDoesNotJoinDeferredWork(t *testing.T) {
 	repository := t.TempDir()
 	started := make(chan struct{}, 2)
 	release := make(chan struct{})
+	d.reopenGitMu.Lock()
 	d.reopenInspect = func(context.Context, *attngit.Client, string, string) (branchInspection, error) {
 		started <- struct{}{}
 		<-release
 		return branchInspection{State: branchStateLocal}, nil
 	}
+	d.reopenGitMu.Unlock()
 
 	results := make(chan error, 2)
 	for _, lane := range []gitLane{gitDeferred, gitInteractive} {

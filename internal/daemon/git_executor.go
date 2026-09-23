@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
 
 	attngit "github.com/victorarias/attn/internal/git"
 )
@@ -94,7 +93,6 @@ func (l gitLane) String() string {
 var (
 	ErrNestedGitExecution = errors.New("nested git execution")
 	ErrGitExecutorClosed  = errors.New("git executor closed")
-	errGitCallbackPanic   = errors.New("git callback panicked")
 )
 
 type gitExecutionMarker struct{}
@@ -102,34 +100,12 @@ type gitExecutionMarker struct{}
 type queuedGitTask struct {
 	task       gitTask
 	ctx        context.Context
-	submitted  time.Time
 	admitted   chan struct{}
 	runCtx     context.Context
 	cancel     context.CancelCauseFunc
 	stopCancel func() bool
 	err        error
 	running    bool
-}
-
-type gitExecutorKindStats struct {
-	Completed     uint64
-	Failed        uint64
-	Canceled      uint64
-	ChildCommands uint64
-	QueueDuration time.Duration
-	RunDuration   time.Duration
-}
-
-type gitExecutorSnapshot struct {
-	Active                    int
-	DeferredActive            int
-	QueuedInteractive         int
-	QueuedDeferred            int
-	ActiveHighWater           int
-	DeferredActiveHighWater   int
-	InteractiveQueueHighWater int
-	DeferredQueueHighWater    int
-	ByKind                    map[gitTaskKind]gitExecutorKindStats
 }
 
 type coordinatedGitExecutor struct {
@@ -142,18 +118,11 @@ type coordinatedGitExecutor struct {
 
 	interactive              []*queuedGitTask
 	deferred                 []*queuedGitTask
-	running                  map[*queuedGitTask]struct{}
 	active                   int
 	deferredActive           int
 	interactiveSinceDeferred int
 	closedErr                error
-
-	activeHighWater           int
-	deferredActiveHighWater   int
-	interactiveQueueHighWater int
-	deferredQueueHighWater    int
-	byKind                    map[gitTaskKind]gitExecutorKindStats
-	enqueueObserver           func(gitTask)
+	enqueueObserver          func(gitTask)
 }
 
 var productionGitExecutorConfig = gitExecutorConfig{
@@ -173,25 +142,11 @@ func (d *Daemon) wireGitExecution(config gitExecutorConfig) {
 }
 
 func (d *Daemon) gitExecution() gitExecutor {
-	d.gitExecMu.Lock()
-	defer d.gitExecMu.Unlock()
-	if d.gitExec == nil {
-		executor, err := newGitExecutor(productionGitExecutorConfig, attngit.NewClient())
-		if err != nil {
-			panic(err)
-		}
-		d.gitExec = executor
-	}
 	return d.gitExec
 }
 
 func (d *Daemon) closeGitExecution(cause error) {
-	d.gitExecMu.Lock()
-	executor := d.gitExec
-	d.gitExecMu.Unlock()
-	if executor != nil {
-		executor.Close(cause)
-	}
+	d.gitExec.Close(cause)
 }
 
 func newGitExecutor(config gitExecutorConfig, client *attngit.Client) (*coordinatedGitExecutor, error) {
@@ -203,17 +158,11 @@ func newGitExecutor(config gitExecutorConfig, client *attngit.Client) (*coordina
 	}
 	root, cancel := context.WithCancelCause(context.Background())
 	return &coordinatedGitExecutor{
-		config:  config,
-		client:  client,
-		root:    root,
-		cancel:  cancel,
-		running: make(map[*queuedGitTask]struct{}),
-		byKind:  make(map[gitTaskKind]gitExecutorKindStats),
+		config: config,
+		client: client,
+		root:   root,
+		cancel: cancel,
 	}, nil
-}
-
-func newDirectGitExecutor() (gitExecutor, error) {
-	return newGitExecutor(testDirectGitExecutorConfig(), attngit.NewClient())
 }
 
 func gitValue[T any](ctx context.Context, executor gitExecutor, task gitTask, run func(context.Context, *attngit.Client) (T, error)) (T, error) {
@@ -230,7 +179,7 @@ func gitValue[T any](ctx context.Context, executor gitExecutor, task gitTask, ru
 	return value, nil
 }
 
-func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) (err error) {
+func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -240,7 +189,7 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 	if cause := context.Cause(ctx); cause != nil {
 		return cause
 	}
-	item := &queuedGitTask{task: task, ctx: ctx, submitted: time.Now(), admitted: make(chan struct{})}
+	item := &queuedGitTask{task: task, ctx: ctx, admitted: make(chan struct{})}
 	if err := e.enqueue(item); err != nil {
 		return err
 	}
@@ -257,30 +206,20 @@ func (e *coordinatedGitExecutor) Run(ctx context.Context, task gitTask, run func
 		return item.err
 	}
 
-	started := time.Now()
-	childCommands := 0
-	client := e.client.WithCommandObserver(func(attngit.Operation) {
-		childCommands++
-	})
 	defer func() {
 		recovered := recover()
-		canceled := context.Cause(item.runCtx) != nil
 		if item.stopCancel != nil {
 			item.stopCancel()
 		}
 		item.cancel(nil)
-		finishErr := err
-		if recovered != nil {
-			finishErr = errGitCallbackPanic
-		}
-		e.finish(item, time.Since(started), childCommands, finishErr, canceled)
+		e.finish(item)
 		if recovered != nil {
 			panic(recovered)
 		}
 	}()
 
 	runCtx := context.WithValue(item.runCtx, gitExecutionMarker{}, true)
-	return run(runCtx, client)
+	return run(runCtx, e.client)
 }
 
 func (e *coordinatedGitExecutor) enqueue(item *queuedGitTask) error {
@@ -294,17 +233,11 @@ func (e *coordinatedGitExecutor) enqueue(item *queuedGitTask) error {
 			return &ErrGitQueueSaturated{Lane: gitDeferred, Limit: e.config.MaxQueuedDeferred}
 		}
 		e.deferred = append(e.deferred, item)
-		if len(e.deferred) > e.deferredQueueHighWater {
-			e.deferredQueueHighWater = len(e.deferred)
-		}
 	} else {
 		if len(e.interactive) >= e.config.MaxQueuedInteractive {
 			return &ErrGitQueueSaturated{Lane: gitInteractive, Limit: e.config.MaxQueuedInteractive}
 		}
 		e.interactive = append(e.interactive, item)
-		if len(e.interactive) > e.interactiveQueueHighWater {
-			e.interactiveQueueHighWater = len(e.interactive)
-		}
 	}
 	if e.enqueueObserver != nil {
 		e.enqueueObserver(item.task)
@@ -377,39 +310,19 @@ func (e *coordinatedGitExecutor) admitLocked(item *queuedGitTask) {
 	item.stopCancel = context.AfterFunc(item.ctx, func() {
 		item.cancel(context.Cause(item.ctx))
 	})
-	e.running[item] = struct{}{}
 	e.active++
 	if item.task.Lane == gitDeferred {
 		e.deferredActive++
 	}
-	if e.active > e.activeHighWater {
-		e.activeHighWater = e.active
-	}
-	if e.deferredActive > e.deferredActiveHighWater {
-		e.deferredActiveHighWater = e.deferredActive
-	}
 	close(item.admitted)
 }
 
-func (e *coordinatedGitExecutor) finish(item *queuedGitTask, runDuration time.Duration, childCommands int, runErr error, canceled bool) {
+func (e *coordinatedGitExecutor) finish(item *queuedGitTask) {
 	e.mu.Lock()
-	delete(e.running, item)
 	e.active--
 	if item.task.Lane == gitDeferred {
 		e.deferredActive--
 	}
-	stats := e.byKind[item.task.Kind]
-	stats.Completed++
-	stats.ChildCommands += uint64(childCommands)
-	stats.QueueDuration += time.Since(item.submitted) - runDuration
-	stats.RunDuration += runDuration
-	if runErr != nil {
-		stats.Failed++
-		if canceled || errors.Is(runErr, context.Canceled) {
-			stats.Canceled++
-		}
-	}
-	e.byKind[item.task.Kind] = stats
 	e.dispatchLocked()
 	e.mu.Unlock()
 }
@@ -433,24 +346,4 @@ func (e *coordinatedGitExecutor) Close(cause error) {
 		close(item.admitted)
 	}
 	e.mu.Unlock()
-}
-
-func (e *coordinatedGitExecutor) Snapshot() gitExecutorSnapshot {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	byKind := make(map[gitTaskKind]gitExecutorKindStats, len(e.byKind))
-	for kind, stats := range e.byKind {
-		byKind[kind] = stats
-	}
-	return gitExecutorSnapshot{
-		Active:                    e.active,
-		DeferredActive:            e.deferredActive,
-		QueuedInteractive:         len(e.interactive),
-		QueuedDeferred:            len(e.deferred),
-		ActiveHighWater:           e.activeHighWater,
-		DeferredActiveHighWater:   e.deferredActiveHighWater,
-		InteractiveQueueHighWater: e.interactiveQueueHighWater,
-		DeferredQueueHighWater:    e.deferredQueueHighWater,
-		ByKind:                    byKind,
-	}
 }

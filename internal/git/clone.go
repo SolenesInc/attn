@@ -2,24 +2,14 @@ package git
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
 func (c *Client) CloneDepthOne(ctx context.Context, source, target string, environment []string) ([]byte, error) {
-	if c == nil || c.runner == nil {
-		return nil, errors.New("git client has no command runner")
-	}
-	if c.observer != nil {
-		c.observer(OpClone)
-	}
-	return c.runner.runWithEnvironment(ctx, OpClone, defaultTimeout(OpClone), "", environment, "clone", "--depth", "1", source, target)
-}
-
-func Clone(cloneURL, targetPath string) error {
-	return defaultClient.Clone(context.Background(), cloneURL, targetPath)
+	process := gitProcess{combined: true, env: environment, resolveGitOnEnvPATH: true}
+	return launchGit(ctx, OpClone, defaultTimeout(OpClone), process, "clone", "--depth", "1", source, target)
 }
 
 func (c *Client) Clone(ctx context.Context, cloneURL, targetPath string) error {
@@ -48,10 +38,6 @@ func (c *Client) cloneWithHTTPAuthorization(ctx context.Context, cloneURL, targe
 	}
 
 	return nil
-}
-
-func EnsureRepo(cloneURL, targetPath string) (bool, error) {
-	return defaultClient.EnsureRepo(context.Background(), cloneURL, targetPath)
 }
 
 func (c *Client) EnsureRepo(ctx context.Context, cloneURL, targetPath string) (bool, error) {

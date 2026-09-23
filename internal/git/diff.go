@@ -16,10 +16,6 @@ type DiffFileInfo struct {
 	HasUncommitted bool   `json:"has_uncommitted,omitempty"`
 }
 
-func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
-	return defaultClient.GetBranchDiffFiles(context.Background(), repoDir, baseRef)
-}
-
 func (c *Client) GetBranchDiffFiles(ctx context.Context, repoDir, baseRef string) ([]DiffFileInfo, error) {
 	fileMap := make(map[string]*DiffFileInfo)
 

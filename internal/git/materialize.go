@@ -15,10 +15,6 @@ func RepositoryCacheKey(identity string) string {
 	return base64.RawURLEncoding.EncodeToString([]byte(strings.ToLower(strings.TrimSpace(identity))))
 }
 
-func ValidateLocalClone(path, expectedIdentity string) (string, error) {
-	return defaultClient.ValidateLocalClone(context.Background(), path, expectedIdentity)
-}
-
 func (c *Client) ValidateLocalClone(ctx context.Context, path, expectedIdentity string) (string, error) {
 	path = CanonicalizePath(path)
 	info, err := os.Stat(path)
@@ -69,10 +65,6 @@ func authorizationForGitURL(rawURL, authorization string) (string, error) {
 	}
 }
 
-func EnsureManagedClone(cloneURL, target, expectedIdentity, authorization string) (string, bool, error) {
-	return defaultClient.EnsureManagedClone(context.Background(), cloneURL, target, expectedIdentity, authorization)
-}
-
 func (c *Client) EnsureManagedClone(ctx context.Context, cloneURL, target, expectedIdentity, authorization string) (string, bool, error) {
 	if _, err := os.Stat(target); err == nil {
 		mainRepo, err := c.ValidateLocalClone(ctx, target, expectedIdentity)
@@ -95,10 +87,6 @@ func (c *Client) EnsureManagedClone(ctx context.Context, cloneURL, target, expec
 	}
 	mainRepo, err := c.publishManagedClone(ctx, staging, target, expectedIdentity)
 	return mainRepo, err == nil, err
-}
-
-func publishManagedClone(staging, target, expectedIdentity string) (string, error) {
-	return defaultClient.publishManagedClone(context.Background(), staging, target, expectedIdentity)
 }
 
 func (c *Client) publishManagedClone(ctx context.Context, staging, target, expectedIdentity string) (string, error) {

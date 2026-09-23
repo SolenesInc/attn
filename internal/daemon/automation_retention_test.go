@@ -161,7 +161,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	}
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -188,7 +188,7 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/clean", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -313,7 +313,7 @@ func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/auto", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	def, err := d.automationApply(fmt.Sprintf(manualAutomationYAML, t.TempDir()))
 	if err != nil {
 		t.Fatal(err)

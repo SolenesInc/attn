@@ -77,7 +77,7 @@ func TestLegacySeedUsesItsDocumentUpdateAsConservativeStateEvidence(t *testing.T
 
 func TestObservedExecutionDistinguishesLocalNonGitAndRemoteHosts(t *testing.T) {
 	localDir := t.TempDir()
-	d := &Daemon{}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 	local := d.observedGardenExecution(&protocol.Session{
 		ID: "local", Directory: localDir, Agent: protocol.SessionAgentCopilot,
 	}, "native-local", time.Now())

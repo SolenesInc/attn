@@ -38,10 +38,6 @@ func ExpandPath(path string) string {
 	return path
 }
 
-func ListBranches(repoDir string) ([]string, error) {
-	return defaultClient.ListBranches(context.Background(), repoDir)
-}
-
 func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, error) {
 	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)")
 	if err != nil {
@@ -73,10 +69,6 @@ func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, er
 	}
 
 	return available, nil
-}
-
-func ListBranchesWithCommits(repoDir string) ([]BranchWithCommit, error) {
-	return defaultClient.ListBranchesWithCommits(context.Background(), repoDir)
 }
 
 func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([]BranchWithCommit, error) {
@@ -125,10 +117,6 @@ func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([
 	return result, nil
 }
 
-func DeleteBranch(repoDir, branch string, force bool) error {
-	return defaultClient.DeleteBranch(context.Background(), repoDir, branch, force)
-}
-
 func (c *Client) DeleteBranch(ctx context.Context, repoDir, branch string, force bool) error {
 	flag := "-d"
 	if force {
@@ -141,10 +129,6 @@ func (c *Client) DeleteBranch(ctx context.Context, repoDir, branch string, force
 	return nil
 }
 
-func SwitchBranch(repoDir, branch string) error {
-	return defaultClient.SwitchBranch(context.Background(), repoDir, branch)
-}
-
 func (c *Client) SwitchBranch(ctx context.Context, repoDir, branch string) error {
 	if out, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", branch); err != nil {
 		return fmt.Errorf("git checkout failed: %s", out)
@@ -152,19 +136,11 @@ func (c *Client) SwitchBranch(ctx context.Context, repoDir, branch string) error
 	return nil
 }
 
-func CreateBranch(repoDir, branch string) error {
-	return defaultClient.CreateBranch(context.Background(), repoDir, branch)
-}
-
 func (c *Client) CreateBranch(ctx context.Context, repoDir, branch string) error {
 	if out, err := c.Combined(ctx, OpMetadata, repoDir, "branch", branch); err != nil {
 		return fmt.Errorf("git branch failed: %s", out)
 	}
 	return nil
-}
-
-func GetCurrentBranch(repoDir string) (string, error) {
-	return defaultClient.GetCurrentBranch(context.Background(), repoDir)
 }
 
 func (c *Client) GetCurrentBranch(ctx context.Context, repoDir string) (string, error) {
@@ -178,10 +154,6 @@ func (c *Client) GetCurrentBranch(ctx context.Context, repoDir string) (string, 
 		return "", fmt.Errorf("git current branch failed: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-func ListRemotes(repoDir string) ([]string, error) {
-	return defaultClient.ListRemotes(context.Background(), repoDir)
 }
 
 func (c *Client) ListRemotes(ctx context.Context, repoDir string) ([]string, error) {
@@ -200,15 +172,6 @@ func (c *Client) ListRemotes(ctx context.Context, repoDir string) ([]string, err
 		}
 	}
 	return remotes, nil
-}
-
-func RefExists(repoDir, ref string) bool {
-	exists, _ := defaultClient.RefExists(context.Background(), repoDir, ref)
-	return exists
-}
-
-func RefExistsContext(ctx context.Context, repoDir, ref string) (bool, error) {
-	return defaultClient.RefExists(ctx, repoDir, ref)
 }
 
 func (c *Client) RefExists(ctx context.Context, repoDir, ref string) (bool, error) {
@@ -230,10 +193,6 @@ func (c *Client) RefExists(ctx context.Context, repoDir, ref string) (bool, erro
 	return false, err
 }
 
-func FetchRemoteBranch(repoDir, remote, branch string) error {
-	return defaultClient.FetchRemoteBranch(context.Background(), repoDir, remote, branch)
-}
-
 func (c *Client) FetchRemoteBranch(ctx context.Context, repoDir, remote, branch string) error {
 	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
@@ -247,10 +206,6 @@ func (c *Client) FetchRemoteBranch(ctx context.Context, repoDir, remote, branch 
 		return fmt.Errorf("git fetch failed: %s (%w)", outStr, err)
 	}
 	return nil
-}
-
-func EnsurePullRequestRevision(repoDir, remote string, number int, expectedSHA, authorization string) error {
-	return defaultClient.EnsurePullRequestRevision(context.Background(), repoDir, remote, number, expectedSHA, authorization)
 }
 
 func (c *Client) EnsurePullRequestRevision(ctx context.Context, repoDir, remote string, number int, expectedSHA, authorization string) error {
@@ -283,10 +238,6 @@ func (c *Client) EnsurePullRequestRevision(ctx context.Context, repoDir, remote 
 	return nil
 }
 
-func FetchRemotes(repoDir string) error {
-	return defaultClient.FetchRemotes(context.Background(), repoDir)
-}
-
 func (c *Client) FetchRemotes(ctx context.Context, repoDir string) error {
 	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
@@ -300,10 +251,6 @@ func (c *Client) FetchRemotes(ctx context.Context, repoDir string) error {
 		return fmt.Errorf("git fetch failed: %s (%w)", outStr, err)
 	}
 	return nil
-}
-
-func ListRemoteBranches(repoDir string) ([]string, error) {
-	return defaultClient.ListRemoteBranches(context.Background(), repoDir)
 }
 
 func (c *Client) ListRemoteBranches(ctx context.Context, repoDir string) ([]string, error) {
@@ -343,10 +290,6 @@ func (c *Client) ListRemoteBranches(ctx context.Context, repoDir string) ([]stri
 	return available, nil
 }
 
-func CheckoutBranch(repoDir, branch string) error {
-	return defaultClient.CheckoutBranch(context.Background(), repoDir, branch)
-}
-
 func (c *Client) CheckoutBranch(ctx context.Context, repoDir, branch string) error {
 	if _, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", branch); err == nil {
 		return nil
@@ -356,10 +299,6 @@ func (c *Client) CheckoutBranch(ctx context.Context, repoDir, branch string) err
 		return fmt.Errorf("git checkout failed: %s", out)
 	}
 	return nil
-}
-
-func GetHeadCommitInfo(repoDir string) (hash string, time string) {
-	return defaultClient.GetHeadCommitInfo(context.Background(), repoDir)
 }
 
 func (c *Client) GetHeadCommitInfo(ctx context.Context, repoDir string) (hash string, time string) {
@@ -372,14 +311,6 @@ func (c *Client) GetHeadCommitInfo(ctx context.Context, repoDir string) (hash st
 		return parts[0], parts[1]
 	}
 	return "", ""
-}
-
-func GetDefaultBranch(repoDir string) (string, error) {
-	return defaultClient.GetDefaultBranch(context.Background(), repoDir)
-}
-
-func GetDefaultBranchContext(ctx context.Context, repoDir string) (string, error) {
-	return defaultClient.GetDefaultBranch(ctx, repoDir)
 }
 
 func (c *Client) GetDefaultBranch(ctx context.Context, repoDir string) (string, error) {

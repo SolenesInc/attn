@@ -91,21 +91,6 @@ func (r *fileDiffReader) FileDiff(ctx context.Context, directory, path, baseRef,
 	})
 }
 
-func readFileDiff(directory, path, baseRef, headRef string, staged bool) (fileDiffContent, error) {
-	executor, err := newDirectGitExecutor()
-	if err != nil {
-		return fileDiffContent{}, err
-	}
-	defer executor.Close(nil)
-	return readFileDiffCoordinated(context.Background(), executor, fileDiffCacheKey{
-		directory: directory,
-		path:      path,
-		baseRef:   baseRef,
-		headRef:   headRef,
-		staged:    staged,
-	})
-}
-
 func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key fileDiffCacheKey) (fileDiffContent, error) {
 	content, err := gitValue(ctx, executor, gitTask{Kind: gitTaskFileDiff, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) (fileDiffContent, error) {
 		content := fileDiffContent{}
@@ -141,16 +126,6 @@ func readFileDiffCoordinated(ctx context.Context, executor gitExecutor, key file
 	}
 	content.modified = string(modified)
 	return content, nil
-}
-
-func testDirectGitExecutorConfig() gitExecutorConfig {
-	return gitExecutorConfig{
-		MaxActive:            2,
-		MaxDeferredActive:    1,
-		InteractiveBurst:     1,
-		MaxQueuedInteractive: 8,
-		MaxQueuedDeferred:    8,
-	}
 }
 
 func cloneGitStatusUpdate(status *protocol.GitStatusUpdateMessage) *protocol.GitStatusUpdateMessage {

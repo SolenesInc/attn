@@ -85,7 +85,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	resolvedLocationJSON := automationResolvedLocationJSON(t, mainRepo, worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	dir := t.TempDir()
 
 	v1 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Sweep.")

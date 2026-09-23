@@ -15,26 +15,26 @@ func TestEnsureDetachedWorktreeAtRevisionCreateAdoptAndProtectEvidence(t *testin
 	}
 	runGit(t, mainDir, "init")
 	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-	revision, err := GetHeadCommit(mainDir)
+	revision, err := NewClient().GetHeadCommit(context.Background(), mainDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	worktree := filepath.Join(filepath.Dir(mainDir), "detached")
-	created, err := EnsureDetachedWorktreeAtRevision(mainDir, worktree, revision)
+	created, err := NewClient().EnsureDetachedWorktreeAtRevision(context.Background(), mainDir, worktree, revision)
 	if err != nil || !created {
 		t.Fatalf("create = %v, %v", created, err)
 	}
-	created, err = EnsureDetachedWorktreeAtRevision(mainDir, worktree, revision)
+	created, err = NewClient().EnsureDetachedWorktreeAtRevision(context.Background(), mainDir, worktree, revision)
 	if err != nil || created {
 		t.Fatalf("adopt = %v, %v", created, err)
 	}
 	if err := os.WriteFile(filepath.Join(worktree, "evidence.txt"), []byte("keep"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := EnsureDetachedWorktreeAtRevision(mainDir, worktree, revision); err == nil || !strings.Contains(err.Error(), "local changes") {
+	if _, err := NewClient().EnsureDetachedWorktreeAtRevision(context.Background(), mainDir, worktree, revision); err == nil || !strings.Contains(err.Error(), "local changes") {
 		t.Fatalf("dirty adoption err = %v", err)
 	}
-	if created, err := EnsureAutomationSessionWorktree(mainDir, worktree, revision, "", true); err != nil || created {
+	if created, err := NewClient().EnsureAutomationSessionWorktree(context.Background(), mainDir, worktree, revision, "", true); err != nil || created {
 		t.Fatalf("persisted session dirty adoption = %v, %v", created, err)
 	}
 	if _, err := os.Stat(filepath.Join(worktree, "evidence.txt")); err != nil {
@@ -43,7 +43,7 @@ func TestEnsureDetachedWorktreeAtRevisionCreateAdoptAndProtectEvidence(t *testin
 
 	attached := filepath.Join(filepath.Dir(mainDir), "attached")
 	runGit(t, mainDir, "worktree", "add", "-b", "review-attached", attached, revision)
-	if _, err := EnsureDetachedWorktreeAtRevision(mainDir, attached, revision); err == nil || !strings.Contains(err.Error(), "attached to branch") {
+	if _, err := NewClient().EnsureDetachedWorktreeAtRevision(context.Background(), mainDir, attached, revision); err == nil || !strings.Contains(err.Error(), "attached to branch") {
 		t.Fatalf("attached adoption err = %v", err)
 	}
 }
@@ -55,7 +55,7 @@ func TestEnsureDetachedWorktreeAtRevisionRecoversFreshStaleMetadata(t *testing.T
 	}
 	runGit(t, mainDir, "init")
 	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
-	revision, err := GetHeadCommit(mainDir)
+	revision, err := NewClient().GetHeadCommit(context.Background(), mainDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestEnsureDetachedWorktreeAtRevisionRecoversFreshStaleMetadata(t *testing.T
 	if err := os.RemoveAll(worktree); err != nil {
 		t.Fatal(err)
 	}
-	created, err := EnsureDetachedWorktreeAtRevision(mainDir, worktree, revision)
+	created, err := NewClient().EnsureDetachedWorktreeAtRevision(context.Background(), mainDir, worktree, revision)
 	if err != nil || !created {
 		t.Fatalf("fresh stale metadata recovery created=%v err=%v", created, err)
 	}
@@ -116,7 +116,7 @@ func TestCreateWorktree(t *testing.T) {
 	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
 
 	wtDir := filepath.Join(tmpDir, "new-wt")
-	err := CreateWorktree(mainDir, "new-feature", wtDir)
+	err := NewClient().CreateWorktree(context.Background(), mainDir, "new-feature", wtDir)
 	if err != nil {
 		t.Fatalf("CreateWorktree failed: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestCreateWorktree(t *testing.T) {
 		t.Error("worktree directory was not created")
 	}
 
-	info, err := GetBranchInfo(wtDir)
+	info, err := NewClient().GetBranchInfo(context.Background(), wtDir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestDeleteWorktree(t *testing.T) {
 	wtDir := filepath.Join(tmpDir, "wt-to-delete")
 	runGit(t, mainDir, "worktree", "add", "-b", "temp", wtDir)
 
-	err := DeleteWorktree(mainDir, wtDir, false)
+	err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, false)
 	if err != nil {
 		t.Fatalf("DeleteWorktree failed: %v", err)
 	}
@@ -176,14 +176,14 @@ func TestDeleteWorktreeDirtyRequiresForce(t *testing.T) {
 		t.Fatalf("write dirty file: %v", err)
 	}
 
-	if err := DeleteWorktree(mainDir, wtDir, false); err == nil {
+	if err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, false); err == nil {
 		t.Fatal("DeleteWorktree without force succeeded on dirty worktree")
 	}
 	if _, err := os.Stat(wtDir); err != nil {
 		t.Fatalf("dirty worktree disappeared after non-force delete: %v", err)
 	}
 
-	if err := DeleteWorktree(mainDir, wtDir, true); err != nil {
+	if err := NewClient().DeleteWorktree(context.Background(), mainDir, wtDir, true); err != nil {
 		t.Fatalf("DeleteWorktree with force failed: %v", err)
 	}
 	worktrees, err := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
@@ -222,9 +222,9 @@ func TestResolveMainRepoPath_WithMainRepo(t *testing.T) {
 	runGit(t, mainDir, "init")
 	runGit(t, mainDir, "commit", "--allow-empty", "-m", "init")
 
-	got := ResolveMainRepoPath(mainDir)
+	got := NewClient().ResolveMainRepoPath(context.Background(), mainDir)
 	if canonicalPath(got) != canonicalPath(mainDir) {
-		t.Errorf("ResolveMainRepoPath(main repo) = %q, want %q", got, mainDir)
+		t.Errorf("NewClient().ResolveMainRepoPath(context.Background(), main repo) = %q, want %q", got, mainDir)
 	}
 }
 
@@ -241,9 +241,9 @@ func TestResolveMainRepoPath_WithWorktree(t *testing.T) {
 	worktreeDir := filepath.Join(tmpDir, "hurdy-gurdy--feat-auto-bump-yt-dlp--fork-hurdy-gurdy")
 	runGit(t, mainDir, "worktree", "add", "-b", "feat/auto-bump-yt-dlp", worktreeDir)
 
-	got := ResolveMainRepoPath(worktreeDir)
+	got := NewClient().ResolveMainRepoPath(context.Background(), worktreeDir)
 	if canonicalPath(got) != canonicalPath(mainDir) {
-		t.Errorf("ResolveMainRepoPath(worktree) = %q, want %q", got, mainDir)
+		t.Errorf("NewClient().ResolveMainRepoPath(context.Background(), worktree) = %q, want %q", got, mainDir)
 	}
 }
 

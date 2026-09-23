@@ -29,8 +29,8 @@ func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T
 		if !worktreeAutomaticCleanupExcluded(d) {
 			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without automatic cleanup exclusion"}
 		}
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/provider-create" {
 			t.Fatalf("provider branch=%q, want feat/provider-create", params.Branch)
@@ -79,8 +79,8 @@ func TestDoCreateWorktree_BeforeCreateHookRunsBeforeBuiltInCreate(t *testing.T) 
 	defer client.Close()
 
 	hookDone := respondToBeforeCreateHookCall(t, client, func(params worktreeCreateProviderParams) error {
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			return fmt.Errorf("before hook main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			return fmt.Errorf("before hook main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/before-hook" {
 			return fmt.Errorf("before hook branch=%q, want feat/before-hook", params.Branch)
@@ -116,8 +116,8 @@ func TestDoCreateWorktree_AfterCreateHookErrorReturnsCreatedPath(t *testing.T) {
 	defer client.Close()
 
 	hookDone := respondToAfterCreateHookCall(t, client, func(params worktreeAfterCreateHookParams) error {
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			return fmt.Errorf("after hook main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			return fmt.Errorf("after hook main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/after-hook" {
 			return fmt.Errorf("after hook branch=%q, want feat/after-hook", params.Branch)
@@ -517,7 +517,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 		if !params.Force {
 			t.Fatalf("provider delete force=false, want true")
 		}
-		if err := git.DeleteWorktree(mainDir, worktreePath, params.Force); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), mainDir, worktreePath, params.Force); err != nil {
 			t.Fatalf("provider delete worktree failed: %v", err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusHandled}
@@ -540,7 +540,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 			t.Fatalf("provider-deleted worktree still listed: %#v", worktree)
 		}
 	}
-	if git.RefExists(mainDir, "feat/provider-delete") {
+	if exists, _ := git.NewClient().RefExists(context.Background(), mainDir, "feat/provider-delete"); exists {
 		t.Fatal("provider-deleted worktree branch remains")
 	}
 	assertLogContains(t, logPath,
@@ -571,7 +571,7 @@ func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
 		if params.Path != worktreePath {
 			t.Fatalf("provider delete path=%q, want %q", params.Path, worktreePath)
 		}
-		if err := git.DeleteWorktree(repo.main, worktreePath, false); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), repo.main, worktreePath, false); err != nil {
 			t.Fatal(err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusHandled}
@@ -581,7 +581,7 @@ func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
 		t.Fatalf("sweep removed %d worktrees, want 1", removed)
 	}
 	waitForProviderResponse(t, responseDone)
-	if git.RefExists(repo.main, "feat/provider-swept") {
+	if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-swept"); exists {
 		t.Fatal("provider-handled sweep left the branch behind")
 	}
 
@@ -605,7 +605,7 @@ func TestWorktreeSweepFinalizesProviderDeletionReportedAsError(t *testing.T) {
 	client, done := startPluginPipe(t, d, "sweep-delete-error-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
 	responseDone := respondToDeleteProviderCall(t, client, func(worktreeDeleteProviderParams) worktreeDeleteProviderResult {
-		if err := git.DeleteWorktree(repo.main, worktreePath, false); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), repo.main, worktreePath, false); err != nil {
 			t.Fatal(err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "provider lost its response after deletion"}
@@ -618,7 +618,7 @@ func TestWorktreeSweepFinalizesProviderDeletionReportedAsError(t *testing.T) {
 	if d.store.GetWorktree(worktreePath) != nil {
 		t.Fatal("provider-deleted worktree remained in the daemon registry")
 	}
-	if git.RefExists(repo.main, "feat/provider-error-after-delete") {
+	if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-error-after-delete"); exists {
 		t.Fatal("provider-deleted worktree branch remains")
 	}
 
@@ -793,7 +793,7 @@ func TestDoDeleteWorktree_ProviderDeleteBeforeErrorFinalizesOnce(t *testing.T) {
 	defer client.Close()
 
 	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
-		if err := git.DeleteWorktree(mainDir, worktreePath, true); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), mainDir, worktreePath, true); err != nil {
 			t.Fatalf("provider delete worktree: %v", err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "connection lost after delete"}
@@ -856,7 +856,7 @@ func initProviderTestRepo(t *testing.T) (string, string) {
 	}
 	runGitDaemon(t, mainDir, "init")
 	runGitDaemon(t, mainDir, "commit", "--allow-empty", "-m", "init")
-	return tmpDir, git.ResolveMainRepoPath(mainDir)
+	return tmpDir, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir)
 }
 
 func respondToCreateProviderCall(

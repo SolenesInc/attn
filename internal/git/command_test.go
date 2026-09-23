@@ -23,7 +23,7 @@ func TestRunGitOutputTimesOut(t *testing.T) {
 	cleanup := setTimeoutForTesting(OpMetadata, 25*time.Millisecond)
 	defer cleanup()
 
-	_, err := runGitOutput(OpMetadata, t.TempDir(), "status")
+	_, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -36,7 +36,7 @@ func TestOutputContextReturnsCancellationCause(t *testing.T) {
 	cause := errors.New("foreground preempted sweep")
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(cause)
-	_, err := OutputContext(ctx, OpMetadata, t.TempDir(), "status")
+	_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
 	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want cancellation cause", err)
 	}
@@ -111,9 +111,9 @@ func TestRunGitOutputLogsSlowCommand(t *testing.T) {
 	})
 	defer SetLogFunc(nil)
 
-	out, err := runGitOutput(OpMetadata, t.TempDir(), "status")
+	out, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
 	if err != nil {
-		t.Fatalf("runGitOutput failed: %v", err)
+		t.Fatalf("Output failed: %v", err)
 	}
 	if strings.TrimSpace(string(out)) != "ok" {
 		t.Fatalf("output = %q, want ok", out)
@@ -142,7 +142,7 @@ func TestRunGitOutputRedactsCredentialURLsInLogsAndTimeouts(t *testing.T) {
 	})
 	defer SetLogFunc(nil)
 
-	_, err := runGitOutput(OpClone, t.TempDir(), "clone", secretURL, "/tmp/repo")
+	_, err := NewClient().Output(context.Background(), OpClone, t.TempDir(), "clone", secretURL, "/tmp/repo")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -173,7 +173,7 @@ func TestHTTPAuthorizationUsesProcessEnvironmentNotArgumentsOrLogs(t *testing.T)
 	var logs []string
 	SetLogFunc(func(format string, args ...interface{}) { logs = append(logs, fmt.Sprintf(format, args...)) })
 	defer SetLogFunc(nil)
-	if _, err := runGitCombinedWithHTTPAuthorization(OpNetwork, "", "https://github.com/owner/repo.git", header, "fetch", "origin", "ref"); err != nil {
+	if _, err := NewClient().combinedWithHTTPAuthorization(context.Background(), OpNetwork, "", "https://github.com/owner/repo.git", header, "fetch", "origin", "ref"); err != nil {
 		t.Fatal(err)
 	}
 	captured, err := os.ReadFile(capture)

@@ -1,13 +1,9 @@
 package automode
 
 import (
-	"context"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"testing"
-
-	"github.com/victorarias/attn/internal/git"
 )
 
 func TestDetectFromRepoNamesTheRepoAndItsRemotes(t *testing.T) {
@@ -40,10 +36,6 @@ func TestDetectFromRepoNamesTheRepoAndItsRemotes(t *testing.T) {
 	}
 	if len(identities) != 2 || identities[0] != "github.com/acme/widgets" {
 		t.Errorf("identities = %v, want origin first for the visibility lookup", identities)
-	}
-	injectedSlots, injectedIdentities := DetectFromRepoWithGit(context.Background(), git.NewClient(), dir)
-	if !reflect.DeepEqual(injectedSlots, slots) || !reflect.DeepEqual(injectedIdentities, identities) {
-		t.Fatalf("injected detection = %v / %v, direct = %v / %v", injectedSlots, injectedIdentities, slots, identities)
 	}
 }
 
