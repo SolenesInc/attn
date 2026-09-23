@@ -422,7 +422,7 @@ func (d *Daemon) seedTileSession(tenderSessionID string, location agentLocation)
 	if tenderSessionID == "" {
 		return location.sessionID
 	}
-	if profileID, err := d.store.SessionProfileID(tenderSessionID); err == nil && profileID == location.profileID {
+	if tender := d.store.Get(tenderSessionID); tender != nil && tender.ProfileID == location.profileID {
 		return tenderSessionID
 	}
 	return location.sessionID

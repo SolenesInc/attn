@@ -7,11 +7,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func readSeedDocumentResult(t *testing.T, client *wsClient) protocol.SeedDocumentGetResultMessage {
@@ -304,5 +306,27 @@ func TestFormatMarkdownAnnotationPayloadNamesSeed(t *testing.T) {
 	}, []protocol.MarkdownAnnotation{{ID: "g", Type: markdownAnnotationTypeGlobal, Text: protocol.Ptr("note")}}, nil)
 	if !strings.Contains(payload, "Seed: s-abc123 — Reader") {
 		t.Fatalf("payload does not identify seed:\n%s", payload)
+	}
+}
+
+func TestOpeningASeedWhoseTenderClosedBindsTheOpener(t *testing.T) {
+	d := newGardenDaemon(t)
+	_, desktop := setupAgentDesktopOn(t, d)
+	injectTestSession(t, d, protocol.Session{ID: "sess-a", Label: "tender", Directory: t.TempDir()})
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "Left growing"})
+	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
+	if _, err := d.store.CloseSession("sess-a", store.SessionClose{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	_, tileID, err := d.openSeedTile(seed.ID, "session-1", false)
+	if err != nil {
+		t.Fatalf("open a seed whose tender closed: %v", err)
+	}
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "session-1" {
+		t.Fatalf("seed tile bound %q, want the opener session-1", tile.TileSessionID)
+	}
+	if _, _, err := d.openSeedTile(seed.ID, "", true); err != nil {
+		t.Fatalf("standalone open of a seed whose tender closed: %v", err)
 	}
 }

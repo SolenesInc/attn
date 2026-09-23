@@ -115,7 +115,7 @@ export function useSessionLaunch({
         return;
       }
       const target = launchTarget(currentDesktop, direction, targetPaneId);
-      const baseId = options.baseSessionId ?? target.focusedSessionId;
+      const baseId = options.baseSessionId ?? activeLocalSession?.id ?? target.focusedSessionId;
       const base = sessions.find((session) => session.id === baseId) ?? null;
       const cwd = options.cwd || base?.cwd;
       if (!cwd) {
@@ -156,6 +156,7 @@ export function useSessionLaunch({
       }
     },
     [
+      activeLocalSession,
       closeSession,
       createSession,
       currentDesktop,
