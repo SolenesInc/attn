@@ -8,4 +8,6 @@ notes: >
   Protocol 318 streams reopen eligibility over WebSocket through the new
   session_reopen_resolved event, keeps inline verdicts on the Unix socket,
   preserves the existing refreshed event, and drops the unused checking flag
-  from reopen verdicts.
+  from reopen verdicts. Closing a session checks reopen eligibility only while
+  a Sessions view is open; the app sends session_reopen_unsubscribe when the
+  view closes.

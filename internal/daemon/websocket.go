@@ -1030,6 +1030,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 			}
 		}
 		go d.sendSessionListWSResult(client, list, intent)
+	case protocol.CmdSessionReopenUnsubscribe:
+		d.removeSessionReopenClient(client)
 	case protocol.CmdSessionShow:
 		go d.sendSessionShowWSResult(client, msg.(*protocol.SessionShowMessage))
 	case protocol.CmdSessionReopen:

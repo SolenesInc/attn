@@ -9547,6 +9547,11 @@ type SessionReopenResultMessage struct {
 	Success bool `json:"success"`
 }
 
+type SessionReopenUnsubscribeMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+}
+
 type SessionSelectedMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`

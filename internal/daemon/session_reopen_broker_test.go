@@ -271,11 +271,38 @@ func TestASessionListBufferedAtDisconnectLeavesNoReopenInterest(t *testing.T) {
 	}
 }
 
+func sendLedgerCommand(t *testing.T, d *Daemon, client *wsClient, command any) {
+	t.Helper()
+	raw, err := json.Marshal(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.handleClientMessage(client, raw)
+}
+
+func openLedgerPage(t *testing.T, d *Daemon, client *wsClient) {
+	t.Helper()
+	sendLedgerCommand(t, d, client, protocol.SessionListMessage{
+		Cmd: protocol.CmdSessionList, RequestID: protocol.Ptr("page"), All: protocol.Ptr(true), Reopen: protocol.Ptr(true),
+	})
+	var page protocol.SessionListResultMessage
+	if err := json.Unmarshal((<-client.send).payload, &page); err != nil || page.Event != protocol.EventSessionListResult || !page.Success {
+		t.Fatalf("ledger page = %+v (err %v), want a successful session_list_result", page, err)
+	}
+}
+
+func ledgerClient(d *Daemon) *wsClient {
+	client := newWorkspaceProtocolTestClient()
+	client.setIdentity("app", "test", []string{protocol.CapabilityWorkspaceSessions})
+	d.wsHub.add(client)
+	return client
+}
+
 func TestSessionCloseProjectsTheRowBeforeStartingResolution(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	addLedgerTestSession(t, d, "closing", t.TempDir())
-	d.wsHub.add(newWorkspaceProtocolTestClient())
 	broker := installTestReopenBroker(t, d, 1)
+	openLedgerPage(t, d, ledgerClient(d))
 	var projected atomic.Bool
 	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
 		if event.Event == protocol.EventSessionClosed {
@@ -294,17 +321,33 @@ func TestSessionCloseProjectsTheRowBeforeStartingResolution(t *testing.T) {
 	<-resolved
 }
 
-func TestSessionCloseDoesNotStartResolutionWithoutAWebSocketClient(t *testing.T) {
+func TestSessionCloseStartsNoResolutionWhileNoLedgerIsOpen(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addLedgerTestSession(t, d, "headless", t.TempDir())
+	addLedgerTestSession(t, d, "unwatched", t.TempDir())
+	ledgerClient(d)
 
-	d.closeSession("headless", store.SessionClose{By: store.SessionClosedByUser})
+	d.closeSession("unwatched", store.SessionClose{By: store.SessionClosedByUser})
 
-	d.reopenBrokerMu.Lock()
-	broker := d.reopenBrokerInstance
-	d.reopenBrokerMu.Unlock()
-	if broker != nil {
-		t.Fatal("headless close initialized the reopen broker")
+	if broker := d.existingSessionReopenBroker(); broker != nil {
+		t.Fatal("a close with no open ledger initialized the reopen broker")
+	}
+}
+
+func TestSessionCloseStartsNoResolutionAfterTheLedgerUnsubscribes(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	addLedgerTestSession(t, d, "after-unsubscribe", t.TempDir())
+	broker := installTestReopenBroker(t, d, 1)
+	client := ledgerClient(d)
+	openLedgerPage(t, d, client)
+
+	sendLedgerCommand(t, d, client, protocol.SessionReopenUnsubscribeMessage{Cmd: protocol.CmdSessionReopenUnsubscribe})
+	d.closeSession("after-unsubscribe", store.SessionClose{By: store.SessionClosedByUser})
+
+	broker.mu.Lock()
+	jobs := len(broker.jobs)
+	broker.mu.Unlock()
+	if jobs != 0 {
+		t.Fatalf("close after the ledger unsubscribed queued %d reopen jobs, want none", jobs)
 	}
 }
 

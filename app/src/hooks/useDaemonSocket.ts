@@ -4621,7 +4621,14 @@ export function useDaemonSocket({
       connected: wsRef.current?.readyState === WebSocket.OPEN,
       connectionGeneration: connectionGenerationRef.current,
     });
-    return () => sessionLedgerListenersRef.current.delete(listener);
+    return () => {
+      const listeners = sessionLedgerListenersRef.current;
+      listeners.delete(listener);
+      const ws = wsRef.current;
+      if (listeners.size === 0 && ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ cmd: 'session_reopen_unsubscribe' }));
+      }
+    };
   }, []);
 
   const sendSessionAnnotationsGet = useCallback((sessionId: string): Promise<SessionAnnotationSet> => {

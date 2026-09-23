@@ -877,6 +877,12 @@ model SessionListMessage {
   reopen?: boolean;
 }
 
+// Ends this connection's streamed reopen eligibility: the ledger view closed.
+// Nothing streams again until the next session_list asks for reopen.
+model SessionReopenUnsubscribeMessage {
+  cmd: "session_reopen_unsubscribe";
+}
+
 // Reads one ledger row, live or closed, by exact session id.
 model SessionShowMessage {
   cmd: "session_show";

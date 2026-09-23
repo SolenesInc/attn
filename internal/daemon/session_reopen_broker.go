@@ -35,11 +35,14 @@ func (d *Daemon) closeSessionReopenBroker() {
 	}
 }
 
-func (d *Daemon) removeSessionReopenClient(client *wsClient) {
+func (d *Daemon) existingSessionReopenBroker() *sessionReopenBroker {
 	d.reopenBrokerMu.Lock()
-	broker := d.reopenBrokerInstance
-	d.reopenBrokerMu.Unlock()
-	if broker != nil {
+	defer d.reopenBrokerMu.Unlock()
+	return d.reopenBrokerInstance
+}
+
+func (d *Daemon) removeSessionReopenClient(client *wsClient) {
+	if broker := d.existingSessionReopenBroker(); broker != nil {
 		broker.RemoveClient(client)
 	}
 }
@@ -149,7 +152,7 @@ func (b *sessionReopenBroker) ResolveForClose(key reopenKey) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.stopped {
+	if b.stopped || len(b.clients) == 0 {
 		return
 	}
 	b.jobLocked(key).broadcastOnCompletion = true
