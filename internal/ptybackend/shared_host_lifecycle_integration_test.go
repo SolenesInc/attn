@@ -288,9 +288,14 @@ func TestSharedHost_RejectedCandidateKeepsLastKnownGood(t *testing.T) {
 	}
 	_ = good.Shutdown(context.Background())
 
+	runs := filepath.Join(root, "runs")
 	broken := filepath.Join(root, "broken-host")
-	if err := os.WriteFile(broken, []byte("#!/bin/sh\nexit 1\n"), 0o700); err != nil {
+	if err := os.WriteFile(broken, []byte("#!/bin/sh\necho run >> '"+runs+"'\nexit 1\n"), 0o700); err != nil {
 		t.Fatal(err)
+	}
+	brokenRuns := func() int {
+		data, _ := os.ReadFile(runs)
+		return strings.Count(string(data), "run")
 	}
 	var rejections []SharedArtifactRejection
 	cfg.BinaryPath = broken
@@ -326,14 +331,15 @@ func TestSharedHost_RejectedCandidateKeepsLastKnownGood(t *testing.T) {
 	if restarted.SharedCandidatePending() {
 		t.Fatal("an unchanged rejected candidate is pending again after restart")
 	}
-	if err := restarted.ValidateSharedCandidate(context.Background(), false); err == nil || len(rejections) != 1 {
-		t.Fatalf("restart revalidated the rejected candidate: err=%v rejections=%d", err, len(rejections))
+	checked := brokenRuns()
+	if err := restarted.ValidateSharedCandidate(context.Background(), false); err == nil || brokenRuns() != checked {
+		t.Fatalf("restart revalidated the rejected candidate: err=%v runs=%d, was %d", err, brokenRuns(), checked)
 	}
 	if err := restarted.Probe(context.Background()); err != nil {
 		t.Fatalf("explicit retry with a last-known-good fallback = %v", err)
 	}
-	if len(rejections) != 2 {
-		t.Fatalf("explicit retry did not rerun validation: rejections=%d", len(rejections))
+	if brokenRuns() == checked {
+		t.Fatal("explicit retry did not rerun validation")
 	}
 	if err := daemon.Remove(context.Background(), "on-last-known-good"); err != nil {
 		t.Fatal(err)
@@ -707,4 +713,29 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
 	}
 	waitForHostSessions(t, backend, onlyHost(t, root))
+}
+
+func TestSharedHost_CandidateWithTheWrongIdentityIsRejected(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-identity-")
+	stopHostsAtCleanup(t, root)
+	impostor := filepath.Join(root, "impostor-host")
+	script := "#!/bin/sh\nn=$#\nprev=\nfor a in \"$@\"; do\n  if [ \"$prev\" = --generation ]; then a=not-this-build; fi\n  set -- \"$@\" \"$a\"\n  prev=$a\ndone\nshift $n\nexec '" + binary + "' \"$@\"\n"
+	if err := os.WriteFile(impostor, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var reports []SharedArtifactRejection
+	backend, err := NewSharedHost(WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-identity", BinaryPath: impostor,
+		OnSharedArtifactRejected: func(r SharedArtifactRejection) error { reports = append(reports, r); return nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a host reporting another build passed its check")
+	}
+	if len(reports) != 1 || !strings.Contains(reports[0].Reason, "identity mismatch") || backend.SharedCandidatePending() {
+		t.Fatalf("reports=%+v pending=%v, want one recorded identity rejection", reports, backend.SharedCandidatePending())
+	}
 }

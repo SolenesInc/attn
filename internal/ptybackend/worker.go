@@ -149,12 +149,13 @@ type WorkerBackend struct {
 	sharedMonitors  map[hostIncarnation]*sharedHostMonitor
 	sharedStopping  bool
 
-	artifactsDir    string
-	candidate       sharedCandidate
-	validateMu      sync.Mutex
-	artifactMu      sync.Mutex
-	pinned          ptyhost.Artifact
-	pinnedValidated bool
+	artifactsDir     string
+	candidate        sharedCandidate
+	validateMu       sync.Mutex
+	artifactMu       sync.Mutex
+	pinned           ptyhost.Artifact
+	pinnedValidated  bool
+	candidateVerdict string
 }
 
 func (s *workerSession) notePollFailure(now time.Time) (logUnreachable bool, evict bool) {

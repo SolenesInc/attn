@@ -118,10 +118,11 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 	}
 }
 
-func TestRejectionIsRecordedOnlyAfterItIsReported(t *testing.T) {
+func TestUndeliveredRejectionIsReportedAgainWithoutRecheck(t *testing.T) {
 	root := sharedArtifactTestRoot(t)
+	runs := filepath.Join(root, "runs")
 	broken := filepath.Join(root, "broken-host")
-	writeScript(t, broken, "exit 1")
+	writeScript(t, broken, "echo run >> '"+runs+"'\nexit 1")
 	cfg := WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-report", BinaryPath: broken,
 		OnSharedArtifactRejected: func(SharedArtifactRejection) error { return errors.New("notification store unavailable") },
@@ -133,20 +134,24 @@ func TestRejectionIsRecordedOnlyAfterItIsReported(t *testing.T) {
 	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
 		t.Fatal("a host that exits at startup passed its check")
 	}
-	if !backend.SharedCandidatePending() {
-		t.Fatal("a rejection that could not be reported was recorded")
+	if backend.SharedCandidatePending() {
+		t.Fatal("a rejection whose report failed was not recorded")
 	}
 
-	var rejections int
-	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) error { rejections++; return nil }
+	var reports []SharedArtifactRejection
+	cfg.OnSharedArtifactRejected = func(r SharedArtifactRejection) error { reports = append(reports, r); return nil }
 	restarted, err := NewSharedHost(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := restarted.ValidateSharedCandidate(context.Background(), false); err == nil {
-		t.Fatal("a host that exits at startup passed its check")
+		t.Fatal("a rejected build passed after restart")
 	}
-	if rejections != 1 || restarted.SharedCandidatePending() {
-		t.Fatalf("after restart: rejections=%d pending=%v, want one report and a recorded rejection", rejections, restarted.SharedCandidatePending())
+	data, err := os.ReadFile(runs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Count(string(data), "run"); got != 1 || len(reports) != 1 || reports[0].Reason == "" {
+		t.Fatalf("after restart: runs=%d reports=%+v, want the recorded rejection reported without a recheck", got, reports)
 	}
 }

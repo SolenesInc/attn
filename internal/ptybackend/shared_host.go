@@ -720,15 +720,29 @@ func (b *WorkerBackend) liveSharedHost(ctx context.Context, artifactID string) (
 	return ptyhost.HostRegistry{}, false
 }
 
-func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Artifact) (ptyhost.HostRegistry, error) {
+var (
+	errHostNotLaunched = errors.New("shared PTY host could not be launched")
+	errHostNotReady    = errors.New("shared PTY host did not become ready")
+)
+
+type sharedHostLaunch struct {
+	cmd          *exec.Cmd
+	logFile      *os.File
+	incarnation  string
+	socketPath   string
+	registryPath string
+	token        string
+}
+
+func (b *WorkerBackend) prepareSharedHostLaunch(artifact ptyhost.Artifact) (sharedHostLaunch, error) {
 	incarnation, socketPath, err := b.newSharedHostIncarnation()
 	if err != nil {
-		return ptyhost.HostRegistry{}, err
+		return sharedHostLaunch{}, err
 	}
 	registryPath := ptyhost.HostRegistryPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, incarnation)
 	token, err := randomToken(32)
 	if err != nil {
-		return ptyhost.HostRegistry{}, err
+		return sharedHostLaunch{}, err
 	}
 	args := []string{
 		"--daemon-instance-id", b.cfg.DaemonInstanceID,
@@ -744,15 +758,24 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 	cmd := exec.Command(artifact.Path, args...)
 	logPath := ptyhost.LogPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID)
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err != nil {
-		return ptyhost.HostRegistry{}, err
+		return sharedHostLaunch{}, err
 	}
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
-		return ptyhost.HostRegistry{}, fmt.Errorf("open shared PTY host log: %w", err)
+		return sharedHostLaunch{}, fmt.Errorf("open shared PTY host log: %w", err)
 	}
-	defer logFile.Close()
 	cmd.Stdout, cmd.Stderr = logFile, logFile
 	cmd.Env = append(withoutEnvironmentKeys(os.Environ(), "ATTN_PTY_WORKER", "ATTN_PTY_HOST"), "ATTN_PTY_HOST=1")
+	return sharedHostLaunch{cmd: cmd, logFile: logFile, incarnation: incarnation, socketPath: socketPath, registryPath: registryPath, token: token}, nil
+}
+
+func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Artifact) (ptyhost.HostRegistry, error) {
+	launch, err := b.prepareSharedHostLaunch(artifact)
+	if err != nil {
+		return ptyhost.HostRegistry{}, fmt.Errorf("%w: %w", errHostNotLaunched, err)
+	}
+	defer launch.logFile.Close()
+	cmd, incarnation, socketPath, registryPath, token := launch.cmd, launch.incarnation, launch.socketPath, launch.registryPath, launch.token
 	if err := cmd.Start(); err != nil {
 		return ptyhost.HostRegistry{}, fmt.Errorf("start shared PTY host: %w", err)
 	}
@@ -787,7 +810,7 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 			lastErr = readErr
 		}
 		if !pidAlive(pid) {
-			return ptyhost.HostRegistry{}, fmt.Errorf("%w: shared PTY host exited before ready: %w", errArtifactRejected, lastErr)
+			return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host exited before ready: %v", lastErr)
 		}
 		timer := time.NewTimer(spawnReadyPollInterval)
 		select {
@@ -799,7 +822,7 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 		}
 	}
 	b.stopSharedHostPID(pid)
-	return ptyhost.HostRegistry{}, fmt.Errorf("shared PTY host did not become ready: %w", lastErr)
+	return ptyhost.HostRegistry{}, fmt.Errorf("%w: %w", errHostNotReady, lastErr)
 }
 
 func (b *WorkerBackend) newSharedHostIncarnation() (incarnation, socketPath string, err error) {

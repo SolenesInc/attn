@@ -68,7 +68,8 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 	if d.store == nil {
 		return nil
 	}
-	record, err := d.store.AddNotification(store.NotificationRecord{
+	record, created, err := d.store.EnsureNotification(store.NotificationRecord{
+		ID:         notificationKindPTYHostRejected + ":" + rejection.ArtifactID,
 		Kind:       notificationKindPTYHostRejected,
 		Severity:   store.NotificationWarning,
 		Title:      "Shared PTY host update failed its check",
@@ -80,7 +81,7 @@ func (d *Daemon) handleSharedArtifactRejected(rejection ptybackend.SharedArtifac
 		SourceKind: "pty_host",
 		SourceID:   rejection.ArtifactID,
 	}, time.Now())
-	if err != nil {
+	if err != nil || !created {
 		return err
 	}
 	d.publishFact(FactNotificationCreated, record.ID, nil)

@@ -66,6 +66,12 @@ func (b *WorkerBackend) passedArtifact(id string) (ptyhost.Artifact, bool) {
 }
 
 func (b *WorkerBackend) candidateRejection() (string, bool) {
+	b.artifactMu.Lock()
+	verdict := b.candidateVerdict
+	b.artifactMu.Unlock()
+	if verdict != "" {
+		return verdict, true
+	}
 	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
 	if err != nil || receipt.Passed || receipt.Environment != sharedArtifactEnvironment() {
 		return "", false
@@ -95,6 +101,9 @@ func (b *WorkerBackend) SharedCandidateError() error {
 
 func (b *WorkerBackend) SharedCandidatePending() bool {
 	if b.candidate.err != nil {
+		return false
+	}
+	if _, rejected := b.candidateRejection(); rejected {
 		return false
 	}
 	receipt, err := ptyhost.ReadArtifactReceipt(b.artifactsDir, b.candidate.id)
@@ -137,6 +146,7 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 		return b.candidate.err
 	}
 	if reason, rejected := b.candidateRejection(); rejected && !explicit {
+		b.reportRejection(reason)
 		return fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, reason)
 	}
 	artifact, err := b.importCandidate()
@@ -169,6 +179,9 @@ func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) error {
 	b.artifactMu.Lock()
 	previous := b.pinned.ID
 	b.pinned, b.pinnedValidated = artifact, true
+	if artifact.ID == b.candidate.id {
+		b.candidateVerdict = ""
+	}
 	b.artifactMu.Unlock()
 	if previous != artifact.ID {
 		b.cfg.Logf("shared PTY host artifact promoted: %s (previous %q)", artifact.ID, previous)
@@ -189,27 +202,9 @@ func (b *WorkerBackend) recordSharedArtifact(artifact ptyhost.Artifact, probeErr
 }
 
 func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, probeErr error) error {
+	reason := probeErr.Error()
 	b.artifactMu.Lock()
-	fallback := ""
-	if b.pinnedValidated && b.pinned.ID != artifact.ID {
-		fallback = b.pinned.ID
-	}
-	b.artifactMu.Unlock()
-	if b.cfg.OnSharedArtifactRejected != nil {
-		err := b.cfg.OnSharedArtifactRejected(SharedArtifactRejection{
-			ArtifactID: artifact.ID,
-			Source:     b.candidate.source,
-			Reason:     probeErr.Error(),
-			FallbackID: fallback,
-		})
-		if err != nil {
-			return fmt.Errorf("report rejected shared PTY host %s: %w", artifact.ID, err)
-		}
-	}
-	if err := b.recordSharedArtifact(artifact, probeErr); err != nil {
-		return err
-	}
-	b.artifactMu.Lock()
+	b.candidateVerdict = reason
 	if b.pinned.ID == artifact.ID {
 		b.pinned, b.pinnedValidated = ptyhost.Artifact{}, false
 		if err := ptyhost.SetLastKnownGood(b.artifactsDir, ""); err != nil {
@@ -217,8 +212,33 @@ func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, probeErr
 		}
 	}
 	b.artifactMu.Unlock()
-	b.cfg.Logf("shared PTY host artifact %s rejected: %s (fallback %q)", artifact.ID, probeErr, fallback)
+	if err := b.recordSharedArtifact(artifact, probeErr); err != nil {
+		b.cfg.Logf("shared PTY host artifact %s rejected but not recorded; it is checked again next start: %v", artifact.ID, err)
+	}
+	b.reportRejection(reason)
 	return fmt.Errorf("shared PTY host %s failed validation: %w", artifact.ID, probeErr)
+}
+
+func (b *WorkerBackend) reportRejection(reason string) {
+	b.artifactMu.Lock()
+	fallback := ""
+	if b.pinnedValidated {
+		fallback = b.pinned.ID
+	}
+	b.artifactMu.Unlock()
+	b.cfg.Logf("shared PTY host artifact %s rejected: %s (fallback %q)", b.candidate.id, reason, fallback)
+	if b.cfg.OnSharedArtifactRejected == nil {
+		return
+	}
+	err := b.cfg.OnSharedArtifactRejected(SharedArtifactRejection{
+		ArtifactID: b.candidate.id,
+		Source:     b.candidate.source,
+		Reason:     reason,
+		FallbackID: fallback,
+	})
+	if err != nil {
+		b.cfg.Logf("report rejected shared PTY host %s: %v", b.candidate.id, err)
+	}
 }
 
 func (b *WorkerBackend) collectSharedArtifacts() {
@@ -250,17 +270,18 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 	}
 	for attempt := 0; ; attempt++ {
 		host, err := b.ensureSharedHost(ctx, &artifact)
-		if err != nil {
-			return err
+		if err == nil {
+			err = b.roundTripProbe(ctx, artifact, host, nonce)
 		}
-		err = b.roundTripProbe(ctx, artifact, host, nonce)
 		switch {
-		case err == nil, errors.Is(err, errArtifactRejected):
-			return err
+		case err == nil:
+			return nil
 		case ctx.Err() != nil:
 			return fmt.Errorf("%v: %w", err, ctx.Err())
 		case attempt == 0 && isRetiringSharedHost(err):
 			continue
+		case errors.Is(err, errHostNotLaunched), errors.Is(err, errHostNotReady):
+			return err
 		default:
 			return fmt.Errorf("%w: %w", errArtifactRejected, err)
 		}
@@ -275,7 +296,7 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	}
 	if !slices.Contains(info.Capabilities, ptyhost.CapabilityProbeChild) {
 		b.stopUnusedRejectedHost(artifact, inc, info)
-		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
+		return errors.New("host does not provide the validation probe")
 	}
 
 	suffix, err := randomToken(6)
