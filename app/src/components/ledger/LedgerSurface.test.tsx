@@ -2,9 +2,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { LedgerSurface } from './LedgerSurface';
 import type { LedgerTab } from './LedgerSurface';
-import { closedEntry, judged, listing, liveEntry, now, page, rows } from './testSupport';
+import { listing, page, rows } from './testSupport';
 import { useWorktreeStore } from '../../store/worktrees';
-import { createSessionLedgerTestConnection } from '../../hooks/sessionLedgerTestConnection';
+import { createSessionLedgerTestConnection } from '../../test/sessionLedgerTestConnection';
+import { closedEntry, liveEntry, now, resolved } from '../../test/sessionLedgerFixtures';
 
 function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onFocusSession?: (id: string) => void; onSelectSession?: (id: string) => void } = {}) {
   useWorktreeStore.getState().clear();
@@ -37,12 +38,7 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     },
   });
   const view = render(<LedgerSurface {...props(tab)} />);
-  act(() => transport.emit({
-    type: 'reopen-resolved',
-    resolution: {
-      sessionId: 'wt', closedAt: '2026-09-05T10:00:00Z', success: true, reopen: judged('wt').reopen,
-    },
-  }));
+  act(() => transport.emit(resolved('wt')));
   return { onTabChange, retab: (next: LedgerTab) => view.rerender(<LedgerSurface {...props(next)} />) };
 }
 

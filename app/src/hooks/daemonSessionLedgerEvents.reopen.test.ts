@@ -1,17 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
+import { reopenVerdictView } from '../components/sessionsLedger';
+import type { SessionReopen } from '../types/generated';
 import type { PendingRequests } from './daemonPendingRequests';
 import { pendingRequestKey } from './daemonPendingRequests';
 
 const reopen = {
   reopenable: true,
   actions: ['reopen'],
-  checking: false,
   directory_state: 'present',
   workspace_id: 'ws-1',
   workspace_plan: 'reuse',
   pane_plan: 'add',
-};
+} as SessionReopen;
 
 describe('session ledger daemon events for reopen', () => {
   it('hands a terminal verdict to the surface by close generation', () => {
@@ -23,12 +24,8 @@ describe('session ledger daemon events for reopen', () => {
     expect(handled).toBe(true);
     expect(onUpdate).toHaveBeenCalledWith({
       type: 'reopen-resolved',
-      resolution: {
-        sessionId: 's1',
-        closedAt: '2026-09-05T10:00:00Z',
-        success: true,
-        reopen,
-      },
+      sessionId: 's1',
+      resolution: { closedAt: '2026-09-05T10:00:00Z', state: 'ready', verdict: reopenVerdictView(reopen) },
     });
   });
 
@@ -40,12 +37,8 @@ describe('session ledger daemon events for reopen', () => {
     );
     expect(onUpdate).toHaveBeenCalledWith({
       type: 'reopen-resolved',
-      resolution: {
-        sessionId: 's1',
-        closedAt: '2026-09-05T10:00:00Z',
-        success: false,
-        error: 'git unavailable',
-      },
+      sessionId: 's1',
+      resolution: { closedAt: '2026-09-05T10:00:00Z', state: 'failed', error: 'git unavailable' },
     });
   });
 

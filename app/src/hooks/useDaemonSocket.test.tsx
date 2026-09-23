@@ -3072,8 +3072,10 @@ describe('useDaemonSocket notebook and annotation events', () => {
     const unsubscribe = result.current.subscribeSessionLedger(listener);
     const entry = { id: 's1', closed_at: '2026-09-05T10:00:00Z' };
 
+    expect(listener).toHaveBeenCalledWith({ type: 'connection', connected: true, connectionGeneration: 1 });
+
     act(() => ws.emit({ event: 'session_closed', session_ledger_entry: entry }));
-    expect(listener).toHaveBeenCalledWith({
+    expect(listener).toHaveBeenLastCalledWith({
       type: 'closed',
       entry,
       connectionGeneration: 1,
@@ -3081,7 +3083,7 @@ describe('useDaemonSocket notebook and annotation events', () => {
 
     unsubscribe();
     act(() => ws.emit({ event: 'session_reopen_resolved', session_id: 's1', closed_at: entry.closed_at, success: false, error: 'gone' }));
-    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(2);
     unmount();
   });
 

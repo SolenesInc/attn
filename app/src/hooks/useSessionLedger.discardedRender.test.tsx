@@ -4,26 +4,8 @@ import { act, render } from '@testing-library/react';
 import { useSessionLedger } from './useSessionLedger';
 import type { SessionLedgerView } from './useSessionLedger';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
-import type { SessionLedgerEntry } from '../types/generated';
-import { SessionState } from '../types/generated';
-import { createSessionLedgerTestConnection } from './sessionLedgerTestConnection';
-
-const NOW = new Date('2026-09-05T14:30:00Z');
-const now = () => NOW;
-
-function closedEntry(id: string): SessionLedgerEntry {
-  return {
-    agent: 'claude',
-    directory: '/Users/victor/projects/attn',
-    label: `run ${id}`,
-    last_seen: '2026-09-05T10:00:00Z',
-    state: SessionState.Idle,
-    workspace_id: 'ws-1',
-    id,
-    closed_at: '2026-09-05T13:00:00Z',
-    closed_by: 'user',
-  };
-}
+import { createSessionLedgerTestConnection } from '../test/sessionLedgerTestConnection';
+import { closedEntry, now } from '../test/sessionLedgerFixtures';
 
 const NEVER = new Promise<never>(() => {});
 

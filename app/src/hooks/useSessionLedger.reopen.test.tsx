@@ -1,42 +1,12 @@
 import { useEffect } from 'react';
 import { act, render, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { SessionReopenAction, SessionState } from '../types/generated';
-import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
+import type { SessionLedgerEntry } from '../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
 import { EMPTY_SESSION_FILTERS, useSessionLedger } from './useSessionLedger';
 import type { SessionLedgerFilters, SessionLedgerView } from './useSessionLedger';
-import { createSessionLedgerTestConnection } from './sessionLedgerTestConnection';
-
-const NOW = new Date('2026-09-05T14:30:00Z');
-const now = () => NOW;
-
-function closedEntry(id: string, closedAt = '2026-09-05T13:00:00Z'): SessionLedgerEntry {
-  return {
-    agent: 'claude',
-    directory: '/Users/victor/projects/attn',
-    label: `run ${id}`,
-    last_seen: '2026-09-05T10:00:00Z',
-    state: SessionState.Idle,
-    workspace_id: 'ws-1',
-    id,
-    closed_at: closedAt,
-    closed_by: 'user',
-  };
-}
-
-function reopen(reason: string): SessionReopen {
-  return {
-    reopenable: true,
-    actions: [SessionReopenAction.Reopen],
-    checking: false,
-    directory_state: 'present',
-    workspace_id: 'ws-1',
-    workspace_plan: 'reuse',
-    pane_plan: 'add',
-    reason,
-  };
-}
+import { createSessionLedgerTestConnection } from '../test/sessionLedgerTestConnection';
+import { NOW, closedEntry, now, resolved, unresolvable, verdict } from '../test/sessionLedgerFixtures';
 
 function renderLedger(
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>,
@@ -56,7 +26,7 @@ function renderLedger(
 describe('useSessionLedger streamed reopen eligibility', () => {
   it('replaces initial resolutions and appends load-more resolutions', async () => {
     const first = closedEntry('new');
-    const older = closedEntry('older', '2026-09-04T13:00:00Z');
+    const older = closedEntry('older', { closed_at: '2026-09-04T13:00:00Z' });
     const list = vi.fn(async (query: SessionLedgerQuery) => query.before
       ? { entries: [older], omitted: 0 }
       : { entries: [first], omitted: 1, next_before: 'older' });
@@ -73,22 +43,18 @@ describe('useSessionLedger streamed reopen eligibility', () => {
 
   it('ignores a stale generation and accepts the matching generation', async () => {
     const entry = closedEntry('s1');
+    const staleClosedAt = '2026-09-04T13:00:00Z';
     const seen = renderLedger(async () => ({ entries: [entry], omitted: 0 }));
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
 
-    await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: {
-        sessionId: 's1', closedAt: '2026-09-04T13:00:00Z', success: true, reopen: reopen('stale'),
-      } });
-    });
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'stale' }), staleClosedAt)));
     expect(seen.view?.resolutions.s1).toEqual({ closedAt: entry.closed_at, state: 'pending' });
 
-    await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: {
-        sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('current'),
-      } });
-    });
-    expect(seen.view?.resolutions.s1).toMatchObject({ state: 'ready', reopen: { reason: 'current' } });
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'current' }))));
+    expect(seen.view?.resolutions.s1).toMatchObject({ state: 'ready', verdict: { reason: 'current' } });
+
+    act(() => seen.emit(unresolvable('s1', 'stale failure', staleClosedAt)));
+    expect(seen.view?.resolutions.s1).toMatchObject({ state: 'ready', verdict: { reason: 'current' } });
   });
 
   it('applies an early event when its row arrives', async () => {
@@ -99,13 +65,11 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: {
-        sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('arrived first'),
-      } });
+      seen.emit(resolved('s1', verdict({ reason: 'arrived first' })));
       release?.({ entries: [entry], omitted: 0 });
     });
     await waitFor(() => expect(seen.view?.resolutions.s1).toMatchObject({
-      state: 'ready', reopen: { reason: 'arrived first' },
+      state: 'ready', verdict: { reason: 'arrived first' },
     }));
   });
 
@@ -114,11 +78,7 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     const seen = renderLedger(async () => ({ entries: [entry], omitted: 0 }));
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
 
-    await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: {
-        sessionId: 's1', closedAt: entry.closed_at!, success: false, error: 'git unavailable',
-      } });
-    });
+    act(() => seen.emit(unresolvable('s1', 'git unavailable')));
     expect(seen.view?.resolutions.s1).toEqual({
       closedAt: entry.closed_at,
       state: 'failed',
@@ -127,27 +87,14 @@ describe('useSessionLedger streamed reopen eligibility', () => {
   });
 
   it('reissues the streamed page after reconnect', async () => {
-    const entry = closedEntry('s1');
-    const list = vi.fn(async () => ({ entries: [entry], omitted: 0 }));
-    const transport = createSessionLedgerTestConnection(list);
-    const seen: { view: SessionLedgerView | null } = { view: null };
-    function Harness({ generation }: { generation: number }) {
-      const connection = { ...transport.connection, generation };
-      const view = useSessionLedger({ enabled: true, connection, now });
-      useEffect(() => { seen.view = view; });
-      return null;
-    }
-    const view = render(<Harness generation={1} />);
+    const list = vi.fn(async () => ({ entries: [closedEntry('s1')], omitted: 0 }));
+    const seen = renderLedger(list);
     await waitFor(() => expect(list).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
-    await act(async () => {
-      transport.emit({ type: 'reopen-resolved', resolution: {
-        sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('before reconnect'),
-      } });
-    });
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'before reconnect' }))));
     expect(seen.view?.resolutions.s1?.state).toBe('ready');
 
-    view.rerender(<Harness generation={2} />);
+    act(() => seen.setConnected(true, 2));
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ reopen: true }));
@@ -155,28 +102,19 @@ describe('useSessionLedger streamed reopen eligibility', () => {
   });
 
   it('clears a superseded load-more state after reconnect', async () => {
-    const entry = closedEntry('s1');
     let releaseLoadMore: ((page: SessionLedgerPage) => void) | undefined;
     const list = vi.fn((query: SessionLedgerQuery) => {
       if (query.before) {
         return new Promise<SessionLedgerPage>((resolve) => { releaseLoadMore = resolve; });
       }
-      return Promise.resolve({ entries: [entry], omitted: 1, next_before: 'older' });
+      return Promise.resolve({ entries: [closedEntry('s1')], omitted: 1, next_before: 'older' });
     });
-    const transport = createSessionLedgerTestConnection(list);
-    const seen: { view: SessionLedgerView | null } = { view: null };
-    function Harness({ generation }: { generation: number }) {
-      const connection = { ...transport.connection, generation };
-      const view = useSessionLedger({ enabled: true, connection, now });
-      useEffect(() => { seen.view = view; });
-      return null;
-    }
-    const view = render(<Harness generation={1} />);
+    const seen = renderLedger(list);
     await waitFor(() => expect(seen.view?.loading).toBe(false));
 
     act(() => { seen.view?.loadMore(); });
     await waitFor(() => expect(seen.view?.loadingMore).toBe(true));
-    view.rerender(<Harness generation={2} />);
+    act(() => seen.setConnected(true, 2));
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(3));
     await waitFor(() => expect(seen.view?.loadingMore).toBe(false));
@@ -194,9 +132,7 @@ describe('useSessionLedger streamed reopen eligibility', () => {
       }));
     const seen = renderLedger(list);
     await waitFor(() => expect(seen.view?.entries).toEqual([entry]));
-    act(() => seen.emit({ type: 'reopen-resolved', resolution: {
-      sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('ready'),
-    } }));
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'ready' }))));
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('ready'));
 
     act(() => seen.view?.reload());
@@ -263,13 +199,9 @@ describe('useSessionLedger streamed reopen eligibility', () => {
     await waitFor(() => expect(seen.view?.entries.map((entry) => entry.id)).toEqual(['s1']));
 
     const closedAt = '2026-09-05T14:00:00Z';
-    await act(async () => {
-      seen.emit({ type: 'closed', entry: { ...live, closed_at: closedAt, closed_by: 'user' } });
-    });
+    act(() => seen.emit({ type: 'closed', entry: { ...live, closed_at: closedAt, closed_by: 'user' } }));
     expect(seen.view?.resolutions.s1).toEqual({ closedAt, state: 'pending' });
-    await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: { sessionId: 's1', closedAt, success: true, reopen: reopen('back') } });
-    });
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'back' }), closedAt)));
     expect(seen.view?.resolutions.s1?.state).toBe('ready');
   });
 
@@ -290,13 +222,10 @@ describe('useSessionLedger streamed reopen eligibility', () => {
   });
 
   it('does not mark rows pending while the filter is invalid and no read is issued', async () => {
-    const entry = closedEntry('s1');
-    const list = vi.fn(async () => ({ entries: [entry], omitted: 0 }));
+    const list = vi.fn(async () => ({ entries: [closedEntry('s1')], omitted: 0 }));
     const seen = renderLedger(list);
     await waitFor(() => expect(seen.view?.resolutions.s1?.state).toBe('pending'));
-    await act(async () => {
-      seen.emit({ type: 'reopen-resolved', resolution: { sessionId: 's1', closedAt: entry.closed_at!, success: true, reopen: reopen('ok') } });
-    });
+    act(() => seen.emit(resolved('s1', verdict({ reason: 'ok' }))));
     expect(seen.view?.resolutions.s1?.state).toBe('ready');
 
     await act(async () => {

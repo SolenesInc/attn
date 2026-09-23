@@ -52,8 +52,6 @@ export function AppLibrarySurfaces() {
     sendFsReadAsset,
     sendNotebookBacklinks,
     sendNotebookToChief,
-    connectionGeneration,
-    isConnected,
     hasReceivedInitialState,
     sendSeedTransition,
     sendSeedNote,
@@ -97,8 +95,6 @@ export function AppLibrarySurfaces() {
           connection: {
             list: sendSessionList,
             subscribe: subscribeSessionLedger,
-            connected: isConnected,
-            generation: connectionGeneration,
           },
           workspaceNames: workspaceNamesById,
           liveSessionIds: liveGardenSessions,

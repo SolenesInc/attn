@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import type { SessionLedgerPage } from '../../hooks/daemonSessionLedgerEvents';
 import { SESSION_FILTERS_SETTING_KEY } from '../../hooks/sessionFiltersSetting';
-import { NOW, entry, listing, page, renderSessionsTab, rows } from './testSupport';
+import { NOW, entry } from '../../test/sessionLedgerFixtures';
+import { listing, page, renderSessionsTab, rows } from './testSupport';
 
 const query = () => screen.getByLabelText('Filter') as HTMLInputElement;
 const type = (text: string) => fireEvent.change(query(), { target: { value: text } });

@@ -2,9 +2,10 @@ import type {
   SessionLedgerEntry,
   SessionLedgerFacets,
   SessionReopen,
-  SessionReopenEntry,
   SessionReopenResult,
 } from '../types/generated';
+import { reopenVerdictView } from '../components/sessionsLedger';
+import type { ReopenVerdictView } from '../components/sessionsLedger';
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
 
@@ -15,7 +16,6 @@ export interface SessionLedgerPage {
   facets?: SessionLedgerFacets;
   next_before?: string;
   omitted: number;
-  reopen?: SessionReopenEntry[];
 }
 
 export interface SessionLedgerQuery {
@@ -28,20 +28,15 @@ export interface SessionLedgerQuery {
   since?: string;
   until?: string;
   reopen?: boolean;
-  reopen_delivery?: 'inline' | 'stream';
 }
 
-export interface SessionReopenResolutionEvent {
-  sessionId: string;
-  closedAt: string;
-  success: boolean;
-  reopen?: SessionReopen;
-  error?: string;
-}
+export type SettledReopenResolution =
+  | { closedAt: string; state: 'ready'; verdict: ReopenVerdictView }
+  | { closedAt: string; state: 'failed'; error: string };
 
 export type SessionLedgerUpdate =
   | { type: 'closed'; entry: SessionLedgerEntry }
-  | { type: 'reopen-resolved'; resolution: SessionReopenResolutionEvent };
+  | { type: 'reopen-resolved'; sessionId: string; resolution: SettledReopenResolution };
 
 export type SessionLedgerConnectionEvent =
   | { type: 'connection'; connected: boolean; connectionGeneration: number }
@@ -98,22 +93,8 @@ export function handleSessionLedgerDaemonEvent(
       );
       return true;
     case 'session_reopen_resolved': {
-      const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
-      const closedAt = typeof event.closed_at === 'string' ? event.closed_at : '';
-      const reopen = event.reopen as SessionReopen | undefined;
-      const error = typeof event.error === 'string' ? event.error : undefined;
-      if (sessionId && closedAt && ((event.success === true && reopen) || (event.success === false && error))) {
-        context.onUpdate?.({
-          type: 'reopen-resolved',
-          resolution: {
-            sessionId,
-            closedAt,
-            success: event.success === true,
-            ...(reopen ? { reopen } : {}),
-            ...(error ? { error } : {}),
-          },
-        });
-      }
+      const update = reopenResolvedUpdate(event);
+      if (update) context.onUpdate?.(update);
       return true;
     }
     case 'session_closed': {
@@ -124,4 +105,18 @@ export function handleSessionLedgerDaemonEvent(
     default:
       return false;
   }
+}
+
+function reopenResolvedUpdate(event: SessionLedgerEvent): SessionLedgerUpdate | null {
+  const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
+  const closedAt = typeof event.closed_at === 'string' ? event.closed_at : '';
+  if (!sessionId || !closedAt) return null;
+  const reopen = event.reopen as SessionReopen | undefined;
+  if (event.success === true && reopen) {
+    return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'ready', verdict: reopenVerdictView(reopen) } };
+  }
+  if (event.success === false && typeof event.error === 'string' && event.error) {
+    return { type: 'reopen-resolved', sessionId, resolution: { closedAt, state: 'failed', error: event.error } };
+  }
+  return null;
 }

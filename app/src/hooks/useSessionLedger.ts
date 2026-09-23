@@ -1,21 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../types/generated';
+import type { SessionLedgerEntry, SessionLedgerFacets } from '../types/generated';
 import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
   SessionLedgerQuery,
-  SessionReopenResolutionEvent,
-  SessionLedgerUpdate,
+  SettledReopenResolution,
 } from './daemonSessionLedgerEvents';
 import {
   customSessionRange,
   isRangeError,
   ledgerInstant,
-  reopenVerdictView,
   sessionRangeWindow,
 } from '../components/sessionsLedger';
-import type { ReopenVerdictView, SessionRangeId, SessionScope } from '../components/sessionsLedger';
+import type { SessionRangeId, SessionScope } from '../components/sessionsLedger';
 
 export interface SessionLedgerFilters {
   scope: SessionScope;
@@ -39,12 +37,7 @@ export const SESSION_PAGE_SIZE = 50;
 
 const systemNow = () => new Date();
 
-const NO_VERDICTS: Record<string, ReopenVerdictView> = {};
-
-export type ReopenResolution =
-  | { closedAt: string; state: 'pending' }
-  | { closedAt: string; state: 'ready'; reopen: SessionReopen }
-  | { closedAt: string; state: 'failed'; error: string };
+export type ReopenResolution = { closedAt: string; state: 'pending' } | SettledReopenResolution;
 
 export interface UseSessionLedgerOptions {
   enabled: boolean;
@@ -58,15 +51,12 @@ export interface UseSessionLedgerOptions {
 export interface SessionLedgerConnection {
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
   subscribe: (listener: (event: SessionLedgerConnectionEvent) => void) => () => void;
-  connected: boolean;
-  generation: number;
 }
 
 export interface SessionLedgerView {
   filters: SessionLedgerFilters;
   setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
   entries: SessionLedgerEntry[];
-  verdicts: Record<string, ReopenVerdictView>;
   resolutions: Record<string, ReopenResolution>;
   facets: SessionLedgerFacets | null;
   omitted: number;
@@ -125,72 +115,45 @@ export function closeBelongsInView(
   return true;
 }
 
-function pendingResolutions(entries: SessionLedgerEntry[]): Record<string, ReopenResolution> {
-  const next: Record<string, ReopenResolution> = {};
-  for (const entry of entries) {
-    if (entry.closed_at) next[entry.id] = { closedAt: entry.closed_at, state: 'pending' };
-  }
-  return next;
+type SettledOutcomes = Record<string, SettledReopenResolution>;
+
+const NO_OUTCOMES: SettledOutcomes = {};
+
+function outcomeKey(sessionId: string, closedAt: string): string {
+  return `${sessionId}\u0000${closedAt}`;
 }
 
-function eventResolution(event: SessionReopenResolutionEvent): ReopenResolution {
-  return event.success && event.reopen
-    ? { closedAt: event.closedAt, state: 'ready', reopen: event.reopen }
-    : { closedAt: event.closedAt, state: 'failed', error: event.error ?? 'Eligibility could not be checked' };
-}
-
-function applyUpdateToEntries(
+function applyClose(
   entries: SessionLedgerEntry[],
-  update: SessionLedgerUpdate,
+  entry: SessionLedgerEntry,
   filters: SessionLedgerFilters,
   at: Date,
 ): SessionLedgerEntry[] {
-  if (update.type !== 'closed') return entries;
-  const entry = update.entry;
   const dropsFromView = filters.scope === 'live';
-  const belongs = closeBelongsInView(entry, filters, at);
   const existing = entries.findIndex((row) => row.id === entry.id);
   if (existing >= 0) {
     const next = entries.slice();
     next[existing] = entry;
     return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
   }
-  return belongs ? [entry, ...entries] : entries;
+  return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
 }
 
-function applyUpdateToResolutions(
-  resolutions: Record<string, ReopenResolution>,
-  update: SessionLedgerUpdate,
-  filters: SessionLedgerFilters,
+function resolutionsForEntries(
+  entries: SessionLedgerEntry[],
+  outcomes: SettledOutcomes,
+  readFailure: string | null,
 ): Record<string, ReopenResolution> {
-  if (update.type === 'reopen-resolved') {
-    const event = update.resolution;
-    if (resolutions[event.sessionId]?.closedAt !== event.closedAt) return resolutions;
-    return { ...resolutions, [event.sessionId]: eventResolution(event) };
+  const resolutions: Record<string, ReopenResolution> = {};
+  for (const entry of entries) {
+    const closedAt = entry.closed_at;
+    if (!closedAt) continue;
+    resolutions[entry.id] = outcomes[outcomeKey(entry.id, closedAt)]
+      ?? (readFailure === null
+        ? { closedAt, state: 'pending' }
+        : { closedAt, state: 'failed', error: readFailure });
   }
-  const entry = update.entry;
-  const next = { ...resolutions };
-  const closedAtAwaitingVerdict = filters.scope === 'live' ? undefined : entry.closed_at;
-  if (closedAtAwaitingVerdict) next[entry.id] = { closedAt: closedAtAwaitingVerdict, state: 'pending' };
-  else delete next[entry.id];
-  return next;
-}
-
-function failPendingResolutions(
-  resolutions: Record<string, ReopenResolution>,
-  error: string,
-): Record<string, ReopenResolution> {
-  const next: Record<string, ReopenResolution> = {};
-  for (const [id, resolution] of Object.entries(resolutions)) {
-    next[id] = resolution.state === 'pending' ? { closedAt: resolution.closedAt, state: 'failed', error } : resolution;
-  }
-  return next;
-}
-
-interface ActiveRead {
-  epoch: number;
-  generation: number;
-  updates: SessionLedgerUpdate[];
+  return resolutions;
 }
 
 export function useSessionLedger({
@@ -203,44 +166,25 @@ export function useSessionLedger({
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
   const [entries, setEntries] = useState<SessionLedgerEntry[]>([]);
-  const [resolutions, setResolutions] = useState<Record<string, ReopenResolution>>({});
+  const [outcomes, setOutcomes] = useState<SettledOutcomes>(NO_OUTCOMES);
+  const [readFailure, setReadFailure] = useState<string | null>(null);
   const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [loadingMoreRequest, setLoadingMoreRequest] = useState<number | null>(null);
+  const [loadingMoreRead, setLoadingMoreRead] = useState<SessionLedgerEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
-  const [lifecycle, setLifecycle] = useState({
-    connected: connection.connected,
-    generation: connection.generation,
-  });
+  const [lifecycle, setLifecycle] = useState({ connected: false, generation: 0 });
   const lifecycleRef = useRef(lifecycle);
-  const entriesRef = useRef(entries);
   const readEpoch = useRef(0);
-  const requestSequence = useRef(0);
-  const activeReads = useRef(new Map<number, ActiveRead>());
-  const loadingMore = loadingMoreRequest !== null;
+  const closesDuringReads = useRef(new Set<SessionLedgerEntry[]>());
+  const loadingMore = loadingMoreRead !== null;
 
-  useEffect(() => {
-    entriesRef.current = entries;
-  }, [entries]);
   const filtersRef = useRef(filters);
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
-
-  const markVisibleEligibilityPending = useCallback(() => {
-    setResolutions(pendingResolutions(entriesRef.current));
-  }, []);
-
-  useEffect(() => {
-    const next = { connected: connection.connected, generation: connection.generation };
-    lifecycleRef.current = next;
-    setLifecycle((current) => current.connected === next.connected && current.generation === next.generation
-      ? current
-      : next);
-  }, [connection.connected, connection.generation]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -248,31 +192,30 @@ export function useSessionLedger({
       if (event.type === 'connection') {
         const next = { connected: event.connected, generation: event.connectionGeneration };
         lifecycleRef.current = next;
-        setLifecycle(next);
+        setLifecycle((current) => current.connected === next.connected && current.generation === next.generation
+          ? current
+          : next);
         if (!event.connected) {
           readEpoch.current += 1;
-          activeReads.current.clear();
+          closesDuringReads.current.clear();
           setLoading(false);
-          setLoadingMoreRequest(null);
-          markVisibleEligibilityPending();
+          setLoadingMoreRead(null);
         }
         return;
       }
       if (!lifecycleRef.current.connected
         || event.connectionGeneration !== lifecycleRef.current.generation) return;
-      const update: SessionLedgerUpdate = event.type === 'closed'
-        ? { type: 'closed', entry: event.entry }
-        : { type: 'reopen-resolved', resolution: event.resolution };
-      for (const read of activeReads.current.values()) {
-        if (read.epoch === readEpoch.current && read.generation === event.connectionGeneration) {
-          read.updates.push(update);
-        }
+      if (event.type === 'reopen-resolved') {
+        const { sessionId, resolution } = event;
+        setOutcomes((current) => ({ ...current, [outcomeKey(sessionId, resolution.closedAt)]: resolution }));
+        return;
       }
+      const entry = event.entry;
+      for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
-      setEntries((current) => applyUpdateToEntries(current, update, filtersRef.current, at));
-      setResolutions((current) => applyUpdateToResolutions(current, update, filtersRef.current));
+      setEntries((current) => applyClose(current, entry, filtersRef.current, at));
     });
-  }, [connection.subscribe, enabled, markVisibleEligibilityPending, now]);
+  }, [connection.subscribe, enabled, now]);
 
   const reportedRef = useRef(filters);
   useEffect(() => {
@@ -286,81 +229,68 @@ export function useSessionLedger({
 
   useEffect(() => {
     const epoch = ++readEpoch.current;
-    activeReads.current.clear();
-    setLoadingMoreRequest(null);
+    closesDuringReads.current.clear();
+    setLoadingMoreRead(null);
     setNextBefore(null);
     setOmitted(0);
-    if (!enabled || filterError || !lifecycle.connected) {
+    if (!enabled || filterError) {
       setLoading(false);
       return;
     }
-    markVisibleEligibilityPending();
-    const request = ++requestSequence.current;
-    const read: ActiveRead = { epoch, generation: lifecycle.generation, updates: [] };
-    activeReads.current.set(request, read);
+    setOutcomes(NO_OUTCOMES);
+    setReadFailure(null);
+    if (!lifecycle.connected) {
+      setLoading(false);
+      return;
+    }
+    const generation = lifecycle.generation;
+    const closes: SessionLedgerEntry[] = [];
+    closesDuringReads.current.add(closes);
+    const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
     setError(null);
     connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {
-        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
+        if (superseded()) return;
         const at = now();
-        let nextEntries = page.entries ?? [];
-        let nextResolutions = pendingResolutions(nextEntries);
-        for (const update of read.updates) {
-          nextEntries = applyUpdateToEntries(nextEntries, update, filters, at);
-          nextResolutions = applyUpdateToResolutions(nextResolutions, update, filters);
-        }
-        entriesRef.current = nextEntries;
-        setEntries(nextEntries);
-        setResolutions(nextResolutions);
+        setEntries(closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []));
         setFacets(page.facets ?? null);
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
+        if (superseded()) return;
         setError(failure.message);
-        setResolutions((current) => failPendingResolutions(current, failure.message));
+        setReadFailure(failure.message);
       })
       .finally(() => {
-        activeReads.current.delete(request);
+        closesDuringReads.current.delete(closes);
         if (epoch === readEpoch.current) setLoading(false);
       });
     return () => {
       if (readEpoch.current === epoch) readEpoch.current += 1;
-      activeReads.current.clear();
+      closesDuringReads.current.clear();
     };
-  }, [enabled, filters, query, filterError, connection.list, lifecycle, pageSize, reloadNonce, markVisibleEligibilityPending, now]);
+  }, [enabled, filters, query, filterError, connection.list, lifecycle, pageSize, reloadNonce, now]);
 
-  const reload = useCallback(() => {
-    readEpoch.current += 1;
-    activeReads.current.clear();
-    setLoadingMoreRequest(null);
-    setReloadNonce((n) => n + 1);
-  }, []);
+  const reload = useCallback(() => setReloadNonce((n) => n + 1), []);
 
   const loadMore = useCallback(() => {
     if (!nextBefore || loading || loadingMore || filterError || !lifecycleRef.current.connected) return;
     const epoch = readEpoch.current;
-    const request = ++requestSequence.current;
-    const read: ActiveRead = { epoch, generation: lifecycleRef.current.generation, updates: [] };
-    activeReads.current.set(request, read);
-    setLoadingMoreRequest(request);
+    const generation = lifecycleRef.current.generation;
+    const closes: SessionLedgerEntry[] = [];
+    closesDuringReads.current.add(closes);
+    const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
+    setLoadingMoreRead(closes);
     connection.list({ ...(sessionLedgerQuery(filtersRef.current, now()) as SessionLedgerQuery), limit: pageSize, before: nextBefore, reopen: true })
       .then((page) => {
-        if (epoch !== readEpoch.current || read.generation !== lifecycleRef.current.generation) return;
+        if (superseded()) return;
         const at = now();
         setEntries((current) => {
           const present = new Set(current.map((entry) => entry.id));
-          let next = [...current, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
-          for (const update of read.updates) next = applyUpdateToEntries(next, update, filtersRef.current, at);
-          entriesRef.current = next;
-          return next;
-        });
-        setResolutions((current) => {
-          let next = { ...current, ...pendingResolutions(page.entries ?? []) };
-          for (const update of read.updates) next = applyUpdateToResolutions(next, update, filtersRef.current);
-          return next;
+          const appended = [...current, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
+          return closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended);
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
@@ -369,24 +299,20 @@ export function useSessionLedger({
         if (epoch === readEpoch.current) setError(failure.message);
       })
       .finally(() => {
-        activeReads.current.delete(request);
-        setLoadingMoreRequest((current) => current === request ? null : current);
+        closesDuringReads.current.delete(closes);
+        setLoadingMoreRead((current) => current === closes ? null : current);
       });
   }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
-  const verdicts = useMemo(() => {
-    const next: Record<string, ReopenVerdictView> = {};
-    for (const [sessionId, resolution] of Object.entries(resolutions)) {
-      if (resolution.state === 'ready') next[sessionId] = reopenVerdictView(resolution.reopen);
-    }
-    return Object.keys(next).length === 0 ? NO_VERDICTS : next;
-  }, [resolutions]);
+  const resolutions = useMemo(
+    () => resolutionsForEntries(entries, outcomes, readFailure),
+    [entries, outcomes, readFailure],
+  );
 
   return {
     filters,
     setFilters,
     entries,
-    verdicts,
     resolutions,
     facets,
     omitted,

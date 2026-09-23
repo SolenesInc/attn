@@ -81,7 +81,7 @@ export function SessionsTab({
     initialFilters: restoredFilters,
     onFiltersChange: rememberFilters,
   });
-  const { filters, setFilters, entries, verdicts, resolutions, reload } = ledger;
+  const { filters, setFilters, entries, resolutions, reload } = ledger;
 
   const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
 
@@ -187,15 +187,13 @@ export function SessionsTab({
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
     setNotice(entry.id, null);
-    const verdict = verdicts[entry.id];
-    if (verdict) fire(entry.id, verdictId(verbId));
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, verdicts, fire]);
+    if (readyVerdict(resolutions[entry.id])) fire(entry.id, verdictId(verbId));
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, resolutions, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
-      verdict: isClosed(entry) ? verdicts[entry.id] : undefined,
-      resolution: isClosed(entry) ? resolutions[entry.id] : undefined,
+      resolution: resolutions[entry.id],
       note: notices[entry.id],
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
@@ -203,10 +201,10 @@ export function SessionsTab({
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
-      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdicts[entry.id]?.directoryState !== 'missing',
+      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && readyVerdict(resolutions[entry.id])?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, verdicts, resolutions, notices, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, resolutions, notices, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -289,8 +287,7 @@ export function SessionsTab({
           ? (
             <SessionInspector
               entry={selected}
-              verdict={isClosed(selected) ? verdicts[selected.id] : undefined}
-              resolution={isClosed(selected) ? resolutions[selected.id] : undefined}
+              resolution={resolutions[selected.id]}
               note={notices[selected.id]}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
@@ -314,13 +311,16 @@ export function SessionsTab({
 
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
 
+function readyVerdict(resolution: ReopenResolution | undefined): ReopenVerdictView | undefined {
+  return resolution?.state === 'ready' ? resolution.verdict : undefined;
+}
+
 function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
 }
 
 interface RowContext {
   nameText: (text: string) => string;
-  verdict: ReopenVerdictView | undefined;
   resolution: ReopenResolution | undefined;
   note: RowNote | undefined;
   live: boolean;
@@ -334,7 +334,7 @@ interface RowContext {
 
 function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const closed = isClosed(entry);
-  const { verdict } = context;
+  const verdict = readyVerdict(context.resolution);
   const verbs: RowVerb[] = [];
   if (context.live) verbs.push({ id: 'focus', label: 'Focus' });
   if (closed && context.actionsAvailable && verdict) {
@@ -385,7 +385,6 @@ function sessionGlyph(entry: SessionLedgerEntry, live: boolean, resolution: Reop
 
 interface SessionInspectorProps {
   entry: SessionLedgerEntry;
-  verdict: ReopenVerdictView | undefined;
   resolution: ReopenResolution | undefined;
   note: RowNote | undefined;
   live: boolean;
@@ -403,9 +402,10 @@ interface SessionInspectorProps {
 }
 
 function SessionInspector({
-  entry, verdict, resolution, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, onReload,
+  entry, resolution, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, onReload,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
+  const verdict = readyVerdict(resolution);
   const busy = note?.kind === 'busy';
   return (
     <Inspector
@@ -458,7 +458,6 @@ function SessionInspector({
               </div>
             </>
           )}
-          {!resolution && <div className="ledger-muted">No verdict yet.</div>}
           {verdict && (
             <>
               <div className="ledger-verdict-text" title={verdict.reason ?? verdict.summary}>

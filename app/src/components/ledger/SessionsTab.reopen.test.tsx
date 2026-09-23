@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import type { SessionLedgerPage } from '../../hooks/daemonSessionLedgerEvents';
 import { SessionReopenAction } from '../../types/generated';
-import { closedEntry, entry, judged, listing, liveEntry, page, renderSessionsTab, rows, verdict } from './testSupport';
+import { closedEntry, entry, liveEntry, resolved, unresolvable, verdict } from '../../test/sessionLedgerFixtures';
+import { listing, page, renderSessionsTab, rows } from './testSupport';
 
 const row = (label: string) => rows().getByText(label).closest('.ledger-row') as HTMLElement;
 const inspector = () => screen.getByRole('complementary', { name: 'Details' });
@@ -15,34 +16,15 @@ const goneEverywhere = verdict({
   actions: [SessionReopenAction.StartFreshDefaultBranch, SessionReopenAction.StartFreshElsewhere],
 });
 
-const resolved = (sessionId: string, reopen = verdict(), closedAt = '2026-09-05T10:00:00Z') => ({
-  sessionId,
-  closedAt,
-  success: true,
-  reopen,
-});
-
-const resolutionNotice = (items: ReturnType<typeof judged>[], nonce = 1) => {
-  const resolutions = Object.fromEntries(items.map((item) => [item.session_id, resolved(item.session_id, item.reopen)]));
-  return {
-    resolutions,
-    arrivalNonceBySession: Object.fromEntries(Object.keys(resolutions).map((sessionId) => [sessionId, nonce])),
-    nonce,
-  };
-};
-
 describe('SessionsTab verdicts', () => {
   it('settles every closed row and reads the verdict in the inspector', async () => {
     const { list, calls } = listing([page({
       entries: [closedEntry('s1'), closedEntry('s2'), liveEntry('s3')],
     })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen: vi.fn(),
-      resolutionNotice: resolutionNotice([
-        judged('s1', { reason: 'the worktree is still there' }),
-        judged('s2', { reopenable: false, reason: 'the worktree is gone', actions: [] }),
-      ]),
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
+    act(() => {
+      view.emit(resolved('s1', verdict({ reason: 'the worktree is still there' })));
+      view.emit(resolved('s2', verdict({ reopenable: false, reason: 'the worktree is gone', actions: [] })));
     });
 
     await rows().findByText('run s1');
@@ -57,14 +39,14 @@ describe('SessionsTab verdicts', () => {
 
   it('shows a row immediately, then settles its eligibility in place', async () => {
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    const { rerender } = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await rows().findByText('run s1');
     expect(within(inspector()).getByText('checking reopen eligibility…')).toBeTruthy();
     expect(row('run s1').querySelector('.ledger-glyph.is-refreshing')).toBeTruthy();
     expect(within(row('run s1')).queryByRole('button', { name: 'Reopen' })).toBeNull();
 
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'its branch is still here' })) }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
+    act(() => view.emit(resolved('s1', verdict({ reason: 'its branch is still here' }))));
 
     await waitFor(() => expect(within(inspector()).queryByText('checking reopen eligibility…')).toBeNull());
     expect(within(inspector()).getByText('its branch is still here')).toBeTruthy();
@@ -84,12 +66,10 @@ describe('SessionsTab verdicts', () => {
 
   it('shows a terminal failure and reloads the page on request', async () => {
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    const { rerender } = renderSessionsTab({ listSessions: list });
+    const view = renderSessionsTab({ listSessions: list });
 
     await rows().findByText('run s1');
-    rerender({ resolutionNotice: { resolutions: { s1: {
-      sessionId: 's1', closedAt: '2026-09-05T10:00:00Z', success: false, error: 'git unavailable',
-    } }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
+    act(() => view.emit(unresolvable('s1', 'git unavailable')));
 
     await within(inspector()).findByText('Eligibility could not be checked.');
     expect(within(inspector()).getByText('git unavailable')).toBeTruthy();
@@ -101,14 +81,16 @@ describe('SessionsTab verdicts', () => {
   it('runs a settled action straight away and offers none without a hand to run it', async () => {
     const onReopen = vi.fn(async () => true);
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    const view = renderSessionsTab({ listSessions: list, onReopen, resolutionNotice: resolutionNotice([judged('s1')]) });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1')));
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
     expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]);
     await waitFor(() => expect(rows().queryByText('reopening…')).toBeNull());
 
     view.unmount();
-    renderSessionsTab({ listSessions: list, resolutionNotice: resolutionNotice([judged('s1')]) });
+    const withoutHand = renderSessionsTab({ listSessions: list });
+    act(() => withoutHand.emit(resolved('s1')));
     await rows().findByText('run s1');
     expect(screen.queryByRole('button', { name: 'Reopen' })).toBeNull();
   });
@@ -127,43 +109,20 @@ describe('SessionsTab settles rows in place', () => {
   it('does not replay retained verdicts when a fresh resolution arrives after reload', async () => {
     const entries = [closedEntry('s1'), closedEntry('s2')];
     const { list } = listing([page({ entries }), page({ entries })]);
-    const oldS1 = resolved('s1', verdict({ reason: 'old s1 verdict' }));
-    const oldS2 = resolved('s2', verdict({ reason: 'old s2 verdict' }));
-    const failedS1 = {
-      sessionId: 's1', closedAt: '2026-09-05T10:00:00Z', success: false, error: 'old failure',
-    };
-    const { rerender } = renderSessionsTab({
-      listSessions: list,
-      resolutionNotice: {
-        resolutions: { s1: oldS1, s2: oldS2 },
-        arrivalNonceBySession: { s1: 1, s2: 1 },
-        nonce: 1,
-      },
+    const view = renderSessionsTab({ listSessions: list });
+    act(() => {
+      view.emit(resolved('s1', verdict({ reason: 'old s1 verdict' })));
+      view.emit(resolved('s2', verdict({ reason: 'old s2 verdict' })));
     });
 
     fireEvent.click(await rows().findByText('run s1'));
     await within(inspector()).findByText('old s1 verdict');
-    rerender({
-      resolutionNotice: {
-        resolutions: { s1: failedS1, s2: oldS2 },
-        arrivalNonceBySession: { s1: 2, s2: 1 },
-        nonce: 2,
-      },
-    });
+    act(() => view.emit(unresolvable('s1', 'old failure')));
     fireEvent.click(await within(inspector()).findByRole('button', { name: 'Reload' }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     await within(inspector()).findByText('checking reopen eligibility…');
 
-    rerender({
-      resolutionNotice: {
-        resolutions: {
-          s1: failedS1,
-          s2: resolved('s2', verdict({ reason: 'fresh s2 verdict' })),
-        },
-        arrivalNonceBySession: { s1: 2, s2: 3 },
-        nonce: 3,
-      },
-    });
+    act(() => view.emit(resolved('s2', verdict({ reason: 'fresh s2 verdict' }))));
 
     await within(inspector()).findByText('checking reopen eligibility…');
     expect(within(inspector()).queryByText('old failure')).toBeNull();
@@ -172,11 +131,13 @@ describe('SessionsTab settles rows in place', () => {
 
   it('replaces a live row when the daemon says it closed, and judges it without re-listing', async () => {
     const { list } = listing([page({ entries: [liveEntry('s1')] })]);
-    const { rerender } = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await screen.findByRole('button', { name: 'Focus' });
-    rerender({ closeNotice: { entry: closedEntry('s1'), nonce: 1 } });
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'the worktree is still there' })) }, arrivalNonceBySession: { s1: 2 }, nonce: 2 } });
+    act(() => {
+      view.emit({ type: 'closed', entry: closedEntry('s1') });
+      view.emit(resolved('s1', verdict({ reason: 'the worktree is still there' })));
+    });
 
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Focus' })).toBeNull());
     expect(screen.getAllByRole('option')).toHaveLength(1);
@@ -188,11 +149,11 @@ describe('SessionsTab settles rows in place', () => {
 
   it('offers the resolved action without re-listing', async () => {
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    const { rerender } = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await rows().findByText('run s1');
     expect(within(row('run s1')).queryByRole('button', { name: 'Reopen' })).toBeNull();
-    rerender({ resolutionNotice: { resolutions: { s1: resolved('s1', verdict({ reason: 'it is there' })) }, arrivalNonceBySession: { s1: 1 }, nonce: 1 } });
+    act(() => view.emit(resolved('s1', verdict({ reason: 'it is there' }))));
 
     await within(row('run s1')).findByRole('button', { name: 'Reopen' });
     expect(within(inspector()).getByText('it is there')).toBeTruthy();
@@ -209,7 +170,7 @@ describe('SessionsTab settles rows in place', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: '1 older ↓' }));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    act(() => view.emit({ type: 'reopen-resolved', resolution: resolved('elsewhere', goneEverywhere) }));
+    act(() => view.emit(resolved('elsewhere', goneEverywhere)));
     await act(async () => { release?.(page({ entries: [closedEntry('elsewhere')] })); });
     await rows().findByText('run elsewhere');
     fireEvent.click(rows().getByText('run elsewhere'));
@@ -225,7 +186,7 @@ describe('SessionsTab settles rows in place', () => {
     const view = renderSessionsTab({ listSessions: list });
     await rows().findByText('run s1');
 
-    view.rerender({ connectionGeneration: 2 });
+    act(() => view.setConnected(true, 2));
 
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole('button', { name: '1 older ↓' })).toBeNull();
@@ -238,7 +199,8 @@ describe('SessionsTab runs a reopen', () => {
     let finish: () => void = () => {};
     const onReopen = vi.fn(() => new Promise<boolean>((resolve) => { finish = () => resolve(true); }));
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    renderSessionsTab({ listSessions: list, onReopen, resolutionNotice: resolutionNotice([judged('s1')]) });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1')));
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
     const busy = within(row('run s1')).getByRole('button', { name: 'reopening…' }) as HTMLButtonElement;
@@ -258,18 +220,13 @@ describe('SessionsTab runs a reopen', () => {
       page({ entries: [closedEntry('s1')] }),
       page({ entries: [closedEntry('s1')] }),
     ]);
-    const { rerender } = renderSessionsTab({
-      listSessions: list,
-      onReopen,
-      resolutionNotice: resolutionNotice([judged('s1')]),
-    });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1')));
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
     await waitFor(() => expect(within(row('run s1')).getByRole('status').textContent).toBe('reopen was refused; it offers Recreate the worktree instead'));
     await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
-    rerender({ resolutionNotice: resolutionNotice([
-      judged('s1', { reopenable: false, reason: 'the directory is gone', directory_state: 'missing', actions: [SessionReopenAction.RecreateWorktreeAndReopen] }),
-    ], 2) });
+    act(() => view.emit(resolved('s1', verdict({ reopenable: false, reason: 'the directory is gone', directory_state: 'missing', actions: [SessionReopenAction.RecreateWorktreeAndReopen] }))));
     await within(row('run s1')).findByRole('button', { name: 'Recreate the worktree' });
     expect(list).toHaveBeenCalledTimes(2);
   });
@@ -278,11 +235,8 @@ describe('SessionsTab runs a reopen', () => {
     const onReopen = vi.fn(async () => false);
     const elsewhereOnly = verdict({ reopenable: false, reason: 'the directory is gone', directory_state: 'missing', actions: [SessionReopenAction.StartFreshElsewhere] });
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen,
-      resolutionNotice: resolutionNotice([{ session_id: 's1', reopen: elsewhereOnly }]),
-    });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1', elsewhereOnly)));
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Start fresh elsewhere' }));
     await waitFor(() => expect(rows().queryByText('reopening…')).toBeNull());
@@ -294,11 +248,8 @@ describe('SessionsTab row grammar', () => {
   it('offers the first action as the verb and the rest behind the menu', async () => {
     const onReopen = vi.fn(async () => true);
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen,
-      resolutionNotice: resolutionNotice([{ session_id: 's1', reopen: goneEverywhere }]),
-    });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1', goneEverywhere)));
 
     const first = await screen.findByRole('option');
     await within(first).findByRole('button', { name: 'Start fresh on the default branch' });
@@ -314,11 +265,10 @@ describe('SessionsTab row grammar', () => {
     const { list } = listing([page({
       entries: [closedEntry('s1', { branch: 'feat/x' }), closedEntry('s2', { branch: 'feat/y' })],
     })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen: vi.fn(),
-      workspaceNames: { 'ws-1': 'attn' },
-      resolutionNotice: resolutionNotice([{ session_id: 's1', reopen: goneEverywhere }, judged('s2')]),
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn(), workspaceNames: { 'ws-1': 'attn' } });
+    act(() => {
+      view.emit(resolved('s1', goneEverywhere));
+      view.emit(resolved('s2'));
     });
 
     await rows().findByText('run s2');
@@ -336,11 +286,8 @@ describe('SessionsTab row grammar', () => {
   it('Enter runs the first verb and a digit runs the nth', async () => {
     const onReopen = vi.fn(async () => true);
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen,
-      resolutionNotice: resolutionNotice([{ session_id: 's1', reopen: goneEverywhere }]),
-    });
+    const view = renderSessionsTab({ listSessions: list, onReopen });
+    act(() => view.emit(resolved('s1', goneEverywhere)));
 
     const first = await screen.findByRole('option');
     await within(first).findByRole('button', { name: 'Start fresh on the default branch' });
@@ -371,13 +318,11 @@ describe('SessionsTab row grammar', () => {
     const { list } = listing([page({
       entries: [entry({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', label: 'Fixture run' }), closedEntry('s2', { label: '', close_reason: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee asked' })],
     })]);
-    renderSessionsTab({
+    const view = renderSessionsTab({
       listSessions: list,
       workspaceNames: { 'ws-1': 'workspace-12345678-1234-1234-1234-123456789abc' },
-      resolutionNotice: resolutionNotice([
-        judged('s2', { reopenable: false, actions: [], reason: 'conversation 12345678-1234-1234-1234-123456789abc is no longer in storage' }),
-      ]),
     });
+    act(() => view.emit(resolved('s2', verdict({ reopenable: false, actions: [], reason: 'conversation 12345678-1234-1234-1234-123456789abc is no longer in storage' }))));
 
     await rows().findByText('untitled session');
     expect(within(row('untitled session')).getByText('closed by you: Fixture run asked')).toBeTruthy();
@@ -392,11 +337,10 @@ describe('SessionsTab row grammar', () => {
     const { list } = listing([page({
       entries: [closedEntry('here', { is_worktree: true }), closedEntry('gone', { is_worktree: true })],
     })]);
-    renderSessionsTab({
-      listSessions: list,
-      onReopen: vi.fn(),
-      onShowWorktree,
-      resolutionNotice: resolutionNotice([judged('here'), judged('gone', { directory_state: 'missing', actions: [] })]),
+    const view = renderSessionsTab({ listSessions: list, onReopen: vi.fn(), onShowWorktree });
+    act(() => {
+      view.emit(resolved('here'));
+      view.emit(resolved('gone', verdict({ directory_state: 'missing', actions: [] })));
     });
 
     await rows().findByText('run gone');

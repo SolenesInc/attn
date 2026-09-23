@@ -1,4 +1,4 @@
-import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../types/generated';
+import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 
 export type SessionScope = 'live' | 'closed' | 'all';
 
@@ -128,7 +128,6 @@ export interface ReopenActionView {
 }
 
 export interface ReopenVerdictView {
-  refreshing: boolean;
   summary: string;
   reopenable: boolean;
   actions: ReopenActionView[];
@@ -143,7 +142,6 @@ export interface ReopenVerdictView {
 
 export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
   return {
-    refreshing: reopen.checking,
     summary: reopen.reason || reopen.warning || 'it can be reopened where it ran',
     reopenable: reopen.reopenable,
     actions: reopen.actions.map((id) => ({ id, label: reopenActionLabel(id) })),
@@ -191,14 +189,4 @@ const DIRECTORY_STATE_LABELS: Record<string, string> = {
 
 export function directoryStateLabel(state: string): string {
   return DIRECTORY_STATE_LABELS[state] ?? state;
-}
-
-export function reopenVerdictsById(
-  verdicts: SessionReopenEntry[] | undefined,
-): Record<string, ReopenVerdictView> {
-  const byId: Record<string, ReopenVerdictView> = {};
-  for (const entry of verdicts ?? []) {
-    byId[entry.session_id] = reopenVerdictView(entry.reopen);
-  }
-  return byId;
 }

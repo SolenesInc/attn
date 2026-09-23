@@ -109,6 +109,7 @@ import type {
   SessionLedgerConnectionEvent,
   SessionLedgerPage,
   SessionLedgerQuery,
+  SessionLedgerUpdate,
 } from './daemonSessionLedgerEvents';
 import { handleNotebookDaemonEvent } from './daemonNotebookEvents';
 import {
@@ -969,6 +970,10 @@ export function useDaemonSocket({
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const connectionGenerationRef = useRef(0);
+  const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean }) => {
+    const stamped: SessionLedgerConnectionEvent = { ...event, connectionGeneration: connectionGenerationRef.current };
+    for (const listener of sessionLedgerListenersRef.current) listener(stamped);
+  }, []);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
@@ -1278,13 +1283,7 @@ export function useDaemonSocket({
       setConnectionError(null);
       connectionGenerationRef.current += 1;
       setConnectionGeneration(connectionGenerationRef.current);
-      for (const listener of sessionLedgerListenersRef.current) {
-        listener({
-          type: 'connection',
-          connected: true,
-          connectionGeneration: connectionGenerationRef.current,
-        });
-      }
+      emitSessionLedger({ type: 'connection', connected: true });
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
       circuitOpenRef.current = false;
@@ -2874,14 +2873,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
-            if (handleSessionLedgerDaemonEvent(data, {
-              pending,
-              onUpdate: (update) => {
-                for (const listener of sessionLedgerListenersRef.current) {
-                  listener({ ...update, connectionGeneration: connectionGenerationRef.current });
-                }
-              },
-            })) break;
+            if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2910,13 +2902,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
-      for (const listener of sessionLedgerListenersRef.current) {
-        listener({
-          type: 'connection',
-          connected: false,
-          connectionGeneration: connectionGenerationRef.current,
-        });
-      }
+      emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -2952,7 +2938,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions]);
+  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -3159,10 +3145,7 @@ export function useDaemonSocket({
   }, []);
 
   const sendSessionList = useCallback((query: SessionLedgerQuery = {}): Promise<SessionLedgerPage> => {
-    return sendRequest<SessionLedgerPage>('session_list', {
-      ...query,
-      ...(query.reopen ? { reopen_delivery: 'stream' } : {}),
-    }, 'Reading the session ledger timed out');
+    return sendRequest<SessionLedgerPage>('session_list', { ...query }, 'Reading the session ledger timed out');
   }, [sendRequest]);
 
   const sendSessionShow = useCallback((sessionId: string): Promise<SessionLedgerEntry> => {
@@ -4633,6 +4616,11 @@ export function useDaemonSocket({
 
   const subscribeSessionLedger = useCallback((listener: (event: SessionLedgerConnectionEvent) => void) => {
     sessionLedgerListenersRef.current.add(listener);
+    listener({
+      type: 'connection',
+      connected: wsRef.current?.readyState === WebSocket.OPEN,
+      connectionGeneration: connectionGenerationRef.current,
+    });
     return () => sessionLedgerListenersRef.current.delete(listener);
   }, []);
 

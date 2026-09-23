@@ -3,31 +3,31 @@ import type {
   SessionLedgerPage,
   SessionLedgerQuery,
   SessionLedgerUpdate,
-} from './daemonSessionLedgerEvents';
-import type { SessionLedgerConnection } from './useSessionLedger';
+} from '../hooks/daemonSessionLedgerEvents';
+import type { SessionLedgerConnection } from '../hooks/useSessionLedger';
 
 export function createSessionLedgerTestConnection(
   list: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>,
-  generation = 1,
 ) {
   const listeners = new Set<(event: SessionLedgerConnectionEvent) => void>();
+  let connected = true;
+  let generation = 1;
   const connection: SessionLedgerConnection = {
     list,
     subscribe(listener) {
       listeners.add(listener);
+      listener({ type: 'connection', connected, connectionGeneration: generation });
       return () => listeners.delete(listener);
     },
-    connected: true,
-    generation,
   };
   const emit = (update: SessionLedgerUpdate) => {
-    for (const listener of listeners) listener({ ...update, connectionGeneration: connection.generation });
+    for (const listener of listeners) listener({ ...update, connectionGeneration: generation });
   };
-  const setConnected = (connected: boolean, nextGeneration = connection.generation) => {
-    connection.connected = connected;
-    connection.generation = nextGeneration;
+  const setConnected = (nextConnected: boolean, nextGeneration = generation) => {
+    connected = nextConnected;
+    generation = nextGeneration;
     for (const listener of listeners) {
-      listener({ type: 'connection', connected, connectionGeneration: nextGeneration });
+      listener({ type: 'connection', connected, connectionGeneration: generation });
     }
   };
   return { connection, emit, setConnected };
