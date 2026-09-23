@@ -294,8 +294,19 @@ func (d *Daemon) handleDesktopTileContentGet(client *wsClient, msg *protocol.Des
 		d.sendCommandError(client, msg.Cmd, "too many tile content subscriptions")
 		return
 	}
-	content, readErr := readMarkdownFile(path)
-	d.sendToClient(client, desktopTileContentMessage(msg.DesktopID, msg.TileID, path, content, readErr))
+	for attempt := 0; attempt < 2; attempt++ {
+		content, readErr := readMarkdownFile(path)
+		current, err := d.desktopMarkdownTilePath(msg.DesktopID, msg.TileID)
+		if err != nil {
+			d.sendCommandError(client, msg.Cmd, err.Error())
+			return
+		}
+		if current == path {
+			d.sendToClient(client, desktopTileContentMessage(msg.DesktopID, msg.TileID, path, content, readErr))
+			return
+		}
+		path = current
+	}
 }
 
 func (d *Daemon) broadcastDesktopTileContent(ref markdownTileRef, content string, readErr error) {
