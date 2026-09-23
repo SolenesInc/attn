@@ -77,26 +77,24 @@ jobs:
           git fetch origin main --quiet || true
 
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          if [ -n "$BASE_SHA" ]; then
-            git checkout "$BASE_SHA"
-          else
-            git checkout origin/main
-          fi
+          git worktree add --detach "$RUNNER_TEMP/base" "${BASE_SHA:-origin/main}"
 
       # Re-run against the base checkout: the pin/patch may differ there, and
       # the archive is keyed by that source identity.
       - name: Ensure native VT library (base)
+        working-directory: ${{ runner.temp }}/base
         run: |
           if [ -x ./scripts/build-libghostty-vt.sh ]; then
             ./scripts/build-libghostty-vt.sh || echo "::warning::could not obtain libghostty-vt for BASE; cgo-linked packages will not build"
           fi
 
       - name: Bench PR base
+        working-directory: ${{ runner.temp }}/base
         run: |
           echo "Running: $BENCH_CMD"
-          eval "$BENCH_CMD" > base.txt || echo "::warning::the benchmark run on BASE exited non-zero; the delta may cover fewer packages than intended"
-          cat base.txt
-          if [ ! -s base.txt ]; then
+          eval "$BENCH_CMD" > "$GITHUB_WORKSPACE/base.txt" || echo "::warning::the benchmark run on BASE exited non-zero; the delta may cover fewer packages than intended"
+          cat "$GITHUB_WORKSPACE/base.txt"
+          if [ ! -s "$GITHUB_WORKSPACE/base.txt" ]; then
             echo "::warning::base.txt is empty; the benchmark run on BASE produced no output"
           fi
 
