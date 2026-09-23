@@ -61,6 +61,10 @@ interface PickerTarget {
   agentsAvailable?: string[];
 }
 
+function endpointUnavailableReason(endpoint: DaemonEndpoint): string {
+  return endpoint.status_message || `${endpoint.name} is ${endpoint.status}`;
+}
+
 interface PathSelectableItem {
   kind: 'recent' | 'directory';
   key: string;
@@ -300,7 +304,7 @@ export function LocationPicker({
         endpointId: endpoint.id,
         name: endpoint.name,
         connected: endpoint.status === 'connected',
-        unavailableReason: endpoint.status_message || `${endpoint.name} is ${endpoint.status}`,
+        unavailableReason: endpointUnavailableReason(endpoint),
         metaLabel: endpoint.status,
         metaClassName: `status-${endpoint.status}`,
         projectsDirectory: endpoint.capabilities?.projects_directory,
