@@ -270,7 +270,7 @@ func TestChiefOfStaffDelegateBindsSeedAndPrompt(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sourceSessionID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 
@@ -333,7 +333,7 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityAcrossPlacements(t *
 			d := newDelegationDaemon(t)
 			backend := &fakeSpawnBackend{}
 			_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-			if err := d.store.SetProfileRole(profileRoleChiefOfStaff, chiefSessionID); err != nil {
+			if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
 				t.Fatalf("set chief role: %v", err)
 			}
 			consumeDelegatedPrompt(t, backend)
@@ -384,7 +384,7 @@ func TestDelegatedFromChiefDecoratesBroadcastSession(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sourceSessionID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)
@@ -1312,7 +1312,7 @@ func TestChiefOfStaffDelegateUnmutesExistingWorkspace(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sourceSessionID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	targetDir := t.TempDir()

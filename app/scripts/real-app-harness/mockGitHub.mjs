@@ -3,11 +3,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  currentHarnessProfile,
-  defaultAppPathForProfile,
+  currentHarnessInstance,
+  defaultAppPathForInstance,
   isProductionHarnessTarget,
-  mockGitHubPortForProfile,
-} from './harnessProfile.mjs';
+  mockGitHubPortForInstance,
+} from './harnessInstance.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HARNESS_DIR, '../../..');
@@ -21,8 +21,8 @@ export const MOCK_GITHUB_SIGNATURE = 'attn-harness-github';
 export const MOCK_GITHUB_URL_VAR = 'ATTN_MOCK_GH_URL';
 export const MOCK_GITHUB_VARS = [MOCK_GITHUB_URL_VAR, 'ATTN_MOCK_GH_TOKEN', 'ATTN_MOCK_GH_HOST'];
 
-export function mockGitHubTarget(profile = currentHarnessProfile()) {
-  const port = mockGitHubPortForProfile(profile);
+export function mockGitHubTarget(instance = currentHarnessInstance()) {
+  const port = mockGitHubPortForInstance(instance);
   return { port, url: `http://127.0.0.1:${port}`, host: MOCK_GITHUB_HOST, token: MOCK_GITHUB_TOKEN };
 }
 
@@ -49,18 +49,18 @@ function serverCommand(args, run) {
 }
 
 export function ensureMockGitHubServer({
-  profile = currentHarnessProfile(),
-  appPath = defaultAppPathForProfile(profile),
+  instance = currentHarnessInstance(),
+  appPath = defaultAppPathForInstance(instance),
   env = process.env,
   fixture = MOCK_GITHUB_FIXTURE,
   run = execFileSync,
   log = (message) => console.log(`[mock-github] ${message}`),
 } = {}) {
-  if (isProductionHarnessTarget({ profile, appPath })) {
+  if (isProductionHarnessTarget({ instance, appPath })) {
     log('skipped: production target keeps the real github.com');
     return null;
   }
-  const target = mockGitHubTarget(profile);
+  const target = mockGitHubTarget(instance);
   const started = serverCommand(
     ['--ensure', '--port', String(target.port), '--host', target.host, '--fixture', fixture],
     run,
@@ -72,22 +72,22 @@ export function ensureMockGitHubServer({
 }
 
 export function stopMockGitHubServer({
-  profile = currentHarnessProfile(),
-  appPath = defaultAppPathForProfile(profile),
+  instance = currentHarnessInstance(),
+  appPath = defaultAppPathForInstance(instance),
   run = execFileSync,
   log = (message) => console.log(`[mock-github] ${message}`),
 } = {}) {
-  if (isProductionHarnessTarget({ profile, appPath })) {
+  if (isProductionHarnessTarget({ instance, appPath })) {
     return null;
   }
-  const target = mockGitHubTarget(profile);
+  const target = mockGitHubTarget(instance);
   const result = serverCommand(['--stop', '--port', String(target.port)], run);
   log(result.stopped ? `stopped pid ${result.pid}` : `nothing to stop on ${target.url}`);
   return result;
 }
 
-export async function readMockGitHubStatus({ profile = currentHarnessProfile(), request = fetch } = {}) {
-  const target = mockGitHubTarget(profile);
+export async function readMockGitHubStatus({ instance = currentHarnessInstance(), request = fetch } = {}) {
+  const target = mockGitHubTarget(instance);
   const response = await request(`${target.url}/__control`);
   if (!response.ok) {
     throw new Error(`mock GitHub status: ${target.url}/__control returned ${response.status}`);

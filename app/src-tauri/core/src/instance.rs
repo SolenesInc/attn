@@ -1,4 +1,4 @@
-//! Build-profile awareness for the Tauri shell. See docs/profiles.md.
+//! Build-instance awareness for the Tauri shell. See docs/instances.md.
 
 use std::env;
 use std::fs::{self, File, OpenOptions};
@@ -9,16 +9,16 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, Instant};
 
-const BUILD_PROFILE: Option<&str> = option_env!("ATTN_BUILD_PROFILE");
+const BUILD_INSTANCE: Option<&str> = option_env!("ATTN_BUILD_INSTANCE");
 
 const BUILD_WS_PORT: Option<&str> = option_env!("ATTN_BUILD_WS_PORT");
 const BUILD_BUNDLE_ID: Option<&str> = option_env!("ATTN_BUILD_BUNDLE_ID");
-const BUILD_DEFAULT_PROFILE_HARNESS: bool =
-    option_env!("ATTN_BUILD_DEFAULT_PROFILE_HARNESS").is_some();
+const BUILD_DEFAULT_INSTANCE_HARNESS: bool =
+    option_env!("ATTN_BUILD_DEFAULT_INSTANCE_HARNESS").is_some();
 const HARNESS_DATA_DIR_ENV: &str = "ATTN_HARNESS_DATA_DIR";
 const APP_PID_FILE: &str = "app.pid";
 const APP_LOCK_DIR: &str = ".attn.locks";
-// Tripwire past a whole `profile clean` (measured 0.44s, 2026-08-30, macOS): a launch
+// Tripwire past a whole `instance clean` (measured 0.44s, 2026-08-30, macOS): a launch
 // that close to one waits it out instead of refusing to start.
 const APP_LOCK_WAIT: Duration = Duration::from_secs(3);
 const ROUTING_PATH_OVERRIDES: [&str; 7] = [
@@ -31,12 +31,12 @@ const ROUTING_PATH_OVERRIDES: [&str; 7] = [
     "ATTN_BUNDLED_PLUGIN_DIR",
 ];
 
-pub fn build_profile() -> &'static str {
-    BUILD_PROFILE.unwrap_or("").trim()
+pub fn build_instance() -> &'static str {
+    BUILD_INSTANCE.unwrap_or("").trim()
 }
 
-pub fn build_profile_label() -> &'static str {
-    let p = build_profile();
+pub fn build_instance_label() -> &'static str {
+    let p = build_instance();
     if p.is_empty() {
         "default"
     } else {
@@ -44,38 +44,38 @@ pub fn build_profile_label() -> &'static str {
     }
 }
 
-/// Mirrors `config.WSPortForProfile()` in Go.
-pub fn default_port_for_build_profile() -> &'static str {
+/// Mirrors `config.WSPortForInstance()` in Go.
+pub fn default_port_for_build_instance() -> &'static str {
     if let Some(port) = BUILD_WS_PORT {
         let port = port.trim();
         if !port.is_empty() {
             return port;
         }
     }
-    match build_profile() {
+    match build_instance() {
         "dev" => "29849",
         _ => "9849",
     }
 }
 
-/// Applies the build-time profile and scrubs routing overrides leaked in by a
-/// parent attn terminal. Must run before anything reads `ATTN_PROFILE`/`ATTN_WS_PORT`.
-pub fn apply_build_profile_env() {
-    let profile = build_profile();
+/// Applies the build-time instance and scrubs routing overrides leaked in by a
+/// parent attn terminal. Must run before anything reads `ATTN_INSTANCE`/`ATTN_WS_PORT`.
+pub fn apply_build_instance_env() {
+    let instance = build_instance();
     for key in ROUTING_PATH_OVERRIDES {
         env::remove_var(key);
     }
-    if profile.is_empty() {
-        env::remove_var("ATTN_PROFILE");
+    if instance.is_empty() {
+        env::remove_var("ATTN_INSTANCE");
     } else {
-        env::set_var("ATTN_PROFILE", profile);
+        env::set_var("ATTN_INSTANCE", instance);
     }
-    if BUILD_DEFAULT_PROFILE_HARNESS {
+    if BUILD_DEFAULT_INSTANCE_HARNESS {
         let data_dir = validated_harness_data_dir()
-            .unwrap_or_else(|error| panic!("refusing default-profile harness launch: {error}"));
+            .unwrap_or_else(|error| panic!("refusing default-instance harness launch: {error}"));
         env::set_var("ATTN_DATA_DIR", data_dir);
     }
-    env::set_var("ATTN_WS_PORT", default_port_for_build_profile());
+    env::set_var("ATTN_WS_PORT", default_port_for_build_instance());
 }
 
 fn validated_harness_data_dir() -> Result<PathBuf, String> {
@@ -118,22 +118,22 @@ pub(crate) fn data_dir() -> Result<PathBuf, String> {
         }
     }
     let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
-    let name = match build_profile() {
+    let name = match build_instance() {
         "" => ".attn".to_string(),
-        profile => format!(".attn-{profile}"),
+        instance => format!(".attn-{instance}"),
     };
     Ok(home.join(name))
 }
 
-/// Mirrors `config.AppLockPathForProfile()` in Go.
+/// Mirrors `config.AppLockPathForInstance()` in Go.
 fn app_lock_path() -> Result<PathBuf, String> {
     let home = dirs::home_dir().ok_or_else(|| "home directory is unavailable".to_string())?;
     Ok(home
         .join(APP_LOCK_DIR)
-        .join(format!("app-{}.lock", build_profile_label())))
+        .join(format!("app-{}.lock", build_instance_label())))
 }
 
-/// Shared for this process's lifetime; `attn profile clean` wants it exclusively,
+/// Shared for this process's lifetime; `attn instance clean` wants it exclusively,
 /// so it gives way while any app instance holds it.
 pub fn hold_app_lock() -> Result<(), String> {
     let file = acquire_app_lock(&app_lock_path()?, APP_LOCK_WAIT)?;
@@ -161,7 +161,7 @@ fn acquire_app_lock(path: &Path, wait: Duration) -> Result<File, String> {
         }
         if Instant::now() >= deadline {
             return Err(format!(
-                "{} is still held exclusively after {}s: `attn profile clean` is removing this profile",
+                "{} is still held exclusively after {}s: `attn instance clean` is removing this instance",
                 path.display(),
                 wait.as_secs_f64()
             ));
@@ -241,28 +241,28 @@ pub fn bundle_identifier() -> &'static str {
             return id;
         }
     }
-    match build_profile() {
+    match build_instance() {
         "dev" => "com.attn.manager.dev",
         _ => "com.attn.manager",
     }
 }
 
 /// Whether the UI automation bridge runs: `ATTN_AUTOMATION=1`/`0` decides,
-/// otherwise any non-empty `ATTN_PROFILE`. Needs `apply_build_profile_env` first.
+/// otherwise any non-empty `ATTN_INSTANCE`. Needs `apply_build_instance_env` first.
 pub fn automation_enabled() -> bool {
     let automation = env::var("ATTN_AUTOMATION").ok();
-    let profile = env::var("ATTN_PROFILE").ok();
-    decide_automation_enabled(automation.as_deref(), profile.as_deref())
+    let instance = env::var("ATTN_INSTANCE").ok();
+    decide_automation_enabled(automation.as_deref(), instance.as_deref())
 }
 
-fn decide_automation_enabled(automation: Option<&str>, profile: Option<&str>) -> bool {
+fn decide_automation_enabled(automation: Option<&str>, instance: Option<&str>) -> bool {
     match automation.map(str::trim) {
         Some("1") => return true,
         Some("0") => return false,
         Some("") | None => {}
         Some(_) => return false,
     }
-    profile.map(str::trim).is_some_and(|p| !p.is_empty())
+    instance.map(str::trim).is_some_and(|p| !p.is_empty())
 }
 
 #[cfg(test)]
@@ -275,7 +275,7 @@ mod tests {
             env::set_var(key, format!("foreign-{key}"));
         }
 
-        apply_build_profile_env();
+        apply_build_instance_env();
 
         for key in ROUTING_PATH_OVERRIDES {
             assert_eq!(env::var_os(key), None, "{key} survived app startup");
@@ -285,9 +285,9 @@ mod tests {
     #[test]
     fn unbaked_build_falls_back_to_prod_resources() {
         // Unbaked builds must fall back to the SAFE prod values, never dev's
-        // 29849 (the pre-PR4 unknown-profile collision bug).
-        assert_eq!(build_profile(), "");
-        assert_eq!(default_port_for_build_profile(), "9849");
+        // 29849 (the pre-PR4 unknown-instance collision bug).
+        assert_eq!(build_instance(), "");
+        assert_eq!(default_port_for_build_instance(), "9849");
         assert_eq!(bundle_identifier(), "com.attn.manager");
     }
 
@@ -334,7 +334,7 @@ mod tests {
         let err = acquire_app_lock(&path, Duration::from_millis(50))
             .expect_err("an exclusive holder must refuse startup");
         assert!(err.contains(&path.display().to_string()), "{err}");
-        assert!(err.contains("profile clean"), "{err}");
+        assert!(err.contains("instance clean"), "{err}");
 
         drop(held);
         acquire_app_lock(&path, Duration::from_millis(50))
@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn the_app_lock_mirrors_config_app_lock_path_for_profile() {
+    fn the_app_lock_mirrors_config_app_lock_path_for_instance() {
         let home = dirs::home_dir().expect("home dir");
         assert_eq!(
             app_lock_path().expect("lock path"),
@@ -388,7 +388,7 @@ mod tests {
     #[test]
     fn harness_data_dir_requires_a_direct_owner_only_directory() {
         let root = env::temp_dir().join(format!(
-            "attn-default-profile-harness-{}",
+            "attn-default-instance-harness-{}",
             std::process::id()
         ));
         let direct = root.join("direct");

@@ -19,7 +19,7 @@ import { createWindowDriver } from './platform.mjs';
 import { getFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, socketPathForInstance } from './harnessInstance.mjs';
 import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import {
   ensureClaudePromptReadyViaPty,
@@ -176,11 +176,11 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
-    throw new Error('the countdown-cancel scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) {
+    throw new Error('the countdown-cancel scenario does not run against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance');
   }
-  const socketPath = socketPathForProfile(profile);
+  const socketPath = socketPathForInstance(instance);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'COUNTDOWN-CANCEL',
@@ -206,7 +206,7 @@ async function main() {
   let targetId = null;
   let targetRepoDir = null;
 
-  runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, profile });
+  runner.log('run context', { runDir: runner.runDir, sessionDir: runner.sessionDir, instance });
 
   // Cleanups run in reverse registration order, so the observer and app are
   // registered first to close last.

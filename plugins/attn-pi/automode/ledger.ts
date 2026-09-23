@@ -102,7 +102,7 @@ export class DenialLedger implements DenialLedgerLike {
       if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") throw error;
       return;
     }
-    // Every session in a profile appends to one ledger, so another may have rotated
+    // Every session in an instance appends to one ledger, so another may have rotated
     // between the size check and here; the active file is then already fresh.
     if (dropped === 0) return;
     const marker = JSON.stringify({ type: "rotated", dropped, at: new Date().toISOString() });

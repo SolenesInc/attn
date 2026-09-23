@@ -1,8 +1,8 @@
 import { defineConfig } from '@playwright/test';
-import { E2E_CLIENT_TOKEN, e2ePorts } from './e2e/profileEnv';
+import { E2E_CLIENT_TOKEN, e2ePorts } from './e2e/instanceEnv';
 
-// Ports for the active ATTN_PROFILE: the default keeps the historical 19849 (daemon) /
-// 1421 (Vite); a named profile gets a disjoint band (see e2e/profileEnv.ts).
+// Ports for the active ATTN_INSTANCE: the default keeps the historical 19849 (daemon) /
+// 1421 (Vite); a named instance gets a disjoint band (see e2e/instanceEnv.ts).
 const { daemonPort: TEST_DAEMON_PORT, vitePort: TEST_VITE_PORT } = e2ePorts();
 // Browser E2E is the Mac shortcut matrix; Linux has the installed-app xdotool scenario.
 const MACOS_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X)';

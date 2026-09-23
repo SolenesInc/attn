@@ -4,7 +4,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 import { LinuxDriver } from './linuxDriver.mjs';
 import { MacOSDriver } from './macosDriver.mjs';
-import { profileCliEnv, profileForAppPath } from './harnessProfile.mjs';
+import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -27,7 +27,7 @@ function spawnDetached(executablePath, env, appPath) {
   const child = spawn(executablePath, [], {
     detached: true,
     stdio: 'ignore',
-    env: profileCliEnv(profileForAppPath(appPath), env ?? {}),
+    env: instanceCliEnv(instanceForAppPath(appPath), env ?? {}),
   });
   child.unref();
   return { spawned: true, pid: Number.isInteger(child.pid) ? child.pid : null, child };
@@ -45,7 +45,7 @@ function resolvedPath(candidate) {
   }
 }
 
-// Mirrors sameExecutable in cmd/attn/profile.go: /proc/<pid>/exe is already
+// Mirrors sameExecutable in cmd/attn/instance.go: /proc/<pid>/exe is already
 // resolved, so a symlinked install root matches only once both sides are.
 function sameExecutable(a, b) {
   return a === b || resolvedPath(a) === resolvedPath(b);

@@ -57,7 +57,7 @@ export interface SidebarProps {
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;
   collapsed: boolean;
-  profile?: string;
+  instance?: string;
   headerActions: SidebarHeaderAction[];
   criticalNotifications?: CriticalNotificationState;
   onOpenNotifications?: () => void;

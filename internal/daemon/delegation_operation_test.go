@@ -50,7 +50,7 @@ func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T)
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sourceID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceID); err != nil {
 		t.Fatal(err)
 	}
 	consumeDelegatedPrompt(t, backend)
@@ -317,7 +317,7 @@ func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, sourceID); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceID); err != nil {
 		t.Fatal(err)
 	}
 	consumeDelegatedPrompt(t, backend)
@@ -350,7 +350,7 @@ func TestDelegationOperationAcceptedBeforeSlowPreparation(t *testing.T) {
 	if inProgress.State != protocol.DelegationOperationStatePreparing {
 		t.Fatalf("state=%s, want preparing", inProgress.State)
 	}
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "replacement-chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "replacement-chief"); err != nil {
 		t.Fatal(err)
 	}
 	close(release)

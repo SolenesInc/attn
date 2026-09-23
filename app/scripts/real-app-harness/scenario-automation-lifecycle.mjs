@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Run serially (packaged-app scenarios are single-tenant):
-//   ATTN_HARNESS_PROFILE=<name> node scripts/real-app-harness/scenario-automation-lifecycle.mjs
+//   ATTN_HARNESS_INSTANCE=<name> node scripts/real-app-harness/scenario-automation-lifecycle.mjs
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -11,12 +11,12 @@ import WebSocket from 'ws';
 import { parseCommonArgs, printCommonHelp, launchFreshAppAndConnect, queryDaemonDb } from './common.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import {
-  currentHarnessProfile,
-  dataDirForProfile,
+  currentHarnessInstance,
+  dataDirForInstance,
   harnessClientHello,
   resolveHarnessResources,
-  profileCliEnv as profileEnv,
-} from './harnessProfile.mjs';
+  instanceCliEnv as instanceEnv,
+} from './harnessInstance.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { captureScreenshotData } from './nativeWindowCapture.mjs';
@@ -93,7 +93,7 @@ async function waitForDaemonReady(binary, daemonEnv) {
     } catch {
       return null;
     }
-  }, 'profile daemon');
+  }, 'instance daemon');
 }
 
 // The tick after the anchor tick legitimately fires a run, so asserting "no
@@ -278,9 +278,9 @@ function worktreeListShows(repo, absolutePath) {
   return out.includes(absolutePath);
 }
 
-function resolveWorktree(observer, profile, sessionID) {
+function resolveWorktree(observer, instance, sessionID) {
   return observer.getSession(sessionID)?.directory
-    || path.join(dataDirForProfile(profile), 'automation', 'worktrees', sessionID, 'repo');
+    || path.join(dataDirForInstance(instance), 'automation', 'worktrees', sessionID, 'repo');
 }
 
 async function waitSessionGone(observer, sessionID, description) {
@@ -312,16 +312,16 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-automation-lifecycle.mjs');
     return;
   }
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('automation lifecycle scenario requires a named non-production profile');
-  const resources = resolveHarnessResources(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('automation lifecycle scenario requires a named non-production instance');
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
-  const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
+  const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-LIFECYCLE',
     tier: 'tier2-local-fake-agent',
     prefix: 'automation-lifecycle',
-    metadata: { profile, excludes: 'A3 retention (time-based policy, unit-tested only)' },
+    metadata: { instance, excludes: 'A3 retention (time-based policy, unit-tested only)' },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
@@ -361,7 +361,7 @@ async function main() {
     });
 
     await runner.step('restart_isolated_daemon', async () => {
-      daemonEnv = profileEnv(profile, {
+      daemonEnv = instanceEnv(instance, {
         ATTN_MOCK_GH_URL: mock.url,
         ATTN_MOCK_GH_HOST: mock.host,
         ATTN_MOCK_GH_TOKEN: 'test-token',
@@ -524,7 +524,7 @@ async function main() {
         const rows = (runJSON(binary, ['automation', 'runs', cleanupID], daemonEnv) || []).filter((row) => row.state === 'delivered');
         return rows.length >= 1 ? rows[0] : null;
       }, 'cleanup leg first delivery', GH_DELIVERY_TIMEOUT_MS);
-      const cleanWorktree = resolveWorktree(observer, profile, cleanRun.session_id);
+      const cleanWorktree = resolveWorktree(observer, instance, cleanRun.session_id);
       runner.assert(fs.existsSync(cleanWorktree), 'first delivery worktree exists', { cleanWorktree });
 
       await client.request('close_session', { sessionId: cleanRun.session_id });
@@ -543,7 +543,7 @@ async function main() {
           .filter((row) => row.state === 'delivered' && row.seed_id !== cleanRun.seed_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'cleanup leg second delivery on a fresh thread', GH_DELIVERY_TIMEOUT_MS);
-      const dirtyWorktree = resolveWorktree(observer, profile, dirtyRun.session_id);
+      const dirtyWorktree = resolveWorktree(observer, instance, dirtyRun.session_id);
       runner.assert(dirtyWorktree !== cleanWorktree, 'the edit-rotated second delivery gets an independent worktree', { cleanWorktree, dirtyWorktree });
       runner.assert(fs.existsSync(dirtyWorktree), 'second delivery worktree exists', { dirtyWorktree });
 
@@ -565,7 +565,7 @@ async function main() {
           .filter((row) => row.state === 'delivered' && row.seed_id !== cleanRun.seed_id && row.seed_id !== dirtyRun.seed_id);
         return rows.length >= 1 ? rows[0] : null;
       }, 'cleanup leg third delivery on the current thread', GH_DELIVERY_TIMEOUT_MS);
-      const activeWorktree = resolveWorktree(observer, profile, activeRun.session_id);
+      const activeWorktree = resolveWorktree(observer, instance, activeRun.session_id);
       runner.assert(activeWorktree !== cleanWorktree && activeWorktree !== dirtyWorktree, 'the third delivery gets an independent worktree', { cleanWorktree, dirtyWorktree, activeWorktree });
       runner.assert(fs.existsSync(activeWorktree), 'third delivery worktree exists', { activeWorktree });
 
@@ -614,14 +614,14 @@ async function main() {
       disableDefinition(binary, cleanupID, daemonEnv);
     });
 
-    await runner.finishSuccess({ profile, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
+    await runner.finishSuccess({ instance, editID, deleteID, cleanupID, run1, run2, run3, deleteRunID });
   } catch (error) {
     await captureFailureEvidence(runner, client).catch(() => {});
-    await runner.finishFailure(error, { profile, editID, deleteID, cleanupID });
+    await runner.finishFailure(error, { instance, editID, deleteID, cleanupID });
     throw error;
   } finally {
     // An enabled definition keeps ticking against a torn-down fixture and spams
-    // this profile forever.
+    // this instance forever.
     if (daemonEnv) {
       if (editApplied) { try { disableDefinition(binary, editID, daemonEnv); } catch {} }
       if (deleteApplied) { try { disableDefinition(binary, deleteID, daemonEnv); } catch {} }
@@ -633,7 +633,7 @@ async function main() {
     if (mock?.child) mock.child.kill('SIGTERM');
     if (editFixture) { try { fs.rmSync(editFixture, { recursive: true, force: true }); } catch {} }
     if (deleteFixture) { try { fs.rmSync(deleteFixture, { recursive: true, force: true }); } catch {} }
-    try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
+    try { run(binary, ['daemon', 'ensure'], instanceEnv(instance)); } catch {}
     await runner.close();
   }
 }

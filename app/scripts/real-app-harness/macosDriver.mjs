@@ -8,8 +8,8 @@ import { openDeepLink } from './deepLink.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
-  defaultAppPathForProfile,
-} from './harnessProfile.mjs';
+  defaultAppPathForInstance,
+} from './harnessInstance.mjs';
 import { createKeyInputGuard } from './keyInputGuard.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -55,7 +55,7 @@ function modifierNames(modifiers = {}) {
 export class MacOSDriver {
   constructor({
     bundleId = null,
-    appPath = defaultAppPathForProfile(),
+    appPath = defaultAppPathForInstance(),
     actionDelayMs = 250,
     keyInputGuard = null,
     client = null,

@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestSessionStateDoor_AcceptedCauseProfiles(t *testing.T) {
+func TestSessionStateDoor_AcceptedCauseInstances(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		state         string

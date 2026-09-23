@@ -135,7 +135,7 @@ func (d *Daemon) refreshTailscaleServeState() {
 
 func (d *Daemon) ensureTailscaleServeFromSettingsAndBroadcast() {
 	d.ensureTailscaleServeFromSettings()
-	d.publishFact(FactTailscaleServeChanged, config.Profile(), nil)
+	d.publishFact(FactTailscaleServeChanged, config.Instance(), nil)
 }
 
 func (d *Daemon) reconcileTailscaleServe(enabled bool) tailscaleStateSnapshot {

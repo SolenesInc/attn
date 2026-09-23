@@ -13,12 +13,12 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { readFrontendProtocolVersion } from './presentDaemon.mjs';
 import {
-  currentHarnessProfile,
-  dataDirForProfile,
+  currentHarnessInstance,
+  dataDirForInstance,
   harnessClientHello,
   resolveHarnessResources,
-  profileCliEnv as profileEnv,
-} from './harnessProfile.mjs';
+  instanceCliEnv as instanceEnv,
+} from './harnessInstance.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -237,16 +237,16 @@ async function main() {
     printCommonHelp('scripts/real-app-harness/scenario-automation-pr-continuity.mjs');
     return;
   }
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('automation continuity scenario requires a named non-production profile');
-  const resources = resolveHarnessResources(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('automation continuity scenario requires a named non-production instance');
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'AUTOMATION-PR-CONTINUITY',
     allowRealAgents: false,
     tier: 'tier2-packaged-local-provider',
     prefix: 'automation-pr-continuity',
-    metadata: { profile, provider: 'local mock GitHub', transcript: 'copied existing Codex rollout' },
+    metadata: { instance, provider: 'local mock GitHub', transcript: 'copied existing Codex rollout' },
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -272,7 +272,7 @@ async function main() {
       await setRequested(started.url, false);
       return started;
     });
-    daemonEnv = profileEnv(profile, {
+    daemonEnv = instanceEnv(instance, {
       ATTN_MOCK_GH_URL: mock.url,
       ATTN_MOCK_GH_HOST: mock.host,
       ATTN_MOCK_GH_TOKEN: 'test-token',
@@ -284,7 +284,7 @@ async function main() {
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await poll(() => {
         try { runJSON(binary, ['automation', 'list'], daemonEnv); return { ready: true }; } catch { return null; }
-      }, 'profile daemon');
+      }, 'instance daemon');
     });
     await runner.step('launch_packaged_app', () => launchFreshAppAndConnect(client, observer));
     // A YAML carrying `enabled:` is rejected outright
@@ -306,7 +306,7 @@ async function main() {
       }, 'initial delivered automation run', 45_000);
       sessionID = runRow.session_id;
       seedID = runRow.seed_id;
-      worktree = observer.getSession(sessionID)?.directory || path.join(dataDirForProfile(profile), 'automation', 'worktrees', sessionID, 'repo');
+      worktree = observer.getSession(sessionID)?.directory || path.join(dataDirForInstance(instance), 'automation', 'worktrees', sessionID, 'repo');
       runner.assert(observer.getSession(sessionID)?.seed_id === seedID, 'the run and reviewer session point at the same seed');
       const firstLaunch = await poll(() => invocations(probe.log).length >= 1 ? invocations(probe.log)[0] : null, 'first Codex launch');
       const prompt = firstLaunch.argv.at(-1) || '';
@@ -328,7 +328,7 @@ async function main() {
       }, 'secondary delivered automation run', 45_000);
       secondarySessionID = secondaryRun.session_id;
       secondarySeedID = secondaryRun.seed_id;
-      secondaryWorktree = observer.getSession(secondarySessionID)?.directory || path.join(dataDirForProfile(profile), 'automation', 'worktrees', secondarySessionID, 'repo');
+      secondaryWorktree = observer.getSession(secondarySessionID)?.directory || path.join(dataDirForInstance(instance), 'automation', 'worktrees', secondarySessionID, 'repo');
       await poll(() => invocations(probe.log).length >= 2 ? invocations(probe.log) : null, 'two independent Codex launches');
       runner.assert(fs.existsSync(worktree), 'initial exact-SHA worktree exists', { worktree });
       runner.assert(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: worktree, encoding: 'utf8' }).trim() === fixture.sha, 'initial worktree is pinned to provider SHA');
@@ -446,7 +446,7 @@ async function main() {
       run(binary, ['daemon', 'ensure'], daemonEnv);
       await poll(() => {
         try { runJSON(binary, ['automation', 'list'], daemonEnv); return { ready: true }; } catch { return null; }
-      }, 'restarted profile daemon');
+      }, 'restarted instance daemon');
       await launchFreshAppAndConnect(client, observer, { sweepStaleSessions: false });
       await client.request('close_session', { sessionId: sessionID });
       await observer.waitFor(() => !observer.getSession(sessionID) ? true : null, 'reviewer to unregister after restart');
@@ -477,9 +477,9 @@ async function main() {
       }, 'visible missing-worktree failure', 30_000);
       runner.assert(String(failed.last_error).includes('worktree') && String(failed.last_error).includes('missing'), 'missing delivered worktree fails without recreation', failed);
     });
-    await runner.finishSuccess({ profile, definitionID, sessionID, seedID, worktree, seed, continuation });
+    await runner.finishSuccess({ instance, definitionID, sessionID, seedID, worktree, seed, continuation });
   } catch (error) {
-    await runner.finishFailure(error, { profile, definitionID, sessionID, seedID, worktree, seed });
+    await runner.finishFailure(error, { instance, definitionID, sessionID, seedID, worktree, seed });
     throw error;
   } finally {
     await client.quitApp().catch(() => {});
@@ -491,7 +491,7 @@ async function main() {
       try { run(binary, ['daemon', 'stop'], daemonEnv); } catch {}
     }
     if (mock?.child) mock.child.kill('SIGTERM');
-    try { run(binary, ['daemon', 'ensure'], profileEnv(profile)); } catch {}
+    try { run(binary, ['daemon', 'ensure'], instanceEnv(instance)); } catch {}
     await runner.close();
   }
 }

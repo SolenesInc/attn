@@ -92,7 +92,7 @@ for user-defined crew members.
 
 ## Big rocks (the arc)
 
-- [x] **Chief as crew embryo** — single-holder profile role, durable ticket
+- [x] **Chief as crew embryo** — single-holder instance role, durable ticket
   role identity, protected session. The embryo exists.
 - [~] **Crew primitive** — durable identity + charter + memory home; sessions
   are a member's days; chief migrates to be the first crew member, not a

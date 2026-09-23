@@ -216,7 +216,7 @@ model Session {
   state_updated_at: string;     // ISO timestamp, always set
   last_model_request_at?: string; // ISO timestamp of the newest positively observed model request. Unlike state_updated_at, evidence refreshes and classifications never move it.
   state_reason?: string;        // Why the resolver reached this state (e.g. "stuck", "classifier_verdict"); absent for states it does not own
-  chief_of_staff?: boolean;     // True when this session holds the profile-wide coordinator role
+  chief_of_staff?: boolean;     // True when this session holds the instance-wide coordinator role
   crew_member?: string;         // The crew member whose active binding this session is — "this session is trellis today". Stamped by the daemon at launch, judged live at broadcast, absent for every unbound session.
   delegated_from_chief?: boolean; // True when this session was delegated from the chief of staff (assignee of a chief-authored ticket)
   ticket_unread?: boolean;      // True when this session has unread ticket events (drives the incoming-nudge indicator)
@@ -711,7 +711,7 @@ model EndpointInfo {
   ssh_target: string;
   status: string;
   enabled?: boolean;
-  profile?: string;
+  instance?: string;
   status_message?: string;
   session_count?: int32;
   capabilities?: EndpointCapabilities;
@@ -730,7 +730,7 @@ model ClientHelloMessage {
   client_kind: string;          // e.g. "tauri-app", "remote-web"
   version: string;              // free-form, used for diagnostics
   capabilities: string[];       // see capability docstrings above
-  // Per-profile credential from <data-dir>/client-token, minted by the daemon.
+  // Per-instance credential from <data-dir>/client-token, minted by the daemon.
   // The WebSocket port has no file permissions of its own, so this is what a
   // local client proves before the daemon records its identity, registers it
   // for broadcasts, or sends it initial_state.
@@ -1511,7 +1511,7 @@ model TicketAttachResultMessage {
 
 
 // ============================================================================
-// Notebook (durable, profile-wide markdown: a dated journal + a PARA knowledge
+// Notebook (durable, instance-wide markdown: a dated journal + a PARA knowledge
 // base).
 // Filesystem-canonical: edits use hash-CAS on file bytes, not a revision table.
 // These messages are the frontend's WebSocket path; the user-facing `attn
@@ -2016,7 +2016,7 @@ model AddEndpointMessage {
   cmd: "add_endpoint";
   name: string;
   ssh_target: string;
-  profile?: string;
+  instance?: string;
 }
 
 model RemoveEndpointMessage {
@@ -2030,7 +2030,7 @@ model UpdateEndpointMessage {
   name?: string;
   ssh_target?: string;
   enabled?: boolean;
-  profile?: string;
+  instance?: string;
 }
 
 model ListEndpointsMessage {
@@ -3274,7 +3274,7 @@ model SetSessionContextWindowCapMessage {
   cap: int32;
 }
 
-// Assign or remove the profile-wide chief-of-staff role. Assigning a new
+// Assign or remove the instance-wide chief-of-staff role. Assigning a new
 // session transfers the singleton role from the previous holder.
 model SetChiefOfStaffMessage {
   cmd: "set_chief_of_staff";
@@ -3304,7 +3304,7 @@ model InitialStateMessage {
   repos?: RepoState[];
   authors?: AuthorState[];
   github_hosts?: string[];
-  // Set while the daemon refuses to poll GitHub for this profile; empty when polling is on.
+  // Set while the daemon refuses to poll GitHub for this instance; empty when polling is on.
   github_polling_off_reason?: string;
   settings?: Record<string>;
   warnings?: DaemonWarning[];

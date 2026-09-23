@@ -24,41 +24,41 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-func runProfile() {
+func runInstance() {
 	if len(os.Args) < 3 {
-		runProfileStatus()
+		runInstanceStatus()
 		return
 	}
 	switch os.Args[2] {
 	case "status":
-		runProfileStatus()
+		runInstanceStatus()
 	case "resolve":
-		runProfileResolve(os.Args[3:])
+		runInstanceResolve(os.Args[3:])
 	case "tauri-config":
-		runProfileTauriConfig(os.Args[3:])
+		runInstanceTauriConfig(os.Args[3:])
 	case "clean":
-		runProfileClean(os.Args[3:])
+		runInstanceClean(os.Args[3:])
 	case "stop-app":
-		runProfileStopApp(os.Args[3:])
+		runInstanceStopApp(os.Args[3:])
 	case "register-scheme":
-		runProfileRegisterScheme(os.Args[3:])
+		runInstanceRegisterScheme(os.Args[3:])
 	case "set-origin":
-		runProfileSetOrigin(os.Args[3:])
+		runInstanceSetOrigin(os.Args[3:])
 	case "list":
-		runProfileList(os.Args[3:])
+		runInstanceList(os.Args[3:])
 	case "env":
-		runProfileEnvArgs(os.Args[3:])
+		runInstanceEnvArgs(os.Args[3:])
 	case "help", "-h", "--help":
-		printProfileHelp(os.Stdout)
+		printInstanceHelp(os.Stdout)
 	default:
-		fmt.Fprintf(os.Stderr, "unknown profile subcommand %q\n\n", os.Args[2])
-		printProfileHelp(os.Stderr)
+		fmt.Fprintf(os.Stderr, "unknown instance subcommand %q\n\n", os.Args[2])
+		printInstanceHelp(os.Stderr)
 		os.Exit(1)
 	}
 }
 
-type profileResolved struct {
-	Profile        string `json:"profile"`
+type instanceResolved struct {
+	Instance       string `json:"instance"`
 	Label          string `json:"label"`
 	DataDir        string `json:"dataDir"`
 	Socket         string `json:"socket"`
@@ -78,37 +78,37 @@ type profileResolved struct {
 	MockGitHubPort string `json:"mockGitHubPort"`
 }
 
-func resolveProfile(profile string) profileResolved {
-	label := profile
+func resolveInstance(instance string) instanceResolved {
+	label := instance
 	if label == "" {
 		label = "default"
 	}
-	return profileResolved{
-		Profile:        profile,
+	return instanceResolved{
+		Instance:       instance,
 		Label:          label,
-		DataDir:        config.DataDirForProfile(profile),
-		Socket:         config.SocketPathForProfile(profile),
-		DBPath:         filepath.Join(config.DataDirForProfile(profile), "attn.db"),
-		WSPort:         config.WSPortForProfile(profile),
-		BundleID:       config.BundleIdentifierForProfile(profile),
-		AppName:        config.AppNameForProfile(profile),
-		AppPath:        config.AppPathForProfile(profile),
-		AppExecutable:  config.AppExecutableForProfile(profile),
-		AppDaemon:      config.AppDaemonBinaryForProfile(profile),
-		AppLocalData:   config.AppLocalDataDirForProfile(profile),
-		AppLock:        config.AppLockPathForProfile(profile),
-		DeepLinkScheme: config.DeepLinkSchemeForProfile(profile),
-		DesktopEntry:   desktopEntryPath(config.AppNameForProfile(profile)),
-		E2EDaemonPort:  config.E2EDaemonPortForProfile(profile),
-		E2EVitePort:    config.E2EVitePortForProfile(profile),
-		MockGitHubPort: config.MockGitHubPortForProfile(profile),
+		DataDir:        config.DataDirForInstance(instance),
+		Socket:         config.SocketPathForInstance(instance),
+		DBPath:         filepath.Join(config.DataDirForInstance(instance), "attn.db"),
+		WSPort:         config.WSPortForInstance(instance),
+		BundleID:       config.BundleIdentifierForInstance(instance),
+		AppName:        config.AppNameForInstance(instance),
+		AppPath:        config.AppPathForInstance(instance),
+		AppExecutable:  config.AppExecutableForInstance(instance),
+		AppDaemon:      config.AppDaemonBinaryForInstance(instance),
+		AppLocalData:   config.AppLocalDataDirForInstance(instance),
+		AppLock:        config.AppLockPathForInstance(instance),
+		DeepLinkScheme: config.DeepLinkSchemeForInstance(instance),
+		DesktopEntry:   desktopEntryPath(config.AppNameForInstance(instance)),
+		E2EDaemonPort:  config.E2EDaemonPortForInstance(instance),
+		E2EVitePort:    config.E2EVitePortForInstance(instance),
+		MockGitHubPort: config.MockGitHubPortForInstance(instance),
 	}
 }
 
-func (r profileResolved) field(key string) (string, bool) {
+func (r instanceResolved) field(key string) (string, bool) {
 	switch key {
-	case "profile":
-		return r.Profile, true
+	case "instance":
+		return r.Instance, true
 	case "label":
 		return r.Label, true
 	case "dataDir":
@@ -147,12 +147,12 @@ func (r profileResolved) field(key string) (string, bool) {
 	return "", false
 }
 
-func runProfileStatus() {
-	r := resolveProfile(config.Profile())
+func runInstanceStatus() {
+	r := resolveInstance(config.Instance())
 	socketUp := fileExists(r.Socket)
 	appInstalled := fileExists(r.AppPath)
 
-	fmt.Printf("attn profile: %s\n\n", r.Label)
+	fmt.Printf("attn instance: %s\n\n", r.Label)
 	fmt.Printf("  data dir   %s\n", r.DataDir)
 	fmt.Printf("  socket     %s  (%s)\n", r.Socket, ynLabel(socketUp, "daemon socket present", "no daemon socket"))
 	fmt.Printf("  ws port    %s\n", r.WSPort)
@@ -166,87 +166,87 @@ func runProfileStatus() {
 	fmt.Printf("  e2e ports  daemon %s · vite %s\n", r.E2EDaemonPort, r.E2EVitePort)
 	fmt.Printf("  mock gh    %s\n\n", r.MockGitHubPort)
 
-	if err := config.ValidateProfileRouting(); err != nil {
+	if err := config.ValidateInstanceRouting(); err != nil {
 		fmt.Printf("CONFLICT — every other attn command refuses to run here:\n%v\n\n", err)
 	}
 
-	fmt.Println("Switch:   attn profile-env <name> | source   (fish: attn profile-env --fish <name> | source)")
-	fmt.Println("Resolve:  attn profile resolve --json         (single value: --field wsPort)")
-	fmt.Println("List:     attn profile list")
+	fmt.Println("Switch:   attn instance-env <name> | source   (fish: attn instance-env --fish <name> | source)")
+	fmt.Println("Resolve:  attn instance resolve --json         (single value: --field wsPort)")
+	fmt.Println("List:     attn instance list")
 }
 
-func runProfileResolve(args []string) {
-	profile := config.Profile()
+func runInstanceResolve(args []string) {
+	instance := config.Instance()
 	field := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--json":
-		case "--profile":
+		case "--instance":
 			if i+1 >= len(args) {
-				profileFatal("--profile requires a value")
+				instanceFatal("--instance requires a value")
 			}
 			i++
-			p, err := config.NormalizeProfileName(args[i])
+			p, err := config.NormalizeInstanceName(args[i])
 			if err != nil {
-				profileFatal(err.Error())
+				instanceFatal(err.Error())
 			}
-			profile = p
+			instance = p
 		case "--field":
 			if i+1 >= len(args) {
-				profileFatal("--field requires a key")
+				instanceFatal("--field requires a key")
 			}
 			i++
 			field = args[i]
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
-			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
 
-	r := resolveProfile(profile)
+	r := resolveInstance(instance)
 	if field != "" {
 		v, ok := r.field(field)
 		if !ok {
-			profileFatal(fmt.Sprintf("unknown field %q (valid: profile,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
+			instanceFatal(fmt.Sprintf("unknown field %q (valid: instance,label,dataDir,socket,dbPath,wsPort,bundleId,appName,appPath,appExecutable,appDaemon,appLocalDataDir,appLockPath,deepLinkScheme,desktopEntry,e2eDaemonPort,e2eVitePort,mockGitHubPort)", field))
 		}
 		fmt.Println(v)
 		return
 	}
 	b, err := json.MarshalIndent(r, "", "  ")
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 	fmt.Println(string(b))
 }
 
-func runProfileTauriConfig(args []string) {
-	profile := config.Profile()
+func runInstanceTauriConfig(args []string) {
+	instance := config.Instance()
 	basePath := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--base":
 			if i+1 >= len(args) {
-				profileFatal("--base requires a value")
+				instanceFatal("--base requires a value")
 			}
 			i++
 			basePath = args[i]
-		case "--profile":
+		case "--instance":
 			if i+1 >= len(args) {
-				profileFatal("--profile requires a value")
+				instanceFatal("--instance requires a value")
 			}
 			i++
-			p, err := config.NormalizeProfileName(args[i])
+			p, err := config.NormalizeInstanceName(args[i])
 			if err != nil {
-				profileFatal(err.Error())
+				instanceFatal(err.Error())
 			}
-			profile = p
+			instance = p
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
-			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
 
@@ -254,21 +254,21 @@ func runProfileTauriConfig(args []string) {
 	if basePath != "" {
 		base, err := os.ReadFile(basePath)
 		if err != nil {
-			profileFatal(err.Error())
+			instanceFatal(err.Error())
 		}
 		window, err = baseMainWindow(base)
 		if err != nil {
-			profileFatal(fmt.Sprintf("%s: %v", basePath, err))
+			instanceFatal(fmt.Sprintf("%s: %v", basePath, err))
 		}
 	}
-	b, err := json.MarshalIndent(tauriConfigOverlay(resolveProfile(profile), window), "", "  ")
+	b, err := json.MarshalIndent(tauriConfigOverlay(resolveInstance(instance), window), "", "  ")
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 	fmt.Println(string(b))
 }
 
-func tauriConfigOverlay(r profileResolved, baseWindow map[string]any) map[string]any {
+func tauriConfigOverlay(r instanceResolved, baseWindow map[string]any) map[string]any {
 	window := map[string]any{}
 	for k, v := range baseWindow {
 		window[k] = v
@@ -318,45 +318,45 @@ func cleanPlan(args []string) (normalized string, force bool, err error) {
 				return "", false, fmt.Errorf("unknown flag %q", args[i])
 			}
 			if name != "" {
-				return "", false, fmt.Errorf("clean takes a single profile name, got %q and %q", name, args[i])
+				return "", false, fmt.Errorf("clean takes a single instance name, got %q and %q", name, args[i])
 			}
 			name = args[i]
 		}
 	}
 	if name == "" {
-		return "", false, fmt.Errorf("clean requires a profile name (e.g. `attn profile clean agent7`)")
+		return "", false, fmt.Errorf("clean requires an instance name (e.g. `attn instance clean agent7`)")
 	}
-	normalized, err = config.NormalizeProfileName(name)
+	normalized, err = config.NormalizeInstanceName(name)
 	if err != nil {
 		return "", false, err
 	}
 	if normalized == "" && !force {
-		return "", false, fmt.Errorf("refusing to clean the default (production) profile without --force; this removes %s, %s and %s",
-			config.DataDirForProfile(""), config.AppPathForProfile(""), config.AppLocalDataDirForProfile(""))
+		return "", false, fmt.Errorf("refusing to clean the default (production) instance without --force; this removes %s, %s and %s",
+			config.DataDirForInstance(""), config.AppPathForInstance(""), config.AppLocalDataDirForInstance(""))
 	}
 	return normalized, force, nil
 }
 
-func runProfileClean(args []string) {
+func runInstanceClean(args []string) {
 	for _, a := range args {
 		if a == "-h" || a == "--help" {
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		}
 	}
 	normalized, _, err := cleanPlan(args)
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
-	if err := cleanProfile(os.Stdout, resolveProfile(normalized)); err != nil {
-		profileFatal(err.Error())
+	if err := cleanInstance(os.Stdout, resolveInstance(normalized)); err != nil {
+		instanceFatal(err.Error())
 	}
 }
 
-func cleanProfile(w io.Writer, r profileResolved) error {
-	fmt.Fprintf(w, ">>> Cleaning profile %s\n", r.Label)
+func cleanInstance(w io.Writer, r instanceResolved) error {
+	fmt.Fprintf(w, ">>> Cleaning instance %s\n", r.Label)
 
-	msg, err := stopProfileApp(r)
+	msg, err := stopInstanceApp(r)
 	if err != nil {
 		return fmt.Errorf("app not stopped: %w; nothing was removed, since a live app rewrites %s as fast as it is deleted. Quit it and re-run; --force does not cover a live app", err, r.AppLocalData)
 	}
@@ -371,7 +371,7 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 		return err
 	}
 
-	if msg := stopProfileDaemon(r); msg != "" {
+	if msg := stopInstanceDaemon(r); msg != "" {
 		fmt.Fprintf(w, "  daemon   %s\n", msg)
 	} else {
 		fmt.Fprintf(w, "  daemon   stopped\n")
@@ -382,7 +382,7 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 	reportProcReap(w, "pty hosts", "generation", sharedHosts)
 	for _, result := range sharedHosts {
 		if result.Outcome != procreap.ReapTerminated && result.Outcome != procreap.ReapAlreadyGone {
-			return fmt.Errorf("shared PTY host %s was not stopped (%s): %v; profile data was preserved", result.ID, result.Outcome, result.Err)
+			return fmt.Errorf("shared PTY host %s was not stopped (%s): %v; instance data was preserved", result.ID, result.Outcome, result.Err)
 		}
 	}
 
@@ -428,11 +428,11 @@ func cleanProfile(w io.Writer, r profileResolved) error {
 		fmt.Fprintf(w, "  data     none (%s)\n", r.DataDir)
 	}
 
-	fmt.Fprintf(w, "Cleaned profile %s.\n", r.Label)
+	fmt.Fprintf(w, "Cleaned instance %s.\n", r.Label)
 	return nil
 }
 
-func refuseRelaunchedApp(r profileResolved) error {
+func refuseRelaunchedApp(r instanceResolved) error {
 	pidPath := appPIDFilePath(r.DataDir)
 	if !fileExists(pidPath) {
 		return nil
@@ -440,7 +440,7 @@ func refuseRelaunchedApp(r profileResolved) error {
 	return fmt.Errorf("%s reappeared after the app was stopped: it has been relaunched; nothing was removed", pidPath)
 }
 
-func holdAppLock(r profileResolved) (func(), error) {
+func holdAppLock(r instanceResolved) (func(), error) {
 	dir := filepath.Dir(r.AppLock)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("create app lock dir %s: %w", dir, err)
@@ -459,7 +459,7 @@ func holdAppLock(r profileResolved) (func(), error) {
 	}, nil
 }
 
-func removeAppLocalData(r profileResolved) (string, error) {
+func removeAppLocalData(r instanceResolved) (string, error) {
 	if !fileExists(r.AppLocalData) {
 		return fmt.Sprintf("none (%s)", r.AppLocalData), nil
 	}
@@ -543,7 +543,7 @@ func summarizeReap(byOutcome map[ptyworker.ReapOutcome]int) string {
 	return strings.Join(parts, ", ")
 }
 
-func stopProfileDaemon(r profileResolved) string {
+func stopInstanceDaemon(r instanceResolved) string {
 	pidPath := filepath.Join(r.DataDir, "attn.pid")
 	result, err := daemonctl.Stop(pidPath)
 	if err != nil {
@@ -561,30 +561,30 @@ func stopProfileDaemon(r profileResolved) string {
 	return ""
 }
 
-func runProfileStopApp(args []string) {
-	profile := config.Profile()
+func runInstanceStopApp(args []string) {
+	instance := config.Instance()
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--profile":
+		case "--instance":
 			if i+1 >= len(args) {
-				profileFatal("--profile requires a value")
+				instanceFatal("--instance requires a value")
 			}
 			i++
-			p, err := config.NormalizeProfileName(args[i])
+			p, err := config.NormalizeInstanceName(args[i])
 			if err != nil {
-				profileFatal(err.Error())
+				instanceFatal(err.Error())
 			}
-			profile = p
+			instance = p
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
-			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
-	msg, err := stopProfileApp(resolveProfile(profile))
+	msg, err := stopInstanceApp(resolveInstance(instance))
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 	fmt.Printf("  app      %s\n", msg)
 }
@@ -596,7 +596,7 @@ var (
 	appStopPollInterval = 50 * time.Millisecond
 )
 
-func stopProfileApp(r profileResolved) (string, error) {
+func stopInstanceApp(r instanceResolved) (string, error) {
 	pidPath := appPIDFilePath(r.DataDir)
 	raw, err := os.ReadFile(pidPath)
 	if err != nil {
@@ -624,7 +624,7 @@ func stopProfileApp(r profileResolved) (string, error) {
 	return quitAppPID(r, pid, pidPath)
 }
 
-func quitAppPID(r profileResolved, pid int, pidPath string) (string, error) {
+func quitAppPID(r instanceResolved, pid int, pidPath string) (string, error) {
 	if requestAppQuit(r.BundleID) && appProcessGoneWithin(pid, appStopQuitWait) {
 		return releaseAppPID(pidPath, pid, fmt.Sprintf("quit pid %d", pid))
 	}
@@ -663,7 +663,7 @@ const (
 	pidUnidentified
 )
 
-func appPIDOwnership(r profileResolved, pid int) (pidOwnership, string, error) {
+func appPIDOwnership(r instanceResolved, pid int) (pidOwnership, string, error) {
 	if processGone(pid) {
 		return pidGone, "", nil
 	}
@@ -682,7 +682,7 @@ func appPIDOwnership(r profileResolved, pid int) (pidOwnership, string, error) {
 
 var lookupProcessExecutable = processExecutable
 
-func appLeftPID(r profileResolved, pid int, pidPath, stage string) (bool, error) {
+func appLeftPID(r instanceResolved, pid int, pidPath, stage string) (bool, error) {
 	switch own, _, idErr := appPIDOwnership(r, pid); own {
 	case pidGone, pidForeign:
 		return true, nil
@@ -758,23 +758,23 @@ func lsregisterForget(appPath string) {
 	_ = exec.Command(lsregisterPath, "-u", appPath).Run()
 }
 
-func runProfileList(args []string) {
+func runInstanceList(args []string) {
 	asJSON := false
 	for _, a := range args {
 		switch a {
 		case "--json":
 			asJSON = true
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
-			profileFatal(fmt.Sprintf("unknown flag %q for `attn profile list`", a))
+			instanceFatal(fmt.Sprintf("unknown flag %q for `attn instance list`", a))
 		}
 	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
-		profileFatal("cannot resolve home directory: " + err.Error())
+		instanceFatal("cannot resolve home directory: " + err.Error())
 	}
 
 	known := map[string]bool{"": true}
@@ -787,18 +787,18 @@ func runProfileList(args []string) {
 				continue
 			}
 			if p, ok := strings.CutPrefix(name, ".attn-"); ok && e.IsDir() {
-				if config.ValidateProfileName(p) == nil {
+				if config.ValidateInstanceName(p) == nil {
 					known[strings.ToLower(p)] = true
 				}
 			}
 		}
 	}
 
-	for _, p := range installedAppProfiles(home) {
+	for _, p := range installedAppInstances(home) {
 		known[p] = true
 	}
 
-	for _, p := range appLocalDataProfiles() {
+	for _, p := range appLocalDataInstances() {
 		known[p] = true
 	}
 
@@ -808,30 +808,30 @@ func runProfileList(args []string) {
 	}
 	sort.Strings(names)
 
-	active := config.Profile()
+	active := config.Instance()
 
 	if asJSON {
-		entries := make([]profileListEntry, 0, len(names))
+		entries := make([]instanceListEntry, 0, len(names))
 		for _, p := range names {
-			entries = append(entries, newProfileListEntry(p, active))
+			entries = append(entries, newInstanceListEntry(p, active))
 		}
-		out, err := json.MarshalIndent(map[string]any{"profiles": entries}, "", "  ")
+		out, err := json.MarshalIndent(map[string]any{"instances": entries}, "", "  ")
 		if err != nil {
-			profileFatal(err.Error())
+			instanceFatal(err.Error())
 		}
 		fmt.Println(string(out))
 		return
 	}
 
-	fmt.Printf("%-3s %-16s %-7s %-9s %-9s %-11s %s\n", "", "PROFILE", "PORT", "DATA", "APPDATA", "APP", "ORIGIN")
+	fmt.Printf("%-3s %-16s %-7s %-9s %-9s %-11s %s\n", "", "INSTANCE", "PORT", "DATA", "APPDATA", "APP", "ORIGIN")
 	for _, p := range names {
-		r := resolveProfile(p)
+		r := resolveInstance(p)
 		marker := "  "
 		if p == active {
 			marker = "* "
 		}
 		origin := "—"
-		if o := readProfileOrigin(r.DataDir); o != nil {
+		if o := readInstanceOrigin(r.DataDir); o != nil {
 			origin = filepath.Base(o.Worktree)
 		}
 		fmt.Printf("%-3s %-16s %-7s %-9s %-9s %-11s %s\n",
@@ -844,11 +844,11 @@ func runProfileList(args []string) {
 			origin,
 		)
 	}
-	fmt.Println("\n* = active (ATTN_PROFILE)")
+	fmt.Println("\n* = active (ATTN_INSTANCE)")
 }
 
-func installedAppProfiles(home string) []string {
-	root := filepath.Dir(config.AppPathForProfile(""))
+func installedAppInstances(home string) []string {
+	root := filepath.Dir(config.AppPathForInstance(""))
 	if runtime.GOOS == "darwin" {
 		root = filepath.Join(home, "Applications")
 	}
@@ -868,24 +868,24 @@ func installedAppProfiles(home string) []string {
 		} else if !fileExists(config.AppExecutableInTree(filepath.Join(root, name))) {
 			continue
 		}
-		if strings.EqualFold(name, config.AppNameForProfile("")) {
+		if strings.EqualFold(name, config.AppNameForInstance("")) {
 			found = append(found, "")
 			continue
 		}
-		if p, ok := strings.CutPrefix(strings.ToLower(name), "attn-"); ok && config.ValidateProfileName(p) == nil {
+		if p, ok := strings.CutPrefix(strings.ToLower(name), "attn-"); ok && config.ValidateInstanceName(p) == nil {
 			found = append(found, p)
 		}
 	}
 	return found
 }
 
-func appLocalDataProfiles() []string {
-	root := filepath.Dir(config.AppLocalDataDirForProfile(""))
+func appLocalDataInstances() []string {
+	root := filepath.Dir(config.AppLocalDataDirForInstance(""))
 	entries, err := os.ReadDir(root)
 	if err != nil {
 		return nil
 	}
-	prodBundleID := config.BundleIdentifierForProfile("")
+	prodBundleID := config.BundleIdentifierForInstance("")
 	found := []string{}
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -895,40 +895,40 @@ func appLocalDataProfiles() []string {
 			found = append(found, "")
 			continue
 		}
-		if p, ok := strings.CutPrefix(e.Name(), prodBundleID+"."); ok && config.ValidateProfileName(p) == nil {
+		if p, ok := strings.CutPrefix(e.Name(), prodBundleID+"."); ok && config.ValidateInstanceName(p) == nil {
 			found = append(found, strings.ToLower(p))
 		}
 	}
 	return found
 }
 
-func printProfileHelp(w *os.File) {
-	fmt.Fprintln(w, `attn profile — inspect and resolve attn profiles
+func printInstanceHelp(w *os.File) {
+	fmt.Fprintln(w, `attn instance — inspect and resolve attn instances
 
-A profile fully isolates attn's runtime: data dir, socket, websocket port,
+An instance fully isolates attn's runtime: data dir, socket, websocket port,
 installed app (a macOS bundle, a directory tree elsewhere), the app's local data
-dir (Tauri's app_local_data_dir), and bundle identifier. ATTN_PROFILE selects it
+dir (Tauri's app_local_data_dir), and bundle identifier. ATTN_INSTANCE selects it
 for every entrypoint (CLI, daemon, e2e, real-app harness, build).
 
 Usage:
-  attn profile                 status of the active profile (ATTN_PROFILE)
-  attn profile status          same
-  attn profile resolve         resolved resources as JSON
-  attn profile resolve --field wsPort      print one resolved value
-  attn profile resolve --profile agent7    resolve a different profile
-  attn profile tauri-config    Tauri --config overlay for the profile's build
-  attn profile register-scheme Linux only: claim <scheme>:// for this profile's app in the desktop database
-  attn profile clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
-  attn profile stop-app        quit the active profile's app (--profile <name> for another)
-  attn profile list            every profile with data and/or an installed app
-  attn profile list --json     same, machine-readable, with origin and what is running
-  attn profile set-origin <name> [--worktree <dir>]
-                               record the worktree a profile was installed from
-  attn profile env <name>      alias of: attn profile-env <name>
+  attn instance                 status of the active instance (ATTN_INSTANCE)
+  attn instance status          same
+  attn instance resolve         resolved resources as JSON
+  attn instance resolve --field wsPort      print one resolved value
+  attn instance resolve --instance agent7   resolve a different instance
+  attn instance tauri-config    Tauri --config overlay for the instance's build
+  attn instance register-scheme Linux only: claim <scheme>:// for this instance's app in the desktop database
+  attn instance clean <name>    reap workers + plugin drivers, stop daemon, quit app, remove its app, app local data, data dir, and scheme handler
+  attn instance stop-app        quit the active instance's app (--instance <name> for another)
+  attn instance list            every instance with data and/or an installed app
+  attn instance list --json     same, machine-readable, with origin and what is running
+  attn instance set-origin <name> [--worktree <dir>]
+                                record the worktree an instance was installed from
+  attn instance env <name>      alias of: attn instance-env <name>
 
-Profile names must match [a-z0-9][a-z0-9-]{0,15}. "dev" is the development
+Instance names must match [a-z0-9][a-z0-9-]{0,15}. "dev" is the development
 sibling (port 29849, ~/.attn-dev). `+"`clean`"+` refuses the default (production)
-profile unless given --force.`)
+instance unless given --force.`)
 }
 
 func fileExists(path string) bool {
@@ -943,7 +943,7 @@ func ynLabel(ok bool, yes, no string) string {
 	return no
 }
 
-func profileFatal(msg string) {
-	fmt.Fprintln(os.Stderr, "attn profile: "+msg)
+func instanceFatal(msg string) {
+	fmt.Fprintln(os.Stderr, "attn instance: "+msg)
 	os.Exit(1)
 }

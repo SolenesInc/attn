@@ -179,7 +179,7 @@ func prepareStartingDaemonReplacementTest(t *testing.T, readyLine string) string
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(dir) })
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_DATA_DIR", dir)
 	t.Setenv("ATTN_SOCKET_PATH", "")
 	t.Setenv("ATTN_DB_PATH", "")
@@ -278,8 +278,8 @@ func TestEnsureTripwireAcceptsDaemonThatCrossesTheBoundary(t *testing.T) {
 }
 
 func TestEnsureLockSerializesSocketInspection(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "new-profile")
-	t.Setenv("ATTN_PROFILE", "")
+	dir := filepath.Join(t.TempDir(), "new-instance")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_DATA_DIR", dir)
 	t.Setenv("ATTN_SOCKET_PATH", "")
 	t.Setenv("ATTN_DB_PATH", "")
@@ -291,7 +291,7 @@ func TestEnsureLockSerializesSocketInspection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
-		t.Fatalf("new profile data directory was not created: %v", err)
+		t.Fatalf("new instance data directory was not created: %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -309,7 +309,7 @@ func TestEnsureLockSerializesSocketInspection(t *testing.T) {
 
 func TestPIDLockAvailableTracksTheKernelLock(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_DATA_DIR", dir)
 	t.Setenv("ATTN_SOCKET_PATH", "")
 	t.Setenv("ATTN_DB_PATH", "")
@@ -412,7 +412,7 @@ func TestMismatchReason_ReportsMissingFingerprint(t *testing.T) {
 func TestRemoveStaleSocketFiles_LeavesPIDFileInPlace(t *testing.T) {
 	dir := t.TempDir()
 	socketPath := filepath.Join(dir, "attn.sock")
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_SOCKET_PATH", socketPath)
 	t.Setenv("ATTN_DB_PATH", "")
 	t.Setenv("ATTN_CONFIG_PATH", "")
@@ -439,7 +439,7 @@ func TestRemoveStaleSocketFiles_LeavesPIDFileInPlace(t *testing.T) {
 }
 
 func TestEnsure_RejectsMixedSocketAndDefaultStoreIsolation(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_SOCKET_PATH", filepath.Join(t.TempDir(), "attn.sock"))
 	t.Setenv("ATTN_DB_PATH", "")
 	t.Setenv("ATTN_CONFIG_PATH", "")
@@ -447,7 +447,7 @@ func TestEnsure_RejectsMixedSocketAndDefaultStoreIsolation(t *testing.T) {
 
 	_, err := Ensure(context.Background(), "/tmp/attn")
 	if err == nil {
-		t.Fatal("Ensure() accepted an alternate socket root with the default profile DB")
+		t.Fatal("Ensure() accepted an alternate socket root with the default instance DB")
 	}
 	if !strings.Contains(err.Error(), "refusing to start daemon") {
 		t.Fatalf("Ensure() error = %q, want isolation refusal", err)

@@ -133,7 +133,7 @@ func TestCrewHandoff_RefusesASymlinkedHandoffsDirectory(t *testing.T) {
 		t.Fatalf("symlink handoffs: %v", err)
 	}
 
-	resp := crewHandoffCall(t, d, woken.SessionID, "This must stay in my profile.")
+	resp := crewHandoffCall(t, d, woken.SessionID, "This must stay in my instance.")
 	if resp.Ok {
 		t.Fatal("a handoff was filed through a symlink leaving the member home")
 	}

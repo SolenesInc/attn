@@ -19,9 +19,9 @@ func TestCleanPlan(t *testing.T) {
 		wantForce bool
 		wantErr   bool
 	}{
-		{name: "named profile", args: []string{"agent7"}, wantName: "agent7"},
-		{name: "named profile uppercase normalizes", args: []string{"Agent7"}, wantName: "agent7"},
-		{name: "dev is a normal named profile", args: []string{"dev"}, wantName: "dev"},
+		{name: "named instance", args: []string{"agent7"}, wantName: "agent7"},
+		{name: "named instance uppercase normalizes", args: []string{"Agent7"}, wantName: "agent7"},
+		{name: "dev is a normal named instance", args: []string{"dev"}, wantName: "dev"},
 		{name: "force flag captured", args: []string{"agent7", "--force"}, wantName: "agent7", wantForce: true},
 		{name: "force short flag", args: []string{"-f", "agent7"}, wantName: "agent7", wantForce: true},
 
@@ -58,7 +58,7 @@ func TestCleanRefusesProductionAndNamesItsAppLocalDataDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("cleanPlan(default) succeeded, want a refusal")
 	}
-	prodLocalData := config.AppLocalDataDirForProfile("")
+	prodLocalData := config.AppLocalDataDirForInstance("")
 	if !strings.Contains(err.Error(), prodLocalData) {
 		t.Fatalf("cleanPlan(default) refusal = %q, want it to name %s", err, prodLocalData)
 	}
@@ -68,10 +68,10 @@ func TestRemoveAppLocalDataRemovesTheResolvedDir(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", dataHome)
 
-	r := resolveProfile("lx")
+	r := resolveInstance("lx")
 	if runtime.GOOS != "darwin" {
 		if want := filepath.Join(dataHome, "com.attn.manager.lx"); r.AppLocalData != want {
-			t.Fatalf("resolveProfile(lx).AppLocalData = %q, want %q", r.AppLocalData, want)
+			t.Fatalf("resolveInstance(lx).AppLocalData = %q, want %q", r.AppLocalData, want)
 		}
 	} else {
 		r.AppLocalData = filepath.Join(dataHome, "com.attn.manager.lx")
@@ -101,22 +101,22 @@ func TestRemoveAppLocalDataRemovesTheResolvedDir(t *testing.T) {
 	}
 }
 
-func TestStopProfileDaemonNoPidFile(t *testing.T) {
-	msg := stopProfileDaemon(profileResolved{DataDir: t.TempDir()})
+func TestStopInstanceDaemonNoPidFile(t *testing.T) {
+	msg := stopInstanceDaemon(instanceResolved{DataDir: t.TempDir()})
 	if !strings.Contains(msg, "no pid file") {
-		t.Fatalf("stopProfileDaemon (no pid file) = %q, want a 'no pid file' note", msg)
+		t.Fatalf("stopInstanceDaemon (no pid file) = %q, want a 'no pid file' note", msg)
 	}
 }
 
-func TestStopProfileDaemonStalePidNotSignaled(t *testing.T) {
+func TestStopInstanceDaemonStalePidNotSignaled(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")
 	if err := os.WriteFile(pidPath, []byte(strconv.Itoa(1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	msg := stopProfileDaemon(profileResolved{DataDir: dir})
+	msg := stopInstanceDaemon(instanceResolved{DataDir: dir})
 	if !strings.Contains(msg, "stale") {
-		t.Fatalf("stopProfileDaemon (unlocked pid file naming live pid 1) = %q, want a 'stale' skip (it must not signal pid 1)", msg)
+		t.Fatalf("stopInstanceDaemon (unlocked pid file naming live pid 1) = %q, want a 'stale' skip (it must not signal pid 1)", msg)
 	}
 }
 
@@ -141,21 +141,21 @@ func TestSameExecutableAcceptsASymlinkedInstallRoot(t *testing.T) {
 		t.Fatalf("sameExecutable(%s, %s) = false, want true", running, configured)
 	}
 	if sameExecutable(config.AppExecutableInTree(filepath.Join(realRoot, "attn-other")), configured) {
-		t.Fatal("sameExecutable() matched another profile's install tree")
+		t.Fatal("sameExecutable() matched another instance's install tree")
 	}
 }
 
-func TestStopProfileAppExitStatus(t *testing.T) {
-	if msg, err := stopProfileApp(profileResolved{DataDir: t.TempDir()}); err != nil {
-		t.Fatalf("stopProfileApp (no pid file) = %v, want a 'not running' success: %q", err, msg)
+func TestStopInstanceAppExitStatus(t *testing.T) {
+	if msg, err := stopInstanceApp(instanceResolved{DataDir: t.TempDir()}); err != nil {
+		t.Fatalf("stopInstanceApp (no pid file) = %v, want a 'not running' success: %q", err, msg)
 	}
 
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "app.pid"), []byte("not-a-pid"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if msg, err := stopProfileApp(profileResolved{DataDir: dir}); err == nil {
-		t.Fatalf("stopProfileApp (unreadable pid) = %q, want an error", msg)
+	if msg, err := stopInstanceApp(instanceResolved{DataDir: dir}); err == nil {
+		t.Fatalf("stopInstanceApp (unreadable pid) = %q, want an error", msg)
 	}
 }
 
@@ -164,13 +164,13 @@ func TestTauriConfigOverlayInheritsTheBaseWindow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	overlay := tauriConfigOverlay(resolveProfile("probe"), window)
+	overlay := tauriConfigOverlay(resolveInstance("probe"), window)
 	got := overlay["app"].(map[string]any)["windows"].([]any)[0].(map[string]any)
 	if got["width"] != float64(1200) || got["height"] != float64(800) || got["minWidth"] != float64(800) {
 		t.Fatalf("base window geometry dropped: %v", got)
 	}
 	if got["title"] != "attn-probe" || got["backgroundThrottling"] != "disabled" {
-		t.Fatalf("profile window overrides missing: %v", got)
+		t.Fatalf("instance window overrides missing: %v", got)
 	}
 	if window["title"] != "attn" {
 		t.Fatalf("overlay mutated the base window: %v", window)

@@ -12,7 +12,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -34,7 +34,7 @@ function parseArgs(argv) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', env: profileCliEnv() }).trim();
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: instanceCliEnv() }).trim();
 }
 
 function buildWorktree(root, branch) {
@@ -76,10 +76,10 @@ async function watchForRemovedPrompt(client, windowMs) {
   return samples.length;
 }
 
-function ledgerEntry(daemonBinary, profile, sessionId) {
+function ledgerEntry(daemonBinary, instance, sessionId) {
   const output = execFileSync(daemonBinary, ['session', 'show', sessionId], {
     encoding: 'utf8',
-    env: profileCliEnv(profile),
+    env: instanceCliEnv(instance),
   });
   return output;
 }
@@ -91,10 +91,10 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
+  const instance = currentHarnessInstance();
+  assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
-  const dataDir = dataDirForProfile(profile);
+  const dataDir = dataDirForInstance(instance);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSION-CLOSE-LEDGER',
     tier: 'tier1-local-shell',
@@ -102,7 +102,7 @@ async function main() {
     metadata: {
       agent: 'claude',
       focus: 'closing a worktree session keeps the worktree, asks nothing, and stays readable in the ledger',
-      profile,
+      instance,
     },
   });
 
@@ -120,7 +120,7 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -169,18 +169,18 @@ async function main() {
     });
 
     const ledger = await runner.step('ledger_reads_the_close_back', async () => {
-      const shown = ledgerEntry(daemonBinary, profile, sessionId);
+      const shown = ledgerEntry(daemonBinary, instance, sessionId);
       runner.assert(/^state\s+closed$/m.test(shown), 'session show must report the session as closed', { shown });
       runner.assert(/^closed\s+.* by user$/m.test(shown), 'session show must name the user as the closer', { shown });
       runner.assert(/^worktree\s+yes, of /m.test(shown), 'session show must keep the worktree it ran in', { shown });
       const closed = execFileSync(daemonBinary, ['session', 'list', '--closed'], {
         encoding: 'utf8',
-        env: profileCliEnv(profile),
+        env: instanceCliEnv(instance),
       });
       runner.assert(closed.includes(sessionId), 'session list --closed must list the closed session', { closed });
       const live = execFileSync(daemonBinary, ['session', 'list'], {
         encoding: 'utf8',
-        env: profileCliEnv(profile),
+        env: instanceCliEnv(instance),
       });
       runner.assert(!live.includes(sessionId), 'session list must not show a closed session', { live });
       runner.writeText('session-show.txt', shown);
@@ -191,9 +191,9 @@ async function main() {
 
     await runner.step('close_survives_a_daemon_restart', async () => {
       await client.quitApp();
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
-      await execFileAsync(daemonBinary, ['daemon', 'ensure'], { env: profileCliEnv(profile) });
-      const shown = ledgerEntry(daemonBinary, profile, sessionId);
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
+      await execFileAsync(daemonBinary, ['daemon', 'ensure'], { env: instanceCliEnv(instance) });
+      const shown = ledgerEntry(daemonBinary, instance, sessionId);
       runner.assert(/^state\s+closed$/m.test(shown), 'A restart must neither resurrect nor reap the closed session', { shown });
       runner.writeText('session-show-after-restart.txt', shown);
     });
@@ -217,7 +217,7 @@ async function main() {
     try {
       await runner.finishCleanup({ sessionId });
     } finally {
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }).catch(() => {});
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) }).catch(() => {});
     }
   }
 }

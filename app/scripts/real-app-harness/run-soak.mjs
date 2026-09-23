@@ -9,18 +9,18 @@ import { ATTN_VERDICT_PREFIX, createRunContext, emitVerdict, ensureDir, harnessA
 import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   assertProductionRunAllowed,
-  currentHarnessProfile,
-  defaultAppPathForProfile,
-  defaultWSURLForProfile,
+  currentHarnessInstance,
+  defaultAppPathForInstance,
+  defaultWSURLForInstance,
   isProductionHarnessTarget,
-  profileCliEnv,
-} from './harnessProfile.mjs';
+  instanceCliEnv,
+} from './harnessInstance.mjs';
 import { stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenario, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 
-if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
-  process.env.ATTN_HARNESS_PROFILE = 'dev';
+if (process.env.ATTN_HARNESS_INSTANCE === undefined && !process.env.ATTN_INSTANCE) {
+  process.env.ATTN_HARNESS_INSTANCE = 'dev';
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
@@ -136,9 +136,9 @@ export function acquireSoakLock({ scenarioId, artifactsRoot, appPath }, {
   return release;
 }
 
-export async function resetAfterIteration(scenario, { productionTarget, profile, appPath }, reset = ensureFreshWorld) {
+export async function resetAfterIteration(scenario, { productionTarget, instance, appPath }, reset = ensureFreshWorld) {
   if (scenario.freshWorldAfter && !productionTarget) {
-    await reset({ profile, appPath });
+    await reset({ instance, appPath });
   }
 }
 
@@ -193,7 +193,7 @@ function printHelp() {
   node scripts/real-app-harness/run-soak.mjs --scenario <id> --repeat 10
   node scripts/real-app-harness/run-soak.mjs --scenario <id> --repeat 30 --until-violation
   node scripts/real-app-harness/run-soak.mjs --scenario <id> --timeout-ms 180000
-  ATTN_HARNESS_PROFILE= node scripts/real-app-harness/run-soak.mjs --scenario <id> --run-against-prod
+  ATTN_HARNESS_INSTANCE= node scripts/real-app-harness/run-soak.mjs --scenario <id> --run-against-prod
 
 Runs one packaged-app scenario repeatedly, strictly serially (the packaged
 app is single-tenant — never parallelized), and reports an aggregate verdict.
@@ -253,7 +253,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   });
 }
 
-function runIteration(scenario, iteration, timeoutMs, runAgainstProd, profile, artifactsRoot) {
+function runIteration(scenario, iteration, timeoutMs, runAgainstProd, instance, artifactsRoot) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const childArgs = scenario.command.slice(1);
@@ -266,7 +266,7 @@ function runIteration(scenario, iteration, timeoutMs, runAgainstProd, profile, a
     const child = spawn(scenario.command[0], childArgs, {
       cwd: process.cwd(),
       stdio: ['inherit', 'pipe', 'pipe'],
-      env: profileCliEnv(profile, { ATTN_REAL_APP_ARTIFACTS_DIR: artifactsRoot }),
+      env: instanceCliEnv(instance, { ATTN_REAL_APP_ARTIFACTS_DIR: artifactsRoot }),
     });
     activeChild = child;
     let stdoutBuffer = '';
@@ -319,9 +319,9 @@ async function main() {
   } = options;
   const scenario = resolveScenario(scenarioId);
 
-  const profile = currentHarnessProfile();
-  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile(profile);
-  const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForProfile();
+  const instance = currentHarnessInstance();
+  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(instance);
+  const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForInstance();
   assertProductionRunAllowed(
     { appPath, wsUrl },
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
@@ -330,16 +330,16 @@ async function main() {
   ensureDir(artifactsRoot);
   releaseSoakLock = acquireSoakLock({ scenarioId, artifactsRoot, appPath });
   const { runDir } = createRunContext({ artifactsDir: artifactsRoot, sessionRootDir: artifactsRoot }, `soak-${scenarioId}`);
-  console.log(`Soak target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
+  console.log(`Soak target: ${appPath} (ATTN_HARNESS_INSTANCE=${process.env.ATTN_HARNESS_INSTANCE || '<default>'})`);
   for (const allowed of scenariosAllowingRealAgents([scenario])) {
     const which = allowed.allowRealAgents === true ? 'all' : allowed.allowRealAgents.join(', ');
     console.log(`[agent-tripwire] REAL AGENTS ALLOWED for every leg of ${allowed.id} (${which}).`);
   }
-  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, profile });
+  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, instance });
   if (productionTarget) {
     console.log('[fresh-world] skipped (production target)');
   } else {
-    await ensureFreshWorld({ profile, appPath });
+    await ensureFreshWorld({ instance, appPath });
   }
   assertPackagedAppBuildMatchesCurrentSource({ appPath, launchEnv: scenario.preflightLaunchEnv || null });
 
@@ -352,7 +352,7 @@ async function main() {
       iteration,
       timeoutMs,
       runAgainstProd,
-      profile,
+      instance,
       artifactsRoot,
     );
     records.push(record);
@@ -360,13 +360,13 @@ async function main() {
     const artifactPaths = iterationArtifactPaths(artifactsRoot, entriesBefore);
     record.evidenceRetained = retainIterationEvidence(artifactPaths, { failed, failedEvidenceOnly });
     console.log(`--- iteration ${iteration}: ${failed ? 'failed' : 'ok'} (${record.durationMs}ms) ---`);
-    await resetAfterIteration(scenario, { productionTarget, profile, appPath });
+    await resetAfterIteration(scenario, { productionTarget, instance, appPath });
     if (untilViolation && failed) {
       break;
     }
   }
   if (!productionTarget) {
-    stopMockGitHubServer({ profile, appPath });
+    stopMockGitHubServer({ instance, appPath });
   }
 
   const summaryPath = path.join(runDir, 'soak-report.json');

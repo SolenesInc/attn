@@ -36,7 +36,7 @@ type Store struct {
 	teardownIntents        map[string]SessionTeardownIntent
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
-	profileRoles           map[string]string
+	instanceRoles          map[string]string
 	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
 }
@@ -90,7 +90,7 @@ func newMapBackedStore() *Store {
 		sessionCloses:   make(map[string]sessionCloseMark),
 		sessionCosts:    make(map[string]SessionCostState),
 		agentMetadata:   make(map[string]string),
-		profileRoles:    make(map[string]string),
+		instanceRoles:   make(map[string]string),
 		workspaces:      make(map[string]workspacelayout.WorkspaceLayout),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
@@ -2126,7 +2126,7 @@ func (s *Store) GetAllSettings() map[string]string {
 	return result
 }
 
-func (s *Store) GetProfileRole(role string) string {
+func (s *Store) GetInstanceRole(role string) string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -2135,12 +2135,12 @@ func (s *Store) GetProfileRole(role string) string {
 		return ""
 	}
 	if s.db == nil {
-		return strings.TrimSpace(s.profileRoles[role])
+		return strings.TrimSpace(s.instanceRoles[role])
 	}
 
 	var sessionID string
 	if err := s.db.QueryRow(
-		"SELECT session_id FROM profile_roles WHERE role = ?",
+		"SELECT session_id FROM instance_roles WHERE role = ?",
 		role,
 	).Scan(&sessionID); err != nil {
 		return ""
@@ -2148,7 +2148,7 @@ func (s *Store) GetProfileRole(role string) string {
 	return strings.TrimSpace(sessionID)
 }
 
-func (s *Store) SetProfileRole(role, sessionID string) error {
+func (s *Store) SetInstanceRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2161,15 +2161,15 @@ func (s *Store) SetProfileRole(role, sessionID string) error {
 		return fmt.Errorf("session id cannot be empty")
 	}
 	if s.db == nil {
-		if s.profileRoles == nil {
-			s.profileRoles = make(map[string]string)
+		if s.instanceRoles == nil {
+			s.instanceRoles = make(map[string]string)
 		}
-		s.profileRoles[role] = sessionID
+		s.instanceRoles[role] = sessionID
 		return nil
 	}
 
 	_, err := s.db.Exec(`
-		INSERT INTO profile_roles (role, session_id) VALUES (?, ?)
+		INSERT INTO instance_roles (role, session_id) VALUES (?, ?)
 		ON CONFLICT(role) DO UPDATE SET session_id = excluded.session_id`,
 		role,
 		sessionID,
@@ -2177,7 +2177,7 @@ func (s *Store) SetProfileRole(role, sessionID string) error {
 	return err
 }
 
-func (s *Store) ClearProfileRole(role, sessionID string) error {
+func (s *Store) ClearInstanceRole(role, sessionID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -2187,14 +2187,14 @@ func (s *Store) ClearProfileRole(role, sessionID string) error {
 		return fmt.Errorf("role cannot be empty")
 	}
 	if s.db == nil {
-		if strings.TrimSpace(s.profileRoles[role]) == sessionID {
-			delete(s.profileRoles, role)
+		if strings.TrimSpace(s.instanceRoles[role]) == sessionID {
+			delete(s.instanceRoles, role)
 		}
 		return nil
 	}
 
 	_, err := s.db.Exec(
-		"DELETE FROM profile_roles WHERE role = ? AND session_id = ?",
+		"DELETE FROM instance_roles WHERE role = ? AND session_id = ?",
 		role,
 		sessionID,
 	)

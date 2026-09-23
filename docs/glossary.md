@@ -96,7 +96,7 @@ See [delegation preferences](delegation-preferences.md) for role settings.
 
 ## Knowledge
 
-- Notebook: a profile's collection of Markdown documents.
+- Notebook: an instance's collection of Markdown documents.
 - Journal: a dated record of work.
 - Knowledge base: knowledge worth keeping across sessions.
 
@@ -111,6 +111,7 @@ See [delegation preferences](delegation-preferences.md) for role settings.
 
 ## Daemons and permissions
 
+- Instance: a daemon, app bundle and data directory installed together under one name. Production is the unnamed instance.
 - Home: the daemon that owns the Garden and crew.
 - Outpost: an enrolled daemon that runs sessions on another machine.
 - Enrollment: an outpost's relationship with its home.

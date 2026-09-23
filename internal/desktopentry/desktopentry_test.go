@@ -15,7 +15,7 @@ func TestRender(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:  "default profile",
+			name:  "default instance",
 			entry: Entry{AppName: "attn", Exec: "/home/u/.local/share/attn/bin/attn-app", Scheme: "attn"},
 			want: `[Desktop Entry]
 Type=Application
@@ -27,7 +27,7 @@ MimeType=x-scheme-handler/attn;
 `,
 		},
 		{
-			name:  "named profile carries its own scheme",
+			name:  "named instance carries its own scheme",
 			entry: Entry{AppName: "attn-lx", Exec: "/home/u/.local/share/attn-lx/bin/attn-app", Scheme: "attn-lx"},
 			want: `[Desktop Entry]
 Type=Application

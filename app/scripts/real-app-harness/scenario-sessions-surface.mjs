@@ -15,7 +15,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -34,7 +34,7 @@ function parseArgs(argv) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', env: profileCliEnv() }).trim();
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: instanceCliEnv() }).trim();
 }
 
 // Two checkouts of one repository plus a plain one elsewhere, so the repository
@@ -107,8 +107,8 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
+  const instance = currentHarnessInstance();
+  assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSIONS-SURFACE',
@@ -117,7 +117,7 @@ async function main() {
     metadata: {
       agent: 'claude',
       focus: 'the Sessions surface lists live and closed sessions, filters them, reopens on the filters it was left with, and updates a row when a session closes',
-      profile,
+      instance,
     },
   });
 
@@ -126,7 +126,7 @@ async function main() {
   const driver = createWindowDriver({ client });
   const sessions = {};
 
-  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_sessions', () => closeScenarioSessions(client, Object.values(sessions)));
@@ -136,7 +136,7 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
       await launchFreshAppAndConnect(client, observer);
       // A previous run's filters would decide what this one opens on.
       queueDaemonSettingRestore(observer, SESSIONS_FILTERS_SETTING);
@@ -218,7 +218,7 @@ async function main() {
       await execFileAsync(daemonBinary,
         ['agent', 'close', sessions.elsewhere, '-m', 'the run finished',
           '--source-session', sessions.elsewhere],
-        { env: profileCliEnv(profile) });
+        { env: instanceCliEnv(instance) });
       const after = await waitForSessions(client, (s) => rowFor(s, sessions.elsewhere)?.state === 'closed',
         'the agent close to reach the surface', 20_000);
       const row = rowFor(after, sessions.elsewhere);
@@ -311,7 +311,7 @@ async function main() {
     await runner.step('the_cli_and_the_surface_agree', async () => {
       const listed = execFileSync(daemonBinary, ['session', 'list', '--all', '--repository', repo], {
         encoding: 'utf8',
-        env: profileCliEnv(profile),
+        env: instanceCliEnv(instance),
       });
       runner.assert(listed.includes(sessions.one) && listed.includes(sessions.two),
         'the CLI repository filter answers the same rows the surface showed', { listed });

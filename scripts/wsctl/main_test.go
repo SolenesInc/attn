@@ -10,31 +10,31 @@ func TestResolveWSURL(t *testing.T) {
 	cases := []struct {
 		name        string
 		explicitURL string
-		profile     string
+		instance    string
 		want        string
 	}{
-		{"explicit URL wins over profile", "ws://localhost:9849/ws", "mdclick1", "ws://localhost:9849/ws"},
+		{"explicit URL wins over instance", "ws://localhost:9849/ws", "mdclick1", "ws://localhost:9849/ws"},
 		{"no env falls back to dev", "", "", defaultWSURL},
-		{"blank profile falls back to dev", "", "   ", defaultWSURL},
-		{"default profile falls back to dev, never prod", "", "default", defaultWSURL},
-		{"dev profile resolves to dev port", "", "dev", "ws://localhost:29849/ws"},
-		{"named profile resolves to its derived port", "", "mdclick1", "ws://localhost:" + config.WSPortForProfile("mdclick1") + "/ws"},
-		{"profile name is case-insensitive", "", "MDCLICK1", "ws://localhost:" + config.WSPortForProfile("mdclick1") + "/ws"},
+		{"blank instance falls back to dev", "", "   ", defaultWSURL},
+		{"default instance falls back to dev, never prod", "", "default", defaultWSURL},
+		{"dev instance resolves to dev port", "", "dev", "ws://localhost:29849/ws"},
+		{"named instance resolves to its derived port", "", "mdclick1", "ws://localhost:" + config.WSPortForInstance("mdclick1") + "/ws"},
+		{"instance name is case-insensitive", "", "MDCLICK1", "ws://localhost:" + config.WSPortForInstance("mdclick1") + "/ws"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := resolveWSURL(tc.explicitURL, tc.profile); got != tc.want {
-				t.Fatalf("resolveWSURL(%q, %q) = %q, want %q", tc.explicitURL, tc.profile, got, tc.want)
+			if got := resolveWSURL(tc.explicitURL, tc.instance); got != tc.want {
+				t.Fatalf("resolveWSURL(%q, %q) = %q, want %q", tc.explicitURL, tc.instance, got, tc.want)
 			}
 		})
 	}
 }
 
 func TestResolveWSURLNeverImplicitProd(t *testing.T) {
-	prod := "ws://localhost:" + config.WSPortForProfile("") + "/ws"
-	for _, profile := range []string{"", "default", "DEFAULT", " ", "dev", "mdclick1"} {
-		if got := resolveWSURL("", profile); got == prod {
-			t.Fatalf("resolveWSURL(\"\", %q) resolved to prod %q; prod must require an explicit ATTN_WS_URL", profile, got)
+	prod := "ws://localhost:" + config.WSPortForInstance("") + "/ws"
+	for _, instance := range []string{"", "default", "DEFAULT", " ", "dev", "mdclick1"} {
+		if got := resolveWSURL("", instance); got == prod {
+			t.Fatalf("resolveWSURL(\"\", %q) resolved to prod %q; prod must require an explicit ATTN_WS_URL", instance, got)
 		}
 	}
 }

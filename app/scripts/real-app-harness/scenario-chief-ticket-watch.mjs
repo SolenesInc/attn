@@ -12,7 +12,7 @@ import {
 } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import {
   preTrustClaudeFolder,
   ensureClaudePromptReadyViaPty,
@@ -94,9 +94,9 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
-function makeAttnRunner(attnBin, profile) {
+function makeAttnRunner(attnBin, instance) {
   return function runAttn(args) {
-    const env = profileCliEnv(profile);
+    const env = instanceCliEnv(instance);
     delete env.ATTN_SESSION_ID;
     delete env.ATTN_WRAPPER_PATH;
     const stdout = execFileSync(attnBin, args, {
@@ -179,10 +179,10 @@ async function main() {
   }
   assert(agent === 'claude' || agent === 'codex', `--agent must be claude or codex (got ${agent})`);
 
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('this benchmark never runs against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('this benchmark never runs against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance');
   const attnBin = resolveAttnBin();
-  const runAttn = makeAttnRunner(attnBin, profile);
+  const runAttn = makeAttnRunner(attnBin, instance);
   // `ticket list --json` prints an array; runAttn's own parse looks for an object.
   const ticketBoard = () => {
     try {
@@ -217,7 +217,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let chiefId = null;
   let workerId = null;
-  const evidence = { runId, profile, agent, steps: [] };
+  const evidence = { runId, instance, agent, steps: [] };
   const note = (m, extra) => { console.log(`[chief-watch] ${m}`); evidence.steps.push({ t: Date.now(), m, ...extra }); };
   const saveEvidence = (verdict) => {
     evidence.verdict = verdict;
@@ -230,7 +230,7 @@ async function main() {
     return text;
   };
 
-  console.log(`[chief-watch] profile=${profile} agent=${agent} runDir=${runDir} repo=${repoDir}`);
+  console.log(`[chief-watch] instance=${instance} agent=${agent} runDir=${runDir} repo=${repoDir}`);
 
   try {
     await launchFreshAppAndConnect(client, observer);
@@ -271,7 +271,7 @@ async function main() {
     if (!roleState) {
       await dumpPane('00-chief-no-role');
       saveEvidence('setup-failed-no-role');
-      throw new Error('SETUP FAILED: the daemon did not assign the chief role to the new session (create-as-chief was skipped — likely a stale chief still holds the role; reset the profile and re-run).');
+      throw new Error('SETUP FAILED: the daemon did not assign the chief role to the new session (create-as-chief was skipped — likely a stale chief still holds the role; reset the instance and re-run).');
     }
 
     await pollFor(

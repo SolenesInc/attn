@@ -7,41 +7,41 @@ import (
 	"testing"
 )
 
-func TestActiveAttnExecutable_PrefersProfileWrapperOverStalePath(t *testing.T) {
+func TestActiveAttnExecutable_PrefersInstanceWrapperOverStalePath(t *testing.T) {
 	root := t.TempDir()
-	profileDir := filepath.Join(root, "attn-profile")
+	instanceDir := filepath.Join(root, "attn-instance")
 	staleDir := filepath.Join(root, "stale-attn")
-	for _, dir := range []string{profileDir, staleDir} {
+	for _, dir := range []string{instanceDir, staleDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatalf("create %s: %v", dir, err)
 		}
 	}
-	for _, path := range []string{filepath.Join(profileDir, "attn"), filepath.Join(staleDir, "attn")} {
+	for _, path := range []string{filepath.Join(instanceDir, "attn"), filepath.Join(staleDir, "attn")} {
 		if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatalf("write %s: %v", path, err)
 		}
 	}
-	profileWrapper := filepath.Join(profileDir, "attn")
-	t.Setenv(wrapperPathEnv, profileWrapper)
+	instanceWrapper := filepath.Join(instanceDir, "attn")
+	t.Setenv(wrapperPathEnv, instanceWrapper)
 	t.Setenv("PATH", staleDir)
 
-	if got := ActiveAttnExecutable(); got != profileWrapper {
-		t.Fatalf("ActiveAttnExecutable() = %q, want active profile wrapper %q", got, profileWrapper)
+	if got := ActiveAttnExecutable(); got != instanceWrapper {
+		t.Fatalf("ActiveAttnExecutable() = %q, want active instance wrapper %q", got, instanceWrapper)
 	}
 }
 
-func TestWithActiveAttnFirst_PrependsAndDeduplicatesProfileDirectory(t *testing.T) {
+func TestWithActiveAttnFirst_PrependsAndDeduplicatesInstanceDirectory(t *testing.T) {
 	root := t.TempDir()
-	profileDir := filepath.Join(root, "attn-profile")
+	instanceDir := filepath.Join(root, "attn-instance")
 	staleDir := filepath.Join(root, "stale-attn")
 	otherDir := filepath.Join(root, "other-tools")
 	env := []string{
-		"PATH=" + strings.Join([]string{staleDir, profileDir, otherDir, profileDir + string(filepath.Separator)}, string(os.PathListSeparator)),
+		"PATH=" + strings.Join([]string{staleDir, instanceDir, otherDir, instanceDir + string(filepath.Separator)}, string(os.PathListSeparator)),
 		"UNCHANGED=value",
 	}
 
-	got := WithActiveAttnFirst(env, filepath.Join(profileDir, "attn"))
-	wantPath := strings.Join([]string{profileDir, staleDir, otherDir}, string(os.PathListSeparator))
+	got := WithActiveAttnFirst(env, filepath.Join(instanceDir, "attn"))
+	wantPath := strings.Join([]string{instanceDir, staleDir, otherDir}, string(os.PathListSeparator))
 	if got[0] != "PATH="+wantPath {
 		t.Fatalf("PATH entry = %q, want %q", got[0], "PATH="+wantPath)
 	}

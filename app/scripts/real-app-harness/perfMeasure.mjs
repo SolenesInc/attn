@@ -3,10 +3,10 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
-  daemonPidFilePathForProfile,
-  dataDirForProfile,
-  socketPathForProfile,
-} from './harnessProfile.mjs';
+  daemonPidFilePathForInstance,
+  dataDirForInstance,
+  socketPathForInstance,
+} from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
 export const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -293,8 +293,8 @@ export function readLivePidFile(pidPath) {
   return pid;
 }
 
-export function readLiveDaemonPid(profile) {
-  return readLivePidFile(daemonPidFilePathForProfile(profile));
+export function readLiveDaemonPid(instance) {
+  return readLivePidFile(daemonPidFilePathForInstance(instance));
 }
 
 function canonicalPath(filePath) {
@@ -305,9 +305,9 @@ function canonicalPath(filePath) {
   }
 }
 
-export function assertDaemonRestartDoesNotHostSession(profile, {
+export function assertDaemonRestartDoesNotHostSession(instance, {
   env = process.env,
-  resolveSocket = socketPathForProfile,
+  resolveSocket = socketPathForInstance,
   readDaemonPid = readLiveDaemonPid,
   readPidFile = readLivePidFile,
 } = {}) {
@@ -315,21 +315,21 @@ export function assertDaemonRestartDoesNotHostSession(profile, {
   const hostingSocket = String(env.ATTN_SOCKET_PATH || '').trim();
   if (!sessionId || !hostingSocket) return;
 
-  const targetSocket = resolveSocket(profile);
-  const targetPid = readDaemonPid(profile);
+  const targetSocket = resolveSocket(instance);
+  const targetPid = readDaemonPid(instance);
   const hostingPid = readPidFile(path.join(path.dirname(hostingSocket), 'attn.pid'));
   const sameDaemon = canonicalPath(targetSocket) === canonicalPath(hostingSocket)
     || (Number.isInteger(targetPid) && targetPid > 0 && targetPid === hostingPid);
   if (sameDaemon) {
     throw new Error(
-      `refusing to restart profile ${JSON.stringify(profile || 'production')} daemon pid ${targetPid ?? 'unknown'} `
-      + `at ${targetSocket}: it hosts invoking session ${sessionId}; run from another profile or pass --no-restart-daemon`,
+      `refusing to restart instance ${JSON.stringify(instance || 'production')} daemon pid ${targetPid ?? 'unknown'} `
+      + `at ${targetSocket}: it hosts invoking session ${sessionId}; run from another instance or pass --no-restart-daemon`,
     );
   }
 }
 
-export async function stopDaemon(profile) {
-  const pid = readLiveDaemonPid(profile);
+export async function stopDaemon(instance) {
+  const pid = readLiveDaemonPid(instance);
   if (pid == null) return null;
   try { process.kill(pid, 'SIGTERM'); } catch { return null; }
   for (let i = 0; i < 50; i += 1) {
@@ -340,16 +340,16 @@ export async function stopDaemon(profile) {
   return pid;
 }
 
-export async function teardownProfileState({ client, profile, wipe = true }) {
-  if (!profile || profile === 'default') {
-    throw new Error(`teardownProfileState refuses an empty/prod profile (got ${JSON.stringify(profile)})`);
+export async function teardownInstanceState({ client, instance, wipe = true }) {
+  if (!instance || instance === 'default') {
+    throw new Error(`teardownInstanceState refuses an empty/prod instance (got ${JSON.stringify(instance)})`);
   }
-  const dataDir = dataDirForProfile(profile);
-  if (dataDir === dataDirForProfile('')) {
-    throw new Error(`teardownProfileState refuses to wipe the prod data dir ${dataDir}`);
+  const dataDir = dataDirForInstance(instance);
+  if (dataDir === dataDirForInstance('')) {
+    throw new Error(`teardownInstanceState refuses to wipe the prod data dir ${dataDir}`);
   }
   await client.quitApp();
-  await stopDaemon(profile);
+  await stopDaemon(instance);
   if (wipe) {
     try { fs.rmSync(dataDir, { recursive: true, force: true }); } catch {}
   }

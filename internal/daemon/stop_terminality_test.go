@@ -206,7 +206,7 @@ func yieldedStopDaemon(t *testing.T, d *Daemon, verdict string) (*Daemon, *recor
 	judge := &recordingClassifier{state: verdict}
 	d.classifier = judge
 	d.classificationTranscriptExtractor = func(*protocol.Session, string, int, time.Time) (string, string, error) {
-		return "The profile build is still running in the background; I'll continue when it completes.", "turn-1", nil
+		return "The instance build is still running in the background; I'll continue when it completes.", "turn-1", nil
 	}
 
 	now := time.Now()

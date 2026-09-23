@@ -123,7 +123,7 @@ export interface EndpointInfo {
   readonly enabled?: boolean
   readonly id: string
   readonly name: string
-  readonly profile?: string
+  readonly instance?: string
   readonly session_count?: number
   readonly ssh_target: string
   readonly status: string

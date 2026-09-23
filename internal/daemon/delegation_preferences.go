@@ -89,7 +89,7 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 			var attempted bool
 			installedPaths, attempted, err = agentdriver.EnsureWorkflowSkillsInstalled(harnesses)
 			if err == nil && !attempted {
-				err = fmt.Errorf("attn-workflow installation is disabled for profile %q; saved preferences were not changed", config.ProfileLabel())
+				err = fmt.Errorf("attn-workflow installation is disabled for instance %q; saved preferences were not changed", config.InstanceLabel())
 			} else if err == nil && len(installedPaths) == 0 {
 				err = fmt.Errorf("no available harness has a supported attn-workflow skill directory")
 			}
@@ -147,7 +147,7 @@ func (d *Daemon) ensureDelegationWorkflowSkill(resolved *delegationprefs.Resolve
 		return fmt.Errorf("sync attn-workflow before delegated role launch: %w", err)
 	}
 	if !attempted {
-		d.logf("skipping user-global attn-workflow skill sync for profile %q", config.ProfileLabel())
+		d.logf("skipping user-global attn-workflow skill sync for instance %q", config.InstanceLabel())
 		return nil
 	}
 	if len(paths) == 0 && resolved.Builtin != nil {

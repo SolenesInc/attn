@@ -35,7 +35,7 @@ AT-SPI are outside the scenario contract.
 
 - Run the focused harness platform and UI automation client tests.
 - Run the repository lint, frontend, Go, and Linux build gates.
-- Install the branch in a named profile inside `attn-linux`, run bundled
+- Install the branch in a named instance inside `attn-linux`, run bundled
   preflight, and exercise the real-app bridge under Xvfb.
 - Repeat the deliberately nonresponsive AT-SPI launch and confirm the manifest
   arrives within the ordinary harness budget.

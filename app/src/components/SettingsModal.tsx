@@ -54,7 +54,7 @@ function SettingsModalContent(props: SettingsModalProps & { closeRef: ForwardedR
         <div className="settings-header" data-testid="settings-header">
           <div className="settings-title">
             <h2>Settings</h2>
-            <span className="settings-profile">local daemon</span>
+            <span className="settings-instance">local daemon</span>
           </div>
           <div className="settings-top-actions">
             <input

@@ -23,18 +23,18 @@ func shellQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", `'\''`) + "'"
 }
 
-func remoteBinaryName(profile string) string {
-	p := strings.TrimSpace(profile)
+func remoteBinaryName(instance string) string {
+	p := strings.TrimSpace(instance)
 	if p == "" {
 		return "attn"
 	}
 	return "attn-" + p
 }
 
-func remoteShellEnvScript(profile string) string {
+func remoteShellEnvScript(instance string) string {
 	var assignments []string
-	if p := strings.TrimSpace(profile); p != "" {
-		assignments = append(assignments, "export ATTN_PROFILE="+shellQuote(p))
+	if p := strings.TrimSpace(instance); p != "" {
+		assignments = append(assignments, "export ATTN_INSTANCE="+shellQuote(p))
 	}
 	for _, forwarded := range []struct {
 		local  string
@@ -70,15 +70,15 @@ func remoteShellEnvScript(profile string) string {
 	return strings.Join(assignments, "; ") + "; "
 }
 
-func remoteShellCommand(profile, script string) string {
-	if envScript := remoteShellEnvScript(profile); envScript != "" {
+func remoteShellCommand(instance, script string) string {
+	if envScript := remoteShellEnvScript(instance); envScript != "" {
 		script = envScript + script
 	}
 	return "sh -lc " + shellQuote(script)
 }
 
-func remoteAttnCommand(profile string, args ...string) string {
-	binName := remoteBinaryName(profile)
+func remoteAttnCommand(instance string, args ...string) string {
+	binName := remoteBinaryName(instance)
 	bin := fmt.Sprintf(`ATTN_BIN="${ATTN_REMOTE_ATTN_BIN:-$HOME/.local/bin/%s}"; if [ ! -x "$ATTN_BIN" ] && [ -z "${ATTN_REMOTE_ATTN_BIN:-}" ]; then ATTN_BIN="$(command -v %s 2>/dev/null || true)"; fi; if [ -z "$ATTN_BIN" ] || [ ! -x "$ATTN_BIN" ]; then printf 'missing attn binary\n' >&2; exit 127; fi; "$ATTN_BIN"`,
 		binName,
 		binName,
@@ -89,9 +89,9 @@ func remoteAttnCommand(profile string, args ...string) string {
 	return bin
 }
 
-func runSSHExit(ctx context.Context, target, profile, script string) (stdout, stderr string, exitCode int, err error) {
+func runSSHExit(ctx context.Context, target, instance, script string) (stdout, stderr string, exitCode int, err error) {
 	var errBuf bytes.Buffer
-	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(profile, script))...)
+	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(instance, script))...)
 	cmd.Stderr = &errBuf
 	out, runErr := cmd.Output()
 	stdout = strings.TrimSpace(string(out))
@@ -106,8 +106,8 @@ func runSSHExit(ctx context.Context, target, profile, script string) (stdout, st
 	return stdout, stderr, -1, runErr
 }
 
-func (m *Manager) remoteClientToken(ctx context.Context, target, profile string) string {
-	stdout, stderr, code, err := runSSHExit(ctx, target, profile, remoteAttnCommand(profile, "client-token"))
+func (m *Manager) remoteClientToken(ctx context.Context, target, instance string) string {
+	stdout, stderr, code, err := runSSHExit(ctx, target, instance, remoteAttnCommand(instance, "client-token"))
 	if err != nil {
 		m.logf("hub: remote client-token on %s failed: %v", target, err)
 		return ""
@@ -119,9 +119,9 @@ func (m *Manager) remoteClientToken(ctx context.Context, target, profile string)
 	return strings.TrimSpace(stdout)
 }
 
-func runSSH(ctx context.Context, target, profile, script string) (string, error) {
+func runSSH(ctx context.Context, target, instance, script string) (string, error) {
 	var stderr bytes.Buffer
-	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(profile, script))...)
+	cmd := exec.CommandContext(ctx, "ssh", append(sshBaseArgs(target), remoteShellCommand(instance, script))...)
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {

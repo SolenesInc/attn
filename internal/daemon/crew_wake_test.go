@@ -651,7 +651,7 @@ func TestCrewPriming_StaleProjectPathsDoNotBlockPriming(t *testing.T) {
 	}
 }
 
-func TestCrewSet_ACwdInsideAnotherProfilesCrewIsRefused(t *testing.T) {
+func TestCrewSet_ACwdInsideAnotherInstancesCrewIsRefused(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	userHome := t.TempDir()
 	foreign := filepath.Join(userHome, ".attn-fixture", crew.HomesDirName, "ember", "project")
@@ -661,7 +661,7 @@ func TestCrewSet_ACwdInsideAnotherProfilesCrewIsRefused(t *testing.T) {
 
 	_, err := d.resolveCrewWorkDirForHome(foreign, userHome)
 	if err == nil {
-		t.Fatal("a cwd inside another profile's crew homes was accepted")
+		t.Fatal("a cwd inside another instance's crew homes was accepted")
 	}
 	for _, want := range []string{foreign, filepath.Join(userHome, ".attn-fixture", crew.HomesDirName), filepath.Join(d.dataRoot, crew.HomesDirName)} {
 		if !strings.Contains(err.Error(), want) {
@@ -670,7 +670,7 @@ func TestCrewSet_ACwdInsideAnotherProfilesCrewIsRefused(t *testing.T) {
 	}
 }
 
-func TestCrewSet_AMissingPathInsideAnotherProfilesCrewIsRefused(t *testing.T) {
+func TestCrewSet_AMissingPathInsideAnotherInstancesCrewIsRefused(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	userHome := t.TempDir()
 	foreignRoot := filepath.Join(userHome, ".attn-fixture", crew.HomesDirName)
@@ -681,7 +681,7 @@ func TestCrewSet_AMissingPathInsideAnotherProfilesCrewIsRefused(t *testing.T) {
 
 	_, err := d.resolveCrewWorkDirForHome(missing, userHome)
 	if err == nil {
-		t.Fatal("a missing path inside another profile's crew homes was accepted")
+		t.Fatal("a missing path inside another instance's crew homes was accepted")
 	}
 	for _, want := range []string{missing, foreignRoot, filepath.Join(d.dataRoot, crew.HomesDirName)} {
 		if !strings.Contains(err.Error(), want) {
@@ -690,23 +690,23 @@ func TestCrewSet_AMissingPathInsideAnotherProfilesCrewIsRefused(t *testing.T) {
 	}
 }
 
-func TestCrewSet_ASymlinkedForeignProfileRootIsRefused(t *testing.T) {
+func TestCrewSet_ASymlinkedForeignInstanceRootIsRefused(t *testing.T) {
 	d, _, _ := newWakeableDaemon(t)
 	userHome := t.TempDir()
-	foreignTarget := filepath.Join(t.TempDir(), "foreign-profile")
+	foreignTarget := filepath.Join(t.TempDir(), "foreign-instance")
 	foreign := filepath.Join(foreignTarget, crew.HomesDirName, "quartz", "project")
 	if err := os.MkdirAll(foreign, 0o755); err != nil {
 		t.Fatalf("create symlinked foreign crew cwd: %v", err)
 	}
-	profileLink := filepath.Join(userHome, ".attn-fixture")
-	if err := os.Symlink(foreignTarget, profileLink); err != nil {
-		t.Fatalf("symlink foreign profile: %v", err)
+	instanceLink := filepath.Join(userHome, ".attn-fixture")
+	if err := os.Symlink(foreignTarget, instanceLink); err != nil {
+		t.Fatalf("symlink foreign instance: %v", err)
 	}
-	linkedCWD := filepath.Join(profileLink, crew.HomesDirName, "quartz", "project")
+	linkedCWD := filepath.Join(instanceLink, crew.HomesDirName, "quartz", "project")
 
 	_, err := d.resolveCrewWorkDirForHome(linkedCWD, userHome)
 	if err == nil {
-		t.Fatal("a cwd under a symlinked foreign profile root was accepted")
+		t.Fatal("a cwd under a symlinked foreign instance root was accepted")
 	}
 	for _, want := range []string{linkedCWD, filepath.Join(userHome, ".attn-fixture", crew.HomesDirName), filepath.Join(d.dataRoot, crew.HomesDirName)} {
 		if !strings.Contains(err.Error(), want) {
@@ -718,7 +718,7 @@ func TestCrewSet_ASymlinkedForeignProfileRootIsRefused(t *testing.T) {
 		t.Fatalf("canonicalize linked cwd: %v", err)
 	}
 	if _, err := d.resolveCrewWorkDirForHome(canonicalCWD, userHome); err == nil {
-		t.Fatal("the canonical target of a symlinked foreign profile root was accepted")
+		t.Fatal("the canonical target of a symlinked foreign instance root was accepted")
 	}
 }
 

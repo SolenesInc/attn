@@ -33,7 +33,7 @@
     linear-gradient(180deg, rgba(255, 255, 255, 0.02), transparent);
 }
 
-.sidebar-profile-marker {
+.sidebar-instance-marker {
   align-self: flex-start;
   max-width: 100%;
   padding: 3px 7px;
@@ -50,12 +50,12 @@
   white-space: nowrap;
 }
 
-.sidebar-profile-marker strong {
+.sidebar-instance-marker strong {
   color: var(--color-text-primary);
   font-weight: 600;
 }
 
-.sidebar-profile-marker--collapsed {
+.sidebar-instance-marker--collapsed {
   box-sizing: border-box;
   width: calc(100% - 10px);
   margin: 6px 5px 2px;

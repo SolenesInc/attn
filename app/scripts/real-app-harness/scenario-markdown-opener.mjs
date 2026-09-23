@@ -143,7 +143,7 @@ async function main() {
     });
 
     // Files are named per run: the recents table persists, so a re-run against
-    // the same profile must still prove THIS run's opens landed.
+    // the same instance must still prove THIS run's opens landed.
     const alpha = `alpha-plan-${runner.runId}.md`;
     const beta = `beta-notes-${runner.runId}.md`;
 

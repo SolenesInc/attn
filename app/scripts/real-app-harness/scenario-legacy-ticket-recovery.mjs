@@ -8,11 +8,11 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { captureScreenshot, ensureDir, queryDaemonDb } from './common.mjs';
 import {
-  assertDefaultProfileHarnessIsolation,
-  defaultProfileHarnessEnv,
-  DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE,
-} from './defaultProfileHarness.mjs';
-import { resolveHarnessResources } from './harnessProfile.mjs';
+  assertDefaultInstanceHarnessIsolation,
+  defaultInstanceHarnessEnv,
+  DEFAULT_INSTANCE_HARNESS_PACKAGING_INSTANCE,
+} from './defaultInstanceHarness.mjs';
+import { resolveHarnessResources } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
@@ -47,7 +47,7 @@ function parseArgs(argv) {
 function printHelp() {
   console.log(`Usage: pnpm run real-app:scenario-legacy-ticket-recovery [-- options]
 
-Build first with: make build-default-profile-harness
+Build first with: make build-default-instance-harness
 
 Options:
   --app-path <path>          Default: ${DEFAULT_APP_PATH}
@@ -106,7 +106,7 @@ function createWorld(resources, name, includeWarnings) {
     fs.chmodSync(dir, 0o700);
   }
   const wsUrl = `ws://127.0.0.1:${resources.wsPort}/ws`;
-  const resolved = assertDefaultProfileHarnessIsolation({
+  const resolved = assertDefaultInstanceHarnessIsolation({
     dataDir,
     toolHome,
     codexHome,
@@ -129,7 +129,7 @@ function createWorld(resources, name, includeWarnings) {
     wsUrl,
     resources,
     resolved,
-    env: defaultProfileHarnessEnv({
+    env: defaultInstanceHarnessEnv({
       dataDir,
       toolHome,
       codexHome,
@@ -496,25 +496,25 @@ async function main() {
     printHelp();
     return;
   }
-  process.env.ATTN_HARNESS_PROFILE = DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE;
+  process.env.ATTN_HARNESS_INSTANCE = DEFAULT_INSTANCE_HARNESS_PACKAGING_INSTANCE;
   process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
-  const profileResources = resolveHarnessResources(DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE);
-  const resources = { ...profileResources, appPath: path.resolve(options.appPath) };
+  const instanceResources = resolveHarnessResources(DEFAULT_INSTANCE_HARNESS_PACKAGING_INSTANCE);
+  const resources = { ...instanceResources, appPath: path.resolve(options.appPath) };
   options.appPath = resources.appPath;
   options.wsUrl = `ws://127.0.0.1:${resources.wsPort}/ws`;
   const binary = appDaemonInTree(resources.appPath);
   if (!fs.existsSync(binary)) {
-    throw new Error(`default-profile harness bundle is missing; run make build-default-profile-harness (${binary})`);
+    throw new Error(`default-instance harness bundle is missing; run make build-default-instance-harness (${binary})`);
   }
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'LEGACY-TICKET-RECOVERY',
     allowRealAgents: false,
-    tier: 'tier2-local-packaged-default-profile',
+    tier: 'tier2-local-packaged-default-instance',
     prefix: 'legacy-ticket-recovery',
     metadata: {
-      logicalProfile: 'default',
-      packagingProfile: DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE,
+      logicalInstance: 'default',
+      packagingInstance: DEFAULT_INSTANCE_HARNESS_PACKAGING_INSTANCE,
       dataPolicy: 'fresh owner-only root; production paths refused twice',
     },
   });

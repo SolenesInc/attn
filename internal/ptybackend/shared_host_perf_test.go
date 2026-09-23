@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -29,8 +28,8 @@ type hostResourceSample struct {
 
 func TestSharedHostResourceExperiment(t *testing.T) {
 	probe, binary := os.Getenv("ATTN_RESOURCE_PROBE"), os.Getenv("ATTN_TEST_PTY_HOST")
-	if runtime.GOOS != "darwin" || probe == "" || binary == "" {
-		t.Skip("set ATTN_RESOURCE_PROBE and ATTN_TEST_PTY_HOST on macOS")
+	if probe == "" || binary == "" {
+		t.Skip("set ATTN_RESOURCE_PROBE and ATTN_TEST_PTY_HOST")
 	}
 	root, err := os.MkdirTemp("/tmp", "pty-perf-")
 	if err != nil {

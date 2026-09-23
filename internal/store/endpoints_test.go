@@ -19,8 +19,8 @@ func TestStoreEndpointCRUD(t *testing.T) {
 	if !record.Enabled {
 		t.Fatal("AddEndpoint() should default enabled=true")
 	}
-	if record.Profile != "" {
-		t.Fatalf("AddEndpoint() Profile = %q, want empty", record.Profile)
+	if record.Instance != "" {
+		t.Fatalf("AddEndpoint() Instance = %q, want empty", record.Instance)
 	}
 
 	got := s.GetEndpoint(record.ID)
@@ -37,12 +37,12 @@ func TestStoreEndpointCRUD(t *testing.T) {
 	name := "gpu-box-2"
 	target := "dev@example"
 	enabled := false
-	profile := "dev"
+	instance := "dev"
 	updated, err := s.UpdateEndpoint(record.ID, EndpointUpdate{
 		Name:      &name,
 		SSHTarget: &target,
 		Enabled:   &enabled,
-		Profile:   &profile,
+		Instance:  &instance,
 	})
 	if err != nil {
 		t.Fatalf("UpdateEndpoint() error = %v", err)
@@ -56,8 +56,8 @@ func TestStoreEndpointCRUD(t *testing.T) {
 	if updated.Enabled {
 		t.Fatal("UpdateEndpoint().Enabled = true, want false")
 	}
-	if updated.Profile != profile {
-		t.Fatalf("UpdateEndpoint().Profile = %q, want %q", updated.Profile, profile)
+	if updated.Instance != instance {
+		t.Fatalf("UpdateEndpoint().Instance = %q, want %q", updated.Instance, instance)
 	}
 
 	list := s.ListEndpoints()
@@ -67,8 +67,8 @@ func TestStoreEndpointCRUD(t *testing.T) {
 	if list[0].ID != record.ID {
 		t.Fatalf("ListEndpoints()[0].ID = %q, want %q", list[0].ID, record.ID)
 	}
-	if list[0].Profile != profile {
-		t.Fatalf("ListEndpoints()[0].Profile = %q, want %q", list[0].Profile, profile)
+	if list[0].Instance != instance {
+		t.Fatalf("ListEndpoints()[0].Instance = %q, want %q", list[0].Instance, instance)
 	}
 
 	if err := s.RemoveEndpoint(record.ID); err != nil {
@@ -79,36 +79,36 @@ func TestStoreEndpointCRUD(t *testing.T) {
 	}
 }
 
-func TestAddEndpointWithProfile(t *testing.T) {
+func TestAddEndpointWithInstance(t *testing.T) {
 	s := New()
 
 	record, err := s.AddEndpoint("gpu-box", "user@example", "dev")
 	if err != nil {
 		t.Fatalf("AddEndpoint() error = %v", err)
 	}
-	if record.Profile != "dev" {
-		t.Fatalf("AddEndpoint() Profile = %q, want dev", record.Profile)
+	if record.Instance != "dev" {
+		t.Fatalf("AddEndpoint() Instance = %q, want dev", record.Instance)
 	}
 
 	got := s.GetEndpoint(record.ID)
-	if got == nil || got.Profile != "dev" {
-		t.Fatalf("GetEndpoint() Profile = %q, want dev", got.Profile)
+	if got == nil || got.Instance != "dev" {
+		t.Fatalf("GetEndpoint() Instance = %q, want dev", got.Instance)
 	}
 }
 
-func TestAddEndpointNormalizesProfileCase(t *testing.T) {
+func TestAddEndpointNormalizesInstanceCase(t *testing.T) {
 	s := New()
 
 	record, err := s.AddEndpoint("gpu-box", "user@example", "DEV")
 	if err != nil {
 		t.Fatalf("AddEndpoint(\"DEV\") error = %v", err)
 	}
-	if record.Profile != "dev" {
-		t.Fatalf("AddEndpoint(\"DEV\") Profile = %q, want %q (must be lowercased so $ATTN_PROFILE on the remote — which is already lowercased by config.Profile() — produces the same data dir as the install path the hub builds locally)", record.Profile, "dev")
+	if record.Instance != "dev" {
+		t.Fatalf("AddEndpoint(\"DEV\") Instance = %q, want %q (must be lowercased so $ATTN_INSTANCE on the remote — which is already lowercased by config.Instance() — produces the same data dir as the install path the hub builds locally)", record.Instance, "dev")
 	}
 }
 
-func TestAddEndpointMapsDefaultProfileToEmpty(t *testing.T) {
+func TestAddEndpointMapsDefaultInstanceToEmpty(t *testing.T) {
 	s := New()
 	for _, input := range []string{"default", "DEFAULT", "  default  "} {
 		t.Run(input, func(t *testing.T) {
@@ -116,40 +116,40 @@ func TestAddEndpointMapsDefaultProfileToEmpty(t *testing.T) {
 			if err != nil {
 				t.Fatalf("AddEndpoint(%q) error = %v", input, err)
 			}
-			if record.Profile != "" {
-				t.Fatalf("AddEndpoint(%q) Profile = %q, want \"\" (literal \"default\" must canonicalize to empty)", input, record.Profile)
+			if record.Instance != "" {
+				t.Fatalf("AddEndpoint(%q) Instance = %q, want \"\" (literal \"default\" must canonicalize to empty)", input, record.Instance)
 			}
 			_ = s.RemoveEndpoint(record.ID)
 		})
 	}
 }
 
-func TestUpdateEndpointClearsProfileWithEmptyString(t *testing.T) {
+func TestUpdateEndpointClearsInstanceWithEmptyString(t *testing.T) {
 	s := New()
 	record, err := s.AddEndpoint("gpu-box", "user@example", "dev")
 	if err != nil {
 		t.Fatalf("AddEndpoint(): %v", err)
 	}
-	if record.Profile != "dev" {
-		t.Fatalf("setup: profile = %q, want dev", record.Profile)
+	if record.Instance != "dev" {
+		t.Fatalf("setup: instance = %q, want dev", record.Instance)
 	}
 
 	empty := ""
-	updated, err := s.UpdateEndpoint(record.ID, EndpointUpdate{Profile: &empty})
+	updated, err := s.UpdateEndpoint(record.ID, EndpointUpdate{Instance: &empty})
 	if err != nil {
-		t.Fatalf("UpdateEndpoint(profile=\"\") error = %v", err)
+		t.Fatalf("UpdateEndpoint(instance=\"\") error = %v", err)
 	}
-	if updated.Profile != "" {
-		t.Fatalf("UpdateEndpoint(profile=\"\") Profile = %q, want empty (a non-nil empty pointer must clear the profile back to default)", updated.Profile)
+	if updated.Instance != "" {
+		t.Fatalf("UpdateEndpoint(instance=\"\") Instance = %q, want empty (a non-nil empty pointer must clear the instance back to default)", updated.Instance)
 	}
 
 	got := s.GetEndpoint(record.ID)
-	if got == nil || got.Profile != "" {
-		t.Fatalf("GetEndpoint() Profile = %q, want empty", got.Profile)
+	if got == nil || got.Instance != "" {
+		t.Fatalf("GetEndpoint() Instance = %q, want empty", got.Instance)
 	}
 }
 
-func TestUpdateEndpointNormalizesProfileCase(t *testing.T) {
+func TestUpdateEndpointNormalizesInstanceCase(t *testing.T) {
 	s := New()
 	record, err := s.AddEndpoint("gpu-box", "user@example", "")
 	if err != nil {
@@ -157,33 +157,33 @@ func TestUpdateEndpointNormalizesProfileCase(t *testing.T) {
 	}
 
 	upper := "DEV"
-	updated, err := s.UpdateEndpoint(record.ID, EndpointUpdate{Profile: &upper})
+	updated, err := s.UpdateEndpoint(record.ID, EndpointUpdate{Instance: &upper})
 	if err != nil {
-		t.Fatalf("UpdateEndpoint(profile=\"DEV\") error = %v", err)
+		t.Fatalf("UpdateEndpoint(instance=\"DEV\") error = %v", err)
 	}
-	if updated.Profile != "dev" {
-		t.Fatalf("UpdateEndpoint(profile=\"DEV\") Profile = %q, want \"dev\"", updated.Profile)
+	if updated.Instance != "dev" {
+		t.Fatalf("UpdateEndpoint(instance=\"DEV\") Instance = %q, want \"dev\"", updated.Instance)
 	}
 }
 
-func TestAddEndpointRejectsInvalidProfile(t *testing.T) {
+func TestAddEndpointRejectsInvalidInstance(t *testing.T) {
 	s := New()
 
 	cases := []string{
 		"with space",
-		"a-very-long-profile-name-over-limit",
+		"a-very-long-instance-name-over-limit",
 		"-leading-dash",
 	}
-	for _, profile := range cases {
-		t.Run(profile, func(t *testing.T) {
-			if _, err := s.AddEndpoint("gpu-box", "user@example", profile); err == nil {
-				t.Fatalf("AddEndpoint(%q) succeeded, want validation error", profile)
+	for _, instance := range cases {
+		t.Run(instance, func(t *testing.T) {
+			if _, err := s.AddEndpoint("gpu-box", "user@example", instance); err == nil {
+				t.Fatalf("AddEndpoint(%q) succeeded, want validation error", instance)
 			}
 		})
 	}
 }
 
-func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
+func TestEndpointMigration34BackfillsBlankInstance(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "legacy.db")
 
@@ -227,12 +227,12 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 	}
 	defer db2.Close()
 
-	var profile string
-	if err := db2.QueryRow(`SELECT profile FROM endpoints WHERE id = 'endpoint-1'`).Scan(&profile); err != nil {
-		t.Fatalf("scan profile: %v", err)
+	var instance string
+	if err := db2.QueryRow(`SELECT instance FROM endpoints WHERE id = 'endpoint-1'`).Scan(&instance); err != nil {
+		t.Fatalf("scan instance: %v", err)
 	}
-	if profile != "" {
-		t.Fatalf("legacy endpoint profile = %q, want empty", profile)
+	if instance != "" {
+		t.Fatalf("legacy endpoint instance = %q, want empty", instance)
 	}
 
 	version, err := GetSchemaVersion(db2)
@@ -241,5 +241,33 @@ func TestEndpointMigration34BackfillsBlankProfile(t *testing.T) {
 	}
 	if version < 34 {
 		t.Fatalf("schema version = %d, want >=34", version)
+	}
+}
+
+func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "test.db")
+	s, err := newSeededStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	if _, err := s.db.Exec(`
+		ALTER TABLE endpoints RENAME COLUMN instance TO profile;
+		ALTER TABLE instance_roles RENAME TO profile_roles;
+		INSERT INTO endpoints (id, name, ssh_target, enabled, profile, created_at, updated_at)
+		VALUES ('endpoint-1', 'gpu', 'user@host', 1, 'dev', '2026-01-01', '2026-01-01');
+		INSERT INTO profile_roles (role, session_id) VALUES ('chief_of_staff', 'session-a');
+		DELETE FROM schema_migrations WHERE version >= 151;
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if err := migrateDB(s.db, dbPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.GetEndpoint("endpoint-1"); got == nil || got.Instance != "dev" {
+		t.Fatalf("migrated endpoint = %+v, want instance dev", got)
+	}
+	if got := s.GetInstanceRole("chief_of_staff"); got != "session-a" {
+		t.Fatalf("migrated chief of staff = %q, want session-a", got)
 	}
 }

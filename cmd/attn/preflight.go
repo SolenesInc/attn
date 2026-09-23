@@ -107,7 +107,7 @@ func writePreflightReport(w io.Writer, report preflight.Report) {
 		}
 	}
 	fmt.Fprintf(w, "attn preflight: %s (%d failed, %d warnings)\n", strings.ToUpper(report.Status), failed, warned)
-	fmt.Fprintf(w, "profile: %s  socket=%s  port=%s\n", report.Routing.Label, report.Routing.Socket, report.Routing.WSPort)
+	fmt.Fprintf(w, "instance: %s  socket=%s  port=%s\n", report.Routing.Label, report.Routing.Socket, report.Routing.WSPort)
 	fmt.Fprintf(w, "launch: agent=%s model=%s effort=%s\n\n",
 		resolvedDisplay(report.Launch.Agent), resolvedDisplay(report.Launch.Model), resolvedDisplay(report.Launch.Effort))
 	for _, check := range report.Checks {
@@ -128,14 +128,14 @@ func resolvedDisplay(value preflight.ResolvedValue) string {
 func writePreflightHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn preflight [options]
 
-Diagnose the active profile without changing it. The command exits non-zero
+Diagnose the active instance without changing it. The command exits non-zero
 when a required tool, writable path, route, daemon, or protocol check fails.
 
 options:
   --agent <name>   agent launch to check (ATTN_AGENT, then codex)
   --model <name>   model pin to check (ATTN_MODEL, then agent default)
   --effort <level> effort pin to check (ATTN_EFFORT, then agent default)
-  --app-path <path> packaged app to check (defaults to the selected profile app)
+  --app-path <path> packaged app to check (defaults to the selected instance app)
   --json           emit the stable machine-readable report
 `)
 }

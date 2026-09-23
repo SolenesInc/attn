@@ -2195,7 +2195,7 @@ export function useUiAutomationBridge({
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
         };
       case 'dismiss_whats_new': {
-        // A fresh profile's one-time What's New modal sits above the workspace and swallows native
+        // A fresh instance's one-time What's New modal sits above the workspace and swallows native
         // HID clicks. Dismiss it the way a user can: a backdrop click (persists "seen").
         const overlay = document.querySelector('.whats-new-overlay');
         if (overlay instanceof HTMLElement) {
@@ -4250,7 +4250,7 @@ export function useUiAutomationBridge({
 
   useEffect(() => {
     // Runtime gate injected by the Rust shell; the rule lives in
-    // app/src-tauri/src/profile.rs::automation_enabled.
+    // app/src-tauri/src/instance.rs::automation_enabled.
     const automationEnabled =
       typeof window !== 'undefined' && (window as { __ATTN_AUTOMATION_ENABLED?: boolean }).__ATTN_AUTOMATION_ENABLED === true;
     if (!isTauri() || !automationEnabled) {

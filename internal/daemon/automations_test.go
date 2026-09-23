@@ -147,7 +147,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		},
 	}}
 	d := newEnrolledDaemon(t, "")
-	d.dataRoot = filepath.Join(root, "profile")
+	d.dataRoot = filepath.Join(root, "instance")
 	enrollHomeForTest(t, d)
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
 	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
@@ -204,7 +204,7 @@ func TestPrepareRepositoryWorktreeUsesLocalOverrideAndExactRevision(t *testing.T
 		t.Fatal(err)
 	}
 	revision := strings.TrimSpace(string(revisionBytes))
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "profile")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	payload, _ := json.Marshal(automation.PullRequestInput{
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: revision,
@@ -257,8 +257,8 @@ func TestPrepareRepositoryWorktreeDoesNotFallbackFromInvalidOverride(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	profileRoot := filepath.Join(root, "profile")
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: profileRoot}
+	instanceRoot := filepath.Join(root, "instance")
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: instanceRoot}
 	payload, _ := json.Marshal(automation.PullRequestInput{
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: strings.TrimSpace(string(revisionBytes)),
@@ -274,7 +274,7 @@ func TestPrepareRepositoryWorktreeDoesNotFallbackFromInvalidOverride(t *testing.
 	if err == nil || !strings.Contains(err.Error(), "origin mismatch") {
 		t.Fatalf("invalid override err = %v", err)
 	}
-	managed := filepath.Join(profileRoot, "automation", "repos", attngit.RepositoryCacheKey("github.com/owner/repo"), "repo")
+	managed := filepath.Join(instanceRoot, "automation", "repos", attngit.RepositoryCacheKey("github.com/owner/repo"), "repo")
 	if _, statErr := os.Stat(managed); !os.IsNotExist(statErr) {
 		t.Fatalf("invalid override fell back to managed cache: %v", statErr)
 	}
@@ -292,7 +292,7 @@ func TestPrepareRepositoryWorktreeChangedHeadCreatesNewExactSnapshot(t *testing.
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "second")
 	secondBytes, _ := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "profile")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	location := automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{
 		Default:   automation.RepositorySource{Type: "managed_cache"},
 		Overrides: map[string]automation.RepositorySource{"github.com/owner/repo": {Type: "local_clone", Path: repo}},
@@ -356,7 +356,7 @@ func TestPrepareRepositoryWorktreeLeavesRevisionFetchFailureRetryable(t *testing
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: strings.Repeat("a", 40),
 	})
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "profile")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	_, err := d.prepareAutomationLocation(context.Background(), automation.WorkRequest{
 		Context: payload,
 		Location: automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{

@@ -6,23 +6,23 @@ import (
 	"testing"
 )
 
-func TestPrintProfileBanner_NoopForDefault(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+func TestPrintInstanceBanner_NoopForDefault(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "")
 	var buf bytes.Buffer
-	PrintProfileBanner(&buf)
+	PrintInstanceBanner(&buf)
 	if buf.Len() != 0 {
-		t.Errorf("expected no output for default profile, got %q", buf.String())
+		t.Errorf("expected no output for default instance, got %q", buf.String())
 	}
 }
 
-func TestPrintProfileBanner_MentionsProfileSocketAndPort(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "dev")
+func TestPrintInstanceBanner_MentionsInstanceSocketAndPort(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "dev")
 	t.Setenv("ATTN_WS_PORT", "")
 	var buf bytes.Buffer
-	PrintProfileBanner(&buf)
+	PrintInstanceBanner(&buf)
 	got := buf.String()
-	if !strings.Contains(got, "profile=dev") {
-		t.Errorf("banner missing profile= field: %q", got)
+	if !strings.Contains(got, "instance=dev") {
+		t.Errorf("banner missing instance= field: %q", got)
 	}
 	if !strings.Contains(got, "socket=") {
 		t.Errorf("banner missing socket= field: %q", got)

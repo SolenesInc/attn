@@ -120,7 +120,7 @@ jobs:
 
       # tauri bundles `bundled-plugins/` as the app's `Resources/plugins`, and a
       # checkout has only a .gitkeep there — the compiled plugins are build
-      # output. A source install gets them from scripts/build-app-profile.sh;
+      # output. A source install gets them from scripts/build-app-instance.sh;
       # this is the release's equivalent step.
       - name: Stage bundled plugins
         run: ./scripts/build-bundled-plugins.sh

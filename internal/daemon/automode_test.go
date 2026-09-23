@@ -74,7 +74,7 @@ func automodePropose(t *testing.T, d *Daemon, kind, target, value string) protoc
 	return docCall(t, func(c net.Conn) { d.handleAutoModePropose(c, msg) })
 }
 
-func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
+func TestAutoModeShowAnswersDefaultsOnAFreshInstance(t *testing.T) {
 	d := newDaemonForTest(t)
 	result := automodeShow(t, d)
 	cfg := result.Config
@@ -89,13 +89,13 @@ func TestAutoModeShowAnswersDefaultsOnAFreshProfile(t *testing.T) {
 		t.Fatalf("rule sources on a global read = %+v", result)
 	}
 	if len(cfg.Rules) != len(cfg.ShippedRules) {
-		t.Errorf("rules = %+v on a fresh profile, want only the shipped ones", cfg.Rules)
+		t.Errorf("rules = %+v on a fresh instance, want only the shipped ones", cfg.Rules)
 	}
 	if cfg.Environment.Slots == nil || cfg.Environment.Notes == nil {
 		t.Fatalf("the environment came back nil: %+v", cfg.Environment)
 	}
 	if len(result.Proposals) != 0 {
-		t.Fatalf("a fresh profile has %d proposals", len(result.Proposals))
+		t.Fatalf("a fresh instance has %d proposals", len(result.Proposals))
 	}
 }
 

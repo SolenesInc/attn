@@ -334,7 +334,7 @@ describe('the daemon a scenario inherits', () => {
     return pidPath;
   }
 
-  const target = { profile: 'dev', appPath: '/tmp/attn-dev.app' };
+  const target = { instance: 'dev', appPath: '/tmp/attn-dev.app' };
 
   it('leaves a daemon that already carries this scenario marker alone', () => {
     const run = vi.fn();
@@ -434,7 +434,7 @@ describe('the daemon a scenario inherits', () => {
   it('never stops a production daemon', () => {
     const run = vi.fn();
     const result = ensureDaemonCarriesTripwire({
-      profile: '',
+      instance: '',
       appPath: '/Applications/attn.app',
       marker: 'shims|claude',
       pidPath: pidFileFor(process.pid),
@@ -467,7 +467,7 @@ describe('the daemon a scenario inherits', () => {
     const run = vi.fn();
 
     expect(() => ensureDaemonCarriesTripwire({
-      profile: '',
+      instance: '',
       appPath: '/Applications/attn.app',
       scenarioId: 'NUDGE-TRIGGER',
       marker: 'shims|claude',
@@ -484,7 +484,7 @@ describe('the daemon a scenario inherits', () => {
     const run = vi.fn();
     const logged = [];
     const result = ensureDaemonCarriesTripwire({
-      profile: '',
+      instance: '',
       appPath: '/Applications/attn.app',
       marker: 'shims|',
       pidPath: pidFileFor(process.pid),

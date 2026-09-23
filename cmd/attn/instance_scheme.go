@@ -17,47 +17,47 @@ func desktopEntryPath(appName string) string {
 	return desktopentry.Path(appName)
 }
 
-func runProfileRegisterScheme(args []string) {
-	profile := config.Profile()
+func runInstanceRegisterScheme(args []string) {
+	instance := config.Instance()
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--profile":
+		case "--instance":
 			if i+1 >= len(args) {
-				profileFatal("--profile requires a value")
+				instanceFatal("--instance requires a value")
 			}
 			i++
-			p, err := config.NormalizeProfileName(args[i])
+			p, err := config.NormalizeInstanceName(args[i])
 			if err != nil {
-				profileFatal(err.Error())
+				instanceFatal(err.Error())
 			}
-			profile = p
+			instance = p
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
-			profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+			instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 		}
 	}
 
 	if runtime.GOOS != "linux" {
-		profileFatal(fmt.Sprintf("register-scheme is Linux-only; on %s the installed app bundle already carries the scheme", runtime.GOOS))
+		instanceFatal(fmt.Sprintf("register-scheme is Linux-only; on %s the installed app bundle already carries the scheme", runtime.GOOS))
 	}
 
-	r := resolveProfile(profile)
+	r := resolveInstance(instance)
 	report, err := desktopentry.Install(desktopentry.Entry{
 		AppName: r.AppName,
 		Exec:    r.AppExecutable,
 		Scheme:  r.DeepLinkScheme,
 	})
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 
 	fmt.Printf(">>> Registered %s:// for %s\n", r.DeepLinkScheme, r.Label)
 	fmt.Printf("  entry    %s\n", report.Path)
 	fmt.Printf("  exec     %s\n", r.AppExecutable)
 	if !fileExists(r.AppExecutable) {
-		fmt.Printf("           ! nothing installed there yet; run make install%s\n", profileSuffix(r.Profile))
+		fmt.Printf("           ! nothing installed there yet; run make install%s\n", instanceSuffix(r.Instance))
 	}
 	if len(report.Ran) > 0 {
 		fmt.Printf("  database %s\n", strings.Join(report.Ran, ", "))
@@ -68,9 +68,9 @@ func runProfileRegisterScheme(args []string) {
 	}
 }
 
-func profileSuffix(profile string) string {
-	if profile == "" {
+func instanceSuffix(instance string) string {
+	if instance == "" {
 		return ""
 	}
-	return " PROFILE=" + profile
+	return " INSTANCE=" + instance
 }

@@ -392,31 +392,31 @@ func TestWorkerBackend_ResolveBinaryPath_ReResolvesImplicitPath(t *testing.T) {
 	}
 }
 
-func TestSharedHostCandidatesIncludeTheRunningProfilesInstall(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "host-lookup")
+func TestSharedHostCandidatesIncludeTheRunningInstancesInstall(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "host-lookup")
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	want := filepath.Join(filepath.Dir(config.AppDaemonBinaryForProfile(config.Profile())), ptyhost.BinaryName)
+	want := filepath.Join(filepath.Dir(config.AppDaemonBinaryForInstance(config.Instance())), ptyhost.BinaryName)
 	for _, candidate := range sharedHostBinaryCandidates() {
 		if candidate == want {
 			return
 		}
 	}
-	t.Fatalf("shared host candidates omit profile install %q", want)
+	t.Fatalf("shared host candidates omit instance install %q", want)
 }
 
-func TestBundledAttnCandidatesLeadWithTheRunningProfilesInstall(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "lx")
+func TestBundledAttnCandidatesLeadWithTheRunningInstancesInstall(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "lx")
 	t.Setenv("XDG_DATA_HOME", "/xdg")
 	got := bundledAttnCandidates("/Users/tester")
 
-	want := []string{config.AppDaemonBinaryForProfile("lx")}
+	want := []string{config.AppDaemonBinaryForInstance("lx")}
 	if runtime.GOOS == "darwin" {
 		want = append(want,
 			"/Users/tester/Applications/attn.app/Contents/MacOS/attn",
 			"/Applications/attn.app/Contents/MacOS/attn",
 		)
 	} else if want[0] != "/xdg/attn-lx/bin/attn" {
-		t.Fatalf("profile install candidate = %q, want /xdg/attn-lx/bin/attn", want[0])
+		t.Fatalf("instance install candidate = %q, want /xdg/attn-lx/bin/attn", want[0])
 	}
 	if len(got) != len(want) {
 		t.Fatalf("bundledAttnCandidates() = %v, want %v", got, want)
@@ -430,9 +430,9 @@ func TestBundledAttnCandidatesLeadWithTheRunningProfilesInstall(t *testing.T) {
 
 func TestBundledAttnCandidatesDoNotRepeatTheProdBundle(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		t.Skip("only darwin resolves the default profile to ~/Applications/attn.app")
+		t.Skip("only darwin resolves the default instance to ~/Applications/attn.app")
 	}
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatalf("UserHomeDir: %v", err)

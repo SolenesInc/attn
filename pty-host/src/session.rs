@@ -227,6 +227,19 @@ pub struct Session {
     connections: AtomicUsize,
     cleanup_scheduled: AtomicBool,
     cleaned: AtomicBool,
+    ownership: Mutex<Ownership>,
+}
+
+enum Ownership {
+    Pending(Box<RegistryEntry>),
+    Committed,
+    Abandoned,
+}
+
+pub enum Commit {
+    Committed,
+    AlreadyCommitted,
+    Abandoned,
 }
 
 impl Session {
@@ -303,6 +316,7 @@ impl Session {
             connections: AtomicUsize::new(0),
             cleanup_scheduled: AtomicBool::new(false),
             cleaned: AtomicBool::new(false),
+            ownership: Mutex::new(Ownership::Abandoned),
         });
 
         let entry = RegistryEntry {
@@ -328,10 +342,8 @@ impl Session {
             unattended_launch: params.unattended_launch,
             runtime_kind: "rust_host",
         };
-        if let Err(error) = write_registry(&session.registry_path, &entry) {
-            abort_spawn(&session);
-            return Err(error);
-        }
+        *session.ownership.lock().expect("ownership mutex poisoned") =
+            Ownership::Pending(Box::new(entry));
 
         if let Err(error) = start_reader(Arc::clone(&session), pty_reader) {
             abort_spawn(&session);
@@ -633,6 +645,37 @@ impl Session {
         Ok(())
     }
 
+    pub fn commit(&self) -> Result<Commit, String> {
+        let mut ownership = self.ownership.lock().expect("ownership mutex poisoned");
+        match &*ownership {
+            Ownership::Pending(entry) => write_registry(&self.registry_path, entry)?,
+            Ownership::Committed => return Ok(Commit::AlreadyCommitted),
+            Ownership::Abandoned => return Ok(Commit::Abandoned),
+        }
+        *ownership = Ownership::Committed;
+        Ok(Commit::Committed)
+    }
+
+    pub fn abandon_if_pending(self: &Arc<Self>) {
+        {
+            let mut ownership = self.ownership.lock().expect("ownership mutex poisoned");
+            if !matches!(*ownership, Ownership::Pending(_)) {
+                return;
+            }
+            *ownership = Ownership::Abandoned;
+        }
+        self.remove();
+    }
+
+    fn publish(&self, event: Value) {
+        if matches!(
+            *self.ownership.lock().expect("ownership mutex poisoned"),
+            Ownership::Committed
+        ) {
+            (self.broadcast)(event);
+        }
+    }
+
     pub fn remove(self: &Arc<Self>) {
         if let Err(error) = self.remove_checked() {
             eprintln!("terminal {} cleanup failed: {error}", self.id);
@@ -649,7 +692,7 @@ impl Session {
         let event = json!({"type": "evt", "event": "teardown_escalated", "session_id": self.id,
             "reason": signal_name(requested), "exit_signal": signal_name(escalated)});
         self.broadcast_watch(event.clone());
-        (self.broadcast)(event);
+        self.publish(event);
     }
 
     fn wait_for_exit(&self, timeout: Duration) -> bool {
@@ -787,7 +830,7 @@ impl Session {
         }
         let event = state_event(&self.id, claim, detail, source);
         self.broadcast_watch(event.clone());
-        (self.broadcast)(event);
+        self.publish(event);
     }
 
     fn mark_exited(self: &Arc<Self>, status: i32) {
@@ -804,7 +847,7 @@ impl Session {
         self.lifecycle_changed.notify_all();
         let event = exit_event(&self.id, exit_code, signal.as_deref());
         self.broadcast_watch(event.clone());
-        (self.broadcast)(event);
+        self.publish(event);
         if self.connections.load(Ordering::Acquire) == 0 {
             self.schedule_cleanup();
         }

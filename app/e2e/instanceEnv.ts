@@ -26,29 +26,29 @@ export function resolveAttnBinaryPath(): string {
 export const E2E_CLIENT_TOKEN = 'e2e-client-token';
 
 export interface E2EPorts {
-  profile: string;
+  instance: string;
   daemonPort: string;
   vitePort: string;
 }
 
-// Default profile keeps fixed ports (19849 / 1421) so a run needs no attn binary
-// at config-load time; a named profile gets a disjoint band so agents can't collide.
+// Default instance keeps fixed ports (19849 / 1421) so a run needs no attn binary
+// at config-load time; a named instance gets a disjoint band so agents can't collide.
 export function e2ePorts(): E2EPorts {
-  const profile = (process.env.ATTN_PROFILE ?? '').trim();
-  if (profile === '') {
-    return { profile: '', daemonPort: '19849', vitePort: '1421' };
+  const instance = (process.env.ATTN_INSTANCE ?? '').trim();
+  if (instance === '') {
+    return { instance: '', daemonPort: '19849', vitePort: '1421' };
   }
   const attn = resolveAttnBinaryPath();
-  const out = execFileSync(attn, ['profile', 'resolve', '--json'], {
+  const out = execFileSync(attn, ['instance', 'resolve', '--json'], {
     encoding: 'utf8',
   });
   const resolved = JSON.parse(out) as {
-    profile: string;
+    instance: string;
     e2eDaemonPort: string;
     e2eVitePort: string;
   };
   return {
-    profile: resolved.profile,
+    instance: resolved.instance,
     daemonPort: resolved.e2eDaemonPort,
     vitePort: resolved.e2eVitePort,
   };

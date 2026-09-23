@@ -19,7 +19,7 @@ import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { transcriptMessages, writeMockAgentFixture } from './mockAgent.mjs';
 import { delay, appDaemonInTree } from './platform.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -149,7 +149,7 @@ function inboxBatches(transcript) {
 }
 
 function readWatcherTranscript(sessionID) {
-  const file = queryDaemonDb(path.join(dataDirForProfile(currentHarnessProfile()), 'attn.db'),
+  const file = queryDaemonDb(path.join(dataDirForInstance(currentHarnessInstance()), 'attn.db'),
     `SELECT transcript_path FROM sessions WHERE id = '${sessionID}'`);
   if (!file) throw new Error(`no mock transcript for ${sessionID}`);
   return fs.readFileSync(file, 'utf8');
@@ -200,11 +200,11 @@ async function main() {
   let seed = null;
   let peerMessage = null;
   let delegated = null;
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('Garden subscription verification requires a named profile.');
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('Garden subscription verification requires a named instance.');
   const cli = (args) => execFileSync(appDaemonInTree(options.appPath), args,
-    { encoding: 'utf8', env: profileCliEnv(profile) }).trim();
-  const unreadSeeds = () => queryDaemonDb(path.join(dataDirForProfile(profile), 'attn.db'),
+    { encoding: 'utf8', env: instanceCliEnv(instance) }).trim();
+  const unreadSeeds = () => queryDaemonDb(path.join(dataDirForInstance(instance), 'attn.db'),
     `SELECT source_id FROM agent_mailbox_items WHERE recipient_session_id = '${watcher.sessionId}' AND kind = 'garden_seed' AND read_at = '' ORDER BY source_id`,
     { json: true }).map((item) => item.source_id);
   try {

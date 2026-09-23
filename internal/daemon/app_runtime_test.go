@@ -1078,11 +1078,11 @@ func TestAppRuntimeHostCandidates(t *testing.T) {
 		"/home/v/.local/bin/attn-app-runtime",
 	}
 	if len(remote) != len(want) {
-		t.Fatalf("profile candidates = %v, want %v", remote, want)
+		t.Fatalf("instance candidates = %v, want %v", remote, want)
 	}
 	for i := range want {
 		if remote[i] != want[i] {
-			t.Fatalf("profile candidates = %v, want %v", remote, want)
+			t.Fatalf("instance candidates = %v, want %v", remote, want)
 		}
 	}
 

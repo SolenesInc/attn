@@ -124,7 +124,7 @@ func (d *Daemon) notebookRoot() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return notebook.DefaultRoot(home, config.Profile()), nil
+	return notebook.DefaultRoot(home, config.Instance()), nil
 }
 
 func (d *Daemon) broadcastNotebookChanged(origin string, paths ...string) {

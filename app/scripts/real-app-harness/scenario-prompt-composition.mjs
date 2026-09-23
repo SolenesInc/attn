@@ -7,7 +7,7 @@ import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, profileCliEnv, resolveHarnessResources } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv, resolveHarnessResources } from './harnessInstance.mjs';
 import { writeMockAgentFixture, transcriptTurns } from './mockAgent.mjs';
 import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 
@@ -39,10 +39,10 @@ function instructions(text, agent) {
 
 async function main() {
   const options = parseCommonArgs(process.argv.slice(2));
-  const profile = currentHarnessProfile();
-  if (!profile) throw new Error('Prompt verification requires a named profile');
-  const resources = resolveHarnessResources(profile);
-  const env = profileCliEnv(profile);
+  const instance = currentHarnessInstance();
+  if (!instance) throw new Error('Prompt verification requires a named instance');
+  const resources = resolveHarnessResources(instance);
+  const env = instanceCliEnv(instance);
   const cli = args => execFileSync(resources.appDaemon, args, { env, encoding: 'utf8', timeout: 30_000 });
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);

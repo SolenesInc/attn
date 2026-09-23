@@ -6,9 +6,9 @@ use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64;
@@ -18,12 +18,14 @@ use serde_json::{Value, json};
 
 use crate::ghostty::Theme;
 use crate::protocol::{
-    AttachParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO, ERR_SESSION_NOT_FOUND,
-    ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION, HelloParams, InputParams,
-    KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams, SignalParams, SpawnParams,
-    error, is_compatible_version, response,
+    AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
+    ERR_SESSION_NOT_FOUND, ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION,
+    HelloParams, InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams,
+    SignalParams, SpawnParams, error, is_compatible_version, response,
 };
-use crate::session::{Broadcast, ChildReaper, Cleanup, Session, SessionRuntime, parse_signal};
+use crate::session::{
+    Broadcast, ChildReaper, Cleanup, Commit, Session, SessionRuntime, parse_signal,
+};
 
 const CONNECTION_QUEUE_SIZE: usize = 256;
 const CONNECTION_STACK_BYTES: usize = 256 * 1024;
@@ -31,12 +33,15 @@ const CONNECTION_STACK_BYTES: usize = 256 * 1024;
 #[derive(Clone)]
 pub struct Config {
     pub daemon_instance_id: String,
-    pub generation: String,
+    pub artifact: String,
     pub socket_path: String,
     pub registry_dir: String,
     pub host_registry_path: String,
     pub control_token: String,
+    pub idle_timeout: Duration,
 }
+
+pub const CAPABILITIES: &[&str] = &[crate::probe_child::CAPABILITY];
 
 #[derive(Serialize)]
 struct HostRegistry<'a> {
@@ -55,6 +60,7 @@ pub struct Host {
     cfg: Config,
     // Lock watchers before state; release state before session callbacks or IO.
     state: Mutex<HostState>,
+    idle_changed: Condvar,
     conn_seq: AtomicU64,
     watchers: Mutex<HashMap<String, HostWatcher>>,
     reaper: ChildReaper,
@@ -64,7 +70,7 @@ pub struct Host {
 struct HostState {
     sessions: HashMap<String, Arc<Session>>,
     spawning: HashSet<String>,
-    idle_epoch: u64,
+    idle_deadline: Option<Instant>,
     shutting_down: bool,
 }
 
@@ -83,7 +89,7 @@ impl HostState {
         if !self.spawning.insert(id.to_owned()) {
             return Err(format!("session {id} spawn already in progress"));
         }
-        self.idle_epoch = self.idle_epoch.wrapping_add(1);
+        self.idle_deadline = None;
         Ok(())
     }
 
@@ -91,16 +97,20 @@ impl HostState {
         !self.shutting_down && self.sessions.is_empty() && self.spawning.is_empty()
     }
 
-    fn schedule_idle(&mut self) -> Option<u64> {
+    fn schedule_idle(&mut self, deadline: Instant) -> bool {
         if !self.idle() {
-            return None;
+            return false;
         }
-        self.idle_epoch = self.idle_epoch.wrapping_add(1);
-        Some(self.idle_epoch)
+        self.idle_deadline = Some(deadline);
+        true
     }
 
-    fn begin_idle_shutdown(&mut self, epoch: u64) -> bool {
-        if self.idle_epoch != epoch || !self.idle() {
+    fn begin_idle_shutdown(&mut self, now: Instant) -> bool {
+        if self.idle_deadline.is_none_or(|deadline| deadline > now) {
+            return false;
+        }
+        self.idle_deadline = None;
+        if !self.idle() {
             return false;
         }
         self.shutting_down = true;
@@ -142,12 +152,15 @@ impl Host {
         let host = Arc::new(Self {
             cfg,
             state: Mutex::new(HostState::default()),
+            idle_changed: Condvar::new(),
             conn_seq: AtomicU64::new(0),
             watchers: Mutex::new(HashMap::new()),
             reaper: ChildReaper::start()?,
         });
         host.write_registry()?;
         host.start_shell_poller()?;
+        host.start_idle_timer()?;
+        host.schedule_idle_if_empty();
         eprintln!(
             "PTY host ready: pid={} socket={} format={}",
             std::process::id(),
@@ -190,7 +203,7 @@ impl Host {
             executable,
             started_at: unix_timestamp().to_string(),
             snapshot_format: env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"),
-            generation: &self.cfg.generation,
+            generation: &self.cfg.artifact,
         };
         write_json_atomic(&self.cfg.host_registry_path, &registry)
     }
@@ -255,10 +268,23 @@ impl Host {
                 session.note_connected();
             }
         }
-        for event in session.lifecycle_events() {
-            self.broadcast_lifecycle(&event);
-        }
         Ok(session)
+    }
+
+    fn commit(&self, id: &str) -> Result<bool, String> {
+        let Some(session) = self.session(id) else {
+            return Ok(false);
+        };
+        match session.commit()? {
+            Commit::Committed => {
+                for event in session.lifecycle_events() {
+                    self.broadcast_lifecycle(&event);
+                }
+                Ok(true)
+            }
+            Commit::AlreadyCommitted => Ok(true),
+            Commit::Abandoned => Ok(false),
+        }
     }
 
     fn shutdown_sessions(&self) -> Result<(), String> {
@@ -302,36 +328,60 @@ impl Host {
         Ok(())
     }
 
-    fn schedule_idle_if_empty(self: &Arc<Self>) {
-        let Some(epoch) = self
+    fn schedule_idle_if_empty(&self) {
+        let deadline = Instant::now() + self.cfg.idle_timeout;
+        if self
             .state
             .lock()
             .expect("host state mutex poisoned")
-            .schedule_idle()
-        else {
-            return;
-        };
-        let host = Arc::downgrade(self);
-        let _ = thread::Builder::new()
+            .schedule_idle(deadline)
+        {
+            self.idle_changed.notify_one();
+        }
+    }
+
+    fn start_idle_timer(self: &Arc<Self>) -> Result<(), String> {
+        let host = Arc::clone(self);
+        thread::Builder::new()
             .name("pty-host-idle".to_owned())
             .stack_size(64 * 1024)
-            .spawn(move || {
-                thread::sleep(std::time::Duration::from_secs(45));
-                let Some(host) = host.upgrade() else {
-                    return;
-                };
-                if !host
-                    .state
-                    .lock()
+            .spawn(move || host.retire_when_idle())
+            .map(|_| ())
+            .map_err(|error| format!("start idle timer: {error}"))
+    }
+
+    fn retire_when_idle(&self) {
+        let mut state = self.state.lock().expect("host state mutex poisoned");
+        loop {
+            let now = Instant::now();
+            if state.begin_idle_shutdown(now) {
+                break;
+            }
+            state = self.wait_for_idle_change(state, now);
+        }
+        drop(state);
+        let _ = fs::remove_file(&self.cfg.host_registry_path);
+        let _ = fs::remove_file(&self.cfg.socket_path);
+        std::process::exit(0);
+    }
+
+    fn wait_for_idle_change<'a>(
+        &self,
+        state: MutexGuard<'a, HostState>,
+        now: Instant,
+    ) -> MutexGuard<'a, HostState> {
+        match state.idle_deadline {
+            Some(deadline) => {
+                self.idle_changed
+                    .wait_timeout(state, deadline.saturating_duration_since(now))
                     .expect("host state mutex poisoned")
-                    .begin_idle_shutdown(epoch)
-                {
-                    return;
-                }
-                let _ = fs::remove_file(&host.cfg.host_registry_path);
-                let _ = fs::remove_file(&host.cfg.socket_path);
-                std::process::exit(0);
-            });
+                    .0
+            }
+            None => self
+                .idle_changed
+                .wait(state)
+                .expect("host state mutex poisoned"),
+        }
     }
 
     fn host_info(&self) -> Value {
@@ -347,7 +397,8 @@ impl Host {
         json!({
             "host_pid": std::process::id(),
             "session_ids": ids,
-            "snapshot_format": env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT")
+            "snapshot_format": env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"),
+            "capabilities": CAPABILITIES
         })
     }
 
@@ -475,6 +526,7 @@ struct Connection {
     authed: bool,
     snapshot_format: String,
     close_action: CloseAction,
+    pending_sessions: Vec<Arc<Session>>,
 }
 
 impl Connection {
@@ -536,6 +588,7 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         authed: false,
         snapshot_format: String::new(),
         close_action: CloseAction::Detach,
+        pending_sessions: Vec::new(),
     };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -577,6 +630,9 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
     }
     if connection.watching_all {
         host.unwatch_all(&connection.id);
+    }
+    for session in &connection.pending_sessions {
+        session.abandon_if_pending();
     }
     drop(connection.sender);
     let _ = writer.join();
@@ -630,14 +686,35 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
             };
             match host.spawn(params) {
-                Ok(session) => connection.send(response(
-                    &request.id,
-                    json!({
+                Ok(session) => {
+                    let reply = json!({
                         "host_pid": std::process::id(),
                         "child_pid": session.child_pid,
                         "attempt_index": session.attempt_index
-                    }),
-                )),
+                    });
+                    connection.pending_sessions.push(session);
+                    connection.send(response(&request.id, reply))
+                }
+                Err(message) => connection.fail(&request.id, ERR_IO, message),
+            }
+        }
+        "commit" => {
+            if connection.selected.is_some() {
+                return connection.fail(
+                    &request.id,
+                    ERR_BAD_REQUEST,
+                    "commit requires a host-level hello",
+                );
+            }
+            let params: CommitParams = match decode_params(&request) {
+                Ok(params) => params,
+                Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
+            };
+            match host.commit(&params.session_id) {
+                Ok(true) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(false) => {
+                    connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found")
+                }
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }
         }
@@ -951,7 +1028,7 @@ fn remove_session(host: &Weak<Host>, session_id: &str) {
 fn validate_config(cfg: &Config) -> Result<(), String> {
     for (name, value) in [
         ("daemon instance id", &cfg.daemon_instance_id),
-        ("generation", &cfg.generation),
+        ("generation", &cfg.artifact),
         ("socket path", &cfg.socket_path),
         ("registry directory", &cfg.registry_dir),
         ("host registry path", &cfg.host_registry_path),
@@ -996,12 +1073,14 @@ fn unix_timestamp() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::HostState;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn idle_retirement_closes_spawn_admission() {
         let mut state = HostState::default();
-        let epoch = state.schedule_idle().unwrap();
-        assert!(state.begin_idle_shutdown(epoch));
+        let now = Instant::now();
+        assert!(state.schedule_idle(now));
+        assert!(state.begin_idle_shutdown(now));
         assert!(
             state.begin_spawn("late-terminal").is_err(),
             "retiring host admitted a new terminal"
@@ -1009,13 +1088,22 @@ mod tests {
     }
 
     #[test]
+    fn idle_retirement_waits_for_its_deadline() {
+        let mut state = HostState::default();
+        let now = Instant::now();
+        assert!(state.schedule_idle(now + Duration::from_secs(1)));
+        assert!(!state.begin_idle_shutdown(now));
+        assert!(state.begin_idle_shutdown(now + Duration::from_secs(1)));
+    }
+
+    #[test]
     fn pending_spawn_prevents_retirement_and_shutdown() {
         let mut state = HostState::default();
-        let epoch = state.schedule_idle().unwrap();
+        let now = Instant::now();
+        assert!(state.schedule_idle(now));
         state.begin_spawn("new-terminal").unwrap();
-        assert!(!state.begin_idle_shutdown(epoch));
-        assert!(!state.begin_idle_shutdown(state.idle_epoch));
-        assert!(state.schedule_idle().is_none());
+        assert!(!state.begin_idle_shutdown(now));
+        assert!(!state.schedule_idle(now));
         assert!(state.begin_shutdown().is_err());
         assert!(!state.shutting_down);
     }
@@ -1023,23 +1111,26 @@ mod tests {
     #[test]
     fn cancelled_spawn_can_retire_on_a_fresh_timer_only() {
         let mut state = HostState::default();
-        let old_epoch = state.schedule_idle().unwrap();
+        let now = Instant::now();
+        assert!(state.schedule_idle(now));
         state.begin_spawn("failed-terminal").unwrap();
         state.spawning.remove("failed-terminal");
-        let new_epoch = state.schedule_idle().unwrap();
-        assert!(!state.begin_idle_shutdown(old_epoch));
-        assert!(state.begin_idle_shutdown(new_epoch));
+        let later = now + Duration::from_secs(1);
+        assert!(state.schedule_idle(later));
+        assert!(!state.begin_idle_shutdown(now));
+        assert!(state.begin_idle_shutdown(later));
     }
 
     #[test]
     fn shutdown_closes_spawn_admission_and_rejects_idle_retirement() {
         let mut state = HostState::default();
-        let epoch = state.schedule_idle().unwrap();
+        let now = Instant::now();
+        assert!(state.schedule_idle(now));
         assert!(state.begin_shutdown().unwrap().is_empty());
         assert!(state.begin_spawn("late-terminal").is_err());
         assert!(state.begin_shutdown().is_err());
-        assert!(state.schedule_idle().is_none());
-        assert!(!state.begin_idle_shutdown(epoch));
+        assert!(!state.schedule_idle(now));
+        assert!(!state.begin_idle_shutdown(now));
     }
 
     #[test]
@@ -1048,16 +1139,17 @@ mod tests {
         state.begin_spawn("terminal").unwrap();
         assert!(state.begin_spawn("terminal").is_err());
         assert!(state.spawning.contains("terminal"));
-        assert!(state.schedule_idle().is_none());
+        assert!(!state.schedule_idle(Instant::now()));
     }
 
     #[test]
     fn invalid_spawn_does_not_cancel_idle_retirement() {
         for id in ["", " ", ".", "..", "a/b", "a\\b"] {
             let mut state = HostState::default();
-            let epoch = state.schedule_idle().unwrap();
+            let now = Instant::now();
+            assert!(state.schedule_idle(now));
             assert!(state.begin_spawn(id).is_err());
-            assert!(state.begin_idle_shutdown(epoch));
+            assert!(state.begin_idle_shutdown(now));
         }
     }
 }

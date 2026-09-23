@@ -8,21 +8,21 @@ import { emitVerdict, harnessArtifactsRoot } from './common.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   assertProductionRunAllowed,
-  currentHarnessProfile,
-  defaultAppPathForProfile,
-  defaultWSURLForProfile,
+  currentHarnessInstance,
+  defaultAppPathForInstance,
+  defaultWSURLForInstance,
   isProductionHarnessTarget,
-} from './harnessProfile.mjs';
+} from './harnessInstance.mjs';
 import { formatResultTable, scenarioSkipReason, selectFailedScenarios } from './matrixDigest.mjs';
 import { ensureMockGitHubServer, stopMockGitHubServer } from './mockGitHub.mjs';
 import { resolveScenarios as resolveScenariosFromCatalog, scenarioCatalog, scenariosAllowingRealAgents } from './scenarioCatalog.mjs';
 import { acquireScenarioLock, packagedAppScenarioLockPath } from './scenarioRunner.mjs';
 import { parseShardSelector, readRecordedDurations, selectShard } from './shardPlan.mjs';
 
-// Must run before any import that reads ATTN_HARNESS_PROFILE at module load.
-// An unset ATTN_PROFILE falls back to dev, never to prod.
-if (process.env.ATTN_HARNESS_PROFILE === undefined && !process.env.ATTN_PROFILE) {
-  process.env.ATTN_HARNESS_PROFILE = 'dev';
+// Must run before any import that reads ATTN_HARNESS_INSTANCE at module load.
+// An unset ATTN_INSTANCE falls back to dev, never to prod.
+if (process.env.ATTN_HARNESS_INSTANCE === undefined && !process.env.ATTN_INSTANCE) {
+  process.env.ATTN_HARNESS_INSTANCE = 'dev';
 }
 
 function parseArgs(argv) {
@@ -98,7 +98,7 @@ function printHelp() {
   node scripts/real-app-harness/run-serial-matrix.mjs --failed-only
   node scripts/real-app-harness/run-serial-matrix.mjs --no-fresh-world
   node scripts/real-app-harness/run-serial-matrix.mjs --shard 2/4
-  ATTN_HARNESS_PROFILE= node scripts/real-app-harness/run-serial-matrix.mjs --run-against-prod
+  ATTN_HARNESS_INSTANCE= node scripts/real-app-harness/run-serial-matrix.mjs --run-against-prod
 
 Target: defaults to the dev install (~/Applications/attn-dev.app, port 29849)
   so the matrix never takes over your live prod app. Run \`make dev\` first
@@ -274,9 +274,9 @@ async function main() {
     console.log(`Shard ${shard.index}/${shard.count}: ${scenarios.length} scenarios, `
       + `${shardPlan.seconds.toFixed(1)}s of recorded work — ${shardPlan.ids.join(', ')}`);
   }
-  const profile = currentHarnessProfile();
-  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile(profile);
-  const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForProfile();
+  const instance = currentHarnessInstance();
+  const appPath = process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(instance);
+  const wsUrl = process.env.ATTN_REAL_APP_WS_URL || defaultWSURLForInstance();
   assertProductionRunAllowed(
     { appPath, wsUrl },
     runAgainstProd ? ['--run-against-prod'] : process.argv.slice(2),
@@ -291,18 +291,18 @@ async function main() {
     appPath,
   }, matrixLockPath);
   process.env.ATTN_REAL_APP_SCENARIO_LOCK_PATH = `${matrixLockPath}.children-${process.pid}`;
-  console.log(`Matrix target: ${appPath} (ATTN_HARNESS_PROFILE=${process.env.ATTN_HARNESS_PROFILE || '<default>'})`);
+  console.log(`Matrix target: ${appPath} (ATTN_HARNESS_INSTANCE=${process.env.ATTN_HARNESS_INSTANCE || '<default>'})`);
   reportRealAgentAllowances(scenarios);
 
-  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, profile });
+  const productionTarget = isProductionHarnessTarget({ appPath, wsUrl, instance });
   if (productionTarget) {
     console.log('[fresh-world] skipped (production target)');
   } else if (noFreshWorld) {
     console.log('[fresh-world] skipped (--no-fresh-world)');
   } else {
-    await ensureFreshWorld({ profile, appPath });
+    await ensureFreshWorld({ instance, appPath });
   }
-  const mockGitHub = ensureMockGitHubServer({ profile, appPath });
+  const mockGitHub = ensureMockGitHubServer({ instance, appPath });
   const preflightKeys = new Set();
   for (const scenario of scenarios) {
     const preflightLaunchEnv = scenario.preflightLaunchEnv || null;
@@ -333,7 +333,7 @@ async function main() {
     const status = result.code === 0 ? 'ok' : (result.timedOut ? 'timed-out' : 'failed');
     console.log(`--- ${scenario.id}: ${status} (${result.durationMs}ms) ---`);
     if (scenario.freshWorldAfter && !productionTarget && !noFreshWorld) {
-      await ensureFreshWorld({ profile, appPath });
+      await ensureFreshWorld({ instance, appPath });
     }
     if (failFast && result.code !== 0) {
       break;
@@ -341,7 +341,7 @@ async function main() {
   }
 
   if (mockGitHub) {
-    stopMockGitHubServer({ profile, appPath });
+    stopMockGitHubServer({ instance, appPath });
   }
 
   const failed = results.filter((result) => result.code !== 0);
