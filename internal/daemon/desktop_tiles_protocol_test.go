@@ -174,6 +174,30 @@ func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 	}
 }
 
+func TestATileCanOnlyFollowAnAgentOfItsOwnProfile(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	elsewhere := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
+	w.agent("their-agent", elsewhere.Profile.ID)
+	w.agent("my-agent", w.profileID)
+	notes := filepath.Join(t.TempDir(), "notes.md")
+
+	docked := w.send(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "tile_session_id": "their-agent", "edge": "right",
+	})
+	wantErrorCode(t, docked, protocol.ProfileErrorCodeCrossProfile)
+
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "tile_session_id": "my-agent", "edge": "right"})
+	rebound := w.send(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"tile_id": "tile-md", "tile_session_id": "their-agent",
+	})
+	wantErrorCode(t, rebound, protocol.ProfileErrorCodeCrossProfile)
+	if tile := w.tile("tile-md"); tile.TileSessionID != "my-agent" {
+		t.Fatalf("a refused rebind left the tile following %q", tile.TileSessionID)
+	}
+}
+
 func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	before := w.desktop

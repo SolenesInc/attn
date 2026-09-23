@@ -96,11 +96,11 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	if dock.tileID == "" {
 		return dock, profiles.Errorf(profiles.CodeInvalid, "docking a tile needs tile_id")
 	}
-	if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
-		return dock, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", dock.sessionID)
-	}
 	desktop, err := d.store.GetDesktop(desktopID)
 	if err != nil {
+		return dock, err
+	}
+	if err := d.checkedTileSession(desktop, dock.sessionID); err != nil {
 		return dock, err
 	}
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
@@ -120,6 +120,23 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	}
 	dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
 	return dock, err
+}
+
+func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID string) error {
+	if sessionID == "" {
+		return nil
+	}
+	if d.store.Get(sessionID) == nil {
+		return profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", sessionID)
+	}
+	profileID, err := d.store.SessionProfileID(sessionID)
+	if err != nil {
+		return err
+	}
+	if profileID != desktop.ProfileID {
+		return profiles.Errorf(profiles.CodeCrossProfile, "session %s belongs to profile %q and desktop %s to profile %q; a tile can only follow an agent of its own profile", sessionID, profileID, desktop.ID, desktop.ProfileID)
+	}
+	return nil
 }
 
 func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
@@ -177,8 +194,8 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	if !found {
 		return update, profiles.Errorf(profiles.CodeNotFound, "tile %s does not belong to desktop %s", update.tileID, desktopID)
 	}
-	if update.sessionID != "" && d.store.Get(update.sessionID) == nil {
-		return update, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", update.sessionID)
+	if err := d.checkedTileSession(desktop, update.sessionID); err != nil {
+		return update, err
 	}
 	if tile.TileKind == string(layouttree.TileKindMarkdown) {
 		if update.sessionID == "" {
