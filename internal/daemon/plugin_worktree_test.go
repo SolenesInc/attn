@@ -557,39 +557,55 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 }
 
 func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
-	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
-	repo := newSweepRepo(t)
-	d := sweepDaemon(t)
-	d.ensureGardenCollections()
-	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
-	worktreePath := repo.worktree("provider-swept", "feat/provider-swept", base)
-	d.refreshRepositoryWorktrees(repo.main, time.Now())
+	for _, provider := range []struct {
+		name   string
+		remove func(t *testing.T, mainRepo, path string)
+	}{
+		{"git worktree remove", func(t *testing.T, mainRepo, path string) {
+			if err := git.NewClient().DeleteWorktree(context.Background(), mainRepo, path, false); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"directory only", func(t *testing.T, _, path string) {
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(provider.name, func(t *testing.T) {
+			t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+			repo := newSweepRepo(t)
+			d := sweepDaemon(t)
+			d.ensureGardenCollections()
+			base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+			worktreePath := repo.worktree("provider-swept", "feat/provider-swept", base)
+			d.refreshRepositoryWorktrees(repo.main, time.Now())
 
-	client, done := startPluginPipe(t, d, "sweep-delete-provider", []string{worktreeDeleteProviderSurface})
-	defer client.Close()
-	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
-		if params.Path != worktreePath {
-			t.Fatalf("provider delete path=%q, want %q", params.Path, worktreePath)
-		}
-		if err := git.NewClient().DeleteWorktree(context.Background(), repo.main, worktreePath, false); err != nil {
-			t.Fatal(err)
-		}
-		return worktreeDeleteProviderResult{Status: providerStatusHandled}
-	})
+			client, done := startPluginPipe(t, d, "sweep-delete-provider", []string{worktreeDeleteProviderSurface})
+			defer client.Close()
+			responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+				if params.Path != worktreePath {
+					t.Fatalf("provider delete path=%q, want %q", params.Path, worktreePath)
+				}
+				provider.remove(t, repo.main, worktreePath)
+				return worktreeDeleteProviderResult{Status: providerStatusHandled}
+			})
 
-	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
-		t.Fatalf("sweep removed %d worktrees, want 1", removed)
-	}
-	waitForProviderResponse(t, responseDone)
-	if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-swept"); exists {
-		t.Fatal("provider-handled sweep left the branch behind")
-	}
+			if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
+				t.Fatalf("sweep removed %d worktrees, want 1", removed)
+			}
+			waitForProviderResponse(t, responseDone)
+			if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-swept"); exists {
+				t.Fatal("provider-handled sweep left the branch behind")
+			}
 
-	_ = client.Close()
-	select {
-	case <-done:
-	case <-time.After(2 * time.Second):
-		t.Fatal("sweep delete provider connection did not close")
+			_ = client.Close()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("sweep delete provider connection did not close")
+			}
+		})
 	}
 }
 

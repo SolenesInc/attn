@@ -293,7 +293,7 @@ func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt
 		if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
 			return seeds, &removalFailure{err: providerErr, fromProvider: true}
 		}
-		d.deleteBranchOfProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
+		d.settleProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
 	case !handled:
 		deleteErr := d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
 			if err := client.DeleteWorktree(ctx, wt.MainRepo, wt.Path, force); err != nil {
@@ -309,7 +309,7 @@ func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt
 		if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
 			return seeds, &removalFailure{err: errors.New("worktree delete provider reported success but the worktree still exists"), fromProvider: true}
 		}
-		d.deleteBranchOfProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
+		d.settleProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
 	}
 	d.finalizeDeletedWorktree(protection, wt.Path)
 	return seeds, nil
@@ -333,12 +333,15 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 	return true
 }
 
-func (d *Daemon) deleteBranchOfProviderRemovedWorktree(ctx context.Context, mainRepo, branch string) {
-	if !d.worktreeBranchIsDeletable(mainRepo, branch) {
-		return
-	}
+func (d *Daemon) settleProviderRemovedWorktree(ctx context.Context, mainRepo, branch string) {
+	deleteBranch := d.worktreeBranchIsDeletable(mainRepo, branch)
 	_ = d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
-		d.deleteDeletableWorktreeBranch(runCtx, client, mainRepo, branch)
+		if err := client.PruneWorktrees(runCtx, mainRepo); err != nil {
+			d.logf("Warning: provider removed a worktree of %s but pruning its registration failed: %v", mainRepo, err)
+		}
+		if deleteBranch {
+			d.deleteDeletableWorktreeBranch(runCtx, client, mainRepo, branch)
+		}
 		return nil
 	})
 }
