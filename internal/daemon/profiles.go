@@ -441,4 +441,5 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 	d.wsHub.SendValueToMatchingClients(message, func(client *wsClient) bool {
 		return client.selectedProfile() == profile.ID
 	})
+	d.nudgeDesktopTileContent()
 }

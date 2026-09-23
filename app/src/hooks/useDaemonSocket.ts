@@ -1692,10 +1692,7 @@ export function useDaemonSocket({
                 content: typeof data.content === 'string' ? data.content : '',
                 error: typeof data.error === 'string' ? data.error : undefined,
               };
-              setDesktopTileContents((prev) => pruneDesktopTileContents(
-                { ...prev, [key]: content },
-                useProfilesStore.getState().desktops,
-              ));
+              setDesktopTileContents((prev) => ({ ...prev, [key]: content }));
             }
             break;
           }
@@ -5619,12 +5616,6 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
-  const sendDesktopTileContentGet = useCallback(
-    (desktopId: string, tileId: string) => {
-      sendOrQueueCommand({ cmd: 'desktop_tile_content_get', desktop_id: desktopId, tile_id: tileId }, { waitForInitialState: true });
-    },
-    [sendOrQueueCommand],
-  );
 
   const clearDisconnectExplanation = useCallback(() => {
     setDisconnectExplanation(null);
@@ -5645,7 +5636,6 @@ export function useDaemonSocket({
     sendDesktopDockTile,
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
-    sendDesktopTileContentGet,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,

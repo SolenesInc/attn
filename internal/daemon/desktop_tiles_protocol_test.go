@@ -220,49 +220,6 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	}
 }
 
-func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {
-	w := newDesktopTilesWorld(t)
-	notes := filepath.Join(t.TempDir(), "notes.md")
-	if err := os.WriteFile(notes, []byte("# first"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
-	bystander, _ := w.connect(w.profileID)
-	drainClientPayloads(t, w.client)
-
-	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
-	first := tileContents(t, w.client)
-	if len(first) != 1 || first[0].Content != "# first" || first[0].Path != notes || first[0].DesktopID != w.desktop.ID {
-		t.Fatalf("desktop_tile_content_get answered %+v", first)
-	}
-	w.d.pollMarkdownOnce()
-	tileContents(t, w.client)
-
-	if err := os.WriteFile(notes, []byte("# second, longer"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	w.d.pollMarkdownOnce()
-	changed := tileContents(t, w.client)
-	if len(changed) != 1 || changed[0].Content != "# second, longer" {
-		t.Fatalf("after the file changed the subscriber got %+v", changed)
-	}
-	if leaked := tileContents(t, bystander); len(leaked) != 0 {
-		t.Fatalf("a client that never asked for the tile got %d content messages", len(leaked))
-	}
-
-	w.apply(map[string]any{"cmd": protocol.CmdDesktopRemoveLeaf, "leaf_id": "tile-md"})
-	if err := os.WriteFile(notes, []byte("# third, after the tile left"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	w.d.pollMarkdownOnce()
-	if late := tileContents(t, w.client); len(late) != 0 {
-		t.Fatalf("a removed tile still streamed %+v", late)
-	}
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("removing the tile left subscriptions %v", keys)
-	}
-}
-
 func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
@@ -279,61 +236,151 @@ func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
 	t.Fatalf("initial_state did not list agent-a: %+v", initial.Sessions)
 }
 
-func TestDeletingAProfileDropsItsTileSubscriptions(t *testing.T) {
+func (w *desktopTilesWorld) dockMarkdown(tileID, content string) string {
+	w.t.Helper()
+	path := filepath.Join(w.t.TempDir(), tileID+".md")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		w.t.Fatal(err)
+	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": tileID, "tile_kind": "markdown", "tile_params": path, "edge": "right"})
+	return path
+}
+
+func (w *desktopTilesWorld) deliveredTiles(client *wsClient) int {
+	w.d.desktopTiles.mu.Lock()
+	defer w.d.desktopTiles.mu.Unlock()
+	return len(w.d.desktopTiles.delivered[client])
+}
+
+func contentsOf(messages []protocol.DesktopTileContentMessage) []string {
+	contents := make([]string, 0, len(messages))
+	for _, message := range messages {
+		contents = append(contents, message.Content)
+	}
+	return contents
+}
+
+func TestTheDaemonSendsMarkdownContentToEveryClientOnTheCurrentDesktopOnce(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
-	w.desktop = doomed.Desktops[0]
-	notes := filepath.Join(t.TempDir(), "notes.md")
-	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
+	path := w.dockMarkdown("tile-md", "# first")
+	second, _ := w.connect(w.profileID)
+	outsider, _ := w.connect("")
+	elsewhere := w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
+	w.mustSend(outsider, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": elsewhere.Profile.ID})
+	drainClientPayloads(t, w.client)
+	drainClientPayloads(t, second)
+	drainClientPayloads(t, outsider)
+
+	w.d.deliverDesktopTileContent(true)
+	for name, client := range map[string]*wsClient{"the docking client": w.client, "a second client": second} {
+		got := tileContents(t, client)
+		if len(got) != 1 || got[0].Content != "# first" || got[0].Path != path || got[0].DesktopID != w.desktop.ID {
+			t.Fatalf("%s received %+v, want the tile's content once", name, got)
+		}
+	}
+	if leaked := tileContents(t, outsider); len(leaked) != 0 {
+		t.Fatalf("a client on another profile received %d content messages", len(leaked))
+	}
+
+	w.d.deliverDesktopTileContent(false)
+	if again := tileContents(t, w.client); len(again) != 0 {
+		t.Fatalf("an unchanged file was sent again: %v", contentsOf(again))
+	}
+
+	replacement := path + ".next"
+	if err := os.WriteFile(replacement, []byte("# second, written elsewhere and renamed over"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
-	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 1 {
-		t.Fatalf("subscribing gave keys %v", keys)
+	if err := os.Rename(replacement, path); err != nil {
+		t.Fatal(err)
 	}
+	w.d.deliverDesktopTileContent(false)
+	if changed := contentsOf(tileContents(t, second)); len(changed) != 1 || changed[0] != "# second, written elsewhere and renamed over" {
+		t.Fatalf("after an atomic replace the second client received %v", changed)
+	}
+}
+
+func TestLeavingADesktopStopsItsContentAndReturningSendsItAgain(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	path := w.dockMarkdown("tile-md", "# notes")
+	first := w.desktop
+	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
+	w.d.deliverDesktopTileContent(true)
+	drainClientPayloads(t, w.client)
+
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": other.ID})
+	w.d.deliverDesktopTileContent(true)
+	if err := os.WriteFile(path, []byte("# edited while away"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	w.d.deliverDesktopTileContent(false)
+	if late := tileContents(t, w.client); len(late) != 0 {
+		t.Fatalf("a desktop the client left still streamed %v", contentsOf(late))
+	}
+	if held := w.deliveredTiles(w.client); held != 0 {
+		t.Fatalf("leaving the desktop left %d delivered tiles tracked for the client", held)
+	}
+
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetCurrent, "profile_id": w.profileID, "desktop_id": first.ID})
+	w.d.deliverDesktopTileContent(true)
+	if back := contentsOf(tileContents(t, w.client)); len(back) != 1 || back[0] != "# edited while away" {
+		t.Fatalf("returning to the desktop sent %v, want the current file once", back)
+	}
+}
+
+func TestARescopedClientGetsTheContentOfItsNewProfileOnly(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.dockMarkdown("tile-md", "# old profile")
+	w.d.deliverDesktopTileContent(true)
+
+	doomed := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"})
+	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": doomed.Profile.ID})
+	oldProfile := w.profileID
+	w.profileID, w.desktop = doomed.Profile.ID, doomed.Desktops[0]
+	w.dockMarkdown("tile-doomed", "# doomed profile")
+	drainClientPayloads(t, w.client)
+	w.d.deliverDesktopTileContent(true)
+	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# doomed profile" {
+		t.Fatalf("after profile_select the client received %v, want only the new profile's tile", got)
+	}
+
 	current, err := w.d.store.GetProfile(doomed.Profile.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-
 	w.mustSend(w.client, map[string]any{
-		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision, "destination_profile_id": w.profileID,
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.Profile.ID, "expected_revision": current.Revision, "destination_profile_id": oldProfile,
 	})
-	w.d.pollMarkdownOnce()
+	drainClientPayloads(t, w.client)
+	w.d.deliverDesktopTileContent(true)
+	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# old profile" {
+		t.Fatalf("after its profile was deleted the client received %v, want the destination's tile again", got)
+	}
 
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("deleting the profile left subscriptions %v", keys)
+	w.d.wsHub.remove(w.client)
+	w.d.deliverDesktopTileContent(false)
+	if held := w.deliveredTiles(w.client); held != 0 {
+		t.Fatalf("a disconnected client still has %d delivered tiles tracked", held)
 	}
 }
 
-func TestSwitchingProfilesDropsTileSubscriptionsOfTheOldProfile(t *testing.T) {
+func TestArrangementChangesAndHelloWakeTheContentSender(t *testing.T) {
 	w := newDesktopTilesWorld(t)
-	notes := filepath.Join(t.TempDir(), "notes.md")
-	if err := os.WriteFile(notes, []byte("# notes"), 0o600); err != nil {
-		t.Fatal(err)
+	drain := func() bool {
+		select {
+		case <-w.d.desktopTiles.nudge:
+			return true
+		default:
+			return false
+		}
 	}
-	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
-	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
-	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})
-
-	w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": other.Profile.ID})
-	drainClientPayloads(t, w.client)
-	if err := os.WriteFile(notes, []byte("# edited after the switch"), 0o600); err != nil {
-		t.Fatal(err)
+	drain()
+	w.dockMarkdown("tile-md", "# notes")
+	if !drain() {
+		t.Fatal("an arrangement change did not wake the content sender")
 	}
-	w.d.pollMarkdownOnce()
-
-	if late := tileContents(t, w.client); len(late) != 0 {
-		t.Fatalf("a client on another profile still got %+v", late)
-	}
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("switching profiles left subscriptions %v", keys)
-	}
-
-	w.d.handleClientMessage(w.client, []byte(`{"cmd":"desktop_tile_content_get","desktop_id":"`+w.desktop.ID+`","tile_id":"tile-md"}`))
-	if keys := w.client.tileContentSubscriptionKeys(); len(keys) != 0 {
-		t.Fatalf("a client subscribed to a desktop outside its profile: %v", keys)
+	w.connect(w.profileID)
+	if !drain() {
+		t.Fatal("a new client's initial state did not wake the content sender")
 	}
 }

@@ -333,6 +333,8 @@ type Daemon struct {
 	markdownSeenMu sync.Mutex
 	markdownSeen   map[string]tileContentSig
 
+	desktopTiles desktopTileDelivery
+
 	browserControlMu sync.Mutex
 	browserControl   map[string]browserControlPending
 
@@ -601,6 +603,7 @@ func New(socketPath string) *Daemon {
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
+		desktopTiles:        newDesktopTileDelivery(),
 		logger:              logger,
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
@@ -643,6 +646,7 @@ func NewForTesting(socketPath string) *Daemon {
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
+		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
@@ -686,6 +690,7 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
+		desktopTiles:        newDesktopTileDelivery(),
 		logger:              nil,
 		ghRegistry:          registry,
 		hubManager:          nil,

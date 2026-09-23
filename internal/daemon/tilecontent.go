@@ -50,7 +50,6 @@ type tileContentSig struct {
 
 type markdownTileRef struct {
 	workspaceID string
-	desktopID   string
 	tileID      string
 	path        string
 }
@@ -274,28 +273,6 @@ func (c *wsClient) wantsTileContent(workspaceID, tileID string) bool {
 	defer c.tileContentMu.RUnlock()
 	_, ok := c.tileContentSubscriptions[key]
 	return ok
-}
-
-func (c *wsClient) dropTileContentSubscription(container, tileID string) {
-	if c == nil {
-		return
-	}
-	c.tileContentMu.Lock()
-	defer c.tileContentMu.Unlock()
-	delete(c.tileContentSubscriptions, tileContentSubscriptionKey(container, tileID))
-}
-
-func (c *wsClient) tileContentSubscriptionKeys() []string {
-	if c == nil {
-		return nil
-	}
-	c.tileContentMu.RLock()
-	defer c.tileContentMu.RUnlock()
-	keys := make([]string, 0, len(c.tileContentSubscriptions))
-	for key := range c.tileContentSubscriptions {
-		keys = append(keys, key)
-	}
-	return keys
 }
 
 func (c *wsClient) pruneTileContentSubscriptions(workspaceID string, activeTileIDs map[string]struct{}) {
@@ -691,8 +668,11 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 		select {
 		case <-done:
 			return
+		case <-d.desktopTiles.nudge:
+			d.deliverDesktopTileContent(true)
 		case <-ticker.C:
 			d.pollMarkdownOnce()
+			d.deliverDesktopTileContent(false)
 		}
 	}
 }
@@ -700,10 +680,6 @@ func (d *Daemon) runMarkdownContentWatcher(done <-chan struct{}) {
 func (d *Daemon) pollMarkdownOnce() {
 	for _, ref := range d.collectChangedMarkdownTiles() {
 		content, readErr := readMarkdownFile(ref.path)
-		if ref.desktopID != "" {
-			d.broadcastDesktopTileContent(ref, content, readErr)
-			continue
-		}
 		d.broadcastTileContent(ref.workspaceID, ref.tileID, string(layouttree.TileKindMarkdown), ref.path, content, readErr)
 	}
 }
@@ -734,7 +710,6 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 			desired[key] = markdownTileRef{workspaceID: workspaceID, tileID: leaf.TileID, path: path}
 		}
 	}
-	d.addSubscribedDesktopMarkdownTiles(desired)
 
 	d.markdownSeenMu.Lock()
 	defer d.markdownSeenMu.Unlock()

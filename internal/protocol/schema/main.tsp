@@ -3459,12 +3459,6 @@ model DesktopUpdateTileMessage {
   tile_session_id?: string;
 }
 
-model DesktopTileContentGetMessage {
-  cmd: "desktop_tile_content_get";
-  desktop_id: string;
-  tile_id: string;
-}
-
 model DesktopTileContentMessage {
   event: "desktop_tile_content";
   desktop_id: string;

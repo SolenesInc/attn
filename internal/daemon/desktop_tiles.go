@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"errors"
 	"strings"
 
 	"github.com/victorarias/attn/internal/garden"
@@ -9,16 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-const desktopTileContainerPrefix = "desktop:"
-
-func desktopTileContainer(desktopID string) string {
-	return desktopTileContainerPrefix + desktopID
-}
-
-func desktopIDFromTileContainer(container string) (string, bool) {
-	return strings.CutPrefix(container, desktopTileContainerPrefix)
-}
 
 func tileLeafByID(tree layouttree.Node, tileID string) (layouttree.TileLeaf, bool) {
 	for _, leaf := range layouttree.TileLeaves(tree) {
@@ -236,158 +225,4 @@ func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.Desktop
 		})
 		return d.desktopChanged(desktop), err
 	})
-}
-
-func (d *Daemon) desktopMarkdownTilePath(desktopID, tileID string) (string, error) {
-	desktop, err := d.store.GetDesktop(desktopID)
-	if err != nil {
-		return "", err
-	}
-	return markdownTilePathOn(desktop, tileID)
-}
-
-func markdownTilePathOn(desktop profiles.Desktop, tileID string) (string, error) {
-	desktopID := desktop.ID
-	tile, found := tileLeafByID(desktop.Tree, tileID)
-	if !found {
-		return "", profiles.Errorf(profiles.CodeNotFound, "tile %s does not belong to desktop %s", tileID, desktopID)
-	}
-	if tile.TileKind != string(layouttree.TileKindMarkdown) {
-		return "", profiles.Errorf(profiles.CodeInvalid, "tile %s is a %s tile; only markdown tiles have content", tileID, tile.TileKind)
-	}
-	return strings.TrimSpace(tile.TileParams), nil
-}
-
-func desktopTileContentMessage(desktopID, tileID, path, content string, readErr error) protocol.DesktopTileContentMessage {
-	message := protocol.DesktopTileContentMessage{
-		Event:     protocol.EventDesktopTileContent,
-		DesktopID: desktopID,
-		TileID:    tileID,
-		TileKind:  string(layouttree.TileKindMarkdown),
-		Path:      path,
-		Content:   content,
-	}
-	if readErr != nil {
-		message.Error = protocol.Ptr(readErr.Error())
-	}
-	return message
-}
-
-func (d *Daemon) handleDesktopTileContentGet(client *wsClient, msg *protocol.DesktopTileContentGetMessage) {
-	if err := d.requireHome("profiles and desktops"); err != nil {
-		d.sendCommandError(client, msg.Cmd, err.Error())
-		return
-	}
-	desktop, err := d.store.GetDesktop(msg.DesktopID)
-	if err == nil && desktop.ProfileID != client.selectedProfile() {
-		err = profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not the profile this client is on", desktop.ID, desktop.ProfileID)
-	}
-	path := ""
-	if err == nil {
-		path, err = markdownTilePathOn(desktop, msg.TileID)
-	}
-	if err != nil {
-		d.sendCommandError(client, msg.Cmd, err.Error())
-		return
-	}
-	if !client.subscribeTileContent(desktopTileContainer(msg.DesktopID), msg.TileID) {
-		d.sendCommandError(client, msg.Cmd, "too many tile content subscriptions")
-		return
-	}
-	for attempt := 0; attempt < 2; attempt++ {
-		content, readErr := readMarkdownFile(path)
-		current, err := d.desktopMarkdownTilePath(msg.DesktopID, msg.TileID)
-		if err != nil {
-			d.sendCommandError(client, msg.Cmd, err.Error())
-			return
-		}
-		if current == path {
-			d.sendToClient(client, desktopTileContentMessage(msg.DesktopID, msg.TileID, path, content, readErr))
-			return
-		}
-		path = current
-	}
-}
-
-func (d *Daemon) broadcastDesktopTileContent(ref markdownTileRef, content string, readErr error) {
-	if path, err := d.desktopMarkdownTilePath(ref.desktopID, ref.tileID); err != nil || path != ref.path {
-		return
-	}
-	container := desktopTileContainer(ref.desktopID)
-	d.wsHub.SendValueToMatchingClients(desktopTileContentMessage(ref.desktopID, ref.tileID, ref.path, content, readErr), func(client *wsClient) bool {
-		return client.wantsTileContent(container, ref.tileID)
-	})
-}
-
-type desktopSubscriber struct {
-	client  *wsClient
-	profile string
-	keys    []string
-}
-
-func (d *Daemon) desktopSubscribers() []desktopSubscriber {
-	var subscribers []desktopSubscriber
-	if d.wsHub == nil {
-		return subscribers
-	}
-	d.wsHub.ForEachClient(func(client *wsClient) {
-		if keys := client.tileContentSubscriptionKeys(); len(keys) > 0 {
-			subscribers = append(subscribers, desktopSubscriber{client: client, profile: client.selectedProfile(), keys: keys})
-		}
-	})
-	return subscribers
-}
-
-type desktopReads struct {
-	d    *Daemon
-	seen map[string]*profiles.Desktop
-}
-
-func (r *desktopReads) get(desktopID string) (*profiles.Desktop, bool) {
-	if desktop, read := r.seen[desktopID]; read {
-		return desktop, true
-	}
-	desktop, err := r.d.store.GetDesktop(desktopID)
-	var profileErr *profiles.Error
-	switch {
-	case err == nil:
-		r.seen[desktopID] = &desktop
-	case errors.As(err, &profileErr) && profileErr.Code == profiles.CodeNotFound:
-		r.seen[desktopID] = nil
-	default:
-		return nil, false
-	}
-	return r.seen[desktopID], true
-}
-
-func subscribedMarkdownPath(desktop *profiles.Desktop, profileID, tileID string) (string, bool) {
-	if desktop == nil || desktop.ProfileID != profileID {
-		return "", false
-	}
-	tile, found := tileLeafByID(desktop.Tree, tileID)
-	path := strings.TrimSpace(tile.TileParams)
-	return path, found && tile.TileKind == string(layouttree.TileKindMarkdown) && path != ""
-}
-
-func (d *Daemon) addSubscribedDesktopMarkdownTiles(desired map[string]markdownTileRef) {
-	reads := &desktopReads{d: d, seen: make(map[string]*profiles.Desktop)}
-	for _, subscriber := range d.desktopSubscribers() {
-		for _, key := range subscriber.keys {
-			container, tileID, _ := strings.Cut(key, "\x00")
-			desktopID, isDesktop := desktopIDFromTileContainer(container)
-			if !isDesktop {
-				continue
-			}
-			desktop, known := reads.get(desktopID)
-			if !known {
-				continue
-			}
-			path, live := subscribedMarkdownPath(desktop, subscriber.profile, tileID)
-			if !live {
-				subscriber.client.dropTileContentSubscription(container, tileID)
-				continue
-			}
-			desired[key] = markdownTileRef{desktopID: desktopID, tileID: tileID, path: path}
-		}
-	}
 }

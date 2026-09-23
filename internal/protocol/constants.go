@@ -311,7 +311,6 @@ const (
 	CmdDesktopSetSplitRatio   = "desktop_set_split_ratio"
 	CmdDesktopDockTile        = "desktop_dock_tile"
 	CmdDesktopUpdateTile      = "desktop_update_tile"
-	CmdDesktopTileContentGet  = "desktop_tile_content_get"
 )
 
 const (

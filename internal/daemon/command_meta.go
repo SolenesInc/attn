@@ -206,7 +206,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDesktopSetSplitRatio:                  commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopDockTile:                       commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdDesktopUpdateTile:                     commandMetadata(ScopeHubLocal, false, true),
-	protocol.CmdDesktopTileContentGet:                 commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdSetWorkspaceRank:                      commandMetadata(ScopeHubLocal, false, true),
 	protocol.CmdWorkspaceTileContentGet:               commandMetadata(ScopeSession, true, true),
 	protocol.CmdAppViewCrash:                          commandMetadata(ScopeHubLocal, false, true),

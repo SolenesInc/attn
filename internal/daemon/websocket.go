@@ -774,6 +774,7 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		return
 	}
 	_ = d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
+	d.nudgeDesktopTileContent()
 
 	go d.fetchAllPRDetails()
 }
@@ -1035,8 +1036,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopDockTile(client, msg.(*protocol.DesktopDockTileMessage))
 	case protocol.CmdDesktopUpdateTile:
 		d.handleDesktopUpdateTile(client, msg.(*protocol.DesktopUpdateTileMessage))
-	case protocol.CmdDesktopTileContentGet:
-		d.handleDesktopTileContentGet(client, msg.(*protocol.DesktopTileContentGetMessage))
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:

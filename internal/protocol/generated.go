@@ -3856,17 +3856,6 @@ type DesktopSetSplitRatioMessage struct {
 	SplitID string `json:"split_id"`
 }
 
-type DesktopTileContentGetMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// DesktopID corresponds to the JSON schema field "desktop_id".
-	DesktopID string `json:"desktop_id"`
-
-	// TileID corresponds to the JSON schema field "tile_id".
-	TileID string `json:"tile_id"`
-}
-
 type DesktopTileContentMessage struct {
 	// Content corresponds to the JSON schema field "content".
 	Content string `json:"content"`

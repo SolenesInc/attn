@@ -283,7 +283,6 @@ describe('useDaemonSocket profiles', () => {
         tileParams: '/notes/plan.md',
         edge: 'right',
       });
-      result.current.sendDesktopTileContentGet('d1', 'tile-md');
     });
     const [command] = ws.commands('desktop_dock_tile');
     expect(command).toMatchObject({
@@ -294,9 +293,7 @@ describe('useDaemonSocket profiles', () => {
       tile_params: '/notes/plan.md',
       edge: 'right',
     });
-    expect(ws.commands('desktop_tile_content_get')).toEqual([
-      { cmd: 'desktop_tile_content_get', desktop_id: 'd1', tile_id: 'tile-md' },
-    ]);
+    expect(ws.commands('desktop_tile_content_get')).toEqual([]);
     act(() => {
       ws.emit({ event: 'profile_action_result', request_id: command.request_id, action: 'desktop_dock_tile', success: true, desktops: [desktop('d1', 'set-default', 1, MARKDOWN_TILE)] });
       ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1, MARKDOWN_TILE)] });
@@ -321,5 +318,18 @@ describe('useDaemonSocket profiles', () => {
       ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1)] });
     });
     expect(result.current.desktopTileContents).toEqual({});
+  });
+
+  it('keeps content that arrives before the arrangement of its desktop', async () => {
+    const { ws, result } = await connect();
+
+    act(() => {
+      ws.emit({ event: 'desktop_tile_content', desktop_id: 'w1', tile_id: 'tile-md', tile_kind: 'markdown', path: '/notes/plan.md', content: '# Plan' });
+    });
+    act(() => {
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-work', 'w1'), desktops: [desktop('w1', 'set-work', 1, MARKDOWN_TILE)] });
+    });
+
+    expect(result.current.desktopTileContents[tileContentKey('w1', 'tile-md')]).toMatchObject({ content: '# Plan' });
   });
 });
