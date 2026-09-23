@@ -98,6 +98,11 @@ func (d *Daemon) openAgentTile(location agentLocation, tile agentTile) (profiles
 		return profiles.Desktop{}, "", profiles.Errorf(profiles.CodeNotFound, "profile %s has no current desktop to open a %s tile on", location.profileID, tile.tileKind)
 	}
 	for attempt := 1; ; attempt++ {
+		if location.sessionID != "" {
+			if placed, err := d.agentLocation(location.sessionID); err == nil {
+				location = placed
+			}
+		}
 		desktop, err := d.store.GetDesktop(location.desktopID)
 		if err != nil {
 			return desktop, "", err
