@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -130,6 +131,20 @@ func (d *Daemon) scopeClientToProfile(client *wsClient, requestedProfileID strin
 		return
 	}
 	client.selectProfile("")
+}
+
+func (d *Daemon) sendInitialArrangement(client *wsClient, event *protocol.InitialStateMessage) {
+	client.arrangementMu.Lock()
+	defer client.arrangementMu.Unlock()
+	shown := d.fillInitialProfileState(client, event)
+	data, err := json.Marshal(event)
+	if err != nil {
+		d.logf("initial state: encoding: %v", err)
+		return
+	}
+	if d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data}) {
+		client.shownTiles = shown
+	}
 }
 
 func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.InitialStateMessage) []desktopMarkdownTile {

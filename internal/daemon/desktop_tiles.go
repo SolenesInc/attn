@@ -114,12 +114,18 @@ func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock)
 	if dock.sessionID == "" {
 		dock.sessionID = existing.TileSessionID
 	}
-	if dock.params == "" {
-		dock.params = existing.TileParams
-		return dock, nil
-	}
-	dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
+	dock.params, err = d.effectiveTileParams(existing, dock.params)
 	return dock, err
+}
+
+func (d *Daemon) effectiveTileParams(tile layouttree.TileLeaf, requested string) (string, error) {
+	if requested == "" || requested == tile.TileParams {
+		return tile.TileParams, nil
+	}
+	if tile.TileKind == string(layouttree.TileKindMarkdown) {
+		return "", profiles.Errorf(profiles.CodeInvalid, "markdown tile %s keeps its file %s; dock a new tile for another file", tile.TileID, tile.TileParams)
+	}
+	return d.validatedTileParams(tile.TileKind, requested)
 }
 
 func (d *Daemon) checkedTileSession(desktop profiles.Desktop, sessionID string) error {
@@ -197,19 +203,8 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	if err := d.checkedTileSession(desktop, update.sessionID); err != nil {
 		return update, err
 	}
-	if tile.TileKind == string(layouttree.TileKindMarkdown) {
-		if update.sessionID == "" {
-			return update, profiles.Errorf(profiles.CodeInvalid, "a markdown tile keeps its file; only its session can change")
-		}
-		update.params = ""
-		return update, nil
-	}
-	if update.params != "" {
-		if update.params, err = d.validatedTileParams(tile.TileKind, update.params); err != nil {
-			return update, err
-		}
-	}
-	return update, nil
+	update.params, err = d.effectiveTileParams(tile, update.params)
+	return update, err
 }
 
 func applyDesktopTileUpdate(desktop profiles.Desktop, update desktopTileUpdate) (profiles.Desktop, error) {

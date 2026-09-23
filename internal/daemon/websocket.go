@@ -783,13 +783,8 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
-	shown := d.fillInitialProfileState(client, event)
 	d.fillInitialMigrationPhase(event)
-	data, err := json.Marshal(event)
-	if err != nil {
-		return
-	}
-	client.trySendArrangement(outboundMessage{kind: messageKindText, payload: data}, func(*wsClient) []desktopMarkdownTile { return shown })
+	d.sendInitialArrangement(client, event)
 	d.nudgeDesktopTileContent()
 
 	go d.fetchAllPRDetails()

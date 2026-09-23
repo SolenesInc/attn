@@ -241,9 +241,15 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 		})
 		wantErrorCode(t, retyped, protocol.ProfileErrorCodeInvalid)
 	}
+	elsewhere := w.send(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"tile_id": "tile-md", "tile_kind": "markdown", "tile_params": "/elsewhere.md", "edge": "left",
+	})
+	wantErrorCode(t, elsewhere, protocol.ProfileErrorCodeInvalid)
 	if tile := w.tile("tile-md"); tile.TileKind != "markdown" || tile.TileParams != notes {
 		t.Fatalf("refused re-docks changed the markdown tile to %+v", tile)
 	}
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "left"})
 }
 
 func TestSessionsCarryTheirProfileOnTheWire(t *testing.T) {
