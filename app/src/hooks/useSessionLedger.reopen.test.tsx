@@ -246,4 +246,23 @@ describe('useSessionLedger streamed reopen eligibility', () => {
 
     expect(seen.view?.resolutions.elsewhere).toEqual({ closedAt: listed.closed_at, state: 'pending' });
   });
+
+  it('drops the previous query\'s rows when a read for changed filters fails', async () => {
+    const listed = closedEntry('s1', { repository: 'first' });
+    const list = vi.fn(async (query: SessionLedgerQuery) => {
+      if (query.repository === 'second') throw new Error('timeout');
+      return { entries: [listed], omitted: 0, facets: { repositories: [], workspaces: [] } };
+    });
+    const seen = renderLedger(list, { ...EMPTY_SESSION_FILTERS, repository: 'first' });
+    await waitFor(() => expect(seen.view?.entries.map((row) => row.id)).toEqual(['s1']));
+
+    await act(async () => {
+      seen.view?.setFilters((filters) => ({ ...filters, repository: 'second' }));
+    });
+    await waitFor(() => expect(seen.view?.error).toBe('timeout'));
+
+    expect(seen.view?.entries).toEqual([]);
+    expect(seen.view?.resolutions).toEqual({});
+    expect(seen.view?.facets).toBeNull();
+  });
 });

@@ -140,9 +140,11 @@ function applyClose(
 interface LedgerRows {
   entries: SessionLedgerEntry[];
   outcomes: SettledOutcomes;
+  facets: SessionLedgerFacets | null;
+  listedQuery: string | null;
 }
 
-const NO_ROWS: LedgerRows = { entries: [], outcomes: NO_OUTCOMES };
+const NO_ROWS: LedgerRows = { entries: [], outcomes: NO_OUTCOMES, facets: null, listedQuery: null };
 
 function outcomesForListedRows(entries: SessionLedgerEntry[], outcomes: SettledOutcomes): SettledOutcomes {
   const kept: SettledOutcomes = {};
@@ -155,8 +157,8 @@ function outcomesForListedRows(entries: SessionLedgerEntry[], outcomes: SettledO
   return kept;
 }
 
-function listRows(entries: SessionLedgerEntry[], outcomes: SettledOutcomes): LedgerRows {
-  return { entries, outcomes: outcomesForListedRows(entries, outcomes) };
+function listRows(rows: LedgerRows, entries: SessionLedgerEntry[]): LedgerRows {
+  return { ...rows, entries, outcomes: outcomesForListedRows(entries, rows.outcomes) };
 }
 
 function isListedGeneration(entries: SessionLedgerEntry[], sessionId: string, closedAt: string): boolean {
@@ -189,9 +191,8 @@ export function useSessionLedger({
   onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
-  const [{ entries, outcomes }, setRows] = useState<LedgerRows>(NO_ROWS);
+  const [{ entries, outcomes, facets }, setRows] = useState<LedgerRows>(NO_ROWS);
   const [readFailure, setReadFailure] = useState<string | null>(null);
-  const [facets, setFacets] = useState<SessionLedgerFacets | null>(null);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -239,7 +240,7 @@ export function useSessionLedger({
       const entry = event.entry;
       for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
-      setRows((current) => listRows(applyClose(current.entries, entry, filtersRef.current, at), current.outcomes));
+      setRows((current) => listRows(current, applyClose(current.entries, entry, filtersRef.current, at)));
     });
   }, [connection.subscribe, enabled, now]);
 
@@ -275,13 +276,13 @@ export function useSessionLedger({
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
     setError(null);
+    const queryKey = JSON.stringify(query);
     connection.list({ ...(query as SessionLedgerQuery), limit: pageSize, reopen: true })
       .then((page) => {
         if (superseded()) return;
         const at = now();
         const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
-        setRows((current) => listRows(listed, current.outcomes));
-        setFacets(page.facets ?? null);
+        setRows((current) => ({ ...listRows(current, listed), facets: page.facets ?? null, listedQuery: queryKey }));
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
@@ -289,6 +290,7 @@ export function useSessionLedger({
         if (superseded()) return;
         setError(failure.message);
         setReadFailure(failure.message);
+        setRows((current) => (current.listedQuery === queryKey ? current : NO_ROWS));
       })
       .finally(() => {
         closesDuringReads.current.delete(closes);
@@ -317,10 +319,7 @@ export function useSessionLedger({
         setRows((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
           const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
-          return listRows(
-            closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended),
-            current.outcomes,
-          );
+          return listRows(current, closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended));
         });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
