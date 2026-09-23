@@ -334,23 +334,33 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 }
 
 func (d *Daemon) deleteBranchOfProviderRemovedWorktree(ctx context.Context, mainRepo, branch string) {
-	if branch == "" {
+	if !d.worktreeBranchIsDeletable(mainRepo, branch) {
 		return
 	}
 	_ = d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
-		d.deleteWorktreeBranch(runCtx, client, mainRepo, branch)
+		d.deleteDeletableWorktreeBranch(runCtx, client, mainRepo, branch)
 		return nil
 	})
 }
 
 func (d *Daemon) deleteWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string) {
+	if d.worktreeBranchIsDeletable(mainRepo, branch) {
+		d.deleteDeletableWorktreeBranch(ctx, client, mainRepo, branch)
+	}
+}
+
+func (d *Daemon) worktreeBranchIsDeletable(mainRepo, branch string) bool {
 	if branch == "" {
-		return
+		return false
 	}
 	if d.gardenKeepsBranch(mainRepo, branch) {
 		d.logf("Preserved branch %s because an open seed can continue from it", branch)
-		return
+		return false
 	}
+	return true
+}
+
+func (d *Daemon) deleteDeletableWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string) {
 	if err := client.DeleteBranch(ctx, mainRepo, branch, true); err != nil {
 		d.logf("Warning: worktree deleted but failed to delete branch %s: %v", branch, err)
 		return

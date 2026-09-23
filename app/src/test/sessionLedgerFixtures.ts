@@ -39,7 +39,6 @@ export function verdict(overrides: Partial<SessionReopen> = {}): SessionReopen {
   return {
     reopenable: true,
     actions: [SessionReopenAction.Reopen],
-    checking: false,
     directory_state: 'present',
     workspace_id: 'ws-1',
     workspace_plan: 'reuse',
