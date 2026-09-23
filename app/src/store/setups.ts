@@ -37,12 +37,16 @@ function withSetup(setups: Setup[], setup: Setup): Setup[] {
   return next;
 }
 
+function newerOf(held: Desktop, incoming: Desktop | undefined): Desktop {
+  return incoming && incoming.revision >= held.revision ? incoming : held;
+}
+
 function mergeDesktops(current: Desktop[], changed: Desktop[], deletedIds: string[] | undefined): Desktop[] {
   const deleted = new Set(deletedIds ?? []);
   const changedById = new Map(changed.map((desktop) => [desktop.id, desktop]));
   const merged = current
     .filter((desktop) => !deleted.has(desktop.id))
-    .map((desktop) => changedById.get(desktop.id) ?? desktop);
+    .map((desktop) => newerOf(desktop, changedById.get(desktop.id)));
   const known = new Set(merged.map((desktop) => desktop.id));
   return [...merged, ...changed.filter((desktop) => !known.has(desktop.id) && !deleted.has(desktop.id))];
 }

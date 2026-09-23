@@ -158,6 +158,19 @@ describe('useDaemonSocket setups', () => {
     expect(useSetupsStore.getState().desktops.map((entry) => entry.id)).toEqual(['d2', 'd10']);
   });
 
+  it('keeps a desktop it already holds at a higher revision', async () => {
+    const { ws } = await connect();
+
+    act(() => {
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2, MARKDOWN_TILE), revision: 5 }] });
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2), revision: 4 }] });
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2, MARKDOWN_TILE), revision: 5, active_pane_id: 'p7' }] });
+    });
+
+    const d2 = useSetupsStore.getState().desktops.find((entry) => entry.id === 'd2');
+    expect(d2).toMatchObject({ revision: 5, tree_json: MARKDOWN_TILE, active_pane_id: 'p7' });
+  });
+
   it('ignores current-desktop moves of setups this client is not on', async () => {
     const { ws } = await connect();
 
