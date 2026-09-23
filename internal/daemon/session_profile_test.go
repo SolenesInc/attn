@@ -31,12 +31,11 @@ func registerTestSession(socketPath, id, label, dir string) error {
 		return err
 	}
 	defer conn.Close()
-	now := string(protocol.TimestampNow())
 	if err := json.NewEncoder(conn).Encode(protocol.InjectTestSessionMessage{
 		Cmd: protocol.CmdInjectTestSession,
 		Session: protocol.Session{
 			ID: id, Label: label, Directory: dir, Agent: protocol.SessionAgentClaude,
-			State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+			State: protocol.SessionStateLaunching,
 		},
 	}); err != nil {
 		return err
