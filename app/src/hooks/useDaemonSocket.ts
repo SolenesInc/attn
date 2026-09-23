@@ -747,12 +747,15 @@ function pruneTileContentsForWorkspace(
   return changed ? next : contents;
 }
 
-function pruneDesktopTileContents(
+function contentOnCurrentDesktop(
   contents: Record<string, TileContentState>,
   desktops: Desktop[],
+  currentDesktopId: string | null,
 ): Record<string, TileContentState> {
-  const liveKeys = new Set(desktops.flatMap((desktop) =>
-    tileIdsFromLayoutJSON(desktop.tree_json, 'markdown').map((tileId) => tileContentKey(desktop.id, tileId))));
+  const current = desktops.find((desktop) => desktop.id === currentDesktopId);
+  const liveKeys = new Set(current
+    ? tileIdsFromLayoutJSON(current.tree_json, 'markdown').map((tileId) => tileContentKey(current.id, tileId))
+    : []);
   const kept = Object.entries(contents).filter(([key]) => liveKeys.has(key));
   return kept.length === Object.keys(contents).length ? contents : Object.fromEntries(kept);
 }
@@ -995,9 +998,10 @@ export function useDaemonSocket({
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
   const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
   const scopedDesktops = useProfilesStore((state) => state.desktops);
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   useEffect(() => {
-    setDesktopTileContents((prev) => pruneDesktopTileContents(prev, scopedDesktops));
-  }, [scopedDesktops]);
+    setDesktopTileContents((prev) => contentOnCurrentDesktop(prev, scopedDesktops, currentDesktopId));
+  }, [scopedDesktops, currentDesktopId]);
   const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
 
   const reconnectAttemptsRef = useRef(0);

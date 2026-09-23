@@ -332,4 +332,20 @@ describe('useDaemonSocket profiles', () => {
 
     expect(result.current.desktopTileContents[tileContentKey('w1', 'tile-md')]).toMatchObject({ content: '# Plan' });
   });
+
+  it('keeps content only for the current desktop', async () => {
+    const { ws, result } = await connect();
+    const withTile = [desktop('d1', 'set-default', 1, MARKDOWN_TILE), desktop('d2', 'set-default', 2, MARKDOWN_TILE)];
+
+    act(() => {
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: withTile });
+      ws.emit({ event: 'desktop_tile_content', desktop_id: 'd1', tile_id: 'tile-md', tile_kind: 'markdown', path: '/notes/plan.md', content: '# Plan' });
+    });
+    expect(Object.keys(result.current.desktopTileContents)).toEqual([tileContentKey('d1', 'tile-md')]);
+
+    act(() => {
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: withTile });
+    });
+    expect(result.current.desktopTileContents).toEqual({});
+  });
 });
