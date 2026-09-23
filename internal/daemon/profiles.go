@@ -13,6 +13,11 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
+type sessionProfileChange struct {
+	FromProfileID string `json:"from_profile_id"`
+	ToProfileID   string `json:"to_profile_id"`
+}
+
 type profileArrangementChange struct {
 	DesktopIDs        []string `json:"desktop_ids,omitempty"`
 	DeletedDesktopIDs []string `json:"deleted_desktop_ids,omitempty"`
@@ -39,6 +44,16 @@ func (c *wsClient) selectProfile(profileID string) {
 	c.identityMu.Lock()
 	defer c.identityMu.Unlock()
 	c.selectedProfileID = profileID
+}
+
+func (c *wsClient) profileOr(requested *string) *string {
+	if strings.TrimSpace(protocol.Deref(requested)) != "" {
+		return requested
+	}
+	if selected := c.selectedProfile(); selected != "" {
+		return &selected
+	}
+	return requested
 }
 
 func (c *wsClient) selectedProfile() string {
@@ -267,7 +282,9 @@ func (d *Daemon) handleProfileRename(client *wsClient, msg *protocol.ProfileRena
 
 func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDeleteMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		d.automationMu.Lock()
 		deletion, err := d.store.DeleteProfile(msg.ProfileID, int64(msg.ExpectedRevision), msg.DestinationProfileID)
+		d.automationMu.Unlock()
 		if err != nil {
 			return profileActionOutcome{}, err
 		}
@@ -281,8 +298,19 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		})
 		return profileActionOutcome{profile: &deletion.Destination, desktops: destination, publish: func() {
-			d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
-			d.publishArrangementChanged(deletion.Destination.ID, profileArrangementChange{DesktopIDs: desktopIDs(destination...)})
+			d.coalesceSnapshots(func() {
+				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
+				d.publishArrangementChanged(deletion.Destination.ID, profileArrangementChange{DesktopIDs: desktopIDs(destination...)})
+				for _, sessionID := range deletion.MovedSessionIDs {
+					d.publishFact(FactSessionProfileChanged, sessionID, sessionProfileChange{FromProfileID: deletion.Deleted.ID, ToProfileID: deletion.Destination.ID})
+				}
+				for _, memberID := range deletion.MovedCrewIDs {
+					d.publishFact(FactCrewUpdated, memberID, nil)
+				}
+			})
+			if len(deletion.MovedAutomationIDs) > 0 {
+				d.broadcastAutomationsChanged(deletion.MovedAutomationIDs...)
+			}
 		}}, nil
 	})
 }

@@ -137,7 +137,7 @@ func (d *Daemon) actionAutomationApply(ctx context.Context, msg *protocol.Automa
 		Event:     protocol.EventAutomationApplyResult,
 		RequestID: msg.RequestID,
 	}
-	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, msg.ExpectedID, msg.ExpectedRevision)
+	definition, err := d.automationApplyWithGuards(ctx, msg.DefinitionYaml, protocol.Deref(msg.ProfileID), msg.ExpectedID, msg.ExpectedRevision)
 	if err != nil {
 		result.Error = protocol.Ptr(err.Error())
 		var refusal *automationRefusal
@@ -262,7 +262,6 @@ func (d *Daemon) automationRunSummary(run store.AutomationRunWithOccurrenceKey) 
 		State:         run.State,
 		SeedID:        protocol.Ptr(run.SeedID),
 		SessionID:     protocol.Ptr(run.SessionID),
-		PaneID:        protocol.Ptr(run.PaneID),
 		CreatedAt:     string(protocol.NewTimestamp(run.CreatedAt)),
 		UpdatedAt:     string(protocol.NewTimestamp(run.UpdatedAt)),
 		OccurrenceKey: protocol.Ptr(run.OccurrenceKey),

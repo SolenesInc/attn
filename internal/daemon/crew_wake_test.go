@@ -92,11 +92,41 @@ func TestCrewWake_StartsADayBoundInTheMembersOwnDirectory(t *testing.T) {
 	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != result.SessionID {
 		t.Fatalf("roster binding = %q, want the woken session %q", got, result.SessionID)
 	}
-	if d.store.GetWorkspace(crewWorkspaceID("trellis")) == nil {
-		t.Fatalf("no workspace %q was created for the woken member", crewWorkspaceID("trellis"))
+	if result.ProfileID != defaultProfileID(t, d.store) {
+		t.Errorf("wake result profile = %q, want the member's profile", result.ProfileID)
 	}
-	if result.WorkspaceID != crewWorkspaceID("trellis") {
-		t.Errorf("wake result workspace = %q, want %q", result.WorkspaceID, crewWorkspaceID("trellis"))
+	if _, placed, err := d.store.SessionPlacement(result.SessionID); err != nil || placed {
+		t.Errorf("woken session placed=%v err=%v, want it unplaced for the queue to surface", placed, err)
+	}
+	if d.store.GetWorkspace("workspace-crew-trellis") != nil {
+		t.Error("wake created a per-member workspace")
+	}
+}
+
+func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	work := createTestProfile(t, d.store, "Work")
+	addTurnSession(t, d, "work-agent", protocol.SessionAgentCodex, "")
+	if _, err := d.store.MoveSessionToProfile("work-agent", work.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, msg := range []*protocol.CrewWakeMessage{
+		{Member: "trellis", ProfileID: protocol.Ptr(work.ID)},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent")},
+		{Member: "trellis", SourceSessionID: protocol.Ptr("work-agent"), ProfileID: protocol.Ptr(defaultProfileID(t, d.store))},
+	} {
+		if _, err := d.crewWakeAsked(msg); err == nil || !strings.Contains(err.Error(), work.ID) {
+			t.Fatalf("wake %+v = %v, want a refusal naming profile %s", msg, err, work.ID)
+		}
+	}
+	if spawnCount(backend) != 0 {
+		t.Fatal("a refused wake spawned a session")
+	}
+
+	result, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(defaultProfileID(t, d.store))})
+	if err != nil || result.ProfileID != defaultProfileID(t, d.store) {
+		t.Fatalf("wake from the member's own profile = %+v, %v", result, err)
 	}
 }
 
@@ -195,15 +225,8 @@ func TestCrewWake_NamesTheDayAndKeepsTheIDLowercase(t *testing.T) {
 	if session.Label != "Trellis" {
 		t.Errorf("session label = %q, want Trellis", session.Label)
 	}
-	workspace := d.store.GetWorkspace(result.WorkspaceID)
-	if workspace == nil {
-		t.Fatalf("no workspace %q was created", result.WorkspaceID)
-	}
-	if workspace.Title != "Trellis" {
-		t.Errorf("workspace title = %q, want Trellis", workspace.Title)
-	}
-	if result.WorkspaceID != "workspace-crew-trellis" {
-		t.Errorf("workspace id = %q, want workspace-crew-trellis", result.WorkspaceID)
+	if session.ProfileID != result.ProfileID || result.ProfileID == "" {
+		t.Errorf("session profile = %q, result profile = %q, want the member's profile on both", session.ProfileID, result.ProfileID)
 	}
 	if result.Member != "trellis" {
 		t.Errorf("wire member = %q, want the lowercase id", result.Member)

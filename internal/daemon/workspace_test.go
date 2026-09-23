@@ -504,6 +504,7 @@ func TestSessionForBroadcast_PreservesPersistedWorkspaceIDDuringRegistryRecovery
 	session := &protocol.Session{
 		ID: "s1", Label: "s1", Agent: protocol.SessionAgentCodex, Directory: "/repo",
 		WorkspaceID: "ws1",
+		ProfileID:   defaultProfileID(t, d.store),
 		State:       protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	}
 	d.store.Add(session)
@@ -622,6 +623,7 @@ func TestLoadWorkspacesFromStore_RebuildsRegistryAndReassociates(t *testing.T) {
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "s1", Agent: protocol.SessionAgentCodex, Directory: "/repo",
 		WorkspaceID: "ws1",
+		ProfileID:   defaultProfileID(t, d.store),
 		State:       protocol.SessionStateWorking,
 		StateSince:  now, StateUpdatedAt: now, LastSeen: now,
 	})
@@ -653,6 +655,7 @@ func TestLoadWorkspacesFromStore_RemovesPersistedOrphans(t *testing.T) {
 	d.store.Add(&protocol.Session{
 		ID: "s-live", Label: "live", Agent: protocol.SessionAgentCodex, Directory: "/repo/live",
 		WorkspaceID: "ws-live",
+		ProfileID:   defaultProfileID(t, d.store),
 		State:       protocol.SessionStateWorking,
 		StateSince:  now, StateUpdatedAt: now, LastSeen: now,
 	})

@@ -33,7 +33,6 @@ test.describe('Binary PTY output transport', () => {
     const spawnResult = await page.evaluate(
       ({ wsUrl, id, clientToken }) =>
         new Promise<{ success?: boolean; error?: string }>((resolve, reject) => {
-          const workspaceId = `workspace-${id}`;
           const ws = new WebSocket(wsUrl);
           const timer = window.setTimeout(() => {
             ws.close();
@@ -50,6 +49,20 @@ test.describe('Binary PTY output transport', () => {
           ws.onmessage = (event) => {
             if (typeof event.data !== 'string') return;
             const data = JSON.parse(event.data);
+            if (data.event === 'initial_state') {
+              ws.send(JSON.stringify({
+                cmd: 'spawn_session',
+                id,
+                profile_id: data.selected_profile_id,
+                placement: {},
+                cwd: '/tmp',
+                agent: 'shell',
+                cols: 80,
+                rows: 24,
+                label: 'Binary PTY',
+              }));
+              return;
+            }
             if (data.event === 'error') {
               window.clearTimeout(timer);
               ws.close();
@@ -68,22 +81,6 @@ test.describe('Binary PTY output transport', () => {
               version: 'e2e',
               capabilities: ['workspace_sessions'],
               client_token: clientToken,
-            }));
-            ws.send(JSON.stringify({
-              cmd: 'register_workspace',
-              id: workspaceId,
-              title: 'Binary PTY',
-              directory: '/tmp',
-            }));
-            ws.send(JSON.stringify({
-              cmd: 'spawn_session',
-              id,
-              workspace_id: workspaceId,
-              cwd: '/tmp',
-              agent: 'shell',
-              cols: 80,
-              rows: 24,
-              label: 'Binary PTY',
             }));
           };
         }),

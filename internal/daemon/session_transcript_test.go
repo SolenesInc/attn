@@ -49,6 +49,7 @@ func TestHandleSessionTranscriptResolvesNativeIDAndReturnsRedactedEvents(t *test
 	d.store.Add(&protocol.Session{
 		ID: "attn-session", Agent: protocol.SessionAgentCodex, Directory: t.TempDir(),
 		WorkspaceID: "workspace", State: protocol.SessionStateWorking,
+		ProfileID:  defaultProfileID(t, d.store),
 		StateSince: "2026-07-19T10:00:00Z", StateUpdatedAt: "2026-07-19T10:00:00Z", LastSeen: "2026-07-19T10:00:00Z",
 	})
 	d.store.SetResumeSessionID("attn-session", "native-session")

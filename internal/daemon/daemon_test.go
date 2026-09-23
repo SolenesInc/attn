@@ -29,12 +29,12 @@ import (
 	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
-	"github.com/victorarias/attn/internal/workspacelayout"
 	"nhooyr.io/websocket"
 )
 
@@ -181,7 +181,7 @@ func TestDaemon_RegisterAndQuery(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	err := c.Register("sess-1", "drumstick", "/home/user/project")
+	err := registerTestSession(sockPath, "sess-1", "drumstick", "/home/user/project")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
@@ -213,7 +213,7 @@ func TestDaemon_StateUpdate(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	c.Register("sess-1", "test", "/tmp")
+	registerTestSession(sockPath, "sess-1", "test", "/tmp")
 
 	err := c.UpdateState("sess-1", protocol.StateWaitingInput)
 	if err != nil {
@@ -244,7 +244,7 @@ func TestDaemon_Unregister(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	c.Register("sess-1", "test", "/tmp")
+	registerTestSession(sockPath, "sess-1", "test", "/tmp")
 	c.Unregister("sess-1")
 
 	sessions, _ := c.Query("")
@@ -268,13 +268,13 @@ func TestDaemon_MultipleSessions(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	if err := c.Register("1", "one", "/tmp/1"); err != nil {
+	if err := registerTestSession(sockPath, "1", "one", "/tmp/1"); err != nil {
 		t.Fatalf("Register(1) error: %v", err)
 	}
-	if err := c.Register("2", "two", "/tmp/2"); err != nil {
+	if err := registerTestSession(sockPath, "2", "two", "/tmp/2"); err != nil {
 		t.Fatalf("Register(2) error: %v", err)
 	}
-	if err := c.Register("3", "three", "/tmp/3"); err != nil {
+	if err := registerTestSession(sockPath, "3", "three", "/tmp/3"); err != nil {
 		t.Fatalf("Register(3) error: %v", err)
 	}
 
@@ -317,8 +317,7 @@ func TestDaemon_SocketCleanup(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	c := client.New(sockPath)
-	err := c.Register("1", "test", "/tmp")
+	err := registerTestSession(sockPath, "1", "test", "/tmp")
 	if err != nil {
 		t.Fatalf("Register error after stale socket cleanup: %v", err)
 	}
@@ -510,6 +509,7 @@ func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 		StateUpdatedAt: nowStr,
 		LastSeen:       nowStr,
 		WorkspaceID:    workspaceID,
+		ProfileID:      defaultProfileID(t, d.store),
 	})
 	newRecoveryHome(t).resumableClaude(t, sessionID)
 	giveRestorationEvidence(t, d, sessionID, sessionID)
@@ -1138,32 +1138,27 @@ func TestDaemon_IncompleteRecoveryDoesNotClearAbsentTombstone(t *testing.T) {
 	}
 }
 
-func TestDaemon_LateRegisterCannotRecreateClosingSession(t *testing.T) {
+func TestDaemon_LateSpawnCannotRecreateClosingSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.ptyBackend = &fakeSpawnBackend{}
 	now := protocol.TimestampNow().String()
 	d.store.Add(&protocol.Session{
-		ID: "late-register", Label: "closing", Agent: protocol.SessionAgentCodex,
+		ID: "late-spawn", Label: "closing", Agent: protocol.SessionAgentCodex, ProfileID: defaultProfileID(t, d.store),
 		Directory: t.TempDir(), State: protocol.SessionStateWorking,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	if _, err := d.prepareSessionTeardown("late-register"); err != nil {
+	if _, err := d.prepareSessionTeardown("late-spawn"); err != nil {
 		t.Fatalf("prepare close: %v", err)
 	}
-	d.commitSessionUnregister("late-register", store.SessionClose{By: store.SessionClosedByUser})
-	conn := &syncConn{}
-	d.handleRegister(conn, &protocol.RegisterMessage{
-		ID: "late-register", Label: protocol.Ptr("late"), Dir: t.TempDir(),
-		Agent: protocol.Ptr(protocol.SessionAgentCodex), WorkspaceID: "workspace-late",
+	d.commitSessionUnregister("late-spawn", store.SessionClose{By: store.SessionClosedByUser})
+	client := spawnTestClient()
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: "late-spawn", Cwd: t.TempDir(), Agent: protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store), Cols: 80, Rows: 24,
 	})
-	var response protocol.Response
-	if err := json.Unmarshal(conn.buf.Bytes(), &response); err != nil {
-		t.Fatalf("decode register response: %v", err)
-	}
-	if response.Ok {
-		t.Fatal("late register succeeded while teardown tombstone existed")
-	}
-	if d.store.Get("late-register") != nil || !d.store.SessionCloseIntentional("late-register") {
-		t.Fatal("late register recreated the session or cleared its tombstone")
+	expectSpawnResult(t, client, "late-spawn", false)
+	if d.store.Get("late-spawn") != nil || !d.store.SessionCloseIntentional("late-spawn") {
+		t.Fatal("late spawn recreated the session or cleared its tombstone")
 	}
 }
 
@@ -1204,17 +1199,19 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled(t *testing
 	}
 }
 
-func TestDaemon_ReconcileSessionsWithWorkerBackend_ReapRemovesEmptyWorkspace(t *testing.T) {
+func TestDaemon_ReconcileSessionsWithWorkerBackend_ReapUnplacesTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := string(protocol.TimestampNow())
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "ws-stale", Title: "stale", Directory: "/tmp/stale",
-	})
 	d.store.Add(&protocol.Session{
 		ID: "stale-session", Label: "stale", Agent: protocol.SessionAgentCodex, Directory: "/tmp/stale",
-		State: protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+		ProfileID: defaultProfileID(t, d.store),
+		State:     protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.associateSessionWithWorkspace("stale-session", "ws-stale")
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	placeTestSession(t, d, "stale-session", profile.CurrentDesktopID)
 	d.ptyBackend = &fakeWorkerReconcileBackend{
 		liveIDs: nil,
 		info:    map[string]ptybackend.SessionInfo{},
@@ -1225,11 +1222,9 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_ReapRemovesEmptyWorkspace(t *
 	if report.Reaped != 1 {
 		t.Fatalf("reaped = %d, want 1", report.Reaped)
 	}
-	if workspace := d.store.GetWorkspace("ws-stale"); workspace != nil {
-		t.Fatalf("empty workspace still persisted after session reap: %+v", workspace)
-	}
-	if _, ok := d.workspaces.snapshot("ws-stale"); ok {
-		t.Fatal("empty workspace still registered after session reap")
+	desktop, err := d.store.GetDesktop(profile.CurrentDesktopID)
+	if err != nil || len(desktop.Panes) != 0 {
+		t.Fatalf("desktop after reap = %+v err=%v, want the pane gone and the desktop kept", desktop, err)
 	}
 }
 
@@ -1381,39 +1376,10 @@ func TestDaemon_PruneSessionsWithoutPTY_PreservesPluginMetadataForResume(t *test
 	}
 }
 
-func TestDaemon_PruneSessionsWithoutPTY_RemovesReapedWorkspaceLayout(t *testing.T) {
+func TestDaemon_PruneSessionsWithoutPTY_RemovesTheReapedPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	now := string(protocol.TimestampNow())
-	workspaceID := "workspace-stale"
 	sessionID := "codex-stale"
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "Stale", Directory: "/tmp/stale"})
-	d.store.Add(&protocol.Session{
-		ID:             sessionID,
-		Label:          sessionID,
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-		WorkspaceID:    workspaceID,
-	})
-	d.workspaces.register(workspaceID, "Stale", "/tmp/stale", "", false, false)
-	d.workspaces.associateSession(sessionID, workspaceID, sessionID)
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-stale",
-		Layout:       layouttree.DefaultLayout("pane-stale"),
-		Panes: []workspacelayout.Pane{{
-			PaneID:    "pane-stale",
-			RuntimeID: sessionID,
-			SessionID: sessionID,
-			Kind:      workspacelayout.PaneKindAgent,
-			Title:     workspacelayout.DefaultPaneTitle,
-		}},
-	}); err != nil {
-		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
-	}
+	desktopID := addStalePlacedSession(t, d, sessionID)
 
 	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 1 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 1", removed)
@@ -1421,64 +1387,57 @@ func TestDaemon_PruneSessionsWithoutPTY_RemovesReapedWorkspaceLayout(t *testing.
 	if got := d.store.Get(sessionID); got != nil {
 		t.Fatalf("store.Get(%q) = %+v, want nil", sessionID, got)
 	}
-	if got := d.store.GetWorkspace(workspaceID); got != nil {
-		t.Fatalf("store.GetWorkspace(%q) = %+v, want nil", workspaceID, got)
-	}
-	if _, ok := d.workspaces.snapshot(workspaceID); ok {
-		t.Fatalf("workspace registry still contains %q", workspaceID)
-	}
-	if got := d.store.GetWorkspaceLayout(workspaceID); got != nil {
-		t.Fatalf("store.GetWorkspaceLayout(%q) = %+v, want nil", workspaceID, got)
+	if desktop, err := d.store.GetDesktop(desktopID); err != nil || len(desktop.Panes) != 0 {
+		t.Fatalf("desktop after prune = %+v err=%v, want no panes", desktop, err)
 	}
 }
 
-func TestDaemon_PruneSessionsWithoutPTY_KeepsTileOnlyWorkspace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+func addStalePlacedSession(t *testing.T, d *Daemon, sessionID string) string {
+	t.Helper()
 	now := string(protocol.TimestampNow())
-	workspaceID := "workspace-stale-tile"
-	sessionID := "codex-stale-tile"
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "Stale Tile", Directory: "/tmp/stale-tile"})
 	d.store.Add(&protocol.Session{
-		ID:             sessionID,
-		Label:          sessionID,
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale-tile",
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-		WorkspaceID:    workspaceID,
+		ID: sessionID, Label: sessionID, Agent: protocol.SessionAgentCodex, Directory: "/tmp/stale",
+		ProfileID: defaultProfileID(t, d.store),
+		State:     protocol.SessionStateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.register(workspaceID, "Stale Tile", "/tmp/stale-tile", "", false, false)
-	d.workspaces.associateSession(sessionID, workspaceID, sessionID)
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-stale",
-		Layout: layouttree.Node{
-			Type:      "split",
-			SplitID:   "split-stale",
-			Direction: layouttree.DirectionVertical,
-			Ratio:     layouttree.DefaultSplitRatio,
-			Children: []layouttree.Node{
-				{Type: "pane", PaneID: "pane-stale"},
-				{Type: "tile", TileID: markdownTileIDForPath("/tmp/notes.md"), TileKind: string(layouttree.TileKindMarkdown), TileParams: "/tmp/notes.md"},
-			},
-		},
-		Panes: []workspacelayout.Pane{{
-			PaneID:    "pane-stale",
-			RuntimeID: sessionID,
-			SessionID: sessionID,
-			Kind:      workspacelayout.PaneKindAgent,
-			Title:     workspacelayout.DefaultPaneTitle,
-		}},
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
+	return profile.CurrentDesktopID
+}
+
+func TestDaemon_PruneSessionsWithoutPTY_KeepsTheTilesOfItsDesktop(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	sessionID := "codex-stale-tile"
+	desktopID := addStalePlacedSession(t, d, sessionID)
+	desktop, err := d.store.GetDesktop(desktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tileID := markdownTileIDForPath("/tmp/notes.md")
+	if _, err := d.store.UpdateDesktopArrangement(desktopID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		next, ok := layouttree.DockTile(desktop.Tree, desktop.Panes[0].PaneID, layouttree.DirectionVertical, false, "split-tile", tileID, string(layouttree.TileKindMarkdown), "/tmp/notes.md", "", layouttree.DefaultSplitRatio)
+		if !ok {
+			t.Fatal("dock the markdown tile")
+		}
+		desktop.Tree = next
+		return desktop, nil
 	}); err != nil {
-		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+		t.Fatal(err)
 	}
 
 	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 1 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 1", removed)
 	}
-	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
+	desktop, err = d.store.GetDesktop(desktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tiles := layouttree.TileIDs(desktop.Tree); len(desktop.Panes) != 0 || len(tiles) != 1 || tiles[0] != tileID {
+		t.Fatalf("desktop after prune = panes %+v tiles %v, want only the markdown tile", desktop.Panes, tiles)
+	}
 }
 
 func TestDaemon_RunDeferredWorkerReconciliationForcesIdleDemotion(t *testing.T) {
@@ -2092,7 +2051,7 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForRecoverableClaude
 		Cols:            80,
 		Rows:            24,
 		Agent:           "claude",
-		WorkspaceID:     "workspace-attn-session",
+		ProfileID:       defaultProfileID(t, d.store),
 		ResumeSessionID: protocol.Ptr("attn-session"),
 	}
 
@@ -2150,7 +2109,7 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDEvenWhenNotRecoverab
 		Cols:            80,
 		Rows:            24,
 		Agent:           "claude",
-		WorkspaceID:     "workspace-attn-session",
+		ProfileID:       defaultProfileID(t, d.store),
 		ResumeSessionID: protocol.Ptr("attn-session"),
 	}
 
@@ -2195,7 +2154,7 @@ func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForCodexSession(t *t
 		Cols:            80,
 		Rows:            24,
 		Agent:           "codex",
-		WorkspaceID:     "workspace-attn-session",
+		ProfileID:       defaultProfileID(t, d.store),
 		ResumeSessionID: protocol.Ptr("attn-session"),
 	}
 
@@ -2247,28 +2206,13 @@ func TestDaemon_HandleObserveAgentConversation_QueuesUntilSessionExists(t *testi
 		t.Fatalf("resume id before registration = %q, want empty", got)
 	}
 
-	serverConn, clientConn = net.Pipe()
-	done = make(chan struct{})
-	go func() {
-		defer close(done)
-		d.handleRegister(serverConn, &protocol.RegisterMessage{
-			ID:          "attn-session",
-			Label:       protocol.Ptr("attn-session"),
-			Dir:         t.TempDir(),
-			Agent:       protocol.Ptr(protocol.SessionAgentCodex),
-			WorkspaceID: "workspace-attn-session",
-		})
-		_ = serverConn.Close()
-	}()
-
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode register response: %v", err)
-	}
-	_ = clientConn.Close()
-	<-done
-	if !resp.Ok {
-		t.Fatalf("register response ok=%v, want true", resp.Ok)
-	}
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := spawnTestClient()
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: "attn-session", Cwd: t.TempDir(), Agent: string(protocol.SessionAgentCodex),
+		ProfileID: defaultProfileID(t, d.store), Cols: 80, Rows: 24,
+	})
+	expectSpawnResult(t, client, "attn-session", true)
 	if got := d.store.GetSessionConversation("attn-session"); got != (store.SessionConversation{NativeID: "codex-session", TranscriptPath: transcriptPath}) {
 		t.Fatalf("binding after registration = %+v, want exact Codex binding", got)
 	}
@@ -2828,53 +2772,41 @@ func TestDaemon_BroadcastRawWSMessage_RemoteSessionExitedClearsRemoteAttachState
 
 func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregistered(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	workspaceID := "workspace-sess-1"
-	session := &protocol.Session{
-		ID:             "sess-1",
-		Label:          "test",
-		Directory:      t.TempDir(),
-		State:          protocol.StateWorking,
-		StateSince:     time.Now().UTC().Format(time.RFC3339),
-		StateUpdatedAt: time.Now().UTC().Format(time.RFC3339),
-		LastSeen:       time.Now().UTC().Format(time.RFC3339),
-		WorkspaceID:    workspaceID,
+	now := time.Now().UTC().Format(time.RFC3339)
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
 	}
-	d.store.Add(session)
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "test", Directory: session.Directory})
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-agent",
-		Layout:       layouttree.DefaultLayout("pane-agent"),
-		Panes: []workspacelayout.Pane{
-			{PaneID: "pane-agent", RuntimeID: session.ID, SessionID: session.ID, Kind: workspacelayout.PaneKindAgent, Title: workspacelayout.DefaultPaneTitle},
-			{PaneID: "pane-agent-2", RuntimeID: "sess-2", SessionID: "sess-2", Kind: workspacelayout.PaneKindAgent, Title: "Agent 2"},
-		},
-	}); err != nil {
-		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	for _, id := range []string{"sess-1", "sess-2"} {
+		d.store.Add(&protocol.Session{
+			ID: id, Label: id, Directory: t.TempDir(), ProfileID: profile.ID,
+			State: protocol.StateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+		})
+		placeTestSession(t, d, id, profile.CurrentDesktopID)
 	}
 
 	client := &wsClient{
-		send:            make(chan outboundMessage, 4),
+		send:            make(chan outboundMessage, 16),
 		attachedStreams: make(map[string]ptybackend.Stream),
 	}
 	d.wsHub.clients[client] = true
 	go d.wsHub.run()
 
-	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: session.ID})
+	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: "sess-1"})
 
-	if got := d.store.Get(session.ID); got != nil {
-		t.Fatalf("store.Get(%q) = %+v, want nil", session.ID, got)
+	if got := d.store.Get("sess-1"); got != nil {
+		t.Fatalf("store.Get(sess-1) = %+v, want nil", got)
 	}
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	if layout == nil {
-		t.Fatalf("store.GetWorkspaceLayout(%q) = nil, want remaining pane layout", workspaceID)
+	desktop, err := d.store.GetDesktop(profile.CurrentDesktopID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(layout.Panes) != 1 || layout.Panes[0].PaneID != "pane-agent-2" {
-		t.Fatalf("layout panes after unregister = %+v, want remaining agent pane only", layout.Panes)
+	if len(desktop.Panes) != 1 || desktop.Panes[0].SessionID != "sess-2" {
+		t.Fatalf("desktop panes after unregister = %+v, want the remaining agent only", desktop.Panes)
 	}
 
 	var event map[string]interface{}
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 16; i++ {
 		event = readOutboundEvent(t, client)
 		if asString(event["event"]) == protocol.EventSessionUnregistered {
 			break
@@ -2883,8 +2815,8 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneAndBroadcastsSessionUnregis
 	if asString(event["event"]) != protocol.EventSessionUnregistered {
 		t.Fatalf("unexpected event after unregister: %+v", event)
 	}
-	if asString(event["session"].(map[string]interface{})["id"]) != session.ID {
-		t.Fatalf("session_unregistered id = %v, want %s", event["session"], session.ID)
+	if asString(event["session"].(map[string]interface{})["id"]) != "sess-1" {
+		t.Fatalf("session_unregistered id = %v, want sess-1", event["session"])
 	}
 }
 
@@ -2907,54 +2839,19 @@ func TestDaemon_HandleUnregisterWS_PreparationFailureKeepsAttachment(t *testing.
 	}
 }
 
-func TestDaemon_HandleUnregisterWS_RemovesSessionPaneWithoutPromotingAnotherPane(t *testing.T) {
+func TestDaemon_HandleUnregisterWS_KeepsTheOtherAgentOnItsDesktop(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	workspaceID := "workspace-shared"
 	now := time.Now().UTC().Format(time.RFC3339)
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "shared", Directory: t.TempDir()})
-	for _, session := range []*protocol.Session{
-		{
-			ID:             "sess-primary",
-			Label:          "Agent",
-			Directory:      t.TempDir(),
-			State:          protocol.StateWorking,
-			StateSince:     now,
-			StateUpdatedAt: now,
-			LastSeen:       now,
-			WorkspaceID:    workspaceID,
-		},
-		{
-			ID:             "sess-next",
-			Label:          "next",
-			Directory:      t.TempDir(),
-			State:          protocol.StateWorking,
-			StateSince:     now,
-			StateUpdatedAt: now,
-			LastSeen:       now,
-			WorkspaceID:    workspaceID,
-		},
-	} {
-		d.store.Add(session)
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
 	}
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-session",
-		Layout: layouttree.Node{
-			Type:      "split",
-			SplitID:   "split-1",
-			Direction: layouttree.DirectionVertical,
-			Ratio:     0.5,
-			Children: []layouttree.Node{
-				{Type: "pane", PaneID: "pane-session"},
-				{Type: "pane", PaneID: "pane-next"},
-			},
-		},
-		Panes: []workspacelayout.Pane{
-			{PaneID: "pane-session", RuntimeID: "sess-primary", SessionID: "sess-primary", Kind: workspacelayout.PaneKindAgent, Title: "Agent"},
-			{PaneID: "pane-next", RuntimeID: "sess-next", SessionID: "sess-next", Kind: workspacelayout.PaneKindAgent, Title: "next"},
-		},
-	}); err != nil {
-		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
+	for _, id := range []string{"sess-primary", "sess-next"} {
+		d.store.Add(&protocol.Session{
+			ID: id, Label: id, Directory: t.TempDir(), ProfileID: profile.ID,
+			State: protocol.StateWorking, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+		})
+		placeTestSession(t, d, id, profile.CurrentDesktopID)
 	}
 
 	client := &wsClient{
@@ -2970,20 +2867,14 @@ func TestDaemon_HandleUnregisterWS_RemovesSessionPaneWithoutPromotingAnotherPane
 		t.Fatalf("closed session still exists: %+v", got)
 	}
 	if got := d.store.Get("sess-next"); got == nil {
-		t.Fatal("replacement session was removed")
+		t.Fatal("the other session was removed")
 	}
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	if layout == nil {
-		t.Fatal("workspace layout was removed")
+	desktop, err := d.store.GetDesktop(profile.CurrentDesktopID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if len(layout.Panes) != 1 {
-		t.Fatalf("layout panes len = %d, want 1: %+v", len(layout.Panes), layout.Panes)
-	}
-	if pane := layout.Panes[0]; pane.PaneID != "pane-next" || pane.SessionID != "sess-next" {
-		t.Fatalf("remaining pane = %+v, want existing pane-next for sess-next", pane)
-	}
-	if layout.Layout.Type != "pane" || layout.Layout.PaneID != "pane-next" {
-		t.Fatalf("layout tree = %+v, want single pane-next pane", layout.Layout)
+	if len(desktop.Panes) != 1 || desktop.Panes[0].SessionID != "sess-next" || desktop.ActivePaneID != desktop.Panes[0].PaneID {
+		t.Fatalf("desktop after close = %+v, want the other agent kept and active", desktop)
 	}
 }
 
@@ -3289,8 +3180,7 @@ func TestDaemon_HealthEndpoint(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	c := client.New(sockPath)
-	c.Register("test-1", "test", "/tmp")
+	registerTestSession(sockPath, "test-1", "test", "/tmp")
 
 	healthURL := "http://127.0.0.1:" + wsPort + "/health"
 	var resp *http.Response
@@ -3459,7 +3349,7 @@ func TestDaemon_AttachFlowOverWebSocket(t *testing.T) {
 	}()
 
 	c := client.New(sockPath)
-	if err := c.Register(sessionID, "web-client-smoke", cwd); err != nil {
+	if err := registerTestSession(sockPath, sessionID, "web-client-smoke", cwd); err != nil {
 		t.Fatalf("register smoke session: %v", err)
 	}
 	if err := c.UpdateState(sessionID, protocol.StateWorking); err != nil {
@@ -4665,7 +4555,7 @@ func TestDaemon_StateChange_BroadcastsToWebSocket(t *testing.T) {
 	waitForSocket(t, sockPath, 5*time.Second)
 
 	c := client.New(sockPath)
-	err := c.Register("test-session", "Test Session", "/tmp/test")
+	err := registerTestSession(sockPath, "test-session", "Test Session", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
@@ -4727,7 +4617,7 @@ func TestDaemon_HookReportedStatesReachClients(t *testing.T) {
 	waitForSocket(t, sockPath, 5*time.Second)
 
 	c := client.New(sockPath)
-	if err := c.Register("test-session", "Test", "/tmp/test"); err != nil {
+	if err := registerTestSession(sockPath, "test-session", "Test", "/tmp/test"); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
@@ -4883,9 +4773,7 @@ func TestDaemon_StopCommand_PendingTodos_SetsWaitingInput(t *testing.T) {
 
 	waitForSocket(t, sockPath, 5*time.Second)
 
-	c := client.New(sockPath)
-
-	err := c.Register("test-session", "Test", "/tmp/test")
+	err := registerTestSession(sockPath, "test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
@@ -4951,7 +4839,7 @@ func TestDaemon_StopCommand_CompletedTodos_ProceedsToClassification(t *testing.T
 
 	c := client.New(sockPath)
 
-	err := c.Register("test-session", "Test", "/tmp/test")
+	err := registerTestSession(sockPath, "test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}

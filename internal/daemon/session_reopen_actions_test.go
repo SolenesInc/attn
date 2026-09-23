@@ -14,7 +14,6 @@ import (
 
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 var errSpawnRefusedInThisTest = errors.New("the pty backend refuses to spawn in this test")
@@ -47,10 +46,10 @@ func TestNoReopenTouchesTheRepositoryWithoutBeingAskedByName(t *testing.T) {
 	if !verdict.offers(protocol.SessionReopenActionRecreateWorktreeAndReopen) {
 		t.Fatalf("the verdict does not offer the recreate action: %q", verdict.Reason)
 	}
-	if _, err := d.reopenSession("untouched", "", ""); err == nil {
+	if _, err := d.reopenSession("untouched", "", "", profileDestination{}); err == nil {
 		t.Fatal("a plain reopen ran instead of refusing a directory that is gone")
 	}
-	if _, err := d.reopenSession("untouched", protocol.SessionReopenActionReopen, ""); err == nil {
+	if _, err := d.reopenSession("untouched", protocol.SessionReopenActionReopen, "", profileDestination{}); err == nil {
 		t.Fatal("--action reopen ran instead of refusing a directory that is gone")
 	}
 
@@ -70,7 +69,7 @@ func TestARefusedReopenNamesTheActionsItOffersInstead(t *testing.T) {
 	d, _, _ := closedWorktreeWithDeletedDirectory(t, "refused", "feat/refused", false)
 	reopenDaemonWithBackend(t, d)
 
-	_, err := d.reopenSession("refused", "", "")
+	_, err := d.reopenSession("refused", "", "", profileDestination{})
 	if err == nil {
 		t.Fatal("the plain reopen was not refused")
 	}
@@ -84,7 +83,7 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	backend := reopenDaemonWithBackend(t, d)
 	before := spawnCount(backend)
 
-	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "")
+	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "", profileDestination{})
 	if err != nil {
 		t.Fatalf("recreate_worktree_and_reopen: %v", err)
 	}
@@ -104,8 +103,8 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if session := d.store.Get("recreate"); session == nil {
 		t.Fatal("the reopened session is not registered")
 	}
-	if d.store.GetWorkspace(outcome.WorkspaceID) == nil {
-		t.Errorf("workspace %s was not created for the reopened session", outcome.WorkspaceID)
+	if outcome.ProfileID != defaultProfileID(t, d.store) {
+		t.Errorf("reopened into profile %q, want its recorded profile", outcome.ProfileID)
 	}
 	spawn := resumeSpawnForSession(t, backend, "recreate", before)
 	if spawn.CWD != attngit.CanonicalizePath(worktree) {
@@ -127,7 +126,7 @@ func TestFetchingTheBranchBackRecreatesTheWorktreeFromTheRemote(t *testing.T) {
 	if !verdict.offers(protocol.SessionReopenActionFetchRecreateAndReopen) {
 		t.Fatalf("the verdict does not offer the fetch action: %q", verdict.Reason)
 	}
-	if _, err := d.reopenSession("fetch", protocol.SessionReopenActionFetchRecreateAndReopen, ""); err != nil {
+	if _, err := d.reopenSession("fetch", protocol.SessionReopenActionFetchRecreateAndReopen, "", profileDestination{}); err != nil {
 		t.Fatalf("fetch_recreate_and_reopen: %v", err)
 	}
 
@@ -149,7 +148,7 @@ func TestStartingFreshFromTheDefaultBranchPutsTheWorktreeBackWithoutTheConversat
 	runGitDaemon(t, repo, "branch", "-D", "feat/default")
 	before := spawnCount(backend)
 
-	if _, err := d.reopenSession("default", protocol.SessionReopenActionStartFreshDefaultBranch, ""); err != nil {
+	if _, err := d.reopenSession("default", protocol.SessionReopenActionStartFreshDefaultBranch, "", profileDestination{}); err != nil {
 		t.Fatalf("start_fresh_default_branch: %v", err)
 	}
 
@@ -171,7 +170,7 @@ func TestStartingFreshInTheSamePlaceKeepsTheDirectoryAndDropsTheConversation(t *
 	})
 	before := spawnCount(backend)
 
-	outcome, err := d.reopenSession("fresh-here", protocol.SessionReopenActionStartFreshSamePlace, "")
+	outcome, err := d.reopenSession("fresh-here", protocol.SessionReopenActionStartFreshSamePlace, "", profileDestination{})
 	if err != nil {
 		t.Fatalf("start_fresh_same_place: %v", err)
 	}
@@ -192,7 +191,7 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 		ID: "elsewhere", Directory: gone, Agent: "codex", Resume: "conv-elsewhere",
 	})
 
-	if _, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, ""); err == nil {
+	if _, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, "", profileDestination{}); err == nil {
 		t.Fatal("start_fresh_elsewhere ran without a directory to start in")
 	}
 	if !d.store.SessionClosed("elsewhere") {
@@ -200,7 +199,7 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 	}
 
 	chosen := t.TempDir()
-	outcome, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, chosen)
+	outcome, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, chosen, profileDestination{})
 	if err != nil {
 		t.Fatalf("start_fresh_elsewhere with a directory: %v", err)
 	}
@@ -225,7 +224,7 @@ func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	}
 	closedAt := protocol.Deref(closed.ClosedAt)
 
-	if _, err := d.reopenSession("failed", "", ""); err == nil {
+	if _, err := d.reopenSession("failed", "", "", profileDestination{}); err == nil {
 		t.Fatal("the reopen reported success although the spawn failed")
 	}
 
@@ -244,46 +243,91 @@ func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	}
 }
 
-func TestAFailedReopenKeepsThePaneThatOutlivedTheClose(t *testing.T) {
+func TestAReopenComesBackUnplacedInItsProfileUnderItsOwnID(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	backend := reopenDaemonWithBackend(t, d)
+	writeCodexRolloutFixture(t, "conv-unplaced")
+	closeReopenSession(t, d, reopenSession{
+		ID: "unplaced", Directory: t.TempDir(), Agent: "codex", Resume: "conv-unplaced",
+	})
+	before := spawnCount(backend)
+
+	outcome, err := d.reopenSession("unplaced", "", "", profileDestination{})
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	if outcome.SessionID != "unplaced" || outcome.ProfileID != defaultProfileID(t, d.store) {
+		t.Errorf("outcome = %+v, want the same id back in the default profile", outcome)
+	}
+	if spawn := resumeSpawnForSession(t, backend, "unplaced", before); spawn.ID != "unplaced" {
+		t.Errorf("spawned %q, want the session's own id", spawn.ID)
+	}
+	if _, placed, err := d.store.SessionPlacement("unplaced"); err != nil || placed {
+		t.Errorf("placed=%v err=%v, want the reopened agent unplaced", placed, err)
+	}
+}
+
+func TestReopeningIntoADeletedProfileNeedsALiveDestination(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	backend := reopenDaemonWithBackend(t, d)
+	writeCodexRolloutFixture(t, "conv-orphan")
+	work := createTestProfile(t, d.store, "Work")
+	personal := createTestProfile(t, d.store, "Personal")
+	closeReopenSession(t, d, reopenSession{
+		ID: "orphan", Directory: t.TempDir(), Agent: "codex", Resume: "conv-orphan", ProfileID: work.ID,
+	})
+	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
+	before := spawnCount(backend)
+
+	if _, err := d.reopenSession("orphan", "", "", profileDestination{}); err == nil || !strings.Contains(err.Error(), work.ID) {
+		t.Fatalf("reopen without a destination = %v, want a refusal naming the deleted profile %s", err, work.ID)
+	}
+	if _, err := d.reopenSession("orphan", "", "", profileDestination{requested: work.ID}); err == nil {
+		t.Fatal("reopening into the deleted profile itself was accepted")
+	}
+	if spawnCount(backend) != before || !d.store.SessionClosed("orphan") {
+		t.Fatal("a refused reopen spawned or lifted the close")
+	}
+
+	outcome, err := d.reopenSession("orphan", "", "", profileDestination{requested: personal.ID})
+	if err != nil {
+		t.Fatalf("reopen into Personal: %v", err)
+	}
+	if outcome.ProfileID != personal.ID || d.store.Get("orphan").ProfileID != personal.ID {
+		t.Errorf("reopened into %q (row %q), want %s", outcome.ProfileID, d.store.Get("orphan").ProfileID, personal.ID)
+	}
+}
+
+func TestReopeningIntoAnotherLiveProfileIsAMoveAndRefused(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	reopenDaemonWithBackend(t, d)
+	writeCodexRolloutFixture(t, "conv-stay")
+	personal := createTestProfile(t, d.store, "Personal")
+	closeReopenSession(t, d, reopenSession{
+		ID: "stay", Directory: t.TempDir(), Agent: "codex", Resume: "conv-stay",
+	})
+
+	if _, err := d.reopenSession("stay", "", "", profileDestination{requested: personal.ID}); err == nil {
+		t.Fatal("reopen moved a session out of its live profile")
+	}
+}
+
+func TestAFailedReopenIntoANewProfileKeepsTheRecordedOne(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)
 	backend.spawnErr = errSpawnRefusedInThisTest
-	writeCodexRolloutFixture(t, "conv-pane")
-	directory := t.TempDir()
-
-	client := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-survivor", Title: "Survivor", Directory: directory,
+	writeCodexRolloutFixture(t, "conv-failed-move")
+	work := createTestProfile(t, d.store, "Work")
+	closeReopenSession(t, d, reopenSession{
+		ID: "failed-move", Directory: t.TempDir(), Agent: "codex", Resume: "conv-failed-move", ProfileID: work.ID,
 	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-survivor",
-		PaneID: protocol.Ptr("pane-survivor"), SessionID: "survivor", Title: protocol.Ptr("Survivor"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane,
-		"workspace-survivor", "pane-survivor", true)
+	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
 
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID: "survivor", Label: "survivor", Agent: protocol.SessionAgentCodex,
-		Directory: directory, WorkspaceID: "workspace-survivor", State: protocol.SessionStateIdle,
-		StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	d.persistResumeSessionID("survivor", "conv-pane")
-	d.closeSession("survivor", store.SessionClose{By: store.SessionClosedByUser})
-
-	verdict := decidedReopenVerdict(t, d, "survivor")
-	if verdict.PanePlan != reopenPlaceReuse {
-		t.Fatalf("pane plan = %s, want the surviving pane reused", verdict.PanePlan)
-	}
-
-	if _, err := d.reopenSession("survivor", "", ""); err == nil {
+	if _, err := d.reopenSession("failed-move", "", "", profileDestination{requested: defaultProfileID(t, d.store)}); err == nil {
 		t.Fatal("the reopen reported success although the spawn failed")
 	}
-
-	holder, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID("survivor")
-	if !ok || paneID != "pane-survivor" || holder != "workspace-survivor" {
-		t.Errorf("pane after the failed reopen = %q in %q (found %v), want pane-survivor kept in workspace-survivor",
-			paneID, holder, ok)
+	if profileID, err := d.store.SessionProfileID("failed-move"); err != nil || profileID != work.ID {
+		t.Errorf("closed row profile = %q err=%v, want the recorded %s kept as history", profileID, err, work.ID)
 	}
 }
 
@@ -349,7 +393,7 @@ func TestReopeningLeavesTheCostCursorWhereTheCloseLeftIt(t *testing.T) {
 		t.Fatalf("cost cursor at the close = %q, want the fixture %q", closed.Cursor, cursor)
 	}
 
-	if _, err := d.reopenSession("cost", "", ""); err != nil {
+	if _, err := d.reopenSession("cost", "", "", profileDestination{}); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 

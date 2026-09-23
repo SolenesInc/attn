@@ -195,8 +195,8 @@ func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
 			t.Errorf("spawn instructions=%+v, want agent guidance", params.Instructions)
 			return
 		}
-		if params.Instructions.WorkspaceID != "workspace-snipe" {
-			t.Errorf("spawn instruction provenance=%+v, want workspace-snipe", params.Instructions)
+		if params.Instructions.ProfileID != defaultProfileID(t, d.store) {
+			t.Errorf("spawn instruction provenance=%+v, want the default profile", params.Instructions)
 			return
 		}
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{
@@ -206,18 +206,17 @@ func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
 		})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
-		YoloMode:    protocol.Ptr(true),
-		Model:       protocol.Ptr("gpt-5"),
-		Effort:      protocol.Ptr("low"),
+		ID:        "snipe-session",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
+		YoloMode:  protocol.Ptr(true),
+		Model:     protocol.Ptr("gpt-5"),
+		Effort:    protocol.Ptr("low"),
 	})
 	<-requestDone
 
@@ -285,15 +284,14 @@ func TestHandleSpawnSession_PluginDriverClosesRunWhenPTYSpawnFails(t *testing.T)
 		closed <- params
 	}()
 
-	addTestWorkspace(d, "workspace-snipe-failed-spawn", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-failed-spawn",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe-failed-spawn",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-failed-spawn",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 
 	params := <-closed
@@ -337,15 +335,14 @@ func TestHandleSpawnSession_PluginDriverClosesRunThatExitsDuringSpawn(t *testing
 		closeDone <- params
 	}()
 
-	addTestWorkspace(d, "workspace-snipe-early-exit", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 4), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-early-exit",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe-early-exit",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-early-exit",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 
 	params := <-closeDone
@@ -411,15 +408,14 @@ func TestHandleSpawnSession_PluginDriverDoesNotQueuePriorRunExitDuringRelaunch(t
 		closeDone <- closed
 	}()
 
-	addTestWorkspace(d, "workspace-snipe-relaunch", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 4), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-relaunch",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe-relaunch",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-relaunch",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 
 	wantRunID := <-newRunID
@@ -506,12 +502,12 @@ func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesWithSpawn(t *test
 	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "spawn-only-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-spawn-only",
-		Agent:       "spawn-only",
-		Cols:        80,
-		Rows:        24,
+		ID:        "spawn-only-session",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "spawn-only",
+		Cols:      80,
+		Rows:      24,
 	})
 	<-requestDone
 }
@@ -719,12 +715,12 @@ func TestHandleSpawnSession_PluginDriverQueuesReportsDuringPTYStartup(t *testing
 	addTestWorkspace(d, "workspace-early", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "early-report",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-early",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "early-report",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 
 	session := d.store.Get("early-report")
@@ -1184,15 +1180,14 @@ func TestHandleSpawnSession_PullRequestReportingSuppressesSelfReportGuidance(t *
 				respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 			}()
 
-			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 			d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-				ID:          "snipe-session",
-				Cwd:         t.TempDir(),
-				WorkspaceID: "workspace-snipe",
-				Agent:       "snipe",
-				Cols:        80,
-				Rows:        24,
+				ID:        "snipe-session",
+				Cwd:       t.TempDir(),
+				ProfileID: defaultProfileID(t, d.store),
+				Agent:     "snipe",
+				Cols:      80,
+				Rows:      24,
 			})
 			<-requestDone
 		})
@@ -1229,12 +1224,11 @@ func TestHandleSpawnSession_PluginDriverResumesAnExplicitConversation(t *testing
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe", "--session", "snipe-conv-7"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:              "snipe-resumed",
 		Cwd:             t.TempDir(),
-		WorkspaceID:     "workspace-snipe",
+		ProfileID:       defaultProfileID(t, d.store),
 		Agent:           "snipe",
 		Cols:            80,
 		Rows:            24,
@@ -1279,10 +1273,9 @@ func TestHandleSpawnSession_PluginDriverRelaunchCarriesTheStoredConversation(t *
 		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
 	}()
 
-	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID: "snipe-relaunch", Cwd: t.TempDir(), WorkspaceID: "workspace-snipe", Agent: "snipe", Cols: 80, Rows: 24,
+		ID: "snipe-relaunch", Cwd: t.TempDir(), ProfileID: defaultProfileID(t, d.store), Agent: "snipe", Cols: 80, Rows: 24,
 	})
 	<-requestDone
 }
@@ -1369,7 +1362,7 @@ func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesFreshDespiteStore
 	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID: "spawn-only-stored", Cwd: t.TempDir(), WorkspaceID: "workspace-spawn-only", Agent: "spawn-only", Cols: 80, Rows: 24,
+		ID: "spawn-only-stored", Cwd: t.TempDir(), ProfileID: defaultProfileID(t, d.store), Agent: "spawn-only", Cols: 80, Rows: 24,
 	})
 	<-requestDone
 	if session := d.store.Get("spawn-only-stored"); session == nil {

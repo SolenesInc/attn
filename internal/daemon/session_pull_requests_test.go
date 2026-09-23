@@ -13,32 +13,7 @@ import (
 
 func registerSessionForPRTest(t *testing.T, d *Daemon, id string) {
 	t.Helper()
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        "workspace-" + id,
-		Title:     "workspace-" + id,
-		Directory: t.TempDir(),
-	})
-
-	serverConn, clientConn := net.Pipe()
-	defer clientConn.Close()
-	go func() {
-		d.handleRegister(serverConn, &protocol.RegisterMessage{
-			ID:          id,
-			Label:       protocol.Ptr(id),
-			Dir:         t.TempDir(),
-			Agent:       protocol.Ptr(protocol.SessionAgentClaude),
-			WorkspaceID: "workspace-" + id,
-		})
-		_ = serverConn.Close()
-	}()
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode register response: %v", err)
-	}
-	if !resp.Ok {
-		t.Fatalf("register response = %+v", resp)
-	}
+	injectTestSession(t, d, protocol.Session{ID: id, Label: id, Directory: t.TempDir(), Agent: protocol.SessionAgentClaude})
 }
 
 func sendPRCommand(t *testing.T, d *Daemon, msg any) protocol.Response {

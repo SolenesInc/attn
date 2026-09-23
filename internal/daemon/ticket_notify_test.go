@@ -307,7 +307,7 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 		chiefB := "chief-b"
 		d.store.Add(&protocol.Session{
 			ID: chiefB, Label: "replacement chief", Agent: protocol.SessionAgentCodex,
-			Directory: "/tmp/chief-b", WorkspaceID: "workspace-chief-b",
+			Directory: "/tmp/chief-b", WorkspaceID: "workspace-chief-b", ProfileID: defaultProfileID(t, d.store),
 			State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 		})
 		d.store.UpdateState(chiefA, protocol.StateIdle)

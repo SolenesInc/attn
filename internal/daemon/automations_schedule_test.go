@@ -36,7 +36,7 @@ func setupScheduledDaemon(t *testing.T, cron, continuity, catchUp string) (*Daem
 		t.Fatalf("parse definition: %v", err)
 	}
 	s := store.New()
-	def, err := s.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), time.Now())
+	def, err := s.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), defaultProfileID(t, s), time.Now())
 	if err != nil {
 		t.Fatalf("upsert definition: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestObserveDueScheduleClaimRejectionLeavesCursorForRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), now0); err != nil {
+	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), defaultProfileID(t, s), now0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -323,7 +323,7 @@ func TestObserveDueScheduleClaimRejectionRetryFiresNewestDueInstant(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), now0); err != nil {
+	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), defaultProfileID(t, s), now0); err != nil {
 		t.Fatal(err)
 	}
 
@@ -408,7 +408,7 @@ func claimPendingScheduledRun(t *testing.T, s *store.Store, def *store.Automatio
 		t.Fatal(err)
 	}
 	d := &Daemon{store: s}
-	reservation, err := d.newAutomationRunReservation()
+	reservation, err := d.newAutomationRunReservation(def)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -481,7 +481,7 @@ func TestScheduledSingletonSecondOccurrenceContinuesFirstOccurrencesThread(t *te
 			RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey,
 			ContinuityKey: "singleton", Provider: occurrence.Provider, Prompt: snapshot.Prompt,
 			Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location,
-			IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID},
+			IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID},
 		}
 		if err := d.validateAutomationContinuation(req); err != nil {
 			return err
@@ -565,7 +565,7 @@ func TestScheduledPendingRunDeliversImmutableSnapshotAfterDefinitionEdit(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), intended.Add(time.Minute)); err != nil {
+	if _, err := s.UpsertAutomationDefinition(editedSpec.ID, editedSpec.Name, string(editedCanonical), defaultProfileID(t, s), intended.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -628,7 +628,7 @@ func TestObserveDueSchedulesFreshContinuityCreatesDistinctRuns(t *testing.T) {
 func TestScheduledSingletonContinuationSkipsPullRequestParsing(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -637,7 +637,7 @@ func TestScheduledSingletonContinuationSkipsPullRequestParsing(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, _, err := s.ClaimScheduledAutomationRun(def.ID, automation.ScheduledOccurrenceKey(intended1), "singleton", def.Revision, string(payload1), `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	first, _, err := s.ClaimScheduledAutomationRun(def.ID, automation.ScheduledOccurrenceKey(intended1), "singleton", def.Revision, string(payload1), `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -662,7 +662,7 @@ func TestScheduledSingletonContinuationSkipsPullRequestParsing(t *testing.T) {
 	req := automation.WorkRequest{
 		RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Provider: "schedule",
 		Context: json.RawMessage(payload2),
-		IDs:     automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID},
+		IDs:     automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID},
 	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		t.Fatalf("singleton continuation with a live session rejected: %v", err)
@@ -760,7 +760,7 @@ func deliverSingletonRunForTest(d *Daemon, s *store.Store, run *store.Automation
 		RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey,
 		ContinuityKey: "singleton", Provider: occurrence.Provider, Prompt: snapshot.Prompt,
 		Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location,
-		IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID},
+		IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID},
 	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
@@ -799,7 +799,7 @@ func scheduledSingletonHoldsLaterOccurrence(t *testing.T, originPlantsSeedBefore
 		if binding.OriginRunID == run.ID {
 			if !originReady {
 				if originPlantsSeedBeforeFailing {
-					req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, ContinuityKey: "singleton", Prompt: "Sweep.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+					req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, ContinuityKey: "singleton", Prompt: "Sweep.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID}}
 					if _, _, err := d.ensureAutomationSeed(req); err != nil {
 						return err
 					}

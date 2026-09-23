@@ -143,12 +143,12 @@ func TestSpawnCarriesThePromotedAutoModeConfig(t *testing.T) {
 	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-session",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 	<-requestDone
 }
@@ -246,12 +246,12 @@ func TestSpawnOmitsAutoModeForADriverThatDoesNotAskForIt(t *testing.T) {
 	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-session",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 	<-requestDone
 }
@@ -303,13 +303,13 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 			d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-				ID:          "snipe-session",
-				Cwd:         t.TempDir(),
-				WorkspaceID: "workspace-snipe",
-				Agent:       "snipe",
-				Cols:        80,
-				Rows:        24,
-				AutoMode:    tc.override,
+				ID:        "snipe-session",
+				Cwd:       t.TempDir(),
+				ProfileID: defaultProfileID(t, d.store),
+				Agent:     "snipe",
+				Cols:      80,
+				Rows:      24,
+				AutoMode:  tc.override,
 			})
 			<-requestDone
 
@@ -326,7 +326,7 @@ func TestSpawnAppliesThePerSessionAutoModeOverride(t *testing.T) {
 			if intent.AutoMode == nil || *intent.AutoMode != *tc.override {
 				t.Errorf("intent auto mode = %v, want %t", intent.AutoMode, *tc.override)
 			}
-			session := &protocol.Session{ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe"}
+			session := &protocol.Session{ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe", ProfileID: defaultProfileID(t, d.store)}
 			revived, _ := buildStoredIntentSpawn(session, intent, 80, 24)
 			if revived.AutoMode == nil || *revived.AutoMode != *tc.override {
 				t.Errorf("revive spawn auto mode = %v, want %t", revived.AutoMode, *tc.override)
@@ -449,12 +449,12 @@ func TestSpawnDetectsTheSessionsRepository(t *testing.T) {
 	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         repo,
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-session",
+		Cwd:       repo,
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 	<-requestDone
 }
@@ -507,12 +507,12 @@ func TestSpawnKeepsTheUsersTrustedRepoOverDetection(t *testing.T) {
 	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         repo,
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
+		ID:        "snipe-session",
+		Cwd:       repo,
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
 	})
 	<-requestDone
 }

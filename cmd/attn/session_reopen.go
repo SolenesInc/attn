@@ -22,10 +22,11 @@ var sessionReopenActions = []protocol.SessionReopenAction{
 }
 
 type sessionReopenArgs struct {
-	target string
-	action string
-	cwd    string
-	json   bool
+	target  string
+	action  string
+	cwd     string
+	profile string
+	json    bool
 }
 
 func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
@@ -38,6 +39,7 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 	fs.SetOutput(io.Discard)
 	action := fs.String("action", "", "the action to perform; `attn session show` lists the ones offered")
 	cwd := fs.String("cwd", "", "where to start, for --action start_fresh_elsewhere")
+	profile := fs.String("profile", "", "the profile to reopen into, when the session's own profile is gone")
 	jsonOut := fs.Bool("json", false, "print the result as JSON")
 	if err := fs.Parse(args[1:]); err != nil {
 		return sessionReopenArgs{}, err
@@ -50,7 +52,7 @@ func parseSessionReopenArgs(args []string) (sessionReopenArgs, error) {
 		return sessionReopenArgs{}, fmt.Errorf("%q is not a reopen action; the actions are %s",
 			named, strings.Join(sessionReopenActionNames(), ", "))
 	}
-	return sessionReopenArgs{target: target, action: named, cwd: strings.TrimSpace(*cwd), json: *jsonOut}, nil
+	return sessionReopenArgs{target: target, action: named, cwd: strings.TrimSpace(*cwd), profile: strings.TrimSpace(*profile), json: *jsonOut}, nil
 }
 
 func knownSessionReopenAction(name string) bool {
@@ -82,6 +84,7 @@ func runSessionReopen(args []string) {
 		SessionID: parsed.target,
 		Action:    parsed.action,
 		Directory: parsed.cwd,
+		ProfileID: parsed.profile,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "session reopen: %v\n", err)
@@ -96,14 +99,14 @@ func runSessionReopen(args []string) {
 
 func fprintSessionReopen(w io.Writer, result *protocol.SessionReopenResult) {
 	if protocol.Deref(result.AlreadyRunning) {
-		fmt.Fprintf(w, "%s is already running in workspace %s\n", result.SessionID, result.WorkspaceID)
+		fmt.Fprintf(w, "%s is already running in profile %s\n", result.SessionID, result.ProfileID)
 		return
 	}
 	if created := protocol.Deref(result.WorktreeCreated); created != "" {
 		fmt.Fprintf(w, "recreated worktree %s\n", created)
 	}
-	fmt.Fprintf(w, "%s reopened in %s (workspace %s, %s)\n",
-		result.SessionID, result.Directory, result.WorkspaceID, result.Action)
+	fmt.Fprintf(w, "%s reopened in %s (profile %s, unplaced, %s)\n",
+		result.SessionID, result.Directory, result.ProfileID, result.Action)
 }
 
 func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.SessionReopen) {
@@ -124,8 +127,11 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 	if reopen.Checking {
 		fmt.Fprintln(w, "checking   a branch check is running; ask again for a sharper verdict")
 	}
-	fmt.Fprintf(w, "lands in   workspace %s (%s), pane %s\n",
-		reopen.WorkspaceID, reopen.WorkspacePlan, reopen.PanePlan)
+	if reopen.ProfileDeleted {
+		fmt.Fprintf(w, "lands in   profile %s is gone; pass --profile <id> to choose where\n", reopen.ProfileID)
+	} else {
+		fmt.Fprintf(w, "lands in   profile %s, unplaced\n", reopen.ProfileID)
+	}
 	fmt.Fprintf(w, "place      directory %s", reopen.DirectoryState)
 	if branch := strings.TrimSpace(protocol.Deref(reopen.BranchState)); branch != "" {
 		fmt.Fprintf(w, ", branch %s", branch)

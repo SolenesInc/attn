@@ -11,6 +11,7 @@ import { CrewPanel } from './CrewPanel';
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
   return {
     id,
+    profile_id: 'profile-default',
     revision,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,

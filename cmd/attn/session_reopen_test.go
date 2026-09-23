@@ -46,7 +46,7 @@ func TestSessionReopenPrintsWhatItDid(t *testing.T) {
 	var out bytes.Buffer
 	fprintSessionReopen(&out, &protocol.SessionReopenResult{
 		SessionID:       "sess-1",
-		WorkspaceID:     "workspace-sess-1",
+		ProfileID:       "profile-default",
 		Directory:       "/tmp/repo--feat",
 		Action:          protocol.SessionReopenActionRecreateWorktreeAndReopen,
 		WorktreeCreated: protocol.Ptr("/tmp/repo--feat"),
@@ -62,7 +62,7 @@ func TestSessionReopenPrintsWhatItDid(t *testing.T) {
 	out.Reset()
 	fprintSessionReopen(&out, &protocol.SessionReopenResult{
 		SessionID:      "sess-1",
-		WorkspaceID:    "workspace-sess-1",
+		ProfileID:      "profile-default",
 		Directory:      "/tmp/repo",
 		Action:         protocol.SessionReopenActionReopen,
 		AlreadyRunning: protocol.Ptr(true),
@@ -80,11 +80,13 @@ func TestTheVerdictSaysAWorktreeCheckIsStillRunning(t *testing.T) {
 		Checking:       true,
 		Actions:        []protocol.SessionReopenAction{},
 		DirectoryState: "missing",
-		WorkspaceID:    "workspace-sess-1",
-		WorkspacePlan:  "create",
-		PanePlan:       "add",
+		ProfileID:      "profile-default",
+		ProfileDeleted: true,
 	})
 	printed := out.String()
+	if !strings.Contains(printed, "pass --profile <id>") {
+		t.Errorf("a verdict for a deleted profile must say how to choose one:\n%s", printed)
+	}
 	if !strings.Contains(printed, "reopen     no: the worktree directory is gone") {
 		t.Errorf("the verdict does not carry its reason:\n%s", printed)
 	}

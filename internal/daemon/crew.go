@@ -32,6 +32,11 @@ func (d *Daemon) ensureCrewCollections() {
 }
 
 func (d *Daemon) importCrewHomes() {
+	d.registerCrewHomes()
+	d.assignCrewProfiles()
+}
+
+func (d *Daemon) registerCrewHomes() {
 	if d.store == nil {
 		return
 	}
@@ -73,6 +78,40 @@ func (d *Daemon) importCrewHomes() {
 		d.publishFact(FactCrewRegistered, member.ID, nil)
 		d.logf("crew: imported member %s from %s", crew.DisplayName(member.ID), member.HomeDir)
 	}
+}
+
+func (d *Daemon) assignCrewProfiles() {
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
+		return
+	}
+	members, _, err := d.readCrewMembersRaw()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("crew: reading members to give them a profile: %v", err)
+		}
+		return
+	}
+	if len(members) == 0 {
+		return
+	}
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		d.logf("crew: members need a profile and none can be given: %v", err)
+		return
+	}
+	for _, member := range members {
+		if _, err := d.store.EnsureCrewProfile(member.ID, profile.ID); err != nil {
+			d.logf("crew: giving %s a profile: %v", crew.DisplayName(member.ID), err)
+		}
+	}
+}
+
+func (d *Daemon) crewProfileID(memberID string) string {
+	profileID, err := d.store.CrewProfile(memberID)
+	if err != nil {
+		d.logf("crew: reading the profile of %s: %v", crew.DisplayName(memberID), err)
+	}
+	return profileID
 }
 
 func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {
@@ -483,6 +522,7 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	wire := protocol.CrewMember{
 		ID:            member.ID,
+		ProfileID:     d.crewProfileID(member.ID),
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath,
 		HomeDir:       member.HomeDir,

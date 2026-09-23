@@ -42,8 +42,8 @@ func writeCrewHelp(w io.Writer) {
 	fmt.Fprint(w, `usage: attn crew <command>
 
 Manage the Crew. Members' charters and handoffs persist across sessions
-in the active instance's crew directory.
-Launch as a member with: attn <agent> --member <name>.
+in the active instance's crew directory. Every member belongs to a profile
+and wakes only there.
 Run crew commands on the home daemon; outposts report which home to use.
 
 commands:
@@ -51,7 +51,9 @@ commands:
         Show all members and their active sessions, if any.
 
   wake <member> [--agent <name>] [--json]
-        Start a session using the member's saved launch settings.
+        Start a session using the member's saved launch settings, unplaced
+        in the member's profile. Asked from an agent of another profile, it
+        refuses.
         Include its charter location, latest handoff, home instructions,
         held seeds with handoff notes, and ready counts for their plots.
         --agent overrides the harness for this session.
@@ -159,7 +161,7 @@ func runCrewWake(args []string) {
 		writeCrewHelp(os.Stderr)
 		os.Exit(2)
 	}
-	result, err := client.New("").CrewWake(parsed.member, parsed.agent)
+	result, err := client.New("").CrewWake(parsed.member, parsed.agent, strings.TrimSpace(os.Getenv("ATTN_SESSION_ID")))
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "crew wake: %v\n", err)
 		os.Exit(1)

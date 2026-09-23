@@ -191,7 +191,7 @@ func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, ob
 				observationLock.Unlock()
 				continue
 			}
-			reservation, err := d.newAutomationRunReservation()
+			reservation, err := d.newAutomationRunReservation(&definition)
 			if err != nil {
 				observationLock.Unlock()
 				d.logf("automation GitHub observation reserve %s: %v", definition.ID, err)

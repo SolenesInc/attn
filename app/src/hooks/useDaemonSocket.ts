@@ -313,7 +313,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '321';
+export const PROTOCOL_VERSION = '323';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1866,7 +1866,6 @@ export function useDaemonSocket({
             if (data.success && typeof data.session_id === 'string') {
               pending.resolve({
                 sessionId: data.session_id,
-                workspaceId: typeof data.workspace_id === 'string' ? data.workspace_id : undefined,
                 alreadyRunning: data.already_running === true,
               });
             } else {
@@ -2987,7 +2986,7 @@ export function useDaemonSocket({
       cmd: 'spawn_session',
       id: args.id,
       cwd: args.cwd,
-      workspace_id: args.workspace_id,
+      placement: {},
       ...(args.endpoint_id && { endpoint_id: args.endpoint_id }),
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,
@@ -4704,7 +4703,7 @@ export function useDaemonSocket({
     (
       seedId: string,
       review?: SeedReviewActionContext,
-    ): Promise<{ sessionId: string; workspaceId?: string; alreadyRunning?: boolean }> => {
+    ): Promise<{ sessionId: string; alreadyRunning?: boolean }> => {
       return new Promise((resolve, reject) => {
         const ws = wsRef.current;
         if (!ws || ws.readyState !== WebSocket.OPEN) {

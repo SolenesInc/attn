@@ -136,9 +136,7 @@ export interface ReopenVerdictView {
   warning?: string;
   directoryState: string;
   branchState?: string;
-  workspacePlan: string;
-  workspaceId: string;
-  panePlan: string;
+  profileDeleted: boolean;
 }
 
 export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
@@ -151,21 +149,14 @@ export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
     warning: reopen.warning,
     directoryState: reopen.directory_state,
     branchState: reopen.branch_state,
-    workspacePlan: reopen.workspace_plan,
-    workspaceId: reopen.workspace_id,
-    panePlan: reopen.pane_plan,
+    profileDeleted: reopen.profile_deleted,
   };
 }
 
-export function reopenPlacement(
-  verdict: ReopenVerdictView,
-  workspaceLabel: (workspaceId: string) => string,
-): string {
-  const workspace = verdict.workspacePlan === 'reuse'
-    ? `lands in ${workspaceLabel(verdict.workspaceId)}`
-    : 'opens a workspace named after the session';
-  const pane = verdict.panePlan === 'reuse' ? 'in its old pane' : 'in a new pane';
-  return `${workspace}, ${pane}`;
+export function reopenPlacement(verdict: ReopenVerdictView): string {
+  return verdict.profileDeleted
+    ? 'its profile was deleted; reopening lands it in your current profile'
+    : 'lands unplaced in its profile';
 }
 
 const BRANCH_STATE_LABELS: Record<string, string> = {

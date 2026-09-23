@@ -12,7 +12,6 @@ import (
 
 	"nhooyr.io/websocket"
 
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/hub"
@@ -40,7 +39,7 @@ func addAgentCloseSession(t *testing.T, d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: label, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "ws-" + id,
+		Directory: "/tmp/" + id, WorkspaceID: "ws-" + id, ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }
@@ -462,9 +461,8 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 	})
 	waitForSocket(t, outpost.socketPath, 10*time.Second)
 
-	outpostClient := client.New(outpost.socketPath)
 	for _, session := range sessions {
-		if err := outpostClient.Register(session.ID, session.Label, session.Directory); err != nil {
+		if err := registerTestSession(outpost.socketPath, session.ID, session.Label, session.Directory); err != nil {
 			t.Fatalf("register %s on the outpost: %v", session.ID, err)
 		}
 	}

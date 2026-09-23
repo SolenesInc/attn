@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -214,6 +215,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
 		if existing := s.sessions[session.ID]; existing != nil {
+			if existing.ProfileID != "" {
+				stored.ProfileID = existing.ProfileID
+			}
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
 			}
@@ -244,6 +248,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	if s.sessionClosedLocked(session.ID) {
 		return fmt.Errorf("add session %s: %w", session.ID, ErrSessionClosed)
 	}
+	if err := s.refuseJoiningDeletedProfileLocked(session); err != nil {
+		return fmt.Errorf("add session %s: %w", session.ID, err)
+	}
 
 	todosJSON, err := json.Marshal(session.Todos)
 	if err != nil {
@@ -260,14 +267,15 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			endpoint_id = excluded.endpoint_id,
 			workspace_id = excluded.workspace_id,
+			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
 			branch = excluded.branch,
 			is_worktree = excluded.is_worktree,
 			main_repo = excluded.main_repo,
@@ -288,6 +296,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.Directory,
 		protocol.Deref(session.EndpointID),
 		session.WorkspaceID,
+		session.ProfileID,
 		protocol.Deref(session.Branch),
 		boolToInt(protocol.Deref(session.IsWorktree)),
 		protocol.Deref(session.MainRepo),
@@ -306,6 +315,25 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	return nil
 }
 
+func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) error {
+	if session.ProfileID == "" {
+		return nil
+	}
+	var current string
+	err := s.db.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, session.ID).Scan(&current)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if current == session.ProfileID {
+		return nil
+	}
+	if current != "" {
+		return profiles.Errorf(profiles.CodeCrossProfile, "session %s belongs to profile %s, not %s it was launched for; it moved while launching", session.ID, current, session.ProfileID)
+	}
+	_, err = loadLiveProfile(s.db, session.ProfileID)
+	return err
+}
+
 func (s *Store) Get(id string) *protocol.Session {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -322,7 +350,7 @@ func (s *Store) Get(id string) *protocol.Session {
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -330,6 +358,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&session.Directory,
 		&endpointID,
 		&workspaceID,
+		&session.ProfileID,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -485,11 +514,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -513,6 +542,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.Directory,
 			&endpointID,
 			&workspaceID,
+			&session.ProfileID,
 			&branch,
 			&isWorktree,
 			&mainRepo,

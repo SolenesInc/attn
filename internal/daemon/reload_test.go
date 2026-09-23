@@ -252,6 +252,7 @@ func addReloadSessionAt(d *Daemon, id string, agent protocol.SessionAgent, state
 	d.store.Add(&protocol.Session{
 		ID: id, Label: id, Agent: agent, Directory: directory,
 		WorkspaceID: "ws-" + id, State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+		ProfileID: recentProfileID(d.store),
 	})
 }
 

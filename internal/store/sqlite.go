@@ -1296,6 +1296,13 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 	`},
 	{ProfileConversionSchemaVersion, "convert legacy workspaces into the Default profile and its desktops", ""},
+	{154, "record the profile each crew member belongs to", `
+		CREATE TABLE IF NOT EXISTS crew_profiles (
+			member_id TEXT PRIMARY KEY,
+			profile_id TEXT NOT NULL
+		);
+		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
+	`},
 }
 
 const migration99SQL = `

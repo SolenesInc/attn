@@ -142,7 +142,7 @@ func TestDaemon_StopCommand_BackgroundWork_StaysWorking(t *testing.T) {
 	waitForSocket(t, sockPath, 5*time.Second)
 
 	c := client.New(sockPath)
-	if err := c.Register("bg-session", "Test", "/tmp/test"); err != nil {
+	if err := registerTestSession(sockPath, "bg-session", "Test", "/tmp/test"); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 
@@ -170,7 +170,7 @@ func TestDaemon_StopCommand_PendingCron_Settles(t *testing.T) {
 	waitForSocket(t, sockPath, 5*time.Second)
 
 	c := client.New(sockPath)
-	if err := c.Register("cron-session", "Test", "/tmp/test"); err != nil {
+	if err := registerTestSession(sockPath, "cron-session", "Test", "/tmp/test"); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 	if err := c.SendStop("cron-session", "/nonexistent/transcript.jsonl", client.StopFacts{

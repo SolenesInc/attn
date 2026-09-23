@@ -600,3 +600,132 @@ func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
 		t.Fatalf("most recently used profile = %+v, %v; want %s", recent, err, home.ID)
 	}
 }
+
+func TestALaunchedSessionLandsBesideTheActivePaneOfTheCurrentDesktop(t *testing.T) {
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "first", profile.ID)
+	addProfileSession(t, s, "second", profile.ID)
+	addProfileSession(t, s, "third", profile.ID)
+
+	placed, firstPane, err := s.PlaceLaunchedSession(SessionPlacementRequest{SessionID: "first", Status: profiles.PaneStatusReady})
+	if err != nil || placed.ID != desktop.ID {
+		t.Fatalf("first launch placed on %s err=%v, want the current desktop %s", placed.ID, err, desktop.ID)
+	}
+	placed, secondPane, err := s.PlaceLaunchedSession(SessionPlacementRequest{SessionID: "second", Status: profiles.PaneStatusReady})
+	if err != nil || placed.ActivePaneID != secondPane {
+		t.Fatalf("second launch = %+v err=%v, want it focused", placed, err)
+	}
+	placed, _, err = s.PlaceLaunchedSession(SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "third", AnchorPaneID: firstPane, Status: profiles.PaneStatusReady})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := layouttree.PaneIDs(placed.Tree); len(got) != 3 || got[0] != firstPane {
+		t.Fatalf("panes = %v, want the third split beside the first", got)
+	}
+	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
+}
+
+func TestALaunchedSessionIsNeverPlacedOutsideItsProfile(t *testing.T) {
+	s, _ := openProfileStore(t)
+	home, _ := mustCreateProfile(t, s, "Home")
+	_, workDesktop := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "homebody", home.ID)
+
+	_, _, err := s.PlaceLaunchedSession(SessionPlacementRequest{DesktopID: workDesktop.ID, SessionID: "homebody", Status: profiles.PaneStatusReady})
+	wantCode(t, err, profiles.CodeCrossProfile)
+	if _, err := s.LaunchDesktop(home.ID, workDesktop.ID); err == nil {
+		t.Fatal("LaunchDesktop accepted a desktop of another profile")
+	}
+	if _, placed, _ := s.SessionPlacement("homebody"); placed {
+		t.Fatal("a refused placement left a pane")
+	}
+}
+
+func TestReAddingASessionNeverChangesItsProfile(t *testing.T) {
+	s, _ := openProfileStore(t)
+	home, _ := mustCreateProfile(t, s, "Home")
+	work, _ := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "agent", home.ID)
+
+	session := s.Get("agent")
+	session.ProfileID = work.ID
+	wantCode(t, s.AddChecked(session), profiles.CodeCrossProfile)
+	session.ProfileID = ""
+	if err := s.AddChecked(session); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Get("agent").ProfileID; got != home.ID {
+		t.Fatalf("profile after re-adds = %q, want %s: membership changes only through a move", got, home.ID)
+	}
+}
+
+func TestReopeningIntoAnotherProfileIsUndoneWithTheClose(t *testing.T) {
+	s, _ := openProfileStore(t)
+	home, _ := mustCreateProfile(t, s, "Home")
+	work, _ := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "agent", home.ID)
+	if _, err := s.CloseSession("agent", SessionClose{By: SessionClosedByUser}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	lifted, reopened, err := s.ReopenSession("agent", work.ID)
+	if err != nil || !reopened || lifted.ProfileID != home.ID {
+		t.Fatalf("reopen lifted=%+v reopened=%v err=%v, want the recorded profile %s lifted", lifted, reopened, err, home.ID)
+	}
+	if got := s.Get("agent").ProfileID; got != work.ID {
+		t.Fatalf("reopened profile = %q, want %s", got, work.ID)
+	}
+	if restored, err := s.RestoreSessionClose("agent", lifted); err != nil || !restored {
+		t.Fatalf("restore close restored=%v err=%v", restored, err)
+	}
+	if got, err := s.SessionProfileID("agent"); err != nil || got != home.ID {
+		t.Fatalf("closed row profile = %q err=%v, want %s back as history", got, err, home.ID)
+	}
+}
+
+func TestNothingJoinsADeletedProfileAndItsCrewMoveWithIt(t *testing.T) {
+	s, _ := openProfileStore(t)
+	doomed, _ := mustCreateProfile(t, s, "Doomed")
+	kept, _ := mustCreateProfile(t, s, "Kept")
+	if assigned, err := s.EnsureCrewProfile("mira", doomed.ID); err != nil || assigned != doomed.ID {
+		t.Fatalf("EnsureCrewProfile = %q, %v; want %s", assigned, err, doomed.ID)
+	}
+	if assigned, err := s.EnsureCrewProfile("mira", kept.ID); err != nil || assigned != doomed.ID {
+		t.Fatalf("a second EnsureCrewProfile = %q, %v; want the first assignment %s kept", assigned, err, doomed.ID)
+	}
+	addProfileSession(t, s, "closed-agent", doomed.ID)
+	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	deletion, err := s.DeleteProfile(doomed.ID, doomed.Revision, kept.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(deletion.MovedCrewIDs, []string{"mira"}) {
+		t.Fatalf("moved crew = %v, want [mira]", deletion.MovedCrewIDs)
+	}
+	if profileID, _ := s.CrewProfile("mira"); profileID != kept.ID {
+		t.Fatalf("mira's profile after the delete = %q, want %s", profileID, kept.ID)
+	}
+
+	_, err = s.EnsureCrewProfile("nell", doomed.ID)
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	now := string(protocol.TimestampNow())
+	err = s.AddChecked(&protocol.Session{
+		ID: "late-spawn", Label: "late", Agent: protocol.SessionAgentCodex, Directory: "/tmp/project", ProfileID: doomed.ID,
+		State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now,
+	})
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	if s.Get("late-spawn") != nil {
+		t.Fatal("a session joined the deleted profile")
+	}
+	_, err = s.UpsertAutomationDefinition("late-automation", "Late", `{}`, doomed.ID, time.Now())
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	_, _, err = s.ReopenSession("closed-agent", "")
+	wantCode(t, err, profiles.CodeProfileDeleted)
+	if _, reopened, err := s.ReopenSession("closed-agent", kept.ID); err != nil || !reopened {
+		t.Fatalf("reopening into the kept profile: reopened=%v err=%v", reopened, err)
+	}
+}

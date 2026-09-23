@@ -1528,6 +1528,9 @@ type AutomationApplyMessage struct {
 	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
 	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 }
@@ -1777,9 +1780,6 @@ type AutomationRunSummary struct {
 
 	// OccurrenceKey corresponds to the JSON schema field "occurrence_key".
 	OccurrenceKey *string `json:"occurrence_key,omitempty,omitzero"`
-
-	// PaneID corresponds to the JSON schema field "pane_id".
-	PaneID *string `json:"pane_id,omitempty,omitzero"`
 
 	// SeedID corresponds to the JSON schema field "seed_id".
 	SeedID *string `json:"seed_id,omitempty,omitzero"`
@@ -2704,6 +2704,9 @@ type CrewMember struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// ResolvedAgent corresponds to the JSON schema field "resolved_agent".
 	ResolvedAgent string `json:"resolved_agent"`
 
@@ -2955,8 +2958,14 @@ type CrewWakeMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
+
+	// SourceSessionID corresponds to the JSON schema field "source_session_id".
+	SourceSessionID *string `json:"source_session_id,omitempty,omitzero"`
 }
 
 type CrewWakeResult struct {
@@ -2966,14 +2975,14 @@ type CrewWakeResult struct {
 	// Member corresponds to the JSON schema field "member".
 	Member string `json:"member"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// ReleasedSessionID corresponds to the JSON schema field "released_session_id".
 	ReleasedSessionID *string `json:"released_session_id,omitempty,omitzero"`
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 }
 
 type CrewWakeResultMessage struct {
@@ -2989,6 +2998,9 @@ type CrewWakeResultMessage struct {
 	// Member corresponds to the JSON schema field "member".
 	Member *string `json:"member,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// ReleasedSessionID corresponds to the JSON schema field "released_session_id".
 	ReleasedSessionID *string `json:"released_session_id,omitempty,omitzero"`
 
@@ -3000,9 +3012,6 @@ type CrewWakeResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type DaemonWarning struct {
@@ -3120,6 +3129,9 @@ type DelegateResult struct {
 	// Checkout corresponds to the JSON schema field "checkout".
 	Checkout string `json:"checkout"`
 
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
@@ -3136,9 +3148,18 @@ type DelegateResult struct {
 	// Model corresponds to the JSON schema field "model".
 	Model string `json:"model"`
 
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
+
+	// PlacementError corresponds to the JSON schema field "placement_error".
+	PlacementError *string `json:"placement_error,omitempty,omitzero"`
+
 	// PredecessorSessionID corresponds to the JSON schema field
 	// "predecessor_session_id".
 	PredecessorSessionID *string `json:"predecessor_session_id,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
 
 	// Role corresponds to the JSON schema field "role".
 	Role *string `json:"role,omitempty,omitzero"`
@@ -3148,9 +3169,6 @@ type DelegateResult struct {
 
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *bool `json:"worktree_created,omitempty,omitzero"`
@@ -7728,29 +7746,6 @@ type RefreshPRsResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type RegisterMessage struct {
-	// Agent corresponds to the JSON schema field "agent".
-	Agent *string `json:"agent,omitempty,omitzero"`
-
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Dir corresponds to the JSON schema field "dir".
-	Dir string `json:"dir"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-
-	// Label corresponds to the JSON schema field "label".
-	Label *string `json:"label,omitempty,omitzero"`
-
-	// Member corresponds to the JSON schema field "member".
-	Member *string `json:"member,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
-}
-
 type RegisterWorkspaceMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -8953,6 +8948,9 @@ type SeedResumeMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -8973,6 +8971,9 @@ type SeedResumeResultMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 
@@ -8981,9 +8982,6 @@ type SeedResumeResultMessage struct {
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type SeedReviewActionContext struct {
@@ -9450,6 +9448,9 @@ type Session struct {
 
 	// PinnedAt corresponds to the JSON schema field "pinned_at".
 	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 
 	// PullRequests corresponds to the JSON schema field "pull_requests".
 	PullRequests []SessionPullRequest `json:"pull_requests,omitempty,omitzero"`
@@ -9967,6 +9968,17 @@ type SessionMessagesGetResultMessage struct {
 	Truncated bool `json:"truncated"`
 }
 
+type SessionPlacement struct {
+	// AnchorPaneID corresponds to the JSON schema field "anchor_pane_id".
+	AnchorPaneID *string `json:"anchor_pane_id,omitempty,omitzero"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
+	// Direction corresponds to the JSON schema field "direction".
+	Direction *LayoutSplitDirection `json:"direction,omitempty,omitzero"`
+}
+
 type SessionPullRequest struct {
 	// CIStatus corresponds to the JSON schema field "ci_status".
 	CIStatus *string `json:"ci_status,omitempty,omitzero"`
@@ -10048,8 +10060,11 @@ type SessionReopen struct {
 	// DirectoryState corresponds to the JSON schema field "directory_state".
 	DirectoryState string `json:"directory_state"`
 
-	// PanePlan corresponds to the JSON schema field "pane_plan".
-	PanePlan string `json:"pane_plan"`
+	// ProfileDeleted corresponds to the JSON schema field "profile_deleted".
+	ProfileDeleted bool `json:"profile_deleted"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 
 	// Reason corresponds to the JSON schema field "reason".
 	Reason *string `json:"reason,omitempty,omitzero"`
@@ -10059,12 +10074,6 @@ type SessionReopen struct {
 
 	// Warning corresponds to the JSON schema field "warning".
 	Warning *string `json:"warning,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
-
-	// WorkspacePlan corresponds to the JSON schema field "workspace_plan".
-	WorkspacePlan string `json:"workspace_plan"`
 }
 
 type SessionReopenAction string
@@ -10094,6 +10103,9 @@ type SessionReopenMessage struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory *string `json:"directory,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID *string `json:"request_id,omitempty,omitzero"`
 
@@ -10122,11 +10134,11 @@ type SessionReopenResult struct {
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// SessionID corresponds to the JSON schema field "session_id".
 	SessionID string `json:"session_id"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 
 	// WorktreeCreated corresponds to the JSON schema field "worktree_created".
 	WorktreeCreated *string `json:"worktree_created,omitempty,omitzero"`
@@ -10520,6 +10532,9 @@ type SnoozeTurnMessage struct {
 }
 
 type SpawnResultMessage struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 
@@ -10528,6 +10543,12 @@ type SpawnResultMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
+
+	// PlacementError corresponds to the JSON schema field "placement_error".
+	PlacementError *string `json:"placement_error,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`
@@ -10585,6 +10606,12 @@ type SpawnSessionMessage struct {
 	// Model corresponds to the JSON schema field "model".
 	Model *string `json:"model,omitempty,omitzero"`
 
+	// Placement corresponds to the JSON schema field "placement".
+	Placement *SessionPlacement `json:"placement,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
 	// ResumePicker corresponds to the JSON schema field "resume_picker".
 	ResumePicker *bool `json:"resume_picker,omitempty,omitzero"`
 
@@ -10599,9 +10626,6 @@ type SpawnSessionMessage struct {
 
 	// SpawnedFrom corresponds to the JSON schema field "spawned_from".
 	SpawnedFrom *string `json:"spawned_from,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 
 	// YoloMode corresponds to the JSON schema field "yolo_mode".
 	YoloMode *bool `json:"yolo_mode,omitempty,omitzero"`

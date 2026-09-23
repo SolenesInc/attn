@@ -109,7 +109,7 @@ func TestClosingRefusesTwiceAndReopenBringsTheRowBack(t *testing.T) {
 		t.Errorf("AddChecked over a closed row = %v, want ErrSessionClosed", err)
 	}
 
-	_, reopened, err := s.ReopenSession("s1")
+	_, reopened, err := s.ReopenSession("s1", "")
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -324,7 +324,7 @@ func TestALiftedCloseGoesBackExactly(t *testing.T) {
 				t.Fatalf("ledger entry after the close = %+v, want it closed", closed)
 			}
 
-			lifted, reopened, err := s.ReopenSession("s1")
+			lifted, reopened, err := s.ReopenSession("s1", "")
 			if err != nil || !reopened {
 				t.Fatalf("ReopenSession = %v, %v, want the close lifted", reopened, err)
 			}
@@ -428,7 +428,7 @@ func TestNothingAfterAReopenCanInflateAFinalizedTotal(t *testing.T) {
 				t.Fatalf("SessionCost at the close: %v", err)
 			}
 
-			if _, reopened, err := s.ReopenSession("s1"); err != nil || !reopened {
+			if _, reopened, err := s.ReopenSession("s1", ""); err != nil || !reopened {
 				t.Fatalf("reopen = %v, %v", reopened, err)
 			}
 

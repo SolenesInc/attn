@@ -7,6 +7,7 @@ import { useCrewLaunchAutosave } from './useCrewLaunchAutosave';
 function member(id: string, revision: number, selection: Partial<CrewMember> = {}): CrewMember {
   return {
     id,
+    profile_id: 'profile-default',
     revision,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,

@@ -181,33 +181,6 @@ func ErrorCode(err error) string {
 	return ""
 }
 
-func (c *Client) Register(id, label, dir string) error {
-	return c.RegisterWithAgent(id, label, dir, "")
-}
-
-func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
-	return c.RegisterAsMember(id, label, dir, agent, "")
-}
-
-func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
-	msg := protocol.RegisterMessage{
-		Cmd:         protocol.CmdRegister,
-		ID:          id,
-		Label:       protocol.Ptr(label),
-		Dir:         dir,
-		WorkspaceID: "workspace-" + id,
-	}
-	if agent != "" {
-		normalized := protocol.NormalizeSessionAgentString(agent, string(protocol.SessionAgentCodex))
-		msg.Agent = protocol.Ptr(normalized)
-	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
-	}
-	_, err := c.send(msg)
-	return err
-}
-
 func (c *Client) Unregister(id string) error {
 	msg := protocol.UnregisterMessage{
 		Cmd: protocol.CmdUnregister,
@@ -389,6 +362,7 @@ type SessionReopenOptions struct {
 	SessionID string
 	Action    string
 	Directory string
+	ProfileID string
 }
 
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
@@ -401,6 +375,9 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	}
 	if directory := strings.TrimSpace(opts.Directory); directory != "" {
 		msg.Directory = protocol.Ptr(directory)
+	}
+	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
+		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	resp, err := c.send(msg)
 	if err != nil {

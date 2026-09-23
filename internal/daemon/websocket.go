@@ -1099,7 +1099,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdSeedReviewDraft:
 		go d.handleSeedReviewDraftWS(client, msg.(*protocol.SeedReviewDraftMessage))
 	case protocol.CmdCrewWake:
-		go d.handleCrewWakeWS(client, msg.(*protocol.CrewWakeMessage))
+		wake := msg.(*protocol.CrewWakeMessage)
+		wake.ProfileID = client.profileOr(wake.ProfileID)
+		go d.handleCrewWakeWS(client, wake)
 	case protocol.CmdCrewCharterGet:
 		go d.handleCrewCharterGetWS(client, msg.(*protocol.CrewCharterGetMessage))
 	case protocol.CmdCrewCharterSet:
@@ -1292,7 +1294,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdAutomationSetEnabled:
 		d.handleAutomationSetEnabledWS(client, msg.(*protocol.AutomationSetEnabledMessage))
 	case protocol.CmdAutomationApply:
-		d.handleAutomationApplyWS(client, msg.(*protocol.AutomationApplyMessage))
+		apply := msg.(*protocol.AutomationApplyMessage)
+		apply.ProfileID = client.profileOr(apply.ProfileID)
+		d.handleAutomationApplyWS(client, apply)
 	case protocol.CmdAutomationValidate:
 		d.handleAutomationValidateWS(client, msg.(*protocol.AutomationValidateMessage))
 	case protocol.CmdAutomationDelete:
@@ -1302,7 +1306,9 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 	case protocol.CmdAutomationRun:
 		d.handleAutomationRunWS(client, msg.(*protocol.AutomationRunMessage))
 	case protocol.CmdSpawnSession:
-		d.handleSpawnSession(client, msg.(*protocol.SpawnSessionMessage))
+		spawn := msg.(*protocol.SpawnSessionMessage)
+		spawn.ProfileID = protocol.Deref(client.profileOr(protocol.Ptr(spawn.ProfileID)))
+		d.handleSpawnSession(client, spawn)
 	case protocol.CmdAttachSession:
 		d.handleAttachSession(client, msg.(*protocol.AttachSessionMessage))
 	case protocol.CmdDetachSession:

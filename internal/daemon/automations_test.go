@@ -150,7 +150,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	d.dataRoot = filepath.Join(root, "instance")
 	enrollHomeForTest(t, d)
 	now := time.Date(2026, 7, 20, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +160,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, string(payload), `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-at0001", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -169,7 +169,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 		RunID: origin.ID, DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
 		Provider: "github", Prompt: "Review", Context: payload, Location: location,
 		Launch: testAutomationLaunch("codex"), IDs: automation.DeliveryIDs{
-			SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID,
+			SeedID: origin.SeedID, SessionID: origin.SessionID,
 		},
 	}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
@@ -415,7 +415,7 @@ func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	setupDelegationGarden(t, d)
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
-	addTestWorkspace(d, "workspace-1", directory)
+	work := createTestProfile(t, d.store, "Work")
 	spec := launchcontract.UnattendedLaunchSpec{
 		Agent: "claude", Model: "sonnet", Effort: "high", Executable: "/opt/claude",
 		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAuto,
@@ -423,7 +423,7 @@ func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	}
 	err := d.ensureAutomationSession(context.Background(), automation.WorkRequest{
 		RunID: "run-1", Prompt: "Inspect the input.", Context: json.RawMessage(`{}`), Launch: spec,
-		IDs: automation.DeliveryIDs{SessionID: "session-1", WorkspaceID: "workspace-1"},
+		IDs: automation.DeliveryIDs{SessionID: "session-1", ProfileID: work.ID},
 	}, directory)
 	if err != nil {
 		t.Fatal(err)
@@ -431,6 +431,12 @@ func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 	spawn, ok := backend.LastSpawn()
 	if !ok {
 		t.Fatal("automation did not spawn a session")
+	}
+	if session := d.store.Get("session-1"); session == nil || session.ProfileID != work.ID {
+		t.Fatalf("automation session = %+v, want it in the definition's profile %s", session, work.ID)
+	}
+	if _, placed, err := d.store.SessionPlacement("session-1"); err != nil || placed {
+		t.Fatalf("automation session placed=%v err=%v, want it unplaced", placed, err)
 	}
 	if spawn.UnattendedLaunch != spec {
 		t.Fatalf("spawn contract = %#v, want %#v", spawn.UnattendedLaunch, spec)
@@ -446,12 +452,12 @@ func TestEnsureAutomationSessionPassesOneUnattendedContract(t *testing.T) {
 func TestDisabledAutomationRefusesRecoveredPendingDelivery(t *testing.T) {
 	s := store.New()
 	now := time.Now()
-	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{"id":"daily-check"}`, now)
+	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{"id":"daily-check"}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -486,7 +492,7 @@ location: {type: directory, path: "` + t.TempDir() + `"}
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -521,7 +527,7 @@ func TestAutomationRecoveryWaitsForInitialGitHubDiscovery(t *testing.T) {
 func TestAutomationRecoveryLeavesGitHubRunsForFreshProviderObservation(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -531,7 +537,7 @@ func TestAutomationRecoveryLeavesGitHubRunsForFreshProviderObservation(t *testin
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -591,7 +597,7 @@ location:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition("requested-review", "Requested review", string(canonical), time.Now()); err != nil {
+	if _, err := s.UpsertAutomationDefinition("requested-review", "Requested review", string(canonical), defaultProfileID(t, s), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	var delivered atomic.Int32
@@ -638,7 +644,7 @@ location:
 		t.Fatalf("runs=%#v err=%v", runs, err)
 	}
 	for i := 1; i < len(runs); i++ {
-		if runs[i-1].ID == runs[i].ID || runs[i-1].SeedID != runs[i].SeedID || runs[i-1].SessionID != runs[i].SessionID || runs[i-1].WorkspaceID != runs[i].WorkspaceID || runs[i-1].PaneID != runs[i].PaneID {
+		if runs[i-1].ID == runs[i].ID || runs[i-1].SeedID != runs[i].SeedID || runs[i-1].SessionID != runs[i].SessionID {
 			t.Fatalf("continuation did not preserve reviewer binding: %#v", runs)
 		}
 	}
@@ -681,7 +687,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), time.Now()); err != nil {
+	if _, err := s.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), defaultProfileID(t, s), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	delivered := make(chan struct{}, 1)
@@ -744,7 +750,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition("retry-review", "Retry review", string(canonical), time.Now()); err != nil {
+	if _, err := s.UpsertAutomationDefinition("retry-review", "Retry review", string(canonical), defaultProfileID(t, s), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	var attempts atomic.Int32
@@ -865,12 +871,12 @@ func TestAutomationContinuationRetendStaysQuiet(t *testing.T) {
 func TestFailedInitialAutomationWithersSeedWithoutCreatingTicket(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, _, err := d.store.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -896,17 +902,17 @@ func TestFailedInitialAutomationWithersSeedWithoutCreatingTicket(t *testing.T) {
 func TestFailedRepeatedOccurrenceNotesSharedSeedOnce(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if continuation, _, err := d.ensureAutomationSeed(firstReq); err != nil || continuation {
 		t.Fatalf("initial seed continuation=%v err=%v", continuation, err)
 	}
@@ -942,7 +948,7 @@ func TestFailedRepeatedOccurrenceNotesSharedSeedOnce(t *testing.T) {
 func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -953,7 +959,7 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, firstPayload, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	first, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, firstPayload, `{}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -972,7 +978,7 @@ func TestChangedHeadContinuationKeepsContractAndIdentityChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	d := &Daemon{store: s, ptyBackend: &fakeSpawnBackend{sessionIDs: []string{first.SessionID}}}
-	req := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Context: json.RawMessage(secondPayload), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
+	req := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Context: json.RawMessage(secondPayload), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID}}
 	changedContract := req
 	changedContract.Context = json.RawMessage(firstPayload)
 	changedContract.Prompt = "Updated review instructions"
@@ -1016,7 +1022,7 @@ func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuat
 	backend := &automationResumeBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
 	d.ptyBackend = backend
 	now := time.Date(2026, 7, 20, 8, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1026,21 +1032,20 @@ func setupStoppedAutomationContinuation(t *testing.T) stoppedAutomationContinuat
 		t.Fatal(err)
 	}
 	origin, _, err := d.store.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	directory := t.TempDir()
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: origin.WorkspaceID, Title: "review", Directory: directory})
-	d.store.Add(&protocol.Session{ID: origin.SessionID, Agent: protocol.SessionAgentCodex, Directory: directory, WorkspaceID: origin.WorkspaceID})
+	d.store.Add(&protocol.Session{ID: origin.SessionID, Agent: protocol.SessionAgentCodex, Directory: directory, ProfileID: origin.ProfileID})
 	writeCodexRolloutFixture(t, "codex-rollout-1")
 	d.store.SetResumeSessionID(origin.SessionID, "codex-rollout-1")
 
 	req := automation.WorkRequest{
 		RunID: "run-2", DefinitionID: def.ID, SubjectKey: subject, ContinuityKey: subject,
 		Prompt: "Review locally", Context: json.RawMessage(`{}`), Launch: testAutomationLaunch("codex"),
-		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID, WorkspaceID: origin.WorkspaceID, PaneID: origin.PaneID},
+		IDs: automation.DeliveryIDs{SeedID: origin.SeedID, SessionID: origin.SessionID, ProfileID: origin.ProfileID},
 	}
 	d.store.SetLaunchIntent(origin.SessionID, store.LaunchIntent{
 		ApprovalRoute:    launchcontract.ApprovalRouteReviewer,
@@ -1163,7 +1168,7 @@ func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
 	}
 	d.ptyBackend = backend
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1179,7 +1184,6 @@ func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
 		def.ID, "scheduled:one", "singleton", def.Revision, `{}`, string(snapshotJSON), now,
 		store.AutomationRunReservation{
 			RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
-			WorkspaceID: "workspace-1", PaneID: "pane-1",
 		},
 	)
 	if err != nil {
@@ -1190,18 +1194,14 @@ func TestContinuationWorkReadySurvivesAnotherRestoreWinning(t *testing.T) {
 		Context: json.RawMessage(`{}`), Launch: snapshot.Launch, Location: snapshot.Location,
 		IDs: automation.DeliveryIDs{
 			SeedID: first.SeedID, SessionID: first.SessionID,
-			WorkspaceID: first.WorkspaceID, PaneID: first.PaneID,
 		},
 	}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: first.WorkspaceID, Title: "nightly", Directory: directory,
-	})
 	d.store.Add(&protocol.Session{
 		ID: first.SessionID, Agent: protocol.SessionAgentClaude,
-		Directory: directory, WorkspaceID: first.WorkspaceID, State: protocol.SessionStateWaitingInput,
+		Directory: directory, ProfileID: first.ProfileID, State: protocol.SessionStateWaitingInput,
 	})
 	writeClaudeTranscriptFixture(t, "claude-transcript-1")
 	d.store.SetResumeSessionID(first.SessionID, "claude-transcript-1")
@@ -1385,7 +1385,7 @@ func TestWithdrawnBeforeLaunchReRequestCreatesFirstWorktree(t *testing.T) {
 func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T) {
 	s := store.New()
 	now := time.Date(2026, 7, 19, 18, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, defaultProfileID(t, s), now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1397,7 +1397,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 		t.Fatal(err)
 	}
 	_, _, err = s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, payload, snapshot, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1417,7 +1417,7 @@ func TestReRequestCanStartReviewerWhenWithdrawnOriginNeverLaunched(t *testing.T)
 	}
 	req := automation.WorkRequest{
 		RunID: second.ID, DefinitionID: def.ID, ContinuityKey: subject, Provider: "github", Prompt: "Review", Context: json.RawMessage(payload),
-		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID},
+		IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID},
 	}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		t.Fatalf("withdrawn-before-launch re-request rejected: %v", err)
@@ -1457,7 +1457,7 @@ func TestAutomationRunBroadcastsAfterClaim(t *testing.T) {
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1502,7 +1502,7 @@ func TestAutomationSetEnabledDisableFailsPendingRunsAndBroadcasts(t *testing.T) 
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1611,7 +1611,7 @@ func TestAutomationDefinitionsGetReachesRealSocketDispatchWithLastRun(t *testing
 	}
 	now := time.Now()
 	run, _, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -1679,7 +1679,7 @@ func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *t
 
 	staleRevision := 1
 	expectedID := def.ID
-	_, err = d.automationApplyWithGuards(context.Background(), raw, &expectedID, &staleRevision)
+	_, err = d.automationApplyWithGuards(context.Background(), raw, "", &expectedID, &staleRevision)
 	if err == nil || !strings.Contains(err.Error(), "changed elsewhere") {
 		t.Fatalf("automationApplyWithGuards with stale expected_revision err=%v, want a stale-revision refusal", err)
 	}
@@ -1699,17 +1699,17 @@ func TestAutomationApplySocketPathIsUnguardedButWSPathEnforcesStaleRevision(t *t
 func TestFailedContinuationAfterContractRotationKeepsOriginSeedOpen(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
@@ -1748,17 +1748,17 @@ func TestFailedContinuationAfterContractRotationKeepsOriginSeedOpen(t *testing.T
 func TestEnsureAutomationSeedRefusesOutpostDaemon(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-"+strings.Repeat("b", 32))
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID}}
 	var fenced *enrollment.FencedError
 	if _, _, err := d.ensureAutomationSeed(req); !errors.As(err, &fenced) {
 		t.Fatalf("ensureAutomationSeed err=%v, want FencedError", err)
@@ -1773,17 +1773,17 @@ func TestEnsureAutomationSeedValidatesTitleAndBody(t *testing.T) {
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
 	claim := func(defID, name, seedID string) automation.WorkRequest {
 		t.Helper()
-		def, err := d.store.UpsertAutomationDefinition(defID, name, `{}`, now)
+		def, err := d.store.UpsertAutomationDefinition(defID, name, `{}`, defaultProfileID(t, d.store), now)
 		if err != nil {
 			t.Fatal(err)
 		}
 		run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:"+defID, "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-			RunID: "run-" + defID, OccurrenceID: "occ-" + defID, SeedID: seedID, SessionID: "session-" + defID, WorkspaceID: "workspace-1", PaneID: "pane-1",
+			RunID: "run-" + defID, OccurrenceID: "occ-" + defID, SeedID: seedID, SessionID: "session-" + defID,
 		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "  Check locally.  ", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+		return automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "  Check locally.  ", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID}}
 	}
 	long := claim("long", strings.Repeat("x", garden.MaxTitleChars+1), "s-seed01")
 	if _, _, err := d.ensureAutomationSeed(long); err == nil || !strings.Contains(err.Error(), "limit is") {
@@ -1830,17 +1830,17 @@ func TestFailedContinuationDeliveryRestoresClosedSeedAndRingsItsSession(t *testi
 	d.workspaces.register("workspace-1", "nightly", t.TempDir(), "n0", false, false)
 	d.workspaces.associateSession("session-1", "workspace-1", "nightly")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
@@ -1854,7 +1854,7 @@ func TestFailedContinuationDeliveryRestoresClosedSeedAndRingsItsSession(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), Location: automation.LocationSpec{Type: "directory", Path: filepath.Join(t.TempDir(), "deleted-worktree")}, IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
+	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), Location: automation.LocationSpec{Type: "directory", Path: filepath.Join(t.TempDir(), "deleted-worktree")}, IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID}}
 	if _, err := d.materializeAutomationRun(context.Background(), secondReq); err == nil || !strings.Contains(err.Error(), "prepare location") {
 		t.Fatalf("materialize err=%v, want the location step to fail", err)
 	}
@@ -1906,17 +1906,17 @@ func TestWithdrawnContinuationRingsItsSessionOnce(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	addGardenSession(t, d, "session-1")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
@@ -1956,17 +1956,17 @@ func TestInitialAutomationOutcomeDoesNotRingItsOwnSession(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	addGardenSession(t, d, "session-1")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(req); err != nil {
 		t.Fatal(err)
 	}
@@ -1984,17 +1984,17 @@ func TestInitialAutomationOutcomeDoesNotRingItsOwnSession(t *testing.T) {
 func TestAutomationWorkReadyExcludesOnlyAnInitialRunsOwnSession(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
@@ -2027,17 +2027,17 @@ func TestAutomationWorkReadyExcludesOnlyAnInitialRunsOwnSession(t *testing.T) {
 func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID, WorkspaceID: first.WorkspaceID, PaneID: first.PaneID}}
+	firstReq := automation.WorkRequest{RunID: first.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", IDs: automation.DeliveryIDs{SeedID: first.SeedID, SessionID: first.SessionID}}
 	if _, _, err := d.ensureAutomationSeed(firstReq); err != nil {
 		t.Fatal(err)
 	}
@@ -2048,7 +2048,7 @@ func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID, WorkspaceID: second.WorkspaceID, PaneID: second.PaneID}}
+	secondReq := automation.WorkRequest{RunID: second.ID, DefinitionID: def.ID, ContinuityKey: "singleton", Prompt: "Check locally.", Context: json.RawMessage(`{}`), IDs: automation.DeliveryIDs{SeedID: second.SeedID, SessionID: second.SessionID}}
 	for i := 0; i < 3; i++ {
 		if err := d.ensureAutomationOccurrenceNote(secondReq); err != nil {
 			t.Fatalf("attempt %d: %v", i, err)

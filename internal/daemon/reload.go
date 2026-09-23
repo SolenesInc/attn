@@ -447,7 +447,7 @@ func (d *Daemon) preparePluginReload(session *protocol.Session, opts *ptybackend
 		Effort:    opts.Effort,
 	}
 	if reg.Capabilities["launch_instructions"] {
-		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.WorkspaceID, isChief,
+		instructions, err := d.preparePluginLaunchInstructions(session.ID, session.ProfileID, isChief,
 			!reg.Capabilities["pull_request_reporting"])
 		if err != nil {
 			d.finishPluginSessionLaunch(session.ID, false)

@@ -23,19 +23,18 @@ export interface AutomationsPanelProps {
   ) => Promise<{ definition: AutomationDefinitionSummary; specYaml: string }>;
   deleteDefinition: (definitionId: string) => Promise<void>;
   onSelectSession: (sessionId: string) => void;
-  onFocusPane: (sessionId: string, paneId: string) => void;
 }
 
 type EditorTarget = { definitionId: string | null } | null;
 
-// session_id/pane_id are always present on AutomationRunSummary but "" means absent.
-// absent, so a plain truthiness check is the correct emptiness test.
+// session_id is always present on AutomationRunSummary but "" means absent,
+// so a plain truthiness check is the correct emptiness test.
 export type RunNavigationTarget =
-  | { kind: 'session'; sessionId: string; paneId: string | null }
+  | { kind: 'session'; sessionId: string }
   | null;
 
 export function runNavigationTarget(run: AutomationRunSummary): RunNavigationTarget {
-  if (run.session_id) return { kind: 'session', sessionId: run.session_id, paneId: run.pane_id || null };
+  if (run.session_id) return { kind: 'session', sessionId: run.session_id };
   return null;
 }
 
@@ -88,7 +87,6 @@ export function AutomationsPanel({
   applyDefinition,
   deleteDefinition,
   onSelectSession,
-  onFocusPane,
 }: AutomationsPanelProps) {
   const definitions = useAutomationsStore((state) => state.definitions);
   const runsByDefinition = useAutomationsStore((state) => state.runsByDefinition);
@@ -208,7 +206,6 @@ export function AutomationsPanel({
     const target = runNavigationTarget(run);
     if (!target) return;
     onSelectSession(target.sessionId);
-    if (target.paneId) onFocusPane(target.sessionId, target.paneId);
   }
 
   const showEmpty = definitionsLoaded && !definitionsError && definitions.length === 0;

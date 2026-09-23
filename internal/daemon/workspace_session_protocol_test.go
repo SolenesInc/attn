@@ -13,70 +13,54 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
-func TestWorkspaceSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
+func TestSessionProtocolLifecycleMatchesAppOrder(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &fakeSpawnBackend{}
 	client := newWorkspaceProtocolTestClient()
-	workspaceID := "workspace-real-app-order"
 	sessionID := "session-shell-1"
-	paneID := "pane-session-shell-1"
 	cwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Real App Order",
-		Directory: cwd,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr(paneID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr("shell"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusSpawning, "")
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr("shell"),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: profile.ID,
+		Placement: &protocol.SessionPlacement{},
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusReady, "")
-	if session := d.store.Get(sessionID); session == nil {
-		t.Fatalf("session %s was not registered", sessionID)
+	placement, placed, err := d.store.SessionPlacement(sessionID)
+	if err != nil || !placed || placement.DesktopID != profile.CurrentDesktopID {
+		t.Fatalf("placement = %+v placed=%v err=%v, want the profile's current desktop", placement, placed, err)
+	}
+	desktop, err := d.store.GetDesktop(placement.DesktopID)
+	if err != nil || desktop.ActivePaneID != placement.PaneID || desktop.Panes[0].Status != profiles.PaneStatusReady || desktop.Panes[0].Title != "shell" {
+		t.Fatalf("desktop = %+v err=%v, want the new agent's ready pane focused", desktop, err)
 	}
 
-	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutClosePane,
-		WorkspaceID: workspaceID,
-		PaneID:      paneID,
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
+	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: sessionID})
 	if session := d.store.Get(sessionID); session != nil {
-		t.Fatalf("session %s still registered after closing its workspace pane", sessionID)
+		t.Fatalf("session %s still registered after its close", sessionID)
 	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		t.Fatalf("workspace layout still exists after closing only pane: %+v", snapshot)
+	if _, placed, _ := d.store.SessionPlacement(sessionID); placed {
+		t.Fatalf("session %s kept its pane after its close", sessionID)
 	}
-	if workspace := d.store.GetWorkspace(workspaceID); workspace != nil {
-		t.Fatalf("workspace still exists after closing its only session pane: %+v", workspace)
-	}
-	if _, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-		t.Fatalf("session %s still has a workspace pane mapping", sessionID)
+	if desktop, err := d.store.GetDesktop(placement.DesktopID); err != nil || len(desktop.Panes) != 0 {
+		t.Fatalf("desktop after close = %+v err=%v, want it empty and kept", desktop, err)
 	}
 }
 
@@ -102,7 +86,7 @@ func TestWorkspaceLayoutCloseFinalPanePreservesPinnedWorkspace(t *testing.T) {
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, Agent: protocol.AgentShellValue,
-		WorkspaceID: workspaceID, Cols: 80, Rows: 24,
+		ProfileID: defaultProfileID(t, d.store), Cols: 80, Rows: 24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 
@@ -145,6 +129,7 @@ func TestWorkspaceLayoutClosePaneKeepsVisibleStateWhenTeardownPreparationFails(t
 	d.store.Add(&protocol.Session{
 		ID: sessionID, Label: "closing", Agent: protocol.SessionAgentCodex, Directory: cwd,
 		WorkspaceID: workspaceID, State: protocol.SessionStateWorking,
+		ProfileID:  defaultProfileID(t, d.store),
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
@@ -203,131 +188,32 @@ func TestWorkspaceLayoutCloseFailedPlaceholderDoesNotCreateTeardown(t *testing.T
 	}
 }
 
-func TestWorkspaceSessionProtocolBareSpawnEnsuresLayoutPane(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	workspaceID := "workspace-bare-spawn"
-	sessionID := "session-bare-spawn"
-	cwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Bare Spawn",
-		Directory: cwd,
-	})
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("bare shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
-	})
-	expectSpawnResult(t, client, sessionID, true)
-
-	gotWorkspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	if !ok {
-		t.Fatalf("bare spawn did not create a workspace layout pane for %s", sessionID)
-	}
-	if gotWorkspaceID != workspaceID {
-		t.Fatalf("ensured pane workspace = %q, want %q", gotWorkspaceID, workspaceID)
-	}
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusReady, "")
-
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if len(snapshot.Panes) != 1 {
-		t.Fatalf("panes = %+v, want exactly the ensured pane", snapshot.Panes)
-	}
-	if snapshot.Panes[0].Title != "bare shell" {
-		t.Fatalf("ensured pane title = %q, want the session label", snapshot.Panes[0].Title)
-	}
-}
-
-func TestWorkspaceSessionProtocolBareSpawnFailureCreatesNoPane(t *testing.T) {
+func TestSessionProtocolSpawnFailureCreatesNoPane(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &failingSpawnBackend{err: errors.New("boom")}
 	client := newWorkspaceProtocolTestClient()
-	workspaceID := "workspace-bare-spawn-fails"
 	sessionID := "session-bare-spawn-fails"
 	cwd := t.TempDir()
 
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Bare Spawn Fails",
-		Directory: cwd,
-	})
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("bare shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr("bare shell"),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store),
+		Placement: &protocol.SessionPlacement{},
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, false)
 
 	if session := d.store.Get(sessionID); session != nil {
 		t.Fatalf("failed bare spawn registered session %s", sessionID)
 	}
-	if _, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-		t.Fatalf("failed bare spawn left a ghost pane for session %s", sessionID)
+	if _, placed, _ := d.store.SessionPlacement(sessionID); placed {
+		t.Fatalf("failed spawn left a ghost pane for session %s", sessionID)
 	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && len(snapshot.Panes) != 0 {
-		t.Fatalf("workspace layout has panes after failed bare spawn: %+v", snapshot.Panes)
-	}
-}
-
-func TestWorkspaceSessionProtocolSpawnAdoptsPreCreatedPane(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	workspaceID := "workspace-adopt"
-	sessionID := "session-adopt"
-	paneID := "pane-session-adopt"
-	cwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Adopt",
-		Directory: cwd,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr(paneID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr("custom title"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
-
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("different label"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
-	})
-	expectSpawnResult(t, client, sessionID, true)
-
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if len(snapshot.Panes) != 1 {
-		t.Fatalf("panes = %+v, want the single pre-created pane adopted", snapshot.Panes)
-	}
-	if snapshot.Panes[0].PaneID != paneID || snapshot.Panes[0].Title != "custom title" {
-		t.Fatalf("adopted pane = %+v, want id %q with its original title", snapshot.Panes[0], paneID)
-	}
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusReady, "")
 }
 
 func TestWorkspaceLayoutAddSessionPaneCorrelatesSetupFailure(t *testing.T) {
@@ -377,14 +263,14 @@ func TestWorkspaceSessionProtocolShellSpawnsIdleNotWorking(t *testing.T) {
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr("shell"),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 
@@ -429,14 +315,14 @@ func TestWorkspaceLayoutClosePanePersistsRemovalBeforeSessionUnregistered(t *tes
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr("shell"),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 
@@ -489,7 +375,7 @@ func TestWorkspaceLayoutClosePaneRepliesAndBroadcastsBeforeStubbornPTYExits(t *t
 		expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, pane.paneID, true)
 		d.store.Add(&protocol.Session{
 			ID: pane.sessionID, Label: pane.sessionID, Agent: protocol.SessionAgentShell,
-			Directory: cwd, WorkspaceID: workspaceID,
+			Directory: cwd, WorkspaceID: workspaceID, ProfileID: defaultProfileID(t, d.store),
 		})
 		d.associateSessionWithWorkspace(pane.sessionID, workspaceID)
 	}
@@ -606,47 +492,6 @@ func TestWorkspaceLayoutStartupReconcileRemovesOrphanButKeepsUnresolvedPanes(t *
 	}
 }
 
-func TestWorkspaceSessionProtocolSpawnFailureMarksPaneFailed(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &failingSpawnBackend{err: errors.New("boom")}
-	client := newWorkspaceProtocolTestClient()
-	workspaceID := "workspace-spawn-fails"
-	sessionID := "session-fails"
-	paneID := "pane-session-fails"
-	cwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Spawn Fails",
-		Directory: cwd,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr(paneID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr("shell"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
-
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
-	})
-	expectSpawnResult(t, client, sessionID, false)
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusFailed, "boom")
-	if session := d.store.Get(sessionID); session != nil {
-		t.Fatalf("failed spawn registered session %s", sessionID)
-	}
-}
-
 func TestWorkspaceSessionProtocolRespawnFailureRestoresExistingSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &failingSpawnBackend{err: errors.New("boom")}
@@ -659,7 +504,7 @@ func TestWorkspaceSessionProtocolRespawnFailureRestoresExistingSession(t *testin
 	})
 	original := &protocol.Session{
 		ID: "existing-session", Label: "preserved", Agent: protocol.SessionAgentShell,
-		Directory: originalDirectory, WorkspaceID: workspaceID, State: protocol.SessionStateIdle,
+		Directory: originalDirectory, WorkspaceID: workspaceID, ProfileID: defaultProfileID(t, d.store), State: protocol.SessionStateIdle,
 		StateSince: "before", StateUpdatedAt: "before", LastSeen: "before",
 	}
 	if err := d.store.AddChecked(original); err != nil {
@@ -668,57 +513,12 @@ func TestWorkspaceSessionProtocolRespawnFailureRestoresExistingSession(t *testin
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: original.ID, Label: protocol.Ptr("replacement"),
-		Cwd: requestedDirectory, Agent: protocol.AgentShellValue, WorkspaceID: workspaceID, Cols: 80, Rows: 24,
+		Cwd: requestedDirectory, Agent: protocol.AgentShellValue, ProfileID: defaultProfileID(t, d.store), Cols: 80, Rows: 24,
 	})
 	expectSpawnResult(t, client, original.ID, false)
 	got := d.store.Get(original.ID)
 	if got == nil || got.Directory != originalDirectory || got.Label != original.Label || got.LastSeen != original.LastSeen {
 		t.Fatalf("session after failed respawn = %+v, want restored %+v", got, original)
-	}
-}
-
-func TestWorkspaceSessionProtocolRejectsShellSpawnWithoutWorkspace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	sessionID := "session-shell-without-workspace"
-
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:   protocol.CmdSpawnSession,
-		ID:    sessionID,
-		Label: protocol.Ptr("shell"),
-		Cwd:   t.TempDir(),
-		Agent: protocol.AgentShellValue,
-		Cols:  80,
-		Rows:  24,
-	})
-
-	expectCommandError(t, client, protocol.CmdSpawnSession, "missing workspace_id")
-	if session := d.store.Get(sessionID); session != nil {
-		t.Fatalf("shell spawn without workspace registered session %s", sessionID)
-	}
-}
-
-func TestWorkspaceSessionProtocolRejectsShellSpawnForUnknownWorkspace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	sessionID := "session-shell-unknown-workspace"
-
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         t.TempDir(),
-		Agent:       protocol.AgentShellValue,
-		Cols:        80,
-		Rows:        24,
-		WorkspaceID: "missing-workspace",
-	})
-
-	expectCommandError(t, client, protocol.CmdSpawnSession, "unknown workspace")
-	if session := d.store.Get(sessionID); session != nil {
-		t.Fatalf("shell spawn for unknown workspace registered session %s", sessionID)
 	}
 }
 
@@ -960,7 +760,7 @@ func TestWorkspaceLayoutDockTilePersistsAndMoves(t *testing.T) {
 		t.Fatalf("missing seed retarget changed params = (%q, %v), want (%q, true)", params, ok, "s-new002")
 	}
 
-	d.store.Add(&protocol.Session{ID: "session-2", Label: "Two", WorkspaceID: workspaceID, Directory: cwd})
+	d.store.Add(&protocol.Session{ID: "session-2", Label: "Two", WorkspaceID: workspaceID, ProfileID: defaultProfileID(t, d.store), Directory: cwd})
 	d.handleWorkspaceLayoutUpdateTile(client, &protocol.WorkspaceLayoutUpdateTileMessage{
 		Cmd:           protocol.CmdWorkspaceLayoutUpdateTile,
 		WorkspaceID:   workspaceID,
@@ -1203,7 +1003,7 @@ func expectWorkspaceLayoutActionResultIDsAndRequestID(t *testing.T, client *wsCl
 	}
 }
 
-func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success bool) {
+func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success bool) protocol.SpawnResultMessage {
 	t.Helper()
 	deadline := time.After(1 * time.Second)
 	for {
@@ -1219,7 +1019,7 @@ func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success
 			if result.Success != success {
 				t.Fatalf("spawn success = %v, want %v; payload=%s", result.Success, success, string(outbound.payload))
 			}
-			return
+			return result
 		case <-deadline:
 			t.Fatalf("timed out waiting for spawn_result for %s", sessionID)
 		}
@@ -1247,27 +1047,6 @@ func expectCommandError(t *testing.T, client *wsClient, cmd, errorContains strin
 			t.Fatalf("timed out waiting for command_error for %s", cmd)
 		}
 	}
-}
-
-func expectPaneStatus(t *testing.T, d *Daemon, workspaceID, paneID string, status workspacelayout.PaneStatus, errorContains string) {
-	t.Helper()
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatalf("workspace layout %s not found", workspaceID)
-	}
-	for _, pane := range snapshot.Panes {
-		if pane.PaneID != paneID {
-			continue
-		}
-		if pane.Status != status {
-			t.Fatalf("pane %s status = %q, want %q", paneID, pane.Status, status)
-		}
-		if errorContains != "" && !strings.Contains(pane.Error, errorContains) {
-			t.Fatalf("pane %s error = %q, want containing %q", paneID, pane.Error, errorContains)
-		}
-		return
-	}
-	t.Fatalf("pane %s not found in workspace %s", paneID, workspaceID)
 }
 
 type failingSpawnBackend struct {

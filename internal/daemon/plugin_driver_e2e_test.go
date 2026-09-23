@@ -135,7 +135,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	})
 
 	sessionID := "plugin-driver-e2e"
-	workspaceID := "workspace-" + sessionID
+	profileID := defaultProfileID(t, d.store)
 	fixture := pluginFixtureSession{
 		daemon:    d,
 		sessionID: sessionID,
@@ -144,19 +144,8 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 		stderr:    fixtureStderr,
 		daemonLog: daemonLog,
 	}
-	if err := writeWS(ws, map[string]interface{}{
-		"cmd":       protocol.CmdRegisterWorkspace,
-		"id":        workspaceID,
-		"title":     "fixture",
-		"directory": tmpDir,
-	}); err != nil {
-		t.Fatalf("register workspace: %v", err)
-	}
-	_ = waitForDaemonWebSocketEvent(t, ws, 5*time.Second, func(event map[string]interface{}) bool {
-		return asString(event["event"]) == protocol.EventWorkspaceRegistered
-	})
 
-	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, workspaceID, tmpDir, true, "", "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
+	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, profileID, tmpDir, true, "", "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
 	waitForPluginFixtureReportReceipt(t, reportWatcher, fixture, 1, "driver.spawn-native")
 	assertPluginFixtureReports(t, fixture, "driver.spawn-native")
 	attachAndAssertPluginPTY(t, ws, sessionID, "driver.spawn", fixtureCWD)
@@ -177,7 +166,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 		session := d.store.Get(sessionID)
 		return session != nil && session.State == protocol.SessionStateIdle
 	}, "initial PTY exit to settle before resume")
-	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, workspaceID, tmpDir, false, sessionID, "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
+	assertPluginFixtureStateTransitions(t, spawnFixtureSession(t, ws, sessionID, profileID, tmpDir, false, sessionID, "spotify-glm/zai-org/GLM-5.2-FP8", "max"))
 	waitForPluginFixtureReportReceipt(t, reportWatcher, fixture, 2, "driver.resume-native")
 	assertPluginFixtureReports(t, fixture, "driver.resume-native")
 	attachAndAssertPluginPTY(t, ws, sessionID, "driver.resume", fixtureCWD)
@@ -216,19 +205,19 @@ func terminatePluginFixturePTY(t *testing.T, d *Daemon, sessionID string) {
 	}
 }
 
-func spawnFixtureSession(t *testing.T, ws *websocket.Conn, sessionID, workspaceID, cwd string, yolo bool, resumeID, model, effort string) []string {
+func spawnFixtureSession(t *testing.T, ws *websocket.Conn, sessionID, profileID, cwd string, yolo bool, resumeID, model, effort string) []string {
 	t.Helper()
 	message := map[string]interface{}{
-		"cmd":          protocol.CmdSpawnSession,
-		"id":           sessionID,
-		"cwd":          cwd,
-		"workspace_id": workspaceID,
-		"agent":        "fixture",
-		"cols":         80,
-		"rows":         24,
-		"yolo_mode":    yolo,
-		"model":        model,
-		"effort":       effort,
+		"cmd":        protocol.CmdSpawnSession,
+		"id":         sessionID,
+		"cwd":        cwd,
+		"profile_id": profileID,
+		"agent":      "fixture",
+		"cols":       80,
+		"rows":       24,
+		"yolo_mode":  yolo,
+		"model":      model,
+		"effort":     effort,
 	}
 	if resumeID != "" {
 		message["resume_session_id"] = resumeID

@@ -27,7 +27,7 @@ func closeMetadataFixture(t *testing.T) (*Daemon, *wsClient, string, string, str
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 	d.store.Add(&protocol.Session{
-		ID: sessionID, Agent: protocol.SessionAgentCodex, Directory: cwd, WorkspaceID: workspaceID,
+		ID: sessionID, Agent: protocol.SessionAgentCodex, Directory: cwd, WorkspaceID: workspaceID, ProfileID: defaultProfileID(t, d.store),
 		Branch: protocol.Ptr("feature/current"), MainRepo: protocol.Ptr("/projects/repo"),
 	})
 	d.associateSessionWithWorkspace(sessionID, workspaceID)
@@ -87,7 +87,7 @@ func TestClosePanePreservesExecutionWithoutRunningGit(t *testing.T) {
 }
 
 func TestReapedSessionPreservesCheckedOutBranch(t *testing.T) {
-	d, _, workspaceID, sessionID, _ := closeMetadataFixture(t)
+	d, _, _, sessionID, _ := closeMetadataFixture(t)
 	cwd := d.store.Get(sessionID).Directory
 	runGit(t, cwd, "init", "-b", "feature/current")
 	runGit(t, cwd, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-m", "Initial commit")
@@ -101,8 +101,8 @@ func TestReapedSessionPreservesCheckedOutBranch(t *testing.T) {
 
 	d.removeReapedSession(sessionID)
 
-	if d.store.Get(sessionID) != nil || d.store.GetWorkspaceLayout(workspaceID) != nil {
-		t.Fatal("reaping retained the session or its layout")
+	if d.store.Get(sessionID) != nil {
+		t.Fatal("reaping retained the session")
 	}
 	execution, ok := d.gardenDispatch(sessionID)
 	if !ok || execution.Branch != "feature/checked-out" || execution.Resume != "native-current" ||

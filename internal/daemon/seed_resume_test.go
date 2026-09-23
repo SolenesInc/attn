@@ -116,13 +116,11 @@ func TestSeedResumeRespawnsClosedTender(t *testing.T) {
 	if session == nil || session.Directory != wantDir {
 		t.Fatalf("resumed session = %+v, want dir=%s", session, wantDir)
 	}
-	workspaceID := "workspace-" + leafID
-	if outcome.WorkspaceID != workspaceID || d.store.GetWorkspace(workspaceID) == nil {
-		t.Fatalf("resume workspace = %q, GetWorkspace=%v", outcome.WorkspaceID, d.store.GetWorkspace(workspaceID))
+	if outcome.ProfileID != session.ProfileID || outcome.ProfileID == "" {
+		t.Fatalf("resume profile = %q, session profile = %q, want the recorded profile", outcome.ProfileID, session.ProfileID)
 	}
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	if layout == nil || len(layout.Panes) != 1 || layout.Panes[0].SessionID != leafID {
-		t.Fatalf("resume layout = %+v, want one pane for %s", layout, leafID)
+	if _, placed, err := d.store.SessionPlacement(leafID); err != nil || placed {
+		t.Fatalf("resumed session placed=%v err=%v, want it unplaced", placed, err)
 	}
 
 	spawn := resumeSpawnForSession(t, backend, leafID, since)
@@ -331,9 +329,6 @@ func TestSeedResumeRollsBackWhenSeedChangesAfterSpawn(t *testing.T) {
 	if session := d.store.Get(leafID); session != nil {
 		t.Fatalf("rollback left session registered: %+v", session)
 	}
-	if workspace := d.store.GetWorkspace(reopenWorkspaceID(leafID)); workspace != nil {
-		t.Fatalf("rollback left workspace registered: %+v", workspace)
-	}
 	if !lifecycleLockedDuringRollback {
 		t.Fatal("session lifecycle lock was not retained through rollback")
 	}
@@ -400,7 +395,7 @@ func TestReopenSessionRuntimeRunsBindingWhenAnotherRestoreWon(t *testing.T) {
 
 	bindings := 0
 	outcome, err := d.reopenSessionRuntime(sessionReopenPlan{
-		SessionID: leafID, Directory: prior.Directory, WorkspaceID: prior.WorkspaceID,
+		SessionID: leafID, Directory: prior.Directory, ProfileID: prior.ProfileID,
 	}, d.newDelegationRollback(), func() error {
 		bindings++
 		return nil
@@ -532,5 +527,37 @@ func TestSeedResumeRollsBackPaneWhenSpawnFails(t *testing.T) {
 	}
 	if ws := d.store.GetWorkspace("workspace-ghost-session"); ws != nil {
 		t.Fatalf("workspace survived a failed resume: %+v", ws)
+	}
+}
+
+func TestSeedResumeNeedsADestinationWhenTheTendersProfileWasDeleted(t *testing.T) {
+	d, backend, sourceSessionID := newGardenDelegationDaemon(t)
+	leafID, seedID := delegateBoundSeed(t, d, backend, sourceSessionID, "codex")
+	writeCodexRolloutFixture(t, "codex-conv-orphan")
+	d.persistResumeSessionID(leafID, "codex-conv-orphan")
+	d.handleUnregister(drainedConn(t), &protocol.UnregisterMessage{ID: leafID})
+	d.waitForSessionTeardown(leafID)
+	kept := createTestProfile(t, d.store, "Kept")
+	deleteTestProfile(t, d.store, defaultProfileID(t, d.store), kept.ID)
+	since := spawnCount(backend)
+
+	if _, err := d.resumeSeed(seedID); err == nil || !strings.Contains(err.Error(), "Sessions ledger") {
+		t.Fatalf("resume without a destination = %v, want a refusal pointing to the Sessions ledger", err)
+	}
+	if spawnCount(backend) != since {
+		t.Fatal("a refused resume spawned the agent")
+	}
+
+	client := spawnTestClient()
+	client.selectProfile(kept.ID)
+	d.handleSeedResume(client, &protocol.SeedResumeMessage{Cmd: protocol.CmdSeedResume, SeedID: seedID, RequestID: protocol.Ptr("resume-1")})
+	var result protocol.SeedResumeResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventSeedResumeResult {
+			decodeInto(t, payload, &result)
+		}
+	}
+	if !result.Success || protocol.Deref(result.ProfileID) != kept.ID || d.store.Get(leafID).ProfileID != kept.ID {
+		t.Fatalf("Garden Resume from a connection in %s = %+v, want the agent resumed there", kept.ID, result)
 	}
 }
