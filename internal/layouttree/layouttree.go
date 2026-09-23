@@ -44,9 +44,9 @@ type Node struct {
 	SplitID       string    `json:"split_id,omitempty"`
 	Direction     Direction `json:"direction,omitempty"`
 	Ratio         float64   `json:"ratio,omitempty"`
-	RatioLocked bool      `json:"ratio_locked,omitempty"`
-	RatioMode   RatioMode `json:"ratio_mode,omitempty"`
-	Children    []Node    `json:"children,omitempty"`
+	RatioLocked   bool      `json:"ratio_locked,omitempty"`
+	RatioMode     RatioMode `json:"ratio_mode,omitempty"`
+	Children      []Node    `json:"children,omitempty"`
 }
 
 func DefaultLayout(paneID string) Node {
