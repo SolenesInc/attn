@@ -1623,9 +1623,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       }),
     );
     const ws = await waitForOpenSocket();
-    result.current.sendSessionSelected('session-selected');
-    result.current.sendWorkspaceSelected('workspace-selected');
-
     const first = result.current.sendWorkspaceSetSplitRatio('workspace-1', 'split-a', 0.3);
     const second = result.current.sendWorkspaceSetSplitRatio('workspace-1', 'split-b', 0.7);
     act(() => {
@@ -1642,8 +1639,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     });
     await waitFor(() => {
       const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'session_selected', id: 'session-selected' });
-      expect(sent).toContainEqual({ cmd: 'workspace_selected', workspace_id: 'workspace-selected' });
       expect(sent).toContainEqual(expect.objectContaining({ cmd: 'workspace_layout_set_split_ratio', workspace_id: 'workspace-1', split_id: 'split-a', ratio: 0.3 }));
       expect(sent).toContainEqual(expect.objectContaining({ cmd: 'workspace_layout_set_split_ratio', workspace_id: 'workspace-1', split_id: 'split-b', ratio: 0.7 }));
     });
@@ -1973,11 +1968,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       settings: {},
     };
     const ws = await waitForOpenSocket();
-    result.current.sendSessionSelected('session-selected');
-    await waitFor(() => {
-      const sent = ws.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'session_selected', id: 'session-selected' });
-    });
     act(() => {
       ws.emit(initialState);
       ws.emit({
@@ -2009,7 +1999,6 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     });
     await waitFor(() => {
       const sent = reconnected.sent.map((entry) => JSON.parse(entry));
-      expect(sent).toContainEqual({ cmd: 'session_selected', id: 'session-selected' });
       expect(sent).toContainEqual({
         cmd: 'workspace_tile_content_get',
         workspace_id: 'workspace-1',
@@ -3713,10 +3702,10 @@ describe('useDaemonSocket notebook and annotation events', () => {
       request_id: sent.request_id,
       seed_id: 's-7k3f9m',
       success: true,
-      workspace_id: 'workspace-1',
+      desktop_id: 'desktop-1',
       tile_id: 'tile-seed-s-7k3f9m',
     });
-    await expect(promise).resolves.toEqual({ workspaceId: 'workspace-1', tileId: 'tile-seed-s-7k3f9m' });
+    await expect(promise).resolves.toEqual({ desktopId: 'desktop-1', tileId: 'tile-seed-s-7k3f9m' });
     unmount();
   });
 

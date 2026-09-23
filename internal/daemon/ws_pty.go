@@ -237,7 +237,7 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 }
 
 func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSessionMessage) {
-	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{})
+	d.handleSpawnSessionWithPolicy(client, msg, internalSpawnPolicy{userStarted: true})
 }
 
 func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {

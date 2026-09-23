@@ -317,7 +317,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '324';
+export const PROTOCOL_VERSION = '325';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -975,8 +975,6 @@ export function useDaemonSocket({
   const ptyTransportRef = useRef(createPtyTransportState<AttachRequestContext>());
   const canceledAttachIdsRef = useRef(new Set<string>());
   const attachQueueRef = useRef(new Map<string, Promise<unknown>>());
-  const selectedSessionRef = useRef<string | null>(null);
-  const selectedWorkspaceRef = useRef<string | null>(null);
   const daemonInstanceIDRef = useRef<string>('');
   const hasReceivedInitialStateRef = useRef(false);
   const lastTerminalThemeRef = useRef<{
@@ -1349,15 +1347,8 @@ export function useDaemonSocket({
 
       docSubscriptions.resubscribeAll((payload) => ws.send(JSON.stringify(payload)));
 
-      if (selectedSessionRef.current) {
-        ws.send(JSON.stringify({ cmd: 'session_selected', id: selectedSessionRef.current }));
-      }
-
       for (const listeners of sessionMessageListenersRef.current.values()) {
         for (const listener of listeners) listener();
-      }
-      if (selectedWorkspaceRef.current) {
-        ws.send(JSON.stringify({ cmd: 'workspace_selected', workspace_id: selectedWorkspaceRef.current }));
       }
     };
 
@@ -1718,9 +1709,10 @@ export function useDaemonSocket({
           }
 
           case 'browser_control_request': {
+            const browserContainerId = typeof data.desktop_id === 'string' ? data.desktop_id : data.workspace_id;
             if (
               typeof data.request_id !== 'string'
-              || typeof data.workspace_id !== 'string'
+              || typeof browserContainerId !== 'string'
               || typeof data.tile_id !== 'string'
               || typeof data.action !== 'string'
             ) {
@@ -1729,7 +1721,7 @@ export function useDaemonSocket({
             }
             const requestId = data.request_id;
             void controlBrowserHost(
-              data.workspace_id,
+              browserContainerId,
               data.tile_id,
               data.action,
               typeof data.params === 'string' ? data.params : undefined,
@@ -1803,7 +1795,7 @@ export function useDaemonSocket({
             }
             pendingActionsRef.current.delete(key);
             if (data.success) {
-              pending.resolve({ workspaceId: data.workspace_id, tileId: data.tile_id });
+              pending.resolve({ desktopId: data.desktop_id, tileId: data.tile_id });
             } else {
               pending.reject(new Error(data.error || 'Open markdown failed'));
             }
@@ -1822,7 +1814,7 @@ export function useDaemonSocket({
             }
             pendingActionsRef.current.delete(key);
             if (data.success) {
-              pending.resolve({ workspaceId: data.workspace_id, tileId: data.tile_id });
+              pending.resolve({ desktopId: data.desktop_id, tileId: data.tile_id });
             } else {
               pending.reject(new Error(data.error || 'Open seed failed'));
             }
@@ -3032,7 +3024,7 @@ export function useDaemonSocket({
       cmd: 'spawn_session',
       id: args.id,
       cwd: args.cwd,
-      placement: {},
+      placement: args.placement ?? {},
       ...(args.endpoint_id && { endpoint_id: args.endpoint_id }),
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,
@@ -3783,7 +3775,7 @@ export function useDaemonSocket({
     );
   }, [sendOrQueueCommand]);
 
-  const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ workspaceId?: string; tileId?: string }> => {
+  const sendOpenMarkdown = useCallback((path: string, sessionId: string): Promise<{ desktopId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -3808,7 +3800,7 @@ export function useDaemonSocket({
     });
   }, [nextRequestID]);
 
-  const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ workspaceId?: string; tileId?: string }> => {
+  const sendOpenSeed = useCallback((seedId: string, placement: SeedPlacement): Promise<{ desktopId?: string; tileId?: string }> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -5145,20 +5137,6 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'unsubscribe_git_status' }));
   }, []);
 
-  const sendSessionSelected = useCallback((id: string) => {
-    selectedSessionRef.current = id;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ cmd: 'session_selected', id }));
-  }, []);
-
-  const sendWorkspaceSelected = useCallback((workspaceId: string) => {
-    selectedWorkspaceRef.current = workspaceId;
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({ cmd: 'workspace_selected', workspace_id: workspaceId }));
-  }, []);
-
   const sendTriggerNudge = useCallback((sessionId: string) => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
@@ -5742,7 +5720,6 @@ export function useDaemonSocket({
     sendEnsureRepo,
     sendSubscribeGitStatus,
     sendUnsubscribeGitStatus,
-    sendSessionSelected,
     sendSessionList,
     sendSessionShow,
     sendSessionReopen,
@@ -5768,7 +5745,6 @@ export function useDaemonSocket({
     sendSnoozeTurn,
     sendWakeTurn,
     sendCancelCountdown,
-    sendWorkspaceSelected,
     sendWorkspaceGet,
     sendWorkspaceAddSessionPane,
     sendWorkspaceClosePane,

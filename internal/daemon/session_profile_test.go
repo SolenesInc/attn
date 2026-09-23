@@ -80,6 +80,37 @@ func placeTestSession(t testing.TB, d *Daemon, sessionID, desktopID string) prof
 	return desktop
 }
 
+func focusTestAgent(t testing.TB, d *Daemon, sessionID string) {
+	t.Helper()
+	placement, placed, err := d.store.SessionPlacement(sessionID)
+	if err != nil {
+		t.Fatalf("read the placement of %s: %v", sessionID, err)
+	}
+	if !placed {
+		profile, err := d.store.MostRecentlyUsedProfile()
+		if err != nil {
+			t.Fatalf("read the most recent profile: %v", err)
+		}
+		if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
+			if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
+				t.Fatalf("give %s a profile: %v", sessionID, err)
+			}
+		}
+		placeTestSession(t, d, sessionID, profile.CurrentDesktopID)
+		if placement, _, err = d.store.SessionPlacement(sessionID); err != nil {
+			t.Fatalf("read the placement of %s: %v", sessionID, err)
+		}
+	}
+	profile, _, err := d.store.SetActivePane(placement.DesktopID, placement.PaneID)
+	if err != nil {
+		t.Fatalf("focus %s: %v", sessionID, err)
+	}
+	if _, err := d.store.SelectProfile(profile.ID); err != nil {
+		t.Fatalf("select profile %s: %v", profile.ID, err)
+	}
+	d.publishArrangementChanged(profile.ID)
+}
+
 func injectTestSession(t testing.TB, d *Daemon, session protocol.Session) {
 	t.Helper()
 	serverConn, clientConn := net.Pipe()

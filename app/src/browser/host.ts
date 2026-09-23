@@ -48,8 +48,8 @@ function safeLabelPart(value: string): string {
   return value.replace(/[^a-zA-Z0-9_-]/g, '-');
 }
 
-export function browserHostLabel(workspaceId: string, tileId: string): string {
-  return `browser-${safeLabelPart(workspaceId)}-${safeLabelPart(tileId)}`;
+export function browserHostLabel(containerId: string, tileId: string): string {
+  return `browser-${safeLabelPart(containerId)}-${safeLabelPart(tileId)}`;
 }
 
 export async function mountBrowserHost(
@@ -121,14 +121,14 @@ function delay(ms: number): Promise<void> {
 }
 
 export async function controlBrowserHost(
-  workspaceId: string,
+  containerId: string,
   tileId: string,
   action: string,
   params?: string,
   selector?: string,
   text?: string,
 ): Promise<string> {
-  const label = browserHostLabel(workspaceId, tileId);
+  const label = browserHostLabel(containerId, tileId);
   const deadline = Date.now() + 5_000;
   for (;;) {
     try {

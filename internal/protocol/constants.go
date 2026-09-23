@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "324"
+const ProtocolVersion = "325"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -163,8 +163,6 @@ const (
 	CmdPullRequestUnwatch                    = "pull_request_unwatch"
 	CmdQuery                                 = "query"
 	CmdHeartbeat                             = "heartbeat"
-	CmdSessionSelected                       = "session_selected"
-	CmdWorkspaceSelected                     = "workspace_selected"
 	CmdTriggerNudge                          = "trigger_nudge"
 	CmdSettleTurn                            = "settle_turn"
 	CmdSnoozeTurn                            = "snooze_turn"

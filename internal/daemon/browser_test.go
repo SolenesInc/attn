@@ -11,7 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
+	"os"
 )
 
 func TestValidateBrowserURL(t *testing.T) {
@@ -114,8 +114,7 @@ func TestNormalizeBrowserAction(t *testing.T) {
 }
 
 func TestBrowserControlRejectsNonObjectParams(t *testing.T) {
-	d, _, _ := setupMarkdownWorkspace(t)
-	d.setSelectedSession("session-1")
+	d, _ := setupAgentDesktop(t)
 	clientConn, serverConn := net.Pipe()
 	defer clientConn.Close()
 	go d.handleBrowserControl(serverConn, &protocol.BrowserControlMessage{
@@ -136,9 +135,8 @@ func TestBrowserControlRejectsNonObjectParams(t *testing.T) {
 func TestOpenBrowserRetargetsExistingTileAtSameURL(t *testing.T) {
 	base := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	synctest.Test(t, func(t *testing.T) {
-		d, _, workspaceID := setupMarkdownWorkspaceOn(t, base)
+		d, desktop := setupAgentDesktopOn(t, base)
 		stopDaemonBackground(t, d)
-		d.setSelectedSession("session-1")
 
 		firstClient, firstServer := net.Pipe()
 		go d.handleOpenBrowser(firstServer, &protocol.OpenBrowserMessage{
@@ -170,13 +168,9 @@ func TestOpenBrowserRetargetsExistingTileAtSameURL(t *testing.T) {
 			URL: "http://localhost:3000",
 		})
 
-		outbound := requireOutbound(t, host, "no browser navigation request reached the host")
-		var request protocol.BrowserControlRequestMessage
-		if err := json.Unmarshal(outbound.payload, &request); err != nil {
-			t.Fatal(err)
-		}
+		request := requireBrowserControlRequest(t, host)
 		if request.Event != protocol.EventBrowserControlRequest ||
-			request.WorkspaceID != workspaceID ||
+			protocol.Deref(request.DesktopID) != desktop.ID ||
 			request.Action != "navigate" ||
 			protocol.Deref(request.Text) != "http://localhost:3000" {
 			t.Fatalf("request = %+v", request)
@@ -190,159 +184,74 @@ func TestOpenBrowserRetargetsExistingTileAtSameURL(t *testing.T) {
 	})
 }
 
-func TestOpenBrowserTargetsSelectedSession(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	d.setSelectedSession("session-1")
-
-	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
-	go d.handleOpenBrowser(serverConn, &protocol.OpenBrowserMessage{
-		Cmd: protocol.CmdOpenBrowser,
-		URL: "http://localhost:3000",
-	})
-
-	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if !resp.Ok {
-		t.Fatalf("open_browser failed: %v", protocol.Deref(resp.Error))
-	}
-
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing after open")
-	}
-	params, ok := layouttree.TileParamsByID(snapshot.Layout, browserTileID)
-	if !ok || params != "http://localhost:3000" {
-		t.Fatalf("docked browser params = (%q, %v)", params, ok)
-	}
-}
-
-func TestOpenBrowserRetargetsSelectedTileOnlyWorkspace(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	d.setSelectedSession("session-1")
-
-	firstClient, firstServer := net.Pipe()
-	go d.handleOpenBrowser(firstServer, &protocol.OpenBrowserMessage{
-		Cmd: protocol.CmdOpenBrowser,
-		URL: "http://localhost:3000",
-	})
-	var firstResp protocol.Response
-	if err := json.NewDecoder(firstClient).Decode(&firstResp); err != nil || !firstResp.Ok {
-		t.Fatalf("first open browser response = (%+v, %v)", firstResp, err)
-	}
-	_ = firstClient.Close()
-
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing after first open")
-	}
-	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
-	if !removed {
-		t.Fatal("session pane was not present in workspace layout")
-	}
-	snapshot.Layout = layout
-	snapshot.Panes = nil
-	snapshot.ActivePaneID = ""
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
-		t.Fatal(err)
-	}
-	d.setSelectedWorkspace(workspaceID)
-
-	secondClient, secondServer := net.Pipe()
-	go d.handleOpenBrowser(secondServer, &protocol.OpenBrowserMessage{
-		Cmd: protocol.CmdOpenBrowser,
-		URL: "https://example.com/retargeted",
-	})
-	var secondResp protocol.Response
-	if err := json.NewDecoder(secondClient).Decode(&secondResp); err != nil || !secondResp.Ok {
-		t.Fatalf("second open browser response = (%+v, %v)", secondResp, err)
-	}
-	_ = secondClient.Close()
-
-	updated := d.store.GetWorkspaceLayout(workspaceID)
-	if updated == nil {
-		t.Fatal("tile-only workspace disappeared")
-	}
-	params, ok := layouttree.TileParamsByID(updated.Layout, browserTileID)
-	if !ok || params != "https://example.com/retargeted" {
-		t.Fatalf("retargeted browser params = (%q, %v)", params, ok)
-	}
-}
-
-func TestOpenBrowserDocksIntoSelectedTileOnlyWorkspace(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	if err := d.dockTile(
-		workspaceID,
-		"pane-1",
-		"tile-notes",
-		string(layouttree.TileKindMarkdown),
-		"/tmp/notes.md",
-		"",
-		protocol.LayoutDockEdgeRight,
-		nil,
-	); err != nil {
-		t.Fatal(err)
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing")
-	}
-	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
-	if !removed {
-		t.Fatal("session pane was not present in workspace layout")
-	}
-	snapshot.Layout = layout
-	snapshot.Panes = nil
-	snapshot.ActivePaneID = ""
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
-		t.Fatal(err)
-	}
-	d.setSelectedWorkspace(workspaceID)
-
-	clientConn, serverConn := net.Pipe()
-	go d.handleOpenBrowser(serverConn, &protocol.OpenBrowserMessage{
-		Cmd: protocol.CmdOpenBrowser,
-		URL: "https://example.com",
-	})
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil || !resp.Ok {
-		t.Fatalf("open browser response = (%+v, %v)", resp, err)
-	}
-	_ = clientConn.Close()
-
-	updated := d.store.GetWorkspaceLayout(workspaceID)
-	if updated == nil || !browserTileInWorkspace(updated.Layout) {
-		t.Fatal("browser tile was not docked beside the existing tile")
-	}
-}
-
-func TestBrowserWorkspaceUsesSelectedTileOnlyWorkspace(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing")
-	}
-	layout, removed := layouttree.Remove(snapshot.Layout, "pane-1")
-	if !removed {
-		t.Fatal("session pane was not present in workspace layout")
-	}
-	snapshot.Layout = layout
-	snapshot.Panes = nil
-	snapshot.ActivePaneID = ""
-	if err := d.store.SaveWorkspaceLayout(workspacelayout.NormalizeWorkspaceLayout(*snapshot)); err != nil {
-		t.Fatal(err)
-	}
-	d.setSelectedWorkspace(workspaceID)
-
-	gotWorkspaceID, _, err := d.browserWorkspaceForSession("")
+func TestOpenBrowserDocksBesideTheAgentThatOpensIt(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
+	_, second, err := d.store.CreateDesktop(desktop.ProfileID, "", 0, true)
 	if err != nil {
-		t.Fatalf("browserWorkspaceForSession() error = %v", err)
+		t.Fatal(err)
 	}
-	if gotWorkspaceID != workspaceID {
-		t.Fatalf("browserWorkspaceForSession() workspace = %q, want %q", gotWorkspaceID, workspaceID)
+	injectTestSession(t, d, protocol.Session{ID: "session-2", Label: "other", Directory: t.TempDir()})
+	if _, err := d.store.RemoveSessionPlacement("session-2"); err != nil {
+		t.Fatal(err)
+	}
+	placeTestSession(t, d, "session-2", second.ID)
+	focusTestAgent(t, d, "session-1")
+
+	if resp := openBrowserFor(t, d, "", "http://localhost:3000"); !resp.Ok {
+		t.Fatalf("open_browser for the current agent: %v", protocol.Deref(resp.Error))
+	}
+	if tile := desktopTile(t, d, desktop.ID, browserTileID); tile.TileParams != "http://localhost:3000" {
+		t.Fatalf("browser on the current agent's desktop = %+v", tile)
+	}
+
+	if resp := openBrowserFor(t, d, "session-2", "http://localhost:4000"); !resp.Ok {
+		t.Fatalf("open_browser for session-2: %v", protocol.Deref(resp.Error))
+	}
+	if tile := desktopTile(t, d, second.ID, browserTileID); tile.TileParams != "http://localhost:4000" {
+		t.Fatalf("browser on session-2's desktop = %+v", tile)
+	}
+	if tile := desktopTile(t, d, desktop.ID, browserTileID); tile.TileParams != "http://localhost:3000" {
+		t.Fatalf("the current agent's browser moved to %q", tile.TileParams)
+	}
+}
+
+func TestOpenBrowserRetargetsTheBrowserOnATileOnlyDesktop(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
+	if resp := openBrowserFor(t, d, "", "http://localhost:3000"); !resp.Ok {
+		t.Fatalf("first open: %v", protocol.Deref(resp.Error))
+	}
+	if _, err := d.store.RemoveSessionPlacement("session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if resp := openBrowserFor(t, d, "", "https://example.com/retargeted"); !resp.Ok {
+		t.Fatalf("second open: %v", protocol.Deref(resp.Error))
+	}
+	if tile := desktopTile(t, d, desktop.ID, browserTileID); tile.TileParams != "https://example.com/retargeted" {
+		t.Fatalf("retargeted browser = %+v", tile)
+	}
+}
+
+func TestOpenBrowserDocksBesideTheTileOfAPanelessDesktop(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(notes, []byte("# notes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := d.openMarkdownTile(notes, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.RemoveSessionPlacement("session-1"); err != nil {
+		t.Fatal(err)
+	}
+	if resp := openBrowserFor(t, d, "", "https://example.com"); !resp.Ok {
+		t.Fatalf("open_browser: %v", protocol.Deref(resp.Error))
+	}
+	updated, err := d.store.GetDesktop(desktop.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !browserTileInWorkspace(updated.Tree) || !layouttree.HasTile(updated.Tree, markdownTileIDForPath(notes)) {
+		t.Fatalf("desktop tree = %+v, want the browser beside the notes tile", updated.Tree)
 	}
 }
 
@@ -382,9 +291,8 @@ func TestBrowserControlTargetUsesExplicitWorkspace(t *testing.T) {
 func TestBrowserControlBrokersToCapableClient(t *testing.T) {
 	base := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	synctest.Test(t, func(t *testing.T) {
-		d, _, _ := setupMarkdownWorkspaceOn(t, base)
+		d, _ := setupAgentDesktopOn(t, base)
 		stopDaemonBackground(t, d)
-		d.setSelectedSession("session-1")
 		largeResult := strings.Repeat("A", 64*1024)
 
 		openClient, openServer := net.Pipe()
@@ -419,11 +327,7 @@ func TestBrowserControlBrokersToCapableClient(t *testing.T) {
 			Text:     protocol.Ptr("browser text"),
 		})
 
-		outbound := requireOutbound(t, host, "no browser control request reached the host")
-		var request protocol.BrowserControlRequestMessage
-		if err := json.Unmarshal(outbound.payload, &request); err != nil {
-			t.Fatal(err)
-		}
+		request := requireBrowserControlRequest(t, host)
 		if request.Event != protocol.EventBrowserControlRequest ||
 			request.Action != "type" ||
 			protocol.Deref(request.Selector) != "#query" ||
@@ -453,18 +357,9 @@ func TestRemoteBrowserControlReturnsResultToHubClient(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		d, _, workspaceID := setupMarkdownWorkspaceOn(t, base)
 		stopDaemonBackground(t, d)
-		d.setSelectedSession("session-1")
-
-		openClient, openServer := net.Pipe()
-		go d.handleOpenBrowser(openServer, &protocol.OpenBrowserMessage{
-			Cmd: protocol.CmdOpenBrowser,
-			URL: "http://localhost:3000",
-		})
-		var openResp protocol.Response
-		if err := json.NewDecoder(openClient).Decode(&openResp); err != nil || !openResp.Ok {
-			t.Fatalf("open browser response = (%+v, %v)", openResp, err)
+		if err := d.dockTile(workspaceID, "pane-1", browserTileID, string(layouttree.TileKindBrowser), "http://localhost:3000", "", protocol.LayoutDockEdgeRight, nil); err != nil {
+			t.Fatal(err)
 		}
-		_ = openClient.Close()
 
 		host := newWorkspaceProtocolTestClient()
 		host.trustedTauriOrigin = true
@@ -486,11 +381,7 @@ func TestRemoteBrowserControlReturnsResultToHubClient(t *testing.T) {
 			WorkspaceID: protocol.Ptr(workspaceID),
 		})
 
-		outbound := requireOutbound(t, host, "no browser control request reached the host")
-		var request protocol.BrowserControlRequestMessage
-		if err := json.Unmarshal(outbound.payload, &request); err != nil {
-			t.Fatal(err)
-		}
+		request := requireBrowserControlRequest(t, host)
 		d.handleBrowserControlResult(host, &protocol.BrowserControlResultMessage{
 			Cmd:       protocol.CmdBrowserControlResult,
 			RequestID: request.RequestID,
@@ -513,8 +404,7 @@ func TestRemoteBrowserControlReturnsResultToHubClient(t *testing.T) {
 }
 
 func TestBrowserControlIgnoresResultFromDifferentHost(t *testing.T) {
-	d, _, _ := setupMarkdownWorkspace(t)
-	d.setSelectedSession("session-1")
+	d, _ := setupAgentDesktop(t)
 	openClient, openServer := net.Pipe()
 	go d.handleOpenBrowser(openServer, &protocol.OpenBrowserMessage{
 		Cmd: protocol.CmdOpenBrowser,

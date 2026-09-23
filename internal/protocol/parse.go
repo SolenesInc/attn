@@ -155,8 +155,6 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdPullRequestUnwatch:                    decodeInto[PullRequestUnwatchMessage],
 	CmdQuery:                                 decodeInto[QueryMessage],
 	CmdHeartbeat:                             decodeInto[HeartbeatMessage],
-	CmdSessionSelected:                       decodeInto[SessionSelectedMessage],
-	CmdWorkspaceSelected:                     decodeInto[WorkspaceSelectedMessage],
 	CmdTriggerNudge:                          decodeInto[TriggerNudgeMessage],
 	CmdSettleTurn:                            decodeInto[SettleTurnMessage],
 	CmdSnoozeTurn:                            decodeInto[SnoozeTurnMessage],

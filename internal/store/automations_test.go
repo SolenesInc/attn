@@ -1328,3 +1328,46 @@ func TestOriginAutomationRunIDForSeedSurvivesBindingRotation(t *testing.T) {
 		t.Fatalf("origin run for an unbound seed = %q err=%v, want none", origin, err)
 	}
 }
+
+func TestAClosedContinuityWorkerFollowsItsAutomationWhenItsProfileIsDeleted(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
+	doomed, _, err := s.CreateProfile("Doomed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept, _, err := s.CreateProfile("Kept")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, doomed.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now,
+		AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1"})
+	if err != nil || !created {
+		t.Fatalf("first claim created=%v err=%v", created, err)
+	}
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddChecked(&protocol.Session{ID: "session-1", Label: "nightly", Agent: "codex", Directory: "/tmp", ProfileID: doomed.ID, State: protocol.SessionStateIdle}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.CloseSession("session-1", SessionClose{}, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DeleteProfile(doomed.ID, doomed.Revision, kept.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour),
+		AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2"})
+	if err != nil || !created {
+		t.Fatalf("second claim created=%v err=%v", created, err)
+	}
+	if second.SessionID != "session-1" || second.SeedID != "seed-1" || second.ProfileID != kept.ID {
+		t.Fatalf("second run = %#v, want it to continue session-1 in %s", second, kept.ID)
+	}
+}

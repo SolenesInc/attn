@@ -612,13 +612,16 @@ func TestALaunchedSessionLandsBesideTheActivePaneOfTheCurrentDesktop(t *testing.
 	if err != nil || placed.ID != desktop.ID {
 		t.Fatalf("first launch placed on %s err=%v, want the current desktop %s", placed.ID, err, desktop.ID)
 	}
-	placed, secondPane, err := s.PlaceLaunchedSession(SessionPlacementRequest{SessionID: "second", Status: profiles.PaneStatusReady})
+	placed, secondPane, err := s.PlaceLaunchedSession(SessionPlacementRequest{SessionID: "second", Status: profiles.PaneStatusReady, Focus: true})
 	if err != nil || placed.ActivePaneID != secondPane {
-		t.Fatalf("second launch = %+v err=%v, want it focused", placed, err)
+		t.Fatalf("second launch = %+v err=%v, want the user's launch focused", placed, err)
 	}
 	placed, _, err = s.PlaceLaunchedSession(SessionPlacementRequest{DesktopID: desktop.ID, SessionID: "third", AnchorPaneID: firstPane, Status: profiles.PaneStatusReady})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if placed.ActivePaneID != secondPane {
+		t.Fatalf("active pane after an unfocused launch = %s, want %s kept: an agent never takes the user's focus by appearing", placed.ActivePaneID, secondPane)
 	}
 	if got := layouttree.PaneIDs(placed.Tree); len(got) != 3 || got[0] != firstPane {
 		t.Fatalf("panes = %v, want the third split beside the first", got)
@@ -650,7 +653,9 @@ func TestReAddingASessionNeverChangesItsProfile(t *testing.T) {
 
 	session := s.Get("agent")
 	session.ProfileID = work.ID
-	wantCode(t, s.AddChecked(session), profiles.CodeCrossProfile)
+	if err := s.AddChecked(session); err != nil {
+		t.Fatal(err)
+	}
 	session.ProfileID = ""
 	if err := s.AddChecked(session); err != nil {
 		t.Fatal(err)

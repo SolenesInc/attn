@@ -129,7 +129,7 @@ func TestStandaloneTicketCreatorGetsUnreadCommentIndicator(t *testing.T) {
 	t.Cleanup(d.stopNudgeCountdowns)
 	_, creatorID, _ := delegateForNotify(t, d, "codex")
 	d.store.UpdateState(creatorID, protocol.StateIdle)
-	d.setSelectedSession(creatorID)
+	focusTestAgent(t, d, creatorID)
 	ticket, err := d.store.CreateTicket(store.Ticket{
 		ID: "standalone", Title: "Standalone", Status: store.TicketStatusTodo,
 	}, creatorID, time.Now())
