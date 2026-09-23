@@ -89,6 +89,9 @@ func TestInterruptedCheckIsNotRecordedAsRejection(t *testing.T) {
 	if rejections != 0 || !backend.SharedCandidatePending() {
 		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
 	}
+	if _, err := backend.launchArtifact(); err == nil || !strings.Contains(err.Error(), "has not passed its check") {
+		t.Fatalf("launch after an interrupted check = %v, want the unchecked build refused", err)
+	}
 }
 
 func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {

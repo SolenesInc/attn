@@ -50,6 +50,9 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+		if err := backend.Probe(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < 2; i++ {
 			id := fmt.Sprintf("session-%d-%d", generation, i)
 			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: id, Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {

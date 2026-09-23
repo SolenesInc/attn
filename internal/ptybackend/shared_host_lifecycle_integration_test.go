@@ -435,7 +435,11 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := first.ensureSharedHost(context.Background(), nil)
+	retainedArtifact, err := first.importCandidate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := first.ensureSharedHost(context.Background(), &retainedArtifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -508,7 +512,11 @@ func TestSharedHost_UnusedHostRetiresOnItsOwn(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
-	host, err := backend.ensureSharedHost(context.Background(), nil)
+	artifact, err := backend.importCandidate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := backend.ensureSharedHost(context.Background(), &artifact)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -525,7 +533,7 @@ func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
-	artifact, err := backend.launchArtifact()
+	artifact, err := backend.importCandidate()
 	if err != nil {
 		t.Fatal(err)
 	}

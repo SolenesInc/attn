@@ -154,7 +154,6 @@ type WorkerBackend struct {
 	validateMu       sync.Mutex
 	artifactMu       sync.Mutex
 	pinned           ptyhost.Artifact
-	pinnedValidated  bool
 	candidateVerdict string
 }
 

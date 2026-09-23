@@ -45,12 +45,12 @@ func (b *WorkerBackend) loadSharedArtifacts() {
 	b.candidate.id, b.candidate.err = ptyhost.HashArtifact(b.cfg.BinaryPath)
 	if b.candidate.err == nil {
 		if artifact, ok := b.passedArtifact(b.candidate.id); ok {
-			b.pinned, b.pinnedValidated = artifact, true
+			b.pinned = artifact
 			return
 		}
 	}
 	if artifact, ok := b.lastKnownGood(); ok {
-		b.pinned, b.pinnedValidated = artifact, true
+		b.pinned = artifact
 	}
 }
 
@@ -108,7 +108,7 @@ func sharedArtifactEnvironment() ptyhost.ArtifactEnvironment {
 func (b *WorkerBackend) SharedArtifactReady() bool {
 	b.artifactMu.Lock()
 	defer b.artifactMu.Unlock()
-	return b.pinnedValidated
+	return b.pinned.ID != ""
 }
 
 func (b *WorkerBackend) SharedCandidateError() error {
@@ -141,7 +141,7 @@ func (b *WorkerBackend) launchArtifact() (ptyhost.Artifact, error) {
 	if reason, rejected := b.candidateRejection(); rejected {
 		return ptyhost.Artifact{}, fmt.Errorf("shared PTY host %s was rejected: %s", b.candidate.id, reason)
 	}
-	return b.importCandidate()
+	return ptyhost.Artifact{}, fmt.Errorf("shared PTY host %s has not passed its check", b.candidate.id)
 }
 
 func (b *WorkerBackend) importCandidate() (ptyhost.Artifact, error) {
@@ -193,7 +193,7 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) {
 	b.artifactMu.Lock()
 	previous := b.pinned.ID
-	b.pinned, b.pinnedValidated = artifact, true
+	b.pinned = artifact
 	if artifact.ID == b.candidate.id {
 		b.candidateVerdict = ""
 	}
@@ -220,7 +220,7 @@ func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, probeErr
 	b.artifactMu.Lock()
 	b.candidateVerdict = reason
 	if b.pinned.ID == artifact.ID {
-		b.pinned, b.pinnedValidated = ptyhost.Artifact{}, false
+		b.pinned = ptyhost.Artifact{}
 	}
 	b.artifactMu.Unlock()
 	if err := b.recordSharedArtifact(artifact, probeErr); err != nil {
@@ -232,10 +232,7 @@ func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, probeErr
 
 func (b *WorkerBackend) reportRejection(reason string) {
 	b.artifactMu.Lock()
-	fallback := ""
-	if b.pinnedValidated {
-		fallback = b.pinned.ID
-	}
+	fallback := b.pinned.ID
 	b.artifactMu.Unlock()
 	b.cfg.Logf("shared PTY host artifact %s rejected: %s (fallback %q)", b.candidate.id, reason, fallback)
 	if b.cfg.OnSharedArtifactRejected == nil {

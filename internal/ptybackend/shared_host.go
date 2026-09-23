@@ -576,6 +576,11 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 	if opts.Rows == 0 {
 		opts.Rows = 24
 	}
+	if !b.SharedArtifactReady() {
+		if err := b.ValidateSharedCandidate(ctx, false); err != nil {
+			return err
+		}
+	}
 
 	prepared, err := pty.PrepareLaunch(toPTYSpawnOptions(opts), b.cfg.Logf)
 	if err != nil {
