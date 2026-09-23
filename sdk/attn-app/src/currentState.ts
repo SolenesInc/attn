@@ -89,6 +89,7 @@ export interface Session {
   readonly pull_requests?: readonly SessionPullRequest[]
   readonly repository?: string
   readonly seed_id?: string
+  readonly setup_id: string
   readonly state: "idle" | "launching" | "pending_approval" | "recoverable" | "scheduled" | "unknown" | "waiting_input" | "working"
   readonly state_reason?: string
   readonly state_since: string

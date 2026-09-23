@@ -316,7 +316,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '318';
+export const PROTOCOL_VERSION = '319';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -1668,9 +1668,11 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'workspace_tile_content': {
-            if (typeof data.workspace_id === 'string' && typeof data.tile_id === 'string') {
-              const key = tileContentKey(data.workspace_id, data.tile_id);
+          case 'workspace_tile_content':
+          case 'desktop_tile_content': {
+            const container = data.event === 'desktop_tile_content' ? data.desktop_id : data.workspace_id;
+            if (typeof container === 'string' && typeof data.tile_id === 'string') {
+              const key = tileContentKey(container, data.tile_id);
               setTileContents((prev) => ({
                 ...prev,
                 [key]: {
@@ -5545,6 +5547,55 @@ export function useDaemonSocket({
     [sendSetupCommand],
   );
 
+  const sendDesktopDockTile = useCallback(
+    (dock: {
+      desktopId: string;
+      expectedRevision: number;
+      tileId: string;
+      tileKind: string;
+      tileParams?: string;
+      tileSessionId?: string;
+      anchorId?: string;
+      edge: 'left' | 'right' | 'top' | 'bottom';
+    }) =>
+      sendSetupCommand('desktop_dock_tile', {
+        desktop_id: dock.desktopId,
+        expected_revision: dock.expectedRevision,
+        tile_id: dock.tileId,
+        tile_kind: dock.tileKind,
+        edge: dock.edge,
+        ...(dock.tileParams ? { tile_params: dock.tileParams } : {}),
+        ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
+        ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
+      }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopUpdateTile = useCallback(
+    (update: { desktopId: string; expectedRevision: number; tileId: string; tileParams?: string; tileSessionId?: string }) =>
+      sendSetupCommand('desktop_update_tile', {
+        desktop_id: update.desktopId,
+        expected_revision: update.expectedRevision,
+        tile_id: update.tileId,
+        ...(update.tileParams ? { tile_params: update.tileParams } : {}),
+        ...(update.tileSessionId ? { tile_session_id: update.tileSessionId } : {}),
+      }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopRemoveLeaf = useCallback(
+    (desktopId: string, leafId: string, expectedRevision: number) =>
+      sendSetupCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopTileContentGet = useCallback(
+    (desktopId: string, tileId: string) => {
+      sendOrQueueCommand({ cmd: 'desktop_tile_content_get', desktop_id: desktopId, tile_id: tileId }, { waitForInitialState: true });
+    },
+    [sendOrQueueCommand],
+  );
+
   const clearDisconnectExplanation = useCallback(() => {
     setDisconnectExplanation(null);
   }, []);
@@ -5561,6 +5612,10 @@ export function useDaemonSocket({
     sendDesktopSetActivePane,
     sendDesktopMoveLeaf,
     sendDesktopPlaceSession,
+    sendDesktopDockTile,
+    sendDesktopUpdateTile,
+    sendDesktopRemoveLeaf,
+    sendDesktopTileContentGet,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,

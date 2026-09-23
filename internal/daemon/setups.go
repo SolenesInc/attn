@@ -489,4 +489,18 @@ func (d *Daemon) projectSetupArrangementChanged(ev bus.Event) {
 	d.wsHub.SendValueToMatchingClients(message, func(client *wsClient) bool {
 		return client.selectedSetup() == setup.ID
 	})
+	d.pruneArrangementTileContent(message)
+}
+
+func (d *Daemon) pruneArrangementTileContent(message protocol.SetupArrangementChangedMessage) {
+	for _, id := range message.DeletedDesktopIds {
+		d.pruneDesktopTileContentSubscriptions(id, nil)
+	}
+	for _, desktop := range message.Desktops {
+		tree, err := layouttree.DecodeLayout(desktop.TreeJson)
+		if err != nil {
+			continue
+		}
+		d.pruneDesktopTileContentSubscriptions(desktop.ID, &tree)
+	}
 }

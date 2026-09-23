@@ -6,6 +6,7 @@ import { SetupCommandError } from './daemonSetupEvents';
 import { useSetupsStore } from '../store/setups';
 import { SELECTED_SETUP_STORAGE_KEY } from '../utils/selectedSetup';
 import type { Desktop, Setup } from '../types/generated';
+import { tileContentKey } from '../types/workspace';
 
 class FakeWebSocket {
   static readonly CONNECTING = 0;
@@ -243,5 +244,51 @@ describe('useDaemonSocket setups', () => {
 
     await expect(move).rejects.toBeInstanceOf(SetupCommandError);
     await expect(move).rejects.toMatchObject({ code: 'stale_revision', message: 'desktop d2 changed since revision 1' });
+  });
+  it('docks a tile and follows its content on a desktop', async () => {
+    const { ws, result } = await connect();
+
+    let dock!: Promise<unknown>;
+    act(() => {
+      dock = result.current.sendDesktopDockTile({
+        desktopId: 'd1',
+        expectedRevision: 1,
+        tileId: 'tile-md',
+        tileKind: 'markdown',
+        tileParams: '/notes/plan.md',
+        edge: 'right',
+      });
+      result.current.sendDesktopTileContentGet('d1', 'tile-md');
+    });
+    const [command] = ws.commands('desktop_dock_tile');
+    expect(command).toMatchObject({
+      desktop_id: 'd1',
+      expected_revision: 1,
+      tile_id: 'tile-md',
+      tile_kind: 'markdown',
+      tile_params: '/notes/plan.md',
+      edge: 'right',
+    });
+    expect(ws.commands('desktop_tile_content_get')).toEqual([
+      { cmd: 'desktop_tile_content_get', desktop_id: 'd1', tile_id: 'tile-md' },
+    ]);
+    act(() => {
+      ws.emit({ event: 'setup_action_result', request_id: command.request_id, action: 'desktop_dock_tile', success: true, desktops: [desktop('d1', 'set-default', 1)] });
+      ws.emit({
+        event: 'desktop_tile_content',
+        desktop_id: 'd1',
+        tile_id: 'tile-md',
+        tile_kind: 'markdown',
+        path: '/notes/plan.md',
+        content: '# Plan',
+      });
+    });
+    await dock;
+
+    expect(result.current.tileContents[tileContentKey('d1', 'tile-md')]).toEqual({
+      path: '/notes/plan.md',
+      content: '# Plan',
+      error: undefined,
+    });
   });
 });

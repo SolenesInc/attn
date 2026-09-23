@@ -122,7 +122,8 @@ describe('DesktopOverview', () => {
     fireEvent.keyDown(dialog, { key: 'ArrowRight' });
     fireEvent.keyDown(dialog, { key: 'Delete' });
 
-    expect(props.onDelete.mock.calls).toEqual([['d2']]);
+    expect(props.onDelete).toHaveBeenCalledTimes(1);
+    expect(props.onDelete).toHaveBeenCalledWith('d2');
   });
 
   it('offers a shortcut slot only to extra desktops', () => {
