@@ -1295,6 +1295,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 			draft TEXT NOT NULL DEFAULT ''
 		);
 	`},
+	{SetupConversionSchemaVersion, "convert legacy workspaces into the Default setup and its desktops", ""},
 }
 
 const migration99SQL = `
@@ -1359,7 +1360,24 @@ func sqliteDSN(dbPath string) string {
 	return u.String()
 }
 
-func OpenDB(dbPath string) (*sql.DB, error) {
+type SchemaUpgrade struct {
+	DatabasePath string
+	From         int
+	To           int
+	BackupPath   string
+}
+
+type SchemaBehindError struct {
+	DatabasePath string
+	Current      int
+	Required     int
+}
+
+func (e *SchemaBehindError) Error() string {
+	return fmt.Sprintf("the database at %s is at schema v%d and this attn needs v%d; only the daemon upgrades it, so start the daemon (`attn daemon ensure`) and retry", e.DatabasePath, e.Current, e.Required)
+}
+
+func openSQLite(dbPath string) (*sql.DB, error) {
 	dir := filepath.Dir(dbPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return nil, err
@@ -1377,27 +1395,54 @@ func OpenDB(dbPath string) (*sql.DB, error) {
 		db.SetMaxOpenConns(sqliteFileConnectionPoolSize)
 		db.SetMaxIdleConns(sqliteFileConnectionPoolSize)
 	}
+	return db, nil
+}
+
+func OpenDB(dbPath string) (*sql.DB, error) {
+	db, _, err := openUpgradedDB(dbPath)
+	return db, err
+}
+
+func openUpgradedDB(dbPath string) (*sql.DB, SchemaUpgrade, error) {
+	upgrade := SchemaUpgrade{DatabasePath: dbPath, To: LatestSchemaVersion()}
+	db, err := openSQLite(dbPath)
+	if err != nil {
+		return nil, upgrade, err
+	}
 
 	if dbPath == ":memory:" {
 		if err := copyMigratedSchema(db); err != nil {
 			db.Close()
-			return nil, err
+			return nil, upgrade, err
 		}
 	}
 
-	if err := migrateSchema(db, dbPath); err != nil {
+	upgrade, err = upgradeSchema(db, dbPath)
+	if err != nil {
 		db.Close()
-		return nil, err
+		return nil, upgrade, err
 	}
-
-	return db, nil
+	return db, upgrade, nil
 }
 
-func migrateSchema(db *sql.DB, dbPath string) error {
-	if _, err := db.Exec(baseSchema); err != nil {
-		return err
+func openCurrentDB(dbPath string) (*sql.DB, error) {
+	if _, err := os.Stat(dbPath); err != nil {
+		return nil, fmt.Errorf("opening the database at %s: %w", dbPath, err)
 	}
-	return migrateDB(db, dbPath)
+	db, err := openSQLite(dbPath)
+	if err != nil {
+		return nil, err
+	}
+	current, err := recordedSchemaVersion(db)
+	if err != nil {
+		db.Close()
+		return nil, fmt.Errorf("reading the schema version of %s: %w", dbPath, err)
+	}
+	if current < LatestSchemaVersion() {
+		db.Close()
+		return nil, &SchemaBehindError{DatabasePath: dbPath, Current: current, Required: LatestSchemaVersion()}
+	}
+	return db, nil
 }
 
 var migratedSchema struct {
@@ -1420,7 +1465,7 @@ func buildMigratedSchemaImage() ([]byte, error) {
 	}
 	defer db.Close()
 	db.SetMaxOpenConns(1)
-	if err := migrateSchema(db, ":memory:"); err != nil {
+	if _, err := upgradeSchema(db, ":memory:"); err != nil {
 		return nil, err
 	}
 	conn, err := db.Conn(context.Background())
@@ -1479,38 +1524,56 @@ func copyMigratedSchema(dst *sql.DB) error {
 }
 
 func migrateDB(db *sql.DB, dbPath string) error {
-	if err := seedLegacyDB(db); err != nil {
-		return fmt.Errorf("seeding legacy db: %w", err)
-	}
+	_, err := upgradeSchema(db, dbPath)
+	return err
+}
 
-	currentVersion, err := getCurrentVersion(db)
+func upgradeSchema(db *sql.DB, dbPath string) (SchemaUpgrade, error) {
+	upgrade := SchemaUpgrade{DatabasePath: dbPath, To: LatestSchemaVersion()}
+	recorded, err := recordedSchemaVersion(db)
 	if err != nil {
-		return fmt.Errorf("getting schema version: %w", err)
+		return upgrade, fmt.Errorf("getting schema version: %w", err)
+	}
+	upgrade.From = recorded
+	currentVersion, err := legacySchemaVersion(db, recorded)
+	if err != nil {
+		return upgrade, fmt.Errorf("detecting an unversioned legacy schema: %w", err)
+	}
+	if currentVersion >= upgrade.To {
+		return upgrade, nil
 	}
 
-	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" && len(migrations) > 0 {
-		latest := migrations[len(migrations)-1].version
-		if currentVersion < latest {
-			if path, err := backupPreMigration(db, dbPath, currentVersion); err != nil {
-				if path != "" {
-					log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d), but pruning old pre-migration snapshots failed: %v", path, currentVersion, latest, err)
-				} else {
-					log.Printf("[store] pre-migration backup failed (schema v%d -> v%d): %v; proceeding with migrations", currentVersion, latest, err)
-				}
-			} else {
-				log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d)", path, currentVersion, latest)
-			}
+	if currentVersion > 0 && dbPath != "" && dbPath != ":memory:" {
+		path, err := backupPreMigration(db, dbPath, currentVersion)
+		if err != nil {
+			return upgrade, fmt.Errorf("backing up %s before upgrading schema v%d to v%d: %w", dbPath, currentVersion, upgrade.To, err)
 		}
+		upgrade.BackupPath = path
+		log.Printf("[store] pre-migration backup written to %s (schema v%d -> v%d)", path, currentVersion, upgrade.To)
+	}
+
+	if err := applyPendingMigrations(db, recorded, currentVersion); err != nil {
+		return upgrade, err
+	}
+	return upgrade, nil
+}
+
+func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return fmt.Errorf("starting the schema upgrade transaction: %w", err)
+	}
+	defer tx.Rollback()
+	if _, err := tx.Exec(baseSchema); err != nil {
+		return fmt.Errorf("creating the base schema: %w", err)
+	}
+	if err := recordLegacySchemaVersions(tx, recorded, currentVersion); err != nil {
+		return err
 	}
 
 	for _, m := range migrations {
 		if m.version <= currentVersion {
 			continue
-		}
-
-		tx, err := db.Begin()
-		if err != nil {
-			return fmt.Errorf("starting transaction for migration %d: %w", m.version, err)
 		}
 
 		if m.version == 141 {
@@ -1892,10 +1955,15 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == SetupConversionSchemaVersion {
+			if err := applySetupConversion(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 138 {
 			if _, err := tx.Exec(m.sql); err != nil {
 				tx.Rollback()
-				return err
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
 			has, err := columnExists(tx, "delegation_operations", "resolved_preferences")
 			if err == nil && !has {
@@ -1934,12 +2002,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			tx.Rollback()
 			return fmt.Errorf("recording migration %d: %w", m.version, err)
 		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("committing migration %d: %w", m.version, err)
-		}
 	}
 
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("committing the schema upgrade: %w", err)
+	}
 	return nil
 }
 
@@ -4182,47 +4249,40 @@ func columnExists(tx *sql.Tx, table, column string) (bool, error) {
 	return false, rows.Err()
 }
 
-func seedLegacyDB(db *sql.DB) error {
-	currentVersion, err := getCurrentVersion(db)
-	if err != nil {
-		return err
-	}
-	if currentVersion > 0 {
-		return nil
-	}
+const legacyUnversionedSchemaVersion = 10
 
+func legacySchemaVersion(db *sql.DB, recorded int) (int, error) {
+	if recorded > 0 {
+		return recorded, nil
+	}
 	var colCount int
-	err = db.QueryRow(`
-		SELECT COUNT(*) FROM pragma_table_info('prs') WHERE name = 'head_sha'
-	`).Scan(&colCount)
-	if err != nil {
-		return err
+	if err := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info('prs') WHERE name = 'head_sha'`).Scan(&colCount); err != nil {
+		return 0, err
 	}
 	if colCount == 0 {
-		return nil
+		return 0, nil
 	}
+	return legacyUnversionedSchemaVersion, nil
+}
 
-	const legacyMaxVersion = 10
-	tx, err := db.Begin()
-	if err != nil {
-		return err
-	}
-
-	for v := 1; v <= legacyMaxVersion; v++ {
-		if _, err := tx.Exec(
-			"INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))",
-			v,
-		); err != nil {
-			tx.Rollback()
-			return err
+func recordLegacySchemaVersions(tx *sql.Tx, recorded, legacy int) error {
+	for v := recorded + 1; v <= legacy; v++ {
+		if _, err := tx.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (?, datetime('now'))", v); err != nil {
+			return fmt.Errorf("recording legacy schema version %d: %w", v, err)
 		}
 	}
-
-	if err := tx.Commit(); err != nil {
-		return err
-	}
-
 	return nil
+}
+
+func recordedSchemaVersion(db *sql.DB) (int, error) {
+	var tables int
+	if err := db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'`).Scan(&tables); err != nil {
+		return 0, err
+	}
+	if tables == 0 {
+		return 0, nil
+	}
+	return getCurrentVersion(db)
 }
 
 func getCurrentVersion(db *sql.DB) (int, error) {

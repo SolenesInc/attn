@@ -57,6 +57,7 @@ const (
 	FactSetupRenamed            = "setup.renamed"
 	FactSetupDeleted            = "setup.deleted"
 	FactSetupArrangementChanged = "setup.arrangement.changed"
+	FactSetupMigrationChanged   = "setup.migration.changed"
 
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
@@ -290,6 +291,10 @@ func buildWireProjections() []projection {
 		{
 			filter: bus.Filter{FactSetupArrangementChanged},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSetupArrangementChanged(ev) },
+		},
+		{
+			filter: bus.Filter{FactSetupMigrationChanged, FactSetupArrangementChanged, FactSessionClosed, FactSessionUnregistered},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectMigrationChanged(ev) },
 		},
 		{
 			filter: bus.Filter{"garden.seed.*"},

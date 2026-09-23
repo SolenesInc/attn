@@ -3463,6 +3463,120 @@ model SetupArrangementChangedMessage {
   deleted_desktop_ids?: string[];
 }
 
+// ============================================================================
+// Workspace migration
+// ============================================================================
+// After the one-time conversion every legacy workspace with a live agent is a
+// desktop of the Default setup and an imported group waiting for one explicit
+// confirmation. The draft is daemon state shared by every client: each command
+// answers its sender with one migration_result carrying the same request_id,
+// and every client then receives migration_changed. A stale expected_revision
+// is refused with stale_revision; re-read the broadcast state and retry.
+
+enum MigrationPhase {
+  placement_required,
+  complete,
+}
+
+// An imported group as it stands now. Closed agents and panes moved away no
+// longer count; a group without a live agent retires and leaves the list.
+model MigrationGroup {
+  group_id: string;             // The legacy workspace id
+  title: string;
+  directory: string;
+  source_desktop_id: string;    // The desktop the conversion created for this group
+  confirmed: boolean;
+  tree_json: string;            // Its surviving panes and tiles, as arranged on the source desktop
+  panes: DesktopPane[];
+}
+
+// A desktop of the draft. key names it in migration_move: the desktop id, or
+// slot-N for a free shortcut slot that becomes a desktop only if a group lands
+// there. An extra desktop emptied by a move leaves the draft; a slot stays.
+model MigrationDraftDesktop {
+  key: string;
+  desktop_id?: string;
+  shortcut_slot?: int32;        // 1-9; absent for an extra desktop
+  tree_json: string;            // Split tree of {"group": id} leaves with direction and first-child ratio; empty when nothing is placed
+}
+
+model MigrationState {
+  phase: MigrationPhase;
+  revision: safeint;
+  setup_id: string;
+  groups: MigrationGroup[];
+  desktops: MigrationDraftDesktop[];
+  can_undo: boolean;
+  suggestion_available: boolean;
+}
+
+model MigrationGetMessage {
+  cmd: "migration_get";
+  request_id: string;
+}
+
+// Confirms groups where they stand: keep here, keep as extra desktop, or the
+// bulk keep of every remaining group. One undo step.
+model MigrationKeepMessage {
+  cmd: "migration_keep";
+  request_id: string;
+  expected_revision: safeint;
+  group_ids: string[];
+}
+
+// Moves a group beside anchor_group_id on the target desktop, or beside the
+// whole desktop when absent, and confirms it. The group's own split tree is
+// kept. One undo step.
+model MigrationMoveMessage {
+  cmd: "migration_move";
+  request_id: string;
+  expected_revision: safeint;
+  group_id: string;
+  target_key: string;
+  anchor_group_id?: string;
+  edge: LayoutDockEdge;
+  share?: float64;              // The moved group's share of the new split, in (0,1); absent means half
+}
+
+// Moves every unconfirmed group on an extra desktop into the emptiest shortcut
+// slot and confirms it. Available once; undo makes it available again.
+model MigrationSuggestMessage {
+  cmd: "migration_suggest";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationUndoMessage {
+  cmd: "migration_undo";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+// Applies the draft to the desktops as they stand and completes the migration
+// in one transaction. Every live group must be confirmed. Agents launched or
+// split in meanwhile keep their places. Finishing a completed migration
+// succeeds without changing anything.
+model MigrationFinishMessage {
+  cmd: "migration_finish";
+  request_id: string;
+  expected_revision: safeint;
+}
+
+model MigrationResultMessage {
+  event: "migration_result";
+  request_id: string;
+  action: string;               // Echo of the command name
+  success: boolean;
+  error?: string;
+  error_code?: SetupErrorCode;
+  state?: MigrationState;
+}
+
+model MigrationChangedMessage {
+  event: "migration_changed";
+  state: MigrationState;
+}
+
 model RegisterWorkspaceMessage {
   cmd: "register_workspace";
   id: string;
@@ -3539,6 +3653,9 @@ model InitialStateMessage {
   endpoints?: EndpointInfo[];
   workspaces?: Workspace[];
   setups?: Setup[];
+  // placement_required while the workspace migration waits for the user; send
+  // migration_get for the draft.
+  migration_phase?: MigrationPhase;
   // The setup this connection is scoped to, and its desktops.
   selected_setup_id?: string;
   desktops?: Desktop[];
@@ -7927,6 +8044,8 @@ alias DaemonEvent =
   | SetupActionResultMessage
   | SetupsChangedMessage
   | SetupArrangementChangedMessage
+  | MigrationResultMessage
+  | MigrationChangedMessage
   | RenameResultMessage
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage

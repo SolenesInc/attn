@@ -312,9 +312,20 @@ const (
 )
 
 const (
+	CmdMigrationGet     = "migration_get"
+	CmdMigrationKeep    = "migration_keep"
+	CmdMigrationMove    = "migration_move"
+	CmdMigrationSuggest = "migration_suggest"
+	CmdMigrationUndo    = "migration_undo"
+	CmdMigrationFinish  = "migration_finish"
+)
+
+const (
 	EventSetupActionResult       = "setup_action_result"
 	EventSetupsChanged           = "setups_changed"
 	EventSetupArrangementChanged = "setup_arrangement_changed"
+	EventMigrationResult         = "migration_result"
+	EventMigrationChanged        = "migration_changed"
 )
 
 const (

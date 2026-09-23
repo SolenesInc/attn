@@ -191,11 +191,14 @@ func wantErrorCode(t *testing.T, result protocol.SetupActionResultMessage, want 
 	}
 }
 
-func TestFirstClientOnAnEmptyDaemonCreatesAndSelectsASetup(t *testing.T) {
+func TestFirstClientOnAFreshDaemonIsScopedToDefaultAndCanCreateAnother(t *testing.T) {
 	w := newSetupsTestDaemon(t)
 	client, initial := w.connect("")
-	if len(initial.Setups) != 0 || initial.SelectedSetupID != nil || len(initial.Desktops) != 0 {
-		t.Fatalf("an empty daemon announced setups=%v selected=%v desktops=%v", initial.Setups, initial.SelectedSetupID, initial.Desktops)
+	if len(initial.Setups) != 1 || initial.Setups[0].Name != "Default" || protocol.Deref(initial.SelectedSetupID) != initial.Setups[0].ID || len(initial.Desktops) != 1 {
+		t.Fatalf("a fresh daemon announced setups=%v selected=%v desktops=%v, want only Default with one desktop", initial.Setups, initial.SelectedSetupID, initial.Desktops)
+	}
+	if initial.MigrationPhase == nil || *initial.MigrationPhase != protocol.MigrationPhaseComplete {
+		t.Fatalf("a fresh daemon reported migration phase %v, want complete", initial.MigrationPhase)
 	}
 
 	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
@@ -206,8 +209,8 @@ func TestFirstClientOnAnEmptyDaemonCreatesAndSelectsASetup(t *testing.T) {
 	if created.Setup.CurrentDesktopID != first.ID || protocol.Deref(first.ShortcutSlot) != 1 {
 		t.Fatalf("first desktop %+v is not current in slot 1 of %+v", first, created.Setup)
 	}
-	if got := setupsChanges(t, client); len(got) != 1 || len(got[0].Setups) != 1 {
-		t.Fatalf("setup_create broadcast %+v, want one setups_changed with one setup", got)
+	if got := setupsChanges(t, client); len(got) != 1 || len(got[0].Setups) != 2 {
+		t.Fatalf("setup_create broadcast %+v, want one setups_changed with Default and the new setup", got)
 	}
 
 	selected := w.mustSend(client, map[string]any{"cmd": protocol.CmdSetupSelect, "setup_id": created.Setup.ID})
@@ -236,8 +239,8 @@ func TestHelloScopesTheClientToItsRememberedSetup(t *testing.T) {
 	if protocol.Deref(remembered.SelectedSetupID) != work.ID {
 		t.Fatalf("hello remembering %s was scoped to %v", work.ID, remembered.SelectedSetupID)
 	}
-	if len(remembered.Setups) != 2 {
-		t.Fatalf("initial_state lists %d setups, want 2", len(remembered.Setups))
+	if len(remembered.Setups) != 3 {
+		t.Fatalf("initial_state lists %d setups, want Default, work and home", len(remembered.Setups))
 	}
 	after, err := w.d.store.GetSetup(work.ID)
 	if err != nil {
@@ -256,8 +259,8 @@ func TestHelloScopesTheClientToItsRememberedSetup(t *testing.T) {
 		"cmd": protocol.CmdSetupDelete, "setup_id": work.ID, "expected_revision": work.Revision, "destination_setup_id": home.ID,
 	})
 	_, deleted := w.connect(work.ID)
-	if protocol.Deref(deleted.SelectedSetupID) != home.ID || len(deleted.Setups) != 1 {
-		t.Fatalf("hello remembering a deleted setup got selected=%v setups=%d, want %s and 1", deleted.SelectedSetupID, len(deleted.Setups), home.ID)
+	if protocol.Deref(deleted.SelectedSetupID) != home.ID || len(deleted.Setups) != 2 {
+		t.Fatalf("hello remembering a deleted setup got selected=%v setups=%d, want %s among Default and home", deleted.SelectedSetupID, len(deleted.Setups), home.ID)
 	}
 }
 
@@ -476,8 +479,8 @@ func TestSetupNamesAreUniqueWhileLiveAndReusableAfterDelete(t *testing.T) {
 		t.Fatalf("a new setup reused the deleted setup's id %s", attn.ID)
 	}
 	live, err := w.d.store.ListSetups(false)
-	if err != nil || len(live) != 2 {
-		t.Fatalf("%d live setups (err %v), want 2", len(live), err)
+	if err != nil || len(live) != 3 {
+		t.Fatalf("%d live setups (err %v), want Default, side and attention", len(live), err)
 	}
 	wantErrorCode(t, w.send(client, map[string]any{
 		"cmd": protocol.CmdSetupDelete, "setup_id": reborn.ID, "expected_revision": reborn.Revision, "destination_setup_id": reborn.ID,
@@ -496,8 +499,8 @@ func TestOutpostRefusesSetupCommandsByName(t *testing.T) {
 	client, _ := w.connect("")
 	result := w.send(client, map[string]any{"cmd": protocol.CmdSetupCreate, "name": "attn"})
 	wantErrorCode(t, result, protocol.SetupErrorCodeUnavailable)
-	if live, err := w.d.store.ListSetups(false); err != nil || len(live) != 0 {
-		t.Fatalf("a refused create left %d setups (err %v)", len(live), err)
+	if live, err := w.d.store.ListSetups(false); err != nil || len(live) != 1 {
+		t.Fatalf("a refused create left %d setups (err %v), want only Default", len(live), err)
 	}
 }
 

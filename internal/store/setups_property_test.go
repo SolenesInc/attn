@@ -16,7 +16,7 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		s := New()
 		defer s.Close()
-		setup, first, err := s.CreateSetup("Default")
+		setup, first, err := s.CreateSetup("Main")
 		if err != nil {
 			t.Fatalf("CreateSetup: %v", err)
 		}

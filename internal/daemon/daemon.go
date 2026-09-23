@@ -86,7 +86,6 @@ const (
 	deferredRecoveryRPCTimeout    = 5 * time.Second
 	workerStartupProbeTimeout     = 20 * time.Second
 
-	warnPersistenceDegraded       = "persistence_degraded"
 	warnWorkerRecoveryPartial     = "worker_recovery_partial"
 	warnStaleSessionsPruned       = "stale_sessions_pruned"
 	warnStaleSessionMissingWorker = "stale_session_missing_worker"
@@ -591,22 +590,6 @@ func New(socketPath string) *Daemon {
 		logger.Infof(format, args...)
 	})
 
-	dbPath := config.DBPath()
-	sessionStore, err := store.NewWithDB(dbPath)
-	var startupWarnings []protocol.DaemonWarning
-	if err != nil {
-		logger.Infof("Failed to open DB at %s: %v (using in-memory)", dbPath, err)
-		sessionStore = store.New()
-		startupWarnings = append(startupWarnings, protocol.DaemonWarning{
-			Code: warnPersistenceDegraded,
-			Message: fmt.Sprintf(
-				"Persistence degraded: unable to open durable state at %s. Running in-memory only; session state will not survive daemon restarts. See daemon log in %s for details.",
-				dbPath,
-				config.LogPath(),
-			),
-		})
-	}
-
 	legacyPath := config.StatePath()
 	if _, err := os.Stat(legacyPath); err == nil {
 		os.Remove(legacyPath)
@@ -621,7 +604,6 @@ func New(socketPath string) *Daemon {
 		socketPath:          socketPath,
 		pidPath:             pidPath,
 		dataRoot:            dataRoot,
-		store:               sessionStore,
 		wsHub:               newWSHub(),
 		presentSince:        time.Now(),
 		done:                make(chan struct{}),
@@ -630,7 +612,6 @@ func New(socketPath string) *Daemon {
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
 		gitCoord:            newGitCoordinator(),
-		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
@@ -652,7 +633,6 @@ func New(socketPath string) *Daemon {
 	}
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
-	d.ensureEventBus()
 	d.sessionTitleExec = d.execSessionTitle
 	return d
 }
@@ -777,6 +757,9 @@ func (d *Daemon) Start() error {
 		d.plugins = newPluginRegistry()
 	}
 	startSucceeded := false
+	if err := enrollment.RefuseOutpost(d.dataRoot); err != nil {
+		return err
+	}
 	if err := d.acquirePIDLock(); err != nil {
 		return fmt.Errorf("acquire PID lock: %w", err)
 	}
@@ -786,13 +769,6 @@ func (d *Daemon) Start() error {
 		}
 		d.Stop()
 	}()
-	d.ensurePluginSupervisor()
-	d.applyHeadlessContextWindowCap()
-	d.applyHeadlessTasksMode()
-	if err := d.startEventBus(); err != nil {
-		return fmt.Errorf("start event bus: %w", err)
-	}
-	d.loadWorkspacesFromStore()
 	if d.daemonInstanceID == "" {
 		instanceID, err := enrollment.EnsureDaemonID(d.dataRoot)
 		if err != nil {
@@ -800,6 +776,16 @@ func (d *Daemon) Start() error {
 		}
 		d.daemonInstanceID = instanceID
 	}
+	if err := d.openStore(); err != nil {
+		return err
+	}
+	d.ensurePluginSupervisor()
+	d.applyHeadlessContextWindowCap()
+	d.applyHeadlessTasksMode()
+	if err := d.startEventBus(); err != nil {
+		return fmt.Errorf("start event bus: %w", err)
+	}
+	d.loadWorkspacesFromStore()
 	if d.clientToken == "" {
 		token, err := config.EnsureClientToken(d.dataRoot)
 		if err != nil {
