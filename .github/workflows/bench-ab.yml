@@ -40,9 +40,9 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
 
       - name: Install benchstat
         run: go install golang.org/x/perf/cmd/benchstat@latest
