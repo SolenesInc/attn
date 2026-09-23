@@ -3024,7 +3024,7 @@ export function useDaemonSocket({
       cmd: 'spawn_session',
       id: args.id,
       cwd: args.cwd,
-      placement: {},
+      placement: args.placement ?? {},
       ...(args.endpoint_id && { endpoint_id: args.endpoint_id }),
       agent: args.shell ? 'shell' : (args.agent || 'codex'),
       cols: args.cols,

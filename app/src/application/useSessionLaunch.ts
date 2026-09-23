@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useSessionWorkspaceController } from '../hooks/useSessionWorkspaceController';
 import { ptySpawn } from '../pty/bridge';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
 import { type TerminalSplitDirection } from '../types/workspace';
@@ -12,10 +12,10 @@ import {
   hasAnyAvailableAgents,
   resolvePreferredAgent,
 } from '../utils/agentAvailability';
+import { launchTarget } from '../utils/launchPlacement';
 import {
   AppContentProps,
   LocationPickerPurpose,
-  paneIdForSession,
   SessionCreationJob,
   SplitSessionOptions,
   TERMINAL_AGENT,
@@ -28,9 +28,6 @@ interface Options {
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
-  getActivePaneIdForSession: ReturnType<
-    typeof useSessionWorkspaceController
-  >['getActivePaneIdForSession'];
   selectCreatedSession: (id: string) => boolean;
   showError: ReturnType<typeof useErrorToast>['showError'];
 }
@@ -40,7 +37,6 @@ export function useSessionLaunch({
   daemonEndpoints,
   sessions,
   activeSessionId,
-  getActivePaneIdForSession,
   selectCreatedSession,
   showError,
 }: Options) {
@@ -53,12 +49,15 @@ export function useSessionLaunch({
   } = useDaemonApi();
   const { closeSession, createSession, takeSessionSpawnArgs } = useSessionStore();
   const activeLocalSession = sessions.find((session) => session.id === activeSessionId) ?? null;
+  const currentDesktop = useProfilesStore(
+    (state) => state.desktops.find((desktop) => desktop.id === state.currentDesktopId) ?? null,
+  );
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = hasAnyAvailableAgents(agentAvailability);
   const [sessionCreationJob, setSessionCreationJob] = useState<SessionCreationJob | null>(null);
   const sessionCreationJobIdRef = useRef(0);
   const worktreeSessionCreateEndpointsRef = useRef<Set<string>>(new Set());
-  const { createWorkspaceSession, rollbackSessionCreation, createSessionForUiAutomation } =
+  const { createWorkspaceSession, createSessionForUiAutomation } =
     useWorkspaceCreation({
       sendWorkspaceClosePane,
       closeSession,
@@ -85,18 +84,24 @@ export function useSessionLaunch({
   }, []);
 
   const nextSplitSessionLabel = useCallback(
-    (workspaceId: string, agent: SessionAgent) => {
+    (agent: SessionAgent) => {
       const normalizedAgent = normalizeSessionAgent(agent, 'codex');
       const base = normalizedAgent === 'shell' ? 'shell' : normalizedAgent;
+      const onDesktop = new Set(currentDesktop?.panes.map((pane) => pane.session_id));
       const matchingCount = sessions.filter(
         (session) =>
-          session.workspaceId === workspaceId &&
-          normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
+          onDesktop.has(session.id) && normalizeSessionAgent(session.agent, 'codex') === normalizedAgent,
       ).length;
       return matchingCount === 0 ? base : `${base} ${matchingCount + 1}`;
     },
-    [sessions],
+    [currentDesktop, sessions],
   );
+
+  const handleNewSession = useCallback((direction: TerminalSplitDirection = 'vertical') => {
+    setLocationPickerPurpose('session');
+    locationPickerSessionDirection.current = direction;
+    setLocationPickerOpen(true);
+  }, []);
 
   const createSplitSession = useCallback(
     async (
@@ -105,82 +110,58 @@ export function useSessionLaunch({
       targetPaneId?: string,
       options: SplitSessionOptions = {},
     ) => {
-      const activeSession = options.baseSessionId
-        ? sessions.find((session) => session.id === options.baseSessionId)
-        : activeLocalSession;
-      if (!activeSession?.workspaceId) {
-        handleNewWorkspace();
+      if (!currentDesktop) {
+        showError('No desktop is open yet; choose a profile before starting an agent.');
+        return;
+      }
+      const target = launchTarget(currentDesktop, direction, targetPaneId);
+      const baseId = options.baseSessionId ?? target.focusedSessionId;
+      const base = sessions.find((session) => session.id === baseId) ?? null;
+      const cwd = options.cwd || base?.cwd;
+      if (!cwd) {
+        handleNewSession(direction);
         return;
       }
       const sessionId = crypto.randomUUID();
-      const workspaceId = activeSession.workspaceId;
-      const paneId = targetPaneId || getActivePaneIdForSession(activeSession);
-      const newPaneId = paneIdForSession(sessionId);
-      const label = options.label || nextSplitSessionLabel(workspaceId, agent);
+      const label = options.label || nextSplitSessionLabel(agent);
       const endpointId =
-        options.endpointId === null ? undefined : (options.endpointId ?? activeSession.endpointId);
-      let paneAdded = false;
-
+        options.endpointId === null ? undefined : (options.endpointId ?? base?.endpointId);
       try {
         await createSession(
           label,
-          options.cwd || activeSession.cwd,
+          cwd,
           sessionId,
           agent,
           endpointId,
-          agent === 'shell' ? false : (options.yoloMode ?? activeSession.yoloMode),
-          workspaceId,
+          agent === 'shell' ? false : (options.yoloMode ?? base?.yoloMode),
+          undefined,
           undefined,
           agent === 'shell' ? undefined : options.autoMode,
         );
         const spawnArgs = takeSessionSpawnArgs(sessionId, 80, 24);
-        await sendWorkspaceAddSessionPane(workspaceId, sessionId, label, {
-          paneId: newPaneId,
-          targetPaneId: paneId,
-          direction,
-        });
-        paneAdded = true;
-        if (spawnArgs) {
-          await ptySpawn({ args: { ...spawnArgs, spawned_from: activeSession.id } });
-        } else {
+        if (!spawnArgs) {
           throw new Error('Session spawn arguments were not prepared.');
         }
+        await ptySpawn({
+          args: { ...spawnArgs, placement: target.placement, ...(base ? { spawned_from: base.id } : {}) },
+        });
         selectCreatedSession(sessionId);
       } catch (error) {
-        await rollbackSessionCreation({
-          sessionId,
-          workspaceId,
-          paneId: paneAdded ? newPaneId : undefined,
-        });
-        showError(error instanceof Error ? error.message : 'Failed to create session split');
+        closeSession(sessionId);
+        showError(error instanceof Error ? error.message : 'Failed to start the agent');
       }
     },
     [
-      activeLocalSession,
+      closeSession,
       createSession,
-      getActivePaneIdForSession,
-      handleNewWorkspace,
+      currentDesktop,
+      handleNewSession,
       nextSplitSessionLabel,
-      rollbackSessionCreation,
-      sendWorkspaceAddSessionPane,
       sessions,
       selectCreatedSession,
       showError,
       takeSessionSpawnArgs,
     ],
-  );
-
-  const handleNewSession = useCallback(
-    (direction: TerminalSplitDirection = 'vertical') => {
-      if (!activeLocalSession?.workspaceId) {
-        handleNewWorkspace();
-        return;
-      }
-      setLocationPickerPurpose('session');
-      locationPickerSessionDirection.current = direction;
-      setLocationPickerOpen(true);
-    },
-    [activeLocalSession?.workspaceId, handleNewWorkspace],
   );
 
   const handleLocationSelect = useCallback(
@@ -226,7 +207,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+      if (locationPickerPurpose === 'session') {
         await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
           cwd: path,
           endpointId: endpointId ?? null,
@@ -323,7 +304,7 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          if (locationPickerPurpose === 'session' && activeLocalSession?.workspaceId) {
+          if (locationPickerPurpose === 'session') {
             await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
               cwd: worktreePath,
               endpointId: endpointId ?? null,

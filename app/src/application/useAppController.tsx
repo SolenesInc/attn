@@ -201,7 +201,6 @@ export function useAppController({
     daemonEndpoints,
     sessions,
     activeSessionId,
-    getActivePaneIdForSession,
     selectCreatedSession,
     showError,
   });
