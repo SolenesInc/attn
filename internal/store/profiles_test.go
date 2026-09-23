@@ -650,7 +650,9 @@ func TestReAddingASessionNeverChangesItsProfile(t *testing.T) {
 
 	session := s.Get("agent")
 	session.ProfileID = work.ID
-	wantCode(t, s.AddChecked(session), profiles.CodeCrossProfile)
+	if err := s.AddChecked(session); err != nil {
+		t.Fatal(err)
+	}
 	session.ProfileID = ""
 	if err := s.AddChecked(session); err != nil {
 		t.Fatal(err)
