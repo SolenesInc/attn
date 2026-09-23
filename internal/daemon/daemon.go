@@ -590,12 +590,6 @@ func New(socketPath string) *Daemon {
 		logger.Infof(format, args...)
 	})
 
-	legacyPath := config.StatePath()
-	if _, err := os.Stat(legacyPath); err == nil {
-		os.Remove(legacyPath)
-		logger.Infof("Removed legacy state file: %s", legacyPath)
-	}
-
 	dataRoot := filepath.Dir(socketPath)
 	pidPath := filepath.Join(dataRoot, "attn.pid")
 	manager := pty.NewManager(logger.Infof)
@@ -719,6 +713,14 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 	return d
 }
 
+func (d *Daemon) removeLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if _, err := os.Stat(legacyPath); err == nil {
+		os.Remove(legacyPath)
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
+}
+
 func (d *Daemon) Start() error {
 	if err := d.resolveAppRuntimeTripwires(); err != nil {
 		return fmt.Errorf("resolve app runtime tripwires: %w", err)
@@ -779,6 +781,7 @@ func (d *Daemon) Start() error {
 	if err := d.openStore(); err != nil {
 		return err
 	}
+	d.removeLegacyStateFile()
 	d.ensurePluginSupervisor()
 	d.applyHeadlessContextWindowCap()
 	d.applyHeadlessTasksMode()
