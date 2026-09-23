@@ -285,10 +285,6 @@ export function LocationPicker({
   const requestGenerationRef = useRef(0);
 
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
-  const availableEndpoints = useMemo(
-    () => endpoints.filter((endpoint) => endpoint.enabled !== false),
-    [endpoints],
-  );
   const selectableTargets = useMemo<PickerTarget[]>(
     () => [
       {
@@ -299,7 +295,7 @@ export function LocationPicker({
         projectsDirectory,
         placeholder: 'Type path (e.g., ~/projects) or search...',
       },
-      ...availableEndpoints.map((endpoint) => ({
+      ...endpoints.map((endpoint) => ({
         id: endpoint.id,
         endpointId: endpoint.id,
         name: endpoint.name,
@@ -313,7 +309,7 @@ export function LocationPicker({
         agentsAvailable: endpoint.capabilities?.agents_available,
       })),
     ],
-    [availableEndpoints, projectsDirectory],
+    [endpoints, projectsDirectory],
   );
   const selectedTarget = useMemo(
     () => selectableTargets.find((target) => target.id === targetId) || selectableTargets[0],
