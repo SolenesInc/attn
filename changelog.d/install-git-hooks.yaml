@@ -1,0 +1,3 @@
+kind: internal
+area: tooling
+change: Builds and tests enable the repository's pre-commit formatter, which now also covers pty-host Rust.

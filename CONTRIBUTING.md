@@ -17,7 +17,7 @@ Not all contributions will be accepted. Opening an issue first sets expectations
 1. Fork the repository
 2. Clone your fork
 3. Install dependencies: Go 1.27+, Rust, Node.js 26+, pnpm
-4. Build: `make build-app`
+4. Build and open a dev profile: `make dev`
 
 ## Development Workflow
 
