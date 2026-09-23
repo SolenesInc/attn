@@ -32,7 +32,6 @@ const CONNECTION_STACK_BYTES: usize = 256 * 1024;
 pub struct Config {
     pub daemon_instance_id: String,
     pub artifact: String,
-    pub incarnation: String,
     pub socket_path: String,
     pub registry_dir: String,
     pub host_registry_path: String,
@@ -53,7 +52,6 @@ struct HostRegistry<'a> {
     started_at: String,
     snapshot_format: &'static str,
     generation: &'a str,
-    incarnation: &'a str,
 }
 
 pub struct Host {
@@ -197,7 +195,6 @@ impl Host {
             started_at: unix_timestamp().to_string(),
             snapshot_format: env!("ATTN_PTY_HOST_SNAPSHOT_FORMAT"),
             generation: &self.cfg.artifact,
-            incarnation: &self.cfg.incarnation,
         };
         write_json_atomic(&self.cfg.host_registry_path, &registry)
     }

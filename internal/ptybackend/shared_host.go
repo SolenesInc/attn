@@ -716,7 +716,6 @@ func (b *WorkerBackend) startSharedHost(ctx context.Context, artifact ptyhost.Ar
 	args := []string{
 		"--daemon-instance-id", b.cfg.DaemonInstanceID,
 		"--generation", artifact.ID,
-		"--incarnation", incarnation,
 		"--socket-path", socketPath,
 		"--registry-dir", ptyhost.RegistryDir(b.cfg.DataRoot, b.cfg.DaemonInstanceID),
 		"--host-registry-path", registryPath,

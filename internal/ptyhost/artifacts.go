@@ -32,7 +32,6 @@ type ArtifactReceipt struct {
 	Environment ArtifactEnvironment `json:"environment"`
 	Passed      bool                `json:"passed"`
 	Reason      string              `json:"reason,omitempty"`
-	CheckedAt   string              `json:"checked_at"`
 }
 
 type lastKnownGood struct {

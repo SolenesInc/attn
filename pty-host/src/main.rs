@@ -35,7 +35,6 @@ fn run() -> Result<(), String> {
     Host::run(Config {
         daemon_instance_id: required(&args, "daemon-instance-id")?,
         artifact: required(&args, "generation")?,
-        incarnation: args.get("incarnation").cloned().unwrap_or_default(),
         socket_path: required(&args, "socket-path")?,
         registry_dir: required(&args, "registry-dir")?,
         host_registry_path: required(&args, "host-registry-path")?,

@@ -164,7 +164,6 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 	receipt := ptyhost.ArtifactReceipt{
 		Environment: sharedArtifactEnvironment(),
 		Passed:      probeErr == nil,
-		CheckedAt:   time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if probeErr != nil {
 		receipt.Reason = probeErr.Error()

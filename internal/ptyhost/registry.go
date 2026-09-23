@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 const BinaryName = "attn-pty-host"
@@ -31,7 +30,6 @@ type HostRegistry struct {
 	StartedAt        string `json:"started_at"`
 	SnapshotFormat   string `json:"snapshot_format"`
 	ArtifactID       string `json:"generation"`
-	Incarnation      string `json:"incarnation,omitempty"`
 }
 
 func Root(dataRoot, daemonInstanceID string) string {
@@ -101,11 +99,4 @@ func ReadHostRegistry(path string) (HostRegistry, error) {
 		return entry, fmt.Errorf("unmarshal PTY host registry: %w", err)
 	}
 	return entry, nil
-}
-
-func WriteHostRegistryAtomic(path string, entry HostRegistry) error {
-	if entry.StartedAt == "" {
-		entry.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	return writeJSONAtomic(path, entry)
 }
