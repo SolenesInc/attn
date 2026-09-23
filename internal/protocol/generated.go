@@ -3129,6 +3129,9 @@ type DelegateResult struct {
 	// Checkout corresponds to the JSON schema field "checkout".
 	Checkout string `json:"checkout"`
 
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Directory corresponds to the JSON schema field "directory".
 	Directory string `json:"directory"`
 
@@ -3144,6 +3147,12 @@ type DelegateResult struct {
 
 	// Model corresponds to the JSON schema field "model".
 	Model string `json:"model"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
+
+	// PlacementError corresponds to the JSON schema field "placement_error".
+	PlacementError *string `json:"placement_error,omitempty,omitzero"`
 
 	// PredecessorSessionID corresponds to the JSON schema field
 	// "predecessor_session_id".

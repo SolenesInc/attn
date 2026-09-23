@@ -776,6 +776,9 @@ func runDelegate() {
 	if operation.Result != nil && operation.Result.FirstTurnUnconfirmed != nil {
 		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.FirstTurnUnconfirmed)
 	}
+	if operation.Result != nil && operation.Result.PlacementError != nil {
+		fmt.Fprintf(os.Stderr, "delegate: %s\n", *operation.Result.PlacementError)
+	}
 	printJSON(operation.Result)
 }
 

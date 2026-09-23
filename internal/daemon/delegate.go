@@ -26,10 +26,12 @@ const (
 )
 
 type internalActionResult struct {
-	Event   string  `json:"event"`
-	Success bool    `json:"success"`
-	Error   *string `json:"error,omitempty"`
-	PaneID  *string `json:"pane_id,omitempty"`
+	Event          string  `json:"event"`
+	Success        bool    `json:"success"`
+	Error          *string `json:"error,omitempty"`
+	DesktopID      *string `json:"desktop_id,omitempty"`
+	PaneID         *string `json:"pane_id,omitempty"`
+	PlacementError *string `json:"placement_error,omitempty"`
 }
 
 func newInternalWSClient() *wsClient {
@@ -487,7 +489,7 @@ func (d *Daemon) delegateResolvedForeground(msg *resolvedDelegationLaunch) (*pro
 	return d.delegateOperationForeground(msg, operationID, sessionID, "", false, "", "", resolved)
 }
 
-func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID string, guidance string) error {
+func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID, profileID string, placement *launchPlacement, directory, name, agent, model, effort, seedID string, guidance string) (internalActionResult, error) {
 	initialPrompt := delegatedSeedPrompt(seedID)
 	if guidance != "" {
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
@@ -515,8 +517,7 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 	}
 	spawnClient := newInternalWSClient()
 	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawnMsg, internalSpawnPolicy{})
-	_, err := readInternalActionResult(spawnClient)
-	return err
+	return readInternalActionResult(spawnClient)
 }
 
 func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
@@ -640,7 +641,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 					"recovering delegated runtime", existing.ProfileID, "", existing.Directory, nil, nil, time.Now())
 			}
 			watch = d.watchLaunch(sessionID)
-			if err := d.spawnDelegatedRuntime(msg, sessionID, existing.ProfileID, nil, existing.Directory, existing.Label, agent, model, effort, seedID, guidance); err != nil {
+			if _, err := d.spawnDelegatedRuntime(msg, sessionID, existing.ProfileID, nil, existing.Directory, existing.Label, agent, model, effort, seedID, guidance); err != nil {
 				d.forgetLaunchWatch(sessionID, watch)
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
@@ -801,7 +802,8 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	}
 
 	watch := d.watchLaunch(sessionID)
-	if err := d.spawnDelegatedRuntime(msg, sessionID, profile.ID, placement, directory, name, agent, model, effort, seedID, guidance); err != nil {
+	spawned, err := d.spawnDelegatedRuntime(msg, sessionID, profile.ID, placement, directory, name, agent, model, effort, seedID, guidance)
+	if err != nil {
 		d.forgetLaunchWatch(sessionID, watch)
 		return nil, rollback.fail(fmt.Errorf("spawn delegated session: %w", err))
 	}
@@ -823,14 +825,17 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 			"delegated session bound", profile.ID, "", operationWorktreePath, nil, nil, time.Now())
 	}
 	result := &protocol.DelegateResult{
-		SeedID:    seedID,
-		SessionID: session.ID,
-		ProfileID: protocol.Ptr(profile.ID),
-		Directory: session.Directory,
-		Checkout:  "reused",
-		Agent:     agent,
-		Model:     model,
-		Effort:    effort,
+		SeedID:         seedID,
+		SessionID:      session.ID,
+		ProfileID:      protocol.Ptr(profile.ID),
+		Directory:      session.Directory,
+		Checkout:       "reused",
+		Agent:          agent,
+		Model:          model,
+		Effort:         effort,
+		DesktopID:      spawned.DesktopID,
+		PaneID:         spawned.PaneID,
+		PlacementError: spawned.PlacementError,
 	}
 	if predecessorID != "" {
 		result.PredecessorSessionID = protocol.Ptr(predecessorID)
@@ -895,6 +900,10 @@ func (d *Daemon) completedDelegationResult(session *protocol.Session, worktreeCr
 	}
 	if branch := strings.TrimSpace(protocol.Deref(session.Branch)); branch != "" {
 		result.Branch = protocol.Ptr(branch)
+	}
+	if placement, placed, err := d.store.SessionPlacement(session.ID); err == nil && placed {
+		result.DesktopID = protocol.Ptr(placement.DesktopID)
+		result.PaneID = protocol.Ptr(placement.PaneID)
 	}
 	return result
 }

@@ -7443,6 +7443,11 @@ model DelegateResult {
   `model`: string;
   effort: string;
   predecessor_session_id?: string;
+  // Where the delegated agent sits. Absent when it runs unplaced.
+  desktop_id?: string;
+  pane_id?: string;
+  // Why the agent stayed unplaced when a placement beside its source was asked for.
+  placement_error?: string;
   // When the harness first reported a turn (hook, transcript or plugin driver).
   // Absent when the delegation completed without that: the first turn is unconfirmed.
   first_turn_at?: string;

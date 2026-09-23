@@ -160,6 +160,10 @@ func TestDelegateSpawnsAgentBesideTheSourceWithBrief(t *testing.T) {
 	if got := desktopOf(t, d, result.SessionID); got != sourceDesktopID {
 		t.Fatalf("delegated session landed on desktop %q, want the source's desktop %s", got, sourceDesktopID)
 	}
+	childPlacement, _, _ := d.store.SessionPlacement(result.SessionID)
+	if protocol.Deref(result.DesktopID) != sourceDesktopID || protocol.Deref(result.PaneID) != childPlacement.PaneID || result.PlacementError != nil {
+		t.Fatalf("delegate result placement = desktop %q pane %q error %q, want %s/%s", protocol.Deref(result.DesktopID), protocol.Deref(result.PaneID), protocol.Deref(result.PlacementError), sourceDesktopID, childPlacement.PaneID)
+	}
 	desktop, err := d.store.GetDesktop(sourceDesktopID)
 	if err != nil {
 		t.Fatal(err)

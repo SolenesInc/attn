@@ -3493,11 +3493,14 @@ export interface DelegateResult {
     agent:                   string;
     branch?:                 string;
     checkout:                string;
+    desktop_id?:             string;
     directory:               string;
     effort:                  string;
     first_turn_at?:          string;
     first_turn_unconfirmed?: string;
     model:                   string;
+    pane_id?:                string;
+    placement_error?:        string;
     predecessor_session_id?: string;
     profile_id?:             string;
     role?:                   string;
@@ -3524,11 +3527,14 @@ export interface DelegateResultObject {
     agent:                   string;
     branch?:                 string;
     checkout:                string;
+    desktop_id?:             string;
     directory:               string;
     effort:                  string;
     first_turn_at?:          string;
     first_turn_unconfirmed?: string;
     model:                   string;
+    pane_id?:                string;
+    placement_error?:        string;
     predecessor_session_id?: string;
     profile_id?:             string;
     role?:                   string;
@@ -19556,11 +19562,14 @@ const typeMap: any = {
         { json: "agent", js: "agent", typ: "" },
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "checkout", js: "checkout", typ: "" },
+        { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
         { json: "effort", js: "effort", typ: "" },
         { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
         { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
         { json: "model", js: "model", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "placement_error", js: "placement_error", typ: u(undefined, "") },
         { json: "predecessor_session_id", js: "predecessor_session_id", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "role", js: "role", typ: u(undefined, "") },
@@ -19579,11 +19588,14 @@ const typeMap: any = {
         { json: "agent", js: "agent", typ: "" },
         { json: "branch", js: "branch", typ: u(undefined, "") },
         { json: "checkout", js: "checkout", typ: "" },
+        { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
         { json: "directory", js: "directory", typ: "" },
         { json: "effort", js: "effort", typ: "" },
         { json: "first_turn_at", js: "first_turn_at", typ: u(undefined, "") },
         { json: "first_turn_unconfirmed", js: "first_turn_unconfirmed", typ: u(undefined, "") },
         { json: "model", js: "model", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "placement_error", js: "placement_error", typ: u(undefined, "") },
         { json: "predecessor_session_id", js: "predecessor_session_id", typ: u(undefined, "") },
         { json: "profile_id", js: "profile_id", typ: u(undefined, "") },
         { json: "role", js: "role", typ: u(undefined, "") },

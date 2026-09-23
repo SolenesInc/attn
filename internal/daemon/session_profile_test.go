@@ -257,6 +257,28 @@ func TestSpawnResultReportsWhereTheAgentLandedOrWhyItDidNot(t *testing.T) {
 	if session := d.store.Get(second.ID); session == nil || session.ProfileID != profile.ID {
 		t.Fatalf("the agent whose placement failed = %+v, want it running unplaced in its profile", session)
 	}
+
+	_, doomed, err := d.store.CreateDesktop(profile.ID, "doomed", 0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	third := spawnCharacterizationMessage("desktop-vanished", profile.ID, cwd)
+	third.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(doomed.ID)}
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.ID == third.ID {
+			if _, err := d.store.DeleteDesktop(doomed.ID, doomed.Revision); err != nil {
+				t.Errorf("delete the target desktop: %v", err)
+			}
+		}
+	}
+	d.handleSpawnSession(client, third)
+	orphaned := expectSpawnResult(t, client, third.ID, true)
+	if orphaned.PaneID != nil || !strings.Contains(protocol.Deref(orphaned.PlacementError), doomed.ID) {
+		t.Fatalf("spawn_result = %+v, want no pane and an error naming the deleted desktop %s", orphaned, doomed.ID)
+	}
+	if _, placed, _ := d.store.SessionPlacement(third.ID); placed {
+		t.Fatal("the agent whose desktop was deleted was placed anyway")
+	}
 }
 
 func TestWebSocketCommandsWithoutAProfileUseTheConnectionsProfile(t *testing.T) {
