@@ -85,9 +85,9 @@ describe('findConflict', () => {
 
   it('detects code-equivalent collisions even when the printed key differs', () => {
     // A localized layout where ⌘+the-1-key reports key '&' but code 'Digit1'.
-    // matchesShortcut would fire workspace.select1, so findConflict must catch it.
+    // matchesShortcut would fire desktop.select1, so findConflict must catch it.
     expect(findConflict({ key: '&', code: 'Digit1', meta: true }, 'session.new'))
-      .toBe('workspace.select1');
+      .toBe('desktop.select1');
   });
 });
 
@@ -159,7 +159,7 @@ describe('chord overrides', () => {
 
   it('finds a conflict for a chord whose leader equals an existing combo', () => {
     expect(findConflict({ leader: { key: 'g', meta: true }, then: { key: 'x' } }, 'dock.attention'))
-      .toBe('view.toggleGrid');
+      .toBe('desktop.overview');
   });
 
   it('lets a chord leader coexist with a different existing combo', () => {

@@ -3,7 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { Sidebar, type DockItem } from './Sidebar';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { buildWorkspaceViewModels, type WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import { type WorkspaceWithSessions } from '../utils/workspaceViewModels';
+import { desktopGroups, groupIndexes } from '../test/desktops';
 
 function sessionlessWorkspace(): WorkspaceWithSessions<TestSession> {
   return {
@@ -44,26 +45,17 @@ function buildSidebarData(sessions: TestSession[]) {
     workspaceId: session.cwd ? `workspace-${session.cwd}` : `workspace-${session.id}`,
   }));
   const workspaceIds = new Set<string>();
-  const workspaces = buildWorkspaceViewModels(
+  const workspaces = desktopGroups(
     viewSessions
       .filter((session) => {
         if (workspaceIds.has(session.workspaceId)) return false;
         workspaceIds.add(session.workspaceId);
         return true;
       })
-      .map((session) => ({
-        id: session.workspaceId,
-        title: session.label,
-        directory: session.cwd || session.id,
-        muted: false,
-      })),
+      .map((session) => ({ id: session.workspaceId, title: session.label })),
     viewSessions,
   );
-  return {
-    workspaces,
-    visualOrder: workspaces,
-    visualIndexByWorkspaceId: new Map(workspaces.map((workspace, index) => [workspace.id, index])),
-  };
+  return { workspaces, visualIndexByWorkspaceId: groupIndexes(workspaces) };
 }
 
 function workspaceWithBrowserTile(): WorkspaceWithSessions<TestSession> {
@@ -73,29 +65,25 @@ function workspaceWithBrowserTile(): WorkspaceWithSessions<TestSession> {
     state: 'idle',
     workspaceId: 'workspace-browser',
   };
-  return buildWorkspaceViewModels(
+  return desktopGroups(
     [
       {
         id: 'workspace-browser',
         title: 'browser',
-        directory: '/repo/browser',
-        layout: {
-          layout_json: JSON.stringify({
-            type: 'split',
-            split_id: 'split-root',
-            direction: 'vertical',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', pane_id: 'pane-s1' },
-              {
-                type: 'tile',
-                tile_id: 'tile-browser',
-                tile_kind: 'browser',
-                tile_params: 'https://www.google.com',
-              },
-            ],
-          }),
-          panes: [{ pane_id: 'pane-s1', session_id: 's1' }],
+        tree: {
+          type: 'split',
+          split_id: 'split-root',
+          direction: 'vertical',
+          ratio: 0.5,
+          children: [
+            { type: 'pane', pane_id: 'pane-s1' },
+            {
+              type: 'tile',
+              tile_id: 'tile-browser',
+              tile_kind: 'browser',
+              tile_params: 'https://www.google.com',
+            },
+          ],
         },
       },
     ],
@@ -324,20 +312,7 @@ describe('Sidebar', () => {
       },
     ];
 
-    const data = buildSidebarData(sessions);
-    const mutedWorkspace = data.workspaces.find((workspace) =>
-      workspace.sessions.some((session) => session.id === 'run-b'),
-    )!;
-    const workspaces = data.workspaces.filter((workspace) => workspace.id !== mutedWorkspace.id);
-    render(
-      <Sidebar
-        {...baseProps}
-        {...data}
-        workspaces={workspaces}
-        visualOrder={workspaces}
-        mutedWorkspaces={[{ ...mutedWorkspace, muted: true }]}
-      />,
-    );
+    render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
 
     const group = screen.getByTestId('sidebar-automation-review-sol');
     const header = screen.getByTestId('sidebar-automation-header-review-sol');
@@ -347,7 +322,6 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('sidebar-session-manual')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
     expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/a')).toBeNull();
-    expect(screen.queryByText(/Muted Workspaces/)).toBeNull();
     expect(screen.getByTestId('sidebar-session-manual').compareDocumentPosition(group)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
@@ -443,7 +417,6 @@ describe('Sidebar', () => {
       <Sidebar
         {...baseProps}
         workspaces={[workspace]}
-        visualOrder={[workspace]}
         visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
         onSelectTile={onSelectTile}
         onCloseTile={onCloseTile}
@@ -545,7 +518,6 @@ describe('Sidebar', () => {
       <Sidebar
         {...baseProps}
         workspaces={[workspace]}
-        visualOrder={[workspace]}
         visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
         onSessionDragStart={onSessionDragStart}
         onSessionDragEnd={onSessionDragEnd}
@@ -579,7 +551,6 @@ describe('Sidebar', () => {
       <Sidebar
         {...baseProps}
         workspaces={[workspace]}
-        visualOrder={[workspace]}
         visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
         onSessionDragStart={onSessionDragStart}
         onSessionDragEnd={onSessionDragEnd}
@@ -606,7 +577,6 @@ describe('Sidebar', () => {
       <Sidebar
         {...baseProps}
         workspaces={[workspace]}
-        visualOrder={[workspace]}
         visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
         onSelectSession={onSelectSession}
         onSessionDragStart={onSessionDragStart}
@@ -767,7 +737,7 @@ describe('Sidebar', () => {
     expect(screen.getByTestId('sidebar-session-a1')).not.toHaveTextContent('⌘1');
   });
 
-  it('hides empty workspaces from the sidebar and shortcut order', () => {
+  it('hides empty desktops without renumbering the slots of the others', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
       { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
@@ -782,35 +752,25 @@ describe('Sidebar', () => {
       focusedSessionId: null,
       hasUnresolvedAgentPanes: false,
     };
-    const visualOrder = [emptyWorkspace, ...sidebarData.visualOrder];
-    render(
-      <Sidebar
-        {...baseProps}
-        workspaces={visualOrder}
-        visualOrder={visualOrder}
-        visualIndexByWorkspaceId={
-          new Map(visualOrder.map((workspace, index) => [workspace.id, index]))
-        }
-      />,
-    );
+    const groups = [emptyWorkspace, ...sidebarData.workspaces];
+    render(<Sidebar {...baseProps} workspaces={groups} visualIndexByWorkspaceId={groupIndexes(groups)} />);
 
     expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/empty')).not.toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/a')).toHaveTextContent('⌘1');
-    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/b')).toHaveTextContent('⌘2');
+    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/a')).toHaveTextContent('⌘2');
+    expect(screen.getByTestId('sidebar-workspace-workspace-/repo/b')).toHaveTextContent('⌘3');
   });
 
   it('hides sessionless workspaces by default and reveals them when showSessionless is set', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
     ]);
-    const all = [...sidebarData.visualOrder, sessionlessWorkspace()];
+    const all = [...sidebarData.workspaces, sessionlessWorkspace()];
     const indexMap = new Map(all.map((workspace, index) => [workspace.id, index]));
 
     const { rerender } = render(
       <Sidebar
         {...baseProps}
         workspaces={all}
-        visualOrder={all}
         visualIndexByWorkspaceId={indexMap}
       />,
     );
@@ -820,7 +780,6 @@ describe('Sidebar', () => {
       <Sidebar
         {...baseProps}
         workspaces={all}
-        visualOrder={all}
         visualIndexByWorkspaceId={indexMap}
         showSessionless
       />,
@@ -832,12 +791,11 @@ describe('Sidebar', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'working', cwd: '/repo/a' },
     ]);
-    const all = [...sidebarData.visualOrder, sessionlessWorkspace()];
+    const all = [...sidebarData.workspaces, sessionlessWorkspace()];
     render(
       <Sidebar
         {...baseProps}
         workspaces={all}
-        visualOrder={all}
         visualIndexByWorkspaceId={new Map(all.map((workspace, index) => [workspace.id, index]))}
         showSessionless
       />,
@@ -1050,40 +1008,6 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByTestId('session-actions-remote-1'));
     expect(screen.getByTestId('close-session-action')).toBeInTheDocument();
     expect(screen.getByTestId('reload-session-action')).toBeInTheDocument();
-  });
-
-  it('mutes workspaces instead of individual sessions', () => {
-    const sidebarData = buildSidebarData([
-      { id: 's1', label: 'active', state: 'idle', cwd: '/repo/active' },
-      { id: 's2', label: 'quiet', state: 'waiting_input', cwd: '/repo/quiet' },
-    ]);
-    const mutedWorkspace = {
-      ...sidebarData.workspaces[1],
-      muted: true,
-    };
-    const onMuteWorkspace = vi.fn();
-
-    render(
-      <Sidebar
-        {...baseProps}
-        workspaces={[sidebarData.workspaces[0]]}
-        visualOrder={[sidebarData.workspaces[0]]}
-        visualIndexByWorkspaceId={new Map([[sidebarData.workspaces[0].id, 0]])}
-        mutedWorkspaces={[mutedWorkspace]}
-        mutedExpanded
-        onMuteWorkspace={onMuteWorkspace}
-      />,
-    );
-
-    expect(screen.queryByTestId('mute-session-s1')).not.toBeInTheDocument();
-
-    fireEvent.click(screen.getByTestId('mute-workspace-workspace-/repo/active'));
-    expect(onMuteWorkspace).toHaveBeenCalledWith('workspace-/repo/active', undefined);
-
-    expect(screen.getByText('Muted Workspaces (1)')).toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-muted-workspace-workspace-/repo/quiet')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Unmute workspace quiet' }));
-    expect(onMuteWorkspace).toHaveBeenCalledWith('workspace-/repo/quiet', undefined);
   });
 
   it('renames a session through the pencil trigger and popover', async () => {

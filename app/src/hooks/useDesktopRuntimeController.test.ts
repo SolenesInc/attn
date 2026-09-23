@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { Session } from '../store/sessions';
 const SESSION_PANE_ID = 'pane-session';
-import { useSessionWorkspaceController } from './useSessionWorkspaceController';
+import { useDesktopRuntimeController } from './useDesktopRuntimeController';
 
 vi.mock('../components/SessionTerminalWorkspace/paneRuntimeEventRouter', () => ({
   usePaneRuntimeEventRouter: () => ({
@@ -85,10 +85,12 @@ function buildSession(overrides?: Partial<Session>): Session {
     label: 'Session 1',
     state: 'idle',
     cwd: '/tmp/repo',
-    workspaceId: 'workspace-session-1',
+    workspaceId: '',
+    profileId: 'profile',
+    desktopId: 'desktop-1',
     agent: 'claude',
     transcriptMatched: true,
-    workspace: {
+    desktop: {
       agents: [],
       layoutTree: { type: 'pane', paneId: SESSION_PANE_ID },
     },
@@ -97,8 +99,8 @@ function buildSession(overrides?: Partial<Session>): Session {
   };
 }
 
-describe('useSessionWorkspaceController', () => {
-  it('stores workspace handles and exposes imperative pane helpers', () => {
+describe('useDesktopRuntimeController', () => {
+  it('stores desktop handles and exposes imperative pane helpers', () => {
     const session = buildSession();
     const fitActivePane = vi.fn();
     const focusLeaf = vi.fn();
@@ -112,10 +114,10 @@ describe('useSessionWorkspaceController', () => {
       fgPaletteCellCount: 4,
     }));
 
-    const { result } = renderHook(() => useSessionWorkspaceController([session], session.id));
+    const { result } = renderHook(() => useDesktopRuntimeController([session], session.id));
 
     act(() => {
-      result.current.setWorkspaceRef(session.workspaceId)({
+      result.current.setDesktopRef(session.desktopId)({
         fitPane: vi.fn(),
         fitActivePane,
         focusLeaf,
@@ -140,7 +142,7 @@ describe('useSessionWorkspaceController', () => {
 
     act(() => {
       result.current.fitSessionActivePane(session.id);
-      result.current.focusWorkspaceLeaf(session.workspaceId, 'document');
+      result.current.focusDesktopLeaf(session.desktopId, 'document');
     });
 
     expect(fitActivePane).toHaveBeenCalledOnce();
@@ -149,12 +151,12 @@ describe('useSessionWorkspaceController', () => {
     expect(result.current.getPaneSize(session.id, SESSION_PANE_ID)).toEqual({ cols: 80, rows: 24 });
   });
 
-  it('forgets workspace handles when removed', () => {
+  it('forgets desktop handles when removed', () => {
     const session = buildSession();
-    const { result } = renderHook(() => useSessionWorkspaceController([session], session.id));
+    const { result } = renderHook(() => useDesktopRuntimeController([session], session.id));
 
     act(() => {
-      result.current.setWorkspaceRef(session.workspaceId)({
+      result.current.setDesktopRef(session.desktopId)({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
         focusLeaf: vi.fn(),
@@ -178,20 +180,20 @@ describe('useSessionWorkspaceController', () => {
     });
 
     act(() => {
-      result.current.removeWorkspaceRef(session.workspaceId);
+      result.current.setDesktopRef(session.desktopId)(null);
     });
 
     expect(result.current.getPaneText(session.id, SESSION_PANE_ID)).toBe('');
     expect(result.current.getPaneSize(session.id, SESSION_PANE_ID)).toBeNull();
   });
 
-  it('does not treat a session id as a workspace id for stale session helpers', () => {
+  it('does not treat a session id as a desktop id for stale session helpers', () => {
     const focusPane = vi.fn();
     const getPaneText = vi.fn(() => 'stale text');
-    const { result } = renderHook(() => useSessionWorkspaceController([], null));
+    const { result } = renderHook(() => useDesktopRuntimeController([], null));
 
     act(() => {
-      result.current.setWorkspaceRef('session-1')({
+      result.current.setDesktopRef('session-1')({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
         focusLeaf: vi.fn(),

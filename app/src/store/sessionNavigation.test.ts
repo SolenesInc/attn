@@ -1,11 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { useSessionStore, type DaemonSessionSnapshot } from './sessions';
-import type { DaemonWorkspace } from '../hooks/useDaemonSocket';
-import {
-  LayoutPaneKind,
-  LayoutPaneStatus,
-  WorkspaceStatus,
-} from '../types/generated';
+import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 
 const state = () => useSessionStore.getState();
 const snapshot = (id: string, owed = false): DaemonSessionSnapshot => ({
@@ -14,37 +9,33 @@ const snapshot = (id: string, owed = false): DaemonSessionSnapshot => ({
   agent: 'claude',
   state: 'working',
   directory: `/tmp/${id}`,
-  workspace_id: `workspace-${id}`,
+  workspace_id: '',
+  profile_id: 'profile',
   turn_owed: owed,
   turn_opened_at: id,
 });
-const workspace = (id: string): DaemonWorkspace => ({
-  id: `workspace-${id}`,
-  title: id,
-  directory: `/tmp/${id}`,
-  status: WorkspaceStatus.Working,
-  muted: false,
-  pinned: false,
-  rank: id,
-  layout: {
-    workspace_id: `workspace-${id}`,
-    active_pane_id: `pane-${id}`,
-    layout_json: JSON.stringify({ type: 'pane', pane_id: `pane-${id}` }),
-    panes: [
-      {
-        workspace_id: `workspace-${id}`,
-        pane_id: `pane-${id}`,
-        kind: LayoutPaneKind.Agent,
-        runtime_id: id,
-        session_id: id,
-        title: id,
-        status: LayoutPaneStatus.Ready,
-      },
-    ],
-  },
+const desktop = (id: string): Desktop => ({
+  id: `desktop-${id}`,
+  profile_id: 'profile',
+  name: '',
+  order_key: id,
+  tree_json: JSON.stringify({ type: 'pane', pane_id: `pane-${id}` }),
+  active_pane_id: `pane-${id}`,
+  revision: 1,
+  panes: [
+    {
+      desktop_id: `desktop-${id}`,
+      pane_id: `pane-${id}`,
+      kind: LayoutPaneKind.Agent,
+      session_id: id,
+      title: id,
+      status: LayoutPaneStatus.Ready,
+    },
+  ],
 });
+const arrange = (ids: string[]) => state().syncFromArrangement('profile', ids.map(desktop));
 function load(ids = ['a', 'b']) {
-  state().syncFromDaemonWorkspaces(ids.map(workspace));
+  arrange(ids);
   state().syncFromDaemonSessions(ids.map((id) => snapshot(id, true)));
   state().syncNavigationSettings({ queue_mode_enabled: 'true' });
 }
@@ -58,7 +49,7 @@ describe('session navigation at daemon ingestion', () => {
     const observed: string[] = [];
     const unsubscribe = useSessionStore.subscribe((s) =>
       observed.push(
-        `${s.activeSessionId}:${s.view}:${s.workspacePaneSelections['workspace-b'].activePaneId}:${s.agentHistory.entries.join(',')}`,
+        `${s.activeSessionId}:${s.view}:${s.focusRequest?.paneId}:${s.agentHistory.entries.join(',')}`,
       ),
     );
     state().syncFromDaemonSessions([snapshot('a'), snapshot('b', true)]);
@@ -91,7 +82,7 @@ describe('session navigation at daemon ingestion', () => {
     expect(state().activeSessionId).toBe('a');
   });
 
-  it.each(['home', 'grid', 'workspace', 'tile', 'history'] as const)(
+  it.each(['home', 'grid', 'tile', 'history'] as const)(
     '%s navigation cancels waiting for the next turn',
     (action) => {
       load();
@@ -102,8 +93,7 @@ describe('session navigation at daemon ingestion', () => {
         state().setView('grid');
         state().setView('dashboard');
       }
-      if (action === 'workspace') state().selectSessionlessWorkspace('notes');
-      if (action === 'tile') state().setSelectedTile({ workspaceId: 'notes', tileId: 'note' });
+      if (action === 'tile') state().setSelectedTile({ desktopId: 'notes', tileId: 'note' });
       if (action === 'history') state().navigateAgentHistory('back', true);
       const selected = state().activeSessionId;
       state().syncFromDaemonSessions([snapshot('a'), snapshot('b', true)]);
@@ -121,7 +111,6 @@ describe('session navigation at daemon ingestion', () => {
   it.each([
     'home',
     'grid',
-    'workspace',
     'tile',
     'session',
     'pane',
@@ -135,14 +124,13 @@ describe('session navigation at daemon ingestion', () => {
     expect(state().selectAgent('c')).toBe(false);
     if (action === 'home') state().goToDashboard();
     if (action === 'grid') state().setView('grid');
-    if (action === 'workspace') state().selectSessionlessWorkspace('notes');
-    if (action === 'tile') state().setSelectedTile({ workspaceId: 'notes', tileId: 'note' });
+    if (action === 'tile') state().setSelectedTile({ desktopId: 'notes', tileId: 'note' });
     if (action === 'session') state().selectAgent('a');
     if (action === 'pane') state().selectAgentPane('a', 'pane-a');
     if (action === 'back' || action === 'forward') state().navigateAgentHistory(action);
     if (action === 'cancel') state().cancelPendingSelection();
     state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
-    state().syncFromDaemonWorkspaces(['a', 'b', 'c'].map(workspace));
+    arrange(['a', 'b', 'c']);
     expect(state().activeSessionId).not.toBe('c');
     expect(state().pendingSelection).toBeNull();
   });
@@ -155,7 +143,7 @@ describe('session navigation at daemon ingestion', () => {
       state().selectAgent('c');
       const sessions = () =>
         state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
-      const panes = () => state().syncFromDaemonWorkspaces(['a', 'b', 'c'].map(workspace));
+      const panes = () => arrange(['a', 'b', 'c']);
       if (order === 'session-first') {
         sessions();
         expect(state().activeSessionId).toBe('a');
@@ -179,7 +167,7 @@ describe('session navigation at daemon ingestion', () => {
     state().selectAgent('c');
     state().selectAgent('d');
     state().syncFromDaemonSessions(['a', 'b', 'c', 'd'].map((id) => snapshot(id, true)));
-    state().syncFromDaemonWorkspaces(['a', 'b', 'c', 'd'].map(workspace));
+    arrange(['a', 'b', 'c', 'd']);
     expect(state().activeSessionId).toBe('d');
   });
 
@@ -187,7 +175,7 @@ describe('session navigation at daemon ingestion', () => {
     load();
     const select = state().selectAgent;
     state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
-    state().syncFromDaemonWorkspaces(['a', 'b', 'c'].map(workspace));
+    arrange(['a', 'b', 'c']);
     expect(select('c')).toBe(true);
     expect(state().pendingSelection).toBeNull();
   });
@@ -198,18 +186,10 @@ describe('session navigation at daemon ingestion', () => {
     state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
     state().selectAgent('c');
     state().syncFromDaemonSessions(['a', 'b'].map((id) => snapshot(id, true)));
-    state().syncFromDaemonWorkspaces(['a', 'b', 'c'].map(workspace));
+    arrange(['a', 'b', 'c']);
     state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
     expect(state().activeSessionId).toBe('a');
     expect(state().pendingSelection).toBeNull();
-  });
-
-  it('keeps a tile-only workspace selected when a background session closes', () => {
-    load();
-    state().selectAgent('a');
-    state().selectSessionlessWorkspace('notes');
-    state().syncFromDaemonSessions([snapshot('b', true)]);
-    expect(state()).toMatchObject({ selectedSessionlessWorkspaceId: 'notes', view: 'session' });
   });
 
   it('finishes an explicit pending selection without letting queue advancement override it', () => {
@@ -218,7 +198,7 @@ describe('session navigation at daemon ingestion', () => {
     state().syncFromDaemonSessions(['a', 'b', 'c'].map((id) => snapshot(id, true)));
     state().selectAgent('c');
     state().syncFromDaemonSessions([snapshot('a', true), snapshot('b', true), snapshot('c')]);
-    state().syncFromDaemonWorkspaces(['a', 'b', 'c'].map(workspace));
+    arrange(['a', 'b', 'c']);
     expect(state()).toMatchObject({ activeSessionId: 'c', pendingSelection: null });
   });
 

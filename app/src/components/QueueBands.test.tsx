@@ -5,7 +5,7 @@ import { Sidebar } from './Sidebar';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';
-import { buildWorkspaceViewModels } from '../utils/workspaceViewModels';
+import { desktopGroups, groupIndexes } from '../test/desktops';
 
 interface TestSession {
   id: string;
@@ -37,30 +37,23 @@ const baseProps = {
   onToggleCollapse: () => {},
 };
 
-type WorkspaceFlags = { pinned?: boolean; muted?: boolean };
-
-function sidebarData(sessions: TestSession[], flags: Record<string, WorkspaceFlags> = {}) {
-  const workspaces = buildWorkspaceViewModels(
+function sidebarData(sessions: TestSession[]) {
+  const workspaces = desktopGroups(
     [
-      { id: 'ws-a', title: 'alpha', directory: '/repo/a', rank: 'a', ...flags['ws-a'] },
-      { id: 'ws-b', title: 'beta', directory: '/repo/b', rank: 'b', ...flags['ws-b'] },
+      { id: 'ws-a', title: 'alpha' },
+      { id: 'ws-b', title: 'beta' },
     ],
     sessions,
   );
-  return {
-    workspaces,
-    visualOrder: workspaces,
-    visualIndexByWorkspaceId: new Map(workspaces.map((workspace, index) => [workspace.id, index])),
-  };
+  return { workspaces, visualIndexByWorkspaceId: groupIndexes(workspaces) };
 }
 
 function renderSidebar(
   sessions: TestSession[],
   queueMode: boolean,
   overrides = {},
-  workspaceFlags: Record<string, WorkspaceFlags> = {},
 ) {
-  const data = sidebarData(sessions, workspaceFlags);
+  const data = sidebarData(sessions);
   return render(
     <Sidebar
       {...baseProps}
@@ -184,18 +177,6 @@ describe('the queue arrangement', () => {
     )).toHaveLength(1);
   });
 
-  it('keeps pinned workspaces as groups, and their agents out of both bands', () => {
-    const { container } = renderSidebar(sessions, true, {}, { 'ws-b': { pinned: true } });
-
-    const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(bandRows).toEqual(['queue-chief-chief', 'queue-turn-newer']);
-
-    const tree = Array.from(container.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(tree).toEqual(['sidebar-session-older', 'sidebar-session-settled']);
-  });
-
   it('shows the live state of a queued agent, because being queued no longer means stopped', () => {
     renderSidebar(sessions, true);
     expect(screen.getByTestId('queue-turn-older').getAttribute('data-state')).toBe('working');
@@ -243,28 +224,6 @@ describe('the queue arrangement', () => {
       .map((row) => row.getAttribute('data-testid'));
     expect(bandRows).not.toContain('queue-settled-shell');
     expect(bandRows).toContain('queue-settled-orphan');
-  });
-
-  it('draws the chief once when its own workspace stays in the tree', () => {
-    const pinned = renderSidebar(sessions, true, {}, { 'ws-a': { pinned: true } });
-    expect(pinned.getByTestId('queue-chief-chief')).toBeTruthy();
-    expect(pinned.queryByTestId('sidebar-session-chief')).toBeNull();
-    pinned.unmount();
-
-    const data = sidebarData(sessions, { 'ws-a': { muted: true } });
-    const muted = render(
-      <Sidebar
-        {...baseProps}
-        {...data}
-        workspaces={data.workspaces.filter((workspace) => !workspace.muted)}
-        mutedWorkspaces={data.workspaces.filter((workspace) => workspace.muted)}
-        mutedExpanded
-        queue={buildQueueBands(data.workspaces)}
-      />
-    );
-    expect(muted.getByTestId('queue-chief-chief')).toBeTruthy();
-    expect(muted.queryByTestId('sidebar-session-chief')).toBeNull();
-    expect(muted.getByTestId('sidebar-muted-workspace-ws-a')).toBeTruthy();
   });
 
   it('keeps the per-session menu reachable from every band', () => {
@@ -368,28 +327,6 @@ describe('snoozing from the sidebar', () => {
     fireEvent.click(screen.getByTestId('queue-wake-later'));
     expect(onWakeTurn).toHaveBeenCalledWith('later');
     expect(onSelectSession).not.toHaveBeenCalled();
-  });
-
-  it('sits above the muted workspaces', () => {
-    const deferred: TestSession[] = [
-      { id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a', turnSnoozedUntil: inAnHour() },
-      { id: 'quiet', label: 'quiet', state: 'idle', workspaceId: 'ws-b' },
-    ];
-    const data = sidebarData(deferred, { 'ws-b': { muted: true } });
-    const { container } = render(
-      <Sidebar
-        {...baseProps}
-        {...data}
-        workspaces={data.workspaces.filter((workspace) => !workspace.muted)}
-        mutedWorkspaces={data.workspaces.filter((workspace) => workspace.muted)}
-        onWakeTurn={vi.fn()}
-        queue={buildQueueBands(data.workspaces)}
-      />
-    );
-
-    const sections = Array.from(container.querySelectorAll('.muted-sessions-header'))
-      .map((header) => header.textContent?.trim());
-    expect(sections).toEqual(['▸Snoozed (1)', '▸Muted Workspaces (1)']);
   });
 
   it('draws no section at all while nothing is deferred', () => {

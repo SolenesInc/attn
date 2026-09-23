@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useSessionStore, type Session } from '../store/sessions';
-import { useSessionWorkspaceController } from './useSessionWorkspaceController';
+import { useDesktopRuntimeController } from './useDesktopRuntimeController';
 import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
 
 function session(id: string): Session {
@@ -10,10 +10,12 @@ function session(id: string): Session {
     label: id,
     state: 'idle',
     cwd: '/tmp/repo',
-    workspaceId: `workspace-${id}`,
+    workspaceId: '',
+    profileId: 'profile',
+    desktopId: `desktop-${id}`,
     agent: 'claude',
     transcriptMatched: true,
-    workspace: {
+    desktop: {
       agents: [{ id: `pane-${id}`, runtimeId: id, sessionId: id, title: id }],
       layoutTree: { type: 'pane', paneId: `pane-${id}` },
     },
@@ -36,11 +38,11 @@ function controller(
 ) {
   const hook = renderHook(() => {
     const { sessions, activeSessionId } = useSessionStore();
-    return useSessionWorkspaceController(sessions, activeSessionId);
+    return useDesktopRuntimeController(sessions, activeSessionId);
   });
   for (const session of useSessionStore.getState().sessions) {
     const handle: Partial<SessionTerminalWorkspaceHandle> = { focusPane };
-    hook.result.current.setWorkspaceRef(session.workspaceId)(
+    hook.result.current.setDesktopRef(session.desktopId)(
       handle as SessionTerminalWorkspaceHandle,
     );
   }

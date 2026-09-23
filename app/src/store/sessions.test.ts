@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSessionStore, isSessionReloading } from './sessions';
-import { LayoutPaneKind, LayoutPaneStatus, WorkspaceStatus } from '../types/generated';
+import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 import { createAgentHistory } from '../navigation/agentHistory';
 import type { TerminalLayoutNode } from '../types/workspace';
 
@@ -24,6 +24,29 @@ vi.mock('../pty/bridge', async () => {
   };
 });
 
+function desktopWith(
+  id: string,
+  treeJson: string,
+  activePaneId: string,
+  panes: Array<{ pane_id: string; session_id: string; title: string; status?: LayoutPaneStatus; error?: string }>,
+): Desktop {
+  return {
+    id,
+    profile_id: 'profile',
+    name: '',
+    order_key: id,
+    tree_json: treeJson,
+    active_pane_id: activePaneId,
+    revision: 1,
+    panes: panes.map((pane) => ({
+      desktop_id: id,
+      kind: LayoutPaneKind.Agent,
+      status: LayoutPaneStatus.Ready,
+      ...pane,
+    })),
+  };
+}
+
 describe('sessions store', () => {
   beforeEach(() => {
     mockPtyReload.mockReset();
@@ -34,7 +57,8 @@ describe('sessions store', () => {
       agentHistory: createAgentHistory(),
       connected: false,
       launcherConfig: { executables: {} },
-      daemonWorkspaceLayouts: {},
+      desktopSnapshots: {},
+      desktopIdBySessionId: {},
     });
   });
 
@@ -42,7 +66,7 @@ describe('sessions store', () => {
     const sessionId = await useSessionStore.getState().createSession('test', '/tmp/test', 'sess-test', 'codex', undefined, false, 'workspace-sess-test');
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
 
-    expect(session?.workspace).toEqual({
+    expect(session?.desktop).toEqual({
       agents: [],
       layoutTree: null,
     });
@@ -111,8 +135,23 @@ describe('sessions store', () => {
     });
   });
 
-  it('syncFromDaemonSessions hydrates canonical session data and preserves local workspace state', () => {
+  it('syncFromDaemonSessions hydrates canonical session data and keeps the session on its desktop', () => {
+    const desktop = {
+      agents: [{ id: 'pane-a', runtimeId: 'runtime-a', title: 'Session', sessionId: 'session-1' }],
+      layoutTree: {
+        type: 'split' as const,
+        splitId: 'root',
+        direction: 'vertical' as const,
+        ratio: 0.5,
+        children: [
+          { type: 'pane' as const, paneId: 'pane-session' },
+          { type: 'pane' as const, paneId: 'pane-a' },
+        ] as [TerminalLayoutNode, TerminalLayoutNode],
+      },
+    };
     useSessionStore.setState({
+      desktopSnapshots: { 'workspace-sess-1': { workspace: desktop, daemonActivePaneId: 'pane-a' } },
+      desktopIdBySessionId: { 'sess-1': 'workspace-sess-1' },
       sessions: [
         {
           id: 'sess-1',
@@ -120,10 +159,12 @@ describe('sessions store', () => {
           state: 'working',
           cwd: '/tmp/old',
           workspaceId: 'workspace-sess-1',
+          profileId: '',
+          desktopId: 'workspace-sess-1',
           agent: 'codex',
           transcriptMatched: false,
           daemonActivePaneId: 'pane-a',
-          workspace: {
+          desktop: {
             agents: [{ id: 'pane-a', runtimeId: 'runtime-a', title: "Session", sessionId: 'session-1' }],
             layoutTree: {
               type: 'split',
@@ -166,12 +207,12 @@ describe('sessions store', () => {
       isWorktree: true,
       daemonActivePaneId: 'pane-a',
     });
-    expect(session.workspace).toMatchObject({
+    expect(session.desktop).toMatchObject({
       agents: [{ id: 'pane-a', runtimeId: 'runtime-a', title: "Session", sessionId: 'session-1' }],
     });
   });
 
-  it('syncFromDaemonSessions drops the source layout when a session moves to another workspace', () => {
+  it('syncFromDaemonSessions takes the desktop the session is placed on now', () => {
     const sourceLayout = {
       agents: [
         { id: 'pane-source', runtimeId: 'source-session', title: 'Source', sessionId: 'source-session' },
@@ -198,29 +239,32 @@ describe('sessions store', () => {
       state: 'working' as const,
       cwd: '/tmp/source',
       workspaceId: 'workspace-source',
+      profileId: '',
+      desktopId: 'workspace-source',
       agent: 'codex' as const,
       transcriptMatched: false,
       daemonActivePaneId: 'pane-moved',
-      workspace: sourceLayout,
+      desktop: sourceLayout,
     };
     useSessionStore.setState({
       sessions: [movedSession],
-      daemonWorkspaceLayouts: {
+      desktopSnapshots: {
         'workspace-target': { workspace: targetLayout, daemonActivePaneId: 'pane-moved' },
       },
+      desktopIdBySessionId: { 'moved-session': 'workspace-target' },
     });
 
     useSessionStore.getState().syncFromDaemonSessions([
       { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
     ]);
-    expect(useSessionStore.getState().sessions[0].workspace).toEqual(targetLayout);
+    expect(useSessionStore.getState().sessions[0].desktop).toEqual(targetLayout);
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('pane-moved');
 
-    useSessionStore.setState({ sessions: [movedSession], daemonWorkspaceLayouts: {} });
+    useSessionStore.setState({ sessions: [movedSession], desktopSnapshots: {}, desktopIdBySessionId: {} });
     useSessionStore.getState().syncFromDaemonSessions([
       { id: 'moved-session', label: 'Moved', agent: 'codex', directory: '/tmp/target', workspace_id: 'workspace-target', state: 'working' },
     ]);
-    expect(useSessionStore.getState().sessions[0].workspace).toEqual({ agents: [], layoutTree: null });
+    expect(useSessionStore.getState().sessions[0].desktop).toEqual({ agents: [], layoutTree: null });
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
   });
 
@@ -236,10 +280,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/workspace',
           workspaceId: 'workspace-root',
+          profileId: '',
+          desktopId: 'workspace-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
-          workspace: {
+          desktop: {
             agents: [
               { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
               { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
@@ -262,10 +308,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/workspace',
           workspaceId: 'workspace-root',
+          profileId: '',
+          desktopId: 'workspace-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
-          workspace: {
+          desktop: {
             agents: [
               { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
               { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
@@ -303,55 +351,34 @@ describe('sessions store', () => {
     expect(state.agentHistory).toEqual({ entries: ['root-session'], cursor: 0 });
   });
 
-  it('syncFromDaemonSessions restores the daemon workspace layout for a session that comes back', () => {
-    const daemonWorkspace = {
-      id: 'workspace-blip',
-      title: 'Blip',
-      directory: '/tmp/workspace',
-      status: WorkspaceStatus.Idle,
-      muted: false,
-      pinned: false,
-      rank: '',
-      layout: {
-        workspace_id: 'workspace-blip',
-        active_pane_id: 'pane-blip',
-        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-blip' }),
-        panes: [
-          {
-            workspace_id: 'workspace-blip',
-            pane_id: 'pane-blip',
-            kind: LayoutPaneKind.Agent,
-            title: 'Blip',
-            runtime_id: 'blip-session',
-            session_id: 'blip-session',
-            status: LayoutPaneStatus.Ready,
-          },
-        ],
-      },
-    };
+  it('syncFromDaemonSessions puts a session that comes back on the desktop it is placed on', () => {
     const daemonSession = {
       id: 'blip-session',
       label: 'Blip',
       agent: 'codex',
       directory: '/tmp/workspace',
-      workspace_id: 'workspace-blip',
+      workspace_id: '',
+      profile_id: 'profile',
       state: 'working',
     };
+    const desktop = desktopWith('desktop-blip', JSON.stringify({ type: 'pane', pane_id: 'pane-blip' }), 'pane-blip', [
+      { pane_id: 'pane-blip', session_id: 'blip-session', title: 'Blip' },
+    ]);
 
     useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
-    useSessionStore.getState().syncFromDaemonWorkspaces([daemonWorkspace]);
+    useSessionStore.getState().syncFromArrangement('profile', [desktop]);
     expect(
-      useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.workspace.agents,
+      useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session')?.desktop.agents,
     ).toHaveLength(1);
 
     useSessionStore.getState().syncFromDaemonSessions([]);
     useSessionStore.getState().syncFromDaemonSessions([daemonSession]);
 
     const restored = useSessionStore.getState().sessions.find((entry) => entry.id === 'blip-session');
-    expect(restored?.workspace.agents).toEqual([
+    expect(restored).toMatchObject({ desktopId: 'desktop-blip', profileId: 'profile', daemonActivePaneId: 'pane-blip' });
+    expect(restored?.desktop.agents).toEqual([
       { id: 'pane-blip', runtimeId: 'blip-session', sessionId: 'blip-session', title: 'Blip' },
     ]);
-    expect(restored?.daemonActivePaneId).toBe('pane-blip');
   });
 
   it('syncFromDaemonSessions retains a genuinely launching session with a pending workspace pane', () => {
@@ -365,10 +392,12 @@ describe('sessions store', () => {
           state: 'launching',
           cwd: '/tmp/launching',
           workspaceId: 'workspace-launching',
+          profileId: '',
+          desktopId: 'workspace-launching',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-launching',
-          workspace: {
+          desktop: {
             agents: [{
               id: 'pane-launching',
               runtimeId: 'launching-session',
@@ -448,10 +477,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/exited',
           workspaceId: 'workspace-exited',
+          profileId: '',
+          desktopId: 'workspace-exited',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-exited',
-          workspace: {
+          desktop: {
             agents: [{
               id: 'pane-exited',
               runtimeId: 'exited-session',
@@ -482,10 +513,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/workspace',
           workspaceId: 'workspace-root',
+          profileId: '',
+          desktopId: 'workspace-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
-          workspace: {
+          desktop: {
             agents: [
               { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
               { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
@@ -499,10 +532,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/workspace',
           workspaceId: 'workspace-root',
+          profileId: '',
+          desktopId: 'workspace-root',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-split',
-          workspace: {
+          desktop: {
             agents: [
               { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
               { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
@@ -540,10 +575,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/previous',
           workspaceId: 'workspace-previous',
+          profileId: '',
+          desktopId: 'workspace-previous',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-previous',
-          workspace: {
+          desktop: {
             agents: [{ id: 'pane-previous', runtimeId: 'previous-session', title: 'Previous', sessionId: 'previous-session' }],
             layoutTree: { type: 'pane', paneId: 'pane-previous' },
           },
@@ -554,10 +591,12 @@ describe('sessions store', () => {
           state: 'idle',
           cwd: '/tmp/closing',
           workspaceId: 'workspace-closing',
+          profileId: '',
+          desktopId: 'workspace-closing',
           agent: 'shell',
           transcriptMatched: true,
           daemonActivePaneId: 'pane-closing',
-          workspace: {
+          desktop: {
             agents: [{ id: 'pane-closing', runtimeId: 'closing-session', title: 'Closing', sessionId: 'closing-session' }],
             layoutTree: { type: 'pane', paneId: 'pane-closing' },
           },
@@ -604,44 +643,36 @@ describe('sessions store', () => {
     });
   });
 
-  it('syncFromDaemonWorkspaces replaces the local split workspace from daemon snapshots', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Workspace', '/tmp/workspace', 'sess-workspace', 'codex', undefined, false, 'workspace-sess-workspace');
+  it('syncFromArrangement gives each session the desktop it is placed on and that desktop\'s active pane', async () => {
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false, 'workspace-sess-desktop');
 
-    useSessionStore.getState().syncFromDaemonWorkspaces([
-      {
-        id: `workspace-${sessionId}`,
-        title: 'Workspace',
-        directory: '/tmp/workspace',
-        status: WorkspaceStatus.Idle,
-        muted: false,
-        pinned: false,
-        rank: '',
-        layout: {
-          workspace_id: `workspace-${sessionId}`,
-          active_pane_id: 'pane-shell',
-          layout_json: JSON.stringify({
-            type: 'split',
-            split_id: 'root',
-            direction: 'vertical',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', pane_id: 'pane-session' },
-              { type: 'pane', pane_id: 'pane-shell' },
-            ],
-          }),
-          panes: [
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: LayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: LayoutPaneStatus.Ready },
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-shell', kind: LayoutPaneKind.Agent, title: 'Shell 1', runtime_id: 'runtime-shell', session_id: 'sess-shell', status: LayoutPaneStatus.Ready },
+    useSessionStore.getState().syncFromArrangement('profile', [
+      desktopWith(
+        'desktop-1',
+        JSON.stringify({
+          type: 'split',
+          split_id: 'root',
+          direction: 'vertical',
+          ratio: 0.5,
+          children: [
+            { type: 'pane', pane_id: 'pane-session' },
+            { type: 'pane', pane_id: 'pane-shell' },
           ],
-        },
-      },
+        }),
+        'pane-shell',
+        [
+          { pane_id: 'pane-session', session_id: sessionId, title: 'Agent' },
+          { pane_id: 'pane-shell', session_id: 'sess-shell', title: 'Shell 1' },
+        ],
+      ),
     ]);
 
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
-    expect(session?.workspace).toEqual({
+    expect(session?.desktopId).toBe('desktop-1');
+    expect(session?.desktop).toEqual({
       agents: [
         { id: 'pane-session', runtimeId: sessionId, sessionId, title: 'Agent' },
-        { id: 'pane-shell', runtimeId: 'runtime-shell', sessionId: 'sess-shell', title: 'Shell 1' },
+        { id: 'pane-shell', runtimeId: 'sess-shell', sessionId: 'sess-shell', title: 'Shell 1' },
       ],
       layoutTree: {
         type: 'split',
@@ -658,87 +689,43 @@ describe('sessions store', () => {
     expect(session?.daemonActivePaneId).toBe('pane-shell');
   });
 
-  it('syncFromDaemonWorkspaces ignores unknown sessions and keeps defaults on invalid layout payloads', async () => {
-    const sessionId = await useSessionStore.getState().createSession('Workspace', '/tmp/workspace', 'sess-workspace', 'codex', undefined, false, 'workspace-sess-workspace');
+  it('syncFromArrangement keeps defaults on an invalid tree and falls back to the first pane', async () => {
+    const sessionId = await useSessionStore.getState().createSession('Desktop', '/tmp/workspace', 'sess-desktop', 'codex', undefined, false, 'workspace-sess-desktop');
 
-    useSessionStore.getState().syncFromDaemonWorkspaces([
-      {
-        id: `workspace-${sessionId}`,
-        title: 'Workspace',
-        directory: '/tmp/workspace',
-        status: WorkspaceStatus.Idle,
-        muted: false,
-        pinned: false,
-        rank: '',
-        layout: {
-          workspace_id: `workspace-${sessionId}`,
-          active_pane_id: 'missing-pane',
-          layout_json: '{not-json',
-          panes: [
-            { workspace_id: `workspace-${sessionId}`, pane_id: 'pane-session', kind: LayoutPaneKind.Agent, title: 'Agent', runtime_id: sessionId, session_id: sessionId, status: LayoutPaneStatus.Ready },
-          ],
-        },
-      },
-      {
-        id: 'workspace-unknown-session',
-        title: 'Unknown',
-        directory: '/tmp/unknown',
-        status: WorkspaceStatus.Idle,
-        muted: false,
-        pinned: false,
-        rank: '',
-        layout: {
-          workspace_id: 'workspace-unknown-session',
-          active_pane_id: 'pane-x',
-          layout_json: '',
-          panes: [
-            { workspace_id: 'workspace-unknown-session', pane_id: 'pane-x', kind: LayoutPaneKind.Agent, title: 'Shell X', runtime_id: 'runtime-x', status: LayoutPaneStatus.Ready },
-          ],
-        },
-      },
+    useSessionStore.getState().syncFromArrangement('profile', [
+      desktopWith('desktop-1', '{not-json', 'missing-pane', [
+        { pane_id: 'pane-session', session_id: sessionId, title: 'Agent' },
+      ]),
+      desktopWith('desktop-2', '', 'pane-x', [{ pane_id: 'pane-x', session_id: 'unknown-session', title: 'Shell X' }]),
     ]);
 
     const session = useSessionStore.getState().sessions.find((entry) => entry.id === sessionId);
-    expect(session?.workspace).toEqual({
+    expect(session?.desktop).toEqual({
       agents: [{ id: 'pane-session', runtimeId: sessionId, sessionId, title: 'Agent' }],
       layoutTree: null,
     });
     expect(session?.daemonActivePaneId).toBe('pane-session');
+    expect(useSessionStore.getState().sessions.map((entry) => entry.id)).toEqual([sessionId]);
   });
 
-  it('keeps a failed layout pane out of the session collection across snapshot orderings', () => {
-    const failedWorkspace = {
-      id: 'workspace-failed',
-      title: 'Failed automation',
-      directory: '/tmp/failed',
-      status: WorkspaceStatus.Idle,
-      muted: false,
-      pinned: false,
-      rank: '',
-      layout: {
-        workspace_id: 'workspace-failed',
-        active_pane_id: 'pane-failed',
-        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
-        panes: [{
-          workspace_id: 'workspace-failed',
-          pane_id: 'pane-failed',
-          kind: LayoutPaneKind.Agent,
-          title: 'Failed reviewer',
-          runtime_id: 'closed-session',
-          session_id: 'closed-session',
-          status: LayoutPaneStatus.Failed,
-          error: 'session is closing',
-        }],
+  it('keeps a failed desktop pane out of the session collection across snapshot orderings', () => {
+    const failed = desktopWith('desktop-failed', JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }), 'pane-failed', [
+      {
+        pane_id: 'pane-failed',
+        session_id: 'closed-session',
+        title: 'Failed reviewer',
+        status: LayoutPaneStatus.Failed,
+        error: 'session is closing',
       },
-    };
+    ]);
 
-    useSessionStore.getState().syncFromDaemonWorkspaces([failedWorkspace]);
+    useSessionStore.getState().syncFromArrangement('profile', [failed]);
     useSessionStore.getState().syncFromDaemonSessions([]);
-    useSessionStore.getState().syncFromDaemonWorkspaces([failedWorkspace]);
+    useSessionStore.getState().syncFromArrangement('profile', [failed]);
 
     const state = useSessionStore.getState();
     expect(state.sessions).toEqual([]);
-    expect(state.daemonWorkspaceLayouts['workspace-failed']?.workspace.agents).toEqual([{
+    expect(state.desktopSnapshots['desktop-failed']?.workspace.agents).toEqual([{
       id: 'pane-failed',
       runtimeId: 'closed-session',
       sessionId: 'closed-session',

@@ -167,41 +167,4 @@ describe('useDaemonSocket keyed command errors', () => {
 
     unmount();
   });
-
-  it('rejects a pending workspace rename with the daemon error instead of timing out', async () => {
-    const { result, unmount } = renderSocket();
-    const ws = await waitForOpenSocket();
-    emitInitialState(ws);
-
-    let rename!: Promise<void>;
-    act(() => {
-      rename = result.current.sendRenameWorkspace('workspace-1', 'new name');
-    });
-    const settled = rename.then(
-      () => 'resolved',
-      (err: Error) => err.message,
-    );
-
-    await waitFor(() => {
-      expect(ws.sent.map((entry) => JSON.parse(entry)).some((entry) => entry.cmd === 'rename_workspace')).toBe(true);
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'command_error',
-        cmd: 'rename_workspace',
-        error: 'endpoint gpu-box is parked: remote binary differs from this client — click Sync to update',
-      });
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_000);
-    });
-
-    await expect(settled).resolves.toBe(
-      'endpoint gpu-box is parked: remote binary differs from this client — click Sync to update',
-    );
-
-    unmount();
-  });
 });

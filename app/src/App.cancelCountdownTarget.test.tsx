@@ -1,7 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 import App from './App';
+import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
+import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 const mockUseDaemonStore = vi.fn();
@@ -68,7 +70,6 @@ vi.mock('./pty/bridge', async () => {
 });
 
 type SocketArgs = {
-  onWorkspacesUpdate?: (workspaces: unknown[]) => void;
   onSettingsUpdate?: (settings: Record<string, string>) => void;
 };
 
@@ -84,38 +85,10 @@ function shortcutHandlers<T>(): T {
 
 const PANES = ['s1', 's2'];
 
-function workspacePayload() {
-  return [{
-    id: 'workspace-main',
-    title: 'main',
-    directory: '/tmp/main',
-    status: 'active',
-    layout: {
-      active_pane_id: 'pane-s1',
-      layout_json: JSON.stringify({
-        type: 'split',
-        split_id: 'split-1',
-        direction: 'horizontal',
-        ratio: 0.5,
-        first: { type: 'pane', pane_id: 'pane-s1' },
-        second: { type: 'pane', pane_id: 'pane-s2' },
-      }),
-      panes: PANES.map((id) => ({
-        workspace_id: 'workspace-main',
-        pane_id: `pane-${id}`,
-        kind: 'agent',
-        runtime_id: id,
-        session_id: id,
-        title: id,
-      })),
-    },
-  }];
-}
-
 function broadcast() {
   act(() => {
     socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
-    socketArgs().onWorkspacesUpdate?.(workspacePayload());
+    arrangeDesktops([agentDesktop('desktop-main', 1, PANES)]);
   });
 }
 
@@ -141,17 +114,20 @@ describe('who ⌘. names', () => {
 
     mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
 
+    useProfilesStore.setState(useProfilesStore.getInitialState(), true);
     useSessionStore.setState({
       sessions: PANES.map((id) => ({
         id,
         label: id,
         state: 'working',
         cwd: '/tmp/main',
-        workspaceId: 'workspace-main',
+        workspaceId: '',
+        profileId: TEST_PROFILE_ID,
+        desktopId: 'desktop-main',
         agent: 'claude',
         transcriptMatched: true,
         daemonActivePaneId: 'pane-s1',
-        workspace: {
+        desktop: {
           agents: PANES.map((paneSession) => ({
             id: `pane-${paneSession}`,
             runtimeId: paneSession,
@@ -185,6 +161,7 @@ describe('who ⌘. names', () => {
         id,
         label: id,
         directory: '/tmp/main',
+        profile_id: TEST_PROFILE_ID,
         state: 'working',
         turn_owed: true,
         turn_opened_at: '2026-08-03T09:00:00Z',
@@ -217,9 +194,9 @@ describe('who ⌘. names', () => {
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
+      ...fakeDesktopCommands(),
       sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),

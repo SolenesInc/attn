@@ -20,7 +20,7 @@ function ShortcutHarness(props: {
   useShortcut('session.close', props.onSessionClose, true);
   useShortcut('terminal.close', props.onTerminalClose, props.terminalEnabled ?? true);
   useShortcut('terminal.toggleZoom', props.onToggleZoom ?? (() => {}), props.onToggleZoom !== undefined);
-  useShortcut('workspace.select1', props.onSelectWorkspace ?? (() => {}), props.onSelectWorkspace !== undefined);
+  useShortcut('desktop.select1', props.onSelectWorkspace ?? (() => {}), props.onSelectWorkspace !== undefined);
   useShortcut('terminal.find', props.onTerminalFind ?? (() => {}), props.onTerminalFind !== undefined);
   useShortcut('session.historyBack', props.onHistoryBack ?? (() => {}), props.onHistoryBack !== undefined);
   useShortcut('session.historyForward', props.onHistoryForward ?? (() => {}), props.onHistoryForward !== undefined);
