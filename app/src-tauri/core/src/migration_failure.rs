@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use crate::profile;
+use crate::instance;
 
 const MARKER_FILE_NAME: &str = "migration-failure.json";
 
@@ -15,7 +15,7 @@ fn marker_path_in(data_dir: &Path) -> PathBuf {
 }
 
 pub(crate) fn marker_exists() -> bool {
-    profile::data_dir()
+    instance::data_dir()
         .map(|dir| marker_path_in(&dir).exists())
         .unwrap_or(false)
 }
@@ -34,5 +34,5 @@ fn read_marker_in(data_dir: &Path) -> Result<Option<MigrationFailureMarker>, Str
 
 #[tauri::command]
 pub(crate) fn read_migration_failure() -> Result<Option<MigrationFailureMarker>, String> {
-    read_marker_in(&profile::data_dir()?)
+    read_marker_in(&instance::data_dir()?)
 }
