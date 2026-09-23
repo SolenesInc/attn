@@ -73,6 +73,11 @@ export function DesktopOverview({
     onClose();
   };
 
+  const stay = (run: () => void) => {
+    run();
+    dialogRef.current?.focus({ preventScroll: true });
+  };
+
   const canSendTo = (desktop: Desktop) => canSendActivePane && desktop.id !== currentDesktopId;
   const canDelete = (desktop: Desktop) => isEmptyDesktop(desktop) && desktop.id !== currentDesktopId;
 
@@ -83,7 +88,6 @@ export function DesktopOverview({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
-    if (event.target !== dialogRef.current) return;
     const steps: Record<string, number> = {
       ArrowRight: 1,
       ArrowLeft: -1,
@@ -95,7 +99,7 @@ export function DesktopOverview({
       moveFocus(steps[event.key]);
       return;
     }
-    if (event.key === 'Enter' && focused) {
+    if (event.key === 'Enter' && focused && event.target === dialogRef.current) {
       event.preventDefault();
       if (event.shiftKey) {
         if (canSendTo(focused)) act(() => onSendActivePane(focused.id));
@@ -164,12 +168,12 @@ export function DesktopOverview({
             </button>
           )}
           {canDelete(desktop) && (
-            <button type="button" onClick={() => onDelete(desktop.id)}>
+            <button type="button" onClick={() => stay(() => onDelete(desktop.id))}>
               Delete
             </button>
           )}
           {!desktop.shortcut_slot && (
-            <button type="button" onClick={() => onGiveShortcutSlot(desktop.id)}>
+            <button type="button" onClick={() => stay(() => onGiveShortcutSlot(desktop.id))}>
               Give a shortcut
             </button>
           )}
