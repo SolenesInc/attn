@@ -1,6 +1,7 @@
 package ptyhost
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -15,24 +16,37 @@ func TestBinaryNameForProfile(t *testing.T) {
 	}
 }
 
-func TestGenerationChangesWithBinaryContent(t *testing.T) {
-	binary := filepath.Join(t.TempDir(), "attn-pty-host")
-	if err := os.WriteFile(binary, []byte("one"), 0o700); err != nil {
+func TestImportArtifactPinsTheBinaryHashedAtStartup(t *testing.T) {
+	source := filepath.Join(t.TempDir(), "attn-pty-host")
+	if err := os.WriteFile(source, []byte("one"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	one, err := Generation(binary, "format")
+	id, err := HashArtifact(source)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(binary, []byte("two"), 0o700); err != nil {
+	if err := os.WriteFile(source, []byte("two"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	two, err := Generation(binary, "format")
+	dir := t.TempDir()
+	if _, err := ImportArtifact(dir, source, id); !errors.Is(err, ErrArtifactChanged) {
+		t.Fatalf("import of a replaced binary = %v, want ErrArtifactChanged", err)
+	}
+	if _, stored := StoredArtifact(dir, id); stored {
+		t.Fatal("a replaced binary was stored under the startup hash")
+	}
+	if err := os.WriteFile(source, []byte("one"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := ImportArtifact(dir, source, id)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if one == two {
-		t.Fatalf("generation stayed %q after binary changed", one)
+	if err := os.WriteFile(source, []byte("two"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := HashArtifact(artifact.Path); err != nil || got != id {
+		t.Fatalf("stored artifact hash = %q, %v; want %q", got, err, id)
 	}
 }
 

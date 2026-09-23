@@ -156,6 +156,7 @@ type Daemon struct {
 	ptyBackend                        ptybackend.Backend
 	ptySettingsMu                     sync.Mutex
 	ptySettingsChangeMu               sync.Mutex
+	sharedPTYHost                     *ptybackend.WorkerBackend
 	upgradingMu                       sync.Mutex
 	upgradingWorkers                  map[string]bool
 	watchersMu                        sync.Mutex
@@ -869,18 +870,13 @@ func (d *Daemon) Start() error {
 			}
 		}
 	case "shared":
-		sharedBackend, err := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
+		sharedBackend, err := d.newSharedPTYHost()
 		if err != nil {
 			d.logf("failed to initialize shared PTY host: %v; falling back to embedded", err)
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize shared PTY host (%v). Falling back to embedded.", err))
 		} else {
 			d.ptyBackend = sharedBackend
+			d.sharedPTYHost = sharedBackend
 			d.logf("using PTY backend: shared")
 		}
 	case "migrating":
@@ -896,13 +892,7 @@ func (d *Daemon) Start() error {
 			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Failed to initialize legacy PTY workers (%v). Falling back to embedded.", legacyErr))
 			break
 		}
-		sharedBackend, sharedErr := ptybackend.NewSharedHost(ptybackend.WorkerBackendConfig{
-			DataRoot:         d.dataRoot,
-			DaemonInstanceID: d.daemonInstanceID,
-			BinaryPath:       strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")),
-			Logf:             d.logf,
-			OnTerminalBuild:  d.handleTerminalBuildChanged,
-		})
+		sharedBackend, sharedErr := d.newSharedPTYHost()
 		if sharedErr != nil {
 			d.ptyBackend = legacyBackend
 			d.logf("shared PTY host initialization failed: %v; new sessions remain on legacy workers", sharedErr)
@@ -910,20 +900,14 @@ func (d *Daemon) Start() error {
 			break
 		}
 
-		useSharedForNew := false
 		sharedEnabled := parseBooleanSetting(d.store.GetSetting(SettingSharedPTYHostEnabled))
-		if sharedEnabled && shouldRunWorkerStartupProbe() {
-			probeCtx, cancelProbe := context.WithTimeout(context.Background(), workerStartupProbeTimeout)
-			probeErr := sharedBackend.Probe(probeCtx)
-			cancelProbe()
-			if probeErr != nil {
-				d.logf("shared PTY host startup probe failed: %v; new sessions remain on legacy workers", probeErr)
-				d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host probe failed (%v). New terminals will keep using dedicated workers.", probeErr))
-			} else {
-				useSharedForNew = true
-			}
-		} else if sharedEnabled && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
+		useSharedForNew := sharedEnabled && sharedBackend.SharedArtifactReady()
+		if sharedEnabled && !useSharedForNew && !shouldRunWorkerStartupProbe() && strings.TrimSpace(os.Getenv("ATTN_PTY_HOST_BINARY")) != "" {
 			useSharedForNew = true
+		}
+		if candidateErr := sharedBackend.SharedCandidateError(); sharedEnabled && !useSharedForNew && candidateErr != nil {
+			d.logf("shared PTY host unavailable: %v; new sessions remain on legacy workers", candidateErr)
+			d.addWarning(warnPTYBackendFallback, fmt.Sprintf("Shared PTY host is unavailable (%v). New terminals will keep using dedicated workers.", candidateErr))
 		}
 		migratingBackend, err := ptybackend.NewMigrating(legacyBackend, sharedBackend, useSharedForNew)
 		if err != nil {
@@ -932,6 +916,7 @@ func (d *Daemon) Start() error {
 			break
 		}
 		d.ptyBackend = migratingBackend
+		d.sharedPTYHost = sharedBackend
 		if useSharedForNew {
 			d.logf("using PTY backend: migrating (existing=owner, new=shared)")
 		} else {
@@ -1022,6 +1007,11 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
+			go d.validateSharedPTYHostAfterRecovery()
+		} else {
+			d.validateSharedPTYHostAfterRecovery()
+		}
 		d.reconcileCrewRestarts()
 		d.gardenWatchMu.Lock()
 		gardenBellErr := d.discardAllIneligibleGardenSeedBellsLocked()

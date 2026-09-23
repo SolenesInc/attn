@@ -10,9 +10,13 @@ const (
 	RuntimeKind = "rust_host"
 
 	MethodSpawn    = "spawn"
+	MethodCommit   = "commit"
 	MethodHostInfo = "host_info"
 	MethodWatchAll = "watch_all"
 	MethodShutdown = "shutdown"
+
+	CapabilityProbeChild = "probe_child"
+	ProbeChildFlag       = "--probe-child"
 )
 
 type SpawnParams struct {
@@ -39,6 +43,10 @@ type SpawnParams struct {
 	UnattendedLaunch  launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
 }
 
+type CommitParams struct {
+	SessionID string `json:"session_id"`
+}
+
 type SpawnResult struct {
 	HostPID      int `json:"host_pid"`
 	ChildPID     int `json:"child_pid"`
@@ -49,4 +57,5 @@ type HostInfoResult struct {
 	HostPID        int      `json:"host_pid"`
 	SessionIDs     []string `json:"session_ids"`
 	SnapshotFormat string   `json:"snapshot_format"`
+	Capabilities   []string `json:"capabilities,omitempty"`
 }

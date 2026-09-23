@@ -1,8 +1,6 @@
 package ptyhost
 
 import (
-	"crypto/sha256"
-	"encoding/base32"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 )
 
 const BinaryName = "attn-pty-host"
@@ -32,7 +29,7 @@ type HostRegistry struct {
 	Executable       string `json:"executable"`
 	StartedAt        string `json:"started_at"`
 	SnapshotFormat   string `json:"snapshot_format"`
-	Generation       string `json:"generation"`
+	ArtifactID       string `json:"generation"`
 }
 
 func Root(dataRoot, daemonInstanceID string) string {
@@ -47,19 +44,23 @@ func SessionRegistryPath(dataRoot, daemonInstanceID, sessionID string) string {
 	return filepath.Join(RegistryDir(dataRoot, daemonInstanceID), sessionID+".json")
 }
 
-func HostRegistryPath(dataRoot, daemonInstanceID, generation string) string {
-	return filepath.Join(Root(dataRoot, daemonInstanceID), "hosts", generation+".json")
+func HostRegistryDir(dataRoot, daemonInstanceID string) string {
+	return filepath.Join(Root(dataRoot, daemonInstanceID), "hosts")
+}
+
+func HostRegistryPath(dataRoot, daemonInstanceID, incarnation string) string {
+	return filepath.Join(HostRegistryDir(dataRoot, daemonInstanceID), incarnation+".json")
 }
 
 func LogPath(dataRoot, daemonInstanceID string) string {
 	return filepath.Join(Root(dataRoot, daemonInstanceID), "log", "host.log")
 }
 
-func SocketPath(dataRoot, daemonInstanceID, generation string) (string, error) {
+func SocketPath(dataRoot, daemonInstanceID, incarnation string) (string, error) {
 	root := filepath.Join(Root(dataRoot, daemonInstanceID), "sock")
-	generation = strings.TrimSpace(generation)
-	if generation == "" || strings.ContainsAny(generation, `/\\`) {
-		return "", errors.New("invalid PTY host generation")
+	incarnation = strings.TrimSpace(incarnation)
+	if incarnation == "" || strings.ContainsAny(incarnation, `/\\`) {
+		return "", errors.New("invalid PTY host incarnation")
 	}
 	limit := 104
 	if runtime.GOOS == "linux" {
@@ -69,22 +70,10 @@ func SocketPath(dataRoot, daemonInstanceID, generation string) (string, error) {
 	if available < 5 {
 		return "", fmt.Errorf("unix socket directory path too long: %s", root)
 	}
-	if available > len(generation) {
-		available = len(generation)
+	if available > len(incarnation) {
+		available = len(incarnation)
 	}
-	return filepath.Join(root, generation[:available]+".sock"), nil
-}
-
-func Generation(binaryPath, snapshotFormat string) (string, error) {
-	binary, err := os.ReadFile(binaryPath)
-	if err != nil {
-		return "", fmt.Errorf("read PTY host binary: %w", err)
-	}
-	hash := sha256.New()
-	_, _ = hash.Write([]byte(snapshotFormat))
-	_, _ = hash.Write([]byte{0})
-	_, _ = hash.Write(binary)
-	return strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(hash.Sum(nil))[:16]), nil
+	return filepath.Join(root, incarnation[:available]+".sock"), nil
 }
 
 func ValidateSocketPath(dataRoot, daemonInstanceID, socketPath string) error {
@@ -110,26 +99,4 @@ func ReadHostRegistry(path string) (HostRegistry, error) {
 		return entry, fmt.Errorf("unmarshal PTY host registry: %w", err)
 	}
 	return entry, nil
-}
-
-func WriteHostRegistryAtomic(path string, entry HostRegistry) error {
-	if entry.StartedAt == "" {
-		entry.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create PTY host registry directory: %w", err)
-	}
-	payload, err := json.MarshalIndent(entry, "", "  ")
-	if err != nil {
-		return fmt.Errorf("marshal PTY host registry: %w", err)
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, append(payload, '\n'), 0o600); err != nil {
-		return fmt.Errorf("write PTY host registry: %w", err)
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		_ = os.Remove(tmp)
-		return fmt.Errorf("publish PTY host registry: %w", err)
-	}
-	return nil
 }

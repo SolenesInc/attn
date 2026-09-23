@@ -79,6 +79,8 @@ type WorkerBackendConfig struct {
 	OwnerNonce       string
 	Logf             func(format string, args ...interface{})
 	OnTerminalBuild  func(sessionID, snapshotFormat string)
+
+	OnSharedArtifactRejected func(SharedArtifactRejection) error
 }
 
 type workerRuntimeKind uint8
@@ -141,11 +143,18 @@ type WorkerBackend struct {
 	hostMu sync.Mutex
 
 	sharedControlMu sync.Mutex
-	sharedControls  map[string]*sharedHostControl
+	sharedControls  map[hostIncarnation]*sharedHostControl
 
 	sharedMonitorMu sync.Mutex
-	sharedMonitors  map[string]*sharedHostMonitor
+	sharedMonitors  map[hostIncarnation]*sharedHostMonitor
 	sharedStopping  bool
+
+	artifactsDir     string
+	candidate        sharedCandidate
+	validateMu       sync.Mutex
+	artifactMu       sync.Mutex
+	pinned           ptyhost.Artifact
+	candidateVerdict string
 }
 
 func (s *workerSession) notePollFailure(now time.Time) (logUnreachable bool, evict bool) {
@@ -245,8 +254,11 @@ func newWorkerBackend(cfg WorkerBackendConfig, kind workerRuntimeKind) (*WorkerB
 		binaryPath:         cfg.BinaryPath,
 		binaryPathExplicit: binaryPathExplicit,
 		sessions:           make(map[string]*workerSession),
-		sharedControls:     make(map[string]*sharedHostControl),
-		sharedMonitors:     make(map[string]*sharedHostMonitor),
+		sharedControls:     make(map[hostIncarnation]*sharedHostControl),
+		sharedMonitors:     make(map[hostIncarnation]*sharedHostMonitor),
+	}
+	if kind == workerRuntimeSharedHost {
+		b.loadSharedArtifacts()
 	}
 	if err := os.MkdirAll(b.registryDir(), 0700); err != nil {
 		return nil, fmt.Errorf("create worker registry dir: %w", err)
@@ -276,21 +288,10 @@ func (b *WorkerBackend) resolveBinaryPath() string {
 		b.cfg.Logf("worker binary missing at %s, not re-resolving explicit path", binaryPath)
 		return binaryPath
 	}
-	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
-
 	if b.kind == workerRuntimeSharedHost {
-		for _, candidate := range sharedHostBinaryCandidates() {
-			if isExecutableFile(candidate) {
-				b.cfg.Logf("PTY host binary re-resolved to %s", candidate)
-				b.binaryPathMu.Lock()
-				b.binaryPath = candidate
-				b.binaryPathMu.Unlock()
-				return candidate
-			}
-		}
-		b.cfg.Logf("PTY host binary re-resolve failed, using original %s", binaryPath)
 		return binaryPath
 	}
+	b.cfg.Logf("worker binary missing at %s, re-resolving", binaryPath)
 
 	candidates := make([]string, 0, 4)
 	if wrapperPath := strings.TrimSpace(os.Getenv("ATTN_WRAPPER_PATH")); wrapperPath != "" {
@@ -415,9 +416,35 @@ func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.O
 	b.onState = handler
 }
 
+func (b *WorkerBackend) reportState(session *workerSession, observation pty.Observation) {
+	b.hooksMu.RLock()
+	onState := b.onState
+	b.hooksMu.RUnlock()
+	if onState != nil {
+		onState(session.SessionID, observation)
+	}
+}
+
+func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal string) {
+	b.hooksMu.RLock()
+	onExit := b.onExit
+	b.hooksMu.RUnlock()
+	if onExit != nil {
+		go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
+	}
+}
+
 func (b *WorkerBackend) Probe(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	if b.kind == workerRuntimeSharedHost {
+		err := b.ValidateSharedCandidate(ctx, true)
+		if err != nil && b.SharedArtifactReady() {
+			b.cfg.Logf("shared PTY host keeps its last-known-good artifact: %v", err)
+			return nil
+		}
+		return err
 	}
 
 	suffix, err := randomToken(6)
@@ -752,6 +779,11 @@ func (b *WorkerBackend) Attach(ctx context.Context, sessionID, subscriberID stri
 	if err != nil {
 		return AttachInfo{}, nil, err
 	}
+	return b.attachSession(ctx, session, subscriberID, opts...)
+}
+
+func (b *WorkerBackend) attachSession(ctx context.Context, session *workerSession, subscriberID string, opts ...AttachOptions) (AttachInfo, Stream, error) {
+	sessionID := session.SessionID
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
 	conn, enc, dec, err := b.connectAuthed(rpcCtx, session)
@@ -856,11 +888,16 @@ func (b *WorkerBackend) Input(ctx context.Context, sessionID string, data []byte
 	if err != nil {
 		return err
 	}
+	return b.inputSession(ctx, session, data)
+}
+
+func (b *WorkerBackend) inputSession(ctx context.Context, session *workerSession, data []byte) error {
+	sessionID := session.SessionID
 	if b.cfg.Logf != nil {
 		b.cfg.Logf("worker backend input: session=%s bytes=%d preview=%q", sessionID, len(data), previewBytesForLog(data))
 	}
 	payload := ptyworker.InputParams{Data: base64.StdEncoding.EncodeToString(data)}
-	err = b.callSimple(ctx, session, ptyworker.MethodInput, payload)
+	err := b.callSimple(ctx, session, ptyworker.MethodInput, payload)
 	if b.cfg.Logf != nil {
 		if err != nil {
 			b.cfg.Logf("worker backend input failed: session=%s err=%v", sessionID, err)
@@ -876,6 +913,10 @@ func (b *WorkerBackend) Resize(ctx context.Context, sessionID string, cols, rows
 	if err != nil {
 		return ResizeResult{}, err
 	}
+	return b.resizeSession(ctx, session, cols, rows, xpixel, ypixel)
+}
+
+func (b *WorkerBackend) resizeSession(ctx context.Context, session *workerSession, cols, rows, xpixel, ypixel uint16) (ResizeResult, error) {
 	var result ptyworker.ResizeResult
 	retried, err := b.callResultPersistent(ctx, session, ptyworker.MethodResize, ptyworker.ResizeParams{
 		Cols: cols, Rows: rows, XPixel: xpixel, YPixel: ypixel,
@@ -943,9 +984,7 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 			b.stopMonitor(session)
 			b.stopPoller(session)
 			b.closePersistentControlConn(session, "remove_missing")
-			b.mu.Lock()
-			delete(b.sessions, sessionID)
-			b.mu.Unlock()
+			b.forgetSession(session)
 			b.pruneSessionFiles(sessionID, session.RegistryPath, session.SocketPath)
 			b.reapWorkerPID(workerPID, sessionID)
 		}
@@ -954,11 +993,20 @@ func (b *WorkerBackend) Remove(ctx context.Context, sessionID string) error {
 	b.stopMonitor(session)
 	b.stopPoller(session)
 	b.closePersistentControlConn(session, "remove")
-	b.mu.Lock()
-	delete(b.sessions, sessionID)
-	b.mu.Unlock()
+	b.forgetSession(session)
 	b.reapWorkerPID(workerPID, sessionID)
 	return nil
+}
+
+func (b *WorkerBackend) forgetSession(session *workerSession) {
+	b.mu.Lock()
+	if b.sessions[session.SessionID] == session {
+		delete(b.sessions, session.SessionID)
+	}
+	b.mu.Unlock()
+	if b.kind == workerRuntimeSharedHost {
+		b.releaseSharedIncarnationIfUnused(incarnationOf(session))
+	}
 }
 
 func (b *WorkerBackend) SessionIDs(_ context.Context) []string {
@@ -1499,14 +1547,16 @@ func (b *WorkerBackend) getSession(sessionID string) (*workerSession, error) {
 		return nil, probeErr
 	}
 	b.mu.Lock()
-	if existing := b.sessions[sessionID]; existing != nil {
-		session = existing
-	} else {
+	existing := b.sessions[sessionID]
+	if existing == nil {
 		b.sessions[sessionID] = session
-		b.startPoller(session)
-		b.startMonitor(session)
 	}
 	b.mu.Unlock()
+	if existing != nil {
+		return existing, nil
+	}
+	b.startPoller(session)
+	b.startMonitor(session)
 	return session, nil
 }
 
@@ -1807,7 +1857,7 @@ func (b *WorkerBackend) connectWithIdentity(
 			_ = conn.Close()
 			return nil, nil, nil, fmt.Errorf("decode hello result: %w", err)
 		}
-		if !ptyworker.IsCompatibleVersion(hello.RPCMajor, hello.RPCMinor) {
+		if !b.compatibleRPCVersion(hello.RPCMajor, hello.RPCMinor) {
 			_ = conn.Close()
 			return nil, nil, nil, fmt.Errorf(
 				"worker rpc version incompatible: got=%d.%d supported=%d.%d..%d.%d",
@@ -1832,6 +1882,13 @@ func (b *WorkerBackend) connectWithIdentity(
 	}
 	_ = conn.SetDeadline(time.Time{})
 	return conn, enc, dec, nil
+}
+
+func (b *WorkerBackend) compatibleRPCVersion(major, minor int) bool {
+	if b.kind == workerRuntimeSharedHost {
+		return major == ptyworker.RPCMajor
+	}
+	return ptyworker.IsCompatibleVersion(major, minor)
 }
 
 func (b *WorkerBackend) rpcError(sessionID string, rpcErr *ptyworker.RPCError) error {
@@ -1871,11 +1928,7 @@ func unixSocketPathFits(path string) bool {
 
 func (b *WorkerBackend) expectedSocketPath(sessionID string) (string, error) {
 	if b.kind == workerRuntimeSharedHost {
-		generation, err := ptyhost.Generation(b.resolveBinaryPath(), buildinfo.SnapshotFormat)
-		if err != nil {
-			return "", err
-		}
-		return ptyhost.SocketPath(b.cfg.DataRoot, b.cfg.DaemonInstanceID, generation)
+		return "", errors.New("shared PTY host sockets belong to host incarnations")
 	}
 	root := b.sockDir()
 
@@ -2133,9 +2186,7 @@ func (b *WorkerBackend) forceSessionEviction(session *workerSession) {
 	b.stopMonitor(session)
 	b.stopPoller(session)
 	b.closePersistentControlConn(session, "force_evict")
-	b.mu.Lock()
-	delete(b.sessions, session.SessionID)
-	b.mu.Unlock()
+	b.forgetSession(session)
 	b.pruneSessionFiles(session.SessionID, session.RegistryPath, session.SocketPath)
 	b.reapWorkerPID(workerPID, session.SessionID)
 }
@@ -2216,12 +2267,7 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 							continue
 						}
 						b.cfg.Logf("worker backend poller: session %s unreachable for %s; forcing exit", session.SessionID, pollerUnreachableAfter)
-						b.hooksMu.RLock()
-						onExit := b.onExit
-						b.hooksMu.RUnlock()
-						if onExit != nil {
-							go onExit(ExitInfo{ID: session.SessionID, ExitCode: 1, Signal: "worker_unreachable", LifecycleID: session.LifecycleID})
-						}
+						b.reportExit(session, 1, "worker_unreachable")
 						b.forceSessionEviction(session)
 						return
 					}
@@ -2263,26 +2309,16 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 				session.mu.Unlock()
 
 				if stateChanged {
-					b.hooksMu.RLock()
-					onState := b.onState
-					b.hooksMu.RUnlock()
-					if onState != nil {
-						onState(session.SessionID, pty.Observation{
-							Source: pty.SourceWorkerInfo,
-							Claim:  newState,
-							Detail: "worker info poll",
-							At:     now,
-						})
-					}
+					b.reportState(session, pty.Observation{
+						Source: pty.SourceWorkerInfo,
+						Claim:  newState,
+						Detail: "worker info poll",
+						At:     now,
+					})
 				}
 
 				if exitNow {
-					b.hooksMu.RLock()
-					onExit := b.onExit
-					b.hooksMu.RUnlock()
-					if onExit != nil {
-						go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: exitSignal, LifecycleID: session.LifecycleID})
-					}
+					b.reportExit(session, exitCode, exitSignal)
 				}
 			}
 		}
@@ -2445,12 +2481,7 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 		now := time.Now()
 		observation := ptyworker.ObservationFromEvent(evt, state, now)
 
-		b.hooksMu.RLock()
-		onState := b.onState
-		b.hooksMu.RUnlock()
-		if onState != nil {
-			onState(session.SessionID, observation)
-		}
+		b.reportState(session, observation)
 	case ptyworker.EventExit:
 		session.mu.Lock()
 		if session.exitNotified {
@@ -2468,12 +2499,7 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 		if evt.ExitSignal != nil {
 			exitSignal = *evt.ExitSignal
 		}
-		b.hooksMu.RLock()
-		onExit := b.onExit
-		b.hooksMu.RUnlock()
-		if onExit != nil {
-			go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: exitSignal, LifecycleID: session.LifecycleID})
-		}
+		b.reportExit(session, exitCode, exitSignal)
 	case ptyworker.EventTeardownEscalated:
 		if b.cfg.Logf == nil || evt.Reason == nil || evt.ExitSignal == nil {
 			return
@@ -2568,30 +2594,30 @@ func readMatchingResponse(dec *json.Decoder, reqID string) (ptyworker.ResponseEn
 	}
 }
 
+type workerFrame struct {
+	ptyworker.EventEnvelope
+	ID     string              `json:"id"`
+	OK     bool                `json:"ok"`
+	Result json.RawMessage     `json:"result,omitempty"`
+	Error  *ptyworker.RPCError `json:"error,omitempty"`
+}
+
 func readFrame(dec *json.Decoder) (string, ptyworker.ResponseEnvelope, ptyworker.EventEnvelope, error) {
-	var raw map[string]json.RawMessage
-	if err := dec.Decode(&raw); err != nil {
+	var frame workerFrame
+	if err := dec.Decode(&frame); err != nil {
 		return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
 	}
-	var typ string
-	if t, ok := raw["type"]; ok {
-		_ = json.Unmarshal(t, &typ)
-	}
-	switch typ {
+	switch frame.Type {
 	case "res":
-		data, _ := json.Marshal(raw)
-		var res ptyworker.ResponseEnvelope
-		if err := json.Unmarshal(data, &res); err != nil {
-			return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
-		}
-		return "res", res, ptyworker.EventEnvelope{}, nil
+		return "res", ptyworker.ResponseEnvelope{
+			Type:   frame.Type,
+			ID:     frame.ID,
+			OK:     frame.OK,
+			Result: frame.Result,
+			Error:  frame.Error,
+		}, ptyworker.EventEnvelope{}, nil
 	case "evt":
-		data, _ := json.Marshal(raw)
-		var evt ptyworker.EventEnvelope
-		if err := json.Unmarshal(data, &evt); err != nil {
-			return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, err
-		}
-		return "evt", ptyworker.ResponseEnvelope{}, evt, nil
+		return "evt", ptyworker.ResponseEnvelope{}, frame.EventEnvelope, nil
 	default:
 		return "", ptyworker.ResponseEnvelope{}, ptyworker.EventEnvelope{}, errors.New("unknown frame type")
 	}
@@ -2603,15 +2629,11 @@ func convertWorkerEvent(evt ptyworker.EventEnvelope) (OutputEvent, bool) {
 		if evt.Data == nil {
 			return OutputEvent{}, false
 		}
-		data, err := base64.StdEncoding.DecodeString(*evt.Data)
-		if err != nil {
-			return OutputEvent{}, false
-		}
 		seq := uint32(0)
 		if evt.Seq != nil {
 			seq = *evt.Seq
 		}
-		return OutputEvent{Kind: OutputEventKindOutput, Data: data, Seq: seq}, true
+		return OutputEvent{Kind: OutputEventKindOutput, Data: evt.Data, Seq: seq}, true
 	case ptyworker.EventDesync:
 		reason := ""
 		if evt.Reason != nil {

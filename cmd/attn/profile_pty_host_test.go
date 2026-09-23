@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -49,6 +50,9 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+		if err := backend.Probe(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < 2; i++ {
 			id := fmt.Sprintf("session-%d-%d", generation, i)
 			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: id, Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {
@@ -85,11 +89,11 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 				} else {
 					invalid.HostPID = os.Getpid()
 				}
-				if err := ptyhost.WriteHostRegistryAtomic(paths[i], invalid); err != nil {
+				if err := writeHostRegistry(paths[i], invalid); err != nil {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() {
-					if err := ptyhost.WriteHostRegistryAtomic(paths[i], entry); err != nil {
+					if err := writeHostRegistry(paths[i], entry); err != nil {
 						t.Error(err)
 					}
 				})
@@ -127,7 +131,7 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 func TestProfileCleanPreservesUnreachableSharedHostRegistry(t *testing.T) {
 	r := stoppedProfile(t)
 	path := ptyhost.HostRegistryPath(r.DataDir, "d-unknown", "unknown")
-	if err := ptyhost.WriteHostRegistryAtomic(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", Generation: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
+	if err := writeHostRegistry(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", ArtifactID: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
@@ -137,4 +141,15 @@ func TestProfileCleanPreservesUnreachableSharedHostRegistry(t *testing.T) {
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("cleanup destroyed the unreaped registry: %v", err)
 	}
+}
+
+func writeHostRegistry(path string, entry ptyhost.HostRegistry) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }

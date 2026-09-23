@@ -713,6 +713,9 @@ func TestSharedHost_BinaryUpgradeLeavesOldSessionsOnOldHost(t *testing.T) {
 	if _, err := newBackend.Recover(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	if err := newBackend.Probe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
 	if err := newBackend.Spawn(context.Background(), SpawnOptions{
 		ID: "after-upgrade", CWD: t.TempDir(), Agent: "shell", Cols: 80, Rows: 24,
 	}); err != nil {

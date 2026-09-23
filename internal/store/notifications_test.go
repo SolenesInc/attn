@@ -360,3 +360,25 @@ func TestNotifications_UnreadCritical(t *testing.T) {
 		t.Fatalf("after reading every critical got (%d, %q), want (0, \"\")", n, title)
 	}
 }
+
+func TestNotifications_EnsureInsertsOnce(t *testing.T) {
+	s := New()
+	now := time.Now().UTC()
+	rec := NotificationRecord{ID: "pty-host-rejected:abc", Kind: "pty_host_rejected", Title: "Rejected"}
+	if _, inserted, err := s.EnsureNotification(rec, now); err != nil || !inserted {
+		t.Fatalf("first ensure: inserted=%v err=%v", inserted, err)
+	}
+	if err := s.MarkNotificationRead(rec.ID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, inserted, err := s.EnsureNotification(rec, now.Add(time.Minute)); err != nil || inserted {
+		t.Fatalf("second ensure: inserted=%v err=%v, want no new notification", inserted, err)
+	}
+	all, err := s.ListNotifications()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 || all[0].ReadAt.IsZero() {
+		t.Fatalf("notifications = %+v, want the original read notification only", all)
+	}
+}
