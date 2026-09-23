@@ -7,7 +7,7 @@ import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { readProcessTable, collectDescendantPids, readLiveDaemonPid } from './perfMeasure.mjs';
 import { startStubWorld, scriptedAgent, stubAgentModel, stubJudgeModel, resolveAttnBinary, waitForPiPreflight } from './piStubProvider.mjs';
 
@@ -17,8 +17,8 @@ const token = `ghp_${'s'.repeat(36)}`;
 const args = process.argv.slice(2);
 if (args[0] === '--') args.shift();
 const options = parseCommonArgs(args);
-const profile = currentHarnessProfile();
-if (!profile) throw new Error('Pi security verification requires a named non-production profile');
+const instance = currentHarnessInstance();
+if (!instance) throw new Error('Pi security verification requires a named non-production instance');
 let repoDir;
 let outside;
 let standardCache;
@@ -35,7 +35,7 @@ const evidenceEntries = (call) => (call.prompt.match(/<transcript>\n([\s\S]*?)\n
 const buildCommand = () => 'node build.cjs';
 const cacheRequest = () => ({ allowWrite: [outside], reason: 'The build writes compiled output to this cache directory.' });
 world = await startStubWorld({
-  scenario: 'pi-security', appPath: options.appPath, profile,
+  scenario: 'pi-security', appPath: options.appPath, instance,
   judge: () => oversized ? { error: 'context_length_exceeded' } : refuseScope ?
     { verdict: 'deny', reason: 'Write access to this shared build cache needs your explicit approval.' } : { verdict: 'allow', forceIntent: evidenceReview },
   agent: scriptedAgent([
@@ -83,7 +83,7 @@ const client = new UiAutomationClient({ appPath: options.appPath, launchEnv: wor
 const observer = new DaemonObserver(options);
 let sessionId;
 let paneId;
-const attn = (args) => execFileSync(resolveAttnBinary(options.appPath), args, { env: profileCliEnv(profile, world.launchEnv), encoding: 'utf8' });
+const attn = (args) => execFileSync(resolveAttnBinary(options.appPath), args, { env: instanceCliEnv(instance, world.launchEnv), encoding: 'utf8' });
 const submit = async (text) => {
   await client.request('write_pane', { sessionId, paneId, text, submit: false });
   await delay(800);
@@ -346,7 +346,7 @@ try {
     for (let index = 0; index < 4; index++) {
       await delay(2000);
       const table = await readProcessTable();
-      const owned = collectDescendantPids(table, readLiveDaemonPid(profile));
+      const owned = collectDescendantPids(table, readLiveDaemonPid(instance));
       samples.push({ at: new Date().toISOString(), processes: table.filter((proc) => owned.has(proc.pid)) });
     }
     runner.writeJson('evidence-idle-processes.json', samples);

@@ -47,11 +47,11 @@ func TestEnsureManagedCloneDoesNotReplaceMismatchedExistingTarget(t *testing.T) 
 
 func TestEnsureManagedCloneReturnsPublishedPathThroughSymlinkedParent(t *testing.T) {
 	root := t.TempDir()
-	realParent := filepath.Join(root, "real-profile")
+	realParent := filepath.Join(root, "real-instance")
 	if err := os.MkdirAll(realParent, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	linkedParent := filepath.Join(root, "linked-profile")
+	linkedParent := filepath.Join(root, "linked-instance")
 	if err := os.Symlink(realParent, linkedParent); err != nil {
 		t.Fatal(err)
 	}

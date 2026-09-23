@@ -97,7 +97,7 @@ func makeRecoveryHome(t *testing.T, dataRoot string) {
 }
 
 func TestLegacyTicketRecoveryInventoryStartsOnlyAfterThePIDLock(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_PTY_BACKEND", "embedded")
 	dataRoot := shortTempDir(t)
 	makeRecoveryHome(t, dataRoot)
@@ -131,7 +131,7 @@ func TestLegacyTicketRecoveryInventoryStartsOnlyAfterThePIDLock(t *testing.T) {
 }
 
 func TestLegacyTicketRecoveryInventoriesBothOwnedBackupRoots(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
@@ -180,7 +180,7 @@ func TestLegacyTicketRecoveryInventoriesBothOwnedBackupRoots(t *testing.T) {
 }
 
 func TestLegacyTicketRecoveryRestoresNewestWithoutChangingSourcesOrLiveRows(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
@@ -263,7 +263,7 @@ func TestLegacyTicketRecoveryRestoresNewestWithoutChangingSourcesOrLiveRows(t *t
 }
 
 func TestLegacyTicketRecoveryRestoresTranscriptOnlyArchiveAndConversation(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
@@ -325,7 +325,7 @@ func TestLegacyTicketRecoveryRestoresTranscriptOnlyArchiveAndConversation(t *tes
 }
 
 func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
 	if err != nil {
@@ -396,7 +396,7 @@ func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *
 }
 
 func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
 	if err != nil {
@@ -481,21 +481,21 @@ func recoveredSeedForTicket(t *testing.T, s *store.Store, ticketID string) garde
 	return seed
 }
 
-func TestLegacyTicketRecoveryFenceSkipsNamedProfilesBeforeInventory(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "dev")
+func TestLegacyTicketRecoveryFenceSkipsNamedInstancesBeforeInventory(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "dev")
 	d := &Daemon{store: store.New(), dataRoot: filepath.Join(t.TempDir(), "missing")}
 	defer d.store.Close()
 	wait, err := d.prepareLegacyTicketRecovery()
 	if err != nil || wait {
-		t.Fatalf("named profile prepare wait=%v err=%v", wait, err)
+		t.Fatalf("named instance prepare wait=%v err=%v", wait, err)
 	}
 	if _, err := os.Stat(d.dataRoot); !os.IsNotExist(err) {
-		t.Fatalf("named profile touched data root: %v", err)
+		t.Fatalf("named instance touched data root: %v", err)
 	}
 }
 
 func TestLegacyTicketRecoveryChangedSourceWarnsAndStaysProtected(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
@@ -532,7 +532,7 @@ func TestLegacyTicketRecoveryChangedSourceWarnsAndStaysProtected(t *testing.T) {
 }
 
 func TestLegacyTicketRecoveryRetriesTransientIOThenWarnsOnce(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
@@ -585,7 +585,7 @@ func TestLegacyTicketRecoveryRetriesTransientIOThenWarnsOnce(t *testing.T) {
 }
 
 func TestLegacyTicketRecoveryResumesCommittedItemsAfterCrash(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
 	dbRoot := t.TempDir()
 	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))

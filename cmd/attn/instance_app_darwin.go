@@ -24,7 +24,7 @@ func requestAppQuit(bundleID string) bool {
 	return true
 }
 
-func stopAppWithoutPIDFile(r profileResolved, pidPath string) (string, error) {
+func stopAppWithoutPIDFile(r instanceResolved, pidPath string) (string, error) {
 	if !fileExists(r.AppPath) {
 		return "not running (not installed, no " + pidPath + ")", nil
 	}

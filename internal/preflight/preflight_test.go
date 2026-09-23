@@ -40,7 +40,7 @@ func passingProber(t *testing.T) prober {
 		appProtocol:   func(context.Context, string) (string, error) { return protocol.ProtocolVersion, nil },
 		daemonHealth: func(context.Context, string) (daemonHealth, error) {
 			return daemonHealth{
-				Status: "ok", Protocol: protocol.ProtocolVersion, Profile: config.ProfileLabel(),
+				Status: "ok", Protocol: protocol.ProtocolVersion, Instance: config.InstanceLabel(),
 				DataDir: dataDir, SocketPath: socketPath, Port: config.WSPort(),
 			}, nil
 		},
@@ -188,10 +188,10 @@ func TestRunReportsRootCausesAndActions(t *testing.T) {
 			checkName: "path.go_build_cache", contains: "permission denied",
 		},
 		{
-			name: "profile routing mismatch",
+			name: "instance routing mismatch",
 			mutate: func(p *prober) {
 				p.daemonHealth = func(context.Context, string) (daemonHealth, error) {
-					return daemonHealth{Protocol: protocol.ProtocolVersion, Profile: "other", DataDir: "/other", SocketPath: "/other.sock", Port: "1"}, nil
+					return daemonHealth{Protocol: protocol.ProtocolVersion, Instance: "other", DataDir: "/other", SocketPath: "/other.sock", Port: "1"}, nil
 				}
 			},
 			checkName: "routing.daemon", contains: "routing mismatch",
@@ -211,7 +211,7 @@ func TestRunReportsRootCausesAndActions(t *testing.T) {
 				dataDir, _ := config.CanonicalRuntimePath(config.DataDir())
 				socketPath, _ := config.CanonicalRuntimePath(config.SocketPath())
 				p.daemonHealth = func(context.Context, string) (daemonHealth, error) {
-					return daemonHealth{Protocol: "older", Profile: config.ProfileLabel(), DataDir: dataDir, SocketPath: socketPath, Port: config.WSPort()}, nil
+					return daemonHealth{Protocol: "older", Instance: config.InstanceLabel(), DataDir: dataDir, SocketPath: socketPath, Port: config.WSPort()}, nil
 				}
 			},
 			checkName: "protocol.app_daemon", contains: "does not match",
@@ -265,7 +265,7 @@ func TestRunRejectsSameRelativeRoutingOverridesFromDifferentWorkingDirectories(t
 	p := passingProber(t)
 	p.daemonHealth = func(context.Context, string) (daemonHealth, error) {
 		return daemonHealth{
-			Protocol: protocol.ProtocolVersion, Profile: config.ProfileLabel(),
+			Protocol: protocol.ProtocolVersion, Instance: config.InstanceLabel(),
 			DataDir: daemonDataDir, SocketPath: daemonSocket, Port: config.WSPort(),
 		}, nil
 	}

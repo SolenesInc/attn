@@ -56,7 +56,7 @@ describe('SettingsModal', () => {
 
   it('replaces the GitHub hosts list with the daemon reason while polling is off', async () => {
     render(
-      <GitHubPollingProvider offReason="GitHub polling is off for profile dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
+      <GitHubPollingProvider offReason="GitHub polling is off for instance dev. Start its daemon with ATTN_GITHUB_POLLING=on.">
         <SettingsModal
           isOpen
           onClose={vi.fn()}

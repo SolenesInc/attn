@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-export const DEFAULT_PROFILE_HARNESS_PACKAGING_PROFILE = 'legacy-recovery';
+export const DEFAULT_INSTANCE_HARNESS_PACKAGING_INSTANCE = 'legacy-recovery';
 
 const ROUTING_ENV = [
   'ATTN_DATA_DIR',
@@ -38,7 +38,7 @@ function under(candidate, root) {
   return relative === '' || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative));
 }
 
-export function assertDefaultProfileHarnessIsolation({
+export function assertDefaultInstanceHarnessIsolation({
   dataDir,
   toolHome,
   codexHome,
@@ -48,13 +48,13 @@ export function assertDefaultProfileHarnessIsolation({
   wsUrl,
   productionRoot = path.join(os.homedir(), '.attn'),
 }) {
-  if (!path.isAbsolute(dataDir)) throw new Error('default-profile harness data root must be absolute');
+  if (!path.isAbsolute(dataDir)) throw new Error('default-instance harness data root must be absolute');
   const metadata = fs.lstatSync(dataDir);
   if (!metadata.isDirectory() || metadata.isSymbolicLink()) {
-    throw new Error('default-profile harness data root must be a direct directory');
+    throw new Error('default-instance harness data root must be a direct directory');
   }
   if ((metadata.mode & 0o077) !== 0) {
-    throw new Error('default-profile harness data root must be owner-only');
+    throw new Error('default-instance harness data root must be owner-only');
   }
 
   const resolvedData = resolvedPath(dataDir);
@@ -80,20 +80,20 @@ export function assertDefaultProfileHarnessIsolation({
 
   const url = new URL(wsUrl);
   if (url.hostname !== '127.0.0.1' || url.pathname !== '/ws' || ['9849', '29849'].includes(url.port)) {
-    throw new Error(`refusing unsafe default-profile harness websocket ${wsUrl}`);
+    throw new Error(`refusing unsafe default-instance harness websocket ${wsUrl}`);
   }
   if (path.basename(appPath).toLowerCase() === 'attn.app' || bundleId === 'com.attn.manager') {
-    throw new Error('refusing the production app bundle for the default-profile harness');
+    throw new Error('refusing the production app bundle for the default-instance harness');
   }
   return paths;
 }
 
-export function defaultProfileHarnessEnv({ dataDir, toolHome, codexHome, notebookRoot, wsPort, clientToken = '' }) {
+export function defaultInstanceHarnessEnv({ dataDir, toolHome, codexHome, notebookRoot, wsPort, clientToken = '' }) {
   const env = { ...process.env };
   for (const key of ROUTING_ENV) delete env[key];
   return {
     ...env,
-    ATTN_PROFILE: '',
+    ATTN_INSTANCE: '',
     ATTN_DATA_DIR: dataDir,
     ATTN_HARNESS_DATA_DIR: dataDir,
     ATTN_HARNESS_NOTEBOOK_ROOT: notebookRoot,

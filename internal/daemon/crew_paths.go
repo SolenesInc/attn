@@ -39,7 +39,7 @@ func (d *Daemon) validateCrewMemberPaths(member crew.Member) error {
 			return fmt.Errorf("refusing crew member %s: resolve stored %s path %q: %w", crew.DisplayName(member.ID), label, stored, err)
 		}
 		if stored == "" || !filepath.IsAbs(stored) || !pathWithin(root, resolved) {
-			return fmt.Errorf("refusing crew member %s: stored %s path %q is outside this daemon's crew root %q; the likely cause is an attn.db copied from another profile", crew.DisplayName(member.ID), label, stored, root)
+			return fmt.Errorf("refusing crew member %s: stored %s path %q is outside this daemon's crew root %q; the likely cause is an attn.db copied from another instance", crew.DisplayName(member.ID), label, stored, root)
 		}
 	}
 	return nil
@@ -86,7 +86,7 @@ func (d *Daemon) validateCrewHandoffsDir(member crew.Member) (string, error) {
 	return stored, nil
 }
 
-func profileCrewRootContaining(userHome, target string) string {
+func instanceCrewRootContaining(userHome, target string) string {
 	if strings.TrimSpace(userHome) == "" || strings.TrimSpace(target) == "" {
 		return ""
 	}
@@ -113,19 +113,19 @@ func profileCrewRootContaining(userHome, target string) string {
 		rel, err = filepath.Rel(home, target)
 	}
 	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return canonicalProfileCrewRootContaining(userHome, target)
+		return canonicalInstanceCrewRootContaining(userHome, target)
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
 	if len(parts) < 2 || parts[1] != crew.HomesDirName {
-		return canonicalProfileCrewRootContaining(userHome, target)
+		return canonicalInstanceCrewRootContaining(userHome, target)
 	}
 	if parts[0] != ".attn" && !strings.HasPrefix(parts[0], ".attn-") {
-		return canonicalProfileCrewRootContaining(userHome, target)
+		return canonicalInstanceCrewRootContaining(userHome, target)
 	}
 	return filepath.Join(home, parts[0], crew.HomesDirName)
 }
 
-func canonicalProfileCrewRootContaining(userHome, target string) string {
+func canonicalInstanceCrewRootContaining(userHome, target string) string {
 	target, err := config.CanonicalRuntimePath(target)
 	if err != nil || target == "" {
 		return ""
@@ -165,9 +165,9 @@ func (d *Daemon) resolveCrewWorkDirForHome(dir, userHome string) (string, error)
 	if err != nil {
 		return "", fmt.Errorf("resolve crew directory %q: %w", dir, err)
 	}
-	foreignRoot := profileCrewRootContaining(userHome, original)
+	foreignRoot := instanceCrewRootContaining(userHome, original)
 	if foreignRoot == "" {
-		foreignRoot = profileCrewRootContaining(userHome, resolved)
+		foreignRoot = instanceCrewRootContaining(userHome, resolved)
 	}
 	if foreignRoot == "" {
 		return original, nil
@@ -183,9 +183,9 @@ func (d *Daemon) resolveCrewWorkDirForHome(dir, userHome string) (string, error)
 	}
 	if foreignRoot != ownRoot {
 		if storedForeignRoot != foreignRoot {
-			return "", fmt.Errorf("refusing crew directory %q: it is inside another profile's crew root %q, which resolves to %q; this daemon's crew root is %q", dir, storedForeignRoot, foreignRoot, ownRoot)
+			return "", fmt.Errorf("refusing crew directory %q: it is inside another instance's crew root %q, which resolves to %q; this daemon's crew root is %q", dir, storedForeignRoot, foreignRoot, ownRoot)
 		}
-		return "", fmt.Errorf("refusing crew directory %q: it resolves inside another profile's crew root %q; this daemon's crew root is %q", dir, foreignRoot, ownRoot)
+		return "", fmt.Errorf("refusing crew directory %q: it resolves inside another instance's crew root %q; this daemon's crew root is %q", dir, foreignRoot, ownRoot)
 	}
 	return original, nil
 }

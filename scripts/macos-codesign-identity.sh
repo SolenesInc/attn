@@ -24,7 +24,7 @@ find_identity() {
   # Apple-anchored and Team-based, so macOS privacy grants (Screen Recording,
   # Accessibility, etc.) persist across rebuilds. Fall back to the stable
   # self-signed local identity, then ad-hoc. Developer ID is preferred over
-  # Apple Development because it is not tied to a provisioning profile/device.
+  # Apple Development because it is not tied to a provisioning instance/device.
   for pattern in \
     '"Developer ID Application:' \
     '"Apple Development:' \

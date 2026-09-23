@@ -26,10 +26,10 @@ expect_failure() {
   fi
 }
 
-expect_failure "$script" "$other_sha" "$sha" passed profile scenarios evidence
-expect_failure "$script" "$sha" short passed profile scenarios evidence
-expect_failure "$script" "$sha" "$sha" failed profile scenarios evidence
-expect_failure "$script" "$sha" "$sha" unknown profile scenarios evidence
+expect_failure "$script" "$other_sha" "$sha" passed instance scenarios evidence
+expect_failure "$script" "$sha" short passed instance scenarios evidence
+expect_failure "$script" "$sha" "$sha" failed instance scenarios evidence
+expect_failure "$script" "$sha" "$sha" unknown instance scenarios evidence
 
 for value in \
   'run-name: App acceptance ${{ inputs.candidate_sha }}' \

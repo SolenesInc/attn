@@ -1,13 +1,13 @@
-/** Compile-time profile baked into this bundle ("" = production), mirroring the Rust
- * shell's ATTN_BUILD_PROFILE. A daemon reporting a different profile is refused. */
-export const BUILD_PROFILE: string = (import.meta.env.VITE_ATTN_BUILD_PROFILE ?? '').trim();
+/** Compile-time instance baked into this bundle ("" = production), mirroring the Rust
+ * shell's ATTN_BUILD_INSTANCE. A daemon reporting a different instance is refused. */
+export const BUILD_INSTANCE: string = (import.meta.env.VITE_ATTN_BUILD_INSTANCE ?? '').trim();
 
-export const BUILD_PROFILE_LABEL: string = BUILD_PROFILE === '' ? 'default' : BUILD_PROFILE;
+export const BUILD_INSTANCE_LABEL: string = BUILD_INSTANCE === '' ? 'default' : BUILD_INSTANCE;
 
-/** Whether the daemon's reported profile matches this build; empty means "default". */
-export function daemonProfileMatches(reportedProfile: string | null | undefined): boolean {
-  const reported = (reportedProfile ?? '').trim() || 'default';
-  return reported === BUILD_PROFILE_LABEL;
+/** Whether the daemon's reported instance matches this build; empty means "default". */
+export function daemonInstanceMatches(reportedInstance: string | null | undefined): boolean {
+  const reported = (reportedInstance ?? '').trim() || 'default';
+  return reported === BUILD_INSTANCE_LABEL;
 }
 
 /** ws://127.0.0.1:29849/ws → http://127.0.0.1:29849/health */
@@ -24,23 +24,23 @@ export function healthURLFromWS(wsUrl: string): string {
   }
 }
 
-export interface DaemonHealthProfile {
-  profile?: string;
+export interface DaemonHealthInstance {
+  instance?: string;
   data_dir?: string;
   socket_path?: string;
   port?: string;
 }
 
-/** Fetches /health for the profile-identity subset. Throws on network/HTTP errors so the
+/** Fetches /health for the instance-identity subset. Throws on network/HTTP errors so the
  * caller decides whether no answer is a mismatch or transient. */
-export async function fetchDaemonHealthProfile(wsUrl: string, signal?: AbortSignal): Promise<DaemonHealthProfile> {
+export async function fetchDaemonHealthInstance(wsUrl: string, signal?: AbortSignal): Promise<DaemonHealthInstance> {
   const url = healthURLFromWS(wsUrl);
   if (!url) throw new Error('cannot derive health URL from ws URL');
   const resp = await fetch(url, { signal, cache: 'no-store' });
   if (!resp.ok) throw new Error(`/health returned ${resp.status}`);
   const body = await resp.json();
   return {
-    profile: typeof body?.profile === 'string' ? body.profile : undefined,
+    instance: typeof body?.instance === 'string' ? body.instance : undefined,
     data_dir: typeof body?.data_dir === 'string' ? body.data_dir : undefined,
     socket_path: typeof body?.socket_path === 'string' ? body.socket_path : undefined,
     port: typeof body?.port === 'string' ? body.port : undefined,
@@ -48,13 +48,13 @@ export async function fetchDaemonHealthProfile(wsUrl: string, signal?: AbortSign
 }
 
 /** Mismatch banner text; the caller shows it non-dismissably and stops reconnecting. */
-export function profileMismatchMessage(reported: string | null | undefined): string {
+export function instanceMismatchMessage(reported: string | null | undefined): string {
   const reportedLabel = (reported ?? '').trim() || 'default';
   return (
-    `Profile mismatch: this app was built for profile "${BUILD_PROFILE_LABEL}" ` +
-    `but the daemon reports profile "${reportedLabel}". ` +
+    `Instance mismatch: this app was built for instance "${BUILD_INSTANCE_LABEL}" ` +
+    `but the daemon reports instance "${reportedLabel}". ` +
     `Refusing to operate on a mismatched daemon. ` +
     `Quit this app and launch the matching one (prod = attn.app, dev = attn-dev.app), ` +
-    `or restart the daemon under the correct ATTN_PROFILE.`
+    `or restart the daemon under the correct ATTN_INSTANCE.`
   );
 }

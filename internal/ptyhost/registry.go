@@ -12,12 +12,12 @@ import (
 
 const BinaryName = "attn-pty-host"
 
-func BinaryNameForProfile(profile string) string {
-	profile = strings.TrimSpace(profile)
-	if profile == "" {
+func BinaryNameForInstance(instance string) string {
+	instance = strings.TrimSpace(instance)
+	if instance == "" {
 		return BinaryName
 	}
-	return BinaryName + "-" + profile
+	return BinaryName + "-" + instance
 }
 
 type HostRegistry struct {

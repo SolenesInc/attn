@@ -242,7 +242,7 @@ func TestCrew_ReimportingHomesLeavesLiveRecordsAlone(t *testing.T) {
 	}
 }
 
-func TestCrew_ImportRefusesAStoredHomeFromAnotherProfile(t *testing.T) {
+func TestCrew_ImportRefusesAStoredHomeFromAnotherInstance(t *testing.T) {
 	d, _, readLog := newWakeableDaemon(t)
 	members, docs, err := d.readCrewMembers()
 	if err != nil {
@@ -273,7 +273,7 @@ func TestCrew_ImportRefusesAStoredHomeFromAnotherProfile(t *testing.T) {
 
 	d.importCrewHomes()
 	log := readLog()
-	for _, want := range []string{"import refused", member.HomeDir, filepath.Join(d.dataRoot, crew.HomesDirName), "attn.db copied from another profile"} {
+	for _, want := range []string{"import refused", member.HomeDir, filepath.Join(d.dataRoot, crew.HomesDirName), "attn.db copied from another instance"} {
 		if !strings.Contains(log, want) {
 			t.Errorf("import refusal does not name %q:\n%s", want, log)
 		}

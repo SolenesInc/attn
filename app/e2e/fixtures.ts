@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as net from 'net';
-import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './profileEnv';
+import { E2E_CLIENT_TOKEN, e2ePorts, resolveAttnBinaryPath } from './instanceEnv';
 import { waitForDaemonSocket } from './daemonReadiness';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../src/hooks/useWhatsNew';
 
@@ -169,8 +169,8 @@ async function startDaemon(ghUrl: string): Promise<{ proc: ChildProcess; socketP
       ...process.env,
       PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
       // Routed entirely by these explicit paths, so it must not also claim the
-      // shell's profile: mismatched routing is refused (ValidateProfileRouting).
-      ATTN_PROFILE: '',
+      // shell's instance: mismatched routing is refused (ValidateInstanceRouting).
+      ATTN_INSTANCE: '',
       ATTN_DATA_DIR: tempDir,
       ATTN_TOOL_HOME: tempDir,
       CODEX_HOME: path.join(tempDir, '.codex'),
@@ -261,7 +261,7 @@ function createManagedDaemon(ghUrl: string): ManagedDaemon {
       env: {
         ...process.env,
         PATH: `${stubs.binDir}${path.delimiter}${process.env.PATH}`,
-        ATTN_PROFILE: '',
+        ATTN_INSTANCE: '',
         ATTN_DATA_DIR: tempDir,
         ATTN_TOOL_HOME: tempDir,
         CODEX_HOME: path.join(tempDir, '.codex'),

@@ -58,7 +58,7 @@ describe('assertDaemonRestartDoesNotHostSession', () => {
     })).toThrow(/hosts invoking session session-under-test/);
   });
 
-  it('allows another profile daemon', () => {
+  it('allows another instance daemon', () => {
     expect(() => assertDaemonRestartDoesNotHostSession('review', hosted)).not.toThrow();
   });
 });

@@ -2,7 +2,7 @@ import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
 import { useSessionStore } from '../store/sessions';
-import { BUILD_PROFILE } from '../utils/buildProfile';
+import { BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
   useAppAppearanceContext,
@@ -102,7 +102,7 @@ export function AppSidebar() {
         selectedTile={selectedTile}
         tileContents={tileContents}
         collapsed={sidebarCollapsed}
-        profile={BUILD_PROFILE}
+        instance={BUILD_INSTANCE}
         headerActions={sidebarHeaderActions}
         criticalNotifications={criticalNotifications}
         onOpenNotifications={openNotificationsPanel}

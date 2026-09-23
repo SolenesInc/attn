@@ -15,10 +15,10 @@ import {
   stopMockGitHubServer,
 } from './mockGitHub.mjs';
 
-const devTarget = { profile: 'dev', appPath: '/tmp/attn-dev.app' };
+const devTarget = { instance: 'dev', appPath: '/tmp/attn-dev.app' };
 
 describe('the GitHub the harness daemon talks to', () => {
-  it('derives a stable per-profile URL, so one daemon serves the whole run', () => {
+  it('derives a stable per-instance URL, so one daemon serves the whole run', () => {
     const first = mockGitHubTarget('dev');
     expect(mockGitHubTarget('dev')).toEqual(first);
     expect(first.url).toBe(`http://127.0.0.1:${first.port}`);
@@ -50,7 +50,7 @@ describe('the GitHub the harness daemon talks to', () => {
     expect(mockGitHubLaunchEnv({ PATH: '/usr/bin' })).toEqual({});
   });
 
-  it('asks the server to ensure exactly once, on the profile port and fixture', () => {
+  it('asks the server to ensure exactly once, on the instance port and fixture', () => {
     const run = vi.fn(() => JSON.stringify({ pid: 7, started: false }));
 
     ensureMockGitHubServer({ ...devTarget, env: {}, run, log: () => {} });
@@ -67,15 +67,15 @@ describe('the GitHub the harness daemon talks to', () => {
 
   it('refuses a status answer that is not a running mock', async () => {
     const notFound = { ok: false, status: 404, json: async () => ({ error: 'nope' }) };
-    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => notFound }))
+    await expect(readMockGitHubStatus({ instance: 'dev', request: async () => notFound }))
       .rejects.toThrow('returned 404');
 
     const impostor = { ok: true, status: 200, json: async () => ({ pid: 1 }) };
-    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => impostor }))
+    await expect(readMockGitHubStatus({ instance: 'dev', request: async () => impostor }))
       .rejects.toThrow(MOCK_GITHUB_SIGNATURE);
 
     const real = { ok: true, status: 200, json: async () => ({ mock: MOCK_GITHUB_SIGNATURE, pid: 9 }) };
-    await expect(readMockGitHubStatus({ profile: 'dev', request: async () => real }))
+    await expect(readMockGitHubStatus({ instance: 'dev', request: async () => real }))
       .resolves.toMatchObject({ pid: 9 });
   });
 
@@ -83,8 +83,8 @@ describe('the GitHub the harness daemon talks to', () => {
     const run = vi.fn();
     const env = {};
 
-    expect(ensureMockGitHubServer({ profile: '', appPath: '/tmp/attn.app', env, run, log: () => {} })).toBeNull();
-    expect(stopMockGitHubServer({ profile: '', appPath: '/tmp/attn.app', run, log: () => {} })).toBeNull();
+    expect(ensureMockGitHubServer({ instance: '', appPath: '/tmp/attn.app', env, run, log: () => {} })).toBeNull();
+    expect(stopMockGitHubServer({ instance: '', appPath: '/tmp/attn.app', run, log: () => {} })).toBeNull();
     expect(run).not.toHaveBeenCalled();
     expect(env).toEqual({});
   });

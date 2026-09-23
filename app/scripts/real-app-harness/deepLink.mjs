@@ -1,7 +1,7 @@
 import { execFile, spawn } from 'node:child_process';
 import { promisify } from 'node:util';
 
-import { appExecutableForAppPath } from './harnessProfile.mjs';
+import { appExecutableForAppPath } from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
 

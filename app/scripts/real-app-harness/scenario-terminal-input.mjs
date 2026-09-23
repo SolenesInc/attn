@@ -12,7 +12,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
-import { profileCliEnv, profileForAppPath } from './harnessProfile.mjs';
+import { instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 import {
   captureSessionArtifacts,
   waitForPaneAttached,
@@ -434,7 +434,7 @@ async function main() {
         let found = false;
         while (Date.now() < deadline) {
           const dump = execFileSync(appDaemonInTree(options.appPath), ['debug', 'input', '--tail', '0', '--grep', pane.runtimeId], {
-            encoding: 'utf8', env: profileCliEnv(profileForAppPath(options.appPath)),
+            encoding: 'utf8', env: instanceCliEnv(instanceForAppPath(options.appPath)),
           });
           if (dump.includes(privateText)) throw new Error('Input diagnostics exposed composition text');
           const records = dump.trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));

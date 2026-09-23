@@ -29,7 +29,7 @@ func TestAttnSkillUsesTheSeedBodyAndANeutralHarvestExample(t *testing.T) {
 func TestEnsureWorkflowSkillsInstalledUsesSupportedIsolatedRoots(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 
 	paths, attempted, err := EnsureWorkflowSkillsInstalled([]string{"codex", "pi", "claude", "copilot", "plugin-only"})
 	if err != nil || !attempted {
@@ -57,16 +57,16 @@ func TestEnsureWorkflowSkillsInstalledUsesSupportedIsolatedRoots(t *testing.T) {
 	}
 }
 
-func TestEnsureWorkflowSkillsInstalledSkipsVerificationProfiles(t *testing.T) {
+func TestEnsureWorkflowSkillsInstalledSkipsVerificationInstances(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	t.Setenv("ATTN_INSTANCE", "fixture-lab")
 	paths, attempted, err := EnsureWorkflowSkillsInstalled([]string{"codex"})
 	if err != nil || attempted || len(paths) != 0 {
 		t.Fatalf("paths=%v attempted=%v error=%v", paths, attempted, err)
 	}
 	if _, err := os.Stat(filepath.Join(home, ".agents")); !os.IsNotExist(err) {
-		t.Fatalf("verification profile wrote user-global skills: %v", err)
+		t.Fatalf("verification instance wrote user-global skills: %v", err)
 	}
 }
 
@@ -225,10 +225,10 @@ func TestEnsureAttnCopilotSkillInstalledPrunesOrphanedFiles(t *testing.T) {
 	assertAttnSkillTree(t, skillDir)
 }
 
-func TestUserGlobalSkillSyncIsSkippedOutsideDefaultAndDevProfiles(t *testing.T) {
+func TestUserGlobalSkillSyncIsSkippedOutsideDefaultAndDevInstances(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	t.Setenv("ATTN_INSTANCE", "fixture-lab")
 
 	for name, ensure := range map[string]func() (bool, error){
 		"claude":  EnsureClaudeSkillInstalled,
@@ -241,14 +241,14 @@ func TestUserGlobalSkillSyncIsSkippedOutsideDefaultAndDevProfiles(t *testing.T) 
 				t.Fatalf("ensure skill: %v", err)
 			}
 			if synced {
-				t.Fatal("a verification profile synchronized a user-global skill")
+				t.Fatal("a verification instance synchronized a user-global skill")
 			}
 		})
 	}
 
 	for _, root := range []string{".claude", ".agents", ".copilot"} {
 		if _, err := os.Stat(filepath.Join(home, root)); !os.IsNotExist(err) {
-			t.Fatalf("verification profile wrote %s: stat err = %v", root, err)
+			t.Fatalf("verification instance wrote %s: stat err = %v", root, err)
 		}
 	}
 }
@@ -256,7 +256,7 @@ func TestUserGlobalSkillSyncIsSkippedOutsideDefaultAndDevProfiles(t *testing.T) 
 func TestUserGlobalSkillSyncRunsForExplicitIsolatedHarness(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	t.Setenv("ATTN_INSTANCE", "fixture-lab")
 	t.Setenv("ATTN_AUTOMATION", "1")
 	t.Setenv(harnessSkillSyncEnv, "1")
 
@@ -270,10 +270,10 @@ func TestUserGlobalSkillSyncRunsForExplicitIsolatedHarness(t *testing.T) {
 	assertAttnSkillTree(t, filepath.Join(home, ".agents", "skills", "attn"))
 }
 
-func TestUserGlobalSkillSyncRunsForDevProfile(t *testing.T) {
+func TestUserGlobalSkillSyncRunsForDevInstance(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 
 	for name, test := range map[string]struct {
 		ensure   func() (bool, error)
@@ -289,7 +289,7 @@ func TestUserGlobalSkillSyncRunsForDevProfile(t *testing.T) {
 				t.Fatalf("ensure skill: %v", err)
 			}
 			if !synced {
-				t.Fatal("dev profile skipped user-global skill synchronization")
+				t.Fatal("dev instance skipped user-global skill synchronization")
 			}
 			assertAttnSkillTree(t, test.skillDir)
 		})

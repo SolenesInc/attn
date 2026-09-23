@@ -11,7 +11,7 @@ import (
 func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "Place this work"})
@@ -61,7 +61,7 @@ func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 func TestSeedSendToChiefRefusesAChangedSeed(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Changing work"})

@@ -8,13 +8,13 @@ import {
 } from './scenario-tr205-remote-relaunch-close-redraw.mjs';
 
 describe('remoteProbeBinaryName', () => {
-  it('resolves the default profile to "attn"', () => {
+  it('resolves the default instance to "attn"', () => {
     expect(remoteProbeBinaryName('')).toBe('attn');
     expect(remoteProbeBinaryName(undefined)).toBe('attn');
     expect(remoteProbeBinaryName('   ')).toBe('attn');
   });
 
-  it('resolves a named profile to "attn-<profile>"', () => {
+  it('resolves a named instance to "attn-<instance>"', () => {
     expect(remoteProbeBinaryName('dev')).toBe('attn-dev');
     expect(remoteProbeBinaryName('agent7')).toBe('attn-agent7');
   });

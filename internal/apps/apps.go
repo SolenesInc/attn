@@ -11,8 +11,8 @@ var nameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
 
 const RuntimeHostBinaryName = "attn-app-runtime"
 
-func RuntimeHostBinaryNameForProfile(profile string) string {
-	p := strings.TrimSpace(profile)
+func RuntimeHostBinaryNameForInstance(instance string) string {
+	p := strings.TrimSpace(instance)
 	if p == "" {
 		return RuntimeHostBinaryName
 	}

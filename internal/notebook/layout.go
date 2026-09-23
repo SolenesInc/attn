@@ -20,9 +20,9 @@ const (
 
 var paraSubdirs = []string{"projects", "areas", "resources", "archive"}
 
-func DefaultRoot(home, profile string) string {
+func DefaultRoot(home, instance string) string {
 	base := filepath.Join(home, "attn-notebook")
-	p := strings.ToLower(strings.TrimSpace(profile))
+	p := strings.ToLower(strings.TrimSpace(instance))
 	if p == "" || p == "default" {
 		return base
 	}
@@ -111,7 +111,7 @@ func ScaffoldPaths() []string {
 
 const indexTemplate = `# Notebook
 
-A durable, profile-wide markdown bundle — the journal attn writes on your behalf
+A durable, instance-wide markdown bundle — the journal attn writes on your behalf
 and the knowledge base the chief of staff maintains. It outlives any single
 workspace and is yours to read, edit, and sync.
 

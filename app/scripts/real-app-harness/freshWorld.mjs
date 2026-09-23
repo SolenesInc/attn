@@ -3,40 +3,40 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
-  bundleIdentifierForProfile,
-  currentHarnessProfile,
-  dataDirForProfile,
-  defaultAppPathForProfile,
+  bundleIdentifierForInstance,
+  currentHarnessInstance,
+  dataDirForInstance,
+  defaultAppPathForInstance,
   isProductionHarnessTarget,
-  profileCliEnv,
-} from './harnessProfile.mjs';
+  instanceCliEnv,
+} from './harnessInstance.mjs';
 
-export function assertFreshWorldTargetSafe({ profile, appPath } = {}) {
-  if (!profile) {
-    throw new Error(`fresh-world preflight refused: profile is empty/falsy (profile=${JSON.stringify(profile)}).`);
+export function assertFreshWorldTargetSafe({ instance, appPath } = {}) {
+  if (!instance) {
+    throw new Error(`fresh-world preflight refused: instance is empty/falsy (instance=${JSON.stringify(instance)}).`);
   }
   if (!appPath) {
     throw new Error(`fresh-world preflight refused: appPath is empty/falsy (appPath=${JSON.stringify(appPath)}).`);
   }
-  // 'default' is the alias for the production profile; isProductionHarnessTarget
-  // only checks profile === '', so it would let a 'default' target through.
-  const normalizedProfile = profile.trim().toLowerCase();
-  if (normalizedProfile === '' || normalizedProfile === 'default') {
+  // 'default' is the alias for the production instance; isProductionHarnessTarget
+  // only checks instance === '', so it would let a 'default' target through.
+  const normalizedInstance = instance.trim().toLowerCase();
+  if (normalizedInstance === '' || normalizedInstance === 'default') {
     throw new Error(
-      `fresh-world preflight refused: profile ${JSON.stringify(profile)} is the production alias `
+      `fresh-world preflight refused: instance ${JSON.stringify(instance)} is the production alias `
       + '(\'default\' collapses to production). Refusing to quit/scrub a production app or daemon.',
     );
   }
-  if (isProductionHarnessTarget({ profile, appPath })) {
+  if (isProductionHarnessTarget({ instance, appPath })) {
     throw new Error(
-      `fresh-world preflight refused: target looks like production (profile=${JSON.stringify(profile)}, `
+      `fresh-world preflight refused: target looks like production (instance=${JSON.stringify(instance)}, `
       + `appPath=${JSON.stringify(appPath)}). Refusing to quit/scrub a production app or daemon.`,
     );
   }
 }
 
 // Matching keys on this full app path, never a bare "pty-worker" pattern, so one
-// profile's cleanup can never touch another profile's or production's workers.
+// instance's cleanup can never touch another instance's or production's workers.
 function attnBinaryPath(appPath) {
   return appDaemonInTree(appPath);
 }
@@ -45,7 +45,7 @@ function ptyHostBinaryPath(appPath) {
   return path.join(path.dirname(attnBinaryPath(appPath)), 'attn-pty-host');
 }
 
-function requestAppQuit({ profile, appPath, bundleId }) {
+function requestAppQuit({ instance, appPath, bundleId }) {
   if (appPlatform.os === 'darwin') {
     try {
       execFileSync('osascript', ['-e', `tell application id "${bundleId}" to quit`], { stdio: 'pipe' });
@@ -53,8 +53,8 @@ function requestAppQuit({ profile, appPath, bundleId }) {
     }
     return;
   }
-  spawnSync(attnBinaryPath(appPath), ['profile', 'stop-app', '--profile', profile], {
-    env: profileCliEnv(profile),
+  spawnSync(attnBinaryPath(appPath), ['instance', 'stop-app', '--instance', instance], {
+    env: instanceCliEnv(instance),
     stdio: 'pipe',
   });
 }
@@ -91,8 +91,8 @@ export function registeredPtyHostPids({ dataDir, executablePath, commandLineFor 
   const hostsRoot = path.join(dataDir, 'pty-hosts');
   if (!fs.existsSync(hostsRoot)) return [];
   const pids = new Set();
-  for (const instance of fs.readdirSync(hostsRoot)) {
-    const hostsDir = path.join(hostsRoot, instance, 'hosts');
+  for (const daemonInstance of fs.readdirSync(hostsRoot)) {
+    const hostsDir = path.join(hostsRoot, daemonInstance, 'hosts');
     if (!fs.existsSync(hostsDir)) continue;
     for (const name of fs.readdirSync(hostsDir)) {
       if (!name.endsWith('.json')) continue;
@@ -143,24 +143,24 @@ async function terminateProcesses({ pids, name, log }) {
 }
 
 export async function ensureFreshWorld({
-  profile = currentHarnessProfile(),
-  appPath = defaultAppPathForProfile(profile),
-  dataDir = dataDirForProfile(profile),
+  instance = currentHarnessInstance(),
+  appPath = defaultAppPathForInstance(instance),
+  dataDir = dataDirForInstance(instance),
   log = (m) => console.log(`[fresh-world] ${m}`),
   timeoutMs = 20_000,
 } = {}) {
-  assertFreshWorldTargetSafe({ profile, appPath });
+  assertFreshWorldTargetSafe({ instance, appPath });
 
   const appWasRunning = findAnySurvivingPids(appPath).length > 0;
-  const bundleId = bundleIdentifierForProfile(profile);
+  const bundleId = bundleIdentifierForInstance(instance);
 
   log(`quitting app bundle ${bundleId}${appWasRunning ? ' (was running)' : ' (not running)'}`);
-  requestAppQuit({ profile, appPath, bundleId });
+  requestAppQuit({ instance, appPath, bundleId });
 
   let daemonStopped = false;
-  log(`stopping daemon for profile '${profile}'`);
+  log(`stopping daemon for instance '${instance}'`);
   const stopResult = spawnSync(attnBinaryPath(appPath), ['daemon', 'stop'], {
-    env: profileCliEnv(profile),
+    env: instanceCliEnv(instance),
     encoding: 'utf8',
   });
   if (stopResult.error) {

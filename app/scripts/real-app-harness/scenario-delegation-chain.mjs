@@ -6,14 +6,14 @@ import { createSessionAndWaitForInitialPane, launchFreshAppAndConnect, parseComm
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, readLiveDaemonPid, readProcessTable, snapshot, readAppFootprint, readGraphicsRegions, appPids } from './perfMeasure.mjs';
 import { MOCK_AGENT_MODEL, writeMockAgentFixture } from './mockAgent.mjs';
 
 const options = parseCommonArgs(process.argv.slice(2));
-const profile = currentHarnessProfile();
-if (!profile) throw new Error('Delegation chain verification requires a named profile');
+const instance = currentHarnessInstance();
+if (!instance) throw new Error('Delegation chain verification requires a named instance');
 process.env.ATTN_HARNESS_ALWAYS_ON_TOP = '0';
 const runner = createScenarioRunner(options, { scenarioId: 'DelegationChain', tier: 'local', prefix: 'delegation-chain', allowRealAgents: false });
 const client = new UiAutomationClient(options);
@@ -21,7 +21,7 @@ const observer = new DaemonObserver(options);
 const driver = createWindowDriver({ appPath: options.appPath, client });
 const created = [];
 const popup = '.delegation-chain-popover';
-const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: profileCliEnv(profile) });
+const runAttn = args => execFileSync(appDaemonInTree(options.appPath), args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 const text = selector => client.request('dom_text', { selector }).then(result => result.text);
 const exists = selector => client.request('dom_text', { selector }).then(() => true, error => {
   if (String(error).includes('selector not found')) return false;
@@ -189,7 +189,7 @@ try {
     const samples = [];
     for (let index = 0; index < 2; index += 1) {
       await delay(2000);
-      const processes = await snapshot(appPid, readLiveDaemonPid(profile), webkitBaseline);
+      const processes = await snapshot(appPid, readLiveDaemonPid(instance), webkitBaseline);
       const pids = new Set(appPids(processes));
       const cpu = (await readProcessTable()).filter(process => pids.has(process.pid));
       const graphics = await Promise.all((processes.byClass.webkit_gpu?.pids ?? []).map(async ({ pid }) => ({ pid, surfaces: await readGraphicsRegions(pid) })));

@@ -401,8 +401,8 @@ func TestClient_NotRunning(t *testing.T) {
 	}
 }
 
-func TestClient_ConnectError_IncludesProfileAndSocket(t *testing.T) {
-	os.Unsetenv("ATTN_PROFILE")
+func TestClient_ConnectError_IncludesInstanceAndSocket(t *testing.T) {
+	os.Unsetenv("ATTN_INSTANCE")
 	sockPath := filepath.Join(t.TempDir(), "missing.sock")
 	c := New(sockPath)
 	err := c.Register("id", "label", "/tmp")
@@ -410,15 +410,15 @@ func TestClient_ConnectError_IncludesProfileAndSocket(t *testing.T) {
 		t.Fatal("expected error when daemon not running")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "profile=default") {
-		t.Errorf("error missing profile=default: %q", msg)
+	if !strings.Contains(msg, "instance=default") {
+		t.Errorf("error missing instance=default: %q", msg)
 	}
 	if !strings.Contains(msg, "missing.sock") {
 		t.Errorf("error missing socket path: %q", msg)
 	}
 }
 
-func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
+func TestClient_ConnectError_HintsOtherInstanceWhenLive(t *testing.T) {
 	tmp, err := os.MkdirTemp("/tmp", "attn-client-")
 	if err != nil {
 		t.Fatalf("mkdtemp: %v", err)
@@ -426,7 +426,7 @@ func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
 	t.Cleanup(func() { _ = os.RemoveAll(tmp) })
 
 	t.Setenv("HOME", tmp)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	t.Setenv("ATTN_SOCKET_PATH", "")
 	config.ReloadForTesting()
 
@@ -448,11 +448,11 @@ func TestClient_ConnectError_HintsOtherProfileWhenLive(t *testing.T) {
 		t.Fatal("expected error when dev daemon not running")
 	}
 	msg := err.Error()
-	if !strings.Contains(msg, "profile=dev") {
-		t.Errorf("error missing profile=dev: %q", msg)
+	if !strings.Contains(msg, "instance=dev") {
+		t.Errorf("error missing instance=dev: %q", msg)
 	}
 	if !strings.Contains(msg, "hint:") {
-		t.Errorf("error missing cross-profile hint: %q", msg)
+		t.Errorf("error missing cross-instance hint: %q", msg)
 	}
 	if !strings.Contains(msg, "default daemon is listening") {
 		t.Errorf("error should hint about default daemon: %q", msg)
@@ -464,7 +464,7 @@ func TestClient_SocketPath(t *testing.T) {
 
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	t.Setenv("ATTN_SOCKET_PATH", "")
 	t.Setenv("ATTN_CONFIG_PATH", filepath.Join(t.TempDir(), "missing-config.json"))
 	config.ReloadForTesting()

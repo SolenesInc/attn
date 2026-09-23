@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { assertProductionRunAllowed, defaultAppPathForProfile } from './harnessProfile.mjs';
+import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
 import { appBuildIdentityInTree, appDaemonInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -116,7 +116,7 @@ function readBinaryBuildInfoSync(binaryPath) {
 }
 
 export function assertPackagedAppBuildMatchesCurrentSource({
-  appPath = defaultAppPathForProfile(),
+  appPath = defaultAppPathForInstance(),
   launchEnv = null,
 } = {}) {
   assertProductionRunAllowed({ appPath });

@@ -1,11 +1,11 @@
-export interface DaemonEndpointProfile {
+export interface DaemonEndpointInstance {
   id?: string;
   wsUrl?: string;
 }
 
 interface ResolveDaemonWebSocketURLOptions {
   wsUrl?: string;
-  endpoint?: DaemonEndpointProfile;
+  endpoint?: DaemonEndpointInstance;
 }
 
 const DEFAULT_DAEMON_WS_PROTOCOL = 'ws';
@@ -41,8 +41,8 @@ export function resolveDaemonWebSocketURL(options: ResolveDaemonWebSocketURLOpti
   return `${protocol}://${host}:${port}${path}`;
 }
 
-// Derived from the WebSocket URL rather than resolved again: a profile that moved
-// its port must move both, or a docked app view imports another profile's artifact.
+// Derived from the WebSocket URL rather than resolved again: an instance that moved
+// its port must move both, or a docked app view imports another instance's artifact.
 export function resolveDaemonHTTPOrigin(options: ResolveDaemonWebSocketURLOptions = {}): string {
   const ws = new URL(resolveDaemonWebSocketURL(options));
   return `${ws.protocol === 'wss:' ? 'https:' : 'http:'}//${ws.host}`;

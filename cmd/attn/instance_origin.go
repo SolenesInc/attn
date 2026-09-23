@@ -17,7 +17,7 @@ import (
 
 const originFileName = "origin.json"
 
-type profileOrigin struct {
+type instanceOrigin struct {
 	Worktree   string `json:"worktree"`
 	Branch     string `json:"branch,omitempty"`
 	RecordedAt string `json:"recordedAt"`
@@ -25,7 +25,7 @@ type profileOrigin struct {
 
 func originPath(dataDir string) string { return filepath.Join(dataDir, originFileName) }
 
-func writeProfileOrigin(dataDir string, origin profileOrigin) error {
+func writeInstanceOrigin(dataDir string, origin instanceOrigin) error {
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
@@ -45,12 +45,12 @@ func writeProfileOrigin(dataDir string, origin profileOrigin) error {
 	return nil
 }
 
-func readProfileOrigin(dataDir string) *profileOrigin {
+func readInstanceOrigin(dataDir string) *instanceOrigin {
 	data, err := os.ReadFile(originPath(dataDir))
 	if err != nil {
 		return nil
 	}
-	var origin profileOrigin
+	var origin instanceOrigin
 	if err := json.Unmarshal(data, &origin); err != nil {
 		return nil
 	}
@@ -60,61 +60,61 @@ func readProfileOrigin(dataDir string) *profileOrigin {
 	return &origin
 }
 
-func runProfileSetOrigin(args []string) {
+func runInstanceSetOrigin(args []string) {
 	name := ""
 	worktree := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--worktree":
 			if i+1 >= len(args) {
-				profileFatal("--worktree requires a directory")
+				instanceFatal("--worktree requires a directory")
 			}
 			i++
 			worktree = args[i]
 		case "-h", "--help":
-			printProfileHelp(os.Stdout)
+			printInstanceHelp(os.Stdout)
 			return
 		default:
 			if strings.HasPrefix(args[i], "-") {
-				profileFatal(fmt.Sprintf("unknown flag %q", args[i]))
+				instanceFatal(fmt.Sprintf("unknown flag %q", args[i]))
 			}
 			if name != "" {
-				profileFatal(fmt.Sprintf("set-origin takes a single profile name, got %q and %q", name, args[i]))
+				instanceFatal(fmt.Sprintf("set-origin takes a single instance name, got %q and %q", name, args[i]))
 			}
 			name = args[i]
 		}
 	}
 	if name == "" {
-		profileFatal("set-origin requires a profile name (e.g. `attn profile set-origin agent7`)")
+		instanceFatal("set-origin requires an instance name (e.g. `attn instance set-origin agent7`)")
 	}
-	normalized, err := config.NormalizeProfileName(name)
+	normalized, err := config.NormalizeInstanceName(name)
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 	if normalized == "" {
-		profileFatal("refusing to record an origin for the default (production) profile")
+		instanceFatal("refusing to record an origin for the default (production) instance")
 	}
 	if worktree == "" {
 		worktree, err = os.Getwd()
 		if err != nil {
-			profileFatal(err.Error())
+			instanceFatal(err.Error())
 		}
 	}
 	abs, err := filepath.Abs(worktree)
 	if err != nil {
-		profileFatal(err.Error())
+		instanceFatal(err.Error())
 	}
 
-	origin := profileOrigin{
+	origin := instanceOrigin{
 		Worktree:   abs,
 		Branch:     gitBranchAt(abs),
 		RecordedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	dataDir := config.DataDirForProfile(normalized)
-	if err := writeProfileOrigin(dataDir, origin); err != nil {
-		profileFatal(fmt.Sprintf("record origin: %v", err))
+	dataDir := config.DataDirForInstance(normalized)
+	if err := writeInstanceOrigin(dataDir, origin); err != nil {
+		instanceFatal(fmt.Sprintf("record origin: %v", err))
 	}
-	fmt.Printf("recorded origin for profile %s: %s", normalized, origin.Worktree)
+	fmt.Printf("recorded origin for instance %s: %s", normalized, origin.Worktree)
 	if origin.Branch != "" {
 		fmt.Printf(" (%s)", origin.Branch)
 	}
@@ -134,38 +134,38 @@ func gitBranchAt(dir string) string {
 	return branch
 }
 
-type profileListEntry struct {
-	Profile       string         `json:"profile"`
-	Label         string         `json:"label"`
-	DataDir       string         `json:"dataDir"`
-	AppPath       string         `json:"appPath"`
-	AppLocalData  string         `json:"appLocalDataDir"`
-	WSPort        string         `json:"wsPort"`
-	Active        bool           `json:"active"`
-	HasData       bool           `json:"hasData"`
-	HasApp        bool           `json:"hasApp"`
-	HasAppLocal   bool           `json:"hasAppLocalData"`
-	DaemonRunning bool           `json:"daemonRunning"`
-	LiveWorkers   int            `json:"liveWorkers"`
-	Origin        *profileOrigin `json:"origin,omitempty"`
+type instanceListEntry struct {
+	Instance      string          `json:"instance"`
+	Label         string          `json:"label"`
+	DataDir       string          `json:"dataDir"`
+	AppPath       string          `json:"appPath"`
+	AppLocalData  string          `json:"appLocalDataDir"`
+	WSPort        string          `json:"wsPort"`
+	Active        bool            `json:"active"`
+	HasData       bool            `json:"hasData"`
+	HasApp        bool            `json:"hasApp"`
+	HasAppLocal   bool            `json:"hasAppLocalData"`
+	DaemonRunning bool            `json:"daemonRunning"`
+	LiveWorkers   int             `json:"liveWorkers"`
+	Origin        *instanceOrigin `json:"origin,omitempty"`
 }
 
-func newProfileListEntry(profile string, active string) profileListEntry {
-	r := resolveProfile(profile)
-	return profileListEntry{
-		Profile:       profile,
+func newInstanceListEntry(instance string, active string) instanceListEntry {
+	r := resolveInstance(instance)
+	return instanceListEntry{
+		Instance:      instance,
 		Label:         r.Label,
 		DataDir:       r.DataDir,
 		AppPath:       r.AppPath,
 		AppLocalData:  r.AppLocalData,
 		WSPort:        r.WSPort,
-		Active:        profile == active,
+		Active:        instance == active,
 		HasData:       fileExists(r.DataDir),
 		HasApp:        fileExists(r.AppPath),
 		HasAppLocal:   fileExists(r.AppLocalData),
 		DaemonRunning: socketLive(r.Socket),
 		LiveWorkers:   countLiveWorkers(r.DataDir),
-		Origin:        readProfileOrigin(r.DataDir),
+		Origin:        readInstanceOrigin(r.DataDir),
 	}
 }
 

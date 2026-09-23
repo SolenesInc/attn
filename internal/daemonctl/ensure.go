@@ -49,7 +49,7 @@ type healthResponse struct {
 	Protocol          string `json:"protocol"`
 	Version           string `json:"version"`
 	SourceFingerprint string `json:"source_fingerprint"`
-	Profile           string `json:"profile"`
+	Instance          string `json:"instance"`
 	DataDir           string `json:"data_dir"`
 	SocketPath        string `json:"socket_path"`
 	Port              string `json:"port"`
@@ -183,7 +183,7 @@ func acquireEnsureLock(ctx context.Context) (func(), error) {
 }
 
 func daemonMatchesCurrentBinary(health healthResponse) bool {
-	if !profileMatchesCurrent(health) {
+	if !instanceMatchesCurrent(health) {
 		return false
 	}
 	currentFingerprint := normalizedFingerprint(buildinfo.SourceFingerprint)
@@ -197,9 +197,9 @@ func daemonIsReady(health healthResponse) bool {
 	return strings.TrimSpace(health.Status) == "ok"
 }
 
-func profileMatchesCurrent(health healthResponse) bool {
-	expected := config.ProfileLabel()
-	reported := strings.TrimSpace(health.Profile)
+func instanceMatchesCurrent(health healthResponse) bool {
+	expected := config.InstanceLabel()
+	reported := strings.TrimSpace(health.Instance)
 	if reported == "" {
 		reported = "default"
 	}
@@ -210,8 +210,8 @@ func mismatchReason(healthErr error, health healthResponse) string {
 	if healthErr != nil {
 		return "health_unavailable"
 	}
-	if !profileMatchesCurrent(health) {
-		return "profile_mismatch"
+	if !instanceMatchesCurrent(health) {
+		return "instance_mismatch"
 	}
 	currentFingerprint := normalizedFingerprint(buildinfo.SourceFingerprint)
 	runningFingerprint := normalizedFingerprint(health.SourceFingerprint)

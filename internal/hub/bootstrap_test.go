@@ -8,7 +8,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 )
 
-func TestRemoteCachesStayInsideTheActiveProfileDataDir(t *testing.T) {
+func TestRemoteCachesStayInsideTheActiveInstanceDataDir(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("ATTN_DATA_DIR", dataDir)
 	platform := RemotePlatform{GOOS: "linux", GOARCH: "arm64", ArtifactName: "attn-linux-arm64"}
@@ -20,7 +20,7 @@ func TestRemoteCachesStayInsideTheActiveProfileDataDir(t *testing.T) {
 		t.Errorf("app runtime cache = %q, want %q", got, want)
 	}
 	if got := config.DataDir(); got != dataDir {
-		t.Fatalf("test profile data dir = %q, want %q", got, dataDir)
+		t.Fatalf("test instance data dir = %q, want %q", got, dataDir)
 	}
 }
 
@@ -112,21 +112,21 @@ func TestRemoteHarnessCleanupEnabled(t *testing.T) {
 	}
 }
 
-func TestRemoteRoutingProfile(t *testing.T) {
+func TestRemoteRoutingInstance(t *testing.T) {
 	t.Setenv("ATTN_REMOTE_SOCKET_PATH", "")
 	t.Setenv("ATTN_REMOTE_DB_PATH", "")
 	t.Setenv("ATTN_REMOTE_ATTN_BIN", "")
-	if got := remoteRoutingProfile(" dev "); got != "dev" {
-		t.Fatalf("remoteRoutingProfile() = %q, want dev without harness routing", got)
+	if got := remoteRoutingInstance(" dev "); got != "dev" {
+		t.Fatalf("remoteRoutingInstance() = %q, want dev without harness routing", got)
 	}
 
 	t.Setenv("ATTN_REMOTE_SOCKET_PATH", "/home/victor/.attn/harness/run-456/attn.sock")
-	if got := remoteRoutingProfile("dev"); got != "" {
-		t.Fatalf("remoteRoutingProfile() = %q, want default profile with harness routing", got)
+	if got := remoteRoutingInstance("dev"); got != "" {
+		t.Fatalf("remoteRoutingInstance() = %q, want default instance with harness routing", got)
 	}
 }
 
-func TestStartRemoteDaemonScript_DefaultProfile(t *testing.T) {
+func TestStartRemoteDaemonScript_DefaultInstance(t *testing.T) {
 	script := startRemoteDaemonScript("")
 	if !strings.Contains(script, `mkdir -p "$HOME/.attn"`) {
 		t.Fatalf("default script missing default attn dir: %s", script)
@@ -135,27 +135,27 @@ func TestStartRemoteDaemonScript_DefaultProfile(t *testing.T) {
 		t.Fatalf("default script missing default binary path: %s", script)
 	}
 	if strings.Contains(script, "$HOME/.local/bin/attn-") {
-		t.Fatalf("default script unexpectedly references named-profile binary: %s", script)
+		t.Fatalf("default script unexpectedly references named-instance binary: %s", script)
 	}
 	if !strings.Contains(script, `>>"$HOME/.attn"/daemon.log`) {
 		t.Fatalf("default script missing default log path: %s", script)
 	}
 }
 
-func TestStartRemoteDaemonScript_NamedProfile(t *testing.T) {
+func TestStartRemoteDaemonScript_NamedInstance(t *testing.T) {
 	script := startRemoteDaemonScript("dev")
 	if !strings.Contains(script, "$HOME/.local/bin/attn-dev") {
 		t.Fatalf("dev script missing dev binary path: %s", script)
 	}
-	if !strings.Contains(script, `mkdir -p "$HOME/.attn-${ATTN_PROFILE}"`) {
-		t.Fatalf("dev script missing profile-aware data dir: %s", script)
+	if !strings.Contains(script, `mkdir -p "$HOME/.attn-${ATTN_INSTANCE}"`) {
+		t.Fatalf("dev script missing instance-aware data dir: %s", script)
 	}
-	if !strings.Contains(script, `>>"$HOME/.attn-${ATTN_PROFILE}"/daemon.log`) {
-		t.Fatalf("dev script missing profile-aware log path: %s", script)
+	if !strings.Contains(script, `>>"$HOME/.attn-${ATTN_INSTANCE}"/daemon.log`) {
+		t.Fatalf("dev script missing instance-aware log path: %s", script)
 	}
 }
 
-func TestStopRemoteDaemonScript_PortByProfile(t *testing.T) {
+func TestStopRemoteDaemonScript_PortByInstance(t *testing.T) {
 	defaultScript := stopRemoteDaemonScript("")
 	if !strings.Contains(defaultScript, "${ATTN_WS_PORT:-9849}") {
 		t.Fatalf("default stop script should fall back to 9849: %s", defaultScript)
@@ -201,13 +201,13 @@ func extractRemovalLines(script string) []string {
 	return lines
 }
 
-func TestRemoteSocketConfigScriptHonorsProfileEnv(t *testing.T) {
+func TestRemoteSocketConfigScriptHonorsInstanceEnv(t *testing.T) {
 	script := remoteSocketConfigScript()
-	if !strings.Contains(script, `attn_profile="${ATTN_PROFILE:-}"`) {
-		t.Fatalf("socket-config script missing ATTN_PROFILE read: %s", script)
+	if !strings.Contains(script, `attn_instance="${ATTN_INSTANCE:-}"`) {
+		t.Fatalf("socket-config script missing ATTN_INSTANCE read: %s", script)
 	}
-	if !strings.Contains(script, `attn_dir="$HOME/.attn-$attn_profile"`) {
-		t.Fatalf("socket-config script missing named-profile data dir: %s", script)
+	if !strings.Contains(script, `attn_dir="$HOME/.attn-$attn_instance"`) {
+		t.Fatalf("socket-config script missing named-instance data dir: %s", script)
 	}
 	if !strings.Contains(script, `attn_dir="$HOME/.attn"`) {
 		t.Fatalf("socket-config script missing default data dir: %s", script)
@@ -218,7 +218,7 @@ func TestResolveRemoteInstallPath(t *testing.T) {
 	cases := []struct {
 		remoteHome string
 		override   string
-		profile    string
+		instance   string
 		want       string
 	}{
 		{"/home/v", "", "", "/home/v/.local/bin/attn"},
@@ -227,10 +227,10 @@ func TestResolveRemoteInstallPath(t *testing.T) {
 		{"/home/v", "~/bin/attn", "", "/home/v/bin/attn"},
 	}
 	for _, c := range cases {
-		got := resolveRemoteInstallPath(c.remoteHome, c.override, c.profile)
+		got := resolveRemoteInstallPath(c.remoteHome, c.override, c.instance)
 		if got != c.want {
 			t.Fatalf("resolveRemoteInstallPath(%q,%q,%q) = %q, want %q",
-				c.remoteHome, c.override, c.profile, got, c.want)
+				c.remoteHome, c.override, c.instance, got, c.want)
 		}
 	}
 }
@@ -238,7 +238,7 @@ func TestResolveRemoteInstallPath(t *testing.T) {
 func TestRemoteAppRuntimePath(t *testing.T) {
 	cases := []struct {
 		remoteInstallPath string
-		profile           string
+		instance          string
 		want              string
 	}{
 		{"/home/v/.local/bin/attn", "", "/home/v/.local/bin/attn-app-runtime"},
@@ -246,8 +246,8 @@ func TestRemoteAppRuntimePath(t *testing.T) {
 		{"/home/v/.attn/harness/run-1/bin/attn", "", "/home/v/.attn/harness/run-1/bin/attn-app-runtime"},
 	}
 	for _, c := range cases {
-		if got := remoteAppRuntimePath(c.remoteInstallPath, c.profile); got != c.want {
-			t.Errorf("remoteAppRuntimePath(%q, %q) = %q, want %q", c.remoteInstallPath, c.profile, got, c.want)
+		if got := remoteAppRuntimePath(c.remoteInstallPath, c.instance); got != c.want {
+			t.Errorf("remoteAppRuntimePath(%q, %q) = %q, want %q", c.remoteInstallPath, c.instance, got, c.want)
 		}
 	}
 }
@@ -255,7 +255,7 @@ func TestRemoteAppRuntimePath(t *testing.T) {
 func TestRemotePTYHostPath(t *testing.T) {
 	cases := []struct {
 		remoteInstallPath string
-		profile           string
+		instance          string
 		want              string
 	}{
 		{"/home/v/.local/bin/attn", "", "/home/v/.local/bin/attn-pty-host"},
@@ -263,8 +263,8 @@ func TestRemotePTYHostPath(t *testing.T) {
 		{"/home/v/.attn/harness/run-1/bin/attn", "", "/home/v/.attn/harness/run-1/bin/attn-pty-host"},
 	}
 	for _, c := range cases {
-		if got := remotePTYHostPath(c.remoteInstallPath, c.profile); got != c.want {
-			t.Errorf("remotePTYHostPath(%q, %q) = %q, want %q", c.remoteInstallPath, c.profile, got, c.want)
+		if got := remotePTYHostPath(c.remoteInstallPath, c.instance); got != c.want {
+			t.Errorf("remotePTYHostPath(%q, %q) = %q, want %q", c.remoteInstallPath, c.instance, got, c.want)
 		}
 	}
 }

@@ -7,7 +7,7 @@ describe('Pi startup preflight', () => {
   const check = (name, status, summary = name) => ({ name, status, summary });
   const output = (...checks) => JSON.stringify({ status: checks.some((c) => c.status === 'fail') ? 'fail' : 'pass', checks });
   const startup = output(check('plugin.attn-pi', 'fail', 'daemon cannot launch pi: pi availability has not been checked'));
-  const failedCommand = (stdout) => Object.assign(new Error('exit 1'), { stdout, stderr: 'profile banner' });
+  const failedCommand = (stdout) => Object.assign(new Error('exit 1'), { stdout, stderr: 'instance banner' });
 
   it('keeps the failed report and waits for the cached startup health to settle', async () => {
     vi.useFakeTimers();
@@ -16,7 +16,7 @@ describe('Pi startup preflight', () => {
     const receipts = [];
     const pending = waitForPiPreflight({ run, save: (attempts) => receipts.push(structuredClone(attempts)) });
     expect(run).toHaveBeenCalledTimes(1);
-    expect(receipts[0][0]).toMatchObject({ stdout: startup, stderr: 'profile banner', report: { status: 'fail' } });
+    expect(receipts[0][0]).toMatchObject({ stdout: startup, stderr: 'instance banner', report: { status: 'fail' } });
     await vi.advanceTimersByTimeAsync(250);
     await expect(pending).resolves.toMatchObject({ status: 'pass' });
     expect(receipts.at(-1)).toHaveLength(2);
@@ -57,7 +57,7 @@ describe('Pi startup preflight', () => {
     const save = vi.fn();
     await expect(waitForPiPreflight({ run: () => { throw failedCommand('not JSON'); }, save }))
       .rejects.toThrow('did not return a report');
-    expect(save.mock.lastCall[0][0]).toMatchObject({ stdout: 'not JSON', stderr: 'profile banner' });
+    expect(save.mock.lastCall[0][0]).toMatchObject({ stdout: 'not JSON', stderr: 'instance banner' });
   });
 });
 

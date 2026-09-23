@@ -11,11 +11,11 @@ import (
 const GitHubPollingOptInEnv = "ATTN_GITHUB_POLLING"
 
 func gitHubPollingOffReason() string {
-	profile := config.Profile()
-	if profile == "" || gitHubPollingOptedIn() {
+	instance := config.Instance()
+	if instance == "" || gitHubPollingOptedIn() {
 		return ""
 	}
-	return fmt.Sprintf("GitHub polling is off for profile %s. Start its daemon with %s=on to poll with your gh credentials.", profile, GitHubPollingOptInEnv)
+	return fmt.Sprintf("GitHub polling is off for instance %s. Start its daemon with %s=on to poll with your gh credentials.", instance, GitHubPollingOptInEnv)
 }
 
 func gitHubPollingOffReasonField() *string {

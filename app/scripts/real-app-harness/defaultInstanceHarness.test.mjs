@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { assertDefaultProfileHarnessIsolation, defaultProfileHarnessEnv } from './defaultProfileHarness.mjs';
+import { assertDefaultInstanceHarnessIsolation, defaultInstanceHarnessEnv } from './defaultInstanceHarness.mjs';
 
 const roots = [];
 
@@ -30,12 +30,12 @@ afterEach(() => {
   for (const root of roots.splice(0)) fs.rmSync(root, { recursive: true, force: true });
 });
 
-describe('default profile harness isolation', () => {
+describe('default instance harness isolation', () => {
   it('accepts a direct owner-only world and scrubs inherited routing', () => {
     const target = fixture();
-    expect(assertDefaultProfileHarnessIsolation(target).dataDir).toBe(fs.realpathSync(target.dataDir));
-    const env = defaultProfileHarnessEnv({ ...target, wsPort: 29150 });
-    expect(env.ATTN_PROFILE).toBe('');
+    expect(assertDefaultInstanceHarnessIsolation(target).dataDir).toBe(fs.realpathSync(target.dataDir));
+    const env = defaultInstanceHarnessEnv({ ...target, wsPort: 29150 });
+    expect(env.ATTN_INSTANCE).toBe('');
     expect(env.ATTN_DATA_DIR).toBe(target.dataDir);
     expect(env.ATTN_HARNESS_DATA_DIR).toBe(target.dataDir);
     expect(env.ATTN_HARNESS_NOTEBOOK_ROOT).toBe(target.notebookRoot);
@@ -47,13 +47,13 @@ describe('default profile harness isolation', () => {
     const target = fixture();
     const alias = path.join(path.dirname(target.dataDir), 'alias');
     fs.symlinkSync(target.productionRoot, alias);
-    expect(() => assertDefaultProfileHarnessIsolation({ ...target, dataDir: alias }))
+    expect(() => assertDefaultInstanceHarnessIsolation({ ...target, dataDir: alias }))
       .toThrow(/direct directory/);
-    expect(() => assertDefaultProfileHarnessIsolation({ ...target, toolHome: '/tmp/outside' }))
+    expect(() => assertDefaultInstanceHarnessIsolation({ ...target, toolHome: '/tmp/outside' }))
       .toThrow(/outside isolated data root/);
-    expect(() => assertDefaultProfileHarnessIsolation({ ...target, wsUrl: 'ws://127.0.0.1:9849/ws' }))
+    expect(() => assertDefaultInstanceHarnessIsolation({ ...target, wsUrl: 'ws://127.0.0.1:9849/ws' }))
       .toThrow(/unsafe.*websocket/);
-    expect(() => assertDefaultProfileHarnessIsolation({ ...target, appPath: '/tmp/attn.app' }))
+    expect(() => assertDefaultInstanceHarnessIsolation({ ...target, appPath: '/tmp/attn.app' }))
       .toThrow(/production app bundle/);
   });
 });

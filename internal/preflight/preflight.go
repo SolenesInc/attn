@@ -48,7 +48,7 @@ type Launch struct {
 }
 
 type Routing struct {
-	Profile  string `json:"profile"`
+	Instance string `json:"instance"`
 	Label    string `json:"label"`
 	DataDir  string `json:"data_dir"`
 	Socket   string `json:"socket"`
@@ -76,7 +76,7 @@ func (r Report) OK() bool { return r.Status != StatusFail }
 type daemonHealth struct {
 	Status           string `json:"status"`
 	Protocol         string `json:"protocol"`
-	Profile          string `json:"profile"`
+	Instance         string `json:"instance"`
 	DataDir          string `json:"data_dir"`
 	SocketPath       string `json:"socket_path"`
 	RoutingPathError string `json:"routing_path_error"`
@@ -162,8 +162,8 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	}
 	paths := []struct{ name, path, action string }{
 		{"path.working_directory", workingDir, "Choose a writable checkout or fix its permissions."},
-		{"path.profile_data", routing.DataDir, "Install or initialize the selected non-production profile, then fix the data directory permissions."},
-		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable app install directory for the selected profile."},
+		{"path.instance_data", routing.DataDir, "Install or initialize the selected non-production instance, then fix the data directory permissions."},
+		{"path.applications", filepath.Dir(routing.AppPath), "Create a writable app install directory for the selected instance."},
 	}
 	for _, item := range paths {
 		if err := p.writable(item.path); err != nil {
@@ -193,25 +193,25 @@ func run(ctx context.Context, opts Options, p prober) Report {
 	if routingErr != nil {
 		add(fail("routing.socket", "could not canonicalize active routing paths: "+routingErr.Error(), "Use absolute paths for ATTN_DATA_DIR and ATTN_SOCKET_PATH, or fix inaccessible symlink ancestors."))
 	} else if err := p.pathIsSocket(routing.Socket); err != nil {
-		add(fail("routing.socket", fmt.Sprintf("expected daemon socket %s is unavailable: %v", routing.Socket, err), "Start the daemon for the active profile and verify ATTN_PROFILE/ATTN_SOCKET_PATH routing."))
+		add(fail("routing.socket", fmt.Sprintf("expected daemon socket %s is unavailable: %v", routing.Socket, err), "Start the daemon for the active instance and verify ATTN_INSTANCE/ATTN_SOCKET_PATH routing."))
 	} else {
 		add(pass("routing.socket", routing.Socket))
 	}
 
 	appProtocol, appErr := p.appProtocol(ctx, routing.AppPath)
 	if appErr != nil {
-		add(fail("protocol.cli_app", fmt.Sprintf("could not read the installed app protocol: %v", appErr), "Build and install this profile's app, then rerun preflight."))
+		add(fail("protocol.cli_app", fmt.Sprintf("could not read the installed app protocol: %v", appErr), "Build and install this instance's app, then rerun preflight."))
 	} else if appProtocol != protocol.ProtocolVersion {
-		add(fail("protocol.cli_app", fmt.Sprintf("CLI protocol %s does not match installed app protocol %s", protocol.ProtocolVersion, appProtocol), "Rebuild and install the selected profile from this checkout."))
+		add(fail("protocol.cli_app", fmt.Sprintf("CLI protocol %s does not match installed app protocol %s", protocol.ProtocolVersion, appProtocol), "Rebuild and install the selected instance from this checkout."))
 	} else {
 		add(pass("protocol.cli_app", "CLI and installed app use protocol "+appProtocol))
 	}
 
 	health, healthErr := p.daemonHealth(ctx, routing.WSPort)
 	if healthErr != nil {
-		add(fail("daemon.readiness", fmt.Sprintf("daemon health is unavailable: %v", healthErr), "Start the daemon for the active profile and rerun preflight."))
-		add(fail("routing.daemon", fmt.Sprintf("daemon health is unavailable on 127.0.0.1:%s: %v", routing.WSPort, healthErr), "Start the daemon for the active profile and verify the selected port is reachable."))
-		add(fail("protocol.app_daemon", "app/daemon protocol compatibility could not be verified", "Start the selected profile's daemon and rerun preflight."))
+		add(fail("daemon.readiness", fmt.Sprintf("daemon health is unavailable: %v", healthErr), "Start the daemon for the active instance and rerun preflight."))
+		add(fail("routing.daemon", fmt.Sprintf("daemon health is unavailable on 127.0.0.1:%s: %v", routing.WSPort, healthErr), "Start the daemon for the active instance and verify the selected port is reachable."))
+		add(fail("protocol.app_daemon", "app/daemon protocol compatibility could not be verified", "Start the selected instance's daemon and rerun preflight."))
 	} else {
 		if status := strings.TrimSpace(health.Status); status != "ok" {
 			add(fail("daemon.readiness", fmt.Sprintf("daemon status is %q", status), "Wait for daemon startup to finish, then rerun preflight."))
@@ -220,18 +220,18 @@ func run(ctx context.Context, opts Options, p prober) Report {
 		}
 		actualPort := fmt.Sprint(health.Port)
 		if health.RoutingPathError != "" {
-			add(fail("routing.daemon", "daemon could not canonicalize its routing paths: "+health.RoutingPathError, "Use absolute daemon routing paths or fix inaccessible symlink ancestors, then restart this profile's daemon."))
-		} else if health.Profile != routing.Label || health.DataDir != routing.DataDir || health.SocketPath != routing.Socket || actualPort != routing.WSPort {
-			add(fail("routing.daemon", fmt.Sprintf("daemon routing mismatch: profile=%s data_dir=%s socket=%s port=%s", health.Profile, health.DataDir, health.SocketPath, actualPort), "Select the intended profile with `attn profile-env`, clear inherited routing overrides, and restart only that profile's daemon."))
+			add(fail("routing.daemon", "daemon could not canonicalize its routing paths: "+health.RoutingPathError, "Use absolute daemon routing paths or fix inaccessible symlink ancestors, then restart this instance's daemon."))
+		} else if health.Instance != routing.Label || health.DataDir != routing.DataDir || health.SocketPath != routing.Socket || actualPort != routing.WSPort {
+			add(fail("routing.daemon", fmt.Sprintf("daemon routing mismatch: instance=%s data_dir=%s socket=%s port=%s", health.Instance, health.DataDir, health.SocketPath, actualPort), "Select the intended instance with `attn instance-env`, clear inherited routing overrides, and restart only that instance's daemon."))
 		} else {
-			add(pass("routing.daemon", fmt.Sprintf("profile=%s socket=%s port=%s", health.Profile, health.SocketPath, actualPort)))
+			add(pass("routing.daemon", fmt.Sprintf("instance=%s socket=%s port=%s", health.Instance, health.SocketPath, actualPort)))
 		}
 		if appErr != nil {
-			add(fail("protocol.app_daemon", "app/daemon protocol compatibility could not be verified because the app protocol is unavailable", "Build and install this profile's app, then rerun preflight."))
+			add(fail("protocol.app_daemon", "app/daemon protocol compatibility could not be verified because the app protocol is unavailable", "Build and install this instance's app, then rerun preflight."))
 		} else if appProtocol == health.Protocol {
 			add(pass("protocol.app_daemon", "installed app and daemon use protocol "+health.Protocol))
 		} else {
-			add(fail("protocol.app_daemon", fmt.Sprintf("installed app protocol %s does not match daemon protocol %s", appProtocol, health.Protocol), "Restart the daemon from the selected profile's installed app."))
+			add(fail("protocol.app_daemon", fmt.Sprintf("installed app protocol %s does not match daemon protocol %s", appProtocol, health.Protocol), "Restart the daemon from the selected instance's installed app."))
 		}
 	}
 
@@ -263,11 +263,11 @@ func checkLaunchAgent(launch Launch, agents []agentdriver.Descriptor, agentsErr 
 	if agentsErr != nil {
 		driver := agentdriver.Get(name)
 		if driver == nil {
-			add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v), so preflight cannot tell whether a plugin provides agent %q", agentsErr, name), "Start this profile's daemon from this build and rerun preflight."))
+			add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v), so preflight cannot tell whether a plugin provides agent %q", agentsErr, name), "Start this instance's daemon from this build and rerun preflight."))
 			return nil
 		}
 		caps := agentdriver.EffectiveCapabilities(driver)
-		add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v); %s was checked against this CLI's built-in driver instead", agentsErr, name), "Start this profile's daemon from this build and rerun preflight to check the launch against it."))
+		add(warn("launch.agent", fmt.Sprintf("daemon could not list its agents (%v); %s was checked against this CLI's built-in driver instead", agentsErr, name), "Start this instance's daemon from this build and rerun preflight to check the launch against it."))
 		return &agentdriver.Descriptor{Name: name, Executable: driver.ResolveExecutable(""), ModelPin: caps.HasModelPin, EffortPin: caps.HasEffortPin}
 	}
 	names := make([]string, 0, len(agents))
@@ -329,8 +329,8 @@ func resolvedLaunchValue(value, source string) ResolvedValue {
 }
 
 func resolveRouting() (Routing, error) {
-	profile := config.Profile()
-	label := profile
+	instance := config.Instance()
+	label := instance
 	if label == "" {
 		label = "default"
 	}
@@ -345,10 +345,10 @@ func resolveRouting() (Routing, error) {
 		socket = absoluteRoutingFallback(rawSocket)
 	}
 	routing := Routing{
-		Profile: profile, Label: label,
+		Instance: instance, Label: label,
 		DataDir: dataDir, Socket: socket,
-		WSPort: config.WSPort(), BundleID: config.BundleIdentifierForProfile(profile),
-		AppPath: config.AppPathForProfile(profile),
+		WSPort: config.WSPort(), BundleID: config.BundleIdentifierForInstance(instance),
+		AppPath: config.AppPathForInstance(instance),
 	}
 	if dataErr != nil || socketErr != nil {
 		return routing, fmt.Errorf("data_dir: %v; socket: %v", dataErr, socketErr)
