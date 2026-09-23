@@ -1,0 +1,3 @@
+kind: fixed
+area: voice
+change: Hosted coding agents can request microphone access for voice input on macOS.
