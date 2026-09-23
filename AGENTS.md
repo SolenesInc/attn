@@ -30,12 +30,12 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 - Never kill by name, pattern, or worktree path. Kill only a PID captured at
   spawn, or a port/socket owner confirmed by working directory.
-- Production `~/.attn` is read-only. Copy data out; never run a test daemon
+- Production ~/.attn is read-only. Copy data out; never run a test daemon
   against it, open it read-write, or clean it.
+- Using attn CLI to interact with ~/.attn is allowed.
 - Non-production builds, installs, launches, and restarts are pre-authorized.
   Production `make`, `make install`, and `make install-daemon` need Victor's
-  explicit approval. Check the `[attn profile=…]` banner first.
-- Never restart the daemon hosting this session.
+  explicit approval.
 - Never redirect `HOME` or resolve test config paths to production `~/.attn`.
   Use the [test isolation rules](docs/maintainer-contracts.md#test-safety)
   when adding or changing tests that reach config paths.
@@ -65,44 +65,47 @@ satisfy the full requirement?
   remote path.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
-- Quote globs passed to shell commands; zsh rejects unmatched bare globs before
-  commands such as `rg` can handle them.
 
 ## PR posture
+
+### Reviewer
 
 - Review for unnecessary machinery as well as correctness. For each new layer,
   option, fallback, or duplicated state, check what current requirement it serves.
   When proposing simplification, name what can be removed, what replaces it, and
   why the full behavior is preserved. Fewer lines alone are not evidence of a
   better design.
+
+### Author
+
 - Codex reviews every PR as `chatgpt-codex-connector[bot]`. It reviews each push on
-  its own. A 👍 reaction on the PR is a clean review for the latest push.
+  its own. A 👍 reaction on the PR means it was approved with no feedback.
   👀 reaction means Codex is reviewing.
 - Read reviews, inline comments, review threads with `isResolved`, and PR reactions
   through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
 - Reply on the thread with what changed, and resolve it. When no change is needed,
   reply with the reason.
-- Use `attn pr watch <url> --mode codex` for the repository's normal durable PR
-  monitor. It is a best-effort attention signal, not merge permission or a
-  substitute for the exact-head gates above.
+- Use `attn pr watch <url> --mode codex` after pushing a PR to wait for CI/review. Do not loop for updates.
+- When addressing comments, avoid patchwork fixes. Understand the root cause of the issue captured
+  by the reviewer, and address it holistically, if necessary by refactoring the system.
 
 ## Commands and verification
 
-| Task                    | Command                  |
-| ----------------------- | ------------------------ |
-| Go tests                | `make test`              |
-| Frontend tests          | `make test-frontend`     |
-| Browser tests           | `make test-e2e`          |
-| Frontend dev server     | `pnpm --dir app run dev` |
-| Shell script tests      | `make test-scripts`      |
-| Lint                    | `make lint`              |
+- `make test`: Go tests (`make test-v` verbose, `make test-watch` on file changes)
+- `make test-frontend` (`pnpm --dir app test:ui` for the Vitest UI)
+- `make test-e2e`: Browser tests (`pnpm --dir app e2e:headed` to watch them)
+- `make test-scripts`: Shell script tests
+- `pnpm --dir app run dev`: Runs the frontend/app dev server
+- `make lint`: Overall linter
 
-`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`;
-`FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
+`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
 
-These targets fetch the native VT library and install `app/node_modules` as needed.
-Prefer fast integration tests; do not copy production code into tests or test
-compile-time guarantees. Use the [test contracts](docs/maintainer-contracts.md#test-safety)
+## Writing tests
+
+- Only write high value unit tests, and for critical parts of the codebase. Low value unit tests are not necessary. Do not write tests for script helpers or test helpers.
+- Prefer fast integration tests.
+- Do not copy production code into tests or test compile-time guarantees.
+- Use the [test contracts](docs/maintainer-contracts.md#test-safety)
 when choosing time, property, or network-failure test helpers.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
@@ -117,34 +120,39 @@ rules in the relevant feature docs.
 
 Do not write implementation notes anywhere. The code must explain how it works.
 If it needs a prose explanation of its wiring or control flow, make the code
-clearer. Delete existing implementation descriptions when editing docs; do not
-move them to another file. Favor clarity over preserving every detail.
+clearer.
 
 ## Task-specific guidance
 
-Read the relevant entry when the task touches its subject; unrelated entries
-need no up-front reading.
+Read the relevant entry when the task touches its subject. When changing or working on:
 
-| When changing or working on                                                            | Read                                                                                                                                                                                                           |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| State ownership, PTYs, store, jobs, Garden/crew, apps, or auto mode                    | [Ownership](docs/maintainer-contracts.md#ownership)                                                                                                                                                            |
-| Command, event, or message shapes                                                      | [Protocol generation and versioning](docs/maintainer-contracts.md#protocol)                                                                                                                                    |
-| `sdk/attn-app/src` or SDK consumers                                                    | [SDK generation and shared React](docs/maintainer-contracts.md#the-app-sdk)                                                                                                                                    |
-| Event publishing, projections, consumers, or retention                                 | [Event bus](docs/maintainer-contracts.md#event-bus)                                                                                                                                                            |
-| Native VT builds, ABI, or pin updates                                                  | [Native VT library](docs/maintainer-contracts.md#native-vt-library)                                                                                                                                            |
-| Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help | [Prompt authoring](docs/prompt-authoring.md): run `go run ./cmd/prompt-editor context EVENT_OR_SOURCE --json` and read complete affected compositions before and after edits; `refresh` reloads Go definitions |
-| Product vocabulary                                                                     | [Glossary](docs/glossary.md); update definitions when meanings change                                                                                                                                          |
-| Branches, PRs, merges, or waiting on reviews                                           | [Working with next](docs/working-with-next.md)                                                                                                                                                                 |
-| Changelog fragments, releases, hotfixes, or syncing `main` into `next`                 | [Making a release](docs/making-a-release.md)                                                                                                                                                                   |
-| Installing, launching, or verifying profiles                                           | [Profiles](docs/profiles.md)                                                                                                                                                                                   |
-| Frontend code or shortcuts                                                             | [Frontend guidance](app/AGENTS.md)                                                                                                                                                                             |
-| Packaged-app scenarios or recording/publishing evidence                                | [Harness guidance](app/scripts/real-app-harness/AGENTS.md)                                                                                                                                                     |
-| Pi driver or auto-mode permissions                                                     | [Pi guidance](plugins/attn-pi/AGENTS.md)                                                                                                                                                                       |
+- Command, event, or message shapes => docs/maintainer-contracts.md#protocol
+- `sdk/attn-app/src` or SDK consumers => docs/maintainer-contracts.md#the-app-sdk
+- Event publishing, projections, consumers, or retention => docs/maintainer-contracts.md#event-bus
+- Native VT builds, ABI, or pin updates => docs/maintainer-contracts.md#native-vt-library
+- Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help => docs/prompt-authoring.md
+- Product vocabulary => [Glossary](docs/glossary.md)
+- Branches, PRs, merges, or waiting on reviews => docs/working-with-next.md
+- Changelog fragments, releases, hotfixes, or syncing `main` into `next` => docs/making-a-release.md
+- Installing, launching, or verifying profiles => docs/profiles.md
+- Frontend code or shortcuts => app/AGENTS.md
+- Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md
+- Pi driver or auto-mode permissions  => plugins/attn-pi/AGENTS.md
+- CPU, memory, or benchmarks => docs/perf-testing.md
+- Terminal input that stops working => docs/diagnosing-terminal-input.md
+- Shared Rust PTY host => docs/pty-host-verification.md
 
 ## Diagnostics
 
-- Daemon: `<data-dir>/daemon.log`.
+- Daemon: `<data-dir>/daemon.log`, or `attn debug daemon-log --since 10m --grep PATTERN`.
 - Dedicated PTY worker: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
 - Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
+- `attn debug incidents|diagnostics|input`: frontend terminal logs; `attn debug ls` lists them.
+- `attn state explain <session>`: why a session has its state, claim by claim.
+- `attn bus status`: event-log consumers, lag, and retention.
+- `go run ./scripts/wsctl`: drives a non-production daemon over WebSocket (sessions, input, screen).
+- `attn db restore`: restores the database from a rotating backup while the daemon is stopped.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
+- Restarting the app or daemon has no impact on the underlying agents, unless
+  Settings → Terminal reports the embedded backend: then a daemon restart stops them.
