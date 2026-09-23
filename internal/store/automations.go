@@ -442,14 +442,14 @@ const AutomationBindingReleasedAgentMoved = "agent_moved_profile"
 
 func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey, profileID string, ids *AutomationRunReservation, now time.Time) error {
 	var bound AutomationRunReservation
-	var bindingID, sessionProfileID string
+	var bindingID, liveSessionProfileID string
 	err := tx.QueryRow(
-		`SELECT b.id,b.seed_id,b.session_id,COALESCE(s.profile_id,'') FROM automation_continuity_bindings b LEFT JOIN sessions s ON s.id=b.session_id WHERE b.definition_id=? AND b.continuity_key=? AND b.status=?`,
+		`SELECT b.id,b.seed_id,b.session_id,COALESCE(p.id,'') FROM automation_continuity_bindings b LEFT JOIN sessions s ON s.id=b.session_id LEFT JOIN profiles p ON p.id=s.profile_id AND p.deleted_at='' WHERE b.definition_id=? AND b.continuity_key=? AND b.status=?`,
 		definitionID, continuityKey, AutomationBindingStatusActive,
-	).Scan(&bindingID, &bound.SeedID, &bound.SessionID, &sessionProfileID)
+	).Scan(&bindingID, &bound.SeedID, &bound.SessionID, &liveSessionProfileID)
 	nowRaw := formatTicketTime(now)
 	switch {
-	case err == nil && (sessionProfileID == "" || sessionProfileID == profileID):
+	case err == nil && (liveSessionProfileID == "" || liveSessionProfileID == profileID):
 		ids.SeedID, ids.SessionID = bound.SeedID, bound.SessionID
 		return nil
 	case err == nil:
