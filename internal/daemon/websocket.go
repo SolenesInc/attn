@@ -987,12 +987,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		}
 		return
 	}
-	if cmd == protocol.CmdSessionSelected {
-		d.setSelectedSession(msg.(*protocol.SessionSelectedMessage).ID)
-	}
-	if cmd == protocol.CmdWorkspaceSelected {
-		d.setSelectedWorkspace(msg.(*protocol.WorkspaceSelectedMessage).WorkspaceID)
-	}
 	if isUserPresenceCommand(cmd) {
 		d.recordUserActivity(time.Now())
 	}
@@ -1188,8 +1182,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleClearSessionsWS()
 	case protocol.CmdClearWarnings:
 		d.handleClearWarningsWS()
-	case protocol.CmdSessionSelected:
-	case protocol.CmdWorkspaceSelected:
 	case protocol.CmdSettleTurn:
 		d.handleSettleTurn(msg.(*protocol.SettleTurnMessage))
 	case protocol.CmdSnoozeTurn:
@@ -1583,10 +1575,6 @@ func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg inte
 
 func remoteCommandSessionID(cmd string, msg interface{}) string {
 	switch cmd {
-	case protocol.CmdSessionSelected:
-		if typed, ok := msg.(*protocol.SessionSelectedMessage); ok {
-			return typed.ID
-		}
 	case protocol.CmdTriggerNudge:
 		if typed, ok := msg.(*protocol.TriggerNudgeMessage); ok {
 			return typed.SessionID

@@ -178,7 +178,6 @@ describe('chief and crew sessions are protected from close', () => {
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendSessionSelected: fn, sendWorkspaceSelected: fn,
       sendWorkspaceClosePane: mockSendWorkspaceClosePane,
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,

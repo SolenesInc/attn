@@ -55,8 +55,6 @@ export function useAppNavigation({
     goHomeAwaitingNextTurn,
   } = useSessionStore();
   const {
-    sendSessionSelected,
-    sendWorkspaceSelected,
     sendWorkspaceUndockTile,
     sendSetWorkspaceRank,
   } = useDaemonApi();
@@ -72,12 +70,6 @@ export function useAppNavigation({
 
   const handleSelectSession = selectAgent;
   const selectCreatedSession = selectAgent;
-
-  useEffect(() => {
-    if (view === 'session' && activeSessionId) {
-      sendSessionSelected(activeSessionId);
-    }
-  }, [activeSessionId, sendSessionSelected, view]);
 
   const { wantsAttention } = attentionQueue;
 
@@ -142,12 +134,6 @@ export function useAppNavigation({
   useEffect(() => {
     activeWorkspaceIdRef.current = activeWorkspaceId;
   }, [activeWorkspaceId]);
-
-  useEffect(() => {
-    if (view === 'session' && activeWorkspaceId) {
-      sendWorkspaceSelected(activeWorkspaceId);
-    }
-  }, [activeWorkspaceId, sendWorkspaceSelected, view]);
 
   const daemonWorkspaceStateById = useMemo(() => {
     const map = new Map<string, TerminalWorkspaceState>();

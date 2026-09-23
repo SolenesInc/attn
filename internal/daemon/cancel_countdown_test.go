@@ -75,8 +75,8 @@ func TestCancelCountdown_NudgeStaysCancelledAcrossSelectionChange(t *testing.T) 
 
 		d.handleCancelCountdown(&protocol.CancelCountdownMessage{SessionID: agentID})
 
-		d.setSelectedSession(agentID)
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, agentID)
+		focusTestAgent(t, d, chiefID)
 		synctest.Wait()
 
 		if currentNudgeTimer(d, agentID) != nil {

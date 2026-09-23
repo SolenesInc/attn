@@ -188,9 +188,7 @@ export function useAppController({
     activeWorkspaceId,
     activeWorkspaceIdRef,
     handleSelectWorkspace,
-    handleSelectTile,
     handleCloseTile,
-    setCrewSeedTile,
     handleSelectWorkspaceByIndex,
     handlePrevWorkspace,
     handleNextWorkspace,
@@ -532,9 +530,6 @@ export function useAppController({
     sendSeedToChief,
     sendCrewWake,
     sendCrewSleep,
-    handleSelectTile,
-    focusWorkspaceLeaf,
-    setCrewSeedTile,
     closeCrewPanel,
   });
 

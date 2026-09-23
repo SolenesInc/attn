@@ -24,6 +24,7 @@ type internalSpawnPolicy struct {
 	unattendedLaunch      launchcontract.UnattendedLaunchSpec
 	approvalRoute         launchcontract.ApprovalRoute
 	preserveApprovalRoute bool
+	userStarted           bool
 }
 
 type spawnRequest struct {
@@ -144,6 +145,9 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 		return nil, &spawnRejection{err: err}
 	}
 	placement := requestedLaunchPlacement(msg.Placement)
+	if placement != nil {
+		placement.focus = policy.userStarted
+	}
 	if err := d.checkLaunchPlacement(profile, placement); err != nil {
 		return nil, &spawnRejection{err: err}
 	}

@@ -74,12 +74,6 @@ func TestRemoteCommandSessionID(t *testing.T) {
 			want: "",
 		},
 		{
-			name: "session_selected",
-			cmd:  protocol.CmdSessionSelected,
-			msg:  &protocol.SessionSelectedMessage{ID: "sess-selected"},
-			want: "sess-selected",
-		},
-		{
 			name: "rename_session",
 			cmd:  protocol.CmdRenameSession,
 			msg:  &protocol.RenameSessionMessage{SessionID: "sess-rename"},

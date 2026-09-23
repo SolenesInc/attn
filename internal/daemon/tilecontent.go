@@ -12,12 +12,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 const markdownTileIDPrefix = "tile-markdown-"
@@ -52,47 +50,6 @@ type markdownTileRef struct {
 	workspaceID string
 	tileID      string
 	path        string
-}
-
-func (d *Daemon) setSelectedSession(sessionID string) {
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return
-	}
-	d.selectedSessionMu.Lock()
-	oldID := d.selectedSessionID
-	d.selectedSessionID = sessionID
-	if workspaceID, _, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); ok {
-		d.selectedWorkspaceID = workspaceID
-	} else {
-		d.selectedWorkspaceID = ""
-	}
-	d.selectedSessionMu.Unlock()
-	if oldID != sessionID {
-		d.updateNudgeSelection(oldID, sessionID)
-	}
-}
-
-func (d *Daemon) currentlySelectedSession() string {
-	d.selectedSessionMu.RLock()
-	defer d.selectedSessionMu.RUnlock()
-	return d.selectedSessionID
-}
-
-func (d *Daemon) setSelectedWorkspace(workspaceID string) {
-	workspaceID = strings.TrimSpace(workspaceID)
-	if workspaceID == "" {
-		return
-	}
-	d.selectedSessionMu.Lock()
-	d.selectedWorkspaceID = workspaceID
-	d.selectedSessionMu.Unlock()
-}
-
-func (d *Daemon) currentlySelectedWorkspace() string {
-	d.selectedSessionMu.RLock()
-	defer d.selectedSessionMu.RUnlock()
-	return d.selectedWorkspaceID
 }
 
 func (d *Daemon) tileFilePath(workspaceID, tileID string) (kind, path string, found bool) {
@@ -351,15 +308,6 @@ func (d *Daemon) broadcastTileContent(workspaceID, tileID, kind, path, content s
 	})
 }
 
-func (d *Daemon) broadcastTileContentNow(workspaceID, tileID string) {
-	kind, path, found := d.tileFilePath(workspaceID, tileID)
-	if !found || kind != string(layouttree.TileKindMarkdown) {
-		return
-	}
-	content, readErr := readMarkdownFile(path)
-	d.broadcastTileContent(workspaceID, tileID, kind, path, content, readErr)
-}
-
 func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.WorkspaceTileContentGetMessage) {
 	kind, _, found := d.tileFilePath(msg.WorkspaceID, msg.TileID)
 	if !found {
@@ -405,7 +353,7 @@ func (d *Daemon) handleWorkspaceTileContentGet(client *wsClient, msg *protocol.W
 	d.sendCommandError(client, protocol.CmdWorkspaceTileContentGet, "tile changed while content was loading; retry")
 }
 
-func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID string, err error) {
+func (d *Daemon) openMarkdownTile(path, callerSessionID string) (desktopID, tileID string, err error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return "", "", fmt.Errorf("path is required")
@@ -418,44 +366,26 @@ func (d *Daemon) openMarkdownTile(path, sessionID string) (workspaceID, tileID s
 		d.store.DeleteFileActivity(path)
 		return "", "", fmt.Errorf("file not found: %s", path)
 	}
-	if sessionID == "" {
-		return "", "", fmt.Errorf("no session selected; open a session in attn or pass --session")
-	}
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", sessionID)
-	}
-
-	d.openTileMu.Lock()
-	defer d.openTileMu.Unlock()
-
-	tileID = markdownTileIDForPath(path)
-	alreadyOpen := false
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		alreadyOpen = layouttree.HasTile(snapshot.Layout, tileID)
-		if !alreadyOpen {
-			for _, leaf := range layouttree.TileLeaves(snapshot.Layout) {
-				if leaf.TileKind == string(layouttree.TileKindMarkdown) && leaf.TileParams == path {
-					tileID = leaf.TileID
-					alreadyOpen = true
-					break
-				}
-			}
-		}
-	}
-	if alreadyOpen {
-		if err := d.rebindTileSession(workspaceID, tileID, sessionID); err != nil {
-			return "", "", err
-		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindMarkdown), path, sessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
+	location, err := d.currentAgent(callerSessionID)
+	if err != nil {
 		return "", "", err
 	}
-	d.broadcastTileContentNow(workspaceID, tileID)
-	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, sessionID)
-	return workspaceID, tileID, nil
+	d.openTileMu.Lock()
+	defer d.openTileMu.Unlock()
+	desktop, tileID, err := d.openAgentTile(location, agentTile{
+		tileID:    markdownTileIDForPath(path),
+		tileKind:  string(layouttree.TileKindMarkdown),
+		params:    path,
+		sessionID: location.sessionID,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	d.store.RecordFileActivity(path, store.FileActivitySourceOpened, location.sessionID)
+	return desktop.ID, tileID, nil
 }
 
-func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, tileID string, err error) {
+func (d *Daemon) openSeedTile(seedID, callerSessionID string, standalone bool) (desktopID, tileID string, err error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", "", err
 	}
@@ -463,67 +393,39 @@ func (d *Daemon) openSeedTile(seedID, placementSessionID string) (workspaceID, t
 	if err != nil {
 		return "", "", err
 	}
-	bindingSessionID := strings.TrimSpace(seed.TenderSession)
-	if bindingSessionID == "" {
-		bindingSessionID = placementSessionID
+	if standalone {
+		callerSessionID = ""
 	}
-
-	d.openTileMu.Lock()
-	defer d.openTileMu.Unlock()
-
-	tileID = seedTileIDForID(seed.ID)
-	if placementSessionID == "" {
-		for _, candidateID := range d.store.WorkspaceLayoutIDs() {
-			if snapshot := d.store.GetWorkspaceLayout(candidateID); snapshot != nil && isStandaloneSeedReader(snapshot, tileID) {
-				layout, ok := layouttree.UpdateTileParams(snapshot.Layout, tileID, seed.ID)
-				if !ok {
-					return "", "", fmt.Errorf("tile not found: %s", tileID)
-				}
-				layout, ok = layouttree.UpdateTileSessionID(layout, tileID, bindingSessionID)
-				if !ok {
-					return "", "", fmt.Errorf("tile not found: %s", tileID)
-				}
-				snapshot.Layout = layout
-				if err := d.store.SaveWorkspaceLayout(*snapshot); err != nil {
-					return "", "", err
-				}
-				d.broadcastWorkspaceLayoutUpdated(candidateID)
-				return candidateID, tileID, nil
-			}
-		}
-
-		workspaceID = uuid.NewString()
-		d.registerWorkspace(workspaceID, seed.Title, "", false)
-		snapshot := workspacelayout.NormalizeWorkspaceLayout(workspacelayout.WorkspaceLayout{
-			WorkspaceID: workspaceID,
-			Layout: layouttree.Node{
-				Type:          "tile",
-				TileID:        tileID,
-				TileKind:      string(layouttree.TileKindSeed),
-				TileParams:    seed.ID,
-				TileSessionID: bindingSessionID,
-			},
-		})
-		if err := d.store.SaveWorkspaceLayout(snapshot); err != nil {
-			d.unregisterWorkspaceIfEmpty(workspaceID)
-			return "", "", err
-		}
-		d.broadcastWorkspaceLayoutUpdated(workspaceID)
-		return workspaceID, tileID, nil
-	}
-
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(placementSessionID)
-	if !ok {
-		return "", "", fmt.Errorf("no workspace found for session %s", placementSessionID)
-	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil && layouttree.HasTile(snapshot.Layout, tileID) {
-		if err := d.rebindTileSession(workspaceID, tileID, bindingSessionID); err != nil {
-			return "", "", err
-		}
-	} else if err := d.dockTile(workspaceID, paneID, tileID, string(layouttree.TileKindSeed), seed.ID, bindingSessionID, protocol.LayoutDockEdgeRight, nil); err != nil {
+	location, err := d.currentAgent(callerSessionID)
+	if err != nil {
 		return "", "", err
 	}
-	return workspaceID, tileID, nil
+	if standalone {
+		location.sessionID = ""
+	}
+	d.openTileMu.Lock()
+	defer d.openTileMu.Unlock()
+	desktop, tileID, err := d.openAgentTile(location, agentTile{
+		tileID:    seedTileIDForID(seed.ID),
+		tileKind:  string(layouttree.TileKindSeed),
+		params:    seed.ID,
+		sessionID: d.seedTileSession(seed.TenderSession, location),
+	})
+	if err != nil {
+		return "", "", err
+	}
+	return desktop.ID, tileID, nil
+}
+
+func (d *Daemon) seedTileSession(tenderSessionID string, location agentLocation) string {
+	tenderSessionID = strings.TrimSpace(tenderSessionID)
+	if tenderSessionID == "" {
+		return location.sessionID
+	}
+	if profileID, err := d.store.SessionProfileID(tenderSessionID); err == nil && profileID == location.profileID {
+		return tenderSessionID
+	}
+	return location.sessionID
 }
 
 func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error {
@@ -547,34 +449,22 @@ func (d *Daemon) rebindTileSession(workspaceID, tileID, sessionID string) error 
 }
 
 func (d *Daemon) handleOpenMarkdown(conn net.Conn, msg *protocol.OpenMarkdownMessage) {
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openMarkdownTile(msg.Path, sessionID)
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_markdown: %v", err))
 		return
 	}
-	d.logf("open_markdown: docked %s as %s into workspace %s (session %s)", strings.TrimSpace(msg.Path), tileID, workspaceID, sessionID)
+	d.logf("open_markdown: %s as %s on desktop %s", strings.TrimSpace(msg.Path), tileID, desktopID)
 	d.sendOK(conn)
 }
 
-func (d *Daemon) seedPlacementSession(msg *protocol.OpenSeedMessage) string {
-	placementSessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if placementSessionID == "" && !protocol.Deref(msg.Standalone) {
-		placementSessionID = d.currentlySelectedSession()
-	}
-	return placementSessionID
-}
-
 func (d *Daemon) handleOpenSeed(conn net.Conn, msg *protocol.OpenSeedMessage) {
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone))
 	if err != nil {
 		d.sendError(conn, fmt.Sprintf("open_seed: %v", err))
 		return
 	}
-	d.logf("open_seed: docked %s as %s into workspace %s", strings.TrimSpace(msg.SeedID), tileID, workspaceID)
+	d.logf("open_seed: %s as %s on desktop %s", strings.TrimSpace(msg.SeedID), tileID, desktopID)
 	d.sendOK(conn)
 }
 
@@ -594,20 +484,17 @@ func (d *Daemon) handleOpenSentFiles(conn net.Conn, msg *protocol.OpenSentFilesM
 		d.sendOK(conn)
 		return
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
+	sessionID := protocol.Deref(msg.SessionID)
 	for _, path := range msg.Paths {
 		path = strings.TrimSpace(path)
 		switch strings.ToLower(filepath.Ext(path)) {
 		case ".md", ".markdown":
-			workspaceID, tileID, err := d.openMarkdownTile(path, sessionID)
+			desktopID, tileID, err := d.openMarkdownTile(path, sessionID)
 			if err != nil {
 				d.logf("open_sent_files: %s: %v", path, err)
 				continue
 			}
-			d.logf("open_sent_files: docked %s as %s into workspace %s (session %s)", path, tileID, workspaceID, sessionID)
+			d.logf("open_sent_files: %s as %s on desktop %s", path, tileID, desktopID)
 		default:
 			d.logf("open_sent_files: dropped %s (no tile can show it)", path)
 		}
@@ -624,20 +511,16 @@ func (d *Daemon) handleOpenMarkdownWS(client *wsClient, msg *protocol.OpenMarkdo
 	if requestID := strings.TrimSpace(protocol.Deref(msg.RequestID)); requestID != "" {
 		result.RequestID = protocol.Ptr(requestID)
 	}
-	sessionID := strings.TrimSpace(protocol.Deref(msg.SessionID))
-	if sessionID == "" {
-		sessionID = d.currentlySelectedSession()
-	}
-	workspaceID, tileID, err := d.openMarkdownTile(msg.Path, sessionID)
+	desktopID, tileID, err := d.openMarkdownTile(msg.Path, protocol.Deref(msg.SessionID))
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
 		return
 	}
-	result.WorkspaceID = protocol.Ptr(workspaceID)
+	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
-	d.logf("open_markdown(ws): docked %s as %s into workspace %s (session %s)", result.Path, tileID, workspaceID, sessionID)
+	d.logf("open_markdown(ws): %s as %s on desktop %s", result.Path, tileID, desktopID)
 	d.sendToClient(client, result)
 }
 
@@ -648,16 +531,16 @@ func (d *Daemon) handleOpenSeedWS(client *wsClient, msg *protocol.OpenSeedMessag
 		SeedID:    strings.TrimSpace(msg.SeedID),
 		Success:   true,
 	}
-	workspaceID, tileID, err := d.openSeedTile(msg.SeedID, d.seedPlacementSession(msg))
+	desktopID, tileID, err := d.openSeedTile(msg.SeedID, protocol.Deref(msg.SessionID), protocol.Deref(msg.Standalone))
 	if err != nil {
 		result.Success = false
 		result.Error = protocol.Ptr(err.Error())
 		d.sendToClient(client, result)
 		return
 	}
-	result.WorkspaceID = protocol.Ptr(workspaceID)
+	result.DesktopID = protocol.Ptr(desktopID)
 	result.TileID = protocol.Ptr(tileID)
-	d.logf("open_seed(ws): docked %s as %s into workspace %s", result.SeedID, tileID, workspaceID)
+	d.logf("open_seed(ws): %s as %s on desktop %s", result.SeedID, tileID, desktopID)
 	d.sendToClient(client, result)
 }
 
@@ -741,8 +624,4 @@ func (d *Daemon) collectChangedMarkdownTiles() []markdownTileRef {
 		}
 	}
 	return changed
-}
-
-func isStandaloneSeedReader(snapshot *workspacelayout.WorkspaceLayout, tileID string) bool {
-	return len(snapshot.Panes) == 0 && snapshot.Layout.Type == "tile" && snapshot.Layout.TileID == tileID
 }

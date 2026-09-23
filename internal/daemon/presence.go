@@ -8,8 +8,9 @@ import (
 
 func isUserPresenceCommand(cmd string) bool {
 	switch cmd {
-	case protocol.CmdSessionSelected,
-		protocol.CmdWorkspaceSelected,
+	case protocol.CmdProfileSelect,
+		protocol.CmdDesktopSetCurrent,
+		protocol.CmdDesktopSetActivePane,
 		protocol.CmdPRVisited,
 		protocol.CmdPtyInput,
 		protocol.CmdPtyResize:

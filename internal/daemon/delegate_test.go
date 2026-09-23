@@ -169,8 +169,8 @@ func TestDelegateSpawnsAgentBesideTheSourceWithBrief(t *testing.T) {
 		t.Fatal(err)
 	}
 	sourcePlacement, _, _ := d.store.SessionPlacement(sourceSessionID)
-	if len(desktop.Panes) != 2 || desktop.ActivePaneID == sourcePlacement.PaneID {
-		t.Fatalf("desktop panes = %+v active=%s, want the child split beside the source and focused", desktop.Panes, desktop.ActivePaneID)
+	if len(desktop.Panes) != 2 || desktop.ActivePaneID != sourcePlacement.PaneID {
+		t.Fatalf("desktop panes = %+v active=%s, want the child split beside the source and the source still focused", desktop.Panes, desktop.ActivePaneID)
 	}
 }
 
