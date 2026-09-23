@@ -98,6 +98,7 @@ import { resolveDaemonWebSocketURL, type DaemonEndpointProfile } from '../utils/
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
 import { handleSetupDaemonEvent, type SetupActionResult } from './daemonSetupEvents';
 import { useSetupsStore } from '../store/setups';
+import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -746,6 +747,16 @@ function pruneTileContentsForWorkspace(
   return changed ? next : contents;
 }
 
+function pruneDesktopTileContents(
+  contents: Record<string, TileContentState>,
+  desktops: Desktop[],
+): Record<string, TileContentState> {
+  const liveKeys = new Set(desktops.flatMap((desktop) =>
+    tileIdsFromLayoutJSON(desktop.tree_json, 'markdown').map((tileId) => tileContentKey(desktop.id, tileId))));
+  const kept = Object.entries(contents).filter(([key]) => liveKeys.has(key));
+  return kept.length === Object.keys(contents).length ? contents : Object.fromEntries(kept);
+}
+
 function pruneTileContentsForWorkspaces(
   contents: Record<string, TileContentState>,
   workspaces: DaemonWorkspace[],
@@ -982,6 +993,11 @@ export function useDaemonSocket({
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
+  const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
+  const scopedDesktops = useSetupsStore((state) => state.desktops);
+  useEffect(() => {
+    setDesktopTileContents((prev) => pruneDesktopTileContents(prev, scopedDesktops));
+  }, [scopedDesktops]);
   const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
 
   const reconnectAttemptsRef = useRef(0);
@@ -1668,11 +1684,25 @@ export function useDaemonSocket({
             }
             break;
 
-          case 'workspace_tile_content':
           case 'desktop_tile_content': {
-            const container = data.event === 'desktop_tile_content' ? data.desktop_id : data.workspace_id;
-            if (typeof container === 'string' && typeof data.tile_id === 'string') {
-              const key = tileContentKey(container, data.tile_id);
+            if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
+              const key = tileContentKey(data.desktop_id, data.tile_id);
+              const content = {
+                path: typeof data.path === 'string' ? data.path : '',
+                content: typeof data.content === 'string' ? data.content : '',
+                error: typeof data.error === 'string' ? data.error : undefined,
+              };
+              setDesktopTileContents((prev) => pruneDesktopTileContents(
+                { ...prev, [key]: content },
+                useSetupsStore.getState().desktops,
+              ));
+            }
+            break;
+          }
+
+          case 'workspace_tile_content': {
+            if (typeof data.workspace_id === 'string' && typeof data.tile_id === 'string') {
+              const key = tileContentKey(data.workspace_id, data.tile_id);
               setTileContents((prev) => ({
                 ...prev,
                 [key]: {
@@ -5759,6 +5789,7 @@ export function useDaemonSocket({
     sendWorkspaceMoveLeafToNewWorkspace,
     sendSetWorkspaceRank,
     tileContents,
+    desktopTileContents,
     requestTileContent,
     sendOpenMarkdown,
     sendOpenSeed,

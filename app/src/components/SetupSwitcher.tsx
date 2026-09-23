@@ -16,9 +16,8 @@ function byMostRecentUse(a: Setup, b: Setup): number {
 
 export function SetupSwitcher({ setups, selectedSetupId, onSelect, onClose }: SetupSwitcherProps) {
   const ordered = useMemo(() => [...setups].sort(byMostRecentUse), [setups]);
-  const [focusedIndex, setFocusedIndex] = useState(() =>
-    Math.max(0, ordered.findIndex((setup) => setup.id === selectedSetupId)),
-  );
+  const [focusedId, setFocusedId] = useState(selectedSetupId);
+  const focusedIndex = Math.max(0, ordered.findIndex((setup) => setup.id === focusedId));
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEscapeStack(onClose, true);
@@ -36,7 +35,7 @@ export function SetupSwitcher({ setups, selectedSetupId, onSelect, onClose }: Se
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       const step = event.key === 'ArrowDown' ? 1 : ordered.length - 1;
-      setFocusedIndex((index) => (index + step) % ordered.length);
+      setFocusedId(ordered[(focusedIndex + step) % ordered.length].id);
       return;
     }
     if (event.key === 'Enter') {

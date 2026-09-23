@@ -54,6 +54,8 @@ function setup(id: string, currentDesktopId: string, lastUsedAt = '2026-09-23T10
   return { id, name: id === 'set-default' ? 'Default' : 'Work', current_desktop_id: currentDesktopId, last_used_at: lastUsedAt, revision: 1 };
 }
 
+const MARKDOWN_TILE = JSON.stringify({ type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown', tile_params: '/notes/plan.md' });
+
 function desktop(id: string, setupId: string, slot?: number, treeJson = ''): Desktop {
   return {
     id,
@@ -300,7 +302,8 @@ describe('useDaemonSocket setups', () => {
       { cmd: 'desktop_tile_content_get', desktop_id: 'd1', tile_id: 'tile-md' },
     ]);
     act(() => {
-      ws.emit({ event: 'setup_action_result', request_id: command.request_id, action: 'desktop_dock_tile', success: true, desktops: [desktop('d1', 'set-default', 1)] });
+      ws.emit({ event: 'setup_action_result', request_id: command.request_id, action: 'desktop_dock_tile', success: true, desktops: [desktop('d1', 'set-default', 1, MARKDOWN_TILE)] });
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1, MARKDOWN_TILE)] });
       ws.emit({
         event: 'desktop_tile_content',
         desktop_id: 'd1',
@@ -312,10 +315,15 @@ describe('useDaemonSocket setups', () => {
     });
     await dock;
 
-    expect(result.current.tileContents[tileContentKey('d1', 'tile-md')]).toEqual({
+    expect(result.current.desktopTileContents[tileContentKey('d1', 'tile-md')]).toEqual({
       path: '/notes/plan.md',
       content: '# Plan',
       error: undefined,
     });
+
+    act(() => {
+      ws.emit({ event: 'setup_arrangement_changed', setup: setup('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1)] });
+    });
+    expect(result.current.desktopTileContents).toEqual({});
   });
 });
