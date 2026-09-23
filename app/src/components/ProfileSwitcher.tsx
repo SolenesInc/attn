@@ -38,7 +38,7 @@ export function ProfileSwitcher({ profiles, selectedProfileId, onSelect, onClose
       setFocusedId(ordered[(focusedIndex + step) % ordered.length].id);
       return;
     }
-    if (event.key === 'Enter') {
+    if (event.key === 'Enter' && event.target === menuRef.current) {
       event.preventDefault();
       choose(ordered[focusedIndex].id);
     }

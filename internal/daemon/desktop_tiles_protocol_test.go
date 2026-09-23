@@ -181,10 +181,13 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 		kind, params string
 		want         protocol.ProfileErrorCode
 	}{
-		"a script URL":    {"browser", "javascript:alert(1)", protocol.ProfileErrorCodeInvalid},
-		"a missing seed":  {"seed", "s-thatneverwas", protocol.ProfileErrorCodeNotFound},
-		"an unknown kind": {"spreadsheet", "/tmp/sheet.csv", protocol.ProfileErrorCodeInvalid},
-		"an empty kind":   {"", "https://example.com", protocol.ProfileErrorCodeInvalid},
+		"a script URL":                   {"browser", "javascript:alert(1)", protocol.ProfileErrorCodeInvalid},
+		"a missing seed":                 {"seed", "s-thatneverwas", protocol.ProfileErrorCodeNotFound},
+		"an unknown kind":                {"spreadsheet", "/tmp/sheet.csv", protocol.ProfileErrorCodeInvalid},
+		"an empty kind":                  {"", "https://example.com", protocol.ProfileErrorCodeInvalid},
+		"a browser without a URL":        {"browser", "  ", protocol.ProfileErrorCodeInvalid},
+		"a seed without an id":           {"seed", "", protocol.ProfileErrorCodeNotFound},
+		"a markdown tile without a file": {"markdown", "", protocol.ProfileErrorCodeInvalid},
 	} {
 		refused := w.send(w.client, map[string]any{
 			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,

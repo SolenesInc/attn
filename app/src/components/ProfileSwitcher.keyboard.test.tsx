@@ -34,6 +34,19 @@ describe('ProfileSwitcher', () => {
     expect(onSelect).toHaveBeenCalledWith('home');
   });
 
+  it('leaves Enter on a Tab-focused profile to that profile\'s own button', () => {
+    const onSelect = vi.fn();
+    render(<ProfileSwitcher profiles={[WORK, HOME, SIDE]} selectedProfileId="work" onSelect={onSelect} onClose={vi.fn()} />);
+    const home = screen.getByRole('menuitem', { name: 'home' });
+
+    const notCancelled = fireEvent.keyDown(home, { key: 'Enter' });
+    expect(notCancelled).toBe(true);
+    expect(onSelect).not.toHaveBeenCalled();
+
+    fireEvent.click(home);
+    expect(onSelect).toHaveBeenCalledWith('home');
+  });
+
   it('falls back to the first profile when the highlighted one is deleted', () => {
     const onSelect = vi.fn();
     const { rerender } = render(<ProfileSwitcher profiles={[WORK, HOME, SIDE]} selectedProfileId="work" onSelect={onSelect} onClose={vi.fn()} />);

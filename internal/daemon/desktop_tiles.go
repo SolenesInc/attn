@@ -54,21 +54,8 @@ type desktopTileDock struct {
 }
 
 func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles.Desktop, error) {
-	if dock.tileID == "" || dock.tileKind == "" {
-		return desktop, profiles.Errorf(profiles.CodeInvalid, "docking a tile needs tile_id and tile_kind")
-	}
 	if layouttree.HasPane(desktop.Tree, dock.tileID) {
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
-	}
-	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
-	if docked && existing.TileKind != dock.tileKind {
-		return desktop, profiles.Errorf(profiles.CodeInvalid, "tile %s is a %s tile and cannot be docked as %s; dock a new tile instead", dock.tileID, existing.TileKind, dock.tileKind)
-	}
-	if dock.params == "" && docked {
-		dock.params = existing.TileParams
-	}
-	if dock.sessionID == "" && docked {
-		dock.sessionID = existing.TileSessionID
 	}
 	anchor := dockAnchor(desktop, dock.anchorID, dock.tileID)
 	if anchor == "" {
@@ -97,7 +84,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 
 func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDockTileMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		dock, err := d.checkedDesktopTileDock(desktopTileDock{
+		dock, err := d.resolvedDesktopTileDock(msg.DesktopID, desktopTileDock{
 			tileID:    strings.TrimSpace(msg.TileID),
 			tileKind:  strings.TrimSpace(msg.TileKind),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
@@ -116,27 +103,47 @@ func (d *Daemon) handleDesktopDockTile(client *wsClient, msg *protocol.DesktopDo
 	})
 }
 
-func (d *Daemon) checkedDesktopTileDock(dock desktopTileDock) (desktopTileDock, error) {
-	if !knownTileKind(dock.tileKind) {
-		return dock, profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed or notebook", dock.tileKind)
+func (d *Daemon) resolvedDesktopTileDock(desktopID string, dock desktopTileDock) (desktopTileDock, error) {
+	if dock.tileID == "" {
+		return dock, profiles.Errorf(profiles.CodeInvalid, "docking a tile needs tile_id")
 	}
 	if dock.sessionID != "" && d.store.Get(dock.sessionID) == nil {
 		return dock, profiles.Errorf(profiles.CodeNotFound, "session %s does not exist", dock.sessionID)
 	}
-	if dock.params == "" || dock.tileKind == string(layouttree.TileKindMarkdown) {
+	desktop, err := d.store.GetDesktop(desktopID)
+	if err != nil {
+		return dock, err
+	}
+	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
+	if !docked {
+		dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
+		return dock, err
+	}
+	if existing.TileKind != dock.tileKind {
+		return dock, profiles.Errorf(profiles.CodeInvalid, "tile %s is a %s tile and cannot be docked as %s; dock a new tile instead", dock.tileID, existing.TileKind, dock.tileKind)
+	}
+	if dock.sessionID == "" {
+		dock.sessionID = existing.TileSessionID
+	}
+	if dock.params == "" {
+		dock.params = existing.TileParams
 		return dock, nil
 	}
-	var err error
-	dock.params, err = d.validatedTileParams(dock.tileKind, dock.params)
+	dock.params, err = d.validatedNewTileParams(dock.tileKind, dock.params)
 	return dock, err
 }
 
-func knownTileKind(kind string) bool {
+func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 	switch layouttree.TileKind(kind) {
-	case layouttree.TileKindMarkdown, layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
-		return true
+	case layouttree.TileKindMarkdown:
+		if params == "" {
+			return "", profiles.Errorf(profiles.CodeInvalid, "a markdown tile needs the path of its file in tile_params")
+		}
+		return params, nil
+	case layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
+		return d.validatedTileParams(kind, params)
 	default:
-		return false
+		return "", profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed or notebook", kind)
 	}
 }
 
