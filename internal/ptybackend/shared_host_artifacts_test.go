@@ -32,23 +32,28 @@ func writeScript(t *testing.T, path, body string) {
 	}
 }
 
-func TestLastKnownGoodFromAnotherEnvironmentIsNotTrusted(t *testing.T) {
-	root := sharedArtifactTestRoot(t)
-	previous := filepath.Join(root, "previous-host")
-	writeScript(t, previous, "exit 0")
-	id, err := ptyhost.HashArtifact(previous)
+func storeCheckedBuild(t *testing.T, root, dir, name, body string, receipt ptyhost.ArtifactReceipt) string {
+	t.Helper()
+	path := filepath.Join(root, name)
+	writeScript(t, path, body)
+	id, err := ptyhost.HashArtifact(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := ptyhost.ArtifactsDir(root, "d-env")
-	if _, err := ptyhost.ImportArtifact(dir, previous, id); err != nil {
+	if _, err := ptyhost.ImportArtifact(dir, path, id); err != nil {
 		t.Fatal(err)
 	}
+	if err := ptyhost.WriteArtifactReceipt(dir, id, receipt); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+func TestLastKnownGoodFromAnotherEnvironmentIsNotTrusted(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
 	stale := sharedArtifactEnvironment()
 	stale.ProbeContract++
-	if err := ptyhost.WriteArtifactReceipt(dir, id, ptyhost.ArtifactReceipt{Environment: stale, Passed: true}); err != nil {
-		t.Fatal(err)
-	}
+	storeCheckedBuild(t, root, ptyhost.ArtifactsDir(root, "d-env"), "previous-host", "exit 0", ptyhost.ArtifactReceipt{Environment: stale, Passed: true})
 	candidate := filepath.Join(root, "candidate-host")
 	writeScript(t, candidate, "exit 1")
 	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-env", BinaryPath: candidate})
@@ -165,20 +170,8 @@ func TestLastKnownGoodIsTheMostRecentlyPassedBuild(t *testing.T) {
 	checked := time.Now().UTC()
 	var ids []string
 	for i, name := range []string{"older-host", "newer-host"} {
-		path := filepath.Join(root, name)
-		writeScript(t, path, "exit "+strconv.Itoa(i))
-		id, err := ptyhost.HashArtifact(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := ptyhost.ImportArtifact(dir, path, id); err != nil {
-			t.Fatal(err)
-		}
 		receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: true, CheckedAt: checked.Add(time.Duration(i) * time.Minute)}
-		if err := ptyhost.WriteArtifactReceipt(dir, id, receipt); err != nil {
-			t.Fatal(err)
-		}
-		ids = append(ids, id)
+		ids = append(ids, storeCheckedBuild(t, root, dir, name, "exit "+strconv.Itoa(i), receipt))
 	}
 	candidate := filepath.Join(root, "candidate-host")
 	writeScript(t, candidate, "exit 9")
@@ -195,25 +188,11 @@ func TestLastKnownGoodIsTheMostRecentlyPassedBuild(t *testing.T) {
 func TestRejectedUpdatesDoNotAccumulate(t *testing.T) {
 	root := sharedArtifactTestRoot(t)
 	dir := ptyhost.ArtifactsDir(root, "d-collect")
-	stored := func(name, body string, passed bool) string {
-		t.Helper()
-		path := filepath.Join(root, name)
-		writeScript(t, path, body)
-		id, err := ptyhost.HashArtifact(path)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := ptyhost.ImportArtifact(dir, path, id); err != nil {
-			t.Fatal(err)
-		}
-		receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: passed, CheckedAt: time.Now().UTC()}
-		if err := ptyhost.WriteArtifactReceipt(dir, id, receipt); err != nil {
-			t.Fatal(err)
-		}
-		return id
+	checked := func(passed bool) ptyhost.ArtifactReceipt {
+		return ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: passed, CheckedAt: time.Now().UTC()}
 	}
-	good := stored("good-host", "exit 0", true)
-	earlierRejection := stored("earlier-broken-host", "exit 2", false)
+	good := storeCheckedBuild(t, root, dir, "good-host", "exit 0", checked(true))
+	earlierRejection := storeCheckedBuild(t, root, dir, "earlier-broken-host", "exit 2", checked(false))
 	candidate := filepath.Join(root, "broken-host")
 	writeScript(t, candidate, "exit 1")
 	candidateID, err := ptyhost.HashArtifact(candidate)

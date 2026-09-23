@@ -553,6 +553,13 @@ func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *
 	}
 }
 
+func wrapHost(t *testing.T, root, name, binary, probeChild string) string {
+	t.Helper()
+	path := filepath.Join(root, name)
+	writeScript(t, path, "if [ \"$1\" = "+ptyhost.ProbeChildFlag+" ]; then "+probeChild+"; fi\nexec '"+binary+"' \"$@\"")
+	return path
+}
+
 func onlyHost(t *testing.T, root string) ptyhost.HostRegistry {
 	t.Helper()
 	paths := ptyhost.HostRegistryPaths(root)
@@ -661,11 +668,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 	}
 	_ = good.Shutdown(context.Background())
 
-	mute := filepath.Join(root, "mute-probe-host")
-	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then read nonce; exit 0; fi\nexec '" + binary + "' \"$@\"\n"
-	if err := os.WriteFile(mute, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	mute := wrapHost(t, root, "mute-probe-host", binary, "read nonce; exit 0")
 	var rejections int
 	cfg.BinaryPath = mute
 	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) error { rejections++; return nil }
@@ -706,11 +709,7 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	if err := syscall.Mkfifo(started, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	stalled := filepath.Join(root, "stalled-probe-host")
-	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then echo started > '" + started + "'; exec sleep 30; fi\nexec '" + binary + "' \"$@\"\n"
-	if err := os.WriteFile(stalled, []byte(script), 0o700); err != nil {
-		t.Fatal(err)
-	}
+	stalled := wrapHost(t, root, "stalled-probe-host", binary, "echo started > '"+started+"'; exec sleep 30")
 	var rejections int
 	backend, err := NewSharedHost(WorkerBackendConfig{
 		DataRoot: root, DaemonInstanceID: "d-stalled", BinaryPath: stalled,
