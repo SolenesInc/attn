@@ -206,7 +206,7 @@ model Session {
   directory: string;
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
   workspace_id: string;         // Owning workspace
-  setup_id: string;             // Owning setup; empty until conversion or launch assigns one
+  setup_id: string;
   workspace_muted?: boolean;    // True when the owning workspace is hidden from normal sidebar/attention surfaces
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
@@ -3435,9 +3435,6 @@ model DesktopSetSplitRatioMessage {
   expected_revision: safeint;
 }
 
-// Docks a tile beside anchor_id, or beside the active pane when absent. On an
-// empty desktop the tile becomes the whole tree. Re-docking an existing tile
-// moves it and keeps its params unless tile_params is given.
 model DesktopDockTileMessage {
   cmd: "desktop_dock_tile";
   request_id: string;
@@ -3449,11 +3446,9 @@ model DesktopDockTileMessage {
   tile_session_id?: string;
   anchor_id?: string;
   edge: LayoutDockEdge;
-  tile_share?: float64;         // The tile's share of the new split, in (0,1)
+  tile_share?: float64;
 }
 
-// Replaces a tile's params and, when tile_session_id is present, rebinds the
-// session the tile sends to. Markdown tiles only accept a rebind.
 model DesktopUpdateTileMessage {
   cmd: "desktop_update_tile";
   request_id: string;
@@ -3464,8 +3459,6 @@ model DesktopUpdateTileMessage {
   tile_session_id?: string;
 }
 
-// Subscribes this connection to a markdown tile's file and answers with
-// DesktopTileContentMessage; the daemon sends another one whenever the file changes.
 model DesktopTileContentGetMessage {
   cmd: "desktop_tile_content_get";
   desktop_id: string;

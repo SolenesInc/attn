@@ -6,7 +6,7 @@ import { createMockDaemonApi } from '../test/mocks/daemon';
 import { useSetupsStore } from '../store/setups';
 import type { Desktop, Setup } from '../types/generated';
 import { SetupCommandError } from './daemonSetupEvents';
-import { useDesktopNavigation } from './useDesktopNavigation';
+import { FRESH_ARRANGEMENT_TRIPWIRE_MS, useDesktopNavigation } from './useDesktopNavigation';
 
 const SETUP: Setup = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
 const TREE_WITH_PANE = (paneId: string) => JSON.stringify({ type: 'pane', pane_id: paneId });
@@ -52,6 +52,16 @@ function renderNavigation() {
   );
   const { result } = renderHook(() => useDesktopNavigation(showNotice), { wrapper });
   return { api, showNotice, result };
+}
+
+function staleRevision() {
+  return new SetupCommandError({
+    ...ok,
+    action: 'desktop_move_leaf',
+    success: false,
+    error: 'stale',
+    error_code: 'stale_revision',
+  } as never);
 }
 
 async function settle() {
@@ -126,31 +136,52 @@ describe('useDesktopNavigation', () => {
     expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
   });
 
-  it('retries a send once with the revision another client just committed', async () => {
+  it('retries a send once the other client\'s newer arrangement arrives', async () => {
     seedStore([
       desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
       desktop('d2', { shortcut_slot: 2, revision: 7 }),
     ]);
     const { api, result } = renderNavigation();
-    api.sendDesktopMoveLeaf.mockImplementationOnce(async () => {
+    api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
+
+    act(() => result.current.sendActivePaneToDesktop('d2'));
+    await settle();
+    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
+
+    act(() => {
       useSetupsStore.setState((state) => ({
         desktops: state.desktops.map((entry) => (entry.id === 'd2' ? { ...entry, revision: 8 } : entry)),
       }));
-      throw new SetupCommandError({
-        ...ok,
-        action: 'desktop_move_leaf',
-        success: false,
-        error: 'stale',
-        error_code: 'stale_revision' as SetupCommandError['code'],
-      } as never);
     });
-
-    act(() => result.current.sendActivePaneToDesktop('d2'));
     await settle();
     await settle();
 
     expect(api.sendDesktopMoveLeaf.mock.calls.map(([move]) => move.expectedTargetRevision)).toEqual([7, 8]);
     expect(api.sendDesktopSetActivePane.mock.calls).toEqual([['d2', 'p1']]);
+  });
+
+  it('names the wait when a newer arrangement never arrives after a stale send', async () => {
+    vi.useFakeTimers();
+    try {
+      seedStore([
+        desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
+        desktop('d2', { shortcut_slot: 2, revision: 7 }),
+      ]);
+      const { api, showNotice, result } = renderNavigation();
+      api.sendDesktopMoveLeaf.mockRejectedValueOnce(staleRevision());
+
+      act(() => result.current.sendActivePaneToDesktop('d2'));
+      await settle();
+      await act(async () => {
+        vi.advanceTimersByTime(FRESH_ARRANGEMENT_TRIPWIRE_MS);
+      });
+      await settle();
+
+      expect(api.sendDesktopMoveLeaf).toHaveBeenCalledTimes(1);
+      expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('did not arrive within 5s'));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('says so when there is no focused pane to send', () => {
