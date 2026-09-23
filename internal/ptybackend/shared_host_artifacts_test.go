@@ -5,9 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/ptyhost"
 )
@@ -44,9 +46,6 @@ func TestLastKnownGoodFromAnotherEnvironmentIsNotTrusted(t *testing.T) {
 	stale := sharedArtifactEnvironment()
 	stale.ProbeContract++
 	if err := ptyhost.WriteArtifactReceipt(dir, id, ptyhost.ArtifactReceipt{Environment: stale, Passed: true}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ptyhost.SetLastKnownGood(dir, id); err != nil {
 		t.Fatal(err)
 	}
 	candidate := filepath.Join(root, "candidate-host")
@@ -153,5 +152,38 @@ func TestUndeliveredRejectionIsReportedAgainWithoutRecheck(t *testing.T) {
 	}
 	if got := strings.Count(string(data), "run"); got != 1 || len(reports) != 1 || reports[0].Reason == "" {
 		t.Fatalf("after restart: runs=%d reports=%+v, want the recorded rejection reported without a recheck", got, reports)
+	}
+}
+
+func TestLastKnownGoodIsTheMostRecentlyPassedBuild(t *testing.T) {
+	root := sharedArtifactTestRoot(t)
+	dir := ptyhost.ArtifactsDir(root, "d-latest")
+	checked := time.Now().UTC()
+	var ids []string
+	for i, name := range []string{"older-host", "newer-host"} {
+		path := filepath.Join(root, name)
+		writeScript(t, path, "exit "+strconv.Itoa(i))
+		id, err := ptyhost.HashArtifact(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := ptyhost.ImportArtifact(dir, path, id); err != nil {
+			t.Fatal(err)
+		}
+		receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: true, CheckedAt: checked.Add(time.Duration(i) * time.Minute)}
+		if err := ptyhost.WriteArtifactReceipt(dir, id, receipt); err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, id)
+	}
+	candidate := filepath.Join(root, "candidate-host")
+	writeScript(t, candidate, "exit 9")
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-latest", BinaryPath: candidate})
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := backend.launchArtifact()
+	if err != nil || artifact.ID != ids[1] {
+		t.Fatalf("launch artifact = %s, %v; want the most recently passed build %s", artifact.ID, err, ids[1])
 	}
 }

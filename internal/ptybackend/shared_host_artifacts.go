@@ -49,9 +49,25 @@ func (b *WorkerBackend) loadSharedArtifacts() {
 			return
 		}
 	}
-	if artifact, ok := b.passedArtifact(ptyhost.LastKnownGood(b.artifactsDir)); ok {
+	if artifact, ok := b.lastKnownGood(); ok {
 		b.pinned, b.pinnedValidated = artifact, true
 	}
+}
+
+func (b *WorkerBackend) lastKnownGood() (ptyhost.Artifact, bool) {
+	var latest ptyhost.Artifact
+	var latestCheck time.Time
+	for _, id := range ptyhost.StoredArtifactIDs(b.artifactsDir) {
+		artifact, ok := b.passedArtifact(id)
+		if !ok {
+			continue
+		}
+		receipt, _ := ptyhost.ReadArtifactReceipt(b.artifactsDir, id)
+		if latest.ID == "" || receipt.CheckedAt.After(latestCheck) {
+			latest, latestCheck = artifact, receipt.CheckedAt
+		}
+	}
+	return latest, latest.ID != ""
 }
 
 func (b *WorkerBackend) passedArtifact(id string) (ptyhost.Artifact, bool) {
@@ -154,7 +170,8 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 		return err
 	}
 	if passed, ok := b.passedArtifact(artifact.ID); ok {
-		return b.promoteSharedArtifact(passed)
+		b.promoteSharedArtifact(passed)
+		return nil
 	}
 
 	started := time.Now()
@@ -169,13 +186,11 @@ func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bo
 		return err
 	}
 	b.cfg.Logf("shared PTY host artifact %s passed validation in %s", artifact.ID, time.Since(started).Round(time.Millisecond))
-	return b.promoteSharedArtifact(artifact)
+	b.promoteSharedArtifact(artifact)
+	return nil
 }
 
-func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) error {
-	if err := ptyhost.SetLastKnownGood(b.artifactsDir, artifact.ID); err != nil {
-		return fmt.Errorf("promote shared PTY host %s: %w", artifact.ID, err)
-	}
+func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) {
 	b.artifactMu.Lock()
 	previous := b.pinned.ID
 	b.pinned, b.pinnedValidated = artifact, true
@@ -187,11 +202,10 @@ func (b *WorkerBackend) promoteSharedArtifact(artifact ptyhost.Artifact) error {
 		b.cfg.Logf("shared PTY host artifact promoted: %s (previous %q)", artifact.ID, previous)
 	}
 	b.collectSharedArtifacts()
-	return nil
 }
 
 func (b *WorkerBackend) recordSharedArtifact(artifact ptyhost.Artifact, probeErr error) error {
-	receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: probeErr == nil}
+	receipt := ptyhost.ArtifactReceipt{Environment: sharedArtifactEnvironment(), Passed: probeErr == nil, CheckedAt: time.Now().UTC()}
 	if probeErr != nil {
 		receipt.Reason = probeErr.Error()
 	}
@@ -207,9 +221,6 @@ func (b *WorkerBackend) rejectSharedArtifact(artifact ptyhost.Artifact, probeErr
 	b.candidateVerdict = reason
 	if b.pinned.ID == artifact.ID {
 		b.pinned, b.pinnedValidated = ptyhost.Artifact{}, false
-		if err := ptyhost.SetLastKnownGood(b.artifactsDir, ""); err != nil {
-			b.cfg.Logf("clear rejected shared PTY host %s: %v", artifact.ID, err)
-		}
 	}
 	b.artifactMu.Unlock()
 	if err := b.recordSharedArtifact(artifact, probeErr); err != nil {
@@ -244,7 +255,8 @@ func (b *WorkerBackend) reportRejection(reason string) {
 func (b *WorkerBackend) collectSharedArtifacts() {
 	b.hostMu.Lock()
 	defer b.hostMu.Unlock()
-	keep := map[string]bool{b.candidate.id: true, ptyhost.LastKnownGood(b.artifactsDir): true}
+	lastKnownGood, _ := b.lastKnownGood()
+	keep := map[string]bool{b.candidate.id: true, lastKnownGood.ID: true}
 	b.artifactMu.Lock()
 	keep[b.pinned.ID] = true
 	b.artifactMu.Unlock()

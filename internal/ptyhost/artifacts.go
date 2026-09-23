@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 var ErrArtifactChanged = errors.New("PTY host binary changed after the daemon started")
@@ -32,10 +33,7 @@ type ArtifactReceipt struct {
 	Environment ArtifactEnvironment `json:"environment"`
 	Passed      bool                `json:"passed"`
 	Reason      string              `json:"reason,omitempty"`
-}
-
-type lastKnownGood struct {
-	Artifact string `json:"artifact"`
+	CheckedAt   time.Time           `json:"checked_at"`
 }
 
 func ArtifactsDir(dataRoot, daemonInstanceID string) string {
@@ -146,25 +144,6 @@ func ReadArtifactReceipt(dir, id string) (ArtifactReceipt, error) {
 
 func WriteArtifactReceipt(dir, id string, receipt ArtifactReceipt) error {
 	return writeJSONAtomic(filepath.Join(artifactDir(dir, id), "receipt.json"), receipt)
-}
-
-func LastKnownGood(dir string) string {
-	var state lastKnownGood
-	if err := readJSON(filepath.Join(dir, "last-known-good.json"), &state); err != nil {
-		return ""
-	}
-	return state.Artifact
-}
-
-func SetLastKnownGood(dir, id string) error {
-	path := filepath.Join(dir, "last-known-good.json")
-	if id == "" {
-		if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-		return nil
-	}
-	return writeJSONAtomic(path, lastKnownGood{Artifact: id})
 }
 
 func readJSON(path string, value any) error {
