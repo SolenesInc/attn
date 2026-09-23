@@ -609,6 +609,41 @@ func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
 	}
 }
 
+func TestWorktreeSweepKeepsAProviderDeletionItCannotPrune(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	d.ensureGardenCollections()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+	worktreePath := repo.worktree("provider-unpruned", "feat/provider-unpruned", base)
+	d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+	client, done := startPluginPipe(t, d, "sweep-delete-unpruned-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+	responseDone := respondToDeleteProviderCall(t, client, func(worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := os.RemoveAll(worktreePath); err != nil {
+			t.Fatal(err)
+		}
+		d.closeGitExecution(ErrGitExecutorClosed)
+		return worktreeDeleteProviderResult{Status: providerStatusHandled}
+	})
+
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 0 {
+		t.Fatalf("sweep removed %d worktrees, want none while their registration cannot be pruned", removed)
+	}
+	waitForProviderResponse(t, responseDone)
+	if d.store.GetWorktree(worktreePath) == nil {
+		t.Fatal("the daemon dropped a worktree whose Git registration was never pruned, so no retry can clean it up")
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweep delete provider connection did not close")
+	}
+}
+
 func TestWorktreeSweepFinalizesProviderDeletionReportedAsError(t *testing.T) {
 	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
 	repo := newSweepRepo(t)
