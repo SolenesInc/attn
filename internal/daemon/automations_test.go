@@ -132,7 +132,7 @@ func setupContinuationWorktree(t *testing.T) (*Daemon, automation.WorkRequest, s
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	revisionBytes, err := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	revisionBytes, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,12 +199,12 @@ func TestPrepareRepositoryWorktreeUsesLocalOverrideAndExactRevision(t *testing.T
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	revisionBytes, err := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	revisionBytes, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
 	revision := strings.TrimSpace(string(revisionBytes))
-	d := &Daemon{dataRoot: filepath.Join(root, "instance")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	payload, _ := json.Marshal(automation.PullRequestInput{
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: revision,
@@ -231,14 +231,14 @@ func TestPrepareRepositoryWorktreeUsesLocalOverrideAndExactRevision(t *testing.T
 	if resolved.MainRepository != attngit.CanonicalizePath(repo) || resolved.Worktree != prepared.Directory || resolved.Revision != revision || resolved.ConfiguredSource.Type != "local_clone" {
 		t.Fatalf("resolved = %#v", resolved)
 	}
-	headBytes, err := attngit.Output(attngit.OpMetadata, prepared.Directory, "rev-parse", "HEAD")
+	headBytes, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, prepared.Directory, "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if head := strings.TrimSpace(string(headBytes)); head != revision {
 		t.Fatalf("worktree HEAD = %s want %s", head, revision)
 	}
-	branchBytes, _ := attngit.Output(attngit.OpMetadata, prepared.Directory, "symbolic-ref", "--quiet", "HEAD")
+	branchBytes, _ := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, prepared.Directory, "symbolic-ref", "--quiet", "HEAD")
 	if branch := strings.TrimSpace(string(branchBytes)); branch != "" {
 		t.Fatalf("worktree is attached to %s", branch)
 	}
@@ -253,12 +253,12 @@ func TestPrepareRepositoryWorktreeDoesNotFallbackFromInvalidOverride(t *testing.
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "snapshot")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:other/repo.git")
-	revisionBytes, err := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	revisionBytes, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	if err != nil {
 		t.Fatal(err)
 	}
 	instanceRoot := filepath.Join(root, "instance")
-	d := &Daemon{dataRoot: instanceRoot}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: instanceRoot}
 	payload, _ := json.Marshal(automation.PullRequestInput{
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: strings.TrimSpace(string(revisionBytes)),
@@ -288,11 +288,11 @@ func TestPrepareRepositoryWorktreeChangedHeadCreatesNewExactSnapshot(t *testing.
 	}
 	runGitDaemon(t, repo, "init")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "first")
-	firstBytes, _ := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	firstBytes, _ := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "second")
-	secondBytes, _ := attngit.Output(attngit.OpMetadata, repo, "rev-parse", "HEAD")
+	secondBytes, _ := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, "rev-parse", "HEAD")
 	runGitDaemon(t, repo, "remote", "add", "origin", "git@github.com:owner/repo.git")
-	d := &Daemon{dataRoot: filepath.Join(root, "instance")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	location := automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{
 		Default:   automation.RepositorySource{Type: "managed_cache"},
 		Overrides: map[string]automation.RepositorySource{"github.com/owner/repo": {Type: "local_clone", Path: repo}},
@@ -356,7 +356,7 @@ func TestPrepareRepositoryWorktreeLeavesRevisionFetchFailureRetryable(t *testing
 		Provider: "github", Host: "github.com", Owner: "owner", Repository: "repo", Number: 42,
 		URL: "https://github.com/owner/repo/pull/42", State: "open", HeadSHA: strings.Repeat("a", 40),
 	})
-	d := &Daemon{dataRoot: filepath.Join(root, "instance")}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), dataRoot: filepath.Join(root, "instance")}
 	_, err := d.prepareAutomationLocation(context.Background(), automation.WorkRequest{
 		Context: payload,
 		Location: automation.LocationSpec{Type: "repository_worktree", RepositorySources: automation.RepositorySources{
@@ -1111,7 +1111,7 @@ func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testi
 	deleteDone := make(chan error, 1)
 	go func() {
 		deleteDone <- fixture.d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
-			return lease.TryDelete(func(context.Context) error { return nil }, func(context.Context) error {
+			return lease.TryAutomaticRemoval(func(automaticWorktreeCleanupProtection) error {
 				close(deleteEntered)
 				<-lease.Context().Done()
 				foregroundWaiting <- context.Cause(lease.Context())
@@ -1126,7 +1126,7 @@ func TestStoppedContinuationWaitsForWorktreeDeleteCommitBeforeReopening(t *testi
 	go func() {
 		continued <- fixture.d.ensureAutomationSession(context.Background(), fixture.req, fixture.directory)
 	}()
-	if err := <-foregroundWaiting; !errors.Is(err, errWorktreeSweepPreempted) {
+	if err := <-foregroundWaiting; !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
 		t.Fatalf("sweep cancellation = %v, want foreground preemption", err)
 	}
 	select {
@@ -1308,7 +1308,7 @@ func TestStoppedContinuationRequiresAvailableTranscript(t *testing.T) {
 
 func TestContinuationPreservesOwnedDirtyWorktree(t *testing.T) {
 	d, req, worktree, repo := setupContinuationWorktree(t)
-	originalHead, err := attngit.GetHeadCommit(worktree)
+	originalHead, err := attngit.NewClient().GetHeadCommit(context.Background(), worktree)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1320,7 +1320,7 @@ func TestContinuationPreservesOwnedDirtyWorktree(t *testing.T) {
 	}
 	runGitDaemon(t, repo, "add", "new-head.txt")
 	runGitDaemon(t, repo, "commit", "-m", "new head")
-	newHead, err := attngit.GetHeadCommit(repo)
+	newHead, err := attngit.NewClient().GetHeadCommit(context.Background(), repo)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1343,7 +1343,7 @@ func TestContinuationPreservesOwnedDirtyWorktree(t *testing.T) {
 	if data, err := os.ReadFile(filepath.Join(worktree, "review-notes.txt")); err != nil || string(data) != "keep me" {
 		t.Fatalf("dirty evidence changed: data=%q err=%v", data, err)
 	}
-	if head, err := attngit.GetHeadCommit(worktree); err != nil || head != originalHead {
+	if head, err := attngit.NewClient().GetHeadCommit(context.Background(), worktree); err != nil || head != originalHead {
 		t.Fatalf("owned checkout moved: head=%q want=%q err=%v", head, originalHead, err)
 	}
 }

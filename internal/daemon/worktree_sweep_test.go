@@ -256,10 +256,26 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	reclaimed := repo.worktree("reclaimed", "feat/reclaimed", base)
 	held := repo.worktree("held", "feat/held", base)
 	d.store.Add(&protocol.Session{ID: "session-held", Directory: held})
+	executor := d.gitExecution().(*coordinatedGitExecutor)
+	var tasks []gitTask
+	executor.enqueueObserver = func(task gitTask) { tasks = append(tasks, task) }
+	finalizedUnderLease := false
+	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) {
+		if event.Event != protocol.EventWorktreeDeleted {
+			return
+		}
+		finalizedUnderLease = true
+		if !worktreeAutomaticCleanupExcluded(d) {
+			t.Error("swept worktree finalized after releasing the automatic cleanup exclusion")
+		}
+	}
 
 	_, removed, _ := d.worktreeSweepPass(now)
 	if removed != 1 {
 		t.Fatalf("removed %d worktrees, want 1", removed)
+	}
+	if !finalizedUnderLease {
+		t.Fatal("worktree sweep did not publish its finalization event")
 	}
 	if _, err := os.Stat(reclaimed); !os.IsNotExist(err) {
 		t.Errorf("reclaimed worktree still on disk: %v", err)
@@ -286,6 +302,23 @@ func TestWorktreeSweepPassKeepsALiveSessionAndReclaimsTheRest(t *testing.T) {
 	}
 	if !strings.Contains(entries[0].Reason, "merged") {
 		t.Errorf("sweep log reason = %q, want it to name the merged signal", entries[0].Reason)
+	}
+	mutationIndex := -1
+	for i, task := range tasks {
+		if task.Kind != gitTaskWorktreeMutation {
+			continue
+		}
+		mutationIndex = i
+		if task.Lane != gitInteractive {
+			t.Errorf("worktree deletion used %s lane, want interactive", task.Lane)
+		}
+	}
+	if mutationIndex < 1 {
+		t.Fatalf("git tasks = %+v, want final identity check followed by deletion", tasks)
+	}
+	finalCheck := tasks[mutationIndex-1]
+	if finalCheck.Kind != gitTaskWorktreeObserve || finalCheck.Lane != gitInteractive {
+		t.Errorf("final identity check = %+v, want interactive worktree observation", finalCheck)
 	}
 }
 

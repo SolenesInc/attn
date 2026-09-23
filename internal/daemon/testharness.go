@@ -285,6 +285,7 @@ func (b *TestHarnessBuilder) Build() *TestHarness {
 		pendingConversation: make(map[string]agentConversationObservation),
 		plugins:             newPluginRegistry(),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 
 	return &TestHarness{
 		Daemon:     d,

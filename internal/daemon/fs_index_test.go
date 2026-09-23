@@ -95,7 +95,7 @@ func TestIndexRootTruncatesAtInjectedCap(t *testing.T) {
 		}
 	}
 
-	files, truncated, err := indexRoot(root, cap, nil)
+	files, truncated, err := (&Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}).indexRoot(root, cap, nil)
 	if err != nil {
 		t.Fatalf("indexRoot: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestIndexRootAppliesCapAfterExtensionFilter(t *testing.T) {
 		}
 	}
 
-	files, truncated, err := indexRoot(root, 5, []string{".MD"})
+	files, truncated, err := (&Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}).indexRoot(root, 5, []string{".MD"})
 	if err != nil {
 		t.Fatalf("indexRoot: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestIndexRootUsesGitAndHonorsGitignore(t *testing.T) {
 		}
 	}
 
-	files, truncated, err := indexRoot(root, maxFsIndexEntries, []string{"md"})
+	files, truncated, err := (&Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}).indexRoot(root, maxFsIndexEntries, []string{"md"})
 	if err != nil {
 		t.Fatalf("indexRoot: %v", err)
 	}

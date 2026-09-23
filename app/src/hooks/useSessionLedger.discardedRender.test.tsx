@@ -4,25 +4,8 @@ import { act, render } from '@testing-library/react';
 import { useSessionLedger } from './useSessionLedger';
 import type { SessionLedgerView } from './useSessionLedger';
 import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
-import type { SessionLedgerEntry } from '../types/generated';
-import { SessionState } from '../types/generated';
-
-const NOW = new Date('2026-09-05T14:30:00Z');
-const now = () => NOW;
-
-function closedEntry(id: string): SessionLedgerEntry {
-  return {
-    agent: 'claude',
-    directory: '/Users/victor/projects/attn',
-    label: `run ${id}`,
-    last_seen: '2026-09-05T10:00:00Z',
-    state: SessionState.Idle,
-    workspace_id: 'ws-1',
-    id,
-    closed_at: '2026-09-05T13:00:00Z',
-    closed_by: 'user',
-  };
-}
+import { createSessionLedgerTestConnection } from '../test/sessionLedgerTestConnection';
+import { closedEntry, now } from '../test/sessionLedgerFixtures';
 
 const NEVER = new Promise<never>(() => {});
 
@@ -38,6 +21,7 @@ describe('useSessionLedger under a render React discards', () => {
       entries: [],
       omitted: 0,
     }));
+    const { connection, emit } = createSessionLedgerTestConnection(list);
 
     // Only a committed render publishes its view, so the assertions below can
     // only ever reach the surface the user is actually looking at.
@@ -45,7 +29,7 @@ describe('useSessionLedger under a render React discards', () => {
     let scopeLive: (() => void) | null = null;
 
     function Harness() {
-      const view = useSessionLedger({ enabled: true, list, now });
+      const view = useSessionLedger({ enabled: true, connection, now });
       const [suspend, setSuspend] = useState(false);
       const { setFilters } = view;
 
@@ -77,7 +61,7 @@ describe('useSessionLedger under a render React discards', () => {
     // The committed surface is still 'all', so a closed row belongs in it.
     expect(seen.view?.filters.scope).toBe('all');
     await act(async () => {
-      seen.view?.recordClose(closedEntry('s1'));
+      emit({ type: 'closed', entry: closedEntry('s1') });
     });
     expect(seen.view?.entries.map((row) => row.id)).toEqual(['s1']);
   });
@@ -87,10 +71,11 @@ describe('useSessionLedger under a render React discards', () => {
       entries: [],
       omitted: 0,
     }));
+    const { connection, emit } = createSessionLedgerTestConnection(list);
     const seen: { view: SessionLedgerView | null } = { view: null };
 
     function Harness() {
-      const view = useSessionLedger({ enabled: true, list, now });
+      const view = useSessionLedger({ enabled: true, connection, now });
       useEffect(() => {
         seen.view = view;
       });
@@ -108,7 +93,7 @@ describe('useSessionLedger under a render React discards', () => {
       seen.view?.setFilters((current) => ({ ...current, scope: 'closed' }));
     });
     await act(async () => {
-      seen.view?.recordClose(closedEntry('s2'));
+      emit({ type: 'closed', entry: closedEntry('s2') });
     });
     expect(seen.view?.filters.scope).toBe('closed');
     expect(seen.view?.entries.map((row) => row.id)).toEqual(['s2']);

@@ -108,14 +108,10 @@ func (d *Daemon) runGitStatusScheduler(client *wsClient, dir string, stop <-chan
 }
 
 func (d *Daemon) sendGitStatusUpdate(client *wsClient, dir string, mode gitStatusMode) gitStatusRefreshResult {
-	var result gitStatusRefreshResult
-	d.runWorktreeForeground("git status", func(context.Context) {
-		result = d.sendGitStatusUpdateForeground(client, dir, mode)
-	})
-	return result
+	return d.sendGitStatusUpdateForeground(context.Background(), client, dir, mode)
 }
 
-func (d *Daemon) sendGitStatusUpdateForeground(client *wsClient, dir string, mode gitStatusMode) gitStatusRefreshResult {
+func (d *Daemon) sendGitStatusUpdateForeground(ctx context.Context, client *wsClient, dir string, mode gitStatusMode) gitStatusRefreshResult {
 	client.gitStatusMu.Lock()
 	currentDir := client.gitStatusDir
 	lastHash := client.gitStatusHash
@@ -125,7 +121,7 @@ func (d *Daemon) sendGitStatusUpdateForeground(client *wsClient, dir string, mod
 		return gitStatusRefreshResult{}
 	}
 
-	status, duration, err := d.coordinator().Status(dir, mode)
+	status, duration, err := d.statusReader().Status(ctx, dir, mode)
 	if err != nil {
 		d.logf("Git status error for %s: %v", dir, err)
 		return gitStatusRefreshResult{duration: duration}
@@ -187,12 +183,10 @@ func (d *Daemon) handleGetFileDiffWS(client *wsClient, msg *protocol.GetFileDiff
 }
 
 func (d *Daemon) handleGetFileDiff(client *wsClient, msg *protocol.GetFileDiffMessage) {
-	d.runWorktreeForeground("git diff", func(context.Context) {
-		d.handleGetFileDiffForeground(client, msg)
-	})
+	d.handleGetFileDiffForeground(context.Background(), client, msg)
 }
 
-func (d *Daemon) handleGetFileDiffForeground(client *wsClient, msg *protocol.GetFileDiffMessage) {
+func (d *Daemon) handleGetFileDiffForeground(ctx context.Context, client *wsClient, msg *protocol.GetFileDiffMessage) {
 	result := protocol.FileDiffResultMessage{
 		Event:     protocol.EventFileDiffResult,
 		Directory: msg.Directory,
@@ -212,7 +206,7 @@ func (d *Daemon) handleGetFileDiffForeground(client *wsClient, msg *protocol.Get
 	}
 
 	staged := msg.Staged != nil && *msg.Staged
-	content, err := d.coordinator().FileDiff(msg.Directory, msg.Path, baseRef, headRef, staged)
+	content, err := d.diffReader().FileDiff(ctx, msg.Directory, msg.Path, baseRef, headRef, staged)
 	if err != nil {
 		result.Error = protocol.Ptr("Failed to read file diff: " + err.Error())
 		d.sendToClient(client, result)

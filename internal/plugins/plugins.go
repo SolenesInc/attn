@@ -1,6 +1,7 @@
 package plugins
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -48,7 +49,8 @@ type ManifestIssue struct {
 }
 
 type InstallOptions struct {
-	Env []string
+	Env      []string
+	CloneGit func(context.Context, string, string, []string) ([]byte, error)
 }
 
 func (i ManifestIssue) Error() string {
@@ -161,6 +163,10 @@ func InstallPath(sourceDir, pluginDir string) (Manifest, error) {
 }
 
 func InstallSourceWithOptions(source, pluginDir string, opts InstallOptions) (Manifest, error) {
+	return InstallSourceWithOptionsContext(context.Background(), source, pluginDir, opts)
+}
+
+func InstallSourceWithOptionsContext(ctx context.Context, source, pluginDir string, opts InstallOptions) (Manifest, error) {
 	source = strings.TrimSpace(source)
 	if source == "" {
 		return Manifest{}, errors.New("plugin source is required")
@@ -176,7 +182,7 @@ func InstallSourceWithOptions(source, pluginDir string, opts InstallOptions) (Ma
 	defer os.RemoveAll(cloneRoot)
 
 	checkoutDir := filepath.Join(cloneRoot, "checkout")
-	if err := cloneGitSource(source, checkoutDir, opts.Env); err != nil {
+	if err := cloneGitSource(ctx, source, checkoutDir, opts); err != nil {
 		return Manifest{}, err
 	}
 	return InstallPathWithOptions(checkoutDir, pluginDir, opts)
@@ -314,10 +320,12 @@ func isGitSource(source string) bool {
 	}
 }
 
-func cloneGitSource(source, targetDir string, env []string) error {
-	cmd := exec.Command("/usr/bin/env", "git", "clone", "--depth", "1", source, targetDir)
-	cmd.Env = env
-	output, err := cmd.CombinedOutput()
+func cloneGitSource(ctx context.Context, source, targetDir string, opts InstallOptions) error {
+	clone := opts.CloneGit
+	if clone == nil {
+		clone = directGitClone
+	}
+	output, err := clone(ctx, source, targetDir, opts.Env)
 	if err == nil {
 		return nil
 	}
@@ -326,6 +334,12 @@ func cloneGitSource(source, targetDir string, env []string) error {
 		return fmt.Errorf("clone plugin repository: %w", err)
 	}
 	return fmt.Errorf("clone plugin repository: %w: %s", err, details)
+}
+
+func directGitClone(ctx context.Context, source, targetDir string, env []string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, "/usr/bin/env", "git", "clone", "--depth", "1", source, targetDir)
+	cmd.Env = env
+	return cmd.CombinedOutput()
 }
 
 func redactGitSource(source string) string {

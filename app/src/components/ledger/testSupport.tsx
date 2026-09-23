@@ -5,17 +5,18 @@ import { vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { SettingsProvider } from '../../contexts/SettingsContext';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
-import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../../types/generated';
-import { SessionReopenAction, SessionState } from '../../types/generated';
+import { createSessionLedgerTestConnection } from '../../test/sessionLedgerTestConnection';
+import { now } from '../../test/sessionLedgerFixtures';
 import { SessionsTab } from './SessionsTab';
 import type { SessionsTabProps } from './SessionsTab';
 import { WorktreesTab } from './WorktreesTab';
 import type { WorktreesTabProps } from './WorktreesTab';
 
-export const NOW = new Date('2026-09-05T14:30:00Z');
-export const now = () => NOW;
-
 type TabOnly<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
+
+type SessionsTabTestProps = Partial<Omit<TabOnly<SessionsTabProps>, 'connection'>> & {
+  listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
+};
 
 export const rows = () => within(screen.getByRole('listbox', { name: 'Rows' }));
 
@@ -31,19 +32,21 @@ function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLI
 }
 
 export function renderSessionsTab(
-  props: Partial<TabOnly<SessionsTabProps>> & Pick<SessionsTabProps, 'listSessions'>,
+  { listSessions, ...props }: SessionsTabTestProps,
   settings: { values?: Record<string, string>; setSetting?: Mock<(key: string, value: string) => void> } = {},
 ) {
   const setSetting = settings.setSetting ?? vi.fn<(key: string, value: string) => void>();
-  const tree = (next: Partial<TabOnly<SessionsTabProps>>) => (
+  const { connection, emit, setConnected } = createSessionLedgerTestConnection(listSessions);
+  const view = render(
     <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
       <Host>
-        {(host) => <SessionsTab workspaceNames={{}} {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
+        {(host) => (
+          <SessionsTab workspaceNames={{}} {...props} connection={connection} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />
+        )}
       </Host>
-    </SettingsProvider>
+    </SettingsProvider>,
   );
-  const view = render(tree({}));
-  return { ...view, setSetting, rerender: (next: Partial<TabOnly<SessionsTabProps>>) => view.rerender(tree(next)) };
+  return { ...view, setSetting, emit, setConnected };
 }
 
 export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = {}) {
@@ -64,50 +67,6 @@ export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = 
       {(host) => <WorktreesTab {...full} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
     </Host>,
   );
-}
-
-export function entry(overrides: Partial<SessionLedgerEntry> & { id: string }): SessionLedgerEntry {
-  return {
-    agent: 'claude',
-    directory: '/Users/victor/projects/attn',
-    label: `run ${overrides.id}`,
-    last_seen: '2026-09-05T10:00:00Z',
-    state: SessionState.Idle,
-    workspace_id: 'ws-1',
-    ...overrides,
-  };
-}
-
-export function closedEntry(id: string, overrides: Partial<SessionLedgerEntry> = {}): SessionLedgerEntry {
-  return entry({
-    id,
-    last_seen: '2026-09-05T09:00:00Z',
-    closed_at: '2026-09-05T10:00:00Z',
-    closed_by: 'user',
-    close_reason: 'work finished',
-    ...overrides,
-  });
-}
-
-export function liveEntry(id: string): SessionLedgerEntry {
-  return entry({ id, last_seen: '2026-09-05T13:00:00Z' });
-}
-
-export function verdict(overrides: Partial<SessionReopen> = {}): SessionReopen {
-  return {
-    reopenable: true,
-    actions: [SessionReopenAction.Reopen],
-    checking: false,
-    directory_state: 'present',
-    workspace_id: 'ws-1',
-    workspace_plan: 'reuse',
-    pane_plan: 'add',
-    ...overrides,
-  };
-}
-
-export function judged(sessionId: string, overrides: Partial<SessionReopen> = {}): SessionReopenEntry {
-  return { session_id: sessionId, reopen: verdict(overrides) };
 }
 
 export function listing(pages: SessionLedgerPage[]) {

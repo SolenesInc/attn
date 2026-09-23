@@ -9,21 +9,21 @@ import (
 	"github.com/victorarias/attn/internal/docstore"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
 func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	var bound string
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegated seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		bound, err = d.bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent, fromChief, createSeed)
+		bound, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, observed, fromChief, createSeed)
 		return err
 	})
 	return bound, err
 }
 
-func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
+func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
@@ -89,7 +89,7 @@ func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plan
 	if err != nil {
 		return "", err
 	}
-	dispatch := observedGardenExecution(&protocol.Session{ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent)}, "", d.gardenTime())
+	dispatch := observed
 	dispatch.Crown = seed.ID
 	dispatch.DispatcherSession = strings.TrimSpace(plannerSessionID)
 	dispatch.DispatcherMember = d.crewMembersBySession()[dispatch.DispatcherSession]
@@ -161,17 +161,18 @@ func (d *Daemon) bindDelegationAssignmentForeground(operationID, sessionID, plan
 }
 
 func (d *Daemon) bindDelegationSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
 	var seedID string
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "bind delegation seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		seedID, err = d.bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
+		seedID, err = d.bindDelegationSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
 		return err
 	})
 	return seedID, err
 }
 
-func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	seedID, err := d.bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent, fromChief)
+func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
+	seedID, err := d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
 	switch {
 	case err == nil:
 		d.logf("delegate: bound seed %q to session %s", seedID, sessionID)
@@ -182,32 +183,53 @@ func (d *Daemon) bindDelegationSeedForeground(sessionID, plannerSessionID, brief
 }
 
 func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
+	var seedID string
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var err error
+		seedID, err = d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
+		return err
+	})
+	return seedID, err
+}
+
+func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
 	}
 	if bound, ok := d.gardenDispatchCrown(sessionID); ok {
 		return bound, nil
 	}
-	if err := d.recordGardenDispatch(sessionID, "", plannerSessionID, cwd, agent, fromChief); err != nil {
+	if err := d.recordGardenDispatchObservedProtected(protection, sessionID, "", plannerSessionID, fromChief, observed); err != nil {
 		return "", fmt.Errorf("preserve session %s before binding it: %w", sessionID, err)
 	}
 	seedID := strings.TrimSpace(crown)
 	if seedID == "" {
-		seed, err := d.plantDelegatedSeed(sessionID, plannerSessionID, brief, name)
+		seed, err := d.plantDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name)
 		if err != nil {
 			return "", err
 		}
 		seedID = seed.ID
-	} else if err := d.tendDispatchedSeed(sessionID, plannerSessionID, seedID); err != nil {
+	} else if err := d.tendDispatchedSeedProtected(protection, sessionID, plannerSessionID, seedID); err != nil {
 		return "", err
 	}
-	if err := d.recordGardenDispatch(sessionID, seedID, plannerSessionID, cwd, agent, fromChief); err != nil {
+	if err := d.recordGardenDispatchObservedProtected(protection, sessionID, seedID, plannerSessionID, fromChief, observed); err != nil {
 		return "", fmt.Errorf("bind %s to session %s: %w", seedID, sessionID, err)
 	}
 	return seedID, nil
 }
 
 func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
+	var seed garden.Seed
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var plantErr error
+		seed, plantErr = d.plantDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name)
+		return plantErr
+	})
+	return seed, err
+}
+
+func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
 	title := strings.TrimSpace(name)
 	if title == "" {
 		title = "delegated work"
@@ -239,13 +261,19 @@ func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name str
 		return garden.Seed{}, err
 	}
 	seed.LastExecutionID = sessionID
-	seed, _, err = d.mintAndPlant(*schema, seed)
+	seed, _, err = d.mintAndPlantProtected(protection, *schema, seed)
 	return seed, err
 }
 
 func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) error {
+	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		return d.tendDispatchedSeedProtected(protection, sessionID, plannerSessionID, seedID)
+	})
+}
+
+func (d *Daemon) tendDispatchedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, seedID string) error {
 	actor := garden.Tender{Session: sessionID, Member: d.resolveTenderMember("", sessionID)}
-	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(seedID, garden.VerbTend, garden.Ask{
+	if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection, seedID, garden.VerbTend, garden.Ask{
 		Actor: actor, CauseSession: plannerSessionID, DirectlyNotifiedSession: sessionID,
 	}, "", d.dispatchSessionLive(plannerSessionID), 0); err != nil {
 		return fmt.Errorf("tend %s as session %s: %w", seedID, sessionID, err)

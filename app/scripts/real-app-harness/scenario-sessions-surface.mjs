@@ -231,15 +231,12 @@ async function main() {
       await hold();
     });
 
-    await runner.step('the_closed_row_carries_the_verdict_its_page_was_read_with', async () => {
-      const judged = await waitForSessions(client, (s) => (rowFor(s, sessions.two)?.verdict ?? '') !== '—',
-        'the closed row to carry a reopen verdict');
-      const row = rowFor(judged, sessions.two);
-      runner.assert(row.verdict.length > 0 && row.verdict !== '—',
-        'a closed row must say what it would take to bring it back', { row });
-      const live = rowFor(judged, sessions.one);
-      runner.assert(live.verdict === '—', 'a live row is never judged', { live });
-      runner.writeJson('row-verdicts.json', judged);
+    await runner.step('the_closed_row_offers_reopen', async () => {
+      const offered = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.actions.includes('Reopen'),
+        'the closed row to offer Reopen');
+      const live = rowFor(offered, sessions.one);
+      runner.assert(!live.actions.includes('Reopen'), 'a live row never offers Reopen', { live });
+      runner.writeJson('row-offers.json', offered);
       await hold();
     });
 

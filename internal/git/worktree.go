@@ -14,13 +14,8 @@ type WorktreeEntry struct {
 	Prunable bool
 }
 
-func ListWorktrees(repoDir string) ([]WorktreeEntry, error) {
-	_ = PruneWorktrees(repoDir)
-	return ObserveWorktrees(repoDir)
-}
-
-func ObserveWorktrees(repoDir string) ([]WorktreeEntry, error) {
-	out, err := runGitOutput(OpWorktree, repoDir, "worktree", "list", "--porcelain")
+func (c *Client) ObserveWorktrees(ctx context.Context, repoDir string) ([]WorktreeEntry, error) {
+	out, err := c.Output(ctx, OpWorktree, repoDir, "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, err
 	}
@@ -49,65 +44,79 @@ func ObserveWorktrees(repoDir string) ([]WorktreeEntry, error) {
 	return worktrees, nil
 }
 
-func PruneWorktrees(repoDir string) error {
-	return runGitNoOutput(OpWorktree, repoDir, "worktree", "prune")
+func (c *Client) ObserveLiveWorktrees(ctx context.Context, repoDir string) ([]WorktreeEntry, error) {
+	all, err := c.ObserveWorktrees(ctx, repoDir)
+	if err != nil {
+		return nil, err
+	}
+	live := make([]WorktreeEntry, 0, len(all))
+	for _, worktree := range all {
+		if !worktree.Prunable {
+			live = append(live, worktree)
+		}
+	}
+	return live, nil
 }
 
-func CreateWorktree(repoDir, branch, path string) error {
-	if out, err := runGitCombined(OpWorktree, repoDir, "worktree", "add", "-b", branch, CanonicalizePath(path)); err != nil {
+func (c *Client) PruneWorktrees(ctx context.Context, repoDir string) error {
+	return c.NoOutput(ctx, OpWorktree, repoDir, "worktree", "prune")
+}
+
+func (c *Client) CreateWorktree(ctx context.Context, repoDir, branch, path string) error {
+	if out, err := c.Combined(ctx, OpWorktree, repoDir, "worktree", "add", "-b", branch, CanonicalizePath(path)); err != nil {
 		return fmt.Errorf("git worktree add failed: %s", out)
 	}
 	return nil
 }
 
-func CreateWorktreeFromPoint(repoDir, branch, path, startingFrom string) error {
+func (c *Client) CreateWorktreeFromPoint(ctx context.Context, repoDir, branch, path, startingFrom string) error {
 	args := []string{"worktree", "add", "-b", branch, CanonicalizePath(path)}
 	if startingFrom != "" {
 		args = append(args, startingFrom)
 	}
-	if out, err := runGitCombined(OpWorktree, repoDir, args...); err != nil {
+	if out, err := c.Combined(ctx, OpWorktree, repoDir, args...); err != nil {
 		return fmt.Errorf("git worktree add failed: %s", out)
 	}
 	return nil
 }
 
-func EnsureDetachedWorktreeAtRevision(repoDir, path, revision string) (bool, error) {
-	return EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(repoDir, path, revision, "")
+func (c *Client) EnsureDetachedWorktreeAtRevision(ctx context.Context, repoDir, path, revision string) (bool, error) {
+	return c.EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(ctx, repoDir, path, revision, "")
 }
 
-func EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(repoDir, path, revision, authorization string) (bool, error) {
-	return ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization, false)
+func (c *Client) EnsureDetachedWorktreeAtRevisionWithHTTPAuthorization(ctx context.Context, repoDir, path, revision, authorization string) (bool, error) {
+	return c.ensureDetachedWorktreeAtRevision(ctx, repoDir, path, revision, authorization, false)
 }
 
-func EnsureAutomationSessionWorktree(repoDir, path, revision, authorization string, sessionPersisted bool) (bool, error) {
-	return ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization, sessionPersisted)
+func (c *Client) EnsureAutomationSessionWorktree(ctx context.Context, repoDir, path, revision, authorization string, sessionPersisted bool) (bool, error) {
+	return c.ensureDetachedWorktreeAtRevision(ctx, repoDir, path, revision, authorization, sessionPersisted)
 }
 
-func ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization string, sessionPersisted bool) (bool, error) {
-	repoDir = ResolveMainRepoPath(repoDir)
+func (c *Client) ensureDetachedWorktreeAtRevision(ctx context.Context, repoDir, path, revision, authorization string, sessionPersisted bool) (bool, error) {
+	repoDir = c.ResolveMainRepoPath(ctx, repoDir)
 	path = CanonicalizePath(path)
 	if info, err := os.Stat(path); err == nil {
 		if !info.IsDir() {
 			return false, fmt.Errorf("automation worktree path is not a directory: %s", path)
 		}
-		mainRepo := ResolveMainRepoPath(path)
+		mainRepo := c.ResolveMainRepoPath(ctx, path)
 		if !sameDirectory(mainRepo, repoDir) {
 			return false, fmt.Errorf("automation worktree repository mismatch: got %s want %s", mainRepo, repoDir)
 		}
 		if sessionPersisted {
 			return false, nil
 		}
-		head, err := GetHeadCommit(path)
+		head, err := c.GetHeadCommit(ctx, path)
 		if err != nil {
 			return false, fmt.Errorf("read automation worktree HEAD: %w", err)
 		}
 		if !strings.EqualFold(head, revision) {
 			return false, fmt.Errorf("automation worktree revision mismatch: got %s want %s", head, revision)
 		}
-		if branch, err := runGitOutput(OpMetadata, path, "symbolic-ref", "--quiet", "HEAD"); err == nil {
+		if branch, err := c.Output(ctx, OpMetadata, path, "symbolic-ref", "--quiet", "HEAD"); err == nil {
 			return false, fmt.Errorf("automation worktree is attached to branch %s; expected detached HEAD", strings.TrimSpace(string(branch)))
 		}
-		clean, err := IsWorktreeClean(path)
+		clean, err := c.IsWorktreeClean(ctx, path)
 		if err != nil {
 			return false, fmt.Errorf("inspect automation worktree: %w", err)
 		}
@@ -121,50 +130,50 @@ func ensureDetachedWorktreeAtRevision(repoDir, path, revision, authorization str
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return false, fmt.Errorf("create automation worktree parent: %w", err)
 	}
-	_ = runGitNoOutput(OpWorktree, repoDir, "worktree", "prune", "--expire", "now")
+	_ = c.NoOutput(ctx, OpWorktree, repoDir, "worktree", "prune", "--expire", "now")
 	remoteURL := ""
 	if authorization != "" {
-		if out, err := runGitOutput(OpMetadata, repoDir, "remote", "get-url", "origin"); err == nil {
+		if out, err := c.Output(ctx, OpMetadata, repoDir, "remote", "get-url", "origin"); err == nil {
 			remoteURL = strings.TrimSpace(string(out))
 		}
 	}
-	if out, err := runGitCombinedWithHTTPAuthorization(OpWorktree, repoDir, remoteURL, authorization, "worktree", "add", "--detach", path, revision); err != nil {
+	if out, err := c.combinedWithHTTPAuthorization(ctx, OpWorktree, repoDir, remoteURL, authorization, "worktree", "add", "--detach", path, revision); err != nil {
 		return false, fmt.Errorf("git worktree add --detach failed: %s", strings.TrimSpace(string(out)))
 	}
 	return true, nil
 }
 
-func CreateWorktreeFromBranch(repoDir, branch, path string) error {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) CreateWorktreeFromBranch(ctx context.Context, repoDir, branch, path string) error {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return err
 	}
-	if out, err := runGitCombined(OpWorktree, resolvedDir, "worktree", "add", ExpandPath(path), branch); err != nil {
+	if out, err := c.Combined(ctx, OpWorktree, resolvedDir, "worktree", "add", ExpandPath(path), branch); err != nil {
 		return fmt.Errorf("git worktree add failed: %s", out)
 	}
 	return nil
 }
 
-func CreateWorktreeFromRemoteBranch(repoDir, remoteBranch, path string) (string, error) {
+func (c *Client) CreateWorktreeFromRemoteBranch(ctx context.Context, repoDir, remoteBranch, path string) (string, error) {
 	localBranch := remoteBranch
 	if idx := strings.Index(remoteBranch, "/"); idx != -1 {
 		localBranch = remoteBranch[idx+1:]
 	}
 
-	resolvedDir, err := ResolveRepoDir(repoDir)
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return "", err
 	}
-	if out, err := runGitCombined(OpWorktree, resolvedDir, "worktree", "add", ExpandPath(path), "-b", localBranch, remoteBranch); err != nil {
+	if out, err := c.Combined(ctx, OpWorktree, resolvedDir, "worktree", "add", ExpandPath(path), "-b", localBranch, remoteBranch); err != nil {
 		return "", fmt.Errorf("git worktree add failed: %s", out)
 	}
 	return localBranch, nil
 }
 
-func DeleteWorktree(repoDir, path string, force bool) error {
+func (c *Client) DeleteWorktree(ctx context.Context, repoDir, path string, force bool) error {
 	path = CanonicalizePath(path)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		if out, err := runGitCombined(OpWorktree, repoDir, "worktree", "prune"); err != nil {
+		if out, err := c.Combined(ctx, OpWorktree, repoDir, "worktree", "prune"); err != nil {
 			return fmt.Errorf("git worktree prune failed: %s", out)
 		}
 		return nil
@@ -175,11 +184,11 @@ func DeleteWorktree(repoDir, path string, force bool) error {
 		args = append(args, "--force")
 	}
 	args = append(args, path)
-	if out, err := runGitCombined(OpWorktree, repoDir, args...); err != nil {
+	if out, err := c.Combined(ctx, OpWorktree, repoDir, args...); err != nil {
 		return fmt.Errorf("git worktree remove failed: %s", out)
 	}
 
-	_ = runGitNoOutput(OpWorktree, repoDir, "worktree", "prune")
+	_ = c.NoOutput(ctx, OpWorktree, repoDir, "worktree", "prune")
 
 	return nil
 }
@@ -212,8 +221,8 @@ func GetMainRepoFromWorktree(worktreePath string) string {
 	return gitdir[:idx]
 }
 
-func IsWorktreeClean(path string) (bool, error) {
-	out, err := runGitOutput(OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
+func (c *Client) IsWorktreeClean(ctx context.Context, path string) (bool, error) {
+	out, err := c.Output(ctx, OpStatus, CanonicalizePath(path), "status", "--porcelain", "--untracked-files=all")
 	if err != nil {
 		return false, err
 	}
@@ -226,13 +235,13 @@ func GenerateWorktreePath(mainRepo, branch string) string {
 	return filepath.Join(filepath.Dir(mainRepo), repoName+"--"+safeBranch)
 }
 
-func ResolveMainRepoPath(repoPath string) string {
+func (c *Client) ResolveMainRepoPath(ctx context.Context, repoPath string) string {
 	expanded := ExpandPath(repoPath)
 	if mainRepo := GetMainRepoFromWorktree(expanded); mainRepo != "" {
 		return filepath.Clean(mainRepo)
 	}
 
-	resolved, err := ResolveRepoDir(expanded)
+	resolved, err := c.ResolveRepoDir(ctx, expanded)
 	if err == nil {
 		return resolved
 	}
@@ -240,12 +249,7 @@ func ResolveMainRepoPath(repoPath string) string {
 	return filepath.Clean(expanded)
 }
 
-func RepositoryRoot(dir string) string {
-	root, _ := RepositoryRootContext(context.Background(), dir)
-	return root
-}
-
-func RepositoryRootContext(ctx context.Context, dir string) (string, error) {
+func (c *Client) RepositoryRoot(ctx context.Context, dir string) (string, error) {
 	current := CanonicalizePath(dir)
 	for {
 		if cause := context.Cause(ctx); cause != nil {

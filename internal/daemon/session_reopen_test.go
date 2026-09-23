@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -91,22 +92,17 @@ func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 
 func decidedReopenVerdict(t *testing.T, d *Daemon, sessionID string) *sessionReopenVerdict {
 	t.Helper()
-	verdict, found := d.reopenVerdict(sessionID)
-	if !found {
+	entry := d.store.SessionLedgerEntry(sessionID)
+	if entry == nil {
 		t.Fatalf("no ledger row for %s", sessionID)
 	}
-	if !verdict.Checking {
-		return verdict
+	verdict, err := d.resolveReopen(
+		context.Background(), *entry, d.scheduledReopenGit(),
+	)
+	if err != nil {
+		t.Fatalf("resolve reopen verdict for %s: %v", sessionID, err)
 	}
-	<-d.inspectBranchInBackground(sessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
-	verdict, found = d.reopenVerdict(sessionID)
-	if !found {
-		t.Fatalf("no ledger row for %s after its branch check", sessionID)
-	}
-	if verdict.Checking {
-		t.Fatalf("%s is still checking after its branch check landed", sessionID)
-	}
-	return verdict
+	return &verdict
 }
 
 func actionNames(actions []protocol.SessionReopenAction) []string {

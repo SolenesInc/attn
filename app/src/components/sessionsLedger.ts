@@ -1,4 +1,4 @@
-import type { SessionLedgerEntry, SessionReopen, SessionReopenEntry } from '../types/generated';
+import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 
 export type SessionScope = 'live' | 'closed' | 'all';
 
@@ -95,18 +95,14 @@ export function shortPath(path: string, segments = 2): string {
 }
 
 const ABSOLUTE_PATH = /\/(?:[^\s/,;:]+\/)+[^\s,;:]+/g;
-const REFUSAL = /^[0-9a-f-]{36} cannot be reopened with (\S+): (.*?)(?:\. Offered instead: (\S+))?$/;
 
 export function compactVerdictText(text: string): string {
   return text.replace(ABSOLUTE_PATH, (match) => shortPath(match));
 }
 
-export function compactRefusalText(text: string): string {
-  const match = REFUSAL.exec(text);
-  if (!match) return compactVerdictText(text);
-  const [, action, reason, offered] = match;
-  const verb = `${action.split('_').join(' ')} was refused`;
-  return offered ? `${verb}; it offers ${reopenActionLabel(offered)} instead` : `${verb}: ${compactVerdictText(reason)}`;
+export function refusalNote(actionId: string, offer: ReopenVerdictView): string {
+  const refused = `${reopenActionLabel(actionId)} was refused`;
+  return offer.actions.length > 0 ? `${refused}; it offers ${offer.actions[0].label} instead` : refused;
 }
 
 const REOPEN_ACTION_LABELS: Record<string, string> = {
@@ -128,7 +124,6 @@ export interface ReopenActionView {
 }
 
 export interface ReopenVerdictView {
-  refreshing: boolean;
   summary: string;
   reopenable: boolean;
   actions: ReopenActionView[];
@@ -143,7 +138,6 @@ export interface ReopenVerdictView {
 
 export function reopenVerdictView(reopen: SessionReopen): ReopenVerdictView {
   return {
-    refreshing: reopen.checking,
     summary: reopen.reason || reopen.warning || 'it can be reopened where it ran',
     reopenable: reopen.reopenable,
     actions: reopen.actions.map((id) => ({ id, label: reopenActionLabel(id) })),
@@ -191,14 +185,4 @@ const DIRECTORY_STATE_LABELS: Record<string, string> = {
 
 export function directoryStateLabel(state: string): string {
   return DIRECTORY_STATE_LABELS[state] ?? state;
-}
-
-export function reopenVerdictsById(
-  verdicts: SessionReopenEntry[] | undefined,
-): Record<string, ReopenVerdictView> {
-  const byId: Record<string, ReopenVerdictView> = {};
-  for (const entry of verdicts ?? []) {
-    byId[entry.session_id] = reopenVerdictView(entry.reopen);
-  }
-  return byId;
 }

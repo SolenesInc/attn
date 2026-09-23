@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -60,13 +61,15 @@ func TestDelegationRequestIDRejectsDifferentNormalizedInput(t *testing.T) {
 	_, sourceID, _ := setupDelegationSource(t, d, backend)
 	consumeDelegatedPrompt(t, backend)
 	first := explicitOperationMessage(d, "same-key", sourceID, "First brief", "first")
-	if _, err := d.startDelegation(&first); err != nil {
+	started, err := d.startDelegation(&first)
+	if err != nil {
 		t.Fatal(err)
 	}
 	second := explicitOperationMessage(d, "same-key", sourceID, "Different brief", "first")
 	if _, err := d.startDelegation(&second); !errors.Is(err, store.ErrDelegationRequestConflict) {
 		t.Fatalf("error=%v, want request conflict", err)
 	}
+	waitDelegationOperation(t, d, started.OperationID)
 }
 
 func TestResolveDelegateRuntimeUsesExactRequestedBaseCommit(t *testing.T) {
@@ -107,7 +110,8 @@ func TestAcceptedDelegationBasePinsTheRequestedRef(t *testing.T) {
 		Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feature/pinned-base", From: protocol.Ptr("HEAD"),
 	}
 
-	got, err := resolveAcceptedDelegationBase(&msg)
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
+	got, err := d.resolveAcceptedDelegationBase(&msg)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +199,7 @@ func TestResolveDelegateRuntimeRejectsDetachedReuse(t *testing.T) {
 
 func mustGitOutput(t *testing.T, repo string, args ...string) []byte {
 	t.Helper()
-	out, err := attngit.Output(attngit.OpMetadata, repo, args...)
+	out, err := attngit.NewClient().Output(context.Background(), attngit.OpMetadata, repo, args...)
 	if err != nil {
 		t.Fatalf("git %v: %v", args, err)
 	}

@@ -21,7 +21,6 @@ const (
 	branchStateRemoteOnly = "remote_only"
 	branchStateGone       = "gone"
 	branchStateMerged     = "merged"
-	branchStateUnknown    = "unknown"
 
 	reopenPlaceReuse  = "reuse"
 	reopenPlaceCreate = "create"
@@ -45,13 +44,13 @@ type sessionReopenVerdict struct {
 	Reason         string
 	Warning        string
 	Actions        []protocol.SessionReopenAction
-	Checking       bool
 	DirectoryState string
 	BranchState    string
 	WorkspaceID    string
 	WorkspacePlan  string
 	PanePlan       string
 	RecreatePath   string
+	Inspection     branchInspection
 }
 
 func (v *sessionReopenVerdict) offers(action protocol.SessionReopenAction) bool {
@@ -67,7 +66,6 @@ func (v *sessionReopenVerdict) toProtocol() *protocol.SessionReopen {
 	out := &protocol.SessionReopen{
 		Reopenable:     v.Reopenable,
 		Actions:        v.Actions,
-		Checking:       v.Checking,
 		DirectoryState: v.DirectoryState,
 		WorkspaceID:    v.WorkspaceID,
 		WorkspacePlan:  v.WorkspacePlan,
@@ -108,36 +106,6 @@ func (d *Daemon) reopenExecutionFromLedger(entry *protocol.SessionLedgerEntry) g
 	}
 	execution.Resume = d.store.GetResumeSessionID(entry.ID)
 	return execution
-}
-
-func (d *Daemon) reopenVerdict(sessionID string) (*sessionReopenVerdict, bool) {
-	entry := d.store.SessionLedgerEntry(strings.TrimSpace(sessionID))
-	if entry == nil {
-		return nil, false
-	}
-	return d.reopenVerdictForEntry(entry), true
-}
-
-func (d *Daemon) reopenVerdictForEntry(entry *protocol.SessionLedgerEntry) *sessionReopenVerdict {
-	verdict := &sessionReopenVerdict{
-		SessionID: entry.ID,
-		Entry:     entry,
-		Execution: d.reopenExecutionFromLedger(entry),
-		Live:      protocol.Deref(entry.ClosedAt) == "",
-	}
-	verdict.DirectoryState = inspectContinuationDirectory(verdict.Execution)
-	d.planReopenPlacement(verdict)
-
-	if verdict.Live {
-		verdict.Reason = fmt.Sprintf("session %s is running; focus it instead of reopening it", entry.ID)
-		return verdict
-	}
-	if !decideReopenHost(verdict, d.endpointInfos()) {
-		return verdict
-	}
-	_, hasLaunchIntent := d.store.LaunchIntent(entry.ID)
-	d.decideReopenPlace(verdict, hasLaunchIntent)
-	return verdict
 }
 
 func (d *Daemon) planReopenPlacement(verdict *sessionReopenVerdict) {
@@ -208,7 +176,12 @@ func (d *Daemon) endpointInfos() []protocol.EndpointInfo {
 	return d.hubManager.List()
 }
 
-func (d *Daemon) decideReopenPlace(verdict *sessionReopenVerdict, hasLaunchIntent bool) {
+func (d *Daemon) decideReopenPlace(
+	ctx context.Context,
+	verdict *sessionReopenVerdict,
+	hasLaunchIntent bool,
+	gitView reopenGit,
+) error {
 	conversation, conversationReason := d.reopenConversation(verdict.Execution)
 	if !hasLaunchIntent {
 		conversation = false
@@ -220,26 +193,35 @@ func (d *Daemon) decideReopenPlace(verdict *sessionReopenVerdict, hasLaunchInten
 		if !conversation {
 			verdict.Reason = conversationReason
 			verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace}
-			return
+			return nil
 		}
 		verdict.Reopenable = true
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionReopen}
-		verdict.Warning = d.reopenBranchWarning(verdict.Execution)
-		return
+		warning, err := reopenBranchWarning(ctx, gitView, verdict.Execution)
+		if err != nil {
+			return err
+		}
+		verdict.Warning = warning
+		return nil
 	case directoryMissing:
-		d.decideMissingDirectory(verdict, conversation, conversationReason)
-		return
+		return d.decideMissingDirectory(ctx, verdict, conversation, conversationReason, gitView)
 	case directoryUnknown:
 		verdict.Reason = fmt.Sprintf("session %s saved no directory to reopen in", verdict.SessionID)
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
-		return
+		return nil
 	default:
 		verdict.Reason = "its directory cannot be opened"
-		return
+		return nil
 	}
 }
 
-func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversation bool, conversationReason string) {
+func (d *Daemon) decideMissingDirectory(
+	ctx context.Context,
+	verdict *sessionReopenVerdict,
+	conversation bool,
+	conversationReason string,
+	gitView reopenGit,
+) error {
 	gone := "its directory no longer exists"
 	repo := strings.TrimSpace(verdict.Execution.RepositoryRoot)
 	branch := strings.TrimSpace(verdict.Execution.Branch)
@@ -248,33 +230,30 @@ func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversat
 	if repo == "" || branch == "" || !targetOK {
 		verdict.Reason = gone + ", and it was not a worktree attn can put back"
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
-		return
+		return nil
 	}
 	verdict.RecreatePath = target
 
-	inspection, known := d.branchInspection(verdict.SessionID, repo, branch)
-	if !known {
-		verdict.Checking = true
-		verdict.BranchState = branchStateUnknown
-		verdict.Reason = gone
-		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
-		return
+	inspection, err := gitView.BranchAvailability(ctx, repo, branch)
+	if err != nil {
+		return fmt.Errorf("inspect branch %s in %s: %w", branch, repo, err)
 	}
+	verdict.Inspection = inspection
 	if inspection.RepoMissing {
 		verdict.Reason = gone + ", and its repository is gone too"
-		return
+		return nil
 	}
 	verdict.BranchState = inspection.State
 
 	if !conversation {
 		verdict.Reason = conversationReason + ", and " + gone
 		verdict.Actions = d.freshActionsForMissingDirectory(verdict, inspection)
-		return
+		return nil
 	}
 	if inspection.AlreadyCheckedOut {
 		verdict.Reason = fmt.Sprintf("%s, and branch %s is checked out somewhere else already", gone, branch)
 		verdict.Actions = []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}
-		return
+		return nil
 	}
 
 	switch inspection.State {
@@ -292,6 +271,7 @@ func (d *Daemon) decideMissingDirectory(verdict *sessionReopenVerdict, conversat
 			protocol.SessionReopenActionStartFreshElsewhere,
 		}
 	}
+	return nil
 }
 
 func (d *Daemon) freshActionsForMissingDirectory(
@@ -358,137 +338,19 @@ func (d *Daemon) conversationResumable(agentName, resumeID string) (bool, string
 	return true, ""
 }
 
-func (d *Daemon) reopenBranchWarning(execution garden.Dispatch) string {
+func reopenBranchWarning(ctx context.Context, gitView reopenGit, execution garden.Dispatch) (string, error) {
 	saved := strings.TrimSpace(execution.Branch)
 	if saved == "" {
-		return ""
+		return "", nil
 	}
-	info, err := attngit.GetBranchInfo(execution.Cwd)
+	info, err := gitView.BranchInfo(ctx, execution.Cwd)
 	if err != nil || info == nil {
-		return ""
+		return "", nil
 	}
 	if current := strings.TrimSpace(info.Branch); current != "" && current != saved {
-		return fmt.Sprintf("it is on branch %s now; the session ran on %s", current, saved)
+		return fmt.Sprintf("it is on branch %s now; the session ran on %s", current, saved), nil
 	}
-	return ""
-}
-
-func (d *Daemon) branchInspection(sessionID, repo, branch string) (branchInspection, bool) {
-	key := branchInspectionKey(repo, branch)
-	d.branchInspectionsMu.Lock()
-	inspection, known := d.branchInspections[key]
-	d.branchInspectionsMu.Unlock()
-	if !known {
-		d.inspectBranchInBackground(sessionID, repo, branch)
-	}
-	return inspection, known
-}
-
-func branchInspectionKey(repo, branch string) string {
-	return attngit.CanonicalizePath(repo) + "\x00" + strings.TrimSpace(branch)
-}
-
-func (d *Daemon) inspectBranchInBackground(sessionID, repo, branch string) <-chan struct{} {
-	key := branchInspectionKey(repo, branch)
-	d.branchInspectionsMu.Lock()
-	if d.branchInspections == nil {
-		d.branchInspections = make(map[string]branchInspection)
-	}
-	if d.branchInspectionsRunning == nil {
-		d.branchInspectionsRunning = make(map[string]chan struct{})
-	}
-	if running := d.branchInspectionsRunning[key]; running != nil {
-		d.branchInspectionsMu.Unlock()
-		return running
-	}
-	done := make(chan struct{})
-	d.branchInspectionsRunning[key] = done
-	d.branchInspectionsMu.Unlock()
-
-	go func() {
-		defer func() {
-			d.branchInspectionsMu.Lock()
-			delete(d.branchInspectionsRunning, key)
-			d.branchInspectionsMu.Unlock()
-			close(done)
-		}()
-		finishOperation := d.beginGitOperation(protocol.GitOperationKindInspectBranch, repo, nil)
-		var inspection branchInspection
-		err := d.worktreeMaintenance.RunForeground(context.Background(), "inspect reopen branch", func(context.Context) error {
-			var err error
-			inspection, err = inspectBranch(repo, branch)
-			return err
-		})
-		finishOperation(err)
-		if err != nil {
-			d.logf("reopen: inspecting branch %s in %s: %v", branch, repo, err)
-			return
-		}
-
-		d.branchInspectionsMu.Lock()
-		d.branchInspections[key] = inspection
-		d.branchInspectionsMu.Unlock()
-
-		if verdict, found := d.reopenVerdict(sessionID); found {
-			d.publishFact(FactSessionReopenRefreshed, sessionID, verdict.toProtocol())
-		}
-	}()
-	return done
-}
-
-func (d *Daemon) refreshReopenBranch(verdict *sessionReopenVerdict) {
-	if verdict.BranchState == "" || verdict.BranchState == branchStateUnknown {
-		return
-	}
-	d.inspectBranchInBackground(verdict.SessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
-}
-
-func (d *Daemon) forgetBranchInspections(repo string) {
-	prefix := attngit.CanonicalizePath(repo) + "\x00"
-	d.branchInspectionsMu.Lock()
-	defer d.branchInspectionsMu.Unlock()
-	for key := range d.branchInspections {
-		if strings.HasPrefix(key, prefix) {
-			delete(d.branchInspections, key)
-		}
-	}
-}
-
-func inspectBranch(repo, branch string) (branchInspection, error) {
-	if _, err := os.Stat(repo); err != nil {
-		return branchInspection{State: branchStateGone, RepoMissing: true}, nil
-	}
-	inspection := branchInspection{State: branchStateGone}
-	if attngit.RefExists(repo, branch) {
-		inspection.State = branchStateLocal
-	} else {
-		remotes, err := attngit.ListRemotes(repo)
-		if err != nil {
-			return branchInspection{}, fmt.Errorf("read remotes of %s: %w", repo, err)
-		}
-		for _, remote := range remotes {
-			if attngit.RefExists(repo, remote+"/"+branch) {
-				inspection.State = branchStateRemoteOnly
-				inspection.Remote = remote
-				break
-			}
-		}
-	}
-	worktrees, err := attngit.ObserveWorktrees(repo)
-	if err != nil {
-		return branchInspection{}, fmt.Errorf("read worktrees of %s: %w", repo, err)
-	}
-	for _, worktree := range worktrees {
-		if strings.TrimSpace(worktree.Branch) != branch {
-			continue
-		}
-		if worktree.Prunable {
-			inspection.StaleRegistration = true
-			continue
-		}
-		inspection.AlreadyCheckedOut = true
-	}
-	return inspection, nil
+	return "", nil
 }
 
 type sessionReopenOutcome struct {
@@ -504,32 +366,48 @@ func (d *Daemon) reopenSession(
 	sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(context.Context) error {
-		var err error
-		outcome, err = d.reopenSessionForeground(sessionID, action, directory)
-		return err
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var reopenErr error
+		outcome, reopenErr = d.reopenSessionProtected(protection, sessionID, action, directory)
+		return reopenErr
 	})
 	return outcome, err
 }
 
-func (d *Daemon) reopenSessionForeground(
-	sessionID string, action protocol.SessionReopenAction, directory string,
+func (d *Daemon) reopenSessionProtected(
+	protection foregroundCleanupProtection, sessionID string, action protocol.SessionReopenAction, directory string,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, fmt.Errorf("session_id is required")
 	}
-	verdict, found := d.reopenVerdict(sessionID)
-	if !found {
+	lifecycleLock := d.sessionLifecycleLockFor(sessionID)
+	lifecycleLock.Lock()
+	defer lifecycleLock.Unlock()
+
+	entry := d.store.SessionLedgerEntry(sessionID)
+	if entry == nil {
 		return nil, fmt.Errorf(
 			"no ledger row for session %s on this daemon; a session that ran before the ledger, or on another "+
 				"daemon, is not here. Its seed may still hand the work over from its saved dispatch", sessionID)
 	}
+	key := reopenKey{SessionID: sessionID, ClosedAt: protocol.Deref(entry.ClosedAt)}
+	gitView := d.scheduledReopenGit()
+	var verdict sessionReopenVerdict
+	var err error
+	if key.ClosedAt == "" {
+		verdict, err = d.resolveReopen(protection.Context(), *entry, gitView)
+	} else {
+		verdict, err = d.resolveClosedReopen(protection.Context(), key, gitView)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("resolve reopen eligibility for session %s: %w", sessionID, err)
+	}
 	if verdict.Live {
 		return &sessionReopenOutcome{
 			SessionID:      sessionID,
-			WorkspaceID:    verdict.Entry.WorkspaceID,
-			Directory:      verdict.Entry.Directory,
+			WorkspaceID:    entry.WorkspaceID,
+			Directory:      entry.Directory,
 			Action:         protocol.SessionReopenActionReopen,
 			AlreadyRunning: true,
 		}, nil
@@ -537,37 +415,38 @@ func (d *Daemon) reopenSessionForeground(
 	if action == "" {
 		action = protocol.SessionReopenActionReopen
 	}
-	if verdict.Checking && !verdict.offers(action) {
-		<-d.inspectBranchInBackground(sessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
-		verdict, found = d.reopenVerdict(sessionID)
-		if !found {
-			return nil, fmt.Errorf("session %s left the ledger while its branch was being checked", sessionID)
-		}
-	}
 	if !verdict.offers(action) {
-		return nil, reopenRefusal(verdict, action)
+		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
-	return d.performReopen(verdict, action, directory)
+	return d.performReopenLocked(protection, &verdict, action, directory)
 }
 
-func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenAction) error {
-	reason := strings.TrimSpace(verdict.Reason)
+type reopenRefusedError struct {
+	verdict *sessionReopenVerdict
+	action  protocol.SessionReopenAction
+}
+
+func (e *reopenRefusedError) Error() string {
+	reason := strings.TrimSpace(e.verdict.Reason)
 	if reason == "" {
 		reason = "the saved execution does not allow it"
 	}
-	if len(verdict.Actions) == 0 {
-		return fmt.Errorf("%s cannot be reopened: %s", verdict.SessionID, reason)
+	if len(e.verdict.Actions) == 0 {
+		return fmt.Sprintf("%s cannot be reopened: %s", e.verdict.SessionID, reason)
 	}
-	offered := make([]string, 0, len(verdict.Actions))
-	for _, offer := range verdict.Actions {
+	offered := make([]string, 0, len(e.verdict.Actions))
+	for _, offer := range e.verdict.Actions {
 		offered = append(offered, string(offer))
 	}
-	return fmt.Errorf("%s cannot be reopened with %s: %s. Offered instead: %s",
-		verdict.SessionID, action, reason, strings.Join(offered, ", "))
+	return fmt.Sprintf("%s cannot be reopened with %s: %s. Offered instead: %s",
+		e.verdict.SessionID, e.action, reason, strings.Join(offered, ", "))
 }
 
-func (d *Daemon) performReopen(
-	verdict *sessionReopenVerdict, action protocol.SessionReopenAction, directory string,
+func (d *Daemon) performReopenLocked(
+	protection foregroundCleanupProtection,
+	verdict *sessionReopenVerdict,
+	action protocol.SessionReopenAction,
+	directory string,
 ) (*sessionReopenOutcome, error) {
 	plan := sessionReopenPlan{
 		SessionID:   verdict.SessionID,
@@ -598,7 +477,7 @@ func (d *Daemon) performReopen(
 		if action == protocol.SessionReopenActionStartFreshDefaultBranch {
 			plan.FreshConversation = true
 		}
-		path, err := d.recreateReopenWorktree(verdict, action)
+		path, err := d.recreateReopenWorktreeProtected(protection, verdict, action)
 		if err != nil {
 			return nil, err
 		}
@@ -609,7 +488,7 @@ func (d *Daemon) performReopen(
 		return nil, fmt.Errorf("%q is not a reopen action", action)
 	}
 
-	outcome, err := d.reopenSessionRuntime(plan, rollback, nil)
+	outcome, err := d.reopenSessionRuntimeProtected(protection, plan, rollback, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -634,48 +513,105 @@ func reopenDirectoryInsideWorktree(worktree string, execution garden.Dispatch) s
 	return worktree
 }
 
-func (d *Daemon) recreateReopenWorktree(
-	verdict *sessionReopenVerdict, action protocol.SessionReopenAction,
+func (d *Daemon) recreateReopenWorktreeProtected(
+	protection foregroundCleanupProtection,
+	verdict *sessionReopenVerdict,
+	action protocol.SessionReopenAction,
 ) (string, error) {
-	repo := strings.TrimSpace(verdict.Execution.RepositoryRoot)
-	branch := strings.TrimSpace(verdict.Execution.Branch)
-	path := verdict.RecreatePath
-	defer d.forgetBranchInspections(repo)
-
-	if inspection, known := d.branchInspection(verdict.SessionID, repo, branch); known && inspection.StaleRegistration {
-		if err := attngit.PruneWorktrees(repo); err != nil {
-			return "", fmt.Errorf("clear the stale worktree registration in %s: %w", repo, err)
+	plan, err := d.reopenWorktreeProviderPlan(protection.Context(), verdict, action)
+	if err != nil {
+		return "", err
+	}
+	if err := d.dispatchWorktreeBeforeCreateHooks(plan.repository, plan.branch, plan.startingFrom, plan.path); err != nil {
+		return "", err
+	}
+	createdPath, createdBranch, handled, err := d.dispatchWorktreeCreateProvider(
+		plan.repository, plan.branch, plan.startingFrom, plan.path,
+	)
+	if err != nil {
+		return "", err
+	}
+	if !handled {
+		createdPath = plan.path
+		mutationErr := d.gitExecution().Run(protection.Context(), gitTask{
+			Kind: gitTaskWorktreeMutation, Lane: gitInteractive,
+		}, func(ctx context.Context, client *attngit.Client) error {
+			var createErr error
+			createdBranch, createErr = mutateReopenWorktreeAdmitted(
+				ctx, client, plan, action, verdict.Inspection.StaleRegistration,
+			)
+			return createErr
+		})
+		if mutationErr != nil {
+			return createdPath, mutationErr
 		}
 	}
+	d.registerCreatedWorktree(protection, plan.repository, createdPath, createdBranch)
+	return createdPath, d.dispatchWorktreeAfterCreateHooks(plan.repository, createdPath, createdBranch)
+}
 
+type reopenWorktreePlan struct {
+	repository   string
+	branch       string
+	startingFrom string
+	path         string
+}
+
+func (d *Daemon) reopenWorktreeProviderPlan(
+	ctx context.Context,
+	verdict *sessionReopenVerdict,
+	action protocol.SessionReopenAction,
+) (reopenWorktreePlan, error) {
+	plan := reopenWorktreePlan{
+		repository: strings.TrimSpace(verdict.Execution.RepositoryRoot),
+		branch:     strings.TrimSpace(verdict.Execution.Branch),
+		path:       verdict.RecreatePath,
+	}
 	switch action {
 	case protocol.SessionReopenActionRecreateWorktreeAndReopen:
-		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
-			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: protocol.Ptr(path),
-		})
+		plan.startingFrom = plan.branch
 	case protocol.SessionReopenActionFetchRecreateAndReopen:
-		inspection, _ := d.branchInspection(verdict.SessionID, repo, branch)
-		if inspection.Remote == "" {
-			return "", fmt.Errorf("no remote carries branch %s any more", branch)
+		if verdict.Inspection.Remote == "" {
+			return reopenWorktreePlan{}, fmt.Errorf("no remote carries branch %s any more", plan.branch)
 		}
-		return d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
-			Cmd:      protocol.CmdCreateWorktreeFromBranch,
-			MainRepo: repo,
-			Branch:   inspection.Remote + "/" + branch,
-			Path:     protocol.Ptr(path),
+		plan.startingFrom = verdict.Inspection.Remote + "/" + plan.branch
+	case protocol.SessionReopenActionStartFreshDefaultBranch:
+		base, err := gitValue(ctx, d.gitExecution(), gitTask{
+			Kind: gitTaskReopen, Lane: gitInteractive,
+		}, func(runCtx context.Context, client *attngit.Client) (string, error) {
+			return client.GetDefaultBranch(runCtx, plan.repository)
 		})
-	default:
-		base, err := attngit.GetDefaultBranch(repo)
 		if err != nil || strings.TrimSpace(base) == "" {
-			return "", fmt.Errorf("%s has no default branch to start from: %w", repo, err)
+			return reopenWorktreePlan{}, fmt.Errorf("%s has no default branch to start from: %w", plan.repository, err)
 		}
-		return d.doCreateWorktreeForeground(&protocol.CreateWorktreeMessage{
-			Cmd:          protocol.CmdCreateWorktree,
-			MainRepo:     repo,
-			Branch:       branch,
-			Path:         protocol.Ptr(path),
-			StartingFrom: protocol.Ptr(base),
-		})
+		plan.startingFrom = base
+	default:
+		return reopenWorktreePlan{}, fmt.Errorf("%q does not recreate a worktree", action)
+	}
+	return plan, nil
+}
+
+func mutateReopenWorktreeAdmitted(
+	ctx context.Context,
+	client *attngit.Client,
+	plan reopenWorktreePlan,
+	action protocol.SessionReopenAction,
+	staleRegistration bool,
+) (string, error) {
+	if staleRegistration {
+		if err := client.PruneWorktrees(ctx, plan.repository); err != nil {
+			return "", fmt.Errorf("clear the stale worktree registration in %s: %w", plan.repository, err)
+		}
+	}
+	switch action {
+	case protocol.SessionReopenActionRecreateWorktreeAndReopen:
+		return plan.branch, client.CreateWorktreeFromBranch(ctx, plan.repository, plan.startingFrom, plan.path)
+	case protocol.SessionReopenActionFetchRecreateAndReopen:
+		return client.CreateWorktreeFromRemoteBranch(ctx, plan.repository, plan.startingFrom, plan.path)
+	case protocol.SessionReopenActionStartFreshDefaultBranch:
+		return plan.branch, client.CreateWorktreeFromPoint(ctx, plan.repository, plan.branch, plan.path, plan.startingFrom)
+	default:
+		return "", fmt.Errorf("%q does not recreate a worktree", action)
 	}
 }
 
@@ -699,11 +635,35 @@ func (d *Daemon) reopenSessionRuntime(
 	rollback *delegationRollback,
 	afterSpawn func() error,
 ) (*sessionRuntimeReopened, error) {
+	var outcome *sessionRuntimeReopened
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var reopenErr error
+		outcome, reopenErr = d.reopenSessionRuntimeWithProtection(protection, plan, rollback, afterSpawn)
+		return reopenErr
+	})
+	return outcome, err
+}
+
+func (d *Daemon) reopenSessionRuntimeWithProtection(
+	protection foregroundCleanupProtection,
+	plan sessionReopenPlan,
+	rollback *delegationRollback,
+	afterSpawn func() error,
+) (*sessionRuntimeReopened, error) {
 	lifecycleLock := d.sessionLifecycleLockFor(plan.SessionID)
 	lifecycleLock.Lock()
 	defer lifecycleLock.Unlock()
+	return d.reopenSessionRuntimeProtected(protection, plan, rollback, afterSpawn)
+}
+
+func (d *Daemon) reopenSessionRuntimeProtected(
+	protection foregroundCleanupProtection,
+	plan sessionReopenPlan,
+	rollback *delegationRollback,
+	afterSpawn func() error,
+) (*sessionRuntimeReopened, error) {
 	fail := func(cause error) (*sessionRuntimeReopened, error) {
-		return nil, rollback.fail(cause)
+		return nil, rollback.fail(protection, cause)
 	}
 
 	entry := d.store.SessionLedgerEntry(plan.SessionID)
@@ -811,7 +771,7 @@ func (d *Daemon) reopenSessionRuntime(
 		spawn.ResumeSessionID = protocol.Ptr(resumeID)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawn, policy)
+	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawn, policy)
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		return fail(fmt.Errorf("spawn reopened session: %w", err))
 	}
@@ -835,7 +795,7 @@ func (d *Daemon) reopenSessionRuntime(
 }
 
 func (r *delegationRollback) onSessionReopened(sessionID string, closed store.SessionCloseRecord) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.terminateSession(sessionID, syscall.SIGTERM)
 		r.d.restoreSessionClose(sessionID, closed)
 		r.d.dissociateSessionFromWorkspace(sessionID)
@@ -848,7 +808,7 @@ func (r *delegationRollback) onSessionRespawned(
 	priorIntent store.LaunchIntent,
 	hadPriorIntent bool,
 ) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		if err := r.d.terminateSessionRuntimeChecked(prior.ID, syscall.SIGTERM); err != nil {
 			return err
 		}
@@ -874,7 +834,7 @@ func (r *delegationRollback) onSessionRespawned(
 }
 
 func (r *delegationRollback) onConversationForgotten(sessionID string, prior store.SessionConversation) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		if strings.TrimSpace(prior.NativeID) == "" {
 			return nil
 		}

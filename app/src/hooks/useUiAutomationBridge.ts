@@ -1819,7 +1819,6 @@ function collectSessionsPanelUiState() {
         .map((segment) => segment.textContent?.trim() || '')
         .find((text) => text.startsWith('closed by')) || row.querySelector('.ledger-stamp')?.textContent?.trim() || '',
       verdict,
-      refreshing: Boolean(row.querySelector('.ledger-glyph.is-refreshing')),
       actions: verbs,
     };
   });

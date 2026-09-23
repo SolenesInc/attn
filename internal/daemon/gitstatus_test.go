@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"testing/synctest"
 	"time"
 
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -64,9 +66,9 @@ func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
 		t.Fatalf("dirty working tree: %v", err)
 	}
 
-	content, err := readFileDiff(dir, "src/file.ts", shaV1, shaV2, false)
+	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaV1, headRef: shaV2})
 	if err != nil {
-		t.Fatalf("readFileDiff: %v", err)
+		t.Fatalf("readFileDiffCoordinated: %v", err)
 	}
 	if content.original != "v1" {
 		t.Errorf("original = %q, want %q", content.original, "v1")
@@ -79,9 +81,9 @@ func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
 func TestReadFileDiff_HeadRefFileDoesNotExist(t *testing.T) {
 	dir, shaEmpty, _, _ := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
 
-	content, err := readFileDiff(dir, "src/file.ts", shaEmpty, shaEmpty, false)
+	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaEmpty, headRef: shaEmpty})
 	if err != nil {
-		t.Fatalf("readFileDiff: %v", err)
+		t.Fatalf("readFileDiffCoordinated: %v", err)
 	}
 	if content.original != "" {
 		t.Errorf("original = %q, want empty (file absent at base_ref)", content.original)
@@ -163,7 +165,7 @@ func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 		releaseFirst := make(chan struct{})
 
 		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			if inFlight.Add(1) > 1 {
 				overlapped.Store(true)
 			}
@@ -215,7 +217,7 @@ func TestGitOperationMarksMatchingStatusSubscriptionDirty(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32
 		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			call := calls.Add(1)
 			return testGitStatus(dir, fmt.Sprintf("file-%d.txt", call)), nil
 		}
@@ -253,7 +255,7 @@ func TestGitStatusSchedulerDelaysSafetyRefreshAfterSlowRun(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		var calls atomic.Int32
 		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			call := calls.Add(1)
 			time.Sleep(gitStatusSlowRefreshDuration + time.Second)
 			return testGitStatus(dir, fmt.Sprintf("file-%d.txt", call)), nil
@@ -294,7 +296,7 @@ func TestGitStatusSchedulerUsesTrackedOnlyAfterLimitedRefresh(t *testing.T) {
 		var calls atomic.Int32
 		modes := make(chan gitStatusMode, 2)
 		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			modes <- mode
 			call := calls.Add(1)
 			status := testGitStatus(dir, fmt.Sprintf("file-%d.txt", call))
@@ -344,7 +346,7 @@ func TestGitStatusCoordinatorSharesInFlightStatusForRepoAndMode(t *testing.T) {
 		started := make(chan struct{})
 		release := make(chan struct{})
 		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
+		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 			call := calls.Add(1)
 			if call == 1 {
 				close(started)
@@ -356,11 +358,11 @@ func TestGitStatusCoordinatorSharesInFlightStatusForRepoAndMode(t *testing.T) {
 			getGitStatusForDaemon = previousGetGitStatus
 		}()
 
-		d := &Daemon{}
+		d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 		results := make(chan *protocol.GitStatusUpdateMessage, 2)
 		for i := 0; i < 2; i++ {
 			go func() {
-				status, _, err := d.coordinator().Status("/repo", gitStatusModeFull)
+				status, _, err := d.statusReader().Status(context.Background(), "/repo", gitStatusModeFull)
 				if err != nil {
 					t.Errorf("Status failed: %v", err)
 				}
@@ -386,7 +388,7 @@ func TestGitStatusCoordinatorSharesInFlightStatusForRepoAndMode(t *testing.T) {
 
 func TestTrackedOnlyStatusResultStaysLimited(t *testing.T) {
 	previousRunGitStatusCommand := runGitStatusCommandForDaemon
-	runGitStatusCommandForDaemon = func(_ string, _ time.Duration, args ...string) ([]byte, error) {
+	runGitStatusCommandForDaemon = func(_ context.Context, _ *attngit.Client, _ string, _ time.Duration, args ...string) ([]byte, error) {
 		if !containsArg(args, "--untracked-files=no") {
 			t.Fatalf("args = %v, want tracked-only status", args)
 		}
@@ -396,11 +398,11 @@ func TestTrackedOnlyStatusResultStaysLimited(t *testing.T) {
 		runGitStatusCommandForDaemon = previousRunGitStatusCommand
 	}()
 
-	status, err := getGitStatusWithOptions("/repo", gitStatusOptions{
+	status, err := getGitStatusWithOptionsAdmitted(context.Background(), attngit.NewClient(), "/repo", gitStatusOptions{
 		mode: gitStatusModeTrackedOnly,
 	})
 	if err != nil {
-		t.Fatalf("getGitStatusWithOptions failed: %v", err)
+		t.Fatalf("getGitStatusWithOptionsAdmitted failed: %v", err)
 	}
 	if !protocol.Deref(status.Limited) {
 		t.Fatal("tracked-only status limited = false, want true")
@@ -414,7 +416,7 @@ func TestGetGitStatusWithOptionsFallsBackToTrackedOnlyAfterFullTimeout(t *testin
 	var calls atomic.Int32
 	argsSeen := make(chan []string, 2)
 	previousRunGitStatusCommand := runGitStatusCommandForDaemon
-	runGitStatusCommandForDaemon = func(_ string, _ time.Duration, args ...string) ([]byte, error) {
+	runGitStatusCommandForDaemon = func(_ context.Context, _ *attngit.Client, _ string, _ time.Duration, args ...string) ([]byte, error) {
 		argsSeen <- append([]string(nil), args...)
 		if calls.Add(1) == 1 {
 			return nil, fmt.Errorf("git status timed out after 5s: git status")
@@ -425,12 +427,12 @@ func TestGetGitStatusWithOptionsFallsBackToTrackedOnlyAfterFullTimeout(t *testin
 		runGitStatusCommandForDaemon = previousRunGitStatusCommand
 	}()
 
-	status, err := getGitStatusWithOptions("/repo", gitStatusOptions{
+	status, err := getGitStatusWithOptionsAdmitted(context.Background(), attngit.NewClient(), "/repo", gitStatusOptions{
 		mode:        gitStatusModeFull,
 		fullTimeout: 5 * time.Second,
 	})
 	if err != nil {
-		t.Fatalf("getGitStatusWithOptions failed: %v", err)
+		t.Fatalf("getGitStatusWithOptionsAdmitted failed: %v", err)
 	}
 	if calls.Load() != 2 {
 		t.Fatalf("status command calls = %d, want 2", calls.Load())
@@ -482,7 +484,7 @@ func TestGitCoordinatorSharesInFlightFileDiff(t *testing.T) {
 		var calls atomic.Int32
 		started := make(chan struct{})
 		release := make(chan struct{})
-		readFileDiffForDaemon = func(_, _, _, _ string, _ bool) (fileDiffContent, error) {
+		readFileDiffForDaemon = func(_ context.Context, _ gitExecutor, _ fileDiffCacheKey) (fileDiffContent, error) {
 			call := calls.Add(1)
 			if call == 1 {
 				close(started)
@@ -494,11 +496,11 @@ func TestGitCoordinatorSharesInFlightFileDiff(t *testing.T) {
 			readFileDiffForDaemon = previousReadFileDiff
 		}()
 
-		d := &Daemon{}
+		d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig)}
 		results := make(chan fileDiffContent, 2)
 		for i := 0; i < 2; i++ {
 			go func() {
-				content, err := d.coordinator().FileDiff("/repo", "src/file.ts", "HEAD", "", false)
+				content, err := d.diffReader().FileDiff(context.Background(), "/repo", "src/file.ts", "HEAD", "", false)
 				if err != nil {
 					t.Errorf("FileDiff failed: %v", err)
 				}

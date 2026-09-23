@@ -9073,9 +9073,6 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
-
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9423,9 +9420,6 @@ type SessionReopen struct {
 	// BranchState corresponds to the JSON schema field "branch_state".
 	BranchState *string `json:"branch_state,omitempty,omitzero"`
 
-	// Checking corresponds to the JSON schema field "checking".
-	Checking bool `json:"checking"`
-
 	// DirectoryState corresponds to the JSON schema field "directory_state".
 	DirectoryState string `json:"directory_state"`
 
@@ -9482,17 +9476,6 @@ type SessionReopenMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionReopenRefreshedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen SessionReopen `json:"reopen"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type SessionReopenResult struct {
 	// Action corresponds to the JSON schema field "action".
 	Action SessionReopenAction `json:"action"`
@@ -9519,6 +9502,9 @@ type SessionReopenResultMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -10957,9 +10943,6 @@ type WebSocketEvent struct {
 
 	// RecentLocations corresponds to the JSON schema field "recent_locations".
 	RecentLocations []RecentLocation `json:"recent_locations,omitempty,omitzero"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

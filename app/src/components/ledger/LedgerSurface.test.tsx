@@ -2,23 +2,30 @@ import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { LedgerSurface } from './LedgerSurface';
 import type { LedgerTab } from './LedgerSurface';
-import { closedEntry, judged, listing, liveEntry, now, page, rows } from './testSupport';
+import { listing, page, rows } from './testSupport';
 import { useWorktreeStore } from '../../store/worktrees';
+import { createSessionLedgerTestConnection } from '../../test/sessionLedgerTestConnection';
+import { closedEntry, liveEntry, now } from '../../test/sessionLedgerFixtures';
 
 function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onFocusSession?: (id: string) => void; onSelectSession?: (id: string) => void } = {}) {
   useWorktreeStore.getState().clear();
   const onTabChange = vi.fn();
   const { list } = listing([page({
     entries: [liveEntry('live'), closedEntry('wt', { is_worktree: true, directory: '/projects/attn--feat-one' })],
-    reopen: [judged('wt')],
   })]);
+  const transport = createSessionLedgerTestConnection(list);
   const props = (current: LedgerTab) => ({
     isOpen: true,
     tab: current,
     onTabChange,
     onClose: extra.onClose ?? vi.fn(),
     now,
-    sessions: { listSessions: list, workspaceNames: {}, onFocusSession: extra.onFocusSession ?? vi.fn(), onReopen: vi.fn() },
+    sessions: {
+      connection: transport.connection,
+      workspaceNames: {},
+      onFocusSession: extra.onFocusSession ?? vi.fn(),
+      onReopen: vi.fn(),
+    },
     worktrees: {
       listWorktrees: vi.fn().mockResolvedValue({ worktrees: [{ path: '/projects/attn--feat-one', branch: 'feat/one', main_repo: '/projects/attn' }], repositories: [{ main_repo: '/projects/attn' }], omitted: 0 }),
       getSweepLog: vi.fn().mockResolvedValue({ entries: [], omitted: 0 }),

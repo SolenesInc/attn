@@ -870,7 +870,8 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
-  // Also judge every closed row of this page, so a surface renders it in one call.
+  // Request reopen eligibility for every closed row of this page, inline in
+  // the result.
   reopen?: boolean;
 }
 
@@ -7055,8 +7056,6 @@ model SessionReopen {
   // Offered actions, best first. Empty means nothing here brings it back.
   actions: SessionReopenAction[];
   warning?: string;
-  // A branch check is running; ask again for a sharper verdict.
-  checking: boolean;
   // present | missing | unavailable | unknown | remote
   directory_state: string;
   // local | remote_only | gone | merged | unknown
@@ -7354,12 +7353,8 @@ model SessionReopenResultMessage {
   success: boolean;
   error?: string;
   result?: SessionReopenResult;
-}
-
-model SessionReopenRefreshedMessage {
-  event: "session_reopen_refreshed";
-  session_id: string;
-  reopen: SessionReopen;
+  // Present when the session refused the action: what it offers instead.
+  reopen?: SessionReopen;
 }
 
 // session_unregistered says the live session left; this says where it went, so
@@ -7367,8 +7362,6 @@ model SessionReopenRefreshedMessage {
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
-  // So a surface that updates in place judges the new row without a re-list.
-  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7597,7 +7590,6 @@ model WebSocketEvent {
   plugin_issues?: PluginIssue[];
   operation?: GitOperation;
   session_ledger_entry?: SessionLedgerEntry;
-  reopen?: SessionReopen;
   branches?: Branch[];
   recent_locations?: RecentLocation[];
   settings?: Record<string>;
@@ -7782,7 +7774,6 @@ alias DaemonEvent =
   | SessionListResultMessage
   | SessionShowResultMessage
   | SessionReopenResultMessage
-  | SessionReopenRefreshedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

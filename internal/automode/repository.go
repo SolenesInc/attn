@@ -1,6 +1,7 @@
 package automode
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -23,7 +24,11 @@ type repositoryRulesDocument struct {
 }
 
 func LoadRepositoryRules(cwd string) (RepositoryRules, error) {
-	root, err := attngit.GetRepoRoot(cwd)
+	return LoadRepositoryRulesWithGit(context.Background(), attngit.NewClient(), cwd)
+}
+
+func LoadRepositoryRulesWithGit(ctx context.Context, client repositoryGit, cwd string) (RepositoryRules, error) {
+	root, err := client.GetRepoRoot(ctx, cwd)
 	if err != nil {
 		present, markerErr := repositoryMarkerPresent(cwd)
 		if markerErr != nil {

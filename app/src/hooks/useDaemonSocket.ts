@@ -54,7 +54,6 @@ import type {
   GardenReview as GeneratedGardenReview,
   SeedSendToChiefResult as GeneratedSeedSendToChiefResult,
   SessionLedgerEntry,
-  SessionReopen,
   SessionReopenResult,
   SupportSnapshotResultMessage,
 } from '../types/generated';
@@ -106,7 +105,12 @@ import {
 import { handleFsDaemonEvent } from './daemonFsEvents';
 import { handleSeedArtifactDaemonEvent } from './daemonSeedArtifactEvents';
 import { handleSessionLedgerDaemonEvent } from './daemonSessionLedgerEvents';
-import type { SessionLedgerPage, SessionLedgerQuery } from './daemonSessionLedgerEvents';
+import type {
+  SessionLedgerConnectionEvent,
+  SessionLedgerPage,
+  SessionLedgerQuery,
+  SessionLedgerUpdate,
+} from './daemonSessionLedgerEvents';
 import { handleNotebookDaemonEvent } from './daemonNotebookEvents';
 import {
   DocumentSubscriptions,
@@ -312,7 +316,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '318';
+export const PROTOCOL_VERSION = '319';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -597,8 +601,6 @@ export interface RecentFile {
 interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
   onNotebookChanged?: (origin: string, paths: string[]) => void;
-  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
   onTasksChanged?: () => void;
   onNotificationsUpdated?: (unreadCount: number, critical: CriticalNotificationState) => void;
   onFsChanged?: (origin: string, paths: string[], root: string) => void;
@@ -853,8 +855,6 @@ export async function retryTransientAttachRequest<T>(
 export function useDaemonSocket({
   onSessionsUpdate,
   onNotebookChanged,
-  onSessionClosed,
-  onSessionReopenRefreshed,
   onTasksChanged,
   onNotificationsUpdated,
   onFsChanged,
@@ -890,8 +890,6 @@ export function useDaemonSocket({
   const callbacksRef = useRef({
     onSessionsUpdate,
     onNotebookChanged,
-    onSessionClosed,
-    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -916,8 +914,6 @@ export function useDaemonSocket({
   callbacksRef.current = {
     onSessionsUpdate,
     onNotebookChanged,
-    onSessionClosed,
-    onSessionReopenRefreshed,
     onTasksChanged,
     onNotificationsUpdated,
     onFsChanged,
@@ -944,6 +940,7 @@ export function useDaemonSocket({
   const pendingActionsRef = useRef<PendingRequests>(new Map());
   const mdAnnotationsPendingRef = useRef<PendingKeyedRequests>(new Map());
   const sessionMessageListenersRef = useRef<Map<string, Set<() => void>>>(new Map());
+  const sessionLedgerListenersRef = useRef<Set<(event: SessionLedgerConnectionEvent) => void>>(new Set());
   const mdAnnotationsGetInflightRef = useRef<Map<string, Promise<{
     annotations: MarkdownAnnotation[];
     generation: number;
@@ -972,6 +969,11 @@ export function useDaemonSocket({
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
+  const connectionGenerationRef = useRef(0);
+  const emitSessionLedger = useCallback((event: SessionLedgerUpdate | { type: 'connection'; connected: boolean }) => {
+    const stamped: SessionLedgerConnectionEvent = { ...event, connectionGeneration: connectionGenerationRef.current };
+    for (const listener of sessionLedgerListenersRef.current) listener(stamped);
+  }, []);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
   const [rateLimit, setRateLimit] = useState<RateLimitState | null>(null);
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
@@ -1279,7 +1281,9 @@ export function useDaemonSocket({
       console.log('[Daemon] WebSocket connected');
       daemonRestartInProgressRef.current = false;
       setConnectionError(null);
-      setConnectionGeneration((prev) => prev + 1);
+      connectionGenerationRef.current += 1;
+      setConnectionGeneration(connectionGenerationRef.current);
+      emitSessionLedger({ type: 'connection', connected: true });
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
       circuitOpenRef.current = false;
@@ -2869,11 +2873,7 @@ export function useDaemonSocket({
           default: {
             const pending = pendingActionsRef.current;
             if (handleSeedArtifactDaemonEvent(data, pending)) break;
-            if (handleSessionLedgerDaemonEvent(data, {
-              pending,
-              onSessionClosed: callbacksRef.current.onSessionClosed,
-              onSessionReopenRefreshed: callbacksRef.current.onSessionReopenRefreshed,
-            })) break;
+            if (handleSessionLedgerDaemonEvent(data, { pending, onUpdate: emitSessionLedger })) break;
             if (handleFsDaemonEvent(data, { pending, onFsChanged: callbacksRef.current.onFsChanged })) break;
             if (handleNotebookDaemonEvent(data, { pending, onNotebookChanged: callbacksRef.current.onNotebookChanged })) break;
             if (handleMarkdownAnnotationDaemonEvent(data, mdAnnotationsPendingRef.current)) break;
@@ -2902,6 +2902,7 @@ export function useDaemonSocket({
 
     ws.onclose = () => {
       wsRef.current = null;
+      emitSessionLedger({ type: 'connection', connected: false });
       hasReceivedInitialStateRef.current = false;
       canceledAttachIdsRef.current.clear();
       docSubscriptions.markDisconnected();
@@ -2937,7 +2938,7 @@ export function useDaemonSocket({
     };
 
     wsRef.current = ws;
-  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions]);
+  }, [resolvedWsUrl, rejectPendingForCommand, ensureDaemonRunning, showRecoveringNoticeForCommand, flushQueuedCommands, pruneAttachedPtySessions, emitSessionLedger]);
 
   useEffect(() => {
     void connect();
@@ -4613,6 +4614,18 @@ export function useDaemonSocket({
     };
   }, []);
 
+  const subscribeSessionLedger = useCallback((listener: (event: SessionLedgerConnectionEvent) => void) => {
+    sessionLedgerListenersRef.current.add(listener);
+    listener({
+      type: 'connection',
+      connected: wsRef.current?.readyState === WebSocket.OPEN,
+      connectionGeneration: connectionGenerationRef.current,
+    });
+    return () => {
+      sessionLedgerListenersRef.current.delete(listener);
+    };
+  }, []);
+
   const sendSessionAnnotationsGet = useCallback((sessionId: string): Promise<SessionAnnotationSet> => {
     return sendRequest('session_annotations_get', { session_id: sessionId }, 'Session annotation fetch timed out');
   }, [sendRequest]);
@@ -5565,6 +5578,7 @@ export function useDaemonSocket({
     sendUnsubscribeGitStatus,
     sendSessionSelected,
     sendSessionList,
+    subscribeSessionLedger,
     sendSessionShow,
     sendSessionReopen,
     sendBusStatusGet,

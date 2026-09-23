@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ func TestRunGitOutputTimesOut(t *testing.T) {
 	cleanup := setTimeoutForTesting(OpMetadata, 25*time.Millisecond)
 	defer cleanup()
 
-	_, err := runGitOutput(OpMetadata, t.TempDir(), "status")
+	_, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -35,9 +36,62 @@ func TestOutputContextReturnsCancellationCause(t *testing.T) {
 	cause := errors.New("foreground preempted sweep")
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(cause)
-	_, err := OutputContext(ctx, OpMetadata, t.TempDir(), "status")
+	_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
 	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want cancellation cause", err)
+	}
+}
+
+func TestClientCancellationStopsRunningGitChild(t *testing.T) {
+	fakeBin := t.TempDir()
+	readyFIFO := filepath.Join(t.TempDir(), "ready")
+	if err := syscall.Mkfifo(readyFIFO, 0o600); err != nil {
+		t.Fatalf("create ready fifo: %v", err)
+	}
+	fakeGit := filepath.Join(fakeBin, "git")
+	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf ready > \"$ATTN_GIT_TEST_READY_FIFO\"\nexec sleep 30\n"), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("ATTN_GIT_TEST_READY_FIFO", readyFIFO)
+
+	cause := errors.New("cancel admitted operation")
+	ctx, cancel := context.WithCancelCause(context.Background())
+	result := make(chan error, 1)
+	go func() {
+		_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
+		result <- err
+	}()
+
+	ready, err := os.ReadFile(readyFIFO)
+	if err != nil {
+		t.Fatalf("read child barrier: %v", err)
+	}
+	if strings.TrimSpace(string(ready)) != "ready" {
+		t.Fatalf("child barrier = %q, want ready", ready)
+	}
+	cancel(cause)
+	if err := <-result; !errors.Is(err, cause) {
+		t.Fatalf("error = %v, want cancellation cause", err)
+	}
+}
+
+func TestClientCloneDepthOneUsesSuppliedEnvironment(t *testing.T) {
+	fakeBin := t.TempDir()
+	fakeGit := filepath.Join(fakeBin, "git")
+	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf '%s|%s' \"$ATTN_PLUGIN_TEST\" \"$*\"\n"), 0o755); err != nil {
+		t.Fatalf("write fake git: %v", err)
+	}
+	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	environment := append(os.Environ(),
+		"ATTN_PLUGIN_TEST=from-plugin-environment",
+	)
+	out, err := NewClient().CloneDepthOne(context.Background(), "https://example.test/plugin.git", "/tmp/plugin", environment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(out); got != "from-plugin-environment|clone --depth 1 https://example.test/plugin.git /tmp/plugin" {
+		t.Fatalf("clone output = %q", got)
 	}
 }
 
@@ -57,9 +111,9 @@ func TestRunGitOutputLogsSlowCommand(t *testing.T) {
 	})
 	defer SetLogFunc(nil)
 
-	out, err := runGitOutput(OpMetadata, t.TempDir(), "status")
+	out, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
 	if err != nil {
-		t.Fatalf("runGitOutput failed: %v", err)
+		t.Fatalf("Output failed: %v", err)
 	}
 	if strings.TrimSpace(string(out)) != "ok" {
 		t.Fatalf("output = %q, want ok", out)
@@ -88,7 +142,7 @@ func TestRunGitOutputRedactsCredentialURLsInLogsAndTimeouts(t *testing.T) {
 	})
 	defer SetLogFunc(nil)
 
-	_, err := runGitOutput(OpClone, t.TempDir(), "clone", secretURL, "/tmp/repo")
+	_, err := NewClient().Output(context.Background(), OpClone, t.TempDir(), "clone", secretURL, "/tmp/repo")
 	if err == nil {
 		t.Fatal("expected timeout error")
 	}
@@ -119,7 +173,7 @@ func TestHTTPAuthorizationUsesProcessEnvironmentNotArgumentsOrLogs(t *testing.T)
 	var logs []string
 	SetLogFunc(func(format string, args ...interface{}) { logs = append(logs, fmt.Sprintf(format, args...)) })
 	defer SetLogFunc(nil)
-	if _, err := runGitCombinedWithHTTPAuthorization(OpNetwork, "", "https://github.com/owner/repo.git", header, "fetch", "origin", "ref"); err != nil {
+	if _, err := NewClient().combinedWithHTTPAuthorization(context.Background(), OpNetwork, "", "https://github.com/owner/repo.git", header, "fetch", "origin", "ref"); err != nil {
 		t.Fatal(err)
 	}
 	captured, err := os.ReadFile(capture)
