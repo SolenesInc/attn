@@ -641,6 +641,13 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 	}
 }
 
+func (b *WorkerBackend) sharedSessionExists(ctx context.Context, session *workerSession) bool {
+	infoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
+	defer cancel()
+	_, err := b.callInfo(infoCtx, session)
+	return err == nil
+}
+
 func (b *WorkerBackend) removeUnreadySharedSession(ctx context.Context, session *workerSession) {
 	removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
 	defer cancel()
@@ -652,7 +659,7 @@ func (b *WorkerBackend) removeUnreadySharedSession(ctx context.Context, session 
 func (b *WorkerBackend) spawnSharedSession(ctx context.Context, host ptyhost.HostRegistry, session *workerSession, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, bool, error) {
 	var result ptyhost.SpawnResult
 	if err := b.callSharedHost(ctx, incarnationOfHost(host), ptyhost.MethodSpawn, params, &result); err != nil {
-		if _, probeErr := b.callInfo(ctx, session); probeErr != nil {
+		if !b.sharedSessionExists(ctx, session) {
 			return nil, false, err
 		}
 		return nil, true, b.startSharedSession(ctx, session, 0)
