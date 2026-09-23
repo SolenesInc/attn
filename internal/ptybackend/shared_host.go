@@ -58,14 +58,30 @@ type sharedHostMonitor struct {
 }
 
 func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *workerSession, method string, params, result any) error {
+	conn, err := b.openSharedCall(ctx, session, method, params, result)
+	if err != nil {
+		return err
+	}
+	_ = conn.Close()
+	return nil
+}
+
+func (b *WorkerBackend) openSharedCall(ctx context.Context, session *workerSession, method string, params, result any) (net.Conn, error) {
 	rpcCtx, cancel := withDefaultRPCTimeout(ctx)
 	defer cancel()
 	conn, enc, dec, err := b.connectAuthed(rpcCtx, session)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer conn.Close()
-	if err := applyConnDeadline(conn, rpcCtx); err != nil {
+	if err := b.completeSharedCall(rpcCtx, conn, enc, dec, session, method, params, result); err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return conn, nil
+}
+
+func (b *WorkerBackend) completeSharedCall(ctx context.Context, conn net.Conn, enc *json.Encoder, dec *json.Decoder, session *workerSession, method string, params, result any) error {
+	if err := applyConnDeadline(conn, ctx); err != nil {
 		return err
 	}
 	reqID := b.nextReqID(method)
@@ -84,7 +100,7 @@ func (b *WorkerBackend) callResultSharedOneShot(ctx context.Context, session *wo
 			return fmt.Errorf("decode shared PTY host %s result: %w", method, err)
 		}
 	}
-	return nil
+	return conn.SetDeadline(time.Time{})
 }
 
 func (b *WorkerBackend) callResultSharedPersistent(ctx context.Context, session *workerSession, method string, params, result any) (bool, error) {
@@ -613,7 +629,6 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 			ControlToken: host.ControlToken,
 			WorkerPID:    host.HostPID,
 			LifecycleID:  params.LifecycleID,
-			probe:        params.Agent == probeAgent,
 		}
 		b.mu.Lock()
 		if _, exists := b.sessions[params.SessionID]; exists {

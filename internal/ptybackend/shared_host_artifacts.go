@@ -20,6 +20,7 @@ const (
 	sharedHostProbeContract = 1
 	sharedHostProbeCols     = 97
 	sharedHostProbeRows     = 31
+	sharedHostProbePrefix   = "probe-"
 )
 
 var errArtifactRejected = errors.New("shared PTY host build is broken")
@@ -128,15 +129,6 @@ func (b *WorkerBackend) importCandidate() (ptyhost.Artifact, error) {
 	return artifact, nil
 }
 
-func (b *WorkerBackend) abandonedSharedProbe(session *workerSession) bool {
-	if b.kind != workerRuntimeSharedHost || !session.probe {
-		return false
-	}
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	return b.sessions[session.SessionID] == nil
-}
-
 func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bool) error {
 	b.validateMu.Lock()
 	defer b.validateMu.Unlock()
@@ -239,30 +231,31 @@ func (b *WorkerBackend) collectSharedArtifacts() {
 }
 
 func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhost.Artifact) error {
-	host, err := b.ensureSharedHost(ctx, &artifact)
-	if err != nil {
-		return err
-	}
-	suffix, err := randomToken(6)
-	if err != nil {
-		return err
-	}
 	nonce, err := randomToken(8)
 	if err != nil {
 		return err
 	}
-	err = b.roundTripProbe(ctx, artifact, incarnationOfHost(host), probeSessionPrefix+suffix, nonce)
-	switch {
-	case err == nil, errors.Is(err, errArtifactRejected):
-		return err
-	case ctx.Err() != nil:
-		return fmt.Errorf("%v: %w", err, ctx.Err())
-	default:
-		return fmt.Errorf("%w: %w", errArtifactRejected, err)
+	for attempt := 0; ; attempt++ {
+		host, err := b.ensureSharedHost(ctx, &artifact)
+		if err != nil {
+			return err
+		}
+		err = b.roundTripProbe(ctx, artifact, host, nonce)
+		switch {
+		case err == nil, errors.Is(err, errArtifactRejected):
+			return err
+		case ctx.Err() != nil:
+			return fmt.Errorf("%v: %w", err, ctx.Err())
+		case attempt == 0 && isRetiringSharedHost(err):
+			continue
+		default:
+			return fmt.Errorf("%w: %w", errArtifactRejected, err)
+		}
 	}
 }
 
-func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Artifact, inc hostIncarnation, id, nonce string) (err error) {
+func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Artifact, host ptyhost.HostRegistry, nonce string) error {
+	inc := incarnationOfHost(host)
 	info, err := b.sharedHostInfo(ctx, inc)
 	if err != nil {
 		return err
@@ -272,32 +265,38 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
 	}
 
+	suffix, err := randomToken(6)
+	if err != nil {
+		return err
+	}
+	probe := &workerSession{
+		SessionID:    sharedHostProbePrefix + suffix,
+		SocketPath:   host.SocketPath,
+		ControlToken: host.ControlToken,
+		WorkerPID:    host.HostPID,
+	}
 	workdir := os.TempDir()
-	params := ptyhost.SpawnParams{
-		SessionID: id,
-		Agent:     probeAgent,
+	owner, err := b.openSharedCall(ctx, inc.endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
+		SessionID: probe.SessionID,
+		Agent:     "probe",
 		CWD:       workdir,
 		Cols:      80,
 		Rows:      24,
+		Ephemeral: true,
 		Attempts: []pty.PreparedLaunchAttempt{{
 			Executable: artifact.Path,
 			Args:       []string{artifact.Path, ptyhost.ProbeChildFlag},
 			Env:        []string{"TERM=xterm-256color"},
 			CWD:        workdir,
 		}},
-	}
-	if _, _, err := b.spawnOnSharedHost(ctx, &artifact, params); err != nil {
+	}, nil)
+	if err != nil {
 		return fmt.Errorf("spawn probe: %w", err)
 	}
-	defer func() {
-		removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
-		defer cancel()
-		if removeErr := b.Remove(removeCtx, id); removeErr != nil && err == nil {
-			err = fmt.Errorf("remove probe: %w", removeErr)
-		}
-	}()
+	defer owner.Close()
+	defer b.releaseSharedIncarnationIfUnused(inc)
 
-	attached, stream, err := b.Attach(ctx, id, "artifact-probe")
+	attached, stream, err := b.attachSession(ctx, probe, "artifact-probe")
 	if err != nil {
 		return fmt.Errorf("attach probe: %w", err)
 	}
@@ -305,10 +304,10 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	if !attached.Running {
 		return errors.New("probe child exited before answering")
 	}
-	if _, err := b.Resize(ctx, id, sharedHostProbeCols, sharedHostProbeRows, 0, 0); err != nil {
+	if _, err := b.resizeSession(ctx, probe, sharedHostProbeCols, sharedHostProbeRows, 0, 0); err != nil {
 		return fmt.Errorf("resize probe: %w", err)
 	}
-	if err := b.Input(ctx, id, []byte(nonce+"\r")); err != nil {
+	if err := b.inputSession(ctx, probe, []byte(nonce+"\r")); err != nil {
 		return fmt.Errorf("send probe input: %w", err)
 	}
 	answer := fmt.Sprintf("ATTN-PROBE %s %dx%d", nonce, sharedHostProbeCols, sharedHostProbeRows)

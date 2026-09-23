@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
+	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptyhost"
 )
 
@@ -524,43 +525,70 @@ func TestSharedHost_ValidationPassesWhenTheDaemonSharesTheHostSnapshotFormat(t *
 	}
 }
 
-func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
-	binary, root := sharedHostTestRoot(t, "attn-host-abandoned-")
-	stopHostsAtCleanup(t, root)
-	cfg := WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-abandoned", BinaryPath: binary}
-	first, err := NewSharedHost(cfg)
+func onlyHost(t *testing.T, root string) ptyhost.HostRegistry {
+	t.Helper()
+	paths := ptyhost.HostRegistryPaths(root)
+	if len(paths) != 1 {
+		t.Fatalf("host registries = %v, want exactly one", paths)
+	}
+	entry, err := ptyhost.ReadHostRegistry(paths[0])
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := first.spawn(context.Background(), SpawnOptions{
-		ID: probeSessionPrefix + "left-behind", CWD: root, Agent: probeAgent, ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	spawnCat(t, first, "user-terminal", root)
-	spawnCat(t, first, probeSessionPrefix+"named-by-a-user", root)
-	if err := first.Shutdown(context.Background()); err != nil {
-		t.Fatal(err)
-	}
+	return entry
+}
 
-	second, err := NewSharedHost(cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = second.Shutdown(context.Background()) })
-	report, err := second.Recover(context.Background())
-	if err != nil || report.Recovered != 2 || report.Pruned != 1 {
-		t.Fatalf("recover = %+v, %v; want both user terminals recovered and the probe pruned", report, err)
-	}
-	ids := second.SessionIDs(context.Background())
-	slices.Sort(ids)
-	if want := []string{probeSessionPrefix + "named-by-a-user", "user-terminal"}; !slices.Equal(ids, want) {
-		t.Fatalf("recovered sessions = %v, want %v", ids, want)
-	}
-	for _, id := range ids {
-		if err := second.Remove(context.Background(), id); err != nil {
+func waitForHostSessions(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry, want ...string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		info, err := backend.sharedHostInfo(context.Background(), incarnationOfHost(host))
+		if err != nil {
 			t.Fatal(err)
 		}
+		if slices.Equal(info.SessionIDs, want) {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("host sessions = %v, want %v", info.SessionIDs, want)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestSharedHost_EphemeralTerminalLivesOnlyAsLongAsItsConnection(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-ephemeral-")
+	stopHostsAtCleanup(t, root)
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-ephemeral", BinaryPath: binary})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	spawnCat(t, backend, "user-terminal", root)
+	host := onlyHost(t, root)
+
+	owner, err := backend.openSharedCall(context.Background(), incarnationOfHost(host).endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
+		SessionID: "ephemeral", Agent: "probe", CWD: root, Cols: 80, Rows: 24, Ephemeral: true,
+		Attempts: []pty.PreparedLaunchAttempt{{Executable: "/bin/cat", Args: []string{"/bin/cat"}, Env: []string{}, CWD: root}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForHostSessions(t, backend, host, "ephemeral", "user-terminal")
+	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-ephemeral", "ephemeral")); !os.IsNotExist(err) {
+		t.Fatalf("the ephemeral terminal has a registry entry: %v", err)
+	}
+	if err := owner.Close(); err != nil {
+		t.Fatal(err)
+	}
+	waitForHostSessions(t, backend, host, "user-terminal")
+
+	report, err := backend.Recover(context.Background())
+	if err != nil || report.Pruned != 0 {
+		t.Fatalf("recover = %+v, %v; want nothing to prune", report, err)
+	}
+	if err := backend.Remove(context.Background(), "user-terminal"); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -606,7 +634,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 		t.Fatal(err)
 	}
 	for id := range exits {
-		if strings.HasPrefix(id, probeSessionPrefix) {
+		if strings.HasPrefix(id, sharedHostProbePrefix) {
 			t.Fatalf("the validation probe %s was reported as a session exit", id)
 		}
 		if id == "exits-at-once" {
@@ -651,17 +679,5 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	if rejections != 0 || !backend.SharedCandidatePending() {
 		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
 	}
-	for _, path := range ptyhost.HostRegistryPaths(root) {
-		entry, err := ptyhost.ReadHostRegistry(path)
-		if err != nil {
-			continue
-		}
-		info, err := backend.sharedHostInfo(context.Background(), incarnationOfHost(entry))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(info.SessionIDs) != 0 {
-			t.Fatalf("the interrupted probe left sessions %v on its host", info.SessionIDs)
-		}
-	}
+	waitForHostSessions(t, backend, onlyHost(t, root))
 }

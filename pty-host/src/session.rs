@@ -210,7 +210,7 @@ pub struct Session {
     pub cwd: String,
     pub child_pid: i32,
     pub attempt_index: usize,
-    pub registry_path: String,
+    pub registry_path: Option<String>,
 
     master: Mutex<Option<File>>,
     model: Mutex<Model>,
@@ -232,7 +232,7 @@ pub struct Session {
 impl Session {
     pub fn spawn(
         params: SpawnParams,
-        registry_path: String,
+        registry_path: Option<String>,
         daemon_instance_id: &str,
         socket_path: &str,
         control_token: &str,
@@ -328,7 +328,9 @@ impl Session {
             unattended_launch: params.unattended_launch,
             runtime_kind: "rust_host",
         };
-        if let Err(error) = write_registry(&session.registry_path, &entry) {
+        if let Some(path) = &session.registry_path
+            && let Err(error) = write_registry(path, &entry)
+        {
             abort_spawn(&session);
             return Err(error);
         }
@@ -839,7 +841,9 @@ impl Session {
             return;
         }
         self.master.lock().expect("master mutex poisoned").take();
-        let _ = fs::remove_file(&self.registry_path);
+        if let Some(path) = &self.registry_path {
+            let _ = fs::remove_file(path);
+        }
         if !self.cleanup_dir.is_empty() {
             let _ = fs::remove_dir_all(&self.cleanup_dir);
         }
@@ -1014,7 +1018,9 @@ fn abort_spawn(session: &Session) {
         }
     }
     session.finish_cleanup();
-    let _ = fs::remove_file(format!("{}.tmp", session.registry_path));
+    if let Some(path) = &session.registry_path {
+        let _ = fs::remove_file(format!("{path}.tmp"));
+    }
 }
 
 fn spawn_attempts(

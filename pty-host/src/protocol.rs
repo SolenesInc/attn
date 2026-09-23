@@ -74,6 +74,8 @@ pub struct SpawnParams {
     #[serde(default)]
     pub theme: Theme,
     pub attempts: Vec<PreparedLaunchAttempt>,
+    #[serde(default)]
+    pub ephemeral: bool,
 
     #[serde(default)]
     pub yolo_mode: bool,

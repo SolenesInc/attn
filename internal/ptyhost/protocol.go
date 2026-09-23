@@ -29,7 +29,8 @@ type SpawnParams struct {
 
 	Theme ptyworker.SetThemeParams `json:"theme"`
 
-	Attempts []pty.PreparedLaunchAttempt `json:"attempts"`
+	Attempts  []pty.PreparedLaunchAttempt `json:"attempts"`
+	Ephemeral bool                        `json:"ephemeral,omitempty"`
 
 	YoloMode          bool                                `json:"yolo_mode,omitempty"`
 	ApprovalRoute     launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`

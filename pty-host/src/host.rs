@@ -217,6 +217,7 @@ impl Host {
 
     fn spawn(self: &Arc<Self>, params: SpawnParams) -> Result<Arc<Session>, String> {
         let id = params.session_id.clone();
+        let ephemeral = params.ephemeral;
         self.state
             .lock()
             .expect("host state mutex poisoned")
@@ -227,14 +228,19 @@ impl Host {
         let cleanup: Cleanup =
             Arc::new(move |session_id| remove_session(&cleanup_host, &session_id));
         let broadcast: Broadcast = Arc::new(move |event| {
+            if ephemeral {
+                return;
+            }
             if let Some(host) = weak.upgrade() {
                 host.broadcast_lifecycle(&event);
             }
         });
-        let registry_path = Path::new(&self.cfg.registry_dir)
-            .join(format!("{id}.json"))
-            .to_string_lossy()
-            .into_owned();
+        let registry_path = (!ephemeral).then(|| {
+            Path::new(&self.cfg.registry_dir)
+                .join(format!("{id}.json"))
+                .to_string_lossy()
+                .into_owned()
+        });
         let result = Session::spawn(
             params,
             registry_path,
@@ -266,8 +272,10 @@ impl Host {
                 session.note_connected();
             }
         }
-        for event in session.lifecycle_events() {
-            self.broadcast_lifecycle(&event);
+        if !ephemeral {
+            for event in session.lifecycle_events() {
+                self.broadcast_lifecycle(&event);
+            }
         }
         Ok(session)
     }
@@ -511,6 +519,7 @@ struct Connection {
     authed: bool,
     snapshot_format: String,
     close_action: CloseAction,
+    ephemeral_sessions: Vec<Arc<Session>>,
 }
 
 impl Connection {
@@ -572,6 +581,7 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         authed: false,
         snapshot_format: String::new(),
         close_action: CloseAction::Detach,
+        ephemeral_sessions: Vec::new(),
     };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -613,6 +623,9 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
     }
     if connection.watching_all {
         host.unwatch_all(&connection.id);
+    }
+    for session in &connection.ephemeral_sessions {
+        session.remove();
     }
     drop(connection.sender);
     let _ = writer.join();
@@ -665,15 +678,19 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 Ok(params) => params,
                 Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
             };
+            let ephemeral = params.ephemeral;
             match host.spawn(params) {
-                Ok(session) => connection.send(response(
-                    &request.id,
-                    json!({
+                Ok(session) => {
+                    let reply = json!({
                         "host_pid": std::process::id(),
                         "child_pid": session.child_pid,
                         "attempt_index": session.attempt_index
-                    }),
-                )),
+                    });
+                    if ephemeral {
+                        connection.ephemeral_sessions.push(session);
+                    }
+                    connection.send(response(&request.id, reply))
+                }
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }
         }
