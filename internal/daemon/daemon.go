@@ -2816,7 +2816,7 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
-	branchInfo, _ := d.readBranchInfo(protection.Context(), gitTaskSessionIdentity, gitInteractive, msg.Dir)
+	branchInfo, _ := d.readBranchInfo(protection.Context(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, msg.Dir)
 
 	nowStr := string(protocol.TimestampNow())
 	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
@@ -4059,7 +4059,7 @@ func (d *Daemon) checkAllBranches() {
 
 	d.coalesceSnapshots(func() {
 		for _, session := range sessions {
-			info, err := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitDeferred, session.Directory)
+			info, err := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, session.Directory)
 			if err != nil {
 				continue
 			}

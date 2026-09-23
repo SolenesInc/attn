@@ -20,7 +20,7 @@ func (d *Daemon) doCreateWorktreeFromBranch(msg *protocol.CreateWorktreeFromBran
 }
 
 func (d *Daemon) doCreateWorktreeFromBranchProtected(protection foregroundCleanupProtection, msg *protocol.CreateWorktreeFromBranchMessage) (string, error) {
-	mainRepo, err := d.resolveMainRepo(protection.Context(), gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
+	mainRepo, err := d.resolveMainRepo(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, msg.MainRepo)
 	if err != nil {
 		return "", err
 	}

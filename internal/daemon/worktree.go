@@ -97,7 +97,7 @@ func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, 
 }
 
 func (d *Daemon) doCreateWorktreeProtected(protection foregroundCleanupProtection, msg *protocol.CreateWorktreeMessage) (string, error) {
-	mainRepo, err := d.resolveMainRepo(protection.Context(), gitTaskWorktreeMutation, gitInteractive, msg.MainRepo)
+	mainRepo, err := d.resolveMainRepo(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, msg.MainRepo)
 	if err != nil {
 		return "", err
 	}

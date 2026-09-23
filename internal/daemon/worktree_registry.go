@@ -342,9 +342,7 @@ func (d *Daemon) resolveIntegrationRefContext(ctx context.Context, repo, branch 
 	if strings.HasPrefix(branch, "origin/") {
 		return branch, nil
 	}
-	exists, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (bool, error) {
-		return client.RefExists(runCtx, repo, "origin/"+branch)
-	})
+	exists, err := d.refExists(ctx, gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, repo, "origin/"+branch)
 	if err != nil {
 		return "", err
 	}

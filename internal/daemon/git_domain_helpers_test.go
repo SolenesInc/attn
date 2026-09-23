@@ -19,7 +19,7 @@ func TestResolveMainRepoFindsARepositoryBehindItsLogicalPath(t *testing.T) {
 	runGitDaemon(t, actual, "init", "-b", "main")
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 
-	resolved, err := d.resolveMainRepo(context.Background(), gitTaskRepositoryInfo, gitInteractive, logical)
+	resolved, err := d.resolveMainRepo(context.Background(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, logical)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +37,7 @@ func TestResolveMainRepoReturnsTheRootForASubdirectory(t *testing.T) {
 	}
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 
-	resolved, err := d.resolveMainRepo(context.Background(), gitTaskRepositoryInfo, gitInteractive, subdir)
+	resolved, err := d.resolveMainRepo(context.Background(), gitTask{Kind: gitTaskRepositoryInfo, Lane: gitInteractive}, subdir)
 	if err != nil {
 		t.Fatal(err)
 	}

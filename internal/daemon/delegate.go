@@ -27,6 +27,8 @@ const (
 	delegationWorktreeOwnerFile = "attn-delegation-owner"
 )
 
+var delegationGitTask = gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}
+
 type internalActionResult struct {
 	Event   string  `json:"event"`
 	Success bool    `json:"success"`
@@ -155,7 +157,7 @@ func (d *Daemon) defaultDelegationEffort(agent, effort string) string {
 }
 
 func (d *Daemon) resolveDelegationRepository(path, flagName string) (string, error) {
-	root, err := d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, path)
+	root, err := d.resolveMainRepo(context.Background(), delegationGitTask, path)
 	if err != nil {
 		return "", fmt.Errorf("%s %s is not in a Git repository", flagName, git.CanonicalizePath(path))
 	}
@@ -207,7 +209,7 @@ func validateDelegationDirectory(path string) (string, error) {
 }
 
 func (d *Daemon) activeSessionInCheckout(directory string, excluded ...string) (string, []string) {
-	worktreeRoot, err := d.readRepoRoot(context.Background(), gitTaskDelegation, gitInteractive, directory)
+	worktreeRoot, err := d.readRepoRoot(context.Background(), delegationGitTask, directory)
 	if err != nil {
 		return "", nil
 	}
@@ -221,7 +223,7 @@ func (d *Daemon) activeSessionInCheckout(directory string, excluded ...string) (
 		if skip[session.ID] || !d.sessionHasLiveWorker(session.ID) {
 			continue
 		}
-		sessionRoot, err := d.readRepoRoot(context.Background(), gitTaskDelegation, gitInteractive, session.Directory)
+		sessionRoot, err := d.readRepoRoot(context.Background(), delegationGitTask, session.Directory)
 		if err == nil && git.CanonicalizePath(sessionRoot) == worktreeRoot {
 			occupants = append(occupants, session.ID)
 		}
@@ -289,7 +291,7 @@ func (r *delegationRollback) onSessionSpawned(sessionID string) {
 }
 
 func (d *Daemon) delegationWorktreeOwnerPath(worktreePath string) (string, error) {
-	out, err := d.gitOutput(context.Background(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
+	out, err := d.gitOutput(context.Background(), delegationGitTask, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
 	if err != nil {
 		return "", fmt.Errorf("resolve delegation worktree owner marker: %w", err)
 	}
@@ -337,11 +339,7 @@ func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 		if session == nil || strings.TrimSpace(session.Directory) == "" {
 			continue
 		}
-		root, err := d.readRepoRoot(context.Background(), gitTaskDelegation, gitInteractive, session.Directory)
-		if err != nil {
-			continue
-		}
-		repo, err := d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, root)
+		_, repo, err := d.readCheckoutRepo(context.Background(), delegationGitTask, session.Directory)
 		if err != nil {
 			continue
 		}
@@ -389,6 +387,13 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 		strings.TrimSpace(protocol.Deref(request.Path)) != "" ||
 		strings.TrimSpace(protocol.Deref(request.StartingFrom)) != ""
 	repo := strings.TrimSpace(protocol.Deref(request.Repo))
+	if repo != "" {
+		resolvedRepo, err := d.resolveMainRepo(context.Background(), delegationGitTask, repo)
+		if err != nil {
+			return err
+		}
+		repo = resolvedRepo
+	}
 	if repo == "" && placement == delegationPlacementExisting {
 		resolvedRepo, err := d.delegationWorktreeRepo(workspaceID)
 		if err != nil {
@@ -397,7 +402,7 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 		repo = resolvedRepo
 	}
 	if repo == "" {
-		root, err := d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, directory)
+		root, err := d.resolveMainRepo(context.Background(), delegationGitTask, directory)
 		if err != nil {
 			if configuredWorktree {
 				return fmt.Errorf("workspace directory is not in a git repository; pass --repo")
@@ -409,11 +414,6 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 			return nil
 		}
 		repo = root
-	}
-	var err error
-	repo, err = d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, repo)
-	if err != nil {
-		return err
 	}
 
 	request.Repo = protocol.Ptr(repo)
@@ -435,7 +435,7 @@ func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection
 		if baseDirectory == "" {
 			return "", false, fmt.Errorf("cannot determine which repository the worktree belongs to; pass --repo")
 		}
-		repoRoot, err := d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, baseDirectory)
+		repoRoot, err := d.resolveMainRepo(protection.Context(), delegationGitTask, baseDirectory)
 		if err != nil {
 			return "", false, fmt.Errorf("workspace directory is not in a git repository; pass --repo")
 		}
@@ -845,7 +845,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 				return nil, repoErr
 			}
 			if resolvedRepo == "" {
-				if root, rootErr := d.resolveMainRepo(context.Background(), gitTaskDelegation, gitInteractive, directory); rootErr == nil {
+				if root, rootErr := d.resolveMainRepo(protection.Context(), delegationGitTask, directory); rootErr == nil {
 					resolvedRepo = root
 				}
 			}
@@ -856,7 +856,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 	if msg.Worktree != nil {
 		repositorySubdir := ""
 		if explicitLaunch {
-			sourceRoot, rootErr := d.readRepoRoot(context.Background(), gitTaskDelegation, gitInteractive, directory)
+			sourceRoot, rootErr := d.readRepoRoot(protection.Context(), delegationGitTask, directory)
 			if rootErr != nil {
 				return nil, rootErr
 			}
@@ -881,7 +881,7 @@ func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtecti
 		if requestedPath := strings.TrimSpace(protocol.Deref(msg.Worktree.Path)); requestedPath != "" && worktreePath != git.CanonicalizePath(requestedPath) {
 			return nil, fmt.Errorf("worktree provider returned %s, expected requested path %s; checkout was left in place", worktreePath, requestedPath)
 		}
-		actualBranch, branchErr := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) (string, error) {
+		actualBranch, branchErr := gitValue(protection.Context(), d.gitExecution(), delegationGitTask, func(ctx context.Context, client *git.Client) (string, error) {
 			return client.GetCurrentBranch(ctx, worktreePath)
 		})
 		if branchErr != nil || actualBranch != msg.Worktree.Branch {

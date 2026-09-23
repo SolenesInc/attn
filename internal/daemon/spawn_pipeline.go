@@ -338,7 +338,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	branchInfo, _ := d.readBranchInfo(context.Background(), gitTaskSessionIdentity, gitInteractive, req.cwd)
+	branchInfo, _ := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, req.cwd)
 	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID, branchInfo)
 	session := plan.launchSession
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
