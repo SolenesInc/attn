@@ -11,6 +11,12 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
+type placementOutcome struct {
+	desktopID string
+	paneID    string
+	err       error
+}
+
 type launchPlacement struct {
 	desktopID    string
 	anchorPaneID string
@@ -64,11 +70,11 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 	return nil
 }
 
-func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *launchPlacement) {
+func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *launchPlacement) placementOutcome {
 	if placement == nil {
-		return
+		return placementOutcome{}
 	}
-	desktop, _, err := d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
+	desktop, paneID, err := d.store.PlaceLaunchedSession(store.SessionPlacementRequest{
 		DesktopID:    placement.desktopID,
 		SessionID:    session.ID,
 		AnchorPaneID: placement.anchorPaneID,
@@ -77,11 +83,13 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 		Status:       profiles.PaneStatusReady,
 	})
 	if err != nil {
-		d.logf("session %s stays unplaced in profile %s: placing it on desktop %q beside pane %q failed: %v",
+		err = fmt.Errorf("session %s stays unplaced in profile %s: placing it on desktop %q beside pane %q failed: %w",
 			session.ID, session.ProfileID, placement.desktopID, placement.anchorPaneID, err)
-		return
+		d.logf("%v", err)
+		return placementOutcome{err: err}
 	}
 	d.publishArrangementChanged(desktop.ProfileID, profileArrangementChange{DesktopIDs: desktopIDs(desktop)})
+	return placementOutcome{desktopID: desktop.ID, paneID: paneID}
 }
 
 func (d *Daemon) announceUnplacement(sessionID string) func() {

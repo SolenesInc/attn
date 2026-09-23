@@ -10236,10 +10236,13 @@ export enum SnoozeTurnMessageCmd {
 }
 
 export interface SpawnResultMessage {
-    error?:  string;
-    event:   SpawnResultMessageEvent;
-    id:      string;
-    success: boolean;
+    desktop_id?:      string;
+    error?:           string;
+    event:            SpawnResultMessageEvent;
+    id:               string;
+    pane_id?:         string;
+    placement_error?: string;
+    success:          boolean;
     [property: string]: any;
 }
 
@@ -23815,9 +23818,12 @@ const typeMap: any = {
         { json: "until", js: "until", typ: "" },
     ], "any"),
     "SpawnResultMessage": o([
+        { json: "desktop_id", js: "desktop_id", typ: u(undefined, "") },
         { json: "error", js: "error", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("SpawnResultMessageEvent") },
         { json: "id", js: "id", typ: "" },
+        { json: "pane_id", js: "pane_id", typ: u(undefined, "") },
+        { json: "placement_error", js: "placement_error", typ: u(undefined, "") },
         { json: "success", js: "success", typ: true },
     ], "any"),
     "SpawnSessionMessage": o([

@@ -10520,6 +10520,9 @@ type SnoozeTurnMessage struct {
 }
 
 type SpawnResultMessage struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 
@@ -10528,6 +10531,12 @@ type SpawnResultMessage struct {
 
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
+
+	// PaneID corresponds to the JSON schema field "pane_id".
+	PaneID *string `json:"pane_id,omitempty,omitzero"`
+
+	// PlacementError corresponds to the JSON schema field "placement_error".
+	PlacementError *string `json:"placement_error,omitempty,omitzero"`
 
 	// Success corresponds to the JSON schema field "success".
 	Success bool `json:"success"`

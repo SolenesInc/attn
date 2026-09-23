@@ -46,6 +46,16 @@ func (c *wsClient) selectProfile(profileID string) {
 	c.selectedProfileID = profileID
 }
 
+func (c *wsClient) profileOr(requested *string) *string {
+	if strings.TrimSpace(protocol.Deref(requested)) != "" {
+		return requested
+	}
+	if selected := c.selectedProfile(); selected != "" {
+		return &selected
+	}
+	return requested
+}
+
 func (c *wsClient) selectedProfile() string {
 	c.identityMu.RLock()
 	defer c.identityMu.RUnlock()
@@ -285,6 +295,7 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 				scoped.selectProfile(deletion.Destination.ID)
 			}
 		})
+		d.moveCrewBetweenProfiles(deletion.Deleted.ID, deletion.Destination.ID)
 		return profileActionOutcome{profile: &deletion.Destination, desktops: destination, publish: func() {
 			d.coalesceSnapshots(func() {
 				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
@@ -293,6 +304,9 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 					d.publishFact(FactSessionProfileChanged, sessionID, sessionProfileChange{FromProfileID: deletion.Deleted.ID, ToProfileID: deletion.Destination.ID})
 				}
 			})
+			if len(deletion.MovedAutomationIDs) > 0 {
+				d.broadcastAutomationsChanged(deletion.MovedAutomationIDs...)
+			}
 		}}, nil
 	})
 }

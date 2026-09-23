@@ -93,26 +93,45 @@ func (d *Daemon) assignCrewProfiles() {
 		return
 	}
 	for _, member := range members {
-		if member.ProfileID != "" {
+		if _, err := d.store.LiveProfile(member.ProfileID); member.ProfileID != "" && err == nil {
 			continue
 		}
 		profile, err := d.store.MostRecentlyUsedProfile()
 		if err != nil {
-			d.logf("crew: %s has no profile and none can be given: %v", crew.DisplayName(member.ID), err)
+			d.logf("crew: %s has no live profile and none can be given: %v", crew.DisplayName(member.ID), err)
 			return
 		}
-		if _, err := d.updateCrewMember(member.ID, func(m *crew.Member) (bool, error) {
-			if m.ProfileID != "" {
-				return false, nil
-			}
-			m.ProfileID = profile.ID
-			return true, nil
-		}); err != nil {
-			d.logf("crew: giving %s profile %s: %v", crew.DisplayName(member.ID), profile.ID, err)
-			continue
-		}
-		d.logf("crew: %s now belongs to profile %s", crew.DisplayName(member.ID), profile.Name)
+		d.setCrewProfile(member.ID, member.ProfileID, profile.ID)
 	}
+}
+
+func (d *Daemon) moveCrewBetweenProfiles(from, to string) {
+	members, _, err := d.readCrewMembersRaw()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("crew: reading members to move them from profile %s to %s: %v", from, to, err)
+		}
+		return
+	}
+	for _, member := range members {
+		if member.ProfileID == from {
+			d.setCrewProfile(member.ID, from, to)
+		}
+	}
+}
+
+func (d *Daemon) setCrewProfile(memberID, from, to string) {
+	if _, err := d.updateCrewMember(memberID, func(m *crew.Member) (bool, error) {
+		if m.ProfileID != from {
+			return false, nil
+		}
+		m.ProfileID = to
+		return true, nil
+	}); err != nil {
+		d.logf("crew: moving %s from profile %q to %s: %v", crew.DisplayName(memberID), from, to, err)
+		return
+	}
+	d.logf("crew: %s now belongs to profile %s", crew.DisplayName(memberID), to)
 }
 
 func (d *Daemon) crewCollection() (*docstore.CollectionSchema, error) {

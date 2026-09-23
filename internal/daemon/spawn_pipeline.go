@@ -36,6 +36,7 @@ type spawnRequest struct {
 	initialPrompt   string
 	profile         profiles.Profile
 	placement       *launchPlacement
+	placed          placementOutcome
 	existingSession *protocol.Session
 	cwd             string
 	label           string
@@ -513,7 +514,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		fact = FactSessionReregistered
 	}
 	d.publishFact(fact, session.ID, nil)
-	d.placeLaunchedSession(session, req.placement)
+	req.placed = d.placeLaunchedSession(session, req.placement)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)
@@ -524,37 +525,43 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 }
 
 func (d *Daemon) runSpawnPipeline(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
-	var result *spawnRejection
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
-		result = d.runSpawnPipelineForeground(msg, policy)
-		return nil
-	})
-	return result
+	_, rejection := d.runSpawnPipelineReporting(msg, policy)
+	return rejection
 }
 
-func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) *spawnRejection {
+func (d *Daemon) runSpawnPipelineReporting(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
+	var placed placementOutcome
+	var rejection *spawnRejection
+	_ = d.worktreeMaintenance.RunForeground(context.Background(), "spawn session", func(context.Context) error {
+		placed, rejection = d.runSpawnPipelineForeground(msg, policy)
+		return nil
+	})
+	return placed, rejection
+}
+
+func (d *Daemon) runSpawnPipelineForeground(msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) (placementOutcome, *spawnRejection) {
 	req, rejection := d.validateSpawnPrelock(msg, policy)
 	if rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	releaseSpawnLock := d.acquireSpawnLock(msg.ID)
 	defer releaseSpawnLock()
 
 	if rejection := d.normalizeSpawnRequest(req); rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	plan, rejection := d.resolveSpawnIntent(req)
 	if rejection != nil {
-		return rejection
+		return placementOutcome{}, rejection
 	}
 	if outcome := d.executeSpawn(req, plan); outcome.err != nil {
-		return &spawnRejection{err: outcome.err}
+		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	} else if outcome.alreadyLive {
-		return nil
+		return placementOutcome{}, nil
 	}
 	if outcome := d.commitSpawn(req, plan); outcome.err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
-		return &spawnRejection{err: outcome.err}
+		return placementOutcome{}, &spawnRejection{err: outcome.err}
 	}
-	return nil
+	return req.placed, nil
 }

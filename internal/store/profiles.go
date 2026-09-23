@@ -15,9 +15,10 @@ import (
 )
 
 type ProfileDeletion struct {
-	Deleted         profiles.Profile
-	Destination     profiles.Profile
-	MovedSessionIDs []string
+	Deleted            profiles.Profile
+	Destination        profiles.Profile
+	MovedSessionIDs    []string
+	MovedAutomationIDs []string
 }
 
 type DesktopDeletion struct {
@@ -513,6 +514,9 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
 			return err
 		}
+		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID); err != nil {
+			return err
+		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
@@ -527,6 +531,23 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		return nil
 	})
 	return result, err
+}
+
+func moveProfileAutomations(tx *sql.Tx, from, to string) ([]string, error) {
+	moved, err := queryColumn[string](tx, `SELECT id FROM automation_definitions WHERE profile_id = ? ORDER BY id`, from)
+	if err != nil {
+		return nil, err
+	}
+	for _, statement := range []string{
+		`UPDATE automation_definitions SET profile_id = ? WHERE profile_id = ?`,
+		`UPDATE automation_runs SET profile_id = ? WHERE profile_id = ? AND state = '` + AutomationRunStatePending + `'`,
+		`UPDATE automation_continuity_bindings SET profile_id = ? WHERE profile_id = ? AND status = '` + AutomationBindingStatusActive + `'`,
+	} {
+		if _, err := tx.Exec(statement, to, from); err != nil {
+			return nil, err
+		}
+	}
+	return moved, nil
 }
 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {
@@ -928,6 +949,9 @@ func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit
 
 func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
 	anchor := strings.TrimSpace(request.AnchorPaneID)
+	if anchor != "" && !layouttree.HasPane(desktop.Tree, anchor) {
+		return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+	}
 	if anchor == "" {
 		anchor = desktop.ActivePaneID
 	}

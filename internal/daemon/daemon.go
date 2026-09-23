@@ -3719,9 +3719,9 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		d.sendError(conn, err.Error())
 		return
 	}
+	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
 	d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical})
 	d.sendOK(conn)
-	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
 }
 
 func (d *Daemon) RefreshPRs() {

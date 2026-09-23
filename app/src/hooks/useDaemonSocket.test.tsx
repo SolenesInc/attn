@@ -1288,7 +1288,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
         cmd: 'spawn_session',
         id: 'sess-new',
         cwd: '/tmp/repo',
-        workspace_id: 'workspace-sess-new',
+        placement: {},
         agent: 'claude',
         cols: 80,
         rows: 24,

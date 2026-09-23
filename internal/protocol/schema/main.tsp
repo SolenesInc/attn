@@ -2259,8 +2259,9 @@ model AutomationApplyMessage {
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
-  // The profile a new definition belongs to; the most recently used profile
-  // when absent. An existing definition keeps its profile.
+  // The profile a new definition belongs to. Absent means the connection's
+  // selected profile over WebSocket and the most recently used profile over
+  // the socket. An existing definition keeps its profile.
   profile_id?: string;
   expected_id?: string;
   expected_revision?: int32;
@@ -2334,7 +2335,7 @@ model SpawnSessionMessage {
   id: string;
   cwd: string;
   endpoint_id?: string;
-  profile_id: string;       // The profile the session belongs to; refused before any side effect when missing or deleted
+  profile_id: string;       // The profile the session belongs to; empty over WebSocket means the connection's selected profile. Refused before any side effect when it resolves to nothing or to a deleted profile
   placement?: SessionPlacement; // Absent leaves a new session unplaced and an existing one where it is
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
   cols: int32;
@@ -4381,6 +4382,12 @@ model SpawnResultMessage {
   id: string;
   success: boolean;
   error?: string;
+  // The pane a requested placement produced. A spawn that asked for a
+  // placement and got none reports why in placement_error; the agent then
+  // runs unplaced in its profile.
+  desktop_id?: string;
+  pane_id?: string;
+  placement_error?: string;
 }
 
 model ReloadSessionResultMessage {
@@ -7010,8 +7017,8 @@ model CrewWakeMessage {
   // The harness to launch; the daemon's default agent when absent.
   agent?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
-  // The profile the wake is asked from: the app's selected profile. A member of
-  // another profile is refused.
+  // The profile the wake is asked from. Absent over WebSocket means the
+  // connection's selected profile. A member of another profile is refused.
   profile_id?: string;
   // The calling session, for a wake asked by an agent; its profile applies as
   // profile_id does.

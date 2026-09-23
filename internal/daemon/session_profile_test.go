@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -219,5 +222,126 @@ func TestCrewHomesJoinAProfileWhenImportedAndLegacyMembersAreGivenOne(t *testing
 	d.assignCrewProfiles()
 	if got := memberByID(t, crewList(t, d), "trellis").ProfileID; got != profileID {
 		t.Fatalf("legacy member profile = %q, want %s", got, profileID)
+	}
+}
+
+func TestSpawnResultReportsWhereTheAgentLandedOrWhyItDidNot(t *testing.T) {
+	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := spawnCharacterizationMessage("landed", profile.ID, cwd)
+	first.Placement = &protocol.SessionPlacement{}
+	d.handleSpawnSession(client, first)
+	landed := expectSpawnResult(t, client, first.ID, true)
+	placement, _, _ := d.store.SessionPlacement(first.ID)
+	if protocol.Deref(landed.DesktopID) != profile.CurrentDesktopID || protocol.Deref(landed.PaneID) != placement.PaneID || landed.PlacementError != nil {
+		t.Fatalf("spawn_result = %+v, want the desktop and pane it landed in (%+v)", landed, placement)
+	}
+
+	second := spawnCharacterizationMessage("anchor-vanished", profile.ID, cwd)
+	second.Placement = &protocol.SessionPlacement{AnchorPaneID: protocol.Ptr(placement.PaneID)}
+	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
+		if opts.ID == second.ID {
+			if _, err := d.store.RemoveSessionPlacement(first.ID); err != nil {
+				t.Errorf("remove the anchor: %v", err)
+			}
+		}
+	}
+	d.handleSpawnSession(client, second)
+	unplaced := expectSpawnResult(t, client, second.ID, true)
+	if unplaced.PaneID != nil || !strings.Contains(protocol.Deref(unplaced.PlacementError), placement.PaneID) {
+		t.Fatalf("spawn_result = %+v, want no pane and an error naming the missing anchor %s", unplaced, placement.PaneID)
+	}
+	if session := d.store.Get(second.ID); session == nil || session.ProfileID != profile.ID {
+		t.Fatalf("the agent whose placement failed = %+v, want it running unplaced in its profile", session)
+	}
+}
+
+func TestWebSocketCommandsWithoutAProfileUseTheConnectionsProfile(t *testing.T) {
+	w := newProfilesTestDaemon(t)
+	w.d.ptyBackend = &fakeSpawnBackend{}
+	client, _ := w.connect("")
+	work := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "Work"}).Profile
+	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": work.ID})
+	drainClientPayloads(t, client)
+
+	data, err := json.Marshal(map[string]any{"cmd": "spawn_session", "id": "scoped", "cwd": t.TempDir(), "agent": "shell", "cols": 80, "rows": 24})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.d.handleClientMessage(client, data)
+	expectSpawnResult(t, client, "scoped", true)
+	if got := w.d.store.Get("scoped").ProfileID; got != work.ID {
+		t.Fatalf("spawn without profile_id landed in %q, want the connection's profile %s", got, work.ID)
+	}
+}
+
+func TestDeletingAProfileCarriesItsAutomationsAndCrewToTheDestination(t *testing.T) {
+	d := newCrewDaemon(t)
+	d.ptyBackend = &fakeSpawnBackend{}
+	w := &profilesTestDaemon{t: t, d: d}
+	d.clientToken = "the-token"
+	client, _ := w.connect("")
+	doomed := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "doomed"}).Profile
+	defaultID := defaultProfileID(t, d.store)
+	now := time.Now()
+	definition, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, doomed.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := d.store.ClaimManualAutomationRun(definition.ID, "req-1", "", `{}`, definition.Revision, `{}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1", ProfileID: doomed.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	d.setCrewProfile("trellis", defaultID, doomed.ID)
+
+	w.mustSend(client, map[string]any{
+		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": defaultID,
+	})
+	if moved, err := d.store.GetAutomationDefinition(definition.ID); err != nil || moved.ProfileID != defaultID {
+		t.Fatalf("definition after delete = %+v err=%v, want it in %s", moved, err, defaultID)
+	}
+	if run, err := d.store.GetAutomationRun(pending.ID); err != nil || run.ProfileID != defaultID {
+		t.Fatalf("pending run after delete = %+v err=%v, want it in %s", run, err, defaultID)
+	}
+	if got := memberByID(t, crewList(t, d), "trellis").ProfileID; got != defaultID {
+		t.Fatalf("crew member profile after delete = %q, want %s", got, defaultID)
+	}
+	if _, err := d.newAutomationRunReservation(definition); err == nil {
+		t.Fatal("the stale definition value still reserved into the deleted profile")
+	}
+	current, _ := d.store.GetAutomationDefinition(definition.ID)
+	if _, err := d.newAutomationRunReservation(current); err != nil {
+		t.Fatalf("reserving a run after the move: %v", err)
+	}
+}
+
+func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
+	d, backend, _ := newWakeableDaemon(t)
+	d.clientToken = "the-token"
+	w := &profilesTestDaemon{t: t, d: d}
+	client, _ := w.connect("")
+	work := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "Work"}).Profile
+	w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": work.ID})
+	drainClientPayloads(t, client)
+
+	wake := &protocol.CrewWakeMessage{Cmd: protocol.CmdCrewWake, Member: "trellis", RequestID: protocol.Ptr("wake-1")}
+	wake.ProfileID = client.profileOr(wake.ProfileID)
+	d.handleCrewWakeWS(client, wake)
+	var result protocol.CrewWakeResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventCrewWakeResult {
+			decodeInto(t, payload, &result)
+		}
+	}
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), work.ID) {
+		t.Fatalf("wake from the Work profile = %+v, want a refusal naming it", result)
+	}
+	if spawnCount(backend) != 0 {
+		t.Fatal("a refused wake spawned a session")
 	}
 }

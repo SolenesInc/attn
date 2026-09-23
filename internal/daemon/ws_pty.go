@@ -241,19 +241,29 @@ func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSession
 }
 
 func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
-		d.sendSpawnRejection(client, msg.ID, rejection)
-		return
-	}
-	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
+	placed, rejection := d.runSpawnPipelineReporting(msg, policy)
+	d.answerSpawn(client, msg.ID, placed, rejection)
 }
 
 func (d *Daemon) handleSpawnSessionWithPolicyForeground(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	if rejection := d.runSpawnPipelineForeground(msg, policy); rejection != nil {
-		d.sendSpawnRejection(client, msg.ID, rejection)
+	placed, rejection := d.runSpawnPipelineForeground(msg, policy)
+	d.answerSpawn(client, msg.ID, placed, rejection)
+}
+
+func (d *Daemon) answerSpawn(client *wsClient, sessionID string, placed placementOutcome, rejection *spawnRejection) {
+	if rejection != nil {
+		d.sendSpawnRejection(client, sessionID, rejection)
 		return
 	}
-	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
+	result := protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: sessionID, Success: true}
+	if placed.paneID != "" {
+		result.DesktopID = protocol.Ptr(placed.desktopID)
+		result.PaneID = protocol.Ptr(placed.paneID)
+	}
+	if placed.err != nil {
+		result.PlacementError = protocol.Ptr(placed.err.Error())
+	}
+	d.sendToClient(client, result)
 }
 
 func (d *Daemon) sendSpawnRejection(client *wsClient, sessionID string, rejection *spawnRejection) {
