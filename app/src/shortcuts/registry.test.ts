@@ -232,12 +232,7 @@ describe('shortcut registry', () => {
       expect(SHORTCUTS['session.goToDashboard']).toEqual({ key: 'h', meta: true, shift: true });
       expect(MAC_SHORTCUTS['session.orchestrator']).toEqual({ key: 'ArrowUp', meta: true, shift: true });
       expect(LINUX_SHORTCUTS['session.orchestrator']).toEqual({ key: 'o', code: 'KeyO', meta: true, alt: true });
-      expect(MAC_SHORTCUTS['desktop.overview']).toEqual({ key: 'g', meta: true });
-      expect(LINUX_SHORTCUTS['desktop.overview']).toEqual({ key: 'g', meta: true, shift: true });
-      expect(MAC_SHORTCUTS['setup.switch']).toEqual({ key: 'u', meta: true, shift: true });
-      expect(LINUX_SHORTCUTS['setup.switch']).toEqual({ key: 'u', meta: true, alt: true });
-      expect(MAC_SHORTCUTS['desktop.send4']).toEqual({ key: '4', code: 'Digit4', meta: true, alt: true });
-      expect(LINUX_SHORTCUTS['desktop.send4']).toEqual({ key: '4', code: 'Digit4', meta: true, alt: true });
+      expect(SHORTCUTS['view.toggleGrid']).toEqual({ key: 'g', meta: true });
     });
 
     it('uses shifted physical bracket bindings for Linux history navigation', () => {

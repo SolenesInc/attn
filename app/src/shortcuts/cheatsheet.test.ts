@@ -28,7 +28,7 @@ describe('buildCheatsheet', () => {
   it('renders its hand-written combos in the platform vocabulary', () => {
     const jumpRow = (rows: ReturnType<typeof buildCheatsheet>) => rows
       .flatMap((c) => c.rows)
-      .find((r) => r.label === 'Switch to desktop 1–9');
+      .find((r) => r.label === 'Jump to workspace 1–9');
     expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['⌘', '1–9']);
     withNavigatorPlatform('Linux aarch64', () => {
       expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['Ctrl', 'Shift', '1–9']);

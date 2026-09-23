@@ -159,7 +159,7 @@ describe('chord overrides', () => {
 
   it('finds a conflict for a chord whose leader equals an existing combo', () => {
     expect(findConflict({ leader: { key: 'g', meta: true }, then: { key: 'x' } }, 'dock.attention'))
-      .toBe('desktop.overview');
+      .toBe('view.toggleGrid');
   });
 
   it('lets a chord leader coexist with a different existing combo', () => {
