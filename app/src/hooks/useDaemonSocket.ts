@@ -4509,60 +4509,6 @@ export function useDaemonSocket({
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'set_plugin_priority', name, priority }, 'Set plugin priority timed out', 30000);
   }, [sendKeyedRequest]);
 
-  const sendAddEndpoint = useCallback((name: string, sshTarget: string, instance?: string): Promise<EndpointActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      if (hasPendingEndpointAction()) {
-        reject(new Error('Another endpoint action is already in progress'));
-        return;
-      }
-      const key = 'endpoint_action:add:pending';
-      pendingActionsRef.current.set(key, { resolve, reject });
-      const payload: Record<string, unknown> = { cmd: 'add_endpoint', name, ssh_target: sshTarget };
-      const trimmed = (instance ?? '').trim();
-      if (trimmed !== '') {
-        payload.instance = trimmed;
-      }
-      ws.send(JSON.stringify(payload));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Add endpoint timed out'));
-        }
-      }, 30000);
-    });
-  }, [hasPendingEndpointAction]);
-
-  const sendUpdateEndpoint = useCallback((
-    endpointId: string,
-    updates: { name?: string; ssh_target?: string; enabled?: boolean; instance?: string }
-  ): Promise<EndpointActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      if (hasPendingEndpointAction()) {
-        reject(new Error('Another endpoint action is already in progress'));
-        return;
-      }
-      const key = `endpoint_action:update:${endpointId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({ cmd: 'update_endpoint', endpoint_id: endpointId, ...updates }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Update endpoint timed out'));
-        }
-      }, 30000);
-    });
-  }, [hasPendingEndpointAction]);
-
   const sendRemoveEndpoint = useCallback((endpointId: string): Promise<EndpointActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
@@ -4581,29 +4527,6 @@ export function useDaemonSocket({
         if (pendingActionsRef.current.has(key)) {
           pendingActionsRef.current.delete(key);
           reject(new Error('Remove endpoint timed out'));
-        }
-      }, 30000);
-    });
-  }, [hasPendingEndpointAction]);
-
-  const sendSetEndpointRemoteWeb = useCallback((endpointId: string, enabled: boolean): Promise<EndpointActionResult> => {
-    return new Promise((resolve, reject) => {
-      const ws = wsRef.current;
-      if (!ws || ws.readyState !== WebSocket.OPEN) {
-        reject(new Error('WebSocket not connected'));
-        return;
-      }
-      if (hasPendingEndpointAction()) {
-        reject(new Error('Another endpoint action is already in progress'));
-        return;
-      }
-      const key = `endpoint_action:remote_web:${endpointId}`;
-      pendingActionsRef.current.set(key, { resolve, reject });
-      ws.send(JSON.stringify({ cmd: 'set_endpoint_remote_web', endpoint_id: endpointId, enabled }));
-      setTimeout(() => {
-        if (pendingActionsRef.current.has(key)) {
-          pendingActionsRef.current.delete(key);
-          reject(new Error('Set endpoint remote web timed out'));
         }
       }, 30000);
     });
@@ -5685,10 +5608,7 @@ export function useDaemonSocket({
     sendUninstallPlugin,
     sendRemovePlugin,
     sendSetPluginPriority,
-    sendAddEndpoint,
-    sendUpdateEndpoint,
     sendRemoveEndpoint,
-    sendSetEndpointRemoteWeb,
     sendBootstrapEndpoint,
     sendListEndpoints,
     sendNotebookList,

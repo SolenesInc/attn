@@ -177,11 +177,11 @@ func TestPullRequestCreatedRecordsHostsAttnCannotPoll(t *testing.T) {
 
 func TestPullRequestMutationsTravelToTheSessionOwner(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("remote", "remote.example.test", "")
+	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
 	if err != nil {
 		t.Fatalf("add endpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
 
 	for _, msg := range []any{

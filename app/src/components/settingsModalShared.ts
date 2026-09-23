@@ -47,13 +47,7 @@ export interface SettingsModalProps {
   endpoints: DaemonEndpoint[];
   plugins: DaemonPlugin[];
   pluginIssues: DaemonPluginIssue[];
-  onAddEndpoint: (name: string, sshTarget: string, instance?: string) => Promise<{ success: boolean }>;
-  onUpdateEndpoint: (
-    endpointId: string,
-    updates: { name?: string; ssh_target?: string; enabled?: boolean; instance?: string },
-  ) => Promise<{ success: boolean }>;
   onRemoveEndpoint: (endpointId: string) => Promise<{ success: boolean }>;
-  onSetEndpointRemoteWeb: (endpointId: string, enabled: boolean) => Promise<{ success: boolean }>;
   onListPlugins: () => Promise<PluginListResult>;
   onInstallPlugin: (source: string) => Promise<{ success: boolean; name?: string }>;
   onInstallBundledPlugin?: (name: string) => Promise<{ success: boolean; name?: string }>;

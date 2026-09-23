@@ -173,6 +173,24 @@ describe('LocationPicker', () => {
     expect(onGetRepoInfo).not.toHaveBeenCalled();
   });
 
+  it('shows an unsupported endpoint as a disabled target that explains why', () => {
+    const reason = 'Remote endpoints are off in this release.';
+    renderPicker({
+      endpoints: [{
+        id: 'ep-1',
+        name: 'gpu-box',
+        ssh_target: 'ai-sandbox',
+        status: 'unsupported',
+        status_message: reason,
+        enabled: true,
+      }],
+    });
+
+    const target = screen.getByRole('radio', { name: /gpu-box/i });
+    expect(target).toBeDisabled();
+    expect(target).toHaveAttribute('title', reason);
+  });
+
   it('arrow navigation keeps the input stable and Enter opens the highlighted row', async () => {
     const onInspectPath = vi.fn(async () => ({
       success: true,

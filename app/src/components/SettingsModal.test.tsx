@@ -34,10 +34,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -69,10 +66,7 @@ describe('SettingsModal', () => {
           endpoints={[]}
           plugins={[]}
           pluginIssues={[]}
-          onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-          onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
           onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-          onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
           onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
           onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
           onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -103,10 +97,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -119,45 +110,6 @@ describe('SettingsModal', () => {
 
     expect(await screen.findByText('ghe.example.test')).toBeInTheDocument();
     expect(screen.getByText('github.com')).toBeInTheDocument();
-  });
-
-  it('submits a new endpoint through the modal', async () => {
-    const onAddEndpoint = vi.fn().mockResolvedValue({ success: true });
-
-    render(
-      <SettingsModal
-        isOpen
-        onClose={vi.fn()}
-        mutedRepos={[]}
-        githubHosts={[]}
-        onUnmuteRepo={vi.fn()}
-        mutedAuthors={[]}
-        onUnmuteAuthor={vi.fn()}
-        settings={{}}
-        endpoints={[]}
-        plugins={[]}
-        pluginIssues={[]}
-        onAddEndpoint={onAddEndpoint}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
-        onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
-        onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
-        onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
-        onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })}
-        onSetSetting={vi.fn()}
-        themePreference="system"
-        onSetTheme={vi.fn()}
-      />
-    );
-
-    fireEvent.change(screen.getByLabelText('Endpoint name'), { target: { value: 'gpu-box' } });
-    fireEvent.change(screen.getByLabelText('SSH target'), { target: { value: 'user@gpu-box' } });
-    fireEvent.click(screen.getByText('Add Endpoint'));
-
-    await waitFor(() => {
-      expect(onAddEndpoint).toHaveBeenCalledWith('gpu-box', 'user@gpu-box', '');
-    });
   });
 
   it('installs a plugin from a source entered in settings', async () => {
@@ -177,10 +129,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={onListPlugins}
         onInstallPlugin={onInstallPlugin}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -212,9 +161,7 @@ describe('SettingsModal', () => {
       <SettingsModal
         isOpen onClose={vi.fn()} mutedRepos={[]} githubHosts={[]} onUnmuteRepo={vi.fn()}
         mutedAuthors={[]} onUnmuteAuthor={vi.fn()} settings={{}} endpoints={[]} plugins={[bundled]} pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })} onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })} onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
-        onListPlugins={vi.fn().mockResolvedValue({ plugins: [bundled], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+               onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}        onListPlugins={vi.fn().mockResolvedValue({ plugins: [bundled], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onInstallBundledPlugin={onInstallBundledPlugin} onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
         onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })} onSetSetting={vi.fn()} themePreference="system" onSetTheme={vi.fn()}
       />,
@@ -235,9 +182,7 @@ describe('SettingsModal', () => {
       <SettingsModal
         isOpen onClose={vi.fn()} mutedRepos={[]} githubHosts={[]} onUnmuteRepo={vi.fn()}
         mutedAuthors={[]} onUnmuteAuthor={vi.fn()} settings={{}} endpoints={[]} plugins={[linked]} pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })} onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })} onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
-        onListPlugins={vi.fn().mockResolvedValue({ plugins: [linked], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+               onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}        onListPlugins={vi.fn().mockResolvedValue({ plugins: [linked], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onInstallBundledPlugin={vi.fn().mockResolvedValue({ success: true })} onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
         onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })} onSetSetting={vi.fn()} themePreference="system" onSetTheme={vi.fn()}
       />,
@@ -258,9 +203,7 @@ describe('SettingsModal', () => {
       <SettingsModal
         isOpen onClose={vi.fn()} mutedRepos={[]} githubHosts={[]} onUnmuteRepo={vi.fn()}
         mutedAuthors={[]} onUnmuteAuthor={vi.fn()} settings={{}} endpoints={[]} plugins={[bundled]} pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })} onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })} onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
-        onListPlugins={vi.fn().mockResolvedValue({ plugins: [bundled], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
+               onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}        onListPlugins={vi.fn().mockResolvedValue({ plugins: [bundled], issues: [] })} onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onUninstallPlugin={onUninstallPlugin} onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
         onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })} onSetSetting={vi.fn()} themePreference="system" onSetTheme={vi.fn()}
       />,
@@ -298,10 +241,7 @@ describe('SettingsModal', () => {
           can_uninstall: true,
         }]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({
           plugins: [{
             name: 'services-pilot-worktrees',
@@ -347,10 +287,7 @@ describe('SettingsModal', () => {
       settings: {},
       endpoints: [],
       pluginIssues: [],
-      onAddEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onUpdateEndpoint: vi.fn().mockResolvedValue({ success: true }),
       onRemoveEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onSetEndpointRemoteWeb: vi.fn().mockResolvedValue({ success: true }),
       onListPlugins: vi.fn().mockResolvedValue({ plugins: [], issues: [] }),
       onInstallPlugin: vi.fn().mockResolvedValue({ success: true }),
       onRemovePlugin: vi.fn().mockResolvedValue({ success: true }),
@@ -438,10 +375,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -472,10 +406,7 @@ describe('SettingsModal', () => {
       endpoints: [],
       plugins: [],
       pluginIssues: [],
-      onAddEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onUpdateEndpoint: vi.fn().mockResolvedValue({ success: true }),
       onRemoveEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onSetEndpointRemoteWeb: vi.fn().mockResolvedValue({ success: true }),
       onListPlugins: vi.fn().mockResolvedValue({ plugins: [], issues: [] }),
       onInstallPlugin: vi.fn().mockResolvedValue({ success: true }),
       onRemovePlugin: vi.fn().mockResolvedValue({ success: true }),
@@ -510,10 +441,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -543,10 +471,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -564,8 +489,9 @@ describe('SettingsModal', () => {
     expect(onSetSetting).toHaveBeenCalledWith('workflows_enabled', 'false');
   });
 
-  it('toggles remote web access for a connected endpoint', async () => {
-    const onSetEndpointRemoteWeb = vi.fn().mockResolvedValue({ success: true });
+  it('lists saved endpoints as off for this release and offers only removal', async () => {
+    const onRemoveEndpoint = vi.fn().mockResolvedValue({ success: true });
+    const reason = 'Remote endpoints are off in this release.';
 
     render(
       <SettingsModal
@@ -581,23 +507,13 @@ describe('SettingsModal', () => {
           id: 'ep-1',
           name: 'gpu-box',
           ssh_target: 'user@gpu-box',
-          status: 'connected',
+          status: 'unsupported',
+          status_message: reason,
           enabled: true,
-          capabilities: {
-            protocol_version: '49',
-            agents_available: ['codex'],
-            tailscale_enabled: false,
-            tailscale_status: 'disabled',
-            tailscale_domain: 'gpu-box.tail1bfe77.ts.net',
-            tailscale_auth_url: 'https://login.tailscale.example/auth',
-          },
         }]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={onSetEndpointRemoteWeb}
+        onRemoveEndpoint={onRemoveEndpoint}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -608,55 +524,16 @@ describe('SettingsModal', () => {
       />
     );
 
-    fireEvent.click(screen.getByText('Enable Web'));
+    fireEvent.click(screen.getByTestId('settings-nav-connectivity'));
+    expect(await screen.findByText('gpu-box')).toBeInTheDocument();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    for (const offered of ['Add Endpoint', 'Edit', 'Re-bootstrap', 'Enable Web', 'Disable']) {
+      expect(screen.queryByText(offered)).not.toBeInTheDocument();
+    }
 
+    fireEvent.click(screen.getByText('Remove'));
     await waitFor(() => {
-      expect(onSetEndpointRemoteWeb).toHaveBeenCalledWith('ep-1', true);
-    });
-    expect(screen.getByText(/sign this host into tailscale/i)).toBeInTheDocument();
-  });
-
-  it('re-bootstraps an enabled endpoint by disabling and re-enabling it', async () => {
-    const onUpdateEndpoint = vi.fn().mockResolvedValue({ success: true });
-
-    render(
-      <SettingsModal
-        isOpen
-        onClose={vi.fn()}
-        mutedRepos={[]}
-        githubHosts={[]}
-        onUnmuteRepo={vi.fn()}
-        mutedAuthors={[]}
-        onUnmuteAuthor={vi.fn()}
-        settings={{}}
-        endpoints={[{
-          id: 'ep-1',
-          name: 'gpu-box',
-          ssh_target: 'user@gpu-box',
-          status: 'error',
-          enabled: true,
-        }]}
-        plugins={[]}
-        pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={onUpdateEndpoint}
-        onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
-        onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
-        onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
-        onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
-        onSetPluginPriority={vi.fn().mockResolvedValue({ success: true })}
-        onSetSetting={vi.fn()}
-        themePreference="system"
-        onSetTheme={vi.fn()}
-      />
-    );
-
-    fireEvent.click(screen.getByText('Re-bootstrap'));
-
-    await waitFor(() => {
-      expect(onUpdateEndpoint).toHaveBeenNthCalledWith(1, 'ep-1', { enabled: false });
-      expect(onUpdateEndpoint).toHaveBeenNthCalledWith(2, 'ep-1', { enabled: true });
+      expect(onRemoveEndpoint).toHaveBeenCalledWith('ep-1');
     });
   });
 
@@ -674,10 +551,7 @@ describe('SettingsModal', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -718,10 +592,7 @@ describe('SettingsModal model data capture', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -775,10 +646,7 @@ describe('SettingsModal model data capture', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -826,10 +694,7 @@ describe('SettingsModal notebook folder', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -906,10 +771,7 @@ describe('SettingsModal chief settings', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -1153,10 +1015,7 @@ describe('SettingsModal font size', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -1245,10 +1104,7 @@ describe('SettingsModal automation handle', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -1351,10 +1207,7 @@ describe('SettingsModal automation handle', () => {
       endpoints: [],
       plugins: [],
       pluginIssues: [],
-      onAddEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onUpdateEndpoint: vi.fn().mockResolvedValue({ success: true }),
       onRemoveEndpoint: vi.fn().mockResolvedValue({ success: true }),
-      onSetEndpointRemoteWeb: vi.fn().mockResolvedValue({ success: true }),
       onListPlugins: vi.fn().mockResolvedValue({ plugins: [], issues: [] }),
       onInstallPlugin: vi.fn().mockResolvedValue({ success: true }),
       onRemovePlugin: vi.fn().mockResolvedValue({ success: true }),
@@ -1408,10 +1261,7 @@ describe('SettingsModal sent files', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}
@@ -1465,10 +1315,7 @@ describe('SettingsModal delegation badge', () => {
         endpoints={[]}
         plugins={[]}
         pluginIssues={[]}
-        onAddEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onUpdateEndpoint={vi.fn().mockResolvedValue({ success: true })}
         onRemoveEndpoint={vi.fn().mockResolvedValue({ success: true })}
-        onSetEndpointRemoteWeb={vi.fn().mockResolvedValue({ success: true })}
         onListPlugins={vi.fn().mockResolvedValue({ plugins: [], issues: [] })}
         onInstallPlugin={vi.fn().mockResolvedValue({ success: true })}
         onRemovePlugin={vi.fn().mockResolvedValue({ success: true })}

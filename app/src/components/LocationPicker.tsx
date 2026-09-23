@@ -52,6 +52,7 @@ interface PickerTarget {
   endpointId?: string;
   name: string;
   connected: boolean;
+  unavailableReason?: string;
   metaLabel: string;
   metaClassName?: string;
   projectsDirectory?: string;
@@ -299,6 +300,7 @@ export function LocationPicker({
         endpointId: endpoint.id,
         name: endpoint.name,
         connected: endpoint.status === 'connected',
+        unavailableReason: endpoint.status_message || `${endpoint.name} is ${endpoint.status}`,
         metaLabel: endpoint.status,
         metaClassName: `status-${endpoint.status}`,
         projectsDirectory: endpoint.capabilities?.projects_directory,
@@ -1104,7 +1106,7 @@ export function LocationPicker({
                   role="radio"
                   aria-checked={active}
                   disabled={!target.connected}
-                  title={!target.connected ? `${target.name} is ${target.metaLabel}` : undefined}
+                  title={!target.connected ? target.unavailableReason : undefined}
                 >
                   <span className="endpoint-option-name">{target.name}</span>
                   {active && yoloMode && (
