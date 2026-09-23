@@ -17,22 +17,13 @@ Not all contributions will be accepted. Opening an issue first sets expectations
 1. Fork the repository
 2. Clone your fork
 3. Install dependencies: Go 1.27+, Rust, Node.js 26+, pnpm
-4. Build: `make build-app`
+4. Build and open a dev profile: `make dev`
 
 ## Development Workflow
 
 Follow [Working with next](docs/working-with-next.md) for branches and pull
 requests, and [Profiles](docs/profiles.md) for development setup and verification.
 Reference the issue in your PR.
-
-## Code Style
-
-- Go: `gofmt`
-- Commits: Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`)
-
-## Project guidance
-
-See [AGENTS.md](AGENTS.md) for repository guidance.
 
 ## Questions?
 
