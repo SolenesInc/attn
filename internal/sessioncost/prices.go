@@ -16,7 +16,7 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-5.4-mini": openAIRates(0.75, 4.5, 0.075, 0),
 	"gpt-5.5":      openAIRates(5, 30, 0.5, 0),
 
-	"gpt-5.6-sol":   openAIRates(5, 30, 0.5, 6.25),
+	"gpt-5.6-sol":   openAIRates(4, 20, 0.4, 5),
 	"gpt-5.6-terra": openAIRates(2, 12, 0.2, 2.5),
 	"gpt-5.6-luna":  openAIRates(0.2, 1.2, 0.02, 0.25),
 
