@@ -5507,7 +5507,10 @@ export function useDaemonSocket({
   );
 
   const sendSetupSelect = useCallback(
-    (setupId: string) => sendSetupCommand('setup_select', { setup_id: setupId }),
+    (setupId: string) => {
+      useSetupsStore.getState().selectionStarted(setupId);
+      return sendSetupCommand('setup_select', { setup_id: setupId });
+    },
     [sendSetupCommand],
   );
 

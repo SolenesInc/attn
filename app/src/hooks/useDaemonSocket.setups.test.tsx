@@ -76,7 +76,7 @@ describe('useDaemonSocket setups', () => {
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
     window.localStorage.clear();
-    useSetupsStore.setState({ setups: [], selectedSetupId: null, desktops: [], previousDesktopId: null });
+    useSetupsStore.setState({ setups: [], selectedSetupId: null, desktops: [], previousDesktopId: null, selection: null });
   });
 
   afterEach(() => {
@@ -248,6 +248,37 @@ describe('useDaemonSocket setups', () => {
     expect(useSetupsStore.getState().selectedSetupId).toBe('set-work');
     expect(useSetupsStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1']);
     expect(window.localStorage.getItem(SELECTED_SETUP_STORAGE_KEY)).toBe('set-work');
+  });
+
+  it('keeps a newer arrangement of the setup it is switching to that arrives before the result', async () => {
+    const { ws, result } = await connect();
+
+    let selection!: Promise<unknown>;
+    act(() => {
+      selection = result.current.sendSetupSelect('set-work');
+    });
+    const [command] = ws.commands('setup_select');
+    act(() => {
+      ws.emit({
+        event: 'setup_arrangement_changed',
+        setup: setup('set-work', 'w2'),
+        desktops: [{ ...desktop('w1', 'set-work', 1, MARKDOWN_TILE), revision: 3 }],
+      });
+      ws.emit({
+        event: 'setup_action_result',
+        request_id: command.request_id,
+        action: 'setup_select',
+        success: true,
+        setup: setup('set-work', 'w1'),
+        desktops: [{ ...desktop('w1', 'set-work', 1), revision: 2 }, desktop('w2', 'set-work', 2)],
+      });
+    });
+    await selection;
+
+    const state = useSetupsStore.getState();
+    expect(state.selectedSetupId).toBe('set-work');
+    expect(state.setups.find((entry) => entry.id === 'set-work')?.current_desktop_id).toBe('w2');
+    expect(state.desktops.map((entry) => [entry.id, entry.revision])).toEqual([['w1', 3], ['w2', 1]]);
   });
 
   it('rejects a refused command with its error code', async () => {
