@@ -22,6 +22,14 @@ func testForegroundCleanupProtection() foregroundCleanupProtection {
 	return foregroundCleanupProtection{ctx: context.Background()}
 }
 
+func worktreeAutomaticCleanupExcluded(d *Daemon) bool {
+	if d.worktreeMaintenance.gate.TryLock() {
+		d.worktreeMaintenance.gate.Unlock()
+		return false
+	}
+	return true
+}
+
 func (f gitExecutorFunc) Run(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
 	return f(ctx, task, run)
 }
@@ -104,10 +112,7 @@ func TestSessionRegistrationAcquiresWorktreeMaintenanceBeforeGitIdentity(t *test
 	d := sweepDaemon(t)
 	leaseHeld := false
 	d.gitExec = gitExecutorFunc(func(ctx context.Context, _ gitTask, _ func(context.Context, *attngit.Client) error) error {
-		err := d.worktreeMaintenance.RunSweep(ctx, func(lease *worktreeSweepLease) error {
-			return lease.TryAutomaticRemoval(func(automaticWorktreeCleanupProtection) error { return nil })
-		})
-		leaseHeld = errors.Is(err, errAutomaticWorktreeCleanupPreempted)
+		leaseHeld = worktreeAutomaticCleanupExcluded(d)
 		if !leaseHeld {
 			return fmt.Errorf("session identity ran without the foreground automatic cleanup exclusion")
 		}

@@ -20,10 +20,10 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 	var result []protocol.Worktree
 	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		gitWorktrees, err := gitValue(protection.Context(), d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) ([]git.WorktreeEntry, error) {
-			return client.ObserveWorktrees(ctx, mainRepo)
+			return client.ObserveLiveWorktrees(ctx, mainRepo)
 		})
 		if err != nil {
-			result = d.reconcileListedWorktrees(protection, mainRepo, nil)
+			result = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(mainRepo))
 			return nil
 		}
 		result = d.reconcileListedWorktrees(protection, mainRepo, gitWorktrees)
@@ -32,40 +32,36 @@ func (d *Daemon) doListWorktrees(mainRepo string) []protocol.Worktree {
 	return result
 }
 
-func (d *Daemon) reconcileListedWorktrees(_ foregroundCleanupProtection, mainRepo string, gitWorktrees []git.WorktreeEntry) []protocol.Worktree {
-	storedWorktrees := d.store.ListWorktreesByRepo(mainRepo)
-	if gitWorktrees == nil {
-		protoWorktrees := make([]protocol.Worktree, len(storedWorktrees))
-		for i, wt := range storedWorktrees {
-			protoWorktrees[i] = protocol.Worktree{
-				Path:      wt.Path,
-				Branch:    wt.Branch,
-				MainRepo:  wt.MainRepo,
-				CreatedAt: protocol.Ptr(wt.CreatedAt.Format(time.RFC3339)),
-			}
+func storedWorktreesAsProtocol(storedWorktrees []*store.Worktree) []protocol.Worktree {
+	protoWorktrees := make([]protocol.Worktree, len(storedWorktrees))
+	for i, wt := range storedWorktrees {
+		protoWorktrees[i] = protocol.Worktree{
+			Path:      wt.Path,
+			Branch:    wt.Branch,
+			MainRepo:  wt.MainRepo,
+			CreatedAt: protocol.Ptr(wt.CreatedAt.Format(time.RFC3339)),
 		}
-		return protoWorktrees
 	}
+	return protoWorktrees
+}
 
-	gitWorktreePaths := make(map[string]bool)
-	for _, gwt := range gitWorktrees {
-		if gwt.Prunable {
-			continue
-		}
-		gitWorktreePaths[gwt.Path] = true
+func (d *Daemon) reconcileListedWorktrees(_ foregroundCleanupProtection, mainRepo string, liveWorktrees []git.WorktreeEntry) []protocol.Worktree {
+	liveWorktreePaths := make(map[string]bool, len(liveWorktrees))
+	for _, gwt := range liveWorktrees {
+		liveWorktreePaths[gwt.Path] = true
 	}
 
 	var validWorktrees []*store.Worktree
-	for _, wt := range storedWorktrees {
-		if gitWorktreePaths[wt.Path] {
+	for _, wt := range d.store.ListWorktreesByRepo(mainRepo) {
+		if liveWorktreePaths[wt.Path] {
 			validWorktrees = append(validWorktrees, wt)
 		} else {
 			d.store.RemoveWorktree(wt.Path)
 		}
 	}
 
-	for _, gwt := range gitWorktrees {
-		if gwt.Path == mainRepo || gwt.Prunable {
+	for _, gwt := range liveWorktrees {
+		if gwt.Path == mainRepo {
 			continue
 		}
 		found := false
@@ -87,16 +83,7 @@ func (d *Daemon) reconcileListedWorktrees(_ foregroundCleanupProtection, mainRep
 		}
 	}
 
-	protoWorktrees := make([]protocol.Worktree, len(validWorktrees))
-	for i, wt := range validWorktrees {
-		protoWorktrees[i] = protocol.Worktree{
-			Path:      wt.Path,
-			Branch:    wt.Branch,
-			MainRepo:  wt.MainRepo,
-			CreatedAt: protocol.Ptr(wt.CreatedAt.Format(time.RFC3339)),
-		}
-	}
-	return protoWorktrees
+	return storedWorktreesAsProtocol(validWorktrees)
 }
 
 func (d *Daemon) doCreateWorktree(msg *protocol.CreateWorktreeMessage) (string, error) {
@@ -195,7 +182,7 @@ func (d *Daemon) discoverWorktree(protection foregroundCleanupProtection, path s
 			return discovery{}, rootErr
 		}
 		mainRepo := client.ResolveMainRepoPath(ctx, root)
-		entries, listErr := client.ObserveWorktrees(ctx, mainRepo)
+		entries, listErr := client.ObserveLiveWorktrees(ctx, mainRepo)
 		return discovery{mainRepo: mainRepo, entries: entries}, listErr
 	})
 	if err != nil || result.mainRepo == "" {
@@ -203,7 +190,7 @@ func (d *Daemon) discoverWorktree(protection foregroundCleanupProtection, path s
 	}
 
 	for _, gwt := range result.entries {
-		if gwt.Path == path && !gwt.Prunable {
+		if gwt.Path == path {
 			wt := &store.Worktree{
 				Path:      gwt.Path,
 				Branch:    gwt.Branch,
@@ -264,9 +251,7 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 		finishOperation(err)
 	}()
 
-	var wt *store.Worktree
-	var seeds []string
-	wt = d.store.GetWorktree(path)
+	wt := d.store.GetWorktree(path)
 	if wt == nil {
 		wt = d.discoverWorktree(protection, path)
 		if wt == nil {
@@ -283,48 +268,51 @@ func (d *Daemon) doDeleteWorktreeProtected(protection foregroundCleanupProtectio
 		}
 	}
 
-	d.captureGardenExecutionsInDirectory(path)
-	seeds = d.seedsForWorktree(wt)
-	branch := wt.Branch
-	mainRepo := wt.MainRepo
-	deleteBranch := branch != "" && !d.gardenKeepsBranch(mainRepo, branch)
-	handled, providerErr := d.dispatchWorktreeDeleteProvider(mainRepo, path, branch, opts.Force)
-	if providerErr != nil {
-		if !d.worktreeDeletionHappened(protection.Context(), mainRepo, path) {
-			return d.classifyDeleteWorktreeProviderError(path, opts.Force, providerErr)
+	seeds, failure := d.removeWorktreeCheckout(protection, wt, opts.Force)
+	if failure != nil {
+		if failure.fromProvider {
+			return d.classifyDeleteWorktreeProviderError(path, opts.Force, failure.err)
 		}
-		d.deleteWorktreeBranch(protection.Context(), mainRepo, branch, deleteBranch)
-	} else if !handled {
-		var branchDeleteErr error
+		return d.classifyDeleteWorktreeGitError(path, opts.Force, failure.err)
+	}
+	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
+	return nil
+}
+
+type removalFailure struct {
+	err          error
+	fromProvider bool
+}
+
+func (d *Daemon) removeWorktreeCheckout(protection worktreeCleanupProtection, wt *store.Worktree, force bool) ([]string, *removalFailure) {
+	d.captureGardenExecutionsInDirectory(wt.Path)
+	seeds := d.seedsForWorktree(wt)
+	handled, providerErr := d.dispatchWorktreeDeleteProvider(wt.MainRepo, wt.Path, wt.Branch, force)
+	switch {
+	case providerErr != nil:
+		if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
+			return seeds, &removalFailure{err: providerErr, fromProvider: true}
+		}
+		d.deleteBranchOfProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
+	case !handled:
 		deleteErr := d.gitExecution().Run(protection.Context(), gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(ctx context.Context, client *git.Client) error {
-			if runErr := client.DeleteWorktree(ctx, mainRepo, path, opts.Force); runErr != nil {
-				return runErr
+			if err := client.DeleteWorktree(ctx, wt.MainRepo, wt.Path, force); err != nil {
+				return err
 			}
-			if deleteBranch {
-				branchDeleteErr = client.DeleteBranch(ctx, mainRepo, branch, true)
-			}
+			d.deleteWorktreeBranch(ctx, client, wt.MainRepo, wt.Branch)
 			return nil
 		})
 		if deleteErr != nil {
-			return d.classifyDeleteWorktreeGitError(path, opts.Force, deleteErr)
+			return seeds, &removalFailure{err: deleteErr}
 		}
-		if branchDeleteErr != nil {
-			d.logf("Warning: worktree deleted but failed to delete branch %s: %v", branch, branchDeleteErr)
-		} else if deleteBranch {
-			d.logf("Deleted branch %s along with worktree", branch)
+	default:
+		if !d.worktreeDeletionHappened(protection.Context(), wt.MainRepo, wt.Path) {
+			return seeds, &removalFailure{err: errors.New("worktree delete provider reported success but the worktree still exists"), fromProvider: true}
 		}
-	} else {
-		if !d.worktreeDeletionHappened(protection.Context(), mainRepo, path) {
-			return &deleteWorktreeError{
-				err:  errors.New("worktree delete provider reported success but the worktree still exists"),
-				kind: deleteWorktreeFailureProviderError,
-			}
-		}
-		d.deleteWorktreeBranch(protection.Context(), mainRepo, branch, deleteBranch)
+		d.deleteBranchOfProviderRemovedWorktree(protection.Context(), wt.MainRepo, wt.Branch)
 	}
-	d.finalizeDeletedWorktree(protection, path)
-	d.recordWorktreeRemoval(wt, seeds, opts, time.Now())
-	return nil
+	d.finalizeDeletedWorktree(protection, wt.Path)
+	return seeds, nil
 }
 
 func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path string) bool {
@@ -345,18 +333,25 @@ func (d *Daemon) worktreeDeletionHappened(ctx context.Context, mainRepo, path st
 	return true
 }
 
-func (d *Daemon) deleteWorktreeBranch(ctx context.Context, mainRepo, branch string, deleteBranch bool) {
+func (d *Daemon) deleteBranchOfProviderRemovedWorktree(ctx context.Context, mainRepo, branch string) {
 	if branch == "" {
 		return
 	}
-	if !deleteBranch {
+	_ = d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
+		d.deleteWorktreeBranch(runCtx, client, mainRepo, branch)
+		return nil
+	})
+}
+
+func (d *Daemon) deleteWorktreeBranch(ctx context.Context, client *git.Client, mainRepo, branch string) {
+	if branch == "" {
+		return
+	}
+	if d.gardenKeepsBranch(mainRepo, branch) {
 		d.logf("Preserved branch %s because an open seed can continue from it", branch)
 		return
 	}
-	err := d.gitExecution().Run(ctx, gitTask{Kind: gitTaskWorktreeMutation, Lane: gitInteractive}, func(runCtx context.Context, client *git.Client) error {
-		return client.DeleteBranch(runCtx, mainRepo, branch, true)
-	})
-	if err != nil {
+	if err := client.DeleteBranch(ctx, mainRepo, branch, true); err != nil {
 		d.logf("Warning: worktree deleted but failed to delete branch %s: %v", branch, err)
 		return
 	}

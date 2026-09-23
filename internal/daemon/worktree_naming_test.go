@@ -106,8 +106,7 @@ func TestDoDeleteWorktree_BroadcastsGitOperationLifecycle(t *testing.T) {
 			return
 		}
 		lookupUnderLease = true
-		if d.worktreeMaintenance.gate.TryLock() {
-			d.worktreeMaintenance.gate.Unlock()
+		if !worktreeAutomaticCleanupExcluded(d) {
 			t.Error("worktree deletion resolved its target before acquiring the automatic cleanup exclusion")
 		}
 	}
@@ -238,8 +237,7 @@ func TestDoDeleteWorktree_ForceDeleteCleansUpAfterGitDelete(t *testing.T) {
 			return
 		}
 		finalizedUnderLease = true
-		if d.worktreeMaintenance.gate.TryLock() {
-			d.worktreeMaintenance.gate.Unlock()
+		if !worktreeAutomaticCleanupExcluded(d) {
 			t.Error("worktree deletion finalized after releasing the automatic cleanup exclusion")
 		}
 	}

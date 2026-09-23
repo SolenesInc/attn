@@ -14,15 +14,6 @@ type WorktreeEntry struct {
 	Prunable bool
 }
 
-func ListWorktrees(repoDir string) ([]WorktreeEntry, error) {
-	return defaultClient.ListWorktrees(context.Background(), repoDir)
-}
-
-func (c *Client) ListWorktrees(ctx context.Context, repoDir string) ([]WorktreeEntry, error) {
-	_ = c.PruneWorktrees(ctx, repoDir)
-	return c.ObserveWorktrees(ctx, repoDir)
-}
-
 func ObserveWorktrees(repoDir string) ([]WorktreeEntry, error) {
 	return defaultClient.ObserveWorktrees(context.Background(), repoDir)
 }
@@ -55,6 +46,20 @@ func (c *Client) ObserveWorktrees(ctx context.Context, repoDir string) ([]Worktr
 	}
 
 	return worktrees, nil
+}
+
+func (c *Client) ObserveLiveWorktrees(ctx context.Context, repoDir string) ([]WorktreeEntry, error) {
+	all, err := c.ObserveWorktrees(ctx, repoDir)
+	if err != nil {
+		return nil, err
+	}
+	live := make([]WorktreeEntry, 0, len(all))
+	for _, worktree := range all {
+		if !worktree.Prunable {
+			live = append(live, worktree)
+		}
+	}
+	return live, nil
 }
 
 func PruneWorktrees(repoDir string) error {

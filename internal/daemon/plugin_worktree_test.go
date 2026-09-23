@@ -17,13 +17,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func worktreeAutomaticCleanupExcluded(d *Daemon) bool {
-	err := d.worktreeMaintenance.RunSweep(context.Background(), func(lease *worktreeSweepLease) error {
-		return lease.TryAutomaticRemoval(func(automaticWorktreeCleanupProtection) error { return nil })
-	})
-	return errors.Is(err, errAutomaticWorktreeCleanupPreempted)
-}
-
 func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T) {
 	tmpDir, mainDir := initProviderTestRepo(t)
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
@@ -538,7 +531,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	if wt := d.store.GetWorktree(worktreePath); wt != nil {
 		t.Fatalf("expected deleted worktree removed from store, got %#v", wt)
 	}
-	worktrees, err := git.ListWorktrees(mainDir)
+	worktrees, err := git.NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if err != nil {
 		t.Fatalf("list worktrees after provider delete: %v", err)
 	}
@@ -766,7 +759,7 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	if wt := d.store.GetWorktree(worktreePath); wt == nil {
 		t.Fatal("provider failure removed worktree from store")
 	}
-	worktrees, listErr := git.ListWorktrees(mainDir)
+	worktrees, listErr := git.NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if listErr != nil {
 		t.Fatalf("list worktrees after provider error: %v", listErr)
 	}

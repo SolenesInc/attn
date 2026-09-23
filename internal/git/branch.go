@@ -53,16 +53,13 @@ func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, er
 		return nil, nil
 	}
 
-	worktrees, err := c.ObserveWorktrees(ctx, repoDir)
+	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
 
 	checkedOut := make(map[string]bool)
 	for _, wt := range worktrees {
-		if wt.Prunable {
-			continue
-		}
 		if wt.Branch != "" {
 			checkedOut[wt.Branch] = true
 		}
@@ -95,16 +92,13 @@ func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([
 		return nil, nil
 	}
 
-	worktrees, err := c.ObserveWorktrees(ctx, repoDir)
+	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
 
 	checkedOut := make(map[string]bool)
 	for _, wt := range worktrees {
-		if wt.Prunable {
-			continue
-		}
 		if wt.Branch != "" {
 			checkedOut[wt.Branch] = true
 		}

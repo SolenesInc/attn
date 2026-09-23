@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,7 +70,7 @@ func TestEnsureDetachedWorktreeAtRevisionRecoversFreshStaleMetadata(t *testing.T
 	}
 }
 
-func TestListWorktrees(t *testing.T) {
+func TestObserveLiveWorktreesSkipsPrunableEntries(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
 	mainDir := filepath.Join(tmpDir, "main")
@@ -81,25 +82,26 @@ func TestListWorktrees(t *testing.T) {
 
 	wtDir := filepath.Join(tmpDir, "wt")
 	runGit(t, mainDir, "worktree", "add", "-b", "feature", wtDir)
+	missingDir := filepath.Join(tmpDir, "missing")
+	runGit(t, mainDir, "worktree", "add", "-b", "feature-stale", missingDir)
+	if err := os.RemoveAll(missingDir); err != nil {
+		t.Fatal(err)
+	}
 
-	worktrees, err := ListWorktrees(mainDir)
+	worktrees, err := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if err != nil {
-		t.Fatalf("ListWorktrees failed: %v", err)
+		t.Fatalf("ObserveLiveWorktrees failed: %v", err)
 	}
 
-	if len(worktrees) < 1 {
-		t.Errorf("expected at least 1 worktree, got %d", len(worktrees))
-	}
-
-	found := false
+	branches := map[string]bool{}
 	for _, wt := range worktrees {
-		if wt.Branch == "feature" {
-			found = true
-			break
-		}
+		branches[wt.Branch] = true
 	}
-	if !found {
+	if !branches["feature"] {
 		t.Error("expected to find feature worktree")
+	}
+	if branches["feature-stale"] {
+		t.Error("prunable worktree should be skipped")
 	}
 }
 
@@ -150,7 +152,7 @@ func TestDeleteWorktree(t *testing.T) {
 		t.Fatalf("DeleteWorktree failed: %v", err)
 	}
 
-	worktrees, _ := ListWorktrees(mainDir)
+	worktrees, _ := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	for _, wt := range worktrees {
 		if wt.Path == wtDir {
 			t.Error("worktree should have been removed")
@@ -184,9 +186,9 @@ func TestDeleteWorktreeDirtyRequiresForce(t *testing.T) {
 	if err := DeleteWorktree(mainDir, wtDir, true); err != nil {
 		t.Fatalf("DeleteWorktree with force failed: %v", err)
 	}
-	worktrees, err := ListWorktrees(mainDir)
+	worktrees, err := NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if err != nil {
-		t.Fatalf("ListWorktrees failed: %v", err)
+		t.Fatalf("ObserveLiveWorktrees failed: %v", err)
 	}
 	for _, wt := range worktrees {
 		if wt.Path == wtDir {

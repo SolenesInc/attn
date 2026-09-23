@@ -153,13 +153,7 @@ func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--dirty")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/dirty", worktree)
 	if err := os.WriteFile(filepath.Join(worktree, "untracked.txt"), []byte("uncommitted"), 0o644); err != nil {
@@ -189,13 +183,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--clean")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/clean", worktree)
 
@@ -299,13 +287,7 @@ func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
 }
 
 func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *testing.T) {
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--retained")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/retained", worktree)
 
@@ -326,13 +308,7 @@ func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *te
 }
 
 func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--auto")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/auto", worktree)
 

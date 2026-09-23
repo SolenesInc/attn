@@ -6,22 +6,22 @@ import (
 	"testing"
 	"time"
 
-	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
-func TestReconcileListedWorktreesDropsPrunableRows(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+func TestListWorktreesDropsPrunableRows(t *testing.T) {
+	root, repo := initProviderTestRepo(t)
+	missing := filepath.Join(root, "missing")
+	runGitDaemon(t, repo, "worktree", "add", "-b", "feature", missing)
+	if err := os.RemoveAll(missing); err != nil {
+		t.Fatal(err)
+	}
+	d := NewForTesting(filepath.Join(root, "attn.sock"))
 	t.Cleanup(d.stopEventBus)
-	repo := "/repo/main"
-	missing := "/repo/missing"
 	d.store.AddWorktree(&store.Worktree{Path: missing, MainRepo: repo, Branch: "feature", CreatedAt: time.Now()})
 
-	listed := d.reconcileListedWorktrees(testForegroundCleanupProtection(), repo, []attngit.WorktreeEntry{
-		{Path: repo, Branch: "main"},
-		{Path: missing, Branch: "feature", Prunable: true},
-	})
+	listed := d.doListWorktrees(repo)
 
 	if len(listed) != 0 {
 		t.Fatalf("listed worktrees = %+v, want no stale row", listed)
@@ -32,13 +32,7 @@ func TestReconcileListedWorktreesDropsPrunableRows(t *testing.T) {
 }
 
 func TestCreateWorktreeFromBranchPrunesMissingRegistration(t *testing.T) {
-	root := t.TempDir()
-	repo := filepath.Join(root, "main")
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, repo, "init", "-b", "main")
-	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "init")
+	root, repo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "reused")
 	runGitDaemon(t, repo, "worktree", "add", "-b", "feature-stale", worktree)
 	if err := os.RemoveAll(worktree); err != nil {

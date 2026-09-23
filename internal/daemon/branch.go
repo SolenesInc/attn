@@ -120,6 +120,7 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 			commitTime    string
 			defaultBranch string
 			worktrees     []git.WorktreeEntry
+			worktreesErr  error
 		}
 		var info repoInfo
 		var worktrees []protocol.Worktree
@@ -132,11 +133,15 @@ func (d *Daemon) handleGetRepoInfoWS(client *wsClient, msg *protocol.GetRepoInfo
 				}
 				commitHash, commitTime := client.GetHeadCommitInfo(ctx, repo)
 				defaultBranch, _ := client.GetDefaultBranch(ctx, repo)
-				listedWorktrees, _ := client.ObserveWorktrees(ctx, repo)
-				return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees}, nil
+				listedWorktrees, worktreesErr := client.ObserveLiveWorktrees(ctx, repo)
+				return repoInfo{currentBranch: currentBranch, commitHash: commitHash, commitTime: commitTime, defaultBranch: defaultBranch, worktrees: listedWorktrees, worktreesErr: worktreesErr}, nil
 			})
 			if infoErr != nil {
 				return infoErr
+			}
+			if info.worktreesErr != nil {
+				worktrees = storedWorktreesAsProtocol(d.store.ListWorktreesByRepo(repo))
+				return nil
 			}
 			worktrees = d.reconcileListedWorktrees(protection, repo, info.worktrees)
 			return nil

@@ -889,53 +889,38 @@ func (d *Daemon) gitTrackedSource(source string) (bool, string, error) {
 		return false, source, fmt.Errorf("resolve source for Git tracking check: %w", err)
 	}
 	dir := filepath.Dir(resolvedSource)
-	result, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) (struct {
-		tracked bool
-		display string
-	}, error) {
+	var tracked bool
+	var display string
+	err = d.gitExecution().Run(context.Background(), gitTask{Kind: gitTaskSeedArtifact, Lane: gitInteractive}, func(ctx context.Context, client *attngit.Client) error {
 		rootRaw, rootErr := client.Output(ctx, attngit.OpMetadata, dir, "rev-parse", "--show-toplevel")
 		if rootErr != nil {
 			var exit *exec.ExitError
 			if errors.As(rootErr, &exit) {
-				return struct {
-					tracked bool
-					display string
-				}{display: source}, nil
+				display = source
+				return nil
 			}
-			return struct {
-				tracked bool
-				display string
-			}{}, fmt.Errorf("check source repository: %w", rootErr)
+			return fmt.Errorf("check source repository: %w", rootErr)
 		}
 		root := strings.TrimSpace(string(rootRaw))
 		rel, relErr := filepath.Rel(root, resolvedSource)
 		if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-			return struct {
-				tracked bool
-				display string
-			}{display: source}, nil
+			display = source
+			return nil
 		}
-		display := filepath.ToSlash(rel)
-		output, trackErr := client.Combined(ctx, attngit.OpMetadata, root, "ls-files", "--error-unmatch", "--", ":(literal)"+display)
+		relative := filepath.ToSlash(rel)
+		output, trackErr := client.Combined(ctx, attngit.OpMetadata, root, "ls-files", "--error-unmatch", "--", ":(literal)"+relative)
 		if trackErr == nil {
-			return struct {
-				tracked bool
-				display string
-			}{tracked: true, display: display}, nil
+			tracked, display = true, relative
+			return nil
 		}
 		var exit *exec.ExitError
 		if errors.As(trackErr, &exit) && exit.ExitCode() == 1 {
-			return struct {
-				tracked bool
-				display string
-			}{display: display}, nil
+			display = relative
+			return nil
 		}
-		return struct {
-			tracked bool
-			display string
-		}{}, fmt.Errorf("check whether %s is tracked by Git: %w: %s", display, trackErr, strings.TrimSpace(string(output)))
+		return fmt.Errorf("check whether %s is tracked by Git: %w: %s", relative, trackErr, strings.TrimSpace(string(output)))
 	})
-	return result.tracked, result.display, err
+	return tracked, display, err
 }
 
 func (d *Daemon) detachLegacyArtifactReference(seedID, authorSession string, legacy garden.ArtifactReference) error {
