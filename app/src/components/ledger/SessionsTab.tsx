@@ -468,49 +468,72 @@ interface SessionInspectorProps {
   actionsAvailable: boolean;
 }
 
+function SessionKicker({ entry, live, verdict }: { entry: SessionLedgerEntry; live: boolean; verdict: ReopenVerdictView | undefined }) {
+  return (
+    <>
+      <span className={`ledger-glyph is-${sessionGlyph(entry, live, verdict)}`} aria-hidden="true" />
+      <span>{isClosed(entry) ? 'closed' : entry.state}</span>
+      <span>·</span>
+      <span>{entry.agent}</span>
+    </>
+  );
+}
+
+function DirectoryField({ entry, verdict, copied, onCopy }: {
+  entry: SessionLedgerEntry; verdict: ReopenVerdictView | undefined; copied: string | null; onCopy: (text: string) => void;
+}) {
+  return (
+    <Field label="Directory" mono>
+      <button type="button" className="ledger-copy" title="Copy the path (y)" onClick={() => onCopy(entry.directory)}>
+        {tildePath(entry.directory)}{copied === entry.directory && <em> copied</em>}
+      </button>
+      {verdict && <div className="ledger-muted">{directoryStateLabel(verdict.directoryState)}</div>}
+    </Field>
+  );
+}
+
+function BranchField({ entry, verdict }: { entry: SessionLedgerEntry; verdict: ReopenVerdictView | undefined }) {
+  const state = branchStateLabel(verdict?.branchState);
+  if (!entry.branch && !verdict?.branchState) return null;
+  return (
+    <Field label="Branch" mono>
+      {entry.branch || '—'}
+      {state && <div className="ledger-muted">{state}</div>}
+    </Field>
+  );
+}
+
+function InstantField({ entry, now, sessionLabel, nameText }: {
+  entry: SessionLedgerEntry; now: Date; sessionLabel: (id: string) => string; nameText: (text: string) => string;
+}) {
+  const closed = isClosed(entry);
+  return (
+    <Field label={closed ? 'Closed' : 'Last seen'}>
+      {fullStamp(ledgerInstant(entry))} <span className="ledger-muted">({relativeStamp(ledgerInstant(entry), now)})</span>
+      {closed && (
+        <div className="ledger-muted">
+          by {closedBySomeone(entry, sessionLabel)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
+        </div>
+      )}
+    </Field>
+  );
+}
+
 function SessionInspector({
   entry, verdict, note, live, seed, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
-  const closed = isClosed(entry);
   return (
-    <Inspector
-      title={entry.label || 'untitled session'}
-      kicker={(
-        <>
-          <span className={`ledger-glyph is-${sessionGlyph(entry, live, verdict)}`} aria-hidden="true" />
-          <span>{closed ? 'closed' : entry.state}</span>
-          <span>·</span>
-          <span>{entry.agent}</span>
-        </>
-      )}
-    >
+    <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} verdict={verdict} />}>
       <Field label="Workspace">{workspaceShown(entry.workspace_id) || '—'}</Field>
-      <Field label="Directory" mono>
-        <button type="button" className="ledger-copy" title="Copy the path (y)" onClick={() => onCopy(entry.directory)}>
-          {tildePath(entry.directory)}{copied === entry.directory && <em> copied</em>}
-        </button>
-        {verdict && <div className="ledger-muted">{directoryStateLabel(verdict.directoryState)}</div>}
-      </Field>
-      {(entry.branch || verdict?.branchState) && (
-        <Field label="Branch" mono>
-          {entry.branch || '—'}
-          {branchStateLabel(verdict?.branchState) && <div className="ledger-muted">{branchStateLabel(verdict?.branchState)}</div>}
-        </Field>
-      )}
-      <Field label={closed ? 'Closed' : 'Last seen'}>
-        {fullStamp(ledgerInstant(entry))} <span className="ledger-muted">({relativeStamp(ledgerInstant(entry), now)})</span>
-        {closed && (
-          <div className="ledger-muted">
-            by {closedBySomeone(entry, sessionLabel)}{entry.close_reason ? `: ${nameText(entry.close_reason)}` : ''}
-          </div>
-        )}
-      </Field>
+      <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
+      <BranchField entry={entry} verdict={verdict} />
+      <InstantField entry={entry} now={now} sessionLabel={sessionLabel} nameText={nameText} />
       {seed && (
         <Field label="Seed">
           <button type="button" className="ledger-link" onClick={() => onVerb('seed')}>{seed.title}</button>
         </Field>
       )}
-      {closed && (
+      {isClosed(entry) && (
         <ReopenVerdict verdict={verdict} note={note} nameText={nameText} onVerb={onVerb} actionsAvailable={actionsAvailable} />
       )}
       {live && (
