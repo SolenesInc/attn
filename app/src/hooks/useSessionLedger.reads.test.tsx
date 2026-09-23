@@ -129,6 +129,20 @@ describe('useSessionLedger reads', () => {
     expect(seen.view?.facets).toBeNull();
   });
 
+  it('drops a failed read\'s error once filters change while disconnected', async () => {
+    const list = vi.fn(async () => { throw new Error('timeout'); });
+    const seen = renderLedger(list, { ...EMPTY_SESSION_FILTERS, repository: 'first' });
+    await waitFor(() => expect(seen.view?.error).toBe('timeout'));
+
+    act(() => seen.setConnected(false));
+    await act(async () => {
+      seen.view?.setFilters((filters) => ({ ...filters, repository: 'second' }));
+    });
+
+    expect(seen.view?.error).toBeNull();
+    expect(seen.view?.entries).toEqual([]);
+  });
+
   it('shows no rows for filters changed while disconnected, and reads them on reconnect', async () => {
     const first = closedEntry('s1', { repository: 'first' });
     const second = closedEntry('s2', { repository: 'second' });

@@ -125,13 +125,14 @@ function applyClose(
     : entries.map((row) => (row.id === entry.id ? entry : row));
 }
 
-interface LedgerRows {
+interface LedgerRead {
+  query: string | null;
   entries: SessionLedgerEntry[];
   facets: SessionLedgerFacets | null;
-  listedQuery: string | null;
+  error: string | null;
 }
 
-const NO_ROWS: LedgerRows = { entries: [], facets: null, listedQuery: null };
+const NO_READ: LedgerRead = { query: null, entries: [], facets: null, error: null };
 
 export function useSessionLedger({
   enabled,
@@ -142,12 +143,11 @@ export function useSessionLedger({
   onFiltersChange,
 }: UseSessionLedgerOptions): SessionLedgerView {
   const [filters, setFilters] = useState<SessionLedgerFilters>(initialFilters);
-  const [rows, setRows] = useState<LedgerRows>(NO_ROWS);
+  const [read, setRead] = useState<LedgerRead>(NO_READ);
   const [omitted, setOmitted] = useState(0);
   const [nextBefore, setNextBefore] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [loadingMoreRead, setLoadingMoreRead] = useState<SessionLedgerEntry[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
   const [lifecycle, setLifecycle] = useState({ connected: false, generation: 0 });
   const lifecycleRef = useRef(lifecycle);
@@ -182,7 +182,7 @@ export function useSessionLedger({
       const entry = event.entry;
       for (const closes of closesDuringReads.current) closes.push(entry);
       const at = now();
-      setRows((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
+      setRead((current) => ({ ...current, entries: applyClose(current.entries, entry, filtersRef.current, at) }));
     });
   }, [connection.subscribe, enabled, now]);
 
@@ -216,19 +216,21 @@ export function useSessionLedger({
     closesDuringReads.current.add(closes);
     const superseded = () => epoch !== readEpoch.current || generation !== lifecycleRef.current.generation;
     setLoading(true);
-    setError(null);
+    setRead((current) => (current.query === queryKey ? { ...current, error: null } : current));
     connection.list({ ...(query as SessionLedgerQuery), limit: pageSize })
       .then((page) => {
         if (superseded()) return;
         const at = now();
         const listed = closes.reduce((next, entry) => applyClose(next, entry, filters, at), page.entries ?? []);
-        setRows({ entries: listed, facets: page.facets ?? null, listedQuery: queryKey });
+        setRead({ query: queryKey, entries: listed, facets: page.facets ?? null, error: null });
         setOmitted(page.omitted ?? 0);
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
         if (superseded()) return;
-        setError(failure.message);
+        setRead((current) => (current.query === queryKey
+          ? { ...current, error: failure.message }
+          : { ...NO_READ, query: queryKey, error: failure.message }));
       })
       .finally(() => {
         closesDuringReads.current.delete(closes);
@@ -254,7 +256,7 @@ export function useSessionLedger({
       .then((page) => {
         if (superseded()) return;
         const at = now();
-        setRows((current) => {
+        setRead((current) => {
           const present = new Set(current.entries.map((entry) => entry.id));
           const appended = [...current.entries, ...(page.entries ?? []).filter((entry) => !present.has(entry.id))];
           return { ...current, entries: closes.reduce((next, entry) => applyClose(next, entry, filtersRef.current, at), appended) };
@@ -263,7 +265,7 @@ export function useSessionLedger({
         setNextBefore(page.next_before ?? null);
       })
       .catch((failure: Error) => {
-        if (epoch === readEpoch.current) setError(failure.message);
+        if (epoch === readEpoch.current) setRead((current) => ({ ...current, error: failure.message }));
       })
       .finally(() => {
         closesDuringReads.current.delete(closes);
@@ -271,7 +273,7 @@ export function useSessionLedger({
       });
   }, [nextBefore, loading, loadingMore, filterError, connection.list, pageSize, now]);
 
-  const { entries, facets } = rows.listedQuery === queryKey ? rows : NO_ROWS;
+  const { entries, facets, error } = read.query === queryKey ? read : NO_READ;
 
   return {
     filters,
