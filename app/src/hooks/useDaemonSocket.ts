@@ -96,6 +96,8 @@ import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointProfile } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
+import { handleSetupDaemonEvent, type SetupActionResult } from './daemonSetupEvents';
+import { useSetupsStore } from '../store/setups';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -1436,6 +1438,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
+            useSetupsStore.getState().enterScope(data.setups, data.selected_setup_id, data.desktops);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
@@ -2897,6 +2900,7 @@ export function useDaemonSocket({
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
+            if (handleSetupDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -5464,6 +5468,83 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
   }, []);
 
+  const sendSetupCommand = useCallback(
+    (cmd: string, body: Record<string, unknown>) =>
+      sendRequest<SetupActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
+    [sendRequest],
+  );
+
+  const sendSetupSelect = useCallback(
+    (setupId: string) => sendSetupCommand('setup_select', { setup_id: setupId }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopCreate = useCallback(
+    (setupId: string) => sendSetupCommand('desktop_create', { setup_id: setupId }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopDelete = useCallback(
+    (desktopId: string, expectedRevision: number) =>
+      sendSetupCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopSetShortcutSlot = useCallback(
+    (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
+      sendSetupCommand('desktop_set_shortcut_slot', {
+        desktop_id: desktopId,
+        expected_revision: expectedRevision,
+        ...(shortcutSlot === null ? {} : { shortcut_slot: shortcutSlot }),
+      }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopSetCurrent = useCallback(
+    (setupId: string, desktopId: string) =>
+      sendSetupCommand('desktop_set_current', { setup_id: setupId, desktop_id: desktopId }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopSetActivePane = useCallback(
+    (desktopId: string, paneId: string) =>
+      sendSetupCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopMoveLeaf = useCallback(
+    (move: {
+      sourceDesktopId: string;
+      targetDesktopId: string;
+      leafId: string;
+      anchorId?: string;
+      edge: 'left' | 'right' | 'top' | 'bottom';
+      expectedSourceRevision: number;
+      expectedTargetRevision: number;
+    }) =>
+      sendSetupCommand('desktop_move_leaf', {
+        source_desktop_id: move.sourceDesktopId,
+        target_desktop_id: move.targetDesktopId,
+        leaf_id: move.leafId,
+        ...(move.anchorId ? { anchor_id: move.anchorId } : {}),
+        edge: move.edge,
+        expected_source_revision: move.expectedSourceRevision,
+        expected_target_revision: move.expectedTargetRevision,
+      }),
+    [sendSetupCommand],
+  );
+
+  const sendDesktopPlaceSession = useCallback(
+    (placement: { desktopId: string; sessionId: string; expectedRevision: number; anchorPaneId?: string }) =>
+      sendSetupCommand('desktop_place_session', {
+        desktop_id: placement.desktopId,
+        session_id: placement.sessionId,
+        expected_revision: placement.expectedRevision,
+        ...(placement.anchorPaneId ? { anchor_pane_id: placement.anchorPaneId } : {}),
+      }),
+    [sendSetupCommand],
+  );
+
   const clearDisconnectExplanation = useCallback(() => {
     setDisconnectExplanation(null);
   }, []);
@@ -5472,6 +5553,14 @@ export function useDaemonSocket({
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     connectionError,
     migrationFailure,
+    sendSetupSelect,
+    sendDesktopCreate,
+    sendDesktopDelete,
+    sendDesktopSetShortcutSlot,
+    sendDesktopSetCurrent,
+    sendDesktopSetActivePane,
+    sendDesktopMoveLeaf,
+    sendDesktopPlaceSession,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,

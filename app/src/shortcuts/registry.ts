@@ -58,7 +58,9 @@ export const MAC_SHORTCUTS = {
   'session.historyForward': { key: ']', code: 'BracketRight', meta: true },
   'session.orchestrator': { key: 'ArrowUp', meta: true, shift: true },
   'session.goToDashboard': { key: 'h', meta: true, shift: true },
-  'view.toggleGrid': { key: 'g', meta: true },
+  'view.toggleGrid': { key: 'g', meta: true, shift: true },
+  'desktop.overview': { key: 'g', meta: true },
+  'setup.switch': { key: 'u', meta: true, shift: true },
   'session.jumpToWaiting': { key: 'j', meta: true },
   // ⌘E stays free: Notebook inline code uses it, and the shortcut editor's chord
   // tests record it as an exclusive leader.
@@ -80,6 +82,16 @@ export const MAC_SHORTCUTS = {
   'workspace.select7': { key: '7', code: 'Digit7', meta: true },
   'workspace.select8': { key: '8', code: 'Digit8', meta: true },
   'workspace.select9': { key: '9', code: 'Digit9', meta: true },
+
+  'desktop.send1': { key: '1', code: 'Digit1', meta: true, alt: true },
+  'desktop.send2': { key: '2', code: 'Digit2', meta: true, alt: true },
+  'desktop.send3': { key: '3', code: 'Digit3', meta: true, alt: true },
+  'desktop.send4': { key: '4', code: 'Digit4', meta: true, alt: true },
+  'desktop.send5': { key: '5', code: 'Digit5', meta: true, alt: true },
+  'desktop.send6': { key: '6', code: 'Digit6', meta: true, alt: true },
+  'desktop.send7': { key: '7', code: 'Digit7', meta: true, alt: true },
+  'desktop.send8': { key: '8', code: 'Digit8', meta: true, alt: true },
+  'desktop.send9': { key: '9', code: 'Digit9', meta: true, alt: true },
 
   'dock.attention': { key: 'p', meta: true, shift: true },
 
@@ -141,7 +153,9 @@ export const LINUX_SHORTCUTS = {
   'session.historyForward': { key: '}', code: 'BracketRight', meta: true, shift: true },
   'session.orchestrator': { key: 'o', code: 'KeyO', meta: true, alt: true },
   'session.goToDashboard': { key: 'h', meta: true, alt: true },
-  'view.toggleGrid': { key: 'g', meta: true, shift: true },
+  'view.toggleGrid': { key: 'g', meta: true, alt: true, shift: true },
+  'desktop.overview': { key: 'g', meta: true, shift: true },
+  'setup.switch': { key: 'u', meta: true, alt: true },
   'session.jumpToWaiting': { key: 'j', meta: true, shift: true },
   'session.settle': { key: 'e', meta: true, alt: true },
   'session.snooze': { key: 's', meta: true, alt: true },
@@ -158,6 +172,16 @@ export const LINUX_SHORTCUTS = {
   'workspace.select7': { key: '7', code: 'Digit7', meta: true, shift: true },
   'workspace.select8': { key: '8', code: 'Digit8', meta: true, shift: true },
   'workspace.select9': { key: '9', code: 'Digit9', meta: true, shift: true },
+
+  'desktop.send1': { key: '1', code: 'Digit1', meta: true, alt: true },
+  'desktop.send2': { key: '2', code: 'Digit2', meta: true, alt: true },
+  'desktop.send3': { key: '3', code: 'Digit3', meta: true, alt: true },
+  'desktop.send4': { key: '4', code: 'Digit4', meta: true, alt: true },
+  'desktop.send5': { key: '5', code: 'Digit5', meta: true, alt: true },
+  'desktop.send6': { key: '6', code: 'Digit6', meta: true, alt: true },
+  'desktop.send7': { key: '7', code: 'Digit7', meta: true, alt: true },
+  'desktop.send8': { key: '8', code: 'Digit8', meta: true, alt: true },
+  'desktop.send9': { key: '9', code: 'Digit9', meta: true, alt: true },
 
   'dock.attention': { key: 'p', meta: true, alt: true },
   'ui.actionMenu': { key: 'k', meta: true, shift: true },
