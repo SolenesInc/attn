@@ -172,21 +172,21 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).workspace,
 		payload: func(w *wireWorld) any { return w.layout() },
 	},
-	FactSetupCreated: {
-		events:  []string{protocol.EventSetupsChanged},
-		subject: (*wireWorld).setup,
+	FactProfileCreated: {
+		events:  []string{protocol.EventProfilesChanged},
+		subject: (*wireWorld).profile,
 	},
-	FactSetupRenamed: {
-		events:  []string{protocol.EventSetupsChanged},
-		subject: (*wireWorld).setup,
+	FactProfileRenamed: {
+		events:  []string{protocol.EventProfilesChanged},
+		subject: (*wireWorld).profile,
 	},
-	FactSetupDeleted: {
-		events:  []string{protocol.EventSetupsChanged},
-		subject: (*wireWorld).setup,
+	FactProfileDeleted: {
+		events:  []string{protocol.EventProfilesChanged},
+		subject: (*wireWorld).profile,
 	},
-	FactSetupArrangementChanged: {
-		events:  []string{protocol.EventSetupsChanged, protocol.EventSetupArrangementChanged},
-		subject: (*wireWorld).setup,
+	FactProfileArrangementChanged: {
+		events:  []string{protocol.EventProfilesChanged, protocol.EventProfileArrangementChanged},
+		subject: (*wireWorld).profile,
 	},
 	FactWorkspaceLayoutRepublished: {
 		events:  []string{protocol.EventWorkspaceLayout},
@@ -479,18 +479,18 @@ func (w *wireWorld) workspace() string    { return w.workspaceID }
 func (w *wireWorld) presentation() string { return w.presentationID }
 func (w *wireWorld) worktree() string     { return w.worktreePath }
 
-func (w *wireWorld) setup() string {
+func (w *wireWorld) profile() string {
 	persistent, err := store.NewWithDB(filepath.Join(w.t.TempDir(), "attn.db"))
 	if err != nil {
-		w.t.Fatalf("open the setups store: %v", err)
+		w.t.Fatalf("open the profiles store: %v", err)
 	}
 	w.t.Cleanup(func() { persistent.Close() })
 	w.d.store = persistent
-	setup, _, err := persistent.CreateSetup("wire")
+	profile, _, err := persistent.CreateProfile("wire")
 	if err != nil {
-		w.t.Fatalf("seed setup: %v", err)
+		w.t.Fatalf("seed profile: %v", err)
 	}
-	return setup.ID
+	return profile.ID
 }
 
 func (w *wireWorld) gardenReview() string {

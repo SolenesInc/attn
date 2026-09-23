@@ -8,25 +8,25 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/setups"
 )
 
 func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 	rapid.Check(t, func(t *rapid.T) {
 		s := New()
 		defer s.Close()
-		setup, first, err := s.CreateSetup("Default")
+		profile, first, err := s.CreateProfile("Default")
 		if err != nil {
-			t.Fatalf("CreateSetup: %v", err)
+			t.Fatalf("CreateProfile: %v", err)
 		}
-		other, _, err := s.CreateSetup("Other")
+		other, _, err := s.CreateProfile("Other")
 		if err != nil {
-			t.Fatalf("CreateSetup: %v", err)
+			t.Fatalf("CreateProfile: %v", err)
 		}
 		desktopIDs := []string{first.ID}
 		for i := 0; i < 2; i++ {
-			_, desktop, err := s.CreateDesktop(setup.ID, "", 0, true)
+			_, desktop, err := s.CreateDesktop(profile.ID, "", 0, true)
 			if err != nil {
 				t.Fatalf("CreateDesktop: %v", err)
 			}
@@ -42,34 +42,34 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 			}); err != nil {
 				t.Fatalf("AddChecked: %v", err)
 			}
-			owner := setup.ID
+			owner := profile.ID
 			if i == len(sessionIDs)-1 {
 				owner = other.ID
 			}
-			if err := s.AssignSessionSetup(sessionIDs[i], owner); err != nil {
-				t.Fatalf("AssignSessionSetup: %v", err)
+			if err := s.AssignSessionProfile(sessionIDs[i], owner); err != nil {
+				t.Fatalf("AssignSessionProfile: %v", err)
 			}
 		}
 		refusal := func(err error) {
-			var setupErr *setups.Error
-			if err != nil && !errors.As(err, &setupErr) {
+			var profileErr *profiles.Error
+			if err != nil && !errors.As(err, &profileErr) {
 				t.Fatalf("operation failed with an untyped error: %v", err)
 			}
 		}
-		draw := func(label string) setups.Desktop {
+		draw := func(label string) profiles.Desktop {
 			desktop, err := s.GetDesktop(rapid.SampledFrom(desktopIDs).Draw(t, label))
 			if err != nil {
 				t.Fatalf("GetDesktop: %v", err)
 			}
 			return desktop
 		}
-		revision := func(desktop setups.Desktop) int64 {
+		revision := func(desktop profiles.Desktop) int64 {
 			if rapid.IntRange(0, 5).Draw(t, "stale") == 0 {
 				return desktop.Revision - 1
 			}
 			return desktop.Revision
 		}
-		leaves := func(desktop setups.Desktop) []string {
+		leaves := func(desktop profiles.Desktop) []string {
 			return append(layouttree.PaneIDs(desktop.Tree), layouttree.TileIDs(desktop.Tree)...)
 		}
 		directions := []layouttree.Direction{layouttree.DirectionVertical, layouttree.DirectionHorizontal}
@@ -93,11 +93,11 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				}
 				tiles++
 				tileID := fmt.Sprintf("tile-%d", tiles)
-				_, err := s.UpdateDesktopArrangement(desktop.ID, revision(desktop), func(d setups.Desktop) (setups.Desktop, error) {
+				_, err := s.UpdateDesktopArrangement(desktop.ID, revision(desktop), func(d profiles.Desktop) (profiles.Desktop, error) {
 					next, ok := layouttree.DockTile(d.Tree, rapid.SampledFrom(anchors).Draw(t, "anchor"), rapid.SampledFrom(directions).Draw(t, "direction"),
 						rapid.Bool().Draw(t, "before"), "split-"+tileID, tileID, string(layouttree.TileKindMarkdown), "{}", "", 0.4)
 					if !ok {
-						return d, setups.Errorf(setups.CodeInvalid, "tile did not dock")
+						return d, profiles.Errorf(profiles.CodeInvalid, "tile did not dock")
 					}
 					d.Tree = next
 					return d, nil
@@ -130,24 +130,24 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 				desktop := draw("desktop")
 				_, _, err := s.SetActivePane(desktop.ID, rapid.SampledFrom(append(layouttree.PaneIDs(desktop.Tree), "missing-pane")).Draw(t, "pane"))
 				refusal(err)
-				_, err = s.SetCurrentDesktop(setup.ID, desktop.ID)
+				_, err = s.SetCurrentDesktop(profile.ID, desktop.ID)
 				refusal(err)
 			},
-			"change_setup": func(t *rapid.T) {
-				destination := rapid.SampledFrom([]string{setup.ID, other.ID}).Draw(t, "destination")
-				_, err := s.MoveSessionToSetup(rapid.SampledFrom(sessionIDs).Draw(t, "session"), destination)
+			"change_profile": func(t *rapid.T) {
+				destination := rapid.SampledFrom([]string{profile.ID, other.ID}).Draw(t, "destination")
+				_, err := s.MoveSessionToProfile(rapid.SampledFrom(sessionIDs).Draw(t, "session"), destination)
 				refusal(err)
 			},
 			"": func(t *rapid.T) {
-				current, desktops, err := s.SetupArrangement(setup.ID)
+				current, desktops, err := s.ProfileArrangement(profile.ID)
 				if err != nil {
-					t.Fatalf("SetupArrangement: %v", err)
+					t.Fatalf("ProfileArrangement: %v", err)
 				}
 				placedOn := make(map[string]string)
 				hasCurrent := false
 				for _, desktop := range desktops {
 					hasCurrent = hasCurrent || desktop.ID == current.CurrentDesktopID
-					if err := setups.CheckDesktop(desktop); err != nil {
+					if err := profiles.CheckDesktop(desktop); err != nil {
 						t.Fatalf("stored desktop broke an invariant: %v", err)
 					}
 					for _, pane := range desktop.Panes {
@@ -155,13 +155,13 @@ func TestArrangementInvariantsHoldUnderRandomOperations(t *testing.T) {
 							t.Fatalf("session %s is placed on %s and %s", pane.SessionID, where, desktop.ID)
 						}
 						placedOn[pane.SessionID] = desktop.ID
-						if owner, _ := s.SessionSetupID(pane.SessionID); owner != desktop.SetupID {
-							t.Fatalf("session %s of setup %s is placed on a desktop of setup %s", pane.SessionID, owner, desktop.SetupID)
+						if owner, _ := s.SessionProfileID(pane.SessionID); owner != desktop.ProfileID {
+							t.Fatalf("session %s of profile %s is placed on a desktop of profile %s", pane.SessionID, owner, desktop.ProfileID)
 						}
 					}
 				}
 				if !hasCurrent {
-					t.Fatalf("current desktop %q is not a desktop of the setup", current.CurrentDesktopID)
+					t.Fatalf("current desktop %q is not a desktop of the profile", current.CurrentDesktopID)
 				}
 			},
 		})

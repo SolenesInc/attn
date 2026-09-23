@@ -1,4 +1,4 @@
-package setups
+package profiles
 
 import (
 	"fmt"
@@ -24,7 +24,7 @@ const (
 	PaneStatusFailed   PaneStatus = "failed"
 )
 
-type Setup struct {
+type Profile struct {
 	ID               string
 	Name             string
 	CurrentDesktopID string
@@ -33,11 +33,11 @@ type Setup struct {
 	DeletedAt        string
 }
 
-func (s Setup) Deleted() bool { return s.DeletedAt != "" }
+func (s Profile) Deleted() bool { return s.DeletedAt != "" }
 
 type Desktop struct {
 	ID           string
-	SetupID      string
+	ProfileID    string
 	Name         string
 	ShortcutSlot int
 	OrderKey     string
@@ -66,7 +66,7 @@ type MigrationState struct {
 }
 
 type Placement struct {
-	SetupID   string
+	ProfileID string
 	DesktopID string
 	PaneID    string
 }
@@ -79,10 +79,10 @@ const (
 	CodeStaleRevision   Code = "stale_revision"
 	CodeNameTaken       Code = "name_taken"
 	CodeSlotTaken       Code = "slot_taken"
-	CodeLastSetup       Code = "last_setup"
+	CodeLastProfile     Code = "last_profile"
 	CodeLastDesktop     Code = "last_desktop"
-	CodeSetupDeleted    Code = "setup_deleted"
-	CodeCrossSetup      Code = "cross_setup"
+	CodeProfileDeleted  Code = "profile_deleted"
+	CodeCrossProfile    Code = "cross_profile"
 	CodeAlreadyPlaced   Code = "already_placed"
 	CodeSessionClosed   Code = "session_closed"
 	CodeDestinationSame Code = "destination_same"

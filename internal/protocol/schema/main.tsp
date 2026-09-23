@@ -691,19 +691,19 @@ model WorkspaceLayout {
 }
 
 
-// Why a setup, desktop or pane command was refused. stale_revision means the
+// Why a profile, desktop or pane command was refused. stale_revision means the
 // command named a revision older than the stored one: re-read the broadcast
 // state and retry against its revision.
-enum SetupErrorCode {
+enum ProfileErrorCode {
   invalid,
   not_found,
   stale_revision,
   name_taken,
   slot_taken,
-  last_setup,
+  last_profile,
   last_desktop,
-  setup_deleted,
-  cross_setup,
+  profile_deleted,
+  cross_profile,
   already_placed,
   session_closed,
   destination_same,
@@ -711,10 +711,10 @@ enum SetupErrorCode {
   internal,
 }
 
-// A setup groups agents and desktops and owns one arrangement shared by every
+// A profile groups agents and desktops and owns one arrangement shared by every
 // client. revision counts changes to its name and to its set of desktops;
 // current_desktop_id and last_used_at are selection and never move it.
-model Setup {
+model Profile {
   id: string;
   name: string;
   current_desktop_id: string;
@@ -738,7 +738,7 @@ model DesktopPane {
 // this desktop, or is empty when the desktop has no panes.
 model Desktop {
   id: string;
-  setup_id: string;
+  profile_id: string;
   name: string;
   shortcut_slot?: int32;        // 1-9; absent for a desktop past the shortcut range
   order_key: string;
@@ -797,11 +797,11 @@ model ClientHelloMessage {
   // what lets the daemon tell a reconnecting client why it was hung up on
   // (client_eviction_notice); a client that omits it simply gets no notice.
   client_id?: string;
-  // The setup this client last selected, remembered by the client alone. The
+  // The profile this client last selected, remembered by the client alone. The
   // daemon scopes arrangement broadcasts to it; absent, deleted or unknown, the
-  // daemon scopes the client to the most recently used setup instead and says
-  // which in initial_state.selected_setup_id.
-  setup_id?: string;
+  // daemon scopes the client to the most recently used profile instead and says
+  // which in initial_state.selected_profile_id.
+  profile_id?: string;
 }
 
 model RegisterMessage {
@@ -3287,48 +3287,48 @@ model BrowserControlResponseMessage {
 }
 
 // ============================================================================
-// Setups and desktops
+// Profiles and desktops
 // ============================================================================
-// Every command answers its sender with one setup_action_result carrying the
-// same request_id. Stored changes reach every client through setups_changed
-// and setup_arrangement_changed, the sender included.
+// Every command answers its sender with one profile_action_result carrying the
+// same request_id. Stored changes reach every client through profiles_changed
+// and profile_arrangement_changed, the sender included.
 
-model SetupCreateMessage {
-  cmd: "setup_create";
+model ProfileCreateMessage {
+  cmd: "profile_create";
   request_id: string;
   name: string;
 }
 
-model SetupRenameMessage {
-  cmd: "setup_rename";
+model ProfileRenameMessage {
+  cmd: "profile_rename";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   name: string;
   expected_revision: safeint;
 }
 
-// Live agents of the deleted setup move to destination_setup_id without a
-// placement. The last setup cannot be deleted.
-model SetupDeleteMessage {
-  cmd: "setup_delete";
+// Live agents of the deleted profile move to destination_profile_id without a
+// placement. The last profile cannot be deleted.
+model ProfileDeleteMessage {
+  cmd: "profile_delete";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   expected_revision: safeint;
-  destination_setup_id: string;
+  destination_profile_id: string;
 }
 
-// Scopes this connection to a setup and records it as the most recently used.
-// The result carries the setup and all of its desktops.
-model SetupSelectMessage {
-  cmd: "setup_select";
+// Scopes this connection to a profile and records it as the most recently used.
+// The result carries the profile and all of its desktops.
+model ProfileSelectMessage {
+  cmd: "profile_select";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
 }
 
 model DesktopCreateMessage {
   cmd: "desktop_create";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   name?: string;
   // Absent, the desktop takes the lowest free slot of 1-9, or none when all are held.
   shortcut_slot?: int32;
@@ -3351,7 +3351,7 @@ model DesktopSetShortcutSlotMessage {
   expected_revision: safeint;
 }
 
-// Places the desktop between two neighbours of the same setup; an absent
+// Places the desktop between two neighbours of the same profile; an absent
 // neighbour means the start or the end.
 model DesktopReorderMessage {
   cmd: "desktop_reorder";
@@ -3363,7 +3363,7 @@ model DesktopReorderMessage {
 }
 
 // Agents placed on the desktop lose their placement and stay open. The last
-// desktop of a setup cannot be deleted.
+// desktop of a profile cannot be deleted.
 model DesktopDeleteMessage {
   cmd: "desktop_delete";
   request_id: string;
@@ -3375,7 +3375,7 @@ model DesktopDeleteMessage {
 model DesktopSetCurrentMessage {
   cmd: "desktop_set_current";
   request_id: string;
-  setup_id: string;
+  profile_id: string;
   desktop_id: string;
 }
 
@@ -3387,7 +3387,7 @@ model DesktopSetActivePaneMessage {
   pane_id: string;
 }
 
-// Gives an unplaced agent of the desktop's setup a pane, split beside
+// Gives an unplaced agent of the desktop's profile a pane, split beside
 // anchor_pane_id or, absent, beside the active pane. The new pane becomes active.
 model DesktopPlaceSessionMessage {
   cmd: "desktop_place_session";
@@ -3401,7 +3401,7 @@ model DesktopPlaceSessionMessage {
 }
 
 // Moves a pane or tile beside anchor_id, within one desktop or between two
-// desktops of one setup. An absent anchor_id docks against the target's root.
+// desktops of one profile. An absent anchor_id docks against the target's root.
 // Both revisions are checked and both desktops change in one transaction.
 model DesktopMoveLeafMessage {
   cmd: "desktop_move_leaf";
@@ -3434,31 +3434,31 @@ model DesktopSetSplitRatioMessage {
   expected_revision: safeint;
 }
 
-model SetupActionResultMessage {
-  event: "setup_action_result";
+model ProfileActionResultMessage {
+  event: "profile_action_result";
   request_id: string;
   action: string;               // Echo of the command name
   success: boolean;
   error?: string;
-  error_code?: SetupErrorCode;
-  setup?: Setup;
-  desktops?: Desktop[];         // The desktops the command changed; every desktop for setup_select
+  error_code?: ProfileErrorCode;
+  profile?: Profile;
+  desktops?: Desktop[];         // The desktops the command changed; every desktop for profile_select
   pane_id?: string;             // The pane desktop_place_session created
 }
 
-// Every live setup, sent to every client when one is created, renamed or deleted.
-model SetupsChangedMessage {
-  event: "setups_changed";
-  setups: Setup[];
+// Every live profile, sent to every client when one is created, renamed or deleted.
+model ProfilesChangedMessage {
+  event: "profiles_changed";
+  profiles: Profile[];
 }
 
-// Sent to every client scoped to the setup after any change to its desktops or
+// Sent to every client scoped to the profile after any change to its desktops or
 // its selection. desktops holds each changed desktop in full; a move between
 // two desktops arrives as one message. A client keeps a desktop it already
 // holds at a higher revision.
-model SetupArrangementChangedMessage {
-  event: "setup_arrangement_changed";
-  setup: Setup;
+model ProfileArrangementChangedMessage {
+  event: "profile_arrangement_changed";
+  profile: Profile;
   desktops: Desktop[];
   deleted_desktop_ids?: string[];
 }
@@ -3538,9 +3538,9 @@ model InitialStateMessage {
   sessions?: Session[];
   endpoints?: EndpointInfo[];
   workspaces?: Workspace[];
-  setups?: Setup[];
-  // The setup this connection is scoped to, and its desktops.
-  selected_setup_id?: string;
+  profiles?: Profile[];
+  // The profile this connection is scoped to, and its desktops.
+  selected_profile_id?: string;
   desktops?: Desktop[];
   prs?: PR[];
   repos?: RepoState[];
@@ -7924,9 +7924,9 @@ alias DaemonEvent =
   | WorkspaceLayoutMessage
   | WorkspaceLayoutUpdatedMessage
   | WorkspaceLayoutActionResultMessage
-  | SetupActionResultMessage
-  | SetupsChangedMessage
-  | SetupArrangementChangedMessage
+  | ProfileActionResultMessage
+  | ProfilesChangedMessage
+  | ProfileArrangementChangedMessage
   | RenameResultMessage
   | ChiefOfStaffResultMessage
   | SessionContextWindowCapResultMessage

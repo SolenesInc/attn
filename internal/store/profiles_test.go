@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/setups"
 )
 
-func openSetupStore(t *testing.T) (*Store, func() *Store) {
+func openProfileStore(t *testing.T) (*Store, func() *Store) {
 	t.Helper()
 	dbPath := filepath.Join(t.TempDir(), "attn.db")
 	s, err := NewWithDB(dbPath)
@@ -37,7 +37,7 @@ func openSetupStore(t *testing.T) (*Store, func() *Store) {
 	return s, restart
 }
 
-func addSetupSession(t *testing.T, s *Store, id, setupID string) {
+func addProfileSession(t *testing.T, s *Store, id, profileID string) {
 	t.Helper()
 	now := string(protocol.TimestampNow())
 	if err := s.AddChecked(&protocol.Session{
@@ -46,24 +46,24 @@ func addSetupSession(t *testing.T, s *Store, id, setupID string) {
 	}); err != nil {
 		t.Fatalf("adding session %s: %v", id, err)
 	}
-	if setupID == "" {
+	if profileID == "" {
 		return
 	}
-	if err := s.AssignSessionSetup(id, setupID); err != nil {
-		t.Fatalf("assigning session %s to setup %s: %v", id, setupID, err)
+	if err := s.AssignSessionProfile(id, profileID); err != nil {
+		t.Fatalf("assigning session %s to profile %s: %v", id, profileID, err)
 	}
 }
 
-func mustCreateSetup(t *testing.T, s *Store, name string) (setups.Setup, setups.Desktop) {
+func mustCreateProfile(t *testing.T, s *Store, name string) (profiles.Profile, profiles.Desktop) {
 	t.Helper()
-	setup, desktop, err := s.CreateSetup(name)
+	profile, desktop, err := s.CreateProfile(name)
 	if err != nil {
-		t.Fatalf("CreateSetup(%q): %v", name, err)
+		t.Fatalf("CreateProfile(%q): %v", name, err)
 	}
-	return setup, desktop
+	return profile, desktop
 }
 
-func mustPlace(t *testing.T, s *Store, desktopID, sessionID string) (setups.Desktop, string) {
+func mustPlace(t *testing.T, s *Store, desktopID, sessionID string) (profiles.Desktop, string) {
 	t.Helper()
 	desktop, err := s.GetDesktop(desktopID)
 	if err != nil {
@@ -79,31 +79,31 @@ func mustPlace(t *testing.T, s *Store, desktopID, sessionID string) (setups.Desk
 	return placed, paneID
 }
 
-func wantCode(t *testing.T, err error, code setups.Code) *setups.Error {
+func wantCode(t *testing.T, err error, code profiles.Code) *profiles.Error {
 	t.Helper()
-	var setupErr *setups.Error
-	if !errors.As(err, &setupErr) {
-		t.Fatalf("error = %v, want a setups error with code %s", err, code)
+	var profileErr *profiles.Error
+	if !errors.As(err, &profileErr) {
+		t.Fatalf("error = %v, want a profiles error with code %s", err, code)
 	}
-	if setupErr.Code != code {
-		t.Fatalf("error code = %s (%s), want %s", setupErr.Code, setupErr.Message, code)
+	if profileErr.Code != code {
+		t.Fatalf("error code = %s (%s), want %s", profileErr.Code, profileErr.Message, code)
 	}
-	return setupErr
+	return profileErr
 }
 
-func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, setupID string) {
+func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, profileID string) {
 	t.Helper()
-	setup, desktops, err := s.SetupArrangement(setupID)
+	profile, desktops, err := s.ProfileArrangement(profileID)
 	if err != nil {
-		t.Fatalf("SetupArrangement(%s): %v", setupID, err)
+		t.Fatalf("ProfileArrangement(%s): %v", profileID, err)
 	}
 	current := false
 	sessions := make(map[string]string)
 	for _, desktop := range desktops {
-		if err := setups.CheckDesktop(desktop); err != nil {
+		if err := profiles.CheckDesktop(desktop); err != nil {
 			t.Fatalf("stored desktop broke an invariant: %v", err)
 		}
-		current = current || desktop.ID == setup.CurrentDesktopID
+		current = current || desktop.ID == profile.CurrentDesktopID
 		for _, pane := range desktop.Panes {
 			if other, dup := sessions[pane.SessionID]; dup {
 				t.Fatalf("session %s is placed on desktops %s and %s", pane.SessionID, other, desktop.ID)
@@ -111,23 +111,23 @@ func assertStoredDesktopsHoldTheirInvariants(t *testing.T, s *Store, setupID str
 			sessions[pane.SessionID] = desktop.ID
 		}
 	}
-	if !setup.Deleted() && !current {
-		t.Fatalf("setup %s names current desktop %q, which is not one of its desktops", setup.ID, setup.CurrentDesktopID)
+	if !profile.Deleted() && !current {
+		t.Fatalf("profile %s names current desktop %q, which is not one of its desktops", profile.ID, profile.CurrentDesktopID)
 	}
 }
 
-func TestSetupArrangementSurvivesRestart(t *testing.T) {
-	s, restart := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
-	if first.ShortcutSlot != 1 || setup.CurrentDesktopID != first.ID {
-		t.Fatalf("new setup = %+v with desktop %+v, want its first desktop current in slot 1", setup, first)
+func TestProfileArrangementSurvivesRestart(t *testing.T) {
+	s, restart := openProfileStore(t)
+	profile, first := mustCreateProfile(t, s, "Default")
+	if first.ShortcutSlot != 1 || profile.CurrentDesktopID != first.ID {
+		t.Fatalf("new profile = %+v with desktop %+v, want its first desktop current in slot 1", profile, first)
 	}
-	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
+	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	mustPlace(t, s, second.ID, "agent-a")
 	placed, paneB := mustPlace(t, s, second.ID, "agent-b")
 	ratioed, err := s.SetDesktopSplitRatio(second.ID, placed.Tree.SplitID, 0.3, placed.Revision)
@@ -135,7 +135,7 @@ func TestSetupArrangementSurvivesRestart(t *testing.T) {
 		t.Fatalf("SetDesktopSplitRatio: %v", err)
 	}
 	paneA := layouttree.PaneIDs(ratioed.Tree)[0]
-	if _, err := s.SetCurrentDesktop(setup.ID, second.ID); err != nil {
+	if _, err := s.SetCurrentDesktop(profile.ID, second.ID); err != nil {
 		t.Fatalf("SetCurrentDesktop: %v", err)
 	}
 	if _, _, err := s.SetActivePane(second.ID, paneA); err != nil {
@@ -146,12 +146,12 @@ func TestSetupArrangementSurvivesRestart(t *testing.T) {
 	}
 
 	s = restart()
-	gotSetup, desktops, err := s.SetupArrangement(setup.ID)
+	gotProfile, desktops, err := s.ProfileArrangement(profile.ID)
 	if err != nil {
-		t.Fatalf("SetupArrangement after restart: %v", err)
+		t.Fatalf("ProfileArrangement after restart: %v", err)
 	}
-	if gotSetup.CurrentDesktopID != second.ID {
-		t.Fatalf("current desktop after restart = %s, want %s", gotSetup.CurrentDesktopID, second.ID)
+	if gotProfile.CurrentDesktopID != second.ID {
+		t.Fatalf("current desktop after restart = %s, want %s", gotProfile.CurrentDesktopID, second.ID)
 	}
 	if len(desktops) != 2 || desktops[1].ID != second.ID {
 		t.Fatalf("desktops after restart = %+v, want the two created in order", desktops)
@@ -169,33 +169,33 @@ func TestSetupArrangementSurvivesRestart(t *testing.T) {
 	if !reflect.DeepEqual(got, ratioedWithActive(ratioed, paneA)) {
 		t.Fatalf("desktop changed across restart:\n got: %+v\nwant: %+v", got, ratioedWithActive(ratioed, paneA))
 	}
-	assertStoredDesktopsHoldTheirInvariants(t, s, setup.ID)
+	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
 }
 
-func ratioedWithActive(desktop setups.Desktop, paneID string) setups.Desktop {
+func ratioedWithActive(desktop profiles.Desktop, paneID string) profiles.Desktop {
 	desktop.ActivePaneID = paneID
 	return desktop
 }
 
 func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "Default")
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
 	if _, _, err := s.SetActivePane(desktop.ID, paneA); err != nil {
 		t.Fatalf("SetActivePane: %v", err)
 	}
-	if _, err := s.SetCurrentDesktop(setup.ID, desktop.ID); err != nil {
+	if _, err := s.SetCurrentDesktop(profile.ID, desktop.ID); err != nil {
 		t.Fatalf("SetCurrentDesktop: %v", err)
 	}
-	after, err := s.GetSetup(setup.ID)
+	after, err := s.GetProfile(profile.ID)
 	if err != nil {
-		t.Fatalf("GetSetup: %v", err)
+		t.Fatalf("GetProfile: %v", err)
 	}
-	if after.Revision != setup.Revision {
-		t.Fatalf("setup revision moved from %d to %d on a selection change", setup.Revision, after.Revision)
+	if after.Revision != profile.Revision {
+		t.Fatalf("profile revision moved from %d to %d on a selection change", profile.Revision, after.Revision)
 	}
 	if after.LastUsedAt == "" {
 		t.Fatal("a selection did not record last_used_at")
@@ -208,17 +208,17 @@ func TestSelectionDoesNotStaleAStructuralEdit(t *testing.T) {
 }
 
 func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
-	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
+	s, _ := openProfileStore(t)
+	profile, first := mustCreateProfile(t, s, "Default")
+	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
-	addSetupSession(t, s, "agent-a", setup.ID)
+	addProfileSession(t, s, "agent-a", profile.ID)
 	_, paneA := mustPlace(t, s, first.ID, "agent-a")
 
 	_, _, err = s.SetActivePane(second.ID, paneA)
-	wantCode(t, err, setups.CodeNotFound)
+	wantCode(t, err, profiles.CodeNotFound)
 
 	removed, err := s.RemoveSessionPlacement("agent-a")
 	if err != nil || removed == nil {
@@ -230,104 +230,104 @@ func TestActivePaneMustBelongToTheDesktop(t *testing.T) {
 	if session := s.Get("agent-a"); session == nil {
 		t.Fatal("removing a placement closed the agent")
 	}
-	assertStoredDesktopsHoldTheirInvariants(t, s, setup.ID)
+	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
 }
 
 func TestAnAgentHasAtMostOnePlacementAcrossTheDaemon(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
-	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
+	s, _ := openProfileStore(t)
+	profile, first := mustCreateProfile(t, s, "Default")
+	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
-	addSetupSession(t, s, "agent-a", setup.ID)
+	addProfileSession(t, s, "agent-a", profile.ID)
 	mustPlace(t, s, first.ID, "agent-a")
 
 	target, _ := s.GetDesktop(second.ID)
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, ExpectedRevision: target.Revision, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
-	wantCode(t, err, setups.CodeAlreadyPlaced)
+	wantCode(t, err, profiles.CodeAlreadyPlaced)
 
 	source, _ := s.GetDesktop(first.ID)
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: first.ID, ExpectedRevision: source.Revision, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
-	wantCode(t, err, setups.CodeAlreadyPlaced)
+	wantCode(t, err, profiles.CodeAlreadyPlaced)
 
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: second.ID, ExpectedRevision: target.Revision, SessionID: "ghost", Direction: layouttree.DirectionVertical})
-	wantCode(t, err, setups.CodeNotFound)
+	wantCode(t, err, profiles.CodeNotFound)
 
 	unchanged, _ := s.GetDesktop(second.ID)
 	if unchanged.Revision != target.Revision || len(unchanged.Panes) != 0 {
 		t.Fatalf("a refused placement changed desktop %+v", unchanged)
 	}
-	assertStoredDesktopsHoldTheirInvariants(t, s, setup.ID)
+	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
 }
 
 func TestLayoutWritesNeverChangeMembership(t *testing.T) {
-	s, _ := openSetupStore(t)
-	work, workDesktop := mustCreateSetup(t, s, "Work")
-	home, homeDesktop := mustCreateSetup(t, s, "Home")
-	addSetupSession(t, s, "work-agent", work.ID)
-	addSetupSession(t, s, "home-agent", home.ID)
-	addSetupSession(t, s, "unowned-agent", "")
+	s, _ := openProfileStore(t)
+	work, workDesktop := mustCreateProfile(t, s, "Work")
+	home, homeDesktop := mustCreateProfile(t, s, "Home")
+	addProfileSession(t, s, "work-agent", work.ID)
+	addProfileSession(t, s, "home-agent", home.ID)
+	addProfileSession(t, s, "unowned-agent", "")
 	placedWork, workPane := mustPlace(t, s, workDesktop.ID, "work-agent")
 
 	_, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, ExpectedRevision: placedWork.Revision, SessionID: "home-agent", Direction: layouttree.DirectionVertical})
-	wantCode(t, err, setups.CodeCrossSetup)
+	wantCode(t, err, profiles.CodeCrossProfile)
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: workDesktop.ID, ExpectedRevision: placedWork.Revision, SessionID: "unowned-agent", Direction: layouttree.DirectionVertical})
-	wantCode(t, err, setups.CodeCrossSetup)
+	wantCode(t, err, profiles.CodeCrossProfile)
 
-	_, err = s.UpdateDesktopArrangement(workDesktop.ID, placedWork.Revision, func(desktop setups.Desktop) (setups.Desktop, error) {
+	_, err = s.UpdateDesktopArrangement(workDesktop.ID, placedWork.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
 		desktop.Panes[0].SessionID = "home-agent"
 		return desktop, nil
 	})
-	wantCode(t, err, setups.CodeCrossSetup)
+	wantCode(t, err, profiles.CodeCrossProfile)
 
 	_, err = s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: workDesktop.ID, TargetDesktopID: homeDesktop.ID, LeafID: workPane,
 		Direction: layouttree.DirectionVertical, ExpectedSourceRevision: placedWork.Revision, ExpectedTargetRevision: homeDesktop.Revision,
 	})
-	wantCode(t, err, setups.CodeCrossSetup)
+	wantCode(t, err, profiles.CodeCrossProfile)
 
-	if setupID, _ := s.SessionSetupID("work-agent"); setupID != work.ID {
-		t.Fatalf("work-agent setup = %s, want %s", setupID, work.ID)
+	if profileID, _ := s.SessionProfileID("work-agent"); profileID != work.ID {
+		t.Fatalf("work-agent profile = %s, want %s", profileID, work.ID)
 	}
-	if err := s.AssignSessionSetup("work-agent", home.ID); err == nil {
-		t.Fatal("assigning a second setup to a session succeeded; membership changes only through a move")
+	if err := s.AssignSessionProfile("work-agent", home.ID); err == nil {
+		t.Fatal("assigning a second profile to a session succeeded; membership changes only through a move")
 	}
 }
 
 func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
-	addSetupSession(t, s, "agent-a", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "Default")
+	addProfileSession(t, s, "agent-a", profile.ID)
 	placed, paneA := mustPlace(t, s, desktop.ID, "agent-a")
 
 	cases := []struct {
 		name    string
-		corrupt func(setups.Desktop) setups.Desktop
+		corrupt func(profiles.Desktop) profiles.Desktop
 	}{
-		{"leaf without a pane row", func(d setups.Desktop) setups.Desktop {
+		{"leaf without a pane row", func(d profiles.Desktop) profiles.Desktop {
 			d.Tree, _ = layouttree.Split(d.Tree, paneA, "pane-orphan", "split-1", layouttree.DirectionVertical, 0.5)
 			return d
 		}},
-		{"pane row without a leaf", func(d setups.Desktop) setups.Desktop {
-			d.Panes = append(d.Panes, setups.Pane{PaneID: "pane-extra", Kind: setups.PaneKindAgent, SessionID: "agent-a", Status: setups.PaneStatusReady})
+		{"pane row without a leaf", func(d profiles.Desktop) profiles.Desktop {
+			d.Panes = append(d.Panes, profiles.Pane{PaneID: "pane-extra", Kind: profiles.PaneKindAgent, SessionID: "agent-a", Status: profiles.PaneStatusReady})
 			return d
 		}},
-		{"ratio outside the open interval", func(d setups.Desktop) setups.Desktop {
+		{"ratio outside the open interval", func(d profiles.Desktop) profiles.Desktop {
 			d.Tree = layouttree.Node{Type: "split", SplitID: "split-1", Direction: layouttree.DirectionVertical, Ratio: 1.5, Children: []layouttree.Node{d.Tree, {Type: "tile", TileID: "tile-1", TileKind: "markdown"}}}
 			return d
 		}},
-		{"split with one child", func(d setups.Desktop) setups.Desktop {
+		{"split with one child", func(d profiles.Desktop) profiles.Desktop {
 			d.Tree = layouttree.Node{Type: "split", SplitID: "split-1", Direction: layouttree.DirectionVertical, Ratio: 0.5, Children: []layouttree.Node{d.Tree}}
 			return d
 		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := s.UpdateDesktopArrangement(desktop.ID, placed.Revision, func(d setups.Desktop) (setups.Desktop, error) {
+			_, err := s.UpdateDesktopArrangement(desktop.ID, placed.Revision, func(d profiles.Desktop) (profiles.Desktop, error) {
 				return tc.corrupt(d), nil
 			})
-			wantCode(t, err, setups.CodeInvalid)
+			wantCode(t, err, profiles.CodeInvalid)
 			got, _ := s.GetDesktop(desktop.ID)
 			if !reflect.DeepEqual(got, placed) {
 				t.Fatalf("a refused write changed the desktop:\n got: %+v\nwant: %+v", got, placed)
@@ -337,14 +337,14 @@ func TestCorruptArrangementsAreRefusedNotNormalized(t *testing.T) {
 }
 
 func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
-	s, restart := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
-	_, second, err := s.CreateDesktop(setup.ID, "", 0, true)
+	s, restart := openProfileStore(t)
+	profile, first := mustCreateProfile(t, s, "Default")
+	_, second, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil {
 		t.Fatalf("CreateDesktop: %v", err)
 	}
 	for _, id := range []string{"agent-a", "agent-b", "agent-c"} {
-		addSetupSession(t, s, id, setup.ID)
+		addProfileSession(t, s, id, profile.ID)
 	}
 	mustPlace(t, s, first.ID, "agent-a")
 	source, paneB := mustPlace(t, s, first.ID, "agent-b")
@@ -354,13 +354,13 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: "pane-that-is-not-there",
 		Direction: layouttree.DirectionHorizontal, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision,
 	})
-	wantCode(t, err, setups.CodeInvalid)
+	wantCode(t, err, profiles.CodeInvalid)
 	_, err = s.MoveLeaf(LeafMoveRequest{
 		SourceDesktopID: first.ID, TargetDesktopID: second.ID, LeafID: paneB, AnchorID: paneC,
 		Direction: layouttree.DirectionHorizontal, ExpectedSourceRevision: source.Revision, ExpectedTargetRevision: target.Revision - 1,
 	})
-	wantCode(t, err, setups.CodeStaleRevision)
-	for _, want := range []setups.Desktop{source, target} {
+	wantCode(t, err, profiles.CodeStaleRevision)
+	for _, want := range []profiles.Desktop{source, target} {
 		got, _ := s.GetDesktop(want.ID)
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("a refused move changed desktop %s:\n got: %+v\nwant: %+v", want.ID, got, want)
@@ -400,14 +400,14 @@ func TestMoveBetweenDesktopsCommitsSourceAndTargetTogether(t *testing.T) {
 	if session := s.Get("agent-b"); session == nil || session.ID != "agent-b" {
 		t.Fatalf("session identity changed across the move: %+v", session)
 	}
-	assertStoredDesktopsHoldTheirInvariants(t, s, setup.ID)
+	assertStoredDesktopsHoldTheirInvariants(t, s, profile.ID)
 }
 
 func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, desktop := mustCreateSetup(t, s, "Default")
-	addSetupSession(t, s, "agent-a", setup.ID)
-	addSetupSession(t, s, "agent-b", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, desktop := mustCreateProfile(t, s, "Default")
+	addProfileSession(t, s, "agent-a", profile.ID)
+	addProfileSession(t, s, "agent-b", profile.ID)
 	seenByBoth := desktop.Revision
 
 	winner, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: seenByBoth, SessionID: "agent-a", Direction: layouttree.DirectionVertical})
@@ -415,133 +415,133 @@ func TestStaleRevisionFromASecondWriterIsRefused(t *testing.T) {
 		t.Fatalf("first writer: %v", err)
 	}
 	_, _, err = s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: seenByBoth, SessionID: "agent-b", Direction: layouttree.DirectionVertical})
-	stale := wantCode(t, err, setups.CodeStaleRevision)
-	if want := setups.Stale("desktop", desktop.ID, seenByBoth, winner.Revision).Message; stale.Message != want {
+	stale := wantCode(t, err, profiles.CodeStaleRevision)
+	if want := profiles.Stale("desktop", desktop.ID, seenByBoth, winner.Revision).Message; stale.Message != want {
 		t.Fatalf("stale message = %q, want %q", stale.Message, want)
 	}
 	if _, _, err := s.PlaceSession(SessionPlacementRequest{DesktopID: desktop.ID, ExpectedRevision: winner.Revision, SessionID: "agent-b", Direction: layouttree.DirectionVertical}); err != nil {
 		t.Fatalf("the loser re-read revision %d and was still refused: %v", winner.Revision, err)
 	}
 
-	_, err = s.RenameSetup(setup.ID, "Renamed", setup.Revision+7)
-	wantCode(t, err, setups.CodeStaleRevision)
+	_, err = s.RenameProfile(profile.ID, "Renamed", profile.Revision+7)
+	wantCode(t, err, profiles.CodeStaleRevision)
 	_, err = s.RenameDesktop(desktop.ID, "Main", seenByBoth)
-	wantCode(t, err, setups.CodeStaleRevision)
+	wantCode(t, err, profiles.CodeStaleRevision)
 	_, err = s.DeleteDesktop(desktop.ID, seenByBoth)
-	wantCode(t, err, setups.CodeStaleRevision)
+	wantCode(t, err, profiles.CodeStaleRevision)
 }
 
-func TestSetupIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
-	s, restart := openSetupStore(t)
-	work, _ := mustCreateSetup(t, s, "Work")
-	home, _ := mustCreateSetup(t, s, "Home")
-	addSetupSession(t, s, "live-agent", work.ID)
-	addSetupSession(t, s, "closed-agent", work.ID)
+func TestProfileIDsSurviveRenameAndDeletedNamesAreReusable(t *testing.T) {
+	s, restart := openProfileStore(t)
+	work, _ := mustCreateProfile(t, s, "Work")
+	home, _ := mustCreateProfile(t, s, "Home")
+	addProfileSession(t, s, "live-agent", work.ID)
+	addProfileSession(t, s, "closed-agent", work.ID)
 	if _, err := s.CloseSession("closed-agent", SessionClose{}, time.Now()); err != nil {
 		t.Fatalf("closing closed-agent: %v", err)
 	}
-	wantCode(t, s.AssignSessionSetup("closed-agent", work.ID), setups.CodeSessionClosed)
+	wantCode(t, s.AssignSessionProfile("closed-agent", work.ID), profiles.CodeSessionClosed)
 
-	_, _, err := s.CreateSetup("  Home ")
-	wantCode(t, err, setups.CodeNameTaken)
-	_, err = s.RenameSetup(work.ID, "Home", work.Revision)
-	wantCode(t, err, setups.CodeNameTaken)
+	_, _, err := s.CreateProfile("  Home ")
+	wantCode(t, err, profiles.CodeNameTaken)
+	_, err = s.RenameProfile(work.ID, "Home", work.Revision)
+	wantCode(t, err, profiles.CodeNameTaken)
 
-	renamed, err := s.RenameSetup(work.ID, "Office", work.Revision)
+	renamed, err := s.RenameProfile(work.ID, "Office", work.Revision)
 	if err != nil {
-		t.Fatalf("RenameSetup: %v", err)
+		t.Fatalf("RenameProfile: %v", err)
 	}
 	if renamed.ID != work.ID || renamed.Revision != work.Revision+1 {
-		t.Fatalf("renamed setup = %+v, want the same id at the next revision", renamed)
+		t.Fatalf("renamed profile = %+v, want the same id at the next revision", renamed)
 	}
-	if setupID, _ := s.SessionSetupID("live-agent"); setupID != work.ID {
-		t.Fatalf("live-agent setup after rename = %s, want %s", setupID, work.ID)
+	if profileID, _ := s.SessionProfileID("live-agent"); profileID != work.ID {
+		t.Fatalf("live-agent profile after rename = %s, want %s", profileID, work.ID)
 	}
 
-	_, err = s.DeleteSetup(work.ID, renamed.Revision, "")
-	wantCode(t, err, setups.CodeInvalid)
-	_, err = s.DeleteSetup(work.ID, renamed.Revision, work.ID)
-	wantCode(t, err, setups.CodeDestinationSame)
-	deletion, err := s.DeleteSetup(work.ID, renamed.Revision, home.ID)
+	_, err = s.DeleteProfile(work.ID, renamed.Revision, "")
+	wantCode(t, err, profiles.CodeInvalid)
+	_, err = s.DeleteProfile(work.ID, renamed.Revision, work.ID)
+	wantCode(t, err, profiles.CodeDestinationSame)
+	deletion, err := s.DeleteProfile(work.ID, renamed.Revision, home.ID)
 	if err != nil {
-		t.Fatalf("DeleteSetup: %v", err)
+		t.Fatalf("DeleteProfile: %v", err)
 	}
 	if !reflect.DeepEqual(deletion.MovedSessionIDs, []string{"live-agent"}) {
 		t.Fatalf("moved sessions = %v, want only the live agent", deletion.MovedSessionIDs)
 	}
-	if setupID, _ := s.SessionSetupID("closed-agent"); setupID != work.ID {
-		t.Fatalf("closed-agent setup = %s, want its history kept at %s", setupID, work.ID)
+	if profileID, _ := s.SessionProfileID("closed-agent"); profileID != work.ID {
+		t.Fatalf("closed-agent profile = %s, want its history kept at %s", profileID, work.ID)
 	}
-	_, err = s.DeleteSetup(home.ID, home.Revision, work.ID)
-	wantCode(t, err, setups.CodeLastSetup)
+	_, err = s.DeleteProfile(home.ID, home.Revision, work.ID)
+	wantCode(t, err, profiles.CodeLastProfile)
 
 	s = restart()
-	reborn, _, err := s.CreateSetup("Office")
+	reborn, _, err := s.CreateProfile("Office")
 	if err != nil {
-		t.Fatalf("reusing a deleted setup's name: %v", err)
+		t.Fatalf("reusing a deleted profile's name: %v", err)
 	}
 	if reborn.ID == work.ID {
-		t.Fatalf("setup id %s was reused for a new setup", work.ID)
+		t.Fatalf("profile id %s was reused for a new profile", work.ID)
 	}
-	tombstone, err := s.GetSetup(work.ID)
+	tombstone, err := s.GetProfile(work.ID)
 	if err != nil || !tombstone.Deleted() {
-		t.Fatalf("deleted setup = %+v, %v; want it kept as history", tombstone, err)
+		t.Fatalf("deleted profile = %+v, %v; want it kept as history", tombstone, err)
 	}
-	live, _ := s.ListSetups(false)
+	live, _ := s.ListProfiles(false)
 	var names []string
-	for _, setup := range live {
-		names = append(names, setup.Name)
+	for _, profile := range live {
+		names = append(names, profile.Name)
 	}
 	sort.Strings(names)
 	if !reflect.DeepEqual(names, []string{"Home", "Office"}) {
-		t.Fatalf("live setups = %v, want Home and the new Office", names)
+		t.Fatalf("live profiles = %v, want Home and the new Office", names)
 	}
-	_, err = s.RenameSetup(work.ID, "Back", tombstone.Revision)
-	wantCode(t, err, setups.CodeSetupDeleted)
+	_, err = s.RenameProfile(work.ID, "Back", tombstone.Revision)
+	wantCode(t, err, profiles.CodeProfileDeleted)
 }
 
-func TestMovingAnAgentToAnotherSetupRemovesItsPlacementOnly(t *testing.T) {
-	s, _ := openSetupStore(t)
-	work, workDesktop := mustCreateSetup(t, s, "Work")
-	home, _ := mustCreateSetup(t, s, "Home")
-	addSetupSession(t, s, "agent-a", work.ID)
-	addSetupSession(t, s, "agent-b", work.ID)
+func TestMovingAnAgentToAnotherProfileRemovesItsPlacementOnly(t *testing.T) {
+	s, _ := openProfileStore(t)
+	work, workDesktop := mustCreateProfile(t, s, "Work")
+	home, _ := mustCreateProfile(t, s, "Home")
+	addProfileSession(t, s, "agent-a", work.ID)
+	addProfileSession(t, s, "agent-b", work.ID)
 	mustPlace(t, s, workDesktop.ID, "agent-a")
 	before, _ := mustPlace(t, s, workDesktop.ID, "agent-b")
 
-	move, err := s.MoveSessionToSetup("agent-b", home.ID)
+	move, err := s.MoveSessionToProfile("agent-b", home.ID)
 	if err != nil {
-		t.Fatalf("MoveSessionToSetup: %v", err)
+		t.Fatalf("MoveSessionToProfile: %v", err)
 	}
-	if move.FromSetupID != work.ID || move.SourceDesktop == nil || move.SourceDesktop.Revision != before.Revision+1 {
+	if move.FromProfileID != work.ID || move.SourceDesktop == nil || move.SourceDesktop.Revision != before.Revision+1 {
 		t.Fatalf("move = %+v, want the source desktop rewritten once", move)
 	}
 	if _, found, _ := s.SessionPlacement("agent-b"); found {
-		t.Fatal("agent-b kept a placement after changing setups")
+		t.Fatal("agent-b kept a placement after changing profiles")
 	}
-	if setupID, _ := s.SessionSetupID("agent-b"); setupID != home.ID {
-		t.Fatalf("agent-b setup = %s, want %s", setupID, home.ID)
+	if profileID, _ := s.SessionProfileID("agent-b"); profileID != home.ID {
+		t.Fatalf("agent-b profile = %s, want %s", profileID, home.ID)
 	}
 	if session := s.Get("agent-b"); session == nil {
-		t.Fatal("moving setups closed the agent")
+		t.Fatal("moving profiles closed the agent")
 	}
-	_, err = s.MoveSessionToSetup("agent-b", home.ID)
-	wantCode(t, err, setups.CodeDestinationSame)
+	_, err = s.MoveSessionToProfile("agent-b", home.ID)
+	wantCode(t, err, profiles.CodeDestinationSame)
 	assertStoredDesktopsHoldTheirInvariants(t, s, work.ID)
 }
 
 func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
-	s, _ := openSetupStore(t)
-	setup, first := mustCreateSetup(t, s, "Default")
-	_, second, _ := s.CreateDesktop(setup.ID, "", 0, true)
-	_, third, _ := s.CreateDesktop(setup.ID, "", 0, true)
-	addSetupSession(t, s, "agent-a", setup.ID)
+	s, _ := openProfileStore(t)
+	profile, first := mustCreateProfile(t, s, "Default")
+	_, second, _ := s.CreateDesktop(profile.ID, "", 0, true)
+	_, third, _ := s.CreateDesktop(profile.ID, "", 0, true)
+	addProfileSession(t, s, "agent-a", profile.ID)
 	mustPlace(t, s, second.ID, "agent-a")
-	if _, err := s.SetCurrentDesktop(setup.ID, second.ID); err != nil {
+	if _, err := s.SetCurrentDesktop(profile.ID, second.ID); err != nil {
 		t.Fatalf("SetCurrentDesktop: %v", err)
 	}
-	_, _, err := s.CreateDesktop(setup.ID, "", 3, false)
-	wantCode(t, err, setups.CodeSlotTaken)
+	_, _, err := s.CreateDesktop(profile.ID, "", 3, false)
+	wantCode(t, err, profiles.CodeSlotTaken)
 
 	current, _ := s.GetDesktop(second.ID)
 	deletion, err := s.DeleteDesktop(second.ID, current.Revision)
@@ -551,14 +551,14 @@ func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
 	if !reflect.DeepEqual(deletion.UnplacedSessionID, []string{"agent-a"}) || s.Get("agent-a") == nil {
 		t.Fatalf("deletion = %+v, want agent-a unplaced and still open", deletion)
 	}
-	if deletion.Setup.CurrentDesktopID != third.ID {
-		t.Fatalf("current desktop after deleting it = %s, want the next one %s", deletion.Setup.CurrentDesktopID, third.ID)
+	if deletion.Profile.CurrentDesktopID != third.ID {
+		t.Fatalf("current desktop after deleting it = %s, want the next one %s", deletion.Profile.CurrentDesktopID, third.ID)
 	}
 	keptThird, _ := s.GetDesktop(third.ID)
 	if keptThird.ShortcutSlot != 3 {
 		t.Fatalf("third desktop slot = %d after deleting slot 2, want slots never renumbered", keptThird.ShortcutSlot)
 	}
-	_, refill, err := s.CreateDesktop(setup.ID, "", 0, true)
+	_, refill, err := s.CreateDesktop(profile.ID, "", 0, true)
 	if err != nil || refill.ShortcutSlot != 2 {
 		t.Fatalf("new desktop = %+v, %v; want it to take the freed slot 2", refill, err)
 	}
@@ -566,53 +566,53 @@ func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReorderDesktop: %v", err)
 	}
-	_, desktops, _ := s.SetupArrangement(setup.ID)
+	_, desktops, _ := s.ProfileArrangement(profile.ID)
 	if desktops[0].ID != moved.ID {
 		t.Fatalf("first desktop = %s, want the reordered %s", desktops[0].ID, moved.ID)
 	}
 
-	only, onlyDesktop := mustCreateSetup(t, s, "Solo")
+	only, onlyDesktop := mustCreateProfile(t, s, "Solo")
 	_, err = s.DeleteDesktop(onlyDesktop.ID, onlyDesktop.Revision)
-	wantCode(t, err, setups.CodeLastDesktop)
+	wantCode(t, err, profiles.CodeLastDesktop)
 	_ = only
 }
 
-func TestMostRecentlyUsedSetupFollowsSelection(t *testing.T) {
-	s, restart := openSetupStore(t)
-	work, _ := mustCreateSetup(t, s, "Work")
-	home, homeDesktop := mustCreateSetup(t, s, "Home")
-	if _, _, err := s.SelectSetup(work.ID); err != nil {
-		t.Fatalf("SelectSetup: %v", err)
+func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
+	s, restart := openProfileStore(t)
+	work, _ := mustCreateProfile(t, s, "Work")
+	home, homeDesktop := mustCreateProfile(t, s, "Home")
+	if _, _, err := s.SelectProfile(work.ID); err != nil {
+		t.Fatalf("SelectProfile: %v", err)
 	}
 	if _, err := s.SetCurrentDesktop(home.ID, homeDesktop.ID); err != nil {
 		t.Fatalf("SetCurrentDesktop: %v", err)
 	}
 	s = restart()
-	recent, err := s.MostRecentlyUsedSetup()
+	recent, err := s.MostRecentlyUsedProfile()
 	if err != nil || recent.ID != home.ID {
-		t.Fatalf("most recently used setup = %+v, %v; want %s", recent, err, home.ID)
+		t.Fatalf("most recently used profile = %+v, %v; want %s", recent, err, home.ID)
 	}
 }
 
-func TestSetupMigrationStateIsRevisioned(t *testing.T) {
-	s, restart := openSetupStore(t)
-	if _, found, err := s.GetSetupMigration(); err != nil || found {
+func TestProfileMigrationStateIsRevisioned(t *testing.T) {
+	s, restart := openProfileStore(t)
+	if _, found, err := s.GetProfileMigration(); err != nil || found {
 		t.Fatalf("fresh migration state found=%v err=%v, want none", found, err)
 	}
-	first, err := s.SaveSetupMigration(setups.MigrationState{SchemaVersion: 150, Phase: "placement_required", ImportedGroups: `[{"id":"g1"}]`}, 0)
+	first, err := s.SaveProfileMigration(profiles.MigrationState{SchemaVersion: 150, Phase: "placement_required", ImportedGroups: `[{"id":"g1"}]`}, 0)
 	if err != nil {
-		t.Fatalf("SaveSetupMigration: %v", err)
+		t.Fatalf("SaveProfileMigration: %v", err)
 	}
 	first.Draft = `{"g1":"keep"}`
-	second, err := s.SaveSetupMigration(first, first.Revision)
+	second, err := s.SaveProfileMigration(first, first.Revision)
 	if err != nil {
 		t.Fatalf("saving a draft: %v", err)
 	}
-	_, err = s.SaveSetupMigration(first, first.Revision)
-	wantCode(t, err, setups.CodeStaleRevision)
+	_, err = s.SaveProfileMigration(first, first.Revision)
+	wantCode(t, err, profiles.CodeStaleRevision)
 
 	s = restart()
-	got, found, err := s.GetSetupMigration()
+	got, found, err := s.GetProfileMigration()
 	if err != nil || !found || !reflect.DeepEqual(got, second) {
 		t.Fatalf("migration state after restart = %+v found=%v err=%v, want %+v", got, found, err, second)
 	}
