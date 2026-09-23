@@ -1187,15 +1187,13 @@ model DelegationRolesResult {
   guidance: string;
 }
 
-// One saved state of Settings > Delegation. Every change, a rollback included,
-// adds a revision; the newest is live.
 model DelegationPreferencesRevision {
   preferences: DelegationPreferences;
-  restores?: safeint; // The revision a rollback copied.
-  source_session?: string; // Absent for changes made in Settings.
+  restores?: safeint;
+  source_session?: string;
   message?: string;
-  created_at?: string; // Absent for the empty table nothing has saved yet.
-  changes: string[]; // What this revision changed in the one live before it.
+  created_at?: string;
+  changes: string[];
 }
 
 model DelegationPreferencesShowMessage {
@@ -1204,7 +1202,7 @@ model DelegationPreferencesShowMessage {
 
 model DelegationPreferencesCommitMessage {
   cmd: "delegation_preferences_commit";
-  preferences: DelegationPreferences; // Its revision is the one the edit started from.
+  preferences: DelegationPreferences;
   message?: string;
   source_session?: string;
 }
@@ -1215,17 +1213,14 @@ model DelegationPreferencesHistoryMessage {
 }
 
 model DelegationPreferencesHistoryResult {
-  revisions: DelegationPreferencesRevision[]; // Newest first.
+  revisions: DelegationPreferencesRevision[];
 }
 
-// Restores an earlier table as a new revision. Without a revision it steps
-// back to the table that was live before the current one; repeating it keeps
-// walking back.
 model DelegationPreferencesRollbackMessage {
   cmd: "delegation_preferences_rollback";
-  request_id?: string; // Required from the app, which receives delegation_preferences_result.
+  request_id?: string;
   revision?: safeint;
-  expected_revision?: safeint; // Refuses with a conflict when another revision is live.
+  expected_revision?: safeint;
   message?: string;
   source_session?: string;
 }

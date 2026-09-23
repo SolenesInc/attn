@@ -455,6 +455,8 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		role, choice, _ := strings.Cut(positionals[0], "/")
 		return role, choice, nil
 	}
+	modelFlags := []string{"agent", "model", "provider", "effort"}
+	guidanceFlags := []string{"name", "icon", "description", "instructions", "stopping-point"}
 	var edit delegationRolesEdit
 	switch command {
 	case "add":
@@ -463,14 +465,22 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 			return nil, "", err
 		}
 		if choiceID != "" {
+			err = acceptOnly(fs, "add <role>/<alt>", slices.Concat([]string{"name", "when"}, modelFlags))
 			edit = addAlternative(roleID, choiceID, name, when, model)
 		} else {
+			err = acceptOnly(fs, "add <role>", slices.Concat([]string{"builtin"}, guidanceFlags, modelFlags))
 			edit = addRole(roleID, builtin, guidance, model)
+		}
+		if err != nil {
+			return nil, "", err
 		}
 	case "set":
 		if *fallback {
 			if len(positionals) != 0 {
 				return nil, "", usagef("usage: attn delegate roles set --fallback [--instructions TEXT] [model flags]")
+			}
+			if err := acceptOnly(fs, "set --fallback", slices.Concat([]string{"fallback", "instructions"}, modelFlags)); err != nil {
+				return nil, "", err
 			}
 			edit = setFallback(instructions, model)
 			break
@@ -479,10 +489,21 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		if err != nil {
 			return nil, "", err
 		}
+		if choiceID != "" {
+			err = acceptOnly(fs, "set <role>/<alt>", slices.Concat([]string{"name", "when", "default"}, modelFlags))
+		} else {
+			err = acceptOnly(fs, "set <role>", slices.Concat(guidanceFlags, modelFlags))
+		}
+		if err != nil {
+			return nil, "", err
+		}
 		edit = setRole(roleID, choiceID, guidance, when, *makeDefault, model)
 	case "copy":
 		if len(positionals) != 2 {
 			return nil, "", usagef("usage: attn delegate roles copy <role> <new-role> [--name NAME]")
+		}
+		if err := acceptOnly(fs, "copy", []string{"name"}); err != nil {
+			return nil, "", err
 		}
 		edit = copyRole(positionals[0], positionals[1], name)
 	case "rm":
@@ -490,24 +511,36 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		if err != nil {
 			return nil, "", err
 		}
+		if err := acceptOnly(fs, "rm", nil); err != nil {
+			return nil, "", err
+		}
 		edit = removeRole(roleID, choiceID)
 	case "enable", "disable":
 		if len(positionals) > 1 {
 			return nil, "", usagef("usage: attn delegate roles %s [<role>]", command)
+		}
+		if err := acceptOnly(fs, command, nil); err != nil {
+			return nil, "", err
 		}
 		edit = setEnabled(positionals, command == "enable")
 	}
 	return edit, *message, nil
 }
 
+func acceptOnly(fs *flag.FlagSet, form string, accepted []string) error {
+	var rejected error
+	fs.Visit(func(f *flag.Flag) {
+		if rejected == nil && f.Name != "m" && !slices.Contains(accepted, f.Name) {
+			rejected = usagef("--%s does not apply to %s; attn delegate roles --help lists each command's flags", f.Name, form)
+		}
+	})
+	return rejected
+}
+
 type guidanceEdits struct{ name, icon, description, instructions, stoppingPoint *optionalText }
 
 func (g guidanceEdits) given() bool {
-	return g.name.value != nil || g.guidanceGiven()
-}
-
-func (g guidanceEdits) guidanceGiven() bool {
-	return g.icon.value != nil || g.description.value != nil || g.instructions.value != nil || g.stoppingPoint.value != nil
+	return g.name.value != nil || g.icon.value != nil || g.description.value != nil || g.instructions.value != nil || g.stoppingPoint.value != nil
 }
 
 func (g guidanceEdits) apply(role *protocol.DelegationRole) {
@@ -577,9 +610,6 @@ func setRole(roleID, choiceID string, guidance guidanceEdits, when *optionalText
 			return err
 		}
 		if choiceID == "" {
-			if when.value != nil || makeDefault {
-				return usagef("--when and --default belong to an alternative: set %s/<alt>", roleID)
-			}
 			if !guidance.given() && !model.given() {
 				return usagef("nothing to change; pass guidance or model flags")
 			}
@@ -593,9 +623,6 @@ func setRole(roleID, choiceID string, guidance guidanceEdits, when *optionalText
 			}
 			model.apply(&choice.Selection)
 			return nil
-		}
-		if guidance.guidanceGiven() {
-			return usagef("guidance belongs to the role: set %s", roleID)
 		}
 		choice, err := findChoice(role, choiceID)
 		if err != nil {
