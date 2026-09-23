@@ -46,7 +46,8 @@ export function SetupSwitcher({ setups, selectedSetupId, onSelect, onClose }: Se
   };
 
   return (
-    <div className="setup-switcher-scrim" onClick={onClose}>
+    <div className="setup-switcher-scrim">
+      <button type="button" className="setup-switcher-dismiss" aria-label="Close the setup list" onClick={onClose} />
       <div
         ref={menuRef}
         className="setup-switcher"
@@ -54,7 +55,6 @@ export function SetupSwitcher({ setups, selectedSetupId, onSelect, onClose }: Se
         aria-label="Switch setup"
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        onClick={(event) => event.stopPropagation()}
       >
         {ordered.map((setup, index) => (
           <button

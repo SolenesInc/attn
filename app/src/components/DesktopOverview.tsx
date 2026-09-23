@@ -61,7 +61,7 @@ export function DesktopOverview({
   const [focusedId, setFocusedId] = useState<string | null>(currentDesktopId);
   const focusedIndex = Math.max(0, ordered.findIndex((desktop) => desktop.id === focusedId));
   const focused = ordered[focusedIndex];
-  const dialogRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEscapeStack(onClose, true);
   useEffect(() => {
@@ -82,7 +82,7 @@ export function DesktopOverview({
     setFocusedId(ordered[next].id);
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
     if (event.target !== dialogRef.current) return;
     const steps: Record<string, number> = {
       ArrowRight: 1,
@@ -131,32 +131,33 @@ export function DesktopOverview({
           desktop.id === focused?.id ? 'focused' : '',
         ].join(' ')}
         data-desktop-id={desktop.id}
-        onClick={() => act(() => onSwitch(desktop.id))}
       >
-        <div className="desktop-overview-card-head">
-          <span className={`desktop-overview-slot ${desktop.shortcut_slot ? '' : 'none'}`}>
-            {desktop.shortcut_slot ? slotShortcut(desktop.shortcut_slot) : 'no shortcut'}
+        <button type="button" className="desktop-overview-open" onClick={() => act(() => onSwitch(desktop.id))}>
+          <span className="desktop-overview-card-head">
+            <span className={`desktop-overview-slot ${desktop.shortcut_slot ? '' : 'none'}`}>
+              {desktop.shortcut_slot ? slotShortcut(desktop.shortcut_slot) : 'no shortcut'}
+            </span>
+            <span className="desktop-overview-name">{label}</span>
+            {leaves.length === 0 && <span className="desktop-overview-empty">empty</span>}
           </span>
-          <span className="desktop-overview-name">{label}</span>
-          {leaves.length === 0 && <span className="desktop-overview-empty">empty</span>}
-        </div>
-        <div className="desktop-overview-mini" aria-hidden="true">
-          {leaves.map((leaf) => (
-            <div
-              key={leaf.id}
-              className={leaf.id === desktop.active_pane_id ? 'active' : ''}
-              style={{
-                left: `${leaf.left * 100}%`,
-                top: `${leaf.top * 100}%`,
-                width: `${leaf.width * 100}%`,
-                height: `${leaf.height * 100}%`,
-              }}
-            >
-              {leaf.label}
-            </div>
-          ))}
-        </div>
-        <div className="desktop-overview-actions" onClick={(event) => event.stopPropagation()}>
+          <span className="desktop-overview-mini" aria-hidden="true">
+            {leaves.map((leaf) => (
+              <span
+                key={leaf.id}
+                className={leaf.id === desktop.active_pane_id ? 'active' : ''}
+                style={{
+                  left: `${leaf.left * 100}%`,
+                  top: `${leaf.top * 100}%`,
+                  width: `${leaf.width * 100}%`,
+                  height: `${leaf.height * 100}%`,
+                }}
+              >
+                {leaf.label}
+              </span>
+            ))}
+          </span>
+        </button>
+        <div className="desktop-overview-actions">
           {canSendTo(desktop) && (
             <button type="button" onClick={() => act(() => onSendActivePane(desktop.id))}>
               Send focused pane here ⇧↵
@@ -178,15 +179,15 @@ export function DesktopOverview({
   };
 
   return (
-    <div className="desktop-overview-scrim" onClick={onClose}>
-      <div
+    <div className="desktop-overview-scrim">
+      <button type="button" className="desktop-overview-dismiss" aria-label="Close the overview" onClick={onClose} />
+      <dialog
+        open
         ref={dialogRef}
         className="desktop-overview"
-        role="dialog"
         aria-label="Desktop overview"
         tabIndex={-1}
         onKeyDown={handleKeyDown}
-        onClick={(event) => event.stopPropagation()}
       >
         <h2>
           {setupName} · {desktops.length} {desktops.length === 1 ? 'desktop' : 'desktops'}
@@ -202,7 +203,7 @@ export function DesktopOverview({
             + New desktop
           </button>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }
