@@ -605,3 +605,54 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 		}
 	}
 }
+
+func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-stalled-")
+	stopHostsAtCleanup(t, root)
+	started := filepath.Join(root, "probe-started")
+	if err := syscall.Mkfifo(started, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stalled := filepath.Join(root, "stalled-probe-host")
+	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then echo started > '" + started + "'; exec sleep 30; fi\nexec '" + binary + "' \"$@\"\n"
+	if err := os.WriteFile(stalled, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var rejections int
+	backend, err := NewSharedHost(WorkerBackendConfig{
+		DataRoot: root, DaemonInstanceID: "d-stalled", BinaryPath: stalled,
+		OnSharedArtifactRejected: func(SharedArtifactRejection) { rejections++ },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	checked := make(chan error, 1)
+	go func() { checked <- backend.ValidateSharedCandidate(ctx, false) }()
+	if _, err := os.ReadFile(started); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	if err := <-checked; err == nil {
+		t.Fatal("an interrupted check passed")
+	}
+	if rejections != 0 || !backend.SharedCandidatePending() {
+		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
+	}
+	for _, path := range ptyhost.HostRegistryPaths(root) {
+		entry, err := ptyhost.ReadHostRegistry(path)
+		if err != nil {
+			continue
+		}
+		info, err := backend.sharedHostInfo(context.Background(), incarnationOfHost(entry))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(info.SessionIDs) != 0 {
+			t.Fatalf("the interrupted probe left sessions %v on its host", info.SessionIDs)
+		}
+	}
+}

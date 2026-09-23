@@ -262,7 +262,7 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 	}
 }
 
-func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Artifact, inc hostIncarnation, id, nonce string) error {
+func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Artifact, inc hostIncarnation, id, nonce string) (err error) {
 	info, err := b.sharedHostInfo(ctx, inc)
 	if err != nil {
 		return err
@@ -289,14 +289,12 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	if _, _, err := b.spawnOnSharedHost(ctx, &artifact, params); err != nil {
 		return fmt.Errorf("spawn probe: %w", err)
 	}
-	removed := false
 	defer func() {
-		if removed {
-			return
-		}
-		removeCtx, cancel := context.WithTimeout(context.Background(), defaultRPCTimeout)
+		removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
 		defer cancel()
-		_ = b.Remove(removeCtx, id)
+		if removeErr := b.Remove(removeCtx, id); removeErr != nil && err == nil {
+			err = fmt.Errorf("remove probe: %w", removeErr)
+		}
 	}()
 
 	attached, stream, err := b.Attach(ctx, id, "artifact-probe")
@@ -320,10 +318,6 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	}
 	if err := stream.Close(); err != nil {
 		return fmt.Errorf("detach probe: %w", err)
-	}
-	removed = true
-	if err := b.Remove(ctx, id); err != nil {
-		return fmt.Errorf("remove probe: %w", err)
 	}
 	return nil
 }
