@@ -220,6 +220,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 
 func (d *Daemon) publishArrangementChanged(profileID string) {
 	d.publishFact(FactProfileArrangementChanged, profileID, nil)
+	d.nudgeDesktopTileContent()
 }
 
 func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
@@ -438,8 +439,7 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 		Profile:  protocolProfile(profile),
 		Desktops: wire,
 	}
-	d.wsHub.SendValueToMatchingClients(message, func(client *wsClient) bool {
+	d.wsHub.SendSnapshotToMatchingClients(message, func(client *wsClient) bool {
 		return client.selectedProfile() == profile.ID
 	})
-	d.nudgeDesktopTileContent()
 }

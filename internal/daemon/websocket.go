@@ -505,6 +505,19 @@ func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsCl
 }
 
 func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
+	h.sendRawTextToMatchingClients(payload, match, maxSlowCount)
+}
+
+func (h *wsHub) SendSnapshotToMatchingClients(message interface{}, match func(*wsClient) bool) {
+	data, err := json.Marshal(message)
+	if err != nil {
+		h.logf("WebSocket snapshot send marshal error: %v", err)
+		return
+	}
+	h.sendRawTextToMatchingClients(data, match, 1)
+}
+
+func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int) {
 	if len(payload) == 0 {
 		return
 	}
@@ -525,11 +538,11 @@ func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClien
 			continue
 		}
 		client.slowCount++
-		if client.slowCount >= maxSlowCount {
-			h.logf("WebSocket client too slow (%d missed), disconnecting", client.slowCount)
+		if client.slowCount >= missesTolerated {
+			h.logf("WebSocket client too slow (%d missed, %d tolerated for this message), disconnecting", client.slowCount, missesTolerated)
 			toRemove = append(toRemove, client)
 		} else {
-			h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, maxSlowCount)
+			h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, missesTolerated)
 		}
 	}
 	for _, client := range toRemove {

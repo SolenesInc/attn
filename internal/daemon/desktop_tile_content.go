@@ -136,7 +136,9 @@ func (d *Daemon) deliverDesktopTileContent(rereadArrangements bool) {
 					content, readErr = readMarkdownFile(file.path)
 					read = true
 				}
-				d.sendToClient(client, desktopTileContentMessage(tile.key.desktopID, tile.key.tileID, file.path, content, readErr))
+				if !d.sendToClient(client, desktopTileContentMessage(tile.key.desktopID, tile.key.tileID, file.path, content, readErr)) {
+					continue
+				}
 				if delivery.delivered[client] == nil {
 					delivery.delivered[client] = map[desktopTileKey]deliveredTileFile{}
 				}

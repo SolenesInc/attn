@@ -1,9 +1,15 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"nhooyr.io/websocket"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
@@ -596,4 +602,46 @@ func TestAStorageFailureIsNotReportedAsUnavailable(t *testing.T) {
 	}
 	result := w.send(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
 	wantErrorCode(t, result, protocol.ProfileErrorCodeInternal)
+}
+
+func connectedClientWithAFullQueue(t *testing.T) *wsClient {
+	t.Helper()
+	accepted := make(chan *websocket.Conn, 1)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		accepted <- conn
+		<-r.Context().Done()
+	}))
+	t.Cleanup(server.Close)
+	peer, _, err := websocket.Dial(context.Background(), "ws"+strings.TrimPrefix(server.URL, "http"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { peer.CloseNow() })
+	client := &wsClient{conn: <-accepted, send: make(chan outboundMessage, 1)}
+	client.send <- outboundMessage{kind: messageKindText, payload: []byte(`{"event":"filler"}`)}
+	return client
+}
+
+func TestAClientThatCannotTakeAnArrangementIsDisconnectedToResync(t *testing.T) {
+	w := newProfilesTestDaemon(t)
+	client, _ := w.connect("")
+	created := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "attn"})
+
+	stalled := connectedClientWithAFullQueue(t)
+	stalled.selectProfile(created.Profile.ID)
+	w.d.wsHub.add(stalled)
+
+	w.d.publishArrangementChanged(created.Profile.ID)
+
+	stillConnected := false
+	w.d.wsHub.ForEachClient(func(c *wsClient) {
+		stillConnected = stillConnected || c == stalled
+	})
+	if stillConnected || !stalled.sendChannelClosed() {
+		t.Fatal("a client that missed its arrangement stayed connected, so it would keep showing the old one")
+	}
 }

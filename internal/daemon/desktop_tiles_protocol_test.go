@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -382,5 +383,29 @@ func TestArrangementChangesAndHelloWakeTheContentSender(t *testing.T) {
 	w.connect(w.profileID)
 	if !drain() {
 		t.Fatal("a new client's initial state did not wake the content sender")
+	}
+	w.d.projectProfileArrangementChanged(bus.Event{Name: FactProfileArrangementChanged, Subject: w.profileID})
+	if drain() {
+		t.Fatal("the arrangement projection woke the content sender; projections only write to the wire")
+	}
+}
+
+func TestContentAClientCouldNotQueueIsSentAgainOnTheNextTick(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.dockMarkdown("tile-md", "# notes")
+	drainClientPayloads(t, w.client)
+	for len(w.client.send) < cap(w.client.send) {
+		w.client.send <- outboundMessage{kind: messageKindText, payload: []byte(`{"event":"filler"}`)}
+	}
+
+	w.d.deliverDesktopTileContent(true)
+	if held := w.deliveredTiles(w.client); held != 0 {
+		t.Fatalf("content that could not be queued was recorded as delivered (%d tiles)", held)
+	}
+
+	drainClientPayloads(t, w.client)
+	w.d.deliverDesktopTileContent(false)
+	if got := contentsOf(tileContents(t, w.client)); len(got) != 1 || got[0] != "# notes" {
+		t.Fatalf("once the queue drained the client received %v, want the tile's content", got)
 	}
 }
