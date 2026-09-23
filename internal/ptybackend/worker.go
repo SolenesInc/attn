@@ -34,6 +34,7 @@ import (
 const (
 	defaultRPCTimeout       = 5 * time.Second
 	probeSessionPrefix      = "probe-"
+	probeAgent              = "attn-probe"
 	killRPCTimeout          = 15 * time.Second
 	livenessRPCTimeout      = 2 * time.Second
 	reclaimRPCTimeout       = 3 * time.Second
@@ -98,6 +99,7 @@ type workerSession struct {
 	ControlToken string
 	WorkerPID    int
 	LifecycleID  string
+	probe        bool
 
 	mu                  sync.Mutex
 	controlMu           sync.Mutex
@@ -417,12 +419,8 @@ func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.O
 	b.onState = handler
 }
 
-func isProbeSession(sessionID string) bool {
-	return strings.HasPrefix(sessionID, probeSessionPrefix)
-}
-
 func (b *WorkerBackend) reportState(session *workerSession, observation pty.Observation) {
-	if isProbeSession(session.SessionID) {
+	if session.probe {
 		return
 	}
 	b.hooksMu.RLock()
@@ -434,7 +432,7 @@ func (b *WorkerBackend) reportState(session *workerSession, observation pty.Obse
 }
 
 func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal string) {
-	if isProbeSession(session.SessionID) {
+	if session.probe {
 		return
 	}
 	b.hooksMu.RLock()
@@ -466,12 +464,13 @@ func (b *WorkerBackend) Probe(ctx context.Context) error {
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, probeTimeout)
 	defer cancelSpawn()
 	if err := b.spawn(spawnCtx, SpawnOptions{
-		ID:    probeSessionID,
-		Agent: "shell",
-		CWD:   os.TempDir(),
-		Label: "attn-worker-probe",
-		Cols:  80,
-		Rows:  24,
+		ID:              probeSessionID,
+		Agent:           probeAgent,
+		ExternalCommand: []string{"/bin/sh"},
+		CWD:             os.TempDir(),
+		Label:           "attn-worker-probe",
+		Cols:            80,
+		Rows:            24,
 	}); err != nil {
 		return fmt.Errorf("spawn probe worker session: %w", err)
 	}
@@ -576,8 +575,8 @@ func (b *WorkerBackend) spawnArgs(opts SpawnOptions, session *workerSession) ([]
 }
 
 func (b *WorkerBackend) Spawn(ctx context.Context, opts SpawnOptions) error {
-	if isProbeSession(opts.ID) {
-		return fmt.Errorf("session id %q uses the reserved %q prefix", opts.ID, probeSessionPrefix)
+	if opts.Agent == probeAgent {
+		return fmt.Errorf("agent %q is reserved for backend probes", probeAgent)
 	}
 	return b.spawn(ctx, opts)
 }
@@ -608,6 +607,7 @@ func (b *WorkerBackend) spawn(ctx context.Context, opts SpawnOptions) error {
 		RegistryPath: filepath.Join(b.registryDir(), sessionID+".json"),
 		ControlToken: token,
 		LifecycleID:  opts.LifecycleID,
+		probe:        opts.Agent == probeAgent,
 	}
 
 	b.mu.Lock()
@@ -1116,6 +1116,7 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 			RegistryPath: path,
 			ControlToken: entry.ControlToken,
 			WorkerPID:    entry.WorkerPID,
+			probe:        entry.Agent == probeAgent,
 		}
 		if err := b.probeRecoveryInfo(ctx, session); err != nil {
 			if errors.Is(err, pty.ErrSessionNotFound) || errors.Is(err, os.ErrNotExist) {
@@ -1133,7 +1134,7 @@ func (b *WorkerBackend) Recover(ctx context.Context) (RecoveryReport, error) {
 			b.quarantineRegistry(path, "rpc_unavailable")
 			continue
 		}
-		if b.abandonedSharedProbe(session.SessionID) {
+		if b.abandonedSharedProbe(session) {
 			if err := b.callResultSharedOneShot(ctx, session, ptyworker.MethodRemove, map[string]any{}, nil); err != nil {
 				b.cfg.Logf("remove abandoned shared PTY host probe %s: %v", session.SessionID, err)
 			}
@@ -1546,6 +1547,7 @@ func (b *WorkerBackend) getSession(sessionID string) (*workerSession, error) {
 		RegistryPath: registryPath,
 		ControlToken: entry.ControlToken,
 		WorkerPID:    entry.WorkerPID,
+		probe:        entry.Agent == probeAgent,
 	}
 	probeCtx, cancel := context.WithTimeout(context.Background(), livenessRPCTimeout)
 	probeErr := b.probeRecoveryInfo(probeCtx, session)

@@ -117,7 +117,7 @@ func TestRejectedCandidateIsNotLaunchedWithoutAFallback(t *testing.T) {
 	}
 }
 
-func TestSessionsCannotClaimTheProbeNamespace(t *testing.T) {
+func TestSessionsCannotClaimTheProbeAgent(t *testing.T) {
 	root := sharedArtifactTestRoot(t)
 	for _, construct := range []func(WorkerBackendConfig) (*WorkerBackend, error){NewWorker, NewSharedHost} {
 		backend, err := construct(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-reserved", BinaryPath: "/bin/cat"})
@@ -125,10 +125,10 @@ func TestSessionsCannotClaimTheProbeNamespace(t *testing.T) {
 			t.Fatal(err)
 		}
 		err = backend.Spawn(context.Background(), SpawnOptions{
-			ID: probeSessionPrefix + "mine", CWD: root, Agent: "shell", ExternalCommand: []string{"/bin/cat"},
+			ID: "mine", CWD: root, Agent: probeAgent, ExternalCommand: []string{"/bin/cat"},
 		})
 		if err == nil || !strings.Contains(err.Error(), "reserved") {
-			t.Fatalf("%s spawn of a probe-named session = %v, want a refusal", backend.PTYBackendMode(), err)
+			t.Fatalf("%s spawn with the probe agent = %v, want a refusal", backend.PTYBackendMode(), err)
 		}
 	}
 }

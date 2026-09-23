@@ -613,6 +613,7 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 			ControlToken: host.ControlToken,
 			WorkerPID:    host.HostPID,
 			LifecycleID:  params.LifecycleID,
+			probe:        params.Agent == probeAgent,
 		}
 		b.mu.Lock()
 		if _, exists := b.sessions[params.SessionID]; exists {
@@ -626,6 +627,9 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 		if err == nil {
 			return result, true, nil
 		}
+		if spawned {
+			b.removeUnreadySharedSession(ctx, session)
+		}
 		b.mu.Lock()
 		delete(b.sessions, params.SessionID)
 		b.mu.Unlock()
@@ -634,6 +638,14 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 			return result, spawned, err
 		}
 		b.cfg.Logf("shared PTY host %s retired before spawning %s; starting another", host.SocketPath, params.SessionID)
+	}
+}
+
+func (b *WorkerBackend) removeUnreadySharedSession(ctx context.Context, session *workerSession) {
+	removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
+	defer cancel()
+	if err := b.callResultSharedOneShot(removeCtx, session, ptyworker.MethodRemove, map[string]any{}, nil); err != nil {
+		b.cfg.Logf("remove shared PTY session %s that never became ready: %v", session.SessionID, err)
 	}
 }
 

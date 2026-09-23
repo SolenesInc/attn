@@ -128,13 +128,13 @@ func (b *WorkerBackend) importCandidate() (ptyhost.Artifact, error) {
 	return artifact, nil
 }
 
-func (b *WorkerBackend) abandonedSharedProbe(sessionID string) bool {
-	if b.kind != workerRuntimeSharedHost || !isProbeSession(sessionID) {
+func (b *WorkerBackend) abandonedSharedProbe(session *workerSession) bool {
+	if b.kind != workerRuntimeSharedHost || !session.probe {
 		return false
 	}
 	b.mu.RLock()
 	defer b.mu.RUnlock()
-	return b.sessions[sessionID] == nil
+	return b.sessions[session.SessionID] == nil
 }
 
 func (b *WorkerBackend) ValidateSharedCandidate(ctx context.Context, explicit bool) error {
@@ -275,7 +275,7 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 	workdir := os.TempDir()
 	params := ptyhost.SpawnParams{
 		SessionID: id,
-		Agent:     "probe",
+		Agent:     probeAgent,
 		CWD:       workdir,
 		Cols:      80,
 		Rows:      24,

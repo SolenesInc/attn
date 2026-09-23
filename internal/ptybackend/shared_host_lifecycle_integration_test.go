@@ -533,11 +533,12 @@ func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := first.spawn(context.Background(), SpawnOptions{
-		ID: probeSessionPrefix + "left-behind", CWD: root, Agent: "probe", ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
+		ID: probeSessionPrefix + "left-behind", CWD: root, Agent: probeAgent, ExternalCommand: []string{"/bin/cat"}, Cols: 80, Rows: 24,
 	}); err != nil {
 		t.Fatal(err)
 	}
 	spawnCat(t, first, "user-terminal", root)
+	spawnCat(t, first, probeSessionPrefix+"named-by-a-user", root)
 	if err := first.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -548,14 +549,18 @@ func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = second.Shutdown(context.Background()) })
 	report, err := second.Recover(context.Background())
-	if err != nil || report.Recovered != 1 || report.Pruned != 1 {
-		t.Fatalf("recover = %+v, %v; want the user terminal recovered and the probe pruned", report, err)
+	if err != nil || report.Recovered != 2 || report.Pruned != 1 {
+		t.Fatalf("recover = %+v, %v; want both user terminals recovered and the probe pruned", report, err)
 	}
-	if ids := second.SessionIDs(context.Background()); len(ids) != 1 || ids[0] != "user-terminal" {
-		t.Fatalf("recovered sessions = %v", ids)
+	ids := second.SessionIDs(context.Background())
+	slices.Sort(ids)
+	if want := []string{probeSessionPrefix + "named-by-a-user", "user-terminal"}; !slices.Equal(ids, want) {
+		t.Fatalf("recovered sessions = %v, want %v", ids, want)
 	}
-	if err := second.Remove(context.Background(), "user-terminal"); err != nil {
-		t.Fatal(err)
+	for _, id := range ids {
+		if err := second.Remove(context.Background(), id); err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 
@@ -601,7 +606,7 @@ func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t
 		t.Fatal(err)
 	}
 	for id := range exits {
-		if isProbeSession(id) {
+		if strings.HasPrefix(id, probeSessionPrefix) {
 			t.Fatalf("the validation probe %s was reported as a session exit", id)
 		}
 		if id == "exits-at-once" {
