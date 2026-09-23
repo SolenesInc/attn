@@ -129,14 +129,12 @@ function applyClose(
   filters: SessionLedgerFilters,
   at: Date,
 ): SessionLedgerEntry[] {
-  const dropsFromView = filters.scope === 'live';
-  const existing = entries.findIndex((row) => row.id === entry.id);
-  if (existing >= 0) {
-    const next = entries.slice();
-    next[existing] = entry;
-    return dropsFromView ? next.filter((row) => row.id !== entry.id) : next;
+  if (!entries.some((row) => row.id === entry.id)) {
+    return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
   }
-  return closeBelongsInView(entry, filters, at) ? [entry, ...entries] : entries;
+  return filters.scope === 'live'
+    ? entries.filter((row) => row.id !== entry.id)
+    : entries.map((row) => (row.id === entry.id ? entry : row));
 }
 
 interface LedgerRows {
