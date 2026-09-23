@@ -202,6 +202,19 @@ func TestDockingATileValidatesItsParamsLikeAnUpdate(t *testing.T) {
 	if got := w.tile("tile-web").TileParams; got != "https://example.com/docs" {
 		t.Fatalf("a valid browser dock stored params %q", got)
 	}
+
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "tile_params": notes, "edge": "right"})
+	for _, kind := range []string{"browser", "seed"} {
+		retyped := w.send(w.client, map[string]any{
+			"cmd": protocol.CmdDesktopDockTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+			"tile_id": "tile-md", "tile_kind": kind, "edge": "left",
+		})
+		wantErrorCode(t, retyped, protocol.ProfileErrorCodeInvalid)
+	}
+	if tile := w.tile("tile-md"); tile.TileKind != "markdown" || tile.TileParams != notes {
+		t.Fatalf("refused re-docks changed the markdown tile to %+v", tile)
+	}
 }
 
 func TestMarkdownTileContentFollowsTheFileUntilTheTileLeaves(t *testing.T) {

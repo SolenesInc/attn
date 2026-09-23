@@ -3483,7 +3483,7 @@ model ProfileActionResultMessage {
   error?: string;
   error_code?: ProfileErrorCode;
   profile?: Profile;
-  desktops?: Desktop[];         // The desktops the command changed; absent for profile_select and profile_delete, whose arrangement arrives as profile_arrangement_changed
+  desktops?: Desktop[];
   pane_id?: string;             // The pane desktop_place_session created
 }
 
@@ -3493,10 +3493,6 @@ model ProfilesChangedMessage {
   profiles: Profile[];
 }
 
-// The whole arrangement of a profile: the profile and every one of its desktops.
-// Sent to every client scoped to the profile after any change to its desktops or
-// its selection, and to a client the daemon rescopes to it. It replaces what the
-// client holds; the last one received is the newest.
 model ProfileArrangementChangedMessage {
   event: "profile_arrangement_changed";
   profile: Profile;

@@ -61,6 +61,9 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
 	}
 	existing, docked := tileLeafByID(desktop.Tree, dock.tileID)
+	if docked && existing.TileKind != dock.tileKind {
+		return desktop, profiles.Errorf(profiles.CodeInvalid, "tile %s is a %s tile and cannot be docked as %s; dock a new tile instead", dock.tileID, existing.TileKind, dock.tileKind)
+	}
 	if dock.params == "" && docked {
 		dock.params = existing.TileParams
 	}
