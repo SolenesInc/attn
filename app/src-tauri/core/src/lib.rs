@@ -1,5 +1,6 @@
 mod browser_alerts;
 mod browser_host;
+mod migration_failure;
 mod native_input;
 mod native_input_diagnostics;
 mod profile;
@@ -556,6 +557,7 @@ fn ensure_daemon(_app: tauri::AppHandle) -> Result<(), String> {
     let bin_path = resolve_daemon_binary()?;
     match run_daemon_ensure(&bin_path) {
         Ok(_) => Ok(()),
+        Err(err) if migration_failure::marker_exists() => Err(err),
         Err(err) => {
             eprintln!("[Daemon] daemon ensure failed: {err}; entering temporary fallback recovery");
             temporary_force_daemon_recovery(&bin_path)
@@ -1315,6 +1317,7 @@ Object.defineProperty(window, "__ATTN_NATIVE_DIALOGS", {
         .invoke_handler(tauri::generate_handler![
             list_directory,
             ensure_daemon,
+            migration_failure::read_migration_failure,
             quit_app,
             open_in_editor,
             open_safe_markdown_target,

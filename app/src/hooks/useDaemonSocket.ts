@@ -12,6 +12,7 @@ import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
+import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
   Session as GeneratedSession,
   Workspace as GeneratedWorkspaceSnapshot,
@@ -971,6 +972,7 @@ export function useDaemonSocket({
   const profileMismatchRef = useRef<boolean>(false);
   const profileCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
@@ -1128,6 +1130,11 @@ export function useDaemonSocket({
     } catch (err) {
       console.error('[Daemon] Failed to ensure daemon is running:', err);
       setConnectionError(err instanceof Error ? err.message : String(err));
+      const marker = await readMigrationFailureMarker();
+      if (marker) {
+        circuitOpenRef.current = true;
+        setMigrationFailure(marker);
+      }
       return false;
     }
   }, []);
@@ -1211,6 +1218,7 @@ export function useDaemonSocket({
     }
 
     if (!await ensureDaemonRunning()) {
+      if (circuitOpenRef.current) return;
       const delay = reconnectDelayRef.current;
       reconnectDelayRef.current = Math.min(delay * 1.5, MAX_RECONNECT_DELAY_MS);
       reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -5463,6 +5471,7 @@ export function useDaemonSocket({
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     connectionError,
+    migrationFailure,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,
