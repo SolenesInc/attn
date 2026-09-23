@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "319"
+const ProtocolVersion = "320"
 
 const (
 	ErrorCodeConflict             = "conflict"

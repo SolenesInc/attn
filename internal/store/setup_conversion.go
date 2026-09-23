@@ -13,7 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/setups"
 )
 
-const SetupConversionSchemaVersion = 152
+const SetupConversionSchemaVersion = 153
 
 const DefaultSetupName = "Default"
 
