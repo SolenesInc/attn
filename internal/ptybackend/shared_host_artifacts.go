@@ -8,7 +8,6 @@ import (
 	"os"
 	"runtime"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/victorarias/attn/internal/buildinfo"
@@ -21,7 +20,6 @@ const (
 	sharedHostProbeContract = 1
 	sharedHostProbeCols     = 97
 	sharedHostProbeRows     = 31
-	sharedHostProbePrefix   = "probe-"
 )
 
 var errArtifactRejected = errors.New("shared PTY host build is broken")
@@ -131,7 +129,7 @@ func (b *WorkerBackend) importCandidate() (ptyhost.Artifact, error) {
 }
 
 func (b *WorkerBackend) abandonedSharedProbe(sessionID string) bool {
-	if b.kind != workerRuntimeSharedHost || !strings.HasPrefix(sessionID, sharedHostProbePrefix) {
+	if b.kind != workerRuntimeSharedHost || !isProbeSession(sessionID) {
 		return false
 	}
 	b.mu.RLock()
@@ -245,20 +243,35 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 	if err != nil {
 		return err
 	}
-	info, err := b.sharedHostInfo(ctx, incarnationOfHost(host))
-	if err != nil {
-		return err
-	}
-	if !slices.Contains(info.Capabilities, ptyhost.CapabilityProbeChild) {
-		b.stopUnusedRejectedHost(artifact, incarnationOfHost(host), info)
-		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
-	}
-
 	suffix, err := randomToken(6)
 	if err != nil {
 		return err
 	}
-	id := sharedHostProbePrefix + suffix
+	nonce, err := randomToken(8)
+	if err != nil {
+		return err
+	}
+	err = b.roundTripProbe(ctx, artifact, incarnationOfHost(host), probeSessionPrefix+suffix, nonce)
+	switch {
+	case err == nil, errors.Is(err, errArtifactRejected):
+		return err
+	case ctx.Err() != nil:
+		return fmt.Errorf("%v: %w", err, ctx.Err())
+	default:
+		return fmt.Errorf("%w: %w", errArtifactRejected, err)
+	}
+}
+
+func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Artifact, inc hostIncarnation, id, nonce string) error {
+	info, err := b.sharedHostInfo(ctx, inc)
+	if err != nil {
+		return err
+	}
+	if !slices.Contains(info.Capabilities, ptyhost.CapabilityProbeChild) {
+		b.stopUnusedRejectedHost(artifact, inc, info)
+		return fmt.Errorf("%w: host does not provide the validation probe", errArtifactRejected)
+	}
+
 	workdir := os.TempDir()
 	params := ptyhost.SpawnParams{
 		SessionID: id,
@@ -292,14 +305,10 @@ func (b *WorkerBackend) probeSharedArtifact(ctx context.Context, artifact ptyhos
 	}
 	defer stream.Close()
 	if !attached.Running {
-		return fmt.Errorf("%w: probe child exited before answering", errArtifactRejected)
+		return errors.New("probe child exited before answering")
 	}
 	if _, err := b.Resize(ctx, id, sharedHostProbeCols, sharedHostProbeRows, 0, 0); err != nil {
 		return fmt.Errorf("resize probe: %w", err)
-	}
-	nonce, err := randomToken(8)
-	if err != nil {
-		return err
 	}
 	if err := b.Input(ctx, id, []byte(nonce+"\r")); err != nil {
 		return fmt.Errorf("send probe input: %w", err)
@@ -324,7 +333,7 @@ func awaitProbeOutput(ctx context.Context, stream Stream, output *bytes.Buffer, 
 		select {
 		case event, ok := <-stream.Events():
 			if !ok {
-				return fmt.Errorf("%w: probe output ended before %q (output %q)", errArtifactRejected, want, tail(output.Bytes()))
+				return fmt.Errorf("probe output ended before %q (output %q)", want, tail(output.Bytes()))
 			}
 			if event.Kind == OutputEventKindOutput {
 				output.Write(event.Data)

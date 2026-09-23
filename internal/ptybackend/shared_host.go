@@ -542,12 +542,7 @@ func (b *WorkerBackend) notifySharedHostSessionLost(session *workerSession) {
 	session.evictionStarted = true
 	session.mu.Unlock()
 	if notifyExit {
-		b.hooksMu.RLock()
-		onExit := b.onExit
-		b.hooksMu.RUnlock()
-		if onExit != nil {
-			go onExit(ExitInfo{ID: session.SessionID, ExitCode: 1, Signal: "worker_unreachable", LifecycleID: session.LifecycleID})
-		}
+		b.reportExit(session, 1, "worker_unreachable")
 	}
 	go b.forceSessionEviction(session)
 }

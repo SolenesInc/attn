@@ -33,6 +33,7 @@ import (
 
 const (
 	defaultRPCTimeout       = 5 * time.Second
+	probeSessionPrefix      = "probe-"
 	killRPCTimeout          = 15 * time.Second
 	livenessRPCTimeout      = 2 * time.Second
 	reclaimRPCTimeout       = 3 * time.Second
@@ -416,6 +417,34 @@ func (b *WorkerBackend) SetStateHandler(handler func(sessionID string, obs pty.O
 	b.onState = handler
 }
 
+func isProbeSession(sessionID string) bool {
+	return strings.HasPrefix(sessionID, probeSessionPrefix)
+}
+
+func (b *WorkerBackend) reportState(session *workerSession, observation pty.Observation) {
+	if isProbeSession(session.SessionID) {
+		return
+	}
+	b.hooksMu.RLock()
+	onState := b.onState
+	b.hooksMu.RUnlock()
+	if onState != nil {
+		onState(session.SessionID, observation)
+	}
+}
+
+func (b *WorkerBackend) reportExit(session *workerSession, exitCode int, signal string) {
+	if isProbeSession(session.SessionID) {
+		return
+	}
+	b.hooksMu.RLock()
+	onExit := b.onExit
+	b.hooksMu.RUnlock()
+	if onExit != nil {
+		go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: signal, LifecycleID: session.LifecycleID})
+	}
+}
+
 func (b *WorkerBackend) Probe(ctx context.Context) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -433,7 +462,7 @@ func (b *WorkerBackend) Probe(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("generate probe session id: %w", err)
 	}
-	probeSessionID := "probe-" + suffix
+	probeSessionID := probeSessionPrefix + suffix
 	spawnCtx, cancelSpawn := context.WithTimeout(ctx, probeTimeout)
 	defer cancelSpawn()
 	if err := b.Spawn(spawnCtx, SpawnOptions{
@@ -2242,12 +2271,7 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 							continue
 						}
 						b.cfg.Logf("worker backend poller: session %s unreachable for %s; forcing exit", session.SessionID, pollerUnreachableAfter)
-						b.hooksMu.RLock()
-						onExit := b.onExit
-						b.hooksMu.RUnlock()
-						if onExit != nil {
-							go onExit(ExitInfo{ID: session.SessionID, ExitCode: 1, Signal: "worker_unreachable", LifecycleID: session.LifecycleID})
-						}
+						b.reportExit(session, 1, "worker_unreachable")
 						b.forceSessionEviction(session)
 						return
 					}
@@ -2289,26 +2313,16 @@ func (b *WorkerBackend) startPoller(session *workerSession) {
 				session.mu.Unlock()
 
 				if stateChanged {
-					b.hooksMu.RLock()
-					onState := b.onState
-					b.hooksMu.RUnlock()
-					if onState != nil {
-						onState(session.SessionID, pty.Observation{
-							Source: pty.SourceWorkerInfo,
-							Claim:  newState,
-							Detail: "worker info poll",
-							At:     now,
-						})
-					}
+					b.reportState(session, pty.Observation{
+						Source: pty.SourceWorkerInfo,
+						Claim:  newState,
+						Detail: "worker info poll",
+						At:     now,
+					})
 				}
 
 				if exitNow {
-					b.hooksMu.RLock()
-					onExit := b.onExit
-					b.hooksMu.RUnlock()
-					if onExit != nil {
-						go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: exitSignal, LifecycleID: session.LifecycleID})
-					}
+					b.reportExit(session, exitCode, exitSignal)
 				}
 			}
 		}
@@ -2471,12 +2485,7 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 		now := time.Now()
 		observation := ptyworker.ObservationFromEvent(evt, state, now)
 
-		b.hooksMu.RLock()
-		onState := b.onState
-		b.hooksMu.RUnlock()
-		if onState != nil {
-			onState(session.SessionID, observation)
-		}
+		b.reportState(session, observation)
 	case ptyworker.EventExit:
 		session.mu.Lock()
 		if session.exitNotified {
@@ -2494,12 +2503,7 @@ func (b *WorkerBackend) handleLifecycleEvent(session *workerSession, evt ptywork
 		if evt.ExitSignal != nil {
 			exitSignal = *evt.ExitSignal
 		}
-		b.hooksMu.RLock()
-		onExit := b.onExit
-		b.hooksMu.RUnlock()
-		if onExit != nil {
-			go onExit(ExitInfo{ID: session.SessionID, ExitCode: exitCode, Signal: exitSignal, LifecycleID: session.LifecycleID})
-		}
+		b.reportExit(session, exitCode, exitSignal)
 	case ptyworker.EventTeardownEscalated:
 		if b.cfg.Logf == nil || evt.Reason == nil || evt.ExitSignal == nil {
 			return

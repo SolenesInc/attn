@@ -532,7 +532,7 @@ func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spawnCat(t, first, sharedHostProbePrefix+"left-behind", root)
+	spawnCat(t, first, probeSessionPrefix+"left-behind", root)
 	spawnCat(t, first, "user-terminal", root)
 	if err := first.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
@@ -552,5 +552,56 @@ func TestSharedHost_RecoveryRemovesAnAbandonedProbe(t *testing.T) {
 	}
 	if err := second.Remove(context.Background(), "user-terminal"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSharedHost_ProbeChildThatExitsRejectsTheBuildWithoutReportingTheProbe(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-mute-")
+	stopHostsAtCleanup(t, root)
+	cfg := WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-mute", BinaryPath: binary}
+	good, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := good.Probe(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_ = good.Shutdown(context.Background())
+
+	mute := filepath.Join(root, "mute-probe-host")
+	script := "#!/bin/sh\nif [ \"$1\" = " + ptyhost.ProbeChildFlag + " ]; then exit 0; fi\nexec '" + binary + "' \"$@\"\n"
+	if err := os.WriteFile(mute, []byte(script), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var rejections int
+	cfg.BinaryPath = mute
+	cfg.OnSharedArtifactRejected = func(SharedArtifactRejection) { rejections++ }
+	backend, err := NewSharedHost(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+	exits := make(chan string, 8)
+	backend.SetExitHandler(func(info ExitInfo) { exits <- info.ID })
+
+	if err := backend.ValidateSharedCandidate(context.Background(), false); err == nil {
+		t.Fatal("a build whose probe child never answers passed validation")
+	}
+	if rejections != 1 || backend.SharedCandidatePending() {
+		t.Fatalf("a build whose probe child exits was not rejected: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
+	}
+
+	if err := backend.Spawn(context.Background(), SpawnOptions{
+		ID: "exits-at-once", CWD: root, Agent: "lifecycle-probe", ExternalCommand: []string{"/bin/true"}, Cols: 80, Rows: 24,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for id := range exits {
+		if isProbeSession(id) {
+			t.Fatalf("the validation probe %s was reported as a session exit", id)
+		}
+		if id == "exits-at-once" {
+			break
+		}
 	}
 }
