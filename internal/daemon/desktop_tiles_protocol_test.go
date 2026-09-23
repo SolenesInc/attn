@@ -8,6 +8,7 @@ import (
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -483,5 +484,28 @@ func TestTileContentAlwaysFollowsTheArrangementItBelongsTo(t *testing.T) {
 	}
 	if contents == 0 {
 		t.Fatal("no tile content was sent at all")
+	}
+}
+
+func TestAnOutpostSendsNoDesktopTileContent(t *testing.T) {
+	w := newProfilesTestDaemonEnrolledAt(t, "d-0123456789abcdef0123456789abcdef")
+	client, initial := w.connect("")
+	profileID := protocol.Deref(initial.SelectedProfileID)
+	desktop := initial.Desktops[0]
+	notes := filepath.Join(t.TempDir(), "notes.md")
+	if err := os.WriteFile(notes, []byte("# from before enrollment"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.d.store.UpdateDesktopArrangement(desktop.ID, int64(desktop.Revision), func(current profiles.Desktop) (profiles.Desktop, error) {
+		return dockTileOnDesktop(current, desktopTileDock{tileID: "tile-md", tileKind: "markdown", params: notes, edge: "right"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	w.d.publishArrangementChanged(profileID)
+	w.d.deliverDesktopTileContent()
+
+	if got := tileContents(t, client); len(got) != 0 {
+		t.Fatalf("an outpost streamed desktop tile content %v", contentsOf(got))
 	}
 }

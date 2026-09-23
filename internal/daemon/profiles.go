@@ -190,10 +190,7 @@ func (d *Daemon) fillInitialProfileState(client *wsClient, event *protocol.Initi
 	}
 	event.SelectedProfileID = protocol.Ptr(selected)
 	event.Desktops = wire
-	if d.requireHome("profiles and desktops") != nil {
-		return nil
-	}
-	return markdownTilesOnCurrentDesktop(profile, desktops)
+	return d.shownMarkdownTiles(profile, desktops)
 }
 
 func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, run func() (profileActionOutcome, error)) {
@@ -479,7 +476,7 @@ func (d *Daemon) projectProfileArrangementChanged(ev bus.Event) {
 		Profile:  protocolProfile(profile),
 		Desktops: wire,
 	}
-	shown := markdownTilesOnCurrentDesktop(profile, desktops)
+	shown := d.shownMarkdownTiles(profile, desktops)
 	d.wsHub.SendArrangementToMatchingClients(message, func(client *wsClient) bool {
 		return client.selectedProfile() == profile.ID
 	}, func(*wsClient) []desktopMarkdownTile { return shown })

@@ -49,7 +49,10 @@ func (d *Daemon) nudgeDesktopTileContent() {
 	}
 }
 
-func markdownTilesOnCurrentDesktop(profile profiles.Profile, desktops []profiles.Desktop) []desktopMarkdownTile {
+func (d *Daemon) shownMarkdownTiles(profile profiles.Profile, desktops []profiles.Desktop) []desktopMarkdownTile {
+	if d.requireHome("profiles and desktops") != nil {
+		return nil
+	}
 	var tiles []desktopMarkdownTile
 	for _, desktop := range desktops {
 		if desktop.ID != profile.CurrentDesktopID {
