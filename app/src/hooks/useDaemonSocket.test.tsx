@@ -2934,11 +2934,10 @@ describe('useDaemonSocket seed resume request/result', () => {
       request_id: sent.request_id,
       success: true,
       session_id: 'sess-1',
-      workspace_id: 'workspace-sess-1',
+      profile_id: 'profile-default',
     });
     await expect(promise).resolves.toEqual({
       sessionId: 'sess-1',
-      workspaceId: 'workspace-sess-1',
       alreadyRunning: false,
     });
     unmount();

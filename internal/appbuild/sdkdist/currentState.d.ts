@@ -77,6 +77,7 @@ export interface Session {
     readonly nudge_fires_at?: string;
     readonly parent_session_id?: string;
     readonly pinned_at?: string;
+    readonly profile_id: string;
     readonly pull_requests?: readonly SessionPullRequest[];
     readonly repository?: string;
     readonly seed_id?: string;
@@ -277,6 +278,7 @@ export interface CrewMember {
     readonly home_dir: string;
     readonly id: string;
     readonly model?: string;
+    readonly profile_id: string;
     readonly resolved_agent: string;
     readonly resolved_effort?: string;
     readonly resolved_model?: string;

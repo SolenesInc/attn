@@ -98,9 +98,7 @@ func TestSessionShowRendersTheCloseAndItsReason(t *testing.T) {
 			Actions:        []protocol.SessionReopenAction{protocol.SessionReopenActionRecreateWorktreeAndReopen},
 			DirectoryState: "missing",
 			BranchState:    protocol.Ptr("local"),
-			WorkspaceID:    "workspace-sess-1",
-			WorkspacePlan:  "create",
-			PanePlan:       "add",
+			ProfileID:      "profile-default",
 		},
 	})
 	out := buf.String()

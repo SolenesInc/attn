@@ -3,10 +3,11 @@ package daemon
 import (
 	"strings"
 
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func (d *Daemon) resolveSpawnParent(spawnedFrom, workspaceID string, isShell bool) string {
+func (d *Daemon) resolveSpawnParent(spawnedFrom string, profile profiles.Profile, placement *launchPlacement, isShell bool) string {
 	if d == nil || d.store == nil || !isShell {
 		return ""
 	}
@@ -29,7 +30,18 @@ func (d *Daemon) resolveSpawnParent(spawnedFrom, workspaceID string, isShell boo
 	if parent == nil {
 		return ""
 	}
-	if strings.TrimSpace(parent.WorkspaceID) != strings.TrimSpace(workspaceID) {
+	if placement == nil {
+		return ""
+	}
+	parentPlacement, placed, err := d.store.SessionPlacement(parent.ID)
+	if err != nil || !placed {
+		return ""
+	}
+	targetDesktopID := placement.desktopID
+	if targetDesktopID == "" {
+		targetDesktopID = profile.CurrentDesktopID
+	}
+	if parentPlacement.DesktopID != targetDesktopID {
 		return ""
 	}
 	return parent.ID

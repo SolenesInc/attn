@@ -499,7 +499,7 @@ func (c ContinuationContract) Equal(other ContinuationContract) bool {
 	return leftErr == nil && rightErr == nil && string(leftJSON) == string(rightJSON)
 }
 
-type DeliveryIDs struct{ SeedID, SessionID, WorkspaceID, PaneID string }
+type DeliveryIDs struct{ SeedID, SessionID, ProfileID string }
 type WorkRequest struct {
 	RunID, DefinitionID, SubjectKey, ContinuityKey, Provider string
 	Prompt                                                   string
@@ -524,8 +524,8 @@ type ResolvedLocation struct {
 	ProviderRef      string           `json:"provider_ref,omitempty"`
 }
 type DeliveryResult struct {
-	SeedID, SessionID, WorkspaceID, Directory, Revision, Mode string
-	Resolved                                                  json.RawMessage
+	SeedID, SessionID, ProfileID, Directory, Revision, Mode string
+	Resolved                                                json.RawMessage
 }
 type Deliverer interface {
 	Deliver(context.Context, WorkRequest) (DeliveryResult, error)

@@ -214,6 +214,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
 		if existing := s.sessions[session.ID]; existing != nil {
+			if existing.ProfileID != "" {
+				stored.ProfileID = existing.ProfileID
+			}
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
 			}
@@ -260,14 +263,15 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 	}
 	_, err = s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, todos, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			endpoint_id = excluded.endpoint_id,
 			workspace_id = excluded.workspace_id,
+			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
 			branch = excluded.branch,
 			is_worktree = excluded.is_worktree,
 			main_repo = excluded.main_repo,
@@ -288,6 +292,7 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 		session.Directory,
 		protocol.Deref(session.EndpointID),
 		session.WorkspaceID,
+		session.ProfileID,
 		protocol.Deref(session.Branch),
 		boolToInt(protocol.Deref(session.IsWorktree)),
 		protocol.Deref(session.MainRepo),
@@ -322,7 +327,7 @@ func (s *Store) Get(id string) *protocol.Session {
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -330,6 +335,7 @@ func (s *Store) Get(id string) *protocol.Session {
 		&session.Directory,
 		&endpointID,
 		&workspaceID,
+		&session.ProfileID,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -485,11 +491,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -513,6 +519,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.Directory,
 			&endpointID,
 			&workspaceID,
+			&session.ProfileID,
 			&branch,
 			&isWorktree,
 			&mainRepo,

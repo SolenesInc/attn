@@ -206,6 +206,7 @@ model Session {
   directory: string;
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
   workspace_id: string;         // Owning workspace
+  profile_id: string;           // The profile this agent belongs to; set at creation and changed only by a move
   workspace_muted?: boolean;    // True when the owning workspace is hidden from normal sidebar/attention surfaces
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
@@ -804,20 +805,6 @@ model ClientHelloMessage {
   profile_id?: string;
 }
 
-model RegisterMessage {
-  cmd: "register";
-  id: string;
-  label?: string;
-  agent?: string;               // Optional for registered plugin IDs
-  dir: string;
-  workspace_id: string;
-  // The crew member this session launches as. The daemon resolves it against
-  // the registry and stamps the binding — identity is the invocation — or
-  // refuses the whole registration: an unknown name, an outpost daemon, or a
-  // member whose day is already live all fail here, before the agent runs.
-  member?: string;
-}
-
 model UnregisterMessage {
   cmd: "unregister";
   id: string;
@@ -952,6 +939,10 @@ model SessionReopenMessage {
   action?: SessionReopenAction;
   // Where to start, for `start_fresh_elsewhere`.
   directory?: string;
+  // The profile to reopen into. Required when the session's recorded profile
+  // was deleted, and refused when it names another profile than a live
+  // recorded one: membership changes only through a move.
+  profile_id?: string;
 }
 
 // Replays the daemon's per-session ring of state observations so a wrong color
@@ -2268,6 +2259,9 @@ model AutomationApplyMessage {
   cmd: "automation_apply";
   definition_yaml: string;
   request_id?: string;
+  // The profile a new definition belongs to; the most recently used profile
+  // when absent. An existing definition keeps its profile.
+  profile_id?: string;
   expected_id?: string;
   expected_revision?: int32;
 }
@@ -2340,7 +2334,8 @@ model SpawnSessionMessage {
   id: string;
   cwd: string;
   endpoint_id?: string;
-  workspace_id: string;     // Required owner for agent sessions
+  profile_id: string;       // The profile the session belongs to; refused before any side effect when missing or deleted
+  placement?: SessionPlacement; // Absent leaves a new session unplaced and an existing one where it is
   agent: string;            // Built-in ID, "shell", or registered plugin driver ID
   cols: int32;
   rows: int32;
@@ -2369,6 +2364,14 @@ model SpawnSessionMessage {
   copilot_executable?: string; // Backward compatibility
   `model`?: string;            // Pin the launched agent's model; empty = agent default (chief launches fall back to chief_model_<agent>)
   effort?: string;             // Pin the launched agent's reasoning effort; empty = agent default
+}
+
+// Where a spawned session's pane goes, resolved by the daemon when the session
+// is committed. The desktop must belong to the spawn's profile.
+model SessionPlacement {
+  desktop_id?: string;      // Absent: the profile's current desktop
+  anchor_pane_id?: string;  // Absent: that desktop's active pane
+  direction?: LayoutSplitDirection;
 }
 
 model AttachSessionMessage {
@@ -4248,7 +4251,6 @@ model AutomationRunSummary {
   cancel_reason?: string;
   seed_id?: string;
   session_id?: string;
-  pane_id?: string;
   created_at: string;
   updated_at: string;
   delivered_at?: string;
@@ -5629,7 +5631,7 @@ model SeedResumeResultMessage {
   "success": boolean;
   "error"?: string;
   "session_id"?: string;
-  "workspace_id"?: string;
+  "profile_id"?: string;
   "already_running"?: boolean;
 }
 
@@ -6867,6 +6869,7 @@ model CrewListMessage {
 // One registered crew member. Paths point at the canonical files.
 model CrewMember {
   id: string;
+  profile_id: string; // The profile the member belongs to; it wakes only there
   revision: safeint;
   charter_path: string;
   home_dir: string;
@@ -7007,6 +7010,12 @@ model CrewWakeMessage {
   // The harness to launch; the daemon's default agent when absent.
   agent?: string;
   request_id?: string; // set by the WS frontend to correlate the result event
+  // The profile the wake is asked from: the app's selected profile. A member of
+  // another profile is refused.
+  profile_id?: string;
+  // The calling session, for a wake asked by an agent; its profile applies as
+  // profile_id does.
+  source_session_id?: string;
 }
 
 // CrewWakeResultMessage replies to a websocket crew_wake, correlated by
@@ -7020,7 +7029,7 @@ model CrewWakeResultMessage {
   error?: string;
   member?: string;
   session_id?: string;
-  workspace_id?: string;
+  profile_id?: string;
   already_awake?: boolean;
   // Present when wake found a stale binding, released it, and started this
   // fresh day. The caller names the repair instead of silently focusing a
@@ -7031,7 +7040,7 @@ model CrewWakeResultMessage {
 model CrewWakeResult {
   member: string;
   session_id: string;
-  workspace_id: string;
+  profile_id: string;
   // True when the member was already awake and session_id is the day that was
   // already running — nothing was launched.
   already_awake: boolean;
@@ -7397,14 +7406,16 @@ model SessionReopen {
   directory_state: string;
   // local | remote_only | gone | merged | unknown
   branch_state?: string;
-  workspace_id: string;
-  workspace_plan: string; // reuse | create
-  pane_plan: string;      // reuse | add
+  // The profile the session reopens into, unplaced: its recorded profile.
+  profile_id: string;
+  // True when the recorded profile was deleted, so reopening needs an
+  // explicit destination profile.
+  profile_deleted: boolean;
 }
 
 model SessionReopenResult {
   session_id: string;
-  workspace_id: string;
+  profile_id: string;
   directory: string;
   action: SessionReopenAction;
   // The session was already running; nothing was reopened.
@@ -7415,7 +7426,7 @@ model SessionReopenResult {
 model DelegateResult {
   seed_id: string;
   session_id: string;
-  workspace_id?: string; // Internal pane placement; CLI output does not depend on it.
+  profile_id?: string;
   directory: string;
   branch?: string;
   checkout: string; // reused | created

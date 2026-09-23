@@ -44,15 +44,19 @@ type reopenSession struct {
 	CostCursor string
 	NoIntent   bool
 	Intent     *store.LaunchIntent
+	ProfileID  string
 }
 
 func closeReopenSession(t *testing.T, d *Daemon, session reopenSession) {
 	t.Helper()
 	now := protocol.TimestampNow().String()
+	if session.ProfileID == "" {
+		session.ProfileID = defaultProfileID(t, d.store)
+	}
 	entry := &protocol.Session{
 		ID: session.ID, Label: session.ID,
 		Agent:     protocol.SessionAgent(session.Agent),
-		Directory: session.Directory, WorkspaceID: "workspace-" + session.ID,
+		Directory: session.Directory, ProfileID: session.ProfileID,
 		State:      protocol.SessionStateIdle,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	}
@@ -150,7 +154,7 @@ func TestReopeningALiveSessionChangesNothing(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	addLedgerTestSession(t, d, "running", t.TempDir())
 
-	outcome, err := d.reopenSession("running", "", "")
+	outcome, err := d.reopenSession("running", "", "", "")
 	if err != nil {
 		t.Fatalf("reopenSession(live) error = %v", err)
 	}
@@ -162,7 +166,7 @@ func TestReopeningALiveSessionChangesNothing(t *testing.T) {
 func TestReopeningASessionWithNoLedgerRowSaysWhereToLookInstead(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 
-	_, err := d.reopenSession("never-ran", "", "")
+	_, err := d.reopenSession("never-ran", "", "", "")
 	if err == nil {
 		t.Fatal("reopening an unknown session id succeeded")
 	}
@@ -185,7 +189,7 @@ func TestReopenVerdictOffersOnlyFreshStartWithoutItsLaunchContract(t *testing.T)
 	if !strings.Contains(verdict.Reason, "launch contract") {
 		t.Fatalf("reason = %q, want the missing launch contract named", verdict.Reason)
 	}
-	if _, err := d.reopenSession("missing-contract", protocol.SessionReopenActionStartFreshSamePlace, ""); err != nil {
+	if _, err := d.reopenSession("missing-contract", protocol.SessionReopenActionStartFreshSamePlace, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	spawn, ok := backend.LastSpawn()
@@ -211,7 +215,7 @@ func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
 		Resume: "codex-ledger-conversation", Intent: &intent,
 	})
 
-	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, ""); err != nil {
+	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, "", ""); err != nil {
 		t.Fatal(err)
 	}
 	spawn, ok := backend.LastSpawn()
@@ -506,54 +510,31 @@ func closedWorktreeWithDeletedDirectory(
 	return d, repo, worktree
 }
 
-func TestReopenVerdictLandsInTheOriginalWorkspaceWhenItIsStillThere(t *testing.T) {
-	d := newEnrolledDaemon(t, "")
-	t.Cleanup(d.stopEventBus)
-	writeCodexRolloutFixture(t, "conv-ws")
-	directory := t.TempDir()
-	client := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-kept", Title: "Kept", Directory: directory,
+func TestReopenVerdictLandsInTheRecordedProfile(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
+	writeCodexRolloutFixture(t, "conv-profile")
+	closeReopenSession(t, d, reopenSession{
+		ID: "in-profile", Directory: t.TempDir(), Agent: "codex", Resume: "conv-profile",
 	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-kept",
-		PaneID: protocol.Ptr("pane-in-workspace"), SessionID: "in-workspace", Title: protocol.Ptr("Kept"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane,
-		"workspace-kept", "pane-in-workspace", true)
 
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID: "in-workspace", Label: "kept", Agent: protocol.SessionAgentCodex,
-		Directory: directory, WorkspaceID: "workspace-kept", State: protocol.SessionStateIdle,
-		StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	d.persistResumeSessionID("in-workspace", "conv-ws")
-	d.closeSession("in-workspace", store.SessionClose{By: store.SessionClosedByUser})
-
-	verdict := decidedReopenVerdict(t, d, "in-workspace")
-	if verdict.WorkspaceID != "workspace-kept" || verdict.WorkspacePlan != reopenPlaceReuse {
-		t.Errorf("workspace = %s (%s), want workspace-kept reused", verdict.WorkspaceID, verdict.WorkspacePlan)
-	}
-	if verdict.PanePlan != reopenPlaceReuse {
-		t.Errorf("pane plan = %s, want the surviving pane reused", verdict.PanePlan)
+	verdict := decidedReopenVerdict(t, d, "in-profile")
+	if verdict.ProfileID != defaultProfileID(t, d.store) || verdict.ProfileDeleted {
+		t.Errorf("profile = %q (deleted %v), want the recorded default profile", verdict.ProfileID, verdict.ProfileDeleted)
 	}
 }
 
-func TestReopenVerdictMakesAWorkspaceNamedAfterTheSessionWhenItsOwnIsGone(t *testing.T) {
+func TestReopenVerdictNamesADeletedProfile(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-nows")
+	writeCodexRolloutFixture(t, "conv-gone-profile")
+	work := createTestProfile(t, d.store, "Work")
 	closeReopenSession(t, d, reopenSession{
-		ID: "no-workspace", Directory: t.TempDir(), Agent: "codex", Resume: "conv-nows",
+		ID: "gone-profile", Directory: t.TempDir(), Agent: "codex", Resume: "conv-gone-profile", ProfileID: work.ID,
 	})
+	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
 
-	verdict := decidedReopenVerdict(t, d, "no-workspace")
-	if verdict.WorkspaceID != "workspace-no-workspace" || verdict.WorkspacePlan != reopenPlaceCreate {
-		t.Errorf("workspace = %s (%s), want one created and named after the session",
-			verdict.WorkspaceID, verdict.WorkspacePlan)
-	}
-	if verdict.PanePlan != reopenPlaceAdd {
-		t.Errorf("pane plan = %s, want a pane added", verdict.PanePlan)
+	verdict := decidedReopenVerdict(t, d, "gone-profile")
+	if verdict.ProfileID != work.ID || !verdict.ProfileDeleted {
+		t.Errorf("profile = %q (deleted %v), want the deleted Work profile named", verdict.ProfileID, verdict.ProfileDeleted)
 	}
 }
 

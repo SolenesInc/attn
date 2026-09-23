@@ -45,7 +45,7 @@ func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 	addTestWorkspace(d, "workspace-s1", dir)
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude,
-		Directory: dir, WorkspaceID: "workspace-s1",
+		Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	d.workspaces.associateSession("s1", "workspace-s1", "original")
@@ -64,7 +64,7 @@ func TestDaemon_HandleRenameSession_PersistsAndSurvivesRespawn(t *testing.T) {
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		Cmd: protocol.CmdSpawnSession, ID: "s1", Cwd: dir, Cols: 80, Rows: 24,
-		Agent: "claude", WorkspaceID: "workspace-s1", Label: protocol.Ptr("original"),
+		Agent: "claude", ProfileID: defaultProfileID(t, d.store), Label: protocol.Ptr("original"),
 	})
 	if got := d.store.Get("s1"); got == nil || got.Label != "renamed" {
 		t.Fatalf("label after stale respawn = %+v, want renamed", got)
@@ -132,7 +132,7 @@ func TestDaemon_HandleRenameSession_RejectsEmptyName(t *testing.T) {
 	addTestWorkspace(d, "workspace-s1", dir)
 	d.store.Add(&protocol.Session{
 		ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude,
-		Directory: dir, WorkspaceID: "workspace-s1",
+		Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 
@@ -153,7 +153,7 @@ func TestRenameSessionOverTheUnixSocketAppliesTheNameCap(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
 	addTestWorkspace(d, "workspace-s1", dir)
-	d.store.Add(&protocol.Session{ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1"})
+	d.store.Add(&protocol.Session{ID: "s1", Label: "original", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store)})
 
 	server, client := net.Pipe()
 	t.Cleanup(func() { _ = server.Close(); _ = client.Close() })
@@ -190,7 +190,7 @@ func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	dir := t.TempDir()
 	addTestWorkspace(d, "workspace-s1", dir)
-	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1"})
+	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store)})
 	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	endpoint, err := d.hubManager.AddEndpoint("remote", "remote.example.test", "")
 	if err != nil {

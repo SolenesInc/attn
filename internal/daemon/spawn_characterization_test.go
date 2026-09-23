@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 const spawnProbeReadDeadline = 250 * time.Millisecond
@@ -31,8 +31,8 @@ func newSpawnCharacterizationDaemonOn(t *testing.T, d *Daemon) (*Daemon, *fakeSp
 	return d, backend, client, cwd
 }
 
-func spawnCharacterizationMessage(id, workspaceID, cwd string) *protocol.SpawnSessionMessage {
-	return &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, Cwd: cwd, Agent: protocol.AgentShellValue, WorkspaceID: workspaceID, Cols: 80, Rows: 24}
+func spawnCharacterizationMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage {
+	return &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: id, Cwd: cwd, Agent: protocol.AgentShellValue, ProfileID: profileID, Cols: 80, Rows: 24}
 }
 
 func assertNoSpawnCharacterizationSession(t *testing.T, d *Daemon, backend *fakeSpawnBackend, id string) {
@@ -47,8 +47,7 @@ func assertNoSpawnCharacterizationSession(t *testing.T, d *Daemon, backend *fake
 
 func TestSpawnCharacterizationRejectsUnknownAgent(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("unknown-agent", "workspace", cwd)
+	msg := spawnCharacterizationMessage("unknown-agent", defaultProfileID(t, d.store), cwd)
 	msg.Agent = "no-such-agent"
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, false)
@@ -57,8 +56,7 @@ func TestSpawnCharacterizationRejectsUnknownAgent(t *testing.T) {
 
 func TestSpawnCharacterizationRejectsShellInitialPrompt(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("shell-prompt", "workspace", cwd)
+	msg := spawnCharacterizationMessage("shell-prompt", defaultProfileID(t, d.store), cwd)
 	msg.InitialPrompt = protocol.Ptr("hello")
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, false)
@@ -67,8 +65,7 @@ func TestSpawnCharacterizationRejectsShellInitialPrompt(t *testing.T) {
 
 func TestSpawnCharacterizationRejectsZeroColumns(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("zero-columns", "workspace", cwd)
+	msg := spawnCharacterizationMessage("zero-columns", defaultProfileID(t, d.store), cwd)
 	msg.Cols = 0
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, false)
@@ -77,35 +74,52 @@ func TestSpawnCharacterizationRejectsZeroColumns(t *testing.T) {
 
 func TestSpawnCharacterizationRejectsOversizedDimensions(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("large-dimensions", "workspace", cwd)
+	msg := spawnCharacterizationMessage("large-dimensions", defaultProfileID(t, d.store), cwd)
 	msg.Cols, msg.Rows = maxPTYDimValue+1, maxPTYDimValue+1
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, false)
 	assertNoSpawnCharacterizationSession(t, d, backend, msg.ID)
 }
 
-func TestSpawnCharacterizationUnknownWorkspaceFailsPrecreatedPane(t *testing.T) {
+func TestSpawnCharacterizationRefusesAMissingOrDeletedProfileBeforeAnySideEffect(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	const workspaceID, sessionID, paneID = "workspace-created-then-removed", "unknown-workspace-pane", "pane-unknown-workspace"
-	addTestWorkspace(d, workspaceID, cwd)
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: workspaceID, PaneID: protocol.Ptr(paneID), SessionID: sessionID})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	d.store.RemoveWorkspace(workspaceID)
-	if err := d.store.SaveWorkspaceLayout(*layout); err != nil {
-		t.Fatalf("restore pane layout without workspace: %v", err)
+	work := createTestProfile(t, d.store, "Work")
+	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
+	for _, tt := range []struct {
+		name, profileID, want string
+	}{
+		{"no profile", "", "missing profile_id"},
+		{"unknown profile", "profile-nowhere", "profile-nowhere"},
+		{"deleted profile", work.ID, "was deleted"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			msg := spawnCharacterizationMessage("refused-"+strings.ReplaceAll(tt.name, " ", "-"), tt.profileID, cwd)
+			d.handleSpawnSession(client, msg)
+			result := expectSpawnResult(t, client, msg.ID, false)
+			if !strings.Contains(protocol.Deref(result.Error), tt.want) {
+				t.Fatalf("refusal = %q, want it to name %q", protocol.Deref(result.Error), tt.want)
+			}
+			assertNoSpawnCharacterizationSession(t, d, backend, msg.ID)
+		})
 	}
-	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, workspaceID, cwd))
-	expectCommandError(t, client, protocol.CmdSpawnSession, "unknown workspace")
-	expectPaneStatus(t, d, workspaceID, paneID, workspacelayout.PaneStatusFailed, "unknown workspace")
-	assertNoSpawnCharacterizationSession(t, d, backend, sessionID)
+}
+
+func TestSpawnCharacterizationRefusesADesktopOfAnotherProfile(t *testing.T) {
+	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
+	work := createTestProfile(t, d.store, "Work")
+	msg := spawnCharacterizationMessage("cross-profile", defaultProfileID(t, d.store), cwd)
+	msg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(work.CurrentDesktopID)}
+	d.handleSpawnSession(client, msg)
+	result := expectSpawnResult(t, client, msg.ID, false)
+	if !strings.Contains(protocol.Deref(result.Error), work.ID) {
+		t.Fatalf("refusal = %q, want it to name profile %s", protocol.Deref(result.Error), work.ID)
+	}
+	assertNoSpawnCharacterizationSession(t, d, backend, msg.ID)
 }
 
 func TestSpawnCharacterizationRejectsUnattendedContractMismatch(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("contract-mismatch", "workspace", cwd)
+	msg := spawnCharacterizationMessage("contract-mismatch", defaultProfileID(t, d.store), cwd)
 	msg.Agent, msg.Model, msg.Effort, msg.Executable = "claude", protocol.Ptr("wrong-model"), protocol.Ptr("high"), protocol.Ptr("/opt/claude")
 	policy := internalSpawnPolicy{unattendedLaunch: launchcontract.UnattendedLaunchSpec{Agent: "claude", Model: "right-model", Effort: "high", Executable: "/opt/claude", ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAuto, DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh}}
 	d.handleSpawnSessionWithPolicy(client, msg, policy)
@@ -119,8 +133,7 @@ func TestSpawnCharacterizationDefaultsLabelAndRecordsRecentLocation(t *testing.T
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("label-default", "workspace", cwd)
+	msg := spawnCharacterizationMessage("label-default", defaultProfileID(t, d.store), cwd)
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, true)
 	if got := d.store.Get(msg.ID).Label; got != "myproj" {
@@ -134,21 +147,44 @@ func TestSpawnCharacterizationDefaultsLabelAndRecordsRecentLocation(t *testing.T
 	t.Fatalf("recent locations did not include %q", cwd)
 }
 
-func TestSpawnCharacterizationAssociatesSessionWithWorkspace(t *testing.T) {
+func TestSpawnCharacterizationStampsTheProfileAndPlacesBesideTheAnchor(t *testing.T) {
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("workspace-association", "workspace", cwd)
-	d.handleSpawnSession(client, msg)
-	expectSpawnResult(t, client, msg.ID, true)
-	if got := d.workspaces.workspaceIDForSession(msg.ID); got != "workspace" {
-		t.Fatalf("workspace registry association = %q, want workspace", got)
+	profileID := defaultProfileID(t, d.store)
+	first := spawnCharacterizationMessage("first", profileID, cwd)
+	first.Placement = &protocol.SessionPlacement{}
+	d.handleSpawnSession(client, first)
+	expectSpawnResult(t, client, first.ID, true)
+	firstPlacement, placed, err := d.store.SessionPlacement(first.ID)
+	if err != nil || !placed {
+		t.Fatalf("first placement placed=%v err=%v, want it on the current desktop", placed, err)
+	}
+
+	second := spawnCharacterizationMessage("second", profileID, cwd)
+	second.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(firstPlacement.DesktopID), AnchorPaneID: protocol.Ptr(firstPlacement.PaneID)}
+	d.handleSpawnSession(client, second)
+	expectSpawnResult(t, client, second.ID, true)
+	if got := d.store.Get(second.ID).ProfileID; got != profileID {
+		t.Fatalf("stored profile = %q, want %q", got, profileID)
+	}
+	desktop, err := d.store.GetDesktop(firstPlacement.DesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := layouttree.PaneIDs(desktop.Tree); len(got) != 2 || desktop.ActivePaneID == firstPlacement.PaneID {
+		t.Fatalf("desktop panes = %v active=%s, want the second agent split beside the first and focused", got, desktop.ActivePaneID)
+	}
+
+	unplaced := spawnCharacterizationMessage("unplaced", profileID, cwd)
+	d.handleSpawnSession(client, unplaced)
+	expectSpawnResult(t, client, unplaced.ID, true)
+	if _, placed, _ := d.store.SessionPlacement(unplaced.ID); placed {
+		t.Fatal("a spawn without a placement was placed")
 	}
 }
 
 func TestSpawnCharacterizationPersistsCodexResumeID(t *testing.T) {
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("codex-resume", "workspace", cwd)
+	msg := spawnCharacterizationMessage("codex-resume", defaultProfileID(t, d.store), cwd)
 	msg.Agent, msg.ResumeSessionID = "codex", protocol.Ptr("native-codex-resume")
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, true)
@@ -159,7 +195,6 @@ func TestSpawnCharacterizationPersistsCodexResumeID(t *testing.T) {
 
 func TestSpawnCharacterizationConsumesQueuedConversationObservation(t *testing.T) {
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
 	const sessionID = "queued-resume"
 	transcriptPath := filepath.Join(t.TempDir(), "rollout-queued-native-id.jsonl")
 	if err := os.WriteFile(transcriptPath, []byte(`{"type":"session_meta","payload":{"id":"queued-native-id"}}`+"\n"), 0o600); err != nil {
@@ -170,7 +205,7 @@ func TestSpawnCharacterizationConsumesQueuedConversationObservation(t *testing.T
 		NativeID:       "queued-native-id",
 		TranscriptPath: transcriptPath,
 	})
-	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, "workspace", cwd))
+	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, defaultProfileID(t, d.store), cwd))
 	expectSpawnResult(t, client, sessionID, true)
 	if got := d.store.GetResumeSessionID(sessionID); got != "queued-native-id" {
 		t.Fatalf("persisted queued resume id = %q, want queued-native-id", got)
@@ -185,10 +220,9 @@ func TestSpawnCharacterizationConsumesQueuedConversationObservation(t *testing.T
 
 func TestSpawnCharacterizationBroadcastsRegistrationThenStateChange(t *testing.T) {
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
 	var events []string
 	d.wsHub.broadcastListener = func(event *protocol.WebSocketEvent) { events = append(events, event.Event) }
-	msg := spawnCharacterizationMessage("broadcast-choice", "workspace", cwd)
+	msg := spawnCharacterizationMessage("broadcast-choice", defaultProfileID(t, d.store), cwd)
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, true)
 	d.ptyBackend = &fakeSpawnBackend{}
@@ -207,7 +241,6 @@ func TestSpawnCharacterizationBroadcastsRegistrationThenStateChange(t *testing.T
 
 func TestSpawnCharacterizationRearmsTicketReconciliation(t *testing.T) {
 	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
 	const sessionID = "ticket-rearm"
 	ticket, err := d.store.CreateTicket(store.Ticket{ID: "ticket-rearm", Title: "Rearm", Assignee: sessionID, Status: store.TicketStatusWorking}, "test", time.Now())
 	if err != nil {
@@ -216,7 +249,7 @@ func TestSpawnCharacterizationRearmsTicketReconciliation(t *testing.T) {
 	if claimed, err := d.store.ClaimTicketReconciliation(ticket.ID, time.Now()); err != nil || !claimed {
 		t.Fatalf("seed reconciliation flag = (%v, %v), want (true, nil)", claimed, err)
 	}
-	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, "workspace", cwd))
+	d.handleSpawnSession(client, spawnCharacterizationMessage(sessionID, defaultProfileID(t, d.store), cwd))
 	expectSpawnResult(t, client, sessionID, true)
 	if claimed, err := d.store.ClaimTicketReconciliation(ticket.ID, time.Now()); err != nil || !claimed {
 		t.Fatalf("rearmed reconciliation flag = (%v, %v), want (true, nil)", claimed, err)
@@ -225,10 +258,9 @@ func TestSpawnCharacterizationRearmsTicketReconciliation(t *testing.T) {
 
 func TestSpawnCharacterizationChiefSettingsFillModelAndEffort(t *testing.T) {
 	d, backend, client, cwd := newSpawnCharacterizationDaemon(t)
-	addTestWorkspace(d, "workspace", cwd)
 	d.store.SetSetting(SettingChiefModelPrefix+"claude", "chief-model")
 	d.store.SetSetting(SettingChiefEffortPrefix+"claude", "chief-effort")
-	msg := spawnCharacterizationMessage("chief-fallback", "workspace", cwd)
+	msg := spawnCharacterizationMessage("chief-fallback", defaultProfileID(t, d.store), cwd)
 	msg.Agent, msg.ChiefOfStaff = "claude", protocol.Ptr(true)
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, true)
@@ -246,8 +278,7 @@ func TestSpawnCharacterizationRejectsPluginChiefWithoutResumeCapability(t *testi
 	plugin, done := startPluginPipe(t, d, "characterization-plugin", nil)
 	defer func() { _ = plugin.Close(); <-done }()
 	registerTestPluginDriver(t, plugin, "characterization", map[string]bool{"launch_instructions": true})
-	addTestWorkspace(d, "workspace", cwd)
-	msg := spawnCharacterizationMessage("plugin-chief-resume", "workspace", cwd)
+	msg := spawnCharacterizationMessage("plugin-chief-resume", defaultProfileID(t, d.store), cwd)
 	msg.Agent, msg.ChiefOfStaff = "characterization", protocol.Ptr(true)
 	d.handleSpawnSession(client, msg)
 	expectSpawnResult(t, client, msg.ID, false)
@@ -263,7 +294,7 @@ func TestSpawnCharacterizationPluginChiefResumeFailureMentionsCapability(t *test
 		defer func() { _ = plugin.Close(); <-done }()
 		registerTestPluginDriver(t, plugin, "characterization-error", map[string]bool{"launch_instructions": true})
 		addTestWorkspace(d, "workspace", cwd)
-		msg := spawnCharacterizationMessage("plugin-chief-error", "workspace", cwd)
+		msg := spawnCharacterizationMessage("plugin-chief-error", defaultProfileID(t, d.store), cwd)
 		msg.Agent, msg.ChiefOfStaff = "characterization-error", protocol.Ptr(true)
 		d.handleSpawnSession(client, msg)
 		outbound := requireOutbound(t, client, "no spawn failure reached the client")
@@ -304,7 +335,7 @@ func TestSpawnCharacterizationAlreadyLivePluginRespawnSkipsPluginPrep(t *testing
 			}
 		}()
 
-		msg := spawnCharacterizationMessage("already-live-plugin", "workspace", cwd)
+		msg := spawnCharacterizationMessage("already-live-plugin", defaultProfileID(t, d.store), cwd)
 		msg.Agent = "characterization-live"
 		d.handleSpawnSession(client, msg)
 		expectSpawnResult(t, client, msg.ID, true)

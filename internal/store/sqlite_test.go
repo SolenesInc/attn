@@ -2027,12 +2027,12 @@ func TestMigration145AdoptsGardenDispatchForAutomationContinuity(t *testing.T) {
 	defer s.Close()
 
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-old000", SessionID: "session-1", ProfileID: "",
 	})
 	if err != nil {
 		t.Fatal(err)

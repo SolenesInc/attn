@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "321"
+const ProtocolVersion = "323"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -38,7 +38,6 @@ const (
 
 const (
 	CmdClientHello                           = "client_hello"
-	CmdRegister                              = "register"
 	CmdDelegate                              = "delegate"
 	CmdDelegationPreferencesGet              = "delegation_preferences_get"
 	CmdDelegationPreferencesSave             = "delegation_preferences_save"

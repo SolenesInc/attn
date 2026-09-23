@@ -33,8 +33,6 @@ type resolvedDelegationLaunch struct {
 
 	Brief                 *string
 	TicketID              *string
-	Placement             *string
-	WorkspaceID           *string
 	Worktree              *protocol.DelegateWorktreeRequest
 	Plot                  *string
 	Handover              *protocol.SeedHandoverRequest
@@ -160,12 +158,10 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		return nil, err
 	}
 	runtime := resolveLaunchInput(msg)
-	runtime.Placement = protocol.Ptr(delegationPlacementNew)
 	runtime.Brief = nil
 	runtime.Plot = nil
 	runtime.Handover = nil
 	runtime.Worktree = nil
-	runtime.WorkspaceID = nil
 	runtime.ParentSeedID = strings.TrimSpace(parentSeedID)
 
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {

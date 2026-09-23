@@ -19,13 +19,13 @@ func respawnDelegatedSession(t *testing.T, d *Daemon, sessionID string) {
 	}
 	client := newWorkspaceProtocolTestClient()
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Cwd:         session.Directory,
-		WorkspaceID: session.WorkspaceID,
-		Agent:       string(session.Agent),
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Cwd:       session.Directory,
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     string(session.Agent),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 }

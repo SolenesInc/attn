@@ -58,11 +58,17 @@ func (d *Daemon) importCrewHomes() {
 			d.logf("crew: import refused stored member %s: %v", crew.DisplayName(member.ID), err)
 		}
 	}
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		d.logf("crew: importing homes needs a profile to put them in: %v", err)
+		return
+	}
 	for _, member := range members {
 		if err := d.validateCrewMemberPaths(member); err != nil {
 			d.logf("crew: import refused member %s: %v", crew.DisplayName(member.ID), err)
 			continue
 		}
+		member.ProfileID = profile.ID
 		if _, err := d.writeCrewMember(*schema, member, docstore.ExpectAbsent); err != nil {
 			if docstore.IsConflict(err) {
 				continue
@@ -72,6 +78,40 @@ func (d *Daemon) importCrewHomes() {
 		}
 		d.publishFact(FactCrewRegistered, member.ID, nil)
 		d.logf("crew: imported member %s from %s", crew.DisplayName(member.ID), member.HomeDir)
+	}
+}
+
+func (d *Daemon) assignCrewProfiles() {
+	if d.store == nil || d.requireHome(crew.Surface) != nil {
+		return
+	}
+	members, _, err := d.readCrewMembersRaw()
+	if err != nil {
+		if !docstore.IsUndeclaredCollection(err) {
+			d.logf("crew: reading members to give them a profile: %v", err)
+		}
+		return
+	}
+	for _, member := range members {
+		if member.ProfileID != "" {
+			continue
+		}
+		profile, err := d.store.MostRecentlyUsedProfile()
+		if err != nil {
+			d.logf("crew: %s has no profile and none can be given: %v", crew.DisplayName(member.ID), err)
+			return
+		}
+		if _, err := d.updateCrewMember(member.ID, func(m *crew.Member) (bool, error) {
+			if m.ProfileID != "" {
+				return false, nil
+			}
+			m.ProfileID = profile.ID
+			return true, nil
+		}); err != nil {
+			d.logf("crew: giving %s profile %s: %v", crew.DisplayName(member.ID), profile.ID, err)
+			continue
+		}
+		d.logf("crew: %s now belongs to profile %s", crew.DisplayName(member.ID), profile.Name)
 	}
 }
 
@@ -483,6 +523,7 @@ func (d *Daemon) sendCrewError(conn net.Conn, verb string, err error) {
 func (d *Daemon) crewMemberWire(member crew.Member, revision int64) protocol.CrewMember {
 	wire := protocol.CrewMember{
 		ID:            member.ID,
+		ProfileID:     member.ProfileID,
 		Revision:      int(revision),
 		CharterPath:   member.CharterPath,
 		HomeDir:       member.HomeDir,

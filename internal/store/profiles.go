@@ -346,6 +346,16 @@ func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, 
 	return profile, desktop, err
 }
 
+func (s *Store) LiveProfile(id string) (profiles.Profile, error) {
+	var profile profiles.Profile
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var err error
+		profile, err = loadLiveProfile(tx, id)
+		return err
+	})
+	return profile, err
+}
+
 func (s *Store) GetProfile(id string) (profiles.Profile, error) {
 	var profile profiles.Profile
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
@@ -916,45 +926,100 @@ func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit
 	return desktop, err
 }
 
+func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
+	anchor := strings.TrimSpace(request.AnchorPaneID)
+	if anchor == "" {
+		anchor = desktop.ActivePaneID
+	}
+	switch {
+	case layouttree.LayoutEmpty(desktop.Tree):
+		desktop.Tree = layouttree.DefaultLayout(paneID)
+	case anchor == "":
+		leaves := layouttree.TileIDs(desktop.Tree)
+		next, ok := layouttree.MoveLeafBetweenLayouts(layouttree.DefaultLayout(paneID), desktop.Tree, paneID, "", newProfileEntityID("split"), request.Direction, false, firstChildRatio(request.NewPaneShare, false), "")
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeInvalid, "desktop %s holds only tiles %v and the new pane could not dock beside them", desktop.ID, leaves)
+		}
+		desktop.Tree = next.TargetLayout
+	default:
+		splitID := newProfileEntityID("split")
+		ratio := firstChildRatio(request.NewPaneShare, false)
+		next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+		}
+		if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
+			next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
+		}
+		desktop.Tree = next
+	}
+	desktop.Panes = append(desktop.Panes, profiles.Pane{
+		PaneID:    paneID,
+		Kind:      profiles.PaneKindAgent,
+		SessionID: strings.TrimSpace(request.SessionID),
+		Title:     strings.TrimSpace(request.Title),
+		Status:    request.Status,
+	})
+	desktop.ActivePaneID = paneID
+	return desktop, nil
+}
+
 func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	desktop, err := s.UpdateDesktopArrangement(request.DesktopID, request.ExpectedRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
-		anchor := strings.TrimSpace(request.AnchorPaneID)
-		if anchor == "" {
-			anchor = desktop.ActivePaneID
+		return placeSessionInTree(desktop, request, paneID)
+	})
+	return desktop, paneID, err
+}
+
+func loadLaunchDesktop(tx *sql.Tx, profile profiles.Profile, desktopID string) (profiles.Desktop, error) {
+	if strings.TrimSpace(desktopID) == "" {
+		desktopID = profile.CurrentDesktopID
+	}
+	desktop, err := loadDesktop(tx, desktopID)
+	if err != nil {
+		return profiles.Desktop{}, err
+	}
+	if desktop.ProfileID != profile.ID {
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not profile %s", desktop.ID, desktop.ProfileID, profile.ID)
+	}
+	return desktop, nil
+}
+
+func (s *Store) LaunchDesktop(profileID, desktopID string) (profiles.Desktop, error) {
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
+			return err
 		}
-		switch {
-		case layouttree.LayoutEmpty(desktop.Tree):
-			desktop.Tree = layouttree.DefaultLayout(paneID)
-		case anchor == "":
-			leaves := layouttree.TileIDs(desktop.Tree)
-			next, ok := layouttree.MoveLeafBetweenLayouts(layouttree.DefaultLayout(paneID), desktop.Tree, paneID, "", newProfileEntityID("split"), request.Direction, false, firstChildRatio(request.NewPaneShare, false), "")
-			if !ok {
-				return desktop, profiles.Errorf(profiles.CodeInvalid, "desktop %s holds only tiles %v and the new pane could not dock beside them", desktop.ID, leaves)
-			}
-			desktop.Tree = next.TargetLayout
-		default:
-			splitID := newProfileEntityID("split")
-			ratio := firstChildRatio(request.NewPaneShare, false)
-			next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
-			if !ok {
-				return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
-			}
-			if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
-				next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
-			}
-			desktop.Tree = next
+		desktop, err = loadLaunchDesktop(tx, profile, desktopID)
+		return err
+	})
+	return desktop, err
+}
+
+func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
+	paneID := newProfileEntityID("pane")
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		profileID, err := openSessionProfileID(tx, request.SessionID)
+		if err != nil {
+			return err
 		}
-		title := strings.TrimSpace(request.Title)
-		desktop.Panes = append(desktop.Panes, profiles.Pane{
-			PaneID:    paneID,
-			Kind:      profiles.PaneKindAgent,
-			SessionID: strings.TrimSpace(request.SessionID),
-			Title:     title,
-			Status:    request.Status,
-		})
-		desktop.ActivePaneID = paneID
-		return desktop, nil
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
+			return err
+		}
+		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
+		if err != nil {
+			return err
+		}
+		desktop, err = placeSessionInTree(current, request, paneID)
+		if err != nil {
+			return err
+		}
+		return writeDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, paneID, err
 }

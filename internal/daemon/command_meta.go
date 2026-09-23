@@ -30,7 +30,6 @@ var CommandMeta = map[string]CommandMetadata{
 	protocol.CmdDelegationPreferencesSave:             commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationModels:                      commandMetadata(ScopeHubLocal, false, false),
 	protocol.CmdDelegationRoles:                       commandMetadata(ScopeHubLocal, false, false),
-	protocol.CmdRegister:                              commandMetadata(ScopeSession, false, true),
 	protocol.CmdSetTicketStatus:                       commandMetadata(ScopeSession, false, true),
 	protocol.CmdTicketInbox:                           commandMetadata(ScopeSession, false, true),
 	protocol.CmdTicketAttach:                          commandMetadata(ScopeSession, false, true),

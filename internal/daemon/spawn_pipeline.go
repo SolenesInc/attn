@@ -14,10 +14,10 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type internalSpawnPolicy struct {
@@ -34,7 +34,8 @@ type spawnRequest struct {
 	hasPluginDriver bool
 	isShell         bool
 	initialPrompt   string
-	workspaceID     string
+	profile         profiles.Profile
+	placement       *launchPlacement
 	existingSession *protocol.Session
 	cwd             string
 	label           string
@@ -137,15 +138,36 @@ func (d *Daemon) validateSpawnPrelock(msg *protocol.SpawnSessionMessage, policy 
 				"agent %q does not support a per-session approval policy or sandbox mode", agent)}
 		}
 	}
-	workspaceID := strings.TrimSpace(msg.WorkspaceID)
-	if workspaceID == "" {
-		return nil, &spawnRejection{commandError: "missing workspace_id"}
+	profile, err := d.liveLaunchProfile(msg.ProfileID)
+	if err != nil {
+		return nil, &spawnRejection{err: err}
 	}
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.setWorkspacePaneStatusForSession(msg.ID, workspacelayout.PaneStatusFailed, "unknown workspace")
-		return nil, &spawnRejection{commandError: "unknown workspace"}
+	placement := requestedLaunchPlacement(msg.Placement)
+	if err := d.checkLaunchPlacement(profile, placement); err != nil {
+		return nil, &spawnRejection{err: err}
 	}
-	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, workspaceID: workspaceID, autoModeDriver: autoModeDriver}, nil
+	return &spawnRequest{msg: msg, policy: policy, agent: agent, pluginDriver: pluginDriver, hasPluginDriver: hasPluginDriver, isShell: isShell, initialPrompt: initialPrompt, profile: profile, placement: placement, autoModeDriver: autoModeDriver}, nil
+}
+
+func (d *Daemon) checkExistingSessionMembership(req *spawnRequest) *spawnRejection {
+	existing := req.existingSession
+	if existing == nil {
+		return nil
+	}
+	if existing.ProfileID != "" && existing.ProfileID != req.profile.ID {
+		return &spawnRejection{err: fmt.Errorf("session %s belongs to profile %s, not %s; membership changes only through a move", existing.ID, existing.ProfileID, req.profile.ID)}
+	}
+	if req.placement == nil {
+		return nil
+	}
+	placement, placed, err := d.store.SessionPlacement(existing.ID)
+	if err != nil {
+		return &spawnRejection{err: fmt.Errorf("read the placement of session %s: %w", existing.ID, err)}
+	}
+	if placed {
+		return &spawnRejection{err: fmt.Errorf("session %s is already placed in pane %s of desktop %s", existing.ID, placement.PaneID, placement.DesktopID)}
+	}
+	return nil
 }
 
 func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
@@ -164,7 +186,10 @@ func (d *Daemon) normalizeSpawnRequest(req *spawnRequest) *spawnRejection {
 	}
 	req.resumeSessionID = protocol.Deref(req.msg.ResumeSessionID)
 	req.driver = agentdriver.Get(req.agent)
-	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.workspaceID, req.isShell)
+	if rejection := d.checkExistingSessionMembership(req); rejection != nil {
+		return rejection
+	}
+	req.parentSessionID = d.resolveSpawnParent(protocol.Deref(req.msg.SpawnedFrom), req.profile, req.placement, req.isShell)
 	if req.parentSessionID == "" && req.existingSession != nil {
 		req.parentSessionID = strings.TrimSpace(protocol.Deref(req.existingSession.ParentSessionID))
 	}
@@ -282,7 +307,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 			params.Metadata = json.RawMessage(metadata)
 		}
 		if req.pluginDriver.Capabilities["launch_instructions"] {
-			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.workspaceID, plan.isChief,
+			instructions, err := d.preparePluginLaunchInstructions(msg.ID, req.profile.ID, plan.isChief,
 				!req.pluginDriver.Capabilities["pull_request_reporting"])
 			if err != nil {
 				d.finishPluginSessionLaunch(msg.ID, false)
@@ -338,7 +363,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		}
 	}
 
-	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
+	plan.launchSession = buildSpawnSessionRecord(msg, req.agent, req.cwd, req.label, req.profile.ID, req.existingSession, req.isShell, req.hasPluginDriver && !req.pluginDriver.Capabilities["state_reporting"], req.parentSessionID)
 	session := plan.launchSession
 	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
 		if req.hasPluginDriver {
@@ -483,19 +508,12 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.observeAgentConversation(pending)
 	}
 	d.store.UpsertRecentLocation(req.cwd)
-	d.associateSessionWithWorkspace(session.ID, req.workspaceID)
-	if req.workspaceID != "" {
-		if _, err := d.ensureWorkspaceSessionPane(req.workspaceID, session.ID, session.Label); err != nil {
-			d.logf("ensure workspace pane for session %s: %v", session.ID, err)
-		}
-	}
-	d.setWorkspacePaneStatusForSession(session.ID, workspacelayout.PaneStatusReady, "")
 	fact := FactSessionRegistered
 	if req.existingSession != nil {
 		fact = FactSessionReregistered
 	}
 	d.publishFact(fact, session.ID, nil)
-	d.recomputeAndBroadcastWorkspaceForSession(session.ID)
+	d.placeLaunchedSession(session, req.placement)
 	if req.hasPluginDriver {
 		if exit := d.finishPluginSessionLaunch(msg.ID, true); exit != nil {
 			d.handlePTYExit(*exit)

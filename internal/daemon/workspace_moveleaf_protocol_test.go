@@ -27,14 +27,14 @@ func addAndSpawnSessionPane(t *testing.T, d *Daemon, client *wsClient, workspace
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr(sessionID),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr(sessionID),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 }
@@ -163,55 +163,6 @@ func TestWorkspaceLayoutMoveLeafToWorkspaceMovesPaneAndSessionOwnership(t *testi
 	}
 	if sourceWorkspace := d.store.GetWorkspace(sourceWorkspaceID); sourceWorkspace != nil {
 		t.Fatalf("empty source workspace still exists: %+v", sourceWorkspace)
-	}
-}
-
-func TestWorkspaceLayoutMoveLeafToWorkspaceBroadcastsLayoutBeforeSessionOwnership(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client := newWorkspaceProtocolTestClient()
-	sourceWorkspaceID := "ws-source-order"
-	targetWorkspaceID := "ws-target-order"
-	sourceCwd := t.TempDir()
-	targetCwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        sourceWorkspaceID,
-		Title:     "Source",
-		Directory: sourceCwd,
-	})
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        targetWorkspaceID,
-		Title:     "Target",
-		Directory: targetCwd,
-	})
-	addAndSpawnSessionPane(t, d, client, sourceWorkspaceID, "s-source-order", "pane-source", "", sourceCwd)
-	addAndSpawnSessionPane(t, d, client, targetWorkspaceID, "s-target-order", "pane-target", "", targetCwd)
-
-	cap := captureBroadcasts(d)
-	d.handleWorkspaceLayoutMoveLeafToWorkspace(client, &protocol.WorkspaceLayoutMoveLeafToWorkspaceMessage{
-		Cmd:               protocol.CmdWorkspaceLayoutMoveLeafToWorkspace,
-		SourceWorkspaceID: sourceWorkspaceID,
-		TargetWorkspaceID: targetWorkspaceID,
-		LeafID:            "pane-source",
-		AnchorID:          protocol.Ptr("pane-target"),
-		Edge:              protocol.LayoutDockEdgeRight,
-	})
-	expectWorkspaceLayoutMoveToWorkspaceResult(t, client, sourceWorkspaceID, targetWorkspaceID, "pane-source", "pane-source", true)
-
-	events := cap.snapshot()
-	if len(events) < 2 {
-		t.Fatalf("expected layout and session broadcasts, got %d: %+v", len(events), events)
-	}
-	first := events[0]
-	if first.Event != protocol.EventWorkspaceLayoutUpdated || first.WorkspaceLayout == nil || first.WorkspaceLayout.WorkspaceID != targetWorkspaceID {
-		t.Fatalf("first broadcast = %+v, want target workspace_layout_updated", first)
-	}
-	second := events[1]
-	if second.Event != protocol.EventSessionStateChanged || second.Session == nil || second.Session.ID != "s-source-order" || second.Session.WorkspaceID != targetWorkspaceID {
-		t.Fatalf("second broadcast = %+v, want moved session_state_changed", second)
 	}
 }
 

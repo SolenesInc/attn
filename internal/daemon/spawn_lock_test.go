@@ -61,26 +61,16 @@ func (b *blockingSpawnBackend) SessionIDs(ctx context.Context) []string {
 	return b.fakeSpawnBackend.SessionIDs(ctx)
 }
 
-func spawnLockMessage(sessionID, workspaceID, cwd string) *protocol.SpawnSessionMessage {
+func spawnLockMessage(sessionID, profileID, cwd string) *protocol.SpawnSessionMessage {
 	return &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: profileID,
+		Cols:      80,
+		Rows:      24,
 	}
-}
-
-func registerSpawnLockWorkspace(t *testing.T, d *Daemon, workspaceID, cwd string) {
-	t.Helper()
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     workspaceID,
-		Directory: cwd,
-	})
 }
 
 func requireSpawnSuccess(t *testing.T, client *wsClient, sessionID string) {
@@ -105,10 +95,8 @@ func TestConcurrentSameSessionSpawnsSpawnOnce(t *testing.T) {
 	d.ptyBackend = backend
 
 	const sessionID = "same-session"
-	workspaceID := "workspace-" + sessionID
 	cwd := t.TempDir()
-	registerSpawnLockWorkspace(t, d, workspaceID, cwd)
-	msg := spawnLockMessage(sessionID, workspaceID, cwd)
+	msg := spawnLockMessage(sessionID, defaultProfileID(t, d.store), cwd)
 	firstClient := spawnTestClient()
 	secondClient := spawnTestClient()
 	firstDone := make(chan struct{})
@@ -176,11 +164,10 @@ func TestDifferentSessionSpawnsDoNotSerialize(t *testing.T) {
 	lockA := d.acquireSpawnLock("session-a")
 	defer lockA()
 	cwd := t.TempDir()
-	registerSpawnLockWorkspace(t, d, "workspace-b", cwd)
 	clientB := spawnTestClient()
 	doneB := make(chan struct{})
 	go func() {
-		d.handleSpawnSession(clientB, spawnLockMessage("session-b", "workspace-b", cwd))
+		d.handleSpawnSession(clientB, spawnLockMessage("session-b", defaultProfileID(t, d.store), cwd))
 		close(doneB)
 	}()
 

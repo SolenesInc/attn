@@ -13,7 +13,7 @@ import (
 
 type seedResumeOutcome struct {
 	SessionID      string
-	WorkspaceID    string
+	ProfileID      string
 	AlreadyRunning bool
 }
 
@@ -89,7 +89,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
 		}
 		return &seedResumeOutcome{
-			SessionID: existing.ID, WorkspaceID: existing.WorkspaceID, AlreadyRunning: true,
+			SessionID: existing.ID, ProfileID: existing.ProfileID, AlreadyRunning: true,
 		}, nil
 	}
 	if !continuation.ResumeAvailable {
@@ -107,10 +107,9 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 			strings.TrimSpace(execution.Agent), strings.TrimSpace(execution.Resume))
 	}
 	reopened, err := d.reopenSessionRuntime(sessionReopenPlan{
-		SessionID:   sessionID,
-		Directory:   execution.Cwd,
-		Title:       seed.Title,
-		WorkspaceID: reopenWorkspaceID(sessionID),
+		SessionID: sessionID,
+		Directory: execution.Cwd,
+		Title:     seed.Title,
 	}, d.newDelegationRollback(), afterSpawn)
 	if err != nil {
 		return nil, err
@@ -120,7 +119,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 	}
 
 	d.logf("resume: reopened seed %q as session %s", seedID, sessionID)
-	return &seedResumeOutcome{SessionID: reopened.SessionID, WorkspaceID: reopened.WorkspaceID}, nil
+	return &seedResumeOutcome{SessionID: reopened.SessionID, ProfileID: reopened.ProfileID}, nil
 }
 
 func (d *Daemon) bindResumedSeed(
@@ -232,7 +231,7 @@ func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMess
 		response.Error = protocol.Ptr(err.Error())
 	} else {
 		response.SessionID = protocol.Ptr(outcome.SessionID)
-		response.WorkspaceID = protocol.Ptr(outcome.WorkspaceID)
+		response.ProfileID = protocol.Ptr(outcome.ProfileID)
 		if outcome.AlreadyRunning {
 			response.AlreadyRunning = protocol.Ptr(true)
 		}

@@ -143,11 +143,11 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 	}
 	if len(shape.Assignment) == 0 || string(shape.Assignment) == "null" {
 		if existing := d.store.Get(record.Operation.SessionID); existing != nil && d.sessionHasLiveWorker(existing.ID) {
-			result := d.completedDelegationResult(existing, "", record.WorktreeOwned)
+			result := d.completedDelegationResult(existing, record.WorktreeOwned)
 			if seedID, ok := d.gardenDispatchCrown(existing.ID); ok {
 				result.SeedID = seedID
 			}
-			d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted, "reconciled legacy delegated session", existing.WorkspaceID, protocol.Deref(record.Operation.WorktreePath), result, nil)
+			d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted, "reconciled legacy delegated session", existing.ProfileID, protocol.Deref(record.Operation.WorktreePath), result, nil)
 			return
 		}
 		d.finishDelegationFailure(id, fmt.Errorf("%w; no live successor can prove the old implicit launch intent. Submit a new request with the known seed, cwd, and checkout", errLegacyDelegationRequest))
@@ -199,7 +199,7 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 		return
 	}
 	d.persistDelegationTerminal(id, protocol.DelegationOperationStateCompleted,
-		"delegation ready", protocol.Deref(result.WorkspaceID), "", result, nil)
+		"delegation ready", protocol.Deref(result.ProfileID), "", result, nil)
 }
 
 func (d *Daemon) finishDelegationFailure(id string, err error) {

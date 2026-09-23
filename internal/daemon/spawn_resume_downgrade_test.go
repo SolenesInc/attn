@@ -28,24 +28,17 @@ func seedClaudeTranscript(t *testing.T, home, resumeID string) {
 	}
 }
 
-func seedReloadableClaudeSession(t *testing.T, d *Daemon, sessionID string) (workspaceID, cwd string) {
+func seedReloadableClaudeSession(t *testing.T, d *Daemon, sessionID string) string {
 	t.Helper()
-	workspaceID = "workspace-" + sessionID
-	cwd = t.TempDir()
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "revive",
-		Directory: cwd,
-	})
+	cwd := t.TempDir()
 	d.store.Add(&protocol.Session{
-		ID:          sessionID,
-		Agent:       protocol.SessionAgentClaude,
-		WorkspaceID: workspaceID,
-		Directory:   cwd,
-		Label:       "revive",
+		ID:        sessionID,
+		Agent:     protocol.SessionAgentClaude,
+		ProfileID: defaultProfileID(t, d.store),
+		Directory: cwd,
+		Label:     "revive",
 	})
-	return workspaceID, cwd
+	return cwd
 }
 
 func TestSpawnDowngradesResumeWhenTranscriptMissing(t *testing.T) {
@@ -54,19 +47,19 @@ func TestSpawnDowngradesResumeWhenTranscriptMissing(t *testing.T) {
 	d.ptyBackend = backend
 
 	sessionID := "attn-revive-claude"
-	workspaceID, cwd := seedReloadableClaudeSession(t, d, sessionID)
+	cwd := seedReloadableClaudeSession(t, d, sessionID)
 	d.persistResumeSessionID(sessionID, sessionID)
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 
 	since := spawnCount(backend)
 	d.handleSpawnSession(spawnTestClient(), &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Cwd:       cwd,
+		Agent:     "claude",
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 
 	spawn := resumeSpawnForSession(t, backend, sessionID, since)
@@ -81,7 +74,7 @@ func TestSpawnPreservesSelfResumeWhenTranscriptPresent(t *testing.T) {
 	d.ptyBackend = backend
 
 	sessionID := "attn-revive-claude-live"
-	workspaceID, cwd := seedReloadableClaudeSession(t, d, sessionID)
+	cwd := seedReloadableClaudeSession(t, d, sessionID)
 	d.persistResumeSessionID(sessionID, sessionID)
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
@@ -89,13 +82,13 @@ func TestSpawnPreservesSelfResumeWhenTranscriptPresent(t *testing.T) {
 
 	since := spawnCount(backend)
 	d.handleSpawnSession(spawnTestClient(), &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Cwd:       cwd,
+		Agent:     "claude",
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 
 	spawn := resumeSpawnForSession(t, backend, sessionID, since)
@@ -110,20 +103,20 @@ func TestSpawnPreservesDistinctNativeResumeID(t *testing.T) {
 	d.ptyBackend = backend
 
 	sessionID := "attn-revive-claude-distinct"
-	workspaceID, cwd := seedReloadableClaudeSession(t, d, sessionID)
+	cwd := seedReloadableClaudeSession(t, d, sessionID)
 	nativeID := "claude-native-xyz"
 	d.persistResumeSessionID(sessionID, nativeID)
 	t.Setenv(toolhome.EnvVar, t.TempDir())
 
 	since := spawnCount(backend)
 	d.handleSpawnSession(spawnTestClient(), &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Cwd:       cwd,
+		Agent:     "claude",
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 
 	spawn := resumeSpawnForSession(t, backend, sessionID, since)
@@ -156,7 +149,7 @@ func TestSpawnResumePickerIgnoresGardenReceipt(t *testing.T) {
 		ID:           sessionID,
 		Cwd:          cwd,
 		Agent:        "claude",
-		WorkspaceID:  "workspace-picker",
+		ProfileID:    defaultProfileID(t, d.store),
 		Cols:         80,
 		Rows:         24,
 		ResumePicker: protocol.Ptr(true),
@@ -183,6 +176,7 @@ func TestSpawnReviveReentersLaunchLifecycle(t *testing.T) {
 		Agent:          protocol.SessionAgentClaude,
 		Directory:      cwd,
 		WorkspaceID:    "workspace",
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.SessionStateRecoverable,
 		StateSince:     now,
 		StateUpdatedAt: now,
@@ -191,13 +185,13 @@ func TestSpawnReviveReentersLaunchLifecycle(t *testing.T) {
 
 	client := spawnTestClient()
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          "recoverable",
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: "workspace",
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        "recoverable",
+		Cwd:       cwd,
+		Agent:     "claude",
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, "recoverable", true)
 

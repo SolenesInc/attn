@@ -7,6 +7,7 @@ import { CrewSeeds } from './CrewSeeds';
 function member(id: string, bindingSession = ''): CrewMember {
   return {
     id,
+    profile_id: 'profile-default',
     revision: 1,
     charter_path: `/crew/${id}/CHARTER.md`,
     home_dir: `/crew/${id}`,

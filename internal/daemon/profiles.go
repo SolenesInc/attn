@@ -13,6 +13,11 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
+type sessionProfileChange struct {
+	FromProfileID string `json:"from_profile_id"`
+	ToProfileID   string `json:"to_profile_id"`
+}
+
 type profileArrangementChange struct {
 	DesktopIDs        []string `json:"desktop_ids,omitempty"`
 	DeletedDesktopIDs []string `json:"deleted_desktop_ids,omitempty"`
@@ -281,8 +286,13 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			}
 		})
 		return profileActionOutcome{profile: &deletion.Destination, desktops: destination, publish: func() {
-			d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
-			d.publishArrangementChanged(deletion.Destination.ID, profileArrangementChange{DesktopIDs: desktopIDs(destination...)})
+			d.coalesceSnapshots(func() {
+				d.publishFact(FactProfileDeleted, deletion.Deleted.ID, nil)
+				d.publishArrangementChanged(deletion.Destination.ID, profileArrangementChange{DesktopIDs: desktopIDs(destination...)})
+				for _, sessionID := range deletion.MovedSessionIDs {
+					d.publishFact(FactSessionProfileChanged, sessionID, sessionProfileChange{FromProfileID: deletion.Deleted.ID, ToProfileID: deletion.Destination.ID})
+				}
+			})
 		}}, nil
 	})
 }

@@ -904,7 +904,6 @@ func (d *Daemon) moveLeafToWorkspace(sourceWorkspaceID, targetWorkspaceID, leafI
 			d.workspaces.associateSession(movedPane.SessionID, targetWorkspaceID, movedPane.Title)
 		}
 		d.store.AssignSessionWorkspace(movedPane.SessionID, targetWorkspaceID)
-		d.publishFact(FactSessionWorkspaceChanged, movedPane.SessionID, nil)
 	}
 
 	if sourceEmpty {
@@ -1047,19 +1046,6 @@ func (d *Daemon) addWorkspaceSessionPaneLocked(msg *protocol.WorkspaceLayoutAddS
 	return protocol.Ptr(paneID), true, nil
 }
 
-func (d *Daemon) ensureWorkspaceSessionPane(workspaceID, sessionID, title string) (string, error) {
-	msg := &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		SessionID:   sessionID,
-	}
-	if strings.TrimSpace(title) != "" {
-		msg.Title = protocol.Ptr(title)
-	}
-	paneID, _, err := d.addWorkspaceSessionPane(msg)
-	return protocol.Deref(paneID), err
-}
-
 func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.WorkspaceLayoutClosePaneMessage) {
 	snapshot, err := d.ensureWorkspaceLayout(msg.WorkspaceID)
 	if err != nil {
@@ -1151,37 +1137,6 @@ func (d *Daemon) handleWorkspaceLayoutClosePane(client *wsClient, msg *protocol.
 	if teardown != nil {
 		d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)
 	}
-}
-
-func (d *Daemon) removeWorkspaceLayoutPaneForSession(sessionID string) {
-	workspaceID, paneID, ok := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID)
-	if !ok || paneID == "" {
-		return
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		return
-	}
-
-	layout, _ := layouttree.Remove(snapshot.Layout, paneID)
-	nextPanes := make([]workspacelayout.Pane, 0, len(snapshot.Panes))
-	for _, pane := range snapshot.Panes {
-		if pane.PaneID != paneID {
-			nextPanes = append(nextPanes, pane)
-		}
-	}
-	snapshot.Layout = layout
-	snapshot.Panes = nextPanes
-	normalized := workspacelayout.NormalizeWorkspaceLayout(*snapshot)
-	if layouttree.LayoutEmpty(normalized.Layout) {
-		d.store.RemoveWorkspaceLayout(workspaceID)
-	} else {
-		if err := d.store.SaveWorkspaceLayout(normalized); err != nil {
-			d.logf("workspace layout session unregister save failed for session %s: %v", sessionID, err)
-			return
-		}
-	}
-	d.broadcastWorkspaceLayoutUpdated(workspaceID)
 }
 
 func (d *Daemon) reconcileWorkspaceLayoutsWithPTYBackend(ctx context.Context) {

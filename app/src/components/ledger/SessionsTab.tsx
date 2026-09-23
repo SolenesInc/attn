@@ -322,7 +322,6 @@ export function SessionsTab({
               note={notices[selected.id]}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
-              workspaceLabel={workspaceLabel}
               workspaceShown={workspaceShown}
               sessionLabel={sessionLabel}
               nameText={nameText}
@@ -412,7 +411,6 @@ interface SessionInspectorProps {
   note: RowNote | undefined;
   live: boolean;
   seed: SessionSeedLink | null;
-  workspaceLabel: (id: string) => string;
   workspaceShown: (id: string) => string | null;
   sessionLabel: (id: string) => string;
   nameText: (text: string) => string;
@@ -424,7 +422,7 @@ interface SessionInspectorProps {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, workspaceLabel, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
+  entry, verdict, note, live, seed, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
   const closed = isClosed(entry);
   const busy = note?.kind === 'busy';
@@ -477,7 +475,7 @@ function SessionInspector({
                 {verdict.refreshing && <em className="ledger-checking"> checking the branch…</em>}
               </div>
               {verdict.warning && <div className="ledger-muted" title={verdict.warning}>{nameText(compactVerdictText(verdict.warning))}</div>}
-              <div className="ledger-muted">{reopenPlacement(verdict, workspaceLabel)}</div>
+              <div className="ledger-muted">{reopenPlacement(verdict)}</div>
               {note && note.kind !== 'busy' && (
                 <div className={`ledger-row-note is-${note.kind}`} role="status">{note.text}</div>
               )}

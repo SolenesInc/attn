@@ -65,8 +65,6 @@ func (d *Daemon) crewAgentAvailable(agent string) bool {
 
 var crewWakePrompt = prompts.RenderText("crew", "wake", prompts.Values{})
 
-func crewWorkspaceID(memberID string) string { return "workspace-crew-" + memberID }
-
 type crewWakeDelivery struct {
 	Message *agentmailbox.PeerMessage
 }
@@ -199,8 +197,38 @@ func (d *Daemon) primeCrewGarden(priming *crew.Priming, memberID string) {
 	}
 }
 
+func (d *Daemon) crewWakeAsked(msg *protocol.CrewWakeMessage) (*protocol.CrewWakeResult, error) {
+	name := strings.TrimSpace(msg.Member)
+	if err := d.refuseCrossProfileWake(name, protocol.Deref(msg.ProfileID), protocol.Deref(msg.SourceSessionID)); err != nil {
+		return nil, err
+	}
+	return d.crewWake(name, strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+}
+
+func (d *Daemon) refuseCrossProfileWake(name, askedProfileID, sourceSessionID string) error {
+	askedProfileID = strings.TrimSpace(askedProfileID)
+	if askedProfileID == "" && strings.TrimSpace(sourceSessionID) != "" {
+		profile, err := d.callerProfile(sourceSessionID)
+		if err != nil {
+			return err
+		}
+		askedProfileID = profile.ID
+	}
+	if askedProfileID == "" {
+		return nil
+	}
+	member, _, err := d.crewMember(name)
+	if err != nil {
+		return err
+	}
+	if member.ProfileID != askedProfileID {
+		return fmt.Errorf("%s belongs to profile %s, not %s; a member wakes only in its own profile", crew.DisplayName(member.ID), member.ProfileID, askedProfileID)
+	}
+	return nil
+}
+
 func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	result, err := d.crewWakeAsked(msg)
 	if err != nil {
 		d.sendCrewError(conn, "wake", err)
 		return
@@ -209,7 +237,7 @@ func (d *Daemon) handleCrewWake(conn net.Conn, msg *protocol.CrewWakeMessage) {
 }
 
 func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessage) {
-	result, err := d.crewWake(strings.TrimSpace(msg.Member), strings.TrimSpace(strings.ToLower(protocol.Deref(msg.Agent))))
+	result, err := d.crewWakeAsked(msg)
 	response := protocol.CrewWakeResultMessage{
 		Event:     protocol.EventCrewWakeResult,
 		RequestID: protocol.Deref(msg.RequestID),
@@ -220,7 +248,7 @@ func (d *Daemon) handleCrewWakeWS(client *wsClient, msg *protocol.CrewWakeMessag
 	} else {
 		response.Member = protocol.Ptr(result.Member)
 		response.SessionID = protocol.Ptr(result.SessionID)
-		response.WorkspaceID = protocol.Ptr(result.WorkspaceID)
+		response.ProfileID = protocol.Ptr(result.ProfileID)
 		if result.AlreadyAwake {
 			response.AlreadyAwake = protocol.Ptr(true)
 		}
@@ -265,10 +293,14 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 				AlreadyAwake: true,
 			}
 			if session := d.store.Get(boundSessionID); session != nil {
-				awake.WorkspaceID = session.WorkspaceID
+				awake.ProfileID = session.ProfileID
 			}
 			return awake, nil
 		}
+	}
+	profile, err := d.liveLaunchProfile(member.ProfileID)
+	if err != nil {
+		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}
 	if agent == "" {
 		agent = member.LaunchAgent()
@@ -294,38 +326,11 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		d.crewWakeAfterClaimHook(member.ID, sessionID)
 	}
 
-	workspaceID := crewWorkspaceID(member.ID)
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-			Cmd:       protocol.CmdRegisterWorkspace,
-			ID:        workspaceID,
-			Title:     crew.DisplayName(member.ID),
-			Directory: directory,
-		})
-		if d.store.GetWorkspace(workspaceID) == nil {
-			d.releaseCrewBindingIfSession(sessionID)
-			return nil, fmt.Errorf("create %s's workspace", crew.DisplayName(member.ID))
-		}
-	}
-	paneClient := newInternalWSClient()
-	d.handleWorkspaceLayoutAddSessionPane(paneClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-" + sessionID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr(crew.DisplayName(member.ID)),
-	})
-	if _, err := readInternalActionResult(paneClient); err != nil {
-		d.releaseCrewBindingIfSession(sessionID)
-		return nil, fmt.Errorf("create %s's pane: %w", crew.DisplayName(member.ID), err)
-	}
-
 	initialPrompt := crewWakePrompt
 	d.notePostInitialPrompt(sessionID)
 	if delivery != nil {
 		if delivery.Message != nil {
 			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
-				d.removeWorkspaceLayoutPaneForSession(sessionID)
 				d.releaseCrewBindingIfSession(sessionID)
 				return nil, err
 			}
@@ -338,7 +343,7 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
 		Cwd:           directory,
-		WorkspaceID:   workspaceID,
+		ProfileID:     profile.ID,
 		Agent:         agent,
 		Model:         d.crewWakeModel(member, agent),
 		Effort:        d.crewWakeEffort(member, agent),
@@ -352,15 +357,14 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
 		}
 		d.forgetPostInitialPrompt(sessionID)
-		d.removeWorkspaceLayoutPaneForSession(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)
 	}
 	d.logf("crew: woke %s in session %s at %s", crew.DisplayName(member.ID), sessionID, directory)
 	result := &protocol.CrewWakeResult{
-		Member:      member.ID,
-		SessionID:   sessionID,
-		WorkspaceID: workspaceID,
+		Member:    member.ID,
+		SessionID: sessionID,
+		ProfileID: profile.ID,
 	}
 	if releasedSessionID != "" {
 		result.ReleasedSessionID = protocol.Ptr(releasedSessionID)

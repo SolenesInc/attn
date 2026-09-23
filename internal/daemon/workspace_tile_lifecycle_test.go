@@ -35,14 +35,14 @@ func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, w
 	})
 	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        sessionID,
+		Label:     protocol.Ptr("shell"),
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	})
 	expectSpawnResult(t, client, sessionID, true)
 

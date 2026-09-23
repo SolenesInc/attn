@@ -28,6 +28,7 @@ func newReloadClientTestDaemon(t *testing.T, intent *store.LaunchIntent) (*Daemo
 		Agent:          protocol.SessionAgentClaude,
 		Directory:      cwd,
 		WorkspaceID:    "workspace",
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,
 		StateUpdatedAt: now,

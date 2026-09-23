@@ -40,7 +40,7 @@ func TestAutomationRetentionSweepPreservesBoundThreadOriginRunAndContinuationSti
 
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, string(snapshotJSON), old, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-origin", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 
 	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, string(snapshotJSON), old, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-shared", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-shared", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -118,7 +118,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	}
 
 	second, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:2", "singleton", def.Revision, `{}`, string(snapshotJSON), old.Add(time.Minute), store.AutomationRunReservation{
-		RunID: "run-second", OccurrenceID: "occ-second", SeedID: "ticket-second", SessionID: "session-second", WorkspaceID: "workspace-second", PaneID: "pane-second",
+		RunID: "run-second", OccurrenceID: "occ-second", SeedID: "ticket-second", SessionID: "session-second", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)

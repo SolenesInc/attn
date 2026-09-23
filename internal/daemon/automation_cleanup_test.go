@@ -192,7 +192,7 @@ func TestAutomationCleanupLiveSessionSkipped(t *testing.T) {
 	run := claimTerminalAutomationRun(t, s, def, "cleanup-live-1", now, automationResolvedLocationJSON(t, mainRepo, worktree))
 	s.Add(&protocol.Session{
 		ID: run.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateIdle,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
+		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), ProfileID: run.ProfileID,
 	})
 
 	cleaned, keptDirty, keptActive, err := d.automationCleanup(context.Background(), def.ID)
@@ -273,7 +273,7 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 
 	now := time.Now()
 	run, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-bound-1", OccurrenceID: "occ-bound-1", SeedID: "ticket-bound-1", SessionID: "session-bound-1", WorkspaceID: "workspace-bound-1", PaneID: "pane-bound-1",
+		RunID: "run-bound-1", OccurrenceID: "occ-bound-1", SeedID: "ticket-bound-1", SessionID: "session-bound-1", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -328,7 +328,7 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 	claim := func(occurrenceKey, continuityKey, suffix, worktree string) *store.AutomationRun {
 		t.Helper()
 		run, _, err := s.ClaimScheduledAutomationRun(def.ID, occurrenceKey, continuityKey, def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-			RunID: "run-" + suffix, OccurrenceID: "occ-" + suffix, SeedID: "ticket-" + suffix, SessionID: "session-" + suffix, WorkspaceID: "workspace-" + suffix, PaneID: "pane-" + suffix,
+			RunID: "run-" + suffix, OccurrenceID: "occ-" + suffix, SeedID: "ticket-" + suffix, SessionID: "session-" + suffix, ProfileID: defaultProfileID(t, s),
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -388,7 +388,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 
 	now := time.Now()
 	liveRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:live", "", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-log-live", OccurrenceID: "occ-log-live", SeedID: "ticket-log-live", SessionID: "session-log-live", WorkspaceID: "workspace-log-live", PaneID: "pane-log-live",
+		RunID: "run-log-live", OccurrenceID: "occ-log-live", SeedID: "ticket-log-live", SessionID: "session-log-live", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -398,11 +398,11 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	}
 	s.Add(&protocol.Session{
 		ID: liveRun.SessionID, Label: "reviewer", Agent: string(protocol.SessionAgentCodex), Directory: t.TempDir(), State: protocol.SessionStateIdle,
-		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), WorkspaceID: liveRun.WorkspaceID,
+		StateSince: now.Format(time.RFC3339), StateUpdatedAt: now.Format(time.RFC3339), LastSeen: now.Format(time.RFC3339), ProfileID: liveRun.ProfileID,
 	})
 
 	boundRun, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:bound", "singleton", def.Revision, `{}`, `{}`, now, store.AutomationRunReservation{
-		RunID: "run-log-bound", OccurrenceID: "occ-log-bound", SeedID: "ticket-log-bound", SessionID: "session-log-bound", WorkspaceID: "workspace-log-bound", PaneID: "pane-log-bound",
+		RunID: "run-log-bound", OccurrenceID: "occ-log-bound", SeedID: "ticket-log-bound", SessionID: "session-log-bound", ProfileID: defaultProfileID(t, d.store),
 	})
 	if err != nil {
 		t.Fatal(err)

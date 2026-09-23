@@ -16,25 +16,24 @@ func newSpawnCommitTestDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, string)
 	backend := &fakeSpawnBackend{}
 	d.ptyBackend = backend
 	cwd := t.TempDir()
-	addTestWorkspace(d, "workspace", cwd)
 	return d, backend, cwd
 }
 
-func spawnCommitMessage(id, cwd string) *protocol.SpawnSessionMessage {
+func spawnCommitMessage(id, profileID, cwd string) *protocol.SpawnSessionMessage {
 	return &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          id,
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: "workspace",
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        id,
+		Cwd:       cwd,
+		Agent:     protocol.AgentShellValue,
+		ProfileID: profileID,
+		Cols:      80,
+		Rows:      24,
 	}
 }
 
 func TestSpawnCommitPreservesStateTransitionDuringSpawn(t *testing.T) {
 	d, backend, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("mid-spawn-state", cwd)
+	msg := spawnCommitMessage("mid-spawn-state", defaultProfileID(t, d.store), cwd)
 	backend.onSpawn = func(ptybackend.SpawnOptions) {
 		if updated := d.store.UpdateState(msg.ID, protocol.StateWorking); !updated {
 			t.Fatalf("UpdateState(%q) = false, want true", msg.ID)
@@ -51,7 +50,7 @@ func TestSpawnCommitPreservesStateTransitionDuringSpawn(t *testing.T) {
 
 func TestSpawnCommitPersistsEndpointID(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("endpoint-explicit", cwd)
+	msg := spawnCommitMessage("endpoint-explicit", defaultProfileID(t, d.store), cwd)
 	msg.EndpointID = protocol.Ptr("ep-1")
 
 	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection != nil {
@@ -64,14 +63,14 @@ func TestSpawnCommitPersistsEndpointID(t *testing.T) {
 
 func TestSpawnCommitPreservesExistingEndpointID(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("endpoint-respawn", cwd)
+	msg := spawnCommitMessage("endpoint-respawn", defaultProfileID(t, d.store), cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             msg.ID,
 		Label:          msg.ID,
 		Agent:          protocol.SessionAgentShell,
 		Directory:      cwd,
-		WorkspaceID:    msg.WorkspaceID,
+		ProfileID:      msg.ProfileID,
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,
 		StateUpdatedAt: now,
@@ -90,7 +89,7 @@ func TestSpawnCommitPreservesExistingEndpointID(t *testing.T) {
 func TestSpawnCostTrackingStartsFreshButNotFromResumedHistory(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
 
-	fresh := spawnCommitMessage("fresh-cost", cwd)
+	fresh := spawnCommitMessage("fresh-cost", defaultProfileID(t, d.store), cwd)
 	fresh.Agent = string(protocol.SessionAgentClaude)
 	if rejection := d.runSpawnPipeline(fresh, internalSpawnPolicy{}); rejection != nil {
 		t.Fatalf("fresh runSpawnPipeline() rejection = %+v", rejection)
@@ -103,7 +102,7 @@ func TestSpawnCostTrackingStartsFreshButNotFromResumedHistory(t *testing.T) {
 		t.Fatalf("fresh session cost state = %+v, want initialized at byte zero", freshCost)
 	}
 
-	resumed := spawnCommitMessage("resumed-cost", cwd)
+	resumed := spawnCommitMessage("resumed-cost", defaultProfileID(t, d.store), cwd)
 	resumed.Agent = string(protocol.SessionAgentClaude)
 	resumed.ResumeSessionID = protocol.Ptr("provider-conversation-with-history")
 	if rejection := d.runSpawnPipeline(resumed, internalSpawnPolicy{}); rejection != nil {
@@ -120,7 +119,7 @@ func TestSpawnCostTrackingStartsFreshButNotFromResumedHistory(t *testing.T) {
 
 func TestSpawnPersistsLaunchIntentBeforeWorkerStart(t *testing.T) {
 	d, backend, cwd := newSpawnCommitTestDaemon(t)
-	msg := spawnCommitMessage("intent-before-worker", cwd)
+	msg := spawnCommitMessage("intent-before-worker", defaultProfileID(t, d.store), cwd)
 	backend.onSpawn = func(ptybackend.SpawnOptions) {
 		if _, ok := d.store.LaunchIntent(msg.ID); !ok {
 			t.Fatal("LaunchIntent() = ok false at worker start, want true")
@@ -135,14 +134,14 @@ func TestSpawnPersistsLaunchIntentBeforeWorkerStart(t *testing.T) {
 func TestSpawnFailureRestoresPriorLaunchIntent(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
 	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("restore-prior-intent", cwd)
+	msg := spawnCommitMessage("restore-prior-intent", defaultProfileID(t, d.store), cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             msg.ID,
 		Label:          msg.ID,
 		Agent:          protocol.SessionAgentShell,
 		Directory:      cwd,
-		WorkspaceID:    msg.WorkspaceID,
+		ProfileID:      msg.ProfileID,
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,
 		StateUpdatedAt: now,
@@ -165,14 +164,14 @@ func TestSpawnFailureRestoresPriorLaunchIntent(t *testing.T) {
 func TestSpawnFailureClearsIntentWhenNoPrior(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
 	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("clear-no-prior-intent", cwd)
+	msg := spawnCommitMessage("clear-no-prior-intent", defaultProfileID(t, d.store), cwd)
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             msg.ID,
 		Label:          msg.ID,
 		Agent:          protocol.SessionAgentShell,
 		Directory:      cwd,
-		WorkspaceID:    msg.WorkspaceID,
+		ProfileID:      msg.ProfileID,
 		State:          protocol.SessionStateIdle,
 		StateSince:     now,
 		StateUpdatedAt: now,
@@ -193,7 +192,7 @@ func TestSpawnFailureClearsIntentWhenNoPrior(t *testing.T) {
 func TestSpawnFailureFreshSessionLeavesNoLaunchIntent(t *testing.T) {
 	d, _, cwd := newSpawnCommitTestDaemon(t)
 	d.ptyBackend = &failingLaunchIntentBackend{}
-	msg := spawnCommitMessage("failed-fresh-intent", cwd)
+	msg := spawnCommitMessage("failed-fresh-intent", defaultProfileID(t, d.store), cwd)
 
 	if rejection := d.runSpawnPipeline(msg, internalSpawnPolicy{}); rejection == nil {
 		t.Fatal("runSpawnPipeline() rejection = nil, want spawn failure")

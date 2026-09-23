@@ -45,6 +45,7 @@ const (
 
 type AutomationDefinition struct {
 	ID, Name, SpecJSON   string
+	ProfileID            string
 	Enabled              bool
 	Revision             int
 	CreatedAt, UpdatedAt time.Time
@@ -58,7 +59,7 @@ type AutomationRun struct {
 	Attempts                          int
 	LastError                         string
 	SeedID, LegacyTicketID            string
-	SessionID, WorkspaceID, PaneID    string
+	SessionID, ProfileID              string
 	ResolvedLocationJSON              string
 	CreatedAt, UpdatedAt              time.Time
 	DeliveredAt                       *time.Time
@@ -67,7 +68,7 @@ type AutomationRun struct {
 type AutomationContinuityBinding struct {
 	ID, DefinitionID, ContinuityKey     string
 	SeedID, OriginRunID, LegacyTicketID string
-	SessionID, WorkspaceID, PaneID      string
+	SessionID, ProfileID                string
 	Status, ReleasedReason              string
 	ReleasedAt                          *time.Time
 	CreatedAt, UpdatedAt                time.Time
@@ -86,7 +87,7 @@ type AutomationProvenanceRecord struct {
 }
 
 type AutomationRunReservation struct {
-	RunID, OccurrenceID, SeedID, SessionID, WorkspaceID, PaneID string
+	RunID, OccurrenceID, SeedID, SessionID, ProfileID string
 }
 
 type AutomationReviewRequestCandidate struct {
@@ -186,7 +187,7 @@ func githubReviewCycleStatus(q automationReviewQueryer, definitionID, subjectKey
 	return hasOccurrence, hasPending, matchesHead, rows.Err()
 }
 
-func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.Time) (*AutomationDefinition, error) {
+func (s *Store) UpsertAutomationDefinition(id, name, specJSON, profileID string, now time.Time) (*AutomationDefinition, error) {
 	s.mu.Lock()
 	locked := true
 	defer func() {
@@ -210,18 +211,21 @@ func (s *Store) UpsertAutomationDefinition(id, name, specJSON string, now time.T
 	switch err {
 	case sql.ErrNoRows:
 		revision = 1
-		_, err = tx.Exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,'')`, id, name, enabled, revision, specJSON, formatTicketTime(now), formatTicketTime(now))
+		_, err = tx.Exec(`INSERT INTO automation_definitions(id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at) VALUES(?,?,?,?,?,?,?,?,'')`, id, name, enabled, revision, specJSON, profileID, formatTicketTime(now), formatTicketTime(now))
 	case nil:
 		wasDeleted := deletedAt != ""
 		if wasDeleted {
 			revision++
+			_, err = tx.Exec(`UPDATE automation_definitions SET profile_id=? WHERE id=?`, profileID, id)
 		} else {
 			enabled = oldEnabled != 0
 			if oldSpec != specJSON {
 				revision++
 			}
 		}
-		_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatTicketTime(now), id)
+		if err == nil {
+			_, err = tx.Exec(`UPDATE automation_definitions SET name=?, enabled=?, revision=?, spec_json=?, updated_at=?, deleted_at='' WHERE id=?`, name, enabled, revision, specJSON, formatTicketTime(now), id)
+		}
 		activation = wasDeleted
 	}
 	if err != nil {
@@ -313,7 +317,7 @@ func scanAutomationDefinition(scanner interface{ Scan(...any) error }) (*Automat
 	var d AutomationDefinition
 	var enabled int
 	var created, updated, deleted string
-	if err := scanner.Scan(&d.ID, &d.Name, &enabled, &d.Revision, &d.SpecJSON, &created, &updated, &deleted); err != nil {
+	if err := scanner.Scan(&d.ID, &d.Name, &enabled, &d.Revision, &d.SpecJSON, &d.ProfileID, &created, &updated, &deleted); err != nil {
 		return nil, err
 	}
 	d.Enabled = enabled != 0
@@ -329,7 +333,7 @@ func (s *Store) GetAutomationDefinition(id string) (*AutomationDefinition, error
 	if s.db == nil {
 		return nil, nil
 	}
-	d, err := scanAutomationDefinition(s.db.QueryRow(`SELECT id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at FROM automation_definitions WHERE id=? AND deleted_at=''`, id))
+	d, err := scanAutomationDefinition(s.db.QueryRow(`SELECT id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at FROM automation_definitions WHERE id=? AND deleted_at=''`, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
@@ -342,19 +346,19 @@ func (s *Store) GetAutomationDefinitionIncludingDeleted(id string) (*AutomationD
 	if s.db == nil {
 		return nil, nil
 	}
-	d, err := scanAutomationDefinition(s.db.QueryRow(`SELECT id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at FROM automation_definitions WHERE id=?`, id))
+	d, err := scanAutomationDefinition(s.db.QueryRow(`SELECT id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at FROM automation_definitions WHERE id=?`, id))
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return d, err
 }
 
-const automationContinuityBindingColumns = `id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,status,released_reason,released_at,created_at,updated_at`
+const automationContinuityBindingColumns = `id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,profile_id,status,released_reason,released_at,created_at,updated_at`
 
 func scanAutomationContinuityBinding(scanner interface{ Scan(...any) error }) (*AutomationContinuityBinding, error) {
 	var b AutomationContinuityBinding
 	var releasedAt, created, updated string
-	if err := scanner.Scan(&b.ID, &b.DefinitionID, &b.ContinuityKey, &b.SeedID, &b.OriginRunID, &b.LegacyTicketID, &b.SessionID, &b.WorkspaceID, &b.PaneID, &b.Status, &b.ReleasedReason, &releasedAt, &created, &updated); err != nil {
+	if err := scanner.Scan(&b.ID, &b.DefinitionID, &b.ContinuityKey, &b.SeedID, &b.OriginRunID, &b.LegacyTicketID, &b.SessionID, &b.ProfileID, &b.Status, &b.ReleasedReason, &releasedAt, &created, &updated); err != nil {
 		return nil, err
 	}
 	b.ReleasedAt = parseOptionalAutomationTime(releasedAt)
@@ -429,25 +433,33 @@ func pendingAutomationRunInThreadTx(tx *sql.Tx, definitionID, provider, subjectK
 	return pending != 0, err
 }
 
+const AutomationBindingReleasedAgentMoved = "agent_moved_profile"
+
 func getOrCreateActiveAutomationContinuityBindingTx(tx *sql.Tx, definitionID, continuityKey string, ids *AutomationRunReservation, now time.Time) error {
-	var createdAt, updatedAt string
+	var bound AutomationRunReservation
+	var bindingID, sessionProfileID string
 	err := tx.QueryRow(
-		`SELECT seed_id,session_id,workspace_id,pane_id,created_at,updated_at FROM automation_continuity_bindings WHERE definition_id=? AND continuity_key=? AND status=?`,
+		`SELECT b.id,b.seed_id,b.session_id,COALESCE(s.profile_id,'') FROM automation_continuity_bindings b LEFT JOIN sessions s ON s.id=b.session_id WHERE b.definition_id=? AND b.continuity_key=? AND b.status=?`,
 		definitionID, continuityKey, AutomationBindingStatusActive,
-	).Scan(&ids.SeedID, &ids.SessionID, &ids.WorkspaceID, &ids.PaneID, &createdAt, &updatedAt)
-	switch err {
-	case sql.ErrNoRows:
-		nowRaw := formatTicketTime(now)
-		_, err = tx.Exec(
-			`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,?,?,?,?,?)`,
-			uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, ids.WorkspaceID, ids.PaneID, AutomationBindingStatusActive, nowRaw, nowRaw,
-		)
-		return err
-	case nil:
+	).Scan(&bindingID, &bound.SeedID, &bound.SessionID, &sessionProfileID)
+	nowRaw := formatTicketTime(now)
+	switch {
+	case err == nil && (sessionProfileID == "" || sessionProfileID == ids.ProfileID):
+		ids.SeedID, ids.SessionID = bound.SeedID, bound.SessionID
 		return nil
-	default:
+	case err == nil:
+		if _, err := tx.Exec(`UPDATE automation_continuity_bindings SET status=?,released_reason=?,released_at=?,updated_at=? WHERE id=?`,
+			AutomationBindingStatusReleased, AutomationBindingReleasedAgentMoved, nowRaw, nowRaw, bindingID); err != nil {
+			return err
+		}
+	case err != sql.ErrNoRows:
 		return err
 	}
+	_, err = tx.Exec(
+		`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,seed_id,origin_run_id,ticket_id,session_id,workspace_id,pane_id,profile_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'',?,'','',?,?,?,?)`,
+		uuid.NewString(), definitionID, continuityKey, ids.SeedID, ids.RunID, ids.SessionID, ids.ProfileID, AutomationBindingStatusActive, nowRaw, nowRaw,
+	)
+	return err
 }
 
 func (s *Store) AutomationSessionHasContinuityBinding(sessionID string) (bool, error) {
@@ -520,7 +532,7 @@ func (s *Store) ListAutomationDefinitions() ([]AutomationDefinition, error) {
 	if s.db == nil {
 		return nil, nil
 	}
-	rows, err := s.db.Query(`SELECT id,name,enabled,revision,spec_json,created_at,updated_at,deleted_at FROM automation_definitions WHERE deleted_at='' ORDER BY id`)
+	rows, err := s.db.Query(`SELECT id,name,enabled,revision,spec_json,profile_id,created_at,updated_at,deleted_at FROM automation_definitions WHERE deleted_at='' ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -595,7 +607,7 @@ func (s *Store) ClaimManualAutomationRun(definitionID, requestID, subjectKey, pa
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'manual',?,?,?,?,?)`, ids.OccurrenceID, definitionID, key, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -653,7 +665,7 @@ func (s *Store) ClaimScheduledAutomationRun(definitionID, occurrenceKey, continu
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'schedule',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, continuityKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err = tx.Commit(); err != nil {
@@ -994,7 +1006,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 	if _, err = tx.Exec(`INSERT INTO automation_occurrences(id,definition_id,provider,occurrence_key,subject_key,observed_at,payload_json,created_at) VALUES(?,?, 'github',?,?,?,?,?)`, ids.OccurrenceID, definitionID, occurrenceKey, subjectKey, now, payloadJSON, now); err != nil {
 		return nil, false, err
 	}
-	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,?,?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.WorkspaceID, ids.PaneID, now, now); err != nil {
+	if _, err = tx.Exec(`INSERT INTO automation_runs(id,definition_id,occurrence_id,definition_revision,snapshot_json,state,seed_id,ticket_id,session_id,workspace_id,pane_id,profile_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'',?,'','',?,?,?)`, ids.RunID, definitionID, ids.OccurrenceID, revision, snapshotJSON, AutomationRunStatePending, ids.SeedID, ids.SessionID, ids.ProfileID, now, now); err != nil {
 		return nil, false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -1007,7 +1019,7 @@ func (s *Store) ClaimGitHubReviewAutomationRun(definitionID, subjectKey string, 
 func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun, error) {
 	var r AutomationRun
 	var created, updated, delivered string
-	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered)
+	err := scanner.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered)
 	if err != nil {
 		return nil, err
 	}
@@ -1017,9 +1029,9 @@ func scanAutomationRun(scanner interface{ Scan(...any) error }) (*AutomationRun,
 	return &r, nil
 }
 
-const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,seed_id,ticket_id,session_id,workspace_id,pane_id,resolved_location_json,created_at,updated_at,delivered_at`
+const automationRunColumns = `id,definition_id,occurrence_id,definition_revision,snapshot_json,state,cancel_reason,attempts,last_error,seed_id,ticket_id,session_id,profile_id,resolved_location_json,created_at,updated_at,delivered_at`
 
-const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.seed_id,r.ticket_id,r.session_id,r.workspace_id,r.pane_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
+const automationRunColumnsQualified = `r.id,r.definition_id,r.occurrence_id,r.definition_revision,r.snapshot_json,r.state,r.cancel_reason,r.attempts,r.last_error,r.seed_id,r.ticket_id,r.session_id,r.profile_id,r.resolved_location_json,r.created_at,r.updated_at,r.delivered_at`
 
 func (s *Store) getAutomationRunUnlocked(id string) (*AutomationRun, error) {
 	r, e := scanAutomationRun(s.db.QueryRow(`SELECT `+automationRunColumns+` FROM automation_runs WHERE id=?`, id))
@@ -1105,7 +1117,7 @@ func (s *Store) ListAutomationRunsWithOccurrenceKeys(definitionID string, limit 
 		var r AutomationRun
 		var created, updated, delivered, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseTicketTime(created)
@@ -1151,7 +1163,7 @@ func (s *Store) LatestAutomationRunPerDefinition() (map[string]AutomationRunWith
 		var r AutomationRun
 		var created, updated, delivered, occurrenceKey string
 		var provenance AutomationProvenanceRecord
-		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.WorkspaceID, &r.PaneID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
+		if err := rows.Scan(&r.ID, &r.DefinitionID, &r.OccurrenceID, &r.DefinitionRevision, &r.SnapshotJSON, &r.State, &r.CancelReason, &r.Attempts, &r.LastError, &r.SeedID, &r.LegacyTicketID, &r.SessionID, &r.ProfileID, &r.ResolvedLocationJSON, &created, &updated, &delivered, &occurrenceKey, &provenance.DefinitionName, &provenance.DefinitionSpecJSON, &provenance.Provider, &provenance.SubjectKey, &provenance.PayloadJSON); err != nil {
 			return nil, err
 		}
 		r.CreatedAt = parseTicketTime(created)

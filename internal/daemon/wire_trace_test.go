@@ -17,6 +17,7 @@ var updateWireGoldens = flag.Bool("update", false, "update wire-trace golden fil
 var (
 	wireTimestampPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`)
 	wireUUIDPattern      = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
+	wireEntityIDPattern  = regexp.MustCompile(`\b([a-z]+)-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b`)
 )
 
 func wireRecorder(d *Daemon) *WireTrace {
@@ -81,6 +82,7 @@ func normalizeWireString(s string, paths map[string]string) string {
 	if wireUUIDPattern.MatchString(s) {
 		return "<uuid>"
 	}
+	s = wireEntityIDPattern.ReplaceAllString(s, "$1-<uuid>")
 	for _, path := range sortedPathsLongestFirst(paths) {
 		s = strings.ReplaceAll(s, path, paths[path])
 	}

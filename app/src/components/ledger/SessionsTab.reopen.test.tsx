@@ -12,7 +12,7 @@ const goneEverywhere = verdict({
   reason: 'the directory is gone; branch feat/x is gone from this repository and its remotes',
   directory_state: 'missing',
   branch_state: 'gone',
-  workspace_plan: 'create',
+  profile_deleted: true,
   actions: [SessionReopenAction.StartFreshDefaultBranch, SessionReopenAction.StartFreshElsewhere],
 });
 
@@ -233,13 +233,13 @@ describe('SessionsTab row grammar', () => {
     await rows().findByText('run s2');
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
-    expect(within(inspector()).getByText('opens a workspace named after the session, in a new pane')).toBeTruthy();
+    expect(within(inspector()).getByText('its profile was deleted; reopening it needs a profile to land in')).toBeTruthy();
 
     fireEvent.keyDown(row('run s1'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row('run s2'));
     expect(row('run s2').getAttribute('aria-selected')).toBe('true');
     expect(within(inspector()).getByText('directory is there')).toBeTruthy();
-    expect(within(inspector()).getByText('lands in attn, in a new pane')).toBeTruthy();
+    expect(within(inspector()).getByText('lands unplaced in its profile')).toBeTruthy();
   });
 
   it('Enter runs the first verb and a digit runs the nth', async () => {
