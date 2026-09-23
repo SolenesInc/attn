@@ -79,11 +79,6 @@ func TestParseCommand(t *testing.T) {
 			wantCmd: CmdQuery,
 		},
 		{
-			name:    "session selected message",
-			input:   `{"cmd":"session_selected","id":"abc"}`,
-			wantCmd: CmdSessionSelected,
-		},
-		{
 			name:    "unregister message",
 			input:   `{"cmd":"unregister","id":"abc"}`,
 			wantCmd: CmdUnregister,

@@ -86,7 +86,7 @@ func TestNudgeCountdownPausedWhileActive(t *testing.T) {
 	_, agentID, inputs := delegateForNotify(t, d, "codex")
 	ticketID := boundTicketID(t, d, agentID)
 	d.store.UpdateState(agentID, protocol.StateIdle)
-	d.setSelectedSession(agentID)
+	focusTestAgent(t, d, agentID)
 
 	commentOnTicket(t, d, ticketID, "take a look")
 
@@ -113,13 +113,13 @@ func TestNudgeCountdownResumesOnSwitchAway(t *testing.T) {
 		chiefID, agentID, _ := delegateForNotify(t, d, "codex")
 		ticketID := boundTicketID(t, d, agentID)
 		d.store.UpdateState(agentID, protocol.StateIdle)
-		d.setSelectedSession(agentID)
+		focusTestAgent(t, d, agentID)
 		commentOnTicket(t, d, ticketID, "take a look")
 		if currentNudgeTimer(d, agentID) != nil {
 			t.Fatal("countdown ran while the session was active")
 		}
 
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, chiefID)
 
 		settledNudgeDeadline(t, d, agentID)
 	})
@@ -140,13 +140,13 @@ func TestBufferedNudgePreservesDeadlineAcrossSelectionPause(t *testing.T) {
 		if err := d.store.SetTicketDeliveryAttention(d.ticketAttentionKey(chiefID), attentionAt); err != nil {
 			t.Fatal(err)
 		}
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, chiefID)
 		commentOnTicket(t, d, ticketID, "buffer this")
 		if deadline := currentNudgeDeadline(d, chiefID); !deadline.IsZero() {
 			t.Fatalf("selected chief armed deadline %s", deadline)
 		}
 
-		d.setSelectedSession(agentID)
+		focusTestAgent(t, d, agentID)
 		deadline := settledNudgeDeadline(t, d, chiefID)
 		want := attentionAt.Add(time.Hour)
 		if delta := deadline.Sub(want); delta < -time.Second || delta > time.Second {
@@ -183,7 +183,7 @@ func TestNudgeCountdownPausesOnSwitchTo(t *testing.T) {
 		t.Fatal("inactive session did not arm a countdown")
 	}
 
-	d.setSelectedSession(agentID)
+	focusTestAgent(t, d, agentID)
 
 	if currentNudgeTimer(d, agentID) != nil {
 		t.Fatal("countdown kept running after the session became active")

@@ -43,7 +43,6 @@ export function AppWorkspaces() {
   const {
     getActivePaneIdForSession,
     setWorkspaceRef,
-    focusWorkspaceLeaf,
     eventRouter: paneRuntimeEventRouter,
   } = useWorkspaceRuntimeContext();
   const { warmWorkspaceIds } = useWorkspaceResidencyContext();
@@ -171,9 +170,6 @@ export function AppWorkspaces() {
                 onOpenPresentation={handleOpenPresentationWindow}
                 onOpenMarkdown={(path, sessionId) => {
                   void sendOpenMarkdown(path, sessionId)
-                    .then(({ workspaceId, tileId }) => {
-                      if (workspaceId && tileId) focusWorkspaceLeaf(workspaceId, tileId);
-                    })
                     .catch((error) => {
                       console.error(
                         '[Markdown] in-app open failed, falling back to OS open:',

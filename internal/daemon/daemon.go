@@ -320,9 +320,8 @@ type Daemon struct {
 
 	workspaces *workspaceRegistry
 
-	selectedSessionMu   sync.RWMutex
-	selectedSessionID   string
-	selectedWorkspaceID string
+	currentAgentMu        sync.RWMutex
+	currentAgentSessionID string
 
 	openTileMu sync.Mutex
 
@@ -809,6 +808,7 @@ func (d *Daemon) Start() error {
 	}
 	d.ensureCrewCollections()
 	d.importCrewHomes()
+	d.refreshCurrentAgent()
 	if err := d.migrateCrewTicketIdentities(); err != nil {
 		return fmt.Errorf("migrate crew ticket identities: %w", err)
 	}
@@ -3724,7 +3724,7 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 		return
 	}
 	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
-	d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical})
+	d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical, focus: true})
 	d.sendOK(conn)
 }
 

@@ -14,8 +14,8 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/layouttree"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -184,7 +184,7 @@ func TestWorkspaceTileContentReloadOnlyReachesSubscribedClients(t *testing.T) {
 		})
 		_ = expectTileContent(t, subscribed, markdownTileIDForPath(file))
 
-		d.broadcastTileContentNow(workspaceID, markdownTileIDForPath(file))
+		d.pollMarkdownOnce()
 		got := expectTileContent(t, subscribed, markdownTileIDForPath(file))
 		if got.Content != "# Private" {
 			t.Fatalf("content = %q, want the file body", got.Content)
@@ -346,21 +346,15 @@ func TestCollectChangedMarkdownTilesDetectsEdits(t *testing.T) {
 	}
 }
 
-func TestOpenMarkdownTargetsSelectedSession(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
-	file := filepath.Join(t.TempDir(), "selected.md")
-	if err := os.WriteFile(file, []byte("# Selected"), 0o644); err != nil {
+func TestOpenMarkdownDocksBesideTheCurrentAgent(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
+	file := filepath.Join(t.TempDir(), "current.md")
+	if err := os.WriteFile(file, []byte("# Current"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	d.setSelectedSession("session-1")
-
 	clientConn, serverConn := net.Pipe()
 	defer clientConn.Close()
-	go d.handleOpenMarkdown(serverConn, &protocol.OpenMarkdownMessage{
-		Cmd:  protocol.CmdOpenMarkdown,
-		Path: file,
-	})
-
+	go d.handleOpenMarkdown(serverConn, &protocol.OpenMarkdownMessage{Cmd: protocol.CmdOpenMarkdown, Path: file})
 	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	var resp protocol.Response
 	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
@@ -369,58 +363,26 @@ func TestOpenMarkdownTargetsSelectedSession(t *testing.T) {
 	if !resp.Ok {
 		t.Fatalf("open_markdown failed: %v", protocol.Deref(resp.Error))
 	}
-
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing after open")
-	}
-	params, ok := layouttree.TileParamsByID(snapshot.Layout, markdownTileIDForPath(file))
-	if !ok || params != file {
-		t.Fatalf("docked tile params = (%q, %v), want %q", params, ok, file)
+	if tile := desktopTile(t, d, desktop.ID, markdownTileIDForPath(file)); tile.TileParams != file || tile.TileSessionID != "session-1" {
+		t.Fatalf("markdown tile = %+v, want the file bound to the current agent", tile)
 	}
 }
 
-func TestOpenMarkdownRejectsBareOpenAfterRemoteSessionSelection(t *testing.T) {
-	d, client, workspaceID := setupMarkdownWorkspace(t)
-	d.setSelectedSession("session-1")
-	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
-	if err != nil {
-		t.Fatalf("add endpoint: %v", err)
-	}
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "session-remote")
-	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
-
-	d.handleClientMessage(client, []byte(`{"cmd":"session_selected","id":"session-remote"}`))
-	if got := d.currentlySelectedSession(); got != "session-remote" {
-		t.Fatalf("selected session = %q, want remote session", got)
-	}
-
+func TestOpenMarkdownForAnUnknownSessionNamesIt(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
 	file := filepath.Join(t.TempDir(), "remote.md")
 	if err := os.WriteFile(file, []byte("# Remote"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	clientConn, serverConn := net.Pipe()
-	defer clientConn.Close()
-	go d.handleOpenMarkdown(serverConn, &protocol.OpenMarkdownMessage{
-		Cmd:  protocol.CmdOpenMarkdown,
-		Path: file,
-	})
-
-	_ = clientConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if _, _, err := d.openMarkdownTile(file, "session-remote"); err == nil || !strings.Contains(err.Error(), "session-remote") {
+		t.Fatalf("open for an unknown session = %v, want an error naming it", err)
 	}
-	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "no workspace found for session session-remote") {
-		t.Fatalf("response = %+v, want explicit remote-selection error", resp)
+	after, err := d.store.GetDesktop(desktop.ID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("local workspace layout missing")
-	}
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 0 {
-		t.Fatalf("local workspace tiles = %+v, want no stale local dock", leaves)
+	if leaves := layouttree.TileLeaves(after.Tree); len(leaves) != 0 {
+		t.Fatalf("the current desktop gained tiles %+v", leaves)
 	}
 }
 
@@ -459,21 +421,8 @@ func expectOpenMarkdownResult(t *testing.T, client *wsClient) protocol.OpenMarkd
 	}
 }
 
-func tileSessionBinding(t *testing.T, d *Daemon, workspaceID, tileID string) string {
-	t.Helper()
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing")
-	}
-	sessionID, ok := layouttree.TileSessionIDByID(snapshot.Layout, tileID)
-	if !ok {
-		t.Fatalf("tile %s not found in layout", tileID)
-	}
-	return sessionID
-}
-
 func TestOpenMarkdownDocksOneTilePerPath(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.md")
 	second := filepath.Join(dir, "second.md")
@@ -486,11 +435,8 @@ func TestOpenMarkdownDocksOneTilePerPath(t *testing.T) {
 		}
 	}
 
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing")
-	}
-	leaves := layouttree.TileLeaves(snapshot.Layout)
+	tree := desktopTree(t, d, desktop.ID)
+	leaves := layouttree.TileLeaves(tree)
 	if len(leaves) != 2 {
 		t.Fatalf("tile leaves = %+v, want one tile per open file", leaves)
 	}
@@ -510,7 +456,7 @@ func TestOpenMarkdownDocksOneTilePerPath(t *testing.T) {
 }
 
 func TestOpenMarkdownNormalizesPathBeforeDerivingTileID(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "notes.md")
 	if err := os.WriteFile(file, []byte("# Notes"), 0o644); err != nil {
@@ -529,8 +475,8 @@ func TestOpenMarkdownNormalizesPathBeforeDerivingTileID(t *testing.T) {
 			t.Fatalf("openMarkdownTile(%q) tile = %q, want %q", spelling, tileID, markdownTileIDForPath(file))
 		}
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 1 {
+	tree := desktopTree(t, d, desktop.ID)
+	if leaves := layouttree.TileLeaves(tree); len(leaves) != 1 {
 		t.Fatalf("tile leaves = %+v, want one tile across all spellings", leaves)
 	}
 
@@ -539,34 +485,35 @@ func TestOpenMarkdownNormalizesPathBeforeDerivingTileID(t *testing.T) {
 	}
 }
 
-func TestOpenMarkdownReusesLegacyFixedIDTile(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+func TestOpenMarkdownReusesATileAlreadyShowingTheFile(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
 	file := filepath.Join(t.TempDir(), "legacy.md")
 	if err := os.WriteFile(file, []byte("# Legacy"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.dockTile(workspaceID, "pane-1", "tile-markdown", string(layouttree.TileKindMarkdown), file, "session-0", protocol.LayoutDockEdgeRight, nil); err != nil {
-		t.Fatalf("dock legacy tile: %v", err)
+	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		return dockTileOnDesktop(desktop, desktopTileDock{tileID: "tile-markdown", tileKind: string(layouttree.TileKindMarkdown), params: file, edge: protocol.LayoutDockEdgeRight})
+	}); err != nil {
+		t.Fatalf("dock the existing tile: %v", err)
 	}
 
-	gotWorkspace, gotTile, err := d.openMarkdownTile(file, "session-1")
+	gotDesktop, gotTile, err := d.openMarkdownTile(file, "session-1")
 	if err != nil {
 		t.Fatalf("openMarkdownTile: %v", err)
 	}
-	if gotWorkspace != workspaceID || gotTile != "tile-markdown" {
-		t.Fatalf("open = (%q, %q), want legacy tile reused in %q", gotWorkspace, gotTile, workspaceID)
+	if gotDesktop != desktop.ID || gotTile != "tile-markdown" {
+		t.Fatalf("open = (%q, %q), want the existing tile reused on %q", gotDesktop, gotTile, desktop.ID)
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 1 {
-		t.Fatalf("tile leaves = %+v, want the legacy tile only (no hashed duplicate)", leaves)
+	if leaves := layouttree.TileLeaves(desktopTree(t, d, desktop.ID)); len(leaves) != 1 {
+		t.Fatalf("tile leaves = %+v, want the existing tile only (no hashed duplicate)", leaves)
 	}
-	if got := tileSessionBinding(t, d, workspaceID, "tile-markdown"); got != "session-1" {
-		t.Fatalf("legacy tile binding = %q, want rebound to session-1", got)
+	if tile := desktopTile(t, d, desktop.ID, "tile-markdown"); tile.TileSessionID != "session-1" {
+		t.Fatalf("existing tile binding = %q, want session-1", tile.TileSessionID)
 	}
 }
 
 func TestOpenMarkdownConcurrentDistinctPathsKeepAllTiles(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
 	dir := t.TempDir()
 	const n = 8
 	files := make([]string, n)
@@ -593,23 +540,16 @@ func TestOpenMarkdownConcurrentDistinctPathsKeepAllTiles(t *testing.T) {
 		}
 	}
 
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	leaves := layouttree.TileLeaves(snapshot.Layout)
+	tree := desktopTree(t, d, desktop.ID)
+	leaves := layouttree.TileLeaves(tree)
 	if len(leaves) != n {
 		t.Fatalf("tile leaves = %d (%+v), want %d — a concurrent dock was lost", len(leaves), leaves, n)
 	}
 }
 
 func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
-	d, client, workspaceID := setupMarkdownWorkspace(t)
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-2"),
-		SessionID:   "session-2",
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, "pane-2", true)
-
+	d, desktop := setupAgentDesktop(t)
+	injectTestSession(t, d, protocol.Session{ID: "session-2", Label: "second", Directory: t.TempDir()})
 	file := filepath.Join(t.TempDir(), "shared.md")
 	if err := os.WriteFile(file, []byte("# Shared"), 0o644); err != nil {
 		t.Fatal(err)
@@ -619,20 +559,20 @@ func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
 	if _, gotTile, err := d.openMarkdownTile(file, "session-1"); err != nil || gotTile != tileID {
 		t.Fatalf("first open = (%q, %v), want tile %q", gotTile, err, tileID)
 	}
-	if got := tileSessionBinding(t, d, workspaceID, tileID); got != "session-1" {
-		t.Fatalf("initial binding = %q, want session-1", got)
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "session-1" {
+		t.Fatalf("initial binding = %q, want session-1", tile.TileSessionID)
 	}
-	layoutAfterFirst := d.store.GetWorkspaceLayout(workspaceID).Layout
+	layoutAfterFirst := desktopTree(t, d, desktop.ID)
 
 	if _, gotTile, err := d.openMarkdownTile(file, "session-2"); err != nil || gotTile != tileID {
 		t.Fatalf("second open = (%q, %v), want reused tile %q", gotTile, err, tileID)
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 1 {
+	after := desktopTree(t, d, desktop.ID)
+	if leaves := layouttree.TileLeaves(after); len(leaves) != 1 {
 		t.Fatalf("tile leaves after reuse = %+v, want exactly one", leaves)
 	}
-	if got := tileSessionBinding(t, d, workspaceID, tileID); got != "session-2" {
-		t.Fatalf("binding after reuse = %q, want session-2", got)
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "session-2" {
+		t.Fatalf("binding after reuse = %q, want session-2", tile.TileSessionID)
 	}
 	rebased, ok := layouttree.UpdateTileSessionID(layoutAfterFirst, tileID, "session-2")
 	if !ok {
@@ -642,7 +582,7 @@ func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	afterJSON, err := layouttree.EncodeLayout(snapshot.Layout)
+	afterJSON, err := layouttree.EncodeLayout(after)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -652,7 +592,8 @@ func TestOpenMarkdownReusesTileAndRebindsSession(t *testing.T) {
 }
 
 func TestOpenMarkdownWSDocksTileAndReportsResult(t *testing.T) {
-	d, client, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
+	client := newWorkspaceProtocolTestClient()
 	d.wsHub.clients[client] = true
 	file := filepath.Join(t.TempDir(), "clicked.md")
 	if err := os.WriteFile(file, []byte("# Clicked"), 0o644); err != nil {
@@ -674,11 +615,11 @@ func TestOpenMarkdownWSDocksTileAndReportsResult(t *testing.T) {
 		t.Fatalf("request id = %q, want req-1", protocol.Deref(result.RequestID))
 	}
 	tileID := markdownTileIDForPath(file)
-	if protocol.Deref(result.WorkspaceID) != workspaceID || protocol.Deref(result.TileID) != tileID {
-		t.Fatalf("result ids = (%q, %q), want (%q, %q)", protocol.Deref(result.WorkspaceID), protocol.Deref(result.TileID), workspaceID, tileID)
+	if protocol.Deref(result.DesktopID) != desktop.ID || protocol.Deref(result.TileID) != tileID {
+		t.Fatalf("result ids = (%q, %q), want (%q, %q)", protocol.Deref(result.DesktopID), protocol.Deref(result.TileID), desktop.ID, tileID)
 	}
-	if got := tileSessionBinding(t, d, workspaceID, tileID); got != "session-1" {
-		t.Fatalf("binding = %q, want session-1", got)
+	if tile := desktopTile(t, d, desktop.ID, tileID); tile.TileSessionID != "session-1" {
+		t.Fatalf("binding = %q, want session-1", tile.TileSessionID)
 	}
 }
 
@@ -710,8 +651,8 @@ func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 		if err := os.WriteFile(file, []byte("v1"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, _, err := d.openMarkdownTile(file, "session-1"); err != nil {
-			t.Fatalf("openMarkdownTile(%s): %v", file, err)
+		if err := d.dockTile(workspaceID, "pane-1", markdownTileIDForPath(file), string(layouttree.TileKindMarkdown), file, "", protocol.LayoutDockEdgeRight, nil); err != nil {
+			t.Fatalf("dock %s: %v", file, err)
 		}
 		client.subscribeTileContent(workspaceID, markdownTileIDForPath(file))
 	}
@@ -734,7 +675,7 @@ func TestCollectChangedMarkdownTilesTracksMultipleTiles(t *testing.T) {
 }
 
 func TestOpenMarkdownRecordsRecentFile(t *testing.T) {
-	d, _, _ := setupMarkdownWorkspace(t)
+	d, _ := setupAgentDesktop(t)
 	file := filepath.Join(t.TempDir(), "notes.md")
 	if err := os.WriteFile(file, []byte("# Notes"), 0o644); err != nil {
 		t.Fatal(err)
@@ -759,7 +700,7 @@ func TestOpenMarkdownRecordsRecentFile(t *testing.T) {
 }
 
 func TestOpenMarkdownForgetsMissingFile(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
 	file := filepath.Join(t.TempDir(), "notes.md")
 	if err := os.WriteFile(file, []byte("# Notes"), 0o644); err != nil {
 		t.Fatal(err)
@@ -777,8 +718,8 @@ func TestOpenMarkdownForgetsMissingFile(t *testing.T) {
 	if files := d.store.GetRecentFiles(10, ""); len(files) != 0 {
 		t.Fatalf("recent files = %+v, want the deleted file forgotten", files)
 	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 1 {
+	tree := desktopTree(t, d, desktop.ID)
+	if leaves := layouttree.TileLeaves(tree); len(leaves) != 1 {
 		t.Fatalf("tile leaves = %+v, want the existing tile untouched", leaves)
 	}
 }
@@ -797,7 +738,7 @@ func openSentFiles(t *testing.T, d *Daemon, msg *protocol.OpenSentFilesMessage) 
 }
 
 func TestOpenSentFilesRoutesMarkdownAndDropsTheRest(t *testing.T) {
-	d, _, workspaceID := setupMarkdownWorkspace(t)
+	d, desktop := setupAgentDesktop(t)
 	dir := t.TempDir()
 	first := filepath.Join(dir, "plan.md")
 	second := filepath.Join(dir, "notes.markdown")
@@ -817,16 +758,13 @@ func TestOpenSentFilesRoutesMarkdownAndDropsTheRest(t *testing.T) {
 		t.Fatalf("open_sent_files failed: %v", protocol.Deref(resp.Error))
 	}
 
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatal("workspace layout missing after open")
-	}
+	tree := desktopTree(t, d, desktop.ID)
 	for _, f := range []string{first, second} {
-		if _, ok := layouttree.TileParamsByID(snapshot.Layout, markdownTileIDForPath(f)); !ok {
+		if _, ok := layouttree.TileParamsByID(tree, markdownTileIDForPath(f)); !ok {
 			t.Fatalf("markdown %s not docked", f)
 		}
 	}
-	if leaves := layouttree.TileLeaves(snapshot.Layout); len(leaves) != 2 {
+	if leaves := layouttree.TileLeaves(tree); len(leaves) != 2 {
 		t.Fatalf("tiles = %+v, want exactly the two markdown tiles", leaves)
 	}
 }

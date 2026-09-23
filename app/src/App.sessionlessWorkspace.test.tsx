@@ -13,7 +13,6 @@ const mockUseDaemonSocket = vi.fn();
 const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
 
 let mockDaemonWorkspaces: Array<Record<string, unknown>>;
-let mockSendWorkspaceSelected: ReturnType<typeof vi.fn>;
 let mockSendWorkspaceClosePane: ReturnType<typeof vi.fn>;
 let mockOpenUrlListener: ((urls: string[]) => void) | null;
 let mockPushWorkspaces: ((workspaces: unknown[]) => void) | undefined;
@@ -207,7 +206,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
-    mockSendWorkspaceSelected = vi.fn();
     mockSendWorkspaceClosePane = vi.fn(async () => ({ success: true }));
     mockOpenUrlListener = null;
     mockPushWorkspaces = undefined;
@@ -298,7 +296,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendSessionSelected: fn, sendWorkspaceSelected: mockSendWorkspaceSelected,
       sendWorkspaceClosePane: mockSendWorkspaceClosePane,
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
       requestTileContent: fn,
@@ -339,7 +336,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     });
     expect(screen.getByTestId('workspace-ws-session').getAttribute('data-active')).toBe('0');
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
-    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
     expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
   });
 
@@ -472,7 +468,6 @@ describe('tile-only (sessionless) workspace selection and render', () => {
       expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('ws-late:tile-seed');
       expect(mockFocusWorkspaceLeaf).toHaveBeenCalledWith('tile-seed');
     });
-    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-late');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {

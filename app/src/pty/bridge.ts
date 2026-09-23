@@ -1,3 +1,4 @@
+import type { SessionPlacement } from '../types/generated';
 import { isTauri } from '@tauri-apps/api/core';
 import { recordPtyListenerError } from '../utils/ptyPerf';
 import type { SeededBlock } from '../utils/terminalBlocks';
@@ -27,6 +28,7 @@ export interface PtySpawnArgs {
   claude_executable?: string;
   codex_executable?: string;
   copilot_executable?: string;
+  placement?: SessionPlacement;
 }
 
 export interface PtyAttachArgs extends PtyPixelGeometry {

@@ -267,7 +267,7 @@ func TestTicketNudgesActiveChiefAcrossRuntimes(t *testing.T) {
 				chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 				setSessionAgent(t, d, chiefID, runtime)
 				d.store.UpdateState(chiefID, protocol.StateWorking)
-				d.setSelectedSession(agentID)
+				focusTestAgent(t, d, agentID)
 
 				callSetTicketStatus(t, d, agentID, string(protocol.DispatchWorkStateReadyForReview), "done, please review")
 				time.Sleep(time.Until(settledNudgeDeadline(t, d, chiefID)) + time.Second)

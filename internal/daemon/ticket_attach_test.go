@@ -250,6 +250,7 @@ func TestTicketAttachNotifiesChief(t *testing.T) {
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 	chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
 	boundTicketID(t, d, agentID)
+	focusTestAgent(t, d, agentID)
 	for _, id := range []string{chiefID, agentID} {
 		if _, err := ticketnotify.ConsumeAll(d.store, d.ticketObserversForSession(id), time.Now()); err != nil {
 			t.Fatal(err)

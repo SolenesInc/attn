@@ -55,6 +55,7 @@ type SessionPlacementRequest struct {
 	NewPaneShare     float64
 	Title            string
 	Status           profiles.PaneStatus
+	Focus            bool
 }
 
 type SessionProfileMove struct {
@@ -1017,7 +1018,9 @@ func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementReques
 		Title:     strings.TrimSpace(request.Title),
 		Status:    request.Status,
 	})
-	desktop.ActivePaneID = paneID
+	if request.Focus || desktop.ActivePaneID == "" {
+		desktop.ActivePaneID = paneID
+	}
 	return desktop, nil
 }
 

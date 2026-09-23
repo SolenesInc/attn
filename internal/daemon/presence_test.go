@@ -58,12 +58,12 @@ func TestHandleClientMessageStampsUserPresence(t *testing.T) {
 	client.setIdentity("daemon-test", "protocol-"+protocol.ProtocolVersion, []string{protocol.CapabilityWorkspaceSessions})
 
 	before := time.Now()
-	d.handleClientMessage(client, []byte(`{"cmd":"session_selected","id":"session-1"}`))
+	d.handleClientMessage(client, []byte(`{"cmd":"desktop_set_active_pane","request_id":"focus-1","desktop_id":"desktop-1","pane_id":"pane-1"}`))
 	after := time.Now()
 
 	result := callTicketInboxResult(t, d, "session-1")
 	if result.LastUserActivityAt == nil {
-		t.Fatal("last_user_activity_at = nil, want stamped after session_selected")
+		t.Fatal("last_user_activity_at = nil, want stamped after desktop_set_active_pane")
 	}
 	got, err := time.Parse(time.RFC3339, *result.LastUserActivityAt)
 	if err != nil {
@@ -76,8 +76,9 @@ func TestHandleClientMessageStampsUserPresence(t *testing.T) {
 
 func TestIsUserPresenceCommandAllowlist(t *testing.T) {
 	present := []string{
-		protocol.CmdSessionSelected,
-		protocol.CmdWorkspaceSelected,
+		protocol.CmdProfileSelect,
+		protocol.CmdDesktopSetCurrent,
+		protocol.CmdDesktopSetActivePane,
 		protocol.CmdPRVisited,
 		protocol.CmdPtyInput,
 		protocol.CmdPtyResize,

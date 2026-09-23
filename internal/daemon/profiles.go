@@ -248,6 +248,7 @@ func (d *Daemon) runProfileAction(client *wsClient, action, requestID string, ru
 func (d *Daemon) publishArrangementChanged(profileID string) {
 	d.publishFact(FactProfileArrangementChanged, profileID, nil)
 	d.nudgeDesktopTileContent()
+	d.refreshCurrentAgent()
 }
 
 func (d *Daemon) desktopChanged(desktop profiles.Desktop) profileActionOutcome {
@@ -396,6 +397,7 @@ func (d *Daemon) handleDesktopPlaceSession(client *wsClient, msg *protocol.Deskt
 			NewPaneShare:     protocol.Deref(msg.NewPaneShare),
 			Title:            title,
 			Status:           profiles.PaneStatusReady,
+			Focus:            true,
 		})
 		return d.desktopChanged(desktop).withPaneID(paneID), err
 	})

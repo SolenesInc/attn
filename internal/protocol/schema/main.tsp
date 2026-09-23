@@ -1798,16 +1798,6 @@ model HeartbeatMessage {
   id: string;
 }
 
-model SessionSelectedMessage {
-  cmd: "session_selected";
-  id: string;
-}
-
-model WorkspaceSelectedMessage {
-  cmd: "workspace_selected";
-  workspace_id: string;
-}
-
 // TriggerNudgeMessage is the user clicking the incoming-nudge indicator to deliver
 // the pending ticket doorbell immediately, bypassing the countdown. Fire-and-forget.
 model TriggerNudgeMessage {
@@ -2862,7 +2852,7 @@ model OpenMarkdownMessage {
   request_id?: string;
 }
 
-// Result of a websocket open_markdown command. On success workspace_id and
+// Result of a websocket open_markdown command. On success desktop_id and
 // tile_id identify the docked (or reused) markdown tile.
 model OpenMarkdownResultMessage {
   event: "open_markdown_result";
@@ -2870,7 +2860,7 @@ model OpenMarkdownResultMessage {
   success: boolean;
   error?: string;
   path: string;
-  workspace_id?: string;
+  desktop_id?: string;
   tile_id?: string;
 }
 
@@ -2888,7 +2878,7 @@ model OpenSeedResultMessage {
   success: boolean;
   error?: string;
   seed_id: string;
-  workspace_id?: string;
+  desktop_id?: string;
   tile_id?: string;
 }
 
@@ -4680,7 +4670,10 @@ model ClientEvictionNoticeMessage {
 model BrowserControlRequestMessage {
   event: "browser_control_request";
   request_id: string;
-  workspace_id: string;
+  // Where the browser tile lives: a desktop for a local agent, a workspace for
+  // a remote outpost's agent. Exactly one is set.
+  desktop_id?: string;
+  workspace_id?: string;
   tile_id: string;
   action: string;
   params?: string;

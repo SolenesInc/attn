@@ -95,7 +95,7 @@ export interface SessionStore extends SessionNavigationState, SessionNavigationA
     agent: SessionAgent | undefined,
     endpointId: string | undefined,
     yoloMode: boolean | undefined,
-    workspaceId: string,
+    workspaceId: string | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => Promise<string>;
@@ -222,15 +222,12 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
     agent: SessionAgent | undefined,
     endpointId: string | undefined,
     yoloMode: boolean | undefined,
-    providedWorkspaceId: string,
+    providedWorkspaceId: string | undefined,
     chiefOfStaff?: boolean,
     autoMode?: boolean,
   ) => {
     const id = providedId || crypto.randomUUID();
-    if (!providedWorkspaceId) {
-      throw new Error('createSession requires workspaceId');
-    }
-    const workspaceId = providedWorkspaceId;
+    const workspaceId = providedWorkspaceId ?? '';
     const resolvedAgent: SessionAgent = agent ?? 'claude';
     const session: Session = {
       id,

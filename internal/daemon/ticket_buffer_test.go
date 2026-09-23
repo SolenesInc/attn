@@ -31,7 +31,7 @@ func TestTicketBurstBundlesIntoOneFollowupNudge(t *testing.T) {
 		d.ticketBundleWindowOverride = 10 * time.Minute
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, chiefID)
 		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
@@ -72,7 +72,7 @@ func TestCompletedTicketInsideBurstStaysBundled(t *testing.T) {
 		d.ticketBundleWindowOverride = 10 * time.Minute
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
-		d.setSelectedSession(agentID)
+		focusTestAgent(t, d, agentID)
 		if bundles := callTicketInbox(t, d, chiefID); len(bundles) != 0 {
 			t.Fatalf("initial chief inbox = %+v", bundles)
 		}
@@ -100,7 +100,7 @@ func TestTicketNudgeReturnsToImmediateAfterQuiet(t *testing.T) {
 		d.ticketBundleWindowOverride = 10 * time.Minute
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, chiefID)
 		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
@@ -157,7 +157,7 @@ func TestDeliveredUnreadDoesNotRearmUntilNewActivity(t *testing.T) {
 		d.ticketBundleWindowOverride = 10 * time.Minute
 		stopDaemonBackground(t, d)
 		chiefID, agentID, inputs := delegateForNotify(t, d, "codex")
-		d.setSelectedSession(chiefID)
+		focusTestAgent(t, d, chiefID)
 		d.store.UpdateState(agentID, protocol.StateIdle)
 		ticketID := boundTicketID(t, d, agentID)
 
@@ -276,7 +276,7 @@ func TestExplicitInboxConsumesDuringBundleWindow(t *testing.T) {
 		if err := d.store.SetTicketDeliveryAttention(d.ticketAttentionKey(chiefID), time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		d.setSelectedSession(agentID)
+		focusTestAgent(t, d, agentID)
 		callSetTicketStatus(t, d, agentID, string(protocol.DispatchWorkStateNeedsInput), "need a decision")
 		deadline := settledNudgeDeadline(t, d, chiefID)
 		if deadline.Before(time.Now().Add(59 * time.Minute)) {

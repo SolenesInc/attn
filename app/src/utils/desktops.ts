@@ -1,6 +1,6 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
-import type { Desktop } from '../types/generated';
+import type { Desktop, DesktopPane } from '../types/generated';
 
 export const SHORTCUT_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
@@ -45,4 +45,12 @@ export function isEmptyDesktop(desktop: Desktop): boolean {
 
 export function slotShortcut(slot: number): string {
   return formatShortcut(`workspace.select${slot}` as ShortcutId);
+}
+
+export function desktopPaneOfAgent(desktops: Desktop[], sessionId: string): DesktopPane | undefined {
+  for (const desktop of desktops) {
+    const pane = desktop.panes.find((entry) => entry.session_id === sessionId);
+    if (pane) return pane;
+  }
+  return undefined;
 }

@@ -2012,6 +2012,9 @@ type BrowserControlRequestMessage struct {
 	// Action corresponds to the JSON schema field "action".
 	Action string `json:"action"`
 
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
@@ -2031,7 +2034,7 @@ type BrowserControlRequestMessage struct {
 	TileID string `json:"tile_id"`
 
 	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
+	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type BrowserControlResponseMessage struct {
@@ -6728,6 +6731,9 @@ type OpenMarkdownMessage struct {
 }
 
 type OpenMarkdownResultMessage struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 
@@ -6745,9 +6751,6 @@ type OpenMarkdownResultMessage struct {
 
 	// TileID corresponds to the JSON schema field "tile_id".
 	TileID *string `json:"tile_id,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type OpenSeedMessage struct {
@@ -6768,6 +6771,9 @@ type OpenSeedMessage struct {
 }
 
 type OpenSeedResultMessage struct {
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID *string `json:"desktop_id,omitempty,omitzero"`
+
 	// Error corresponds to the JSON schema field "error".
 	Error *string `json:"error,omitempty,omitzero"`
 
@@ -6785,9 +6791,6 @@ type OpenSeedResultMessage struct {
 
 	// TileID corresponds to the JSON schema field "tile_id".
 	TileID *string `json:"tile_id,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type OpenSentFilesMessage struct {
@@ -10239,14 +10242,6 @@ type SessionReopenResultMessage struct {
 	Success bool `json:"success"`
 }
 
-type SessionSelectedMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// ID corresponds to the JSON schema field "id".
-	ID string `json:"id"`
-}
-
 type SessionShowMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -12332,14 +12327,6 @@ type WorkspaceRegisteredMessage struct {
 
 	// Workspace corresponds to the JSON schema field "workspace".
 	Workspace Workspace `json:"workspace"`
-}
-
-type WorkspaceSelectedMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 }
 
 type WorkspaceStateChangedMessage struct {

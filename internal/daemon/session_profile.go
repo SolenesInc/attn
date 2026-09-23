@@ -21,6 +21,7 @@ type launchPlacement struct {
 	desktopID    string
 	anchorPaneID string
 	direction    layouttree.Direction
+	focus        bool
 }
 
 func (p *launchPlacement) targetDesktop(profile profiles.Profile) string {
@@ -81,6 +82,7 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 		Direction:    placement.direction,
 		Title:        session.Label,
 		Status:       profiles.PaneStatusReady,
+		Focus:        placement.focus,
 	})
 	if err != nil {
 		err = fmt.Errorf("session %s stays unplaced in profile %s: placing it on desktop %q beside pane %q failed: %w",

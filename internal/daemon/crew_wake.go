@@ -342,7 +342,7 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	}
 
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSession(spawnClient, &protocol.SpawnSessionMessage{
+	d.handleSpawnSessionWithPolicy(spawnClient, &protocol.SpawnSessionMessage{
 		Cmd:           protocol.CmdSpawnSession,
 		ID:            sessionID,
 		Cwd:           directory,
@@ -354,7 +354,7 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		Rows:          24,
 		Label:         protocol.Ptr(crew.DisplayName(member.ID)),
 		InitialPrompt: protocol.Ptr(initialPrompt),
-	})
+	}, internalSpawnPolicy{})
 	if _, err := readInternalActionResult(spawnClient); err != nil {
 		if delivery != nil && delivery.Message != nil {
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
