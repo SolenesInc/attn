@@ -172,11 +172,13 @@ Two ways to run:
   returns a runId immediately and the engine keeps running in the background.
   Capture the runId, then poll `attn workflow show <runId>` on your own schedule;
   the run keeps going while your shell yields between checks.
-- Blocking: `attn workflow run <script.js> --wait` stays in the foreground for the
-  full run and only then prints the terminal result. Use it only if your caller
-  can block that whole time. If your shell yields or times out a foreground command
-  (e.g. a ~30s yield), the result output is lost but the run continues; switch to
-  polling `workflow show` rather than cancelling it.
+- Blocking: `attn workflow run <script.js> --wait` runs the engine in the
+  foreground process for the full run and only then prints the terminal result.
+  Use it only if your caller keeps that process alive the whole time: a timeout
+  that kills the command also kills the run, and its last reported state stays
+  `running`. If your shell only yields a still-running command (e.g. a ~30s
+  yield), the run continues but you lose its result output; poll `workflow show`
+  rather than cancelling it.
 
 Reading progress from `attn workflow show <runId>` (re-read it each poll):
 
