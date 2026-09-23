@@ -223,7 +223,7 @@ done
 	identities["fallback-agent"] = current.identity("fallback-agent", false)
 	assertAll(current, "fallback-new-agent")
 	for _, id := range slices.Sorted(maps.Keys(identities)) {
-		current.command(map[string]any{"cmd": "workspace_layout_close_pane", "workspace_id": "upgrade", "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
+		current.command(map[string]any{"cmd": "unregister", "id": id}, "session_unregistered", "")
 	}
 	current.stop()
 }
@@ -239,6 +239,7 @@ type upgradeDaemon struct {
 	ws         *websocket.Conn
 	workers    map[int]bool
 	agentPIDs  map[string]int
+	profileID  string
 	stopped    bool
 }
 
@@ -343,6 +344,7 @@ func (d *upgradeDaemon) connect() {
 	if d.instanceID == "" {
 		d.t.Fatal("initial_state has no daemon instance identity")
 	}
+	d.profileID, _ = initial["selected_profile_id"].(string)
 }
 
 func (d *upgradeDaemon) notificationCount(kind string) int {
@@ -474,8 +476,15 @@ func (d *upgradeDaemon) setSharedSetting(enabled bool) {
 
 func (d *upgradeDaemon) spawn(id, agent, executable string) {
 	d.t.Helper()
-	d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
-	d.command(map[string]any{"cmd": "spawn_session", "id": id, "workspace_id": "upgrade", "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}, "spawn_result", id)
+	spawn := map[string]any{"cmd": "spawn_session", "id": id, "cwd": d.root, "agent": agent, "codex_executable": executable, "cols": 80, "rows": 24}
+	if d.profileID == "" {
+		d.command(map[string]any{"cmd": "workspace_layout_add_session_pane", "workspace_id": "upgrade", "session_id": id, "pane_id": "pane-" + id}, "workspace_layout_action_result", "")
+		spawn["workspace_id"] = "upgrade"
+	} else {
+		spawn["profile_id"] = d.profileID
+		spawn["placement"] = map[string]any{}
+	}
+	d.command(spawn, "spawn_result", id)
 	for _, shared := range []bool{false, true} {
 		path := filepath.Join(d.root, "workers", d.instanceID, "registry", id+".json")
 		if shared {

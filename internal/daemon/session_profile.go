@@ -17,6 +17,13 @@ type launchPlacement struct {
 	direction    layouttree.Direction
 }
 
+func (p *launchPlacement) targetDesktop(profile profiles.Profile) string {
+	if p.desktopID != "" {
+		return p.desktopID
+	}
+	return profile.CurrentDesktopID
+}
+
 func requestedLaunchPlacement(requested *protocol.SessionPlacement) *launchPlacement {
 	if requested == nil {
 		return nil
