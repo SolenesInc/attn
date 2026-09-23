@@ -439,6 +439,7 @@ func (d *Daemon) removeSessionRuntime(sessionID string) error {
 func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 	msg, session := req.msg, plan.launchSession
 	if current := d.store.Get(session.ID); current != nil {
+		session.ProfileID = current.ProfileID
 		session.State = current.State
 		session.StateSince = current.StateSince
 		session.StateUpdatedAt = current.StateUpdatedAt

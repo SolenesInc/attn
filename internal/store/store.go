@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
+	"github.com/victorarias/attn/internal/profiles"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -323,8 +324,11 @@ func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) err
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
-	if current != "" {
+	if current == session.ProfileID {
 		return nil
+	}
+	if current != "" {
+		return profiles.Errorf(profiles.CodeCrossProfile, "session %s belongs to profile %s, not %s it was launched for; it moved while launching", session.ID, current, session.ProfileID)
 	}
 	_, err = loadLiveProfile(s.db, session.ProfileID)
 	return err
