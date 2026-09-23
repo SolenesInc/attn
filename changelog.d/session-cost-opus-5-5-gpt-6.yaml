@@ -6,4 +6,9 @@ change: >
   million tokens, with cache reads at $0.20, which is 5% of input instead of the
   usual 10%. Sol bills $2 input, $10 output, $0.20 cached input, and $2.50 cache
   writes. Luna bills $0.10 input, $0.50 output, $0.01 cached input, and $0.125
-  cache writes. Before this, sessions on these models showed no price.
+  cache writes. OpenAI requests whose prompt exceeds 272K tokens on GPT-5.5,
+  GPT-5.6, and GPT-6 now bill at OpenAI's long-context rates: double the input
+  and cache rates and 1.5 times the output rate for the whole request.
+symptom: >
+  Sessions on these models showed no price, and long-context OpenAI requests
+  were billed at the standard rate, understating their cost.

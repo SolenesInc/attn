@@ -1,6 +1,7 @@
 package store
 
 import (
+	"math"
 	"path/filepath"
 	"testing"
 
@@ -191,5 +192,52 @@ func TestSessionCostReadsLedgerKeysWrittenBeforePurposesExisted(t *testing.T) {
 	}
 	if got := state.Ledger[sessioncost.AgentKey("claude-opus-4-8")]; got.InputTokens != 15 || got.OutputTokens != 3 {
 		t.Fatalf("merged row = %+v", got)
+	}
+}
+
+func TestSessionCostPricesOpenAILongContextRequestsAtTheLongContextRate(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "attn.db")
+	s, err := newSeededStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Add(&protocol.Session{ID: "sol", Label: "sol"})
+	atThreshold := SessionCostObservation{
+		ObservationID: "codex:1", Model: "gpt-6-sol",
+		Usage: sessioncost.Usage{InputTokens: 72_000, CacheReadInputTokens: 200_000, OutputTokens: 10_000},
+	}
+	overThreshold := SessionCostObservation{
+		ObservationID: "codex:2", Model: "gpt-6-sol",
+		Usage: sessioncost.Usage{InputTokens: 72_001, CacheReadInputTokens: 200_000, OutputTokens: 10_000},
+	}
+	if _, err := s.ApplySessionCostObservations("sol", "cursor-1", []SessionCostObservation{atThreshold, overThreshold}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	s, err = newSeededStore(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	revised := overThreshold
+	revised.Usage.OutputTokens = 20_000
+	if _, err := s.ApplySessionCostObservations("sol", "cursor-2", []SessionCostObservation{revised}); err != nil {
+		t.Fatal(err)
+	}
+	state, err := s.SessionCost("sol")
+	if err != nil {
+		t.Fatal(err)
+	}
+	summary := sessioncost.Summarize(state.Ledger, nil)
+	if !summary.Valid || summary.HasUnpricedUsage || len(summary.Models) != 1 || summary.TotalTokens != 574_001 {
+		t.Fatalf("summary = %+v", summary)
+	}
+	standardUSD := (72_000*2 + 200_000*0.2 + 10_000*10) / 1e6
+	longContextUSD := (72_001*4 + 200_000*0.4 + 20_000*15) / 1e6
+	if summary.CostUSD == nil || math.Abs(*summary.CostUSD-(standardUSD+longContextUSD)) > 1e-12 {
+		t.Fatalf("summary = %+v, want cost %.6f", summary, standardUSD+longContextUSD)
 	}
 }

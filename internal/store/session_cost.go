@@ -19,7 +19,7 @@ type SessionCostObservation struct {
 }
 
 func (o SessionCostObservation) ledgerKey() sessioncost.LedgerKey {
-	return sessioncost.NewLedgerKey(o.Model, o.Purpose)
+	return sessioncost.RequestLedgerKey(o.Model, o.Purpose, o.Usage)
 }
 
 type SessionCostState struct {

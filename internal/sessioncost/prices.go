@@ -25,6 +25,32 @@ var builtInRateCards = map[string]RateCard{
 	"gpt-6-luna":  openAIRates(0.1, 0.5, 0.01, 0.125),
 }
 
+const (
+	openAILongContextPromptTokens     = 272_000
+	openAILongContextInputMultiplier  = 2
+	openAILongContextOutputMultiplier = 1.5
+)
+
+var openAILongContextModels = map[string]bool{
+	"gpt-5.5":       true,
+	"gpt-5.6-sol":   true,
+	"gpt-5.6-terra": true,
+	"gpt-5.6-luna":  true,
+	"gpt-6-astra":   true,
+	"gpt-6-sol":     true,
+	"gpt-6-luna":    true,
+}
+
+func longContextRates(card RateCard) RateCard {
+	return RateCard{
+		InputUSDPerMTok:        card.InputUSDPerMTok * openAILongContextInputMultiplier,
+		OutputUSDPerMTok:       card.OutputUSDPerMTok * openAILongContextOutputMultiplier,
+		CacheReadUSDPerMTok:    card.CacheReadUSDPerMTok * openAILongContextInputMultiplier,
+		CacheWrite5mUSDPerMTok: card.CacheWrite5mUSDPerMTok * openAILongContextInputMultiplier,
+		CacheWrite1hUSDPerMTok: card.CacheWrite1hUSDPerMTok * openAILongContextInputMultiplier,
+	}
+}
+
 func anthropicRates(input, output float64) RateCard {
 	return RateCard{
 		InputUSDPerMTok:        input,

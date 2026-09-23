@@ -393,7 +393,7 @@ func TestClosingDropsTheCostObservationsAndKeepsTheTotals(t *testing.T) {
 			}
 			for model, usage := range before.Ledger {
 				if after.Ledger[model] != usage {
-					t.Errorf("%s total = %+v after the close, want %+v", model, after.Ledger[model], usage)
+					t.Errorf("%v total = %+v after the close, want %+v", model, after.Ledger[model], usage)
 				}
 			}
 			if after.Cursor != before.Cursor {
