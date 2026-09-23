@@ -61,10 +61,10 @@ func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, 
 }
 
 func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error) {
-	return d.automationApplyWithGuards(context.Background(), raw, nil, nil)
+	return d.automationApplyWithGuards(context.Background(), raw, "", nil, nil)
 }
 
-func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
 	spec, canonical, err := d.validateAutomationSpec(raw)
 	if err != nil {
 		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
@@ -90,10 +90,14 @@ func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw string, expe
 		}
 		return nil
 	}
-	return d.automationApplyLocked(ctx, spec, canonical, guard)
+	profile, err := d.requestedOrRecentProfile(profileID)
+	if err != nil {
+		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
+	}
+	return d.automationApplyLocked(ctx, spec, canonical, profile.ID, guard)
 }
 
-func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, guard func(*store.AutomationDefinition) error) (*store.AutomationDefinition, error) {
+func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.DefinitionSpec, canonical []byte, profileID string, guard func(*store.AutomationDefinition) error) (*store.AutomationDefinition, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {
@@ -108,7 +112,7 @@ func (d *Daemon) automationApplyLocked(ctx context.Context, spec automation.Defi
 			return nil, err
 		}
 	}
-	definition, err := d.store.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), time.Now())
+	definition, err := d.store.UpsertAutomationDefinition(spec.ID, spec.Name, string(canonical), profileID, time.Now())
 	if err != nil {
 		return definition, err
 	}

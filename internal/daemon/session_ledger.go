@@ -151,7 +151,10 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		Event:     protocol.EventSessionReopenResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), profileDestination{
+		requested:           protocol.Deref(msg.ProfileID),
+		whenRecordedDeleted: client.selectedProfile(),
+	})
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	} else {

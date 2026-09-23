@@ -71,7 +71,6 @@ function baseProps() {
     }),
     deleteDefinition: vi.fn().mockResolvedValue(undefined),
     onSelectSession: vi.fn(),
-    onFocusPane: vi.fn(),
   };
 }
 
@@ -347,21 +346,6 @@ describe('AutomationsPanel', () => {
     await user.click(runOpen);
 
     expect(props.onSelectSession).toHaveBeenCalledWith('s1');
-  });
-
-  it('navigates to the session and focuses the pane when a run has session_id/pane_id', async () => {
-    const user = userEvent.setup();
-    const props = baseProps();
-    props.fetchDefinitions.mockResolvedValue([makeDefinition({ id: 'd1' })]);
-    props.fetchRuns.mockResolvedValue([makeRun({ id: 'r1', session_id: 's1', pane_id: 'p1' })]);
-    render(<AutomationsPanel {...props} />);
-
-    await user.click(await screen.findByText('PR reviewer'));
-    const runOpen = await screen.findByTestId('automation-run-open-r1');
-    await user.click(runOpen);
-
-    expect(props.onSelectSession).toHaveBeenCalledWith('s1');
-    expect(props.onFocusPane).toHaveBeenCalledWith('s1', 'p1');
   });
 
   it('renders a run with no session_id as non-navigable', async () => {

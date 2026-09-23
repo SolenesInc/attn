@@ -24,6 +24,7 @@ func addTurnSession(t *testing.T, d *Daemon, id string, agent protocol.SessionAg
 		Label:          id,
 		Directory:      "/tmp/" + id,
 		WorkspaceID:    workspaceID,
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          protocol.StateLaunching,
 		StateSince:     now,
 		StateUpdatedAt: now,

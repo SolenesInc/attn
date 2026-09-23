@@ -38,17 +38,17 @@ func TestLaunchIntentSpawnSuccessPersistsResolvedValues(t *testing.T) {
 	addTestWorkspace(d, "workspace", cwd)
 	client := spawnTestClient()
 	msg := &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          "persist-launch-intent",
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: "workspace",
-		Cols:        80,
-		Rows:        24,
-		YoloMode:    protocol.Ptr(true),
-		Executable:  protocol.Ptr("/opt/claude"),
-		Model:       protocol.Ptr("claude-opus"),
-		Effort:      protocol.Ptr("high"),
+		Cmd:        protocol.CmdSpawnSession,
+		ID:         "persist-launch-intent",
+		Cwd:        cwd,
+		Agent:      "claude",
+		ProfileID:  defaultProfileID(t, d.store),
+		Cols:       80,
+		Rows:       24,
+		YoloMode:   protocol.Ptr(true),
+		Executable: protocol.Ptr("/opt/claude"),
+		Model:      protocol.Ptr("claude-opus"),
+		Effort:     protocol.Ptr("high"),
 	}
 
 	d.handleSpawnSession(client, msg)
@@ -78,13 +78,13 @@ func TestLaunchIntentSpawnFailurePersistsNothing(t *testing.T) {
 	addTestWorkspace(d, "workspace", cwd)
 	client := spawnTestClient()
 	msg := &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          "failed-launch-intent",
-		Cwd:         cwd,
-		Agent:       "claude",
-		WorkspaceID: "workspace",
-		Cols:        80,
-		Rows:        24,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        "failed-launch-intent",
+		Cwd:       cwd,
+		Agent:     "claude",
+		ProfileID: defaultProfileID(t, d.store),
+		Cols:      80,
+		Rows:      24,
 	}
 
 	d.handleSpawnSession(client, msg)

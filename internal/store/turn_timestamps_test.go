@@ -94,7 +94,7 @@ func TestASnoozeWrittenInTheOldEncodingIsStillWakeable(t *testing.T) {
 
 func TestAReviewRequestCursorAdvancesWithinASecond(t *testing.T) {
 	s := newTurnStore(t)
-	def, err := s.UpsertAutomationDefinition("reviews", "Reviews", `{"id":"reviews"}`, turnBase())
+	def, err := s.UpsertAutomationDefinition("reviews", "Reviews", `{"id":"reviews"}`, "", turnBase())
 	if err != nil {
 		t.Fatalf("upsert definition: %v", err)
 	}

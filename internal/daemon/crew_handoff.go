@@ -256,21 +256,7 @@ func (d *Daemon) crewNap(member crew.Member, oldSessionID string, teardown *sess
 		}
 	}
 
-	paneClient := newInternalWSClient()
-	d.handleWorkspaceLayoutAddSessionPane(paneClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: spawnMsg.WorkspaceID,
-		PaneID:      protocol.Ptr("pane-" + newSessionID),
-		SessionID:   newSessionID,
-		Title:       protocol.Ptr(crew.DisplayName(member.ID)),
-	})
-	if _, err := readInternalActionResult(paneClient); err != nil {
-		undoBinding()
-		return "", fmt.Errorf("create %s's next pane: %w", crew.DisplayName(member.ID), err)
-	}
-
 	if rejection := d.runSpawnPipeline(spawnMsg, policy); rejection != nil {
-		d.removeWorkspaceLayoutPaneForSession(newSessionID)
 		undoBinding()
 		return "", fmt.Errorf("wake %s's successor: %w", crew.DisplayName(member.ID), rejection.reason())
 	}
@@ -290,13 +276,13 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	} else {
 		d.logf("crew: no launch intent for %s's closing day; the successor launches with defaults", crew.DisplayName(member.ID))
 		spawnMsg = &protocol.SpawnSessionMessage{
-			Cmd:         protocol.CmdSpawnSession,
-			Cwd:         session.Directory,
-			Agent:       string(session.Agent),
-			WorkspaceID: session.WorkspaceID,
-			Label:       protocol.Ptr(crew.DisplayName(member.ID)),
-			Cols:        cols,
-			Rows:        rows,
+			Cmd:       protocol.CmdSpawnSession,
+			Cwd:       session.Directory,
+			Agent:     string(session.Agent),
+			ProfileID: session.ProfileID,
+			Label:     protocol.Ptr(crew.DisplayName(member.ID)),
+			Cols:      cols,
+			Rows:      rows,
 		}
 	}
 	spawnMsg.ID = uuid.NewString()
@@ -321,8 +307,8 @@ func (d *Daemon) crewNapSpawn(member crew.Member, session *protocol.Session) (*p
 	}
 
 	spawnMsg.ResumeSessionID = nil
-	if strings.TrimSpace(spawnMsg.WorkspaceID) == "" {
-		spawnMsg.WorkspaceID = crewWorkspaceID(member.ID)
+	if placement := d.placementBeside(session.ID); placement != nil {
+		spawnMsg.Placement = &protocol.SessionPlacement{DesktopID: protocol.Ptr(placement.desktopID), AnchorPaneID: protocol.Ptr(placement.anchorPaneID)}
 	}
 	if strings.TrimSpace(spawnMsg.Cwd) == "" {
 		spawnMsg.Cwd = member.HomeDir
@@ -353,8 +339,6 @@ func (d *Daemon) closeNappedSession(sessionID string, teardown *sessionTeardown)
 	d.commitSessionUnregister(sessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "crew member put to sleep"})
 	if teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 		d.publishFact(FactSessionTerminated, teardown.session.ID, nil)
 	}
 	d.terminateSessionAsync(sessionID, syscall.SIGTERM, teardown)

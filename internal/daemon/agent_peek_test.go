@@ -181,7 +181,7 @@ func TestHandleAgentPeekServesTheRenderedScreen(t *testing.T) {
 func TestHandleAgentPeekServesTheScreenKeptWhenTheProcessExited(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{screen: "Error: Model \"gpt-5.6-sol\" is ambiguous across providers\n"}
-	workspaceID, sessionID, cwd := setupDelegationSource(t, d, backend)
+	_, sessionID, cwd := setupDelegationSource(t, d, backend)
 
 	if !d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 1}) {
 		t.Fatal("process exit was suppressed")
@@ -208,7 +208,7 @@ func TestHandleAgentPeekServesTheScreenKeptWhenTheProcessExited(t *testing.T) {
 	backend.mu.Unlock()
 	client := newWorkspaceProtocolTestClient()
 	respawn := &protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, WorkspaceID: workspaceID,
+		Cmd: protocol.CmdSpawnSession, ID: sessionID, Cwd: cwd, ProfileID: defaultProfileID(t, d.store),
 		Agent: protocol.AgentShellValue, Cols: 80, Rows: 24, Label: protocol.Ptr("Source"),
 	}
 	d.handleSpawnSession(client, respawn)

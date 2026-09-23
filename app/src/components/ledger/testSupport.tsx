@@ -99,9 +99,8 @@ export function verdict(overrides: Partial<SessionReopen> = {}): SessionReopen {
     actions: [SessionReopenAction.Reopen],
     checking: false,
     directory_state: 'present',
-    workspace_id: 'ws-1',
-    workspace_plan: 'reuse',
-    pane_plan: 'add',
+    profile_id: 'profile-default',
+    profile_deleted: false,
     ...overrides,
   };
 }

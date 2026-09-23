@@ -250,12 +250,12 @@ func TestConcurrentReuseDelegationsRequireExplicitSharing(t *testing.T) {
 
 func TestRecoveredDelegationResultDistinguishesReusedWorktree(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	session := &protocol.Session{ID: "session", WorkspaceID: "workspace", Directory: "/tmp/shared", IsWorktree: protocol.Ptr(true)}
-	reused := d.completedDelegationResult(session, delegationPlacementNew, false)
+	session := &protocol.Session{ID: "session", ProfileID: "profile", Directory: "/tmp/shared", IsWorktree: protocol.Ptr(true)}
+	reused := d.completedDelegationResult(session, false)
 	if reused.WorktreeCreated != nil {
 		t.Fatalf("reused worktree reported created=%v", protocol.Deref(reused.WorktreeCreated))
 	}
-	created := d.completedDelegationResult(session, delegationPlacementNew, true)
+	created := d.completedDelegationResult(session, true)
 	if !protocol.Deref(created.WorktreeCreated) {
 		t.Fatal("owned worktree lost created receipt")
 	}
@@ -405,22 +405,22 @@ func TestDelegationOperationRestartResumesAcceptedRecord(t *testing.T) {
 func TestDelegationOperationAdoptsReconciledReservedRuntime(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
-	workspaceID, sourceID, cwd := setupDelegationSource(t, d, backend)
+	_, sourceID, cwd := setupDelegationSource(t, d, backend)
 	encoded, _ := json.Marshal(map[string]any{"cmd": "delegate", "request_id": "spawn-crash", "source_session_id": sourceID, "brief": "Adopt the surviving runtime.", "agent": "codex", "label": "adopted"})
 	record, _, err := d.store.ClaimDelegationOperation("spawn-crash", "operation-spawn-crash", "session-spawn-crash", "", "", string(encoded), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, WorkspaceID: workspaceID, Label: "adopted", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, ProfileID: defaultProfileID(t, d.store), Label: "adopted", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateLaunching, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	backend.sessionIDs = append(backend.sessionIDs, record.Operation.SessionID)
 	d.runDelegationOperation(record.Operation.OperationID)
 	done := waitDelegationOperation(t, d, record.Operation.OperationID)
-	if done.State != protocol.DelegationOperationStateCompleted || done.WorkspaceID == nil || protocol.Deref(done.WorkspaceID) != workspaceID {
+	if done.State != protocol.DelegationOperationStateCompleted || done.Result == nil || protocol.Deref(done.Result.ProfileID) != defaultProfileID(t, d.store) {
 		t.Fatalf("operation=%+v", done)
 	}
 	adopted := d.store.Get(record.Operation.SessionID)
-	if adopted == nil || adopted.WorkspaceID != workspaceID || adopted.Label != "adopted" {
+	if adopted == nil || adopted.ProfileID != defaultProfileID(t, d.store) || adopted.Label != "adopted" {
 		t.Fatalf("adopted session=%+v", adopted)
 	}
 	if got := len(backend.spawnOpts); got != 1 {
@@ -431,14 +431,14 @@ func TestDelegationOperationAdoptsReconciledReservedRuntime(t *testing.T) {
 func TestLegacyDelegationOperationWithoutLiveRuntimeRequiresExplicitRetry(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
-	workspaceID, sourceID, cwd := setupDelegationSource(t, d, backend)
+	_, sourceID, cwd := setupDelegationSource(t, d, backend)
 	encoded, _ := json.Marshal(map[string]any{"cmd": "delegate", "request_id": "spawn-missing", "source_session_id": sourceID, "brief": "Recover the missing runtime.", "agent": "codex", "label": "respawned"})
 	record, _, err := d.store.ClaimDelegationOperation("spawn-missing", "operation-spawn-missing", "session-spawn-missing", "", "", string(encoded), time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
 	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, WorkspaceID: workspaceID, Label: "respawned", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateRecoverable, StateSince: now, StateUpdatedAt: now, LastSeen: now})
+	d.store.Add(&protocol.Session{ID: record.Operation.SessionID, ProfileID: defaultProfileID(t, d.store), Label: "respawned", Agent: protocol.SessionAgentCodex, Directory: cwd, State: protocol.SessionStateRecoverable, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	d.runDelegationOperation(record.Operation.OperationID)
 	done := waitDelegationOperation(t, d, record.Operation.OperationID)
 	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "new request") {

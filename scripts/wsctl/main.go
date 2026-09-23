@@ -71,7 +71,7 @@ URL: %s (ATTN_WS_URL > ATTN_INSTANCE-derived port > dev; prod needs an explicit 
 Commands:
   add-workspace --title T --dir D [--id I]
   rm-workspace --id I
-  add-session --workspace W --cwd D [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
+  add-session --cwd D [--profile P] [--place] [--agent claude] [--label L] [--initial-prompt-file P] [--yolo] [--id I] [--cols 80] [--rows 24]
   rm-session --id I
   kill-session --id I [--reload]
   screen --id I
@@ -147,7 +147,8 @@ func rmWorkspace(args []string) error {
 
 func addSession(args []string) error {
 	fs := flag.NewFlagSet("add-session", flag.ExitOnError)
-	workspace := fs.String("workspace", "", "owning workspace id (required)")
+	profile := fs.String("profile", "", "owning profile id (defaults to the daemon's selected profile)")
+	place := fs.Bool("place", false, "place the session on the profile's current desktop beside its active pane")
 	cwd := fs.String("cwd", "", "session working directory (required)")
 	agent := fs.String("agent", "claude", "agent: claude | codex | copilot | shell")
 	label := fs.String("label", "", "session label (defaults to dir basename)")
@@ -158,8 +159,8 @@ func addSession(args []string) error {
 	rows := fs.Int("rows", 24, "initial PTY rows")
 	fs.Parse(args)
 
-	if *workspace == "" || *cwd == "" {
-		return errors.New("--workspace and --cwd are required")
+	if *cwd == "" {
+		return errors.New("--cwd is required")
 	}
 	abs, err := filepath.Abs(*cwd)
 	if err != nil {
@@ -171,13 +172,16 @@ func addSession(args []string) error {
 	}
 
 	msg := map[string]any{
-		"cmd":          "spawn_session",
-		"id":           sessID,
-		"cwd":          abs,
-		"workspace_id": *workspace,
-		"agent":        *agent,
-		"cols":         *cols,
-		"rows":         *rows,
+		"cmd":        "spawn_session",
+		"id":         sessID,
+		"cwd":        abs,
+		"profile_id": *profile,
+		"agent":      *agent,
+		"cols":       *cols,
+		"rows":       *rows,
+	}
+	if *place {
+		msg["placement"] = map[string]any{}
 	}
 	if *label != "" {
 		msg["label"] = *label
@@ -204,7 +208,7 @@ func addSession(args []string) error {
 			return fmt.Errorf("daemon rejected spawn: %s", errMsg)
 		}
 	}
-	fmt.Printf("session spawned: id=%s workspace=%s agent=%s cwd=%s\n", sessID, *workspace, *agent, abs)
+	fmt.Printf("session spawned: id=%s profile=%s agent=%s cwd=%s\n", sessID, msg["profile_id"], *agent, abs)
 	return nil
 }
 
@@ -401,8 +405,18 @@ func sendAndWaitMatch(payload map[string]any, expectedEvent string, match func(m
 	if err := sendClientHello(ctx, conn); err != nil {
 		return nil, err
 	}
-	if _, _, err := conn.Read(ctx); err != nil {
+	_, initial, err := conn.Read(ctx)
+	if err != nil {
 		return nil, fmt.Errorf("drain initial_state: %w", err)
+	}
+	if profileID, ok := payload["profile_id"].(string); ok && profileID == "" {
+		var state struct {
+			SelectedProfileID string `json:"selected_profile_id"`
+		}
+		if err := json.Unmarshal(initial, &state); err != nil {
+			return nil, fmt.Errorf("decode initial_state: %w", err)
+		}
+		payload["profile_id"] = state.SelectedProfileID
 	}
 
 	body, err := json.Marshal(payload)

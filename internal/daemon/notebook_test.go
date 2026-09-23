@@ -403,7 +403,7 @@ func addIdleNotebookSession(d *Daemon, id string, state protocol.SessionState) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: id, Agent: protocol.SessionAgentClaude,
-		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id,
+		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id, ProfileID: recentProfileID(d.store),
 		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

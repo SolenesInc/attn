@@ -17,7 +17,7 @@ func addLedgerTestSession(t *testing.T, d *Daemon, id, directory string) {
 	now := protocol.TimestampNow().String()
 	d.store.Add(&protocol.Session{
 		ID: id, Label: id, Agent: protocol.SessionAgentClaude,
-		Directory: directory, WorkspaceID: "ws-" + id,
+		Directory: directory, WorkspaceID: "ws-" + id, ProfileID: defaultProfileID(t, d.store),
 		State:      protocol.SessionStateWaitingInput,
 		StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})

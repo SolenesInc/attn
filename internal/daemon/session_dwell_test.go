@@ -75,14 +75,14 @@ func TestSpawnFilesWhoAnswersApprovals(t *testing.T) {
 			d.store.SetSetting(SettingAutoApproveEnabled, strconv.FormatBool(tc.autoApprove))
 
 			msg := &protocol.SpawnSessionMessage{
-				Cmd:         protocol.CmdSpawnSession,
-				ID:          "spawn-reviewer-" + tc.name,
-				Cwd:         cwd,
-				Agent:       "codex",
-				WorkspaceID: "workspace",
-				Cols:        80,
-				Rows:        24,
-				YoloMode:    protocol.Ptr(tc.yolo),
+				Cmd:       protocol.CmdSpawnSession,
+				ID:        "spawn-reviewer-" + tc.name,
+				Cwd:       cwd,
+				Agent:     "codex",
+				ProfileID: defaultProfileID(t, d.store),
+				Cols:      80,
+				Rows:      24,
+				YoloMode:  protocol.Ptr(tc.yolo),
 			}
 			client := spawnTestClient()
 			d.handleSpawnSession(client, msg)

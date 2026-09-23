@@ -28,7 +28,7 @@ export function AppDock() {
   const { activeWorkflowRun } = useWorkflowPanelContext();
   const { waitingLocalSessions } = useAttentionQueueContext();
   const { prs } = useAppInputs();
-  const { handleSelectSession, selectAgentPane } = useNavigationContext();
+  const { handleSelectSession } = useNavigationContext();
   const {
     listAutomationDefinitions,
     listAutomationRuns,
@@ -87,7 +87,6 @@ export function AppDock() {
                 applyDefinition={applyAutomationDefinition}
                 deleteDefinition={deleteAutomationDefinition}
                 onSelectSession={handleSelectSession}
-                onFocusPane={(sessionId, paneId) => selectAgentPane(sessionId, paneId)}
               />
             ),
           },

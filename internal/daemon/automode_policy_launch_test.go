@@ -117,12 +117,12 @@ func TestSpawnAppliesThePerSessionPolicyPair(t *testing.T) {
 			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 			ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
 			msg := &protocol.SpawnSessionMessage{
-				ID:          "snipe-session",
-				Cwd:         t.TempDir(),
-				WorkspaceID: "workspace-snipe",
-				Agent:       "snipe",
-				Cols:        80,
-				Rows:        24,
+				ID:        "snipe-session",
+				Cwd:       t.TempDir(),
+				ProfileID: defaultProfileID(t, d.store),
+				Agent:     "snipe",
+				Cols:      80,
+				Rows:      24,
 			}
 			if tc.policy != "" {
 				msg.ApprovalPolicy = protocol.Ptr(tc.policy)
@@ -142,7 +142,7 @@ func TestSpawnAppliesThePerSessionPolicyPair(t *testing.T) {
 					intent.ApprovalPolicy, intent.SandboxMode, tc.policy, tc.sandbox)
 			}
 			session := &protocol.Session{
-				ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe",
+				ID: "snipe-session", Directory: t.TempDir(), Agent: "snipe", WorkspaceID: "workspace-snipe", ProfileID: defaultProfileID(t, d.store),
 			}
 			revived, _ := buildStoredIntentSpawn(session, intent, 80, 24)
 			if got := protocol.Deref(revived.ApprovalPolicy); got != tc.policy {
@@ -204,7 +204,7 @@ func TestYoloOnAnAutoModeDriverLaunchesWithFullAccess(t *testing.T) {
 	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
 		ID:             "snipe-session",
 		Cwd:            t.TempDir(),
-		WorkspaceID:    "workspace-snipe",
+		ProfileID:      defaultProfileID(t, d.store),
 		Agent:          "snipe",
 		Cols:           80,
 		Rows:           24,
@@ -238,13 +238,13 @@ func TestYoloIsStillRefusedForADriverThatReadsNeitherFlag(t *testing.T) {
 	addTestWorkspace(d, "workspace-snipe", t.TempDir())
 
 	rejection := d.runSpawnPipeline(&protocol.SpawnSessionMessage{
-		ID:          "snipe-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
-		YoloMode:    protocol.Ptr(true),
+		ID:        "snipe-session",
+		Cwd:       t.TempDir(),
+		ProfileID: defaultProfileID(t, d.store),
+		Agent:     "snipe",
+		Cols:      80,
+		Rows:      24,
+		YoloMode:  protocol.Ptr(true),
 	}, internalSpawnPolicy{})
 	if rejection == nil {
 		t.Fatal("a yolo launch was accepted by a driver that supports neither yolo nor auto mode")
@@ -286,12 +286,12 @@ func TestSpawnRefusesAPolicyPairItCannotHonour(t *testing.T) {
 			addTestWorkspace(d, "workspace-snipe", t.TempDir())
 
 			msg := &protocol.SpawnSessionMessage{
-				ID:          "snipe-session",
-				Cwd:         t.TempDir(),
-				WorkspaceID: "workspace-snipe",
-				Agent:       "snipe",
-				Cols:        80,
-				Rows:        24,
+				ID:        "snipe-session",
+				Cwd:       t.TempDir(),
+				ProfileID: defaultProfileID(t, d.store),
+				Agent:     "snipe",
+				Cols:      80,
+				Rows:      24,
 			}
 			if tc.policy != "" {
 				msg.ApprovalPolicy = protocol.Ptr(tc.policy)

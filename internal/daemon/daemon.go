@@ -27,7 +27,6 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/config"
-	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/diag"
 	"github.com/victorarias/attn/internal/enrollment"
 	"github.com/victorarias/attn/internal/fsdoc"
@@ -48,7 +47,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/supervise"
 	"github.com/victorarias/attn/internal/transcript"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type workerReconcileReport struct {
@@ -1371,11 +1369,18 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				state = protocol.SessionStateLaunching
 			}
 
+			profile, err := d.store.MostRecentlyUsedProfile()
+			if err != nil {
+				d.logf("worker reconciliation left runtime %s without a session row: no profile to adopt it into: %v", sessionID, err)
+				report.MissingMetadata++
+				continue
+			}
 			recoveredSession := &protocol.Session{
 				ID:             sessionID,
 				Label:          label,
 				Agent:          normalizeStoredSessionAgent(info.Agent, protocol.SessionAgentCodex),
 				Directory:      directory,
+				ProfileID:      profile.ID,
 				State:          state,
 				StateSince:     now,
 				StateUpdatedAt: now,
@@ -2000,6 +2005,7 @@ func (d *Daemon) restoreSessionClose(sessionID string, closed store.SessionClose
 }
 
 func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error)) {
+	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionSnapshot(session); err != nil {
 			d.logf("garden: preserving execution %s before closing it: %v", sessionID, err)
@@ -2026,6 +2032,7 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 }
 
 func (d *Daemon) removeReapedSession(sessionID string) {
+	defer d.announceUnplacement(sessionID)()
 	if session := d.store.Get(sessionID); session != nil {
 		if _, err := d.captureGardenSessionExecution(session); err != nil {
 			d.logf("garden: preserving execution %s before reaping: %v", sessionID, err)
@@ -2036,8 +2043,6 @@ func (d *Daemon) removeReapedSession(sessionID string) {
 	d.forgetSessionTrace(sessionID)
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
-	d.dissociateSessionFromWorkspace(sessionID)
-	d.removeWorkspaceLayoutPaneForSession(sessionID)
 }
 
 func (d *Daemon) forgetSessionRuntime(sessionID string) {
@@ -2486,8 +2491,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 
 	switch cmd {
-	case protocol.CmdRegister:
-		d.handleRegister(conn, msg.(*protocol.RegisterMessage))
 	case protocol.CmdDelegate:
 		d.handleDelegate(conn, msg.(*protocol.DelegateMessage))
 	case protocol.CmdAutomationApply, protocol.CmdAutomationValidate, protocol.CmdAutomationDefinitionsGet, protocol.CmdAutomationDefinitionGet, protocol.CmdAutomationRun, protocol.CmdAutomationRunsGet, protocol.CmdAutomationSetEnabled, protocol.CmdAutomationDelete, protocol.CmdAutomationCleanup:
@@ -2775,103 +2778,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 	}
 }
 
-func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
-		d.handleRegisterForeground(conn, msg)
-		return nil
-	})
-}
-
-func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
-	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
-	existing := d.store.Get(msg.ID)
-
-	branchInfo, _ := git.GetBranchInfo(msg.Dir)
-
-	nowStr := string(protocol.TimestampNow())
-	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
-	sessionLabel := protocol.Deref(msg.Label)
-	if existing != nil && strings.TrimSpace(existing.Label) != "" {
-		sessionLabel = existing.Label
-	}
-	session := &protocol.Session{
-		ID:             msg.ID,
-		Label:          sessionLabel,
-		Agent:          agent,
-		Directory:      msg.Dir,
-		State:          protocol.SessionStateLaunching,
-		StateSince:     nowStr,
-		StateUpdatedAt: nowStr,
-		LastSeen:       nowStr,
-	}
-	if branchInfo != nil {
-		if branchInfo.Branch != "" {
-			session.Branch = protocol.Ptr(branchInfo.Branch)
-		}
-		if branchInfo.IsWorktree {
-			session.IsWorktree = protocol.Ptr(true)
-		}
-		if branchInfo.MainRepo != "" {
-			session.MainRepo = protocol.Ptr(branchInfo.MainRepo)
-		}
-		if branchInfo.Repository != "" {
-			session.Repository = protocol.Ptr(branchInfo.Repository)
-		}
-	}
-	workspaceID := strings.TrimSpace(msg.WorkspaceID)
-	if workspaceID == "" {
-		d.sendError(conn, "missing workspace_id")
-		return
-	}
-	if member := strings.TrimSpace(protocol.Deref(msg.Member)); member != "" {
-		memberID, err := d.claimCrewBinding(member, msg.ID)
-		if err != nil {
-			d.sendError(conn, fmt.Sprintf("crew bind %q: %v", member, err))
-			return
-		}
-		d.logf("session %s registering as crew member %s", msg.ID, crew.DisplayName(memberID))
-	} else {
-		d.releaseCrewBindingIfSession(msg.ID)
-	}
-	session.WorkspaceID = workspaceID
-	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
-		d.releaseCrewBindingIfSession(session.ID)
-		d.sendError(conn, err.Error())
-		return
-	}
-	existingWS := d.store.GetWorkspace(workspaceID)
-	workspaceTitle := session.Label
-	if existingWS != nil && strings.TrimSpace(existingWS.Title) != "" {
-		workspaceTitle = existingWS.Title
-	}
-	workspaceRank := d.resolveWorkspaceRank(existingWS)
-	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: workspaceTitle, Directory: session.Directory, Status: protocol.WorkspaceStatusLaunching, Rank: workspaceRank})
-	d.workspaces.register(workspaceID, workspaceTitle, session.Directory, workspaceRank, false, false)
-	if pending, ok := d.consumePendingAgentConversation(session.ID); ok {
-		d.observeAgentConversation(pending)
-	}
-	if err := d.store.ClearTicketReconciliationForAssignee(session.ID); err != nil {
-		d.logf("clear ticket reconciliation on register for %s: %v", session.ID, err)
-	}
-	d.reviveCrashedTicketsForSession(session.ID)
-	d.associateSessionWithWorkspace(session.ID, workspaceID)
-	if _, err := d.ensureWorkspaceLayout(workspaceID); err != nil {
-		d.logf("workspace layout bootstrap failed for workspace %s: %v", workspaceID, err)
-	}
-
-	d.store.UpsertRecentLocation(msg.Dir)
-
-	d.sendOK(conn)
-
-	fact := FactSessionRegistered
-	if existing != nil {
-		fact = FactSessionReregistered
-	}
-	d.publishFact(fact, session.ID, nil)
-	d.broadcastWorkspaceLayout(workspaceID)
-	d.recomputeAndBroadcastWorkspaceForSession(session.ID)
-}
-
 func (d *Daemon) projectSessionEvent(event, sessionID string) {
 	decorated := d.sessionForBroadcast(d.store.Get(sessionID))
 	if decorated == nil {
@@ -2913,8 +2819,6 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 
 	if teardown != nil && teardown.session != nil {
 		d.publishSessionUnregistered(teardown.session)
-		d.dissociateSessionFromWorkspace(teardown.session.ID)
-		d.removeWorkspaceLayoutPaneForSession(teardown.session.ID)
 	}
 	if teardown != nil {
 		d.terminateSessionAsync(msg.ID, syscall.SIGTERM, teardown)
@@ -3809,68 +3713,19 @@ func (d *Daemon) handleInjectTestSession(conn net.Conn, msg *protocol.InjectTest
 
 	msg.Session.Agent = normalizeStoredSessionAgent(string(msg.Session.Agent), protocol.SessionAgentCodex)
 	stampSessionTimestamps(&msg.Session, string(protocol.TimestampNow()))
-	workspaceID := strings.TrimSpace(msg.Session.WorkspaceID)
-	if workspaceID == "" {
-		workspaceID = "workspace-" + msg.Session.ID
-	}
-	msg.Session.WorkspaceID = workspaceID
-	existingWS := d.store.GetWorkspace(workspaceID)
-	workspaceRank := d.resolveWorkspaceRank(existingWS)
-	if existingWS == nil {
-		d.store.AddWorkspace(&protocol.Workspace{
-			ID:        workspaceID,
-			Title:     msg.Session.Label,
-			Directory: msg.Session.Directory,
-			Status:    protocol.WorkspaceStatusLaunching,
-			Rank:      workspaceRank,
-		})
-	}
-	d.workspaces.register(workspaceID, msg.Session.Label, msg.Session.Directory, workspaceRank, false, false)
-
-	d.store.Add(&msg.Session)
-	d.associateSessionWithWorkspace(msg.Session.ID, workspaceID)
-	paneID := "pane-" + msg.Session.ID
-	layout := workspacelayout.DefaultWorkspaceLayout(workspaceID, paneID, msg.Session.ID)
-	if current := d.store.GetWorkspaceLayout(workspaceID); current != nil {
-		layout = workspacelayout.NormalizeWorkspaceLayout(*current)
-		if !layouttree.HasPane(layout.Layout, paneID) {
-			layout.Panes = append(layout.Panes, workspacelayout.Pane{
-				PaneID:    paneID,
-				RuntimeID: msg.Session.ID,
-				SessionID: msg.Session.ID,
-				Kind:      workspacelayout.PaneKindAgent,
-				Title:     msg.Session.Label,
-				Status:    workspacelayout.PaneStatusReady,
-			})
-			targetPaneID := layout.ActivePaneID
-			if targetPaneID == "" {
-				targetPaneID = firstWorkspaceLayoutPaneID(layout)
-			}
-			if targetPaneID == "" || layout.Layout.Type == "" {
-				layout.Layout = layouttree.DefaultLayout(paneID)
-			} else {
-				nextLayout, _ := layouttree.Split(
-					layout.Layout,
-					targetPaneID,
-					paneID,
-					newWorkspaceLayoutEntityID("split"),
-					layouttree.DirectionVertical,
-					layouttree.DefaultSplitRatio,
-				)
-				layout.Layout = nextLayout
-			}
-			layout.ActivePaneID = paneID
-			layout = workspacelayout.NormalizeWorkspaceLayout(layout)
-		}
-	}
-	if err := d.store.SaveWorkspaceLayout(layout); err != nil {
+	profile, err := d.requestedOrRecentProfile(msg.Session.ProfileID)
+	if err != nil {
 		d.sendError(conn, err.Error())
 		return
 	}
-	d.sendOK(conn)
-
+	msg.Session.ProfileID = profile.ID
+	if err := d.store.AddChecked(&msg.Session); err != nil {
+		d.sendError(conn, err.Error())
+		return
+	}
 	d.publishFact(FactSessionRegistered, msg.Session.ID, nil)
-	d.broadcastWorkspaceLayout(workspaceID)
+	d.placeLaunchedSession(&msg.Session, &launchPlacement{direction: layouttree.DirectionVertical})
+	d.sendOK(conn)
 }
 
 func (d *Daemon) RefreshPRs() {

@@ -767,7 +767,7 @@ func TestSpawnPipeline_InitialPromptMarkerBeatsEarlyPromptHook(t *testing.T) {
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		ID:            "sess-oneshot",
 		Cwd:           t.TempDir(),
-		WorkspaceID:   "workspace-title",
+		ProfileID:     defaultProfileID(t, d.store),
 		Agent:         "claude",
 		Cols:          80,
 		Rows:          24,
@@ -797,7 +797,7 @@ func TestSpawnPipeline_FailedLaunchRollsBackInitialPromptMarker(t *testing.T) {
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		ID:            "sess-failed",
 		Cwd:           t.TempDir(),
-		WorkspaceID:   "workspace-title",
+		ProfileID:     defaultProfileID(t, d.store),
 		Agent:         "claude",
 		Cols:          80,
 		Rows:          24,
@@ -848,7 +848,7 @@ func TestSpawnPipeline_AlreadyLiveSpawnPreservesInitialPromptMarker(t *testing.T
 	spawn := &protocol.SpawnSessionMessage{
 		ID:            "sess-dup",
 		Cwd:           t.TempDir(),
-		WorkspaceID:   "workspace-title",
+		ProfileID:     defaultProfileID(t, d.store),
 		Agent:         "claude",
 		Cols:          80,
 		Rows:          24,
@@ -904,7 +904,7 @@ func TestSpawnPipeline_InitialPromptTitlesAtSpawn(t *testing.T) {
 	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
 		ID:            "sess-spawn-title",
 		Cwd:           t.TempDir(),
-		WorkspaceID:   "workspace-title",
+		ProfileID:     defaultProfileID(t, d.store),
 		Agent:         "claude",
 		Cols:          80,
 		Rows:          24,

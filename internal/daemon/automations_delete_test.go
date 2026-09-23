@@ -20,7 +20,7 @@ func TestAutomationDeleteHappyPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, time.Now(), store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1"})
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
 	}
@@ -90,7 +90,7 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("apply v1: %v", err)
 	}
-	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, `{"prompt":"v1"}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run1, _, err := s.ClaimScheduledAutomationRun(def1.ID, "schedule:1", "singleton", def1.Revision, `{}`, `{"prompt":"v1"}`, now, store.AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +123,7 @@ func TestAutomationDeleteThenReapplyResurrects(t *testing.T) {
 		t.Fatalf("expected the pre-delete run to remain listable, got %#v err=%v", runs, err)
 	}
 
-	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, `{"prompt":"v1"}`, now.Add(24*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "s-seed02", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
+	run2, fresh, err := s.ClaimScheduledAutomationRun(def2.ID, "schedule:2", "singleton", def2.Revision, `{}`, `{"prompt":"v1"}`, now.Add(24*time.Hour), store.AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "s-seed02", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -158,7 +158,7 @@ func TestAutomationDeleteRetiresReviewEdgesBindingsAndFencesProviderCursors(t *t
 	}
 
 	origin, _, err := s.ClaimScheduledAutomationRun(def.ID, "schedule:1", "singleton", def.Revision, `{}`, `{}`, observedAt, store.AutomationRunReservation{
-		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "s-seed03", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin",
+		RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "s-seed03", SessionID: "session-origin",
 	})
 	if err != nil {
 		t.Fatal(err)

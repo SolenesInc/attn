@@ -1,0 +1,4 @@
+kind: changed
+area: daemon
+change: Every new agent belongs to a profile. A delegated agent opens beside the agent that started it; crew wakes, automation runs and reopened sessions start without a pane in their profile, and `attn session reopen --profile` chooses where a session goes when its own profile was deleted. Deleting a profile moves its running agents, automations and crew to the profile you choose, and nothing new can join a deleted profile.
+notes: Typing `attn` in a terminal now asks the app to start an agent instead of running one outside the daemon, and `--member` is gone; wake a crew member with `attn crew wake`.

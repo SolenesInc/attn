@@ -147,12 +147,13 @@ func finalizeSessionCostTx(tx *sql.Tx, id string) error {
 }
 
 type SessionCloseRecord struct {
-	At     string
-	By     string
-	Reason string
+	At        string
+	By        string
+	Reason    string
+	ProfileID string
 }
 
-func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
+func (s *Store) ReopenSession(id, profileID string) (SessionCloseRecord, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -161,9 +162,13 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 		if !closed {
 			return SessionCloseRecord{}, false, nil
 		}
+		lifted := SessionCloseRecord{At: mark.At, By: mark.By, Reason: mark.Reason, ProfileID: mark.session.ProfileID}
+		if profileID != "" {
+			mark.session.ProfileID = profileID
+		}
 		s.sessions[id] = mark.session
 		delete(s.sessionCloses, id)
-		return SessionCloseRecord{At: mark.At, By: mark.By, Reason: mark.Reason}, true, nil
+		return lifted, true, nil
 	}
 
 	tx, err := s.db.Begin()
@@ -173,16 +178,24 @@ func (s *Store) ReopenSession(id string) (SessionCloseRecord, bool, error) {
 	defer tx.Rollback()
 
 	var lifted SessionCloseRecord
-	err = tx.QueryRow("SELECT closed_at, closed_by, close_reason FROM sessions WHERE id = ? AND closed_at <> ''", id).
-		Scan(&lifted.At, &lifted.By, &lifted.Reason)
+	err = tx.QueryRow("SELECT closed_at, closed_by, close_reason, profile_id FROM sessions WHERE id = ? AND closed_at <> ''", id).
+		Scan(&lifted.At, &lifted.By, &lifted.Reason, &lifted.ProfileID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return SessionCloseRecord{}, false, nil
 	}
 	if err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
 	}
-	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = ''
-		WHERE id = ?`, id); err != nil {
+	if profileID == "" {
+		profileID = lifted.ProfileID
+	}
+	if profileID != "" {
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
+		}
+	}
+	if _, err := tx.Exec(`UPDATE sessions SET closed_at = '', closed_by = '', close_reason = '', profile_id = ?
+		WHERE id = ?`, profileID, id); err != nil {
 		return SessionCloseRecord{}, false, fmt.Errorf("reopen session %s: %w", id, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -201,12 +214,16 @@ func (s *Store) RestoreSessionClose(id string, closed SessionCloseRecord) (bool,
 			return false, nil
 		}
 		delete(s.sessions, id)
+		if closed.ProfileID != "" {
+			session.ProfileID = closed.ProfileID
+		}
 		s.sessionCloses[id] = sessionCloseMark{At: closed.At, By: closed.By, Reason: closed.Reason, session: session}
 		return true, nil
 	}
 
-	result, err := s.db.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?
-		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, id)
+	result, err := s.db.Exec(`UPDATE sessions SET closed_at = ?, closed_by = ?, close_reason = ?,
+		profile_id = CASE WHEN ? = '' THEN profile_id ELSE ? END
+		WHERE id = ? AND closed_at = ''`, closed.At, closed.By, closed.Reason, closed.ProfileID, closed.ProfileID, id)
 	if err != nil {
 		return false, fmt.Errorf("restore the close of session %s: %w", id, err)
 	}

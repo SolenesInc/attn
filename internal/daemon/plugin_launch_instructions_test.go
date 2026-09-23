@@ -10,17 +10,17 @@ import (
 func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "workspace-a", t.TempDir())
+	addTestWorkspace(d, "profile-a", t.TempDir())
 
-	instructions, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
+	instructions, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
 	if d.store.Get("session-a") != nil {
 		t.Fatal("instruction preparation persisted a provisional session")
 	}
-	if instructions.Kind != pluginInstructionKindAgent || instructions.WorkspaceID != "workspace-a" {
-		t.Fatalf("instructions = %+v, want agent kind for workspace-a", instructions)
+	if instructions.Kind != pluginInstructionKindAgent || instructions.ProfileID != "profile-a" {
+		t.Fatalf("instructions = %+v, want agent kind for profile-a", instructions)
 	}
 	if !strings.Contains(instructions.Content, hooks.AgentGuidance) || !strings.Contains(instructions.Content, hooks.GardenGuidance) {
 		t.Fatalf("instructions content did not compose existing guidance: %q", instructions.Content)
@@ -33,11 +33,11 @@ func TestPreparePluginLaunchInstructionsBeforeSessionPersistence(t *testing.T) {
 func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
 	d := newEnrolledDaemon(t, "")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "workspace-a", t.TempDir())
+	addTestWorkspace(d, "profile-a", t.TempDir())
 	notebookRoot := t.TempDir()
 	d.store.SetSetting(SettingNotebookRoot, notebookRoot)
 
-	instructions, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", true, true)
+	instructions, err := d.preparePluginLaunchInstructions("session-a", "profile-a", true, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -52,9 +52,9 @@ func TestPreparePluginChiefInstructionsUsesNotebook(t *testing.T) {
 func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "workspace-a", t.TempDir())
+	addTestWorkspace(d, "profile-a", t.TempDir())
 
-	instructions, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
+	instructions, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -69,9 +69,9 @@ func TestPreparePluginLaunchInstructionsOutpostOmitsGarden(t *testing.T) {
 func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.T) {
 	d := newEnrolledDaemon(t, "d-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	t.Cleanup(func() { _ = d.store.Close() })
-	addTestWorkspace(d, "workspace-a", t.TempDir())
+	addTestWorkspace(d, "profile-a", t.TempDir())
 
-	told, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", false, true)
+	told, err := d.preparePluginLaunchInstructions("session-a", "profile-a", false, true)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.
 		t.Fatal("a harness that reports nothing missed the pull request block")
 	}
 
-	quiet, err := d.preparePluginLaunchInstructions("session-b", "workspace-a", false, false)
+	quiet, err := d.preparePluginLaunchInstructions("session-b", "profile-a", false, false)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestPreparePluginLaunchInstructionsGatePullRequestSelfReporting(t *testing.
 		t.Fatal("a reporting harness was told to record its own pull requests")
 	}
 
-	chief, err := d.preparePluginLaunchInstructions("session-a", "workspace-a", true, false)
+	chief, err := d.preparePluginLaunchInstructions("session-a", "profile-a", true, false)
 	if err != nil {
 		t.Fatalf("preparePluginLaunchInstructions: %v", err)
 	}

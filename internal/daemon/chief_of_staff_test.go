@@ -39,7 +39,7 @@ func addChiefOfStaffTestSession(d *Daemon, id, label string) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: id, Label: label, Agent: protocol.SessionAgentCodex,
-		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id,
+		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id, ProfileID: recentProfileID(d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 }

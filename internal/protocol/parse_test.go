@@ -14,11 +14,6 @@ func TestParseCommand(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "register message",
-			input:   `{"cmd":"register","id":"abc","label":"test","dir":"/tmp","workspace_id":"workspace-abc"}`,
-			wantCmd: CmdRegister,
-		},
-		{
 			name:    "delegate message",
 			input:   `{"cmd":"delegate","request_id":"request-1","source_session_id":"abc","assignment":{"kind":"new","brief":"Investigate this"},"cwd":"/repo","agent":"codex"}`,
 			wantCmd: CmdDelegate,
@@ -166,28 +161,6 @@ func TestParseCommand(t *testing.T) {
 				t.Errorf("cmd = %q, want %q", cmd, tt.wantCmd)
 			}
 		})
-	}
-}
-
-func TestParseRegister(t *testing.T) {
-	input := `{"cmd":"register","id":"abc123","label":"drumstick","dir":"/home/user/project"}`
-	cmd, data, err := ParseMessage([]byte(input))
-	if err != nil {
-		t.Fatalf("parse error: %v", err)
-	}
-	if cmd != CmdRegister {
-		t.Fatalf("cmd = %q, want %q", cmd, CmdRegister)
-	}
-
-	msg, ok := data.(*RegisterMessage)
-	if !ok {
-		t.Fatalf("data type = %T, want *RegisterMessage", data)
-	}
-	if msg.ID != "abc123" {
-		t.Errorf("ID = %q, want %q", msg.ID, "abc123")
-	}
-	if Deref(msg.Label) != "drumstick" {
-		t.Errorf("Label = %q, want %q", Deref(msg.Label), "drumstick")
 	}
 }
 

@@ -16,7 +16,6 @@ func decodeInto[T any](data []byte) (any, error) {
 
 var messageDecoders = map[string]func([]byte) (any, error){
 	CmdClientHello:                           decodeInto[ClientHelloMessage],
-	CmdRegister:                              decodeInto[RegisterMessage],
 	CmdDelegate:                              decodeInto[DelegateMessage],
 	CmdAutomationApply:                       decodeInto[AutomationApplyMessage],
 	CmdAutomationRun:                         decodeInto[AutomationRunMessage],

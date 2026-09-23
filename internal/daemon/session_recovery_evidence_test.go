@@ -8,12 +8,10 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
-	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type recoveryHome struct {
@@ -74,6 +72,7 @@ func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionA
 		Label:          id,
 		Agent:          agent,
 		Directory:      "/tmp/" + id,
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          state,
 		StateSince:     now,
 		StateUpdatedAt: now,
@@ -84,33 +83,6 @@ func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionA
 
 func deadWorkerBackend() *fakeWorkerReconcileBackend {
 	return &fakeWorkerReconcileBackend{liveIDs: nil, info: map[string]ptybackend.SessionInfo{}}
-}
-
-func saveTwoPaneLayout(workspaceID, firstSessionID, secondSessionID string) workspacelayout.WorkspaceLayout {
-	pane := func(sessionID string) workspacelayout.Pane {
-		return workspacelayout.Pane{
-			PaneID:    "pane-" + sessionID,
-			RuntimeID: sessionID,
-			SessionID: sessionID,
-			Kind:      workspacelayout.PaneKindAgent,
-			Title:     workspacelayout.DefaultPaneTitle,
-		}
-	}
-	return workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-" + firstSessionID,
-		Layout: layouttree.Node{
-			Type:      "split",
-			SplitID:   "split-" + workspaceID,
-			Direction: layouttree.DirectionVertical,
-			Ratio:     layouttree.DefaultSplitRatio,
-			Children: []layouttree.Node{
-				{Type: "pane", PaneID: "pane-" + firstSessionID},
-				{Type: "pane", PaneID: "pane-" + secondSessionID},
-			},
-		},
-		Panes: []workspacelayout.Pane{pane(firstSessionID), pane(secondSessionID)},
-	}
 }
 
 func TestRecoveryKeepsAnyResumableSessionWhateverItWasDoing(t *testing.T) {
@@ -298,36 +270,33 @@ func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 func TestRecoveryKeepsThePaneOfARecoverableSession(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	workspaceID := "ws-crash"
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "crash", Directory: "/tmp/crash",
-	})
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, id := range []string{"pane-keeps", "pane-goes"} {
 		addStaleSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-		d.associateSessionWithWorkspace(id, workspaceID)
+		placeTestSession(t, d, id, profile.CurrentDesktopID)
 	}
 	home.resumableCodex(t, "native-pane-keeps")
 	giveRestorationEvidence(t, d, "pane-keeps", "native-pane-keeps")
 	giveRestorationEvidence(t, d, "pane-goes", "native-pane-goes")
-	if err := d.store.SaveWorkspaceLayout(saveTwoPaneLayout(workspaceID, "pane-keeps", "pane-goes")); err != nil {
-		t.Fatalf("SaveWorkspaceLayout: %v", err)
-	}
 
 	d.ptyBackend = deadWorkerBackend()
 	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
 
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	if layout == nil {
-		t.Fatal("workspace layout was removed with the reaped session")
+	desktop, err := d.store.GetDesktop(profile.CurrentDesktopID)
+	if err != nil {
+		t.Fatal(err)
 	}
 	sessions := map[string]bool{}
-	for _, pane := range layout.Panes {
+	for _, pane := range desktop.Panes {
 		sessions[pane.SessionID] = true
 	}
 	if !sessions["pane-keeps"] {
-		t.Fatalf("recoverable session lost its pane; layout panes = %+v", layout.Panes)
+		t.Fatalf("recoverable session lost its pane; desktop panes = %+v", desktop.Panes)
 	}
 	if sessions["pane-goes"] {
-		t.Fatalf("reaped session kept its pane; layout panes = %+v", layout.Panes)
+		t.Fatalf("reaped session kept its pane; desktop panes = %+v", desktop.Panes)
 	}
 }

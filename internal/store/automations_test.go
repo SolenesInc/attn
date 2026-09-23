@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 func markAutomationRunDeliveredForTest(s *Store, id, resolved string, now time.Time) error {
@@ -17,13 +19,13 @@ func markAutomationRunDeliveredForTest(s *Store, id, resolved string, now time.T
 func TestAutomationDeliveryAndWorkReadyEventCommitAndRetryTogether(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("delivery-event", "Delivery event", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("delivery-event", "Delivery event", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, created, err := s.ClaimManualAutomationRun(
 		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
-		AutomationRunReservation{RunID: "run-event", OccurrenceID: "occ-event", SeedID: "s-ready", SessionID: "sess-ready", WorkspaceID: "workspace-ready", PaneID: "pane-ready"},
+		AutomationRunReservation{RunID: "run-event", OccurrenceID: "occ-event", SeedID: "s-ready", SessionID: "sess-ready"},
 	)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -67,13 +69,13 @@ func TestAutomationDeliveryAndWorkReadyEventCommitAndRetryTogether(t *testing.T)
 func TestDeleteAutomationRunPrunesItsEventSources(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("delete-event-source", "Delete event source", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("delete-event-source", "Delete event source", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	run, created, err := s.ClaimManualAutomationRun(
 		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
-		AutomationRunReservation{RunID: "run-delete-source", OccurrenceID: "occ-delete-source", SeedID: "s-delete-source", SessionID: "sess-delete-source", WorkspaceID: "workspace-delete-source", PaneID: "pane-delete-source"},
+		AutomationRunReservation{RunID: "run-delete-source", OccurrenceID: "occ-delete-source", SeedID: "s-delete-source", SessionID: "sess-delete-source"},
 	)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -103,7 +105,7 @@ func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host s
 func TestGitHubReviewActivationBaselinesExistingDemandPerHost(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,7 +146,7 @@ func TestGitHubReviewActivationBaselineSurvivesRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +171,7 @@ func TestGitHubReviewLiveReapplyDoesNotRearm(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
 	const spec = `{"id":"review"}`
-	def, err := s.UpsertAutomationDefinition("review", "Review", spec, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", spec, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +180,7 @@ func TestGitHubReviewLiveReapplyDoesNotRearm(t *testing.T) {
 	if candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(time.Minute)); err != nil || len(candidates) != 1 {
 		t.Fatalf("new request candidates=%#v err=%v", candidates, err)
 	}
-	if _, err := s.UpsertAutomationDefinition(def.ID, def.Name, spec, now.Add(2*time.Minute)); err != nil {
+	if _, err := s.UpsertAutomationDefinition(def.ID, def.Name, spec, "", now.Add(2*time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	if candidates, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now.Add(3*time.Minute)); err != nil || len(candidates) != 1 || candidates[0].Cycle != 1 {
@@ -189,16 +191,16 @@ func TestGitHubReviewLiveReapplyDoesNotRearm(t *testing.T) {
 func TestAutomationClaimIsIdempotentAndSnapshotsRevision(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, now)
+	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1"}
 	first, created, err := s.ClaimManualAutomationRun("cleanup", "request-1", "github.com/owner/repo#42", `{"scope":"tmp"}`, def.Revision, `{"prompt":"first"}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	other := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
+	other := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2"}
 	second, created, err := s.ClaimManualAutomationRun("cleanup", "request-1", "", `{"scope":"changed"}`, def.Revision, `{"prompt":"changed"}`, now.Add(time.Minute), other)
 	if err != nil || created {
 		t.Fatalf("duplicate claim created=%v err=%v", created, err)
@@ -215,15 +217,15 @@ func TestAutomationClaimIsIdempotentAndSnapshotsRevision(t *testing.T) {
 func TestAutomationProvenanceRecordsAreNewestFirstAndJoined(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Requested PR review - GPT Sol medium", `{"trigger":{"type":"github_review_requested"}}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Requested PR review - GPT Sol medium", `{"trigger":{"type":"github_review_requested"}}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "ghe.spotify.net/owner/repo#1", `{"cycle":1}`, def.Revision, `{}`, now, firstIDs); err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimManualAutomationRun(def.ID, "request-2", "ghe.spotify.net/owner/repo#1", `{"cycle":2}`, def.Revision, `{}`, now.Add(time.Minute), secondIDs); err != nil || !created {
 		t.Fatalf("second claim created=%v err=%v", created, err)
 	}
@@ -252,17 +254,17 @@ func TestAutomationProvenanceRecordsAreNewestFirstAndJoined(t *testing.T) {
 func TestScheduledAutomationClaimIsIdempotent(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	key := "scheduled:2026-07-20T03:00:00Z"
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1"}
 	first, created, err := s.ClaimScheduledAutomationRun(def.ID, key, "", def.Revision, `{"provider":"schedule"}`, `{"prompt":"sweep"}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	other := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
+	other := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2"}
 	second, created, err := s.ClaimScheduledAutomationRun(def.ID, key, "", def.Revision, `{"provider":"schedule","changed":true}`, `{"prompt":"changed"}`, now.Add(time.Minute), other)
 	if err != nil || created {
 		t.Fatalf("duplicate claim created=%v err=%v", created, err)
@@ -282,14 +284,14 @@ func TestScheduledAutomationClaimIsIdempotent(t *testing.T) {
 func TestScheduledAutomationClaimRejectsStaleRevision(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now); err != nil {
+	if _, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, "", now); err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, ids); err == nil {
 		t.Fatal("expected stale revision claim to be rejected")
 	}
@@ -304,14 +306,14 @@ func TestScheduledAutomationClaimRejectsStaleRevision(t *testing.T) {
 func TestScheduledAutomationClaimRejectsDisabledDefinition(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, _, err := s.SetAutomationEnabled(def.ID, false, now); err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, ids); err == nil {
 		t.Fatal("expected a disabled definition's claim to be rejected")
 	}
@@ -326,15 +328,15 @@ func TestScheduledAutomationClaimRejectsDisabledDefinition(t *testing.T) {
 func TestScheduledAutomationDifferentInstantsClaimDifferentRuns(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"})
+	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"})
 	if err != nil || !created {
 		t.Fatalf("second claim created=%v err=%v", created, err)
 	}
@@ -346,16 +348,16 @@ func TestScheduledAutomationDifferentInstantsClaimDifferentRuns(t *testing.T) {
 func TestScheduledAutomationSingletonContinuityReusesBinding(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now, firstIDs)
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
-	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"}
 	if _, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs); err == nil || created {
 		t.Fatalf("second claim created=%v err=%v, want refused while the first run is still pending", created, err)
 	}
@@ -369,19 +371,66 @@ func TestScheduledAutomationSingletonContinuityReusesBinding(t *testing.T) {
 	if second.ID == first.ID {
 		t.Fatal("second occurrence should claim a distinct run")
 	}
-	if second.SeedID != first.SeedID || second.SessionID != first.SessionID || second.WorkspaceID != first.WorkspaceID || second.PaneID != first.PaneID {
+	if second.SeedID != first.SeedID || second.SessionID != first.SessionID {
 		t.Fatalf("singleton continuity did not reuse binding IDs: first=%#v second=%#v", first, second)
+	}
+}
+
+func TestContinuityBindingIsNotReclaimedByAnAgentMovedToAnotherProfile(t *testing.T) {
+	s := New()
+	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
+	home, _, err := s.CreateProfile("Home")
+	if err != nil {
+		t.Fatal(err)
+	}
+	work, _, err := s.CreateProfile("Work")
+	if err != nil {
+		t.Fatal(err)
+	}
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, home.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "seed-1", SessionID: "session-1"}
+	first, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now, firstIDs)
+	if err != nil || !created {
+		t.Fatalf("first claim created=%v err=%v", created, err)
+	}
+	if err := markAutomationRunDeliveredForTest(s, first.ID, `{}`, now); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.AddChecked(&protocol.Session{ID: "session-1", Label: "nightly", Agent: "codex", Directory: "/tmp", ProfileID: home.ID, State: protocol.SessionStateIdle}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.MoveSessionToProfile("session-1", work.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "seed-2", SessionID: "session-2"}
+	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-21T03:00:00Z", "singleton", def.Revision, `{}`, `{}`, now.Add(24*time.Hour), secondIDs)
+	if err != nil || !created {
+		t.Fatalf("second claim created=%v err=%v", created, err)
+	}
+	if second.SessionID != "session-2" || second.SeedID != "seed-2" || second.ProfileID != home.ID {
+		t.Fatalf("second run reclaimed the moved agent: %#v", second)
+	}
+	var status, reason string
+	if err := s.db.QueryRow(`SELECT status, released_reason FROM automation_continuity_bindings WHERE session_id = ?`, "session-1").Scan(&status, &reason); err != nil {
+		t.Fatal(err)
+	}
+	if status != AutomationBindingStatusReleased || reason != AutomationBindingReleasedAgentMoved {
+		t.Fatalf("moved agent's binding = %s/%s, want %s/%s", status, reason, AutomationBindingStatusReleased, AutomationBindingReleasedAgentMoved)
 	}
 }
 
 func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:1", "singleton", def.Revision, `{}`, `{}`, now, firstIDs); err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
 	}
@@ -405,7 +454,7 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 		t.Fatalf("re-release of an already-released binding errored: %v", err)
 	}
 
-	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "ticket-2", SessionID: "session-2"}
 	second, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2", "singleton", def.Revision, `{}`, `{}`, now.Add(2*time.Minute), secondIDs)
 	if err != nil || !created {
 		t.Fatalf("second claim created=%v err=%v", created, err)
@@ -430,7 +479,7 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -449,11 +498,11 @@ func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *t
 func TestMarkAutomationRunCancelledSetsStateAndReason(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -473,11 +522,11 @@ func TestMarkAutomationRunCancelledSetsStateAndReason(t *testing.T) {
 func TestListPrunableAndTerminalAutomationRunsIncludeCancelledRuns(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, now)
+	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -499,7 +548,7 @@ func TestListPrunableAndTerminalAutomationRunsIncludeCancelledRuns(t *testing.T)
 func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdrawnNotFailed(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -510,13 +559,13 @@ func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdraw
 		t.Fatal(err)
 	}
 	runA, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subjectA, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-a", OccurrenceID: "occ-a", SeedID: "ticket-a", SessionID: "session-a", WorkspaceID: "workspace-a", PaneID: "pane-a",
+		RunID: "run-a", OccurrenceID: "occ-a", SeedID: "ticket-a", SessionID: "session-a",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim A created=%v err=%v", created, err)
 	}
 	runB, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subjectB, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-b", OccurrenceID: "occ-b", SeedID: "ticket-b", SessionID: "session-b", WorkspaceID: "workspace-b", PaneID: "pane-b",
+		RunID: "run-b", OccurrenceID: "occ-b", SeedID: "ticket-b", SessionID: "session-b",
 	})
 	if err != nil || !created {
 		t.Fatalf("claim B created=%v err=%v", created, err)
@@ -542,7 +591,7 @@ func TestListWithdrawnGitHubReviewUndeliveredRunsIncludesCancelledReviewWithdraw
 func TestAutomationScheduleCursorGetSetRoundtrip(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +622,7 @@ func TestAutomationScheduleCursorGetSetRoundtrip(t *testing.T) {
 func TestListAutomationRunsWithOccurrenceKeysOrdersNewestFirstWithLimit(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, base)
+	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, "", base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -583,8 +632,6 @@ func TestListAutomationRunsWithOccurrenceKeysOrdersNewestFirstWithLimit(t *testi
 			OccurrenceID: "occ-" + requestID,
 			SeedID:       "ticket-" + requestID,
 			SessionID:    "session-" + requestID,
-			WorkspaceID:  "workspace-" + requestID,
-			PaneID:       "pane-" + requestID,
 		}
 		run, created, err := s.ClaimManualAutomationRun(def.ID, requestID, "", `{}`, def.Revision, `{}`, at, ids)
 		if err != nil || !created {
@@ -617,15 +664,15 @@ func TestListAutomationRunsWithOccurrenceKeysOrdersNewestFirstWithLimit(t *testi
 func TestLatestAutomationRunPerDefinitionPicksNewestPerDefinitionAndOmitsZeroRunDefinitions(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	defA, err := s.UpsertAutomationDefinition("def-a", "A", `{"id":"def-a"}`, base)
+	defA, err := s.UpsertAutomationDefinition("def-a", "A", `{"id":"def-a"}`, "", base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defB, err := s.UpsertAutomationDefinition("def-b", "B", `{"id":"def-b"}`, base)
+	defB, err := s.UpsertAutomationDefinition("def-b", "B", `{"id":"def-b"}`, "", base)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defEmpty, err := s.UpsertAutomationDefinition("def-empty", "Empty", `{"id":"def-empty"}`, base)
+	defEmpty, err := s.UpsertAutomationDefinition("def-empty", "Empty", `{"id":"def-empty"}`, "", base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -636,8 +683,6 @@ func TestLatestAutomationRunPerDefinitionPicksNewestPerDefinitionAndOmitsZeroRun
 			OccurrenceID: "occ-" + defID + "-" + requestID,
 			SeedID:       "ticket-" + defID + "-" + requestID,
 			SessionID:    "session-" + defID + "-" + requestID,
-			WorkspaceID:  "workspace-" + defID + "-" + requestID,
-			PaneID:       "pane-" + defID + "-" + requestID,
 		}
 		run, created, err := s.ClaimManualAutomationRun(defID, requestID, "", `{}`, 1, `{}`, at, ids)
 		if err != nil || !created {
@@ -672,11 +717,11 @@ func TestLatestAutomationRunPerDefinitionPicksNewestPerDefinitionAndOmitsZeroRun
 func TestListPendingAutomationRunsIncludesScheduledProvider(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	run, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
 	}
@@ -698,7 +743,7 @@ func TestListPendingAutomationRunsIncludesScheduledProvider(t *testing.T) {
 func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -712,7 +757,7 @@ func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].Cycle != 1 {
 		t.Fatalf("retry reconcile = %#v err=%v", candidates, err)
 	}
-	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	firstIDs := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "auto-run-1", SessionID: "session-1"}
 	first, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{"head_sha":"one"}`, `{"prompt":"review"}`, now, firstIDs)
 	if err != nil || !created {
 		t.Fatalf("first claim created=%v err=%v", created, err)
@@ -738,12 +783,12 @@ func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 	if err != nil || len(candidates) != 1 || candidates[0].Cycle != 2 {
 		t.Fatalf("re-request candidates = %#v err=%v", candidates, err)
 	}
-	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2", WorkspaceID: "workspace-2", PaneID: "pane-2"}
+	secondIDs := AutomationRunReservation{RunID: "run-2", OccurrenceID: "occ-2", SeedID: "auto-run-2", SessionID: "session-2"}
 	second, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 2, def.Revision, `{"head_sha":"two"}`, `{"prompt":"review"}`, now.Add(4*time.Minute), secondIDs)
 	if err != nil || !created {
 		t.Fatalf("second claim created=%v err=%v", created, err)
 	}
-	if second.ID != secondIDs.RunID || second.SeedID != first.SeedID || second.SessionID != first.SessionID || second.WorkspaceID != first.WorkspaceID || second.PaneID != first.PaneID {
+	if second.ID != secondIDs.RunID || second.SeedID != first.SeedID || second.SessionID != first.SessionID {
 		t.Fatalf("continuation did not reuse binding: first=%#v second=%#v", first, second)
 	}
 	occurrence, err := s.GetAutomationOccurrence(second.OccurrenceID)
@@ -755,7 +800,7 @@ func TestGitHubReviewEdgeRetriesThenReusesContinuityBinding(t *testing.T) {
 func TestGitHubReviewChangedHeadsAreDurableAndPendingRunCannotBeOvertaken(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -786,7 +831,7 @@ func TestGitHubReviewChangedHeadsAreDurableAndPendingRunCannotBeOvertaken(t *tes
 	if candidates := reconcile(now, headOne); len(candidates) != 1 || candidates[0].Cycle != 1 || candidates[0].HeadSHA != headOne {
 		t.Fatalf("first-head candidates=%#v", candidates)
 	}
-	first, created := claim(now, headOne, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	first, created := claim(now, headOne, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if !created {
 		t.Fatal("first head was not claimed")
 	}
@@ -831,7 +876,7 @@ func TestGitHubReviewChangedHeadsAreDurableAndPendingRunCannotBeOvertaken(t *tes
 func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 8, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -844,7 +889,7 @@ func TestGitHubReviewLegacyCycleOccurrenceUsesPayloadHeadWithoutReplay(t *testin
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	run, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"})
+	run, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"})
 	if err != nil || !created {
 		t.Fatalf("legacy claim created=%v err=%v", created, err)
 	}
@@ -880,7 +925,7 @@ func TestGitHubReviewChangedHeadsKeepDefinitionsIndependent(t *testing.T) {
 	)
 	var seeds, sessions []string
 	for index, definitionID := range []string{"review-sol", "review-secondary"} {
-		def, err := s.UpsertAutomationDefinition(definitionID, definitionID, `{}`, now)
+		def, err := s.UpsertAutomationDefinition(definitionID, definitionID, `{}`, "", now)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -897,7 +942,7 @@ func TestGitHubReviewChangedHeadsKeepDefinitionsIndependent(t *testing.T) {
 			t.Fatalf("%s first candidates=%#v", definitionID, candidates)
 		}
 		first, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{"head_sha":"`+headOne+`"}`, `{}`, now, AutomationRunReservation{
-			RunID: fmt.Sprintf("run-%d-1", index), OccurrenceID: fmt.Sprintf("occ-%d-1", index), SeedID: fmt.Sprintf("seed-%d", index), SessionID: fmt.Sprintf("session-%d", index), WorkspaceID: fmt.Sprintf("workspace-%d", index), PaneID: fmt.Sprintf("pane-%d", index),
+			RunID: fmt.Sprintf("run-%d-1", index), OccurrenceID: fmt.Sprintf("occ-%d-1", index), SeedID: fmt.Sprintf("seed-%d", index), SessionID: fmt.Sprintf("session-%d", index),
 		})
 		if err != nil || !created {
 			t.Fatalf("%s first claim created=%v err=%v", definitionID, created, err)
@@ -923,7 +968,7 @@ func TestGitHubReviewChangedHeadsKeepDefinitionsIndependent(t *testing.T) {
 func TestGitHubReviewAcceptedPendingRunRemainsRetryableWhileDemandIsActive(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{"id":"review"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -933,7 +978,7 @@ func TestGitHubReviewAcceptedPendingRunRemainsRetryableWhileDemandIsActive(t *te
 	if err != nil || len(candidates) != 1 {
 		t.Fatalf("first reconcile = %#v err=%v", candidates, err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	run, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -965,7 +1010,7 @@ func TestReapplyWhileDisabledPreservesReviewActivationBaseline(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	const spec = `{"id":"review"}`
-	def, err := s.UpsertAutomationDefinition("review", "Review", spec, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", spec, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -974,14 +1019,14 @@ func TestReapplyWhileDisabledPreservesReviewActivationBaseline(t *testing.T) {
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, ids); err != nil || !created {
 		t.Fatalf("initial claim created=%v err=%v", created, err)
 	}
 	if _, _, err := s.SetAutomationEnabled(def.ID, false, now.Add(time.Minute)); err != nil {
 		t.Fatal(err)
 	}
-	if reapplied, err := s.UpsertAutomationDefinition(def.ID, def.Name, spec, now.Add(90*time.Second)); err != nil {
+	if reapplied, err := s.UpsertAutomationDefinition(def.ID, def.Name, spec, "", now.Add(90*time.Second)); err != nil {
 		t.Fatal(err)
 	} else if reapplied.Enabled {
 		t.Fatalf("re-apply re-enabled a disabled definition: %#v", reapplied)
@@ -1013,7 +1058,7 @@ func TestReapplyWhileDisabledPreservesReviewActivationBaseline(t *testing.T) {
 func TestGitHubReviewCursorOrdersObservationsWithinOneSecond(t *testing.T) {
 	s := New()
 	base := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, base)
+	def, err := s.UpsertAutomationDefinition("review", "Review", `{}`, "", base)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1040,7 +1085,7 @@ func TestGitHubReviewCursorOrdersObservationsWithinOneSecond(t *testing.T) {
 func TestSetAutomationEnabledFlipsStateAndIsIdempotent(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1078,7 +1123,7 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
 	const spec = `{"id":"review"}`
-	def, err := s.UpsertAutomationDefinition("review", "Review", spec, now)
+	def, err := s.UpsertAutomationDefinition("review", "Review", spec, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1087,7 +1132,7 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	if _, err := s.ReconcileAutomationReviewRequests(def.ID, "github.com", []string{subject}, now); err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
+	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1"}
 	if _, created, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 1, def.Revision, `{}`, `{}`, now, ids); err != nil || !created {
 		t.Fatalf("initial claim created=%v err=%v", created, err)
 	}
@@ -1117,7 +1162,7 @@ func TestSetAutomationEnabledNeverTouchesSpecOrRevision(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
 	const spec = `{"id":"nightly-sweep"}`
-	def, err := s.UpsertAutomationDefinition("nightly-sweep", "Nightly sweep", spec, now)
+	def, err := s.UpsertAutomationDefinition("nightly-sweep", "Nightly sweep", spec, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1147,7 +1192,7 @@ func TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
 	const corruptJSON = `not-json`
-	def, err := s.UpsertAutomationDefinition("corrupt-spec", "Corrupt spec", corruptJSON, now)
+	def, err := s.UpsertAutomationDefinition("corrupt-spec", "Corrupt spec", corruptJSON, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1167,11 +1212,11 @@ func TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON(t *testing.T) {
 func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-origin", WorkspaceID: "workspace-origin", PaneID: "pane-origin"}
+	ids := AutomationRunReservation{RunID: "run-origin", OccurrenceID: "occ-origin", SeedID: "ticket-origin", SessionID: "session-origin"}
 	origin, created, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:1", "singleton", def.Revision, `{}`, `{}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("claim origin created=%v err=%v", created, err)
@@ -1195,11 +1240,11 @@ func TestListPrunableAutomationRunsProtectsBoundThreadOrigin(t *testing.T) {
 func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, now)
+	def, err := s.UpsertAutomationDefinition("cleanup", "Cleanup", `{"id":"cleanup"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	ids := AutomationRunReservation{RunID: "run-manual", OccurrenceID: "occ-manual", SeedID: "ticket-manual", SessionID: "session-manual", WorkspaceID: "workspace-manual", PaneID: "pane-manual"}
+	ids := AutomationRunReservation{RunID: "run-manual", OccurrenceID: "occ-manual", SeedID: "ticket-manual", SessionID: "session-manual"}
 	run, created, err := s.ClaimManualAutomationRun(def.ID, "request-1", "", `{}`, def.Revision, `{}`, now, ids)
 	if err != nil || !created {
 		t.Fatalf("claim created=%v err=%v", created, err)
@@ -1221,7 +1266,7 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1229,7 +1274,7 @@ func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.
 		t.Fatalf("initial revision = %d, want 1", def.Revision)
 	}
 
-	noop, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now.Add(time.Minute))
+	noop, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, "", now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1240,7 +1285,7 @@ func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.
 		t.Fatalf("no-op reapply disturbed enabled: %#v", noop)
 	}
 
-	edited, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now.Add(2*time.Minute))
+	edited, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, "", now.Add(2*time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1252,12 +1297,12 @@ func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.
 func TestOriginAutomationRunIDForSeedSurvivesBindingRotation(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{}`, now)
+	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{}`, "", now)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "singleton", def.Revision, `{}`, `{}`, now, AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1",
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -25,7 +25,7 @@ func TestHarness_FakeClassifier(t *testing.T) {
 
 	c := client.New(sockPath)
 
-	err := c.Register("test-session", "Test", "/tmp/test")
+	err := registerTestSession(sockPath, "test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestHarness_ClaudeStop_RetriesTranscriptReadOnFirstTurn(t *testing.T) {
 	defer harness.Stop()
 
 	c := client.New(sockPath)
-	if err := c.Register("claude-session", "Claude", "/tmp/test-claude"); err != nil {
+	if err := registerTestSession(sockPath, "claude-session", "Claude", "/tmp/test-claude"); err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
 	if err := c.UpdateState("claude-session", protocol.StateWorking); err != nil {
@@ -135,7 +135,7 @@ func TestHarness_BroadcastRecorder(t *testing.T) {
 
 	harness.Recorder.Clear()
 
-	err := c.Register("test-session", "Test", "/tmp/test")
+	err := registerTestSession(sockPath, "test-session", "Test", "/tmp/test")
 	if err != nil {
 		t.Fatalf("Register error: %v", err)
 	}
@@ -180,12 +180,11 @@ func TestHarness_WaitForEvent(t *testing.T) {
 	harness.Start()
 	defer harness.Stop()
 
-	c := client.New(sockPath)
 	harness.Recorder.Clear()
 
 	go func() {
 		time.Sleep(50 * time.Millisecond)
-		c.Register("delayed-session", "Delayed", "/tmp/delayed")
+		registerTestSession(sockPath, "delayed-session", "Delayed", "/tmp/delayed")
 	}()
 
 	event := harness.Recorder.WaitForEvent(protocol.EventSessionRegistered, 1*time.Second)
@@ -239,17 +238,17 @@ func TestHarness_ConcurrentOperations(t *testing.T) {
 	done := make(chan bool, 3)
 
 	go func() {
-		c.Register("session-1", "One", "/tmp/1")
+		registerTestSession(sockPath, "session-1", "One", "/tmp/1")
 		done <- true
 	}()
 
 	go func() {
-		c.Register("session-2", "Two", "/tmp/2")
+		registerTestSession(sockPath, "session-2", "Two", "/tmp/2")
 		done <- true
 	}()
 
 	go func() {
-		c.Register("session-3", "Three", "/tmp/3")
+		registerTestSession(sockPath, "session-3", "Three", "/tmp/3")
 		done <- true
 	}()
 

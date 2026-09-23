@@ -32,7 +32,7 @@ func spawnForChiefTest(t *testing.T, d *Daemon, client *wsClient, workspaceID, s
 		Label:        protocol.Ptr(sessionID),
 		Cwd:          cwd,
 		Agent:        agent,
-		WorkspaceID:  workspaceID,
+		ProfileID:    defaultProfileID(t, d.store),
 		Cols:         80,
 		Rows:         24,
 		ChiefOfStaff: protocol.Ptr(chief),

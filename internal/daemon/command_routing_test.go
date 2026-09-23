@@ -99,7 +99,6 @@ func TestUnclassifiedCommandListOnlyShrinks(t *testing.T) {
 const sessionLedgerIsPerDaemon = "the ledger records the sessions this daemon ran; another daemon's rows are read there"
 
 var sessionCommandsAnsweredWhereTheyLand = map[string]string{
-	protocol.CmdRegister:            "arrives from the agent process over the unix socket",
 	protocol.CmdState:               "arrives from the agent process over the unix socket",
 	protocol.CmdStop:                "arrives from the agent process over the unix socket",
 	protocol.CmdTodos:               "arrives from the agent process over the unix socket",

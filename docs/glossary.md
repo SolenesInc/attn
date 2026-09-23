@@ -39,6 +39,7 @@
 - Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
+- Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Active pane: the pane a desktop has selected. Every client shares it.
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.

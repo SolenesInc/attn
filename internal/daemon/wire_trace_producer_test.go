@@ -29,7 +29,7 @@ func TestWireTraceProducerGolden(t *testing.T) {
 	now := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID: "sess-1", Label: "one", Agent: protocol.SessionAgentClaude,
-		Directory: workspaceDir, WorkspaceID: "workspace-1",
+		Directory: workspaceDir, WorkspaceID: "workspace-1", ProfileID: defaultProfileID(t, d.store),
 		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	d.workspaces.associateSession("sess-1", "workspace-1", "one")

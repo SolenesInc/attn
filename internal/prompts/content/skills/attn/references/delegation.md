@@ -42,7 +42,7 @@ For a completed design, recommend an Orchestrator when the plan requires coordin
 
 ## Choose the folder and checkout
 
-Every delegation, including handover, requires `--cwd`. Attn does not infer it from a workspace or source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
+Every delegation, including handover, requires `--cwd`. Attn does not infer it from the source session. Outside Git, the folder is enough. Inside Git, explicitly choose one mode and its branch arguments:
 
 ```sh
 # Reuse a checkout on its current branch.

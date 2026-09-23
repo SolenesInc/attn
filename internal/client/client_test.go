@@ -13,86 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestClient_Register(t *testing.T) {
-	tmpDir := t.TempDir()
-	sockPath := filepath.Join(tmpDir, "test.sock")
-
-	listener, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatalf("listen error: %v", err)
-	}
-	defer listener.Close()
-
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		buf := make([]byte, 4096)
-		n, _ := conn.Read(buf)
-
-		cmd, msg, err := protocol.ParseMessage(buf[:n])
-		if err != nil || cmd != protocol.CmdRegister {
-			return
-		}
-		reg := msg.(*protocol.RegisterMessage)
-		if protocol.Deref(reg.Label) != "test-session" {
-			return
-		}
-
-		resp := protocol.Response{Ok: true}
-		json.NewEncoder(conn).Encode(resp)
-	}()
-
-	c := New(sockPath)
-	err = c.Register("sess-123", "test-session", "/tmp")
-	if err != nil {
-		t.Fatalf("Register error: %v", err)
-	}
-}
-
-func TestClient_RegisterWithAgent(t *testing.T) {
-	tmpDir := t.TempDir()
-	sockPath := filepath.Join(tmpDir, "test.sock")
-
-	listener, err := net.Listen("unix", sockPath)
-	if err != nil {
-		t.Fatalf("listen error: %v", err)
-	}
-	defer listener.Close()
-
-	go func() {
-		conn, err := listener.Accept()
-		if err != nil {
-			return
-		}
-		defer conn.Close()
-
-		buf := make([]byte, 4096)
-		n, _ := conn.Read(buf)
-
-		cmd, msg, err := protocol.ParseMessage(buf[:n])
-		if err != nil || cmd != protocol.CmdRegister {
-			return
-		}
-		reg := msg.(*protocol.RegisterMessage)
-		if protocol.Deref(reg.Agent) != "claude" {
-			return
-		}
-
-		resp := protocol.Response{Ok: true}
-		json.NewEncoder(conn).Encode(resp)
-	}()
-
-	c := New(sockPath)
-	err = c.RegisterWithAgent("sess-123", "test-session", "/tmp", "claude")
-	if err != nil {
-		t.Fatalf("RegisterWithAgent error: %v", err)
-	}
-}
-
 func TestClient_UpdateState(t *testing.T) {
 	tmpDir := t.TempDir()
 	sockPath := filepath.Join(tmpDir, "test.sock")
@@ -350,7 +270,7 @@ func TestClient_Delegate(t *testing.T) {
 				OperationID: "operation-1", RequestID: "request-1", SessionID: "delegated-session",
 				State: protocol.DelegationOperationStateCompleted,
 				Result: &protocol.DelegateResult{
-					SessionID: "delegated-session", WorkspaceID: protocol.Ptr("workspace-1"), SeedID: "s-parser",
+					SessionID: "delegated-session", ProfileID: protocol.Ptr("profile-1"), SeedID: "s-parser",
 					Directory: "/tmp/project",
 				},
 			},
@@ -367,7 +287,7 @@ func TestClient_Delegate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Delegate error: %v", err)
 	}
-	if result.SessionID != "delegated-session" || protocol.Deref(result.WorkspaceID) != "workspace-1" {
+	if result.SessionID != "delegated-session" || protocol.Deref(result.ProfileID) != "profile-1" {
 		t.Fatalf("Delegate result = %+v", result)
 	}
 
@@ -395,7 +315,7 @@ func TestClient_Delegate(t *testing.T) {
 
 func TestClient_NotRunning(t *testing.T) {
 	c := New("/nonexistent/socket.sock")
-	err := c.Register("id", "label", "/tmp")
+	err := c.Unregister("id")
 	if err == nil {
 		t.Error("expected error when daemon not running")
 	}
@@ -405,7 +325,7 @@ func TestClient_ConnectError_IncludesInstanceAndSocket(t *testing.T) {
 	os.Unsetenv("ATTN_INSTANCE")
 	sockPath := filepath.Join(t.TempDir(), "missing.sock")
 	c := New(sockPath)
-	err := c.Register("id", "label", "/tmp")
+	err := c.Unregister("id")
 	if err == nil {
 		t.Fatal("expected error when daemon not running")
 	}
@@ -443,7 +363,7 @@ func TestClient_ConnectError_HintsOtherInstanceWhenLive(t *testing.T) {
 
 	devSock := filepath.Join(tmp, ".attn-dev", "attn.sock")
 	c := New(devSock)
-	err = c.Register("id", "label", "/tmp")
+	err = c.Unregister("id")
 	if err == nil {
 		t.Fatal("expected error when dev daemon not running")
 	}

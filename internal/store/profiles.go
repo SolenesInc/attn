@@ -15,9 +15,11 @@ import (
 )
 
 type ProfileDeletion struct {
-	Deleted         profiles.Profile
-	Destination     profiles.Profile
-	MovedSessionIDs []string
+	Deleted            profiles.Profile
+	Destination        profiles.Profile
+	MovedSessionIDs    []string
+	MovedAutomationIDs []string
+	MovedCrewIDs       []string
 }
 
 type DesktopDeletion struct {
@@ -101,16 +103,16 @@ func scanProfile(row rowScanner) (profiles.Profile, error) {
 	return profile, err
 }
 
-func loadProfile(tx *sql.Tx, id string) (profiles.Profile, error) {
-	profile, err := scanProfile(tx.QueryRow(`SELECT `+profileColumns+` FROM profiles WHERE id = ?`, id))
+func loadProfile(q queryer, id string) (profiles.Profile, error) {
+	profile, err := scanProfile(q.QueryRow(`SELECT `+profileColumns+` FROM profiles WHERE id = ?`, id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return profiles.Profile{}, profiles.Errorf(profiles.CodeNotFound, "profile %q does not exist", id)
 	}
 	return profile, err
 }
 
-func loadLiveProfile(tx *sql.Tx, id string) (profiles.Profile, error) {
-	profile, err := loadProfile(tx, id)
+func loadLiveProfile(q queryer, id string) (profiles.Profile, error) {
+	profile, err := loadProfile(q, id)
 	if err != nil {
 		return profiles.Profile{}, err
 	}
@@ -346,6 +348,16 @@ func (s *Store) CreateProfile(name string) (profiles.Profile, profiles.Desktop, 
 	return profile, desktop, err
 }
 
+func (s *Store) LiveProfile(id string) (profiles.Profile, error) {
+	var profile profiles.Profile
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var err error
+		profile, err = loadLiveProfile(tx, id)
+		return err
+	})
+	return profile, err
+}
+
 func (s *Store) GetProfile(id string) (profiles.Profile, error) {
 	var profile profiles.Profile
 	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
@@ -498,6 +510,15 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE profile_id = ? AND closed_at = ''`, destinationID, id); err != nil {
 			return err
 		}
+		if result.MovedAutomationIDs, err = moveProfileAutomations(tx, id, destinationID); err != nil {
+			return err
+		}
+		if result.MovedCrewIDs, err = queryColumn[string](tx, `SELECT member_id FROM crew_profiles WHERE profile_id = ? ORDER BY member_id`, id); err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`UPDATE crew_profiles SET profile_id = ? WHERE profile_id = ?`, destinationID, id); err != nil {
+			return err
+		}
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
@@ -512,6 +533,54 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		return nil
 	})
 	return result, err
+}
+
+func (s *Store) CrewProfile(memberID string) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.db == nil {
+		return "", profiles.Errorf(profiles.CodeUnavailable, "profiles need the SQLite store")
+	}
+	var profileID string
+	err := s.db.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&profileID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return profileID, err
+}
+
+func (s *Store) EnsureCrewProfile(memberID, profileID string) (string, error) {
+	var assigned string
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		err := tx.QueryRow(`SELECT profile_id FROM crew_profiles WHERE member_id = ?`, memberID).Scan(&assigned)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if _, err := loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		assigned = profileID
+		_, err = tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)`, memberID, profileID)
+		return err
+	})
+	return assigned, err
+}
+
+func moveProfileAutomations(tx *sql.Tx, from, to string) ([]string, error) {
+	moved, err := queryColumn[string](tx, `SELECT id FROM automation_definitions WHERE profile_id = ? ORDER BY id`, from)
+	if err != nil {
+		return nil, err
+	}
+	for _, statement := range []string{
+		`UPDATE automation_definitions SET profile_id = ? WHERE profile_id = ?`,
+		`UPDATE automation_runs SET profile_id = ? WHERE profile_id = ? AND state = '` + AutomationRunStatePending + `'`,
+		`UPDATE automation_continuity_bindings SET profile_id = ? WHERE profile_id = ? AND status = '` + AutomationBindingStatusActive + `'`,
+	} {
+		if _, err := tx.Exec(statement, to, from); err != nil {
+			return nil, err
+		}
+	}
+	return moved, nil
 }
 
 func (s *Store) CreateDesktop(profileID, name string, shortcutSlot int, takeFreeSlot bool) (profiles.Profile, profiles.Desktop, error) {
@@ -911,45 +980,103 @@ func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit
 	return desktop, err
 }
 
+func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
+	anchor := strings.TrimSpace(request.AnchorPaneID)
+	if anchor != "" && !layouttree.HasPane(desktop.Tree, anchor) {
+		return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+	}
+	if anchor == "" {
+		anchor = desktop.ActivePaneID
+	}
+	switch {
+	case layouttree.LayoutEmpty(desktop.Tree):
+		desktop.Tree = layouttree.DefaultLayout(paneID)
+	case anchor == "":
+		leaves := layouttree.TileIDs(desktop.Tree)
+		next, ok := layouttree.MoveLeafBetweenLayouts(layouttree.DefaultLayout(paneID), desktop.Tree, paneID, "", newProfileEntityID("split"), request.Direction, false, firstChildRatio(request.NewPaneShare, false), "")
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeInvalid, "desktop %s holds only tiles %v and the new pane could not dock beside them", desktop.ID, leaves)
+		}
+		desktop.Tree = next.TargetLayout
+	default:
+		splitID := newProfileEntityID("split")
+		ratio := firstChildRatio(request.NewPaneShare, false)
+		next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
+		if !ok {
+			return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+		}
+		if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
+			next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
+		}
+		desktop.Tree = next
+	}
+	desktop.Panes = append(desktop.Panes, profiles.Pane{
+		PaneID:    paneID,
+		Kind:      profiles.PaneKindAgent,
+		SessionID: strings.TrimSpace(request.SessionID),
+		Title:     strings.TrimSpace(request.Title),
+		Status:    request.Status,
+	})
+	desktop.ActivePaneID = paneID
+	return desktop, nil
+}
+
 func (s *Store) PlaceSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
 	paneID := newProfileEntityID("pane")
 	desktop, err := s.UpdateDesktopArrangement(request.DesktopID, request.ExpectedRevision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
-		anchor := strings.TrimSpace(request.AnchorPaneID)
-		if anchor == "" {
-			anchor = desktop.ActivePaneID
+		return placeSessionInTree(desktop, request, paneID)
+	})
+	return desktop, paneID, err
+}
+
+func loadLaunchDesktop(tx *sql.Tx, profile profiles.Profile, desktopID string) (profiles.Desktop, error) {
+	if strings.TrimSpace(desktopID) == "" {
+		desktopID = profile.CurrentDesktopID
+	}
+	desktop, err := loadDesktop(tx, desktopID)
+	if err != nil {
+		return profiles.Desktop{}, err
+	}
+	if desktop.ProfileID != profile.ID {
+		return profiles.Desktop{}, profiles.Errorf(profiles.CodeCrossProfile, "desktop %s belongs to profile %s, not profile %s", desktop.ID, desktop.ProfileID, profile.ID)
+	}
+	return desktop, nil
+}
+
+func (s *Store) LaunchDesktop(profileID, desktopID string) (profiles.Desktop, error) {
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
+			return err
 		}
-		switch {
-		case layouttree.LayoutEmpty(desktop.Tree):
-			desktop.Tree = layouttree.DefaultLayout(paneID)
-		case anchor == "":
-			leaves := layouttree.TileIDs(desktop.Tree)
-			next, ok := layouttree.MoveLeafBetweenLayouts(layouttree.DefaultLayout(paneID), desktop.Tree, paneID, "", newProfileEntityID("split"), request.Direction, false, firstChildRatio(request.NewPaneShare, false), "")
-			if !ok {
-				return desktop, profiles.Errorf(profiles.CodeInvalid, "desktop %s holds only tiles %v and the new pane could not dock beside them", desktop.ID, leaves)
-			}
-			desktop.Tree = next.TargetLayout
-		default:
-			splitID := newProfileEntityID("split")
-			ratio := firstChildRatio(request.NewPaneShare, false)
-			next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
-			if !ok {
-				return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
-			}
-			if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
-				next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
-			}
-			desktop.Tree = next
+		desktop, err = loadLaunchDesktop(tx, profile, desktopID)
+		return err
+	})
+	return desktop, err
+}
+
+func (s *Store) PlaceLaunchedSession(request SessionPlacementRequest) (profiles.Desktop, string, error) {
+	paneID := newProfileEntityID("pane")
+	var desktop profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		profileID, err := openSessionProfileID(tx, request.SessionID)
+		if err != nil {
+			return err
 		}
-		title := strings.TrimSpace(request.Title)
-		desktop.Panes = append(desktop.Panes, profiles.Pane{
-			PaneID:    paneID,
-			Kind:      profiles.PaneKindAgent,
-			SessionID: strings.TrimSpace(request.SessionID),
-			Title:     title,
-			Status:    request.Status,
-		})
-		desktop.ActivePaneID = paneID
-		return desktop, nil
+		profile, err := loadLiveProfile(tx, profileID)
+		if err != nil {
+			return err
+		}
+		current, err := loadLaunchDesktop(tx, profile, request.DesktopID)
+		if err != nil {
+			return err
+		}
+		desktop, err = placeSessionInTree(current, request, paneID)
+		if err != nil {
+			return err
+		}
+		return writeDesktopArrangement(tx, now, &desktop)
 	})
 	return desktop, paneID, err
 }

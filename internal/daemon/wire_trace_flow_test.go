@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 func runDaemonSocketCommand(t *testing.T, fn func(conn net.Conn)) {
@@ -31,30 +30,17 @@ func TestWireTraceFlowGolden(t *testing.T) {
 	d.ptyBackend = &fakeSpawnBackend{}
 	trace := wireRecorder(d)
 
-	workspaceDir := filepath.Join(dir, "workspace")
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		t.Fatalf("create workspace dir: %v", err)
+	workDir := filepath.Join(dir, "work")
+	if err := os.MkdirAll(workDir, 0o755); err != nil {
+		t.Fatalf("create work dir: %v", err)
 	}
 	client := newWorkspaceProtocolTestClient()
 
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-1", Title: "One", Directory: workspaceDir,
+	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
+		Cmd: protocol.CmdSpawnSession, ID: "sess-1", Cwd: workDir, Agent: protocol.AgentShellValue,
+		ProfileID: defaultProfileID(t, d.store), Placement: &protocol.SessionPlacement{}, Label: protocol.Ptr("one"),
+		Cols: 80, Rows: 24,
 	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-1",
-		PaneID: protocol.Ptr("pane-1"), SessionID: "sess-1", Title: protocol.Ptr("one"),
-	})
-	runDaemonSocketCommand(t, func(conn net.Conn) {
-		d.handleRegister(conn, &protocol.RegisterMessage{
-			ID: "sess-1", Label: protocol.Ptr("one"), Dir: workspaceDir,
-			Agent: protocol.Ptr(protocol.SessionAgentClaude), WorkspaceID: "workspace-1",
-		})
-	})
-	layout := d.store.GetWorkspaceLayout("workspace-1")
-	layout.Panes[0].Status = workspacelayout.PaneStatusReady
-	if err := d.store.SaveWorkspaceLayout(*layout); err != nil {
-		t.Fatalf("mark registered pane ready: %v", err)
-	}
 	runDaemonSocketCommand(t, func(conn net.Conn) {
 		d.handleTodos(conn, &protocol.TodosMessage{
 			ID: "sess-1", Todos: []string{"write the migration"},
@@ -63,16 +49,7 @@ func TestWireTraceFlowGolden(t *testing.T) {
 	d.handleRenameSession(client, &protocol.RenameSessionMessage{
 		Cmd: protocol.CmdRenameSession, SessionID: "sess-1", Label: "renamed",
 	})
-	d.handleRenameWorkspace(client, &protocol.RenameWorkspaceMessage{
-		Cmd: protocol.CmdRenameWorkspace, WorkspaceID: "workspace-1", Title: "Renamed",
-	})
-	d.handleMuteWorkspaceWS(client, &protocol.MuteWorkspaceMessage{
-		Cmd: protocol.CmdMuteWorkspace, WorkspaceID: "workspace-1",
-	})
 	d.handleUnregisterWS(client, &protocol.UnregisterMessage{ID: "sess-1"})
-	d.handleUnregisterWorkspace(client, &protocol.UnregisterWorkspaceMessage{
-		Cmd: protocol.CmdUnregisterWorkspace, ID: "workspace-1",
-	})
 
 	assertWireGolden(t, "flow", renderWireTrace(trace, map[string]string{
 		dir: "<tmp>",

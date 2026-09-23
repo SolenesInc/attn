@@ -245,7 +245,7 @@ func (s *Store) MarkDelegationWorktreeOwned(id, path, token string, now time.Tim
 	return err
 }
 
-func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, workspaceID, ticketID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
+func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOperationState, progress, profileID, ticketID, worktreePath string, result *protocol.DelegateResult, operationErr error, now time.Time) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -278,13 +278,13 @@ func (s *Store) UpdateDelegationOperation(id string, state protocol.DelegationOp
 		resultBranch = protocol.Deref(result.Branch)
 	}
 	_, err := s.db.Exec(`UPDATE delegation_operations SET state = ?, progress = ?,
-		workspace_id = CASE WHEN ? = '' THEN workspace_id ELSE ? END,
+		profile_id = CASE WHEN ? = '' THEN profile_id ELSE ? END,
 		ticket_id = CASE WHEN ? = '' THEN ticket_id ELSE ? END,
 		directory = CASE WHEN ? = '' THEN directory ELSE ? END,
 		branch = CASE WHEN ? = '' THEN branch ELSE ? END,
 		worktree_path = CASE WHEN ? = '' THEN worktree_path ELSE ? END,
 		result_json = ?, error = ?, failure_code = ?, updated_at = ? WHERE request_id = ? OR operation_id = ?`,
-		string(state), progress, workspaceID, workspaceID, ticketID, ticketID,
+		string(state), progress, profileID, profileID, ticketID, ticketID,
 		resultDirectory, resultDirectory, resultBranch, resultBranch,
 		worktreePath, worktreePath, resultJSON, errorText, failureCode, stamp, id, id)
 	return err

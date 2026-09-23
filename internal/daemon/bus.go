@@ -27,7 +27,7 @@ const (
 	FactSessionChiefRoleChanged       = "session.chief_role.changed"
 	FactSessionReconciled             = "session.reconciled"
 	FactSessionPTYExited              = "session.pty.exited"
-	FactSessionWorkspaceChanged       = "session.workspace.changed"
+	FactSessionProfileChanged         = "session.profile.changed"
 	FactSessionPinChanged             = "session.pin.changed"
 	FactSessionCapChanged             = "session.cap.changed"
 	FactSessionActivityChanged        = "session.activity.changed"
@@ -325,7 +325,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionPTYExited(ev) },
 		},
 		{
-			filter: bus.Filter{FactSessionWorkspaceChanged},
+			filter: bus.Filter{FactSessionProfileChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
 			},

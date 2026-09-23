@@ -13,22 +13,23 @@ import (
 
 type seedResumeOutcome struct {
 	SessionID      string
-	WorkspaceID    string
+	ProfileID      string
 	AlreadyRunning bool
 }
 
 func (d *Daemon) resumeSeed(seedID string) (*seedResumeOutcome, error) {
-	return d.resumeSeedFromReview(seedID, nil)
+	return d.resumeSeedFromReview(seedID, nil, profileDestination{})
 }
 
 func (d *Daemon) resumeSeedFromReview(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	destination profileDestination,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
 		var err error
-		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
+		outcome, err = d.resumeSeedFromReviewForeground(seedID, review, destination)
 		return err
 	})
 	return outcome, err
@@ -37,6 +38,7 @@ func (d *Daemon) resumeSeedFromReview(
 func (d *Daemon) resumeSeedFromReviewForeground(
 	seedID string,
 	review *protocol.SeedReviewActionContext,
+	destination profileDestination,
 ) (*seedResumeOutcome, error) {
 	seedID = strings.TrimSpace(seedID)
 	if seedID == "" {
@@ -89,7 +91,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 			d.logf("Garden review: settle %s after Resume: %v", seedID, err)
 		}
 		return &seedResumeOutcome{
-			SessionID: existing.ID, WorkspaceID: existing.WorkspaceID, AlreadyRunning: true,
+			SessionID: existing.ID, ProfileID: existing.ProfileID, AlreadyRunning: true,
 		}, nil
 	}
 	if !continuation.ResumeAvailable {
@@ -99,6 +101,12 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 		}
 		return nil, fmt.Errorf("%s cannot resume: %s", seedID, reason)
 	}
+	recorded := sessionReopenVerdict{SessionID: sessionID}
+	d.planReopenProfile(&recorded)
+	profileID, err := recorded.destinationProfile(destination)
+	if err != nil {
+		return nil, fmt.Errorf("%s cannot resume: %w; reopen its session from the Sessions ledger to choose where it lands", seedID, err)
+	}
 	afterSpawn := func() error {
 		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
 			return err
@@ -107,10 +115,10 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 			strings.TrimSpace(execution.Agent), strings.TrimSpace(execution.Resume))
 	}
 	reopened, err := d.reopenSessionRuntime(sessionReopenPlan{
-		SessionID:   sessionID,
-		Directory:   execution.Cwd,
-		Title:       seed.Title,
-		WorkspaceID: reopenWorkspaceID(sessionID),
+		SessionID: sessionID,
+		Directory: execution.Cwd,
+		Title:     seed.Title,
+		ProfileID: profileID,
 	}, d.newDelegationRollback(), afterSpawn)
 	if err != nil {
 		return nil, err
@@ -120,7 +128,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 	}
 
 	d.logf("resume: reopened seed %q as session %s", seedID, sessionID)
-	return &seedResumeOutcome{SessionID: reopened.SessionID, WorkspaceID: reopened.WorkspaceID}, nil
+	return &seedResumeOutcome{SessionID: reopened.SessionID, ProfileID: reopened.ProfileID}, nil
 }
 
 func (d *Daemon) bindResumedSeed(
@@ -222,7 +230,10 @@ func (d *Daemon) bindResumedSeed(
 
 func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMessage) {
 	requestID := protocol.Deref(msg.RequestID)
-	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review)
+	outcome, err := d.resumeSeedFromReview(msg.SeedID, msg.Review, profileDestination{
+		requested:           protocol.Deref(msg.ProfileID),
+		whenRecordedDeleted: client.selectedProfile(),
+	})
 	response := protocol.SeedResumeResultMessage{
 		Event:     protocol.EventSeedResumeResult,
 		RequestID: requestID,
@@ -232,7 +243,7 @@ func (d *Daemon) handleSeedResume(client *wsClient, msg *protocol.SeedResumeMess
 		response.Error = protocol.Ptr(err.Error())
 	} else {
 		response.SessionID = protocol.Ptr(outcome.SessionID)
-		response.WorkspaceID = protocol.Ptr(outcome.WorkspaceID)
+		response.ProfileID = protocol.Ptr(outcome.ProfileID)
 		if outcome.AlreadyRunning {
 			response.AlreadyRunning = protocol.Ptr(true)
 		}

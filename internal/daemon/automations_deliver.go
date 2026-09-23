@@ -123,7 +123,7 @@ func (d *Daemon) recordAutomationRunSeedOutcome(run *store.AutomationRun, body s
 		if json.Unmarshal([]byte(run.SnapshotJSON), &snapshot) == nil {
 			prompt, agent = snapshot.Prompt, snapshot.Launch.Agent
 		}
-		req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, Prompt: prompt, Launch: automation.EffectiveLaunch{Agent: agent}, Location: automation.LocationSpec{}, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+		req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, Prompt: prompt, Launch: automation.EffectiveLaunch{Agent: agent}, Location: automation.LocationSpec{}, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}
 		if _, _, ensureErr := d.ensureAutomationSeed(req); ensureErr != nil {
 			return fmt.Errorf("record automation outcome: ensure seed: %w", ensureErr)
 		}
@@ -194,7 +194,7 @@ func (d *Daemon) deliverAutomationRun(ctx context.Context, run *store.Automation
 	case "singleton":
 		continuityKey = "singleton"
 	}
-	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, WorkspaceID: run.WorkspaceID, PaneID: run.PaneID}}
+	req := automation.WorkRequest{RunID: run.ID, DefinitionID: run.DefinitionID, SubjectKey: occurrence.SubjectKey, ContinuityKey: continuityKey, Provider: occurrence.Provider, Prompt: snapshot.Prompt, Context: json.RawMessage(occurrence.PayloadJSON), Launch: snapshot.Launch, Location: snapshot.Location, IDs: automation.DeliveryIDs{SeedID: run.SeedID, SessionID: run.SessionID, ProfileID: run.ProfileID}}
 	if err := d.validateAutomationContinuation(req); err != nil {
 		return err
 	}
@@ -248,19 +248,13 @@ func (d *Daemon) launchAutomationRun(ctx context.Context, req automation.WorkReq
 	if err := d.bindAutomationSeedLocation(req, location); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("bind seed location: %w", err)
 	}
-	if err := d.ensureAutomationWorkspace(ctx, req, location.Directory); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("ensure workspace: %w", err)
-	}
-	if err := d.ensureAutomationPane(ctx, req); err != nil {
-		return automation.DeliveryResult{}, fmt.Errorf("ensure pane: %w", err)
-	}
 	if err := d.ensureAutomationSession(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("ensure session: %w", err)
 	}
 	if err := d.verifyAutomationDelivery(ctx, req, location.Directory); err != nil {
 		return automation.DeliveryResult{}, fmt.Errorf("verify delivery: %w", err)
 	}
-	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, WorkspaceID: req.IDs.WorkspaceID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
+	return automation.DeliveryResult{SeedID: req.IDs.SeedID, SessionID: req.IDs.SessionID, ProfileID: req.IDs.ProfileID, Directory: location.Directory, Revision: location.Revision, Resolved: location.Resolved, Mode: "created"}, nil
 }
 
 func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) error {
@@ -274,7 +268,7 @@ func (d *Daemon) validateAutomationContinuation(req automation.WorkRequest) erro
 	if binding == nil {
 		return errors.New("automation continuity binding missing")
 	}
-	if binding.SeedID != req.IDs.SeedID || binding.SessionID != req.IDs.SessionID || binding.WorkspaceID != req.IDs.WorkspaceID || binding.PaneID != req.IDs.PaneID {
+	if binding.SeedID != req.IDs.SeedID || binding.SessionID != req.IDs.SessionID {
 		return errors.New("automation run does not match its continuity binding")
 	}
 	if binding.OriginRunID == "" || binding.OriginRunID == req.RunID {
@@ -566,7 +560,7 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 	sessionPersisted := false
 	if d.store != nil {
 		if existing := d.store.Get(req.IDs.SessionID); existing != nil {
-			if filepath.Clean(existing.Directory) != filepath.Clean(worktree) || existing.WorkspaceID != req.IDs.WorkspaceID || string(existing.Agent) != req.Launch.Agent {
+			if filepath.Clean(existing.Directory) != filepath.Clean(worktree) || string(existing.Agent) != req.Launch.Agent {
 				return automation.PreparedLocation{}, fmt.Errorf("persisted session does not match automation snapshot")
 			}
 			sessionPersisted = true
@@ -598,43 +592,6 @@ func (d *Daemon) prepareAutomationLocation(_ context.Context, req automation.Wor
 func (d *Daemon) bindAutomationSeedLocation(req automation.WorkRequest, location automation.PreparedLocation) error {
 	return d.recordGardenDispatch(req.IDs.SessionID, req.IDs.SeedID, "", location.Directory, req.Launch.Agent, false)
 }
-func (d *Daemon) ensureAutomationWorkspace(_ context.Context, req automation.WorkRequest, directory string) error {
-	if existing := d.store.GetWorkspace(req.IDs.WorkspaceID); existing != nil {
-		if filepath.Clean(existing.Directory) != filepath.Clean(directory) {
-			return fmt.Errorf("workspace directory mismatch: %s", existing.Directory)
-		}
-		return nil
-	}
-	title := filepath.Base(directory)
-	if reviewTitle, _, _, ok := automationReviewNames(req); ok {
-		title = reviewTitle
-	}
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{Cmd: protocol.CmdRegisterWorkspace, ID: req.IDs.WorkspaceID, Title: title, Directory: directory})
-	if d.store.GetWorkspace(req.IDs.WorkspaceID) == nil {
-		return fmt.Errorf("workspace was not persisted")
-	}
-	if _, msg := d.setWorkspaceMuted(req.IDs.WorkspaceID, false); msg != "" {
-		return fmt.Errorf("make workspace visible: %s", msg)
-	}
-	return nil
-}
-func (d *Daemon) ensureAutomationPane(_ context.Context, req automation.WorkRequest) error {
-	title := filepath.Base(req.Location.Path)
-	if title == "." || title == "" {
-		title = req.SubjectKey
-	}
-	if _, reviewTitle, _, ok := automationReviewNames(req); ok {
-		title = reviewTitle
-	}
-	pane, _, err := d.addWorkspaceSessionPane(&protocol.WorkspaceLayoutAddSessionPaneMessage{Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: req.IDs.WorkspaceID, PaneID: protocol.Ptr(req.IDs.PaneID), SessionID: req.IDs.SessionID, Title: protocol.Ptr(title)})
-	if err != nil {
-		return err
-	}
-	if protocol.Deref(pane) != req.IDs.PaneID {
-		return fmt.Errorf("session pane mismatch: got %s want %s", protocol.Deref(pane), req.IDs.PaneID)
-	}
-	return nil
-}
 func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.WorkRequest, directory string) error {
 	if err := req.Launch.Validate(); err != nil {
 		return fmt.Errorf("invalid unattended launch contract: %w", err)
@@ -644,7 +601,7 @@ func (d *Daemon) ensureAutomationSession(ctx context.Context, req automation.Wor
 		return err
 	}
 	if existing := d.store.SessionLedgerEntry(req.IDs.SessionID); existing != nil {
-		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.WorkspaceID != req.IDs.WorkspaceID || existing.Agent != req.Launch.Agent {
+		if filepath.Clean(existing.Directory) != filepath.Clean(directory) || existing.Agent != req.Launch.Agent {
 			return fmt.Errorf("persisted session does not match automation snapshot")
 		}
 	}
@@ -684,7 +641,7 @@ func (d *Daemon) continueAutomationSessionForeground(req automation.WorkRequest,
 	label := automationSessionLabel(req, directory)
 	_, err := d.reopenSessionRuntime(sessionReopenPlan{
 		SessionID: req.IDs.SessionID, Directory: directory, Title: label,
-		WorkspaceID: req.IDs.WorkspaceID,
+		ProfileID: req.IDs.ProfileID,
 	}, d.newDelegationRollback(), nil)
 	if err != nil {
 		return err
@@ -717,7 +674,7 @@ func automationSessionLabel(req automation.WorkRequest, directory string) string
 func (d *Daemon) startAutomationSession(req automation.WorkRequest, directory, inputPath string) error {
 	label, prompt := d.automationSessionLaunch(req, directory, inputPath)
 	client := newInternalWSClient()
-	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, WorkspaceID: req.IDs.WorkspaceID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
+	message := &protocol.SpawnSessionMessage{Cmd: protocol.CmdSpawnSession, ID: req.IDs.SessionID, Cwd: directory, ProfileID: req.IDs.ProfileID, Agent: req.Launch.Agent, Cols: 80, Rows: 24, Label: protocol.Ptr(label), InitialPrompt: protocol.Ptr(prompt), Model: protocol.Ptr(req.Launch.Model), Effort: protocol.Ptr(req.Launch.Effort), Executable: protocol.Ptr(req.Launch.Executable)}
 	d.handleSpawnSessionWithPolicy(client, message, internalSpawnPolicy{unattendedLaunch: req.Launch})
 	if _, err := readInternalActionResult(client); err != nil {
 		return err
@@ -906,7 +863,7 @@ func (d *Daemon) verifyAutomationDelivery(_ context.Context, req automation.Work
 		return fmt.Errorf("seed dispatch link missing")
 	}
 	session := d.store.Get(req.IDs.SessionID)
-	if session == nil || session.WorkspaceID != req.IDs.WorkspaceID || filepath.Clean(session.Directory) != filepath.Clean(directory) {
+	if session == nil || session.ProfileID != req.IDs.ProfileID || filepath.Clean(session.Directory) != filepath.Clean(directory) {
 		return fmt.Errorf("session links disagree")
 	}
 	return nil

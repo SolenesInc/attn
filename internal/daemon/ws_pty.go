@@ -21,7 +21,6 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 var wsSubscriberCounter atomic.Int64
@@ -187,7 +186,6 @@ func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID string, err error)
 	if strings.TrimSpace(errMsg) == "" {
 		errMsg = "spawn failed"
 	}
-	d.setWorkspacePaneStatusForSession(sessionID, workspacelayout.PaneStatusFailed, errMsg)
 	d.sendToClient(client, protocol.SpawnResultMessage{
 		Event:   protocol.EventSpawnResult,
 		ID:      sessionID,
@@ -196,7 +194,7 @@ func (d *Daemon) sendSpawnFailure(client *wsClient, sessionID string, err error)
 	})
 }
 
-func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label string, existing *protocol.Session, isShell, pluginReportsNoState bool, parentSessionID string) *protocol.Session {
+func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, label, profileID string, existing *protocol.Session, isShell, pluginReportsNoState bool, parentSessionID string) *protocol.Session {
 	nowStr := string(protocol.TimestampNow())
 	state := protocol.SessionStateLaunching
 	if isShell {
@@ -215,7 +213,7 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 	if pluginReportsNoState {
 		state, stateSince, stateUpdatedAt = protocol.SessionStateWorking, nowStr, nowStr
 	}
-	session := &protocol.Session{ID: msg.ID, Label: label, Agent: protocol.SessionAgent(agent), Directory: cwd, State: state, StateSince: stateSince, StateUpdatedAt: stateUpdatedAt, LastSeen: nowStr, WorkspaceID: msg.WorkspaceID}
+	session := &protocol.Session{ID: msg.ID, Label: label, Agent: protocol.SessionAgent(agent), Directory: cwd, State: state, StateSince: stateSince, StateUpdatedAt: stateUpdatedAt, LastSeen: nowStr, ProfileID: profileID}
 	if parentSessionID != "" {
 		session.ParentSessionID = protocol.Ptr(parentSessionID)
 	}
@@ -243,19 +241,29 @@ func (d *Daemon) handleSpawnSession(client *wsClient, msg *protocol.SpawnSession
 }
 
 func (d *Daemon) handleSpawnSessionWithPolicy(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	if rejection := d.runSpawnPipeline(msg, policy); rejection != nil {
-		d.sendSpawnRejection(client, msg.ID, rejection)
-		return
-	}
-	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
+	placed, rejection := d.runSpawnPipelineReporting(msg, policy)
+	d.answerSpawn(client, msg.ID, placed, rejection)
 }
 
 func (d *Daemon) handleSpawnSessionWithPolicyForeground(client *wsClient, msg *protocol.SpawnSessionMessage, policy internalSpawnPolicy) {
-	if rejection := d.runSpawnPipelineForeground(msg, policy); rejection != nil {
-		d.sendSpawnRejection(client, msg.ID, rejection)
+	placed, rejection := d.runSpawnPipelineForeground(msg, policy)
+	d.answerSpawn(client, msg.ID, placed, rejection)
+}
+
+func (d *Daemon) answerSpawn(client *wsClient, sessionID string, placed placementOutcome, rejection *spawnRejection) {
+	if rejection != nil {
+		d.sendSpawnRejection(client, sessionID, rejection)
 		return
 	}
-	d.sendToClient(client, protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: msg.ID, Success: true})
+	result := protocol.SpawnResultMessage{Event: protocol.EventSpawnResult, ID: sessionID, Success: true}
+	if placed.paneID != "" {
+		result.DesktopID = protocol.Ptr(placed.desktopID)
+		result.PaneID = protocol.Ptr(placed.paneID)
+	}
+	if placed.err != nil {
+		result.PlacementError = protocol.Ptr(placed.err.Error())
+	}
+	d.sendToClient(client, result)
 }
 
 func (d *Daemon) sendSpawnRejection(client *wsClient, sessionID string, rejection *spawnRejection) {
@@ -268,16 +276,16 @@ func (d *Daemon) sendSpawnRejection(client *wsClient, sessionID string, rejectio
 
 func buildStoredIntentSpawn(session *protocol.Session, intent store.LaunchIntent, cols, rows int) (*protocol.SpawnSessionMessage, internalSpawnPolicy) {
 	spawnMsg := &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          session.ID,
-		Cwd:         session.Directory,
-		Agent:       string(session.Agent),
-		WorkspaceID: session.WorkspaceID,
-		Label:       protocol.Ptr(session.Label),
-		Cols:        cols,
-		Rows:        rows,
-		YoloMode:    protocol.Ptr(intent.YoloMode),
-		AutoMode:    intent.AutoMode,
+		Cmd:       protocol.CmdSpawnSession,
+		ID:        session.ID,
+		Cwd:       session.Directory,
+		Agent:     string(session.Agent),
+		ProfileID: session.ProfileID,
+		Label:     protocol.Ptr(session.Label),
+		Cols:      cols,
+		Rows:      rows,
+		YoloMode:  protocol.Ptr(intent.YoloMode),
+		AutoMode:  intent.AutoMode,
 	}
 	if intent.ApprovalPolicy != "" {
 		spawnMsg.ApprovalPolicy = protocol.Ptr(intent.ApprovalPolicy)
