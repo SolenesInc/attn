@@ -154,7 +154,7 @@ func TestReopeningALiveSessionChangesNothing(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	addLedgerTestSession(t, d, "running", t.TempDir())
 
-	outcome, err := d.reopenSession("running", "", "", "")
+	outcome, err := d.reopenSession("running", "", "", profileDestination{})
 	if err != nil {
 		t.Fatalf("reopenSession(live) error = %v", err)
 	}
@@ -166,7 +166,7 @@ func TestReopeningALiveSessionChangesNothing(t *testing.T) {
 func TestReopeningASessionWithNoLedgerRowSaysWhereToLookInstead(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 
-	_, err := d.reopenSession("never-ran", "", "", "")
+	_, err := d.reopenSession("never-ran", "", "", profileDestination{})
 	if err == nil {
 		t.Fatal("reopening an unknown session id succeeded")
 	}
@@ -189,7 +189,7 @@ func TestReopenVerdictOffersOnlyFreshStartWithoutItsLaunchContract(t *testing.T)
 	if !strings.Contains(verdict.Reason, "launch contract") {
 		t.Fatalf("reason = %q, want the missing launch contract named", verdict.Reason)
 	}
-	if _, err := d.reopenSession("missing-contract", protocol.SessionReopenActionStartFreshSamePlace, "", ""); err != nil {
+	if _, err := d.reopenSession("missing-contract", protocol.SessionReopenActionStartFreshSamePlace, "", profileDestination{}); err != nil {
 		t.Fatal(err)
 	}
 	spawn, ok := backend.LastSpawn()
@@ -215,7 +215,7 @@ func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
 		Resume: "codex-ledger-conversation", Intent: &intent,
 	})
 
-	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, "", ""); err != nil {
+	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, "", profileDestination{}); err != nil {
 		t.Fatal(err)
 	}
 	spawn, ok := backend.LastSpawn()

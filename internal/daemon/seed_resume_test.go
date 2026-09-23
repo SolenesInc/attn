@@ -548,11 +548,16 @@ func TestSeedResumeNeedsADestinationWhenTheTendersProfileWasDeleted(t *testing.T
 		t.Fatal("a refused resume spawned the agent")
 	}
 
-	outcome, err := d.resumeSeedFromReview(seedID, nil, kept.ID)
-	if err != nil {
-		t.Fatalf("resume into %s: %v", kept.ID, err)
+	client := spawnTestClient()
+	client.selectProfile(kept.ID)
+	d.handleSeedResume(client, &protocol.SeedResumeMessage{Cmd: protocol.CmdSeedResume, SeedID: seedID, RequestID: protocol.Ptr("resume-1")})
+	var result protocol.SeedResumeResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventSeedResumeResult {
+			decodeInto(t, payload, &result)
+		}
 	}
-	if outcome.ProfileID != kept.ID || d.store.Get(leafID).ProfileID != kept.ID {
-		t.Fatalf("resumed into %q (row %q), want %s", outcome.ProfileID, d.store.Get(leafID).ProfileID, kept.ID)
+	if !result.Success || protocol.Deref(result.ProfileID) != kept.ID || d.store.Get(leafID).ProfileID != kept.ID {
+		t.Fatalf("Garden Resume from a connection in %s = %+v, want the agent resumed there", kept.ID, result)
 	}
 }

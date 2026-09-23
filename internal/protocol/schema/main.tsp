@@ -5629,7 +5629,9 @@ model SeedResumeMessage {
   // Present only when Resume resolves one captured Review garden item.
   "review"?: SeedReviewActionContext;
   // Where the agent resumes when its recorded profile was deleted. Required then;
-  // otherwise it must name the recorded profile or be absent.
+  // otherwise it must name the recorded profile or be absent. Over WebSocket, an
+  // absent profile_id for a deleted recorded profile means the connection's
+  // selected profile.
   "profile_id"?: string;
 }
 

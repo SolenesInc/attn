@@ -148,8 +148,16 @@ func (d *Daemon) planReopenProfile(verdict *sessionReopenVerdict) {
 	verdict.ProfileDeleted = err != nil || profile.Deleted()
 }
 
-func (v *sessionReopenVerdict) destinationProfile(requested string) (string, error) {
-	requested = strings.TrimSpace(requested)
+type profileDestination struct {
+	requested           string
+	whenRecordedDeleted string
+}
+
+func (v *sessionReopenVerdict) destinationProfile(destination profileDestination) (string, error) {
+	requested := strings.TrimSpace(destination.requested)
+	if requested == "" && v.ProfileDeleted {
+		requested = strings.TrimSpace(destination.whenRecordedDeleted)
+	}
 	switch {
 	case v.ProfileDeleted && requested == "":
 		return "", fmt.Errorf("session %s belonged to profile %q, which is gone; name the profile to reopen it into (attn session reopen --profile <id>)", v.SessionID, v.ProfileID)
@@ -496,19 +504,19 @@ type sessionReopenOutcome struct {
 }
 
 func (d *Daemon) reopenSession(
-	sessionID string, action protocol.SessionReopenAction, directory, profileID string,
+	sessionID string, action protocol.SessionReopenAction, directory string, destination profileDestination,
 ) (*sessionReopenOutcome, error) {
 	var outcome *sessionReopenOutcome
 	err := d.worktreeMaintenance.RunForeground(context.Background(), "reopen session", func(context.Context) error {
 		var err error
-		outcome, err = d.reopenSessionForeground(sessionID, action, directory, profileID)
+		outcome, err = d.reopenSessionForeground(sessionID, action, directory, destination)
 		return err
 	})
 	return outcome, err
 }
 
 func (d *Daemon) reopenSessionForeground(
-	sessionID string, action protocol.SessionReopenAction, directory, profileID string,
+	sessionID string, action protocol.SessionReopenAction, directory string, destination profileDestination,
 ) (*sessionReopenOutcome, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -542,7 +550,7 @@ func (d *Daemon) reopenSessionForeground(
 	if !verdict.offers(action) {
 		return nil, reopenRefusal(verdict, action)
 	}
-	return d.performReopen(verdict, action, directory, profileID)
+	return d.performReopen(verdict, action, directory, destination)
 }
 
 func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenAction) error {
@@ -562,9 +570,9 @@ func reopenRefusal(verdict *sessionReopenVerdict, action protocol.SessionReopenA
 }
 
 func (d *Daemon) performReopen(
-	verdict *sessionReopenVerdict, action protocol.SessionReopenAction, directory, requestedProfileID string,
+	verdict *sessionReopenVerdict, action protocol.SessionReopenAction, directory string, destination profileDestination,
 ) (*sessionReopenOutcome, error) {
-	profileID, err := verdict.destinationProfile(requestedProfileID)
+	profileID, err := verdict.destinationProfile(destination)
 	if err != nil {
 		return nil, err
 	}
@@ -876,7 +884,7 @@ func (d *Daemon) handleSessionReopen(conn net.Conn, msg *protocol.SessionReopenM
 	if msg.Action != nil {
 		action = *msg.Action
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), protocol.Deref(msg.ProfileID))
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), profileDestination{requested: protocol.Deref(msg.ProfileID)})
 	if err != nil {
 		d.sendError(conn, err.Error())
 		return

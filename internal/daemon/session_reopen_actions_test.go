@@ -46,10 +46,10 @@ func TestNoReopenTouchesTheRepositoryWithoutBeingAskedByName(t *testing.T) {
 	if !verdict.offers(protocol.SessionReopenActionRecreateWorktreeAndReopen) {
 		t.Fatalf("the verdict does not offer the recreate action: %q", verdict.Reason)
 	}
-	if _, err := d.reopenSession("untouched", "", "", ""); err == nil {
+	if _, err := d.reopenSession("untouched", "", "", profileDestination{}); err == nil {
 		t.Fatal("a plain reopen ran instead of refusing a directory that is gone")
 	}
-	if _, err := d.reopenSession("untouched", protocol.SessionReopenActionReopen, "", ""); err == nil {
+	if _, err := d.reopenSession("untouched", protocol.SessionReopenActionReopen, "", profileDestination{}); err == nil {
 		t.Fatal("--action reopen ran instead of refusing a directory that is gone")
 	}
 
@@ -69,7 +69,7 @@ func TestARefusedReopenNamesTheActionsItOffersInstead(t *testing.T) {
 	d, _, _ := closedWorktreeWithDeletedDirectory(t, "refused", "feat/refused", false)
 	reopenDaemonWithBackend(t, d)
 
-	_, err := d.reopenSession("refused", "", "", "")
+	_, err := d.reopenSession("refused", "", "", profileDestination{})
 	if err == nil {
 		t.Fatal("the plain reopen was not refused")
 	}
@@ -83,7 +83,7 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	backend := reopenDaemonWithBackend(t, d)
 	before := spawnCount(backend)
 
-	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "", "")
+	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "", profileDestination{})
 	if err != nil {
 		t.Fatalf("recreate_worktree_and_reopen: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestFetchingTheBranchBackRecreatesTheWorktreeFromTheRemote(t *testing.T) {
 	if !verdict.offers(protocol.SessionReopenActionFetchRecreateAndReopen) {
 		t.Fatalf("the verdict does not offer the fetch action: %q", verdict.Reason)
 	}
-	if _, err := d.reopenSession("fetch", protocol.SessionReopenActionFetchRecreateAndReopen, "", ""); err != nil {
+	if _, err := d.reopenSession("fetch", protocol.SessionReopenActionFetchRecreateAndReopen, "", profileDestination{}); err != nil {
 		t.Fatalf("fetch_recreate_and_reopen: %v", err)
 	}
 
@@ -148,7 +148,7 @@ func TestStartingFreshFromTheDefaultBranchPutsTheWorktreeBackWithoutTheConversat
 	runGitDaemon(t, repo, "branch", "-D", "feat/default")
 	before := spawnCount(backend)
 
-	if _, err := d.reopenSession("default", protocol.SessionReopenActionStartFreshDefaultBranch, "", ""); err != nil {
+	if _, err := d.reopenSession("default", protocol.SessionReopenActionStartFreshDefaultBranch, "", profileDestination{}); err != nil {
 		t.Fatalf("start_fresh_default_branch: %v", err)
 	}
 
@@ -170,7 +170,7 @@ func TestStartingFreshInTheSamePlaceKeepsTheDirectoryAndDropsTheConversation(t *
 	})
 	before := spawnCount(backend)
 
-	outcome, err := d.reopenSession("fresh-here", protocol.SessionReopenActionStartFreshSamePlace, "", "")
+	outcome, err := d.reopenSession("fresh-here", protocol.SessionReopenActionStartFreshSamePlace, "", profileDestination{})
 	if err != nil {
 		t.Fatalf("start_fresh_same_place: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 		ID: "elsewhere", Directory: gone, Agent: "codex", Resume: "conv-elsewhere",
 	})
 
-	if _, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, "", ""); err == nil {
+	if _, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, "", profileDestination{}); err == nil {
 		t.Fatal("start_fresh_elsewhere ran without a directory to start in")
 	}
 	if !d.store.SessionClosed("elsewhere") {
@@ -199,7 +199,7 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 	}
 
 	chosen := t.TempDir()
-	outcome, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, chosen, "")
+	outcome, err := d.reopenSession("elsewhere", protocol.SessionReopenActionStartFreshElsewhere, chosen, profileDestination{})
 	if err != nil {
 		t.Fatalf("start_fresh_elsewhere with a directory: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	}
 	closedAt := protocol.Deref(closed.ClosedAt)
 
-	if _, err := d.reopenSession("failed", "", "", ""); err == nil {
+	if _, err := d.reopenSession("failed", "", "", profileDestination{}); err == nil {
 		t.Fatal("the reopen reported success although the spawn failed")
 	}
 
@@ -252,7 +252,7 @@ func TestAReopenComesBackUnplacedInItsProfileUnderItsOwnID(t *testing.T) {
 	})
 	before := spawnCount(backend)
 
-	outcome, err := d.reopenSession("unplaced", "", "", "")
+	outcome, err := d.reopenSession("unplaced", "", "", profileDestination{})
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -279,17 +279,17 @@ func TestReopeningIntoADeletedProfileNeedsALiveDestination(t *testing.T) {
 	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
 	before := spawnCount(backend)
 
-	if _, err := d.reopenSession("orphan", "", "", ""); err == nil || !strings.Contains(err.Error(), work.ID) {
+	if _, err := d.reopenSession("orphan", "", "", profileDestination{}); err == nil || !strings.Contains(err.Error(), work.ID) {
 		t.Fatalf("reopen without a destination = %v, want a refusal naming the deleted profile %s", err, work.ID)
 	}
-	if _, err := d.reopenSession("orphan", "", "", work.ID); err == nil {
+	if _, err := d.reopenSession("orphan", "", "", profileDestination{requested: work.ID}); err == nil {
 		t.Fatal("reopening into the deleted profile itself was accepted")
 	}
 	if spawnCount(backend) != before || !d.store.SessionClosed("orphan") {
 		t.Fatal("a refused reopen spawned or lifted the close")
 	}
 
-	outcome, err := d.reopenSession("orphan", "", "", personal.ID)
+	outcome, err := d.reopenSession("orphan", "", "", profileDestination{requested: personal.ID})
 	if err != nil {
 		t.Fatalf("reopen into Personal: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestReopeningIntoAnotherLiveProfileIsAMoveAndRefused(t *testing.T) {
 		ID: "stay", Directory: t.TempDir(), Agent: "codex", Resume: "conv-stay",
 	})
 
-	if _, err := d.reopenSession("stay", "", "", personal.ID); err == nil {
+	if _, err := d.reopenSession("stay", "", "", profileDestination{requested: personal.ID}); err == nil {
 		t.Fatal("reopen moved a session out of its live profile")
 	}
 }
@@ -323,7 +323,7 @@ func TestAFailedReopenIntoANewProfileKeepsTheRecordedOne(t *testing.T) {
 	})
 	deleteTestProfile(t, d.store, work.ID, defaultProfileID(t, d.store))
 
-	if _, err := d.reopenSession("failed-move", "", "", defaultProfileID(t, d.store)); err == nil {
+	if _, err := d.reopenSession("failed-move", "", "", profileDestination{requested: defaultProfileID(t, d.store)}); err == nil {
 		t.Fatal("the reopen reported success although the spawn failed")
 	}
 	if profileID, err := d.store.SessionProfileID("failed-move"); err != nil || profileID != work.ID {
@@ -393,7 +393,7 @@ func TestReopeningLeavesTheCostCursorWhereTheCloseLeftIt(t *testing.T) {
 		t.Fatalf("cost cursor at the close = %q, want the fixture %q", closed.Cursor, cursor)
 	}
 
-	if _, err := d.reopenSession("cost", "", "", ""); err != nil {
+	if _, err := d.reopenSession("cost", "", "", profileDestination{}); err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
 

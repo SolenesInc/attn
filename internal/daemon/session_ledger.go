@@ -151,7 +151,10 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		Event:     protocol.EventSessionReopenResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), d.reopenProfileForClient(client, msg))
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), profileDestination{
+		requested:           protocol.Deref(msg.ProfileID),
+		whenRecordedDeleted: client.selectedProfile(),
+	})
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	} else {
@@ -159,18 +162,6 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		reply.Result = sessionReopenResult(outcome)
 	}
 	d.sendToClient(client, reply)
-}
-
-func (d *Daemon) reopenProfileForClient(client *wsClient, msg *protocol.SessionReopenMessage) string {
-	if requested := strings.TrimSpace(protocol.Deref(msg.ProfileID)); requested != "" {
-		return requested
-	}
-	recorded := sessionReopenVerdict{SessionID: strings.TrimSpace(msg.SessionID)}
-	d.planReopenProfile(&recorded)
-	if recorded.ProfileDeleted {
-		return client.selectedProfile()
-	}
-	return ""
 }
 
 func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.SessionShowMessage) {
