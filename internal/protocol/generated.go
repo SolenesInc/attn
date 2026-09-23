@@ -3675,6 +3675,17 @@ type DesktopDockTileMessage struct {
 	TileShare *float64 `json:"tile_share,omitempty,omitzero"`
 }
 
+type DesktopFocusSessionMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
+}
+
 type DesktopMoveLeafMessage struct {
 	// AnchorID corresponds to the JSON schema field "anchor_id".
 	AnchorID *string `json:"anchor_id,omitempty,omitzero"`

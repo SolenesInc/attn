@@ -818,6 +818,46 @@ func (s *Store) SetActivePane(desktopID, paneID string) (profiles.Profile, profi
 	return profile, desktop, err
 }
 
+func (s *Store) FocusSession(sessionID string) (profiles.Profile, *profiles.Desktop, error) {
+	var profile profiles.Profile
+	var focused *profiles.Desktop
+	err := s.profilesTx(func(tx *sql.Tx, now string) error {
+		var profileID string
+		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, sessionID).Scan(&profileID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return profiles.Errorf(profiles.CodeNotFound, "session %q does not exist", sessionID)
+		}
+		if err != nil {
+			return err
+		}
+		if profile, err = loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		var desktopID, paneID string
+		placed, err := rowFound(tx.QueryRow(`SELECT desktop_id, pane_id FROM desktop_panes WHERE session_id = ?`, sessionID), &desktopID, &paneID)
+		if err != nil {
+			return err
+		}
+		if placed {
+			desktop, err := loadDesktop(tx, desktopID)
+			if err != nil {
+				return err
+			}
+			desktop.ActivePaneID = paneID
+			if _, err := tx.Exec(`UPDATE desktops SET active_pane_id = ?, updated_at = ? WHERE id = ?`, paneID, now, desktopID); err != nil {
+				return err
+			}
+			profile.CurrentDesktopID = desktopID
+			if _, err := tx.Exec(`UPDATE profiles SET current_desktop_id = ? WHERE id = ?`, desktopID, profile.ID); err != nil {
+				return err
+			}
+			focused = &desktop
+		}
+		return touchProfileUse(tx, &profile, now)
+	})
+	return profile, focused, err
+}
+
 func panePersisted(tx *sql.Tx, desktopID string, pane profiles.Pane) (bool, error) {
 	var count int
 	if err := tx.QueryRow(`SELECT count(*) FROM desktop_panes WHERE pane_id = ? AND session_id = ? AND desktop_id = ?`,

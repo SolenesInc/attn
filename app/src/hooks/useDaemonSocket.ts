@@ -5523,6 +5523,11 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopFocusSession = useCallback(
+    (sessionId: string) => sendProfileCommand('desktop_focus_session', { session_id: sessionId }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopMoveLeaf = useCallback(
     (move: {
       sourceDesktopId: string;
@@ -5613,6 +5618,7 @@ export function useDaemonSocket({
     sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
+    sendDesktopFocusSession,
     sendDesktopMoveLeaf,
     sendDesktopPlaceSession,
     sendDesktopDockTile,

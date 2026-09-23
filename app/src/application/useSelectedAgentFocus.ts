@@ -4,21 +4,15 @@ import { useProfilesStore } from '../store/profiles';
 import { desktopPaneOfAgent } from '../utils/desktops';
 
 export function useSelectedAgentFocus(selectedSessionId: string | null) {
-  const { sendDesktopSetCurrent, sendDesktopSetActivePane } = useDaemonApi();
+  const { sendDesktopFocusSession } = useDaemonApi();
   useEffect(() => {
     if (!selectedSessionId) return;
-    const { desktops, currentDesktopId, selectedProfileId } = useProfilesStore.getState();
+    const { desktops, currentDesktopId } = useProfilesStore.getState();
     const pane = desktopPaneOfAgent(desktops, selectedSessionId);
-    if (!pane || !selectedProfileId) return;
-    const desktop = desktops.find((entry) => entry.id === pane.desktop_id);
-    const onCurrentDesktop = pane.desktop_id === currentDesktopId;
-    if (onCurrentDesktop && desktop?.active_pane_id === pane.pane_id) return;
-    const focus = async () => {
-      if (!onCurrentDesktop) await sendDesktopSetCurrent(selectedProfileId, pane.desktop_id);
-      await sendDesktopSetActivePane(pane.desktop_id, pane.pane_id);
-    };
-    focus().catch((error: unknown) => {
-      console.warn('[App] Failed to focus the selected agent on its desktop:', error);
+    const current = desktops.find((desktop) => desktop.id === currentDesktopId);
+    if (pane && current?.id === pane.desktop_id && current.active_pane_id === pane.pane_id) return;
+    sendDesktopFocusSession(selectedSessionId).catch((error: unknown) => {
+      console.warn('[App] Failed to focus the selected agent:', error);
     });
-  }, [selectedSessionId, sendDesktopSetActivePane, sendDesktopSetCurrent]);
+  }, [selectedSessionId, sendDesktopFocusSession]);
 }
