@@ -3,6 +3,7 @@ import { invoke } from '@tauri-apps/api/core';
 interface MigrationFailureMarkerFile {
   marker_path: string;
   contents: string;
+  read_error?: string;
 }
 
 export interface MigrationFailureFact {
@@ -32,6 +33,9 @@ function factValue(value: unknown): string {
 }
 
 export function migrationFailureFromMarker(file: MigrationFailureMarkerFile): MigrationFailure {
+  if (file.read_error) {
+    return { markerPath: file.marker_path, facts: [{ label: 'Marker could not be read', value: file.read_error }] };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(file.contents);

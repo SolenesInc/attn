@@ -5507,10 +5507,7 @@ export function useDaemonSocket({
   );
 
   const sendProfileSelect = useCallback(
-    (profileId: string) => {
-      useProfilesStore.getState().selectionStarted(profileId);
-      return sendProfileCommand('profile_select', { profile_id: profileId });
-    },
+    (profileId: string) => sendProfileCommand('profile_select', { profile_id: profileId }),
     [sendProfileCommand],
   );
 

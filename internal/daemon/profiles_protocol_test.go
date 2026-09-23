@@ -164,6 +164,15 @@ func arrangementChanges(t *testing.T, client *wsClient) []protocol.ProfileArrang
 	return changes
 }
 
+func desktopIn(desktops []protocol.Desktop, id string) (protocol.Desktop, bool) {
+	for _, desktop := range desktops {
+		if desktop.ID == id {
+			return desktop, true
+		}
+	}
+	return protocol.Desktop{}, false
+}
+
 func profilesChanges(t *testing.T, client *wsClient) []protocol.ProfilesChangedMessage {
 	t.Helper()
 	var changes []protocol.ProfilesChangedMessage
@@ -214,8 +223,12 @@ func TestFirstClientOnAFreshDaemonIsScopedToDefaultAndCanCreateAnother(t *testin
 	}
 
 	selected := w.mustSend(client, map[string]any{"cmd": protocol.CmdProfileSelect, "profile_id": created.Profile.ID})
-	if len(selected.Desktops) != 1 || selected.Profile.LastUsedAt == nil {
-		t.Fatalf("profile_select returned %+v, want the arrangement and a last_used_at", selected)
+	if selected.Profile != nil || selected.Desktops != nil {
+		t.Fatalf("profile_select answered %+v, want success alone", selected)
+	}
+	arrived := arrangementChanges(t, client)
+	if len(arrived) != 1 || arrived[0].Profile.ID != created.Profile.ID || arrived[0].Profile.LastUsedAt == nil || len(arrived[0].Desktops) != 1 {
+		t.Fatalf("after profile_select the client received %+v, want the whole arrangement of the new profile with a last_used_at", arrived)
 	}
 
 	_, again := w.connect("")
@@ -298,11 +311,12 @@ func TestSelectionReachesTheOtherConnectionAndSurvivesARestart(t *testing.T) {
 	if seen[0].Profile.CurrentDesktopID != desktopTwo.ID {
 		t.Fatalf("the second connection saw current desktop %s, want %s", seen[0].Profile.CurrentDesktopID, desktopTwo.ID)
 	}
-	if len(seen[1].Desktops) != 1 || seen[1].Desktops[0].ActivePaneID != paneB {
-		t.Fatalf("the second connection saw %+v, want desktop %s with active pane %s", seen[1].Desktops, desktopTwo.ID, paneB)
+	focused, ok := desktopIn(seen[1].Desktops, desktopTwo.ID)
+	if len(seen[1].Desktops) != 2 || !ok || focused.ActivePaneID != paneB {
+		t.Fatalf("the second connection saw %+v, want both desktops with %s focused on %s", seen[1].Desktops, desktopTwo.ID, paneB)
 	}
-	if seen[1].Desktops[0].Revision != revisionBeforeSelection {
-		t.Fatalf("selecting a pane moved the desktop revision from %d to %d", revisionBeforeSelection, seen[1].Desktops[0].Revision)
+	if focused.Revision != revisionBeforeSelection {
+		t.Fatalf("selecting a pane moved the desktop revision from %d to %d", revisionBeforeSelection, focused.Revision)
 	}
 	if own := arrangementChanges(t, first); len(own) != 2 {
 		t.Fatalf("the selecting connection saw %d arrangement changes, want 2", len(own))
@@ -537,12 +551,14 @@ func TestDeletingAProfileLandsItsClientsOnTheDestination(t *testing.T) {
 	deleted := w.mustSend(deleter, map[string]any{
 		"cmd": protocol.CmdProfileDelete, "profile_id": doomed.ID, "expected_revision": doomed.Revision, "destination_profile_id": kept.Profile.ID,
 	})
-	if deleted.Profile.ID != kept.Profile.ID || len(deleted.Desktops) != 1 {
-		t.Fatalf("profile_delete answered %+v, want the destination and its arrangement", deleted)
+	if deleted.Profile != nil || deleted.Desktops != nil {
+		t.Fatalf("profile_delete answered %+v, want success alone", deleted)
 	}
-	landed := arrangementChanges(t, bystander)
-	if len(landed) != 1 || landed[0].Profile.ID != kept.Profile.ID || len(landed[0].Desktops) != 1 {
-		t.Fatalf("a client on the deleted profile was sent %+v, want the destination's whole arrangement", landed)
+	for name, client := range map[string]*wsClient{"the deleting client": deleter, "a bystander": bystander} {
+		landed := arrangementChanges(t, client)
+		if len(landed) != 1 || landed[0].Profile.ID != kept.Profile.ID || len(landed[0].Desktops) != 1 {
+			t.Fatalf("%s on the deleted profile was sent %+v, want the destination's whole arrangement", name, landed)
+		}
 	}
 
 	w.mustSend(deleter, map[string]any{

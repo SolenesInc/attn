@@ -29,9 +29,9 @@ function seedStore(desktops: Desktop[], previousDesktopId: string | null = null,
   useProfilesStore.setState({
     profiles: [{ ...PROFILE, current_desktop_id: currentDesktopId }],
     selectedProfileId: PROFILE.id,
+    currentDesktopId,
     desktops,
     previousDesktopId,
-    selection: null,
   });
 }
 
@@ -73,7 +73,7 @@ async function settle() {
 
 describe('useDesktopNavigation', () => {
   beforeEach(() => {
-    useProfilesStore.setState({ profiles: [], selectedProfileId: null, desktops: [], previousDesktopId: null, selection: null });
+    useProfilesStore.setState({ profiles: [], selectedProfileId: null, currentDesktopId: null, desktops: [], previousDesktopId: null });
   });
 
   it('switches to the desktop on a slot', () => {

@@ -7301,10 +7301,9 @@ export enum ProfileActionResultMessageEvent {
 }
 
 export interface ProfileArrangementChangedMessage {
-    deleted_desktop_ids?: string[];
-    desktops:             DesktopElement[];
-    event:                ProfileArrangementChangedMessageEvent;
-    profile:              ProfileElement;
+    desktops: DesktopElement[];
+    event:    ProfileArrangementChangedMessageEvent;
+    profile:  ProfileElement;
     [property: string]: any;
 }
 
@@ -22006,7 +22005,6 @@ const typeMap: any = {
         { json: "success", js: "success", typ: true },
     ], "any"),
     "ProfileArrangementChangedMessage": o([
-        { json: "deleted_desktop_ids", js: "deleted_desktop_ids", typ: u(undefined, a("")) },
         { json: "desktops", js: "desktops", typ: a(r("DesktopElement")) },
         { json: "event", js: "event", typ: r("ProfileArrangementChangedMessageEvent") },
         { json: "profile", js: "profile", typ: r("ProfileElement") },

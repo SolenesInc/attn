@@ -48,7 +48,7 @@ describe('MigrationFailureScreen', () => {
     expect(screen.queryByRole('button', { name: /retry/i })).toBeNull();
   });
 
-  it('shows an unreadable marker verbatim rather than hiding it', () => {
+  it('shows a marker that is not JSON verbatim rather than hiding it', () => {
     const failure = migrationFailureFromMarker({
       marker_path: '/tmp/attn/migration-failure.json',
       contents: 'conversion aborted before writing JSON',

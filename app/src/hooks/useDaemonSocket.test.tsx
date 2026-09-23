@@ -565,6 +565,43 @@ describe('useDaemonSocket PTY kill sequencing', () => {
     unmount();
   });
 
+  it('stops at a marker it cannot read and shows why', async () => {
+    let ensureAttempts = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === 'ensure_daemon') {
+        ensureAttempts++;
+        throw new Error('daemon ensure failed: conversion aborted');
+      }
+      if (cmd === 'read_migration_failure') {
+        return { marker_path: '/tmp/attn/migration-failure.json', contents: '', read_error: 'Permission denied (os error 13)' };
+      }
+      return true;
+    });
+
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.migrationFailure).toEqual({
+        markerPath: '/tmp/attn/migration-failure.json',
+        facts: [{ label: 'Marker could not be read', value: 'Permission denied (os error 13)' }],
+      });
+    });
+    expect(pendingTimeouts.size).toBe(0);
+    expect(ensureAttempts).toBe(1);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    unmount();
+  });
+
   it('serializes endpoint actions so concurrent updates do not collide', async () => {
     const { result, unmount } = renderHook(() =>
       useDaemonSocket({

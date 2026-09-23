@@ -70,13 +70,15 @@ function desktop(id: string, profileId: string, slot?: number, treeJson = ''): D
   };
 }
 
+const DEFAULT_DESKTOPS = [desktop('d1', 'set-default', 1), desktop('d2', 'set-default', 2), desktop('d10', 'set-default')];
+
 describe('useDaemonSocket profiles', () => {
   beforeEach(() => {
     FakeWebSocket.instances = [];
     vi.stubGlobal('WebSocket', FakeWebSocket);
     vi.mocked(isTauri).mockReturnValue(false);
     window.localStorage.clear();
-    useProfilesStore.setState({ profiles: [], selectedProfileId: null, desktops: [], previousDesktopId: null, selection: null });
+    useProfilesStore.setState({ profiles: [], selectedProfileId: null, currentDesktopId: null, desktops: [], previousDesktopId: null });
   });
 
   afterEach(() => {
@@ -110,7 +112,7 @@ describe('useDaemonSocket profiles', () => {
         settings: {},
         profiles: [profile('set-default', 'd1'), profile('set-work', 'w1', '2026-09-22T10:00:00Z')],
         selected_profile_id: 'set-default',
-        desktops: [desktop('d1', 'set-default', 1), desktop('d2', 'set-default', 2), desktop('d10', 'set-default')],
+        desktops: DEFAULT_DESKTOPS,
       });
     });
     return { ws, result: rendered.result };
@@ -123,6 +125,7 @@ describe('useDaemonSocket profiles', () => {
     expect(JSON.parse(ws.sent[0])).toMatchObject({ cmd: 'client_hello', profile_id: 'set-deleted' });
     expect(useProfilesStore.getState()).toMatchObject({
       selectedProfileId: 'set-default',
+      currentDesktopId: 'd1',
       previousDesktopId: null,
     });
     expect(useProfilesStore.getState().desktops.map((entry) => entry.id)).toEqual(['d1', 'd2', 'd10']);
@@ -133,55 +136,50 @@ describe('useDaemonSocket profiles', () => {
     const { ws } = await connect();
 
     act(() => {
-      ws.emit({
-        event: 'profile_arrangement_changed',
-        profile: profile('set-default', 'd2'),
-        desktops: [{ ...desktop('d2', 'set-default', 2), active_pane_id: '' }],
-      });
-      ws.emit({ event: 'profiles_changed', profiles: [profile('set-default', 'd2'), profile('set-work', 'w1')] });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: DEFAULT_DESKTOPS });
     });
 
-    const state = useProfilesStore.getState();
-    expect(state.profiles.find((entry) => entry.id === 'set-default')?.current_desktop_id).toBe('d2');
-    expect(state.previousDesktopId).toBe('d1');
+    expect(useProfilesStore.getState()).toMatchObject({ currentDesktopId: 'd2', previousDesktopId: 'd1' });
   });
 
   it('forgets the bounce target when that desktop is deleted', async () => {
     const { ws } = await connect();
 
     act(() => {
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: [] });
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: [], deleted_desktop_ids: ['d1'] });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: DEFAULT_DESKTOPS });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: DEFAULT_DESKTOPS.slice(1) });
     });
 
     expect(useProfilesStore.getState().previousDesktopId).toBeNull();
     expect(useProfilesStore.getState().desktops.map((entry) => entry.id)).toEqual(['d2', 'd10']);
   });
 
-  it('keeps a desktop it already holds at a higher revision', async () => {
+  it('shows the last arrangement it received in full', async () => {
     const { ws } = await connect();
 
     act(() => {
       ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2, MARKDOWN_TILE), revision: 5 }] });
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2), revision: 4 }] });
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [{ ...desktop('d2', 'set-default', 2, MARKDOWN_TILE), revision: 5, active_pane_id: 'p7' }] });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd1'), desktops: [desktop('d1', 'set-default', 1), { ...desktop('d2', 'set-default', 2), revision: 6 }] });
     });
 
-    const d2 = useProfilesStore.getState().desktops.find((entry) => entry.id === 'd2');
-    expect(d2).toMatchObject({ revision: 5, tree_json: MARKDOWN_TILE, active_pane_id: 'p7' });
+    expect(useProfilesStore.getState().desktops.map((entry) => [entry.id, entry.revision, entry.tree_json])).toEqual([
+      ['d1', 1, ''],
+      ['d2', 6, ''],
+    ]);
   });
 
-  it('ignores current-desktop moves of profiles this client is not on', async () => {
+  it('leaves the current desktop to the arrangement when the profile list changes', async () => {
     const { ws } = await connect();
 
     act(() => {
-      ws.emit({ event: 'profiles_changed', profiles: [profile('set-default', 'd1'), profile('set-work', 'w2')] });
+      ws.emit({ event: 'profiles_changed', profiles: [profile('set-default', 'd2'), profile('set-work', 'w2')] });
     });
 
-    expect(useProfilesStore.getState().previousDesktopId).toBeNull();
+    expect(useProfilesStore.getState()).toMatchObject({ currentDesktopId: 'd1', previousDesktopId: null });
+    expect(useProfilesStore.getState().profiles.map((entry) => entry.current_desktop_id)).toEqual(['d2', 'w2']);
   });
 
-  it('rescopes to the profile a profile_select answers with', async () => {
+  it('moves to another profile when its arrangement arrives, not when profile_select answers', async () => {
     const { ws, result } = await connect();
 
     let selection!: Promise<unknown>;
@@ -191,18 +189,16 @@ describe('useDaemonSocket profiles', () => {
     const [command] = ws.commands('profile_select');
     expect(command).toMatchObject({ profile_id: 'set-work' });
     act(() => {
-      ws.emit({
-        event: 'profile_action_result',
-        request_id: command.request_id,
-        action: 'profile_select',
-        success: true,
-        profile: profile('set-work', 'w1', '2026-09-23T11:00:00Z'),
-        desktops: [desktop('w1', 'set-work', 1)],
-      });
+      ws.emit({ event: 'profile_action_result', request_id: command.request_id, action: 'profile_select', success: true });
     });
     await selection;
+    expect(useProfilesStore.getState().selectedProfileId).toBe('set-default');
 
-    expect(useProfilesStore.getState()).toMatchObject({ selectedProfileId: 'set-work', previousDesktopId: null });
+    act(() => {
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-work', 'w1', '2026-09-23T11:00:00Z'), desktops: [desktop('w1', 'set-work', 1)] });
+    });
+
+    expect(useProfilesStore.getState()).toMatchObject({ selectedProfileId: 'set-work', currentDesktopId: 'w1', previousDesktopId: null });
     expect(useProfilesStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1']);
     expect(window.localStorage.getItem(SELECTED_PROFILE_STORAGE_KEY)).toBe('set-work');
   });
@@ -224,61 +220,17 @@ describe('useDaemonSocket profiles', () => {
     expect(window.localStorage.getItem(SELECTED_PROFILE_STORAGE_KEY)).toBe('set-work');
   });
 
-  it('ignores a late arrangement of the profile it just left', async () => {
-    const { ws, result } = await connect();
+  it('ends on the profile whose arrangement arrived last when a late one of the old profile comes first', async () => {
+    const { ws } = await connect();
 
-    let selection!: Promise<unknown>;
     act(() => {
-      selection = result.current.sendProfileSelect('set-work');
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: DEFAULT_DESKTOPS });
+      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-work', 'w1'), desktops: [desktop('w1', 'set-work', 1)] });
     });
-    const [command] = ws.commands('profile_select');
-    act(() => {
-      ws.emit({
-        event: 'profile_action_result',
-        request_id: command.request_id,
-        action: 'profile_select',
-        success: true,
-        profile: profile('set-work', 'w1'),
-        desktops: [desktop('w1', 'set-work', 1)],
-      });
-      ws.emit({ event: 'profile_arrangement_changed', profile: profile('set-default', 'd2'), desktops: [desktop('d2', 'set-default', 2)] });
-    });
-    await selection;
 
-    expect(useProfilesStore.getState().selectedProfileId).toBe('set-work');
+    expect(useProfilesStore.getState()).toMatchObject({ selectedProfileId: 'set-work', currentDesktopId: 'w1', previousDesktopId: null });
     expect(useProfilesStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1']);
     expect(window.localStorage.getItem(SELECTED_PROFILE_STORAGE_KEY)).toBe('set-work');
-  });
-
-  it('keeps a newer arrangement of the profile it is switching to that arrives before the result', async () => {
-    const { ws, result } = await connect();
-
-    let selection!: Promise<unknown>;
-    act(() => {
-      selection = result.current.sendProfileSelect('set-work');
-    });
-    const [command] = ws.commands('profile_select');
-    act(() => {
-      ws.emit({
-        event: 'profile_arrangement_changed',
-        profile: profile('set-work', 'w2'),
-        desktops: [{ ...desktop('w1', 'set-work', 1, MARKDOWN_TILE), revision: 3 }],
-      });
-      ws.emit({
-        event: 'profile_action_result',
-        request_id: command.request_id,
-        action: 'profile_select',
-        success: true,
-        profile: profile('set-work', 'w1'),
-        desktops: [{ ...desktop('w1', 'set-work', 1), revision: 2 }, desktop('w2', 'set-work', 2)],
-      });
-    });
-    await selection;
-
-    const state = useProfilesStore.getState();
-    expect(state.selectedProfileId).toBe('set-work');
-    expect(state.profiles.find((entry) => entry.id === 'set-work')?.current_desktop_id).toBe('w2');
-    expect(state.desktops.map((entry) => [entry.id, entry.revision])).toEqual([['w1', 3], ['w2', 1]]);
   });
 
   it('rejects a refused command with its error code', async () => {

@@ -36,8 +36,7 @@ function waitForArrangementAfter(seen: Map<string, number>): Promise<void> {
 }
 
 function currentDesktopOf(state: ReturnType<typeof useProfilesStore.getState>): Desktop | undefined {
-  const profile = state.profiles.find((entry) => entry.id === state.selectedProfileId);
-  return state.desktops.find((desktop) => desktop.id === profile?.current_desktop_id);
+  return state.desktops.find((desktop) => desktop.id === state.currentDesktopId);
 }
 
 function failureMessage(err: unknown): string {
@@ -57,13 +56,14 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const desktops = useProfilesStore((state) => state.desktops);
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const selectedProfile = useMemo(
     () => profiles.find((profile) => profile.id === selectedProfileId),
     [selectedProfileId, profiles],
   );
   const currentDesktop = useMemo(
-    () => desktops.find((desktop) => desktop.id === selectedProfile?.current_desktop_id),
-    [desktops, selectedProfile],
+    () => desktops.find((desktop) => desktop.id === currentDesktopId),
+    [desktops, currentDesktopId],
   );
 
   const report = useCallback(

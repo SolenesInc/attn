@@ -28,9 +28,6 @@ type ProfileEvent =
   | { event?: string };
 
 function settleProfileAction(pending: PendingRequests, result: ProfileActionResult): void {
-  if (result.success && result.action === 'profile_select' && result.profile) {
-    useProfilesStore.getState().selectedProfileChanged(result.profile, result.desktops ?? []);
-  }
   const key = pendingRequestKey(result.action, result.request_id);
   const waiter = pending.get(key);
   if (!waiter) return;
@@ -52,7 +49,7 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       return true;
     case 'profile_arrangement_changed': {
       const message = data as ProfileArrangementChangedMessage;
-      useProfilesStore.getState().arrangementChanged(message.profile, message.desktops ?? [], message.deleted_desktop_ids);
+      useProfilesStore.getState().arrangementArrived(message.profile, message.desktops ?? []);
       return true;
     }
     default:

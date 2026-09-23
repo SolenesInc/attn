@@ -7390,9 +7390,6 @@ type ProfileActionResultMessage struct {
 }
 
 type ProfileArrangementChangedMessage struct {
-	// DeletedDesktopIds corresponds to the JSON schema field "deleted_desktop_ids".
-	DeletedDesktopIds []string `json:"deleted_desktop_ids,omitempty,omitzero"`
-
 	// Desktops corresponds to the JSON schema field "desktops".
 	Desktops []Desktop `json:"desktops"`
 
