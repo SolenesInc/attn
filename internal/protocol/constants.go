@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "323"
+const ProtocolVersion = "324"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -308,6 +308,8 @@ const (
 	CmdDesktopMoveLeaf        = "desktop_move_leaf"
 	CmdDesktopRemoveLeaf      = "desktop_remove_leaf"
 	CmdDesktopSetSplitRatio   = "desktop_set_split_ratio"
+	CmdDesktopDockTile        = "desktop_dock_tile"
+	CmdDesktopUpdateTile      = "desktop_update_tile"
 )
 
 const (
@@ -323,6 +325,7 @@ const (
 	EventProfileActionResult       = "profile_action_result"
 	EventProfilesChanged           = "profiles_changed"
 	EventProfileArrangementChanged = "profile_arrangement_changed"
+	EventDesktopTileContent        = "desktop_tile_content"
 	EventMigrationResult           = "migration_result"
 	EventMigrationChanged          = "migration_changed"
 )

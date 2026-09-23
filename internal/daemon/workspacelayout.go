@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/rankkey"
@@ -570,45 +569,8 @@ func (d *Daemon) handleWorkspaceLayoutUpdateTile(client *wsClient, msg *protocol
 		}
 	}
 
-	switch tileKind {
-	case string(layouttree.TileKindBrowser):
-		tileParams, err = validateBrowserURL(tileParams)
-		if err != nil {
-			d.sendWorkspaceLayoutTileActionResultWithRequest(
-				client,
-				protocol.CmdWorkspaceLayoutUpdateTile,
-				msg.WorkspaceID,
-				tileID,
-				requestID,
-				err,
-			)
-			return
-		}
-	case string(layouttree.TileKindNotebook):
-	case string(layouttree.TileKindSeed):
-		if err := d.requireHome(garden.Surface); err != nil {
-			d.sendWorkspaceLayoutTileActionResultWithRequest(
-				client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID,
-				tileID, requestID, err,
-			)
-			return
-		}
-		if _, _, err := d.readSeed(tileParams); err != nil {
-			d.sendWorkspaceLayoutTileActionResultWithRequest(
-				client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID,
-				tileID, requestID, err,
-			)
-			return
-		}
-	default:
-		d.sendWorkspaceLayoutTileActionResultWithRequest(
-			client,
-			protocol.CmdWorkspaceLayoutUpdateTile,
-			msg.WorkspaceID,
-			tileID,
-			requestID,
-			fmt.Errorf("tile parameters cannot be updated for tile kind %q", tileKind),
-		)
+	if tileParams, err = d.validatedTileParams(tileKind, tileParams); err != nil {
+		d.sendWorkspaceLayoutTileActionResultWithRequest(client, protocol.CmdWorkspaceLayoutUpdateTile, msg.WorkspaceID, tileID, requestID, err)
 		return
 	}
 	layout, ok := layouttree.UpdateTileParams(snapshot.Layout, tileID, tileParams)

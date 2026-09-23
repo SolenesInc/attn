@@ -3440,6 +3440,40 @@ model DesktopSetSplitRatioMessage {
   expected_revision: safeint;
 }
 
+model DesktopDockTileMessage {
+  cmd: "desktop_dock_tile";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+  tile_id: string;
+  tile_kind: string;
+  tile_params?: string;
+  tile_session_id?: string;
+  anchor_id?: string;
+  edge: LayoutDockEdge;
+  tile_share?: float64;
+}
+
+model DesktopUpdateTileMessage {
+  cmd: "desktop_update_tile";
+  request_id: string;
+  desktop_id: string;
+  expected_revision: safeint;
+  tile_id: string;
+  tile_params?: string;
+  tile_session_id?: string;
+}
+
+model DesktopTileContentMessage {
+  event: "desktop_tile_content";
+  desktop_id: string;
+  tile_id: string;
+  tile_kind: string;
+  path: string;
+  content: string;
+  error?: string;
+}
+
 model ProfileActionResultMessage {
   event: "profile_action_result";
   request_id: string;
@@ -3448,7 +3482,7 @@ model ProfileActionResultMessage {
   error?: string;
   error_code?: ProfileErrorCode;
   profile?: Profile;
-  desktops?: Desktop[];         // The desktops the command changed; every desktop for profile_select
+  desktops?: Desktop[];
   pane_id?: string;             // The pane desktop_place_session created
 }
 
@@ -3458,15 +3492,10 @@ model ProfilesChangedMessage {
   profiles: Profile[];
 }
 
-// Sent to every client scoped to the profile after any change to its desktops or
-// its selection. desktops holds each changed desktop in full; a move between
-// two desktops arrives as one message. A client keeps a desktop it already
-// holds at a higher revision.
 model ProfileArrangementChangedMessage {
   event: "profile_arrangement_changed";
   profile: Profile;
   desktops: Desktop[];
-  deleted_desktop_ids?: string[];
 }
 
 // ============================================================================
@@ -8050,6 +8079,7 @@ alias DaemonEvent =
   | ProfileActionResultMessage
   | ProfilesChangedMessage
   | ProfileArrangementChangedMessage
+  | DesktopTileContentMessage
   | MigrationResultMessage
   | MigrationChangedMessage
   | RenameResultMessage

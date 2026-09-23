@@ -88,7 +88,7 @@ func (d *Daemon) placeLaunchedSession(session *protocol.Session, placement *laun
 		d.logf("%v", err)
 		return placementOutcome{err: err}
 	}
-	d.publishArrangementChanged(desktop.ProfileID, profileArrangementChange{DesktopIDs: desktopIDs(desktop)})
+	d.publishArrangementChanged(desktop.ProfileID)
 	return placementOutcome{desktopID: desktop.ID, paneID: paneID}
 }
 
@@ -99,7 +99,7 @@ func (d *Daemon) announceUnplacement(sessionID string) func() {
 	}
 	return func() {
 		if _, stillPlaced, err := d.store.SessionPlacement(sessionID); err == nil && !stillPlaced {
-			d.publishArrangementChanged(placement.ProfileID, profileArrangementChange{DesktopIDs: []string{placement.DesktopID}})
+			d.publishArrangementChanged(placement.ProfileID)
 		}
 	}
 }

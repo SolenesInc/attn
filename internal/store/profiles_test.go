@@ -588,7 +588,7 @@ func TestMostRecentlyUsedProfileFollowsSelection(t *testing.T) {
 	s, restart := openProfileStore(t)
 	work, _ := mustCreateProfile(t, s, "Work")
 	home, homeDesktop := mustCreateProfile(t, s, "Home")
-	if _, _, err := s.SelectProfile(work.ID); err != nil {
+	if _, err := s.SelectProfile(work.ID); err != nil {
 		t.Fatalf("SelectProfile: %v", err)
 	}
 	if _, err := s.SetCurrentDesktop(home.ID, homeDesktop.ID); err != nil {

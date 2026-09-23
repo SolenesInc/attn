@@ -30,8 +30,9 @@ var wireSenderExceptions = map[string]string{
 	"broadcastMessage":      "the generic value sender every projection uses",
 	"broadcastRawWSMessage": "the remote relay: the fact was already published on the remote daemon's bus, and re-publishing it locally would duplicate it",
 
-	"broadcastFsChanged":   "filesystem change bursts, coalesced per watcher rather than per file",
-	"broadcastTileContent": "workspace tile content bytes, sent only to the clients subscribed to that tile",
+	"broadcastFsChanged":          "filesystem change bursts, coalesced per watcher rather than per file",
+	"broadcastTileContent":        "workspace tile content bytes, sent only to the clients subscribed to that tile",
+	"broadcastDesktopTileContent": "desktop tile content bytes, sent only to the clients subscribed to that tile",
 }
 
 func TestWireTrafficComesFromProjections(t *testing.T) {

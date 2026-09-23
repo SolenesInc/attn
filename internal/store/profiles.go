@@ -429,21 +429,16 @@ func (s *Store) RenameProfile(id, name string, expectedRevision int64) (profiles
 	return profile, err
 }
 
-func (s *Store) SelectProfile(id string) (profiles.Profile, []profiles.Desktop, error) {
+func (s *Store) SelectProfile(id string) (profiles.Profile, error) {
 	var profile profiles.Profile
-	var desktops []profiles.Desktop
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
 		var err error
 		if profile, err = loadLiveProfile(tx, id); err != nil {
 			return err
 		}
-		if err := touchProfileUse(tx, &profile, now); err != nil {
-			return err
-		}
-		desktops, err = listDesktops(tx, id)
-		return err
+		return touchProfileUse(tx, &profile, now)
 	})
-	return profile, desktops, err
+	return profile, err
 }
 
 func (s *Store) ProfileArrangement(id string) (profiles.Profile, []profiles.Desktop, error) {

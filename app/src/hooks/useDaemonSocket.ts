@@ -12,6 +12,7 @@ import type { DelegationPreferences } from '../types/generated';
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isTauri } from '@tauri-apps/api/core';
+import { readMigrationFailureMarker, type MigrationFailure } from '../utils/migrationFailure';
 import type {
   Session as GeneratedSession,
   Workspace as GeneratedWorkspaceSnapshot,
@@ -95,6 +96,9 @@ import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
+import { handleProfileDaemonEvent, type ProfileActionResult } from './daemonProfileEvents';
+import { useProfilesStore } from '../store/profiles';
+import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
   handleAutoModeDaemonEvent,
@@ -313,7 +317,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '323';
+export const PROTOCOL_VERSION = '324';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -743,6 +747,19 @@ function pruneTileContentsForWorkspace(
   return changed ? next : contents;
 }
 
+function contentOnCurrentDesktop(
+  contents: Record<string, TileContentState>,
+  desktops: Desktop[],
+  currentDesktopId: string | null,
+): Record<string, TileContentState> {
+  const current = desktops.find((desktop) => desktop.id === currentDesktopId);
+  const liveKeys = new Set(current
+    ? tileIdsFromLayoutJSON(current.tree_json, 'markdown').map((tileId) => tileContentKey(current.id, tileId))
+    : []);
+  const kept = Object.entries(contents).filter(([key]) => liveKeys.has(key));
+  return kept.length === Object.keys(contents).length ? contents : Object.fromEntries(kept);
+}
+
 function pruneTileContentsForWorkspaces(
   contents: Record<string, TileContentState>,
   workspaces: DaemonWorkspace[],
@@ -971,6 +988,7 @@ export function useDaemonSocket({
   const instanceMismatchRef = useRef<boolean>(false);
   const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [migrationFailure, setMigrationFailure] = useState<MigrationFailure | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
   const [hasReceivedInitialState, setHasReceivedInitialState] = useState(false);
@@ -978,6 +996,12 @@ export function useDaemonSocket({
   const [warnings, setWarnings] = useState<DaemonWarning[]>([]);
   const [gitOperations, setGitOperations] = useState<Record<string, DaemonGitOperation>>({});
   const [tileContents, setTileContents] = useState<Record<string, TileContentState>>({});
+  const [desktopTileContents, setDesktopTileContents] = useState<Record<string, TileContentState>>({});
+  const scopedDesktops = useProfilesStore((state) => state.desktops);
+  const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
+  useEffect(() => {
+    setDesktopTileContents((prev) => contentOnCurrentDesktop(prev, scopedDesktops, currentDesktopId));
+  }, [scopedDesktops, currentDesktopId]);
   const [seedReviewOverview, setSeedReviewOverview] = useState<SeedReviewOverview>({ candidateCount: 0 });
 
   const reconnectAttemptsRef = useRef(0);
@@ -1128,6 +1152,11 @@ export function useDaemonSocket({
     } catch (err) {
       console.error('[Daemon] Failed to ensure daemon is running:', err);
       setConnectionError(err instanceof Error ? err.message : String(err));
+      const marker = await readMigrationFailureMarker();
+      if (marker) {
+        circuitOpenRef.current = true;
+        setMigrationFailure(marker);
+      }
       return false;
     }
   }, []);
@@ -1211,6 +1240,7 @@ export function useDaemonSocket({
     }
 
     if (!await ensureDaemonRunning()) {
+      if (circuitOpenRef.current) return;
       const delay = reconnectDelayRef.current;
       reconnectDelayRef.current = Math.min(delay * 1.5, MAX_RECONNECT_DELAY_MS);
       reconnectTimeoutRef.current = window.setTimeout(() => {
@@ -1428,6 +1458,7 @@ export function useDaemonSocket({
             );
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
+            useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);
@@ -1656,6 +1687,20 @@ export function useDaemonSocket({
               callbacksRef.current.onPresentationUpdated?.(data.presentation);
             }
             break;
+
+          case 'desktop_tile_content': {
+            if (typeof data.desktop_id === 'string' && typeof data.tile_id === 'string') {
+              const key = tileContentKey(data.desktop_id, data.tile_id);
+              const content = {
+                path: typeof data.path === 'string' ? data.path : '',
+                content: typeof data.content === 'string' ? data.content : '',
+                error: typeof data.error === 'string' ? data.error : undefined,
+              };
+              const { desktops, currentDesktopId } = useProfilesStore.getState();
+              setDesktopTileContents((prev) => contentOnCurrentDesktop({ ...prev, [key]: content }, desktops, currentDesktopId));
+            }
+            break;
+          }
 
           case 'workspace_tile_content': {
             if (typeof data.workspace_id === 'string' && typeof data.tile_id === 'string') {
@@ -2888,6 +2933,7 @@ export function useDaemonSocket({
             if (docSubscriptions.handleEvent(data)) break;
             if (handleDelegationDaemonEvent(data, pending)) break;
             if (handleCrewDaemonEvent(data, pending)) break;
+            if (handleProfileDaemonEvent(data, pending)) break;
             if (handleAutoModeDaemonEvent(data, pending)) break;
             if (handleWorktreeDaemonEvent(data, pending, {
               onWorktreeState: (worktree) => useWorktreeStore.getState().observe(worktree),
@@ -5455,6 +5501,126 @@ export function useDaemonSocket({
     ws.send(JSON.stringify({ cmd: 'clear_warnings' }));
   }, []);
 
+  const sendProfileCommand = useCallback(
+    (cmd: string, body: Record<string, unknown>) =>
+      sendRequest<ProfileActionResult>(cmd, body, `The daemon did not answer ${cmd}`),
+    [sendRequest],
+  );
+
+  const sendProfileSelect = useCallback(
+    (profileId: string) => sendProfileCommand('profile_select', { profile_id: profileId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopCreate = useCallback(
+    (profileId: string) => sendProfileCommand('desktop_create', { profile_id: profileId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopDelete = useCallback(
+    (desktopId: string, expectedRevision: number) =>
+      sendProfileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: expectedRevision }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopSetShortcutSlot = useCallback(
+    (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
+      sendProfileCommand('desktop_set_shortcut_slot', {
+        desktop_id: desktopId,
+        expected_revision: expectedRevision,
+        ...(shortcutSlot === null ? {} : { shortcut_slot: shortcutSlot }),
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopSetCurrent = useCallback(
+    (profileId: string, desktopId: string) =>
+      sendProfileCommand('desktop_set_current', { profile_id: profileId, desktop_id: desktopId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopSetActivePane = useCallback(
+    (desktopId: string, paneId: string) =>
+      sendProfileCommand('desktop_set_active_pane', { desktop_id: desktopId, pane_id: paneId }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopMoveLeaf = useCallback(
+    (move: {
+      sourceDesktopId: string;
+      targetDesktopId: string;
+      leafId: string;
+      anchorId?: string;
+      edge: 'left' | 'right' | 'top' | 'bottom';
+      expectedSourceRevision: number;
+      expectedTargetRevision: number;
+    }) =>
+      sendProfileCommand('desktop_move_leaf', {
+        source_desktop_id: move.sourceDesktopId,
+        target_desktop_id: move.targetDesktopId,
+        leaf_id: move.leafId,
+        ...(move.anchorId ? { anchor_id: move.anchorId } : {}),
+        edge: move.edge,
+        expected_source_revision: move.expectedSourceRevision,
+        expected_target_revision: move.expectedTargetRevision,
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopPlaceSession = useCallback(
+    (placement: { desktopId: string; sessionId: string; expectedRevision: number; anchorPaneId?: string }) =>
+      sendProfileCommand('desktop_place_session', {
+        desktop_id: placement.desktopId,
+        session_id: placement.sessionId,
+        expected_revision: placement.expectedRevision,
+        ...(placement.anchorPaneId ? { anchor_pane_id: placement.anchorPaneId } : {}),
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopDockTile = useCallback(
+    (dock: {
+      desktopId: string;
+      expectedRevision: number;
+      tileId: string;
+      tileKind: string;
+      tileParams?: string;
+      tileSessionId?: string;
+      anchorId?: string;
+      edge: 'left' | 'right' | 'top' | 'bottom';
+    }) =>
+      sendProfileCommand('desktop_dock_tile', {
+        desktop_id: dock.desktopId,
+        expected_revision: dock.expectedRevision,
+        tile_id: dock.tileId,
+        tile_kind: dock.tileKind,
+        edge: dock.edge,
+        ...(dock.tileParams ? { tile_params: dock.tileParams } : {}),
+        ...(dock.tileSessionId ? { tile_session_id: dock.tileSessionId } : {}),
+        ...(dock.anchorId ? { anchor_id: dock.anchorId } : {}),
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopUpdateTile = useCallback(
+    (update: { desktopId: string; expectedRevision: number; tileId: string; tileParams?: string; tileSessionId?: string }) =>
+      sendProfileCommand('desktop_update_tile', {
+        desktop_id: update.desktopId,
+        expected_revision: update.expectedRevision,
+        tile_id: update.tileId,
+        ...(update.tileParams ? { tile_params: update.tileParams } : {}),
+        ...(update.tileSessionId ? { tile_session_id: update.tileSessionId } : {}),
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopRemoveLeaf = useCallback(
+    (desktopId: string, leafId: string, expectedRevision: number) =>
+      sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
+    [sendProfileCommand],
+  );
+
+
   const clearDisconnectExplanation = useCallback(() => {
     setDisconnectExplanation(null);
   }, []);
@@ -5462,6 +5628,18 @@ export function useDaemonSocket({
   return {
     isConnected: wsRef.current?.readyState === WebSocket.OPEN,
     connectionError,
+    migrationFailure,
+    sendProfileSelect,
+    sendDesktopCreate,
+    sendDesktopDelete,
+    sendDesktopSetShortcutSlot,
+    sendDesktopSetCurrent,
+    sendDesktopSetActivePane,
+    sendDesktopMoveLeaf,
+    sendDesktopPlaceSession,
+    sendDesktopDockTile,
+    sendDesktopUpdateTile,
+    sendDesktopRemoveLeaf,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,
@@ -5605,6 +5783,7 @@ export function useDaemonSocket({
     sendWorkspaceMoveLeafToNewWorkspace,
     sendSetWorkspaceRank,
     tileContents,
+    desktopTileContents,
     requestTileContent,
     sendOpenMarkdown,
     sendOpenSeed,

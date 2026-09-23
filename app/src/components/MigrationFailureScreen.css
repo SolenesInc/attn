@@ -1,0 +1,63 @@
+.migration-failure {
+  box-sizing: border-box;
+  height: 100vh;
+  overflow: auto;
+  padding: 48px 56px;
+  background: var(--color-bg-app);
+  color: var(--color-text-primary);
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.migration-failure h1 {
+  margin: 0 0 12px;
+  font-size: var(--font-size-xl);
+  font-weight: 600;
+}
+
+.migration-failure p {
+  margin: 0 0 28px;
+  max-width: 64ch;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size);
+  line-height: 1.5;
+}
+
+.migration-failure-facts {
+  margin: 0 0 24px;
+  display: grid;
+  gap: 10px;
+}
+
+.migration-failure-fact {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 16px;
+}
+
+.migration-failure-fact dt {
+  color: var(--color-text-tertiary);
+  font-size: var(--font-size-md);
+}
+
+.migration-failure-fact dd {
+  margin: 0;
+  font-family: 'JetBrains Mono', 'DejaVu Sans Mono', monospace;
+  font-size: var(--font-size-md);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.migration-failure-copy {
+  padding: 6px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: var(--color-bg-button);
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  cursor: pointer;
+}
+
+.migration-failure-copy:hover {
+  border-color: var(--color-border-hover);
+}

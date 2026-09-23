@@ -59,6 +59,9 @@ type wsClient struct {
 	capabilities      map[string]struct{}
 	identityMu        sync.RWMutex
 
+	arrangementMu sync.Mutex
+	shownTiles    []desktopMarkdownTile
+
 	presence   clientPresence
 	presenceMu sync.RWMutex
 
@@ -505,6 +508,19 @@ func (h *wsHub) SendValueToMatchingClients(message interface{}, match func(*wsCl
 }
 
 func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool) {
+	h.sendRawTextToMatchingClients(payload, match, maxSlowCount, nil)
+}
+
+func (h *wsHub) SendArrangementToMatchingClients(message interface{}, match func(*wsClient) bool, shown func(*wsClient) []desktopMarkdownTile) {
+	data, err := json.Marshal(message)
+	if err != nil {
+		h.logf("WebSocket arrangement send marshal error: %v", err)
+		return
+	}
+	h.sendRawTextToMatchingClients(data, match, 1, shown)
+}
+
+func (h *wsHub) sendRawTextToMatchingClients(payload []byte, match func(*wsClient) bool, missesTolerated int, shown func(*wsClient) []desktopMarkdownTile) {
 	if len(payload) == 0 {
 		return
 	}
@@ -520,16 +536,16 @@ func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClien
 		if match != nil && !match(client) {
 			continue
 		}
-		if client.trySend(message) {
+		if client.trySendArrangement(message, shown) {
 			client.slowCount = 0
 			continue
 		}
 		client.slowCount++
-		if client.slowCount >= maxSlowCount {
-			h.logf("WebSocket client too slow (%d missed), disconnecting", client.slowCount)
+		if client.slowCount >= missesTolerated {
+			h.logf("WebSocket client too slow (%d missed, %d tolerated for this message), disconnecting", client.slowCount, missesTolerated)
 			toRemove = append(toRemove, client)
 		} else {
-			h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, maxSlowCount)
+			h.logf("WebSocket client slow (%d/%d missed)", client.slowCount, missesTolerated)
 		}
 	}
 	for _, client := range toRemove {
@@ -767,13 +783,9 @@ func (d *Daemon) sendInitialState(client *wsClient) {
 		Apps:                   state.Apps,
 		Crew:                   state.Crew,
 	}
-	d.fillInitialProfileState(client, event)
 	d.fillInitialMigrationPhase(event)
-	data, err := json.Marshal(event)
-	if err != nil {
-		return
-	}
-	_ = d.sendOutbound(client, outboundMessage{kind: messageKindText, payload: data})
+	d.sendInitialArrangement(client, event)
+	d.nudgeDesktopTileContent()
 
 	go d.fetchAllPRDetails()
 }
@@ -1031,6 +1043,10 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleDesktopRemoveLeaf(client, msg.(*protocol.DesktopRemoveLeafMessage))
 	case protocol.CmdDesktopSetSplitRatio:
 		d.handleDesktopSetSplitRatio(client, msg.(*protocol.DesktopSetSplitRatioMessage))
+	case protocol.CmdDesktopDockTile:
+		d.handleDesktopDockTile(client, msg.(*protocol.DesktopDockTileMessage))
+	case protocol.CmdDesktopUpdateTile:
+		d.handleDesktopUpdateTile(client, msg.(*protocol.DesktopUpdateTileMessage))
 	case protocol.CmdClientHello:
 		d.handleClientHello(client, msg.(*protocol.ClientHelloMessage))
 	case protocol.CmdDelegate:

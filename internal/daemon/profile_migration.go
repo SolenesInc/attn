@@ -193,10 +193,7 @@ func (d *Daemon) handleMigrationFinish(client *wsClient, msg *protocol.Migration
 			return finish.View, nil, err
 		}
 		return finish.View, func() {
-			d.publishArrangementChanged(finish.Profile.ID, profileArrangementChange{
-				DesktopIDs:        desktopIDs(finish.Desktops...),
-				DeletedDesktopIDs: finish.Deleted,
-			})
+			d.publishArrangementChanged(finish.Profile.ID)
 			d.publishMigrationChanged(finish.Profile.ID)
 		}, nil
 	})

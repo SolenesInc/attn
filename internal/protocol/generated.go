@@ -3637,6 +3637,41 @@ type DesktopDeleteMessage struct {
 	RequestID string `json:"request_id"`
 }
 
+type DesktopDockTileMessage struct {
+	// AnchorID corresponds to the JSON schema field "anchor_id".
+	AnchorID *string `json:"anchor_id,omitempty,omitzero"`
+
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Edge corresponds to the JSON schema field "edge".
+	Edge LayoutDockEdge `json:"edge"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+
+	// TileKind corresponds to the JSON schema field "tile_kind".
+	TileKind string `json:"tile_kind"`
+
+	// TileParams corresponds to the JSON schema field "tile_params".
+	TileParams *string `json:"tile_params,omitempty,omitzero"`
+
+	// TileSessionID corresponds to the JSON schema field "tile_session_id".
+	TileSessionID *string `json:"tile_session_id,omitempty,omitzero"`
+
+	// TileShare corresponds to the JSON schema field "tile_share".
+	TileShare *float64 `json:"tile_share,omitempty,omitzero"`
+}
+
 type DesktopMoveLeafMessage struct {
 	// AnchorID corresponds to the JSON schema field "anchor_id".
 	AnchorID *string `json:"anchor_id,omitempty,omitzero"`
@@ -3837,6 +3872,52 @@ type DesktopSetSplitRatioMessage struct {
 
 	// SplitID corresponds to the JSON schema field "split_id".
 	SplitID string `json:"split_id"`
+}
+
+type DesktopTileContentMessage struct {
+	// Content corresponds to the JSON schema field "content".
+	Content string `json:"content"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// Error corresponds to the JSON schema field "error".
+	Error *string `json:"error,omitempty,omitzero"`
+
+	// Event corresponds to the JSON schema field "event".
+	Event string `json:"event"`
+
+	// Path corresponds to the JSON schema field "path".
+	Path string `json:"path"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+
+	// TileKind corresponds to the JSON schema field "tile_kind".
+	TileKind string `json:"tile_kind"`
+}
+
+type DesktopUpdateTileMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DesktopID corresponds to the JSON schema field "desktop_id".
+	DesktopID string `json:"desktop_id"`
+
+	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
+	ExpectedRevision int `json:"expected_revision"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// TileID corresponds to the JSON schema field "tile_id".
+	TileID string `json:"tile_id"`
+
+	// TileParams corresponds to the JSON schema field "tile_params".
+	TileParams *string `json:"tile_params,omitempty,omitzero"`
+
+	// TileSessionID corresponds to the JSON schema field "tile_session_id".
+	TileSessionID *string `json:"tile_session_id,omitempty,omitzero"`
 }
 
 type DetachSessionMessage struct {
@@ -7316,9 +7397,6 @@ type ProfileActionResultMessage struct {
 }
 
 type ProfileArrangementChangedMessage struct {
-	// DeletedDesktopIds corresponds to the JSON schema field "deleted_desktop_ids".
-	DeletedDesktopIds []string `json:"deleted_desktop_ids,omitempty,omitzero"`
-
 	// Desktops corresponds to the JSON schema field "desktops".
 	Desktops []Desktop `json:"desktops"`
 

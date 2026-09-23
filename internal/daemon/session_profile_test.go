@@ -141,7 +141,7 @@ func TestDelegationWithoutASourceStartsUnplacedInTheMostRecentProfile(t *testing
 	setupDelegationGarden(t, d)
 	consumeDelegatedPrompt(t, backend)
 	work := createTestProfile(t, d.store, "Work")
-	if _, _, err := d.store.SelectProfile(work.ID); err != nil {
+	if _, err := d.store.SelectProfile(work.ID); err != nil {
 		t.Fatal(err)
 	}
 

@@ -493,6 +493,7 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       if (cmd === 'ensure_daemon' && ensureAttempts++ === 0) {
         throw new Error(startupError);
       }
+      if (cmd === 'read_migration_failure') return null;
       return true;
     });
 
@@ -517,6 +518,86 @@ describe('useDaemonSocket PTY kill sequencing', () => {
       expect(result.current.connectionError).toBeNull();
     });
     expect(ensureAttempts).toBe(2);
+
+    unmount();
+  });
+
+  it('stops at a migration failure marker instead of retrying the daemon', async () => {
+    let ensureAttempts = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === 'ensure_daemon') {
+        ensureAttempts++;
+        throw new Error('daemon ensure failed: conversion aborted');
+      }
+      if (cmd === 'read_migration_failure') {
+        return {
+          marker_path: '/tmp/attn/migration-failure.json',
+          contents: JSON.stringify({ error: 'conversion aborted', database_path: '/tmp/attn/attn.db' }),
+        };
+      }
+      return true;
+    });
+
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.migrationFailure).toEqual({
+        markerPath: '/tmp/attn/migration-failure.json',
+        facts: [
+          { label: 'Database', value: '/tmp/attn/attn.db' },
+          { label: 'Error', value: 'conversion aborted' },
+        ],
+      });
+    });
+    expect(pendingTimeouts.size).toBe(0);
+    expect(ensureAttempts).toBe(1);
+    expect(FakeWebSocket.instances).toHaveLength(0);
+
+    unmount();
+  });
+
+  it('stops at a marker it cannot read and shows why', async () => {
+    let ensureAttempts = 0;
+    vi.mocked(invoke).mockImplementation(async (cmd) => {
+      if (cmd === 'ensure_daemon') {
+        ensureAttempts++;
+        throw new Error('daemon ensure failed: conversion aborted');
+      }
+      if (cmd === 'read_migration_failure') {
+        return { marker_path: '/tmp/attn/migration-failure.json', contents: '', read_error: 'Permission denied (os error 13)' };
+      }
+      return true;
+    });
+
+    const { result, unmount } = renderHook(() =>
+      useDaemonSocket({
+        onSessionsUpdate: vi.fn(),
+        onWorkspacesUpdate: vi.fn(),
+        onPRsUpdate: vi.fn(),
+        onReposUpdate: vi.fn(),
+        onAuthorsUpdate: vi.fn(),
+        wsUrl: 'ws://localhost:9999/ws',
+      }),
+    );
+
+    await waitFor(() => {
+      expect(result.current.migrationFailure).toEqual({
+        markerPath: '/tmp/attn/migration-failure.json',
+        facts: [{ label: 'Marker could not be read', value: 'Permission denied (os error 13)' }],
+      });
+    });
+    expect(pendingTimeouts.size).toBe(0);
+    expect(ensureAttempts).toBe(1);
+    expect(FakeWebSocket.instances).toHaveLength(0);
 
     unmount();
   });

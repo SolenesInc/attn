@@ -1,0 +1,56 @@
+.profile-switcher-scrim {
+  inset: 0;
+  position: fixed;
+  z-index: 300;
+}
+
+.profile-switcher-dismiss {
+  background: none;
+  border: none;
+  cursor: default;
+  inset: 0;
+  position: absolute;
+}
+
+.profile-switcher {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 8px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  left: 12px;
+  min-width: 220px;
+  outline: none;
+  padding: 4px;
+  position: absolute;
+  top: 44px;
+}
+
+.profile-switcher-item {
+  align-items: baseline;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-md);
+  gap: 8px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.profile-switcher-item.focused,
+.profile-switcher-item:hover {
+  background: var(--color-bg-selected);
+}
+
+.profile-switcher-name {
+  flex: 1;
+}
+
+.profile-switcher-selected {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}

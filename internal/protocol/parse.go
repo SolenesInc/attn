@@ -299,6 +299,8 @@ var messageDecoders = map[string]func([]byte) (any, error){
 	CmdDesktopPlaceSession:                   decodeInto[DesktopPlaceSessionMessage],
 	CmdDesktopMoveLeaf:                       decodeInto[DesktopMoveLeafMessage],
 	CmdDesktopRemoveLeaf:                     decodeInto[DesktopRemoveLeafMessage],
+	CmdDesktopDockTile:                       decodeInto[DesktopDockTileMessage],
+	CmdDesktopUpdateTile:                     decodeInto[DesktopUpdateTileMessage],
 	CmdDesktopSetSplitRatio:                  decodeInto[DesktopSetSplitRatioMessage],
 	CmdSetWorkspaceRank:                      decodeInto[SetWorkspaceRankMessage],
 	CmdSetChiefOfStaff:                       decodeInto[SetChiefOfStaffMessage],

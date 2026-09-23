@@ -24,8 +24,6 @@ type ProfileMigrationFinish struct {
 	View     ProfileMigrationView
 	Finished bool
 	Profile  profiles.Profile
-	Desktops []profiles.Desktop
-	Deleted  []string
 }
 
 func loadProfileMigration(tx *sql.Tx) (ProfileMigrationView, error) {
@@ -141,7 +139,7 @@ func (s *Store) FinishProfileMigration(expectedRevision int64) (ProfileMigration
 		if err := saveMigrationRow(tx, &view); err != nil {
 			return err
 		}
-		result = ProfileMigrationFinish{View: view, Finished: true, Profile: profile, Desktops: outcome.Desktops, Deleted: outcome.Deleted}
+		result = ProfileMigrationFinish{View: view, Finished: true, Profile: profile}
 		return nil
 	})
 	return result, err

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
+import { MigrationFailureScreen } from './components/MigrationFailureScreen';
 import { DaemonApiProvider } from './contexts/DaemonApiContext';
 import { KeybindingsProvider } from './contexts/KeybindingsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -223,6 +224,10 @@ function App() {
       cancelled = true;
     };
   }, [hasReceivedInitialState, getPresentations]);
+
+  if (daemon.migrationFailure) {
+    return <MigrationFailureScreen failure={daemon.migrationFailure} />;
+  }
 
   return (
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
