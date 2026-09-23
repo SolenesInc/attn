@@ -558,21 +558,36 @@ func onlyHost(t *testing.T, root string) ptyhost.HostRegistry {
 	return entry
 }
 
-func waitForHostSessions(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry, want ...string) {
+func hostSessions(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry) []string {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		info, err := backend.sharedHostInfo(context.Background(), incarnationOfHost(host))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if slices.Equal(info.SessionIDs, want) {
-			return
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("host sessions = %v, want %v", info.SessionIDs, want)
-		}
-		time.Sleep(20 * time.Millisecond)
+	info, err := backend.sharedHostInfo(context.Background(), incarnationOfHost(host))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return info.SessionIDs
+}
+
+func watchHostTerminal(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry, id string) <-chan struct{} {
+	t.Helper()
+	exited, watch, err := backend.watchProbeExit(context.Background(), &workerSession{
+		SessionID: id, SocketPath: host.SocketPath, ControlToken: host.ControlToken, WorkerPID: host.HostPID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = watch.Close() })
+	return exited
+}
+
+func requireAbandoned(t *testing.T, backend *WorkerBackend, host ptyhost.HostRegistry, id string, exited <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-exited:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("terminal %s was never stopped", id)
+	}
+	if err := backend.commitSharedSession(context.Background(), incarnationOfHost(host), id); !errors.Is(err, pty.ErrSessionNotFound) {
+		t.Fatalf("commit of %s after its owner closed = %v, want session not found", id, err)
 	}
 }
 
@@ -601,7 +616,9 @@ func TestSharedHost_UncommittedTerminalLivesOnlyAsLongAsItsConnection(t *testing
 
 	abandoned := spawn("abandoned")
 	committed := spawn("committed")
-	waitForHostSessions(t, backend, host, "abandoned", "committed", "user-terminal")
+	if got := hostSessions(t, backend, host); !slices.Equal(got, []string{"abandoned", "committed", "user-terminal"}) {
+		t.Fatalf("host sessions = %v", got)
+	}
 	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-pending", "abandoned")); !os.IsNotExist(err) {
 		t.Fatalf("an uncommitted terminal has a registry entry: %v", err)
 	}
@@ -611,12 +628,10 @@ func TestSharedHost_UncommittedTerminalLivesOnlyAsLongAsItsConnection(t *testing
 	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-pending", "committed")); err != nil {
 		t.Fatalf("a committed terminal has no registry entry: %v", err)
 	}
+	abandonedExit := watchHostTerminal(t, backend, host, "abandoned")
 	_ = abandoned.Close()
 	_ = committed.Close()
-	waitForHostSessions(t, backend, host, "committed", "user-terminal")
-	if err := backend.commitSharedSession(context.Background(), inc, "abandoned"); !errors.Is(err, pty.ErrSessionNotFound) {
-		t.Fatalf("commit after the owner closed = %v, want session not found", err)
-	}
+	requireAbandoned(t, backend, host, "abandoned", abandonedExit)
 	if err := backend.commitSharedSession(context.Background(), inc, "committed"); err != nil {
 		t.Fatalf("a repeated commit = %v, want success", err)
 	}
@@ -705,6 +720,12 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	if _, err := os.ReadFile(started); err != nil {
 		t.Fatal(err)
 	}
+	host := onlyHost(t, root)
+	probes := hostSessions(t, backend, host)
+	if len(probes) != 1 {
+		t.Fatalf("host sessions during the check = %v, want the probe", probes)
+	}
+	probeExit := watchHostTerminal(t, backend, host, probes[0])
 	cancel()
 	if err := <-checked; err == nil {
 		t.Fatal("an interrupted check passed")
@@ -712,7 +733,7 @@ func TestSharedHost_InterruptedProbeLeavesNoTerminalBehind(t *testing.T) {
 	if rejections != 0 || !backend.SharedCandidatePending() {
 		t.Fatalf("an interrupted check was recorded: rejections=%d pending=%v", rejections, backend.SharedCandidatePending())
 	}
-	waitForHostSessions(t, backend, onlyHost(t, root))
+	requireAbandoned(t, backend, host, probes[0], probeExit)
 }
 
 func TestSharedHost_CandidateWithTheWrongIdentityIsRejected(t *testing.T) {
