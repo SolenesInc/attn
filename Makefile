@@ -1,4 +1,4 @@
-.PHONY: lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
+.PHONY: git-hooks lint lint-go lint-frontend run build build-linux-amd64 build-linux-arm64 build-pty-host build-pty-host-linux-amd64 build-pty-host-linux-arm64 build-app-runtime-host build-app-runtime-host-linux-amd64 build-app-runtime-host-linux-arm64 publish-native-vt publish-ghostty-vt-wasm install install-staged install-daemon install-dev install-daemon-dev install-window-recorder dev build-default-profile-harness verify-ghostty-vt-wasm test test-scripts test-v test-watch test-frontend test-e2e clean generate-types ensure-go-jsonschema check-types generate-sdk check-sdk build-app ensure-codesign-identity sign-app app-screenshot dist release release-hotfix
 
 # Bare `make` does the full prod inner loop: install + open the app.
 # `make install` is install-only (for scripts/CI that drive the launch
@@ -122,7 +122,13 @@ publish-native-vt:
 publish-ghostty-vt-wasm:
 	./scripts/publish-ghostty-vt-wasm.sh
 
-build: generate-prompts $(NATIVE_VT_DEP)
+git-hooks:
+	@hooks="$$(git rev-parse --git-common-dir 2>/dev/null)/hooks" || exit 0; \
+	git config --get core.hooksPath >/dev/null && exit 0; \
+	ls "$$hooks" 2>/dev/null | grep -qv '\.sample$$' && exit 0; \
+	git config core.hooksPath .githooks || [ "$$(git config --get core.hooksPath)" = .githooks ]
+
+build: git-hooks generate-prompts $(NATIVE_VT_DEP)
 	go build -ldflags "$(GO_LDFLAGS)" -o $(OUTPUT) $(BUILD_DIR)
 
 PTY_HOST_BINARY := pty-host/target/release/attn-pty-host
@@ -194,7 +200,7 @@ verify-ghostty-vt-wasm:
 DIFF_BASE ?= origin/next
 GO_SUITE_IGNORES := ^(docs/|[^/]*\.md$$|app/src/)
 GO_SUITE_READS := ^app/src/(hooks/useDaemonSocket\.ts$$|ghostty/testdata/)
-test: $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
+test: git-hooks $(NATIVE_VT_DEP) verify-ghostty-vt-wasm
 	@changed="$$(git diff --name-only "$$(git merge-base HEAD $(DIFF_BASE))" && git ls-files --others --exclude-standard)" || changed=unknown; \
 	if [ -z "$(FORCE)" ] && ! printf '%s' "$$changed" | grep -qE '$(GO_SUITE_READS)' && ! printf '%s' "$$changed" | grep -qvE '$(GO_SUITE_IGNORES)'; then \
 		echo "make test: skipped the Go suite, only docs and app/src changed since $(DIFF_BASE). FORCE=1 runs it."; \
