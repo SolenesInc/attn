@@ -8,7 +8,8 @@ and run commands from the repository root.
 - Scenarios share one display and run serially:
   `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
 - The profile comes from `ATTN_HARNESS_PROFILE`, then `ATTN_PROFILE`, then `dev`.
-  Production needs `--run-against-prod` and explicit approval.
+  Production needs an empty `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and
+  explicit approval.
 - Install the current checkout first; a stale build fails its fingerprint check.
 - Hunt CI flakes with
   `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
@@ -27,15 +28,18 @@ and run commands from the repository root.
   `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
   pointer. A scenario that needs real focus calls `driver.activateApp()` and
   says why.
-- Scenarios run the mock agent, not real models. Script its turns with
-  `writeMockAgentFixture` in the session cwd before launch; no fixture means a
-  silent agent. Real providers need `allowRealAgents` and a reason.
-- The agent tripwire fails a scenario that runs a real agent or headless model
+- Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
+  and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
+  before launch; no fixture means a silent agent. Real providers need
+  `allowRealAgents` and a reason.
+- In those scenarios the agent tripwire fails any real agent or headless model
   task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
   every agent and turns headless tasks back on.
-- Non-production runs talk to the mock GitHub (`scripts/mock-github.mjs`), never
-  github.com. Production runs keep the real github.com.
-  Seed custom PRs through `/__control/seed`.
+- Those scenarios talk to the mock GitHub (`scripts/mock-github.mjs`) on
+  non-production profiles; production keeps the real github.com. Seed custom
+  PRs through `/__control/seed`.
+- Hand-run scripts outside `createScenarioRunner` have none of these guards and
+  may launch real providers; read one before running it.
 - Build child environments with `profileCliEnv`, never `{ ...process.env }`.
 - Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
 - Signal only PIDs from the automation manifest or spawned processes. Keep
@@ -43,7 +47,8 @@ and run commands from the repository root.
 
 ## Reading results
 
-- The verdict is the last `ATTN_VERDICT ` stdout line; `summary.json` has the rest.
+- The verdict is the last `ATTN_VERDICT ` stdout line (hand-run scripts may not
+  print one); `summary.json` has the rest.
 - Check pane text and native screenshots before diagnosing. WebGL terminals need
   native window captures.
 - Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`,

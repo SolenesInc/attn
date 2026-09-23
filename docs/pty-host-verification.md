@@ -18,6 +18,8 @@ a missing host, all in temporary data directories. CI runs it on macOS and Linux
 
 ## Resource measurement
 
+On macOS only:
+
 ```sh
 make build-pty-host
 bash scripts/measure-pty-host.sh /absolute/path/to/attn-pty-host attempt-name

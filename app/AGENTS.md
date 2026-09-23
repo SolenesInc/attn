@@ -17,8 +17,8 @@ Paths are relative to `app/src`.
 ## Terminal and GPU
 
 - Resize order: model, renderer, paint, `onResize`, PTY SIGWINCH.
-- Release hidden panes with `setSurfaceReleased(true)`; reuse WebGL contexts,
-  since WKWebView's pool runs out.
+- Release hidden panes with `setSurfaceReleased(true)`. Reuse the WebGL context
+  when font metrics change; recreating it exhausts WKWebView's pool.
 - Measure memory with `scenario-perf-baseline`; `ps` RSS misses graphics memory.
 
 ## Shortcuts
