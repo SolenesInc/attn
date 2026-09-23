@@ -29,6 +29,12 @@ jobs:
       release_preflight: ${{ steps.filter.outputs.release_preflight }}
       app_acceptance: ${{ steps.filter.outputs.app_acceptance }}
     steps:
+      - name: Report API quota
+        continue-on-error: true
+        run: >-
+          gh api rate_limit --jq '.resources.core |
+          "GitHub API quota: \(.used)/\(.limit) used, resets \(.reset | todate)"'
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -53,6 +59,8 @@ jobs:
               - 'scripts/**'
               - '.github/workflows/app-acceptance.yml'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             frontend:
               - 'internal/prompts/**'
               - 'cmd/promptgen/**'
@@ -79,6 +87,8 @@ jobs:
               - 'internal/appbuild/sdkdist/**'
               - 'internal/protocol/schema/**'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             # Every input to the type pipeline plus both of its outputs. The
             # outputs are listed so a hand-edit is gated even when no schema
             # moved — that edit is exactly what this catches.
@@ -88,6 +98,8 @@ jobs:
               - 'app/src/types/generated.ts'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.tool-versions'
+              - '.github/actions/setup-toolchains/**'
             tauri:
               - 'app/src-tauri/**'
               - 'pty-host/**'
@@ -98,6 +110,7 @@ jobs:
               - 'ghostty-vt-native.lock'
               - 'Makefile'
               - '.github/workflows/ci.yml'
+              - '.github/actions/setup-toolchains/**'
             # The plugin tests read Go sources and fixtures verbatim, and attn-pi
             # speaks the daemon's plugin-driver and conversation-host wire.
             plugins:
@@ -107,6 +120,7 @@ jobs:
               - 'scripts/build-bundled-plugins.sh'
               - '.tool-versions'
               - '.github/workflows/ci.yml'
+              - '.github/actions/setup-toolchains/**'
               - 'internal/automode/environment.go'
               - 'internal/hooks/testdata/pull-request-extraction.json'
               - 'internal/hostsession/**'
@@ -151,6 +165,7 @@ jobs:
               - 'scripts/rust-zig-linker.sh'
               - 'scripts/rust-zig-ar.sh'
               - 'scripts/build-app-runtime-host.sh'
+              - '.github/actions/setup-toolchains/**'
   changelog:
     name: Changelog
     # Waits on app-acceptance because candidate-gate.sh reads that job's result,
@@ -171,9 +186,9 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
 
       - name: Gate pull request
         if: github.event_name == 'pull_request'
@@ -192,12 +207,10 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '26'
+          go: 'true'
+          node: 'true'
       - run: make test-scripts
 
   main-route:
@@ -226,15 +239,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '26'
+          go: 'true'
+          node: 'true'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -261,10 +270,10 @@ jobs:
         run: ./scripts/ci-runner-class.sh
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
 
       - name: Resolve Go cache paths
         id: go-cache-paths
@@ -355,10 +364,10 @@ jobs:
           fetch-depth: 0
       - name: Report runner class
         run: ./scripts/ci-runner-class.sh
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
       - name: Resolve Go cache paths
         id: go-cache-paths
         run: |
@@ -383,8 +392,8 @@ jobs:
         run: bash scripts/test-pty-upgrade.sh
       - name: Verify shared host protocol and lifecycle
         run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./internal/ptybackend -run '^Test(SharedHost_|MigratingHost_)' -count=1
-      - name: Verify profile cleanup with live host generations
-        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestProfileClean.*SharedHost' -count=1
+      - name: Verify instance cleanup with live host generations
+        run: ATTN_TEST_PTY_HOST="$PWD/pty-host/target/release/attn-pty-host" go test -race ./cmd/attn -run '^TestInstanceClean.*SharedHost' -count=1
       - name: Save Go build cache
         if: >-
           always() && steps.go-cache.outcome == 'success' &&
@@ -409,18 +418,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-go@v5
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
+          node: 'true'
 
       - name: Check generated prompt catalogs
         working-directory: .
         run: go run ./cmd/promptgen --check
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '26'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -471,15 +477,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Go and Node.js
+        uses: ./.github/actions/setup-toolchains
         with:
-          node-version: '26'
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
+          go: 'true'
+          node: 'true'
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -564,10 +566,10 @@ jobs:
             librsvg2-dev libgtk-3-dev libxdo-dev libssl-dev patchelf
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
-          cache: false
+          go: 'true'
+          go-cache: 'false'
 
       - name: Resolve Go cache paths
         id: go-cache-paths
@@ -650,9 +652,9 @@ jobs:
         uses: ./.github/actions/setup-linux-sandbox
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: ./.github/actions/setup-toolchains
         with:
-          go-version-file: go.mod
+          go: 'true'
 
       - name: Read bun pin
         id: bun
@@ -688,7 +690,7 @@ jobs:
     # 202s on run 34060183460; 30m leaves room for a cold Rust cache.
     timeout-minutes: 30
     env:
-      ATTN_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -701,7 +703,7 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
 
       - name: Upload the app tree
         uses: actions/upload-artifact@v4
@@ -728,8 +730,8 @@ jobs:
     # Heaviest shard 199.4s of a 785.7s matrix (run 34067680122); 40m is slack.
     timeout-minutes: 40
     env:
-      ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
     steps:
       - uses: actions/checkout@v4
         with:
@@ -747,7 +749,7 @@ jobs:
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ runner.temp }}/app-tree.tar.gz
 
       - name: Run serial matrix shard
@@ -764,7 +766,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: |
-          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
           mkdir -p "$EVIDENCE_DIR/daemon"
           if [ -f "$data_dir/daemon.log" ]; then
             cp "$data_dir/daemon.log" "$EVIDENCE_DIR/daemon/daemon.log"
@@ -798,9 +800,9 @@ jobs:
           if-no-files-found: error
           path: ${{ runner.temp }}/attn-real-app-harness/last-matrix.json
 
-      - name: Clean profile
+      - name: Clean instance
         if: always()
-        run: ./attn profile clean "$ATTN_PROFILE"
+        run: ./attn instance clean "$ATTN_INSTANCE"
 
       - name: Report the shard verdict
         if: always()
@@ -833,9 +835,9 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: ./.github/actions/setup-toolchains
         with:
-          node-version: '26'
+          node: 'true'
 
       - name: Download shard results
         if: needs.app-acceptance-build.result == 'success'
@@ -914,8 +916,8 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 40
     env:
-      ATTN_PROFILE: app-acceptance
-      ATTN_HARNESS_PROFILE: app-acceptance
+      ATTN_INSTANCE: app-acceptance
+      ATTN_HARNESS_INSTANCE: app-acceptance
       ATTN_HARNESS_PARK_VISIBLE_PX: '0'
     steps:
       - name: Configure artifact directory
@@ -932,12 +934,12 @@ jobs:
         id: build-app
         uses: ./.github/actions/build-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
 
       - name: Install the App acceptance tree
         uses: ./.github/actions/install-app-acceptance
         with:
-          profile: ${{ env.ATTN_PROFILE }}
+          instance: ${{ env.ATTN_INSTANCE }}
           archive: ${{ steps.build-app.outputs.archive }}
 
       - name: Run native clipboard scenario
@@ -959,7 +961,7 @@ jobs:
         env:
           EVIDENCE_DIR: ${{ runner.temp }}/attn-real-app-harness
         run: |
-          data_dir="$(./attn profile resolve --field dataDir 2>/dev/null || true)"
+          data_dir="$(./attn instance resolve --field dataDir 2>/dev/null || true)"
           mkdir -p "$EVIDENCE_DIR/daemon"
           if [ -d "$data_dir" ]; then
             find "$data_dir" -name '*.log' -exec cp {} "$EVIDENCE_DIR/daemon/" \;
@@ -977,9 +979,9 @@ jobs:
             ${{ runner.temp }}/attn-real-app-harness/**/*.json
             ${{ runner.temp }}/attn-real-app-harness/daemon/*.log
 
-      - name: Clean profile
+      - name: Clean instance
         if: always()
-        run: ./attn profile clean "$ATTN_PROFILE"
+        run: ./attn instance clean "$ATTN_INSTANCE"
 
   release-preflight:
     name: Release preflight
@@ -1013,6 +1015,12 @@ jobs:
       contents: read
     runs-on: ubuntu-24.04
     steps:
+      - name: Report API quota
+        continue-on-error: true
+        run: >-
+          gh api rate_limit --jq '.resources.core |
+          "GitHub API quota: \(.used)/\(.limit) used, resets \(.reset | todate)"'
+
       - name: Aggregate checks
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}

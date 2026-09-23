@@ -13,7 +13,7 @@ import { SidebarSettings } from './SidebarSettings';
 export function SidebarCollapsed() {
   const {
     selectedWorkspaceId,
-    profile,
+    instance,
     headerActions,
     gridLayout,
     onSelectGridLayout,
@@ -28,12 +28,12 @@ export function SidebarCollapsed() {
   } = useSidebarContext();
   return (
     <div className="sidebar collapsed">
-      {profile && (
+      {instance && (
         <div
-          className="sidebar-profile-marker sidebar-profile-marker--collapsed"
-          title={`Profile: ${profile}`}
+          className="sidebar-instance-marker sidebar-instance-marker--collapsed"
+          title={`Instance: ${instance}`}
         >
-          {profile}
+          {instance}
         </div>
       )}
       <div className="icon-rail">
@@ -238,7 +238,7 @@ export function SidebarPopovers() {
 
 export function SidebarHeader() {
   const {
-    profile,
+    instance,
     headerActions,
     gridLayout,
     onSelectGridLayout,
@@ -260,9 +260,9 @@ export function SidebarHeader() {
   return (
     <>
       <div className="sidebar-header">
-        {profile && (
-          <div className="sidebar-profile-marker" data-testid="sidebar-profile-marker">
-            profile <strong>{profile}</strong>
+        {instance && (
+          <div className="sidebar-instance-marker" data-testid="sidebar-instance-marker">
+            instance <strong>{instance}</strong>
           </div>
         )}
         <div className="sidebar-tool-row">

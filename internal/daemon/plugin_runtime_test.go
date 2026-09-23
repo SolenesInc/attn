@@ -17,7 +17,7 @@ import (
 )
 
 func TestPluginDirForSocketUsesSocketRuntimeRoot(t *testing.T) {
-	socketPath := filepath.Join(t.TempDir(), "profile", "attn.sock")
+	socketPath := filepath.Join(t.TempDir(), "instance", "attn.sock")
 	if got, want := pluginDirForSocket(socketPath), filepath.Join(filepath.Dir(socketPath), "plugins"); got != want {
 		t.Fatalf("pluginDirForSocket() = %q, want %q", got, want)
 	}
@@ -38,7 +38,7 @@ func TestBundledPluginDirForExecutableUsesExplicitOverride(t *testing.T) {
 }
 
 func TestPluginDataDirForSocketIsSeparateFromUserPluginInstallRoot(t *testing.T) {
-	socketPath := filepath.Join(t.TempDir(), "profile", "attn.sock")
+	socketPath := filepath.Join(t.TempDir(), "instance", "attn.sock")
 	got := pluginDataDirForSocket(socketPath, "attn-example")
 	want := filepath.Join(filepath.Dir(socketPath), "plugin-data", "attn-example")
 	if got != want {

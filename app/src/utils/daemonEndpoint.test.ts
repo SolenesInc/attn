@@ -9,7 +9,7 @@ describe('resolveDaemonWebSocketURL', () => {
     })).toBe('wss://remote.example/ws');
   });
 
-  it('uses direct wsUrl override when no endpoint profile is provided', () => {
+  it('uses direct wsUrl override when no endpoint instance is provided', () => {
     expect(resolveDaemonWebSocketURL({
       wsUrl: 'ws://localhost:9999/ws',
     })).toBe('ws://localhost:9999/ws');

@@ -386,7 +386,7 @@ func TestDaemon_BundledPluginIsAvailableAndInertByDefault(t *testing.T) {
 	}
 }
 
-func TestDaemon_InstallAndUninstallBundledPluginUpdatesProfileState(t *testing.T) {
+func TestDaemon_InstallAndUninstallBundledPluginUpdatesInstanceState(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	d.pluginDir = filepath.Join(t.TempDir(), "user-plugins")
 	d.bundledPluginDir = filepath.Join(t.TempDir(), "bundled-plugins")
@@ -479,7 +479,7 @@ func TestDaemon_BundledInstallDoesNotChangeMemoryWhenPersistenceFails(t *testing
 	}
 }
 
-func TestDaemon_BundledAppUpdatePreservesProfileInstallation(t *testing.T) {
+func TestDaemon_BundledAppUpdatePreservesInstanceInstallation(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))
 	d.bundledPluginDir = filepath.Join(t.TempDir(), "bundled-plugins")
 	writeTestPluginManifest(t, d.bundledPluginDir, "attn-example")

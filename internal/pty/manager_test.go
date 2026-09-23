@@ -200,7 +200,7 @@ func TestBuildSpawnEnv_SetsAttnPresence(t *testing.T) {
 
 func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testing.T) {
 	socketPath := filepath.Join(t.TempDir(), "fixture.sock")
-	t.Setenv("ATTN_PROFILE", "fixture-lab")
+	t.Setenv("ATTN_INSTANCE", "fixture-lab")
 	t.Setenv("ATTN_DATA_DIR", filepath.Join(t.TempDir(), "fixture-data"))
 	t.Setenv("ATTN_DB_PATH", filepath.Join(t.TempDir(), "fixture.db"))
 	t.Setenv("ATTN_SOCKET_PATH", socketPath)
@@ -209,7 +209,7 @@ func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testin
 	t.Setenv("ATTN_PLUGIN_DIR", filepath.Join(t.TempDir(), "fixture-plugins"))
 
 	routingEnv := []string{
-		"ATTN_PROFILE=" + config.Profile(),
+		"ATTN_INSTANCE=" + config.Instance(),
 		"ATTN_DATA_DIR=" + config.DataDir(),
 		"ATTN_DB_PATH=" + config.DBPath(),
 		"ATTN_SOCKET_PATH=" + config.SocketPath(),
@@ -220,7 +220,7 @@ func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testin
 	env := buildSpawnEnv("", SpawnOptions{
 		ID: "session-1",
 		LoginShellEnv: []string{
-			"ATTN_PROFILE=default",
+			"ATTN_INSTANCE=default",
 			"ATTN_DATA_DIR=/tmp/login-data",
 			"ATTN_DB_PATH=/tmp/login.db",
 			"ATTN_SOCKET_PATH=/tmp/login-shell.sock",
@@ -229,7 +229,7 @@ func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testin
 			"ATTN_PLUGIN_DIR=/tmp/login-plugins",
 		},
 		ExternalEnv: []string{
-			"ATTN_PROFILE=plugin-profile",
+			"ATTN_INSTANCE=plugin-instance",
 			"ATTN_DATA_DIR=/tmp/plugin-data",
 			"ATTN_DB_PATH=/tmp/plugin.db",
 			"ATTN_SOCKET_PATH=/tmp/plugin.sock",
@@ -241,8 +241,8 @@ func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testin
 		DaemonEnv: routingEnv,
 	}, "codex", "/tmp/attn-wrapper", nil)
 
-	if got, _ := lookupEnv(env, "ATTN_PROFILE"); got != "fixture-lab" {
-		t.Fatalf("ATTN_PROFILE = %q, want daemon profile fixture-lab", got)
+	if got, _ := lookupEnv(env, "ATTN_INSTANCE"); got != "fixture-lab" {
+		t.Fatalf("ATTN_INSTANCE = %q, want daemon instance fixture-lab", got)
 	}
 	if got, _ := lookupEnv(env, "ATTN_SOCKET_PATH"); got != socketPath {
 		t.Fatalf("ATTN_SOCKET_PATH = %q, want daemon socket %q", got, socketPath)
@@ -264,11 +264,11 @@ func TestBuildSpawnEnv_DaemonRoutingOverridesLoginAndPluginEnvironment(t *testin
 }
 
 func TestBuildSpawnEnv_PutsActiveAttnFirstForAgentsAndShells(t *testing.T) {
-	profileDir := filepath.Join(t.TempDir(), "attn-profile")
-	wrapperPath := filepath.Join(profileDir, "attn")
+	instanceDir := filepath.Join(t.TempDir(), "attn-instance")
+	wrapperPath := filepath.Join(instanceDir, "attn")
 	staleDir := filepath.Join(t.TempDir(), "stale-attn")
 	otherDir := filepath.Join(t.TempDir(), "other-tools")
-	loginPath := strings.Join([]string{staleDir, profileDir, otherDir, profileDir}, string(os.PathListSeparator))
+	loginPath := strings.Join([]string{staleDir, instanceDir, otherDir, instanceDir}, string(os.PathListSeparator))
 
 	t.Setenv("ATTN_SESSION_ID", "inherited-session")
 	t.Setenv("ATTN_AGENT", "inherited-agent")
@@ -280,9 +280,9 @@ func TestBuildSpawnEnv_PutsActiveAttnFirstForAgentsAndShells(t *testing.T) {
 			}, agent, wrapperPath, nil)
 
 			path := envValue(t, env, "PATH")
-			wantPath := strings.Join([]string{profileDir, staleDir, otherDir}, string(os.PathListSeparator))
+			wantPath := strings.Join([]string{instanceDir, staleDir, otherDir}, string(os.PathListSeparator))
 			if path != wantPath {
-				t.Fatalf("PATH = %q, want active profile first with duplicate removed: %q", path, wantPath)
+				t.Fatalf("PATH = %q, want active instance first with duplicate removed: %q", path, wantPath)
 			}
 
 			if agent == "shell" {

@@ -36,7 +36,7 @@ func addCloseGuardWorkspaceLayout(t *testing.T, d *Daemon, workspaceID, protecte
 func TestHandleUnregisterWS_RefusesChiefOfStaff(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -55,7 +55,7 @@ func TestHandleUnregisterWS_AllowsNonChiefWhileChiefExists(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
 	addChiefOfStaffTestSession(d, "worker", "Worker")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -74,7 +74,7 @@ func TestHandleWorkspaceLayoutClosePane_RefusesChiefOfStaff(t *testing.T) {
 	addChiefOfStaffTestSession(d, "chief", "Chief")
 	addChiefOfStaffTestSession(d, "worker", "Worker")
 	addCloseGuardWorkspaceLayout(t, d, "workspace-shared", "chief", "pane-chief", "worker", "pane-worker")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -97,7 +97,7 @@ func TestHandleWorkspaceLayoutClosePane_AllowsNonChiefPane(t *testing.T) {
 	addChiefOfStaffTestSession(d, "chief", "Chief")
 	addChiefOfStaffTestSession(d, "worker", "Worker")
 	addCloseGuardWorkspaceLayout(t, d, "workspace-shared", "chief", "pane-chief", "worker", "pane-worker")
-	if err := d.store.SetProfileRole(profileRoleChiefOfStaff, "chief"); err != nil {
+	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
 

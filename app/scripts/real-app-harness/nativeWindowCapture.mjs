@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { assertProductionRunAllowed, bundleIdentifierForProfile } from './harnessProfile.mjs';
+import { assertProductionRunAllowed, bundleIdentifierForInstance } from './harnessInstance.mjs';
 import { appPlatform, createWindowDriver } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -112,7 +112,7 @@ export async function widenWindowForSplitPanes(client, target = SPLIT_FRIENDLY_W
 }
 
 export async function getFrontWindowBounds(bundleId = null, options = {}) {
-  const targetBundleId = bundleId || options.client?.bundleId || bundleIdentifierForProfile();
+  const targetBundleId = bundleId || options.client?.bundleId || bundleIdentifierForInstance();
   assertProductionRunAllowed({ bundleId: targetBundleId });
   const automationBounds = await readUiAutomationWindowBounds(options.client);
   if (automationBounds) {
@@ -192,7 +192,7 @@ async function writeUiAutomationWindowBounds(client, targetBounds) {
 }
 
 export async function setFrontWindowBounds(targetBounds, options = {}) {
-  const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForProfile();
+  const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForInstance();
   assertProductionRunAllowed({ bundleId });
   const normalizedTarget = normalizeLogicalBounds(targetBounds);
   if (!normalizedTarget) {
@@ -362,7 +362,7 @@ export async function captureScreenshotData(outputPath, { client, selector } = {
 }
 
 export async function captureFrontWindowScreenshot(outputPath, options = {}) {
-  const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForProfile();
+  const bundleId = options.bundleId || options.client?.bundleId || bundleIdentifierForInstance();
   assertProductionRunAllowed({ bundleId });
   const bounds = await getFrontWindowBounds(bundleId, options);
   const captureRect = resolveCaptureRect(bounds, options.crop || null);

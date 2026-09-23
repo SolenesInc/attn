@@ -109,7 +109,7 @@ satisfy the full requirement?
 when choosing time, property, or network-failure test helpers.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/profiles.md#verification-requirements).
+[verification requirements](docs/instances.md#verification-requirements).
 Rendering changes must avoid continuous repainting.
 
 ## Documentation
@@ -134,7 +134,7 @@ Read the relevant entry when the task touches its subject. When changing or work
 - Product vocabulary => [Glossary](docs/glossary.md)
 - Branches, PRs, merges, or waiting on reviews => docs/working-with-next.md
 - Changelog fragments, releases, hotfixes, or syncing `main` into `next` => docs/making-a-release.md
-- Installing, launching, or verifying profiles => docs/profiles.md
+- Installing, launching, or verifying instances => docs/instances.md
 - Frontend code or shortcuts => app/AGENTS.md
 - Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md
 - Pi driver or auto-mode permissions  => plugins/attn-pi/AGENTS.md

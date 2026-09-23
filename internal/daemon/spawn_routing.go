@@ -4,7 +4,7 @@ import "github.com/victorarias/attn/internal/config"
 
 func (d *Daemon) spawnRoutingEnv() []string {
 	return []string{
-		"ATTN_PROFILE=" + config.Profile(),
+		"ATTN_INSTANCE=" + config.Instance(),
 		"ATTN_DATA_DIR=" + d.dataRoot,
 		"ATTN_DB_PATH=" + config.DBPath(),
 		"ATTN_SOCKET_PATH=" + d.socketPath,

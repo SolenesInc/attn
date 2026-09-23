@@ -369,7 +369,7 @@ export function WorkspaceSettings({
           <h3>Notebook Folder</h3>
           <p className="settings-description">
             Where attn keeps your durable Notebook — dated journals and the knowledge base — as plain markdown you own.
-            Leave blank to use the default (<code>~/attn-notebook</code>, separate per profile). Changing this points
+            Leave blank to use the default (<code>~/attn-notebook</code>, separate per instance). Changing this points
             attn at the new folder; your existing notes are not moved, so move or sync the folder yourself if you want
             the current contents to come along.
           </p>
@@ -1218,7 +1218,7 @@ export function DataSettings({
         <div className="settings-block-body">
           <div className="settings-warning">
             Captures exact visible terminal text. Records may contain source code, conversations, command output, and
-            secrets. Files stay in this attn profile and are never uploaded automatically.
+            secrets. Files stay in this attn instance and are never uploaded automatically.
           </div>
           <div className="settings-row-card">
             <div>
@@ -1678,12 +1678,12 @@ export function RemoteEndpointsSettings({
           />
           <input
             type="text"
-            value={endpointPanel.draft.profile}
-            onChange={(e) => endpointPanel.setDraft('profile', e.target.value)}
+            value={endpointPanel.draft.instance}
+            onChange={(e) => endpointPanel.setDraft('instance', e.target.value)}
             placeholder="default"
             pattern="[a-z0-9][a-z0-9-]{0,15}"
             className="settings-input"
-            aria-label="Profile"
+            aria-label="Instance"
             disabled={endpointPanel.busy}
             autoCapitalize="none"
             autoCorrect="off"
@@ -1715,7 +1715,7 @@ export function RemoteEndpointsSettings({
                   <div className="endpoint-card-header">
                     <div className="endpoint-card-title">
                       <span className="endpoint-name">{endpoint.name}</span>
-                      <span className="settings-pill">{endpoint.profile || 'default'}</span>
+                      <span className="settings-pill">{endpoint.instance || 'default'}</span>
                       <span className={`endpoint-status-badge status-${endpoint.status}`}>{endpoint.status}</span>
                     </div>
                     <div className="endpoint-card-actions">
@@ -1801,10 +1801,10 @@ export function RemoteEndpointsSettings({
                       />
                       <input
                         type="text"
-                        value={endpointPanel.editing?.profile ?? ''}
-                        onChange={(e) => endpointPanel.setEdit('profile', e.target.value)}
+                        value={endpointPanel.editing?.instance ?? ''}
+                        onChange={(e) => endpointPanel.setEdit('instance', e.target.value)}
                         className="settings-input"
-                        aria-label="Edit profile"
+                        aria-label="Edit instance"
                         placeholder="default"
                         pattern="[a-z0-9][a-z0-9-]{0,15}"
                         disabled={endpointPanel.busy}

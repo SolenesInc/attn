@@ -1266,28 +1266,28 @@ func (c *Client) WorkflowRunCancel(runID string) (*protocol.WorkflowRun, error) 
 }
 
 func explainConnectError(sockPath string, cause error) error {
-	profile := config.ProfileLabel()
-	base := fmt.Sprintf("connect to daemon at %s (profile=%s): %v",
-		config.CollapseHome(sockPath), profile, cause)
-	if hint := crossProfileHint(); hint != "" {
+	instance := config.InstanceLabel()
+	base := fmt.Sprintf("connect to daemon at %s (instance=%s): %v",
+		config.CollapseHome(sockPath), instance, cause)
+	if hint := crossInstanceHint(); hint != "" {
 		return errors.New(base + "\n  " + hint)
 	}
 	return errors.New(base)
 }
 
-func crossProfileHint() string {
-	current := config.Profile()
+func crossInstanceHint() string {
+	current := config.Instance()
 	if current == "" {
-		otherSock := config.SocketPathForProfile("dev")
+		otherSock := config.SocketPathForInstance("dev")
 		if socketLive(otherSock) {
-			return fmt.Sprintf("hint: a dev daemon is listening at %s — run `eval \"$(attn profile-env dev)\"` to switch this shell",
+			return fmt.Sprintf("hint: a dev daemon is listening at %s — run `eval \"$(attn instance-env dev)\"` to switch this shell",
 				config.CollapseHome(otherSock))
 		}
 		return ""
 	}
-	otherSock := config.SocketPathForProfile("")
+	otherSock := config.SocketPathForInstance("")
 	if socketLive(otherSock) {
-		return fmt.Sprintf("hint: the default daemon is listening at %s — run `eval \"$(attn profile-env --unset)\"` to switch this shell",
+		return fmt.Sprintf("hint: the default daemon is listening at %s — run `eval \"$(attn instance-env --unset)\"` to switch this shell",
 			config.CollapseHome(otherSock))
 	}
 	return ""

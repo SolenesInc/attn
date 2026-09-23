@@ -26,7 +26,7 @@ func TestValidateBrowserURL(t *testing.T) {
 }
 
 func TestTrustedTauriOrigin(t *testing.T) {
-	t.Setenv("ATTN_PROFILE", "")
+	t.Setenv("ATTN_INSTANCE", "")
 	for _, origin := range []string{"tauri://localhost", "http://tauri.localhost"} {
 		if !isTrustedTauriOrigin(origin) {
 			t.Fatalf("isTrustedTauriOrigin(%q) = false", origin)
@@ -38,12 +38,12 @@ func TestTrustedTauriOrigin(t *testing.T) {
 		}
 	}
 
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	if !isTrustedTauriOrigin("http://localhost:1420") {
-		t.Fatal("documented Tauri dev origin is not trusted in the dev profile")
+		t.Fatal("documented Tauri dev origin is not trusted in the dev instance")
 	}
 	if isTrustedTauriOrigin("http://localhost:3000") {
-		t.Fatal("unrelated localhost origin is trusted in the dev profile")
+		t.Fatal("unrelated localhost origin is trusted in the dev instance")
 	}
 }
 

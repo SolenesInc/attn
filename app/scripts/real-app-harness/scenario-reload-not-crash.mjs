@@ -17,7 +17,7 @@ import { waitForFirstWorkspacePane } from './scenarioAssertions.mjs';
 import { ensureClaudePromptReadyViaPty, ensureCodexPromptReadyViaPty, preTrustClaudeFolder } from './scenarioAgents.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -53,13 +53,13 @@ function resolveAttnBin() {
   throw new Error('attn binary not found (build ./attn or set ATTN_HARNESS_BIN)');
 }
 
-function makeAttnRunner(attnBin, profile) {
+function makeAttnRunner(attnBin, instance) {
   return function runAttn(args) {
     const stdout = execFileSync(attnBin, args, {
       encoding: 'utf8',
-      env: profileCliEnv(profile),
+      env: instanceCliEnv(instance),
     }).trim();
-    // The profile banner goes to stderr, so --json stdout is pure JSON
+    // The instance banner goes to stderr, so --json stdout is pure JSON
     // (object or array depending on the command).
     const json = stdout.startsWith('{') || stdout.startsWith('[') ? JSON.parse(stdout) : null;
     return { stdout, json };
@@ -73,8 +73,8 @@ function ticketStatus(runAttn, ticketId) {
   return ticket?.status || null;
 }
 
-function reconcileTaskCount(profile, ticketId) {
-  const dbPath = path.join(os.homedir(), `.attn-${profile}`, 'attn.db');
+function reconcileTaskCount(instance, ticketId) {
+  const dbPath = path.join(os.homedir(), `.attn-${instance}`, 'attn.db');
   return Number(queryDaemonDb(dbPath, `SELECT COUNT(*) FROM tasks WHERE kind='reconcile' AND subject='${ticketId}';`));
 }
 
@@ -121,12 +121,12 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
-    throw new Error('the reload-not-crash scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) {
+    throw new Error('the reload-not-crash scenario does not run against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance');
   }
   const attnBin = resolveAttnBin();
-  const runAttn = makeAttnRunner(attnBin, profile);
+  const runAttn = makeAttnRunner(attnBin, instance);
 
   const { runId, runDir, sessionDir } = createRunContext(options, 'reload-not-crash');
 
@@ -142,14 +142,14 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
   let crashSessionId = null;
-  const evidence = { runId, profile, steps: [] };
+  const evidence = { runId, instance, steps: [] };
   const note = (m, extra) => { console.log(`[reload-not-crash] ${m}`); evidence.steps.push({ t: Date.now(), m, ...extra }); };
   const saveEvidence = (verdict) => {
     evidence.verdict = verdict;
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
   };
 
-  console.log(`[reload-not-crash] profile=${profile} runDir=${runDir} repo=${repoDir}`);
+  console.log(`[reload-not-crash] instance=${instance} runDir=${runDir} repo=${repoDir}`);
 
   try {
     await launchFreshAppAndConnect(client, observer);
@@ -186,7 +186,7 @@ async function main() {
 
     const statusAfterReload = ticketStatus(runAttn, ticketId);
     assert(statusAfterReload === 'working', `ticket unchanged after reload (got ${statusAfterReload})`);
-    const tasksAfterReload = reconcileTaskCount(profile, ticketId);
+    const tasksAfterReload = reconcileTaskCount(instance, ticketId);
     assert(tasksAfterReload === 0, `no reconcile task after reload (got ${tasksAfterReload})`);
     note('reload left the ticket alone', { statusAfterReload, tasksAfterReload });
 
@@ -226,7 +226,7 @@ async function main() {
       500,
     );
     assert(crashed, 'ticket crashed after real kill');
-    const tasksAfterCrash = reconcileTaskCount(profile, crashTicketId);
+    const tasksAfterCrash = reconcileTaskCount(instance, crashTicketId);
     assert(tasksAfterCrash === 1, `reconcile task minted for the real crash (got ${tasksAfterCrash})`);
     const reloadTicketFinal = ticketStatus(runAttn, ticketId);
     assert(reloadTicketFinal === 'working', `reload-leg ticket still working at the end (got ${reloadTicketFinal})`);

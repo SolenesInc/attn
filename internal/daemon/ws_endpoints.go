@@ -24,16 +24,16 @@ func (d *Daemon) handleAddEndpointWS(client *wsClient, msg *protocol.AddEndpoint
 		d.sendEndpointActionResult(client, "add", "", false, "endpoint manager unavailable")
 		return
 	}
-	profile := strings.TrimSpace(protocol.Deref(msg.Profile))
-	if profile == "" {
-		profile = config.Profile()
+	instance := strings.TrimSpace(protocol.Deref(msg.Instance))
+	if instance == "" {
+		instance = config.Instance()
 	}
-	canonicalProfile, err := config.NormalizeProfileName(profile)
+	canonicalInstance, err := config.NormalizeInstanceName(instance)
 	if err != nil {
 		d.sendEndpointActionResult(client, "add", "", false, err.Error())
 		return
 	}
-	record, err := d.hubManager.AddEndpoint(msg.Name, msg.SshTarget, canonicalProfile)
+	record, err := d.hubManager.AddEndpoint(msg.Name, msg.SshTarget, canonicalInstance)
 	if err != nil {
 		d.sendEndpointActionResult(client, "add", "", false, err.Error())
 		return
@@ -61,8 +61,8 @@ func (d *Daemon) handleUpdateEndpointWS(client *wsClient, msg *protocol.UpdateEn
 		return
 	}
 
-	if msg.Profile != nil {
-		if err := config.ValidateProfileName(*msg.Profile); err != nil {
+	if msg.Instance != nil {
+		if err := config.ValidateInstanceName(*msg.Instance); err != nil {
 			d.sendEndpointActionResult(client, "update", msg.EndpointID, false, err.Error())
 			return
 		}
@@ -71,7 +71,7 @@ func (d *Daemon) handleUpdateEndpointWS(client *wsClient, msg *protocol.UpdateEn
 		Name:      msg.Name,
 		SSHTarget: msg.SshTarget,
 		Enabled:   msg.Enabled,
-		Profile:   msg.Profile,
+		Instance:  msg.Instance,
 	}
 	record, err := d.hubManager.UpdateEndpoint(msg.EndpointID, update)
 	if err != nil {

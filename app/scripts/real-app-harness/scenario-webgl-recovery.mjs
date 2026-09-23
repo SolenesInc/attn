@@ -11,7 +11,7 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { appLocalDataDirForProfile, currentHarnessProfile } from './harnessProfile.mjs';
+import { appLocalDataDirForInstance, currentHarnessInstance } from './harnessInstance.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import {
   captureSessionArtifacts,
@@ -48,8 +48,8 @@ function parseArgs(argv) {
 
 // Same on-disk location terminalDiagnosticsLog.ts writes to
 // ($APPLOCALDATA/debug/terminal-diagnostics.jsonl).
-function terminalDiagnosticsLogPath(profile) {
-  return path.join(appLocalDataDirForProfile(profile), 'debug', 'terminal-diagnostics.jsonl');
+function terminalDiagnosticsLogPath(instance) {
+  return path.join(appLocalDataDirForInstance(instance), 'debug', 'terminal-diagnostics.jsonl');
 }
 
 function readRecoveryEvents(logPath, paneId) {
@@ -135,7 +135,7 @@ async function main() {
   const { runId, runDir, sessionDir } = createRunContext(options, 'webgl-recovery');
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const logPath = terminalDiagnosticsLogPath(currentHarnessProfile());
+  const logPath = terminalDiagnosticsLogPath(currentHarnessInstance());
   const sessionLabel = `webgl-recovery-${runId}`;
 // Markers must survive as a single unwrapped line on narrow panes (~50 cols in
 // split layouts), so keep them short.

@@ -6,12 +6,12 @@ import { launchFreshAppAndConnect, parseCommonArgs } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance } from './harnessInstance.mjs';
 import { createWindowDriver, delay } from './platform.mjs';
 import { captureWebKitPids, snapshot, readProcessTable, readLiveDaemonPid, readAppFootprint } from './perfMeasure.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 const options = parseCommonArgs(process.argv.slice(2));
-if (!currentHarnessProfile()) throw new Error('Agent settings verification requires a named profile');
+if (!currentHarnessInstance()) throw new Error('Agent settings verification requires a named instance');
 const runner = createScenarioRunner(options, { scenarioId: 'AgentSettings', tier: 'local', prefix: 'agent-settings', allowRealAgents: false });
 const client = new UiAutomationClient(options);
 const observer = new DaemonObserver(options);
@@ -142,7 +142,7 @@ try {
   });
   await runner.step('idle_settings_measurement', async () => {
     const appPid = client.readManifest().pid;
-    const daemonPid = readLiveDaemonPid(currentHarnessProfile());
+    const daemonPid = readLiveDaemonPid(currentHarnessInstance());
     const before = await snapshot(appPid, daemonPid, webkitBaseline);
     const pids = new Set(Object.values(before.byClass).flatMap(value => value.pids.map(value => value.pid)));
     const samples = [];

@@ -48,7 +48,7 @@ import {
   collectRemoteAgentTripwire,
   verifyRemoteDaemonTripwire,
 } from './remoteAgentTripwire.mjs';
-import { currentHarnessProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance } from './harnessInstance.mjs';
 
 function isNativeCaptureUnavailable(error) {
   const message = error instanceof Error ? error.message : String(error || '');
@@ -107,10 +107,10 @@ function parseProbeStyle(remoteAgent) {
   return style;
 }
 
-// Mirrors remoteBinaryName in internal/hub/ssh.go:29 — default profile
-// installs as "attn", named profiles install as "attn-<profile>".
-export function remoteProbeBinaryName(profile) {
-  const trimmed = String(profile || '').trim();
+// Mirrors remoteBinaryName in internal/hub/ssh.go:29 — default instance
+// installs as "attn", named instances install as "attn-<instance>".
+export function remoteProbeBinaryName(instance) {
+  const trimmed = String(instance || '').trim();
   return trimmed === '' ? 'attn' : `attn-${trimmed}`;
 }
 
@@ -181,7 +181,7 @@ async function prepareRemoteProbeBaseline(client, sessionId, style) {
   });
   // Text and the doorbell CR are sent as SEPARATE write_pane calls — a fast
   // burst ending in CR is treated as a bracketed paste and never submits.
-  const probeCommand = buildProbeLaunchCommand(remoteProbeBinaryName(currentHarnessProfile()), style);
+  const probeCommand = buildProbeLaunchCommand(remoteProbeBinaryName(currentHarnessInstance()), style);
   await client.request('write_pane', { sessionId, paneId, text: probeCommand, submit: false });
   await sleep(300);
   await client.request('write_pane', { sessionId, paneId, text: '\r', submit: false });

@@ -23,11 +23,11 @@ failing the exit code.
 | Scenario | Measures | Command |
 | --- | --- | --- |
 | Baseline | RSS with N sessions | `pnpm --dir app run real-app:scenario-perf-baseline -- --sessions 8 --stream 2` |
-| Cold/warm | RSS fresh and after a workload | `ATTN_HARNESS_PROFILE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
-| Leak soak | Retained-RSS slope across session cycles | `ATTN_HARNESS_PROFILE=perf pnpm --dir app run real-app:scenario-perf-leak-soak -- --cycles 12` |
+| Cold/warm | RSS fresh and after a workload | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-cold-warm -- --sessions 8` |
+| Leak soak | Retained-RSS slope across session cycles | `ATTN_HARNESS_INSTANCE=perf pnpm --dir app run real-app:scenario-perf-leak-soak -- --cycles 12` |
 
-Cold/warm and leak soak wipe their data, so they need a dedicated profile
-(`make install PROFILE=perf`). Add `--record-baseline` only after an intended
+Cold/warm and leak soak wipe their data, so they need a dedicated instance
+(`make install INSTANCE=perf`). Add `--record-baseline` only after an intended
 footprint change, never to silence a regression you don't understand.
 
 ## Daemon profiling

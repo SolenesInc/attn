@@ -22,16 +22,16 @@ func RoutingOverrideEnv() []string {
 	return append([]string(nil), routingOverrideEnv...)
 }
 
-func ValidateProfileRouting() error {
+func ValidateInstanceRouting() error {
 	if err := validateHarnessRouting(); err != nil {
 		return err
 	}
-	profile := Profile()
-	if profile == "" {
+	instance := Instance()
+	if instance == "" {
 		return nil
 	}
-	profileDir := DataDirForProfile(profile)
-	profilePort := WSPortForProfile(profile)
+	instanceDir := DataDirForInstance(instance)
+	instancePort := WSPortForInstance(instance)
 
 	checks := []struct {
 		env       string
@@ -40,12 +40,12 @@ func ValidateProfileRouting() error {
 		expected  string
 		isPath    bool
 	}{
-		{"ATTN_DATA_DIR", "", DataDir(), profileDir, true},
-		{"ATTN_SOCKET_PATH", "socket_path", SocketPath(), filepath.Join(profileDir, "attn.sock"), true},
-		{"ATTN_DB_PATH", "db_path", DBPath(), filepath.Join(profileDir, "attn.db"), true},
-		{"ATTN_CONFIG_PATH", "", ConfigPath(), filepath.Join(profileDir, "config.json"), true},
-		{"ATTN_PLUGIN_DIR", "", PluginDir(), filepath.Join(profileDir, "plugins"), true},
-		{"ATTN_WS_PORT", "", WSPort(), profilePort, false},
+		{"ATTN_DATA_DIR", "", DataDir(), instanceDir, true},
+		{"ATTN_SOCKET_PATH", "socket_path", SocketPath(), filepath.Join(instanceDir, "attn.sock"), true},
+		{"ATTN_DB_PATH", "db_path", DBPath(), filepath.Join(instanceDir, "attn.db"), true},
+		{"ATTN_CONFIG_PATH", "", ConfigPath(), filepath.Join(instanceDir, "config.json"), true},
+		{"ATTN_PLUGIN_DIR", "", PluginDir(), filepath.Join(instanceDir, "plugins"), true},
+		{"ATTN_WS_PORT", "", WSPort(), instancePort, false},
 	}
 
 	var (
@@ -55,7 +55,7 @@ func ValidateProfileRouting() error {
 	for _, check := range checks {
 		agree, err := routingValuesAgree(check.resolved, check.expected, check.isPath)
 		if err != nil {
-			return fmt.Errorf("resolve %s for profile %s: %w", check.env, profile, err)
+			return fmt.Errorf("resolve %s for instance %s: %w", check.env, instance, err)
 		}
 		if agree {
 			continue
@@ -80,7 +80,7 @@ func ValidateProfileRouting() error {
 	if len(conflicts) == 0 {
 		return nil
 	}
-	return formatRoutingConflict(profile, profileDir, profilePort, conflicts)
+	return formatRoutingConflict(instance, instanceDir, instancePort, conflicts)
 }
 
 func validateHarnessRouting() error {
@@ -88,8 +88,8 @@ func validateHarnessRouting() error {
 	if rawRoot == "" {
 		return nil
 	}
-	if Profile() != "" {
-		return fmt.Errorf("refusing ATTN_HARNESS_DATA_DIR with named profile %s", Profile())
+	if Instance() != "" {
+		return fmt.Errorf("refusing ATTN_HARNESS_DATA_DIR with named instance %s", Instance())
 	}
 	if !filepath.IsAbs(rawRoot) {
 		return fmt.Errorf("ATTN_HARNESS_DATA_DIR must be absolute")
@@ -106,7 +106,7 @@ func validateHarnessRouting() error {
 	if err != nil {
 		return fmt.Errorf("resolve ATTN_HARNESS_DATA_DIR: %w", err)
 	}
-	production, err := CanonicalRuntimePath(DataDirForProfile(""))
+	production, err := CanonicalRuntimePath(DataDirForInstance(""))
 	if err != nil {
 		return fmt.Errorf("resolve production data directory: %w", err)
 	}
@@ -128,14 +128,14 @@ func validateHarnessRouting() error {
 	for _, check := range checks {
 		resolved, resolveErr := CanonicalRuntimePath(check.path)
 		if resolveErr != nil {
-			return fmt.Errorf("resolve %s for default-profile harness: %w", check.label, resolveErr)
+			return fmt.Errorf("resolve %s for default-instance harness: %w", check.label, resolveErr)
 		}
 		if !runtimePathWithin(resolved, root) {
-			return fmt.Errorf("refusing %s=%q outside default-profile harness root %q", check.label, resolved, root)
+			return fmt.Errorf("refusing %s=%q outside default-instance harness root %q", check.label, resolved, root)
 		}
 	}
 	if port := strings.TrimSpace(WSPort()); port == "9849" || port == "29849" {
-		return fmt.Errorf("refusing default-profile harness websocket port %s", port)
+		return fmt.Errorf("refusing default-instance harness websocket port %s", port)
 	}
 	return nil
 }
@@ -160,10 +160,10 @@ type routingConflict struct {
 	configFile string
 }
 
-func formatRoutingConflict(profile, profileDir, profilePort string, conflicts []routingConflict) error {
+func formatRoutingConflict(instance, instanceDir, instancePort string, conflicts []routingConflict) error {
 	var b strings.Builder
-	fmt.Fprintf(&b, "ATTN_PROFILE=%s disagrees with the routing this process resolved.\n", profile)
-	fmt.Fprintf(&b, "  profile %s is %s (port %s), but:\n", profile, profileDir, profilePort)
+	fmt.Fprintf(&b, "ATTN_INSTANCE=%s disagrees with the routing this process resolved.\n", instance)
+	fmt.Fprintf(&b, "  instance %s is %s (port %s), but:\n", instance, instanceDir, instancePort)
 
 	var envNames []string
 	var files []string
@@ -176,16 +176,16 @@ func formatRoutingConflict(profile, profileDir, profilePort string, conflicts []
 		fmt.Fprintf(&b, "    %-16s = %s (%s in %s)\n", conflict.label, conflict.value, conflict.configKey, conflict.configFile)
 		files = append(files, conflict.configFile)
 	}
-	fmt.Fprintf(&b, "  An explicit override outranks ATTN_PROFILE, so this process would act as profile %s"+
-		" against another profile's data. Refusing before anything opens it.\n", profile)
+	fmt.Fprintf(&b, "  An explicit override outranks ATTN_INSTANCE, so this process would act as instance %s"+
+		" against another instance's data. Refusing before anything opens it.\n", instance)
 
 	if len(envNames) > 0 {
-		fmt.Fprintf(&b, "  Fix: env%s ATTN_PROFILE=%s <command>\n", scrubFlags(envNames), profile)
-		fmt.Fprintf(&b, "  Or clear them in your shell: eval \"$(attn profile-env %s)\"\n", profile)
+		fmt.Fprintf(&b, "  Fix: env%s ATTN_INSTANCE=%s <command>\n", scrubFlags(envNames), instance)
+		fmt.Fprintf(&b, "  Or clear them in your shell: eval \"$(attn instance-env %s)\"\n", instance)
 	}
 	if len(files) > 0 {
-		fmt.Fprintf(&b, "  No environment change fixes %s: edit it, or start the profile over with `attn profile clean %s`\n",
-			files[0], profile)
+		fmt.Fprintf(&b, "  No environment change fixes %s: edit it, or start the instance over with `attn instance clean %s`\n",
+			files[0], instance)
 	}
 	return fmt.Errorf("%s", strings.TrimRight(b.String(), "\n"))
 }

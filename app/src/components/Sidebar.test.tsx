@@ -157,13 +157,13 @@ describe('Sidebar', () => {
     expect(root).not.toHaveClass('kin-up');
   });
 
-  it('shows only a non-default profile marker', () => {
+  it('shows only a non-default instance marker', () => {
     const data = buildSidebarData([]);
     const { rerender } = render(<Sidebar {...baseProps} {...data} />);
-    expect(screen.queryByTestId('sidebar-profile-marker')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar-instance-marker')).not.toBeInTheDocument();
 
-    rerender(<Sidebar {...baseProps} {...data} profile="fixture-lab" />);
-    expect(screen.getByTestId('sidebar-profile-marker')).toHaveTextContent('profile fixture-lab');
+    rerender(<Sidebar {...baseProps} {...data} instance="fixture-lab" />);
+    expect(screen.getByTestId('sidebar-instance-marker')).toHaveTextContent('instance fixture-lab');
   });
 
   it('uses regular state indicator for codex sessions', () => {

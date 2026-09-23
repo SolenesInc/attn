@@ -61,9 +61,9 @@ func (d *Daemon) authorizeClientHello(client *wsClient, msg *protocol.ClientHell
 		return true
 	}
 	reason := fmt.Sprintf(
-		"client_hello refused: client_token does not match this daemon's. Read it from %s (owner-only) and send it as client_token; the daemon serving profile %q minted it.",
+		"client_hello refused: client_token does not match this daemon's. Read it from %s (owner-only) and send it as client_token; the daemon serving instance %q minted it.",
 		config.ClientTokenPath(),
-		config.Profile(),
+		config.Instance(),
 	)
 	if d.clientToken == "" {
 		reason = "client_hello refused: this daemon minted no client token, so it can authorize nobody. It was started without Daemon.Start."

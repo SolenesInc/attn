@@ -8,7 +8,7 @@
     "updates": {
       "crew-management": {
         "run": "crew-management-2026-09-19T20-31-21-890Z",
-        "job": "Local scenario run, traincrew profile",
+        "job": "Local scenario run, traincrew instance",
         "recordedAt": "2026-09-19",
         "seconds": 57.6,
         "runnerClass": "local macOS",
@@ -16,7 +16,7 @@
       },
       "workspace-switching": {
         "run": "workspace-switching-2026-09-15T21-17-34-309Z",
-        "job": "Local serial matrix, rugged-doctor profile",
+        "job": "Local serial matrix, rugged-doctor instance",
         "recordedAt": "2026-09-15",
         "seconds": 45.7,
         "runnerClass": "local macOS",
@@ -24,7 +24,7 @@
       },
       "delegation-chain": {
         "run": "delegation-chain-2026-09-13T23-06-51-792Z",
-        "job": "Local serial matrix, frosty-chain profile",
+        "job": "Local serial matrix, frosty-chain instance",
         "recordedAt": "2026-09-13",
         "seconds": 41.0,
         "runnerClass": "local macOS",

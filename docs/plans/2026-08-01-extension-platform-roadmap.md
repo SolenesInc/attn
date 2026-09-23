@@ -246,6 +246,6 @@ Tour/Other/Skipped. Old Present deleted at parity on the actually-used parts.
   app's capability is its own surface, gated at C2 (see Stage gates).
 - **Verification** per repo policy: every stage that touches daemon
   lifecycle, protocol, or UI needs live verification from a non-production
-  profile; A2 additionally needs evidence that wire behavior is unchanged.
+  instance; A2 additionally needs evidence that wire behavior is unchanged.
 - **Changelog** entries only where behavior is user-visible (A5 onward,
   C2, C3).

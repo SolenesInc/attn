@@ -77,69 +77,69 @@ func ReloadForTesting() {
 	loadConfig()
 }
 
-var profileNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
+var instanceNamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,15}$`)
 
-func Profile() string {
-	raw := strings.TrimSpace(os.Getenv("ATTN_PROFILE"))
+func Instance() string {
+	raw := strings.TrimSpace(os.Getenv("ATTN_INSTANCE"))
 	if raw == "" {
 		return ""
 	}
 	normalized := strings.ToLower(raw)
-	if !profileNamePattern.MatchString(normalized) {
+	if !instanceNamePattern.MatchString(normalized) {
 		return ""
 	}
 	return normalized
 }
 
-func ValidateProfile() error {
-	raw := os.Getenv("ATTN_PROFILE")
-	if err := ValidateProfileName(raw); err != nil {
-		return fmt.Errorf("invalid ATTN_PROFILE=%q: must match ^[a-z0-9][a-z0-9-]{0,15}$", strings.TrimSpace(raw))
+func ValidateInstance() error {
+	raw := os.Getenv("ATTN_INSTANCE")
+	if err := ValidateInstanceName(raw); err != nil {
+		return fmt.Errorf("invalid ATTN_INSTANCE=%q: must match ^[a-z0-9][a-z0-9-]{0,15}$", strings.TrimSpace(raw))
 	}
 	return nil
 }
 
-func ProfileLabel() string {
-	if p := Profile(); p != "" {
+func InstanceLabel() string {
+	if p := Instance(); p != "" {
 		return p
 	}
 	return "default"
 }
 
 func DeepLinkScheme() string {
-	return DeepLinkSchemeForProfile(Profile())
+	return DeepLinkSchemeForInstance(Instance())
 }
 
-func normalizeProfileForDerivation(profile string) string {
-	p := strings.ToLower(strings.TrimSpace(profile))
-	if p == "" || p == "default" || !profileNamePattern.MatchString(p) {
+func normalizeInstanceForDerivation(instance string) string {
+	p := strings.ToLower(strings.TrimSpace(instance))
+	if p == "" || p == "default" || !instanceNamePattern.MatchString(p) {
 		return ""
 	}
 	return p
 }
 
-func BundleIdentifierForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func BundleIdentifierForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "com.attn.manager"
 	}
 	return "com.attn.manager." + p
 }
 
-func AppNameForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func AppNameForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "attn"
 	}
 	return "attn-" + p
 }
 
-func AppPathForProfile(profile string) string {
+func AppPathForInstance(instance string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	name := AppNameForProfile(profile)
+	name := AppNameForInstance(instance)
 	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Applications", name+".app")
 	}
@@ -153,8 +153,8 @@ func xdgDataHome(home string) string {
 	return filepath.Join(home, ".local", "share")
 }
 
-func AppExecutableForProfile(profile string) string {
-	return AppExecutableInTree(AppPathForProfile(profile))
+func AppExecutableForInstance(instance string) string {
+	return AppExecutableInTree(AppPathForInstance(instance))
 }
 
 func AppExecutableInTree(appPath string) string {
@@ -164,8 +164,8 @@ func AppExecutableInTree(appPath string) string {
 	return filepath.Join(appPath, "bin", "attn-app")
 }
 
-func AppDaemonBinaryForProfile(profile string) string {
-	return AppDaemonBinaryInTree(AppPathForProfile(profile))
+func AppDaemonBinaryForInstance(instance string) string {
+	return AppDaemonBinaryInTree(AppPathForInstance(instance))
 }
 
 func AppDaemonBinaryInTree(appPath string) string {
@@ -190,28 +190,28 @@ func InstallResourcesDir(executable string) string {
 	return ""
 }
 
-func DeepLinkSchemeForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func DeepLinkSchemeForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "attn"
 	}
 	return "attn-" + p
 }
 
-func ValidateProfileName(name string) error {
+func ValidateInstanceName(name string) error {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
 		return nil
 	}
 	normalized := strings.ToLower(trimmed)
-	if !profileNamePattern.MatchString(normalized) {
-		return fmt.Errorf("invalid profile name %q: must match ^[a-z0-9][a-z0-9-]{0,15}$", name)
+	if !instanceNamePattern.MatchString(normalized) {
+		return fmt.Errorf("invalid instance name %q: must match ^[a-z0-9][a-z0-9-]{0,15}$", name)
 	}
 	return nil
 }
 
-func NormalizeProfileName(name string) (string, error) {
-	if err := ValidateProfileName(name); err != nil {
+func NormalizeInstanceName(name string) (string, error) {
+	if err := ValidateInstanceName(name); err != nil {
 		return "", err
 	}
 	canonical := strings.ToLower(strings.TrimSpace(name))
@@ -226,7 +226,7 @@ func attnDir() string {
 		return filepath.Clean(override)
 	}
 	requireExplicitDataDirUnderTest()
-	return defaultAttnDir(Profile())
+	return defaultAttnDir(Instance())
 }
 
 func requireExplicitDataDirUnderTest() {
@@ -249,14 +249,14 @@ func ScopeTestEnvironment(dataDir string) {
 	os.Unsetenv("ATTN_CLIENT_TOKEN")
 }
 
-func defaultAttnDir(profile string) string {
+func defaultAttnDir(instance string) string {
 	home, err := os.UserHomeDir()
 	base := "/tmp/.attn"
 	if err == nil {
 		base = filepath.Join(home, ".attn")
 	}
-	if profile != "" {
-		return base + "-" + profile
+	if instance != "" {
+		return base + "-" + instance
 	}
 	return base
 }
@@ -283,24 +283,24 @@ func AppsDir() string {
 	return filepath.Join(attnDir(), "apps")
 }
 
-func DataDirForProfile(profile string) string {
+func DataDirForInstance(instance string) string {
 	home, err := os.UserHomeDir()
 	base := "/tmp/.attn"
 	if err == nil {
 		base = filepath.Join(home, ".attn")
 	}
-	p := strings.ToLower(strings.TrimSpace(profile))
+	p := strings.ToLower(strings.TrimSpace(instance))
 	if p == "" || p == "default" {
 		return base
 	}
-	if !profileNamePattern.MatchString(p) {
+	if !instanceNamePattern.MatchString(p) {
 		return base
 	}
 	return base + "-" + p
 }
 
-func SocketPathForProfile(profile string) string {
-	return filepath.Join(DataDirForProfile(profile), "attn.sock")
+func SocketPathForInstance(instance string) string {
+	return filepath.Join(DataDirForInstance(instance), "attn.sock")
 }
 
 func DBPath() string {
@@ -340,11 +340,11 @@ func ValidateDaemonIsolation(socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("resolve daemon socket root: %w", err)
 	}
-	profileDataDir, err := comparableDaemonIsolationPath(DataDir())
+	instanceDataDir, err := comparableDaemonIsolationPath(DataDir())
 	if err != nil {
-		return fmt.Errorf("resolve profile data dir: %w", err)
+		return fmt.Errorf("resolve instance data dir: %w", err)
 	}
-	if socketDir == profileDataDir {
+	if socketDir == instanceDataDir {
 		return nil
 	}
 
@@ -352,18 +352,18 @@ func ValidateDaemonIsolation(socketPath string) error {
 	if err != nil {
 		return fmt.Errorf("resolve daemon DB path: %w", err)
 	}
-	defaultDBPath, err := comparableDaemonIsolationPath(filepath.Join(profileDataDir, "attn.db"))
+	defaultDBPath, err := comparableDaemonIsolationPath(filepath.Join(instanceDataDir, "attn.db"))
 	if err != nil {
-		return fmt.Errorf("resolve profile DB path: %w", err)
+		return fmt.Errorf("resolve instance DB path: %w", err)
 	}
 	if dbPath != defaultDBPath {
 		return nil
 	}
 
 	return fmt.Errorf(
-		"refusing to start daemon with socket root %q while DB path still resolves to the %s profile store %q; set ATTN_DB_PATH to an isolated database or use ATTN_PROFILE",
+		"refusing to start daemon with socket root %q while DB path still resolves to the %s instance store %q; set ATTN_DB_PATH to an isolated database or use ATTN_INSTANCE",
 		socketDir,
-		ProfileLabel(),
+		InstanceLabel(),
 		defaultDBPath,
 	)
 }
@@ -411,18 +411,18 @@ func StatePath() string {
 		return "/tmp/." + binaryName + "-state.json"
 	}
 	suffix := ""
-	if p := Profile(); p != "" {
+	if p := Instance(); p != "" {
 		suffix = "-" + p
 	}
 	return filepath.Join(home, "."+binaryName+"-state"+suffix+".json")
 }
 
-func AppLocalDataDirForProfile(profile string) string {
+func AppLocalDataDirForInstance(instance string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	bundleID := BundleIdentifierForProfile(profile)
+	bundleID := BundleIdentifierForInstance(instance)
 	if runtime.GOOS == "darwin" {
 		return filepath.Join(home, "Library", "Application Support", bundleID)
 	}
@@ -430,16 +430,16 @@ func AppLocalDataDirForProfile(profile string) string {
 }
 
 func AppLocalDataDir() string {
-	return AppLocalDataDirForProfile(Profile())
+	return AppLocalDataDirForInstance(Instance())
 }
 
-func AppLockPathForProfile(profile string) string {
+func AppLockPathForInstance(instance string) string {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "/tmp"
 	}
-	label := strings.ToLower(strings.TrimSpace(profile))
-	if label == "" || !profileNamePattern.MatchString(label) {
+	label := strings.ToLower(strings.TrimSpace(instance))
+	if label == "" || !instanceNamePattern.MatchString(label) {
 		label = "default"
 	}
 	return filepath.Join(home, ".attn.locks", "app-"+label+".lock")
@@ -454,57 +454,57 @@ func WSPort() string {
 	if port != "" {
 		return port
 	}
-	return WSPortForProfile(Profile())
+	return WSPortForInstance(Instance())
 }
 
-func WSPortForProfile(profile string) string {
-	p := strings.ToLower(strings.TrimSpace(profile))
+func WSPortForInstance(instance string) string {
+	p := strings.ToLower(strings.TrimSpace(instance))
 	switch p {
 	case "", "default":
 		return "9849"
 	case "dev":
 		return "29849"
 	default:
-		if !profileNamePattern.MatchString(p) {
+		if !instanceNamePattern.MatchString(p) {
 			return "9849"
 		}
-		return derivedProfilePort(p)
+		return derivedInstancePort(p)
 	}
 }
 
-func profileFNV(profile string) uint32 {
+func instanceFNV(instance string) uint32 {
 	h := fnv.New32a()
-	h.Write([]byte(profile))
+	h.Write([]byte(instance))
 	return h.Sum32()
 }
 
-func derivedProfilePort(profile string) string {
-	port := 20000 + int(profileFNV(profile)%9849)
+func derivedInstancePort(instance string) string {
+	port := 20000 + int(instanceFNV(instance)%9849)
 	return fmt.Sprintf("%d", port)
 }
 
-func E2EDaemonPortForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func E2EDaemonPortForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "19849"
 	}
-	return fmt.Sprintf("%d", 30000+int(profileFNV(p)%1000))
+	return fmt.Sprintf("%d", 30000+int(instanceFNV(p)%1000))
 }
 
-func E2EVitePortForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func E2EVitePortForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "1421"
 	}
-	return fmt.Sprintf("%d", 31000+int(profileFNV(p)%1000))
+	return fmt.Sprintf("%d", 31000+int(instanceFNV(p)%1000))
 }
 
-func MockGitHubPortForProfile(profile string) string {
-	p := normalizeProfileForDerivation(profile)
+func MockGitHubPortForInstance(instance string) string {
+	p := normalizeInstanceForDerivation(instance)
 	if p == "" {
 		return "19850"
 	}
-	return fmt.Sprintf("%d", 32000+int(profileFNV(p)%1000))
+	return fmt.Sprintf("%d", 32000+int(instanceFNV(p)%1000))
 }
 
 func WSBindAddress() string {

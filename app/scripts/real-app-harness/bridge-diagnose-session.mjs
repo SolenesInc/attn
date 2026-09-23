@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createRunContext } from './common.mjs';
-import { assertProductionRunAllowed, defaultAppPathForProfile } from './harnessProfile.mjs';
+import { assertProductionRunAllowed, defaultAppPathForInstance } from './harnessInstance.mjs';
 import { captureFrontWindowScreenshot } from './nativeWindowCapture.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -35,7 +35,7 @@ function parseArgs(argv) {
     args.shift();
   }
   const options = {
-    appPath: process.env.ATTN_REAL_APP_PATH || defaultAppPathForProfile(),
+    appPath: process.env.ATTN_REAL_APP_PATH || defaultAppPathForInstance(),
     artifactsDir: process.env.ATTN_REAL_APP_ARTIFACTS_DIR || path.join(os.tmpdir(), 'attn-real-app-harness'),
     sessionRootDir: process.env.ATTN_REAL_APP_SESSION_ROOT || path.join(os.tmpdir(), 'attn-real-app-sessions'),
     freshLaunch: false,

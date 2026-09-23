@@ -6,8 +6,8 @@ import { openDeepLink as openHarnessDeepLink } from './deepLink.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
-  defaultAppPathForProfile,
-} from './harnessProfile.mjs';
+  defaultAppPathForInstance,
+} from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -111,7 +111,7 @@ export function parseXdotoolGeometry(stdout) {
 export class LinuxDriver {
   constructor({
     bundleId = null,
-    appPath = defaultAppPathForProfile(),
+    appPath = defaultAppPathForInstance(),
     actionDelayMs = 250,
     env = process.env,
     run = execFileAsync,

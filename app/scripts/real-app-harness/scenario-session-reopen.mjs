@@ -13,7 +13,7 @@ import {
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
@@ -30,7 +30,7 @@ function parseArgs(argv) {
 }
 
 function git(cwd, ...args) {
-  return execFileSync('git', args, { cwd, encoding: 'utf8', env: profileCliEnv() }).trim();
+  return execFileSync('git', args, { cwd, encoding: 'utf8', env: instanceCliEnv() }).trim();
 }
 
 function buildWorktree(root, branch) {
@@ -47,22 +47,22 @@ function buildWorktree(root, branch) {
   return { repo, worktree };
 }
 
-function attn(daemonBinary, profile, ...args) {
-  return execFileSync(daemonBinary, args, { encoding: 'utf8', env: profileCliEnv(profile) });
+function attn(daemonBinary, instance, ...args) {
+  return execFileSync(daemonBinary, args, { encoding: 'utf8', env: instanceCliEnv(instance) });
 }
 
-function attnAllowingFailure(daemonBinary, profile, ...args) {
-  const result = spawnSync(daemonBinary, args, { encoding: 'utf8', env: profileCliEnv(profile) });
+function attnAllowingFailure(daemonBinary, instance, ...args) {
+  const result = spawnSync(daemonBinary, args, { encoding: 'utf8', env: instanceCliEnv(instance) });
   return { status: result.status, stdout: result.stdout || '', stderr: result.stderr || '' };
 }
 
 // A verdict says `checking` while an inspect_branch is in flight and answers
 // sharper on the next ask. Ask until it has stopped checking.
-async function showUntilDecided(daemonBinary, profile, sessionId, timeoutMs) {
+async function showUntilDecided(daemonBinary, instance, sessionId, timeoutMs) {
   const deadline = Date.now() + timeoutMs;
   let shown = '';
   while (Date.now() < deadline) {
-    shown = attn(daemonBinary, profile, 'session', 'show', sessionId);
+    shown = attn(daemonBinary, instance, 'session', 'show', sessionId);
     if (!/^checking\s/m.test(shown)) return shown;
     await sleep(100);
   }
@@ -113,10 +113,10 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  assertFreshWorldTargetSafe({ profile, appPath: options.appPath });
+  const instance = currentHarnessInstance();
+  assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
-  const dataDir = dataDirForProfile(profile);
+  const dataDir = dataDirForInstance(instance);
   const dbPath = path.join(dataDir, 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSION-REOPEN',
@@ -125,7 +125,7 @@ async function main() {
     metadata: {
       agent: 'codex',
       focus: 'a closed worktree session reopens under its own id, and recreates a deleted worktree only when asked',
-      profile,
+      instance,
     },
   });
 
@@ -133,7 +133,7 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   let sessionId = null;
 
-  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) }));
+  runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) }));
   runner.registerCleanup('close_observer', () => observer.close());
   runner.registerCleanup('quit_app', () => client.quitApp());
   runner.registerCleanup('close_session', () => closeScenarioSessions(client, [sessionId].filter(Boolean)));
@@ -150,7 +150,7 @@ async function main() {
 
     await runner.step('launch_app', async () => {
       await client.quitApp();
-      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: profileCliEnv(profile) });
+      await execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) });
       await launchFreshAppAndConnect(client, observer);
     });
 
@@ -187,7 +187,7 @@ async function main() {
     });
 
     await runner.step('the_verdict_says_it_comes_back', async () => {
-      const shown = await showUntilDecided(daemonBinary, profile, sessionId, 30_000);
+      const shown = await showUntilDecided(daemonBinary, instance, sessionId, 30_000);
       runner.assert(/^state\s+closed$/m.test(shown), 'session show must report the session as closed', { shown });
       runner.assert(/^reopen\s+yes$/m.test(shown), 'the verdict must offer a plain reopen', { shown });
       runner.assert(/^place\s+directory present/m.test(shown), 'the verdict must read the directory as present', { shown });
@@ -195,10 +195,10 @@ async function main() {
     });
 
     await runner.step('reopen_from_the_cli', async () => {
-      const out = attn(daemonBinary, profile, 'session', 'reopen', sessionId);
+      const out = attn(daemonBinary, instance, 'session', 'reopen', sessionId);
       runner.assert(out.includes(sessionId) && out.includes('reopened'), 'reopen must report the session it brought back', { out });
       const ui = await waitForSessionBack(client, observer, sessionId, 60_000);
-      const live = attn(daemonBinary, profile, 'session', 'list');
+      const live = attn(daemonBinary, instance, 'session', 'list');
       runner.assert(live.includes(sessionId), 'the reopened session must be live again', { live });
       runner.writeText('session-reopen.txt', out);
       runner.writeJson('session-ui-after-reopen.json', ui);
@@ -213,11 +213,11 @@ async function main() {
     });
 
     await runner.step('the_verdict_refuses_and_writes_nothing', async () => {
-      const shown = await showUntilDecided(daemonBinary, profile, sessionId, 30_000);
+      const shown = await showUntilDecided(daemonBinary, instance, sessionId, 30_000);
       runner.assert(/^reopen\s+no: /m.test(shown), 'the verdict must refuse and say why', { shown });
       runner.assert(/^actions\s+.*recreate_worktree_and_reopen/m.test(shown),
         'the verdict must offer the recreate action', { shown });
-      const refused = attnAllowingFailure(daemonBinary, profile, 'session', 'reopen', sessionId);
+      const refused = attnAllowingFailure(daemonBinary, instance, 'session', 'reopen', sessionId);
       runner.assert(refused.status !== 0, 'a plain reopen must be refused', refused);
       runner.assert(refused.stderr.includes('recreate_worktree_and_reopen'),
         'the refusal must name the action offered instead', refused);
@@ -232,13 +232,13 @@ async function main() {
     });
 
     await runner.step('the_page_carries_the_same_verdict', async () => {
-      const page = attn(daemonBinary, profile, 'session', 'list', '--closed', '--reopen');
+      const page = attn(daemonBinary, instance, 'session', 'list', '--closed', '--reopen');
       runner.assert(/^ID\s+.*\bREOPEN\b/m.test(page), 'the asked-for page must carry a verdict column', { page });
       const row = page.split('\n').find((line) => line.startsWith(sessionId));
       runner.assert(!!row && row.includes('recreate_worktree_and_reopen'),
         'the page must name the same action session show offered', { page });
 
-      const plain = attn(daemonBinary, profile, 'session', 'list', '--closed');
+      const plain = attn(daemonBinary, instance, 'session', 'list', '--closed');
       runner.assert(!/\bREOPEN\b/.test(plain), 'a page nobody asked to judge must not carry verdicts', { plain });
 
       runner.assert(!fs.existsSync(worktree), 'judging a page must not put the worktree back', { worktree });
@@ -251,7 +251,7 @@ async function main() {
     });
 
     await runner.step('the_recreate_action_brings_it_back', async () => {
-      const out = attn(daemonBinary, profile, 'session', 'reopen', sessionId, '--action', 'recreate_worktree_and_reopen');
+      const out = attn(daemonBinary, instance, 'session', 'reopen', sessionId, '--action', 'recreate_worktree_and_reopen');
       runner.assert(out.includes('recreated worktree'), 'the action must report the worktree it recreated', { out });
       runner.assert(fs.existsSync(worktree), 'the recreate action must put the worktree back', { worktree });
       runner.assert(git(worktree, 'rev-parse', '--abbrev-ref', 'HEAD') === branch,

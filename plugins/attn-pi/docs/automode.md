@@ -179,7 +179,7 @@ the current directory and prints the global, repository and effective rules.
 
 ## Network
 
-One proxy runs per profile inside the plugin driver process, speaking plain
+One proxy runs per instance inside the plugin driver process, speaking plain
 HTTP, HTTPS CONNECT and SOCKS5 TCP. Sessions reach it through `HTTP_PROXY`,
 `HTTPS_PROXY` and `ALL_PROXY`. Each bash execution gets fresh credentials,
 registered through the authenticated suite relay before the command starts.

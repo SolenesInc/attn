@@ -10,10 +10,10 @@ import { appDaemonInTree, appPlatform } from './platform.mjs';
 import {
   assertProductionRunAllowed,
   bundleIdentifierForAppPath,
-  defaultAppPathForProfile,
-  manifestPathForProfile,
-  profileForAppPath,
-} from './harnessProfile.mjs';
+  defaultAppPathForInstance,
+  manifestPathForInstance,
+  instanceForAppPath,
+} from './harnessInstance.mjs';
 
 const execFileAsync = promisify(execFile);
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -98,18 +98,18 @@ function isFatalFrontendResponsivenessError(error) {
 
 export class UiAutomationClient {
   constructor({
-    appPath = defaultAppPathForProfile(),
+    appPath = defaultAppPathForInstance(),
     manifestPath = null,
     launchEnv = null,
     backgroundLaunch = false,
     bundleId = null,
     platform = appPlatform,
   } = {}) {
-    const appProfile = profileForAppPath(appPath);
+    const appInstance = instanceForAppPath(appPath);
     const resolvedBundleId = bundleId || bundleIdentifierForAppPath(appPath);
     assertProductionRunAllowed({ appPath, bundleId: resolvedBundleId });
     this.appPath = appPath;
-    this.manifestPath = manifestPath || manifestPathForProfile(appProfile);
+    this.manifestPath = manifestPath || manifestPathForInstance(appInstance);
     this.launchEnv = launchEnv;
     this.backgroundLaunch = backgroundLaunch;
     this.bundleId = resolvedBundleId;

@@ -112,6 +112,6 @@ new output, and drains again.
   tile state rendering.
 - Full Go, frontend, and harness test gates, plus a Linux build of daemon-side
   code.
-- A packaged isolated profile, bundled preflight, and live scenarios covering
+- A packaged isolated instance, bundled preflight, and live scenarios covering
   restore/continued input, `fresh_spawn`, resize/attach behavior, and a quiet
   visible grid. Compare the idle-grid receipt before and after this change.

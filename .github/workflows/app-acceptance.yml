@@ -8,8 +8,8 @@ on:
         description: Full release candidate commit SHA
         required: true
         type: string
-      profile:
-        description: Non-production profile used for verification
+      instance:
+        description: Non-production instance used for verification
         required: true
         type: string
       scenarios:
@@ -51,10 +51,10 @@ jobs:
           CANDIDATE_SHA: ${{ inputs.candidate_sha }}
           EVIDENCE: ${{ inputs.evidence }}
           OUTCOME: ${{ inputs.outcome }}
-          PROFILE: ${{ inputs.profile }}
+          INSTANCE: ${{ inputs.instance }}
           SCENARIOS: ${{ inputs.scenarios }}
         run: |
           CANDIDATE_CHECKOUT_SHA="$(git -C candidate rev-parse --verify 'HEAD^{commit}')"
           ./authority/scripts/app-acceptance.sh \
             "$CANDIDATE_CHECKOUT_SHA" "$CANDIDATE_SHA" \
-            "$OUTCOME" "$PROFILE" "$SCENARIOS" "$EVIDENCE"
+            "$OUTCOME" "$INSTANCE" "$SCENARIOS" "$EVIDENCE"

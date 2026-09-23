@@ -13,7 +13,7 @@ import {
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, resolveHarnessResources, profileCliEnv as profileEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, resolveHarnessResources, instanceCliEnv as instanceEnv } from './harnessInstance.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import {
   captureSessionArtifacts,
@@ -143,11 +143,11 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
-    throw new Error('kitty image scenario requires a named non-production profile (it restarts the profile daemon)');
+  const instance = currentHarnessInstance();
+  if (!instance) {
+    throw new Error('kitty image scenario requires a named non-production instance (it restarts the instance daemon)');
   }
-  const resources = resolveHarnessResources(profile);
+  const resources = resolveHarnessResources(instance);
   const binary = appDaemonInTree(resources.appPath);
 
   const runner = createScenarioRunner(options, {
@@ -156,7 +156,7 @@ async function main() {
     tier: 'tier1-local-shell',
     prefix: 'terminal-kitty-image',
     metadata: {
-      profile,
+      instance,
       darkLimit: STORAGE_OFF,
       focus: 'worker-described kitty placement renders, scrolls, deletes by default — and stays dark with the escape hatch',
     },
@@ -169,8 +169,8 @@ async function main() {
   fs.writeFileSync(imageFile, `\n${kittyTransmitAndDisplay(IMAGE_ID, IMAGE_WIDTH, IMAGE_HEIGHT, IMAGE_Z)}\n`, 'binary');
   fs.writeFileSync(deleteFile, '\x1b_Ga=d,q=2\x1b\\\n', 'binary');
 
-  const defaultEnv = profileEnv(profile);
-  const offEnv = profileEnv(profile, { ATTN_KITTY_STORAGE_LIMIT: STORAGE_OFF });
+  const defaultEnv = instanceEnv(instance);
+  const offEnv = instanceEnv(instance, { ATTN_KITTY_STORAGE_LIMIT: STORAGE_OFF });
 
   // A worker inherits the DAEMON's environment, so the dark leg ensures a daemon
   // carrying the hatch BEFORE relaunching the app.
@@ -186,7 +186,7 @@ async function main() {
   const captures = {};
 
   runner.log('run context', {
-    runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, profile,
+    runDir: runner.runDir, sessionDir: runner.sessionDir, wsUrl: options.wsUrl, instance,
   });
 
   const closeSessionPanes = async (id) => {
@@ -238,7 +238,7 @@ async function main() {
 
   try {
     await runner.step('start_daemon_default', async () => {
-      await ensureFreshWorld({ profile, appPath: resources.appPath });
+      await ensureFreshWorld({ instance, appPath: resources.appPath });
       try { run(binary, ['daemon', 'stop'], defaultEnv); } catch {}
       run(binary, ['daemon', 'ensure'], defaultEnv);
     });

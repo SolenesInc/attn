@@ -14,7 +14,7 @@ import { waitForFirstWorkspacePane, waitForPaneText } from './scenarioAssertions
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 import {
   resolveAttnBinary,
   restartDaemonWithStubEnv,
@@ -64,13 +64,13 @@ function parseAttnJSON(stdout) {
   }
 }
 
-function makeAttnRunner(attnBin, profile) {
-  const socketPath = socketPathForProfile(profile);
+function makeAttnRunner(attnBin, instance) {
+  const socketPath = socketPathForInstance(instance);
   return function runAttn(args, { allowFailure = false } = {}) {
     try {
       const stdout = execFileSync(attnBin, args, {
         encoding: 'utf8',
-        env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
+        env: instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPath }),
       });
       return { stdout, stderr: '', status: 0, json: parseAttnJSON(stdout) };
     } catch (error) {
@@ -105,13 +105,13 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
-    throw new Error('the pi-automode scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) {
+    throw new Error('the pi-automode scenario does not run against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance');
   }
   const attnBin = resolveAttnBinary(options.appPath);
-  const runAttn = makeAttnRunner(attnBin, profile);
-  const dbPath = path.join(dataDirForProfile(profile), 'attn.db');
+  const runAttn = makeAttnRunner(attnBin, instance);
+  const dbPath = path.join(dataDirForInstance(instance), 'attn.db');
 
   const judgeQueue = [];
   const stub = await startPiStubProvider({
@@ -138,13 +138,13 @@ async function main() {
   const launchEnv = { PI_CODING_AGENT_DIR: agentDir };
 
   try {
-    await drive({ options, profile, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir });
+    await drive({ options, instance, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir });
   } finally {
     await stub.close().catch(() => {});
   }
 }
 
-async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir }) {
+async function drive({ options, instance, runAttn, dbPath, stub, judgeQueue, launchEnv, agentDir }) {
   const runner = createScenarioRunner(options, {
     scenarioId: 'PI-AUTOMODE',
     tier: 'tier2-local-real-agent',
@@ -176,7 +176,7 @@ async function drive({ options, profile, runAttn, dbPath, stub, judgeQueue, laun
     });
 
     await runner.step('launch_app', async () => {
-      await restartDaemonWithStubEnv({ appPath: options.appPath, profile, agentDir });
+      await restartDaemonWithStubEnv({ appPath: options.appPath, instance, agentDir });
       await launchFreshAppAndConnect(client, observer);
       await client.request('set_setting', { key: 'default_model_pi', value: stubAgentModel });
       runner.registerCleanup('restore_pi_model', () => client

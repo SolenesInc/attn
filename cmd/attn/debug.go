@@ -65,7 +65,7 @@ func writeDebugHelp(w io.Writer) {
 
 commands:
   ls
-        list the profile's debug artifacts: files under the frontend's debug
+        list the instance's debug artifacts: files under the frontend's debug
         directory (name, size, mtime) and the daemon.log path/size
   incidents [--tail N] [--grep PATTERN] [--json]
         print lines from terminal-incidents.jsonl (auto-captured render bugs)
@@ -75,7 +75,7 @@ commands:
         print terminal input decisions, focus/composition state and PTY receipts;
         export with: attn debug input --tail 0 > attn-input-dump.jsonl
   daemon-log [--tail N] [--since DUR] [--grep PATTERN]
-        print lines from the profile's daemon.log; --since takes a Go
+        print lines from the instance's daemon.log; --since takes a Go
         duration (e.g. 10m, 1h) and filters to lines timestamped within it
 
 flags:
@@ -85,7 +85,7 @@ flags:
                   JSONL files already hold one machine-readable JSON object
                   per line, so both commands always print raw lines verbatim
 
-All commands honor the active ATTN_PROFILE, the same as the rest of the CLI.
+All commands honor the active ATTN_INSTANCE, the same as the rest of the CLI.
 `)
 }
 

@@ -12,8 +12,8 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Listener, LogicalPosition, LogicalSize, Manager, Runtime};
 
+use crate::instance;
 use crate::native_input;
-use crate::profile;
 
 const REQUEST_EVENT: &str = "attn://ui-automation/request";
 const RESPONSE_EVENT: &str = "attn://ui-automation/response";
@@ -758,7 +758,7 @@ fn serve_connection<R: Runtime>(
 }
 
 pub fn maybe_start<R: Runtime>(app: &AppHandle<R>) {
-    if !profile::automation_enabled() {
+    if !instance::automation_enabled() {
         return;
     }
 

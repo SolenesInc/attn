@@ -20,7 +20,7 @@ import {
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
-import { currentHarnessProfile, dataDirForProfile, profileCliEnv } from './harnessProfile.mjs';
+import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree } from './platform.mjs';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -48,8 +48,8 @@ async function pollFor(fn, description, timeoutMs = 60_000, intervalMs = 250) {
 function readRegistryEntry(dataDir, sessionId) {
   const workersDir = path.join(dataDir, 'workers');
   if (!fs.existsSync(workersDir)) return null;
-  for (const instance of fs.readdirSync(workersDir)) {
-    const file = path.join(workersDir, instance, 'registry', `${sessionId}.json`);
+  for (const daemonInstance of fs.readdirSync(workersDir)) {
+    const file = path.join(workersDir, daemonInstance, 'registry', `${sessionId}.json`);
     if (!fs.existsSync(file)) continue;
     try {
       return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -60,11 +60,11 @@ function readRegistryEntry(dataDir, sessionId) {
   return null;
 }
 
-function restartDaemon(appPath, profile) {
+function restartDaemon(appPath, instance) {
   const binary = appDaemonInTree(appPath);
-  // profileCliEnv, not a hand-built env: a harness driven from inside attn
+  // instanceCliEnv, not a hand-built env: a harness driven from inside attn
   // inherits ATTN_DATA_DIR and would land on production ~/.attn.
-  const env = profileCliEnv(profile);
+  const env = instanceCliEnv(instance);
   execFileSync(binary, ['daemon', 'stop'], { env, stdio: 'inherit' });
   execFileSync(binary, ['daemon', 'ensure'], { env, stdio: 'inherit' });
 }
@@ -83,8 +83,8 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  const dataDir = dataDirForProfile(profile);
+  const instance = currentHarnessInstance();
+  const dataDir = dataDirForInstance(instance);
 
   const runner = createScenarioRunner(options, {
     scenarioId: 'TERMINAL-BUILD-UPGRADE',
@@ -94,14 +94,14 @@ async function main() {
     metadata: {
       agent: 'shell',
       focus: 'a terminal-engine update swaps the pty-worker in place, keeping pid, PTY and child',
-      profile,
+      instance,
     },
   });
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   let observer = new DaemonObserver({ wsUrl: options.wsUrl });
 
-  runner.log(`[RealAppHarness] profile=${profile} dataDir=${dataDir} wsUrl=${options.wsUrl}`);
+  runner.log(`[RealAppHarness] instance=${instance} dataDir=${dataDir} wsUrl=${options.wsUrl}`);
 
   let staged = false;
   let cleanedUp = false;
@@ -109,14 +109,14 @@ async function main() {
     if (cleanedUp) return;
     cleanedUp = true;
     // Put the real tag back: a staged format left installed would upgrade every
-    // session of this profile on the next daemon start.
+    // session of this instance on the next daemon start.
     if (staged) {
-      execFileSync('make', ['install-daemon', `PROFILE=${profile}`], {
+      execFileSync('make', ['install-daemon', `INSTANCE=${instance}`], {
         cwd: REPO_ROOT,
         stdio: 'inherit',
-        env: profileCliEnv(profile),
+        env: instanceCliEnv(instance),
       });
-      restartDaemon(options.appPath, profile);
+      restartDaemon(options.appPath, instance);
     }
     await client.quitApp().catch(() => {});
     observer.close();
@@ -167,10 +167,10 @@ async function main() {
       staged = true;
       execFileSync(
         'make',
-        ['install-daemon', `PROFILE=${profile}`, `SNAPSHOT_FORMAT=${STAGED_SNAPSHOT_FORMAT}`],
-        { cwd: REPO_ROOT, stdio: 'inherit', env: profileCliEnv(profile) },
+        ['install-daemon', `INSTANCE=${instance}`, `SNAPSHOT_FORMAT=${STAGED_SNAPSHOT_FORMAT}`],
+        { cwd: REPO_ROOT, stdio: 'inherit', env: instanceCliEnv(instance) },
       );
-      restartDaemon(options.appPath, profile);
+      restartDaemon(options.appPath, instance);
       await pollFor(
         async () => daemonLogTail(dataDir).includes(`terminal upgrade: session=${session.sessionId} worker swapped in place`),
         'the daemon to report the worker swapped in place',

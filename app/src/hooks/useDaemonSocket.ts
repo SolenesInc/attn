@@ -93,7 +93,7 @@ import { recordPtyCommand, recordWsBinaryPtyOutput, recordWsJsonParse } from '..
 import { completeTerminalInputProbe, maybeStartTerminalInputProbe } from '../utils/terminalInputLatency';
 import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
-import { resolveDaemonWebSocketURL, type DaemonEndpointProfile } from '../utils/daemonEndpoint';
+import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
 import {
@@ -132,7 +132,7 @@ import {
   type PendingKeyedRequests,
   type PendingRequests,
 } from './daemonPendingRequests';
-import { BUILD_PROFILE, daemonProfileMatches, fetchDaemonHealthProfile, profileMismatchMessage } from '../utils/buildProfile';
+import { BUILD_INSTANCE, daemonInstanceMatches, fetchDaemonHealthInstance, instanceMismatchMessage } from '../utils/buildInstance';
 import { controlBrowserHost, serializeBrowserControlResultMessage } from '../browser/host';
 import { useWorkflowRunsStore } from '../store/workflowRuns';
 import { useAutoModePushStore } from '../store/autoMode';
@@ -247,7 +247,7 @@ export interface PathInspection {
   is_directory: boolean;
   repo_root?: string;
 }
-export type { DaemonEndpointProfile };
+export type { DaemonEndpointInstance };
 
 export { PRRole, HeatState };
 
@@ -313,7 +313,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '318';
+export const PROTOCOL_VERSION = '319';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -620,7 +620,7 @@ interface UseDaemonSocketOptions {
   onSettingError?: (message: string) => void;
   onGitStatusUpdate?: (status: GitStatusUpdate) => void;
   onSessionExited?: (info: SessionExitInfo) => void;
-  endpoint?: DaemonEndpointProfile;
+  endpoint?: DaemonEndpointInstance;
   wsUrl?: string;
 }
 
@@ -968,8 +968,8 @@ export function useDaemonSocket({
     cursor: string;
     ansi_palette: string[];
   } | null>(null);
-  const profileMismatchRef = useRef<boolean>(false);
-  const profileCheckedRef = useRef<boolean>(false);
+  const instanceMismatchRef = useRef<boolean>(false);
+  const instanceCheckedRef = useRef<boolean>(false);
   const [connectionError, setConnectionError] = useState<string | null>(null);
   const [disconnectExplanation, setDisconnectExplanation] = useState<string | null>(null);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
@@ -1206,7 +1206,7 @@ export function useDaemonSocket({
 
   const connect = useCallback(async () => {
     if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
-    if (profileMismatchRef.current) {
+    if (instanceMismatchRef.current) {
       return;
     }
 
@@ -1219,18 +1219,18 @@ export function useDaemonSocket({
       return;
     }
 
-    if (BUILD_PROFILE !== '' && !profileCheckedRef.current) {
+    if (BUILD_INSTANCE !== '' && !instanceCheckedRef.current) {
       try {
-        const health = await fetchDaemonHealthProfile(resolvedWsUrl);
-        if (!daemonProfileMatches(health.profile)) {
-          profileMismatchRef.current = true;
-          setConnectionError(profileMismatchMessage(health.profile));
+        const health = await fetchDaemonHealthInstance(resolvedWsUrl);
+        if (!daemonInstanceMatches(health.instance)) {
+          instanceMismatchRef.current = true;
+          setConnectionError(instanceMismatchMessage(health.instance));
           circuitOpenRef.current = true;
           return;
         }
-        profileCheckedRef.current = true;
+        instanceCheckedRef.current = true;
       } catch (err) {
-        console.warn('[Daemon] profile pre-check failed, proceeding without it:', err);
+        console.warn('[Daemon] instance pre-check failed, proceeding without it:', err);
       }
     }
 
@@ -4464,7 +4464,7 @@ export function useDaemonSocket({
     return sendKeyedRequest<PluginActionResult>(key, { cmd: 'set_plugin_priority', name, priority }, 'Set plugin priority timed out', 30000);
   }, [sendKeyedRequest]);
 
-  const sendAddEndpoint = useCallback((name: string, sshTarget: string, profile?: string): Promise<EndpointActionResult> => {
+  const sendAddEndpoint = useCallback((name: string, sshTarget: string, instance?: string): Promise<EndpointActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;
       if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -4478,9 +4478,9 @@ export function useDaemonSocket({
       const key = 'endpoint_action:add:pending';
       pendingActionsRef.current.set(key, { resolve, reject });
       const payload: Record<string, unknown> = { cmd: 'add_endpoint', name, ssh_target: sshTarget };
-      const trimmed = (profile ?? '').trim();
+      const trimmed = (instance ?? '').trim();
       if (trimmed !== '') {
-        payload.profile = trimmed;
+        payload.instance = trimmed;
       }
       ws.send(JSON.stringify(payload));
       setTimeout(() => {
@@ -4494,7 +4494,7 @@ export function useDaemonSocket({
 
   const sendUpdateEndpoint = useCallback((
     endpointId: string,
-    updates: { name?: string; ssh_target?: string; enabled?: boolean; profile?: string }
+    updates: { name?: string; ssh_target?: string; enabled?: boolean; instance?: string }
   ): Promise<EndpointActionResult> => {
     return new Promise((resolve, reject) => {
       const ws = wsRef.current;

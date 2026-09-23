@@ -15,17 +15,17 @@ func launchDeepLink(deepLink string) error {
 	if runtime.GOOS == "darwin" {
 		return exec.Command("open", deepLink).Run()
 	}
-	return launchProfileApp(config.Profile(), deepLink)
+	return launchInstanceApp(config.Instance(), deepLink)
 }
 
-func launchProfileApp(profile string, args ...string) error {
-	executable := config.AppExecutableForProfile(profile)
+func launchInstanceApp(instance string, args ...string) error {
+	executable := config.AppExecutableForInstance(instance)
 	if _, err := os.Stat(executable); err != nil {
-		return fmt.Errorf("no app installed for profile %s at %s (run make install%s)",
-			config.ProfileLabel(), executable, profileSuffix(profile))
+		return fmt.Errorf("no app installed for instance %s at %s (run make install%s)",
+			config.InstanceLabel(), executable, instanceSuffix(instance))
 	}
 
-	dataDir := config.DataDirForProfile(profile)
+	dataDir := config.DataDirForInstance(instance)
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", dataDir, err)
 	}

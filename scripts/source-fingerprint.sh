@@ -76,7 +76,7 @@ should_exclude_path() {
     # Nothing in it is staged into the bundle.
     plugins/attn-pi/receipts/*) return 0 ;;
     plugins/attn-pi/package.json|plugins/attn-pi/bun.lock|plugins/attn-pi/attn-plugin.toml|plugins/attn-pi/README.md) return 1 ;;
-    scripts/build-app-profile.sh|scripts/build-bundled-plugins.sh) return 1 ;;
+    scripts/build-app-instance.sh|scripts/build-bundled-plugins.sh) return 1 ;;
     # The app runtime host is compiled into the bundle, so its source and its
     # build script move the fingerprint. The generic scripts/* rule below ignores
     # everything it does not name.

@@ -44,11 +44,11 @@ type AddEndpointMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SshTarget corresponds to the JSON schema field "ssh_target".
 	SshTarget string `json:"ssh_target"`
@@ -4242,11 +4242,11 @@ type EndpointInfo struct {
 	// ID corresponds to the JSON schema field "id".
 	ID string `json:"id"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name string `json:"name"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SessionCount corresponds to the JSON schema field "session_count".
 	SessionCount *int `json:"session_count,omitempty,omitzero"`
@@ -11259,11 +11259,11 @@ type UpdateEndpointMessage struct {
 	// EndpointID corresponds to the JSON schema field "endpoint_id".
 	EndpointID string `json:"endpoint_id"`
 
+	// Instance corresponds to the JSON schema field "instance".
+	Instance *string `json:"instance,omitempty,omitzero"`
+
 	// Name corresponds to the JSON schema field "name".
 	Name *string `json:"name,omitempty,omitzero"`
-
-	// Profile corresponds to the JSON schema field "profile".
-	Profile *string `json:"profile,omitempty,omitzero"`
 
 	// SshTarget corresponds to the JSON schema field "ssh_target".
 	SshTarget *string `json:"ssh_target,omitempty,omitzero"`

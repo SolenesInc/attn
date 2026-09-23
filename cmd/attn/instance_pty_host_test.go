@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,17 +15,17 @@ import (
 	"github.com/victorarias/attn/internal/ptyworker"
 )
 
-func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
+func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 	binary := os.Getenv("ATTN_TEST_PTY_HOST")
 	if binary == "" {
-		t.Skip("set ATTN_TEST_PTY_HOST to run live profile cleanup")
+		t.Skip("set ATTN_TEST_PTY_HOST to run live instance cleanup")
 	}
 	root, err := os.MkdirTemp("/tmp", "pty-clean-")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.RemoveAll(root)
-	r := profileResolved{Label: "test", DataDir: filepath.Join(root, "data"), AppPath: filepath.Join(root, "absent-app"), AppLocalData: filepath.Join(root, "app-data"), AppLock: filepath.Join(root, "app.lock")}
+	r := instanceResolved{Label: "test", DataDir: filepath.Join(root, "data"), AppPath: filepath.Join(root, "absent-app"), AppLocalData: filepath.Join(root, "app-data"), AppLock: filepath.Join(root, "app.lock")}
 	if err := os.MkdirAll(r.AppLocalData, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -49,6 +50,9 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
+		if err := backend.Probe(context.Background()); err != nil {
+			t.Fatal(err)
+		}
 		for i := 0; i < 2; i++ {
 			id := fmt.Sprintf("session-%d-%d", generation, i)
 			if err := backend.Spawn(context.Background(), ptybackend.SpawnOptions{ID: id, Agent: "cleanup-fixture", CWD: root, Cols: 80, Rows: 24, ExternalCommand: []string{"/bin/cat"}}); err != nil {
@@ -85,17 +89,17 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 				} else {
 					invalid.HostPID = os.Getpid()
 				}
-				if err := ptyhost.WriteHostRegistryAtomic(paths[i], invalid); err != nil {
+				if err := writeHostRegistry(paths[i], invalid); err != nil {
 					t.Fatal(err)
 				}
 				t.Cleanup(func() {
-					if err := ptyhost.WriteHostRegistryAtomic(paths[i], entry); err != nil {
+					if err := writeHostRegistry(paths[i], entry); err != nil {
 						t.Error(err)
 					}
 				})
 			}
 			var out bytes.Buffer
-			if err := cleanProfile(&out, r); err == nil {
+			if err := cleanInstance(&out, r); err == nil {
 				t.Fatalf("cleanup accepted invalid %s: %s", field, out.String())
 			}
 			for pid := range pids {
@@ -106,17 +110,17 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 		})
 	}
 	var out bytes.Buffer
-	if err := cleanProfile(&out, r); err != nil {
-		t.Fatalf("clean profile: %v\n%s", err, out.String())
+	if err := cleanInstance(&out, r); err != nil {
+		t.Fatalf("clean instance: %v\n%s", err, out.String())
 	}
 	for _, pid := range children {
 		if ptyworker.ProcessAlive(pid) {
-			t.Errorf("child %d survived profile cleanup", pid)
+			t.Errorf("child %d survived instance cleanup", pid)
 		}
 	}
 	for pid := range pids {
 		if ptyworker.ProcessAlive(pid) {
-			t.Errorf("host %d survived profile cleanup", pid)
+			t.Errorf("host %d survived instance cleanup", pid)
 		}
 	}
 	if _, err := os.Stat(r.DataDir); !os.IsNotExist(err) {
@@ -124,17 +128,28 @@ func TestProfileCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 	}
 }
 
-func TestProfileCleanPreservesUnreachableSharedHostRegistry(t *testing.T) {
-	r := stoppedProfile(t)
+func TestInstanceCleanPreservesUnreachableSharedHostRegistry(t *testing.T) {
+	r := stoppedInstance(t)
 	path := ptyhost.HostRegistryPath(r.DataDir, "d-unknown", "unknown")
-	if err := ptyhost.WriteHostRegistryAtomic(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", Generation: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
+	if err := writeHostRegistry(path, ptyhost.HostRegistry{Version: 1, DaemonInstanceID: "d-unknown", ArtifactID: "unknown", HostPID: os.Getpid(), SocketPath: filepath.Join(ptyhost.Root(r.DataDir, "d-unknown"), "sock", "unknown.sock"), ControlToken: "unreachable"}); err != nil {
 		t.Fatal(err)
 	}
 	var out bytes.Buffer
-	if err := cleanProfile(&out, r); err == nil {
+	if err := cleanInstance(&out, r); err == nil {
 		t.Fatalf("cleanup accepted an unreachable live host: %s", out.String())
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("cleanup destroyed the unreaped registry: %v", err)
 	}
+}
+
+func writeHostRegistry(path string, entry ptyhost.HostRegistry) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	data, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }

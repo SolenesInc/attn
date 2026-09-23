@@ -41,7 +41,7 @@ The Lima and OrbStack providers own creation and start/stop. No adapter deletes 
 Set `ATTN_LINUX_PROVIDER`, `ATTN_LINUX_VM`, `ATTN_LINUX_SSH_TARGET`, and
 `ATTN_LINUX_SSH_CONFIG` to avoid repeating options. CLI options take precedence.
 
-## Source, profiles and results
+## Source, instances and results
 
 `sync`, `provision` and `build` copy the current HEAD and staged, unstaged and
 non-ignored new files. Git configuration, hooks, host tool caches and ignored
@@ -56,7 +56,7 @@ A lock prevents sync and commands from changing the same checkout concurrently.
 `run` and `test` use the last synced source. Run `sync` after edits for unit tests,
 or `build` before packaged-app scenarios. The existing app build fingerprint check
 rejects stale installs. Commands run with a clean environment and the named
-`linux-<checkout hash>` profile; `--profile` selects another non-production name.
+`linux-<checkout hash>` instance; `--instance` selects another non-production name.
 The guest receives no host routing variables or provider credentials.
 
 `test` runs the existing serial matrix under Xvfb and copies its artifacts even
@@ -73,7 +73,7 @@ pnpm --dir app real-app:linux clean
 pnpm --dir app real-app:linux stop
 ```
 
-`clean` removes only the selected installed profile using the guest CLI.
+`clean` removes only the selected installed instance using the guest CLI.
 `stop` preserves source and caches. `up` starts the VM again without provisioning.
 
 ## Remote endpoint scenarios

@@ -10,7 +10,7 @@ import { appDaemonInTree, delay } from './platform.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
-import { currentHarnessProfile, profileCliEnv, socketPathForProfile } from './harnessProfile.mjs';
+import { currentHarnessInstance, instanceCliEnv, socketPathForInstance } from './harnessInstance.mjs';
 
 const SLOT = 'domains';
 const TYPED = 'grafana.harness.corp';
@@ -32,13 +32,13 @@ function parseAttnJSON(stdout) {
   }
 }
 
-function makeAttnRunner(attnBin, profile) {
-  const socketPath = socketPathForProfile(profile);
+function makeAttnRunner(attnBin, instance) {
+  const socketPath = socketPathForInstance(instance);
   return function runAttn(args, { input } = {}) {
     const stdout = execFileSync(attnBin, args, {
       encoding: 'utf8',
       input,
-      env: profileCliEnv(profile, { ATTN_SOCKET_PATH: socketPath }),
+      env: instanceCliEnv(instance, { ATTN_SOCKET_PATH: socketPath }),
     });
     return { stdout, json: parseAttnJSON(stdout) };
   };
@@ -68,11 +68,11 @@ async function main() {
     return;
   }
 
-  const profile = currentHarnessProfile();
-  if (!profile) {
-    throw new Error('the automode-environment scenario does not run against production; set ATTN_PROFILE / ATTN_HARNESS_PROFILE to a named profile');
+  const instance = currentHarnessInstance();
+  if (!instance) {
+    throw new Error('the automode-environment scenario does not run against production; set ATTN_INSTANCE / ATTN_HARNESS_INSTANCE to a named instance');
   }
-  const runAttn = makeAttnRunner(resolveAttnBinary(options.appPath), profile);
+  const runAttn = makeAttnRunner(resolveAttnBinary(options.appPath), instance);
 
   const client = new UiAutomationClient(options);
   const observer = new DaemonObserver(options);

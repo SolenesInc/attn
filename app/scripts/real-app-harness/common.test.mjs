@@ -26,22 +26,22 @@ function attnBinary() {
 const ATTN_BIN = attnBinary();
 const describeWithBinary = ATTN_BIN ? describe : describe.skip;
 
-const originalHarnessProfile = process.env.ATTN_HARNESS_PROFILE;
-const originalProfile = process.env.ATTN_PROFILE;
+const originalHarnessInstance = process.env.ATTN_HARNESS_INSTANCE;
+const originalInstance = process.env.ATTN_INSTANCE;
 const originalAppPath = process.env.ATTN_REAL_APP_PATH;
 const originalWsUrl = process.env.ATTN_REAL_APP_WS_URL;
 
 beforeEach(() => {
-  delete process.env.ATTN_HARNESS_PROFILE;
-  delete process.env.ATTN_PROFILE;
+  delete process.env.ATTN_HARNESS_INSTANCE;
+  delete process.env.ATTN_INSTANCE;
   delete process.env.ATTN_REAL_APP_PATH;
   delete process.env.ATTN_REAL_APP_WS_URL;
 });
 
 afterEach(() => {
   for (const [name, value] of [
-    ['ATTN_HARNESS_PROFILE', originalHarnessProfile],
-    ['ATTN_PROFILE', originalProfile],
+    ['ATTN_HARNESS_INSTANCE', originalHarnessInstance],
+    ['ATTN_INSTANCE', originalInstance],
     ['ATTN_REAL_APP_PATH', originalAppPath],
     ['ATTN_REAL_APP_WS_URL', originalWsUrl],
   ]) {
@@ -58,22 +58,22 @@ describe('parseCommonArgs production safety', () => {
     expect(options.wsUrl).toBe('ws://127.0.0.1:29849/ws');
   });
 
-  it('refuses the production profile without the explicit acknowledgement', () => {
-    process.env.ATTN_HARNESS_PROFILE = '';
+  it('refuses the production instance without the explicit acknowledgement', () => {
+    process.env.ATTN_HARNESS_INSTANCE = '';
 
     expect(() => parseCommonArgs([])).toThrow(
       'Refusing to run the real-app harness against production',
     );
   });
 
-  it('allows the production profile only with the explicit acknowledgement', () => {
-    process.env.ATTN_HARNESS_PROFILE = '';
+  it('allows the production instance only with the explicit acknowledgement', () => {
+    process.env.ATTN_HARNESS_INSTANCE = '';
 
     expect(() => parseCommonArgs(['--run-against-prod'])).not.toThrow();
   });
 
   it('derives the production daemon from an acknowledged production app path', () => {
-    delete process.env.ATTN_HARNESS_PROFILE;
+    delete process.env.ATTN_HARNESS_INSTANCE;
     delete process.env.ATTN_REAL_APP_WS_URL;
 
     const options = parseCommonArgs([
@@ -92,12 +92,12 @@ describe('parseCommonArgs production safety', () => {
   });
 });
 
-describeWithBinary('parseCommonArgs one-knob (ATTN_PROFILE)', () => {
-  it('targets the named profile from ATTN_PROFILE with no extra flags', () => {
-    process.env.ATTN_PROFILE = 'agent7';
+describeWithBinary('parseCommonArgs one-knob (ATTN_INSTANCE)', () => {
+  it('targets the named instance from ATTN_INSTANCE with no extra flags', () => {
+    process.env.ATTN_INSTANCE = 'agent7';
 
     const resolved = JSON.parse(
-      execFileSync(ATTN_BIN, ['profile', 'resolve', '--profile', 'agent7', '--json'], {
+      execFileSync(ATTN_BIN, ['instance', 'resolve', '--instance', 'agent7', '--json'], {
         encoding: 'utf8',
       }),
     );
@@ -109,9 +109,9 @@ describeWithBinary('parseCommonArgs one-knob (ATTN_PROFILE)', () => {
     expect(options.runAgainstProd).toBe(false);
   });
 
-  it('lets ATTN_HARNESS_PROFILE override ATTN_PROFILE', () => {
-    process.env.ATTN_PROFILE = 'agent7';
-    process.env.ATTN_HARNESS_PROFILE = 'agent9';
+  it('lets ATTN_HARNESS_INSTANCE override ATTN_INSTANCE', () => {
+    process.env.ATTN_INSTANCE = 'agent7';
+    process.env.ATTN_HARNESS_INSTANCE = 'agent9';
 
     const options = parseCommonArgs([]);
 

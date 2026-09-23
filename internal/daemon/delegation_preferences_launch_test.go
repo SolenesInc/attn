@@ -133,7 +133,7 @@ func TestDelegationRoleLaunchContainsOnlySelectedGuidance(t *testing.T) {
 func TestDelegationRoleLaunchRefreshesOptedInWorkflowSkill(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(toolhome.EnvVar, home)
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, source, _ := setupDelegationSource(t, d, backend)
@@ -159,7 +159,7 @@ func TestDelegationRoleLaunchRefreshesOptedInWorkflowSkill(t *testing.T) {
 
 func TestWorkflowSkillUnsupportedHarnessOnlyBlocksMaintainedRoles(t *testing.T) {
 	t.Setenv(toolhome.EnvVar, t.TempDir())
-	t.Setenv("ATTN_PROFILE", "dev")
+	t.Setenv("ATTN_INSTANCE", "dev")
 	d := newDelegationDaemon(t)
 	cfg := configuredBuild(t, d)
 	cfg.WorkflowSkillEnabled = true

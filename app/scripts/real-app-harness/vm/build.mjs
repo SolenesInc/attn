@@ -10,11 +10,11 @@ export function ensureBundledPiInstalled(execute = run) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
-    const profile = process.env.ATTN_PROFILE;
-    if (!profile || !/^[a-z][a-z0-9-]{0,39}$/.test(profile) || ['default', 'prod', 'production'].includes(profile)) {
-      throw new Error('Building a runner requires a named non-production ATTN_PROFILE');
+    const instance = process.env.ATTN_INSTANCE;
+    if (!instance || !/^[a-z][a-z0-9-]{0,39}$/.test(instance) || ['default', 'prod', 'production'].includes(instance)) {
+      throw new Error('Building a runner requires a named non-production ATTN_INSTANCE');
     }
-    run('make', ['install', `PROFILE=${profile}`]);
+    run('make', ['install', `INSTANCE=${instance}`]);
     ensureBundledPiInstalled();
   } catch (error) { console.error(error.message); process.exitCode = error.exitCode || 1; }
 }

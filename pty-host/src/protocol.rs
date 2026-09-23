@@ -59,6 +59,11 @@ pub struct PreparedLaunchAttempt {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct CommitParams {
+    pub session_id: String,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct SpawnParams {
     pub session_id: String,
     pub agent: String,

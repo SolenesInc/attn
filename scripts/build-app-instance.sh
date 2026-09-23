@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# Build the packaged attn .app for a single profile, deriving ALL bundle
+# Build the packaged attn .app for a single instance, deriving ALL bundle
 # metadata (productName, bundle id, ws port, deep-link scheme) from the single
-# authority: `attn profile resolve`. The default/prod profile builds from the
-# committed tauri.conf.json; every NAMED profile gets a generated, gitignored
-# `tauri.<appName>.gen.conf.json` overlay (from `attn profile tauri-config`) so
-# no per-profile bundle metadata is ever hand-maintained.
+# authority: `attn instance resolve`. The default/prod instance builds from the
+# committed tauri.conf.json; every NAMED instance gets a generated, gitignored
+# `tauri.<appName>.gen.conf.json` overlay (from `attn instance tauri-config`) so
+# no per-instance bundle metadata is ever hand-maintained.
 #
 # Inputs (env):
-#   PROFILE                  profile name ("" = default/prod)
+#   INSTANCE                  instance name ("" = default/prod)
 #   ATTN_BIN                 path to the freshly built attn binary (the authority + sidecar)
 #   VERSION SOURCE_FINGERPRINT GIT_COMMIT BUILD_TIME   build-identity stamp
 #   SOURCE_DIRTY_PATHS_BASE64  NUL-separated relevant dirty paths, base64 encoded
 #   MACOS_CODESIGN_IDENTITY  optional; else discovered, else ad-hoc ("-")
-#   ATTN_APP_CARGO_PROFILE   cargo profile for a named profile (default: fast);
+#   ATTN_APP_CARGO_PROFILE   cargo profile for a named instance (default: fast);
 #                            the default/prod bundle always builds with release
 #
 # Output lands at app/src-tauri/target/staged/<appName>.app (macOS) or
@@ -23,8 +23,8 @@
 # `set -u` is fragile. Required vars are validated explicitly.
 set -eo pipefail
 
-profile="${PROFILE:-}"
-harness_default="${ATTN_BUILD_DEFAULT_PROFILE_HARNESS:-}"
+instance="${INSTANCE:-}"
+harness_default="${ATTN_BUILD_DEFAULT_INSTANCE_HARNESS:-}"
 attn="${ATTN_BIN:?ATTN_BIN (path to built attn binary) is required}"
 pty_host="${ATTN_PTY_HOST_BIN:?ATTN_PTY_HOST_BIN is required}"
 : "${VERSION:?VERSION is required}"
@@ -37,13 +37,13 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
 
 # Resolve every resource from the one authority.
-app_name="$("$attn" profile resolve --profile "$profile" --field appName)"
-bundle_id="$("$attn" profile resolve --profile "$profile" --field bundleId)"
-ws_port="$("$attn" profile resolve --profile "$profile" --field wsPort)"
-label="$("$attn" profile resolve --profile "$profile" --field label)"
+app_name="$("$attn" instance resolve --instance "$instance" --field appName)"
+bundle_id="$("$attn" instance resolve --instance "$instance" --field bundleId)"
+ws_port="$("$attn" instance resolve --instance "$instance" --field wsPort)"
+label="$("$attn" instance resolve --instance "$instance" --field label)"
 
-if [ -n "$harness_default" ] && [ -z "$profile" ]; then
-  echo "ATTN_BUILD_DEFAULT_PROFILE_HARNESS requires a named packaging profile" >&2
+if [ -n "$harness_default" ] && [ -z "$instance" ]; then
+  echo "ATTN_BUILD_DEFAULT_INSTANCE_HARNESS requires a named packaging instance" >&2
   exit 1
 fi
 
@@ -57,7 +57,7 @@ fi
 
 # `fast` is `release` with app-core unoptimized (app/src-tauri/Cargo.toml): a
 # Rust change costs a quarter of the CPU. What ships is always `release`.
-if [ -n "$profile" ]; then
+if [ -n "$instance" ]; then
   cargo_profile="${ATTN_APP_CARGO_PROFILE:-fast}"
 else
   cargo_profile="release"
@@ -74,7 +74,7 @@ cp "$attn" "app/src-tauri/binaries/attn-${host_triple}"
 cp "$pty_host" "app/src-tauri/binaries/attn-pty-host-${host_triple}"
 
 # Compile first-party plugins before Tauri collects resources. Bundled means
-# available in the catalog; the daemon still requires a per-profile opt-in.
+# available in the catalog; the daemon still requires a per-instance opt-in.
 bash ./scripts/build-bundled-plugins.sh
 
 # The shared app runtime, compiled the same way and for the same reason: a
@@ -84,19 +84,19 @@ bash ./scripts/build-app-runtime-host.sh
 cd app
 pnpm install
 
-if [ -n "$profile" ]; then
-  # Named profile: generate the bundle-metadata overlay from the authority and
+if [ -n "$instance" ]; then
+  # Named instance: generate the bundle-metadata overlay from the authority and
   # bake the resolved port + bundle id so the Rust runtime view can never drift.
   gen_rel="src-tauri/${app_name}.gen.conf.json"
-  "$attn" profile tauri-config --profile "$profile" --base src-tauri/tauri.conf.json > "$gen_rel"
+  "$attn" instance tauri-config --instance "$instance" --base src-tauri/tauri.conf.json > "$gen_rel"
   echo ">>> Generated Tauri overlay $gen_rel"
   if [ -n "$harness_default" ]; then
-    echo ">>> Logical runtime profile: default, isolated by ATTN_HARNESS_DATA_DIR"
-    ATTN_BUILD_PROFILE="" \
-    VITE_ATTN_BUILD_PROFILE="" \
+    echo ">>> Logical runtime instance: default, isolated by ATTN_HARNESS_DATA_DIR"
+    ATTN_BUILD_INSTANCE="" \
+    VITE_ATTN_BUILD_INSTANCE="" \
     ATTN_BUILD_WS_PORT="$ws_port" \
     ATTN_BUILD_BUNDLE_ID="$bundle_id" \
-    ATTN_BUILD_DEFAULT_PROFILE_HARNESS=1 \
+    ATTN_BUILD_DEFAULT_INSTANCE_HARNESS=1 \
     VITE_DAEMON_PORT="$ws_port" \
     VITE_INSTALL_CHANNEL=source \
     VITE_ATTN_BUILD_VERSION="$VERSION" \
@@ -106,8 +106,8 @@ if [ -n "$profile" ]; then
     VITE_ATTN_BUILD_TIME="$BUILD_TIME" \
     pnpm tauri build $bundle_args --config "$gen_rel" -- --profile "$cargo_profile"
   else
-    ATTN_BUILD_PROFILE="$profile" \
-    VITE_ATTN_BUILD_PROFILE="$profile" \
+    ATTN_BUILD_INSTANCE="$instance" \
+    VITE_ATTN_BUILD_INSTANCE="$instance" \
     ATTN_BUILD_WS_PORT="$ws_port" \
     ATTN_BUILD_BUNDLE_ID="$bundle_id" \
     VITE_DAEMON_PORT="$ws_port" \
@@ -120,7 +120,7 @@ if [ -n "$profile" ]; then
     pnpm tauri build $bundle_args --config "$gen_rel" -- --profile "$cargo_profile"
   fi
 else
-  # Default/prod build: committed tauri.conf.json, no baked profile env. This is
+  # Default/prod build: committed tauri.conf.json, no baked instance env. This is
   # byte-for-byte the historical `make build-app` command.
   VITE_INSTALL_CHANNEL=source \
   VITE_ATTN_BUILD_VERSION="$VERSION" \
@@ -164,8 +164,8 @@ if [ "$(uname -s)" = "Darwin" ]; then
 
   # Sign the sidecar first, then the enclosing app bundle, so macOS privacy
   # grants attach to a stable signed identity across source rebuilds. One
-  # machine-wide identity signs every profile's bundle (grants are keyed by
-  # bundle id, so each profile grants once on first launch).
+  # machine-wide identity signs every instance's bundle (grants are keyed by
+  # bundle id, so each instance grants once on first launch).
   identity="${MACOS_CODESIGN_IDENTITY:-}"
   if [ -z "$identity" ]; then identity="$(bash ./scripts/macos-codesign-identity.sh find)"; fi
   if [ -z "$identity" ]; then identity="-"; fi

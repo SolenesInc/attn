@@ -132,8 +132,8 @@ func ensureAttnCopilotSkillInstalled() error {
 }
 
 func userGlobalSkillSyncEnabled() bool {
-	profile := config.Profile()
-	if profile == "" || profile == "dev" {
+	instance := config.Instance()
+	if instance == "" || instance == "dev" {
 		return true
 	}
 	return os.Getenv("ATTN_AUTOMATION") == "1" && os.Getenv(harnessSkillSyncEnv) == "1" && strings.TrimSpace(os.Getenv(toolhome.EnvVar)) != ""

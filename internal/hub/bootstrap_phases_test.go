@@ -11,11 +11,11 @@ func TestEnsureRemoteReadyRevivesTheDaemonBeforeShippingTheSidecar(t *testing.T)
 	b := NewBootstrapper(nil)
 	var order []string
 
-	b.makeReady = func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
+	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
 		order = append(order, "ready")
 		return readyRemote{remoteInstallPath: "/home/x/.local/bin/attn"}, nil
 	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
+	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
 		order = append(order, "ship")
 		if ready.remoteInstallPath != "/home/x/.local/bin/attn" {
 			t.Errorf("ship phase got %q, want what the ready phase resolved", ready.remoteInstallPath)
@@ -35,10 +35,10 @@ func TestEnsureRemoteReadySkipsTheSidecarWhenTheRemoteNeverBecameReady(t *testin
 	b := NewBootstrapper(nil)
 	shipped := false
 
-	b.makeReady = func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
+	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
 		return readyRemote{}, errors.New("daemon did not become ready")
 	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
+	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
 		shipped = true
 		return nil
 	}
@@ -56,11 +56,11 @@ func TestEnsureRemoteReadyGivesTheSidecarItsOwnBudget(t *testing.T) {
 	var readyDeadline, shipDeadline time.Time
 	var shipCtxErr error
 
-	b.makeReady = func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
+	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
 		readyDeadline, _ = ctx.Deadline()
 		return readyRemote{}, nil
 	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
+	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
 		shipDeadline, _ = ctx.Deadline()
 		shipCtxErr = ctx.Err()
 		return nil
@@ -90,10 +90,10 @@ func TestEnsureRemoteReadySurvivesASidecarThatCannotBeShipped(t *testing.T) {
 		logged = append(logged, format)
 	})
 
-	b.makeReady = func(ctx context.Context, sshTarget, profile, homeDaemonID string) (readyRemote, error) {
+	b.makeReady = func(ctx context.Context, sshTarget, instance, homeDaemonID string) (readyRemote, error) {
 		return readyRemote{}, nil
 	}
-	b.shipAppRuntime = func(ctx context.Context, sshTarget, profile string, ready readyRemote) error {
+	b.shipAppRuntime = func(ctx context.Context, sshTarget, instance string, ready readyRemote) error {
 		return errors.New("the app runtime host is missing")
 	}
 

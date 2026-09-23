@@ -1247,7 +1247,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{148, "durable Garden seed event handling", ``},
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
-	{151, "create setups, desktops and their panes beside the workspace tables", `
+	{151, "rename install profiles to instances", ``},
+	{152, "create setups, desktops and their panes beside the workspace tables", `
 		CREATE TABLE IF NOT EXISTS setups (
 			id TEXT PRIMARY KEY,
 			name TEXT NOT NULL,
@@ -1876,13 +1877,18 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 151 {
+			if err := applyMigration151(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 150 {
 			if err := applyMigration150(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
-		} else if m.version == 151 {
-			if err := applyMigration151(tx, m.sql); err != nil {
+		} else if m.version == 152 {
+			if err := applyMigration152(tx, m.sql); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -1934,6 +1940,36 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration151(tx *sql.Tx) error {
+	hasProfile, err := columnExists(tx, "endpoints", "profile")
+	if err != nil {
+		return err
+	}
+	hasInstance, err := columnExists(tx, "endpoints", "instance")
+	if err != nil {
+		return err
+	}
+	if hasProfile && !hasInstance {
+		if _, err := tx.Exec(`ALTER TABLE endpoints RENAME COLUMN profile TO instance`); err != nil {
+			return err
+		}
+	}
+	hasProfileRoles, err := tableExists(tx, "profile_roles")
+	if err != nil {
+		return err
+	}
+	hasInstanceRoles, err := tableExists(tx, "instance_roles")
+	if err != nil {
+		return err
+	}
+	if hasProfileRoles && !hasInstanceRoles {
+		if _, err := tx.Exec(`ALTER TABLE profile_roles RENAME TO instance_roles`); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -2327,7 +2363,7 @@ func applyMigration131(tx *sql.Tx) error {
 	return nil
 }
 
-func applyMigration151(tx *sql.Tx, migrationSQL string) error {
+func applyMigration152(tx *sql.Tx, migrationSQL string) error {
 	if _, err := tx.Exec(migrationSQL); err != nil {
 		return err
 	}

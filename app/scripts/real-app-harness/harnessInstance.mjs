@@ -6,20 +6,20 @@ import { fileURLToPath } from 'node:url';
 
 const HARNESS_DIR = path.dirname(fileURLToPath(import.meta.url));
 
-const DEV_PROFILE = 'dev';
+const DEV_INSTANCE = 'dev';
 const PROD_BUNDLE_ID = 'com.attn.manager';
 const PROD_APP_NAME = 'attn.app';
 const PROD_APP_TREE = 'attn';
 const PROD_DAEMON_PORT = '9849';
 
-// Profile name grammar — mirrors config.profileNamePattern on the Go side.
-const PROFILE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
+// Instance name grammar — mirrors config.instanceNamePattern on the Go side.
+const INSTANCE_NAME = /^[a-z0-9][a-z0-9-]{0,15}$/;
 
 // Fast-path resources for prod ('') and dev. The drift guard in
-// harnessProfile.test.mjs pins them to `attn profile resolve`.
+// harnessInstance.test.mjs pins them to `attn instance resolve`.
 const BUILTIN_RESOURCES = {
   '': {
-    profile: '',
+    instance: '',
     bundleId: PROD_BUNDLE_ID,
     appName: 'attn',
     wsPort: 9849,
@@ -29,7 +29,7 @@ const BUILTIN_RESOURCES = {
     mockGitHubPort: 19850,
   },
   dev: {
-    profile: 'dev',
+    instance: 'dev',
     bundleId: 'com.attn.manager.dev',
     appName: 'attn-dev',
     wsPort: 29849,
@@ -52,7 +52,7 @@ function appLocalDataDir(bundleId) {
 }
 
 // The executable inside an app tree the caller names, which `--app-path` can
-// place anywhere; deriving it from a profile would answer for another install.
+// place anywhere; deriving it from an instance would answer for another install.
 export function appExecutableInAppTree(appPath, platform = process.platform) {
   return platform === 'darwin'
     ? path.join(appPath, 'Contents', 'MacOS', 'app')
@@ -76,18 +76,18 @@ function installedApp(appName) {
   };
 }
 
-function normalizeProfile(raw) {
+function normalizeInstance(raw) {
   const value = (raw ?? '').trim().toLowerCase();
   return value === 'default' ? '' : value;
 }
 
-export function currentHarnessProfile() {
-  const override = process.env.ATTN_HARNESS_PROFILE;
+export function currentHarnessInstance() {
+  const override = process.env.ATTN_HARNESS_INSTANCE;
   if (override !== undefined) {
-    return normalizeProfile(override);
+    return normalizeInstance(override);
   }
-  const base = normalizeProfile(process.env.ATTN_PROFILE);
-  return base === '' ? DEV_PROFILE : base;
+  const base = normalizeInstance(process.env.ATTN_INSTANCE);
+  return base === '' ? DEV_INSTANCE : base;
 }
 
 const resourceCache = new Map();
@@ -101,25 +101,25 @@ function resolveAttnBinaryPath() {
     if (fs.existsSync(candidate)) return candidate;
   }
   throw new Error(
-    `attn binary not found for profile resolution. Tried: ${candidates.join(', ')}. `
+    `attn binary not found for instance resolution. Tried: ${candidates.join(', ')}. `
     + `Build it with 'make dev' (or 'go build -o ./attn ./cmd/attn'), or set ATTN_HARNESS_BIN.`,
   );
 }
 
-function resolveViaAuthority(profile) {
+function resolveViaAuthority(instance) {
   const attn = resolveAttnBinaryPath();
   let stdout;
   try {
-    stdout = execFileSync(attn, ['profile', 'resolve', '--profile', profile, '--json'], {
+    stdout = execFileSync(attn, ['instance', 'resolve', '--instance', instance, '--json'], {
       encoding: 'utf8',
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to resolve profile '${profile}' via '${attn} profile resolve': ${message}`);
+    throw new Error(`Failed to resolve instance '${instance}' via '${attn} instance resolve': ${message}`);
   }
   const resolved = JSON.parse(stdout);
   return {
-    profile: resolved.profile,
+    instance: resolved.instance,
     bundleId: resolved.bundleId,
     appName: resolved.appName,
     appPath: resolved.appPath,
@@ -134,8 +134,8 @@ function resolveViaAuthority(profile) {
   };
 }
 
-export function resolveHarnessResources(profile = currentHarnessProfile()) {
-  const key = normalizeProfile(profile);
+export function resolveHarnessResources(instance = currentHarnessInstance()) {
+  const key = normalizeInstance(instance);
   if (Object.prototype.hasOwnProperty.call(BUILTIN_RESOURCES, key)) {
     const builtin = BUILTIN_RESOURCES[key];
     return {
@@ -144,8 +144,8 @@ export function resolveHarnessResources(profile = currentHarnessProfile()) {
       appLocalDataDir: appLocalDataDir(builtin.bundleId),
     };
   }
-  if (!PROFILE_NAME.test(key)) {
-    throw new Error(`Invalid attn profile name '${profile}' (expected ${PROFILE_NAME}).`);
+  if (!INSTANCE_NAME.test(key)) {
+    throw new Error(`Invalid attn instance name '${instance}' (expected ${INSTANCE_NAME}).`);
   }
   if (!resourceCache.has(key)) {
     resourceCache.set(key, resolveViaAuthority(key));
@@ -153,52 +153,52 @@ export function resolveHarnessResources(profile = currentHarnessProfile()) {
   return resourceCache.get(key);
 }
 
-export function bundleIdentifierForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).bundleId;
+export function bundleIdentifierForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).bundleId;
 }
 
 // macOS filesystems are case-insensitive: `Attn.app` is the prod bundle.
-export function profileForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
+export function instanceForAppPath(appPath, fallbackInstance = currentHarnessInstance()) {
   const appName = path.basename(appPath || '').toLowerCase();
   const match = /^attn(?:-([a-z0-9][a-z0-9-]{0,15}))?(?:\.app)?$/.exec(appName);
   if (match) return match[1] ?? '';
-  return fallbackProfile;
+  return fallbackInstance;
 }
 
-export function bundleIdentifierForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
-  return bundleIdentifierForProfile(profileForAppPath(appPath, fallbackProfile));
+export function bundleIdentifierForAppPath(appPath, fallbackInstance = currentHarnessInstance()) {
+  return bundleIdentifierForInstance(instanceForAppPath(appPath, fallbackInstance));
 }
 
-export function appExecutableForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).appExecutable;
+export function appExecutableForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).appExecutable;
 }
 
-export function appExecutableForAppPath(appPath, fallbackProfile = currentHarnessProfile()) {
-  return appExecutableForProfile(profileForAppPath(appPath, fallbackProfile));
+export function appExecutableForAppPath(appPath, fallbackInstance = currentHarnessInstance()) {
+  return appExecutableForInstance(instanceForAppPath(appPath, fallbackInstance));
 }
 
-export function defaultAppPathForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).appPath;
+export function defaultAppPathForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).appPath;
 }
 
-export function defaultDaemonPortForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).wsPort;
+export function defaultDaemonPortForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).wsPort;
 }
 
-export function dataDirForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).dataDir;
+export function dataDirForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).dataDir;
 }
 
-export function mockGitHubPortForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).mockGitHubPort;
+export function mockGitHubPortForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).mockGitHubPort;
 }
 
 // The daemon refuses a client_hello without this token.
-export function clientTokenForProfile(profile = currentHarnessProfile()) {
+export function clientTokenForInstance(instance = currentHarnessInstance()) {
   const fromEnv = (process.env.ATTN_CLIENT_TOKEN ?? '').trim();
   if (fromEnv) return fromEnv;
   try {
-    return fs.readFileSync(path.join(dataDirForProfile(profile), 'client-token'), 'utf8').trim();
+    return fs.readFileSync(path.join(dataDirForInstance(instance), 'client-token'), 'utf8').trim();
   } catch {
     return '';
   }
@@ -210,36 +210,36 @@ export function harnessClientHello(clientKind, { version = 'real-app-harness', c
     client_kind: clientKind,
     version,
     capabilities,
-    client_token: clientTokenForProfile(),
+    client_token: clientTokenForInstance(),
   };
 }
 
-export function socketPathForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).socket;
+export function socketPathForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).socket;
 }
 
-export function daemonPidFilePathForProfile(profile = currentHarnessProfile()) {
-  return path.join(resolveHarnessResources(profile).dataDir, 'attn.pid');
+export function daemonPidFilePathForInstance(instance = currentHarnessInstance()) {
+  return path.join(resolveHarnessResources(instance).dataDir, 'attn.pid');
 }
 
-export function defaultWSURLForProfile(profile = currentHarnessProfile()) {
-  return `ws://127.0.0.1:${resolveHarnessResources(profile).wsPort}/ws`;
+export function defaultWSURLForInstance(instance = currentHarnessInstance()) {
+  return `ws://127.0.0.1:${resolveHarnessResources(instance).wsPort}/ws`;
 }
 
-export function appLocalDataDirForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).appLocalDataDir;
+export function appLocalDataDirForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).appLocalDataDir;
 }
 
-export function manifestPathForProfile(profile = currentHarnessProfile()) {
-  return path.join(appLocalDataDirForProfile(profile), 'debug', 'ui-automation.json');
+export function manifestPathForInstance(instance = currentHarnessInstance()) {
+  return path.join(appLocalDataDirForInstance(instance), 'debug', 'ui-automation.json');
 }
 
-export function deepLinkSchemeForProfile(profile = currentHarnessProfile()) {
-  return resolveHarnessResources(profile).deepLinkScheme;
+export function deepLinkSchemeForInstance(instance = currentHarnessInstance()) {
+  return resolveHarnessResources(instance).deepLinkScheme;
 }
 
-// An attn-hosted shell exports all six, and each one outranks the profile name:
-// miss one and the child lands in the hosting session's world, not the profile's.
+// An attn-hosted shell exports all six, and each one outranks the instance name:
+// miss one and the child lands in the hosting session's world, not the instance's.
 const ROUTING_OVERRIDE_ENV = [
   'ATTN_DATA_DIR',
   'ATTN_WS_PORT',
@@ -251,26 +251,26 @@ const ROUTING_OVERRIDE_ENV = [
 
 let routingDropAnnounced = false;
 
-function announceRoutingDrop(profile, dropped) {
+function announceRoutingDrop(instance, dropped) {
   if (routingDropAnnounced || dropped.length === 0) return;
   routingDropAnnounced = true;
   console.log(
-    `[harness-profile] profile '${profile || 'default'}': dropped inherited routing overrides from `
+    `[harness-instance] instance '${instance || 'default'}': dropped inherited routing overrides from `
     + `every child environment: ${dropped.join(', ')}`,
   );
 }
 
-// Every profile names a destination, the empty one (production) included, so the
+// Every instance names a destination, the empty one (production) included, so the
 // shell's own routing always goes; only an explicit extra survives.
-export function profileCliEnv(profile = currentHarnessProfile(), extra = {}) {
-  const env = { ...process.env, ATTN_PROFILE: profile, ...extra };
+export function instanceCliEnv(instance = currentHarnessInstance(), extra = {}) {
+  const env = { ...process.env, ATTN_INSTANCE: instance, ...extra };
   const dropped = [];
   for (const key of ROUTING_OVERRIDE_ENV) {
     if (key in extra || !(key in env)) continue;
     delete env[key];
     dropped.push(key);
   }
-  announceRoutingDrop(profile, dropped);
+  announceRoutingDrop(instance, dropped);
   return env;
 }
 
@@ -282,7 +282,7 @@ export function isProductionHarnessTarget({
   appPath,
   bundleId,
   wsUrl,
-  profile = currentHarnessProfile(),
+  instance = currentHarnessInstance(),
 } = {}) {
   let wsPort = '';
   try {
@@ -291,7 +291,7 @@ export function isProductionHarnessTarget({
   }
   const appName = path.basename(appPath || '').toLowerCase();
   return (
-    profile === ''
+    instance === ''
     || appName === PROD_APP_NAME
     || appName === PROD_APP_TREE
     || bundleId === PROD_BUNDLE_ID

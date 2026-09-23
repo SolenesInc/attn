@@ -16,6 +16,6 @@ func processExecutable(pid int) (string, error) {
 
 func requestAppQuit(string) bool { return false }
 
-func stopAppWithoutPIDFile(_ profileResolved, pidPath string) (string, error) {
+func stopAppWithoutPIDFile(_ instanceResolved, pidPath string) (string, error) {
 	return "not running (no " + pidPath + ")", nil
 }
