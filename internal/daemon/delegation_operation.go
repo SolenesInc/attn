@@ -103,10 +103,6 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 }
 
 func (d *Daemon) runDelegationOperation(id string) {
-	d.runDelegationOperationForeground(id)
-}
-
-func (d *Daemon) runDelegationOperationForeground(id string) {
 	if !d.beginDelegationRun(id) {
 		return
 	}
@@ -116,6 +112,13 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 	case <-d.done:
 		return
 	}
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		d.runDelegationOperationProtected(protection, id)
+		return nil
+	})
+}
+
+func (d *Daemon) runDelegationOperationProtected(protection foregroundCleanupProtection, id string) {
 	record, err := d.store.GetDelegationOperation(id)
 	if err != nil {
 		d.logf("delegate operation %s disappeared: %v", id, err)
@@ -185,12 +188,7 @@ func (d *Daemon) runDelegationOperationForeground(id string) {
 		d.finishDelegationFailure(id, fmt.Errorf("record resolved delegation: %w", err))
 		return
 	}
-	var result *protocol.DelegateResult
-	launchErr := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var delegateErr error
-		result, delegateErr = d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
-		return delegateErr
-	})
+	result, launchErr := d.delegateOperationProtected(protection, runtime, id, record.Operation.SessionID, protocol.Deref(record.Operation.WorktreePath), record.WorktreeOwned, record.WorktreeToken, record.ChiefSessionID, resolved)
 	if launchErr != nil {
 		d.finishDelegationFailure(id, launchErr)
 		return
