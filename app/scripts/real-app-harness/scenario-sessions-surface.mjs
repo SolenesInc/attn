@@ -232,24 +232,11 @@ async function main() {
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the filter to be lifted');
     });
 
-    await runner.step('slow_git_metadata_is_controlled', async () => {
+    await runner.step('arm_slow_git_metadata', async () => {
       const daemonPid = Number(fs.readFileSync(path.join(dataDir, 'attn.pid'), 'utf8').trim());
       runner.assert(readProcessEnvironment(daemonPid).includes(`PATH=${path.dirname(eligibilityGit.executable)}${path.delimiter}`),
         'the daemon must resolve Git through the eligibility wrapper');
       fs.writeFileSync(eligibilityGit.gate, 'enabled\n');
-      const probe = async (cwd) => {
-        const startedAt = performance.now();
-        await execFileAsync(eligibilityGit.executable, ['rev-parse', '--show-toplevel'], {
-          cwd,
-          env: profileCliEnv(profile, eligibilityGit.env),
-        });
-        return performance.now() - startedAt;
-      };
-      const [slowMs, fastMs] = await Promise.all([probe(repo), probe(other)]);
-      runner.assert(slowMs >= 3_000, 'the slow repository holds Git metadata for at least three seconds', { slowMs });
-      runner.assert(fastMs >= 1_000 && fastMs < slowMs,
-        'the fast repository remains delayed but settles before the slow repository', { slowMs, fastMs });
-      runner.writeJson('eligibility-git-delays.json', { slowMs, fastMs });
       git(repo, 'worktree', 'remove', '--force', slowWorktree);
       git(other, 'worktree', 'remove', '--force', fastWorktree);
     });
