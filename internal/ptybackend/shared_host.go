@@ -606,21 +606,20 @@ func (b *WorkerBackend) spawnShared(ctx context.Context, opts SpawnOptions) erro
 		Effort:            opts.Effort,
 		UnattendedLaunch:  opts.UnattendedLaunch,
 	}
-	result, spawned, err := b.spawnOnSharedHost(ctx, nil, params)
-	switch {
-	case !spawned:
+	result, err := b.spawnOnSharedHost(ctx, nil, params)
+	if result == nil {
 		prepared.CleanupExcept(-1)
-	case result != nil:
+	} else {
 		prepared.CleanupExcept(result.AttemptIndex)
 	}
 	return err
 }
 
-func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost.Artifact, params ptyhost.SpawnParams) (result *ptyhost.SpawnResult, spawned bool, err error) {
+func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost.Artifact, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, error) {
 	for attempt := 0; ; attempt++ {
 		host, err := b.ensureSharedHost(ctx, artifact)
 		if err != nil {
-			return nil, false, err
+			return nil, err
 		}
 		session := &workerSession{
 			SessionID:    params.SessionID,
@@ -633,63 +632,52 @@ func (b *WorkerBackend) spawnOnSharedHost(ctx context.Context, artifact *ptyhost
 		b.mu.Lock()
 		if _, exists := b.sessions[params.SessionID]; exists {
 			b.mu.Unlock()
-			return nil, false, fmt.Errorf("session %s already exists", params.SessionID)
+			return nil, fmt.Errorf("session %s already exists", params.SessionID)
 		}
 		b.sessions[params.SessionID] = session
 		b.mu.Unlock()
 
-		result, spawned, err := b.spawnSharedSession(ctx, host, session, params)
+		result, err := b.spawnAndCommit(ctx, host, session, params)
 		if err == nil {
-			return result, true, nil
-		}
-		if spawned {
-			b.removeUnreadySharedSession(ctx, session)
+			b.startMonitor(session)
+			b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", session.SessionID, session.WorkerPID, result.ChildPID)
+			return result, nil
 		}
 		b.mu.Lock()
 		delete(b.sessions, params.SessionID)
 		b.mu.Unlock()
 		b.releaseSharedIncarnationIfUnused(incarnationOf(session))
-		if spawned || attempt > 0 || !isRetiringSharedHost(err) {
-			return result, spawned, err
+		if result != nil || attempt > 0 || !isRetiringSharedHost(err) {
+			return result, err
 		}
 		b.cfg.Logf("shared PTY host %s retired before spawning %s; starting another", host.SocketPath, params.SessionID)
 	}
 }
 
-func (b *WorkerBackend) sharedSessionExists(ctx context.Context, session *workerSession) bool {
-	infoCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
-	defer cancel()
-	_, err := b.callInfo(infoCtx, session)
-	return err == nil
-}
-
-func (b *WorkerBackend) removeUnreadySharedSession(ctx context.Context, session *workerSession) {
-	removeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
-	defer cancel()
-	if err := b.callResultSharedOneShot(removeCtx, session, ptyworker.MethodRemove, map[string]any{}, nil); err != nil {
-		b.cfg.Logf("remove shared PTY session %s that never became ready: %v", session.SessionID, err)
-	}
-}
-
-func (b *WorkerBackend) spawnSharedSession(ctx context.Context, host ptyhost.HostRegistry, session *workerSession, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, bool, error) {
+func (b *WorkerBackend) spawnAndCommit(ctx context.Context, host ptyhost.HostRegistry, session *workerSession, params ptyhost.SpawnParams) (*ptyhost.SpawnResult, error) {
+	inc := incarnationOfHost(host)
 	var result ptyhost.SpawnResult
-	if err := b.callSharedHost(ctx, incarnationOfHost(host), ptyhost.MethodSpawn, params, &result); err != nil {
-		if !b.sharedSessionExists(ctx, session) {
-			return nil, false, err
-		}
-		return nil, true, b.startSharedSession(ctx, session, 0)
+	owner, err := b.openSharedCall(ctx, inc.endpoint(), ptyhost.MethodSpawn, params, &result)
+	if err != nil {
+		return nil, err
 	}
+	defer owner.Close()
 	session.WorkerPID = result.HostPID
-	return &result, true, b.startSharedSession(ctx, session, result.ChildPID)
+	if err := b.commitSharedSession(ctx, inc, session.SessionID); err != nil {
+		return &result, fmt.Errorf("commit shared PTY session: %w", err)
+	}
+	return &result, nil
 }
 
-func (b *WorkerBackend) startSharedSession(ctx context.Context, session *workerSession, childPID int) error {
-	if _, err := b.callInfo(ctx, session); err != nil {
-		return fmt.Errorf("shared PTY session did not become ready: %w", err)
+func (b *WorkerBackend) commitSharedSession(ctx context.Context, inc hostIncarnation, sessionID string) error {
+	params := ptyhost.CommitParams{SessionID: sessionID}
+	err := b.callSharedHost(ctx, inc, ptyhost.MethodCommit, params, nil)
+	if err == nil || errors.Is(err, pty.ErrSessionNotFound) {
+		return err
 	}
-	b.startMonitor(session)
-	b.cfg.Logf("shared PTY host spawn ready: session=%s host_pid=%d child_pid=%d", session.SessionID, session.WorkerPID, childPID)
-	return nil
+	confirmCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), defaultRPCTimeout)
+	defer cancel()
+	return b.callSharedHost(confirmCtx, inc, ptyhost.MethodCommit, params, nil)
 }
 
 func isRetiringSharedHost(err error) bool {

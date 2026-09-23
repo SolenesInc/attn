@@ -10,6 +10,7 @@ const (
 	RuntimeKind = "rust_host"
 
 	MethodSpawn    = "spawn"
+	MethodCommit   = "commit"
 	MethodHostInfo = "host_info"
 	MethodWatchAll = "watch_all"
 	MethodShutdown = "shutdown"
@@ -29,8 +30,7 @@ type SpawnParams struct {
 
 	Theme ptyworker.SetThemeParams `json:"theme"`
 
-	Attempts  []pty.PreparedLaunchAttempt `json:"attempts"`
-	Ephemeral bool                        `json:"ephemeral,omitempty"`
+	Attempts []pty.PreparedLaunchAttempt `json:"attempts"`
 
 	YoloMode          bool                                `json:"yolo_mode,omitempty"`
 	ApprovalRoute     launchcontract.ApprovalRoute        `json:"approval_route,omitempty"`
@@ -41,6 +41,10 @@ type SpawnParams struct {
 	Model             string                              `json:"model,omitempty"`
 	Effort            string                              `json:"effort,omitempty"`
 	UnattendedLaunch  launchcontract.UnattendedLaunchSpec `json:"unattended_launch,omitzero"`
+}
+
+type CommitParams struct {
+	SessionID string `json:"session_id"`
 }
 
 type SpawnResult struct {

@@ -295,7 +295,6 @@ func (b *WorkerBackend) roundTripProbe(ctx context.Context, artifact ptyhost.Art
 		CWD:       workdir,
 		Cols:      80,
 		Rows:      24,
-		Ephemeral: true,
 		Attempts: []pty.PreparedLaunchAttempt{{
 			Executable: artifact.Path,
 			Args:       []string{artifact.Path, ptyhost.ProbeChildFlag},

@@ -59,6 +59,11 @@ pub struct PreparedLaunchAttempt {
 }
 
 #[derive(Clone, Deserialize)]
+pub struct CommitParams {
+    pub session_id: String,
+}
+
+#[derive(Clone, Deserialize)]
 pub struct SpawnParams {
     pub session_id: String,
     pub agent: String,
@@ -74,8 +79,6 @@ pub struct SpawnParams {
     #[serde(default)]
     pub theme: Theme,
     pub attempts: Vec<PreparedLaunchAttempt>,
-    #[serde(default)]
-    pub ephemeral: bool,
 
     #[serde(default)]
     pub yolo_mode: bool,

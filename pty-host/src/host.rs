@@ -18,12 +18,14 @@ use serde_json::{Value, json};
 
 use crate::ghostty::Theme;
 use crate::protocol::{
-    AttachParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO, ERR_SESSION_NOT_FOUND,
-    ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION, HelloParams, InputParams,
-    KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams, SignalParams, SpawnParams,
-    error, is_compatible_version, response,
+    AttachParams, CommitParams, ERR_BAD_REQUEST, ERR_IMAGE_NOT_FOUND, ERR_IO,
+    ERR_SESSION_NOT_FOUND, ERR_SESSION_NOT_RUNNING, ERR_UNAUTHORIZED, ERR_UNSUPPORTED_VERSION,
+    HelloParams, InputParams, KittyImageParams, RPC_MAJOR, RPC_MINOR, Request, ResizeParams,
+    SignalParams, SpawnParams, error, is_compatible_version, response,
 };
-use crate::session::{Broadcast, ChildReaper, Cleanup, Session, SessionRuntime, parse_signal};
+use crate::session::{
+    Broadcast, ChildReaper, Cleanup, Commit, Session, SessionRuntime, parse_signal,
+};
 
 const CONNECTION_QUEUE_SIZE: usize = 256;
 const CONNECTION_STACK_BYTES: usize = 256 * 1024;
@@ -217,7 +219,6 @@ impl Host {
 
     fn spawn(self: &Arc<Self>, params: SpawnParams) -> Result<Arc<Session>, String> {
         let id = params.session_id.clone();
-        let ephemeral = params.ephemeral;
         self.state
             .lock()
             .expect("host state mutex poisoned")
@@ -228,19 +229,14 @@ impl Host {
         let cleanup: Cleanup =
             Arc::new(move |session_id| remove_session(&cleanup_host, &session_id));
         let broadcast: Broadcast = Arc::new(move |event| {
-            if ephemeral {
-                return;
-            }
             if let Some(host) = weak.upgrade() {
                 host.broadcast_lifecycle(&event);
             }
         });
-        let registry_path = (!ephemeral).then(|| {
-            Path::new(&self.cfg.registry_dir)
-                .join(format!("{id}.json"))
-                .to_string_lossy()
-                .into_owned()
-        });
+        let registry_path = Path::new(&self.cfg.registry_dir)
+            .join(format!("{id}.json"))
+            .to_string_lossy()
+            .into_owned();
         let result = Session::spawn(
             params,
             registry_path,
@@ -272,12 +268,23 @@ impl Host {
                 session.note_connected();
             }
         }
-        if !ephemeral {
-            for event in session.lifecycle_events() {
-                self.broadcast_lifecycle(&event);
-            }
-        }
         Ok(session)
+    }
+
+    fn commit(&self, id: &str) -> Result<bool, String> {
+        let Some(session) = self.session(id) else {
+            return Ok(false);
+        };
+        match session.commit()? {
+            Commit::Committed => {
+                for event in session.lifecycle_events() {
+                    self.broadcast_lifecycle(&event);
+                }
+                Ok(true)
+            }
+            Commit::AlreadyCommitted => Ok(true),
+            Commit::Abandoned => Ok(false),
+        }
     }
 
     fn shutdown_sessions(&self) -> Result<(), String> {
@@ -519,7 +526,7 @@ struct Connection {
     authed: bool,
     snapshot_format: String,
     close_action: CloseAction,
-    ephemeral_sessions: Vec<Arc<Session>>,
+    pending_sessions: Vec<Arc<Session>>,
 }
 
 impl Connection {
@@ -581,7 +588,7 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
         authed: false,
         snapshot_format: String::new(),
         close_action: CloseAction::Detach,
-        ephemeral_sessions: Vec::new(),
+        pending_sessions: Vec::new(),
     };
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
@@ -624,8 +631,8 @@ fn handle_connection(host: Arc<Host>, stream: UnixStream, id: u64) {
     if connection.watching_all {
         host.unwatch_all(&connection.id);
     }
-    for session in &connection.ephemeral_sessions {
-        session.remove();
+    for session in &connection.pending_sessions {
+        session.abandon_if_pending();
     }
     drop(connection.sender);
     let _ = writer.join();
@@ -678,7 +685,6 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                 Ok(params) => params,
                 Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
             };
-            let ephemeral = params.ephemeral;
             match host.spawn(params) {
                 Ok(session) => {
                     let reply = json!({
@@ -686,10 +692,28 @@ fn handle_request(host: &Arc<Host>, connection: &mut Connection, request: Reques
                         "child_pid": session.child_pid,
                         "attempt_index": session.attempt_index
                     });
-                    if ephemeral {
-                        connection.ephemeral_sessions.push(session);
-                    }
+                    connection.pending_sessions.push(session);
                     connection.send(response(&request.id, reply))
+                }
+                Err(message) => connection.fail(&request.id, ERR_IO, message),
+            }
+        }
+        "commit" => {
+            if connection.selected.is_some() {
+                return connection.fail(
+                    &request.id,
+                    ERR_BAD_REQUEST,
+                    "commit requires a host-level hello",
+                );
+            }
+            let params: CommitParams = match decode_params(&request) {
+                Ok(params) => params,
+                Err(message) => return connection.fail(&request.id, ERR_BAD_REQUEST, message),
+            };
+            match host.commit(&params.session_id) {
+                Ok(true) => connection.send(response(&request.id, json!({"ok": true}))),
+                Ok(false) => {
+                    connection.fail(&request.id, ERR_SESSION_NOT_FOUND, "session not found")
                 }
                 Err(message) => connection.fail(&request.id, ERR_IO, message),
             }

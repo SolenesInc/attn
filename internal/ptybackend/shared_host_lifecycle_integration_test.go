@@ -3,6 +3,8 @@ package ptybackend
 import (
 	"bytes"
 	"context"
+	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"slices"
@@ -427,8 +429,21 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	spawnCat(t, first, "retained", root)
-	hostPID := first.WorkerPIDs(context.Background())["retained"]
+	host, err := first.ensureSharedHost(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostPID := host.HostPID
+	for _, id := range []string{"retained", "retained-second"} {
+		owner, err := first.openSharedCall(context.Background(), incarnationOfHost(host).endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
+			SessionID: id, Agent: "lifecycle-probe", CWD: root, Cols: 80, Rows: 24,
+			Attempts: []pty.PreparedLaunchAttempt{{Executable: "/bin/cat", Args: []string{"/bin/cat"}, Env: []string{}, CWD: root}},
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = owner.Close()
+	}
 	if err := first.Shutdown(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +453,7 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = current.Shutdown(context.Background()) })
-	if report, err := current.Recover(context.Background()); err != nil || report.Recovered != 1 {
+	if report, err := current.Recover(context.Background()); err != nil || report.Recovered != 2 {
 		t.Fatalf("recover = %+v, %v", report, err)
 	}
 	_, stream, err := current.Attach(context.Background(), "retained", "retained")
@@ -453,7 +468,6 @@ func TestSharedHost_OperatesARetainedOlderArtifact(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForStreamText(t, stream, "__RETAINED_HOST__")
-	spawnCat(t, current, "retained-second", root)
 	if got := current.WorkerPIDs(context.Background())["retained-second"]; got != hostPID {
 		t.Fatalf("second session host = %d, want the retained host %d", got, hostPID)
 	}
@@ -556,36 +570,49 @@ func waitForHostSessions(t *testing.T, backend *WorkerBackend, host ptyhost.Host
 	}
 }
 
-func TestSharedHost_EphemeralTerminalLivesOnlyAsLongAsItsConnection(t *testing.T) {
-	binary, root := sharedHostTestRoot(t, "attn-host-ephemeral-")
+func TestSharedHost_UncommittedTerminalLivesOnlyAsLongAsItsConnection(t *testing.T) {
+	binary, root := sharedHostTestRoot(t, "attn-host-pending-")
 	stopHostsAtCleanup(t, root)
-	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-ephemeral", BinaryPath: binary})
+	backend, err := NewSharedHost(WorkerBackendConfig{DataRoot: root, DaemonInstanceID: "d-pending", BinaryPath: binary})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = backend.Shutdown(context.Background()) })
 	spawnCat(t, backend, "user-terminal", root)
 	host := onlyHost(t, root)
+	inc := incarnationOfHost(host)
+	spawn := func(id string) net.Conn {
+		t.Helper()
+		owner, err := backend.openSharedCall(context.Background(), inc.endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
+			SessionID: id, Agent: "probe", CWD: root, Cols: 80, Rows: 24,
+			Attempts: []pty.PreparedLaunchAttempt{{Executable: "/bin/cat", Args: []string{"/bin/cat"}, Env: []string{}, CWD: root}},
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return owner
+	}
 
-	owner, err := backend.openSharedCall(context.Background(), incarnationOfHost(host).endpoint(), ptyhost.MethodSpawn, ptyhost.SpawnParams{
-		SessionID: "ephemeral", Agent: "probe", CWD: root, Cols: 80, Rows: 24, Ephemeral: true,
-		Attempts: []pty.PreparedLaunchAttempt{{Executable: "/bin/cat", Args: []string{"/bin/cat"}, Env: []string{}, CWD: root}},
-	}, nil)
-	if err != nil {
+	abandoned := spawn("abandoned")
+	committed := spawn("committed")
+	waitForHostSessions(t, backend, host, "abandoned", "committed", "user-terminal")
+	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-pending", "abandoned")); !os.IsNotExist(err) {
+		t.Fatalf("an uncommitted terminal has a registry entry: %v", err)
+	}
+	if err := backend.commitSharedSession(context.Background(), inc, "committed"); err != nil {
 		t.Fatal(err)
 	}
-	waitForHostSessions(t, backend, host, "ephemeral", "user-terminal")
-	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-ephemeral", "ephemeral")); !os.IsNotExist(err) {
-		t.Fatalf("the ephemeral terminal has a registry entry: %v", err)
+	if _, err := os.Stat(ptyhost.SessionRegistryPath(root, "d-pending", "committed")); err != nil {
+		t.Fatalf("a committed terminal has no registry entry: %v", err)
 	}
-	if err := owner.Close(); err != nil {
-		t.Fatal(err)
+	_ = abandoned.Close()
+	_ = committed.Close()
+	waitForHostSessions(t, backend, host, "committed", "user-terminal")
+	if err := backend.commitSharedSession(context.Background(), inc, "abandoned"); !errors.Is(err, pty.ErrSessionNotFound) {
+		t.Fatalf("commit after the owner closed = %v, want session not found", err)
 	}
-	waitForHostSessions(t, backend, host, "user-terminal")
-
-	report, err := backend.Recover(context.Background())
-	if err != nil || report.Pruned != 0 {
-		t.Fatalf("recover = %+v, %v; want nothing to prune", report, err)
+	if err := backend.commitSharedSession(context.Background(), inc, "committed"); err != nil {
+		t.Fatalf("a repeated commit = %v, want success", err)
 	}
 	if err := backend.Remove(context.Background(), "user-terminal"); err != nil {
 		t.Fatal(err)
