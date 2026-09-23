@@ -9476,17 +9476,6 @@ type SessionReopenMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionReopenRefreshedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen SessionReopen `json:"reopen"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type SessionReopenResult struct {
 	// Action corresponds to the JSON schema field "action".
 	Action SessionReopenAction `json:"action"`

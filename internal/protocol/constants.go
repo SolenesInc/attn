@@ -385,7 +385,6 @@ const (
 	EventSessionListResult               = "session_list_result"
 	EventSessionShowResult               = "session_show_result"
 	EventSessionReopenResult             = "session_reopen_result"
-	EventSessionReopenRefreshed          = "session_reopen_refreshed"
 	EventSessionClosed                   = "session_closed"
 	EventNotificationListResult          = "notification_list_result"
 	EventNotificationMarkReadResult      = "notification_mark_read_result"

@@ -131,51 +131,43 @@ export function SessionsTab({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
   const [menuKey, setMenuKey] = useState<string | null>(null);
-  const [notices, setNotices] = useState<Record<string, RowNote>>({});
-  const [refusals, setRefusals] = useState<Record<string, Refusal>>({});
-  const verdictFor = useCallback((entry: SessionLedgerEntry): ReopenVerdictView | undefined => {
-    const refusal = refusals[entry.id];
-    return refusal && refusal.closedAt === entry.closed_at ? refusal.verdict : undefined;
-  }, [refusals]);
+  const [attempts, setAttempts] = useState<Record<string, ReopenAttempt>>({});
+  const attemptFor = useCallback((entry: SessionLedgerEntry): ReopenAttempt | undefined => {
+    const attempt = attempts[entry.id];
+    return attempt && attempt.closedAt === (entry.closed_at ?? '') ? attempt : undefined;
+  }, [attempts]);
   const [copied, copy] = useCopied();
 
-  const setNotice = useCallback((sessionId: string, note: RowNote | null) => {
-    setNotices((current) => {
-      if (!note) {
-        if (!(sessionId in current)) return current;
-        const next = { ...current };
-        delete next[sessionId];
-        return next;
-      }
-      return { ...current, [sessionId]: note };
+  const recordAttempt = useCallback((entry: SessionLedgerEntry, change: Partial<Omit<ReopenAttempt, 'closedAt'>>) => {
+    const closedAt = entry.closed_at ?? '';
+    setAttempts((current) => {
+      const previous = current[entry.id]?.closedAt === closedAt ? current[entry.id] : { closedAt };
+      return { ...current, [entry.id]: { ...previous, ...change } };
     });
   }, []);
 
   const fire = useCallback((entry: SessionLedgerEntry, actionId: string) => {
     if (!onReopen) return;
-    const sessionId = entry.id;
     setMenuKey(null);
     const refuse = (failure: unknown) => {
       if (failure instanceof SessionReopenRefusal) {
-        const refusal = { closedAt: entry.closed_at ?? '', verdict: failure.verdict };
-        setRefusals((current) => ({ ...current, [sessionId]: refusal }));
-        setNotice(sessionId, { kind: 'refused', text: refusalNote(actionId, failure.verdict) });
+        recordAttempt(entry, { note: { kind: 'refused', text: refusalNote(actionId, failure.verdict) }, verdict: failure.verdict });
       } else {
         const message = failure instanceof Error ? failure.message : String(failure);
-        setNotice(sessionId, { kind: 'refused', text: compactVerdictText(message) });
+        recordAttempt(entry, { note: { kind: 'refused', text: compactVerdictText(message) } });
       }
       reload();
     };
-    setNotice(sessionId, { kind: 'busy', text: 'reopening…' });
+    recordAttempt(entry, { note: { kind: 'busy', text: 'reopening…' } });
     let outcome: ReturnType<typeof onReopen>;
     try {
-      outcome = onReopen(sessionId, actionId);
+      outcome = onReopen(entry.id, actionId);
     } catch (failure) {
       refuse(failure);
       return;
     }
-    Promise.resolve(outcome).then(() => setNotice(sessionId, null)).catch(refuse);
-  }, [onReopen, setNotice, reload]);
+    Promise.resolve(outcome).then(() => recordAttempt(entry, { note: undefined })).catch(refuse);
+  }, [onReopen, recordAttempt, reload]);
 
   const isLive = useCallback(
     (entry: SessionLedgerEntry) => !isClosed(entry) && (liveSessionIds?.has(entry.id) ?? true),
@@ -199,25 +191,24 @@ export function SessionsTab({
     if (verbId === 'focus') { onFocusSession?.(entry.id); return; }
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
-    setNotice(entry.id, null);
     fire(entry, verdictId(verbId));
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, fire]);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
-      verdict: verdictFor(entry),
-      note: notices[entry.id],
+      verdict: attemptFor(entry)?.verdict,
+      note: attemptFor(entry)?.note,
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
       workspaceLabel: workspaceShown,
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
-      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdictFor(entry)?.directoryState !== 'missing',
+      canShowWorktree: !!onShowWorktree && !!entry.is_worktree && attemptFor(entry)?.verdict?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, verdictFor, notices, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, attemptFor, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -300,8 +291,8 @@ export function SessionsTab({
           ? (
             <SessionInspector
               entry={selected}
-              verdict={verdictFor(selected)}
-              note={notices[selected.id]}
+              verdict={attemptFor(selected)?.verdict}
+              note={attemptFor(selected)?.note}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
               workspaceLabel={workspaceLabel}
@@ -323,9 +314,10 @@ export function SessionsTab({
 
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
 
-interface Refusal {
+interface ReopenAttempt {
   closedAt: string;
-  verdict: ReopenVerdictView;
+  note?: RowNote;
+  verdict?: ReopenVerdictView;
 }
 
 const PLAIN_REOPEN: ReopenActionView = { id: 'reopen', label: 'Reopen' };

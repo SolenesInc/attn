@@ -416,7 +416,6 @@ func (d *Daemon) reopenSessionProtected(
 		action = protocol.SessionReopenActionReopen
 	}
 	if !verdict.offers(action) {
-		d.publishFact(FactSessionReopenRefreshed, sessionID, verdict.toProtocol())
 		return nil, &reopenRefusedError{verdict: &verdict, action: action}
 	}
 	return d.performReopenLocked(protection, &verdict, action, directory)

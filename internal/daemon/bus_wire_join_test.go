@@ -88,11 +88,6 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).session,
 		payload: func(w *wireWorld) any { return w.d.store.SessionLedgerEntry(w.sessionID) },
 	},
-	FactSessionReopenRefreshed: {
-		events:  []string{protocol.EventSessionReopenRefreshed},
-		subject: (*wireWorld).session,
-		payload: func(*wireWorld) any { return protocol.SessionReopen{Reopenable: true} },
-	},
 	FactSessionUnregistered: {
 		events:  []string{protocol.EventSessionUnregistered, protocol.EventGardenSeedsUpdated},
 		subject: (*wireWorld).session,

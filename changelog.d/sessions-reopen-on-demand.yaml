@@ -7,6 +7,7 @@ notes: >
   resolves it only when the user reopens, so an open Sessions view costs no
   Git or directory checks, even while automations close sessions. Protocol
   318 adds the refused verdict to session_reopen_result, drops the verdict
-  from session_closed, and removes the unused checking flag from reopen
-  verdicts. session_list still returns inline verdicts when asked, which
+  from session_closed, removes the unused checking flag from reopen verdicts,
+  and removes the session.reopen.refreshed fact with its
+  session_reopen_refreshed event, which nothing consumed. session_list still returns inline verdicts when asked, which
   `attn session list --reopen` uses.

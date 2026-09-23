@@ -122,7 +122,7 @@ describe('SessionsTab reopens on demand', () => {
     ]);
   });
 
-  it('forgets an offer once the session closes again', async () => {
+  it('forgets a refusal and its offer once the session closes again', async () => {
     const onReopen = vi.fn(async () => { throw refusal(goneEverywhere); });
     const { list } = listing([page({ entries: [closedEntry('s1')] })]);
     const view = renderSessionsTab({ listSessions: list, onReopen });
@@ -131,6 +131,7 @@ describe('SessionsTab reopens on demand', () => {
     act(() => view.emit({ type: 'closed', entry: closedEntry('s1', { closed_at: '2026-09-05T12:00:00Z' }) }));
 
     await within(row('run s1')).findByRole('button', { name: 'Reopen' });
+    expect(screen.queryByRole('status')).toBeNull();
     expect(within(inspector()).queryByText('directory is gone')).toBeNull();
   });
 

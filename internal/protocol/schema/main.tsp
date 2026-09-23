@@ -7357,12 +7357,6 @@ model SessionReopenResultMessage {
   reopen?: SessionReopen;
 }
 
-model SessionReopenRefreshedMessage {
-  event: "session_reopen_refreshed";
-  session_id: string;
-  reopen: SessionReopen;
-}
-
 // session_unregistered says the live session left; this says where it went, so
 // an open ledger surface updates in place instead of re-listing.
 model SessionClosedMessage {
@@ -7780,7 +7774,6 @@ alias DaemonEvent =
   | SessionListResultMessage
   | SessionShowResultMessage
   | SessionReopenResultMessage
-  | SessionReopenRefreshedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

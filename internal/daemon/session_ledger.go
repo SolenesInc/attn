@@ -199,18 +199,6 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
-func projectSessionReopenRefreshed(d *Daemon, event bus.Event) {
-	reopen, ok := decodeFact[protocol.SessionReopen](d, event)
-	if !ok {
-		return
-	}
-	d.wsHub.BroadcastValue(&protocol.SessionReopenRefreshedMessage{
-		Event:     protocol.EventSessionReopenRefreshed,
-		SessionID: event.Subject,
-		Reopen:    reopen,
-	})
-}
-
 func projectSessionClosed(d *Daemon, event bus.Event) {
 	entry, ok := decodeFact[protocol.SessionLedgerEntry](d, event)
 	if !ok {
