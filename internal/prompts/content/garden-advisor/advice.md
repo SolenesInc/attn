@@ -6,7 +6,7 @@ Recommend one action from available_actions:
 - harvest: the seed's stated outcome and required verification are complete
 - wither: the work should be abandoned
 
-Explain the recommendation and cite the supplied evidence.
+Return the action as recommendation, why you chose it as explanation, and one to eight evidence items, each citing the supplied evidence it rests on.
 
 Seed and evidence:
 {{evidence}}

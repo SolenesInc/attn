@@ -24,7 +24,7 @@ Paths are relative to `app/src`.
 ## Shortcuts
 
 - macOS menu accelerators can swallow keys before the DOM sees them; remove
-  conflicting predefined items in `src-tauri/src/lib.rs`. Handle Cmd+C through
+  conflicting predefined items in `src-tauri/core/src/lib.rs`. Handle Cmd+C through
   `GhosttyTerminal`'s `copy` event.
 - On Linux, plain Ctrl+letter belongs to the shell. App actions use Ctrl+Shift,
   or Ctrl+Alt when the macOS binding already has Shift.

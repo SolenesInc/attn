@@ -615,7 +615,7 @@ func (c *Claude) ClassifyWithExecutable(text, executable, workDir string, timeou
 		classifier.TruncateForLog(result.Text),
 	)
 
-	if state, ok := classifier.ParseVerdict(result.StructuredOutput, result.Text); ok {
+	if state, ok := classifier.ParseVerdict(result.StructuredOutput); ok {
 		return state, nil
 	}
 	classifier.DefaultLogger("classifier: claude response missing explicit WAITING/DONE verdict, returning unknown")
