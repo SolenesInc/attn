@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import type { Desktop } from '../types/generated';
 import { OPENER_EXTENSIONS } from '../components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from '../components/palette/openerTarget';
 import { claimPaletteFocus } from '../components/palette/paletteClaim';
@@ -15,7 +14,6 @@ interface Options {
   settings: AppContentProps['settings'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
-  focusedLeafOn: (desktop: Desktop) => string;
   showError: (message: string) => void;
 }
 
@@ -28,7 +26,7 @@ function currentDesktop() {
   return desktops.find((desktop) => desktop.id === currentDesktopId);
 }
 
-export function useDesktopTiles({ settings, sessions, activeSessionId, focusedLeafOn, showError }: Options) {
+export function useDesktopTiles({ settings, sessions, activeSessionId, showError }: Options) {
   const { sendRecentFiles, sendFsIndex, sendDesktopDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
   const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
@@ -79,12 +77,11 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, focusedLe
         tileId,
         tileKind: 'notebook',
         tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
-        anchorId: focusedLeafOn(desktop) || undefined,
         edge: 'right',
         tileShare: 0.4,
       }),
     ).catch((error) => showError(`Could not open the notebook: ${failureMessage(error)}`));
-  }, [sendDesktopDockTile, settings, sessions, activeSessionId, focusedLeafOn, showError]);
+  }, [sendDesktopDockTile, settings, sessions, activeSessionId, showError]);
 
   // A fresh tile id every time: the daemon reads a duplicate id as a move.
   const dockAppViewTile = useCallback(
@@ -99,13 +96,12 @@ export function useDesktopTiles({ settings, sessions, activeSessionId, focusedLe
           tileId,
           tileKind: appViewTileKind(app, view),
           tileParams: params || undefined,
-          anchorId: focusedLeafOn(desktop) || undefined,
           edge: 'right',
           tileShare: 0.4,
         }),
       ).catch((error) => showError(`Could not open that view: ${failureMessage(error)}`));
     },
-    [focusedLeafOn, sendDesktopDockTile, showError],
+    [sendDesktopDockTile, showError],
   );
 
   return {

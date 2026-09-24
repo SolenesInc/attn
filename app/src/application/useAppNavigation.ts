@@ -1,12 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { hasLeaf } from '../types/workspace';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { orderedDesktops } from '../utils/desktops';
 import { oldestWantedTurn } from '../utils/queueBands';
@@ -26,7 +24,6 @@ interface Options {
   desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
-  focusDesktopLeaf: ReturnType<typeof useDesktopRuntimeController>['focusDesktopLeaf'];
   showError: (message: string) => void;
 }
 export function useAppNavigation({
@@ -35,7 +32,6 @@ export function useAppNavigation({
   desktopViews,
   unmutedEnrichedSessions,
   attentionQueue,
-  focusDesktopLeaf,
   showError,
 }: Options) {
   const {
@@ -44,13 +40,12 @@ export function useAppNavigation({
     followNextTurn,
     setFollowNextTurn,
     selectedTile,
-    setSelectedTile,
     utilityFocusRequestToken,
     requestTerminalFocus,
     goToDashboard,
     goHomeAwaitingNextTurn,
   } = useSessionStore();
-  const { sendDesktopSetCurrent, sendDesktopRemoveLeaf } = useDaemonApi();
+  const { sendDesktopSetCurrent, sendDesktopSetActivePane, sendDesktopRemoveLeaf } = useDaemonApi();
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopIdRef = useRef<string | null>(currentDesktopId);
@@ -109,71 +104,38 @@ export function useAppNavigation({
     [sendDesktopSetCurrent, setView],
   );
 
-  const selectTile = useCallback(
-    (desktopId: string, tileId: string) => {
-      handleSelectDesktop(desktopId);
-      setSelectedTile({ desktopId, tileId });
-      window.requestAnimationFrame(() => focusDesktopLeaf(desktopId, tileId));
-    },
-    [focusDesktopLeaf, handleSelectDesktop, setSelectedTile],
-  );
-
-  const selectTileRef = useRef(selectTile);
-  useLayoutEffect(() => {
-    selectTileRef.current = selectTile;
-  }, [selectTile]);
-  const pendingTileSelectionRef = useRef<{ key: string; unsubscribe: () => void } | null>(null);
   const [crewSeedTile, setCrewSeedTile] = useState<{ desktopId: string; tileId: string } | null>(
     null,
   );
 
-  useEffect(
-    () => () => {
-      pendingTileSelectionRef.current?.unsubscribe();
-      pendingTileSelectionRef.current = null;
+  const handleSelectTile = useCallback(
+    (desktopId: string, tileId: string) => {
+      const { selectedProfileId, desktops } = useProfilesStore.getState();
+      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
+      setView('session');
+      void sendDesktopSetActivePane(desktopId, tileId)
+        .then(() => {
+          if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
+        })
+        .catch((error) => {
+          showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
+        });
     },
-    [],
+    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
   );
-
-  const handleSelectTile = useCallback((desktopId: string, tileId: string) => {
-    const key = `${desktopId}:${tileId}`;
-    pendingTileSelectionRef.current?.unsubscribe();
-    pendingTileSelectionRef.current = null;
-    const tileExists = () => {
-      const layout = useSessionStore.getState().desktopSnapshots[desktopId]?.workspace.layoutTree;
-      return layout ? hasLeaf(layout, tileId) : false;
-    };
-    if (tileExists()) {
-      selectTileRef.current(desktopId, tileId);
-      return;
-    }
-    const unsubscribe = useSessionStore.subscribe(() => {
-      if (!tileExists()) return;
-      unsubscribe();
-      if (pendingTileSelectionRef.current?.key === key) pendingTileSelectionRef.current = null;
-      window.requestAnimationFrame(() => selectTileRef.current(desktopId, tileId));
-    });
-    pendingTileSelectionRef.current = { key, unsubscribe };
-  }, []);
 
   const handleCloseTile = useCallback(
     (desktopId: string, tileId: string) => {
-      const clearIfClosed = <T extends { desktopId: string; tileId: string } | null>(current: T) =>
-        current?.desktopId === desktopId && current.tileId === tileId ? null : current;
-      const pendingKey = `${desktopId}:${tileId}`;
-      if (pendingTileSelectionRef.current?.key === pendingKey) {
-        pendingTileSelectionRef.current.unsubscribe();
-        pendingTileSelectionRef.current = null;
-      }
-      setCrewSeedTile(clearIfClosed);
-      setSelectedTile(clearIfClosed);
+      setCrewSeedTile((current) =>
+        current?.desktopId === desktopId && current.tileId === tileId ? null : current,
+      );
       void withFreshDesktopRevisions([desktopId], (revisionOf) =>
         sendDesktopRemoveLeaf(desktopId, tileId, revisionOf(desktopId)),
       ).catch((error) => {
         showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
       });
     },
-    [sendDesktopRemoveLeaf, setSelectedTile, showError],
+    [sendDesktopRemoveLeaf, showError],
   );
 
   const handleReloadTile = useCallback((desktopId: string, tileId: string) => {

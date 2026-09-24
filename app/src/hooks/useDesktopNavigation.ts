@@ -2,8 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
-import { hasPane, parseLayoutJSON } from '../types/workspace';
-import { isStaleRevision, waitForArrangementAfter } from './desktopRevisions';
+import { withFreshDesktopRevisions } from './desktopRevisions';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
@@ -16,15 +15,9 @@ function failureMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-const daemonActivePane = (desktop: Desktop) => desktop.active_pane_id;
-
-export function useDesktopNavigation(
-  showNotice: ShowNotice,
-  focusedLeafOn: (desktop: Desktop) => string = daemonActivePane,
-) {
+export function useDesktopNavigation(showNotice: ShowNotice) {
   const {
     sendDesktopSetCurrent,
-    sendDesktopSetActivePane,
     sendDesktopMoveLeaf,
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,
@@ -78,41 +71,33 @@ export function useDesktopNavigation(
   );
 
   const moveActivePane = useCallback(
-    async (targetDesktopId: string, retryOnStale: boolean): Promise<void> => {
+    async (targetDesktopId: string): Promise<void> => {
       const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
-      const leafId = focusedLeafOn(source);
+      const leafId = source.active_pane_id;
       if (!leafId) {
         showNotice('No focused pane to send.');
         return;
       }
-      try {
-        await sendDesktopMoveLeaf({
+      await withFreshDesktopRevisions([source.id, target.id], (revisionOf) =>
+        sendDesktopMoveLeaf({
           sourceDesktopId: source.id,
           targetDesktopId: target.id,
           leafId,
-          anchorId: focusedLeafOn(target) || undefined,
+          anchorId: target.active_pane_id || undefined,
           edge: 'right',
-          expectedSourceRevision: source.revision,
-          expectedTargetRevision: target.revision,
-        });
-      } catch (err) {
-        if (retryOnStale && isStaleRevision(err)) {
-          await waitForArrangementAfter(new Map([[source.id, source.revision], [target.id, target.revision]]));
-          return moveActivePane(targetDesktopId, false);
-        }
-        throw err;
-      }
-      const layout = parseLayoutJSON(source.tree_json);
-      if (layout && hasPane(layout, leafId)) await sendDesktopSetActivePane(target.id, leafId);
+          expectedSourceRevision: revisionOf(source.id),
+          expectedTargetRevision: revisionOf(target.id),
+        }),
+      );
     },
-    [focusedLeafOn, sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
+    [sendDesktopMoveLeaf, showNotice],
   );
 
   const sendActivePaneToDesktop = useCallback(
-    (desktopId: string) => report(moveActivePane(desktopId, true)),
+    (desktopId: string) => report(moveActivePane(desktopId)),
     [moveActivePane, report],
   );
 

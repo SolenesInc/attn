@@ -1,7 +1,7 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 import type { Desktop, DesktopPane } from '../types/generated';
-import { hasPane, parseLayoutJSON, type TerminalWorkspaceSnapshot, type TerminalWorkspaceState } from '../types/workspace';
+import { hasLeaf, parseLayoutJSON, type TerminalWorkspaceSnapshot, type TerminalWorkspaceState } from '../types/workspace';
 
 export const SHORTCUT_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
 
@@ -70,7 +70,7 @@ export function desktopSnapshot(desktop: Desktop): TerminalWorkspaceSnapshot {
   const active = desktop.active_pane_id;
   return {
     workspace,
-    daemonActivePaneId: active && workspace.layoutTree && hasPane(workspace.layoutTree, active) ? active : firstPaneId,
+    daemonActivePaneId: active && workspace.layoutTree && hasLeaf(workspace.layoutTree, active) ? active : firstPaneId,
   };
 }
 

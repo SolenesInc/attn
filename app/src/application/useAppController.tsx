@@ -119,7 +119,6 @@ export function useAppController({
   const {
     getActivePaneIdForSession,
     getDesktopLeafDropSnapshot,
-    focusDesktopLeaf,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
     scrollSessionPaneToTop,
@@ -167,7 +166,6 @@ export function useAppController({
     desktopViews,
     unmutedEnrichedSessions,
     attentionQueue,
-    focusDesktopLeaf,
     showError,
   });
   const {
@@ -185,7 +183,6 @@ export function useAppController({
     handleJumpToWaiting,
     currentDesktopIdRef,
     handleSelectDesktop,
-    handleSelectTile,
     handleCloseTile,
     setCrewSeedTile,
     handleNavigateOutOfSession,
@@ -252,7 +249,6 @@ export function useAppController({
     settings,
     sessions,
     activeSessionId,
-    focusedLeafOn: desktopRuntime.focusedLeafOn,
     showError,
   });
   const {
@@ -512,7 +508,7 @@ export function useAppController({
     sendSeedToChief,
     sendCrewWake,
     sendCrewSleep,
-    handleSelectTile,
+    handleSelectDesktop,
     setCrewSeedTile,
     closeCrewPanel,
   });
@@ -546,7 +542,7 @@ export function useAppController({
   }, []);
 
   const showNavigationNotice = useCallback((message: string) => showError(message), [showError]);
-  const desktopNavigation = useDesktopNavigation(showNavigationNotice, desktopRuntime.focusedLeafOn);
+  const desktopNavigation = useDesktopNavigation(showNavigationNotice);
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),

@@ -18,7 +18,7 @@ export function AppNavigationMenus() {
     setMarkdownOpenerOpen,
   } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { handleSelectTile } = useNavigationContext();
+  const { handleSelectDesktop } = useNavigationContext();
   const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
@@ -41,7 +41,7 @@ export function AppNavigationMenus() {
             }
             void sendOpenMarkdown(path, bindTo)
               .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) handleSelectTile(desktopId, tileId);
+                if (desktopId && tileId) handleSelectDesktop(desktopId);
               })
               .catch((error) => {
                 console.error(

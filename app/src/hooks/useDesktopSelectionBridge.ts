@@ -9,13 +9,23 @@ interface Shown {
   desktopId: string | null;
   paneId: string;
   sessionId: string | null;
+  tileId: string | null;
 }
 
 function shownOf(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): Shown {
   const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
   const paneId = desktop?.active_pane_id ?? '';
   const sessionId = desktop?.panes.find((pane) => pane.pane_id === paneId)?.session_id ?? null;
-  return { desktopId: state.currentDesktopId, paneId, sessionId };
+  const tileId = paneId && !sessionId ? paneId : null;
+  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId };
+}
+
+function mirrorShownTile(shown: Shown) {
+  const sessions = useSessionStore.getState();
+  const current = sessions.selectedTile;
+  if (current?.desktopId === shown.desktopId && current.tileId === shown.tileId) return;
+  if (!current && !shown.tileId) return;
+  sessions.setSelectedTile(shown.desktopId && shown.tileId ? { desktopId: shown.desktopId, tileId: shown.tileId } : null);
 }
 
 type Command =
@@ -136,10 +146,7 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
         const shown = shownOf(state);
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) return;
-        const { selectedTile } = useSessionStore.getState();
-        if (selectedTile && selectedTile.desktopId !== shown.desktopId) {
-          useSessionStore.setState({ selectedTile: null });
-        }
+        mirrorShownTile(shown);
         const sessions = useSessionStore.getState();
         if (sessions.view !== 'session') return;
         if (shown.sessionId !== sessions.activeSessionId || sessions.pendingSelection) {

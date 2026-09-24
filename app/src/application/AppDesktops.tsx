@@ -39,7 +39,7 @@ export function AppDesktops() {
     handleSelectSession,
     handleNavigateOutOfSession,
     handleCloseTile,
-    handleSelectTile,
+    handleSelectDesktop,
     crewSeedTile,
   } = useNavigationContext();
   const { handleBackToCrew } = useCrewPanelContext();
@@ -142,7 +142,7 @@ export function AppDesktops() {
           onOpenMarkdown={(path, sessionId) => {
             void sendOpenMarkdown(path, sessionId)
               .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) handleSelectTile(desktopId, tileId);
+                if (desktopId && tileId) handleSelectDesktop(desktopId);
               })
               .catch((error) => {
                 console.error('[Markdown] in-app open failed, falling back to OS open:', error);

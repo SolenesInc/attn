@@ -1,12 +1,11 @@
 import { DesktopOverview } from '../components/DesktopOverview';
 import { ProfileSwitcher } from '../components/ProfileSwitcher';
-import { useDesktopNavigationContext, useDesktopRuntimeContext, useNavigationContext } from './AppContexts';
+import { useDesktopNavigationContext, useNavigationContext } from './AppContexts';
 
 export function AppDesktopNavigation() {
   const { desktopNavigation, desktopOverviewOpen, setDesktopOverviewOpen, profileSwitcherOpen, setProfileSwitcherOpen } =
     useDesktopNavigationContext();
   const { setView } = useNavigationContext();
-  const { focusedLeafOn } = useDesktopRuntimeContext();
   const {
     profiles,
     selectedProfile,
@@ -26,7 +25,7 @@ export function AppDesktopNavigation() {
           profileName={selectedProfile?.name ?? ''}
           desktops={desktops}
           currentDesktopId={currentDesktop?.id ?? null}
-          canSendActivePane={Boolean(currentDesktop && focusedLeafOn(currentDesktop))}
+          canSendActivePane={Boolean(currentDesktop?.active_pane_id)}
           onSwitch={(desktopId) => {
             setView('session');
             switchToDesktop(desktopId);

@@ -38,7 +38,7 @@ function seedStore(desktops: Desktop[], previousDesktopId: string | null = null,
 
 const ok = { request_id: 'r', action: 'x', success: true, event: 'profile_action_result' };
 
-function renderNavigation(focusedLeafOn: (desktop: Desktop) => string = (desktop) => desktop.active_pane_id) {
+function renderNavigation() {
   const api = {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
     sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
@@ -52,7 +52,7 @@ function renderNavigation(focusedLeafOn: (desktop: Desktop) => string = (desktop
   const wrapper = ({ children }: { children: ReactNode }) => (
     <DaemonApiProvider api={createMockDaemonApi(api)}>{children}</DaemonApiProvider>
   );
-  const { result } = renderHook(() => useDesktopNavigation(showNotice, focusedLeafOn), { wrapper });
+  const { result } = renderHook(() => useDesktopNavigation(showNotice), { wrapper });
   return { api, showNotice, result };
 }
 
@@ -115,7 +115,7 @@ describe('useDesktopNavigation', () => {
     expect(showNotice).toHaveBeenCalledWith(expect.stringContaining('No desktop on'));
   });
 
-  it('sends the focused pane beside the target active pane and focuses it there', async () => {
+  it('sends the focused pane beside the target active leaf and leaves focusing it to the daemon', async () => {
     seedStore([
       desktop('d1', { shortcut_slot: 1, tree_json: TREE_WITH_PANE('p1'), active_pane_id: 'p1', revision: 4 }),
       desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
@@ -134,11 +134,11 @@ describe('useDesktopNavigation', () => {
       expectedSourceRevision: 4,
       expectedTargetRevision: 7,
     }]]);
-    expect(api.sendDesktopSetActivePane.mock.calls).toEqual([['d2', 'p1']]);
+    expect(api.sendDesktopSetActivePane).not.toHaveBeenCalled();
     expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
   });
 
-  it('sends the focused tile rather than the last agent pane, and leaves the target focus alone', async () => {
+  it('sends the tile that is the active leaf', async () => {
     const withTile = JSON.stringify({
       type: 'split',
       split_id: 's1',
@@ -150,16 +150,15 @@ describe('useDesktopNavigation', () => {
       ],
     });
     seedStore([
-      desktop('d1', { shortcut_slot: 1, tree_json: withTile, active_pane_id: 'p1', revision: 4 }),
+      desktop('d1', { shortcut_slot: 1, tree_json: withTile, active_pane_id: 't1', revision: 4 }),
       desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
     ]);
-    const { api, result } = renderNavigation((desktop) => (desktop.id === 'd1' ? 't1' : desktop.active_pane_id));
+    const { api, result } = renderNavigation();
 
     act(() => result.current.sendActivePaneToSlot(2));
     await settle();
 
-    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetDesktopId: 'd2' });
-    expect(api.sendDesktopSetActivePane).not.toHaveBeenCalled();
+    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetDesktopId: 'd2', anchorId: 'p9' });
   });
 
   it('retries a send once the other client\'s newer arrangement arrives', async () => {
@@ -183,7 +182,6 @@ describe('useDesktopNavigation', () => {
     await settle();
 
     expect(api.sendDesktopMoveLeaf.mock.calls.map(([move]) => move.expectedTargetRevision)).toEqual([7, 8]);
-    expect(api.sendDesktopSetActivePane.mock.calls).toEqual([['d2', 'p1']]);
   });
 
   it('names the wait when a newer arrangement never arrives after a stale send', async () => {

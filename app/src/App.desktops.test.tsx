@@ -15,7 +15,6 @@ const mockUseDaemonSocket = vi.fn();
 
 let desktopCommands: ReturnType<typeof fakeDesktopCommands>;
 let mockOpenUrlListener: ((urls: string[]) => void) | null;
-const { mockFocusDesktopLeaf } = vi.hoisted(() => ({ mockFocusDesktopLeaf: vi.fn() }));
 
 function collectTileIds(node: TerminalLayoutNode | null): string[] {
   if (!node) {
@@ -77,8 +76,8 @@ vi.mock('./components/Sidebar', () => ({
       <button type="button" data-testid="open-grid" onClick={() => onSelectGridLayout?.({ mode: 'auto' })}>
         grid
       </button>
-      <button type="button" data-testid="select-late-tile" onClick={() => onSelectTile('d-late', 'tile-seed')}>
-        late tile
+      <button type="button" data-testid="select-readme-tile" onClick={() => onSelectTile('d2', 'tile-readme')}>
+        readme
       </button>
     </div>
   ),
@@ -97,6 +96,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     workspace,
     isActiveSession,
     selectedSessionId,
+    activePaneId,
     onFocusPane,
     onUndockTile,
   }: {
@@ -104,16 +104,18 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     selectedSessionId?: string | null;
+    activePaneId: string;
     onFocusPane?: (paneId: string) => void;
     onUndockTile?: (tileId: string) => void;
   }, ref) {
-    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusDesktopLeaf, focusPane: vi.fn() }));
+    React.useImperativeHandle(ref, () => ({ focusPane: vi.fn() }));
     return (
     <div>
       <div
         data-testid={`desktop-${workspaceId}`}
         data-active={isActiveSession ? '1' : '0'}
         data-selected-session={selectedSessionId ?? ''}
+        data-active-leaf={activePaneId}
         data-agent-count={workspace.agents.length}
         data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
       />
@@ -167,6 +169,7 @@ function tileDesktop(id: string, slot: number, tileId: string, tileKind: string,
   return {
     ...agentDesktop(id, slot, []),
     tree_json: JSON.stringify({ type: 'tile', tile_id: tileId, tile_kind: tileKind, tile_params: tileParams }),
+    active_pane_id: tileId,
   };
 }
 
@@ -221,7 +224,6 @@ describe('desktop surface', () => {
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     mockOpenUrlListener = null;
-    mockFocusDesktopLeaf.mockClear();
     desktopCommands = fakeDesktopCommands();
 
     arrangeDesktops([
@@ -456,35 +458,62 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('s3');
   });
 
-  it('waits for an opened tile to reach its desktop before selecting and focusing it', async () => {
+  it('focuses a tile through the daemon and follows the focus it broadcasts', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
 
-    await userEvent.click(screen.getByTestId('select-late-tile'));
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
+    await userEvent.click(screen.getByTestId('select-readme-tile'));
+
+    await waitFor(() => expect(isActive('d2')).toBe(true));
+    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d2', 'tile-readme');
+    expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenLastCalledWith(TEST_PROFILE_ID, 'd2');
+    expect(desktopCommands.sendDesktopSetActivePane.mock.invocationCallOrder[0]).toBeLessThan(
+      desktopCommands.sendDesktopSetCurrent.mock.invocationCallOrder[0],
+    );
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme');
+    expect(screen.getByTestId(desktopTestId('d2')).getAttribute('data-active-leaf')).toBe('tile-readme');
+  });
+
+  it('follows the daemon onto a tile an open docked on the current desktop', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
 
     act(() => {
       arrangeDesktops(
-        [...useProfilesStore.getState().desktops, tileDesktop('d-late', 4, 'tile-seed', 'document', 'seed:s-work11')],
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1'
+            ? {
+                ...desktop,
+                tree_json: JSON.stringify({
+                  type: 'split',
+                  split_id: 'opened',
+                  direction: 'vertical',
+                  ratio: 0.6,
+                  children: [
+                    JSON.parse(desktop.tree_json),
+                    { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' },
+                  ],
+                }),
+                active_pane_id: 'tile-notes',
+                revision: desktop.revision + 1,
+              }
+            : desktop,
+        ),
         'd1',
       );
     });
 
-    await waitFor(() => {
-      expect(isActive('d-late')).toBe(true);
-      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d-late:tile-seed');
-      expect(mockFocusDesktopLeaf).toHaveBeenCalledWith('tile-seed');
-    });
-    expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenLastCalledWith(TEST_PROFILE_ID, 'd-late');
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
+    expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-active-leaf')).toBe('tile-notes');
+    expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-selected-session')).toBe('');
+    expect(useSessionStore.getState().activeSessionId).toBeNull();
   });
 
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
     await userEvent.click(screen.getByTestId('select-d2'));
-    await waitFor(() => expect(isActive('d2')).toBe(true));
-    act(() => useSessionStore.getState().setSelectedTile({ desktopId: 'd2', tileId: 'tile-readme' }));
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme');
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));
 
     act(() => arrangeDesktops([...useProfilesStore.getState().desktops, agentDesktop('d-empty', 4, [])], 'd-empty'));
 

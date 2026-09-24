@@ -13,7 +13,6 @@ import {
   type StateUpdate,
   type TileSelection,
 } from '../navigation/sessionNavigation';
-import { collectLayoutLeaves, parseLayoutJSON } from '../types/workspace';
 import { getAgentExecutableSettings } from '../utils/agentAvailability';
 
 export interface SessionNavigationActions {
@@ -60,14 +59,6 @@ export function reconcileSessionNavigation(
   const advanced = state.pendingSelection
     ? pending
     : advanceQueue(pending, next.sessions, state.navigationQueue, next.navigationQueue);
-  if (update.navigationDesktops && advanced.selectedTile) {
-    const { desktopId, tileId } = advanced.selectedTile;
-    const desktop = update.navigationDesktops.find((entry) => entry.id === desktopId);
-    const exists = collectLayoutLeaves(parseLayoutJSON(desktop?.tree_json ?? '')).some(
-      (leaf) => leaf.type === 'tile' && leaf.tileId === tileId,
-    );
-    if (!exists) advanced.selectedTile = null;
-  }
   return { ...next, ...advanced };
 }
 

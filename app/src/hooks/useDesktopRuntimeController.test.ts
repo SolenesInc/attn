@@ -1,6 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
 import type { Session } from '../store/sessions';
 const SESSION_PANE_ID = 'pane-session';
 import { useDesktopRuntimeController } from './useDesktopRuntimeController';
@@ -104,7 +103,6 @@ describe('useDesktopRuntimeController', () => {
   it('stores desktop handles and exposes imperative pane helpers', () => {
     const session = buildSession();
     const fitActivePane = vi.fn();
-    const focusLeaf = vi.fn();
     const getPaneText = vi.fn(() => 'pane text');
     const getPaneSize = vi.fn(() => ({ cols: 80, rows: 24 }));
     const getPaneVisibleContent = vi.fn(() => buildVisibleContent('pane text'));
@@ -121,7 +119,6 @@ describe('useDesktopRuntimeController', () => {
       result.current.setDesktopRef(session.desktopId)({
         fitPane: vi.fn(),
         fitActivePane,
-        focusLeaf,
         focusPane: vi.fn(),
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),
@@ -138,39 +135,16 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
-        getActiveLeafId: vi.fn(() => ''),
       });
     });
 
     act(() => {
       result.current.fitSessionActivePane(session.id);
-      result.current.focusDesktopLeaf(session.desktopId, 'document');
     });
 
     expect(fitActivePane).toHaveBeenCalledOnce();
-    expect(focusLeaf).toHaveBeenCalledWith('document');
     expect(result.current.getPaneText(session.id, SESSION_PANE_ID)).toBe('pane text');
     expect(result.current.getPaneSize(session.id, SESSION_PANE_ID)).toEqual({ cols: 80, rows: 24 });
-  });
-
-  it('holds a leaf focus for a desktop that is not mounted yet and applies it once it mounts', () => {
-    const session = buildSession();
-    const focusLeaf = vi.fn();
-    const { result } = renderHook(() => useDesktopRuntimeController([session], session.id));
-
-    act(() => {
-      result.current.focusDesktopLeaf('desktop-late', 'tile-seed');
-    });
-    expect(focusLeaf).not.toHaveBeenCalled();
-
-    const partial: Partial<SessionTerminalWorkspaceHandle> = { focusLeaf };
-    const handle = partial as SessionTerminalWorkspaceHandle;
-    act(() => {
-      result.current.setDesktopRef('desktop-late')(handle);
-      result.current.setDesktopRef('desktop-late')(handle);
-    });
-
-    expect(focusLeaf).toHaveBeenCalledExactlyOnceWith('tile-seed');
   });
 
   it('forgets desktop handles when removed', () => {
@@ -181,7 +155,6 @@ describe('useDesktopRuntimeController', () => {
       result.current.setDesktopRef(session.desktopId)({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
-        focusLeaf: vi.fn(),
         focusPane: vi.fn(),
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),
@@ -198,7 +171,6 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
-        getActiveLeafId: vi.fn(() => ''),
       });
     });
 
@@ -219,7 +191,6 @@ describe('useDesktopRuntimeController', () => {
       result.current.setDesktopRef('session-1')({
         fitPane: vi.fn(),
         fitActivePane: vi.fn(),
-        focusLeaf: vi.fn(),
         focusPane,
         focusActivePane: vi.fn(),
         typePaneTextViaUI: vi.fn(() => true),
@@ -236,7 +207,6 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
-        getActiveLeafId: vi.fn(() => ''),
       });
       result.current.focusSessionPane('session-1', SESSION_PANE_ID);
     });

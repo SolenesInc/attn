@@ -43,11 +43,9 @@ export interface SessionTerminalWorkspaceHandle
     | 'injectPaneBase64'
     | 'drainPaneTerminal'
   > {
-  focusLeaf: (leafId: string) => void;
   focusActivePane: (retries?: number) => void;
   typePaneTextViaUI: (paneId: string, text: string) => boolean;
   getLeafDropSnapshot: () => LeafDropSnapshot | null;
-  getActiveLeafId: () => string;
 }
 
 export interface SessionTerminalWorkspaceProps {

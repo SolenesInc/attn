@@ -21,7 +21,7 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
-  handleSelectTile: (desktopId: string, tileId: string) => void;
+  handleSelectDesktop: (desktopId: string) => void;
   setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
@@ -39,7 +39,7 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
-  handleSelectTile,
+  handleSelectDesktop,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -55,10 +55,10 @@ export function useAppGardenActions({
       }
       const { desktopId, tileId } = opened;
       beforeFocus?.({ desktopId, tileId });
-      handleSelectTile(desktopId, tileId);
+      handleSelectDesktop(desktopId);
       return opened;
     },
-    [sendOpenSeed, handleSelectTile],
+    [sendOpenSeed, handleSelectDesktop],
   );
 
   const handleOpenSeedTile = useCallback(
@@ -114,13 +114,13 @@ export function useAppGardenActions({
     (path: string) => {
       void sendOpenMarkdown(path, '')
         .then(({ desktopId, tileId }) => {
-          if (desktopId && tileId) handleSelectTile(desktopId, tileId);
+          if (desktopId && tileId) handleSelectDesktop(desktopId);
         })
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [handleSelectTile, sendOpenMarkdown, showError],
+    [handleSelectDesktop, sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(
