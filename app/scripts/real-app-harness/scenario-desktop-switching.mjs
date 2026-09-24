@@ -155,7 +155,8 @@ async function main() {
       );
       const splitPane = withSplit.arrangement.desktops
         .find((desktop) => desktop.id === desktopA.id)
-        .panes.find((pane) => pane.sessionId !== first.sessionId);
+        ?.panes.find((pane) => pane.sessionId !== first.sessionId);
+      runner.assert(Boolean(splitPane), `No split pane on desktop A: ${JSON.stringify(withSplit.arrangement, null, 2)}`, withSplit.arrangement);
       split = { sessionId: splitPane.sessionId, paneId: splitPane.paneId };
       createdSessionIds.push(split.sessionId);
       await waitForPaneAttached(client, split.sessionId, split.paneId, 20_000);
