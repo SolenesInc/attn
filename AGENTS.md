@@ -75,6 +75,10 @@ satisfy the full requirement?
   When proposing simplification, name what can be removed, what replaces it, and
   why the full behavior is preserved. Fewer lines alone are not evidence of a
   better design.
+- Ask for rigor only where a current requirement or a promise in
+  [Testing](docs/testing.md) needs it, and name which. Do not request tests
+  that guard no promise, unit tests for behavior a wire test covers, or
+  validation, fallbacks, and edge-case handling for hypothetical inputs.
 
 ### Author
 
