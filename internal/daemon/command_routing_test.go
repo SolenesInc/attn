@@ -56,7 +56,7 @@ var commandsPredatingTheScopeGuard = map[string]bool{
 	"fs_write": true, "get_screen_snapshot": true, "journal_append": true, "notebook_backlinks": true,
 	"notebook_guide": true, "notebook_list": true, "notebook_read": true, "notebook_send_to_chief": true,
 	"notebook_write": true, "notification_list": true, "notification_mark_read": true, "open_browser": true,
-	"pin_workspace": true, "present_close": true, "present_feedback": true, "present_open": true,
+	"present_close": true, "present_feedback": true, "present_open": true,
 	"recent_files": true, "register_workspace": true, "set_endpoint_remote_web": true, "task_list": true,
 	"task_retry": true, "ticket_comment": true, "ticket_list": true, "ticket_show": true, "ticket_subscribe": true,
 	"ticket_take": true, "ticket_unsubscribe": true, "unregister_workspace": true, "workflow_call_upsert": true,

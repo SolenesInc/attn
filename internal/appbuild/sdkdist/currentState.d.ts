@@ -76,7 +76,6 @@ export interface Session {
     readonly main_repo?: string;
     readonly nudge_fires_at?: string;
     readonly parent_session_id?: string;
-    readonly pinned_at?: string;
     readonly profile_id: string;
     readonly pull_requests?: readonly SessionPullRequest[];
     readonly repository?: string;
@@ -93,7 +92,6 @@ export interface Session {
     readonly turn_snoozed_until?: string;
     readonly usage?: SessionUsage;
     readonly workspace_id: string;
-    readonly workspace_muted?: boolean;
 }
 export interface EndpointCapabilities {
     readonly agents_available: readonly string[];
@@ -141,8 +139,6 @@ export interface Workspace {
     readonly endpoint_id?: string;
     readonly id: string;
     readonly layout?: WorkspaceLayout;
-    readonly muted: boolean;
-    readonly pinned: boolean;
     readonly rank: string;
     readonly status: "idle" | "launching" | "pending_approval" | "scheduled" | "unknown" | "waiting_input" | "working";
     readonly title: string;

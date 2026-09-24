@@ -882,10 +882,6 @@ func (d *Daemon) unregisterWorkspaceIfEmpty(workspaceID string) bool {
 	if d.workspaces == nil {
 		return false
 	}
-	if workspace, ok := d.workspaces.snapshot(workspaceID); ok && workspace.Pinned {
-		d.recomputeAndBroadcastWorkspace(workspaceID)
-		return false
-	}
 	if len(d.workspaces.sessionIDs(workspaceID)) > 0 ||
 		d.workspaceHasSessionlessContent(workspaceID) {
 		d.recomputeAndBroadcastWorkspace(workspaceID)

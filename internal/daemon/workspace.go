@@ -19,8 +19,6 @@ type workspaceEntry struct {
 	title      string
 	directory  string
 	status     protocol.WorkspaceStatus
-	muted      bool
-	pinned     bool
 	rank       string
 	sessionIDs map[string]struct{}
 }
@@ -38,7 +36,7 @@ func newWorkspaceRegistry() *workspaceRegistry {
 	}
 }
 
-func (r *workspaceRegistry) register(id, title, directory, rank string, muted, pinned bool) (protocol.Workspace, bool) {
+func (r *workspaceRegistry) register(id, title, directory, rank string) (protocol.Workspace, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -53,8 +51,6 @@ func (r *workspaceRegistry) register(id, title, directory, rank string, muted, p
 	}
 	entry.title = title
 	entry.directory = directory
-	entry.muted = muted
-	entry.pinned = pinned
 	if rank != "" {
 		entry.rank = rank
 	}
@@ -69,39 +65,6 @@ func (r *workspaceRegistry) rename(id, title string) (protocol.Workspace, bool) 
 		return protocol.Workspace{}, false
 	}
 	entry.title = title
-	return snapshotEntry(entry), true
-}
-
-func (r *workspaceRegistry) toggleMuted(id string) (protocol.Workspace, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.workspaces[id]
-	if !ok {
-		return protocol.Workspace{}, false
-	}
-	entry.muted = !entry.muted
-	return snapshotEntry(entry), true
-}
-
-func (r *workspaceRegistry) setMuted(id string, muted bool) (protocol.Workspace, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.workspaces[id]
-	if !ok {
-		return protocol.Workspace{}, false
-	}
-	entry.muted = muted
-	return snapshotEntry(entry), true
-}
-
-func (r *workspaceRegistry) setPinned(id string, pinned bool) (protocol.Workspace, bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	entry, ok := r.workspaces[id]
-	if !ok {
-		return protocol.Workspace{}, false
-	}
-	entry.pinned = pinned
 	return snapshotEntry(entry), true
 }
 
@@ -250,8 +213,6 @@ func snapshotEntry(e *workspaceEntry) protocol.Workspace {
 		Title:     e.title,
 		Directory: e.directory,
 		Status:    e.status,
-		Muted:     e.muted,
-		Pinned:    e.pinned,
 		Rank:      e.rank,
 	}
 }
@@ -382,13 +343,11 @@ func (d *Daemon) registerWorkspace(id, title, directory string, addRecent bool) 
 		d.workspaces = newWorkspaceRegistry()
 	}
 	existing := d.store.GetWorkspace(id)
-	muted := existing != nil && existing.Muted
-	pinned := existing != nil && existing.Pinned
 	if existing != nil && strings.TrimSpace(existing.Title) != "" {
 		title = existing.Title
 	}
 	rank := d.resolveWorkspaceRank(existing)
-	snapshot, isNew := d.workspaces.register(id, title, directory, rank, muted, pinned)
+	snapshot, isNew := d.workspaces.register(id, title, directory, rank)
 	d.store.AddWorkspace(&snapshot)
 	if addRecent {
 		d.store.UpsertRecentLocation(directory)
@@ -399,89 +358,6 @@ func (d *Daemon) registerWorkspace(id, title, directory string, addRecent bool) 
 		fact = FactWorkspaceReregistered
 	}
 	d.publishFact(fact, id, nil)
-}
-
-func (d *Daemon) handleMuteWorkspaceWS(client *wsClient, msg *protocol.MuteWorkspaceMessage) {
-	if _, errMsg := d.toggleWorkspaceMute(msg.WorkspaceID); errMsg != "" {
-		d.sendCommandError(client, protocol.CmdMuteWorkspace, errMsg)
-	}
-}
-
-func (d *Daemon) toggleWorkspaceMute(workspaceID string) (protocol.Workspace, string) {
-	id := strings.TrimSpace(workspaceID)
-	if id == "" {
-		return protocol.Workspace{}, "missing workspace_id"
-	}
-	if d.workspaces == nil {
-		return protocol.Workspace{}, "workspace registry unavailable"
-	}
-	snapshot, ok := d.workspaces.toggleMuted(id)
-	if !ok {
-		return protocol.Workspace{}, "workspace not found"
-	}
-	d.store.ToggleWorkspaceMute(id)
-	d.publishFact(FactWorkspaceMuteChanged, id, nil)
-	return snapshot, ""
-}
-
-func (d *Daemon) setWorkspaceMuted(workspaceID string, muted bool) (protocol.Workspace, string) {
-	id := strings.TrimSpace(workspaceID)
-	if id == "" {
-		return protocol.Workspace{}, "missing workspace_id"
-	}
-	if d.workspaces == nil {
-		return protocol.Workspace{}, "workspace registry unavailable"
-	}
-	current, ok := d.workspaces.snapshot(id)
-	if !ok {
-		return protocol.Workspace{}, "workspace not found"
-	}
-	if current.Muted == muted {
-		return current, ""
-	}
-	if err := d.store.SetWorkspaceMuted(id, muted); err != nil {
-		return protocol.Workspace{}, "persist workspace mute: " + err.Error()
-	}
-	snapshot, ok := d.workspaces.setMuted(id, muted)
-	if !ok {
-		_ = d.store.SetWorkspaceMuted(id, current.Muted)
-		return protocol.Workspace{}, "workspace disappeared while updating mute state"
-	}
-	d.publishFact(FactWorkspaceMuteChanged, id, nil)
-	return snapshot, ""
-}
-
-func (d *Daemon) handlePinWorkspaceWS(client *wsClient, msg *protocol.PinWorkspaceMessage) {
-	if _, errMsg := d.setWorkspacePinned(msg.WorkspaceID, msg.Pinned); errMsg != "" {
-		d.sendCommandError(client, protocol.CmdPinWorkspace, errMsg)
-	}
-}
-
-func (d *Daemon) setWorkspacePinned(workspaceID string, pinned bool) (protocol.Workspace, string) {
-	id := strings.TrimSpace(workspaceID)
-	if id == "" {
-		return protocol.Workspace{}, "missing workspace_id"
-	}
-	if d.workspaces == nil {
-		return protocol.Workspace{}, "workspace registry unavailable"
-	}
-	current, ok := d.workspaces.snapshot(id)
-	if !ok {
-		return protocol.Workspace{}, "workspace not found"
-	}
-	if current.Pinned == pinned {
-		return current, ""
-	}
-	if err := d.store.SetWorkspacePinned(id, pinned); err != nil {
-		return protocol.Workspace{}, "persist workspace pin: " + err.Error()
-	}
-	snapshot, ok := d.workspaces.setPinned(id, pinned)
-	if !ok {
-		_ = d.store.SetWorkspacePinned(id, current.Pinned)
-		return protocol.Workspace{}, "workspace disappeared while updating pin state"
-	}
-	d.publishFact(FactWorkspacePinChanged, id, nil)
-	return snapshot, ""
 }
 
 func (d *Daemon) tearDownRemovedWorkspace(snapshot protocol.Workspace) {
@@ -548,7 +424,6 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 		if len(d.store.SessionsInWorkspace(ws.ID)) == 0 {
 			_, registered := d.workspaces.snapshot(ws.ID)
 			if !registered &&
-				!ws.Pinned &&
 				!d.workspaceHasPendingSpawn(ws.ID) &&
 				!d.workspaceHasSessionlessContent(ws.ID) {
 				d.store.RemoveWorkspace(ws.ID)
@@ -556,7 +431,7 @@ func (d *Daemon) loadWorkspacesFromStore() []string {
 				continue
 			}
 		}
-		d.workspaces.register(ws.ID, ws.Title, ws.Directory, ws.Rank, ws.Muted, ws.Pinned)
+		d.workspaces.register(ws.ID, ws.Title, ws.Directory, ws.Rank)
 	}
 	for _, session := range d.store.List("") {
 		if session == nil {
@@ -650,8 +525,7 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 		return
 	}
 	if remaining == 0 {
-		snap, _ := d.workspaces.snapshot(workspaceID)
-		if snap.Pinned || d.workspaceHasSessionlessContent(workspaceID) {
+		if d.workspaceHasSessionlessContent(workspaceID) {
 			d.recomputeWorkspaceStatus(workspaceID)
 			d.publishFact(FactWorkspaceSessionDissociated, workspaceID, nil)
 			return
@@ -674,16 +548,4 @@ func (d *Daemon) decorateSessionWithWorkspace(session *protocol.Session) {
 	if id := d.workspaces.workspaceIDForSession(session.ID); id != "" {
 		session.WorkspaceID = id
 	}
-}
-
-func (d *Daemon) decorateSessionWithWorkspaceMute(session *protocol.Session) {
-	if session == nil || d.store == nil {
-		return
-	}
-	workspace := d.store.GetWorkspace(session.WorkspaceID)
-	if workspace != nil && workspace.Muted {
-		session.WorkspaceMuted = protocol.Ptr(true)
-		return
-	}
-	session.WorkspaceMuted = nil
 }

@@ -1166,12 +1166,6 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleMuteRepoWS(msg.(*protocol.MuteRepoMessage))
 	case protocol.CmdMuteAuthor:
 		d.handleMuteAuthorWS(msg.(*protocol.MuteAuthorMessage))
-	case protocol.CmdMuteWorkspace:
-		d.handleMuteWorkspaceWS(client, msg.(*protocol.MuteWorkspaceMessage))
-	case protocol.CmdPinWorkspace:
-		d.handlePinWorkspaceWS(client, msg.(*protocol.PinWorkspaceMessage))
-	case protocol.CmdPinSession:
-		d.handlePinSession(client, msg.(*protocol.PinSessionMessage))
 	case protocol.CmdSetSessionContextWindowCap:
 		d.handleSetSessionContextWindowCap(client, msg.(*protocol.SetSessionContextWindowCapMessage))
 	case protocol.CmdRefreshPRs:
@@ -1627,10 +1621,6 @@ func remoteCommandSessionID(cmd string, msg interface{}) string {
 		if typed, ok := msg.(*protocol.WakeTurnMessage); ok {
 			return typed.SessionID
 		}
-	case protocol.CmdPinSession:
-		if typed, ok := msg.(*protocol.PinSessionMessage); ok {
-			return typed.SessionID
-		}
 	case protocol.CmdSetSessionContextWindowCap:
 		if typed, ok := msg.(*protocol.SetSessionContextWindowCapMessage); ok {
 			return typed.SessionID
@@ -1770,10 +1760,6 @@ func remoteCommandEndpointID(cmd string, msg interface{}) string {
 		}
 	case protocol.CmdRegisterWorkspace:
 		if typed, ok := msg.(*protocol.RegisterWorkspaceMessage); ok {
-			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
-		}
-	case protocol.CmdMuteWorkspace:
-		if typed, ok := msg.(*protocol.MuteWorkspaceMessage); ok {
 			return strings.TrimSpace(protocol.Deref(typed.EndpointID))
 		}
 	case protocol.CmdCreateWorktree:

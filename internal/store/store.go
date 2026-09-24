@@ -112,9 +112,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	if session.MainRepo != nil {
 		cloned.MainRepo = protocol.Ptr(protocol.Deref(session.MainRepo))
 	}
-	if session.PinnedAt != nil {
-		cloned.PinnedAt = protocol.Ptr(protocol.Deref(session.PinnedAt))
-	}
 	if session.ContextWindowCap != nil {
 		cloned.ContextWindowCap = protocol.Ptr(protocol.Deref(session.ContextWindowCap))
 	}
@@ -217,9 +214,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool)
 			}
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
-			}
-			if existing.PinnedAt != nil {
-				stored.PinnedAt = protocol.Ptr(protocol.Deref(existing.PinnedAt))
 			}
 			if existing.ContextWindowCap != nil {
 				stored.ContextWindowCap = protocol.Ptr(protocol.Deref(existing.ContextWindowCap))
@@ -341,10 +335,10 @@ func (s *Store) Get(id string) *protocol.Session {
 	var stateSince, stateUpdatedAt, lastSeen string
 	var isWorktree int
 	var contextWindowCap int
-	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+	var endpointID, workspaceID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -361,7 +355,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		&stateSince,
 		&stateUpdatedAt,
 		&lastModelRequestAt,
-		&pinnedAt,
 		&contextWindowCap,
 		&parentSessionID,
 		&activity,
@@ -373,9 +366,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		return nil
 	}
 
-	if pinnedAt.Valid && pinnedAt.String != "" {
-		session.PinnedAt = protocol.Ptr(pinnedAt.String)
-	}
 	if contextWindowCap > 0 {
 		session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 	}
@@ -508,11 +498,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -527,7 +517,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var stateSince, stateUpdatedAt, lastSeen string
 		var isWorktree int
 		var contextWindowCap int
-		var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+		var endpointID, workspaceID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
@@ -545,7 +535,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&stateSince,
 			&stateUpdatedAt,
 			&lastModelRequestAt,
-			&pinnedAt,
 			&contextWindowCap,
 			&parentSessionID,
 			&activity,
@@ -557,9 +546,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			continue
 		}
 
-		if pinnedAt.Valid && pinnedAt.String != "" {
-			session.PinnedAt = protocol.Ptr(pinnedAt.String)
-		}
 		if contextWindowCap > 0 {
 			session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 		}

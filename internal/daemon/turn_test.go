@@ -187,32 +187,6 @@ func TestChiefOfStaffNeverOwesATurn(t *testing.T) {
 	}
 }
 
-func TestPinnedAndMutedWorkspacesAreFilteredAtRead(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		set  func(d *Daemon, workspaceID string)
-	}{
-		{"pinned", func(d *Daemon, id string) { d.store.SetWorkspacePinned(id, true) }},
-		{"muted", func(d *Daemon, id string) { d.store.SetWorkspaceMuted(id, true) }},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := newTurnDaemon(t)
-			d.store.AddWorkspace(&protocol.Workspace{ID: "ws1", Title: "ws1", Directory: "/tmp/ws1"})
-			addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
-
-			tc.set(d, "ws1")
-			moveTo(d, "s1", protocol.StateWaitingInput)
-			if owed(t, d, "s1") {
-				t.Fatalf("a session in a %s workspace owes a turn", tc.name)
-			}
-
-			if d.store.TurnStamps("s1").OpenedAt.IsZero() {
-				t.Fatal("the exclusion suppressed the stamp; it must filter at read")
-			}
-		})
-	}
-}
-
 func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentClaude, "ws1")

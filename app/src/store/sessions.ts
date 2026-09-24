@@ -56,7 +56,6 @@ export interface DaemonSessionSnapshot {
   turn_owed?: boolean;
   turn_opened_at?: string;
   turn_snoozed_until?: string;
-  pinned_at?: string;
   crew_member?: string;
   parent_session_id?: string;
   id: string;

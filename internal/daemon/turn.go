@@ -25,41 +25,6 @@ func (d *Daemon) handleSettleTurn(msg *protocol.SettleTurnMessage) {
 	d.broadcastSessionStateChanged(sessionID)
 }
 
-func (d *Daemon) handlePinSession(client *wsClient, msg *protocol.PinSessionMessage) {
-	if msg == nil {
-		return
-	}
-	if errMsg := d.setSessionPinned(msg.SessionID, msg.Pinned); errMsg != "" {
-		d.sendCommandError(client, protocol.CmdPinSession, errMsg)
-	}
-}
-
-func (d *Daemon) setSessionPinned(sessionID string, pinned bool) string {
-	if d == nil || d.store == nil {
-		return "store unavailable"
-	}
-	id := strings.TrimSpace(sessionID)
-	if id == "" {
-		return "missing session_id"
-	}
-	session := d.store.Get(id)
-	if session == nil {
-		return "session not found"
-	}
-	if d.isChiefOfStaffSession(id) {
-		return "the chief of staff is already anchored above the queue"
-	}
-	alreadyPinned := strings.TrimSpace(protocol.Deref(session.PinnedAt)) != ""
-	if alreadyPinned == pinned {
-		return ""
-	}
-	if !d.store.SetSessionPinned(id, pinned, time.Now()) {
-		return "persist session pin failed"
-	}
-	d.publishFact(FactSessionPinChanged, id, nil)
-	return ""
-}
-
 func (d *Daemon) traceSettle(sessionID string) {
 	session := d.store.Get(sessionID)
 	if session == nil {
@@ -96,15 +61,10 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
 	stamps := d.store.TurnStamps(session.ID)
 	in := attention.Input{
-		OpenedAt:      stamps.OpenedAt,
-		SettledAt:     stamps.SettledAt,
-		IsShell:       string(session.Agent) == protocol.AgentShellValue,
-		ChiefOfStaff:  protocol.Deref(session.ChiefOfStaff),
-		SessionPinned: strings.TrimSpace(protocol.Deref(session.PinnedAt)) != "",
-	}
-	if workspace := d.store.GetWorkspace(session.WorkspaceID); workspace != nil {
-		in.WorkspacePinned = workspace.Pinned
-		in.WorkspaceMuted = workspace.Muted
+		OpenedAt:     stamps.OpenedAt,
+		SettledAt:    stamps.SettledAt,
+		IsShell:      string(session.Agent) == protocol.AgentShellValue,
+		ChiefOfStaff: protocol.Deref(session.ChiefOfStaff),
 	}
 	return in
 }

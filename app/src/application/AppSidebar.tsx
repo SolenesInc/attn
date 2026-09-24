@@ -48,7 +48,6 @@ export function AppSidebar() {
     tileContents,
     sendMuteWorkspace,
     sendPinWorkspace,
-    sendPinSession,
     sendRenameSession,
     sendRenameWorkspace,
     sendSettleTurn,
@@ -116,7 +115,6 @@ export function AppSidebar() {
         onMutedExpandedChange={setSidebarMutedExpanded}
         onMuteWorkspace={sendMuteWorkspace}
         onPinWorkspace={sendPinWorkspace}
-        onPinSession={sendPinSession}
         onRenameSession={sendRenameSession}
         onRenameWorkspace={sendRenameWorkspace}
         onChangeChiefOfStaff={handleChangeChiefOfStaff}

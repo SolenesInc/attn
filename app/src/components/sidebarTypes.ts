@@ -83,7 +83,6 @@ export interface SidebarProps {
   onMutedExpandedChange?: (expanded: boolean) => void;
   onMuteWorkspace?: (workspaceId: string, endpointId?: string) => void;
   onPinWorkspace?: (workspaceId: string, pinned: boolean) => void;
-  onPinSession?: (sessionId: string, pinned: boolean) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameWorkspace?: (workspaceId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;

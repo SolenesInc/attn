@@ -98,9 +98,6 @@ func TestOwedExclusions(t *testing.T) {
 	}{
 		{"shell", Input{OpenedAt: opened, IsShell: true}},
 		{"chief of staff", Input{OpenedAt: opened, ChiefOfStaff: true}},
-		{"pinned session", Input{OpenedAt: opened, SessionPinned: true}},
-		{"pinned workspace", Input{OpenedAt: opened, WorkspacePinned: true}},
-		{"muted workspace", Input{OpenedAt: opened, WorkspaceMuted: true}},
 	}
 
 	for _, tt := range tests {

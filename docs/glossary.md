@@ -13,7 +13,7 @@
 - Turn: attention owed to an agent. Viewing the agent does not settle it.
 - Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
 - Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
-- Queue: agents ordered by attention owed. Pinning an agent or workspace excludes it without settling its turns.
+- Queue: agents ordered by attention owed.
 - Satellite: a shell pane attached to an agent.
 - Orphan: a satellite without a live parent.
 - Sliver: a pane or tile folded into a thin strip to make room.

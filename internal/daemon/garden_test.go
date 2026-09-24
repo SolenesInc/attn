@@ -42,7 +42,7 @@ func newGardenDaemon(t *testing.T) *Daemon {
 		ID: "sess-a", Label: "a",
 		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-	d.workspaces.register("ws-1", "a", "/tmp/a", "a0", false, false)
+	d.workspaces.register("ws-1", "a", "/tmp/a", "a0")
 	d.workspaces.associateSession("sess-a", "ws-1", "a")
 	return d
 }

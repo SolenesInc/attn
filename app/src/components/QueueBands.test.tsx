@@ -16,7 +16,6 @@ interface TestSession {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
-  pinnedAt?: string;
   parentSessionId?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
@@ -154,15 +153,14 @@ describe('the queue arrangement', () => {
     expect(screen.queryByTestId('sidebar-queue')).toBeNull();
   });
 
-  it('leaves the tree alone while the arrangement is off, pins and satellites included', () => {
+  it('leaves the tree alone while the arrangement is off, satellites included', () => {
     const tagged: TestSession[] = [
       ...sessions,
-      { id: 'held', label: 'held', state: 'working', workspaceId: 'ws-b', pinnedAt: '2026-07-26T12:00:00Z' },
       { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
     ];
     renderSidebar(tagged, false);
 
-    for (const id of ['chief', 'newer', 'older', 'settled', 'held', 'shell']) {
+    for (const id of ['chief', 'newer', 'older', 'settled', 'shell']) {
       expect(screen.getByTestId(`sidebar-session-${id}`)).toBeTruthy();
     }
   });
@@ -230,41 +228,6 @@ describe('the queue arrangement', () => {
 
     fireEvent.click(screen.getByTestId('queue-settle-older'));
     expect(onSettleTurn).toHaveBeenCalledWith('older');
-    expect(onSelectSession).not.toHaveBeenCalled();
-  });
-
-  it('pins the row\'s own agent without selecting it, from either band', () => {
-    const onPinSession = vi.fn();
-    const onSelectSession = vi.fn();
-    renderSidebar(sessions, true, { onPinSession, onSelectSession });
-
-    fireEvent.click(screen.getByTestId('queue-pin-older'));
-    expect(onPinSession).toHaveBeenCalledWith('older', true);
-
-    fireEvent.click(screen.getByTestId('queue-pin-settled'));
-    expect(onPinSession).toHaveBeenLastCalledWith('settled', true);
-    expect(onSelectSession).not.toHaveBeenCalled();
-  });
-
-  it('draws a pinned agent in its own band below settled, and unpins it there', () => {
-    const onPinSession = vi.fn();
-    const onSelectSession = vi.fn();
-    const withPin: TestSession[] = [
-      ...sessions,
-      { id: 'held', label: 'held', state: 'working', workspaceId: 'ws-b', pinnedAt: '2026-07-26T12:00:00Z' },
-    ];
-    const { container } = renderSidebar(withPin, true, { onPinSession, onSelectSession });
-
-    const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(bandRows).toContain('queue-pinned-held');
-    expect(bandRows.indexOf('queue-pinned-held')).toBeGreaterThan(bandRows.indexOf('queue-settled-settled'));
-
-    expect(screen.queryByTestId('queue-settle-held')).toBeNull();
-    expect(screen.queryByTestId('queue-snooze-held')).toBeNull();
-
-    fireEvent.click(screen.getByTestId('queue-unpin-held'));
-    expect(onPinSession).toHaveBeenCalledWith('held', false);
     expect(onSelectSession).not.toHaveBeenCalled();
   });
 
@@ -462,7 +425,7 @@ describe('the crew in the sidebar', () => {
     return renderSidebar([...sessions, ...crewSessions], true, { crew, ...overrides });
   }
 
-  it('draws every member, awake or asleep, at the top of the pinned band', () => {
+  it('draws every member, awake or asleep, in the crew band', () => {
     const { container } = renderCrew([
       { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },
     ]);
@@ -473,7 +436,7 @@ describe('the crew in the sidebar', () => {
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
     const headers = Array.from(container.querySelectorAll('.queue-bands > *'))
       .map((node) => node.textContent);
-    expect(headers.some((text) => text?.startsWith('Pinned'))).toBe(true);
+    expect(headers.some((text) => text?.startsWith('Crew'))).toBe(true);
 
     expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
     expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
@@ -506,7 +469,7 @@ describe('the crew in the sidebar', () => {
     expect(rows.filter((id) => id?.includes('keel'))).toEqual(['queue-crew-keel']);
   });
 
-  it('moves an opted-in awake member into the queue and keeps sleeping members pinned', () => {
+  it('moves an opted-in awake member into the queue and keeps sleeping members in the crew band', () => {
     const crewSession: TestSession = {
       id: 'sess-keel',
       label: 'keel of the day',

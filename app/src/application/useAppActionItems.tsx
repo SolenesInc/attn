@@ -50,7 +50,7 @@ export function useAppActionItems() {
     queueModeEnabled,
     handleSnoozeActiveSession,
   } = useAttentionQueueContext();
-  const { sendSetSetting, sendPinSession, sendPinWorkspace, sendMuteWorkspace, sendWakeTurn } =
+  const { sendSetSetting, sendPinWorkspace, sendMuteWorkspace, sendWakeTurn } =
     useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -225,23 +225,6 @@ export function useAppActionItems() {
           },
         ]
       : [];
-    const sessionPinItems: ActionMenuItem[] =
-      activeSession && activeSessionQueueEligible && !activeSession.chiefOfStaff
-        ? [
-            {
-              id: 'pin-active-session',
-              title: activeSession.pinnedAt
-                ? `Unpin ${activeSession.label}`
-                : `Pin ${activeSession.label}`,
-              description: activeSession.pinnedAt
-                ? 'Put this agent back in the queue'
-                : 'Take this agent out of the queue and keep it in view',
-              keywords: ['pin', 'unpin', 'agent', 'session', 'queue'],
-              icon: <AttentionActionIcon />,
-              run: () => sendPinSession(activeSession.id, !activeSession.pinnedAt),
-            },
-          ]
-        : [];
     const sessionSeedItems: ActionMenuItem[] =
       activeSession &&
       (activeSession.seedId || seeds.some((seed) => seed.tender_session === activeSession.id))
@@ -313,7 +296,6 @@ export function useAppActionItems() {
     return [
       ...actionMenuItems,
       ...appViewMenuItems,
-      ...sessionPinItems,
       ...delegationItems,
       ...sessionSeedItems,
       ...sessionUsageItems,
@@ -351,7 +333,6 @@ export function useAppActionItems() {
     activeSessionQueueEligible,
     seeds,
     sendPinWorkspace,
-    sendPinSession,
     sendMuteWorkspace,
   ]);
 
