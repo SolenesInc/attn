@@ -175,37 +175,21 @@ func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.Endpoi
 	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
 		return true
 	}
-	name, status := endpointNameAndStatus(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
-	switch status {
-	case "connected":
-		verdict.Reason = fmt.Sprintf(
-			"session %s ran on %s; its ledger row lives on that daemon, so reopen it there",
-			verdict.SessionID, name)
-	case hub.StatusUnsupported:
-		verdict.Reason = fmt.Sprintf("session %s ran on %s. %s", verdict.SessionID, name, hub.UnsupportedReason)
-	default:
-		verdict.Reason = fmt.Sprintf(
-			"session %s ran on %s, which is not reachable now; retry when it is",
-			verdict.SessionID, name)
-	}
+	name := endpointName(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
+	verdict.Reason = fmt.Sprintf("session %s ran on %s. %s", verdict.SessionID, name, hub.UnsupportedReason)
 	return false
 }
 
-func endpointNameAndStatus(endpoints []protocol.EndpointInfo, endpointID string) (string, string) {
-	name := endpointID
-	if name == "" {
-		name = "another host"
-	}
+func endpointName(endpoints []protocol.EndpointInfo, endpointID string) string {
 	for _, endpoint := range endpoints {
-		if endpoint.ID != endpointID {
-			continue
+		if endpoint.ID == endpointID && strings.TrimSpace(endpoint.Name) != "" {
+			return strings.TrimSpace(endpoint.Name)
 		}
-		if named := strings.TrimSpace(endpoint.Name); named != "" {
-			name = named
-		}
-		return name, endpoint.Status
 	}
-	return name, ""
+	if endpointID != "" {
+		return endpointID
+	}
+	return "another host"
 }
 
 func (d *Daemon) endpointInfos() []protocol.EndpointInfo {

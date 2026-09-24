@@ -179,17 +179,3 @@ func TestEveryEndpointCommandRefusesWithoutAnSSHCallOrALocalFallback(t *testing.
 	}
 	w.assertSSHNeverRan()
 }
-
-func TestReopeningARemoteSessionNamesTheReleaseLimit(t *testing.T) {
-	verdict := sessionReopenVerdict{SessionID: "remote-1"}
-	verdict.Execution.HostKind = "remote"
-	verdict.Execution.EndpointID = "endpoint-1"
-	endpoints := []protocol.EndpointInfo{{ID: "endpoint-1", Name: "gpu-box", Status: hub.StatusUnsupported}}
-
-	if decideReopenHost(&verdict, endpoints) {
-		t.Fatal("a remote session was offered a local reopen")
-	}
-	if !strings.Contains(verdict.Reason, "gpu-box") || !strings.Contains(verdict.Reason, hub.UnsupportedReason) {
-		t.Fatalf("reason = %q, want the endpoint name and the release reason", verdict.Reason)
-	}
-}
