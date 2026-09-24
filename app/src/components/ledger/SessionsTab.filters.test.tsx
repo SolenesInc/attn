@@ -123,6 +123,21 @@ describe('SessionsTab query', () => {
     expect(query().value).toBe('');
   });
 
+  it('keeps a profile filter through a rename and when the profile has no rows', async () => {
+    const { list, calls } = listing([page({ facets: { profiles: [], repositories: [] } })]);
+    const { rerender } = renderSessionsTab({ listSessions: list, profileNames: { 'profile-1': 'attn work' } });
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    type('profile:attn-work');
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]).toEqual({ all: true, limit: 50, profile_id: 'profile-1', reopen: true });
+
+    rerender({ profileNames: { 'profile-1': 'Office' } });
+    await waitFor(() => expect(query().value).toBe('profile:office'));
+    await act(async () => { await Promise.resolve(); });
+    expect(calls.every((call, index) => index === 0 || call.profile_id === 'profile-1')).toBe(true);
+  });
+
   it('narrows the page by words and dir: without asking the daemon', async () => {
     const { list, calls } = listing([page({ entries: [
       entry({ id: 's1', label: 'ledger work', directory: '/Users/victor/projects/attn--wt' }),

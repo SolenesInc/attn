@@ -38,7 +38,7 @@ function git(cwd, ...args) {
 }
 
 // Two checkouts of one repository plus a plain one elsewhere, so the repository
-// filter has something to separate that the workspace filter cannot.
+// filter has something to separate that the profile filter cannot.
 function buildRepositories(root) {
   const repo = path.join(root, 'ledger-repo');
   fs.mkdirSync(repo, { recursive: true });
@@ -196,6 +196,18 @@ async function main() {
       await waitForSessions(client, (s) => s.rows.length >= 3, 'the filter to be lifted');
     });
 
+    await runner.step('the_profile_filter_names_the_profile_the_sessions_run_in', async () => {
+      await client.request('sessions_set_filter', { profile: 'default' });
+      const inDefault = await waitForSessions(client, (s) => s.profile !== '' && s.rows.length >= 3,
+        'the Default profile filter to apply and keep every session');
+      await client.request('sessions_set_filter', { profile: 'no-such-profile' });
+      const unknown = await waitForSessions(client, (s) => s.profile === '',
+        'an unknown profile to leave the list unfiltered');
+      runner.writeJson('filtered-by-profile.json', { inDefault, unknown });
+      await client.request('sessions_set_filter', { profile: '' });
+      await waitForSessions(client, (s) => s.profile === '' && s.rows.length >= 3, 'the profile filter to be lifted');
+    });
+
     await runner.step('a_close_updates_the_row_in_place', async () => {
       const before = await waitForSessions(client, (s) => rowFor(s, sessions.two)?.state !== 'closed',
         'the session to be listed as live before it closes');
@@ -286,7 +298,7 @@ async function main() {
         'the filters this run wants remembered');
       runner.writeJson('filters-picked.json', picked);
       const remembered = JSON.stringify({
-        scope: 'closed', range: '7d', customFrom: '', customTo: '', workspaceId: '', repository: repo,
+        scope: 'closed', range: '7d', customFrom: '', customTo: '', profileId: '', repository: repo,
       });
       await observer.waitFor(() => observer.getSetting(SESSIONS_FILTERS_SETTING) === remembered,
         'the daemon to persist the filters');

@@ -1823,7 +1823,7 @@ function queryTokens(root: HTMLElement): string[] {
 function collectSessionsPanelUiState() {
   const root = ledgerRoot('Sessions');
   if (!root) {
-    return { open: false, scope: '', range: '', workspace: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
+    return { open: false, scope: '', range: '', profile: '', repository: '', rows: [], footer: '', canLoadMore: false, state: '' };
   }
   // Typed tokens apply after a debounce; the toolbar carries the filters the list is actually queried with.
   const toolbar = root.querySelector('.ledger-toolbar');
@@ -1839,7 +1839,6 @@ function collectSessionsPanelUiState() {
       label: row.querySelector('.ledger-row-title')?.textContent?.trim() || '',
       agent: row.querySelector('.ledger-meta-seg')?.textContent?.trim() || '',
       state,
-      workspace: '',
       where: row.querySelector('.ledger-row-meta .is-path')?.getAttribute('title') || '',
       branch: row.querySelector('.ledger-row-meta .is-mono:not(.is-path)')?.textContent?.trim() || '',
       seed: verbs.find((verb) => verb.startsWith('Seed ·'))?.slice(7) || '',
@@ -1855,7 +1854,7 @@ function collectSessionsPanelUiState() {
     open: true,
     scope: root.querySelector('.ledger-segmented button[aria-pressed="true"]')?.textContent?.trim() || '',
     range: applied('range') || 'any',
-    workspace: applied('workspace'),
+    profile: applied('profile'),
     repository: applied('repository'),
     rows,
     footer: root.querySelector('.ledger-status-left')?.textContent?.trim() || '',
@@ -2991,8 +2990,8 @@ export function useUiAutomationBridge({
         return collectSessionsPanelUiState();
       case 'sessions_set_filter': {
         const root = sessionsPanelRoot();
-        const { scope, range, workspace, repository, from, to } = payload as {
-          scope?: string; range?: string; workspace?: string; repository?: string; from?: string; to?: string;
+        const { scope, range, profile, repository, from, to } = payload as {
+          scope?: string; range?: string; profile?: string; repository?: string; from?: string; to?: string;
         };
         if (scope) {
           const button = Array.from(root.querySelectorAll('.ledger-segmented button'))
@@ -3013,9 +3012,9 @@ export function useUiAutomationBridge({
             if (from) next.push(`from:${from}`);
             if (to) next.push(`to:${to}`);
           }
-          if (workspace !== undefined) {
-            next = next.filter((token) => !/^ws:/i.test(token));
-            if (workspace) next.push(`ws:${workspace}`);
+          if (profile !== undefined) {
+            next = next.filter((token) => !/^profile:/i.test(token));
+            if (profile) next.push(`profile:${profile}`);
           }
           if (repository !== undefined) {
             next = next.filter((token) => !/^repo(?:-path)?:/i.test(token));

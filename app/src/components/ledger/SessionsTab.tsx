@@ -22,7 +22,7 @@ import {
 } from '../sessionsLedger';
 import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
-import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
 import type { ParsedQuery } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
@@ -313,7 +313,9 @@ function sameQueryFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boo
 
 function useLedgerQueryText({ restoredFilters, profileNames, facets, repository, setFilters, requestedDir }: LedgerQueryTextOptions) {
   const [text, setText] = useState(() => formatQuery(restoredFilters, profileNames));
-  const parsed = useMemo(() => parseQuery(text, facets, repository), [text, facets, repository]);
+  const profiles = useMemo(() => profileChoices(profileNames, facets), [profileNames, facets]);
+  const parsed = useMemo(() => parseQuery(text, facets, profiles, repository), [text, facets, profiles, repository]);
+  useProfileRenamesInQuery(profileNames, setText);
   const keepRepository = unresolvedWhilePending(parsed, facets, 'repo:');
   const keepProfile = unresolvedWhilePending(parsed, facets, 'profile:');
 
@@ -347,6 +349,15 @@ function useReloadWhenChanged(value: string, reload: () => void) {
     loadedWith.current = value;
     reload();
   }, [value, reload]);
+}
+
+function useProfileRenamesInQuery(profileNames: Record<string, string>, setText: Dispatch<SetStateAction<string>>) {
+  const namedWith = useRef(profileNames);
+  useEffect(() => {
+    const before = namedWith.current;
+    namedWith.current = profileNames;
+    if (before !== profileNames) setText((current) => renameProfileTokens(current, before, profileNames));
+  }, [profileNames, setText]);
 }
 
 function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): string {
