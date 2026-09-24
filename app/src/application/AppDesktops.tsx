@@ -157,7 +157,7 @@ export function AppDesktops() {
           resolvedTheme={resolvedTheme}
           focusRequestToken={utilityFocusRequestToken}
           enabled={!blockingOverlayOpen}
-          isActiveSession={isCurrent}
+          isActiveSession={isCurrent && view !== 'dashboard'}
           isSessionViewVisible={view === 'session'}
           terminalsLive
           eventRouter={eventRouter}

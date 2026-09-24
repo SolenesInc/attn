@@ -298,6 +298,18 @@ describe('desktop surface', () => {
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-selected-session')).toBe('s1');
   });
 
+  it('stops treating the current desktop as active at home', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    expect(isActive('d1')).toBe(true);
+
+    act(() => {
+      useSessionStore.getState().goToDashboard();
+    });
+
+    expect(isActive('d1')).toBe(false);
+  });
+
   it('sends pane focus to the daemon and follows its broadcast', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
