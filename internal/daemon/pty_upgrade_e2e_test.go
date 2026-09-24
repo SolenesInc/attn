@@ -128,8 +128,7 @@ done
 		t.Fatal(err)
 	}
 	current = start(newBinary, hostBinary)
-	current.waitForLog("shared PTY host artifact promoted", nil)
-	current.assertSharedSetting(true, true)
+	current.waitForSharedHostActive()
 	assertAll(current, "mixed-restart")
 	current.setSharedSetting(false)
 	current.command(map[string]any{"cmd": "reload_session", "id": "promote-agent", "cols": 80, "rows": 24}, "reload_session_result", "promote-agent")
@@ -451,6 +450,32 @@ func (d *upgradeDaemon) assertSharedSetting(enabled, active bool) {
 			d.t.Fatalf("want shared enabled=%v active=%v, got %v", enabled, active, settings)
 		}
 		return
+	}
+}
+
+func (d *upgradeDaemon) waitForSharedHostActive() {
+	d.t.Helper()
+	d.write(map[string]any{"cmd": "get_settings"})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	for {
+		event, _, _ := d.read(ctx)
+		if event["event"] != "settings_updated" {
+			continue
+		}
+		if event["changed_key"] != nil && event["changed_key"] != SettingSharedPTYHostActive {
+			continue
+		}
+		settings, ok := event["settings"].(map[string]any)
+		if !ok || settings[SettingSharedPTYHostEnabled] != "true" {
+			d.t.Fatalf("want shared host enabled, got %v", event)
+		}
+		if settings[SettingSharedPTYHostActive] == "true" {
+			return
+		}
+		if event["changed_key"] == SettingSharedPTYHostActive {
+			d.t.Fatalf("shared host activation event reported inactive: %v", event)
+		}
 	}
 }
 

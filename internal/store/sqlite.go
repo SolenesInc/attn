@@ -1248,7 +1248,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{149, "index delegation session identity", `CREATE INDEX IF NOT EXISTS idx_delegation_operations_session ON delegation_operations(session_id)`},
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
-	{152, "keep every delegation preferences revision", ``},
+	{152, "file long-context session cost observations under their tier", ``},
+	{153, "keep every delegation preferences revision", ``},
 }
 
 const migration99SQL = `
@@ -1836,6 +1837,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 153 {
+			if err := applyMigration153(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 151 {
 			if err := applyMigration151(tx); err != nil {
 				tx.Rollback()
@@ -1894,6 +1900,43 @@ func migrateDB(db *sql.DB, dbPath string) error {
 		}
 	}
 
+	return nil
+}
+
+func applyMigration152(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, session_cost_json FROM sessions WHERE session_cost_json != ''")
+	if err != nil {
+		return err
+	}
+	costs := make(map[string]string)
+	for rows.Next() {
+		var id, raw string
+		if err := rows.Scan(&id, &raw); err != nil {
+			rows.Close()
+			return err
+		}
+		costs[id] = raw
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for id, raw := range costs {
+		state, err := decodeSessionCostState(raw)
+		if err != nil {
+			log.Printf("[store] migration 152: skipped unreadable session cost for %s: %v", id, err)
+			continue
+		}
+		if !rekeyLongContextObservations(&state) {
+			continue
+		}
+		encoded, err := json.Marshal(state)
+		if err != nil {
+			return fmt.Errorf("encode session cost for %s: %w", id, err)
+		}
+		if _, err := tx.Exec("UPDATE sessions SET session_cost_json = ? WHERE id = ?", string(encoded), id); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

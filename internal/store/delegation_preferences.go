@@ -10,7 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/delegationprefs"
 )
 
-func applyMigration152(tx *sql.Tx) error {
+func applyMigration153(tx *sql.Tx) error {
 	if _, err := tx.Exec(`CREATE TABLE IF NOT EXISTS delegation_preference_revisions (
 	revision INTEGER PRIMARY KEY,
 	parent INTEGER,
