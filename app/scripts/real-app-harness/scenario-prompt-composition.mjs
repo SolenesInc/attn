@@ -86,7 +86,7 @@ async function main() {
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes('You are the chief of staff.') === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes('You are the chief of staff of your profile.') === chief, 'chief branch matches session role', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }
