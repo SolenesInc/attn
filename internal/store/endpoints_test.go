@@ -253,7 +253,7 @@ func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
 	defer s.Close()
 	if _, err := s.db.Exec(`
 		ALTER TABLE endpoints RENAME COLUMN instance TO profile;
-		ALTER TABLE instance_roles RENAME TO profile_roles;
+		CREATE TABLE profile_roles (role TEXT PRIMARY KEY, session_id TEXT NOT NULL);
 		INSERT INTO endpoints (id, name, ssh_target, enabled, profile, created_at, updated_at)
 		VALUES ('endpoint-1', 'gpu', 'user@host', 1, 'dev', '2026-01-01', '2026-01-01');
 		INSERT INTO profile_roles (role, session_id) VALUES ('chief_of_staff', 'session-a');
@@ -267,7 +267,8 @@ func TestMigration151CarriesProfileColumnsIntoInstances(t *testing.T) {
 	if got := s.GetEndpoint("endpoint-1"); got == nil || got.Instance != "dev" {
 		t.Fatalf("migrated endpoint = %+v, want instance dev", got)
 	}
-	if got := s.GetInstanceRole("chief_of_staff"); got != "session-a" {
-		t.Fatalf("migrated chief of staff = %q, want session-a", got)
+	var roleTables int
+	if err := s.db.QueryRow(`SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'instance_roles'`).Scan(&roleTables); err != nil || roleTables != 0 {
+		t.Fatalf("instance_roles tables after migrating = %d (err %v), want it folded into profiles", roleTables, err)
 	}
 }

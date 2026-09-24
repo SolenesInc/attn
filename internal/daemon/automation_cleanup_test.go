@@ -33,7 +33,7 @@ func TestAutomationCleanupPartitionsCleanAndDirtyWorktrees(t *testing.T) {
 	}
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -77,7 +77,7 @@ func TestAutomationCleanupNeverTouchesRowsOrArtifacts(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-rows", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -130,7 +130,7 @@ func TestAutomationCleanupSecondRunIsNoOp(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-noop", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -182,7 +182,7 @@ func TestAutomationCleanupLiveSessionSkipped(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-live", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -222,7 +222,7 @@ func TestAutomationCleanupReclaimsSoftDeletedDefinition(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-deleted-def", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -264,7 +264,7 @@ func TestAutomationCleanupBoundThreadReportsKeptActive(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-bound", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	dir := t.TempDir()
 	def, err := d.automationApply(scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Bound."))
 	if err != nil {
@@ -317,7 +317,7 @@ func TestAutomationCleanupThreeWayPartition(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/partition-bound", boundWorktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	dir := t.TempDir()
 	def, err := d.automationApply(scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Partition."))
 	if err != nil {
@@ -379,7 +379,7 @@ func TestAutomationCleanupLogsDistinguishLiveSessionFromBoundThread(t *testing.T
 	defer logger.Close()
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub(), logger: logger}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub(), logger: logger})
 	dir := t.TempDir()
 	def, err := d.automationApply(scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Log."))
 	if err != nil {

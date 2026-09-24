@@ -17,7 +17,7 @@ func TestAutomationRetentionSweepPreservesBoundThreadOriginRunAndContinuationSti
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	dir := t.TempDir()
 
 	v1 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Sweep.")
@@ -85,7 +85,7 @@ func TestAutomationRetentionAndCleanupPreserveBoundThreadSharedWorktree(t *testi
 	resolvedLocationJSON := automationResolvedLocationJSON(t, mainRepo, worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	dir := t.TempDir()
 
 	v1 := scheduledDefinitionYAML(dir, "*/5 * * * *", "singleton", "latest", "Sweep.")

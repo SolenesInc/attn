@@ -1303,6 +1303,16 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 		);
 		CREATE INDEX IF NOT EXISTS idx_crew_profiles_profile ON crew_profiles(profile_id);
 	`},
+	{155, "give each profile its own chief of staff", `
+		UPDATE profiles SET chief_session_id = (
+			SELECT r.session_id FROM instance_roles r WHERE r.role = 'chief_of_staff'
+		)
+		WHERE id = (
+			SELECT s.profile_id FROM sessions s JOIN instance_roles r ON r.session_id = s.id
+			WHERE r.role = 'chief_of_staff' AND s.profile_id != ''
+		);
+		DROP TABLE IF EXISTS instance_roles;
+	`},
 }
 
 const migration99SQL = `
@@ -1957,6 +1967,11 @@ func applyPendingMigrations(db *sql.DB, recorded, currentVersion int) error {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
+		} else if m.version == 155 {
+			if err := applyMigration155(tx, m.sql); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
 		} else if m.version == 152 {
 			if err := applyMigration152(tx, m.sql); err != nil {
 				tx.Rollback()
@@ -2435,6 +2450,24 @@ func applyMigration131(tx *sql.Tx) error {
 		}
 	}
 	return nil
+}
+
+func applyMigration155(tx *sql.Tx, migrationSQL string) error {
+	hasChief, err := columnExists(tx, "profiles", "chief_session_id")
+	if err != nil {
+		return err
+	}
+	if !hasChief {
+		if _, err := tx.Exec(`ALTER TABLE profiles ADD COLUMN chief_session_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	hasRoles, err := tableExists(tx, "instance_roles")
+	if err != nil || !hasRoles {
+		return err
+	}
+	_, err = tx.Exec(migrationSQL)
+	return err
 }
 
 func applyMigration152(tx *sql.Tx, migrationSQL string) error {

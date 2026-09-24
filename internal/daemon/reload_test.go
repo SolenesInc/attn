@@ -372,7 +372,7 @@ func TestBuildReloadSpawnOptionsCarriesContextWindowCap(t *testing.T) {
 
 	t.Run("reloaded chief keeps the configured cap", func(t *testing.T) {
 		d := newDaemonWithSession(t, "chief")
-		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+		if err := setTestChief(d, "chief"); err != nil {
 			t.Fatalf("assign chief role: %v", err)
 		}
 		d.store.SetSetting(SettingChiefContextWindowCap, "160000")
@@ -388,7 +388,7 @@ func TestBuildReloadSpawnOptionsCarriesContextWindowCap(t *testing.T) {
 
 	t.Run("reloaded chief with no configured cap falls back to the default", func(t *testing.T) {
 		d := newDaemonWithSession(t, "chief")
-		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+		if err := setTestChief(d, "chief"); err != nil {
 			t.Fatalf("assign chief role: %v", err)
 		}
 
@@ -538,7 +538,7 @@ func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testin
 	addTestWorkspace(d, "ws-plugin-chief", t.TempDir())
 	addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "plugin-chief"); err != nil {
+	if err := setTestChief(d, "plugin-chief"); err != nil {
 		t.Fatalf("assign chief role: %v", err)
 	}
 	if !d.store.BeginAgentDriverRun("plugin-chief", "example-plugin", "run-old") {
@@ -617,7 +617,7 @@ func TestReloadSessionAgentLeavesPluginWorkerAliveWhenResumeCannotBePrepared(t *
 	addTestWorkspace(d, "ws-plugin-chief", t.TempDir())
 	addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "plugin-chief"); err != nil {
+	if err := setTestChief(d, "plugin-chief"); err != nil {
 		t.Fatalf("assign chief role: %v", err)
 	}
 	plugin, done := startPluginPipe(t, d, "example-plugin", nil)
@@ -673,7 +673,7 @@ func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testi
 			addReloadSession(d, "plugin-chief", protocol.SessionAgent("example"), protocol.SessionStateIdle)
 			d.store.SetSetting(SettingNotebookRoot, t.TempDir())
 			if test.initialChief != "" {
-				if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, test.initialChief); err != nil {
+				if err := setTestChief(d, test.initialChief); err != nil {
 					t.Fatalf("seed chief role: %v", err)
 				}
 			}
@@ -721,7 +721,7 @@ func TestSetChiefOfStaffRejectsPluginRoleChangeWhenResumePreflightFails(t *testi
 			if result.Success || !strings.Contains(protocol.Deref(result.Error), "native resume unavailable") {
 				t.Fatalf("result=%+v, want resume preflight failure", result)
 			}
-			if got := d.chiefOfStaffSessionID(); got != test.wantChief {
+			if got := d.chiefForCaller(""); got != test.wantChief {
 				t.Fatalf("persisted chief role=%q, want %q", got, test.wantChief)
 			}
 			if order := backend.callOrder(); len(order) != 0 {
@@ -1032,7 +1032,7 @@ func TestReloadSessionForClientRefusesPluginChiefWithoutLaunchInstructions(t *te
 	d := newReloadTestDaemon(t, backend)
 	addTestWorkspace(d, "ws-pi-chief", t.TempDir())
 	addReloadSession(d, "pi-chief", protocol.SessionAgent("pi"), protocol.SessionStateIdle)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "pi-chief"); err != nil {
+	if err := setTestChief(d, "pi-chief"); err != nil {
 		t.Fatalf("assign chief role: %v", err)
 	}
 	plugin, done := startPluginPipe(t, d, "pi-plugin", nil)

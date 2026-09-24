@@ -18,7 +18,7 @@ func (d *Daemon) ticketDurableIdentitiesForSession(sessionID string) []string {
 
 func (d *Daemon) ticketSessionForIdentity(identity string) string {
 	if identity == store.TicketRoleIdentity(store.TicketRoleChiefOfStaff) {
-		return d.chiefOfStaffSessionID()
+		return d.defaultProfileChief()
 	}
 	if memberID, ok := store.ParseTicketMemberIdentity(identity); ok {
 		member, _, err := d.crewMember(memberID)

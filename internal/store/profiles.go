@@ -96,11 +96,11 @@ func (s *Store) profilesTx(fn func(tx *sql.Tx, now string) error) error {
 	return tx.Commit()
 }
 
-const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at`
+const profileColumns = `id, name, current_desktop_id, last_used_at, revision, deleted_at, chief_session_id`
 
 func scanProfile(row rowScanner) (profiles.Profile, error) {
 	var profile profiles.Profile
-	err := row.Scan(&profile.ID, &profile.Name, &profile.CurrentDesktopID, &profile.LastUsedAt, &profile.Revision, &profile.DeletedAt)
+	err := row.Scan(&profile.ID, &profile.Name, &profile.CurrentDesktopID, &profile.LastUsedAt, &profile.Revision, &profile.DeletedAt, &profile.ChiefSessionID)
 	return profile, err
 }
 
@@ -534,6 +534,96 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		return nil
 	})
 	return result, err
+}
+
+func (s *Store) SetProfileChief(sessionID string) (profiles.Profile, string, error) {
+	var profile profiles.Profile
+	var previous string
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var profileID string
+		err := tx.QueryRow(`SELECT profile_id FROM sessions WHERE id = ? AND closed_at = ''`, sessionID).Scan(&profileID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return profiles.Errorf(profiles.CodeNotFound, "session %s is not a live agent", sessionID)
+		}
+		if err != nil {
+			return err
+		}
+		if profile, err = loadLiveProfile(tx, profileID); err != nil {
+			return err
+		}
+		previous = profile.ChiefSessionID
+		profile.ChiefSessionID = sessionID
+		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ?`, sessionID, profile.ID)
+		return err
+	})
+	return profile, previous, err
+}
+
+func (s *Store) ClaimProfileChief(profileID, sessionID string) (bool, error) {
+	claimed := false
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		result, err := tx.Exec(`UPDATE profiles SET chief_session_id = ? WHERE id = ? AND chief_session_id = '' AND deleted_at = ''`, sessionID, profileID)
+		if err != nil {
+			return err
+		}
+		affected, err := result.RowsAffected()
+		claimed = affected == 1
+		return err
+	})
+	return claimed, err
+}
+
+func (s *Store) ClearProfileChief(sessionID string) (string, error) {
+	var profileID string
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		found, err := rowFound(tx.QueryRow(`SELECT id FROM profiles WHERE chief_session_id = ? AND deleted_at = ''`, sessionID), &profileID)
+		if err != nil || !found {
+			return err
+		}
+		_, err = tx.Exec(`UPDATE profiles SET chief_session_id = '' WHERE id = ?`, profileID)
+		return err
+	})
+	return profileID, err
+}
+
+func (s *Store) ClearAllProfileChiefs() error {
+	return s.profilesTx(func(tx *sql.Tx, _ string) error {
+		_, err := tx.Exec(`UPDATE profiles SET chief_session_id = ''`)
+		return err
+	})
+}
+
+func (s *Store) ProfileChiefs() (map[string]string, error) {
+	chiefs := map[string]string{}
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		rows, err := tx.Query(`SELECT id, chief_session_id FROM profiles WHERE deleted_at = '' AND chief_session_id != ''`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var profileID, sessionID string
+			if err := rows.Scan(&profileID, &sessionID); err != nil {
+				return err
+			}
+			chiefs[profileID] = sessionID
+		}
+		return rows.Err()
+	})
+	return chiefs, err
+}
+
+func (s *Store) OldestProfile() (profiles.Profile, error) {
+	var profile profiles.Profile
+	err := s.profilesTx(func(tx *sql.Tx, _ string) error {
+		var err error
+		profile, err = scanProfile(tx.QueryRow(`SELECT ` + profileColumns + ` FROM profiles WHERE deleted_at = '' ORDER BY created_at, id LIMIT 1`))
+		if errors.Is(err, sql.ErrNoRows) {
+			return profiles.Errorf(profiles.CodeNotFound, "no live profile exists")
+		}
+		return err
+	})
+	return profile, err
 }
 
 func (s *Store) CrewProfile(memberID string) (string, error) {

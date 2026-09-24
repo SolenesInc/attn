@@ -18,6 +18,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const Surface = "automations"
+
 const APIVersion = "attn.dev/automations/v1alpha1"
 
 type DefinitionSpec struct {

@@ -19,7 +19,7 @@ import (
 
 func TestAutomationDefinitionsGetWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -48,7 +48,7 @@ func TestAutomationDefinitionsGetWSResultCorrelatesRequest(t *testing.T) {
 
 func TestAutomationRunsGetWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -86,7 +86,7 @@ func TestAutomationRunsGetWSResultCorrelatesRequest(t *testing.T) {
 
 func TestAutomationRunsGetWSResultTruncatesAtCap(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestAutomationRunsGetWSResultTruncatesAtCap(t *testing.T) {
 
 func TestAutomationSetEnabledWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -164,7 +164,7 @@ func TestAutomationSetEnabledWSResultCorrelatesRequest(t *testing.T) {
 
 func TestAutomationDeleteWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -213,7 +213,7 @@ func TestAutomationCleanupWSResultCorrelatesRequest(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/cleanup-ws", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestAutomationCleanupWSResultCorrelatesRequest(t *testing.T) {
 
 func TestAutomationRunWSResultCorrelatesRequest(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -314,7 +314,7 @@ func TestAutomationRunWSRejectsNonManualTrigger(t *testing.T) {
 
 func TestAutomationRunWSMutualExclusion(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -339,7 +339,7 @@ func TestAutomationRunWSMutualExclusion(t *testing.T) {
 
 func TestAutomationRunWSRoutesPRURL(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -422,7 +422,7 @@ location: {type: directory, path: "%s"}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			s := store.New()
-			d := &Daemon{store: s, wsHub: newWSHub()}
+			d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 			raw := fmt.Sprintf(template, tc.id, tc.driver, t.TempDir())
 			if tc.mutate != nil {
 				raw = tc.mutate(raw)
@@ -470,7 +470,7 @@ location: {type: directory, path: "%s"}
 
 func TestAutomationCommandApplyOverSocketIsUnguarded(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	original, err := d.automationApply(raw)
 	if err != nil {
@@ -498,7 +498,7 @@ func TestAutomationCommandApplyOverSocketIsUnguarded(t *testing.T) {
 
 func TestAutomationApplyWSRefusesIDMismatch(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	original, err := d.automationApply(raw)
 	if err != nil {
@@ -535,7 +535,7 @@ func TestAutomationApplyWSRefusesIDMismatch(t *testing.T) {
 
 func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	original, err := d.automationApply(raw)
 	if err != nil {
@@ -591,7 +591,7 @@ func TestAutomationApplyWSRefusesCreateOverLiveDefinition(t *testing.T) {
 
 func TestAutomationApplyWSRefusesStaleRevision(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	original, err := d.automationApply(raw)
 	if err != nil {
@@ -628,7 +628,7 @@ func TestAutomationApplyWSRefusesStaleRevision(t *testing.T) {
 
 func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	original, err := d.automationApply(raw)
 	if err != nil {
@@ -671,7 +671,7 @@ func TestAutomationApplyWSRefusesEditOfDeletedDefinition(t *testing.T) {
 
 func TestAutomationDefinitionGetWSStarterTemplate(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationDefinitionGetWS(client, &protocol.AutomationDefinitionGetMessage{
@@ -705,7 +705,7 @@ func TestAutomationDefinitionGetWSStarterTemplate(t *testing.T) {
 
 func TestAutomationDefinitionGetWSUnknownID(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 
 	client := &wsClient{send: make(chan outboundMessage, 4)}
 	d.handleAutomationDefinitionGetWS(client, &protocol.AutomationDefinitionGetMessage{
@@ -723,7 +723,7 @@ func TestAutomationDefinitionGetWSUnknownID(t *testing.T) {
 
 func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -792,7 +792,7 @@ func TestAutomationDefinitionGetWSAfterToggleDerivesFromSpecJSON(t *testing.T) {
 
 func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub(), wsAutomationMutationTimeout: 50 * time.Millisecond}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub(), wsAutomationMutationTimeout: 50 * time.Millisecond})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -857,7 +857,7 @@ func TestAutomationSetEnabledWSDeadlineAbortsWithoutMutating(t *testing.T) {
 
 func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -918,7 +918,7 @@ func TestAutomationRunWSRetryWithSameRequestIDDoesNotDuplicate(t *testing.T) {
 
 func TestAutomationCommandValidateHasNoPayload(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 
 	clientConn, serverConn := net.Pipe()
@@ -937,7 +937,7 @@ func TestAutomationCommandValidateHasNoPayload(t *testing.T) {
 
 func TestAutomationCommandSetEnabledTogglesColumn(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -971,7 +971,7 @@ func TestAutomationCommandSetEnabledTogglesColumn(t *testing.T) {
 
 func TestAutomationCommandDefinitionGetMissingDefinitionOverSocket(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 
 	clientConn, serverConn := net.Pipe()
 	defer clientConn.Close()

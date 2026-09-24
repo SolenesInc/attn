@@ -11,7 +11,7 @@ import (
 func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	seedWire := plant(t, d, protocol.SeedPlantMessage{Title: "Place this work"})
@@ -30,7 +30,7 @@ func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 		ExpectedRev: int(doc.Rev), ExpectedTenderSession: seed.TenderSession,
 		ExpectedTenderMember: seed.TenderMember, SourceSessionID: protocol.Ptr("sess-a"),
 		Guidance: protocol.Ptr("Use branch feature/special in /tmp/special."),
-	})
+	}, d.chiefForCaller(""))
 	if err != nil {
 		t.Fatalf("sendSeedToChief: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestSeedSendToChiefTransfersOwnershipAndPreservesExecution(t *testing.T) {
 func TestSeedSendToChiefRefusesAChangedSeed(t *testing.T) {
 	d := newGardenDaemon(t)
 	addGardenSession(t, d, "chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Changing work"})
@@ -69,7 +69,7 @@ func TestSeedSendToChiefRefusesAChangedSeed(t *testing.T) {
 		Cmd: protocol.CmdSeedSendToChief, SeedID: seed.ID,
 		ExpectedRev: seed.Rev - 1, ExpectedTenderSession: seed.TenderSession,
 		ExpectedTenderMember: seed.TenderMember,
-	})
+	}, d.chiefForCaller(""))
 	if err == nil || result != nil || !strings.Contains(err.Error(), "changed since you opened it") {
 		t.Fatalf("result = %+v, err = %v", result, err)
 	}

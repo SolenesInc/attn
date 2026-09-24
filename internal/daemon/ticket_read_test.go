@@ -49,7 +49,7 @@ func TestTicketInboxConsumesByIdentity(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
+	if err := setTestChief(d, chiefSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)
@@ -151,7 +151,7 @@ func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	_, creatorSessionID, _ := setupDelegationSource(t, d, backend)
 	chiefSessionID := "session-chief"
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
+	if err := setTestChief(d, chiefSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)
@@ -205,7 +205,7 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
 	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
+	if err := setTestChief(d, chiefSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)

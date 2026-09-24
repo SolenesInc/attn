@@ -66,7 +66,7 @@ func (d *Daemon) captureGardenReview() (gardenReviewCapture, error) {
 
 	observations := make([]garden.ReviewObservation, 0, len(read.seeds))
 	byID := make(map[string]garden.ReviewObservation, len(read.seeds))
-	chiefAvailable := d.chiefOfStaffSessionID() != ""
+	chiefAvailable := len(d.chiefSessionIDs()) > 0
 	for _, seed := range read.seeds {
 		doc := read.docs[seed.ID]
 		lifecycleAt, exact := reviewLifecycleTime(seed, doc)

@@ -3088,7 +3088,7 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
-		d.chiefOfStaffSessionID(),
+		d.chiefSessionIDs(),
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
@@ -3104,7 +3104,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 
 func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
-	chiefOfStaffSessionID string,
+	chiefs map[string]bool,
 	delegatedFromChief map[string]bool,
 	crewBySession map[string]string,
 	seedBySession map[string]string,
@@ -3118,7 +3118,7 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionWithNudge(clone)
 	d.decorateSessionWithAutoSettle(clone)
 	d.decorateSessionWithSnooze(clone)
-	d.decorateChiefOfStaffWithSessionID(clone, chiefOfStaffSessionID)
+	d.decorateChiefOfStaff(clone, chiefs)
 	d.decorateDelegatedFromChief(clone, delegatedFromChief)
 	d.decorateCrewMember(clone, crewBySession)
 	d.decorateSessionSeed(clone, seedBySession)
@@ -3135,7 +3135,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	if len(sessions) == 0 {
 		return nil
 	}
-	chiefOfStaffSessionID := d.chiefOfStaffSessionID()
+	chiefs := d.chiefSessionIDs()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
@@ -3146,7 +3146,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	pullRequestWatchesByPR := d.pullRequestWatchesByPR()
 	out := make([]protocol.Session, 0, len(sessions))
 	for _, session := range sessions {
-		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefOfStaffSessionID, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
+		if decorated := d.sessionForBroadcastWithChiefOfStaff(session, chiefs, delegatedFromChief, crewBySession, seedBySession, dispatcherBySession); decorated != nil {
 			decorated.DelegationRole = rolesBySession[decorated.ID]
 			decorated.Automation = bySession[decorated.ID]
 			decorated.PullRequests = d.sessionPullRequestsForBroadcast(pullRequestsBySession[decorated.ID], pullRequestWatchesByPR)
@@ -3184,9 +3184,9 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 		return nil
 	}
 	sessions := d.hubManager.RemoteSessions()
-	chiefOfStaffSessionID := d.chiefOfStaffSessionID()
+	chiefs := d.chiefSessionIDs()
 	for i := range sessions {
-		d.decorateChiefOfStaffWithSessionID(&sessions[i], chiefOfStaffSessionID)
+		d.decorateChiefOfStaff(&sessions[i], chiefs)
 	}
 	return sessions
 }

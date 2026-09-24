@@ -48,7 +48,7 @@ func TestCreateAsChiefAssignsRoleAtLaunch(t *testing.T) {
 	spawnForChiefTest(t, d, client, "ws-chief", "sess-chief", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-chief", true)
 
-	if got := d.chiefOfStaffSessionID(); got != "sess-chief" {
+	if got := d.chiefForCaller(""); got != "sess-chief" {
 		t.Fatalf("chief role holder = %q, want sess-chief", got)
 	}
 	session := d.store.Get("sess-chief")
@@ -67,14 +67,14 @@ func TestCreateAsChiefSkippedWhenChiefExists(t *testing.T) {
 	d.ptyBackend = &fakeSpawnBackend{}
 	client := newWorkspaceProtocolTestClient()
 
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "incumbent"); err != nil {
+	if err := setTestChief(d, "incumbent"); err != nil {
 		t.Fatalf("seed incumbent chief: %v", err)
 	}
 
 	spawnForChiefTest(t, d, client, "ws-second", "sess-second", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-second", true)
 
-	if got := d.chiefOfStaffSessionID(); got != "incumbent" {
+	if got := d.chiefForCaller(""); got != "incumbent" {
 		t.Fatalf("chief role holder = %q, want incumbent (unchanged)", got)
 	}
 	if d.isChiefOfStaffSession("sess-second") {
@@ -91,7 +91,7 @@ func TestCreateAsChiefIgnoredForShell(t *testing.T) {
 	spawnForChiefTest(t, d, client, "ws-shell", "sess-shell", protocol.AgentShellValue, true)
 	expectSpawnResult(t, client, "sess-shell", true)
 
-	if got := d.chiefOfStaffSessionID(); got != "" {
+	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("chief role holder = %q, want empty (shell cannot be chief)", got)
 	}
 }
@@ -110,7 +110,7 @@ func TestCreateAsChiefRejectsPluginWithoutLaunchInstructions(t *testing.T) {
 
 	spawnForChiefTest(t, d, client, "ws-plugin", "sess-plugin", "fixture", true)
 	expectSpawnResult(t, client, "sess-plugin", false)
-	if got := d.chiefOfStaffSessionID(); got != "" {
+	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("chief role holder = %q, want empty", got)
 	}
 }
@@ -124,7 +124,7 @@ func TestCreateAsChiefRolledBackOnSpawnFailure(t *testing.T) {
 	spawnForChiefTest(t, d, client, "ws-fail", "sess-fail", string(protocol.SessionAgentClaude), true)
 	expectSpawnResult(t, client, "sess-fail", false)
 
-	if got := d.chiefOfStaffSessionID(); got != "" {
+	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("chief role holder = %q, want empty (assignment rolled back on spawn failure)", got)
 	}
 }
@@ -134,10 +134,10 @@ func TestMaybeAssignChiefOnSpawnSkipsRespawn(t *testing.T) {
 	t.Cleanup(func() { _ = d.store.Close() })
 
 	existing := &protocol.Session{ID: "sess-respawn"}
-	if assigned := d.maybeAssignChiefOnSpawn("sess-respawn", string(protocol.SessionAgentClaude), true, existing); assigned {
+	if assigned := d.maybeAssignChiefOnSpawn("sess-respawn", string(protocol.SessionAgentClaude), defaultProfileID(t, d.store), true, existing); assigned {
 		t.Fatal("respawn (existingSession != nil) must not assign the chief role")
 	}
-	if got := d.chiefOfStaffSessionID(); got != "" {
+	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("chief role holder = %q, want empty", got)
 	}
 }

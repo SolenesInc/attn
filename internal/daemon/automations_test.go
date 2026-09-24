@@ -2059,3 +2059,31 @@ func TestAutomationOccurrenceNoteRecordedOncePerRun(t *testing.T) {
 		t.Fatalf("notes=%#v err=%v, want one occurrence note for %s", notes, err, second.ID)
 	}
 }
+
+func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
+	const home = "d-cccccccccccccccccccccccccccccccc"
+	d := newEnrolledDaemon(t, home)
+	var fenced *enrollment.FencedError
+	if _, err := d.automationApplyWithGuards(context.Background(), "id: nightly\nname: Nightly\n", defaultProfileID(t, d.store), nil, nil); !errors.As(err, &fenced) || !strings.Contains(err.Error(), home) {
+		t.Fatalf("apply on an outpost = %v, want a refusal naming the home %s", err, home)
+	}
+	if defs, err := d.store.ListAutomationDefinitions(); err != nil || len(defs) != 0 {
+		t.Fatalf("definitions after a refused apply = %v, %v; want none", defs, err)
+	}
+	def, err := d.store.UpsertAutomationDefinition("legacy", "Legacy", `{}`, defaultProfileID(t, d.store), time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.automationRun(context.Background(), def.ID, "request-1", "{}"); !errors.As(err, &fenced) {
+		t.Fatalf("run on an outpost = %v, want the home fence", err)
+	}
+	if _, err := d.automationSetEnabled(context.Background(), def.ID, true); !errors.As(err, &fenced) {
+		t.Fatalf("enable on an outpost = %v, want the home fence", err)
+	}
+	if _, err := d.automationSetEnabled(context.Background(), def.ID, false); err != nil {
+		t.Fatalf("disabling a leftover definition on an outpost: %v", err)
+	}
+	if err := d.automationDelete(context.Background(), def.ID); err != nil {
+		t.Fatalf("deleting a leftover definition on an outpost: %v", err)
+	}
+}

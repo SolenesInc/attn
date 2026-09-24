@@ -11,7 +11,7 @@ import (
 
 func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	dir := t.TempDir()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
@@ -80,7 +80,7 @@ func TestAutomationApplyContractEditRotatesContinuityBindings(t *testing.T) {
 
 func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	dir := t.TempDir()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
@@ -132,7 +132,7 @@ func TestAutomationApplyNonContractEditPreservesContinuityBindings(t *testing.T)
 
 func TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	dir := t.TempDir()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
@@ -178,7 +178,7 @@ func TestAutomationApplyPreservesPinnedSnapshotOfAlreadyClaimedRun(t *testing.T)
 
 func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	dir := t.TempDir()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
@@ -253,7 +253,7 @@ func TestAutomationApplyRevertAllowsFreshThreadWhenOldTicketSurvives(t *testing.
 
 func TestAutomationApplyLocationEditRotatesContinuityBindings(t *testing.T) {
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
 
 	v1 := scheduledDefinitionYAML(t.TempDir(), "*/5 * * * *", "singleton", "latest", "Sweep.")

@@ -45,7 +45,7 @@ func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "3")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -80,7 +80,7 @@ func TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -108,7 +108,7 @@ func TestAutomationRetentionSweepPendingRunsNeverPruned(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -133,7 +133,7 @@ func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	}
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -199,7 +199,7 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/clean", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, dataRoot: root, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -234,7 +234,7 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -258,7 +258,7 @@ func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
 	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, wsHub: newWSHub()})
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {

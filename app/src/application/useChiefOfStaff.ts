@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useProfilesStore } from '../store/profiles';
 import { AppContentProps } from './appSupport';
 import { useAppSessions } from './useAppSessions';
 
@@ -66,9 +67,10 @@ export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showErr
     }
   }, [applyChiefOfStaffChange, chiefTransferSaving, chiefTransferTarget]);
 
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const hasChiefOfStaff = useMemo(
-    () => daemonSessions.some((ds) => ds.chief_of_staff === true),
-    [daemonSessions],
+    () => daemonSessions.some((ds) => ds.chief_of_staff === true && ds.profile_id === selectedProfileId),
+    [daemonSessions, selectedProfileId],
   );
 
   return {

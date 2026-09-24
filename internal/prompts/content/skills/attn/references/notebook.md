@@ -92,6 +92,7 @@ filesystem watcher notices your change and refreshes any open in-app browser.
 The Notebook is your home. When you are promoted to the role mid-session, attn
 points you at `<root>/index.md` — read it to orient. Read `<root>/knowledge/index.md`,
 record durable decisions in the knowledge base as you make them, and keep the
-day's journal current with your cross-workspace view. Write at a chief-of-staff
-altitude — what moved across workspaces, what you delegated and decided — not a
-per-workspace play-by-play. You remain instance-wide.
+day's journal current with your view of your profile. Write at a chief-of-staff
+altitude — what moved across your profile's agents, what you delegated and
+decided — not a per-agent play-by-play. Each profile has its own chief; the
+Notebook is the one store you all share.

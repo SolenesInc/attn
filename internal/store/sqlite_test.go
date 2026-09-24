@@ -86,7 +86,7 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 	defer db.Close()
 
-	tables := []string{"sessions", "prs", "repos", "instance_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "pull_request_watches", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links", "garden_seed_event_receipts", "garden_seed_event_sources"}
+	tables := []string{"sessions", "prs", "repos", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "pull_request_watches", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links", "garden_seed_event_receipts", "garden_seed_event_sources"}
 	for _, table := range tables {
 		var count int
 		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)

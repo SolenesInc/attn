@@ -380,3 +380,26 @@ func TestAppWakeFromAnotherProfileIsRefused(t *testing.T) {
 		t.Fatal("a refused wake spawned a session")
 	}
 }
+
+func setTestChief(d *Daemon, sessionID string) error {
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		return err
+	}
+	if d.store.Get(sessionID) != nil {
+		if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
+			if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
+				return err
+			}
+		}
+		_, _, err := d.store.SetProfileChief(sessionID)
+		return err
+	}
+	if current := d.chiefOfProfile(profile.ID); current != "" {
+		if _, err := d.store.ClearProfileChief(current); err != nil {
+			return err
+		}
+	}
+	_, err = d.store.ClaimProfileChief(profile.ID, sessionID)
+	return err
+}
