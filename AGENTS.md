@@ -135,6 +135,7 @@ clearer.
 
 Read the relevant entry when the task touches its subject. When changing or working on:
 
+- Writing, changing, or deleting tests => docs/testing.md
 - Command, event, or message shapes => docs/maintainer-contracts.md#protocol
 - `sdk/attn-app/src` or SDK consumers => docs/maintainer-contracts.md#the-app-sdk
 - Event publishing, projections, consumers, or retention => docs/maintainer-contracts.md#event-bus
