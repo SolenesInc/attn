@@ -168,12 +168,14 @@ func runDelegateRolesShow(args []string) error {
 }
 
 func writeDelegationTable(w io.Writer, cfg protocol.DelegationPreferences) {
-	offered := delegationprefs.Active(prompts.ExpandDelegationPreferences(cfg))
-	state := "on"
+	withTableOn := prompts.ExpandDelegationPreferences(cfg)
+	withTableOn.Enabled = true
+	ready := delegationprefs.Active(withTableOn).Roles
+	state, offered := "on", len(ready)
 	if !cfg.Enabled {
-		state = "off: agents choose harness and model themselves"
+		state, offered = "off: agents choose harness and model themselves", 0
 	}
-	fmt.Fprintf(w, "delegation roles %s · revision %d · %d of %d roles offered to agents\n\n", state, cfg.Revision, len(offered.Roles), len(cfg.Roles))
+	fmt.Fprintf(w, "delegation roles %s · revision %d · %d of %d roles offered to agents\n\n", state, cfg.Revision, offered, len(cfg.Roles))
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	for _, role := range prompts.ExpandDelegationRoles(cfg.Roles) {
 		var tags []string
@@ -182,7 +184,7 @@ func writeDelegationTable(w io.Writer, cfg protocol.DelegationPreferences) {
 		}
 		if !role.Enabled {
 			tags = append(tags, "off")
-		} else if !slices.ContainsFunc(offered.Roles, func(r protocol.DelegationRole) bool { return r.ID == role.ID }) {
+		} else if !slices.ContainsFunc(ready, func(r protocol.DelegationRole) bool { return r.ID == role.ID }) {
 			tags = append(tags, "needs a model")
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", role.ID, role.Name, delegationprefs.DescribeSelection(defaultChoice(role).Selection), strings.Join(tags, ", "))
