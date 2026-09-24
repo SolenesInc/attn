@@ -25,15 +25,18 @@ Before committing a test, ask: could everything behind the boundary it drives
 be rewritten from scratch, behavior preserved, without editing the test? If
 not, the test pins the implementation. Do not commit it.
 
-Consequences:
+For wire, stack, and scenario tests:
 
-- Tests outside the kernel kind do not call unexported functions, read
-  internal structs, or assert on log lines.
-- Tests do not seed state by writing to the store or calling internals. They
+- They do not call unexported functions, read internal structs, or assert on
+  log lines.
+- They do not seed state by writing to the store or calling internals. They
   reach a state the way a client would, through the protocol, the CLI, or a
   prior daemon run.
 - Only what the table below lists as faked is faked. Everything else behind
   the boundary is real.
+
+A kernel test's boundary is its function, so it builds the function's input
+directly.
 
 ## Kinds of test
 
@@ -82,7 +85,8 @@ A kernel test is justified only when both hold:
 - its input space is too large to cover through the protocol.
 
 Kernel tests are tables, corpora, or `rapid` properties. One hand-picked
-example per function is not a kernel test.
+example per function is not a kernel test. A migration's input is a database
+in an older version's schema and data, built however the test needs.
 
 ## Choosing a kind
 
