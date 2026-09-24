@@ -10,9 +10,12 @@ Paths are relative to `app/src`.
 
 ## Tests
 
-- Name tests `Source.concern.test.tsx` and use `createMockDaemon()` from
-  `src/test/mocks/daemon.ts`, as in `PresentRoot.test.tsx`.
-- Assert exact daemon calls after render settles to catch fetch loops.
+- Follow [Testing](../docs/testing.md). App wire tests render the real app
+  with its real socket client against the scripted daemon in `src/test/`,
+  which speaks the generated protocol types.
+- Name tests `Source.concern.test.tsx`.
+- Assert the exact requests the app sends after render settles, to catch
+  fetch loops.
 
 ## Terminal and GPU
 

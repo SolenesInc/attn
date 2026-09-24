@@ -75,6 +75,10 @@ satisfy the full requirement?
   When proposing simplification, name what can be removed, what replaces it, and
   why the full behavior is preserved. Fewer lines alone are not evidence of a
   better design.
+- Ask for rigor only where a current requirement or a promise in
+  [Testing](docs/testing.md) needs it, and name which. Do not request tests
+  that guard no promise, unit tests for behavior a wire test covers, or
+  validation, fallbacks, and edge-case handling for hypothetical inputs.
 
 ### Author
 
@@ -102,11 +106,21 @@ satisfy the full requirement?
 
 ## Writing tests
 
-- Only write high value unit tests, and for critical parts of the codebase. Low value unit tests are not necessary. Do not write tests for script helpers or test helpers.
-- Prefer fast integration tests.
-- Do not copy production code into tests or test compile-time guarantees.
-- Use the [test contracts](docs/maintainer-contracts.md#test-safety)
-when choosing time, property, or network-failure test helpers.
+Follow [Testing](docs/testing.md). In short:
+
+- Commit tests that guard a promise attn makes: behavior that users, the
+  agents attn runs, clients, app authors, or later versions rely on. Check
+  your own work by running it; keep scratch tests out of commits.
+- Could everything behind the test's boundary be rewritten, behavior
+  preserved, without editing the test? If not, do not commit it.
+- Default to wire tests: a real daemon driven as a protocol client, or the real
+  app driven as the daemon. Go to stack or scenario tests only for behavior
+  across processes or on screen. Kernel tests only for specified logic with
+  large input spaces, as tables, corpora, or properties.
+- When a behavior-preserving change breaks a test, delete or replace the test;
+  do not repair it.
+- Do not test script helpers or test helpers, copy production code into tests,
+  or test compile-time guarantees.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/instances.md#verification-requirements).
@@ -126,6 +140,7 @@ clearer.
 
 Read the relevant entry when the task touches its subject. When changing or working on:
 
+- Writing, changing, or deleting tests => docs/testing.md
 - Command, event, or message shapes => docs/maintainer-contracts.md#protocol
 - `sdk/attn-app/src` or SDK consumers => docs/maintainer-contracts.md#the-app-sdk
 - Event publishing, projections, consumers, or retention => docs/maintainer-contracts.md#event-bus
