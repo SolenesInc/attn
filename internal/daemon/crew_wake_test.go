@@ -1117,3 +1117,56 @@ func TestMovingACrewMembersAgentTakesTheMemberToTheDestination(t *testing.T) {
 		t.Fatalf("waking trellis from its old profile = %v, want a refusal naming %s", err, work.ID)
 	}
 }
+
+func TestAMoveIsRefusedWhenTheCrewRosterCannotBeRead(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Cwd: protocol.Ptr(t.TempDir())}); !resp.Ok {
+		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
+	}
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	schema, err := d.crewCollection()
+	if err != nil {
+		t.Fatal(err)
+	}
+	members, docs, err := d.readCrewMembers()
+	if err != nil {
+		t.Fatal(err)
+	}
+	copied := members[0]
+	copied.HomeDir = t.TempDir()
+	body, err := copied.Encode()
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := docs[copied.ID].Rev
+	if _, err := d.store.CommitDocumentWrite(store.DocumentWrite{Schema: *schema, ID: copied.ID, Body: body, Expected: &expected},
+		documentChangedFact(crew.Namespace, crew.CollectionMembers, copied.ID, false), time.Now()); err != nil {
+		t.Fatalf("store a member whose home is outside the crew root, as a copied attn.db would: %v", err)
+	}
+	client := newWorkspaceProtocolTestClient()
+
+	d.handleSessionMove(client, &protocol.SessionMoveMessage{
+		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,
+	})
+
+	var result protocol.ProfileActionResultMessage
+	for _, payload := range drainClientPayloads(t, client) {
+		if eventName(t, payload) == protocol.EventProfileActionResult {
+			decodeInto(t, payload, &result)
+		}
+	}
+	if result.Success || !strings.Contains(protocol.Deref(result.Error), "crew roster") {
+		t.Fatalf("move with an unreadable roster answered %q, want a refusal naming the roster", protocol.Deref(result.Error))
+	}
+	if profileID, _ := d.store.SessionProfileID(woken.SessionID); profileID != home {
+		t.Fatalf("the refused move left the agent in %s, want %s", profileID, home)
+	}
+	if member, _ := d.store.CrewProfile("trellis"); member != home {
+		t.Fatalf("the refused move left trellis in %q, want %s", member, home)
+	}
+}

@@ -1,5 +1,5 @@
 import type { SessionLedgerFilters } from '../../hooks/useSessionLedger';
-import type { SessionLedgerFacets } from '../../types/generated';
+import type { SessionLedgerFacets, SessionLedgerProfileFacet } from '../../types/generated';
 import type { SessionRangeId } from '../sessionsLedger';
 import { tildePath } from './ledgerTime';
 
@@ -18,7 +18,6 @@ const RANGE_WORDS: Record<string, SessionRangeId> = {
 export function parseQuery(
   text: string,
   facets: SessionLedgerFacets | null,
-  profileLabel: (id: string) => string,
   preferredRepository = '',
 ): ParsedQuery {
   const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' };
@@ -52,9 +51,8 @@ export function parseQuery(
         || (named.length === 1 ? named[0].value : '');
       if (match) filters.repository = match; else unresolved.push(token);
     } else if (key === 'profile') {
-      const match = (facets?.profiles ?? []).find((facet) =>
-        facet.profile_id === value || nameToken(facet.name || profileLabel(facet.profile_id)) === value.toLowerCase());
-      if (match) filters.profileId = match.profile_id; else unresolved.push(token);
+      const match = resolveProfileToken(facets?.profiles ?? [], value);
+      if (match) filters.profileId = match; else unresolved.push(token);
     } else if (key === 'dir') {
       dir = value;
     } else {
@@ -68,11 +66,11 @@ export function parseQuery(
 
 export function formatQuery(
   filters: SessionLedgerFilters,
-  profileLabel: (id: string) => string,
+  profileNames: Record<string, string>,
 ): string {
   const tokens: string[] = [];
   if (filters.repository) tokens.push(`repo:${baseName(filters.repository)}`);
-  if (filters.profileId) tokens.push(`profile:${nameToken(profileLabel(filters.profileId))}`);
+  if (filters.profileId) tokens.push(`profile:${profileToken(filters.profileId, profileNames)}`);
   if (filters.range === 'custom') {
     if (filters.customFrom) tokens.push(`from:${filters.customFrom}`);
     if (filters.customTo) tokens.push(`to:${filters.customTo}`);
@@ -80,6 +78,23 @@ export function formatQuery(
     tokens.push(filters.range);
   }
   return tokens.join(' ');
+}
+
+// A live profile owns its name; a deleted namesake, or two names that collapse
+// to one token, answers only to its id.
+function resolveProfileToken(profiles: SessionLedgerProfileFacet[], value: string): string {
+  if (profiles.some((facet) => facet.profile_id === value)) return value;
+  const named = profiles.filter((facet) => nameToken(facet.name) === value.toLowerCase());
+  const candidates = named.length > 1 ? named.filter((facet) => !facet.deleted) : named;
+  return candidates.length === 1 ? candidates[0].profile_id : '';
+}
+
+function profileToken(profileId: string, profileNames: Record<string, string>): string {
+  const name = profileNames[profileId];
+  if (!name) return profileId;
+  const token = nameToken(name);
+  const shared = Object.entries(profileNames).some(([id, other]) => id !== profileId && nameToken(other) === token);
+  return shared ? profileId : token;
 }
 
 function nameToken(label: string): string {

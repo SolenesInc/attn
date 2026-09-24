@@ -308,12 +308,8 @@ function sameQueryFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boo
 }
 
 function useLedgerQueryText({ restoredFilters, profileNames, facets, repository, setFilters, requestedDir }: LedgerQueryTextOptions) {
-  const profileLabel = useCallback((id: string) => profileNames[id] ?? id, [profileNames]);
-  const [text, setText] = useState(() => formatQuery(restoredFilters, profileLabel));
-  const parsed = useMemo(
-    () => parseQuery(text, facets, profileLabel, repository),
-    [text, facets, profileLabel, repository],
-  );
+  const [text, setText] = useState(() => formatQuery(restoredFilters, profileNames));
+  const parsed = useMemo(() => parseQuery(text, facets, repository), [text, facets, repository]);
   const keepRepository = unresolvedWhilePending(parsed, facets, 'repo:');
   const keepProfile = unresolvedWhilePending(parsed, facets, 'profile:');
 
