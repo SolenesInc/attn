@@ -65,8 +65,8 @@ func (d *Daemon) checkLaunchPlacement(profile profiles.Profile, placement *launc
 	if err != nil {
 		return err
 	}
-	if placement.anchorPaneID != "" && !layouttree.HasPane(desktop.Tree, placement.anchorPaneID) {
-		return fmt.Errorf("anchor pane %q does not belong to desktop %s", placement.anchorPaneID, desktop.ID)
+	if placement.anchorPaneID != "" && !layouttree.HasLeaf(desktop.Tree, placement.anchorPaneID) {
+		return fmt.Errorf("anchor leaf %q does not belong to desktop %s", placement.anchorPaneID, desktop.ID)
 	}
 	return nil
 }

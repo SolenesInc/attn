@@ -20,7 +20,7 @@ func tileLeafByID(tree layouttree.Node, tileID string) (layouttree.TileLeaf, boo
 
 func dockAnchor(desktop profiles.Desktop, requested, tileID string) string {
 	for _, candidate := range []string{strings.TrimSpace(requested), desktop.ActivePaneID} {
-		if candidate != "" && candidate != tileID && (layouttree.HasPane(desktop.Tree, candidate) || layouttree.HasTile(desktop.Tree, candidate)) {
+		if candidate != "" && candidate != tileID && layouttree.HasLeaf(desktop.Tree, candidate) {
 			return candidate
 		}
 	}

@@ -100,6 +100,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     isActiveSession,
     selectedSessionId,
     activePaneId,
+    workspaceDirectory,
     onFocusPane,
     onUndockTile,
   }: {
@@ -108,6 +109,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     isActiveSession: boolean;
     selectedSessionId?: string | null;
     activePaneId: string;
+    workspaceDirectory?: string;
     onFocusPane?: (paneId: string) => void;
     onUndockTile?: (tileId: string) => void;
   }, ref) {
@@ -119,6 +121,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
         data-active={isActiveSession ? '1' : '0'}
         data-selected-session={selectedSessionId ?? ''}
         data-active-leaf={activePaneId}
+        data-workspace-directory={workspaceDirectory ?? ''}
         data-agent-count={workspace.agents.length}
         data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
       />
@@ -574,6 +577,23 @@ describe('desktop surface', () => {
 
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
     expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'tile-notes']]);
+  });
+
+  it('offers the focused agent\'s directory as the workspace root only when it runs on this machine', async () => {
+    render(<App />);
+    await waitFor(() =>
+      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-workspace-directory')).toBe('/tmp/repo'),
+    );
+
+    act(() => {
+      useSessionStore.setState((state) => ({
+        sessions: state.sessions.map((entry) => (entry.id === 's1' ? { ...entry, endpointId: 'remote-box' } : entry)),
+      }));
+    });
+
+    await waitFor(() =>
+      expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-workspace-directory')).toBe(''),
+    );
   });
 
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {

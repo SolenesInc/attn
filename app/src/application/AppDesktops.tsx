@@ -92,7 +92,9 @@ export function AppDesktops() {
     const terminalState = desktopTerminalState(desktop);
     const isCurrent = desktop.id === currentDesktopId;
     const activePane = terminalState.agents.find((pane) => pane.id === desktop.active_pane_id);
-    const workspaceDirectory = desktopSessions.find((session) => session.id === activePane?.sessionId)?.cwd;
+    const contextSessionId = activePane?.sessionId ?? (isCurrent ? activeSessionId : null);
+    const contextSession = desktopSessions.find((session) => session.id === contextSessionId);
+    const workspaceDirectory = contextSession && !contextSession.endpointId ? contextSession.cwd : undefined;
     return (
       <div key={desktop.id} className={`terminal-wrapper ${isCurrent ? 'active' : ''}`}>
         <SessionTerminalWorkspace
