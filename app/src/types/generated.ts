@@ -3732,10 +3732,9 @@ export enum DelegationPreferencesChangedMessageEvent {
 }
 
 export interface DelegationPreferencesCommitMessage {
-    cmd:             DelegationPreferencesCommitMessageCmd;
-    message?:        string;
-    preferences:     Preferences;
-    source_session?: string;
+    cmd:         DelegationPreferencesCommitMessageCmd;
+    message?:    string;
+    preferences: Preferences;
     [property: string]: any;
 }
 
@@ -3778,13 +3777,12 @@ export interface DelegationPreferencesHistoryResult {
 }
 
 export interface DelegationPreferencesRevisionElement {
-    changes:         string[];
-    created_at?:     string;
-    message?:        string;
-    origin?:         DelegationPreferencesOrigin;
-    preferences:     Preferences;
-    restores?:       number;
-    source_session?: string;
+    changes:     string[];
+    created_at?: string;
+    message?:    string;
+    origin?:     DelegationPreferencesOrigin;
+    preferences: Preferences;
+    restores?:   number;
     [property: string]: any;
 }
 
@@ -3821,13 +3819,12 @@ export interface HarnessElement {
 }
 
 export interface DelegationPreferencesRevision {
-    changes:         string[];
-    created_at?:     string;
-    message?:        string;
-    origin?:         DelegationPreferencesOrigin;
-    preferences:     Preferences;
-    restores?:       number;
-    source_session?: string;
+    changes:     string[];
+    created_at?: string;
+    message?:    string;
+    origin?:     DelegationPreferencesOrigin;
+    preferences: Preferences;
+    restores?:   number;
     [property: string]: any;
 }
 
@@ -3837,7 +3834,6 @@ export interface DelegationPreferencesRollbackMessage {
     message?:           string;
     request_id?:        string;
     revision?:          number;
-    source_session?:    string;
     [property: string]: any;
 }
 
@@ -19068,7 +19064,6 @@ const typeMap: any = {
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesCommitMessageCmd") },
         { json: "message", js: "message", typ: u(undefined, "") },
         { json: "preferences", js: "preferences", typ: r("Preferences") },
-        { json: "source_session", js: "source_session", typ: u(undefined, "") },
     ], "any"),
     "Preferences": o([
         { json: "enabled", js: "enabled", typ: true },
@@ -19095,7 +19090,6 @@ const typeMap: any = {
         { json: "origin", js: "origin", typ: u(undefined, r("DelegationPreferencesOrigin")) },
         { json: "preferences", js: "preferences", typ: r("Preferences") },
         { json: "restores", js: "restores", typ: u(undefined, 0) },
-        { json: "source_session", js: "source_session", typ: u(undefined, "") },
     ], "any"),
     "DelegationPreferencesResultMessage": o([
         { json: "error", js: "error", typ: u(undefined, "") },
@@ -19123,7 +19117,6 @@ const typeMap: any = {
         { json: "origin", js: "origin", typ: u(undefined, r("DelegationPreferencesOrigin")) },
         { json: "preferences", js: "preferences", typ: r("Preferences") },
         { json: "restores", js: "restores", typ: u(undefined, 0) },
-        { json: "source_session", js: "source_session", typ: u(undefined, "") },
     ], "any"),
     "DelegationPreferencesRollbackMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesRollbackMessageCmd") },
@@ -19131,7 +19124,6 @@ const typeMap: any = {
         { json: "message", js: "message", typ: u(undefined, "") },
         { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "revision", js: "revision", typ: u(undefined, 0) },
-        { json: "source_session", js: "source_session", typ: u(undefined, "") },
     ], "any"),
     "DelegationPreferencesSaveMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesSaveMessageCmd") },

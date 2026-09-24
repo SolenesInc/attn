@@ -18,8 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-const delegationRolesEditAttempts = 3
-
 func runDelegateRoles(args []string) {
 	if len(args) == 0 || args[0] == "--json" {
 		runDelegateRolesCatalog(args)
@@ -267,9 +265,6 @@ func writeDelegationRevisionHeader(w io.Writer, revision protocol.DelegationPref
 	case protocol.DelegationPreferencesOriginCli:
 		parts = append(parts, "from the CLI")
 	}
-	if revision.SourceSession != nil {
-		parts = append(parts, "by session "+*revision.SourceSession)
-	}
 	fmt.Fprintln(w, strings.Join(parts, " · "))
 	if revision.Message != nil {
 		fmt.Fprintf(w, "  %q\n", *revision.Message)
@@ -301,7 +296,7 @@ func runDelegateRolesRollback(args []string) error {
 		}
 		target = &revision
 	}
-	restored, err := client.New("").DelegationPreferencesRollback(target, os.Getenv("ATTN_SESSION_ID"), *message)
+	restored, err := client.New("").DelegationPreferencesRollback(target, *message)
 	if err != nil {
 		return err
 	}
@@ -325,7 +320,7 @@ func runDelegateRolesApply(args []string) error {
 	if err := json.Unmarshal(raw, &preferences); err != nil {
 		return fmt.Errorf("read %s: %w", positionals[0], err)
 	}
-	saved, err := client.New("").DelegationPreferencesCommit(preferences, os.Getenv("ATTN_SESSION_ID"), *message)
+	saved, err := client.New("").DelegationPreferencesCommit(preferences, *message)
 	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
 		return fmt.Errorf("the table changed after revision %d; export it again with attn delegate roles show --json", preferences.Revision)
 	}
@@ -342,25 +337,23 @@ func runDelegateRolesEdit(command string, args []string) error {
 		return err
 	}
 	c := client.New("")
-	for attempt := 1; ; attempt++ {
-		live, err := c.DelegationPreferencesShow()
-		if err != nil {
-			return err
-		}
-		next := live.Preferences
-		if err := edit(&next); err != nil {
-			return err
-		}
-		saved, err := c.DelegationPreferencesCommit(next, os.Getenv("ATTN_SESSION_ID"), message)
-		if client.ErrorCode(err) == protocol.ErrorCodeConflict && attempt < delegationRolesEditAttempts {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		writeDelegationRevisionResult(os.Stdout, saved)
-		return nil
+	live, err := c.DelegationPreferencesShow()
+	if err != nil {
+		return err
 	}
+	next := live.Preferences
+	if err := edit(&next); err != nil {
+		return err
+	}
+	saved, err := c.DelegationPreferencesCommit(next, message)
+	if client.ErrorCode(err) == protocol.ErrorCodeConflict {
+		return fmt.Errorf("the table changed while this command ran; run it again")
+	}
+	if err != nil {
+		return err
+	}
+	writeDelegationRevisionResult(os.Stdout, saved)
+	return nil
 }
 
 func writeDelegationRevisionResult(w io.Writer, revision *protocol.DelegationPreferencesRevision) {
@@ -462,8 +455,6 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		}
 		return role, choice, nil
 	}
-	modelFlags := []string{"agent", "model", "provider", "effort"}
-	guidanceFlags := []string{"name", "icon", "description", "instructions", "stopping-point"}
 	var edit delegationRolesEdit
 	switch command {
 	case "add":
@@ -472,22 +463,14 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 			return nil, "", err
 		}
 		if choiceID != "" {
-			err = acceptOnly(fs, "add <role>/<alt>", slices.Concat([]string{"name", "when"}, modelFlags))
 			edit = addAlternative(roleID, choiceID, name, when, model)
 		} else {
-			err = acceptOnly(fs, "add <role>", slices.Concat([]string{"builtin"}, guidanceFlags, modelFlags))
 			edit = addRole(roleID, builtin, guidance, model)
-		}
-		if err != nil {
-			return nil, "", err
 		}
 	case "set":
 		if *fallback {
 			if len(positionals) != 0 {
 				return nil, "", usagef("usage: attn delegate roles set --fallback [--instructions TEXT] [model flags]")
-			}
-			if err := acceptOnly(fs, "set --fallback", slices.Concat([]string{"fallback", "instructions"}, modelFlags)); err != nil {
-				return nil, "", err
 			}
 			edit = setFallback(instructions, model)
 			break
@@ -496,21 +479,10 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		if err != nil {
 			return nil, "", err
 		}
-		if choiceID != "" {
-			err = acceptOnly(fs, "set <role>/<alt>", slices.Concat([]string{"name", "when", "default"}, modelFlags))
-		} else {
-			err = acceptOnly(fs, "set <role>", slices.Concat(guidanceFlags, modelFlags))
-		}
-		if err != nil {
-			return nil, "", err
-		}
 		edit = setRole(roleID, choiceID, guidance, when, *makeDefault, model)
 	case "copy":
 		if len(positionals) != 2 {
 			return nil, "", usagef("usage: attn delegate roles copy <role> <new-role> [--name NAME]")
-		}
-		if err := acceptOnly(fs, "copy", []string{"name"}); err != nil {
-			return nil, "", err
 		}
 		edit = copyRole(positionals[0], positionals[1], name)
 	case "rm":
@@ -518,30 +490,14 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		if err != nil {
 			return nil, "", err
 		}
-		if err := acceptOnly(fs, "rm", nil); err != nil {
-			return nil, "", err
-		}
 		edit = removeRole(roleID, choiceID)
 	case "enable", "disable":
 		if len(positionals) > 1 {
 			return nil, "", usagef("usage: attn delegate roles %s [<role>]", command)
 		}
-		if err := acceptOnly(fs, command, nil); err != nil {
-			return nil, "", err
-		}
 		edit = setEnabled(positionals, command == "enable")
 	}
 	return edit, *message, nil
-}
-
-func acceptOnly(fs *flag.FlagSet, form string, accepted []string) error {
-	var rejected error
-	fs.Visit(func(f *flag.Flag) {
-		if rejected == nil && f.Name != "m" && !slices.Contains(accepted, f.Name) {
-			rejected = usagef("--%s does not apply to %s; attn delegate roles --help lists each command's flags", f.Name, form)
-		}
-	})
-	return rejected
 }
 
 type guidanceEdits struct{ name, icon, description, instructions, stoppingPoint *optionalText }

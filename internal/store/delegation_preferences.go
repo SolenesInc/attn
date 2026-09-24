@@ -17,7 +17,6 @@ func applyMigration153(tx *sql.Tx) error {
 	restores INTEGER,
 	config TEXT NOT NULL,
 	origin TEXT NOT NULL DEFAULT '',
-	source_session TEXT NOT NULL DEFAULT '',
 	message TEXT NOT NULL DEFAULT '',
 	created_at TEXT NOT NULL
 )`); err != nil {
@@ -37,9 +36,8 @@ DROP TABLE delegation_preferences;`)
 }
 
 type DelegationPreferencesNote struct {
-	Origin        string
-	SourceSession string
-	Message       string
+	Origin  string
+	Message string
 }
 
 type DelegationPreferencesRevision struct {
@@ -55,7 +53,7 @@ type delegationPreferencesRow struct {
 	parent   *int
 }
 
-const delegationPreferencesRowColumns = `revision, parent, restores, config, origin, source_session, message, created_at`
+const delegationPreferencesRowColumns = `revision, parent, restores, config, origin, message, created_at`
 
 func (s *Store) GetDelegationPreferences() (delegationprefs.Config, error) {
 	s.mu.RLock()
@@ -94,7 +92,7 @@ func scanDelegationPreferencesRow(row interface{ Scan(...any) error }) (delegati
 		raw, createdAt   string
 	)
 	out.revision.Config = delegationprefs.Defaults()
-	err := row.Scan(&revision, &parent, &restores, &raw, &out.revision.Origin, &out.revision.SourceSession, &out.revision.Message, &createdAt)
+	err := row.Scan(&revision, &parent, &restores, &raw, &out.revision.Origin, &out.revision.Message, &createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, false, nil
 	}
@@ -212,8 +210,8 @@ func (s *Store) appendDelegationPreferences(
 		return DelegationPreferencesRevision{Config: cfg}, err
 	}
 	now := time.Now().UTC()
-	if _, err := tx.Exec(`INSERT INTO delegation_preference_revisions (`+delegationPreferencesRowColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		cfg.Revision, parent, restores, string(raw), note.Origin, note.SourceSession, note.Message, now.Format(sortableTimeFormat)); err != nil {
+	if _, err := tx.Exec(`INSERT INTO delegation_preference_revisions (`+delegationPreferencesRowColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		cfg.Revision, parent, restores, string(raw), note.Origin, note.Message, now.Format(sortableTimeFormat)); err != nil {
 		return DelegationPreferencesRevision{Config: cfg}, err
 	}
 	if err := tx.Commit(); err != nil {

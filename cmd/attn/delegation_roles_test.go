@@ -100,14 +100,8 @@ func TestDelegationRolesEditRefusalsSayWhatToDoInstead(t *testing.T) {
 		usage   bool
 	}{
 		{"set", []string{"build"}, "nothing to change", true},
-		{"set", []string{"build", "--when", "x"}, "--when does not apply to set <role>", true},
-		{"set", []string{"build/hard", "--instructions", "x"}, "--instructions does not apply to set <role>/<alt>", true},
-		{"rm", []string{"build", "--name", "typo"}, "--name does not apply to rm", true},
 		{"rm", []string{"build/"}, "is not a role or role/alternative", true},
 		{"set", []string{"/hard", "--model", "x"}, "is not a role or role/alternative", true},
-		{"disable", []string{"build", "--model", "x"}, "--model does not apply to disable", true},
-		{"copy", []string{"build", "clone", "--instructions", "x"}, "--instructions does not apply to copy", true},
-		{"add", []string{"build/fast", "--when", "x", "--builtin", "builder"}, "--builtin does not apply to add <role>/<alt>", true},
 		{"add", []string{"build/fast"}, "needs --when", true},
 		{"add", []string{"review"}, "needs --name", true},
 		{"add", []string{"build", "--name", "Again"}, "already exists", false},

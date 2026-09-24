@@ -160,7 +160,7 @@ func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.
 	}
 	var saved store.DelegationPreferencesRevision
 	if err == nil {
-		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, delegationPreferencesNote(protocol.DelegationPreferencesOriginCli, msg.SourceSession, msg.Message))
+		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, delegationPreferencesNote(protocol.DelegationPreferencesOriginCli, msg.Message))
 	}
 	if err != nil {
 		d.replyDelegationPreferencesError(conn, err)
@@ -197,7 +197,7 @@ func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protoco
 }
 
 func (d *Daemon) rollbackDelegationPreferences(msg *protocol.DelegationPreferencesRollbackMessage, origin protocol.DelegationPreferencesOrigin) (store.DelegationPreferencesRevision, error) {
-	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, msg.ExpectedRevision, delegationPreferencesNote(origin, msg.SourceSession, msg.Message))
+	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, msg.ExpectedRevision, delegationPreferencesNote(origin, msg.Message))
 	if err == nil {
 		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	}
@@ -211,8 +211,8 @@ func requireWorkflowSkillInstall(current, next delegationprefs.Config) error {
 	return nil
 }
 
-func delegationPreferencesNote(origin protocol.DelegationPreferencesOrigin, sourceSession, message *string) store.DelegationPreferencesNote {
-	return store.DelegationPreferencesNote{Origin: string(origin), SourceSession: strings.TrimSpace(protocol.Deref(sourceSession)), Message: strings.TrimSpace(protocol.Deref(message))}
+func delegationPreferencesNote(origin protocol.DelegationPreferencesOrigin, message *string) store.DelegationPreferencesNote {
+	return store.DelegationPreferencesNote{Origin: string(origin), Message: strings.TrimSpace(protocol.Deref(message))}
 }
 
 func (d *Daemon) replyDelegationPreferencesRevision(conn net.Conn, revision store.DelegationPreferencesRevision) {
@@ -235,9 +235,6 @@ func delegationPreferencesRevisionWire(revision store.DelegationPreferencesRevis
 	}
 	if revision.Origin != "" {
 		wire.Origin = protocol.Ptr(protocol.DelegationPreferencesOrigin(revision.Origin))
-	}
-	if revision.SourceSession != "" {
-		wire.SourceSession = &revision.SourceSession
 	}
 	if revision.Message != "" {
 		wire.Message = &revision.Message

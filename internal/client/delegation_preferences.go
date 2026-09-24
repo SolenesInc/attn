@@ -20,21 +20,19 @@ func (c *Client) DelegationPreferencesShow() (*protocol.DelegationPreferencesRev
 	return c.delegationPreferencesRevision(protocol.DelegationPreferencesShowMessage{Cmd: protocol.CmdDelegationPreferencesShow})
 }
 
-func (c *Client) DelegationPreferencesCommit(preferences protocol.DelegationPreferences, sourceSession, message string) (*protocol.DelegationPreferencesRevision, error) {
+func (c *Client) DelegationPreferencesCommit(preferences protocol.DelegationPreferences, message string) (*protocol.DelegationPreferencesRevision, error) {
 	return c.delegationPreferencesRevision(protocol.DelegationPreferencesCommitMessage{
-		Cmd:           protocol.CmdDelegationPreferencesCommit,
-		Preferences:   preferences,
-		SourceSession: nonEmpty(sourceSession),
-		Message:       nonEmpty(message),
+		Cmd:         protocol.CmdDelegationPreferencesCommit,
+		Preferences: preferences,
+		Message:     nonEmpty(message),
 	})
 }
 
-func (c *Client) DelegationPreferencesRollback(revision *int, sourceSession, message string) (*protocol.DelegationPreferencesRevision, error) {
+func (c *Client) DelegationPreferencesRollback(revision *int, message string) (*protocol.DelegationPreferencesRevision, error) {
 	return c.delegationPreferencesRevision(protocol.DelegationPreferencesRollbackMessage{
-		Cmd:           protocol.CmdDelegationPreferencesRollback,
-		Revision:      revision,
-		SourceSession: nonEmpty(sourceSession),
-		Message:       nonEmpty(message),
+		Cmd:      protocol.CmdDelegationPreferencesRollback,
+		Revision: revision,
+		Message:  nonEmpty(message),
 	})
 }
 

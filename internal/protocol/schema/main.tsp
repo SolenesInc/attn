@@ -1196,7 +1196,6 @@ model DelegationPreferencesRevision {
   preferences: DelegationPreferences;
   restores?: safeint;
   origin?: DelegationPreferencesOrigin;
-  source_session?: string;
   message?: string;
   created_at?: string;
   changes: string[];
@@ -1210,7 +1209,6 @@ model DelegationPreferencesCommitMessage {
   cmd: "delegation_preferences_commit";
   preferences: DelegationPreferences;
   message?: string;
-  source_session?: string;
 }
 
 model DelegationPreferencesHistoryMessage {
@@ -1228,7 +1226,6 @@ model DelegationPreferencesRollbackMessage {
   revision?: safeint;
   expected_revision?: safeint;
   message?: string;
-  source_session?: string;
 }
 
 enum DelegateAssignmentKind {

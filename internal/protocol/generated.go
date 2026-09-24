@@ -3411,9 +3411,6 @@ type DelegationPreferencesCommitMessage struct {
 
 	// Preferences corresponds to the JSON schema field "preferences".
 	Preferences DelegationPreferences `json:"preferences"`
-
-	// SourceSession corresponds to the JSON schema field "source_session".
-	SourceSession *string `json:"source_session,omitempty,omitzero"`
 }
 
 type DelegationPreferencesGetMessage struct {
@@ -3489,9 +3486,6 @@ type DelegationPreferencesRevision struct {
 
 	// Restores corresponds to the JSON schema field "restores".
 	Restores *int `json:"restores,omitempty,omitzero"`
-
-	// SourceSession corresponds to the JSON schema field "source_session".
-	SourceSession *string `json:"source_session,omitempty,omitzero"`
 }
 
 type DelegationPreferencesRollbackMessage struct {
@@ -3509,9 +3503,6 @@ type DelegationPreferencesRollbackMessage struct {
 
 	// Revision corresponds to the JSON schema field "revision".
 	Revision *int `json:"revision,omitempty,omitzero"`
-
-	// SourceSession corresponds to the JSON schema field "source_session".
-	SourceSession *string `json:"source_session,omitempty,omitzero"`
 }
 
 type DelegationPreferencesSaveMessage struct {
