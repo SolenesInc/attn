@@ -44,9 +44,11 @@ function failureMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+const NO_FOCUSED_LEAF = (): string | null => null;
+
 export function useDesktopNavigation(
   showNotice: ShowNotice,
-  focusedLeafOf: (desktopId: string) => string | null = () => null,
+  focusedLeafOf: (desktopId: string) => string | null = NO_FOCUSED_LEAF,
 ) {
   const {
     sendDesktopSetCurrent,
