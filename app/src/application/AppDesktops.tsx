@@ -38,10 +38,11 @@ export function AppDesktops() {
     handleSelectSession,
     handleNavigateOutOfSession,
     handleCloseTile,
+    handleSelectTile,
     crewSeedTile,
   } = useNavigationContext();
   const { handleBackToCrew } = useCrewPanelContext();
-  const { setDesktopRef, focusDesktopLeaf, eventRouter } = useDesktopRuntimeContext();
+  const { setDesktopRef, eventRouter } = useDesktopRuntimeContext();
   const { mountedDesktopIds } = useDesktopResidencyContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const {
@@ -140,7 +141,7 @@ export function AppDesktops() {
           onOpenMarkdown={(path, sessionId) => {
             void sendOpenMarkdown(path, sessionId)
               .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) focusDesktopLeaf(desktopId, tileId);
+                if (desktopId && tileId) handleSelectTile(desktopId, tileId);
               })
               .catch((error) => {
                 console.error('[Markdown] in-app open failed, falling back to OS open:', error);

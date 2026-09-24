@@ -3,7 +3,6 @@ import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
-import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useDaemonStore } from '../store/daemonSessions';
 import { gardenPathToSeed, useGardenWalk } from '../store/gardenWalk';
 import { useSessionStore } from '../store/sessions';
@@ -23,7 +22,6 @@ interface Options {
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
   handleSelectTile: (desktopId: string, tileId: string) => void;
-  focusDesktopLeaf: ReturnType<typeof useDesktopRuntimeController>['focusDesktopLeaf'];
   setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
@@ -42,7 +40,6 @@ export function useAppGardenActions({
   sendCrewWake,
   sendCrewSleep,
   handleSelectTile,
-  focusDesktopLeaf,
   setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
@@ -117,13 +114,13 @@ export function useAppGardenActions({
     (path: string) => {
       void sendOpenMarkdown(path, '')
         .then(({ desktopId, tileId }) => {
-          if (desktopId && tileId) focusDesktopLeaf(desktopId, tileId);
+          if (desktopId && tileId) handleSelectTile(desktopId, tileId);
         })
         .catch((error) => {
           showError(error instanceof Error ? error.message : 'Could not open the document');
         });
     },
-    [focusDesktopLeaf, sendOpenMarkdown, showError],
+    [handleSelectTile, sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(

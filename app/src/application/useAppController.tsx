@@ -247,7 +247,12 @@ export function useAppController({
     openNotebookBrowser,
   } = appPanels;
 
-  const desktopTiles = useDesktopTiles({ settings, sessions, activeSessionId });
+  const desktopTiles = useDesktopTiles({
+    settings,
+    sessions,
+    activeSessionId,
+    focusedLeafOn: desktopRuntime.focusedLeafOn,
+  });
   const {
     markdownOpenerOpen,
     appViewParamsPrompt,
@@ -288,7 +293,6 @@ export function useAppController({
   const [zoomModeBySessionId, setZoomModeBySessionId] = useState<Record<string, boolean>>({});
   const appDiagnostics = useAppDiagnostics({
     sessions,
-    daemonWorkspaces,
     getPaneSize,
     activeSessionId,
     getActivePaneIdForSession,
@@ -507,7 +511,6 @@ export function useAppController({
     sendCrewWake,
     sendCrewSleep,
     handleSelectTile,
-    focusDesktopLeaf,
     setCrewSeedTile,
     closeCrewPanel,
   });
@@ -541,7 +544,7 @@ export function useAppController({
   }, []);
 
   const showNavigationNotice = useCallback((message: string) => showError(message), [showError]);
-  const desktopNavigation = useDesktopNavigation(showNavigationNotice, desktopRuntime.focusedLeafOf);
+  const desktopNavigation = useDesktopNavigation(showNavigationNotice, desktopRuntime.focusedLeafOn);
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),

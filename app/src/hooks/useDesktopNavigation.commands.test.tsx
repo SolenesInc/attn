@@ -37,7 +37,7 @@ function seedStore(desktops: Desktop[], previousDesktopId: string | null = null,
 
 const ok = { request_id: 'r', action: 'x', success: true, event: 'profile_action_result' };
 
-function renderNavigation(focusedLeafOf: (desktopId: string) => string | null = () => null) {
+function renderNavigation(focusedLeafOn: (desktop: Desktop) => string = (desktop) => desktop.active_pane_id) {
   const api = {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
     sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
@@ -51,7 +51,7 @@ function renderNavigation(focusedLeafOf: (desktopId: string) => string | null = 
   const wrapper = ({ children }: { children: ReactNode }) => (
     <DaemonApiProvider api={createMockDaemonApi(api)}>{children}</DaemonApiProvider>
   );
-  const { result } = renderHook(() => useDesktopNavigation(showNotice, focusedLeafOf), { wrapper });
+  const { result } = renderHook(() => useDesktopNavigation(showNotice, focusedLeafOn), { wrapper });
   return { api, showNotice, result };
 }
 
@@ -152,7 +152,7 @@ describe('useDesktopNavigation', () => {
       desktop('d1', { shortcut_slot: 1, tree_json: withTile, active_pane_id: 'p1', revision: 4 }),
       desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
     ]);
-    const { api, result } = renderNavigation((desktopId) => (desktopId === 'd1' ? 't1' : null));
+    const { api, result } = renderNavigation((desktop) => (desktop.id === 'd1' ? 't1' : desktop.active_pane_id));
 
     act(() => result.current.sendActivePaneToSlot(2));
     await settle();

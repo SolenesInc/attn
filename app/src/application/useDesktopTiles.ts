@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
+import type { Desktop } from '../types/generated';
 import { OPENER_EXTENSIONS } from '../components/palette/MarkdownOpener';
 import { resolveMarkdownOpenerTarget } from '../components/palette/openerTarget';
 import { claimPaletteFocus } from '../components/palette/paletteClaim';
@@ -13,6 +14,7 @@ interface Options {
   settings: AppContentProps['settings'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
+  focusedLeafOn: (desktop: Desktop) => string;
 }
 
 function currentDesktop() {
@@ -20,7 +22,7 @@ function currentDesktop() {
   return desktops.find((desktop) => desktop.id === currentDesktopId);
 }
 
-export function useDesktopTiles({ settings, sessions, activeSessionId }: Options) {
+export function useDesktopTiles({ settings, sessions, activeSessionId, focusedLeafOn }: Options) {
   const { sendRecentFiles, sendFsIndex, sendDesktopDockTile } = useDaemonApi();
   const [markdownOpenerOpen, setMarkdownOpenerOpen] = useState(false);
   const [appViewParamsPrompt, setAppViewParamsPrompt] = useState<{
@@ -69,13 +71,13 @@ export function useDesktopTiles({ settings, sessions, activeSessionId }: Options
       tileId: `notebook-tile-${crypto.randomUUID()}`,
       tileKind: 'notebook',
       tileParams: root ? serializeNotebookTileParams({ root }) : undefined,
-      anchorId: desktop.active_pane_id || undefined,
+      anchorId: focusedLeafOn(desktop) || undefined,
       edge: 'right',
       tileShare: 0.4,
     }).catch((error) => {
       console.warn('[App] Failed to dock notebook tile:', error);
     });
-  }, [sendDesktopDockTile, settings, sessions, activeSessionId]);
+  }, [sendDesktopDockTile, settings, sessions, activeSessionId, focusedLeafOn]);
 
   // A fresh tile id every time: the daemon reads a duplicate id as a move.
   const dockAppViewTile = useCallback(
@@ -88,14 +90,14 @@ export function useDesktopTiles({ settings, sessions, activeSessionId }: Options
         tileId: `app-view-tile-${crypto.randomUUID()}`,
         tileKind: appViewTileKind(app, view),
         tileParams: params || undefined,
-        anchorId: desktop.active_pane_id || undefined,
+        anchorId: focusedLeafOn(desktop) || undefined,
         edge: 'right',
         tileShare: 0.4,
       }).catch((error) => {
         console.warn('[App] Failed to dock app view tile:', error);
       });
     },
-    [sendDesktopDockTile],
+    [focusedLeafOn, sendDesktopDockTile],
   );
 
   return {

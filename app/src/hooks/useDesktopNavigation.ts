@@ -44,11 +44,11 @@ function failureMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-const NO_FOCUSED_LEAF = (): string | null => null;
+const daemonActivePane = (desktop: Desktop) => desktop.active_pane_id;
 
 export function useDesktopNavigation(
   showNotice: ShowNotice,
-  focusedLeafOf: (desktopId: string) => string | null = NO_FOCUSED_LEAF,
+  focusedLeafOn: (desktop: Desktop) => string = daemonActivePane,
 ) {
   const {
     sendDesktopSetCurrent,
@@ -111,7 +111,7 @@ export function useDesktopNavigation(
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
-      const leafId = focusedLeafOf(source.id) ?? source.active_pane_id;
+      const leafId = focusedLeafOn(source);
       if (!leafId) {
         showNotice('No focused pane to send.');
         return;
@@ -121,7 +121,7 @@ export function useDesktopNavigation(
           sourceDesktopId: source.id,
           targetDesktopId: target.id,
           leafId,
-          anchorId: target.active_pane_id || undefined,
+          anchorId: focusedLeafOn(target) || undefined,
           edge: 'right',
           expectedSourceRevision: source.revision,
           expectedTargetRevision: target.revision,
@@ -136,7 +136,7 @@ export function useDesktopNavigation(
       const layout = parseLayoutJSON(source.tree_json);
       if (layout && hasPane(layout, leafId)) await sendDesktopSetActivePane(target.id, leafId);
     },
-    [focusedLeafOf, sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
+    [focusedLeafOn, sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
   );
 
   const sendActivePaneToDesktop = useCallback(

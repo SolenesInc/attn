@@ -5,8 +5,8 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { AppActionMenu } from './AppActionMenu';
 import {
   useAttentionQueueContext,
-  useDesktopRuntimeContext,
   useDesktopTilesContext,
+  useNavigationContext,
 } from './AppContexts';
 
 export function AppNavigationMenus() {
@@ -18,7 +18,7 @@ export function AppNavigationMenus() {
     setMarkdownOpenerOpen,
   } = useDesktopTilesContext();
   const { sendBrowseDirectory, sendOpenMarkdown, sendSnoozeTurn } = useDaemonApi();
-  const { focusDesktopLeaf } = useDesktopRuntimeContext();
+  const { handleSelectTile } = useNavigationContext();
   const { snoozeMenu, setSnoozeMenu } = useAttentionQueueContext();
   return (
     <>
@@ -41,7 +41,7 @@ export function AppNavigationMenus() {
             }
             void sendOpenMarkdown(path, bindTo)
               .then(({ desktopId, tileId }) => {
-                if (desktopId && tileId) focusDesktopLeaf(desktopId, tileId);
+                if (desktopId && tileId) handleSelectTile(desktopId, tileId);
               })
               .catch((error) => {
                 console.error(

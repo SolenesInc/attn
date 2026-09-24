@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import type { Desktop } from '../types/generated';
 import { useSessionStore, type Session } from '../store/sessions';
 import type { BlockStateSnapshot, PlacementStateSnapshot } from '../components/GhosttyTerminal';
 import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
@@ -20,7 +21,7 @@ interface DesktopRuntimeController {
   setDesktopRef: (desktopId: string) => (ref: SessionTerminalWorkspaceHandle | null) => void;
   getDesktopLeafDropSnapshot: (desktopId: string | null | undefined) => LeafDropSnapshot | null;
   focusDesktopLeaf: (desktopId: string, leafId: string) => void;
-  focusedLeafOf: (desktopId: string) => string | null;
+  focusedLeafOn: (desktop: Desktop) => string;
   focusSessionPane: (sessionId: string, paneId: string, retries?: number) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
@@ -90,8 +91,8 @@ export function useDesktopRuntimeController(
     desktopRefs.current.get(desktopId)?.focusLeaf(leafId);
   }, []);
 
-  const focusedLeafOf = useCallback(
-    (desktopId: string) => desktopRefs.current.get(desktopId)?.getActiveLeafId() || null,
+  const focusedLeafOn = useCallback(
+    (desktop: Desktop) => desktopRefs.current.get(desktop.id)?.getActiveLeafId() || desktop.active_pane_id,
     [],
   );
 
@@ -180,7 +181,7 @@ export function useDesktopRuntimeController(
     setDesktopRef,
     getDesktopLeafDropSnapshot,
     focusDesktopLeaf,
-    focusedLeafOf,
+    focusedLeafOn,
     focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,
