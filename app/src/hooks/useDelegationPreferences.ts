@@ -24,7 +24,7 @@ export function useDelegationPreferences(
   const request = useRef(0);
   const deferred = useRef(false);
   const confirmed = useRef<DelegationPreferences | null>(null);
-  const lastEdit = useRef<Promise<number | null>>(Promise.resolve(null));
+  const lastEdit = useRef<Promise<number | null> | null>(null);
 
   const confirm = useCallback((next: DelegationSettingsState) => {
     revision.current = next.preferences.revision;
