@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { SessionLedgerEntry, SessionReopen } from '../../types/generated';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
-import type { SessionLedgerFilters } from '../../hooks/useSessionLedger';
+import type { SessionLedgerFilters, SessionLedgerView } from '../../hooks/useSessionLedger';
 import {
   SESSION_FILTERS_SETTING_KEY,
   parseSessionFilters,
@@ -23,6 +23,7 @@ import {
 import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import type { ParsedQuery } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
@@ -88,41 +89,9 @@ export function SessionsTab({
   });
   const { filters, setFilters, entries, verdicts, recordClose, recordVerdict, reload } = ledger;
 
-  const profileLabel = useCallback((id: string) => profileNames[id] ?? id, [profileNames]);
-
-  const [text, setText] = useState(() => formatQuery(restoredFilters, profileLabel));
-  const parsed = useMemo(
-    () => parseQuery(text, ledger.facets, profileLabel, filters.repository),
-    [text, ledger.facets, profileLabel, filters.repository],
-  );
-  const facetsPending = ledger.facets === null;
-  const unresolvedRepository = facetsPending
-    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('repo:'));
-  const unresolvedProfile = facetsPending
-    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('profile:'));
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setFilters((current) => {
-        const next = {
-          ...current,
-          ...parsed.filters,
-          repository: unresolvedRepository ? current.repository : parsed.filters.repository,
-          profileId: unresolvedProfile ? current.profileId : parsed.filters.profileId,
-        };
-        const same = next.range === current.range && next.customFrom === current.customFrom
-          && next.customTo === current.customTo && next.profileId === current.profileId
-          && next.repository === current.repository;
-        return same ? current : next;
-      });
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [parsed.filters, setFilters, unresolvedRepository, unresolvedProfile]);
-
-  useEffect(() => {
-    if (!requestedDir) return;
-    setText(`dir:${requestedDir.path}`);
-  }, [requestedDir]);
+  const { text, setText, parsed } = useLedgerQueryText({
+    restoredFilters, profileNames, facets: ledger.facets, repository: filters.repository, setFilters, requestedDir,
+  });
 
   useEffect(() => {
     if (!closeNotice) return;
@@ -262,17 +231,7 @@ export function SessionsTab({
       }));
   }, [text, parsed]);
 
-  const emptyMessage = ledger.filterError
-    ? ledger.filterError
-    : ledger.error
-      ? ledger.error
-      : ledger.loading && entries.length === 0
-        ? 'Reading the ledger…'
-        : entries.length > 0
-          ? 'Nothing on this page matches the query.'
-          : filters.scope === 'closed'
-            ? 'No closed sessions yet. Closing one records it here.'
-            : filters.scope === 'live' ? 'No live sessions right now.' : 'The ledger is empty.';
+  const emptyMessage = ledgerEmptyMessage(ledger, filters.scope);
 
   return (
     <>
@@ -328,6 +287,67 @@ export function SessionsTab({
       </div>
     </>
   );
+}
+
+interface LedgerQueryTextOptions {
+  restoredFilters: SessionLedgerFilters;
+  profileNames: Record<string, string>;
+  facets: SessionLedgerFacets | null;
+  repository: string;
+  setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
+  requestedDir?: { path: string; nonce: number } | null;
+}
+
+function unresolvedWhilePending(parsed: ParsedQuery, facets: SessionLedgerFacets | null, prefix: string): boolean {
+  return facets === null && parsed.unresolved.some((token) => token.toLowerCase().startsWith(prefix));
+}
+
+function sameQueryFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
+  return a.range === b.range && a.customFrom === b.customFrom && a.customTo === b.customTo
+    && a.profileId === b.profileId && a.repository === b.repository;
+}
+
+function useLedgerQueryText({ restoredFilters, profileNames, facets, repository, setFilters, requestedDir }: LedgerQueryTextOptions) {
+  const profileLabel = useCallback((id: string) => profileNames[id] ?? id, [profileNames]);
+  const [text, setText] = useState(() => formatQuery(restoredFilters, profileLabel));
+  const parsed = useMemo(
+    () => parseQuery(text, facets, profileLabel, repository),
+    [text, facets, profileLabel, repository],
+  );
+  const keepRepository = unresolvedWhilePending(parsed, facets, 'repo:');
+  const keepProfile = unresolvedWhilePending(parsed, facets, 'profile:');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setFilters((current) => {
+        const next = {
+          ...current,
+          ...parsed.filters,
+          repository: keepRepository ? current.repository : parsed.filters.repository,
+          profileId: keepProfile ? current.profileId : parsed.filters.profileId,
+        };
+        return sameQueryFilters(next, current) ? current : next;
+      });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [parsed.filters, setFilters, keepRepository, keepProfile]);
+
+  useEffect(() => {
+    if (!requestedDir) return;
+    setText(`dir:${requestedDir.path}`);
+  }, [requestedDir]);
+
+  return { text, setText, parsed };
+}
+
+function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): string {
+  if (ledger.filterError) return ledger.filterError;
+  if (ledger.error) return ledger.error;
+  if (ledger.loading && ledger.entries.length === 0) return 'Reading the ledger…';
+  if (ledger.entries.length > 0) return 'Nothing on this page matches the query.';
+  if (scope === 'closed') return 'No closed sessions yet. Closing one records it here.';
+  if (scope === 'live') return 'No live sessions right now.';
+  return 'The ledger is empty.';
 }
 
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
