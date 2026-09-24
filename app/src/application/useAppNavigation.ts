@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
+import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -26,6 +27,7 @@ interface Options {
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   focusDesktopLeaf: ReturnType<typeof useDesktopRuntimeController>['focusDesktopLeaf'];
+  showError: (message: string) => void;
 }
 export function useAppNavigation({
   activeSessionId,
@@ -34,6 +36,7 @@ export function useAppNavigation({
   unmutedEnrichedSessions,
   attentionQueue,
   focusDesktopLeaf,
+  showError,
 }: Options) {
   const {
     view,
@@ -164,11 +167,13 @@ export function useAppNavigation({
       }
       setCrewSeedTile(clearIfClosed);
       setSelectedTile(clearIfClosed);
-      const desktop = useProfilesStore.getState().desktops.find((entry) => entry.id === desktopId);
-      if (!desktop) return;
-      void sendDesktopRemoveLeaf(desktopId, tileId, desktop.revision).catch(() => {});
+      void withFreshDesktopRevisions([desktopId], (revisionOf) =>
+        sendDesktopRemoveLeaf(desktopId, tileId, revisionOf(desktopId)),
+      ).catch((error) => {
+        showError(`Could not close that tile: ${error instanceof Error ? error.message : String(error)}`);
+      });
     },
-    [sendDesktopRemoveLeaf, setSelectedTile],
+    [sendDesktopRemoveLeaf, setSelectedTile, showError],
   );
 
   const handleReloadTile = useCallback((desktopId: string, tileId: string) => {

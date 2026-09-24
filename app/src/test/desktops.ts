@@ -93,6 +93,9 @@ export function fakeDesktopCommands() {
       }));
       return ok('desktop_place_session');
     }),
+    sendDesktopRemoveLeaf: vi.fn(async (_desktopId: string, _leafId: string, _expectedRevision: number) =>
+      ok('desktop_remove_leaf'),
+    ),
   };
 }
 

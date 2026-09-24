@@ -5,6 +5,7 @@ import { useDaemonStore } from '../store/daemonSessions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
+import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { desktopTerminalState, orderedDesktops } from '../utils/desktops';
 import {
   useAppAppearanceContext,
@@ -23,8 +24,8 @@ import {
   useSessionLifecycleContext,
 } from './AppContexts';
 
-function revisionOf(desktopId: string): number | null {
-  return useProfilesStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.revision ?? null;
+function failureMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function AppDesktops() {
@@ -53,7 +54,7 @@ export function AppDesktops() {
     zoomModeBySessionId,
     setZoomModeBySessionId,
   } = useAppShell();
-  const { handleTerminalModelRecovered } = useAppErrorsContext();
+  const { handleTerminalModelRecovered, showError } = useAppErrorsContext();
   const { seedPopoverRequest, usagePopoverRequest } = useAppPanelsContext();
   const { terminalFontSize, resolvedTheme } = useAppAppearanceContext();
   const { delegationSessions } = useAppSessionsContext();
@@ -173,10 +174,11 @@ export function AppDesktops() {
           }}
           onRenameSession={sendRenameSession}
           onSelectSession={handleSelectSession}
-          onResizeSplit={(splitId, ratio) => {
-            const revision = revisionOf(desktop.id);
-            return revision === null ? undefined : sendDesktopSetSplitRatio(desktop.id, splitId, ratio, revision);
-          }}
+          onResizeSplit={(splitId, ratio) =>
+            withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+              sendDesktopSetSplitRatio(desktop.id, splitId, ratio, revisionOf(desktop.id)),
+            )
+          }
           onFocusPane={(paneId) => {
             if (paneId === desktop.active_pane_id) return;
             void sendDesktopSetActivePane(desktop.id, paneId).catch(() => {});
@@ -191,25 +193,30 @@ export function AppDesktops() {
           onUndockTile={(tileId) => {
             handleCloseTile(desktop.id, tileId);
           }}
-          onUpdateTile={(tileId, tileParams, tileSessionId) => {
-            const revision = revisionOf(desktop.id);
-            return revision === null
-              ? undefined
-              : sendDesktopUpdateTile({ desktopId: desktop.id, expectedRevision: revision, tileId, tileParams, tileSessionId });
-          }}
+          onUpdateTile={(tileId, tileParams, tileSessionId) =>
+            withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+              sendDesktopUpdateTile({
+                desktopId: desktop.id,
+                expectedRevision: revisionOf(desktop.id),
+                tileId,
+                tileParams,
+                tileSessionId,
+              }),
+            )
+          }
           onMoveLeaf={(leafId, anchorId, edge, ratio) => {
-            const revision = revisionOf(desktop.id);
-            if (revision === null) return;
-            void sendDesktopMoveLeaf({
-              sourceDesktopId: desktop.id,
-              targetDesktopId: desktop.id,
-              leafId,
-              anchorId,
-              edge,
-              leafShare: ratio,
-              expectedSourceRevision: revision,
-              expectedTargetRevision: revision,
-            }).catch(() => {});
+            void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
+              sendDesktopMoveLeaf({
+                sourceDesktopId: desktop.id,
+                targetDesktopId: desktop.id,
+                leafId,
+                anchorId,
+                edge,
+                leafShare: ratio,
+                expectedSourceRevision: revisionOf(desktop.id),
+                expectedTargetRevision: revisionOf(desktop.id),
+              }),
+            ).catch((error) => showError(`Could not move that pane: ${failureMessage(error)}`));
           }}
           getActiveLeafDropSnapshot={getActiveLeafDropSnapshot}
           onLeafDragStart={handleLeafDragStart}

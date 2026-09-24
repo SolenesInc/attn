@@ -136,6 +136,10 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
         const shown = shownOf(state);
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) return;
+        const { selectedTile } = useSessionStore.getState();
+        if (selectedTile && selectedTile.desktopId !== shown.desktopId) {
+          useSessionStore.setState({ selectedTile: null });
+        }
         const sessions = useSessionStore.getState();
         if (sessions.view !== 'session') return;
         if (shown.sessionId !== sessions.activeSessionId || sessions.pendingSelection) {

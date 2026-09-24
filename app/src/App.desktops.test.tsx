@@ -5,6 +5,7 @@ import App from './App';
 import { useProfilesStore } from './store/profiles';
 import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
+import { ProfileCommandError } from './hooks/daemonProfileEvents';
 import type { Desktop } from './types/generated';
 import type { TerminalLayoutNode } from './types/workspace';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
@@ -97,12 +98,14 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     isActiveSession,
     selectedSessionId,
     onFocusPane,
+    onUndockTile,
   }: {
     workspaceId: string;
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
     isActiveSession: boolean;
     selectedSessionId?: string | null;
     onFocusPane?: (paneId: string) => void;
+    onUndockTile?: (tileId: string) => void;
   }, ref) {
     React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusDesktopLeaf, focusPane: vi.fn() }));
     return (
@@ -114,6 +117,9 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
         data-agent-count={workspace.agents.length}
         data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
       />
+      {collectTileIds(workspace.layoutTree).map((tileId) => (
+        <button key={tileId} type="button" data-testid={`undock-${tileId}`} onClick={() => onUndockTile?.(tileId)} />
+      ))}
       {workspace.agents.map((agent) => {
         const pane = agent as { id: string };
         return (
@@ -470,6 +476,44 @@ describe('desktop surface', () => {
       expect(mockFocusDesktopLeaf).toHaveBeenCalledWith('tile-seed');
     });
     expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenLastCalledWith(TEST_PROFILE_ID, 'd-late');
+  });
+
+  it('drops the selected tile when the shown desktop moves to one without agents', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    await userEvent.click(screen.getByTestId('select-d2'));
+    await waitFor(() => expect(isActive('d2')).toBe(true));
+    act(() => useSessionStore.getState().setSelectedTile({ desktopId: 'd2', tileId: 'tile-readme' }));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme');
+
+    act(() => arrangeDesktops([...useProfilesStore.getState().desktops, agentDesktop('d-empty', 4, [])], 'd-empty'));
+
+    await waitFor(() => expect(isActive('d-empty')).toBe(true));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
+  });
+
+  it('retries closing a tile against the revision another window moved the desktop to', async () => {
+    const { sendDesktopRemoveLeaf } = desktopCommands;
+    sendDesktopRemoveLeaf.mockRejectedValueOnce(new ProfileCommandError({
+      event: 'profile_action_result',
+      request_id: 'test',
+      action: 'desktop_remove_leaf',
+      success: false,
+      error: 'stale',
+      error_code: 'stale_revision',
+    } as never));
+    render(<App />);
+    await userEvent.click(await screen.findByTestId('select-d2'));
+    await userEvent.click(await screen.findByTestId('undock-tile-readme'));
+    expect(sendDesktopRemoveLeaf).toHaveBeenLastCalledWith('d2', 'tile-readme', 1);
+
+    act(() => arrangeDesktops(
+      useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd2' ? { ...desktop, revision: 7 } : desktop)),
+      'd2',
+    ));
+
+    await waitFor(() => expect(sendDesktopRemoveLeaf).toHaveBeenLastCalledWith('d2', 'tile-readme', 7));
+    expect(sendDesktopRemoveLeaf).toHaveBeenCalledTimes(2);
   });
 
   it('mounts the desktops the grid shows', async () => {

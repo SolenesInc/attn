@@ -3,38 +3,10 @@ import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
 import { hasPane, parseLayoutJSON } from '../types/workspace';
-import { ProfileCommandError } from './daemonProfileEvents';
+import { isStaleRevision, waitForArrangementAfter } from './desktopRevisions';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
-
-export const FRESH_ARRANGEMENT_TRIPWIRE_MS = 5_000;
-
-function revisionOf(desktopId: string): number | null {
-  return useProfilesStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.revision ?? null;
-}
-
-function arrangementAdvanced(seen: Map<string, number>): boolean {
-  return [...seen].some(([desktopId, revision]) => revisionOf(desktopId) !== revision);
-}
-
-function waitForArrangementAfter(seen: Map<string, number>): Promise<void> {
-  if (arrangementAdvanced(seen)) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      unsubscribe();
-      reject(new Error(
-        `Another window changed this desktop and its new layout did not arrive within ${FRESH_ARRANGEMENT_TRIPWIRE_MS / 1000}s. Try again.`,
-      ));
-    }, FRESH_ARRANGEMENT_TRIPWIRE_MS);
-    const unsubscribe = useProfilesStore.subscribe(() => {
-      if (!arrangementAdvanced(seen)) return;
-      window.clearTimeout(timer);
-      unsubscribe();
-      resolve();
-    });
-  });
-}
 
 function currentDesktopOf(state: ReturnType<typeof useProfilesStore.getState>): Desktop | undefined {
   return state.desktops.find((desktop) => desktop.id === state.currentDesktopId);
@@ -127,7 +99,7 @@ export function useDesktopNavigation(
           expectedTargetRevision: target.revision,
         });
       } catch (err) {
-        if (retryOnStale && err instanceof ProfileCommandError && err.code === 'stale_revision') {
+        if (retryOnStale && isStaleRevision(err)) {
           await waitForArrangementAfter(new Map([[source.id, source.revision], [target.id, target.revision]]));
           return moveActivePane(targetDesktopId, false);
         }

@@ -168,6 +168,7 @@ export function useAppController({
     unmutedEnrichedSessions,
     attentionQueue,
     focusDesktopLeaf,
+    showError,
   });
   const {
     view,
@@ -252,6 +253,7 @@ export function useAppController({
     sessions,
     activeSessionId,
     focusedLeafOn: desktopRuntime.focusedLeafOn,
+    showError,
   });
   const {
     markdownOpenerOpen,

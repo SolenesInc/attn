@@ -6,7 +6,8 @@ import { createMockDaemonApi } from '../test/mocks/daemon';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop, Profile } from '../types/generated';
 import { ProfileCommandError } from './daemonProfileEvents';
-import { FRESH_ARRANGEMENT_TRIPWIRE_MS, useDesktopNavigation } from './useDesktopNavigation';
+import { FRESH_ARRANGEMENT_TRIPWIRE_MS } from './desktopRevisions';
+import { useDesktopNavigation } from './useDesktopNavigation';
 
 const PROFILE: Profile = { id: 'set-default', name: 'Default', current_desktop_id: 'd1', revision: 3 };
 const TREE_WITH_PANE = (paneId: string) => JSON.stringify({ type: 'pane', pane_id: paneId });
