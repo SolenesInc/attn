@@ -41,7 +41,7 @@
 - Pane: an agent's place on a desktop. An agent has at most one pane.
 - Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
-- Active pane: the pane a desktop has selected. Every client shares it.
+- Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
 
 ## Garden and crew
