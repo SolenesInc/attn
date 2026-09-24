@@ -40,6 +40,7 @@ export function useAppNavigation({
     followNextTurn,
     setFollowNextTurn,
     selectedTile,
+    setSelectedTile,
     utilityFocusRequestToken,
     requestTerminalFocus,
     goToDashboard,
@@ -113,6 +114,7 @@ export function useAppNavigation({
       const { selectedProfileId, desktops } = useProfilesStore.getState();
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
+      setSelectedTile({ desktopId, tileId });
       void sendDesktopSetActivePane(desktopId, tileId)
         .then(() => {
           if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
@@ -121,7 +123,7 @@ export function useAppNavigation({
           showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
         });
     },
-    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
+    [sendDesktopSetActivePane, sendDesktopSetCurrent, setSelectedTile, setView, showError],
   );
 
   const handleCloseTile = useCallback(

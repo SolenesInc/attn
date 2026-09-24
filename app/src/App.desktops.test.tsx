@@ -474,7 +474,7 @@ describe('desktop surface', () => {
     expect(screen.getByTestId(desktopTestId('d2')).getAttribute('data-active-leaf')).toBe('tile-readme');
   });
 
-  it('follows the daemon onto a tile an open docked on the current desktop', async () => {
+  it('follows the daemon onto a tile an open docked, keeping the agent as context without pulling focus back', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
 
@@ -506,7 +506,8 @@ describe('desktop surface', () => {
     await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-active-leaf')).toBe('tile-notes');
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-selected-session')).toBe('');
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {
