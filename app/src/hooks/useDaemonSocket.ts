@@ -317,7 +317,7 @@ export interface RateLimitState {
 }
 
 // Protocol version - must match daemon's ProtocolVersion
-export const PROTOCOL_VERSION = '325';
+export const PROTOCOL_VERSION = '327';
 const MAX_PENDING_ATTACH_OUTPUTS = 512;
 
 const CLIENT_INSTANCE_ID =
@@ -4187,16 +4187,6 @@ export function useDaemonSocket({
     }));
   }, []);
 
-  const sendPinSession = useCallback((sessionId: string, pinned: boolean) => {
-    const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-    ws.send(JSON.stringify({
-      cmd: 'pin_session',
-      session_id: sessionId,
-      pinned,
-    }));
-  }, []);
-
   const sendRefreshPRs = useCallback((): Promise<PRActionResult> => {
     const key = 'refresh_prs';
     return sendKeyedRequest<PRActionResult>(key, { cmd: 'refresh_prs' }, 'Refresh timed out', GITHUB_REFRESH_TIMEOUT_MS);
@@ -5562,7 +5552,6 @@ export function useDaemonSocket({
     sendMuteAuthor,
     sendMuteWorkspace,
     sendPinWorkspace,
-    sendPinSession,
     sendRefreshPRs,
     sendFetchPRDetails,
     sendClearSessions,

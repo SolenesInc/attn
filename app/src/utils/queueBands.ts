@@ -45,7 +45,6 @@ export interface QueueBandSession extends WorkspaceViewSession {
   turnOwed?: boolean;
   turnOpenedAt?: string;
   turnSnoozedUntil?: string;
-  pinnedAt?: string;
   /** Set on a shell: the agent session it was split from. */
   parentSessionId?: string;
   crewMember?: string;
@@ -121,11 +120,8 @@ export interface QueueBands<TSession extends QueueBandSession> {
   chief: QueueRow<TSession> | null;
   turns: QueueRow<TSession>[];
   settled: QueueRow<TSession>[];
-  /** Sessions pinned out of the queue, in pin order — not state order, so a row never
-     * moves because the agent in it started working. */
-  pinned: QueueRow<TSession>[];
   /** The days crew members are living right now, member id order. A member's row is
-     * permanent, so it renders in the pinned region awake or asleep. */
+     * permanent, so it renders in the crew region awake or asleep. */
   crew: QueueRow<TSession>[];
   /** Agents the user deferred, soonest wake first. */
   snoozed: QueueRow<TSession>[];
@@ -142,7 +138,6 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   let chief: QueueRow<TSession> | null = null;
   const turns: QueueRow<TSession>[] = [];
   const settled: QueueRow<TSession>[] = [];
-  const pinned: QueueRow<TSession>[] = [];
   const snoozed: QueueRow<TSession>[] = [];
   const crew: QueueRow<TSession>[] = [];
   const attachedParents = liveParentIds(workspaces);
@@ -173,10 +168,6 @@ export function buildQueueBands<TSession extends QueueBandSession>(
       if (workspace.pinned || workspace.muted) {
         continue;
       }
-      if (session.pinnedAt) {
-        pinned.push(row);
-        continue;
-      }
       if (isAttachedSatellite(session, workspace.id, attachedParents)) {
         continue;
       }
@@ -192,11 +183,10 @@ export function buildQueueBands<TSession extends QueueBandSession>(
   }
 
   turns.sort((a, b) => compareTurnOrder(a.session, b.session));
-  pinned.sort((a, b) => comparePinOrder(a.session, b.session));
   snoozed.sort((a, b) => compareWakeOrder(a.session, b.session));
   crew.sort((a, b) => compareCrewOrder(a.session, b.session));
 
-  return { chief, turns, settled, pinned, snoozed, crew };
+  return { chief, turns, settled, snoozed, crew };
 }
 
 /** Index every session by its workspace, so a satellite's parent is confirmed present
@@ -229,16 +219,6 @@ function compareCrewOrder(a: QueueBandSession, b: QueueBandSession): number {
   const memberB = b.crewMember ?? '';
   if (memberA !== memberB) {
     return memberA < memberB ? -1 : 1;
-  }
-  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
-}
-
-/** Pin order: earliest pin first, tie-broken by id so the order is total. */
-function comparePinOrder(a: QueueBandSession, b: QueueBandSession): number {
-  const pinnedA = a.pinnedAt ?? '';
-  const pinnedB = b.pinnedAt ?? '';
-  if (pinnedA !== pinnedB) {
-    return pinnedA < pinnedB ? -1 : 1;
   }
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }

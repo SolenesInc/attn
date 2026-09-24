@@ -82,46 +82,7 @@
     "workspace_id": "workspace-1"
   }
 }
---- 06 workspace_state_changed
-{
-  "event": "workspace_state_changed",
-  "workspace": {
-    "directory": "<tmp>/workspace",
-    "id": "workspace-1",
-    "muted": true,
-    "pinned": false,
-    "rank": "i",
-    "status": "idle",
-    "title": "One"
-  }
-}
---- 07 workspace_state_changed
-{
-  "event": "workspace_state_changed",
-  "workspace": {
-    "directory": "<tmp>/workspace",
-    "id": "workspace-1",
-    "muted": true,
-    "pinned": true,
-    "rank": "i",
-    "status": "idle",
-    "title": "One"
-  }
-}
---- 08 workspace_state_changed
-{
-  "event": "workspace_state_changed",
-  "workspace": {
-    "directory": "<tmp>/workspace",
-    "id": "workspace-1",
-    "muted": false,
-    "pinned": true,
-    "rank": "i",
-    "status": "idle",
-    "title": "One"
-  }
-}
---- 09 workflow_run_updated
+--- 06 workflow_run_updated
 {
   "event": "workflow_run_updated",
   "run": {
@@ -134,36 +95,36 @@
     "updated_at": "<timestamp>"
   }
 }
---- 10 prs_updated
+--- 07 prs_updated
 {
   "event": "prs_updated"
 }
---- 11 repos_updated
+--- 08 repos_updated
 {
   "event": "repos_updated"
 }
---- 12 authors_updated
+--- 09 authors_updated
 {
   "event": "authors_updated"
 }
---- 13 github_hosts_updated
+--- 10 github_hosts_updated
 {
   "event": "github_hosts_updated",
   "github_hosts": null
 }
---- 14 automations_changed
+--- 11 automations_changed
 {
   "definition_ids": [
     "definition-1"
   ],
   "event": "automations_changed"
 }
---- 15 plugins_updated
+--- 12 plugins_updated
 {
   "event": "plugins_updated",
   "plugins": []
 }
---- 16 settings_updated
+--- 13 settings_updated
 {
   "changed_key": "claude_executable",
   "event": "settings_updated",
@@ -233,17 +194,17 @@
     "workflows_enabled": "false"
   }
 }
---- 17 tasks_changed
+--- 14 tasks_changed
 {
   "event": "tasks_changed"
 }
---- 18 notifications_updated
+--- 15 notifications_updated
 {
   "event": "notifications_updated",
   "unread_count": 0,
   "unread_critical_count": 0
 }
---- 19 notebook_changed
+--- 16 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "agent",
@@ -251,12 +212,12 @@
     "<tmp>/workspace/journal.md"
   ]
 }
---- 20 endpoints_updated
+--- 17 endpoints_updated
 {
   "endpoints": [],
   "event": "endpoints_updated"
 }
---- 21 endpoint_status_changed
+--- 18 endpoint_status_changed
 {
   "endpoint": {
     "id": "endpoint-1",
@@ -266,7 +227,7 @@
   },
   "event": "endpoint_status_changed"
 }
---- 22 git_operation_started
+--- 19 git_operation_started
 {
   "event": "git_operation_started",
   "operation": {
@@ -277,7 +238,7 @@
     "status": "running"
   }
 }
---- 23 git_operation_finished
+--- 20 git_operation_finished
 {
   "event": "git_operation_finished",
   "operation": {
@@ -290,7 +251,7 @@
     "status": "succeeded"
   }
 }
---- 24 worktree_created
+--- 21 worktree_created
 {
   "event": "worktree_created",
   "worktrees": [
@@ -302,7 +263,7 @@
     }
   ]
 }
---- 25 worktree_deleted
+--- 22 worktree_deleted
 {
   "event": "worktree_deleted",
   "worktrees": [
@@ -313,7 +274,7 @@
     }
   ]
 }
---- 26 worktrees_updated
+--- 23 worktrees_updated
 {
   "event": "worktrees_updated",
   "worktrees": [
@@ -325,14 +286,14 @@
     }
   ]
 }
---- 27 session_exited
+--- 24 session_exited
 {
   "event": "session_exited",
   "exit_code": 3,
   "id": "sess-1",
   "signal": "SIGTERM"
 }
---- 28 endpoint_status_changed
+--- 25 endpoint_status_changed
 {
   "endpoint": {
     "id": "endpoint-1",
@@ -342,7 +303,7 @@
   },
   "event": "endpoint_status_changed"
 }
---- 29 notebook_changed
+--- 26 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "agent",
@@ -350,7 +311,7 @@
     "journal/2026-08-01.md"
   ]
 }
---- 30 notebook_changed
+--- 27 notebook_changed
 {
   "event": "notebook_changed",
   "origin": "ui",

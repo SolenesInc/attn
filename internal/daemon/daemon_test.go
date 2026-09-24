@@ -497,7 +497,7 @@ func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 	cwd := t.TempDir()
 
 	d.store.AddWorkspace(&protocol.Workspace{ID: workspaceID, Title: "Reseed", Directory: cwd})
-	d.workspaces.register(workspaceID, "Reseed", cwd, "a0", false, false)
+	d.workspaces.register(workspaceID, "Reseed", cwd, "a0")
 	nowStr := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{
 		ID:             sessionID,
@@ -2018,7 +2018,7 @@ func (b *fakeSpawnBackend) RemovedIDs() []string {
 func addTestWorkspace(d *Daemon, id, directory string) {
 	rank := d.resolveWorkspaceRank(d.store.GetWorkspace(id))
 	d.store.AddWorkspace(&protocol.Workspace{ID: id, Title: id, Directory: directory, Status: protocol.WorkspaceStatusLaunching, Rank: rank})
-	d.workspaces.register(id, id, directory, rank, false, false)
+	d.workspaces.register(id, id, directory, rank)
 }
 
 func TestDaemon_HandleSpawnSession_UsesStoredResumeSessionIDForRecoverableClaudeSession(t *testing.T) {

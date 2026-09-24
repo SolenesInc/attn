@@ -2710,26 +2710,6 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleMutePR(conn, msg.(*protocol.MutePRMessage))
 	case protocol.CmdMuteRepo:
 		d.handleMuteRepo(conn, msg.(*protocol.MuteRepoMessage))
-	case protocol.CmdMuteWorkspace:
-		if _, errMsg := d.toggleWorkspaceMute(msg.(*protocol.MuteWorkspaceMessage).WorkspaceID); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
-	case protocol.CmdPinWorkspace:
-		m := msg.(*protocol.PinWorkspaceMessage)
-		if _, errMsg := d.setWorkspacePinned(m.WorkspaceID, m.Pinned); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
-	case protocol.CmdPinSession:
-		m := msg.(*protocol.PinSessionMessage)
-		if errMsg := d.setSessionPinned(m.SessionID, m.Pinned); errMsg != "" {
-			d.sendError(conn, errMsg)
-			return
-		}
-		d.sendOK(conn)
 	case protocol.CmdSetSessionContextWindowCap:
 		m := msg.(*protocol.SetSessionContextWindowCapMessage)
 		if err := d.setSessionContextWindowCap(m.SessionID, m.Cap); err != nil {
@@ -3124,7 +3104,6 @@ func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	d.decorateSessionSeed(clone, seedBySession)
 	d.decorateSessionDispatcher(clone, dispatcherBySession)
 	d.decorateSessionWithWorkspace(clone)
-	d.decorateSessionWithWorkspaceMute(clone)
 	d.decorateSessionWithCost(clone)
 	d.decorateSessionWithTerminalBuild(clone)
 	d.decorateSessionWithTurn(clone)

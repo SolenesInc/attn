@@ -981,15 +981,6 @@ func (c *Client) Heartbeat(id string) error {
 	return err
 }
 
-func (c *Client) ToggleWorkspaceMute(workspaceID string) error {
-	msg := protocol.MuteWorkspaceMessage{
-		Cmd:         protocol.CmdMuteWorkspace,
-		WorkspaceID: workspaceID,
-	}
-	_, err := c.send(msg)
-	return err
-}
-
 func (c *Client) OpenMarkdown(path, sessionID string) error {
 	msg := protocol.OpenMarkdownMessage{
 		Cmd:  protocol.CmdOpenMarkdown,

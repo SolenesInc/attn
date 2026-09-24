@@ -1,13 +1,10 @@
 package daemon
 
 import (
-	"encoding/json"
-	"net"
 	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
-	"testing/synctest"
 
 	"github.com/victorarias/attn/internal/layouttree"
 	"github.com/victorarias/attn/internal/protocol"
@@ -143,7 +140,7 @@ func TestRollupWorkspaceStatus_PriorityOrdering(t *testing.T) {
 
 func TestWorkspaceRegistry_RegisterUnregister(t *testing.T) {
 	r := newWorkspaceRegistry()
-	snapshot, isNew := r.register("ws1", "Workspace 1", "/repo", "", false, false)
+	snapshot, isNew := r.register("ws1", "Workspace 1", "/repo", "")
 	if !isNew {
 		t.Fatal("first register should be new")
 	}
@@ -154,7 +151,7 @@ func TestWorkspaceRegistry_RegisterUnregister(t *testing.T) {
 		t.Fatalf("initial status = %q, want idle", snapshot.Status)
 	}
 
-	_, isNew = r.register("ws1", "Renamed", "/repo", "", false, false)
+	_, isNew = r.register("ws1", "Renamed", "/repo", "")
 	if isNew {
 		t.Fatal("second register should not be new")
 	}
@@ -173,8 +170,8 @@ func TestWorkspaceRegistry_RegisterUnregister(t *testing.T) {
 
 func TestWorkspaceRegistry_AssociateAndDissociate(t *testing.T) {
 	r := newWorkspaceRegistry()
-	r.register("ws1", "ws", "/repo", "", false, false)
-	r.register("ws2", "ws", "/repo", "", false, false)
+	r.register("ws1", "ws", "/repo", "")
+	r.register("ws2", "ws", "/repo", "")
 
 	if !r.associateSession("s1", "ws1", "Session 1") {
 		t.Fatal("associate should succeed")
@@ -240,7 +237,7 @@ func TestDissociateLastSessionUnregistersWorkspace(t *testing.T) {
 
 func TestWorkspaceRegistry_UnregisterCleansSessionLinks(t *testing.T) {
 	r := newWorkspaceRegistry()
-	r.register("ws1", "ws", "/repo", "", false, false)
+	r.register("ws1", "ws", "/repo", "")
 	r.associateSession("s1", "ws1", "Session 1")
 	r.associateSession("s2", "ws1", "Session 2")
 
@@ -318,58 +315,6 @@ func TestHandleRegisterWorkspace_BroadcastsRegisteredThenStateChanged(t *testing
 	if events[1].Event != protocol.EventWorkspaceStateChanged {
 		t.Fatalf("second broadcast = %q, want workspace_state_changed", events[1].Event)
 	}
-}
-
-func TestHandleConnection_MuteWorkspaceDispatchesSocketCommand(t *testing.T) {
-	d := newDaemonForTest(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-			Cmd:       protocol.CmdRegisterWorkspace,
-			ID:        "ws1",
-			Title:     "Workspace 1",
-			Directory: "/repo",
-		})
-		cap := captureBroadcasts(d)
-
-		serverConn, clientConn := net.Pipe()
-		defer clientConn.Close()
-		done := make(chan struct{})
-		go func() {
-			defer close(done)
-			d.handleConnection(serverConn)
-		}()
-
-		if err := json.NewEncoder(clientConn).Encode(protocol.MuteWorkspaceMessage{
-			Cmd:         protocol.CmdMuteWorkspace,
-			WorkspaceID: "ws1",
-		}); err != nil {
-			t.Fatalf("send mute_workspace command: %v", err)
-		}
-		var resp protocol.Response
-		if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-			t.Fatalf("decode mute_workspace response: %v", err)
-		}
-		if !resp.Ok {
-			t.Fatalf("mute_workspace response ok=false error=%v", resp.Error)
-		}
-		requireDone(t, done, "mute_workspace connection did not finish")
-
-		workspace := d.store.GetWorkspace("ws1")
-		if workspace == nil {
-			t.Fatal("workspace missing from store after mute")
-		}
-		if !workspace.Muted {
-			t.Fatal("workspace not muted in store after socket command")
-		}
-		events := cap.snapshot()
-		if len(events) != 1 {
-			t.Fatalf("expected one workspace_state_changed broadcast, got %d: %+v", len(events), events)
-		}
-		if events[0].Event != protocol.EventWorkspaceStateChanged || events[0].Workspace == nil || !events[0].Workspace.Muted {
-			t.Fatalf("unexpected broadcast: %+v", events[0])
-		}
-	})
 }
 
 func TestHandleUnregisterWorkspace_BroadcastsOnlyForKnown(t *testing.T) {
@@ -484,18 +429,6 @@ func TestSessionForBroadcast_PopulatesWorkspaceID(t *testing.T) {
 	if got.WorkspaceID != "ws1" {
 		t.Fatalf("workspace_id = %q, want ws1", got.WorkspaceID)
 	}
-	if got.WorkspaceMuted != nil {
-		t.Fatalf("workspace_muted = %v, want omitted for visible workspace", protocol.Deref(got.WorkspaceMuted))
-	}
-
-	if _, errMsg := d.toggleWorkspaceMute("ws1"); errMsg != "" {
-		t.Fatalf("mute workspace: %s", errMsg)
-	}
-	got = d.sessionForBroadcast(d.store.Get("s1"))
-	if got == nil || !protocol.Deref(got.WorkspaceMuted) {
-		t.Fatalf("workspace_muted = %v, want true", got)
-	}
-
 }
 
 func TestSessionForBroadcast_PreservesPersistedWorkspaceIDDuringRegistryRecovery(t *testing.T) {
@@ -785,37 +718,7 @@ func TestAssociateSessionWithWorkspace_PersistsToStore(t *testing.T) {
 	}
 }
 
-func TestPinnedWorkspaceSurvivesFinalSessionClose(t *testing.T) {
-	d := newDaemonForTest(t)
-	cap := captureBroadcasts(d)
-	now := string(protocol.TimestampNow())
-
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "ws1", Title: "ws", Directory: "/repo",
-	})
-	d.setWorkspacePinned("ws1", true)
-
-	d.store.Add(&protocol.Session{
-		ID: "s1", Label: "s1", Agent: protocol.SessionAgentCodex, Directory: "/repo",
-		State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	d.associateSessionWithWorkspace("s1", "ws1")
-
-	d.dissociateSessionFromWorkspace("s1")
-
-	if _, ok := d.workspaces.snapshot("ws1"); !ok {
-		t.Fatal("pinned workspace was removed after last session departed")
-	}
-
-	events := cap.snapshot()
-	for _, e := range events {
-		if e.Event == protocol.EventWorkspaceUnregistered && e.Workspace != nil && e.Workspace.ID == "ws1" {
-			t.Fatal("pinned workspace emitted workspace_unregistered")
-		}
-	}
-}
-
-func TestUnpinnedWorkspaceRemovedOnFinalSessionClose(t *testing.T) {
+func TestWorkspaceRemovedOnFinalSessionClose(t *testing.T) {
 	d := newDaemonForTest(t)
 	now := string(protocol.TimestampNow())
 
@@ -833,106 +736,5 @@ func TestUnpinnedWorkspaceRemovedOnFinalSessionClose(t *testing.T) {
 
 	if _, ok := d.workspaces.snapshot("ws1"); ok {
 		t.Fatal("unpinned workspace should be removed after last session departed")
-	}
-}
-
-func TestPinnedEmptyWorkspaceSurvivesStartupCleanup(t *testing.T) {
-	d := newDaemonForTest(t)
-
-	d.store.AddWorkspace(&protocol.Workspace{
-		ID: "ws-pinned", Title: "Pinned", Directory: "/repo", Pinned: true,
-	})
-	d.store.AddWorkspace(&protocol.Workspace{
-		ID: "ws-unpinned", Title: "Unpinned", Directory: "/repo",
-	})
-
-	reaped := d.loadWorkspacesFromStore()
-
-	if _, ok := d.workspaces.snapshot("ws-pinned"); !ok {
-		t.Fatal("pinned empty workspace was reaped during startup load")
-	}
-	if _, ok := d.workspaces.snapshot("ws-unpinned"); ok {
-		t.Fatal("unpinned empty workspace should be reaped during startup load")
-	}
-
-	found := false
-	for _, id := range reaped {
-		if id == "ws-unpinned" {
-			found = true
-		}
-		if id == "ws-pinned" {
-			t.Fatal("pinned workspace should not be in reaped list")
-		}
-	}
-	if !found {
-		t.Fatal("unpinned workspace should be in reaped list")
-	}
-}
-
-func TestQueryIncludesPinnedEmptyWorkspace(t *testing.T) {
-	d := newDaemonForTest(t)
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        "ws-pinned",
-		Title:     "Pinned",
-		Directory: "/repo",
-	})
-	if _, errMsg := d.setWorkspacePinned("ws-pinned", true); errMsg != "" {
-		t.Fatalf("pin workspace: %s", errMsg)
-	}
-
-	server, client := net.Pipe()
-	defer client.Close()
-	go func() {
-		defer server.Close()
-		d.handleQuery(server, &protocol.QueryMessage{Cmd: protocol.CmdQuery})
-	}()
-
-	var resp protocol.Response
-	if err := json.NewDecoder(client).Decode(&resp); err != nil {
-		t.Fatalf("decode query response: %v", err)
-	}
-	if len(resp.Sessions) != 0 {
-		t.Fatalf("sessions = %d, want none", len(resp.Sessions))
-	}
-	if len(resp.Workspaces) != 1 {
-		t.Fatalf("workspaces = %d, want pinned empty workspace", len(resp.Workspaces))
-	}
-	got := resp.Workspaces[0]
-	if got.ID != "ws-pinned" || !got.Pinned || got.Status != protocol.WorkspaceStatusIdle {
-		t.Fatalf("workspace = %+v, want pinned idle ws-pinned", got)
-	}
-}
-
-func TestSetWorkspacePinned_PersistsAndBroadcasts(t *testing.T) {
-	d := newDaemonForTest(t)
-	cap := captureBroadcasts(d)
-
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "ws1", Title: "ws", Directory: "/repo",
-	})
-
-	snap, errMsg := d.setWorkspacePinned("ws1", true)
-	if errMsg != "" {
-		t.Fatalf("setWorkspacePinned: %s", errMsg)
-	}
-	if !snap.Pinned {
-		t.Fatal("snapshot after pin should have Pinned=true")
-	}
-
-	stored := d.store.GetWorkspace("ws1")
-	if stored == nil || !stored.Pinned {
-		t.Fatalf("store should persist pinned state: %+v", stored)
-	}
-
-	events := cap.snapshot()
-	var foundStateChanged bool
-	for _, e := range events {
-		if e.Event == protocol.EventWorkspaceStateChanged && e.Workspace != nil && e.Workspace.ID == "ws1" && e.Workspace.Pinned {
-			foundStateChanged = true
-		}
-	}
-	if !foundStateChanged {
-		t.Fatal("expected workspace_state_changed broadcast with Pinned=true")
 	}
 }

@@ -28,7 +28,6 @@ const (
 	FactSessionReconciled             = "session.reconciled"
 	FactSessionPTYExited              = "session.pty.exited"
 	FactSessionProfileChanged         = "session.profile.changed"
-	FactSessionPinChanged             = "session.pin.changed"
 	FactSessionCapChanged             = "session.cap.changed"
 	FactSessionActivityChanged        = "session.activity.changed"
 	FactSessionCostChanged            = "session.cost.changed"
@@ -44,8 +43,6 @@ const (
 	FactWorkspaceReregistered       = "workspace.reregistered"
 	FactWorkspaceRenamed            = "workspace.renamed"
 	FactWorkspaceStatusChanged      = "workspace.status.changed"
-	FactWorkspaceMuteChanged        = "workspace.mute.changed"
-	FactWorkspacePinChanged         = "workspace.pin.changed"
 	FactWorkspaceRankChanged        = "workspace.rank.changed"
 	FactWorkspaceSessionAssociated  = "workspace.session.associated"
 	FactWorkspaceSessionDissociated = "workspace.session.dissociated"
@@ -176,7 +173,7 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{FactSessionPinChanged, FactSessionCapChanged, FactSessionModelRequestStarted},
+			filter: bus.Filter{FactSessionCapChanged, FactSessionModelRequestStarted},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{
@@ -262,8 +259,6 @@ func buildWireProjections() []projection {
 				FactWorkspaceReregistered,
 				FactWorkspaceRenamed,
 				FactWorkspaceStatusChanged,
-				FactWorkspaceMuteChanged,
-				FactWorkspacePinChanged,
 				FactWorkspaceRankChanged,
 				FactWorkspaceSessionAssociated,
 				FactWorkspaceSessionDissociated,

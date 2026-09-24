@@ -43,7 +43,6 @@ describe('buildQueueBands', () => {
       chief: bands.chief?.session.id ?? null,
       turns: bands.turns.map((row) => row.session.id),
       settled: bands.settled.map((row) => row.session.id),
-      pinned: bands.pinned.map((row) => row.session.id),
       crew: bands.crew.map((row) => row.session.id),
       snoozed: bands.snoozed.map((row) => row.session.id),
     });
@@ -138,7 +137,6 @@ describe('buildQueueBands', () => {
 
     expect(bands.turns.map((row) => row.session.id)).toEqual([]);
     expect(bands.settled.map((row) => row.session.id)).toEqual(['agent']);
-    expect(bands.pinned).toEqual([]);
     expect(bands.snoozed).toEqual([]);
   });
 
@@ -470,60 +468,6 @@ describe('headOfQueue', () => {
   });
 });
 
-describe('the pinned band', () => {
-  it('holds pinned sessions in pin order, out of every other band', () => {
-    const bands = buildQueueBands(views([
-      { id: 'later', label: 'later', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T09:00:00Z', pinnedAt: '2026-08-05T11:00:00Z' },
-      { id: 'earlier', label: 'earlier', workspaceId: 'ws-b', pinnedAt: '2026-08-05T10:00:00Z' },
-      { id: 'unpinned', label: 'unpinned', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T08:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['earlier', 'later']);
-    expect(bands.turns.map((row) => row.session.id)).toEqual(['unpinned']);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('does not move a pinned row when the agent it holds changes state', () => {
-    const session = (state: string): QueueBandSession => ({
-      id: 'held', label: 'held', workspaceId: 'ws-a', state, pinnedAt: '2026-08-05T10:00:00Z',
-    });
-    const other: QueueBandSession = { id: 'other', label: 'other', workspaceId: 'ws-a', pinnedAt: '2026-08-05T09:00:00Z' };
-
-    const idle = buildQueueBands(views([other, session('idle')]));
-    const working = buildQueueBands(views([other, session('working')]));
-
-    expect(working.pinned.map((row) => row.session.id)).toEqual(idle.pinned.map((row) => row.session.id));
-  });
-
-  it('leaves a pinned session in a pinned workspace out of the bands entirely', () => {
-    const bands = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true }],
-      [{ id: 'both', label: 'both', workspaceId: 'ws-a', pinnedAt: '2026-08-05T10:00:00Z' }],
-    ));
-
-    expect(bands.pinned).toEqual([]);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('keeps the chief out of the pinned band even if a pin was somehow stamped', () => {
-    const bands = buildQueueBands(views([
-      { id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true, pinnedAt: '2026-08-05T10:00:00Z' },
-    ]));
-
-    expect(bands.chief?.session.id).toBe('chief');
-    expect(bands.pinned).toEqual([]);
-  });
-
-  it('outranks a live snooze, because a pin has no time to come back from', () => {
-    const bands = buildQueueBands(views([
-      { id: 'both', label: 'both', workspaceId: 'ws-a', pinnedAt: '2026-08-05T10:00:00Z', turnSnoozedUntil: '2100-01-01T00:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['both']);
-    expect(bands.snoozed).toEqual([]);
-  });
-});
-
 describe('satellite shells', () => {
   it('gives no row to a shell whose agent is alive in the same workspace', () => {
     const bands = buildQueueBands(views([
@@ -558,45 +502,18 @@ describe('satellite shells', () => {
 
     expect(bands.settled.map((row) => row.session.id)).toEqual(['shell']);
   });
-
-  it('shows a pinned satellite, since the pinned band is where it was put on purpose', () => {
-    const bands = buildQueueBands(views([
-      { id: 'agent', label: 'agent', workspaceId: 'ws-a' },
-      { id: 'shell', label: 'shell', workspaceId: 'ws-a', parentSessionId: 'agent', pinnedAt: '2026-08-05T10:00:00Z' },
-    ]));
-
-    expect(bands.pinned.map((row) => row.session.id)).toEqual(['shell']);
-  });
-});
-
-describe('advanceAfterTurnClosed and the pinned band', () => {
-  it('does not move the user off an agent they just pinned', () => {
-    const owed: QueueBandSession[] = [
-      { id: 'pinned-one', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T09:00:00Z' },
-      { id: 'next', label: 'b', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-08-05T10:00:00Z' },
-    ];
-    const before = buildQueueBands(views(owed));
-    const after = buildQueueBands(views([
-      { ...owed[0], turnOwed: false, turnOpenedAt: undefined, pinnedAt: '2026-08-05T11:00:00Z' },
-      owed[1],
-    ]));
-
-    expect(after.pinned.map((row) => row.session.id)).toEqual(['pinned-one']);
-    expect(advanceAfterTurnClosed(before.turns, after, 'pinned-one')).toBeNull();
-  });
 });
 
 describe('the crew band', () => {
   it('takes a member day out of every other band, whatever it is doing', () => {
     const bands = buildQueueBands(views([
       { id: 'sess-trellis', label: 'trellis', workspaceId: 'ws-a', crewMember: 'trellis', turnOwed: true, turnOpenedAt: '2026-08-14T09:00:00Z' },
-      { id: 'sess-keel', label: 'keel', workspaceId: 'ws-a', crewMember: 'keel', pinnedAt: '2026-08-14T08:00:00Z' },
+      { id: 'sess-keel', label: 'keel', workspaceId: 'ws-a', crewMember: 'keel' },
       { id: 'worker', label: 'worker', workspaceId: 'ws-b', turnOwed: true, turnOpenedAt: '2026-08-14T09:30:00Z' },
     ]));
 
     expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-keel', 'sess-trellis']);
     expect(bands.turns.map((row) => row.session.id)).toEqual(['worker']);
-    expect(bands.pinned).toHaveLength(0);
     expect(bands.settled).toHaveLength(0);
   });
 

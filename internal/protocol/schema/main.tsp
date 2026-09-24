@@ -207,7 +207,6 @@ model Session {
   endpoint_id?: string;         // Optional: owning endpoint for remote/session-aware routing
   workspace_id: string;         // Owning workspace
   profile_id: string;           // The profile this agent belongs to; set at creation and changed only by a move
-  workspace_muted?: boolean;    // True when the owning workspace is hidden from normal sidebar/attention surfaces
   branch?: string;              // Optional: might not be in git repo
   is_worktree?: boolean;        // Optional: false if not worktree
   main_repo?: string;           // Optional: only set if worktree
@@ -226,13 +225,12 @@ model Session {
   dispatcher_member?: string;   // The crew member whose day dispatched this session. Read from the dispatch record and present even when no live session resolves.
   delegation_role?: SessionDelegationRole;
   nudge_fires_at?: string;      // ISO timestamp a pending ticket-nudge countdown will fire; absent when paused (active session) or no countdown
-  turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief, pinned, muted); never stored, and never recomputed by a client.
+  turn_owed?: boolean;          // True when the user owes this session a turn. Derived at broadcast from the turn stamps plus the queue's exclusions (shell, chief); never stored, and never recomputed by a client.
   turn_opened_at?: string;      // ISO timestamp the outstanding turn opened; the queue's sort key. Absent when nothing is owed.
   turn_snoozed_until?: string;  // ISO timestamp a live snooze runs to. Present only while the deferral holds; its presence is what puts the row in the sidebar's snoozed section, and while it is set no state can open a turn for this session except one that breaks through.
   auto_settle_fires_at?: string; // ISO timestamp the auto-settle countdown will close this session's turn. Present only while the countdown is running, which is the whole contract: it is what the terminal tile animates against, and its absence is what says nothing is pending. Absent during the arm delay, when auto-settle is off, and after a cancel.
   auto_settle_held?: boolean;   // True while the auto-settle countdown is frozen because the user is typing or moving the pointer in this session. Mutually exclusive with auto_settle_fires_at by construction: a frozen countdown has no deadline to animate against, so the tile draws a full paused bar and waits. It clears on its own five quiet seconds after the last interaction, when a fresh deadline replaces it.
   auto_settle_dismiss_armed?: boolean; // True while a standing dismissal covers this session's next auto-settle, whether the user armed it during a countdown or ahead of one. Excludes the other two by construction: arming is what stops a pending timer. It is spent at the end of the `working` stretch it covers, and pressing the cancel-countdown shortcut again while nothing is counting down disarms it.
-  pinned_at?: string;           // ISO timestamp this session was individually pinned out of the queue. Presence is the pin, and the instant is the pinned band's sort key. Like a pinned workspace it filters at read: the turn stamps keep accruing underneath, so unpinning surfaces whatever was outstanding at its true age.
   context_window_cap?: int32;   // Per-session context-window cap in tokens, set by the user on this one session. Absent means no pin — the launch falls back to the chief or per-agent default settings. A pin outranks both, and takes effect at the next launch of the agent (the daemon reloads a live session in place when the pin changes).
   parent_session_id?: string;   // The agent session a shell was split from. Spawn-time provenance resolved by the daemon, always an agent id and never another shell's, so there is no chain to walk. Whether the link is live is judged at read (parent present in the same workspace), so the field itself is never cleared.
   activity?: string;            // One short present-tense line saying what the agent is doing right now, generated from its transcript by a headless agent. Display only — it never feeds attention, the queue, or state classification. Absent when the feature is off or nothing has been generated for this session yet.
@@ -251,8 +249,6 @@ model Workspace {
   title: string;
   directory: string;
   status: WorkspaceStatus;
-  muted: boolean;               // Muting parks the whole workspace out of attention surfaces.
-  pinned: boolean;              // Pinned workspaces persist in the sidebar even when empty.
   rank: string;                 // Fractional-index sort key; default order is opening (creation) order.
   layout?: WorkspaceLayout;
   endpoint_id?: string;         // Set by a hub daemon on workspaces mirrored from a remote endpoint; absent/empty means the workspace is local to this daemon. Remote daemons never set this themselves — the hub stamps it at ingest.
@@ -1855,26 +1851,6 @@ model WakeTurnMessage {
 model CancelCountdownMessage {
   cmd: "cancel_countdown";
   session_id: string;
-}
-
-model MuteWorkspaceMessage {
-  cmd: "mute_workspace";
-  workspace_id: string;
-  endpoint_id?: string;
-}
-
-model PinWorkspaceMessage {
-  cmd: "pin_workspace";
-  workspace_id: string;
-  pinned: boolean;
-}
-
-// Pins one session out of the queue, leaving its workspace and its siblings
-// where they are. The chief is refused: it already has an anchored slot.
-model PinSessionMessage {
-  cmd: "pin_session";
-  session_id: string;
-  pinned: boolean;
 }
 
 model QueryPRsMessage {

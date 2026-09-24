@@ -2673,8 +2673,6 @@ export function useUiAutomationBridge({
             .map((row) => readRow(row, 'queue-turn-')),
           settled: Array.from(band?.querySelectorAll('[data-testid^="queue-settled-"]') || [])
             .map((row) => readRow(row, 'queue-settled-')),
-          pinned: Array.from(band?.querySelectorAll('[data-testid^="queue-pinned-"]') || [])
-            .map((row) => readRow(row, 'queue-pinned-')),
           crew: Array.from(band?.querySelectorAll('.queue-row--crew[data-crew-member]') || [])
             .map((row) => ({
               member: row.getAttribute('data-crew-member') || '',

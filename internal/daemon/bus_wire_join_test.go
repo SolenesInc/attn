@@ -40,10 +40,6 @@ var wireFixtures = map[string]wireFixture{
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
 	},
-	FactSessionPinChanged: {
-		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
-	},
 	FactSessionCapChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
 		subject: (*wireWorld).session,
@@ -136,14 +132,6 @@ var wireFixtures = map[string]wireFixture{
 		subject: (*wireWorld).workspace,
 	},
 	FactWorkspaceStatusChanged: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspaceMuteChanged: {
-		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
-	},
-	FactWorkspacePinChanged: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
 		subject: (*wireWorld).workspace,
 	},

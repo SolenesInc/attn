@@ -217,7 +217,7 @@ func TestClient_ListIncludesWorkspaces(t *testing.T) {
 				{ID: "1", Label: "one", State: protocol.SessionStateWaitingInput},
 			},
 			Workspaces: []protocol.Workspace{
-				{ID: "workspace-empty", Title: "Empty", Directory: "/repo", Status: protocol.WorkspaceStatusIdle, Pinned: true},
+				{ID: "workspace-empty", Title: "Empty", Directory: "/repo", Status: protocol.WorkspaceStatusIdle},
 			},
 		}
 		json.NewEncoder(conn).Encode(resp)
@@ -231,8 +231,8 @@ func TestClient_ListIncludesWorkspaces(t *testing.T) {
 	if len(result.Sessions) != 1 {
 		t.Fatalf("sessions = %d, want 1", len(result.Sessions))
 	}
-	if len(result.Workspaces) != 1 || result.Workspaces[0].ID != "workspace-empty" || !result.Workspaces[0].Pinned {
-		t.Fatalf("workspaces = %+v, want pinned empty workspace", result.Workspaces)
+	if len(result.Workspaces) != 1 || result.Workspaces[0].ID != "workspace-empty" {
+		t.Fatalf("workspaces = %+v, want the empty workspace", result.Workspaces)
 	}
 }
 

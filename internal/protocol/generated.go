@@ -6320,17 +6320,6 @@ type MuteRepoMessage struct {
 	Repo string `json:"repo"`
 }
 
-type MuteWorkspaceMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// EndpointID corresponds to the JSON schema field "endpoint_id".
-	EndpointID *string `json:"endpoint_id,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
-}
-
 type NotebookBacklinksMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -6941,28 +6930,6 @@ type PathInspection struct {
 
 	// ResolvedPath corresponds to the JSON schema field "resolved_path".
 	ResolvedPath string `json:"resolved_path"`
-}
-
-type PinSessionMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Pinned corresponds to the JSON schema field "pinned".
-	Pinned bool `json:"pinned"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
-type PinWorkspaceMessage struct {
-	// Cmd corresponds to the JSON schema field "cmd".
-	Cmd string `json:"cmd"`
-
-	// Pinned corresponds to the JSON schema field "pinned".
-	Pinned bool `json:"pinned"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 }
 
 type PluginActionResultMessage struct {
@@ -9527,9 +9494,6 @@ type Session struct {
 	// ParentSessionID corresponds to the JSON schema field "parent_session_id".
 	ParentSessionID *string `json:"parent_session_id,omitempty,omitzero"`
 
-	// PinnedAt corresponds to the JSON schema field "pinned_at".
-	PinnedAt *string `json:"pinned_at,omitempty,omitzero"`
-
 	// ProfileID corresponds to the JSON schema field "profile_id".
 	ProfileID string `json:"profile_id"`
 
@@ -9577,9 +9541,6 @@ type Session struct {
 
 	// WorkspaceID corresponds to the JSON schema field "workspace_id".
 	WorkspaceID string `json:"workspace_id"`
-
-	// WorkspaceMuted corresponds to the JSON schema field "workspace_muted".
-	WorkspaceMuted *bool `json:"workspace_muted,omitempty,omitzero"`
 }
 
 type SessionAnnotation struct {
@@ -12000,12 +11961,6 @@ type Workspace struct {
 
 	// Layout corresponds to the JSON schema field "layout".
 	Layout *WorkspaceLayout `json:"layout,omitempty,omitzero"`
-
-	// Muted corresponds to the JSON schema field "muted".
-	Muted bool `json:"muted"`
-
-	// Pinned corresponds to the JSON schema field "pinned".
-	Pinned bool `json:"pinned"`
 
 	// Rank corresponds to the JSON schema field "rank".
 	Rank string `json:"rank"`

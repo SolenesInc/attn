@@ -58,7 +58,6 @@ interface QueueBandsProps {
   onSelectSession: (id: string) => void;
   onSettleTurn: (id: string) => void;
   onScreenSessionIds?: ReadonlySet<string>;
-  onPinSession?: (sessionId: string, pinned: boolean) => void;
   onOpenActions?: (
     session: { id: string; label: string; chiefOfStaff?: boolean },
     event: ReactMouseEvent,
@@ -72,19 +71,15 @@ function QueueRowControls({
   onSettle,
   onSnooze,
   onWake,
-  onPin,
-  onUnpin,
   onOpenActions,
 }: {
   session: Pick<QueueBandSessionView, 'id' | 'label'>;
   onSettle?: () => void;
   onSnooze?: (event: ReactMouseEvent) => void;
   onWake?: () => void;
-  onPin?: () => void;
-  onUnpin?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
 }) {
-  if (!onOpenActions && !onPin && !onUnpin && !onSettle && !onSnooze && !onWake) return null;
+  if (!onOpenActions && !onSettle && !onSnooze && !onWake) return null;
 
   return (
     <div className="queue-row-controls">
@@ -132,36 +127,6 @@ function QueueRowControls({
           </button>
         </div>
       )}
-      {onPin && (
-        <button
-          type="button"
-          className="queue-row-pin"
-          data-testid={`queue-pin-${session.id}`}
-          title="Pin this agent — keep it in view, out of the queue"
-          aria-label={`Pin ${session.label}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onPin();
-          }}
-        >
-          📍
-        </button>
-      )}
-      {onUnpin && (
-        <button
-          type="button"
-          className="queue-row-pin"
-          data-testid={`queue-unpin-${session.id}`}
-          title="Unpin — put this agent back in the queue"
-          aria-label={`Unpin ${session.label}`}
-          onClick={(event) => {
-            event.stopPropagation();
-            onUnpin();
-          }}
-        >
-          📌
-        </button>
-      )}
       {onSettle && (
         <button
           type="button"
@@ -190,8 +155,6 @@ function QueueRowView({
   onSettle,
   onSnooze,
   onWake,
-  onPin,
-  onUnpin,
   onOpenActions,
   showSettling,
   delegates,
@@ -205,8 +168,6 @@ function QueueRowView({
   onSettle?: () => void;
   onSnooze?: (event: ReactMouseEvent) => void;
   onWake?: () => void;
-  onPin?: () => void;
-  onUnpin?: () => void;
   onOpenActions?: (event: ReactMouseEvent) => void;
   showSettling?: boolean;
   delegates: readonly QueueBandSessionView[];
@@ -246,8 +207,6 @@ function QueueRowView({
         onSettle={onSettle}
         onSnooze={onSnooze}
         onWake={onWake}
-        onPin={onPin}
-        onUnpin={onUnpin}
         onOpenActions={onOpenActions}
       />
       {showSettling && (session.autoSettleFiresAt || session.autoSettleHeld) && (
@@ -267,7 +226,6 @@ export function QueueBands({
   onSelectSession,
   onSettleTurn,
   onScreenSessionIds,
-  onPinSession,
   onOpenActions,
   onOpenSnooze,
   allSessions,
@@ -277,7 +235,7 @@ export function QueueBands({
   const snoozeHandler = (session: QueueBandSessionView) =>
     onOpenSnooze && ((event: ReactMouseEvent) => onOpenSnooze(session, event));
   const crewInOtherBands = new Set(
-    [...bands.turns, ...bands.settled, ...bands.pinned, ...bands.snoozed].flatMap((row) =>
+    [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) =>
       row.session.crewMember ? [row.session.crewMember] : [],
     ),
   );
@@ -317,7 +275,6 @@ export function QueueBands({
             onSelect={() => onSelectSession(row.session.id)}
             onSettle={() => onSettleTurn(row.session.id)}
             onSnooze={snoozeHandler(row.session)}
-            onPin={onPinSession && (() => onPinSession(row.session.id, true))}
             onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
             showSettling={offScreen(row.session.id)}
             {...rowDelegation(row.session)}
@@ -337,7 +294,6 @@ export function QueueBands({
               selected={selectedId === row.session.id}
               onSelect={() => onSelectSession(row.session.id)}
               onSnooze={snoozeHandler(row.session)}
-              onPin={onPinSession && (() => onPinSession(row.session.id, true))}
               onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
               {...rowDelegation(row.session)}
               testIdPrefix="queue-settled"
@@ -345,11 +301,11 @@ export function QueueBands({
           ))}
         </>
       )}
-      {(bands.pinned.length > 0 || crewRows.length > 0) && (
+      {crewRows.length > 0 && (
         <>
           <div className="queue-band-header">
-            <span>Pinned</span>
-            <span className="queue-band-count">{bands.pinned.length + crewRows.length}</span>
+            <span>Crew</span>
+            <span className="queue-band-count">{crewRows.length}</span>
           </div>
           {crewRows.map((crewRow) => (
             <CrewRowView
@@ -373,18 +329,6 @@ export function QueueBands({
               onOpenMemberActions={
                 onOpenCrewMemberActions && ((event) => onOpenCrewMemberActions(crewRow.member, event))
               }
-            />
-          ))}
-          {bands.pinned.map((row) => (
-            <QueueRowView
-              key={row.session.id}
-              row={row}
-              selected={selectedId === row.session.id}
-              onSelect={() => onSelectSession(row.session.id)}
-              onUnpin={onPinSession && (() => onPinSession(row.session.id, false))}
-              onOpenActions={onOpenActions && ((event) => onOpenActions(row.session, event))}
-              {...rowDelegation(row.session)}
-              testIdPrefix="queue-pinned"
             />
           ))}
         </>

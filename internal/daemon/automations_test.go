@@ -1827,7 +1827,7 @@ func TestFailedContinuationDeliveryRestoresClosedSeedAndRingsItsSession(t *testi
 	d.ensureGardenCollections()
 	stamp := string(protocol.TimestampNow())
 	d.store.Add(&protocol.Session{ID: "session-1", Label: "nightly", State: "idle", StateSince: stamp, StateUpdatedAt: stamp, LastSeen: stamp})
-	d.workspaces.register("workspace-1", "nightly", t.TempDir(), "n0", false, false)
+	d.workspaces.register("workspace-1", "nightly", t.TempDir(), "n0")
 	d.workspaces.associateSession("session-1", "workspace-1", "nightly")
 	now := time.Date(2026, 9, 8, 10, 0, 0, 0, time.UTC)
 	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)

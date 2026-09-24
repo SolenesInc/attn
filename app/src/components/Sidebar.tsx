@@ -37,7 +37,6 @@ function SidebarExpanded() {
     onOpenSnooze,
     onWakeTurn,
     onScreenSessionIds,
-    onPinSession,
     harnessLogosEnabled,
     leafDrag,
     onNewWorkspaceDrop,
@@ -94,7 +93,6 @@ function SidebarExpanded() {
           onSelectSession={onSelectSession}
           onSettleTurn={(id) => onSettleTurn?.(id)}
           onScreenSessionIds={onScreenSessionIds}
-          onPinSession={onPinSession}
           onOpenActions={openSessionActions}
           onOpenSnooze={onOpenSnooze}
           allSessions={allSessions}
