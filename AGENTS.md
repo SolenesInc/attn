@@ -108,9 +108,9 @@ satisfy the full requirement?
 
 Follow [Testing](docs/testing.md). In short:
 
-- Commit tests that guard a promise attn makes: protocol, durability, CLI,
-  screen, app SDK, or performance. Check your own work by running it; keep
-  scratch tests out of commits.
+- Commit tests that guard a promise attn makes: behavior that users, the
+  agents attn runs, clients, app authors, or later versions rely on. Check
+  your own work by running it; keep scratch tests out of commits.
 - Could everything behind the test's boundary be rewritten, behavior
   preserved, without editing the test? If not, do not commit it.
 - Default to wire tests: a real daemon driven as a protocol client, or the real

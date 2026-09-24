@@ -7,7 +7,9 @@ the same way spikes stay out.
 
 ## Promises
 
-attn makes these promises:
+A promise is behavior that someone outside the code relies on: the user, the
+agents attn runs, the daemon's clients, app authors, or a later version of attn
+reading today's data. attn's promises include:
 
 - **Protocol**: the commands, responses, and events exchanged between the
   daemon and its clients: the app, the CLI, and remote daemons.
@@ -21,6 +23,9 @@ attn makes these promises:
 - **Performance**: idle attn stays quiet, and memory does not creep. Benchmarks
   and memory scenarios track it, as described in
   [Performance testing](perf-testing.md).
+- **Agent prompts**: the instructions attn sends to the agents it runs. Their
+  compatibility fixtures change only for intentional wording edits, per
+  [Prompt authoring](prompt-authoring.md#verify).
 
 The protocol is the main seam. Most behavior is observable there, and both
 the daemon and the app are tested against it.
@@ -52,7 +57,7 @@ Each kind is defined by where the test enters and what it may fake.
 | -------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Kernel   | A function with a written specification                    | The function                                 | Nothing                                                                                   |
 | Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network; the browser and Tauri host for the app |
-| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub                                          |
+| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub; the PTY in the browser suite            |
 | Scenario | Native input; observes the screen, the protocol, the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub                                          |
 
 ### Wire
@@ -74,7 +79,8 @@ transcript files, and terminal output. Time is controlled, never waited on:
 
 Stack tests cover what only exists between processes: restarts, reconnects,
 signals, PTY ownership, CLI behavior, and Linux paths. The browser end-to-end
-suite is a stack test: a real daemon serving the frontend in a browser.
+suite is a stack test: a real daemon serving the frontend in a browser. It
+mocks the PTY unless a test needs real terminals.
 
 ### Scenario
 
