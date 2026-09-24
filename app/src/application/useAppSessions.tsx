@@ -1,7 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
-import { useProfilesStore } from '../store/profiles';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
 import { sessionAttentionFields } from '../navigation/sessionNavigation';
@@ -87,7 +86,6 @@ export function useAppSessions({
     (session) => session.profileId === selectedProfileId,
   );
 
-  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const selectedProfileChiefId = daemonSessions.find(
     (session) => session.chief_of_staff === true && session.profile_id === selectedProfileId,
   )?.id;
