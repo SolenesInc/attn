@@ -7,7 +7,7 @@ the same way spikes stay out.
 
 ## Promises
 
-attn keeps its promises at four boundaries:
+attn keeps its promises at five boundaries:
 
 - **Protocol**: the commands, responses, and events exchanged between the
   daemon and its clients: the app, the CLI, and remote daemons.
@@ -15,6 +15,9 @@ attn keeps its promises at four boundaries:
   and machine restarts, and upgrades between versions.
 - **CLI**: commands, output, and exit codes that users and agents rely on.
 - **Screen**: what the user sees and does with the keyboard.
+- **App SDK**: the API that apps and their views build against. Its declared
+  types must match the protocol shapes they mirror; a check comparing the two
+  guards both promises.
 
 The protocol is the main seam. Most behavior is observable there, and both
 the daemon and the app are tested against it.
