@@ -72,13 +72,19 @@ export function useDesktopRuntimeController(
     return sessions.find((entry) => entry.id === sessionId)?.desktopId || null;
   }, [sessions]);
 
+  const leafFocusAwaitingMount = useRef<Map<string, string>>(new Map());
   const setDesktopRef = useCallback(
     (desktopId: string) => (ref: SessionTerminalWorkspaceHandle | null) => {
-      if (ref) {
-        desktopRefs.current.set(desktopId, ref);
+      if (!ref) {
+        desktopRefs.current.delete(desktopId);
         return;
       }
-      desktopRefs.current.delete(desktopId);
+      desktopRefs.current.set(desktopId, ref);
+      const awaitedLeaf = leafFocusAwaitingMount.current.get(desktopId);
+      if (awaitedLeaf) {
+        leafFocusAwaitingMount.current.delete(desktopId);
+        ref.focusLeaf(awaitedLeaf);
+      }
     },
     []
   );
@@ -88,7 +94,12 @@ export function useDesktopRuntimeController(
   ), []);
 
   const focusDesktopLeaf = useCallback((desktopId: string, leafId: string) => {
-    desktopRefs.current.get(desktopId)?.focusLeaf(leafId);
+    const desktop = desktopRefs.current.get(desktopId);
+    if (desktop) {
+      desktop.focusLeaf(leafId);
+      return;
+    }
+    leafFocusAwaitingMount.current.set(desktopId, leafId);
   }, []);
 
   const focusedLeafOn = useCallback(

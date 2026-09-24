@@ -121,6 +121,22 @@ describe('useSessionLaunch from the new-session picker', () => {
     expect(args.chief_of_staff).toBeFalsy();
   });
 
+  it('launches a chief of staff into a new worktree when the picker asks for one', async () => {
+    const { result } = renderLaunch(null, {
+      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/repo/exsin--chief' })),
+      sendRegisterWorkspace: vi.fn(async () => undefined),
+      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
+    });
+
+    await act(async () => {
+      result.current.handleCreateWorktreeSession('/repo/exsin', 'chief', 'main', undefined, 'shell', false, undefined, true);
+      await vi.waitFor(() => expect(vi.mocked(ptySpawn)).toHaveBeenCalled());
+    });
+
+    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
+    expect(args).toMatchObject({ cwd: '/repo/exsin--chief', chief_of_staff: true });
+  });
+
   it('launches a chief of staff when the picker asks for one', async () => {
     const { result } = renderLaunch(null, {
       sendRegisterWorkspace: vi.fn(async () => undefined),

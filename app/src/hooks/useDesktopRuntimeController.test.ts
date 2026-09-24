@@ -1,5 +1,6 @@
 import { act, renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import type { SessionTerminalWorkspaceHandle } from '../components/SessionTerminalWorkspace';
 import type { Session } from '../store/sessions';
 const SESSION_PANE_ID = 'pane-session';
 import { useDesktopRuntimeController } from './useDesktopRuntimeController';
@@ -150,6 +151,26 @@ describe('useDesktopRuntimeController', () => {
     expect(focusLeaf).toHaveBeenCalledWith('document');
     expect(result.current.getPaneText(session.id, SESSION_PANE_ID)).toBe('pane text');
     expect(result.current.getPaneSize(session.id, SESSION_PANE_ID)).toEqual({ cols: 80, rows: 24 });
+  });
+
+  it('holds a leaf focus for a desktop that is not mounted yet and applies it once it mounts', () => {
+    const session = buildSession();
+    const focusLeaf = vi.fn();
+    const { result } = renderHook(() => useDesktopRuntimeController([session], session.id));
+
+    act(() => {
+      result.current.focusDesktopLeaf('desktop-late', 'tile-seed');
+    });
+    expect(focusLeaf).not.toHaveBeenCalled();
+
+    const partial: Partial<SessionTerminalWorkspaceHandle> = { focusLeaf };
+    const handle = partial as SessionTerminalWorkspaceHandle;
+    act(() => {
+      result.current.setDesktopRef('desktop-late')(handle);
+      result.current.setDesktopRef('desktop-late')(handle);
+    });
+
+    expect(focusLeaf).toHaveBeenCalledExactlyOnceWith('tile-seed');
   });
 
   it('forgets desktop handles when removed', () => {

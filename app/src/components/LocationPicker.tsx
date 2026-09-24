@@ -88,7 +88,7 @@ interface LocationPickerProps {
   onInspectPath?: (path: string, endpointId?: string) => Promise<InspectPathResult>;
   onGetRepoInfo?: (mainRepo: string, endpointId?: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
   onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string, endpointId?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean) => void;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
   onDeleteWorktree?: (path: string, endpointId?: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
@@ -831,6 +831,7 @@ export function LocationPicker({
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
+        chiefOfStaff && chiefToggleEligible,
       );
       onClose();
       return;
@@ -870,6 +871,8 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
+    chiefOfStaff,
+    chiefToggleEligible,
     effectiveAgentAvailability,
     selectedEndpointId,
     setSelectedPathFromPhysical,

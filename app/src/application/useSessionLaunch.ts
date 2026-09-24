@@ -164,6 +164,41 @@ export function useSessionLaunch({
     ],
   );
 
+  const launchPicked = useCallback(
+    async (pick: {
+      label: string;
+      cwd: string;
+      agent: SessionAgent;
+      endpointId?: string;
+      yoloMode: boolean;
+      autoMode?: boolean;
+      chiefOfStaff: boolean;
+    }): Promise<string | null> => {
+      if (!pick.chiefOfStaff) {
+        await createSplitSession(pick.agent, locationPickerSessionDirection.current, undefined, {
+          cwd: pick.cwd,
+          endpointId: pick.endpointId ?? null,
+          label: pick.label,
+          yoloMode: pick.yoloMode,
+          autoMode: pick.autoMode,
+        });
+        return null;
+      }
+      const sessionId = await createWorkspaceSession(
+        pick.label,
+        pick.cwd,
+        undefined,
+        pick.agent,
+        pick.endpointId,
+        pick.yoloMode,
+        { chiefOfStaff: true, autoMode: pick.autoMode },
+      );
+      selectCreatedSession(sessionId);
+      return sessionId;
+    },
+    [createSplitSession, createWorkspaceSession, selectCreatedSession],
+  );
+
   const handleLocationSelect = useCallback(
     async (
       path: string,
@@ -207,14 +242,9 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
+      const pick = { label: folderName, cwd: path, agent: selectedAgent, endpointId, yoloMode, autoMode, chiefOfStaff };
       if (!chiefOfStaff) {
-        await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
-          cwd: path,
-          endpointId: endpointId ?? null,
-          label: folderName,
-          yoloMode,
-          autoMode,
-        });
+        await launchPicked(pick);
         return;
       }
       setSessionCreationJob({
@@ -225,18 +255,9 @@ export function useSessionLaunch({
         error: null,
       });
       try {
-        const sessionId = await createWorkspaceSession(
-          folderName,
-          path,
-          undefined,
-          selectedAgent,
-          endpointId,
-          yoloMode,
-          { chiefOfStaff, autoMode },
-        );
-        selectCreatedSession(sessionId);
+        const sessionId = await launchPicked(pick);
         setSessionCreationJob((current) =>
-          current?.id === jobId ? { ...current, sessionId, phase: 'starting_session' } : current,
+          current?.id === jobId && sessionId ? { ...current, sessionId, phase: 'starting_session' } : current,
         );
       } catch (err) {
         setSessionCreationJob((current) =>
@@ -249,12 +270,10 @@ export function useSessionLaunch({
     [
       activeLocalSession?.workspaceId,
       agentAvailability,
-      createSplitSession,
-      createWorkspaceSession,
       daemonEndpoints,
       hasAvailableAgents,
+      launchPicked,
       locationPickerPurpose,
-      selectCreatedSession,
       showError,
     ],
   );
@@ -268,6 +287,7 @@ export function useSessionLaunch({
       agent: SessionAgent,
       yoloMode: boolean,
       autoMode?: boolean,
+      chiefOfStaff = false,
     ) => {
       const endpointKey = endpointId || 'local';
       if (worktreeSessionCreateEndpointsRef.current.has(endpointKey)) {
@@ -304,14 +324,19 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
-            cwd: worktreePath,
-            endpointId: endpointId ?? null,
+          const sessionId = await launchPicked({
             label: folderName,
+            cwd: worktreePath,
+            agent,
+            endpointId,
             yoloMode,
             autoMode,
+            chiefOfStaff,
           });
-          setSessionCreationJob((current) => (current?.id === jobId ? null : current));
+          setSessionCreationJob((current) => {
+            if (current?.id !== jobId) return current;
+            return sessionId ? { ...current, label: folderName, phase: 'starting_session', sessionId } : null;
+          });
         } catch (err) {
           setSessionCreationJob((current) =>
             current?.id === jobId
@@ -326,15 +351,7 @@ export function useSessionLaunch({
         }
       })();
     },
-    [
-      activeLocalSession?.workspaceId,
-      createSplitSession,
-      createWorkspaceSession,
-      locationPickerPurpose,
-      selectCreatedSession,
-      sendCreateWorktree,
-      showError,
-    ],
+    [launchPicked, sendCreateWorktree, showError],
   );
 
   const closeLocationPicker = useCallback(() => {
