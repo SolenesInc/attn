@@ -199,6 +199,17 @@ it('does not roll back a change made elsewhere when the undone edit failed to sa
   expect(getState().preferences.roles).toHaveLength(1);
 });
 
+it('undoes the edit its banner names when another edit queues behind that save', async () => {
+  const { daemon, getState } = setup([custom]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+  fireEvent.click(screen.getByRole('switch', { name: 'Delegation preferences' }));
+  await screen.findByRole('alert');
+  expect(daemon.getCalls('rollback').map(call => call.args)).toEqual([[1]]);
+  expect(getState().preferences.enabled).toBe(false);
+});
+
 it('withdraws undo when a change made elsewhere reloads the table', async () => {
   const { daemon, getState, bump } = setup([custom]);
   fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
