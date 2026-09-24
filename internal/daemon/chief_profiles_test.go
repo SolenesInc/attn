@@ -86,3 +86,25 @@ func TestChiefLookupsFollowTheirCaller(t *testing.T) {
 		t.Fatalf("a legacy chief ticket reaches %q, want the Default profile's chief home-chief", got)
 	}
 }
+
+func TestAChiefClosesOnlyAgentsOfItsProfile(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	t.Cleanup(func() { _ = d.store.Close() })
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	spawnChiefCandidate(t, d, client, "home-chief", home)
+	for id, profileID := range map[string]string{"home-agent": home, "work-agent": work.ID} {
+		d.handleSpawnSession(client, spawnCharacterizationMessage(id, profileID, t.TempDir()))
+		expectSpawnResult(t, client, id, true)
+	}
+
+	chief := d.store.Get("home-chief")
+	if rule, err := d.agentCloseRule(chief, d.store.Get("home-agent")); err != nil || rule != protocol.AgentCloseRuleChiefOfStaff {
+		t.Fatalf("home chief closing a home agent = %q, %v; want the chief rule", rule, err)
+	}
+	if rule, err := d.agentCloseRule(chief, d.store.Get("work-agent")); err == nil {
+		t.Fatalf("home chief closing a Work agent was allowed by %q", rule)
+	}
+}
