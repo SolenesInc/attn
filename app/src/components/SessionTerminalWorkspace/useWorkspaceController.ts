@@ -500,6 +500,7 @@ export function useWorkspaceController(
         panesContainerRef.current
           ? { container: panesContainerRef.current, paneBounds: renderedPaneBounds }
           : null,
+      getActiveLeafId: () => activeLeafIdRef.current,
     }),
     [activePaneId, renderedPaneBounds, runtime],
   );

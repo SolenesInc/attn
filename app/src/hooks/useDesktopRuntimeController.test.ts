@@ -137,6 +137,7 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
+        getActiveLeafId: vi.fn(() => ''),
       });
     });
 
@@ -176,6 +177,7 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
+        getActiveLeafId: vi.fn(() => ''),
       });
     });
 
@@ -213,6 +215,7 @@ describe('useDesktopRuntimeController', () => {
         injectPaneBase64: vi.fn(async () => true),
         drainPaneTerminal: vi.fn(async () => true),
         getLeafDropSnapshot: vi.fn(() => null),
+        getActiveLeafId: vi.fn(() => ''),
       });
       result.current.focusSessionPane('session-1', SESSION_PANE_ID);
     });

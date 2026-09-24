@@ -37,7 +37,7 @@ function seedStore(desktops: Desktop[], previousDesktopId: string | null = null,
 
 const ok = { request_id: 'r', action: 'x', success: true, event: 'profile_action_result' };
 
-function renderNavigation() {
+function renderNavigation(focusedLeafOf: (desktopId: string) => string | null = () => null) {
   const api = {
     sendDesktopSetCurrent: vi.fn().mockResolvedValue(ok),
     sendDesktopSetActivePane: vi.fn().mockResolvedValue(ok),
@@ -51,7 +51,7 @@ function renderNavigation() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <DaemonApiProvider api={createMockDaemonApi(api)}>{children}</DaemonApiProvider>
   );
-  const { result } = renderHook(() => useDesktopNavigation(showNotice), { wrapper });
+  const { result } = renderHook(() => useDesktopNavigation(showNotice, focusedLeafOf), { wrapper });
   return { api, showNotice, result };
 }
 
@@ -135,6 +135,30 @@ describe('useDesktopNavigation', () => {
     }]]);
     expect(api.sendDesktopSetActivePane.mock.calls).toEqual([['d2', 'p1']]);
     expect(api.sendDesktopSetCurrent).not.toHaveBeenCalled();
+  });
+
+  it('sends the focused tile rather than the last agent pane, and leaves the target focus alone', async () => {
+    const withTile = JSON.stringify({
+      type: 'split',
+      split_id: 's1',
+      direction: 'vertical',
+      ratio: 0.5,
+      children: [
+        { type: 'pane', pane_id: 'p1' },
+        { type: 'tile', tile_id: 't1', tile_kind: 'markdown', tile_params: '/notes.md' },
+      ],
+    });
+    seedStore([
+      desktop('d1', { shortcut_slot: 1, tree_json: withTile, active_pane_id: 'p1', revision: 4 }),
+      desktop('d2', { shortcut_slot: 2, tree_json: TREE_WITH_PANE('p9'), active_pane_id: 'p9', revision: 7 }),
+    ]);
+    const { api, result } = renderNavigation((desktopId) => (desktopId === 'd1' ? 't1' : null));
+
+    act(() => result.current.sendActivePaneToSlot(2));
+    await settle();
+
+    expect(api.sendDesktopMoveLeaf.mock.calls[0][0]).toMatchObject({ leafId: 't1', targetDesktopId: 'd2' });
+    expect(api.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
   it('retries a send once the other client\'s newer arrangement arrives', async () => {

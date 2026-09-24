@@ -310,6 +310,19 @@ describe('desktop surface', () => {
     expect(isActive('d1')).toBe(false);
   });
 
+  it('ignores a click on the Unplaced group, which is not a desktop', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    act(() => {
+      useSessionStore.getState().goToDashboard();
+    });
+
+    await userEvent.click(screen.getByTestId('select-unplaced'));
+
+    expect(desktopCommands.sendDesktopSetCurrent).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().view).toBe('dashboard');
+  });
+
   it('sends pane focus to the daemon and follows its broadcast', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));

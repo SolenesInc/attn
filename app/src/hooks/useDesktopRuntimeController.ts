@@ -20,6 +20,7 @@ interface DesktopRuntimeController {
   setDesktopRef: (desktopId: string) => (ref: SessionTerminalWorkspaceHandle | null) => void;
   getDesktopLeafDropSnapshot: (desktopId: string | null | undefined) => LeafDropSnapshot | null;
   focusDesktopLeaf: (desktopId: string, leafId: string) => void;
+  focusedLeafOf: (desktopId: string) => string | null;
   focusSessionPane: (sessionId: string, paneId: string, retries?: number) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
@@ -88,6 +89,11 @@ export function useDesktopRuntimeController(
   const focusDesktopLeaf = useCallback((desktopId: string, leafId: string) => {
     desktopRefs.current.get(desktopId)?.focusLeaf(leafId);
   }, []);
+
+  const focusedLeafOf = useCallback(
+    (desktopId: string) => desktopRefs.current.get(desktopId)?.getActiveLeafId() || null,
+    [],
+  );
 
   const focusSessionPane = useCallback((sessionId: string, paneId: string, retries = 20) => {
     const desktopId = desktopIdForSession(sessionId);
@@ -174,6 +180,7 @@ export function useDesktopRuntimeController(
     setDesktopRef,
     getDesktopLeafDropSnapshot,
     focusDesktopLeaf,
+    focusedLeafOf,
     focusSessionPane,
     typeInSessionPaneViaUI,
     isSessionPaneInputFocused,

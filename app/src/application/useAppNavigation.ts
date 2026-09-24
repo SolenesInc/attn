@@ -48,7 +48,6 @@ export function useAppNavigation({
     goHomeAwaitingNextTurn,
   } = useSessionStore();
   const { sendDesktopSetCurrent, sendDesktopRemoveLeaf } = useDaemonApi();
-  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopIdRef = useRef<string | null>(currentDesktopId);
@@ -98,11 +97,13 @@ export function useAppNavigation({
 
   const handleSelectDesktop = useCallback(
     (desktopId: string) => {
+      const { selectedProfileId, desktops } = useProfilesStore.getState();
+      if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
-      if (!selectedProfileId || desktopId === currentDesktopIdRef.current) return;
+      if (desktopId === currentDesktopIdRef.current) return;
       void sendDesktopSetCurrent(selectedProfileId, desktopId).catch(() => {});
     },
-    [selectedProfileId, sendDesktopSetCurrent, setView],
+    [sendDesktopSetCurrent, setView],
   );
 
   const selectTile = useCallback(

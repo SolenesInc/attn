@@ -47,6 +47,7 @@ export interface SessionTerminalWorkspaceHandle
   focusActivePane: (retries?: number) => void;
   typePaneTextViaUI: (paneId: string, text: string) => boolean;
   getLeafDropSnapshot: () => LeafDropSnapshot | null;
+  getActiveLeafId: () => string;
 }
 
 export interface SessionTerminalWorkspaceProps {

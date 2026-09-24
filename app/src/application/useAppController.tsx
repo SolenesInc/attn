@@ -541,7 +541,7 @@ export function useAppController({
   }, []);
 
   const showNavigationNotice = useCallback((message: string) => showError(message), [showError]);
-  const desktopNavigation = useDesktopNavigation(showNavigationNotice);
+  const desktopNavigation = useDesktopNavigation(showNavigationNotice, desktopRuntime.focusedLeafOf);
 
   useKeyboardShortcuts({
     onNewSession: () => handleNewSession('vertical'),

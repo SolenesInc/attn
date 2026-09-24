@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
+import { hasPane, parseLayoutJSON } from '../types/workspace';
 import { ProfileCommandError } from './daemonProfileEvents';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
@@ -43,7 +44,10 @@ function failureMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
-export function useDesktopNavigation(showNotice: ShowNotice) {
+export function useDesktopNavigation(
+  showNotice: ShowNotice,
+  focusedLeafOf: (desktopId: string) => string | null = () => null,
+) {
   const {
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,
@@ -105,8 +109,8 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
-      const paneId = source.active_pane_id;
-      if (!paneId) {
+      const leafId = focusedLeafOf(source.id) ?? source.active_pane_id;
+      if (!leafId) {
         showNotice('No focused pane to send.');
         return;
       }
@@ -114,7 +118,7 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         await sendDesktopMoveLeaf({
           sourceDesktopId: source.id,
           targetDesktopId: target.id,
-          leafId: paneId,
+          leafId,
           anchorId: target.active_pane_id || undefined,
           edge: 'right',
           expectedSourceRevision: source.revision,
@@ -127,9 +131,10 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
         }
         throw err;
       }
-      await sendDesktopSetActivePane(target.id, paneId);
+      const layout = parseLayoutJSON(source.tree_json);
+      if (layout && hasPane(layout, leafId)) await sendDesktopSetActivePane(target.id, leafId);
     },
-    [sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
+    [focusedLeafOf, sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
   );
 
   const sendActivePaneToDesktop = useCallback(
