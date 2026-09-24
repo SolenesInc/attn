@@ -26,6 +26,7 @@ app/src-tauri/app-runtime/*
 !app/src-tauri/app-runtime/.gitkeep
 dist/app-runtime/
 /dist/pty-host/
+*.tsbuildinfo
 
 # Claude Code local config. settings.json is the shared, checked-in part (repo
 # hooks); everything else here is per-machine. The pattern must exclude the
