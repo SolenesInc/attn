@@ -50,6 +50,44 @@ func TestAClientThatFallsBehindIsDroppedWithoutItsBacklogAndToldWhyOnce(t *testi
 	})
 }
 
+func TestConcurrentReconnectsDeliverOneEvictionNotice(t *testing.T) {
+	inBubble(t, func(t *testing.T, w *world) {
+		const clientID = "reconnects-together"
+		stalled := evictionStalledClient(t, w, clientID)
+		w.advance(16 * time.Second)
+		evictionDrain(t, stalled)
+
+		peers := []*testworld.Peer{
+			w.Connect(transportHello(clientID), nil),
+			w.Connect(transportHello(clientID), nil),
+		}
+		for _, peer := range peers {
+			testworld.Await[protocol.InitialStateMessage](peer, protocol.EventInitialState, nil)
+		}
+		synctest.Wait()
+		delivered := 0
+		for _, peer := range peers {
+			for _, event := range peer.Received() {
+				if event.Event != protocol.EventClientEvictionNotice {
+					continue
+				}
+				delivered++
+				notice := testworld.Await[protocol.ClientEvictionNoticeMessage](peer, protocol.EventClientEvictionNotice, nil)
+				if notice.Reason != "client too slow" || notice.UndeliveredMessages < 1 {
+					t.Errorf("concurrent reconnect brought eviction notice %+v, want client too slow with its undelivered message", notice)
+				}
+			}
+			peer.Close()
+		}
+		if delivered != 1 {
+			t.Errorf("concurrent reconnects delivered %d eviction notices, want one", delivered)
+		}
+		if again := evictionNotice(t, w, clientID); again != nil {
+			t.Errorf("reconnecting after the notice was delivered brought %+v again", again)
+		}
+	})
+}
+
 func TestAClientWhoseSocketStopsAcceptingWritesIsDroppedAndToldWhyWhileItIsRemembered(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		prompt := evictionStalledClient(t, w, "returns-soon")
