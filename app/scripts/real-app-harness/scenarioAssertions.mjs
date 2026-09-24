@@ -44,7 +44,8 @@ function terminalTextIncludes(text, needle, { allowWrapped = false } = {}) {
 }
 
 export function firstWorkspacePane(workspace) {
-  return (workspace?.panes || [])[0] || null;
+  const panes = workspace?.panes || [];
+  return panes.find((pane) => pane.sessionId === workspace?.id) || null;
 }
 
 function isRetryableAutomationAbsence(error) {

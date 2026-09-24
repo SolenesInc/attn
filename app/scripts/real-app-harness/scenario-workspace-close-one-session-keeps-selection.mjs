@@ -312,10 +312,18 @@ async function main() {
       note(`closing workspace session closed`, { closingSessionId });
     });
 
-    await runner.step('closing_the_last_session_switches_back_to_the_previous_workspace', async () => {
-      await waitForActiveSession(client, keptSessionId, 'previous workspace selected after closing target');
+    await runner.step('the_emptied_desktop_stays_and_bounces_back_to_the_previous_one', async () => {
+      const emptied = await client.request('get_state');
+      const current = emptied.arrangement.desktops.find((desktop) => desktop.id === emptied.arrangement.currentDesktopId);
+      runner.assert(
+        current?.panes.length === 0 && emptied.activeSessionId === null && emptied.arrangement.previousDesktopId,
+        `Closing the last agent should leave its desktop empty and current, with a bounce target: ${JSON.stringify(emptied.arrangement, null, 2)}`,
+        emptied.arrangement,
+      );
+      await client.request('dispatch_shortcut', { shortcutId: `desktop.select${current.slot}` });
+      await waitForActiveSession(client, keptSessionId, 'previous desktop selected after bouncing back');
       await assertPreviousWorkspaceVisible(runner, client, keptSessionId, closingSessionId);
-      note(`previous workspace selected and visible after switchback`, { keptSessionId });
+      note(`previous desktop selected and visible after bouncing back`, { keptSessionId });
     });
 
     const summary = await runner.finishSuccess({

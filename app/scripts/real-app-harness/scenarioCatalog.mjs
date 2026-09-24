@@ -9,10 +9,10 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'workspace-creation-shortcuts',
-    runnerId: 'WORKSPACE-CREATION-SHORTCUTS',
-    label: 'Workspace creation shortcuts',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-creation-shortcuts'],
+    id: 'session-creation-shortcuts',
+    runnerId: 'SESSION-CREATION-SHORTCUTS',
+    label: 'Session creation shortcuts',
+    command: ['pnpm', 'run', 'real-app:scenario-session-creation-shortcuts'],
   },
   {
     id: 'linux-shortcuts',
@@ -20,6 +20,12 @@ export const scenarioCatalog = [
     label: 'Linux terminal-style shortcuts through xdotool',
     command: ['pnpm', 'run', 'real-app:scenario-linux-shortcuts'],
     soakOnly: true,
+  },
+  {
+    id: 'desktop-switching',
+    runnerId: 'DESKTOP-SWITCHING',
+    label: 'Desktop switch, send, bounce, overview and a second client',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-switching'],
   },
   {
     id: 'workspace-switching',

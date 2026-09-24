@@ -99,6 +99,15 @@ async function createShellWorkspace(client, observer, cwd, label) {
   };
 }
 
+async function desktopSlotOf(client, sessionId) {
+  const state = await client.request('get_state');
+  const desktop = state.arrangement.desktops.find((entry) => entry.panes.some((pane) => pane.sessionId === sessionId));
+  if (!desktop?.slot) {
+    throw new Error(`Session ${sessionId} is not on a desktop with a shortcut slot: ${JSON.stringify(state.arrangement, null, 2)}`);
+  }
+  return desktop.slot;
+}
+
 async function addSplit(client, sessionId, shortcutId, expectedCount) {
   const before = await client.request('get_workspace', { sessionId });
   const beforeIds = new Set((before.panes || []).map((pane) => pane.paneId));
@@ -301,11 +310,11 @@ async function main() {
     });
 
     await runner.step('assert_cmd_number_shortcuts', async () => {
-      await pressShortcutKeys(client, driver, 'workspace.select1');
+      await pressShortcutKeys(client, driver, `desktop.select${await desktopSlotOf(client, workspaceA.sessionId)}`);
       await waitForActiveSession(client, workspaceA.sessionId, 'Cmd+1 selecting first workspace session');
       await assertWorkspaceVisible(client, workspaceA.sessionId, workspaceB.sessionId, 3);
 
-      await pressShortcutKeys(client, driver, 'workspace.select2');
+      await pressShortcutKeys(client, driver, `desktop.select${await desktopSlotOf(client, workspaceB.sessionId)}`);
       await waitForActiveSession(client, workspaceB.sessionId, 'Cmd+2 selecting second workspace session');
       await assertWorkspaceVisible(client, workspaceB.sessionId, workspaceA.sessionId, 2);
 

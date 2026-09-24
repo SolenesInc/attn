@@ -169,10 +169,10 @@ async function main() {
         description: 'shell prompt ready',
       });
       const workspace = await client.request('get_workspace', { sessionId });
-      if (!workspace.workspaceId) {
+      if (!workspace.desktopId) {
         throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
       }
-      return { workspaceId: workspace.workspaceId, cwd: sessionCwd };
+      return { workspaceId: workspace.desktopId, cwd: sessionCwd };
     });
 
     const summon = async (description) => {

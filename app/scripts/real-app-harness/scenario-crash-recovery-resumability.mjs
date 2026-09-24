@@ -366,9 +366,9 @@ async function main() {
       if (session) {
         throw new Error(`claude session survived as ${session.state}; it has no transcript to resume`);
       }
-      const workspace = observer.getWorkspace(claudeSessionId);
-      if (workspace) {
-        throw new Error('the reaped claude session left its workspace pane behind');
+      const holder = observer.desktops.find((desktop) => desktop.panes.some((pane) => pane.session_id === claudeSessionId));
+      if (holder) {
+        throw new Error(`the reaped claude session left its pane behind on desktop ${holder.id}:\n${observer.describeArrangement()}`);
       }
     });
 

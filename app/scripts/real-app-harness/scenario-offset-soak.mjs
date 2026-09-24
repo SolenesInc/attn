@@ -38,7 +38,6 @@ function parseArgs(argv) {
     iterations: 150,
     workspaceCount: 6,
     seed: 1,
-    warmLimit: 3,
     settleMs: 400,
   };
   for (let index = 0; index < args.length; index += 1) {
@@ -50,7 +49,6 @@ function parseArgs(argv) {
     else if (arg === '--iterations') options.iterations = Number.parseInt(args[++index], 10);
     else if (arg === '--workspaces') options.workspaceCount = Number.parseInt(args[++index], 10);
     else if (arg === '--seed') options.seed = Number.parseInt(args[++index], 10);
-    else if (arg === '--warm-limit') options.warmLimit = Number.parseInt(args[++index], 10);
     else if (arg === '--settle-ms') options.settleMs = Number.parseInt(args[++index], 10);
     else if (arg === '--run-against-prod') options.runAgainstProd = true;
     else if (arg === '--help' || arg === '-h') options.help = true;
@@ -138,7 +136,7 @@ async function createTuiWorkspace(client, observer, cwd, sessionLabel, markerLab
   );
   return {
     sessionId,
-    workspaceId: workspace.workspaceId,
+    workspaceId: workspace.desktopId,
     label: sessionLabel,
     panes: [{ paneId: pane.paneId, markerLabel }],
     nextPaneMarker: 1,
@@ -248,7 +246,6 @@ async function main() {
   --iterations <n>     Number of random action steps to run (default: 150)
   --workspaces <n>     Number of shell workspaces to create (default: 6)
   --seed <n>           PRNG seed for deterministic action sequence (default: 1)
-  --warm-limit <n>     Warm workspace virtualization limit (default: 3)
   --settle-ms <n>      Settle delay before each post-step assertion (default: 400)
 `);
     return;
@@ -271,14 +268,13 @@ async function main() {
   let transientCount = 0;
   const transientSteps = [];
   let initialUiScale = null;
-  let initialWarmLimit = null;
   const TRANSIENT_RECHECK_POLL_MS = 750;
   const TRANSIENT_RECHECK_DEADLINE_MS = 4_500;
 
   console.log(`[RealAppHarness] runDir=${runDir}`);
   console.log(`[RealAppHarness] sessionDir=${sessionDir}`);
   console.log(`[RealAppHarness] wsUrl=${options.wsUrl}`);
-  console.log(`[RealAppHarness] seed=${options.seed} iterations=${options.iterations} workspaces=${options.workspaceCount} warmLimit=${options.warmLimit}`);
+  console.log(`[RealAppHarness] seed=${options.seed} iterations=${options.iterations} workspaces=${options.workspaceCount}`);
 
   try {
     process.env.ATTN_HARNESS_PARK_VISIBLE_PX ??= '0';
@@ -286,19 +282,17 @@ async function main() {
     await closeExistingSessions(client, options.sessionRootDir);
 
     initialUiScale = observer.getSetting('uiScale');
-    initialWarmLimit = (await client.request('get_warm_workspace_limit')).limit;
     await client.request('dispatch_shortcut', { shortcutId: 'ui.resetFontSize' });
     if (initialUiScale !== '' && initialUiScale !== '1') {
       await observer.waitFor(() => observer.getSetting('uiScale') === '1', 'default UI scale persisted');
     }
-    await client.request('set_warm_workspace_limit', { limit: options.warmLimit });
 
     for (let index = 0; index < options.workspaceCount; index += 1) {
       const sessionLabel = `offsetsoak-${runId}-${index}`;
       const markerLabel = `s${index}`;
       const workspace = await createTuiWorkspace(client, observer, path.join(sessionDir, `ws${index}`), sessionLabel, markerLabel);
       workspaces.push(workspace);
-      console.log(`[RealAppHarness] created workspace ${index}: sessionId=${workspace.sessionId} workspaceId=${workspace.workspaceId} marker=${markerLabel}`);
+      console.log(`[RealAppHarness] created workspace ${index}: sessionId=${workspace.sessionId} workspaceId=${workspace.desktopId} marker=${markerLabel}`);
     }
 
     let activeIndex = workspaces.length - 1;
@@ -585,7 +579,6 @@ async function main() {
       seed: options.seed,
       iterations: options.iterations,
       workspaceCount: options.workspaceCount,
-      warmLimit: options.warmLimit,
       maxOverflowPxSeen: maxOverflowSeen,
       transientCount,
       transientSteps,
@@ -606,14 +599,8 @@ async function main() {
         );
       }
     } finally {
-      try {
-        if (initialWarmLimit !== null) {
-          await client.request('set_warm_workspace_limit', { limit: initialWarmLimit });
-        }
-      } finally {
-        await client.quitApp().catch(() => {});
-        await observer.close();
-      }
+      await client.quitApp().catch(() => {});
+      await observer.close();
     }
   }
 }

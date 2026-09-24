@@ -218,7 +218,7 @@ async function main() {
       });
 
       const workspace = await client.request('get_workspace', { sessionId });
-      const id = workspace.workspaceId;
+      const id = workspace.desktopId;
       if (!id) {
         throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
       }

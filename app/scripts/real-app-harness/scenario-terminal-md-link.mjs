@@ -126,11 +126,11 @@ async function selectorIsAbsent(client, selector) {
   }
 }
 
-function collectMarkdownTiles(layout) {
-  if (!layout?.layout_json) return [];
+function collectMarkdownTiles(desktop) {
+  if (!desktop?.tree_json) return [];
   let root;
   try {
-    root = JSON.parse(layout.layout_json);
+    root = JSON.parse(desktop.tree_json);
   } catch {
     return [];
   }
@@ -217,7 +217,7 @@ async function main() {
       const workspace = await client.request('get_workspace', { sessionId });
       pane = workspace?.panes?.[0];
       runner.assert(Boolean(pane), `No pane in workspace: ${JSON.stringify(workspace)}`);
-      workspaceId = workspace.workspaceId;
+      workspaceId = workspace.desktopId;
       runner.assert(Boolean(workspaceId), `No workspaceId on workspace: ${JSON.stringify(workspace)}`);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
       await waitForPaneAttached(client, sessionId, pane.paneId, 20_000);
@@ -327,7 +327,7 @@ async function main() {
       return (state.tileIds || []).filter((id) => id.startsWith('tile-markdown'));
     };
 
-    const markdownTileNodes = () => collectMarkdownTiles(observer.workspacesBySessionId.get(sessionId));
+    const markdownTileNodes = () => collectMarkdownTiles(observer.desktopOf(sessionId));
 
     const tileFocused = async (tileId) => {
       const view = (await client.request('get_session_ui_state', { sessionId }))?.workspace?.view;
