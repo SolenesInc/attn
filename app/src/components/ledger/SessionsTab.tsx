@@ -315,7 +315,12 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
   const [text, setText] = useState(() => formatQuery(restoredFilters, profileNames));
   const profiles = useMemo(() => profileChoices(profileNames, facets), [profileNames, facets]);
   const parsed = useMemo(() => parseQuery(text, facets, profiles, repository), [text, facets, profiles, repository]);
-  useProfileRenamesInQuery(profileNames, setText);
+  const namedWith = useRef(profileNames);
+  useEffect(() => {
+    const before = namedWith.current;
+    namedWith.current = profileNames;
+    if (before !== profileNames) setText((current) => renameProfileTokens(current, before, profileNames));
+  }, [profileNames]);
   const keepRepository = unresolvedWhilePending(parsed, facets, 'repo:');
   const keepProfile = unresolvedWhilePending(parsed, facets, 'profile:');
 
@@ -349,15 +354,6 @@ function useReloadWhenChanged(value: string, reload: () => void) {
     loadedWith.current = value;
     reload();
   }, [value, reload]);
-}
-
-function useProfileRenamesInQuery(profileNames: Record<string, string>, setText: Dispatch<SetStateAction<string>>) {
-  const namedWith = useRef(profileNames);
-  useEffect(() => {
-    const before = namedWith.current;
-    namedWith.current = profileNames;
-    if (before !== profileNames) setText((current) => renameProfileTokens(current, before, profileNames));
-  }, [profileNames, setText]);
 }
 
 function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): string {
