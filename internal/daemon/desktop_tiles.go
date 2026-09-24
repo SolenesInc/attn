@@ -194,11 +194,12 @@ func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
 type desktopTileUpdate struct {
 	tileID    string
 	params    string
+	hasParams bool
 	sessionID string
 }
 
 func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUpdate) (desktopTileUpdate, error) {
-	if update.tileID == "" || (update.params == "" && update.sessionID == "") {
+	if update.tileID == "" || (!update.hasParams && update.sessionID == "") {
 		return update, profiles.Errorf(profiles.CodeInvalid, "updating a tile needs tile_id and tile_params or tile_session_id")
 	}
 	desktop, err := d.store.GetDesktop(desktopID)
@@ -212,13 +213,22 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	if err := d.checkedTileSession(desktop, update.sessionID); err != nil {
 		return update, err
 	}
+	if !update.hasParams {
+		return update, nil
+	}
+	if update.params == "" {
+		if tile.TileKind != string(layouttree.TileKindNotebook) {
+			return update, profiles.Errorf(profiles.CodeInvalid, "a %s tile cannot drop its tile_params; only a notebook tile falls back to the default root", tile.TileKind)
+		}
+		return update, nil
+	}
 	update.params, err = d.effectiveTileParams(tile, update.params)
 	return update, err
 }
 
 func applyDesktopTileUpdate(desktop profiles.Desktop, update desktopTileUpdate) (profiles.Desktop, error) {
 	next, found := desktop.Tree, true
-	if update.params != "" {
+	if update.hasParams {
 		next, found = layouttree.UpdateTileParams(next, update.tileID, update.params)
 	}
 	if found && update.sessionID != "" {
@@ -236,6 +246,7 @@ func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.Desktop
 		update, err := d.checkedDesktopTileUpdate(msg.DesktopID, desktopTileUpdate{
 			tileID:    strings.TrimSpace(msg.TileID),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
+			hasParams: msg.TileParams != nil,
 			sessionID: strings.TrimSpace(protocol.Deref(msg.TileSessionID)),
 		})
 		if err != nil {

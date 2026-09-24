@@ -270,6 +270,27 @@ describe('useDaemonSocket profiles', () => {
     await expect(move).rejects.toBeInstanceOf(ProfileCommandError);
     await expect(move).rejects.toMatchObject({ code: 'stale_revision', message: 'desktop d2 changed since revision 1' });
   });
+  it('sends an empty tile_params to clear a tile, and a move carries its drop share', async () => {
+    const { ws, result } = await connect();
+
+    act(() => {
+      void result.current.sendDesktopUpdateTile({ desktopId: 'd1', expectedRevision: 3, tileId: 'nb', tileParams: '' });
+      void result.current.sendDesktopMoveLeaf({
+        sourceDesktopId: 'd1',
+        targetDesktopId: 'd1',
+        leafId: 'pane-1',
+        anchorId: 'pane-2',
+        edge: 'left',
+        leafShare: 0.3,
+        expectedSourceRevision: 3,
+        expectedTargetRevision: 3,
+      });
+    });
+
+    expect(ws.commands('desktop_update_tile')[0]).toMatchObject({ tile_id: 'nb', tile_params: '' });
+    expect(ws.commands('desktop_move_leaf')[0]).toMatchObject({ leaf_id: 'pane-1', leaf_share: 0.3 });
+  });
+
   it('docks a tile and follows its content on a desktop', async () => {
     const { ws, result } = await connect();
 

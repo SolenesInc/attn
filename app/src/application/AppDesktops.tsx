@@ -197,7 +197,7 @@ export function AppDesktops() {
               ? undefined
               : sendDesktopUpdateTile({ desktopId: desktop.id, expectedRevision: revision, tileId, tileParams, tileSessionId });
           }}
-          onMoveLeaf={(leafId, anchorId, edge) => {
+          onMoveLeaf={(leafId, anchorId, edge, ratio) => {
             const revision = revisionOf(desktop.id);
             if (revision === null) return;
             void sendDesktopMoveLeaf({
@@ -206,6 +206,7 @@ export function AppDesktops() {
               leafId,
               anchorId,
               edge,
+              leafShare: ratio,
               expectedSourceRevision: revision,
               expectedTargetRevision: revision,
             }).catch(() => {});

@@ -175,6 +175,23 @@ func TestUpdatingATileValidatesItsParamsByKind(t *testing.T) {
 	}
 }
 
+func TestAnEmptyNotebookParamClearsItsRootWhileAMissingOneIsRefused(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.agent("agent-a", w.profileID)
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-nb", "tile_kind": "notebook", "tile_params": `{"root":"/elsewhere"}`, "edge": "right"})
+
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopUpdateTile, "tile_id": "tile-nb", "tile_params": ""})
+	if got := w.tile("tile-nb").TileParams; got != "" {
+		t.Fatalf("notebook tile params are %q after clearing its root", got)
+	}
+
+	nothing := w.send(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopUpdateTile, "desktop_id": w.desktop.ID, "expected_revision": w.desktop.Revision,
+		"tile_id": "tile-nb",
+	})
+	wantErrorCode(t, nothing, protocol.ProfileErrorCodeInvalid)
+}
+
 func TestATileCanOnlyFollowAnAgentOfItsOwnProfile(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	elsewhere := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdProfileCreate, "name": "elsewhere"})

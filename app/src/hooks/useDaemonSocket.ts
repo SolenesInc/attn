@@ -5181,6 +5181,7 @@ export function useDaemonSocket({
       leafId: string;
       anchorId?: string;
       edge: 'left' | 'right' | 'top' | 'bottom';
+      leafShare?: number;
       expectedSourceRevision: number;
       expectedTargetRevision: number;
     }) =>
@@ -5190,6 +5191,7 @@ export function useDaemonSocket({
         leaf_id: move.leafId,
         ...(move.anchorId ? { anchor_id: move.anchorId } : {}),
         edge: move.edge,
+        ...(move.leafShare ? { leaf_share: move.leafShare } : {}),
         expected_source_revision: move.expectedSourceRevision,
         expected_target_revision: move.expectedTargetRevision,
       }),
@@ -5239,7 +5241,7 @@ export function useDaemonSocket({
         desktop_id: update.desktopId,
         expected_revision: update.expectedRevision,
         tile_id: update.tileId,
-        ...(update.tileParams ? { tile_params: update.tileParams } : {}),
+        ...(update.tileParams !== undefined ? { tile_params: update.tileParams } : {}),
         ...(update.tileSessionId ? { tile_session_id: update.tileSessionId } : {}),
       }),
     [sendProfileCommand],

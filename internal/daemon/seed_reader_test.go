@@ -164,7 +164,7 @@ func TestReopeningASeedResetsItsTileNavigatedToAnotherSeed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, current.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
-		return applyDesktopTileUpdate(desktop, desktopTileUpdate{tileID: tileID, params: second.ID})
+		return applyDesktopTileUpdate(desktop, desktopTileUpdate{tileID: tileID, params: second.ID, hasParams: true})
 	}); err != nil {
 		t.Fatal(err)
 	}

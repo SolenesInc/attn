@@ -138,7 +138,7 @@ func openTileID(desktop profiles.Desktop, tile agentTile) string {
 
 func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, tile agentTile, tileID string) (func(profiles.Desktop) (profiles.Desktop, error), error) {
 	if _, docked := tileLeafByID(desktop.Tree, tileID); docked {
-		update, err := d.checkedDesktopTileUpdate(desktop.ID, desktopTileUpdate{tileID: tileID, params: tile.params, sessionID: tile.sessionID})
+		update, err := d.checkedDesktopTileUpdate(desktop.ID, desktopTileUpdate{tileID: tileID, params: tile.params, hasParams: tile.params != "", sessionID: tile.sessionID})
 		return func(desktop profiles.Desktop) (profiles.Desktop, error) {
 			updated, err := applyDesktopTileUpdate(desktop, update)
 			if err != nil {
