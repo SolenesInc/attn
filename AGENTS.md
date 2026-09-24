@@ -102,11 +102,20 @@ satisfy the full requirement?
 
 ## Writing tests
 
-- Only write high value unit tests, and for critical parts of the codebase. Low value unit tests are not necessary. Do not write tests for script helpers or test helpers.
-- Prefer fast integration tests.
-- Do not copy production code into tests or test compile-time guarantees.
-- Use the [test contracts](docs/maintainer-contracts.md#test-safety)
-when choosing time, property, or network-failure test helpers.
+Follow [Testing](docs/testing.md). In short:
+
+- Commit tests that guard a promise attn makes: protocol, durability, CLI, or
+  screen. Check your own work by running it; keep scratch tests out of commits.
+- Could everything behind the test's boundary be rewritten, behavior
+  preserved, without editing the test? If not, do not commit it.
+- Default to wire tests: a real daemon driven as a protocol client, or the real
+  app driven as the daemon. Go to stack or scenario tests only for behavior
+  across processes or on screen. Kernel tests only for specified logic with
+  large input spaces, as tables, corpora, or properties.
+- When a behavior-preserving change breaks a test, delete or replace the test;
+  do not repair it.
+- Do not test script helpers or test helpers, copy production code into tests,
+  or test compile-time guarantees.
 
 Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
 [verification requirements](docs/instances.md#verification-requirements).
