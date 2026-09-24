@@ -79,6 +79,9 @@ vi.mock('./components/Sidebar', () => ({
       <button type="button" data-testid="select-readme-tile" onClick={() => onSelectTile('d2', 'tile-readme')}>
         readme
       </button>
+      <button type="button" data-testid="select-notes-tile" onClick={() => onSelectTile('d1', 'tile-notes')}>
+        notes
+      </button>
     </div>
   ),
 }));
@@ -170,6 +173,19 @@ function tileDesktop(id: string, slot: number, tileId: string, tileKind: string,
     ...agentDesktop(id, slot, []),
     tree_json: JSON.stringify({ type: 'tile', tile_id: tileId, tile_kind: tileKind, tile_params: tileParams }),
     active_pane_id: tileId,
+  };
+}
+
+function withNotesTile(desktop: Desktop): Desktop {
+  return {
+    ...desktop,
+    tree_json: JSON.stringify({
+      type: 'split',
+      split_id: 'notes',
+      direction: 'vertical',
+      ratio: 0.6,
+      children: [JSON.parse(desktop.tree_json), { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }],
+    }),
   };
 }
 
@@ -508,6 +524,30 @@ describe('desktop surface', () => {
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-selected-session')).toBe('');
     expect(useSessionStore.getState().activeSessionId).toBe('s1');
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
+  });
+
+  it('sends pane focus even to the daemon-active pane while a tile selection is still in flight', async () => {
+    arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(() => new Promise(() => {}));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    await userEvent.click(screen.getByTestId('select-notes-tile'));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
+    await userEvent.click(screen.getByTestId('focus-pane-s1'));
+
+    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s1');
+  });
+
+  it('puts the sidebar back on the shown focus when the daemon refuses a tile selection', async () => {
+    arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
+    desktopCommands.sendDesktopSetActivePane.mockRejectedValueOnce(new Error('leaf gone'));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    await userEvent.click(screen.getByTestId('select-notes-tile'));
+
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe(''));
   });
 
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {

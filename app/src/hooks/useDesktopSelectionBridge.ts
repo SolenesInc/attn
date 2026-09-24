@@ -31,6 +31,10 @@ function agentToShow(
   return panes[0]?.session_id ?? null;
 }
 
+export function resyncShownTile() {
+  mirrorShownTile(shownOf(useProfilesStore.getState()));
+}
+
 function mirrorShownTile(shown: Shown) {
   const current = useSessionStore.getState().selectedTile;
   if (current?.desktopId === shown.desktopId && current.tileId === shown.tileId) return;

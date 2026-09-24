@@ -180,8 +180,11 @@ export function AppDesktops() {
             )
           }
           onFocusPane={(paneId) => {
-            if (paneId === desktop.active_pane_id) return;
-            void sendDesktopSetActivePane(desktop.id, paneId).catch(() => {});
+            const tileSelectedHere = useSessionStore.getState().selectedTile?.desktopId === desktop.id;
+            if (paneId === desktop.active_pane_id && !tileSelectedHere) return;
+            void sendDesktopSetActivePane(desktop.id, paneId).catch((error) => {
+              showError(`Could not focus that pane: ${failureMessage(error)}`);
+            });
           }}
           zoomActive={Boolean(zoomModeBySessionId[desktop.id])}
           onSetZoomActive={(active) => {

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
+import { resyncShownTile } from '../hooks/useDesktopSelectionBridge';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
 import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -120,6 +121,7 @@ export function useAppNavigation({
           if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
         })
         .catch((error) => {
+          resyncShownTile();
           showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
         });
     },
