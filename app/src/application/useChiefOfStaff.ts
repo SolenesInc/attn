@@ -3,10 +3,9 @@ import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { AppContentProps } from './appSupport';
-import { useAppSessions } from './useAppSessions';
 
 interface Options {
-  enrichedLocalSessions: ReturnType<typeof useAppSessions>['enrichedLocalSessions'];
+  enrichedLocalSessions: ReadonlyArray<{ id: string; label: string; chiefOfStaff?: boolean }>;
   daemonSessions: AppContentProps['daemonSessions'];
   showError: ReturnType<typeof useErrorToast>['showError'];
 }

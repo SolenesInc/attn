@@ -601,7 +601,7 @@ location:
 		t.Fatal(err)
 	}
 	var delivered atomic.Int32
-	d := &Daemon{store: s, ghRegistry: registry}
+	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry})
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered.Add(1)
 		return markAutomationRunDeliveredForTest(s, run.ID, `{"type":"test"}`, time.Now())
@@ -691,7 +691,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		t.Fatal(err)
 	}
 	delivered := make(chan struct{}, 1)
-	d := &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()}
+	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()})
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now()); err != nil {
 			return err
@@ -754,7 +754,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		t.Fatal(err)
 	}
 	var attempts atomic.Int32
-	d := &Daemon{store: s, ghRegistry: registry}
+	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry})
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		if attempts.Add(1) == 1 {
 			return &retryableAutomationDeliveryError{cause: errors.New("transient launch failure")}

@@ -29,8 +29,7 @@ describe('useChiefOfStaff transfers', () => {
     const sendSetChiefOfStaff = vi.fn(async () => undefined);
     const api = createMockDaemonApi({ sendSetChiefOfStaff });
     const wrapper = ({ children }: { children: ReactNode }) => <DaemonApiProvider api={api}>{children}</DaemonApiProvider>;
-    const enrichedLocalSessions = local as unknown as Parameters<typeof useChiefOfStaff>[0]['enrichedLocalSessions'];
-    const hook = renderHook(() => useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError: vi.fn() }), { wrapper });
+    const hook = renderHook(() => useChiefOfStaff({ enrichedLocalSessions: local, daemonSessions, showError: vi.fn() }), { wrapper });
     return { hook, sendSetChiefOfStaff };
   }
 
