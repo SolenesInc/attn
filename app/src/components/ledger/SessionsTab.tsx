@@ -229,7 +229,7 @@ export function SessionsTab({
         tone: parsed.unresolved.includes(token) ? 'unresolved' as const : undefined,
         onRemove: () => setText(removeToken(text, token)),
       }));
-  }, [text, parsed]);
+  }, [text, parsed, setText]);
 
   const emptyMessage = ledgerEmptyMessage(ledger, filters.scope);
 
