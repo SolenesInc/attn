@@ -1,4 +1,4 @@
 kind: added
 area: delegation
 change: Agents can change your delegation roles from the CLI with attn delegate roles, and every change can be rolled back.
-notes: attn delegate roles show, add, set, copy, rm, enable, disable and apply edit the table in Settings > Delegation. Each change, from the CLI or Settings, becomes a revision recording who made it and why; attn delegate roles history lists them, rollback steps back through them, and rollback <revision> restores any one, including a newer one. Settings' Undo now rolls back through the same history.
+notes: attn delegate roles show, add, set, copy, rm, enable, disable and apply edit the table in Settings > Delegation. Each change, from the CLI or Settings, becomes a revision recording who made it and why; attn delegate roles history lists them, rollback steps back through them, and rollback <revision> restores any one, including a newer one.

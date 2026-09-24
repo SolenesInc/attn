@@ -19,8 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-var errMissingRequestID = errors.New("missing request id")
-
 func (d *Daemon) delegationHarnesses() []protocol.DelegationHarness {
 	result := []protocol.DelegationHarness{}
 	for _, name := range agentdriver.List() {
@@ -46,50 +44,42 @@ func (d *Daemon) delegationHarnesses() []protocol.DelegationHarness {
 	return result
 }
 
-func (d *Daemon) delegationPreferencesResult(requestID string, cfg delegationprefs.Config) protocol.DelegationPreferencesResultMessage {
-	return protocol.DelegationPreferencesResultMessage{
-		Event:         protocol.EventDelegationPreferencesResult,
-		RequestID:     requestID,
-		Success:       true,
-		Preferences:   &cfg,
-		ExpandedRoles: append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...),
-		Harnesses:     d.delegationHarnesses(),
-		Templates:     prompts.DelegationRoleTemplates(),
-	}
-}
-
-func delegationPreferencesFailure(requestID string, err error) protocol.DelegationPreferencesResultMessage {
-	return protocol.DelegationPreferencesResultMessage{Event: protocol.EventDelegationPreferencesResult, RequestID: requestID, Error: protocol.Ptr(err.Error())}
-}
-
 func (d *Daemon) handleDelegationPreferencesGet(client *wsClient, msg *protocol.DelegationPreferencesGetMessage) {
+	result := protocol.DelegationPreferencesResultMessage{Event: protocol.EventDelegationPreferencesResult, RequestID: msg.RequestID}
 	if strings.TrimSpace(msg.RequestID) == "" {
-		d.sendToClient(client, delegationPreferencesFailure(msg.RequestID, errMissingRequestID))
+		result.Error = protocol.Ptr("missing request id")
+		d.sendToClient(client, result)
 		return
 	}
 	cfg, err := d.store.GetDelegationPreferences()
 	if err != nil {
-		d.sendToClient(client, delegationPreferencesFailure(msg.RequestID, err))
-		return
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+		result.Preferences = &cfg
+		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
+		result.Harnesses = d.delegationHarnesses()
+		result.Templates = prompts.DelegationRoleTemplates()
 	}
-	d.sendToClient(client, d.delegationPreferencesResult(msg.RequestID, cfg))
+	d.sendToClient(client, result)
 }
 
 func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol.DelegationPreferencesSaveMessage) {
+	result := protocol.DelegationPreferencesResultMessage{Event: protocol.EventDelegationPreferencesResult, RequestID: msg.RequestID}
 	if strings.TrimSpace(msg.RequestID) == "" {
-		d.sendToClient(client, delegationPreferencesFailure(msg.RequestID, errMissingRequestID))
+		result.Error = protocol.Ptr("missing request id")
+		d.sendToClient(client, result)
 		return
 	}
-	install := protocol.Deref(msg.InstallWorkflowSkill)
 	current, err := d.store.GetDelegationPreferences()
 	var installedPaths []string
 	if err == nil {
 		err = delegationprefs.Validate(msg.Preferences)
 	}
-	if err == nil && !install {
-		err = requireWorkflowSkillInstall(current, msg.Preferences)
+	if err == nil && msg.Preferences.WorkflowSkillEnabled && !current.WorkflowSkillEnabled && !protocol.Deref(msg.InstallWorkflowSkill) {
+		err = fmt.Errorf("enabling attn-workflow requires the explicit Add Attn roles install action")
 	}
-	if err == nil && install {
+	if err == nil && protocol.Deref(msg.InstallWorkflowSkill) {
 		if !msg.Preferences.WorkflowSkillEnabled {
 			err = fmt.Errorf("the install action must save workflow_skill_enabled")
 		} else if msg.Preferences.Revision != current.Revision {
@@ -110,34 +100,24 @@ func (d *Daemon) handleDelegationPreferencesSave(client *wsClient, msg *protocol
 			}
 		}
 	}
-	var saved store.DelegationPreferencesRevision
+	var cfg delegationprefs.Config
 	if err == nil {
+		var saved store.DelegationPreferencesRevision
 		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, store.DelegationPreferencesNote{Origin: string(protocol.DelegationPreferencesOriginSettings)})
+		cfg = saved.Config
 	}
-	if err != nil {
-		result := delegationPreferencesFailure(msg.RequestID, err)
-		result.WorkflowSkillPaths = installedPaths
-		d.sendToClient(client, result)
-		return
-	}
-	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
-	result := d.delegationPreferencesResult(msg.RequestID, saved.Config)
 	result.WorkflowSkillPaths = installedPaths
-	d.sendToClient(client, result)
-}
-
-func (d *Daemon) handleDelegationPreferencesRollbackWS(client *wsClient, msg *protocol.DelegationPreferencesRollbackMessage) {
-	requestID := protocol.Deref(msg.RequestID)
-	if strings.TrimSpace(requestID) == "" {
-		d.sendToClient(client, delegationPreferencesFailure(requestID, errMissingRequestID))
-		return
-	}
-	restored, err := d.rollbackDelegationPreferences(msg, protocol.DelegationPreferencesOriginSettings)
 	if err != nil {
-		d.sendToClient(client, delegationPreferencesFailure(requestID, err))
-		return
+		result.Error = protocol.Ptr(err.Error())
+	} else {
+		result.Success = true
+		result.Preferences = &cfg
+		result.ExpandedRoles = append(prompts.ExpandDelegationRoles(cfg.Roles), prompts.ExpandDelegationRoles(prompts.DelegationRoleTemplates())...)
+		result.Harnesses = d.delegationHarnesses()
+		result.Templates = prompts.DelegationRoleTemplates()
+		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	}
-	d.sendToClient(client, d.delegationPreferencesResult(requestID, restored.Config))
+	d.sendToClient(client, result)
 }
 
 func (d *Daemon) handleDelegationPreferencesShow(conn net.Conn) {
@@ -155,12 +135,12 @@ func (d *Daemon) handleDelegationPreferencesShow(conn net.Conn) {
 
 func (d *Daemon) handleDelegationPreferencesCommit(conn net.Conn, msg *protocol.DelegationPreferencesCommitMessage) {
 	current, err := d.store.GetDelegationPreferences()
-	if err == nil {
-		err = requireWorkflowSkillInstall(current, msg.Preferences)
+	if err == nil && msg.Preferences.WorkflowSkillEnabled && !current.WorkflowSkillEnabled {
+		err = fmt.Errorf("enabling attn-workflow requires the explicit Add Attn roles install action in Settings > Delegation")
 	}
 	var saved store.DelegationPreferencesRevision
 	if err == nil {
-		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, delegationPreferencesNote(protocol.DelegationPreferencesOriginCli, msg.Message))
+		saved, err = d.store.SaveDelegationPreferences(msg.Preferences, cliDelegationPreferencesNote(msg.Message))
 	}
 	if err != nil {
 		d.replyDelegationPreferencesError(conn, err)
@@ -188,31 +168,17 @@ func (d *Daemon) handleDelegationPreferencesHistory(conn net.Conn, msg *protocol
 }
 
 func (d *Daemon) handleDelegationPreferencesRollback(conn net.Conn, msg *protocol.DelegationPreferencesRollbackMessage) {
-	restored, err := d.rollbackDelegationPreferences(msg, protocol.DelegationPreferencesOriginCli)
+	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, cliDelegationPreferencesNote(msg.Message))
 	if err != nil {
 		d.replyDelegationPreferencesError(conn, err)
 		return
 	}
+	d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
 	d.replyDelegationPreferencesRevision(conn, restored)
 }
 
-func (d *Daemon) rollbackDelegationPreferences(msg *protocol.DelegationPreferencesRollbackMessage, origin protocol.DelegationPreferencesOrigin) (store.DelegationPreferencesRevision, error) {
-	restored, err := d.store.RollbackDelegationPreferences(msg.Revision, msg.ExpectedRevision, delegationPreferencesNote(origin, msg.Message))
-	if err == nil {
-		d.publishFact(FactDelegationPreferencesChanged, "preferences", nil)
-	}
-	return restored, err
-}
-
-func requireWorkflowSkillInstall(current, next delegationprefs.Config) error {
-	if next.WorkflowSkillEnabled && !current.WorkflowSkillEnabled {
-		return errors.New("maintained Attn roles need the attn-workflow skill; install it with Add Attn roles in Settings > Delegation")
-	}
-	return nil
-}
-
-func delegationPreferencesNote(origin protocol.DelegationPreferencesOrigin, message *string) store.DelegationPreferencesNote {
-	return store.DelegationPreferencesNote{Origin: string(origin), Message: strings.TrimSpace(protocol.Deref(message))}
+func cliDelegationPreferencesNote(message *string) store.DelegationPreferencesNote {
+	return store.DelegationPreferencesNote{Origin: string(protocol.DelegationPreferencesOriginCli), Message: strings.TrimSpace(protocol.Deref(message))}
 }
 
 func (d *Daemon) replyDelegationPreferencesRevision(conn net.Conn, revision store.DelegationPreferencesRevision) {

@@ -9,7 +9,7 @@ import { FALLBACK, adoptMaintainedRoles, adoptionConflicts, alternatives, comple
 import './DelegationSettings.css';
 
 type PopoverTarget = { key: string; anchor: Anchor };
-type Undo = { label: string; generation: number };
+type Undo = { label: string; previous: DelegationPreferences; generation: number };
 
 const DELEGATION_ICONS = ['search', 'diamond', 'code', 'arrow', 'list', 'bug', 'spark', 'circle'] as const;
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -20,7 +20,7 @@ const leadText = (enabled: boolean) => enabled
 function useUndo(generation: number) {
   const [undo, setUndo] = useState<Undo | null>(null);
   const live = undo && undo.generation === generation ? undo : null;
-  const remember = (label: string) => setUndo({ label, generation: generation + 1 });
+  const remember = (label: string, previous: DelegationPreferences) => setUndo({ label, previous: structuredClone(previous), generation: generation + 1 });
   return { undo: live, remember, forget: () => setUndo(null) };
 }
 
@@ -284,7 +284,7 @@ function AdoptionPanel({ config, templates, names, adoption, onChange, onCancel,
 }
 
 export function DelegationSettings({ policy, loadModels }: { policy: DelegationPreferencesPolicy; loadModels: (harness: string) => Promise<DelegationModelCatalog> }) {
-  const { state, preferences: config, error, generation, reload, save, undo: rollBackLastEdit } = policy;
+  const { state, preferences: config, error, generation, reload, save } = policy;
   const [adoption, setAdoption] = useState<Record<string, string> | null>(null);
   const { undo, remember, forget } = useUndo(generation);
   const rows = useExpansion();
@@ -295,7 +295,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
 
   const view = roleViewer(state.expandedRoles);
   const commit = (next: DelegationPreferences) => { void save(next); };
-  const commitUndoable = (next: DelegationPreferences, label: string) => { void save(next); remember(label); };
+  const commitUndoable = (next: DelegationPreferences, label: string) => { void save(next); remember(label, config); };
   const withRoles = (roles: DelegationRole[]) => ({ ...config, roles });
   const updateRole = (next: DelegationRole) => commit(withRoles(config.roles.map(role => role.id === next.id ? next : role)));
 
@@ -346,7 +346,7 @@ export function DelegationSettings({ policy, loadModels }: { policy: DelegationP
       {config.roles.length > 0 && <AddRow config={config} missing={missing} onAdd={addRole} onAdopt={adopt} />}
     </div>
     {adoption && <AdoptionPanel config={config} templates={missing} names={templateName} adoption={adoption} onChange={setAdoption} onCancel={() => setAdoption(null)} onConfirm={confirmAdoption} />}
-    {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void rollBackLastEdit(); forget(); }}>Undo</button></div>}
+    {undo && <div role="status" className="delegation-undo"><span>{undo.label}.</span><button type="button" className="settings-action quiet" onClick={() => { void save(undo.previous); forget(); }}>Undo</button></div>}
     {config.roles.length > 0 && <TableFoot config={config} />}
     {picker.popover && target && <DelegationModelPopover value={target.value} harnesses={state.harnesses} anchor={picker.popover.anchor} onChange={selection => commit(target.with(selection))} onClose={picker.close} loadModels={loadModels} />}
   </div>;

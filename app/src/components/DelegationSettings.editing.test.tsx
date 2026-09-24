@@ -23,28 +23,18 @@ function setup(roles: DelegationRole[] = [], enabled = roles.length > 0) {
     harnesses: [{ id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true }],
   };
   const daemon = createMockDaemon();
-  const revisions: DelegationPreferences[] = [structuredClone(state.preferences)];
-  const commit = (value: DelegationPreferences) => {
-    state = { ...state, preferences: { ...structuredClone(value), revision: state.preferences.revision + 1 }, expandedRoles: [...value.roles.map(expand), expandedTemplate] };
-    revisions[state.preferences.revision] = structuredClone(state.preferences);
-    return structuredClone(state);
-  };
   daemon.setResponse('load', () => structuredClone(state));
   daemon.setResponse('save', (args: unknown[]) => {
     const value = args[0] as DelegationPreferences;
     if (value.revision !== state.preferences.revision) throw new Error('delegation preferences changed; reload before saving or choosing a role');
-    return commit(value);
-  });
-  daemon.setResponse('rollback', (args: unknown[]) => {
-    if (args[0] !== state.preferences.revision) throw new Error('delegation preferences changed; reload before saving or choosing a role');
-    return commit(revisions[state.preferences.revision - 1]);
+    state = { ...state, preferences: { ...structuredClone(value), revision: value.revision + 1 }, expandedRoles: [...value.roles.map(expand), expandedTemplate] };
+    return structuredClone(state);
   });
   daemon.setResponse('models', { models: [{ harness: 'codex', provider: '', id: 'model-a', name: 'Everyday model', description: '', detail: '', effort_support: 'supported', effort_levels: ['medium', 'high'], access: 'unknown' }], detail: 'Reported by Codex' });
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
   const models = daemon.createRequest<DelegationModelCatalog>('models');
-  const rollback = daemon.createRequest<DelegationSettingsState>('rollback');
-  function Harness() { const policy = useDelegationPreferences(true, load, save, rollback); return <><DelegationSwitch policy={policy} /><DelegationSettings policy={policy} loadModels={models} /></>; }
+  function Harness() { const policy = useDelegationPreferences(true, load, save); return <><DelegationSwitch policy={policy} /><DelegationSettings policy={policy} loadModels={models} /></>; }
   render(<Harness />);
   const saved = () => waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
   return { daemon, getState: () => state, saved, bump: () => { state = { ...state, preferences: { ...state.preferences, revision: state.preferences.revision + 1 } }; } };
@@ -158,7 +148,6 @@ it('deletes a role with undo and reloads after a conflict', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
   await waitFor(() => expect(getState().preferences.roles).toHaveLength(1));
   await screen.findByRole('button', { name: 'Build' });
-  expect(daemon.getCalls('rollback').map(call => call.args)).toEqual([[1]]);
 
   bump();
   fireEvent.click(screen.getByRole('button', { name: 'Build' }));
@@ -179,35 +168,12 @@ it('renders a configured maintained role by built-in kind when a template shares
   daemon.setResponse('load', () => structuredClone(state));
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
-  function Harness() { const policy = useDelegationPreferences(true, load, save, daemon.createRequest('rollback')); return <DelegationSettings policy={policy} loadModels={daemon.createRequest('models')} />; }
+  function Harness() { const policy = useDelegationPreferences(true, load, save); return <DelegationSettings policy={policy} loadModels={daemon.createRequest('models')} />; }
   render(<Harness />);
   expect(await screen.findByRole('button', { name: 'Pathfinder' })).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Orchestrator' })).not.toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Restore Attn roles (1)' })).toBeInTheDocument();
   await act(async () => { state = { ...state }; });
-});
-
-it('does not roll back a change made elsewhere when the undone edit failed to save', async () => {
-  const { daemon, getState, bump } = setup([custom]);
-  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
-  bump();
-  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-  await screen.findByRole('alert');
-  await waitFor(() => expect(daemon.getCalls('load').length).toBeGreaterThanOrEqual(2));
-  expect(daemon.getCalls('rollback')).toHaveLength(0);
-  expect(getState().preferences.roles).toHaveLength(1);
-});
-
-it('undoes the edit its banner names when another edit queues behind that save', async () => {
-  const { daemon, getState } = setup([custom]);
-  fireEvent.click(await screen.findByRole('button', { name: 'Build' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
-  fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-  fireEvent.click(screen.getByRole('switch', { name: 'Delegation preferences' }));
-  await screen.findByRole('alert');
-  expect(daemon.getCalls('rollback').map(call => call.args)).toEqual([[1]]);
-  expect(getState().preferences.enabled).toBe(false);
 });
 
 it('withdraws undo when a change made elsewhere reloads the table', async () => {
@@ -251,7 +217,7 @@ it('reloads the table, harnesses included, when the section is shown again while
   const save = daemon.createRequest<DelegationSettingsState>('save');
   const models = daemon.createRequest<DelegationModelCatalog>('models');
   function Host() {
-    const policy = useDelegationPreferences(true, load, save, daemon.createRequest('rollback'));
+    const policy = useDelegationPreferences(true, load, save);
     const [shown, setShown] = useState(true);
     return <><button type="button" onClick={() => setShown(s => !s)}>toggle</button>{shown && <DelegationSettings policy={policy} loadModels={models} />}</>;
   }
@@ -284,8 +250,7 @@ it('makes an alternative the default and keeps the former default as an alternat
   expect(screen.getByText('No condition yet. The agent cannot pick this.')).toBeInTheDocument();
   expect(screen.getByText('Made Hard verification the default for Build.')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-  await waitFor(() => expect(getState().preferences.roles[0].default_choice_id).toBe('default'));
-  expect(daemon.getCalls('rollback').map(call => call.args)).toEqual([[1]]);
-  expect(savesSoFar(daemon)).toBe(1);
+  await waitFor(() => expect(savesSoFar(daemon)).toBe(2));
+  expect(getState().preferences.roles[0].default_choice_id).toBe('default');
   expect(daemon.getCalls('models')).toHaveLength(0);
 });

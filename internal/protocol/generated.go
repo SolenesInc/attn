@@ -3492,14 +3492,8 @@ type DelegationPreferencesRollbackMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
 
-	// ExpectedRevision corresponds to the JSON schema field "expected_revision".
-	ExpectedRevision *int `json:"expected_revision,omitempty,omitzero"`
-
 	// Message corresponds to the JSON schema field "message".
 	Message *string `json:"message,omitempty,omitzero"`
-
-	// RequestID corresponds to the JSON schema field "request_id".
-	RequestID *string `json:"request_id,omitempty,omitzero"`
 
 	// Revision corresponds to the JSON schema field "revision".
 	Revision *int `json:"revision,omitempty,omitzero"`

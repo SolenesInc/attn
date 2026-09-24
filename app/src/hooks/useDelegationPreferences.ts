@@ -3,15 +3,10 @@ import type { DelegationPreferences } from '../types/generated';
 import type { DelegationSettingsState } from './daemonDelegationEvents';
 import { useDelegationPreferencesPush } from '../store/delegationPreferences';
 
-type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean; committed: (revision: number | null) => void };
+type Pending = { value: DelegationPreferences; installWorkflowSkill: boolean };
 const message = (e: unknown) => String(e instanceof Error ? e.message : e);
 
-export function useDelegationPreferences(
-  active: boolean,
-  load: () => Promise<DelegationSettingsState>,
-  save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>,
-  rollback: (expectedRevision: number) => Promise<DelegationSettingsState>,
-) {
+export function useDelegationPreferences(active: boolean, load: () => Promise<DelegationSettingsState>, save: (value: DelegationPreferences, installWorkflowSkill?: boolean) => Promise<DelegationSettingsState>) {
   const [state, setState] = useState<DelegationSettingsState | null>(null);
   const [preferences, setPreferences] = useState<DelegationPreferences | null>(null);
   const [busy, setBusy] = useState(false);
@@ -24,7 +19,6 @@ export function useDelegationPreferences(
   const request = useRef(0);
   const deferred = useRef(false);
   const confirmed = useRef<DelegationPreferences | null>(null);
-  const lastEdit = useRef<Promise<number | null> | null>(null);
 
   const confirm = useCallback((next: DelegationSettingsState) => {
     revision.current = next.preferences.revision;
@@ -65,43 +59,30 @@ export function useDelegationPreferences(
   useEffect(() => { if (active && !flight.current && !pending.current) void reload(); }, [active, pushed, reload]);
   useEffect(() => () => { request.current++; }, []);
 
-  const discardPending = useCallback(() => {
-    pending.current?.committed(null);
-    pending.current = null;
-  }, []);
-
   const drain = useCallback(async () => {
     while (pending.current) {
-      const { value, installWorkflowSkill, committed } = pending.current;
+      const { value, installWorkflowSkill } = pending.current;
       pending.current = null;
       try {
         const next = await save({ ...value, revision: revision.current }, installWorkflowSkill);
-        committed(next.preferences.revision);
         if (pending.current) confirm(next); else apply(next);
       } catch (e) {
-        committed(null);
-        discardPending();
+        pending.current = null;
         setError(message(e));
         rollBack();
         await fetch();
         // An edit made against the table the conflict replaced would overwrite the change it lost to.
-        if (pending.current) { discardPending(); setError(message(e)); }
+        if (pending.current) { pending.current = null; setError(message(e)); }
       }
     }
-  }, [save, confirm, apply, rollBack, fetch, discardPending]);
+  }, [save, confirm, apply, rollBack, fetch]);
 
   const persist = useCallback((value: DelegationPreferences, installWorkflowSkill = false) => {
     setPreferences(value);
     setError('');
     setGeneration(n => n + 1);
-    const startEdit = () => {
-      let committed: Pending['committed'] = () => {};
-      lastEdit.current = new Promise(resolve => { committed = resolve; });
-      return committed;
-    };
-    const queued = pending.current;
     // An install queued behind a running save must survive the edits that collapse into it.
-    pending.current = { value, installWorkflowSkill: installWorkflowSkill || (queued?.installWorkflowSkill ?? false), committed: queued?.committed ?? startEdit() };
+    pending.current = { value, installWorkflowSkill: installWorkflowSkill || (pending.current?.installWorkflowSkill ?? false) };
     if (flight.current) return flight.current;
     request.current++;
     setBusy(true);
@@ -116,21 +97,6 @@ export function useDelegationPreferences(
     return flight.current;
   }, [drain, fetch]);
 
-  const undo = useCallback(async () => {
-    const edit = lastEdit.current;
-    if (flight.current) await flight.current;
-    const edited = await edit;
-    if (edited === null) return;
-    setError('');
-    setGeneration(n => n + 1);
-    try {
-      apply(await rollback(edited));
-    } catch (e) {
-      setError(message(e));
-      await fetch();
-    }
-  }, [rollback, apply, fetch]);
-
-  return { state, preferences, busy, error, generation, reload, save: persist, undo };
+  return { state, preferences, busy, error, generation, reload, save: persist };
 }
 export type DelegationPreferencesPolicy = ReturnType<typeof useDelegationPreferences>;

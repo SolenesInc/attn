@@ -28,8 +28,7 @@ function setup() {
   });
   const load = daemon.createRequest<DelegationSettingsState>('load');
   const save = daemon.createRequest<DelegationSettingsState>('save');
-  const rollback = daemon.createRequest<DelegationSettingsState>('rollback');
-  const hook = renderHook(() => useDelegationPreferences(true, load, save, rollback));
+  const hook = renderHook(() => useDelegationPreferences(true, load, save));
   return { daemon, hook, server: () => server, bump: () => { server = { ...server, preferences: { ...server.preferences, revision: server.preferences.revision + 1 } }; }, releaseFirst: () => { const r = release; release = () => {}; r?.(); }, holdLoads: () => { releaseLoad = () => {}; return () => { const r = releaseLoad; releaseLoad = null; r?.(); }; }, failLoads: (reason: string) => { loadFailure = reason; return () => { loadFailure = ''; }; }, holdSaves: () => { holding = true; return () => { holding = false; held.splice(0).forEach(resolve => resolve()); }; } };
 }
 

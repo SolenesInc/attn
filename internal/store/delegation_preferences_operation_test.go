@@ -53,17 +53,8 @@ func TestDelegationPreferencesMigrationCarriesTheSavedTableIntoHistory(t *testin
 	if err != nil || !reflect.DeepEqual(live, saved) {
 		t.Fatalf("carried table: %+v, %v", live, err)
 	}
-	if _, err := migrated.RollbackDelegationPreferences(nil, nil, DelegationPreferencesNote{}); err == nil {
+	if _, err := migrated.RollbackDelegationPreferences(nil, DelegationPreferencesNote{}); err == nil {
 		t.Fatal("rolled back past the start of the carried history")
-	}
-	edited := live
-	edited.Enabled = false
-	if _, err := migrated.SaveDelegationPreferences(edited, DelegationPreferencesNote{}); err != nil {
-		t.Fatal(err)
-	}
-	restored, err := migrated.RollbackDelegationPreferences(nil, nil, DelegationPreferencesNote{})
-	if err != nil || restored.Config.Revision != 5 || !restored.Config.Enabled || *restored.Restores != 3 {
-		t.Fatalf("rollback onto the carried revision: %+v, %v", restored, err)
 	}
 }
 

@@ -1222,9 +1222,7 @@ model DelegationPreferencesHistoryResult {
 
 model DelegationPreferencesRollbackMessage {
   cmd: "delegation_preferences_rollback";
-  request_id?: string;
   revision?: safeint;
-  expected_revision?: safeint;
   message?: string;
 }
 

@@ -77,8 +77,6 @@ revisions and what each one changed. `attn delegate roles rollback` restores
 the table that was live before the current one, and repeating it keeps
 walking back. `rollback <revision>` restores any revision, older or newer, so
 rolling forward is restoring a later one. A rollback is itself a revision.
-Settings' Undo rolls back the edit it offers to undo, and only while that edit
-is still the live revision.
 
 ## Agents
 

@@ -72,21 +72,8 @@ func TestDelegationPreferencesSettingsRoundTripAndConflict(t *testing.T) {
 	if !got.Success || got.Preferences.Enabled || got.Preferences.Fallback.Selection.Harness != "copilot" {
 		t.Fatalf("disable lost fallback: %+v", got)
 	}
-	d.handleDelegationPreferencesRollbackWS(client, &protocol.DelegationPreferencesRollbackMessage{RequestID: protocol.Ptr("undo"), ExpectedRevision: protocol.Ptr(2)})
-	got = readPreferencesResult(t, client)
-	if !got.Success || got.RequestID != "undo" || !got.Preferences.Enabled || got.Preferences.Revision != 3 {
-		t.Fatalf("undo: %+v", got)
-	}
-	d.handleDelegationPreferencesRollbackWS(client, &protocol.DelegationPreferencesRollbackMessage{RequestID: protocol.Ptr("stale-undo"), ExpectedRevision: protocol.Ptr(2)})
-	if got = readPreferencesResult(t, client); got.Success {
-		t.Fatalf("undo after a change made elsewhere: %+v", got)
-	}
-	history, err := d.store.DelegationPreferencesHistory(2)
-	if err != nil || history[0].Origin != string(protocol.DelegationPreferencesOriginSettings) || history[1].Origin != string(protocol.DelegationPreferencesOriginSettings) {
-		t.Fatalf("Settings saves and undos are recorded as Settings changes: %+v %v", history, err)
-	}
-	if len(docFacts(t, d, FactDelegationPreferencesChanged)) != 3 {
-		t.Fatal("expected one fact for each successful save or rollback")
+	if len(docFacts(t, d, FactDelegationPreferencesChanged)) != 2 {
+		t.Fatal("expected one fact for each successful save")
 	}
 }
 

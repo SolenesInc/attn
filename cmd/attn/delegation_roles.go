@@ -19,35 +19,11 @@ import (
 )
 
 func runDelegateRoles(args []string) {
-	if len(args) == 0 || args[0] == "--json" {
-		runDelegateRolesCatalog(args)
-		return
-	}
-	command, rest := args[0], args[1:]
-	var err error
-	switch command {
-	case "-h", "--help", "help":
-		writeDelegateRolesHelp(os.Stdout)
-		return
-	case "show":
-		err = runDelegateRolesShow(rest)
-	case "history":
-		err = runDelegateRolesHistory(rest)
-	case "rollback":
-		err = runDelegateRolesRollback(rest)
-	case "apply":
-		err = runDelegateRolesApply(rest)
-	case "add", "set", "copy", "rm", "enable", "disable":
-		err = runDelegateRolesEdit(command, rest)
-	default:
-		fmt.Fprintf(os.Stderr, "delegate roles: unknown command %q\n", command)
-		writeDelegateRolesHelp(os.Stderr)
-		os.Exit(2)
-	}
+	err := delegateRoles(os.Stdout, args)
 	if err == nil {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "delegate roles %s: %v\n", command, err)
+	fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
 	var usage usageError
 	if errors.As(err, &usage) {
 		os.Exit(2)
@@ -59,21 +35,42 @@ type usageError struct{ error }
 
 func usagef(format string, args ...any) error { return usageError{fmt.Errorf(format, args...)} }
 
-func runDelegateRolesCatalog(args []string) {
+func delegateRoles(w io.Writer, args []string) error {
+	if len(args) == 0 || args[0] == "--json" {
+		return delegateRolesCatalog(w, args)
+	}
+	command, rest := args[0], args[1:]
+	switch command {
+	case "-h", "--help", "help":
+		writeDelegateRolesHelp(w)
+		return nil
+	case "show":
+		return delegateRolesShow(w, rest)
+	case "history":
+		return delegateRolesHistory(w, rest)
+	case "rollback":
+		return delegateRolesRollback(w, rest)
+	case "apply":
+		return delegateRolesApply(w, rest)
+	case "add", "set", "copy", "rm", "enable", "disable":
+		return delegateRolesEdit(w, command, rest)
+	}
+	return usagef("unknown command %q; attn delegate roles --help lists them", command)
+}
+
+func delegateRolesCatalog(w io.Writer, args []string) error {
 	if len(args) > 1 {
-		fmt.Fprintln(os.Stderr, "usage: attn delegate roles [--json]")
-		os.Exit(2)
+		return usagef("usage: attn delegate roles [--json]")
 	}
 	result, err := client.New("").DelegationRoles()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
-		os.Exit(1)
+		return err
 	}
 	if len(args) == 1 {
-		printJSON(result)
-	} else {
-		fmt.Println(prompts.DelegationRolesText(*result))
+		return fprintJSON(w, result)
 	}
+	fmt.Fprintln(w, prompts.DelegationRolesText(*result))
+	return nil
 }
 
 func writeDelegateRolesHelp(w io.Writer) {
@@ -89,7 +86,7 @@ reading:
         model, alternatives and the fallback. With a role, its full guidance.
         --json prints the table as apply reads it.
 
-  history [--limit N] [--json]
+  history [--limit N]
         revisions newest first, with who changed what and why.
 
 changing (each accepts -m TEXT, the reason recorded in history):
@@ -124,7 +121,6 @@ changing (each accepts -m TEXT, the reason recorded in history):
 
 guidance flags (custom roles only):
   --description TEXT  --instructions TEXT  --stopping-point TEXT  --icon TEXT
-  A value of @PATH reads a file, @- reads stdin.
 
 model flags:
   --agent NAME     harness; changing it starts a fresh selection
@@ -135,35 +131,30 @@ model flags:
 `)
 }
 
-func runDelegateRolesShow(args []string) error {
+func delegateRolesShow(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("delegate roles show", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	asJSON := fs.Bool("json", false, "print the table as apply reads it")
 	positionals, err := parseInterspersedFlagArgs(fs, args)
-	if err != nil || len(positionals) > 1 {
-		return usagef("usage: attn delegate roles show [<role>] [--json]")
+	if err != nil || len(positionals) > 1 || (*asJSON && len(positionals) == 1) {
+		return usagef("usage: attn delegate roles show [<role> | --json]")
 	}
 	live, err := client.New("").DelegationPreferencesShow()
 	if err != nil {
 		return err
 	}
-	if len(positionals) == 1 {
+	switch {
+	case *asJSON:
+		return fprintJSON(w, live.Preferences)
+	case len(positionals) == 1:
 		role, err := findRole(&live.Preferences, positionals[0])
 		if err != nil {
 			return err
 		}
-		if *asJSON {
-			printJSON(role)
-			return nil
-		}
-		writeDelegationRole(os.Stdout, prompts.ExpandDelegationRoles([]protocol.DelegationRole{*role})[0])
-		return nil
+		writeDelegationRole(w, prompts.ExpandDelegationRoles([]protocol.DelegationRole{*role})[0])
+	default:
+		writeDelegationTable(w, live.Preferences)
 	}
-	if *asJSON {
-		printJSON(live.Preferences)
-		return nil
-	}
-	writeDelegationTable(os.Stdout, live.Preferences)
 	return nil
 }
 
@@ -220,32 +211,26 @@ func writeDelegationRole(w io.Writer, role protocol.DelegationRole) {
 	}
 }
 
-func runDelegateRolesHistory(args []string) error {
+func delegateRolesHistory(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("delegate roles history", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	limit := fs.Int("limit", 10, "revisions to list")
-	asJSON := fs.Bool("json", false, "print the revisions as JSON")
 	if err := fs.Parse(args); err != nil || fs.NArg() > 0 || *limit <= 0 {
-		return usagef("usage: attn delegate roles history [--limit N] [--json]")
+		return usagef("usage: attn delegate roles history [--limit N]")
 	}
 	history, err := client.New("").DelegationPreferencesHistory(*limit)
 	if err != nil {
 		return err
 	}
-	if *asJSON {
-		printJSON(history)
-		return nil
-	}
 	if len(history.Revisions) == 0 {
-		fmt.Println("no revisions yet; the table has never been saved")
-		return nil
+		fmt.Fprintln(w, "no revisions yet; the table has never been saved")
 	}
 	for i, revision := range history.Revisions {
 		if i > 0 {
-			fmt.Println()
+			fmt.Fprintln(w)
 		}
-		writeDelegationRevisionHeader(os.Stdout, revision, i == 0)
-		writeDelegationChanges(os.Stdout, revision.Changes)
+		writeDelegationRevisionHeader(w, revision, i == 0)
+		writeDelegationChanges(w, revision.Changes)
 	}
 	return nil
 }
@@ -282,7 +267,7 @@ func writeDelegationChanges(w io.Writer, changes []string) {
 	}
 }
 
-func runDelegateRolesRollback(args []string) error {
+func delegateRolesRollback(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("delegate roles rollback", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "reason recorded in history")
@@ -292,7 +277,7 @@ func runDelegateRolesRollback(args []string) error {
 	}
 	var target *int
 	if len(positionals) == 1 {
-		revision, err := strconv.Atoi(strings.TrimPrefix(positionals[0], "r"))
+		revision, err := strconv.Atoi(positionals[0])
 		if err != nil || revision < 0 {
 			return usagef("%q is not a revision; attn delegate roles history lists them", positionals[0])
 		}
@@ -302,11 +287,11 @@ func runDelegateRolesRollback(args []string) error {
 	if err != nil {
 		return err
 	}
-	writeDelegationRevisionResult(os.Stdout, restored)
+	writeDelegationRevisionResult(w, restored)
 	return nil
 }
 
-func runDelegateRolesApply(args []string) error {
+func delegateRolesApply(w io.Writer, args []string) error {
 	fs := flag.NewFlagSet("delegate roles apply", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	message := fs.String("m", "", "reason recorded in history")
@@ -314,7 +299,12 @@ func runDelegateRolesApply(args []string) error {
 	if err != nil || len(positionals) != 1 {
 		return usagef("usage: attn delegate roles apply <file|-> [-m TEXT]")
 	}
-	raw, err := readFileOrStdin(positionals[0])
+	var raw []byte
+	if positionals[0] == "-" {
+		raw, err = io.ReadAll(os.Stdin)
+	} else {
+		raw, err = os.ReadFile(positionals[0])
+	}
 	if err != nil {
 		return err
 	}
@@ -329,12 +319,12 @@ func runDelegateRolesApply(args []string) error {
 	if err != nil {
 		return err
 	}
-	writeDelegationRevisionResult(os.Stdout, saved)
+	writeDelegationRevisionResult(w, saved)
 	return nil
 }
 
-func runDelegateRolesEdit(command string, args []string) error {
-	edit, message, err := parseDelegationRolesEdit(command, args, readFileOrStdin)
+func delegateRolesEdit(w io.Writer, command string, args []string) error {
+	edit, message, err := parseDelegationRolesEdit(command, args)
 	if err != nil {
 		return err
 	}
@@ -354,7 +344,7 @@ func runDelegateRolesEdit(command string, args []string) error {
 	if err != nil {
 		return err
 	}
-	writeDelegationRevisionResult(os.Stdout, saved)
+	writeDelegationRevisionResult(w, saved)
 	return nil
 }
 
@@ -370,65 +360,33 @@ func writeDelegationRevisionResult(w io.Writer, revision *protocol.DelegationPre
 
 type delegationRolesEdit func(*protocol.DelegationPreferences) error
 
-type optionalText struct {
-	value *string
-	read  func(string) ([]byte, error)
-}
+type optionalText struct{ value *string }
 
 func (o *optionalText) String() string { return "" }
 
-func (o *optionalText) Set(raw string) error {
-	value := raw
-	if path, ok := strings.CutPrefix(raw, "@"); ok && o.read != nil {
-		content, err := o.read(path)
-		if err != nil {
-			return err
-		}
-		value = string(content)
-	}
+func (o *optionalText) Set(value string) error {
 	o.value = &value
 	return nil
 }
 
 type selectionFlags struct{ agent, model, provider, effort optionalText }
 
-func (s selectionFlags) given() bool {
-	return s.agent.value != nil || s.model.value != nil || s.provider.value != nil || s.effort.value != nil
-}
-
 func (s selectionFlags) apply(selection *protocol.DelegationSelection) {
-	if v := s.agent.value; v != nil && *v != selection.Harness {
-		*selection = protocol.DelegationSelection{Harness: *v}
-	}
-	if v := s.model.value; v != nil {
-		model := harnessDefault(*v)
-		if model != selection.Model {
-			selection.Model, selection.Effort = model, ""
-		}
-	}
-	if v := s.provider.value; v != nil && *v != selection.Provider {
-		selection.Provider, selection.Effort = *v, ""
-	}
-	if selection.Model == "" {
-		selection.Provider = ""
-	}
-	if v := s.effort.value; v != nil {
-		selection.Effort = harnessDefault(*v)
-	}
+	delegationprefs.ApplyOverrides(selection, s.agent.value, s.provider.value, harnessDefault(s.model.value), harnessDefault(s.effort.value))
 }
 
-func harnessDefault(value string) string {
-	if value == "default" {
-		return ""
+func harnessDefault(value *string) *string {
+	if value != nil && *value == "default" {
+		return new(string)
 	}
 	return value
 }
 
-func parseDelegationRolesEdit(command string, args []string, read func(string) ([]byte, error)) (delegationRolesEdit, string, error) {
+func parseDelegationRolesEdit(command string, args []string) (delegationRolesEdit, string, error) {
 	fs := flag.NewFlagSet("delegate roles "+command, flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	text := func(name string) *optionalText {
-		value := &optionalText{read: read}
+		value := &optionalText{}
 		fs.Var(value, name, "")
 		return value
 	}
@@ -447,8 +405,8 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		return nil, "", usageError{err}
 	}
 	guidance := guidanceEdits{name: name, icon: icon, description: description, instructions: instructions, stoppingPoint: stoppingPoint}
-	target := func(want int, usage string) (string, string, error) {
-		if len(positionals) != want {
+	target := func(usage string) (string, string, error) {
+		if len(positionals) != 1 {
 			return "", "", usagef("usage: attn delegate roles %s", usage)
 		}
 		role, choice, alternative := strings.Cut(positionals[0], "/")
@@ -460,7 +418,7 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 	var edit delegationRolesEdit
 	switch command {
 	case "add":
-		roleID, choiceID, err := target(1, "add <role>[/<alt>] ...")
+		roleID, choiceID, err := target("add <role>[/<alt>] ...")
 		if err != nil {
 			return nil, "", err
 		}
@@ -477,7 +435,7 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 			edit = setFallback(instructions, model)
 			break
 		}
-		roleID, choiceID, err := target(1, "set <role>[/<alt>] ... | set --fallback ...")
+		roleID, choiceID, err := target("set <role>[/<alt>] ... | set --fallback ...")
 		if err != nil {
 			return nil, "", err
 		}
@@ -488,7 +446,7 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 		}
 		edit = copyRole(positionals[0], positionals[1], name)
 	case "rm":
-		roleID, choiceID, err := target(1, "rm <role>[/<alt>]")
+		roleID, choiceID, err := target("rm <role>[/<alt>]")
 		if err != nil {
 			return nil, "", err
 		}
@@ -504,10 +462,6 @@ func parseDelegationRolesEdit(command string, args []string, read func(string) (
 
 type guidanceEdits struct{ name, icon, description, instructions, stoppingPoint *optionalText }
 
-func (g guidanceEdits) given() bool {
-	return g.name.value != nil || g.icon.value != nil || g.description.value != nil || g.instructions.value != nil || g.stoppingPoint.value != nil
-}
-
 func (g guidanceEdits) apply(role *protocol.DelegationRole) {
 	for _, field := range []struct {
 		edit   *optionalText
@@ -521,25 +475,12 @@ func (g guidanceEdits) apply(role *protocol.DelegationRole) {
 
 func addRole(roleID string, builtin *optionalText, guidance guidanceEdits, model selectionFlags) delegationRolesEdit {
 	return func(cfg *protocol.DelegationPreferences) error {
-		if _, err := findRole(cfg, roleID); err == nil {
-			return fmt.Errorf("role %q already exists; change it with attn delegate roles set %s", roleID, roleID)
-		}
 		role := protocol.DelegationRole{ID: roleID, Enabled: true, DefaultChoiceID: "default", Choices: []protocol.DelegationChoice{{ID: "default", Name: "Default"}}}
 		if builtin.value != nil {
-			if guidance.given() {
-				return errors.New("a maintained role keeps Attn's guidance; add it, then copy it to edit")
-			}
-			if !cfg.WorkflowSkillEnabled {
-				return errors.New("maintained Attn roles need the attn-workflow skill; install it once with Add Attn roles in Settings > Delegation")
-			}
 			kind := protocol.BuiltinDelegationRole(*builtin.value)
 			role.Builtin = &kind
-		} else {
-			if guidance.name.value == nil {
-				return usagef("a custom role needs --name (or --builtin for one of Attn's maintained roles)")
-			}
-			guidance.apply(&role)
 		}
+		guidance.apply(&role)
 		model.apply(&role.Choices[0].Selection)
 		cfg.Roles = append(cfg.Roles, role)
 		return nil
@@ -552,15 +493,12 @@ func addAlternative(roleID, choiceID string, name, when *optionalText, model sel
 		if err != nil {
 			return err
 		}
-		if _, err := findChoice(role, choiceID); err == nil {
-			return fmt.Errorf("%s/%s already exists; change it with attn delegate roles set %s/%s", roleID, choiceID, roleID, choiceID)
-		}
-		if when.value == nil || strings.TrimSpace(*when.value) == "" {
-			return usagef("an alternative needs --when: agents pick it only when its condition fits")
-		}
-		choice := protocol.DelegationChoice{ID: choiceID, Name: choiceID, When: strings.TrimSpace(*when.value), Selection: defaultChoice(*role).Selection}
+		choice := protocol.DelegationChoice{ID: choiceID, Name: choiceID, Selection: defaultChoice(*role).Selection}
 		if name.value != nil {
 			choice.Name = strings.TrimSpace(*name.value)
+		}
+		if when.value != nil {
+			choice.When = strings.TrimSpace(*when.value)
 		}
 		model.apply(&choice.Selection)
 		role.Choices = append(role.Choices, choice)
@@ -575,12 +513,6 @@ func setRole(roleID, choiceID string, guidance guidanceEdits, when *optionalText
 			return err
 		}
 		if choiceID == "" {
-			if !guidance.given() && !model.given() {
-				return usagef("nothing to change; pass guidance or model flags")
-			}
-			if role.Builtin != nil && guidance.given() {
-				return fmt.Errorf("%s is maintained by Attn; attn delegate roles copy %s <new-role> makes an editable copy", roleID, roleID)
-			}
 			guidance.apply(role)
 			choice, err := findChoice(role, role.DefaultChoiceID)
 			if err != nil {
@@ -592,9 +524,6 @@ func setRole(roleID, choiceID string, guidance guidanceEdits, when *optionalText
 		choice, err := findChoice(role, choiceID)
 		if err != nil {
 			return err
-		}
-		if guidance.name.value == nil && when.value == nil && !makeDefault && !model.given() {
-			return usagef("nothing to change; pass --name, --when, --default or model flags")
 		}
 		if guidance.name.value != nil {
 			choice.Name = strings.TrimSpace(*guidance.name.value)
@@ -612,9 +541,6 @@ func setRole(roleID, choiceID string, guidance guidanceEdits, when *optionalText
 
 func setFallback(instructions *optionalText, model selectionFlags) delegationRolesEdit {
 	return func(cfg *protocol.DelegationPreferences) error {
-		if instructions.value == nil && !model.given() {
-			return usagef("nothing to change; pass --instructions or model flags")
-		}
 		if instructions.value != nil {
 			cfg.Fallback.Instructions = strings.TrimSpace(*instructions.value)
 		}
@@ -628,9 +554,6 @@ func copyRole(sourceID, roleID string, name *optionalText) delegationRolesEdit {
 		source, err := findRole(cfg, sourceID)
 		if err != nil {
 			return err
-		}
-		if _, err := findRole(cfg, roleID); err == nil {
-			return fmt.Errorf("role %q already exists", roleID)
 		}
 		copied := prompts.ExpandDelegationRoles([]protocol.DelegationRole{*source})[0]
 		copied.ID, copied.Builtin = roleID, nil
@@ -657,9 +580,6 @@ func removeRole(roleID, choiceID string) delegationRolesEdit {
 		}
 		if _, err := findChoice(role, choiceID); err != nil {
 			return err
-		}
-		if choiceID == role.DefaultChoiceID {
-			return fmt.Errorf("%s/%s is the role's default; make another alternative the default first with set %s/<alt> --default", roleID, choiceID, roleID)
 		}
 		role.Choices = slices.DeleteFunc(role.Choices, func(c protocol.DelegationChoice) bool { return c.ID == choiceID })
 		return nil
@@ -706,11 +626,4 @@ func defaultChoice(role protocol.DelegationRole) protocol.DelegationChoice {
 		}
 	}
 	return protocol.DelegationChoice{}
-}
-
-func readFileOrStdin(path string) ([]byte, error) {
-	if path == "-" {
-		return io.ReadAll(os.Stdin)
-	}
-	return os.ReadFile(path)
 }

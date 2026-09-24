@@ -3197,8 +3197,6 @@ export function useDaemonSocket({
     sendRequest('delegation_preferences_get', {}, 'Reading delegation preferences timed out'), [sendRequest]);
   const sendDelegationPreferencesSave = useCallback((preferences: DelegationPreferences, installWorkflowSkill = false): Promise<DelegationSettingsState> =>
     sendRequest('delegation_preferences_save', { preferences, ...(installWorkflowSkill ? { install_workflow_skill: true } : {}) }, 'Saving delegation preferences timed out'), [sendRequest]);
-  const sendDelegationPreferencesRollback = useCallback((expectedRevision: number): Promise<DelegationSettingsState> =>
-    sendRequest('delegation_preferences_rollback', { expected_revision: expectedRevision }, 'Undoing the delegation change timed out'), [sendRequest]);
   const sendDelegationModels = useCallback((harness: string): Promise<DelegationModelCatalog> =>
     sendRequest('delegation_models', { harness }, 'Discovering models timed out', MODEL_DISCOVERY_TIMEOUT_MS), [sendRequest]);
 
@@ -5587,7 +5585,6 @@ export function useDaemonSocket({
     sendSupportSnapshot,
     sendDelegationPreferencesGet,
     sendDelegationPreferencesSave,
-    sendDelegationPreferencesRollback,
     sendDelegationModels,
     sendAutoModeGet,
     sendAutoModePromote,

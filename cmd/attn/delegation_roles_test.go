@@ -1,118 +1,104 @@
 package main
 
 import (
-	"errors"
+	"bytes"
+	"encoding/json"
+	"net"
 	"os"
-	"reflect"
+	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/toolhome"
 )
 
-func delegationTableForEdits() protocol.DelegationPreferences {
-	return protocol.DelegationPreferences{Enabled: true, Revision: 4, Roles: []protocol.DelegationRole{{
-		ID: "build", Name: "Build", Enabled: true, DefaultChoiceID: "default",
-		Choices: []protocol.DelegationChoice{
-			{ID: "default", Name: "Default", Selection: protocol.DelegationSelection{Harness: "claude", Model: "opus", Effort: "high"}},
-			{ID: "hard", Name: "Hard", When: "Concurrency", Selection: protocol.DelegationSelection{Harness: "codex", Model: "gpt-5.6-sol", Effort: "xhigh"}},
-		},
-	}}}
-}
-
-func applyDelegationRolesEdit(t *testing.T, command string, args ...string) (protocol.DelegationPreferences, string, error) {
+func startDelegationRolesDaemon(t *testing.T) {
 	t.Helper()
-	files := map[string]string{"guide.md": "Read the guide.\n"}
-	read := func(path string) ([]byte, error) {
-		if content, ok := files[path]; ok {
-			return []byte(content), nil
-		}
-		return nil, os.ErrNotExist
-	}
-	cfg := delegationTableForEdits()
-	edit, message, err := parseDelegationRolesEdit(command, args, read)
-	if err == nil {
-		err = edit(&cfg)
-	}
-	return cfg, message, err
-}
-
-func TestDelegationRolesEditModelFlagsFollowLaunchOverrideRules(t *testing.T) {
-	for _, tc := range []struct {
-		args []string
-		want protocol.DelegationSelection
-	}{
-		{[]string{"build", "--model", "sonnet"}, protocol.DelegationSelection{Harness: "claude", Model: "sonnet"}},
-		{[]string{"build", "--model", "sonnet", "--effort", "low"}, protocol.DelegationSelection{Harness: "claude", Model: "sonnet", Effort: "low"}},
-		{[]string{"build", "--model", "opus"}, protocol.DelegationSelection{Harness: "claude", Model: "opus", Effort: "high"}},
-		{[]string{"build", "--effort", "default"}, protocol.DelegationSelection{Harness: "claude", Model: "opus"}},
-		{[]string{"--agent", "codex", "build"}, protocol.DelegationSelection{Harness: "codex"}},
-		{[]string{"build", "--model", "default"}, protocol.DelegationSelection{Harness: "claude"}},
-	} {
-		cfg, _, err := applyDelegationRolesEdit(t, "set", tc.args...)
-		if got := cfg.Roles[0].Choices[0].Selection; err != nil || got != tc.want {
-			t.Errorf("set %v: got %+v, %v; want %+v", tc.args, got, err, tc.want)
-		}
-	}
-}
-
-func TestDelegationRolesEditsChangeOnlyTheirTarget(t *testing.T) {
-	cfg, message, err := applyDelegationRolesEdit(t, "add", "review", "--name", "Review", "--instructions", "@guide.md", "--agent", "codex", "--model", "gpt-5.6-sol", "-m", "user asked")
-	if err != nil || message != "user asked" {
-		t.Fatalf("add: %v %q", err, message)
-	}
-	added := cfg.Roles[1]
-	if added.Name != "Review" || added.Instructions != "Read the guide." || !added.Enabled || added.Choices[0].Selection != (protocol.DelegationSelection{Harness: "codex", Model: "gpt-5.6-sol"}) {
-		t.Fatalf("added role: %+v", added)
-	}
-	if !reflect.DeepEqual(cfg.Roles[0], delegationTableForEdits().Roles[0]) {
-		t.Fatal("adding a role changed another")
-	}
-
-	cfg, _, err = applyDelegationRolesEdit(t, "add", "build/fast", "--when", "Small fixes", "--model", "sonnet")
+	t.Setenv(toolhome.EnvVar, t.TempDir())
+	t.Setenv("ATTN_PTY_BACKEND", "embedded")
+	t.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
+	t.Setenv("ATTN_MOCK_GH_URL", "http://127.0.0.1:1")
+	port, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
 	}
-	fast := cfg.Roles[0].Choices[2]
-	if fast.Name != "fast" || fast.When != "Small fixes" || fast.Selection != (protocol.DelegationSelection{Harness: "claude", Model: "sonnet"}) {
-		t.Fatalf("alternative starts from the default model: %+v", fast)
+	t.Setenv("ATTN_WS_PORT", strconv.Itoa(port.Addr().(*net.TCPAddr).Port))
+	port.Close()
+	dir, err := os.MkdirTemp("", "attn-")
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	cfg, _, err = applyDelegationRolesEdit(t, "set", "build/hard", "--default")
-	if err != nil || cfg.Roles[0].DefaultChoiceID != "hard" {
-		t.Fatalf("make default: %+v %v", cfg.Roles[0], err)
-	}
-	cfg, _, err = applyDelegationRolesEdit(t, "set", "--fallback", "--agent", "claude", "--model", "sonnet")
-	if err != nil || cfg.Fallback.Selection != (protocol.DelegationSelection{Harness: "claude", Model: "sonnet"}) {
-		t.Fatalf("fallback: %+v %v", cfg.Fallback, err)
-	}
-	cfg, _, err = applyDelegationRolesEdit(t, "disable")
-	if err != nil || cfg.Enabled || !cfg.Roles[0].Enabled {
-		t.Fatalf("disable the table: %+v %v", cfg, err)
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "attn.sock")
+	t.Setenv("ATTN_SOCKET_PATH", socket)
+	d := daemon.NewForTesting(socket)
+	go d.Start()
+	t.Cleanup(d.Stop)
+	for deadline := time.Now().Add(5 * time.Second); ; {
+		if conn, err := net.Dial("unix", socket); err == nil {
+			conn.Close()
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("daemon socket never came up")
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
 }
 
-func TestDelegationRolesEditRefusalsSayWhatToDoInstead(t *testing.T) {
-	for _, tc := range []struct {
-		command string
-		args    []string
-		want    string
-		usage   bool
-	}{
-		{"set", []string{"build"}, "nothing to change", true},
-		{"rm", []string{"build/"}, "is not a role or role/alternative", true},
-		{"set", []string{"/hard", "--model", "x"}, "is not a role or role/alternative", true},
-		{"add", []string{"build/fast"}, "needs --when", true},
-		{"add", []string{"review"}, "needs --name", true},
-		{"add", []string{"build", "--name", "Again"}, "already exists", false},
-		{"rm", []string{"build/default"}, "--default", false},
-		{"set", []string{"missing", "--model", "x"}, "attn delegate roles show", false},
-		{"add", []string{"pathfinder", "--builtin", "pathfinder"}, "Add Attn roles", false},
-	} {
-		_, _, err := applyDelegationRolesEdit(t, tc.command, tc.args...)
-		var usage usageError
-		if err == nil || !strings.Contains(err.Error(), tc.want) || errors.As(err, &usage) != tc.usage {
-			t.Errorf("%s %v: %v (usage=%v); want %q usage=%v", tc.command, tc.args, err, errors.As(err, &usage), tc.want, tc.usage)
+func TestDelegationRolesCommandsEditWalkBackAndRestoreTheDaemonsTable(t *testing.T) {
+	startDelegationRolesDaemon(t)
+	run := func(args ...string) string {
+		t.Helper()
+		var out bytes.Buffer
+		if err := delegateRoles(&out, args); err != nil {
+			t.Fatalf("%v: %v", args, err)
+		}
+		return out.String()
+	}
+	expect := func(output string, lines ...string) {
+		t.Helper()
+		for _, line := range lines {
+			if !strings.Contains(output, line) {
+				t.Fatalf("missing %q in:\n%s", line, output)
+			}
 		}
 	}
+	refused := func(want string, args ...string) {
+		t.Helper()
+		if err := delegateRoles(&bytes.Buffer{}, args); err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%v: %v; want an error containing %q", args, err, want)
+		}
+	}
+
+	expect(run("add", "build", "--name", "Build", "--agent", "claude", "--model", "opus", "--effort", "high", "-m", "the user wants a builder"),
+		"revision 1", "added role build (claude opus high)")
+	expect(run("add", "build/hard", "--when", "Concurrency", "--agent", "codex", "--model", "gpt-5.6-sol"),
+		"build: added alternative hard (codex gpt-5.6-sol)")
+	expect(run("set", "build", "--model", "sonnet"), "revision 3", "build: claude opus high → claude sonnet")
+	refused("needs a default choice", "rm", "build/default")
+
+	var exported protocol.DelegationPreferences
+	if err := json.Unmarshal([]byte(run("show", "--json")), &exported); err != nil || exported.Revision != 3 {
+		t.Fatalf("export after a refused edit: revision %d, %v", exported.Revision, err)
+	}
+	slices.Reverse(exported.Roles[0].Choices)
+	raw, _ := json.Marshal(exported)
+	edited := filepath.Join(t.TempDir(), "roles.json")
+	if err := os.WriteFile(edited, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expect(run("apply", edited), "revision 4", "build: reordered alternatives")
+	refused("the table changed after revision 3", "apply", edited)
+
+	expect(run("rollback"), "revision 5 restores revision 3", "build: reordered alternatives")
+	expect(run("rollback"), "revision 6 restores revision 2", "build: claude sonnet → claude opus high")
+	expect(run("rollback", "4"), "revision 7 restores revision 4", "build: claude opus high → claude sonnet", "build: reordered alternatives")
+	expect(run("show"), "revision 7", "build", "claude sonnet", "/hard", "when: Concurrency")
+	expect(run("history", "--limit", "7"), "revision 7 (live)", "restores 4", "from the CLI", `"the user wants a builder"`, "added role build (claude opus high)")
 }

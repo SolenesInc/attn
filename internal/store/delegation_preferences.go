@@ -145,12 +145,9 @@ func (s *Store) SaveDelegationPreferences(cfg delegationprefs.Config, note Deleg
 	}, note)
 }
 
-func (s *Store) RollbackDelegationPreferences(target, expected *int, note DelegationPreferencesNote) (DelegationPreferencesRevision, error) {
+func (s *Store) RollbackDelegationPreferences(target *int, note DelegationPreferencesNote) (DelegationPreferencesRevision, error) {
 	return s.appendDelegationPreferences(func(tx *sql.Tx, live delegationPreferencesRow) (delegationprefs.Config, *int, *int, error) {
 		current := live.revision.Config.Revision
-		if expected != nil && *expected != current {
-			return live.revision.Config, nil, nil, delegationprefs.ErrConflict
-		}
 		if target == nil {
 			if live.parent == nil {
 				return live.revision.Config, nil, nil, fmt.Errorf("revision %d is where the history starts; there is nothing to roll back to", current)

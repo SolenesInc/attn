@@ -3829,11 +3829,9 @@ export interface DelegationPreferencesRevision {
 }
 
 export interface DelegationPreferencesRollbackMessage {
-    cmd:                DelegationPreferencesRollbackMessageCmd;
-    expected_revision?: number;
-    message?:           string;
-    request_id?:        string;
-    revision?:          number;
+    cmd:       DelegationPreferencesRollbackMessageCmd;
+    message?:  string;
+    revision?: number;
     [property: string]: any;
 }
 
@@ -19120,9 +19118,7 @@ const typeMap: any = {
     ], "any"),
     "DelegationPreferencesRollbackMessage": o([
         { json: "cmd", js: "cmd", typ: r("DelegationPreferencesRollbackMessageCmd") },
-        { json: "expected_revision", js: "expected_revision", typ: u(undefined, 0) },
         { json: "message", js: "message", typ: u(undefined, "") },
-        { json: "request_id", js: "request_id", typ: u(undefined, "") },
         { json: "revision", js: "revision", typ: u(undefined, 0) },
     ], "any"),
     "DelegationPreferencesSaveMessage": o([
