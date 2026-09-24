@@ -80,13 +80,14 @@ export function formatQuery(
   return tokens.join(' ');
 }
 
-// A live profile owns its name; a deleted namesake, or two names that collapse
-// to one token, answers only to its id.
 function resolveProfileToken(profiles: SessionLedgerProfileFacet[], value: string): string {
   if (profiles.some((facet) => facet.profile_id === value)) return value;
-  const named = profiles.filter((facet) => nameToken(facet.name) === value.toLowerCase());
-  const candidates = named.length > 1 ? named.filter((facet) => !facet.deleted) : named;
-  return candidates.length === 1 ? candidates[0].profile_id : '';
+  const namesakes = profiles.filter((facet) => nameToken(facet.name) === value.toLowerCase());
+  return onlyProfileOf(namesakes) || onlyProfileOf(namesakes.filter((facet) => !facet.deleted));
+}
+
+function onlyProfileOf(profiles: SessionLedgerProfileFacet[]): string {
+  return profiles.length === 1 ? profiles[0].profile_id : '';
 }
 
 function profileToken(profileId: string, profileNames: Record<string, string>): string {

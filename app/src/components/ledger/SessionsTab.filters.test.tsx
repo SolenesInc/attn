@@ -29,6 +29,23 @@ describe('SessionsTab query', () => {
     expect(calls).toHaveLength(2);
   });
 
+  it('reads the page again when a profile or an agent\'s profile changes, and only then', async () => {
+    const { list, calls } = listing([
+      page({ entries: [entry({ id: 's1', profile_name: 'Work' })] }),
+      page({ entries: [entry({ id: 's1', profile_name: 'Office' })] }),
+    ]);
+    const { rerender } = renderSessionsTab({ listSessions: list, profileMembership: 'p1:Work\ns1@p1' });
+    await rows().findByText('Work');
+
+    rerender({ profileMembership: 'p1:Work\ns1@p1' });
+    await act(async () => { await Promise.resolve(); });
+    expect(calls).toHaveLength(1);
+
+    rerender({ profileMembership: 'p1:Office\ns1@p1' });
+    await rows().findByText('Office');
+    expect(calls).toHaveLength(2);
+  });
+
   it('resolves range words into instants in the viewer timezone', async () => {
     const { list, calls } = listing([page()]);
     renderSessionsTab({ listSessions: list });

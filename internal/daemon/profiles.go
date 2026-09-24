@@ -330,16 +330,7 @@ func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSele
 
 func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
-		member, _, err := d.boundCrewMember(msg.SessionID)
-		if err != nil {
-			return profileActionOutcome{}, fmt.Errorf("moving session %s needs the crew roster to know whether a member is bound to it, and reading it failed: %w", msg.SessionID, err)
-		}
-		move, err := d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{
-			SessionID:            msg.SessionID,
-			ExpectedProfileID:    msg.ExpectedProfileID,
-			DestinationProfileID: msg.DestinationProfileID,
-			CrewMemberID:         member.ID,
-		})
+		move, err := d.moveSessionWithItsCrewMember(msg)
 		if err != nil || !move.Changed() {
 			return profileActionOutcome{}, err
 		}
@@ -348,6 +339,21 @@ func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMe
 			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
 		}
 		return outcome, nil
+	})
+}
+
+func (d *Daemon) moveSessionWithItsCrewMember(msg *protocol.SessionMoveMessage) (store.SessionProfileMove, error) {
+	d.crewWakeMu.Lock()
+	defer d.crewWakeMu.Unlock()
+	member, _, err := d.boundCrewMember(msg.SessionID)
+	if err != nil {
+		return store.SessionProfileMove{}, fmt.Errorf("moving session %s needs the crew roster to know whether a member is bound to it, and reading it failed: %w", msg.SessionID, err)
+	}
+	return d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{
+		SessionID:            msg.SessionID,
+		ExpectedProfileID:    msg.ExpectedProfileID,
+		DestinationProfileID: msg.DestinationProfileID,
+		CrewMemberID:         member.ID,
 	})
 }
 

@@ -27,6 +27,11 @@ export function AppLibrarySurfaces() {
     () => Object.fromEntries(profiles.map((profile) => [profile.id, profile.name])),
     [profiles],
   );
+  const daemonSessions = useDaemonStore((state) => state.daemonSessions);
+  const profileMembership = useMemo(() => [
+    ...profiles.map((profile) => `${profile.id}:${profile.name}`),
+    ...daemonSessions.map((session) => `${session.id}@${session.profile_id}`),
+  ].sort().join('\n'), [profiles, daemonSessions]);
   const {
     sessionsOpen,
     ledgerTab,
@@ -99,6 +104,7 @@ export function AppLibrarySurfaces() {
         sessions={{
           listSessions: sendSessionList,
           profileNames,
+          profileMembership,
           liveSessionIds: liveGardenSessions,
           seedForSession,
           onFocusSession: handleSelectSession,

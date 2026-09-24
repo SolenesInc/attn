@@ -38,7 +38,7 @@ export function renderSessionsTab(
   const tree = (next: Partial<TabOnly<SessionsTabProps>>) => (
     <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
       <Host>
-        {(host) => <SessionsTab profileNames={{}} {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
+        {(host) => <SessionsTab profileNames={{}} profileMembership="" {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
       </Host>
     </SettingsProvider>
   );

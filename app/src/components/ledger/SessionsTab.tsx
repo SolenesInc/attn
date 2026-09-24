@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
@@ -35,6 +35,7 @@ export interface SessionSeedLink {
 export interface SessionsTabProps {
   listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
   profileNames: Record<string, string>;
+  profileMembership: string;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
@@ -61,6 +62,7 @@ const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle
 export function SessionsTab({
   listSessions,
   profileNames,
+  profileMembership,
   liveSessionIds,
   seedForSession,
   onFocusSession,
@@ -92,6 +94,8 @@ export function SessionsTab({
   const { text, setText, parsed } = useLedgerQueryText({
     restoredFilters, profileNames, facets: ledger.facets, repository: filters.repository, setFilters, requestedDir,
   });
+
+  useReloadWhenChanged(profileMembership, reload);
 
   useEffect(() => {
     if (!closeNotice) return;
@@ -334,6 +338,15 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
   }, [requestedDir]);
 
   return { text, setText, parsed };
+}
+
+function useReloadWhenChanged(value: string, reload: () => void) {
+  const loadedWith = useRef(value);
+  useEffect(() => {
+    if (loadedWith.current === value) return;
+    loadedWith.current = value;
+    reload();
+  }, [value, reload]);
 }
 
 function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): string {
