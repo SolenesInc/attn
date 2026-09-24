@@ -8,6 +8,9 @@ import (
 )
 
 func (d *Daemon) recoverAutomations() {
+	if !d.automationsRunHere("recovering pending runs") {
+		return
+	}
 	runs, err := d.store.ListPendingAutomationRuns()
 	if err != nil {
 		d.logf("automation recovery list: %v", err)

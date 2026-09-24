@@ -16,6 +16,14 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
+func (d *Daemon) automationsRunHere(activity string) bool {
+	if err := d.requireHome(automation.Surface); err != nil {
+		d.logf("automations: skipping %s on this daemon: %v", activity, err)
+		return false
+	}
+	return true
+}
+
 func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, input string) (*store.AutomationRun, error) {
 	if err := d.requireHome(automation.Surface); err != nil {
 		return nil, err

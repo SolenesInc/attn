@@ -2087,3 +2087,33 @@ func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
 		t.Fatalf("deleting a leftover definition on an outpost: %v", err)
 	}
 }
+
+func TestAnOutpostLaunchesNothingFromLeftoverAutomations(t *testing.T) {
+	d := newEnrolledDaemon(t, "d-dddddddddddddddddddddddddddddddd")
+	backend := &fakeSpawnBackend{}
+	d.ptyBackend = backend
+	now := time.Now()
+	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pending, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
+		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d.recoverAutomations()
+	if _, err := d.automationScheduleHandler(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	d.observeGitHubReviewRequests("github.com", nil, now)
+
+	if run, err := d.store.GetAutomationRun(pending.ID); err != nil || run.State != store.AutomationRunStatePending {
+		t.Fatalf("leftover run on an outpost = %+v, %v; want it left pending", run, err)
+	}
+	if spawnCount(backend) != 0 {
+		t.Fatal("an outpost launched an agent for a leftover automation")
+	}
+}

@@ -94,6 +94,9 @@ func pullRequestAutomationInput(host, owner, repository string, snapshot *github
 }
 
 func (d *Daemon) observeGitHubReviewRequests(host string, prs []*protocol.PR, observedAt time.Time) {
+	if !d.automationsRunHere("review-request runs") {
+		return
+	}
 	definitions, err := d.store.ListAutomationDefinitions()
 	if err != nil {
 		d.logf("automation GitHub observation list definitions: %v", err)
