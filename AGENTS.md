@@ -115,8 +115,7 @@ Rendering changes must avoid continuous repainting.
 ## Documentation
 
 Docs define product vocabulary, explain intended behavior and tell people how
-to use, run and test attn. Keep the glossary to short definitions. Put product
-rules in the relevant feature docs.
+to use, run and test attn. Keep the glossary to short definitions.
 
 Do not write implementation notes anywhere. The code must explain how it works.
 If it needs a prose explanation of its wiring or control flow, make the code
