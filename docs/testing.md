@@ -39,12 +39,12 @@ Consequences:
 
 Each kind is defined by where the test enters and what it may fake.
 
-| Kind     | Enters and observes through                               | Real                                                        | Faked                                                       |
-| -------- | --------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------- |
-| Kernel   | A function with a written specification                   | The function                                                | Nothing                                                     |
-| Wire     | The protocol, from one side                               | Everything on the other side of the protocol                | Agent binaries, clock, network                              |
-| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend                 | Agent binaries, external services such as GitHub            |
-| Scenario | Keyboard and screen of the packaged app                   | Everything, packaged as shipped                             | Agent binaries                                              |
+| Kind     | Enters and observes through                                | Real                                         | Faked                                               |
+| -------- | ---------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------- |
+| Kernel   | A function with a written specification                    | The function                                 | Nothing                                             |
+| Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network   |
+| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub    |
+| Scenario | Keyboard and screen of the packaged app                    | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub    |
 
 ### Wire
 
