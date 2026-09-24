@@ -33,11 +33,9 @@ func (d *Daemon) handleClientHello(client *wsClient, msg *protocol.ClientHelloMe
 		msg.Capabilities,
 	)
 	d.admitClient(client)
-	if record, ok := d.wsHub.takeEviction(clientID); ok {
-		if !d.sendEvictionNotice(client, record) {
-			d.wsHub.rememberEviction(clientID, record)
-		}
-	}
+	d.wsHub.deliverEviction(clientID, func(record evictionRecord) bool {
+		return d.sendEvictionNotice(client, record)
+	})
 }
 
 func (d *Daemon) admitClient(client *wsClient) {

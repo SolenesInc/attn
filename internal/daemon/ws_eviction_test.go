@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -153,6 +154,63 @@ func TestEvictedClientLearnsWhyOnItsNextConnection(t *testing.T) {
 
 	if _, ok := d.wsHub.takeEviction(clientID); ok {
 		t.Error("the eviction is still on file after being delivered")
+	}
+}
+
+func TestEvictionNoticeRemainsFiledUntilQueued(t *testing.T) {
+	h := newWSHub()
+	d := &Daemon{wsHub: h}
+	const clientID = "app-instance-1"
+	record := evictionRecord{at: time.Now(), reason: slowClientCloseReason, undelivered: maxSlowCount}
+	h.rememberEviction(clientID, record)
+
+	sendTo := func(client *wsClient) {
+		t.Helper()
+		h.deliverEviction(clientID, func(got evictionRecord) bool {
+			if filed, ok := h.evictions[clientID]; !ok || filed != got {
+				t.Errorf("eviction record was removed before the notice was queued")
+			}
+			return d.sendEvictionNotice(client, got)
+		})
+	}
+	assertFiled := func(want bool) {
+		t.Helper()
+		h.evictionMu.Lock()
+		_, ok := h.evictions[clientID]
+		h.evictionMu.Unlock()
+		if ok != want {
+			t.Errorf("eviction record filed = %t, want %t", ok, want)
+		}
+	}
+
+	closed := &wsClient{send: make(chan outboundMessage, 1)}
+	closed.setClientID(clientID)
+	closed.closeSendChannel()
+	sendTo(closed)
+	assertFiled(true)
+
+	full := &wsClient{send: make(chan outboundMessage, 1)}
+	full.setClientID(clientID)
+	full.send <- outboundMessage{}
+	sendTo(full)
+	assertFiled(true)
+
+	ready := &wsClient{send: make(chan outboundMessage, 1)}
+	ready.setClientID(clientID)
+	sendTo(ready)
+	assertFiled(false)
+	var message outboundMessage
+	select {
+	case message = <-ready.send:
+	default:
+		t.Fatal("eviction notice was not queued")
+	}
+	var notice protocol.ClientEvictionNoticeMessage
+	if err := json.Unmarshal(message.payload, &notice); err != nil {
+		t.Fatalf("decode eviction notice: %v", err)
+	}
+	if notice.Event != protocol.EventClientEvictionNotice || notice.Reason != record.reason || notice.UndeliveredMessages != record.undelivered {
+		t.Errorf("queued eviction notice = %+v, want reason %q and %d undelivered messages", notice, record.reason, record.undelivered)
 	}
 }
 
