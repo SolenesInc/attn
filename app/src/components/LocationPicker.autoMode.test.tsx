@@ -33,7 +33,7 @@ function renderPicker(settings: Record<string, string>) {
     <SettingsProvider settings={settings} setSetting={vi.fn()}>
       <LocationPicker
         isOpen
-        purpose="workspace"
+        purpose="session"
         onClose={vi.fn()}
         onSelect={onSelect}
         onInspectPath={onInspectPath}
@@ -46,7 +46,7 @@ function renderPicker(settings: Record<string, string>) {
     <SettingsProvider settings={next} setSetting={vi.fn()}>
       <LocationPicker
         isOpen
-        purpose="workspace"
+        purpose="session"
         onClose={vi.fn()}
         onSelect={onSelect}
         onInspectPath={onInspectPath}

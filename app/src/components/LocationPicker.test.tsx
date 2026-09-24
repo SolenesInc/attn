@@ -810,13 +810,13 @@ describe('LocationPicker', () => {
     });
   });
 
-  it('offers Terminal as an agent with Alt+T for workspace and session pickers', async () => {
+  it('offers Terminal as an agent with Alt+T in the new-session picker', async () => {
     const setSetting = vi.fn();
     const { rerender } = render(
       <SettingsProvider settings={{}} setSetting={setSetting}>
         <LocationPicker
           isOpen
-          purpose="workspace"
+          purpose="session"
           onClose={vi.fn()}
           onSelect={vi.fn()}
           endpoints={[]}
@@ -1622,29 +1622,29 @@ describe('LocationPicker', () => {
     }));
 
     it('shows the chief toggle for claude when no chief exists', () => {
-      renderPicker({ chiefExists: false, purpose: 'workspace' });
+      renderPicker({ chiefExists: false, purpose: 'session' });
       expect(screen.getByTestId('location-picker-chief-toggle')).toBeInTheDocument();
     });
 
     it('hides the chief toggle when a chief already exists', () => {
-      renderPicker({ chiefExists: true, purpose: 'workspace' });
+      renderPicker({ chiefExists: true, purpose: 'session' });
       expect(screen.queryByTestId('location-picker-chief-toggle')).not.toBeInTheDocument();
     });
 
-    it('hides the chief toggle in the split-session flow (purpose=session)', () => {
-      renderPicker({ chiefExists: false, purpose: 'session' });
+    it('hides the chief toggle when the picker only chooses a directory to reopen in', () => {
+      renderPicker({ chiefExists: false, purpose: 'reopen' });
       expect(screen.queryByTestId('location-picker-chief-toggle')).not.toBeInTheDocument();
     });
 
     it('hides the chief toggle for the terminal (shell) agent', () => {
-      renderPicker({ chiefExists: false, purpose: 'workspace' });
+      renderPicker({ chiefExists: false, purpose: 'session' });
       fireEvent.click(screen.getByRole('radio', { name: /Terminal/i }));
       expect(screen.queryByTestId('location-picker-chief-toggle')).not.toBeInTheDocument();
     });
 
     it('plumbs chiefOfStaff=true through onSelect when the toggle is on', async () => {
       const onInspectPath = inspectsTo('/home/remote/projects');
-      const { onSelect } = renderPicker({ chiefExists: false, purpose: 'workspace', onInspectPath });
+      const { onSelect } = renderPicker({ chiefExists: false, purpose: 'session', onInspectPath });
 
       fireEvent.click(screen.getByTestId('location-picker-chief-toggle'));
       const input = screen.getByTestId('location-picker-path-input');
@@ -1658,7 +1658,7 @@ describe('LocationPicker', () => {
 
     it('defaults chiefOfStaff to false when the toggle is left off', async () => {
       const onInspectPath = inspectsTo('/home/remote/projects');
-      const { onSelect } = renderPicker({ chiefExists: false, purpose: 'workspace', onInspectPath });
+      const { onSelect } = renderPicker({ chiefExists: false, purpose: 'session', onInspectPath });
 
       const input = screen.getByTestId('location-picker-path-input');
       fireEvent.change(input, { target: { value: '/home/remote/projects' } });

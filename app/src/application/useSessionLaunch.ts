@@ -74,14 +74,9 @@ export function useSessionLaunch({
 
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
   const [locationPickerPurpose, setLocationPickerPurpose] =
-    useState<LocationPickerPurpose>('workspace');
+    useState<LocationPickerPurpose>('session');
   const locationPickerSessionDirection = useRef<TerminalSplitDirection>('vertical');
   const reopenPickRef = useRef<{ settle: (path?: string) => void } | null>(null);
-
-  const handleNewWorkspace = useCallback(() => {
-    setLocationPickerPurpose('workspace');
-    setLocationPickerOpen(true);
-  }, []);
 
   const nextSplitSessionLabel = useCallback(
     (agent: SessionAgent) => {
@@ -212,7 +207,7 @@ export function useSessionLaunch({
             : resolvePreferredAgent(agent, agentAvailability, 'codex');
       }
       const folderName = path.split('/').pop() || 'session';
-      if (locationPickerPurpose === 'session') {
+      if (!chiefOfStaff) {
         await createSplitSession(selectedAgent, locationPickerSessionDirection.current, undefined, {
           cwd: path,
           endpointId: endpointId ?? null,
@@ -309,38 +304,14 @@ export function useSessionLaunch({
               : current,
           );
           const folderName = worktreePath.split('/').pop() || branchName || 'session';
-          if (locationPickerPurpose === 'session') {
-            await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
-              cwd: worktreePath,
-              endpointId: endpointId ?? null,
-              label: folderName,
-              yoloMode,
-              autoMode,
-            });
-            setSessionCreationJob((current) => (current?.id === jobId ? null : current));
-            return;
-          }
-          const sessionId = await createWorkspaceSession(
-            folderName,
-            worktreePath,
-            undefined,
-            agent,
-            endpointId,
+          await createSplitSession(agent, locationPickerSessionDirection.current, undefined, {
+            cwd: worktreePath,
+            endpointId: endpointId ?? null,
+            label: folderName,
             yoloMode,
-            { autoMode },
-          );
-          selectCreatedSession(sessionId);
-          setSessionCreationJob((current) =>
-            current?.id === jobId
-              ? {
-                  ...current,
-                  label: folderName,
-                  path: worktreePath,
-                  phase: 'starting_session',
-                  sessionId,
-                }
-              : current,
-          );
+            autoMode,
+          });
+          setSessionCreationJob((current) => (current?.id === jobId ? null : current));
         } catch (err) {
           setSessionCreationJob((current) =>
             current?.id === jobId
@@ -399,7 +370,6 @@ export function useSessionLaunch({
     closeLocationPicker,
     handleLocationSelect,
     handleCreateWorktreeSession,
-    handleNewWorkspace,
     handleNewSession,
     createSplitSession,
     chooseReopenDirectory,
