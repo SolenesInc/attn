@@ -138,6 +138,34 @@ describe('isRiskyBinding', () => {
   });
 });
 
+describe('saved bindings from before desktops', () => {
+  it('carries workspace.select overrides and dock entries over to desktop.select', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      overrides: { 'workspace.select2': { key: '2', code: 'Digit2', ctrl: true }, 'workspace.select3': null },
+      dock: { collapsed: false, items: ['workspace.select1', 'dock.attention'] },
+    });
+
+    const parsed = parseKeybindingsConfig(raw);
+
+    expect(parsed.overrides['desktop.select2']).toEqual({ key: '2', code: 'Digit2', ctrl: true });
+    expect(parsed.overrides['desktop.select3']).toBeNull();
+    expect(parsed.dock.items).toEqual(['desktop.select1', 'dock.attention']);
+    expect(Object.keys(parsed.overrides).some((id) => id.startsWith('workspace.'))).toBe(false);
+  });
+
+  it('keeps a desktop.select override over the legacy one it replaces', () => {
+    const raw = JSON.stringify({
+      overrides: {
+        'desktop.select4': { key: '4', code: 'Digit4', alt: true },
+        'workspace.select4': { key: '4', code: 'Digit4', ctrl: true },
+      },
+    });
+
+    expect(parseKeybindingsConfig(raw).overrides['desktop.select4']).toEqual({ key: '4', code: 'Digit4', alt: true });
+  });
+});
+
 describe('chord overrides', () => {
   it('resolves a chord override and round-trips it through parse/serialize', () => {
     const chord = { leader: { key: 'k', meta: true }, then: { key: 'd' } };
