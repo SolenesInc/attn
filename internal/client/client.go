@@ -285,15 +285,15 @@ func (c *Client) SessionInstructions(targetSessionID, question string) (*protoco
 }
 
 type SessionListOptions struct {
-	Closed      bool
-	All         bool
-	Limit       int
-	Before      string
-	WorkspaceID string
-	Repository  string
-	Since       string
-	Until       string
-	Reopen      bool
+	Closed     bool
+	All        bool
+	Limit      int
+	Before     string
+	ProfileID  string
+	Repository string
+	Since      string
+	Until      string
+	Reopen     bool
 }
 
 func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResult, error) {
@@ -310,8 +310,8 @@ func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResu
 	if before := strings.TrimSpace(opts.Before); before != "" {
 		msg.Before = protocol.Ptr(before)
 	}
-	if workspace := strings.TrimSpace(opts.WorkspaceID); workspace != "" {
-		msg.WorkspaceID = protocol.Ptr(workspace)
+	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
+		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	if repository := strings.TrimSpace(opts.Repository); repository != "" {
 		msg.Repository = protocol.Ptr(repository)

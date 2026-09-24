@@ -296,7 +296,7 @@ commands:
         read provider-neutral, timestamped, redacted conversation and tool
         events. --after resumes strictly after a prior cursor; --follow polls
         until interrupted; --json emits one event per line.
-  list [--closed | --all] [--limit <n>] [--before <id>] [--workspace <id>]
+  list [--closed | --all] [--limit <n>] [--before <id>] [--profile <id>]
        [--repository <path>] [--last <preset> | --since <when> [--until <when>]]
        [--reopen] [--json]
         read the session ledger, newest first: live sessions by default,

@@ -71,8 +71,8 @@ func TestTheWebSocketAnswersSessionListWithAPageAndItsFacets(t *testing.T) {
 	if len(ids) != 2 || !slices.Contains(ids, "live-one") || !slices.Contains(ids, "closed-one") {
 		t.Fatalf("entries = %v, want live and closed together", ids)
 	}
-	if reply.Result.Facets == nil || len(reply.Result.Facets.Workspaces) != 2 {
-		t.Errorf("facets = %+v, want a workspace choice per session", reply.Result.Facets)
+	if facets := reply.Result.Facets; facets == nil || len(facets.Profiles) != 1 || facets.Profiles[0].Name != "Default" || facets.Profiles[0].Count != 2 {
+		t.Errorf("facets = %+v, want the Default profile counting both sessions", reply.Result.Facets)
 	}
 }
 
@@ -169,7 +169,7 @@ func TestTheSessionClosedFactReachesTheAppAsALedgerRow(t *testing.T) {
 	addLedgerTestSession(t, d, "closing", t.TempDir())
 	entry := protocol.SessionLedgerEntry{
 		ID: "closing", Label: "closing", Agent: string(protocol.SessionAgentClaude),
-		Directory: "/tmp/closing", WorkspaceID: "ws-closing", State: protocol.SessionStateIdle,
+		Directory: "/tmp/closing", ProfileID: "profile-closing", State: protocol.SessionStateIdle,
 		LastSeen: protocol.TimestampNow().String(),
 		ClosedAt: protocol.Ptr(protocol.NewTimestamp(time.Now()).String()),
 		ClosedBy: protocol.Ptr(store.SessionClosedByUser),

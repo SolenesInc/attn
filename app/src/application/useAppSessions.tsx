@@ -117,12 +117,6 @@ export function useAppSessions({
     [daemonSessions],
   );
 
-  const workspaceNamesById = useMemo(() => {
-    const names: Record<string, string> = {};
-    for (const workspace of daemonWorkspaces) names[workspace.id] = workspace.name || workspace.id;
-    return names;
-  }, [daemonWorkspaces]);
-
   const gardenSessionLabels = useMemo(
     () => new Map(daemonSessions.map((session) => [session.id, session.label])),
     [daemonSessions],
@@ -153,7 +147,6 @@ export function useAppSessions({
     activeEndpoint,
     activeRemoteSession,
     liveGardenSessions,
-    workspaceNamesById,
     gardenSessionLabels,
     worktreePanelSessions,
     enrichedLocalSessions,

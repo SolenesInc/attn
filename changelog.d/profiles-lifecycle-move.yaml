@@ -1,0 +1,4 @@
+kind: changed
+area: sessions
+change: The Sessions ledger shows and filters by profile (`profile:name` in the query, `attn session list --profile <id>`), and a closed session keeps the profile it ran in even after that profile is deleted. The daemon can move a running agent to another profile without restarting it; it arrives there without a pane, and a profile's chief moved out stops being its chief.
+notes: The ledger's `ws:` filter and workspace column are gone; profiles replace workspaces.

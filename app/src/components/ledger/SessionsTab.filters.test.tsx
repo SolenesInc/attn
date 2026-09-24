@@ -84,20 +84,20 @@ describe('SessionsTab query', () => {
     });
   });
 
-  it('resolves repo: and ws: through the facets and flags a token nothing matches', async () => {
+  it('resolves repo: and profile: through the facets and flags a token nothing matches', async () => {
     const { list, calls } = listing([page({
       entries: [entry({ id: 's1' })],
       facets: {
-        workspaces: [{ value: 'ws-1', count: 4 }],
+        profiles: [{ profile_id: 'profile-1', name: 'attn work', count: 4 }],
         repositories: [{ value: '/Users/victor/projects/attn', count: 7 }],
       },
     })]);
-    renderSessionsTab({ listSessions: list, workspaceNames: { 'ws-1': 'attn work' } });
+    renderSessionsTab({ listSessions: list, profileNames: { 'profile-1': 'attn work' } });
     await rows().findByText('run s1');
 
-    type('repo:attn ws:attn-work');
+    type('repo:attn profile:attn-work');
     await waitFor(() => expect(calls).toHaveLength(2));
-    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', workspace_id: 'ws-1', reopen: true });
+    expect(calls[1]).toEqual({ all: true, limit: 50, repository: '/Users/victor/projects/attn', profile_id: 'profile-1', reopen: true });
 
     type('repo:nope');
     const chip = await screen.findByRole('button', { name: /repo:nope/ });
@@ -148,27 +148,27 @@ describe('SessionsTab pagination', () => {
 
 describe('SessionsTab filter memory', () => {
   const stored = JSON.stringify({
-    scope: 'closed', range: '7d', customFrom: '', customTo: '', workspaceId: 'ws-2', repository: '/Users/victor/projects/attn',
+    scope: 'closed', range: '7d', customFrom: '', customTo: '', profileId: 'profile-2', repository: '/Users/victor/projects/attn',
   });
 
   it('queries with the remembered filters on the first read and shows them as tokens', async () => {
     const { list, calls } = listing([page()]);
     const { setSetting } = renderSessionsTab(
-      { listSessions: list, workspaceNames: { 'ws-2': 'attn' } },
+      { listSessions: list, profileNames: { 'profile-2': 'attn' } },
       { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
     );
     await waitFor(() => expect(calls).toHaveLength(1));
 
     const since = new Date(NOW.getFullYear(), NOW.getMonth(), NOW.getDate() - 6).toISOString();
-    expect(calls[0]).toEqual({ closed: true, since, workspace_id: 'ws-2', repository: '/Users/victor/projects/attn', limit: 50, reopen: true });
-    expect(query().value).toBe('repo:attn ws:attn 7d');
+    expect(calls[0]).toEqual({ closed: true, since, profile_id: 'profile-2', repository: '/Users/victor/projects/attn', limit: 50, reopen: true });
+    expect(query().value).toBe('repo:attn profile:attn 7d');
     expect(setSetting).not.toHaveBeenCalled();
   });
 
   it('keeps the remembered path when repository names collide', async () => {
     const { list, calls } = listing([page({
       facets: {
-        workspaces: [],
+        profiles: [],
         repositories: [
           { value: '/tmp/earlier/attn', count: 4 },
           { value: '/Users/victor/projects/attn', count: 3 },
@@ -191,13 +191,13 @@ describe('SessionsTab filter memory', () => {
     try {
       const listSessions = vi.fn(() => new Promise<SessionLedgerPage>(() => {}));
       const { setSetting } = renderSessionsTab(
-        { listSessions, workspaceNames: { 'ws-2': 'attn' } },
+        { listSessions, profileNames: { 'profile-2': 'attn' } },
         { values: { [SESSION_FILTERS_SETTING_KEY]: stored } },
       );
 
       await act(async () => { vi.runOnlyPendingTimers(); });
 
-      expect(query().value).toBe('repo:attn ws:attn 7d');
+      expect(query().value).toBe('repo:attn profile:attn 7d');
       expect(setSetting).not.toHaveBeenCalled();
     } finally {
       vi.useRealTimers();
@@ -207,7 +207,7 @@ describe('SessionsTab filter memory', () => {
   it('restores a custom range exactly as it was left', async () => {
     const { list, calls } = listing([page()]);
     renderSessionsTab({ listSessions: list }, { values: { [SESSION_FILTERS_SETTING_KEY]: JSON.stringify({
-      scope: 'all', range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: '', repository: '',
+      scope: 'all', range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', profileId: '', repository: '',
     }) } });
     await waitFor(() => expect(calls).toHaveLength(1));
 
@@ -224,7 +224,7 @@ describe('SessionsTab filter memory', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Closed' }));
     await waitFor(() => expect(written()).toHaveLength(1));
-    expect(written()[0]).toEqual({ scope: 'closed', range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' });
+    expect(written()[0]).toEqual({ scope: 'closed', range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' });
 
     type('30d');
     await waitFor(() => expect(written()).toHaveLength(2));

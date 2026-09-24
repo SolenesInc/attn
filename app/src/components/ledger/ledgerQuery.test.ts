@@ -4,14 +4,17 @@ import { nameIds, relativeStamp, shortPath, tildePath, untilStamp } from './ledg
 
 const facets = {
   repositories: [{ value: '/Users/victor/projects/attn', count: 3 }],
-  workspaces: [{ value: 'ws-1', count: 2 }],
+  profiles: [
+    { profile_id: 'profile-1', name: 'attn work', count: 2 },
+    { profile_id: 'profile-old', name: 'Old Side', deleted: true, count: 1 },
+  ],
 };
-const label = (id: string) => (id === 'ws-1' ? 'attn work' : id);
+const label = (id: string) => (id === 'profile-1' ? 'attn work' : id);
 
 describe('parseQuery', () => {
   it('splits tokens into daemon filters, a directory, and words', () => {
-    const parsed = parseQuery('repo:attn ws:attn-work 7d dir:~/x Ledger  reopen', facets, label);
-    expect(parsed.filters).toEqual({ range: '7d', customFrom: '', customTo: '', workspaceId: 'ws-1', repository: '/Users/victor/projects/attn' });
+    const parsed = parseQuery('repo:attn profile:attn-work 7d dir:~/x Ledger  reopen', facets, label);
+    expect(parsed.filters).toEqual({ range: '7d', customFrom: '', customTo: '', profileId: 'profile-1', repository: '/Users/victor/projects/attn' });
     expect(parsed.dir).toBe('~/x');
     expect(parsed.words).toEqual(['ledger', 'reopen']);
     expect(parsed.unresolved).toEqual([]);
@@ -23,10 +26,14 @@ describe('parseQuery', () => {
   });
 
   it('keeps a token the facets cannot name so the user sees why nothing matched', () => {
-    const parsed = parseQuery('repo:nope ws:nobody', facets, label);
+    const parsed = parseQuery('repo:nope profile:nobody', facets, label);
     expect(parsed.filters.repository).toBe('');
-    expect(parsed.filters.workspaceId).toBe('');
-    expect(parsed.unresolved).toEqual(['repo:nope', 'ws:nobody']);
+    expect(parsed.filters.profileId).toBe('');
+    expect(parsed.unresolved).toEqual(['repo:nope', 'profile:nobody']);
+  });
+
+  it('finds a deleted profile by the name its history carries', () => {
+    expect(parseQuery('profile:old-side', facets, label).filters.profileId).toBe('profile-old');
   });
 
   it('keeps the selected repository when two paths share a base name', () => {
@@ -67,10 +74,10 @@ describe('parseQuery', () => {
   });
 
   it('round-trips through formatQuery', () => {
-    const filters = { scope: 'all' as const, range: 'custom' as const, customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: 'ws-1', repository: '/Users/victor/projects/attn' };
+    const filters = { scope: 'all' as const, range: 'custom' as const, customFrom: '2026-08-01', customTo: '2026-08-03', profileId: 'profile-1', repository: '/Users/victor/projects/attn' };
     const text = formatQuery(filters, label);
-    expect(text).toBe('repo:attn ws:attn-work from:2026-08-01 to:2026-08-03');
-    expect(parseQuery(text, facets, label).filters).toEqual({ range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', workspaceId: 'ws-1', repository: '/Users/victor/projects/attn' });
+    expect(text).toBe('repo:attn profile:attn-work from:2026-08-01 to:2026-08-03');
+    expect(parseQuery(text, facets, label).filters).toEqual({ range: 'custom', customFrom: '2026-08-01', customTo: '2026-08-03', profileId: 'profile-1', repository: '/Users/victor/projects/attn' });
   });
 });
 
@@ -92,7 +99,7 @@ describe('query helpers', () => {
   it('takes a base name and removes one token', () => {
     expect(baseName('/a/b/c/')).toBe('c');
     expect(baseName('plain')).toBe('plain');
-    expect(removeToken('repo:a  7d ws:b', '7d')).toBe('repo:a ws:b');
+    expect(removeToken('repo:a  7d profile:b', '7d')).toBe('repo:a profile:b');
   });
 });
 

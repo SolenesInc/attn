@@ -3,7 +3,7 @@ import type { SessionLedgerFacets } from '../../types/generated';
 import type { SessionRangeId } from '../sessionsLedger';
 import { tildePath } from './ledgerTime';
 
-// Grammar: `repo:attn ws:name 7d from:… to:… dir:… words`; `dir:` and words narrow the loaded page only.
+// Grammar: `repo:attn profile:name 7d from:… to:… dir:… words`; `dir:` and words narrow the loaded page only.
 export interface ParsedQuery {
   filters: Omit<SessionLedgerFilters, 'scope'>;
   dir: string;
@@ -18,10 +18,10 @@ const RANGE_WORDS: Record<string, SessionRangeId> = {
 export function parseQuery(
   text: string,
   facets: SessionLedgerFacets | null,
-  workspaceLabel: (id: string) => string,
+  profileLabel: (id: string) => string,
   preferredRepository = '',
 ): ParsedQuery {
-  const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', workspaceId: '', repository: '' };
+  const filters: ParsedQuery['filters'] = { range: 'any', customFrom: '', customTo: '', profileId: '', repository: '' };
   const words: string[] = [];
   const unresolved: string[] = [];
   let dir = '';
@@ -51,10 +51,10 @@ export function parseQuery(
         || preferred
         || (named.length === 1 ? named[0].value : '');
       if (match) filters.repository = match; else unresolved.push(token);
-    } else if (key === 'ws') {
-      const match = (facets?.workspaces ?? []).find((facet) =>
-        facet.value === value || wsToken(workspaceLabel(facet.value)) === value.toLowerCase());
-      if (match) filters.workspaceId = match.value; else unresolved.push(token);
+    } else if (key === 'profile') {
+      const match = (facets?.profiles ?? []).find((facet) =>
+        facet.profile_id === value || nameToken(facet.name || profileLabel(facet.profile_id)) === value.toLowerCase());
+      if (match) filters.profileId = match.profile_id; else unresolved.push(token);
     } else if (key === 'dir') {
       dir = value;
     } else {
@@ -68,11 +68,11 @@ export function parseQuery(
 
 export function formatQuery(
   filters: SessionLedgerFilters,
-  workspaceLabel: (id: string) => string,
+  profileLabel: (id: string) => string,
 ): string {
   const tokens: string[] = [];
   if (filters.repository) tokens.push(`repo:${baseName(filters.repository)}`);
-  if (filters.workspaceId) tokens.push(`ws:${wsToken(workspaceLabel(filters.workspaceId))}`);
+  if (filters.profileId) tokens.push(`profile:${nameToken(profileLabel(filters.profileId))}`);
   if (filters.range === 'custom') {
     if (filters.customFrom) tokens.push(`from:${filters.customFrom}`);
     if (filters.customTo) tokens.push(`to:${filters.customTo}`);
@@ -82,7 +82,7 @@ export function formatQuery(
   return tokens.join(' ');
 }
 
-function wsToken(label: string): string {
+function nameToken(label: string): string {
   return label.trim().replace(/\s+/g, '-').toLowerCase();
 }
 

@@ -9853,14 +9853,20 @@ type SessionLedgerEntry struct {
 	// MainRepo corresponds to the JSON schema field "main_repo".
 	MainRepo *string `json:"main_repo,omitempty,omitzero"`
 
+	// ProfileDeleted corresponds to the JSON schema field "profile_deleted".
+	ProfileDeleted *bool `json:"profile_deleted,omitempty,omitzero"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
+
+	// ProfileName corresponds to the JSON schema field "profile_name".
+	ProfileName string `json:"profile_name"`
+
 	// Repository corresponds to the JSON schema field "repository".
 	Repository *string `json:"repository,omitempty,omitzero"`
 
 	// State corresponds to the JSON schema field "state".
 	State SessionState `json:"state"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID string `json:"workspace_id"`
 }
 
 type SessionLedgerFacet struct {
@@ -9872,11 +9878,25 @@ type SessionLedgerFacet struct {
 }
 
 type SessionLedgerFacets struct {
+	// Profiles corresponds to the JSON schema field "profiles".
+	Profiles []SessionLedgerProfileFacet `json:"profiles"`
+
 	// Repositories corresponds to the JSON schema field "repositories".
 	Repositories []SessionLedgerFacet `json:"repositories"`
+}
 
-	// Workspaces corresponds to the JSON schema field "workspaces".
-	Workspaces []SessionLedgerFacet `json:"workspaces"`
+type SessionLedgerProfileFacet struct {
+	// Count corresponds to the JSON schema field "count".
+	Count int `json:"count"`
+
+	// Deleted corresponds to the JSON schema field "deleted".
+	Deleted *bool `json:"deleted,omitempty,omitzero"`
+
+	// Name corresponds to the JSON schema field "name".
+	Name string `json:"name"`
+
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID string `json:"profile_id"`
 }
 
 type SessionListMessage struct {
@@ -9895,6 +9915,9 @@ type SessionListMessage struct {
 	// Limit corresponds to the JSON schema field "limit".
 	Limit *int `json:"limit,omitempty,omitzero"`
 
+	// ProfileID corresponds to the JSON schema field "profile_id".
+	ProfileID *string `json:"profile_id,omitempty,omitzero"`
+
 	// Reopen corresponds to the JSON schema field "reopen".
 	Reopen *bool `json:"reopen,omitempty,omitzero"`
 
@@ -9909,9 +9932,6 @@ type SessionListMessage struct {
 
 	// Until corresponds to the JSON schema field "until".
 	Until *string `json:"until,omitempty,omitzero"`
-
-	// WorkspaceID corresponds to the JSON schema field "workspace_id".
-	WorkspaceID *string `json:"workspace_id,omitempty,omitzero"`
 }
 
 type SessionListResult struct {
@@ -10008,6 +10028,24 @@ type SessionMessagesGetResultMessage struct {
 
 	// Truncated corresponds to the JSON schema field "truncated".
 	Truncated bool `json:"truncated"`
+}
+
+type SessionMoveMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// DestinationProfileID corresponds to the JSON schema field
+	// "destination_profile_id".
+	DestinationProfileID string `json:"destination_profile_id"`
+
+	// ExpectedProfileID corresponds to the JSON schema field "expected_profile_id".
+	ExpectedProfileID string `json:"expected_profile_id"`
+
+	// RequestID corresponds to the JSON schema field "request_id".
+	RequestID string `json:"request_id"`
+
+	// SessionID corresponds to the JSON schema field "session_id".
+	SessionID string `json:"session_id"`
 }
 
 type SessionPlacement struct {

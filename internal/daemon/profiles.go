@@ -327,6 +327,43 @@ func (d *Daemon) handleProfileSelect(client *wsClient, msg *protocol.ProfileSele
 	})
 }
 
+func (d *Daemon) handleSessionMove(client *wsClient, msg *protocol.SessionMoveMessage) {
+	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
+		member, _ := d.crewMemberForSession(msg.SessionID)
+		move, err := d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{
+			SessionID:            msg.SessionID,
+			ExpectedProfileID:    msg.ExpectedProfileID,
+			DestinationProfileID: msg.DestinationProfileID,
+			CrewMemberID:         member.ID,
+		})
+		if err != nil || !move.Changed() {
+			return profileActionOutcome{}, err
+		}
+		outcome := profileActionOutcome{publish: func() { d.publishSessionMoved(move) }}
+		if move.SourceDesktop != nil {
+			outcome.desktops = []profiles.Desktop{*move.SourceDesktop}
+		}
+		return outcome, nil
+	})
+}
+
+func (d *Daemon) publishSessionMoved(move store.SessionProfileMove) {
+	d.coalesceSnapshots(func() {
+		d.publishFact(FactSessionProfileChanged, move.SessionID, sessionProfileChange{FromProfileID: move.FromProfileID, ToProfileID: move.ToProfileID})
+		if move.SourceDesktop != nil {
+			d.publishArrangementChanged(move.FromProfileID)
+		}
+		if move.MovedCrewID != "" {
+			d.publishFact(FactCrewUpdated, move.MovedCrewID, nil)
+		}
+	})
+	if demoted := move.DemotedChiefID; demoted != "" {
+		d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
+		d.retargetChiefTicketDelivery(demoted, "")
+		go d.reloadSessionAgent(demoted)
+	}
+}
+
 func (d *Daemon) handleDesktopCreate(client *wsClient, msg *protocol.DesktopCreateMessage) {
 	d.runProfileAction(client, msg.Cmd, msg.RequestID, func() (profileActionOutcome, error) {
 		profile, desktop, err := d.store.CreateDesktop(msg.ProfileID, protocol.Deref(msg.Name), protocol.Deref(msg.ShortcutSlot), msg.ShortcutSlot == nil)

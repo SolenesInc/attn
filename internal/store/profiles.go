@@ -59,11 +59,24 @@ type SessionPlacementRequest struct {
 	Focus            bool
 }
 
+type SessionProfileMoveRequest struct {
+	SessionID            string
+	ExpectedProfileID    string
+	DestinationProfileID string
+	CrewMemberID         string
+}
+
 type SessionProfileMove struct {
-	SessionID     string
-	FromProfileID string
-	ToProfileID   string
-	SourceDesktop *profiles.Desktop
+	SessionID      string
+	FromProfileID  string
+	ToProfileID    string
+	SourceDesktop  *profiles.Desktop
+	DemotedChiefID string
+	MovedCrewID    string
+}
+
+func (m SessionProfileMove) Changed() bool {
+	return m.FromProfileID != m.ToProfileID
 }
 
 func firstChildRatio(leafShare float64, leafIsFirst bool) float64 {
@@ -1404,10 +1417,14 @@ func (s *Store) RemoveSessionPlacement(sessionID string) (*profiles.Desktop, err
 	return desktop, err
 }
 
-func (s *Store) MoveSessionToProfile(sessionID, destinationProfileID string) (SessionProfileMove, error) {
-	move := SessionProfileMove{SessionID: sessionID, ToProfileID: destinationProfileID}
+func (s *Store) MoveSessionToProfile(request SessionProfileMoveRequest) (SessionProfileMove, error) {
+	sessionID, destinationID := request.SessionID, request.DestinationProfileID
+	move := SessionProfileMove{SessionID: sessionID, ToProfileID: destinationID}
 	err := s.profilesTx(func(tx *sql.Tx, now string) error {
-		if _, err := loadLiveProfile(tx, destinationProfileID); err != nil {
+		if strings.TrimSpace(request.ExpectedProfileID) == "" {
+			return profiles.Errorf(profiles.CodeInvalid, "moving session %s needs the profile it was seen in", sessionID)
+		}
+		if _, err := loadLiveProfile(tx, destinationID); err != nil {
 			return err
 		}
 		from, err := openSessionProfileID(tx, sessionID)
@@ -1415,14 +1432,43 @@ func (s *Store) MoveSessionToProfile(sessionID, destinationProfileID string) (Se
 			return err
 		}
 		move.FromProfileID = from
-		if move.FromProfileID == destinationProfileID {
-			return profiles.Errorf(profiles.CodeDestinationSame, "session %s already belongs to profile %s", sessionID, destinationProfileID)
+		if !move.Changed() {
+			return nil
+		}
+		if from != request.ExpectedProfileID {
+			return profiles.Errorf(profiles.CodeStaleRevision, "session %s belongs to profile %s now, the move was made against profile %s; re-read and retry", sessionID, from, request.ExpectedProfileID)
 		}
 		if move.SourceDesktop, err = removeSessionPlacement(tx, now, sessionID); err != nil {
 			return err
 		}
-		_, err = tx.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ? AND closed_at = ''`, destinationProfileID, sessionID)
+		if _, err := tx.Exec(`UPDATE sessions SET profile_id = ? WHERE id = ? AND closed_at = ''`, destinationID, sessionID); err != nil {
+			return err
+		}
+		if move.DemotedChiefID, err = clearChiefOf(tx, from, sessionID); err != nil {
+			return err
+		}
+		move.MovedCrewID, err = moveCrewMember(tx, request.CrewMemberID, destinationID)
 		return err
 	})
 	return move, err
+}
+
+func clearChiefOf(tx *sql.Tx, profileID, sessionID string) (string, error) {
+	result, err := tx.Exec(`UPDATE profiles SET chief_session_id = '' WHERE id = ? AND chief_session_id = ?`, profileID, sessionID)
+	if err != nil {
+		return "", err
+	}
+	if affected, err := result.RowsAffected(); err != nil || affected == 0 {
+		return "", err
+	}
+	return sessionID, nil
+}
+
+func moveCrewMember(tx *sql.Tx, memberID, profileID string) (string, error) {
+	if memberID == "" {
+		return "", nil
+	}
+	_, err := tx.Exec(`INSERT INTO crew_profiles(member_id, profile_id) VALUES (?, ?)
+		ON CONFLICT(member_id) DO UPDATE SET profile_id = excluded.profile_id`, memberID, profileID)
+	return memberID, err
 }

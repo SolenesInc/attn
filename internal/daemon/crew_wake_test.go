@@ -19,6 +19,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func newWakeableDaemon(t *testing.T) (*Daemon, *fakeSpawnBackend, func() string) {
@@ -107,7 +108,7 @@ func TestCrewWake_RefusesAMemberOfAnotherProfile(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	work := createTestProfile(t, d.store, "Work")
 	addTurnSession(t, d, "work-agent", protocol.SessionAgentCodex, "")
-	if _, err := d.store.MoveSessionToProfile("work-agent", work.ID); err != nil {
+	if _, err := d.store.MoveSessionToProfile(store.SessionProfileMoveRequest{SessionID: "work-agent", ExpectedProfileID: defaultProfileID(t, d.store), DestinationProfileID: work.ID}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1086,5 +1087,33 @@ func TestCrewRegistry_EveryMemberWriteBroadcastsItsRevision(t *testing.T) {
 	member, ok := lastCrewUpdatedMember(t, trace, "trellis")
 	if !ok || member.Revision <= before {
 		t.Fatalf("filing a letter left the roster at revision %d (broadcast=%v), want past %d so the next save's token is current", member.Revision, ok, before)
+	}
+}
+
+func TestMovingACrewMembersAgentTakesTheMemberToTheDestination(t *testing.T) {
+	d, _, _ := newWakeableDaemon(t)
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	if resp := crewSet(t, d, protocol.CrewSetMessage{Member: "trellis", Cwd: protocol.Ptr(t.TempDir())}); !resp.Ok {
+		t.Fatalf("crew set: %v", protocol.Deref(resp.Error))
+	}
+	woken, err := d.crewWake("trellis", "")
+	if err != nil {
+		t.Fatalf("wake: %v", err)
+	}
+	client := newWorkspaceProtocolTestClient()
+
+	d.handleSessionMove(client, &protocol.SessionMoveMessage{
+		Cmd: protocol.CmdSessionMove, RequestID: "move-trellis", SessionID: woken.SessionID, ExpectedProfileID: home, DestinationProfileID: work.ID,
+	})
+
+	if member, err := d.store.CrewProfile("trellis"); err != nil || member != work.ID {
+		t.Fatalf("trellis belongs to %q, %v after its agent moved; want %s", member, err, work.ID)
+	}
+	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != woken.SessionID {
+		t.Fatalf("trellis is bound to %q after the move, want the same session %s", got, woken.SessionID)
+	}
+	if _, err := d.crewWakeAsked(&protocol.CrewWakeMessage{Member: "trellis", ProfileID: protocol.Ptr(home)}); err == nil || !strings.Contains(err.Error(), work.ID) {
+		t.Fatalf("waking trellis from its old profile = %v, want a refusal naming %s", err, work.ID)
 	}
 }

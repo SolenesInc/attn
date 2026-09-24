@@ -38,7 +38,7 @@ export function renderSessionsTab(
   const tree = (next: Partial<TabOnly<SessionsTabProps>>) => (
     <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
       <Host>
-        {(host) => <SessionsTab workspaceNames={{}} {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
+        {(host) => <SessionsTab profileNames={{}} {...props} {...next} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
       </Host>
     </SettingsProvider>
   );
@@ -73,7 +73,8 @@ export function entry(overrides: Partial<SessionLedgerEntry> & { id: string }): 
     label: `run ${overrides.id}`,
     last_seen: '2026-09-05T10:00:00Z',
     state: SessionState.Idle,
-    workspace_id: 'ws-1',
+    profile_id: 'profile-1',
+    profile_name: 'Default',
     ...overrides,
   };
 }

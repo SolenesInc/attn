@@ -35,14 +35,14 @@ const (
 )
 
 type SessionLedgerQuery struct {
-	Scope       SessionLedgerScope
-	Limit       int
-	Before      string
-	WorkspaceID string
-	Repository  string
-	Since       time.Time
-	Until       time.Time
-	Facets      bool
+	Scope      SessionLedgerScope
+	Limit      int
+	Before     string
+	ProfileID  string
+	Repository string
+	Since      time.Time
+	Until      time.Time
+	Facets     bool
 }
 
 type SessionLedgerPage struct {
@@ -287,8 +287,10 @@ func (s *Store) SessionLedger(query SessionLedgerQuery) (SessionLedgerPage, erro
 	return s.sessionLedgerDB(query, limit)
 }
 
-const ledgerSelect = `SELECT id, label, agent, directory, workspace_id, branch, is_worktree, main_repo,
-	repository, state, last_seen, closed_at, closed_by, close_reason`
+const ledgerSelect = `SELECT id, label, agent, directory, profile_id,
+	COALESCE((SELECT name FROM profiles WHERE profiles.id = sessions.profile_id), ''),
+	COALESCE((SELECT deleted_at FROM profiles WHERE profiles.id = sessions.profile_id), ''),
+	branch, is_worktree, main_repo, repository, state, last_seen, closed_at, closed_by, close_reason`
 
 const ledgerAt = `CASE WHEN closed_at <> '' THEN closed_at ELSE last_seen END`
 
@@ -315,9 +317,9 @@ func (q SessionLedgerQuery) scopeAndWindow() ([]string, []any) {
 
 func (q SessionLedgerQuery) selection() ([]string, []any) {
 	where, args := q.scopeAndWindow()
-	if workspace := strings.TrimSpace(q.WorkspaceID); workspace != "" {
-		where = append(where, "workspace_id = ?")
-		args = append(args, workspace)
+	if profileID := strings.TrimSpace(q.ProfileID); profileID != "" {
+		where = append(where, "profile_id = ?")
+		args = append(args, profileID)
 	}
 	if repository := strings.TrimSpace(q.Repository); repository != "" {
 		where = append(where, "repository = ?")
@@ -416,15 +418,40 @@ func (s *Store) ledgerFacetsDB(query SessionLedgerQuery) (*protocol.SessionLedge
 	if err != nil {
 		return nil, err
 	}
-	workspaces, err := count("workspace_id")
+	profileFacets, err := s.ledgerProfileFacetsDB(clause, args)
 	if err != nil {
 		return nil, err
 	}
-	return &protocol.SessionLedgerFacets{Repositories: repositories, Workspaces: workspaces}, nil
+	return &protocol.SessionLedgerFacets{Repositories: repositories, Profiles: profileFacets}, nil
+}
+
+func (s *Store) ledgerProfileFacetsDB(clause string, args []any) ([]protocol.SessionLedgerProfileFacet, error) {
+	rows, err := s.db.Query(`SELECT counted.profile_id, COALESCE(p.name, ''), COALESCE(p.deleted_at, ''), counted.total
+		FROM (SELECT profile_id, COUNT(*) AS total FROM sessions`+clause+` GROUP BY profile_id) counted
+		LEFT JOIN profiles p ON p.id = counted.profile_id
+		WHERE counted.profile_id <> ''
+		ORDER BY COALESCE(p.name, ''), counted.profile_id`, args...)
+	if err != nil {
+		return nil, fmt.Errorf("count ledger profiles: %w", err)
+	}
+	defer rows.Close()
+	facets := []protocol.SessionLedgerProfileFacet{}
+	for rows.Next() {
+		var facet protocol.SessionLedgerProfileFacet
+		var deletedAt string
+		if err := rows.Scan(&facet.ProfileID, &facet.Name, &deletedAt, &facet.Count); err != nil {
+			return nil, fmt.Errorf("count ledger profiles: %w", err)
+		}
+		if deletedAt != "" {
+			facet.Deleted = protocol.Ptr(true)
+		}
+		facets = append(facets, facet)
+	}
+	return facets, rows.Err()
 }
 
 func (q SessionLedgerQuery) matches(entry protocol.SessionLedgerEntry) bool {
-	if workspace := strings.TrimSpace(q.WorkspaceID); workspace != "" && entry.WorkspaceID != workspace {
+	if profileID := strings.TrimSpace(q.ProfileID); profileID != "" && entry.ProfileID != profileID {
 		return false
 	}
 	if repository := strings.TrimSpace(q.Repository); repository != "" && protocol.Deref(entry.Repository) != repository {
@@ -507,19 +534,20 @@ func (s *Store) sessionLedgerMemory(query SessionLedgerQuery, limit int) (Sessio
 
 func ledgerFacetsMemory(entries []protocol.SessionLedgerEntry) *protocol.SessionLedgerFacets {
 	repositories := map[string]int{}
-	workspaces := map[string]int{}
+	profileCounts := map[string]int{}
 	for _, entry := range entries {
 		if repository := protocol.Deref(entry.Repository); repository != "" {
 			repositories[repository]++
 		}
-		if entry.WorkspaceID != "" {
-			workspaces[entry.WorkspaceID]++
+		if entry.ProfileID != "" {
+			profileCounts[entry.ProfileID]++
 		}
 	}
-	return &protocol.SessionLedgerFacets{
-		Repositories: sortedFacets(repositories),
-		Workspaces:   sortedFacets(workspaces),
+	profileFacets := []protocol.SessionLedgerProfileFacet{}
+	for _, facet := range sortedFacets(profileCounts) {
+		profileFacets = append(profileFacets, protocol.SessionLedgerProfileFacet{ProfileID: facet.Value, Count: facet.Count})
 	}
+	return &protocol.SessionLedgerFacets{Repositories: sortedFacets(repositories), Profiles: profileFacets}
 }
 
 func sortedFacets(counts map[string]int) []protocol.SessionLedgerFacet {
@@ -573,17 +601,17 @@ type sessionCloseMark struct {
 
 func ledgerEntryFromSession(session *protocol.Session, mark sessionCloseMark) protocol.SessionLedgerEntry {
 	entry := protocol.SessionLedgerEntry{
-		ID:          session.ID,
-		Label:       session.Label,
-		Agent:       string(session.Agent),
-		Directory:   session.Directory,
-		WorkspaceID: session.WorkspaceID,
-		Branch:      session.Branch,
-		IsWorktree:  session.IsWorktree,
-		MainRepo:    session.MainRepo,
-		Repository:  session.Repository,
-		State:       session.State,
-		LastSeen:    session.LastSeen,
+		ID:         session.ID,
+		Label:      session.Label,
+		Agent:      string(session.Agent),
+		Directory:  session.Directory,
+		ProfileID:  session.ProfileID,
+		Branch:     session.Branch,
+		IsWorktree: session.IsWorktree,
+		MainRepo:   session.MainRepo,
+		Repository: session.Repository,
+		State:      session.State,
+		LastSeen:   session.LastSeen,
 	}
 	if mark.At != "" {
 		entry.ClosedAt = protocol.Ptr(mark.At)
@@ -602,15 +630,17 @@ type ledgerScanner interface {
 func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	var entry protocol.SessionLedgerEntry
 	var isWorktree int
-	var branch, mainRepo, repository, workspaceID sql.NullString
-	var closedAt, closedBy, closeReason string
+	var branch, mainRepo, repository sql.NullString
+	var profileDeletedAt, closedAt, closedBy, closeReason string
 
 	err := row.Scan(
 		&entry.ID,
 		&entry.Label,
 		&entry.Agent,
 		&entry.Directory,
-		&workspaceID,
+		&entry.ProfileID,
+		&entry.ProfileName,
+		&profileDeletedAt,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -624,8 +654,8 @@ func scanLedgerEntry(row ledgerScanner) (protocol.SessionLedgerEntry, error) {
 	if err != nil {
 		return protocol.SessionLedgerEntry{}, err
 	}
-	if workspaceID.Valid {
-		entry.WorkspaceID = workspaceID.String
+	if profileDeletedAt != "" {
+		entry.ProfileDeleted = protocol.Ptr(true)
 	}
 	if branch.Valid && branch.String != "" {
 		entry.Branch = protocol.Ptr(branch.String)

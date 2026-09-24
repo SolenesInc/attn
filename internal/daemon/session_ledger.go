@@ -24,12 +24,12 @@ func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.Sessi
 
 	before := strings.TrimSpace(protocol.Deref(msg.Before))
 	query := store.SessionLedgerQuery{
-		Scope:       scope,
-		Limit:       protocol.Deref(msg.Limit),
-		Before:      before,
-		WorkspaceID: strings.TrimSpace(protocol.Deref(msg.WorkspaceID)),
-		Repository:  strings.TrimSpace(protocol.Deref(msg.Repository)),
-		Facets:      wantFacets && before == "",
+		Scope:      scope,
+		Limit:      protocol.Deref(msg.Limit),
+		Before:     before,
+		ProfileID:  strings.TrimSpace(protocol.Deref(msg.ProfileID)),
+		Repository: strings.TrimSpace(protocol.Deref(msg.Repository)),
+		Facets:     wantFacets && before == "",
 	}
 
 	since, err := ledgerInstantArg("since", protocol.Deref(msg.Since))

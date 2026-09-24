@@ -23,7 +23,7 @@ export interface SessionLedgerQuery {
   all?: boolean;
   limit?: number;
   before?: string;
-  workspace_id?: string;
+  profile_id?: string;
   repository?: string;
   since?: string;
   until?: string;

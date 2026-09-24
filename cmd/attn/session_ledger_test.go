@@ -87,7 +87,7 @@ func TestSessionShowRendersTheCloseAndItsReason(t *testing.T) {
 	fprintSessionShow(&buf, protocol.SessionShowResult{
 		Entry: protocol.SessionLedgerEntry{
 			ID: "sess-1", Label: "ledger", Agent: "claude", Directory: "/tmp/one",
-			WorkspaceID: "ws-1", State: protocol.SessionStateIdle, LastSeen: "2026-09-05T11:00:00Z",
+			ProfileID: "profile-work", ProfileName: "Work", ProfileDeleted: protocol.Ptr(true), State: protocol.SessionStateIdle, LastSeen: "2026-09-05T11:00:00Z",
 			Branch: protocol.Ptr("feat/x"), IsWorktree: protocol.Ptr(true), MainRepo: protocol.Ptr("/repo"),
 			ClosedAt: protocol.Ptr("2026-09-05T11:30:00Z"), ClosedBy: protocol.Ptr("sess-boss"),
 			CloseReason: protocol.Ptr("brief delivered"),
@@ -103,7 +103,7 @@ func TestSessionShowRendersTheCloseAndItsReason(t *testing.T) {
 	})
 	out := buf.String()
 	for _, want := range []string{
-		"sess-1", "feat/x", "/repo", "sess-boss", "brief delivered", "closed",
+		"sess-1", "feat/x", "/repo", "sess-boss", "brief delivered", "closed", "Work (profile-work), deleted",
 		"the directory /tmp/one no longer exists",
 		"attn session reopen sess-1 --action recreate_worktree_and_reopen",
 	} {
@@ -144,14 +144,14 @@ func TestSessionListPresetsAreCalendarDaysInTheLocalTimezone(t *testing.T) {
 
 func TestSessionListTakesTheFiltersTheAppOffers(t *testing.T) {
 	parsed, err := parseSessionListArgs([]string{
-		"--all", "--workspace", "ws-1", "--repository", "/repos/attn",
+		"--all", "--profile", "profile-work", "--repository", "/repos/attn",
 		"--since", "2026-09-01T00:00:00Z", "--until", "2026-09-04T00:00:00Z",
 	})
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if parsed.workspace != "ws-1" || parsed.repository != "/repos/attn" {
-		t.Errorf("parsed = %+v, want the workspace and repository filters", parsed)
+	if parsed.profile != "profile-work" || parsed.repository != "/repos/attn" {
+		t.Errorf("parsed = %+v, want the profile and repository filters", parsed)
 	}
 	if parsed.since != "2026-09-01T00:00:00Z" || parsed.until != "2026-09-04T00:00:00Z" {
 		t.Errorf("parsed window = [%s, %s)", parsed.since, parsed.until)
