@@ -287,6 +287,7 @@ describe('desktop surface', () => {
     await waitFor(() => expect(isActive('d2')).toBe(true));
     expect(screen.getByTestId(desktopTestId('d2')).getAttribute('data-tile-ids')).toBe('tile-readme');
     expect(isActive('d1')).toBe(false);
+    expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-selected-session')).toBe('');
     expect(screen.queryByTestId(desktopTestId('d3'))).toBeNull();
     expect(screen.getByTestId('sidebar').getAttribute('data-selected-desktop')).toBe('d2');
     expect(useSessionStore.getState().activeSessionId).toBeNull();

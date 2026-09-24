@@ -119,7 +119,7 @@ export function AppDesktops() {
             pullRequests: entry.pullRequests,
           }))}
           delegationSessions={delegationSessions}
-          selectedSessionId={activePane?.sessionId ?? null}
+          selectedSessionId={isCurrent ? (activePane?.sessionId ?? null) : null}
           seedTargetSessions={daemonSessions.map((session) => ({
             sessionId: session.id,
             label: session.label || session.id,
