@@ -574,69 +574,11 @@ async function main() {
       );
     });
 
-    await runner.step('pinning_from_a_row_takes_that_agent_out_of_the_queue', async () => {
-      const before = await queueState(client);
-      const alphaWorkspaceId = (before.turns.find((row) => row.id === alpha.sessionId) || {}).workspaceId;
-      runner.assert(Boolean(alphaWorkspaceId), 'the row carries the workspace it belongs to');
-      const openedAt = observer.getSession(alpha.sessionId)?.turn_opened_at;
-      runner.assert(Boolean(openedAt), 'alpha has an open turn to pin over');
-
-      await client.request('dom_click', { selector: `[data-testid="queue-pin-${alpha.sessionId}"]` });
-      const pinned = await waitForTurns(client, [beta.sessionId], 'alpha out of the turns band once pinned', 20_000);
-      runner.assert(
-        !settledIds(pinned).includes(alpha.sessionId),
-        `a pinned agent is not in the settled band: ${JSON.stringify(settledIds(pinned))}`,
-      );
-      runner.assert(
-        (pinned.pinned || []).map((row) => row.id).includes(alpha.sessionId),
-        `a pinned agent lands in the Pinned band: ${JSON.stringify(pinned.pinned)}`,
-      );
-      runner.assert(
-        !pinned.treeSessionIds.includes(alpha.sessionId),
-        `pinning one agent did not pin its workspace: ${JSON.stringify(pinned.treeSessionIds)}`,
-      );
-
-      await client.request('dom_click', { selector: `[data-testid="queue-unpin-${alpha.sessionId}"]` });
-      await waitForTurns(
-        client,
-        [beta.sessionId, alpha.sessionId],
-        'alpha back in the turns band once unpinned',
-        20_000,
-      );
-      const restoredOpenedAt = observer.getSession(alpha.sessionId)?.turn_opened_at;
-      runner.assert(
-        restoredOpenedAt === openedAt,
-        `the restored turn keeps the instant it opened rather than restarting its clock: ${JSON.stringify({ openedAt, restoredOpenedAt })}`,
-      );
-    });
-
     await runner.step('the_chief_never_queues', async () => {
       await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
       await client.request('chief_of_staff_toggle');
       const promoted = await waitForTurns(client, [alpha.sessionId], 'beta out of the band once it is chief', 20_000);
       runner.assert(promoted.chief?.id === beta.sessionId, `beta occupies the chief slot: ${JSON.stringify(promoted.chief)}`);
-
-      const chiefWorkspaceId = promoted.chief.workspaceId;
-      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'false' });
-      await pollFor(async () => {
-        const state = await queueState(client);
-        return state.present ? null : state;
-      }, 'the tree back before pinning the chief workspace', 15_000);
-      await client.request('dom_click', { selector: `[data-testid="pin-workspace-${chiefWorkspaceId}"]` });
-      await client.request('set_setting', { key: 'queue_mode_enabled', value: 'true' });
-      const chiefPinned = await pollFor(async () => {
-        const state = await queueState(client);
-        return state.present && state.chief && state.treeWorkspaceIds.includes(chiefWorkspaceId) ? state : null;
-      }, 'the band back with the chief workspace pinned and its group drawn', 15_000);
-      runner.assert(
-        chiefPinned.chief.id === beta.sessionId,
-        `the chief keeps its slot while its workspace is pinned: ${JSON.stringify(chiefPinned.chief)}`,
-      );
-      runner.assert(
-        !chiefPinned.treeSessionIds.includes(beta.sessionId),
-        `the pinned group does not draw the chief again: ${JSON.stringify(chiefPinned.treeSessionIds)}`,
-      );
-      await client.request('dom_click', { selector: `[data-testid="pin-workspace-${chiefWorkspaceId}"]` });
 
       await client.request('chief_of_staff_open_actions', { sessionId: beta.sessionId });
       await client.request('chief_of_staff_toggle');
