@@ -7,7 +7,7 @@ the same way spikes stay out.
 
 ## Promises
 
-attn keeps its promises at five boundaries:
+attn makes these promises:
 
 - **Protocol**: the commands, responses, and events exchanged between the
   daemon and its clients: the app, the CLI, and remote daemons.
@@ -18,6 +18,9 @@ attn keeps its promises at five boundaries:
 - **App SDK**: the API that apps and their views build against. Its declared
   types must match the protocol shapes they mirror; a check comparing the two
   guards both promises.
+- **Performance**: idle attn stays quiet, and memory does not creep. Benchmarks
+  and memory scenarios track it, as described in
+  [Performance testing](perf-testing.md).
 
 The protocol is the main seam. Most behavior is observable there, and both
 the daemon and the app are tested against it.
@@ -45,12 +48,12 @@ directly.
 
 Each kind is defined by where the test enters and what it may fake.
 
-| Kind     | Enters and observes through                                | Real                                         | Faked                                               |
-| -------- | ---------------------------------------------------------- | -------------------------------------------- | --------------------------------------------------- |
-| Kernel   | A function with a written specification                    | The function                                 | Nothing                                             |
-| Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network   |
-| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub    |
-| Scenario | Keyboard; observes the screen, the protocol, and the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub    |
+| Kind     | Enters and observes through                                | Real                                         | Faked                                                                                     |
+| -------- | ---------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Kernel   | A function with a written specification                    | The function                                 | Nothing                                                                                   |
+| Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network; the browser and Tauri host for the app |
+| Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub                                          |
+| Scenario | Keyboard; observes the screen, the protocol, and the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub                                          |
 
 ### Wire
 
@@ -59,7 +62,8 @@ store, bus, and PTY layer, and acts as a protocol client. An app wire test
 renders the real app with its real socket client, and acts as the daemon,
 sending protocol messages and asserting on what renders and what the app sends
 back. Both sides use the generated protocol types, so a protocol change breaks
-both at once.
+both at once. App wire tests run in a simulated browser with the Tauri host
+stubbed; everything attn itself ships in the frontend runs for real.
 
 Fake agent binaries follow the real harness's observable contract: its hooks,
 transcript files, and terminal output. Time uses `synctest`; network failures
