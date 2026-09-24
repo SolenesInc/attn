@@ -47,7 +47,7 @@ Each kind is defined by where the test enters and what it may fake.
 | Kernel   | A function with a written specification                    | The function                                 | Nothing                                             |
 | Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network   |
 | Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub    |
-| Scenario | Keyboard and screen of the packaged app                    | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub    |
+| Scenario | Keyboard; observes the screen, the protocol, and the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub    |
 
 ### Wire
 
@@ -74,6 +74,8 @@ Scenarios run the packaged app in CI under Xvfb, per the
 [verification requirements](instances.md#verification-requirements) and the
 [harness guide](../app/scripts/real-app-harness/AGENTS.md). They cover
 rendering, focus, keyboard flow, and whole-product behavior such as queue mode.
+Their verdicts come from the screen, the protocol, or the CLI, never from the
+daemon's database.
 
 ### Kernel
 

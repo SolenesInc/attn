@@ -41,7 +41,8 @@ and run commands from the repository root.
 - Hand-run scripts outside `createScenarioRunner` have none of these guards and
   may launch real providers; read one before running it.
 - Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
-- Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
+- Take verdicts from the screen, the protocol, or the CLI, not the daemon DB;
+  see [Testing](../../../docs/testing.md#scenario). Resolve pane ids from app state.
 - Signal only PIDs from the automation manifest or spawned processes. Keep
   OS-specific behavior in `platform.mjs`.
 
