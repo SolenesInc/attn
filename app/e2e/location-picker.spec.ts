@@ -32,20 +32,23 @@ function createLocationPickerRepo(worktreeBranches: string[]) {
   };
 }
 
+const sessionLabels = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => (window.__TEST_GET_SESSIONS?.() ?? []).map((session) => session.label));
+
 test.describe('LocationPicker', () => {
   test.describe('Basic Dialog Operations', () => {
-    test('opens new workspace dialog with Cmd+T', async ({ page, daemon }) => {
+    test('opens the new-session dialog with Cmd+N', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
 
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
       await expect(page.locator('.location-picker')).toBeVisible();
-      await expect(page.locator('.picker-title')).toHaveText('New Workspace Location');
+      await expect(page.locator('.picker-title')).toHaveText('New Session Location');
     });
 
     test('closes dialog with Escape', async ({ page, daemon }) => {
@@ -53,7 +56,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       await page.keyboard.press('Escape');
@@ -65,7 +68,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
       const enabledAgents = page.locator('.agent-option:not(:disabled)');
       const enabledCount = await enabledAgents.count();
@@ -80,7 +83,7 @@ test.describe('LocationPicker', () => {
 
       await page.keyboard.press('Escape');
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
       await expect(page.locator('.agent-option', { hasText: agentName })).toHaveClass(/active/);
     });
@@ -92,7 +95,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       const recentSection = page.locator('.picker-section-title').filter({ hasText: 'RECENT' });
@@ -115,7 +118,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       await page.keyboard.type('~/');
@@ -139,7 +142,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       // ~/Library gives a predictable set: most Macs have "Application Support".
@@ -176,7 +179,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       await page.keyboard.type('~/');
@@ -205,7 +208,7 @@ test.describe('LocationPicker', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+t');
+      await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
       await page.keyboard.type('/xyz_nonexistent_path_12345');
@@ -228,7 +231,7 @@ test.describe('LocationPicker', () => {
         await page.waitForSelector('.dashboard');
 
         for (const typedPath of [repo.worktrees[0].path, `${repo.worktrees[0].path}/`]) {
-          await page.keyboard.press('Meta+t');
+          await page.keyboard.press('Meta+n');
           await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
           const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -256,7 +259,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -274,8 +277,8 @@ test.describe('LocationPicker', () => {
 
         await page.keyboard.press('Enter');
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin' }).first()).toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin--feat-images' })).toHaveCount(0);
+        await expect.poll(() => sessionLabels(page)).toContain('exsin');
+        expect(await sessionLabels(page)).not.toContain('exsin--feat-images');
       } finally {
         repo.cleanup();
       }
@@ -288,7 +291,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -307,7 +310,7 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'exsin--feat-more' }).first()).toBeVisible();
+        await expect.poll(() => sessionLabels(page)).toContain('exsin--feat-more');
       } finally {
         repo.cleanup();
       }
@@ -320,7 +323,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -337,7 +340,7 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: `exsin--${generated}` }).first()).toBeVisible();
+        await expect.poll(() => sessionLabels(page)).toContain(`exsin--${generated}`);
       } finally {
         repo.cleanup();
       }
@@ -350,7 +353,7 @@ test.describe('LocationPicker', () => {
       try {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -386,7 +389,7 @@ test.describe('LocationPicker', () => {
         await page.goto('/');
         await page.waitForSelector('.dashboard');
 
-        await page.keyboard.press('Meta+t');
+        await page.keyboard.press('Meta+n');
         await expect(page.locator('.location-picker-overlay')).toBeVisible();
 
         const input = page.locator('[data-testid="location-picker-path-input"]');
@@ -395,8 +398,8 @@ test.describe('LocationPicker', () => {
         await page.keyboard.press('Enter');
 
         await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
-        await expect(page.locator('.session-name', { hasText: 'project-with-hidden-child' }).first()).toBeVisible();
-        await expect(page.locator('.session-name', { hasText: '.claude' })).toHaveCount(0);
+        await expect.poll(() => sessionLabels(page)).toContain('project-with-hidden-child');
+        expect(await sessionLabels(page)).not.toContain('.claude');
       } finally {
         fs.rmSync(parentDir, { recursive: true, force: true });
       }

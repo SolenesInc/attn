@@ -374,8 +374,8 @@ describe('desktop surface', () => {
         ),
         'd1',
       );
-      useSessionStore.getState().syncFromDaemonSessions([
-        ...['s1', 's2', 's3', 's4', 's9'].map((id) => ({
+      useSessionStore.getState().syncFromDaemonSessions(
+        ['s1', 's2', 's3', 's4', 's9'].map((id) => ({
           id,
           label: id,
           directory: '/tmp/repo',
@@ -383,7 +383,7 @@ describe('desktop surface', () => {
           profile_id: TEST_PROFILE_ID,
           workspace_id: '',
         })),
-      ]);
+      );
     });
 
     await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s9'));

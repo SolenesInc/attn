@@ -128,6 +128,7 @@ declare global {
   interface Window {
     __TEST_INJECT_SESSION?: (session: TestSession) => void;
     __TEST_UPDATE_SESSION_STATE?: (id: string, state: UISessionState) => void;
+    __TEST_GET_SESSIONS?: () => Array<{ id: string; label: string; cwd: string }>;
     __TEST_SET_SESSION_WORKSPACE?: (sessionId: string, workspace: TerminalWorkspaceState, daemonActivePaneId?: string) => void;
   }
 }
@@ -492,10 +493,7 @@ declare global {
 
 if (import.meta.env.DEV) {
   window.__TEST_INJECT_SESSION = (session: TestSession) => {
-    if (!session.workspaceId) {
-      throw new Error('__TEST_INJECT_SESSION requires workspaceId');
-    }
-    const workspaceId = session.workspaceId;
+    const workspaceId = session.workspaceId ?? '';
     useSessionStore.setState((state) => ({
       sessions: [
         ...state.sessions,
@@ -512,6 +510,9 @@ if (import.meta.env.DEV) {
       ],
     }));
   };
+
+  window.__TEST_GET_SESSIONS = () =>
+    useSessionStore.getState().sessions.map(({ id, label, cwd }) => ({ id, label, cwd }));
 
   window.__TEST_UPDATE_SESSION_STATE = (id: string, state: UISessionState) => {
     useSessionStore.setState((s) => ({
