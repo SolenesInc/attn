@@ -52,12 +52,17 @@ interface PickerTarget {
   endpointId?: string;
   name: string;
   connected: boolean;
+  unavailableReason?: string;
   metaLabel: string;
   metaClassName?: string;
   projectsDirectory?: string;
   placeholder: string;
   daemonInstanceId?: string;
   agentsAvailable?: string[];
+}
+
+function endpointUnavailableReason(endpoint: DaemonEndpoint): string {
+  return endpoint.status_message || `${endpoint.name} is ${endpoint.status}`;
 }
 
 interface PathSelectableItem {
@@ -280,10 +285,6 @@ export function LocationPicker({
   const requestGenerationRef = useRef(0);
 
   const agentCapabilities = useMemo(() => getAgentCapabilities(settings), [settings]);
-  const availableEndpoints = useMemo(
-    () => endpoints.filter((endpoint) => endpoint.enabled !== false),
-    [endpoints],
-  );
   const selectableTargets = useMemo<PickerTarget[]>(
     () => [
       {
@@ -294,11 +295,12 @@ export function LocationPicker({
         projectsDirectory,
         placeholder: 'Type path (e.g., ~/projects) or search...',
       },
-      ...availableEndpoints.map((endpoint) => ({
+      ...endpoints.map((endpoint) => ({
         id: endpoint.id,
         endpointId: endpoint.id,
         name: endpoint.name,
         connected: endpoint.status === 'connected',
+        unavailableReason: endpointUnavailableReason(endpoint),
         metaLabel: endpoint.status,
         metaClassName: `status-${endpoint.status}`,
         projectsDirectory: endpoint.capabilities?.projects_directory,
@@ -307,7 +309,7 @@ export function LocationPicker({
         agentsAvailable: endpoint.capabilities?.agents_available,
       })),
     ],
-    [availableEndpoints, projectsDirectory],
+    [endpoints, projectsDirectory],
   );
   const selectedTarget = useMemo(
     () => selectableTargets.find((target) => target.id === targetId) || selectableTargets[0],
@@ -1104,7 +1106,7 @@ export function LocationPicker({
                   role="radio"
                   aria-checked={active}
                   disabled={!target.connected}
-                  title={!target.connected ? `${target.name} is ${target.metaLabel}` : undefined}
+                  title={!target.connected ? target.unavailableReason : undefined}
                 >
                   <span className="endpoint-option-name">{target.name}</span>
                   {active && yoloMode && (

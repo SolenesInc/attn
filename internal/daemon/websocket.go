@@ -1451,27 +1451,12 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 }
 
 func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg interface{}, raw []byte) bool {
+	if endpointID := remoteCommandEndpointID(cmd, msg); endpointID != "" {
+		d.forwardEndpointScopedCommand(client, cmd, msg, raw, endpointID)
+		return true
+	}
 	if d.hubManager == nil {
 		return false
-	}
-
-	if endpointID := remoteCommandEndpointID(cmd, msg); endpointID != "" {
-		if d.hubManager.HasEndpoint(endpointID) {
-			if cmd == protocol.CmdSpawnSession {
-				if typed, ok := msg.(*protocol.SpawnSessionMessage); ok {
-					d.hubManager.ReservePendingSessionRoute(endpointID, typed.ID)
-				}
-			}
-			if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
-				d.sendCommandError(client, cmd, err.Error())
-				return true
-			}
-			return true
-		}
-		if d.hubManager.HasConfiguredEndpoints() {
-			d.sendCommandError(client, cmd, fmt.Sprintf("endpoint not found: %s", endpointID))
-			return true
-		}
 	}
 
 	if ptyTargetID := remoteCommandPTYTargetID(cmd, msg); ptyTargetID != "" {
@@ -1571,6 +1556,25 @@ func (d *Daemon) tryHandleRemoteWSCommand(client *wsClient, cmd string, msg inte
 		return true
 	}
 	return true
+}
+
+func (d *Daemon) forwardEndpointScopedCommand(client *wsClient, cmd string, msg interface{}, raw []byte, endpointID string) {
+	if d.hubManager == nil {
+		d.sendCommandError(client, cmd, fmt.Sprintf("endpoint not found: %s", endpointID))
+		return
+	}
+	if err := d.hubManager.EndpointRefusal(endpointID); err != nil {
+		d.sendCommandError(client, cmd, err.Error())
+		return
+	}
+	if cmd == protocol.CmdSpawnSession {
+		if typed, ok := msg.(*protocol.SpawnSessionMessage); ok {
+			d.hubManager.ReservePendingSessionRoute(endpointID, typed.ID)
+		}
+	}
+	if err := d.hubManager.ForwardEndpointCommand(context.Background(), endpointID, raw); err != nil {
+		d.sendCommandError(client, cmd, err.Error())
+	}
 }
 
 func remoteCommandSessionID(cmd string, msg interface{}) string {

@@ -467,11 +467,11 @@ func startAgentCloseOutpost(t *testing.T, d *Daemon, sessions ...protocol.Sessio
 		}
 	}
 
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
 	if err != nil {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 	conn, _, err := websocket.Dial(ctx, fmt.Sprintf("ws://127.0.0.1:%d/ws", port), nil)
@@ -610,11 +610,11 @@ func TestAgentCloseRefusesWhenTheOwningEndpointCannotTakeIt(t *testing.T) {
 	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
 		t.Fatal(err)
 	}
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("gpu-box", "gpu", "")
+	endpoint, err := d.store.AddEndpoint("gpu-box", "gpu", "")
 	if err != nil {
 		t.Fatalf("AddEndpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	if !d.hubManager.ReplaceRemoteSessions(endpoint.ID, []protocol.Session{
 		remoteAgentCloseSession("remote-worker", "Remote worker"),
 	}) {

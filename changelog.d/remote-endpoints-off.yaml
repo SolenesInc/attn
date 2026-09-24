@@ -1,0 +1,9 @@
+kind: removed
+area: remote
+change: Remote endpoints are off in this release. Saved endpoints stay listed in Settings as unsupported, with the reason, and can be removed; attn never connects to, installs on or restarts them.
+symptom: After an upgrade, a failed reconnect could install the new binary on a remote and restart it into a daemon that refuses the outpost role.
+notes: >
+  Adding an endpoint, re-bootstrapping, remote web access, and launching,
+  browsing or reopening on a remote all refuse with the same reason instead of
+  falling back to this machine. A daemon enrolled as an outpost refuses to start
+  until `attn enrollment leave`.

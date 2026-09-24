@@ -191,11 +191,11 @@ func TestRenameSessionOverTheUnixSocketTravelsToTheSessionOwner(t *testing.T) {
 	dir := t.TempDir()
 	addTestWorkspace(d, "workspace-s1", dir)
 	d.store.Add(&protocol.Session{ID: "s1", Label: "local", Agent: protocol.SessionAgentClaude, Directory: dir, WorkspaceID: "workspace-s1", ProfileID: defaultProfileID(t, d.store)})
-	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
-	endpoint, err := d.hubManager.AddEndpoint("remote", "remote.example.test", "")
+	endpoint, err := d.store.AddEndpoint("remote", "remote.example.test", "")
 	if err != nil {
 		t.Fatalf("add endpoint: %v", err)
 	}
+	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
 	d.hubManager.ReservePendingSessionRoute(endpoint.ID, "s-remote")
 
 	serverConn, clientConn := net.Pipe()

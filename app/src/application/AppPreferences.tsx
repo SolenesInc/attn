@@ -38,10 +38,7 @@ export function AppPreferences() {
   const {
     sendMuteRepo,
     sendMuteAuthor,
-    sendAddEndpoint,
-    sendUpdateEndpoint,
     sendRemoveEndpoint,
-    sendSetEndpointRemoteWeb,
     sendListPlugins,
     sendInstallPlugin,
     sendInstallBundledPlugin,
@@ -87,10 +84,7 @@ export function AppPreferences() {
         endpoints={daemonEndpoints}
         plugins={daemonPlugins}
         pluginIssues={daemonPluginIssues}
-        onAddEndpoint={sendAddEndpoint}
-        onUpdateEndpoint={sendUpdateEndpoint}
         onRemoveEndpoint={sendRemoveEndpoint}
-        onSetEndpointRemoteWeb={sendSetEndpointRemoteWeb}
         onListPlugins={sendListPlugins}
         onInstallPlugin={sendInstallPlugin}
         onInstallBundledPlugin={sendInstallBundledPlugin}

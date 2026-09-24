@@ -23,7 +23,6 @@ export function SectionStatusPills({
   tailscaleEnabled,
   tailscaleStatus,
   endpoints,
-  connectedEndpointCount,
   pluginProblemCount,
   activePluginCount,
   plugins,
@@ -42,7 +41,6 @@ export function SectionStatusPills({
   | 'tailscaleEnabled'
   | 'tailscaleStatus'
   | 'endpoints'
-  | 'connectedEndpointCount'
   | 'pluginProblemCount'
   | 'activePluginCount'
   | 'plugins'
@@ -64,7 +62,6 @@ export function SectionStatusPills({
           tailscaleEnabled={tailscaleEnabled}
           tailscaleStatus={tailscaleStatus}
           endpoints={endpoints}
-          connectedEndpointCount={connectedEndpointCount}
         />
       );
     case 'plugins':
@@ -446,12 +443,7 @@ export function ConnectivitySettings({
   githubPollingOffReason,
   githubHosts,
   endpointPanel,
-  handleAddEndpoint,
   endpoints,
-  handleSaveEndpoint,
-  handleToggleEndpoint,
-  handleRebootstrapEndpoint,
-  handleSetEndpointRemoteWeb,
   handleRemoveEndpoint,
 }: Pick<
   SettingsModalState,
@@ -465,12 +457,7 @@ export function ConnectivitySettings({
   | 'githubPollingOffReason'
   | 'githubHosts'
   | 'endpointPanel'
-  | 'handleAddEndpoint'
   | 'endpoints'
-  | 'handleSaveEndpoint'
-  | 'handleToggleEndpoint'
-  | 'handleRebootstrapEndpoint'
-  | 'handleSetEndpointRemoteWeb'
   | 'handleRemoveEndpoint'
 >) {
   return (
@@ -489,12 +476,7 @@ export function ConnectivitySettings({
 
       <RemoteEndpointsSettings
         endpointPanel={endpointPanel}
-        handleAddEndpoint={handleAddEndpoint}
         endpoints={endpoints}
-        handleSaveEndpoint={handleSaveEndpoint}
-        handleToggleEndpoint={handleToggleEndpoint}
-        handleRebootstrapEndpoint={handleRebootstrapEndpoint}
-        handleSetEndpointRemoteWeb={handleSetEndpointRemoteWeb}
         handleRemoveEndpoint={handleRemoveEndpoint}
       />
     </>
@@ -1623,275 +1605,57 @@ export function GitHubHostsSettings({
 
 export function RemoteEndpointsSettings({
   endpointPanel,
-  handleAddEndpoint,
   endpoints,
-  handleSaveEndpoint,
-  handleToggleEndpoint,
-  handleRebootstrapEndpoint,
-  handleSetEndpointRemoteWeb,
   handleRemoveEndpoint,
-}: Pick<
-  SettingsModalState,
-  | 'endpointPanel'
-  | 'handleAddEndpoint'
-  | 'endpoints'
-  | 'handleSaveEndpoint'
-  | 'handleToggleEndpoint'
-  | 'handleRebootstrapEndpoint'
-  | 'handleSetEndpointRemoteWeb'
-  | 'handleRemoveEndpoint'
->) {
+}: Pick<SettingsModalState, 'endpointPanel' | 'endpoints' | 'handleRemoveEndpoint'>) {
   return (
     <section className="settings-block">
       <div className="settings-block-intro">
         <div className="settings-kicker">Remote</div>
         <h3>Remote Endpoints</h3>
         <p className="settings-description">
-          SSH targets that the local daemon bootstraps and keeps connected as remote attn peers.
+          Remote endpoints are off in this release. attn keeps saved endpoints and never connects to, installs on or
+          restarts them; sessions on those hosts keep running there.
         </p>
       </div>
       <div className="settings-block-body">
-        <div className="settings-form-grid endpoint-form">
-          <input
-            type="text"
-            value={endpointPanel.draft.name}
-            onChange={(e) => endpointPanel.setDraft('name', e.target.value)}
-            placeholder="gpu-box"
-            className="settings-input"
-            aria-label="Endpoint name"
-            disabled={endpointPanel.busy}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <input
-            type="text"
-            value={endpointPanel.draft.target}
-            onChange={(e) => endpointPanel.setDraft('target', e.target.value)}
-            placeholder="user@gpu-box"
-            className="settings-input"
-            aria-label="SSH target"
-            disabled={endpointPanel.busy}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <input
-            type="text"
-            value={endpointPanel.draft.instance}
-            onChange={(e) => endpointPanel.setDraft('instance', e.target.value)}
-            placeholder="default"
-            pattern="[a-z0-9][a-z0-9-]{0,15}"
-            className="settings-input"
-            aria-label="Instance"
-            disabled={endpointPanel.busy}
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-          />
-          <button className="settings-action" onClick={() => void handleAddEndpoint()} disabled={endpointPanel.busy}>
-            Add Endpoint
-          </button>
-        </div>
         {endpointPanel.error && <div className="settings-warning">{endpointPanel.error}</div>}
         {endpoints.length === 0 ? (
-          <p className="settings-empty">No remote endpoints configured.</p>
+          <p className="settings-empty">No saved remote endpoints.</p>
         ) : (
           <div className="endpoint-list">
-            {endpoints.map((endpoint) => {
-              const isEditing = endpointPanel.editing?.id === endpoint.id;
-              const isBusy = endpointPanel.busyKey === endpoint.id;
-              const availableAgents = endpoint.capabilities?.agents_available || [];
-              const remoteWebEnabled = endpoint.capabilities?.tailscale_enabled === true;
-              const remoteWebStatus =
-                endpoint.capabilities?.tailscale_status || (remoteWebEnabled ? 'starting' : 'disabled');
-              const remoteWebURL = endpoint.capabilities?.tailscale_url;
-              const remoteWebAuthURL = endpoint.capabilities?.tailscale_auth_url;
-              const remoteWebError = endpoint.capabilities?.tailscale_error;
-              const canToggleRemoteWeb = endpoint.status === 'connected' && !endpointPanel.busy;
-              const canRebootstrap = endpoint.enabled !== false && !endpointPanel.busy;
-              return (
-                <div key={endpoint.id} className={`endpoint-card status-${endpoint.status}`}>
-                  <div className="endpoint-card-header">
-                    <div className="endpoint-card-title">
-                      <span className="endpoint-name">{endpoint.name}</span>
-                      <span className="settings-pill">{endpoint.instance || 'default'}</span>
-                      <span className={`endpoint-status-badge status-${endpoint.status}`}>{endpoint.status}</span>
-                    </div>
-                    <div className="endpoint-card-actions">
-                      {isEditing ? (
-                        <>
-                          <button
-                            className="settings-action"
-                            onClick={() => void handleSaveEndpoint(endpoint.id)}
-                            disabled={isBusy}
-                          >
-                            Save
-                          </button>
-                          <button
-                            className="settings-action"
-                            onClick={endpointPanel.cancelEdit}
-                            disabled={endpointPanel.busy}
-                          >
-                            Cancel
-                          </button>
-                        </>
-                      ) : (
-                        <button
-                          className="settings-action"
-                          onClick={() => endpointPanel.beginEdit(endpoint)}
-                          disabled={endpointPanel.busy}
-                        >
-                          Edit
-                        </button>
-                      )}
-                      <button
-                        className="settings-action"
-                        onClick={() => void handleToggleEndpoint(endpoint)}
-                        disabled={endpointPanel.busy}
-                      >
-                        {endpoint.enabled === false ? 'Enable' : 'Disable'}
-                      </button>
-                      <button
-                        className="settings-action"
-                        onClick={() => void handleRebootstrapEndpoint(endpoint)}
-                        disabled={!canRebootstrap}
-                      >
-                        Re-bootstrap
-                      </button>
-                      <button
-                        className="settings-action"
-                        onClick={() => void handleSetEndpointRemoteWeb(endpoint.id, !remoteWebEnabled)}
-                        disabled={!canToggleRemoteWeb}
-                      >
-                        {remoteWebEnabled ? 'Disable Web' : 'Enable Web'}
-                      </button>
-                      <button
-                        className="settings-action danger"
-                        onClick={() => void handleRemoveEndpoint(endpoint.id)}
-                        disabled={endpointPanel.busy}
-                      >
-                        Remove
-                      </button>
-                    </div>
+            {endpoints.map((endpoint) => (
+              <div key={endpoint.id} className={`endpoint-card status-${endpoint.status}`}>
+                <div className="endpoint-card-header">
+                  <div className="endpoint-card-title">
+                    <span className="endpoint-name">{endpoint.name}</span>
+                    <span className="settings-pill">{endpoint.instance || 'default'}</span>
+                    <span className={`endpoint-status-badge status-${endpoint.status}`}>{endpoint.status}</span>
                   </div>
-                  {isEditing ? (
-                    <div className="settings-form-grid endpoint-form-inline">
-                      <input
-                        type="text"
-                        value={endpointPanel.editing?.name ?? ''}
-                        onChange={(e) => endpointPanel.setEdit('name', e.target.value)}
-                        className="settings-input"
-                        aria-label="Edit endpoint name"
-                        disabled={endpointPanel.busy}
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      <input
-                        type="text"
-                        value={endpointPanel.editing?.target ?? ''}
-                        onChange={(e) => endpointPanel.setEdit('target', e.target.value)}
-                        className="settings-input"
-                        aria-label="Edit SSH target"
-                        disabled={endpointPanel.busy}
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                      <input
-                        type="text"
-                        value={endpointPanel.editing?.instance ?? ''}
-                        onChange={(e) => endpointPanel.setEdit('instance', e.target.value)}
-                        className="settings-input"
-                        aria-label="Edit instance"
-                        placeholder="default"
-                        pattern="[a-z0-9][a-z0-9-]{0,15}"
-                        disabled={endpointPanel.busy}
-                        autoCapitalize="none"
-                        autoCorrect="off"
-                        spellCheck={false}
-                      />
-                    </div>
-                  ) : (
-                    <div className="endpoint-summary">
-                      <div className="settings-meta-row">
-                        <span className="settings-meta-label">SSH</span>
-                        <code>{endpoint.ssh_target}</code>
-                      </div>
-                      <div className="settings-meta-row">
-                        <span className="settings-meta-label">Enabled</span>
-                        <span>{endpoint.enabled === false ? 'No' : 'Yes'}</span>
-                      </div>
-                      {endpoint.status_message && (
-                        <div className="settings-meta-row">
-                          <span className="settings-meta-label">Status</span>
-                          <span>{endpoint.status_message}</span>
-                        </div>
-                      )}
-                      {endpoint.capabilities && (
-                        <>
-                          <div className="settings-meta-row">
-                            <span className="settings-meta-label">Protocol</span>
-                            <span>{endpoint.capabilities.protocol_version}</span>
-                          </div>
-                          <div className="settings-meta-row">
-                            <span className="settings-meta-label">PTY</span>
-                            <span>{endpoint.capabilities.pty_backend_mode || 'unknown'}</span>
-                          </div>
-                          <div className="settings-meta-row">
-                            <span className="settings-meta-label">Sessions</span>
-                            <span>{endpoint.session_count ?? 0}</span>
-                          </div>
-                          <div className="settings-meta-row">
-                            <span className="settings-meta-label">Remote Web</span>
-                            <span>{remoteWebStatus}</span>
-                          </div>
-                          <div className="settings-meta-row">
-                            <span className="settings-meta-label">Agents</span>
-                            <span>{availableAgents.length > 0 ? availableAgents.join(', ') : 'none reported'}</span>
-                          </div>
-                          {remoteWebURL && (
-                            <div className="settings-meta-row">
-                              <span className="settings-meta-label">Remote URL</span>
-                              <a href={remoteWebURL} target="_blank" rel="noreferrer">
-                                {remoteWebURL}
-                              </a>
-                            </div>
-                          )}
-                          {remoteWebAuthURL && (
-                            <div className="settings-warning">
-                              Sign this host into Tailscale:{' '}
-                              <a href={remoteWebAuthURL} target="_blank" rel="noreferrer">
-                                {remoteWebAuthURL}
-                              </a>
-                            </div>
-                          )}
-                          {endpoint.capabilities.tailscale_domain && !remoteWebURL && (
-                            <div className="settings-meta-row">
-                              <span className="settings-meta-label">Remote DNS</span>
-                              <code>{endpoint.capabilities.tailscale_domain}</code>
-                            </div>
-                          )}
-                          {remoteWebError && <div className="settings-warning">{remoteWebError}</div>}
-                          {endpoint.capabilities.projects_directory && (
-                            <div className="settings-meta-row">
-                              <span className="settings-meta-label">Projects</span>
-                              <code>{endpoint.capabilities.projects_directory}</code>
-                            </div>
-                          )}
-                        </>
-                      )}
-                      {!canToggleRemoteWeb && (
-                        <div className="settings-hint">
-                          Connect to the remote daemon before changing its web access.
-                        </div>
-                      )}
+                  <div className="endpoint-card-actions">
+                    <button
+                      className="settings-action danger"
+                      onClick={() => void handleRemoveEndpoint(endpoint.id)}
+                      disabled={endpointPanel.busy}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+                <div className="endpoint-summary">
+                  <div className="settings-meta-row">
+                    <span className="settings-meta-label">SSH</span>
+                    <code>{endpoint.ssh_target}</code>
+                  </div>
+                  {endpoint.status_message && (
+                    <div className="settings-meta-row">
+                      <span className="settings-meta-label">Status</span>
+                      <span>{endpoint.status_message}</span>
                     </div>
                   )}
                 </div>
-              );
-            })}
+              </div>
+            ))}
           </div>
         )}
       </div>
@@ -1903,18 +1667,17 @@ export function ConnectivityStatusPills({
   tailscaleEnabled,
   tailscaleStatus,
   endpoints,
-  connectedEndpointCount,
-}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus' | 'endpoints' | 'connectedEndpointCount'>) {
+}: Pick<SettingsModalState, 'tailscaleEnabled' | 'tailscaleStatus' | 'endpoints'>) {
   return (
     <>
       <span className={`settings-pill ${tailscaleEnabled && tailscaleStatus !== 'error' ? 'good' : ''}`}>
         {tailscaleEnabled ? tailscaleStatus : 'mobile off'}
       </span>
-      <span
-        className={`settings-pill ${endpoints.length === 0 || connectedEndpointCount === endpoints.length ? 'good' : 'warn'}`}
-      >
-        {connectedEndpointCount}/{endpoints.length} remotes
-      </span>
+      {endpoints.length > 0 && (
+        <span className="settings-pill">
+          {endpoints.length} {endpoints.length === 1 ? 'remote' : 'remotes'} off
+        </span>
+      )}
     </>
   );
 }

@@ -24,22 +24,7 @@ func (d *Daemon) handleAddEndpointWS(client *wsClient, msg *protocol.AddEndpoint
 		d.sendEndpointActionResult(client, "add", "", false, "endpoint manager unavailable")
 		return
 	}
-	instance := strings.TrimSpace(protocol.Deref(msg.Instance))
-	if instance == "" {
-		instance = config.Instance()
-	}
-	canonicalInstance, err := config.NormalizeInstanceName(instance)
-	if err != nil {
-		d.sendEndpointActionResult(client, "add", "", false, err.Error())
-		return
-	}
-	record, err := d.hubManager.AddEndpoint(msg.Name, msg.SshTarget, canonicalInstance)
-	if err != nil {
-		d.sendEndpointActionResult(client, "add", "", false, err.Error())
-		return
-	}
-	d.publishFact(FactEndpointAdded, record.ID, nil)
-	d.sendEndpointActionResult(client, "add", record.ID, true, "")
+	d.sendEndpointActionResult(client, "add", "", false, d.hubManager.AddEndpoint(msg.Name).Error())
 }
 
 func (d *Daemon) handleRemoveEndpointWS(client *wsClient, msg *protocol.RemoveEndpointMessage) {

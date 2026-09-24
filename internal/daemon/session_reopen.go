@@ -12,6 +12,7 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -174,34 +175,21 @@ func decideReopenHost(verdict *sessionReopenVerdict, endpoints []protocol.Endpoi
 	if strings.TrimSpace(verdict.Execution.HostKind) != garden.HostRemote {
 		return true
 	}
-	name, reachable := endpointReachable(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
-	if reachable {
-		verdict.Reason = fmt.Sprintf(
-			"session %s ran on %s; its ledger row lives on that daemon, so reopen it there",
-			verdict.SessionID, name)
-		return false
-	}
-	verdict.Reason = fmt.Sprintf(
-		"session %s ran on %s, which is not reachable now; retry when it is",
-		verdict.SessionID, name)
+	name := endpointName(endpoints, strings.TrimSpace(verdict.Execution.EndpointID))
+	verdict.Reason = fmt.Sprintf("session %s ran on %s. %s", verdict.SessionID, name, hub.UnsupportedReason)
 	return false
 }
 
-func endpointReachable(endpoints []protocol.EndpointInfo, endpointID string) (string, bool) {
-	name := endpointID
-	if name == "" {
-		name = "another host"
-	}
+func endpointName(endpoints []protocol.EndpointInfo, endpointID string) string {
 	for _, endpoint := range endpoints {
-		if endpoint.ID != endpointID {
-			continue
+		if endpoint.ID == endpointID && strings.TrimSpace(endpoint.Name) != "" {
+			return strings.TrimSpace(endpoint.Name)
 		}
-		if named := strings.TrimSpace(endpoint.Name); named != "" {
-			name = named
-		}
-		return name, endpoint.Status == "connected"
 	}
-	return name, false
+	if endpointID != "" {
+		return endpointID
+	}
+	return "another host"
 }
 
 func (d *Daemon) endpointInfos() []protocol.EndpointInfo {

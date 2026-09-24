@@ -41,6 +41,27 @@ type BinaryMismatchError struct {
 
 func (e *BinaryMismatchError) Error() string { return e.Message }
 
+const StatusUnsupported = "unsupported"
+
+const UnsupportedReason = "Remote endpoints are off in this release. attn keeps this endpoint saved and never connects to it, installs on it or restarts it; sessions on that host keep running there."
+
+var ErrOutpostsOff = errors.New("remote endpoints are off in this release")
+
+type UnsupportedEndpointError struct {
+	EndpointID string
+	Name       string
+}
+
+func (e *UnsupportedEndpointError) Error() string {
+	who := strings.TrimSpace(e.Name)
+	if who == "" {
+		who = e.EndpointID
+	}
+	return fmt.Sprintf("refused for endpoint %s: %s", who, UnsupportedReason)
+}
+
+func (e *UnsupportedEndpointError) Unwrap() error { return ErrOutpostsOff }
+
 const (
 	settingProjectsDirectory = "projects_directory"
 	settingPTYBackendMode    = "pty_backend_mode"
@@ -148,11 +169,12 @@ func NewManager(
 
 func infoFromRecord(record store.EndpointRecord) protocol.EndpointInfo {
 	info := protocol.EndpointInfo{
-		ID:        record.ID,
-		Name:      record.Name,
-		SshTarget: record.SSHTarget,
-		Status:    "disconnected",
-		Enabled:   protocol.Ptr(record.Enabled),
+		ID:            record.ID,
+		Name:          record.Name,
+		SshTarget:     record.SSHTarget,
+		Status:        StatusUnsupported,
+		StatusMessage: protocol.Ptr(UnsupportedReason),
+		Enabled:       protocol.Ptr(record.Enabled),
 	}
 	if strings.TrimSpace(record.Instance) != "" {
 		info.Instance = protocol.Ptr(record.Instance)
@@ -191,7 +213,7 @@ func (m *Manager) Stop() {
 		if len(runtime.sessions) > 0 {
 			emptied = append(emptied, id)
 		}
-		if target := isolatedRemoteShutdownTarget(runtime.record); target.Target != "" {
+		if target := isolatedRemoteShutdownTarget(runtime); target.Target != "" {
 			key := target.Target + "|" + target.Instance
 			if _, exists := seenTargets[key]; !exists {
 				seenTargets[key] = struct{}{}
@@ -242,36 +264,8 @@ func (m *Manager) List() []protocol.EndpointInfo {
 	return out
 }
 
-func (m *Manager) AddEndpoint(name, sshTarget, instance string) (*store.EndpointRecord, error) {
-	name = strings.TrimSpace(name)
-	sshTarget = strings.TrimSpace(sshTarget)
-	instance = strings.TrimSpace(instance)
-	if name == "" {
-		return nil, fmt.Errorf("endpoint name is required")
-	}
-	if sshTarget == "" {
-		return nil, fmt.Errorf("ssh target is required")
-	}
-
-	record, err := m.store.AddEndpoint(name, sshTarget, instance)
-	if err != nil {
-		return nil, err
-	}
-
-	m.mu.Lock()
-	m.runtimes[record.ID] = &endpointRuntime{
-		record:     *record,
-		info:       infoFromRecord(*record),
-		sessions:   make(map[string]protocol.Session),
-		workspaces: make(map[string]protocol.Workspace),
-	}
-	if m.started && record.Enabled {
-		m.startRuntimeLocked(record.ID)
-	}
-	m.mu.Unlock()
-
-	m.publishStatus(record.ID)
-	return record, nil
+func (m *Manager) AddEndpoint(name string) error {
+	return &UnsupportedEndpointError{Name: strings.TrimSpace(name)}
 }
 
 func (m *Manager) BootstrapEndpoint(id string) error {
@@ -280,6 +274,9 @@ func (m *Manager) BootstrapEndpoint(id string) error {
 	rt, ok := m.runtimes[id]
 	if !ok {
 		return fmt.Errorf("endpoint %s not found", id)
+	}
+	if err := rt.unsupported(); err != nil {
+		return err
 	}
 	rt.pendingBootstrap = true
 	m.stopRuntimeLocked(rt)
@@ -312,6 +309,7 @@ func (m *Manager) UpdateEndpoint(id string, update store.EndpointUpdate) (*store
 	runtime, ok := m.runtimes[id]
 	if !ok {
 		runtime = &endpointRuntime{
+			info:       infoFromRecord(*record),
 			sessions:   make(map[string]protocol.Session),
 			workspaces: make(map[string]protocol.Workspace),
 		}
@@ -352,7 +350,7 @@ func (m *Manager) RemoveEndpoint(id string) error {
 	m.mu.Lock()
 	if runtime, ok := m.runtimes[id]; ok {
 		changed = len(runtime.sessions) > 0
-		shutdownTarget = isolatedRemoteShutdownTarget(runtime.record)
+		shutdownTarget = isolatedRemoteShutdownTarget(runtime)
 		m.stopRuntimeLocked(runtime)
 		delete(m.runtimes, id)
 	}
@@ -371,10 +369,11 @@ type isolatedShutdownTarget struct {
 	Instance string
 }
 
-func isolatedRemoteShutdownTarget(record store.EndpointRecord) isolatedShutdownTarget {
-	if !remoteHarnessCleanupEnabled() {
+func isolatedRemoteShutdownTarget(runtime *endpointRuntime) isolatedShutdownTarget {
+	if !remoteHarnessCleanupEnabled() || runtime.unsupported() != nil {
 		return isolatedShutdownTarget{}
 	}
+	record := runtime.record
 	target := strings.TrimSpace(record.SSHTarget)
 	if target == "" {
 		return isolatedShutdownTarget{}
@@ -401,7 +400,7 @@ func (m *Manager) stopIsolatedRemoteDaemons(targets []isolatedShutdownTarget) {
 
 func (m *Manager) startRuntimeLocked(id string) {
 	runtime, ok := m.runtimes[id]
-	if !ok || !runtime.record.Enabled || m.ctx == nil {
+	if !ok || !runtime.record.Enabled || m.ctx == nil || runtime.unsupported() != nil {
 		return
 	}
 	if runtime.cancel != nil {
@@ -1002,17 +1001,14 @@ func (m *Manager) ReservePendingSessionRoute(endpointID, sessionID string) {
 	}
 }
 
-func (m *Manager) HasEndpoint(endpointID string) bool {
+func (m *Manager) EndpointRefusal(endpointID string) error {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	_, ok := m.runtimes[endpointID]
-	return ok
-}
-
-func (m *Manager) HasConfiguredEndpoints() bool {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.runtimes) > 0
+	runtime, ok := m.runtimes[endpointID]
+	if !ok {
+		return fmt.Errorf("endpoint not found: %s", endpointID)
+	}
+	return refusalLocked(endpointID, runtime)
 }
 
 var parkedStatuses = map[string]bool{
@@ -1040,7 +1036,17 @@ func (e *ParkedEndpointError) Error() string {
 	return fmt.Sprintf("endpoint %s is parked: %s", who, detail)
 }
 
-func parkedErrorLocked(endpointID string, runtime *endpointRuntime) error {
+func (runtime *endpointRuntime) unsupported() error {
+	if runtime.info.Status != StatusUnsupported {
+		return nil
+	}
+	return &UnsupportedEndpointError{EndpointID: runtime.record.ID, Name: runtime.record.Name}
+}
+
+func refusalLocked(endpointID string, runtime *endpointRuntime) error {
+	if err := runtime.unsupported(); err != nil {
+		return err
+	}
 	if !parkedStatuses[runtime.info.Status] {
 		return nil
 	}
@@ -1067,9 +1073,9 @@ func (m *Manager) ForwardEndpointCommand(ctx context.Context, endpointID string,
 		m.mu.RUnlock()
 		return fmt.Errorf("endpoint not found: %s", endpointID)
 	}
-	if parked := parkedErrorLocked(endpointID, runtime); parked != nil {
+	if refused := refusalLocked(endpointID, runtime); refused != nil {
 		m.mu.RUnlock()
-		return parked
+		return refused
 	}
 	conn := runtime.conn
 	m.mu.RUnlock()
@@ -1811,9 +1817,9 @@ func (m *Manager) SetEndpointRemoteWeb(ctx context.Context, endpointID string, e
 		m.mu.Unlock()
 		return fmt.Errorf("endpoint not found: %s", endpointID)
 	}
-	if parked := parkedErrorLocked(endpointID, runtime); parked != nil {
+	if refused := refusalLocked(endpointID, runtime); refused != nil {
 		m.mu.Unlock()
-		return parked
+		return refused
 	}
 	if runtime.conn == nil {
 		m.mu.Unlock()

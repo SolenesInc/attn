@@ -3,7 +3,7 @@ import { useCallback, useEffect, useImperativeHandle, useMemo, useState, type Fo
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useGitHubPollingOffReason } from '../contexts/GitHubPollingContext';
 import { useAutoModePolicy } from '../hooks/useAutoModePolicy';
-import { DaemonEndpoint, DaemonSettings } from '../hooks/useDaemonSocket';
+import { DaemonSettings } from '../hooks/useDaemonSocket';
 import { useDelegationPreferences } from '../hooks/useDelegationPreferences';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { normalizeSessionAgent, type SessionAgent } from '../types/sessionAgent';
@@ -40,7 +40,7 @@ import {
   SettingsSectionID,
   formatByteCount,
 } from './settingsModalShared';
-import { useEndpointPanel } from './useEndpointPanel';
+import { usePanelAction } from './settingsPanelAction';
 import { usePluginPanel } from './usePluginPanel';
 import { useSavedFlash } from './useSavedFlash';
 
@@ -57,10 +57,7 @@ export function useSettingsModalState({
   endpoints,
   plugins,
   pluginIssues,
-  onAddEndpoint,
-  onUpdateEndpoint,
   onRemoveEndpoint,
-  onSetEndpointRemoteWeb,
   onListPlugins,
   onInstallPlugin,
   onInstallBundledPlugin,
@@ -151,7 +148,7 @@ export function useSettingsModalState({
     sendDelegationPreferencesSave,
   );
   const [settingsSearch, setSettingsSearch] = useState('');
-  const endpointPanel = useEndpointPanel();
+  const endpointPanel = usePanelAction();
   const pluginPanel = usePluginPanel(onListPlugins);
   const agentAvailability = useMemo(() => getAgentAvailability(settings), [settings]);
   const hasAvailableAgents = useMemo(() => hasAnyAvailableAgents(agentAvailability), [agentAvailability]);
@@ -372,13 +369,13 @@ export function useSettingsModalState({
     trim: true,
   });
 
-  const { reopen: reopenEndpointPanel } = endpointPanel;
+  const { clearError: clearEndpointError } = endpointPanel;
   const { setSourcePath: setPluginSourcePath } = pluginPanel;
   useEffect(() => {
     if (!isOpen) return;
-    reopenEndpointPanel();
+    clearEndpointError();
     setPluginSourcePath('');
-  }, [isOpen, reopenEndpointPanel, setPluginSourcePath]);
+  }, [isOpen, clearEndpointError, setPluginSourcePath]);
 
   useEscapeStack(closeSettings, isOpen);
 
@@ -473,76 +470,13 @@ export function useSettingsModalState({
     onSetSetting('worktree_sweep_enabled', worktreeSweepEnabled ? 'false' : 'true');
   }, [worktreeSweepEnabled, onSetSetting]);
 
-  const handleAddEndpoint = useCallback(async () => {
-    const name = endpointPanel.draft.name.trim();
-    const sshTarget = endpointPanel.draft.target.trim();
-    const instance = endpointPanel.draft.instance.trim();
-    if (!name || !sshTarget) {
-      endpointPanel.fail('Endpoint name and SSH target are required.');
-      return;
-    }
-    await endpointPanel.run('new', 'Failed to add endpoint', async () => {
-      await onAddEndpoint(name, sshTarget, instance);
-      endpointPanel.clearDraft();
-    });
-  }, [endpointPanel, onAddEndpoint]);
-
-  const handleSaveEndpoint = useCallback(
-    async (endpointId: string) => {
-      const editing = endpointPanel.editing;
-      if (!editing) return;
-      const name = editing.name.trim();
-      const sshTarget = editing.target.trim();
-      const instance = editing.instance.trim();
-      if (!name || !sshTarget) {
-        endpointPanel.fail('Endpoint name and SSH target are required.');
-        return;
-      }
-      await endpointPanel.run(endpointId, 'Failed to update endpoint', async () => {
-        await onUpdateEndpoint(endpointId, { name, ssh_target: sshTarget, instance });
-        endpointPanel.cancelEdit();
-      });
-    },
-    [endpointPanel, onUpdateEndpoint],
-  );
-
-  const handleToggleEndpoint = useCallback(
-    async (endpoint: DaemonEndpoint) => {
-      await endpointPanel.run(endpoint.id, 'Failed to update endpoint', () =>
-        onUpdateEndpoint(endpoint.id, { enabled: endpoint.enabled === false }).then(() => undefined),
-      );
-    },
-    [endpointPanel, onUpdateEndpoint],
-  );
-
-  const handleRebootstrapEndpoint = useCallback(
-    async (endpoint: DaemonEndpoint) => {
-      if (endpoint.enabled === false) return;
-      await endpointPanel.run(endpoint.id, 'Failed to re-bootstrap endpoint', async () => {
-        await onUpdateEndpoint(endpoint.id, { enabled: false });
-        await onUpdateEndpoint(endpoint.id, { enabled: true });
-      });
-    },
-    [endpointPanel, onUpdateEndpoint],
-  );
-
   const handleRemoveEndpoint = useCallback(
     async (endpointId: string) => {
       await endpointPanel.run(endpointId, 'Failed to remove endpoint', async () => {
         await onRemoveEndpoint(endpointId);
-        if (endpointPanel.editing?.id === endpointId) endpointPanel.cancelEdit();
       });
     },
     [endpointPanel, onRemoveEndpoint],
-  );
-
-  const handleSetEndpointRemoteWeb = useCallback(
-    async (endpointId: string, enabled: boolean) => {
-      await endpointPanel.run(endpointId, 'Failed to update remote web access', () =>
-        onSetEndpointRemoteWeb(endpointId, enabled).then(() => undefined),
-      );
-    },
-    [endpointPanel, onSetEndpointRemoteWeb],
   );
 
   const { refresh: refreshPlugins } = pluginPanel;
@@ -625,7 +559,6 @@ export function useSettingsModalState({
     [onSetPluginPriority, pluginPanel, refreshPlugins, savedFlash],
   );
 
-  const connectedEndpointCount = endpoints.filter((endpoint) => endpoint.status === 'connected').length;
   const activePluginCount = plugins.filter((plugin) => plugin.connected || plugin.running).length;
   const mutedItemCount = mutedRepos.length + mutedAuthors.length;
   const pluginProblemCount =
@@ -816,7 +749,6 @@ export function useSettingsModalState({
     tailscaleEnabled,
     tailscaleStatus,
     endpoints,
-    connectedEndpointCount,
     pluginProblemCount,
     activePluginCount,
     plugins,
@@ -857,11 +789,6 @@ export function useSettingsModalState({
     githubPollingOffReason,
     githubHosts,
     endpointPanel,
-    handleAddEndpoint,
-    handleSaveEndpoint,
-    handleToggleEndpoint,
-    handleRebootstrapEndpoint,
-    handleSetEndpointRemoteWeb,
     handleRemoveEndpoint,
     pluginPanel,
     setPluginSourcePath,

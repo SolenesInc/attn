@@ -11,6 +11,7 @@ import (
 
 	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
+	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -230,18 +231,16 @@ func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
 	}
 }
 
-func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
+func TestReopenVerdictRefusesEveryRemoteSessionWithTheReleaseReason(t *testing.T) {
 	endpoints := []protocol.EndpointInfo{
-		{ID: "outpost-7", Name: "big-linux", Status: "connected"},
-		{ID: "outpost-8", Name: "sleepy-linux", Status: "disconnected"},
+		{ID: "outpost-7", Name: "big-linux", Status: hub.StatusUnsupported},
 	}
 	cases := map[string]struct {
 		endpointID string
-		wantTail   string
+		wantHost   string
 	}{
-		"reachable":   {endpointID: "outpost-7", wantTail: "reopen it there"},
-		"unreachable": {endpointID: "outpost-8", wantTail: "retry when it is"},
-		"forgotten":   {endpointID: "outpost-nobody-configured", wantTail: "retry when it is"},
+		"saved":   {endpointID: "outpost-7", wantHost: "big-linux"},
+		"removed": {endpointID: "outpost-nobody-configured", wantHost: "outpost-nobody-configured"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -253,13 +252,11 @@ func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
 				t.Fatal("a remote session went on being decided on this daemon")
 			}
 			wantReopenVerdict(t, verdict, false, nil)
-			if !strings.Contains(verdict.Reason, tc.endpointID) &&
-				!strings.Contains(verdict.Reason, "big-linux") &&
-				!strings.Contains(verdict.Reason, "sleepy-linux") {
-				t.Errorf("reason = %q, want the host named", verdict.Reason)
+			if !strings.Contains(verdict.Reason, tc.wantHost) || !strings.Contains(verdict.Reason, hub.UnsupportedReason) {
+				t.Errorf("reason = %q, want %s named with the release reason", verdict.Reason, tc.wantHost)
 			}
-			if !strings.Contains(verdict.Reason, tc.wantTail) {
-				t.Errorf("reason = %q, want it to end with %q", verdict.Reason, tc.wantTail)
+			if strings.Contains(verdict.Reason, "retry") {
+				t.Errorf("reason = %q offers a retry that cannot succeed", verdict.Reason)
 			}
 		})
 	}

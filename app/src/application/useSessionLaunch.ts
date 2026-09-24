@@ -193,7 +193,7 @@ export function useSessionLaunch({
           return;
         }
         if (endpoint.status !== 'connected') {
-          showError(`Endpoint ${endpoint.name} is ${endpoint.status}.`);
+          showError(endpoint.status_message || `Endpoint ${endpoint.name} is ${endpoint.status}.`);
           return;
         }
         if (agent !== TERMINAL_AGENT && !endpoint.capabilities?.agents_available.includes(agent)) {
