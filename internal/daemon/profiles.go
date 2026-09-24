@@ -305,6 +305,11 @@ func (d *Daemon) handleProfileDelete(client *wsClient, msg *protocol.ProfileDele
 			if len(deletion.MovedAutomationIDs) > 0 {
 				d.broadcastAutomationsChanged(deletion.MovedAutomationIDs...)
 			}
+			if demoted := deletion.DemotedChiefID; demoted != "" {
+				d.publishFact(FactSessionChiefRoleChanged, demoted, nil)
+				d.retargetChiefTicketDelivery(demoted, "")
+				go d.reloadSessionAgent(demoted)
+			}
 		}}, nil
 	})
 }

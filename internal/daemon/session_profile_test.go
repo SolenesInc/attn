@@ -386,20 +386,15 @@ func setTestChief(d *Daemon, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if d.store.Get(sessionID) != nil {
-		if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
-			if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
-				return err
-			}
-		}
-		_, _, err := d.store.SetProfileChief(sessionID)
-		return err
+	if d.store.Get(sessionID) == nil {
+		now := string(protocol.TimestampNow())
+		d.store.Add(&protocol.Session{ID: sessionID, Label: sessionID, State: protocol.SessionStateIdle, StateSince: now, StateUpdatedAt: now, LastSeen: now})
 	}
-	if current := d.chiefOfProfile(profile.ID); current != "" {
-		if _, err := d.store.ClearProfileChief(current); err != nil {
+	if profileID, _ := d.store.SessionProfileID(sessionID); profileID == "" {
+		if err := d.store.AssignSessionProfile(sessionID, profile.ID); err != nil {
 			return err
 		}
 	}
-	_, err = d.store.ClaimProfileChief(profile.ID, sessionID)
+	_, _, err = d.store.SetProfileChief(sessionID)
 	return err
 }

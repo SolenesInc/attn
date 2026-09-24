@@ -31,8 +31,8 @@ func TestTicketIdentityRoundTripsForChiefSession(t *testing.T) {
 	}
 
 	observers := d.ticketObserversForSession("chief")
-	if len(observers) != 2 {
-		t.Fatalf("chief observers = %+v, want its session identity plus the durable role", observers)
+	if len(observers) != 3 {
+		t.Fatalf("chief observers = %+v, want its session identity plus the legacy and profile chief identities", observers)
 	}
 	for _, obs := range observers {
 		if got := d.ticketSessionForIdentity(obs.ID); got != "chief" {

@@ -20,6 +20,7 @@ type ProfileDeletion struct {
 	MovedSessionIDs    []string
 	MovedAutomationIDs []string
 	MovedCrewIDs       []string
+	DemotedChiefID     string
 }
 
 type DesktopDeletion struct {
@@ -523,10 +524,12 @@ func (s *Store) DeleteProfile(id string, expectedRevision int64, destinationID s
 		if err := deleteProfileDesktops(tx, id); err != nil {
 			return err
 		}
+		result.DemotedChiefID = profile.ChiefSessionID
 		profile.CurrentDesktopID = ""
+		profile.ChiefSessionID = ""
 		profile.DeletedAt = now
 		profile.Revision++
-		if _, err := tx.Exec(`UPDATE profiles SET current_desktop_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id); err != nil {
+		if _, err := tx.Exec(`UPDATE profiles SET current_desktop_id = '', chief_session_id = '', deleted_at = ?, revision = ? WHERE id = ?`, now, profile.Revision, id); err != nil {
 			return err
 		}
 		result.Deleted = profile

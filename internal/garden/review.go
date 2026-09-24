@@ -146,7 +146,6 @@ type ReviewObservation struct {
 	DirectoryState    ReviewDirectoryState
 	ResumeAvailable   bool
 	HandoverAvailable bool
-	ChiefAvailable    bool
 	ReviewAgainAt     time.Time
 }
 
@@ -159,7 +158,6 @@ type ReviewCandidate struct {
 	SubtreeActivityAt time.Time
 	ResumeAvailable   bool
 	HandoverAvailable bool
-	ChiefAvailable    bool
 	Plot              bool
 	SubtreeIDs        []string
 }
@@ -202,7 +200,6 @@ func ReviewCandidates(observations []ReviewObservation, window time.Duration, no
 			LifecycleExact:    exact,
 			ResumeAvailable:   observation.ResumeAvailable,
 			HandoverAvailable: observation.HandoverAvailable,
-			ChiefAvailable:    observation.ChiefAvailable,
 			Plot:              isPlot,
 			SubtreeIDs:        subtree,
 		}

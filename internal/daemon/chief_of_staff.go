@@ -12,35 +12,31 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) chiefSessionIDs() map[string]bool {
-	chiefs := map[string]bool{}
+func (d *Daemon) profileChiefs() map[string]string {
 	if d.store == nil {
-		return chiefs
+		return map[string]string{}
 	}
 	byProfile, err := d.store.ProfileChiefs()
 	if err != nil {
 		d.logf("read profile chiefs: %v", err)
 	}
-	for _, sessionID := range byProfile {
-		chiefs[sessionID] = true
+	return byProfile
+}
+
+func (d *Daemon) chiefOfProfile(profileID string) string {
+	if profileID == "" {
+		return ""
 	}
-	return chiefs
+	return d.profileChiefs()[profileID]
 }
 
 func (d *Daemon) isChiefOfStaffSession(sessionID string) bool {
 	sessionID = strings.TrimSpace(sessionID)
-	return sessionID != "" && d.chiefSessionIDs()[sessionID]
-}
-
-func (d *Daemon) chiefOfProfile(profileID string) string {
-	if d.store == nil || profileID == "" {
-		return ""
+	if sessionID == "" || d.store == nil {
+		return false
 	}
-	byProfile, err := d.store.ProfileChiefs()
-	if err != nil {
-		d.logf("read profile chiefs: %v", err)
-	}
-	return byProfile[profileID]
+	profileID, err := d.store.SessionProfileID(sessionID)
+	return err == nil && d.chiefOfProfile(profileID) == sessionID
 }
 
 func (d *Daemon) chiefForCaller(callerSessionID string) string {
@@ -69,11 +65,11 @@ func (d *Daemon) defaultProfileChief() string {
 	return profile.ChiefSessionID
 }
 
-func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefs map[string]bool) {
+func (d *Daemon) decorateChiefOfStaff(session *protocol.Session, chiefByProfile map[string]string) {
 	if session == nil {
 		return
 	}
-	if chiefs[session.ID] {
+	if session.ProfileID != "" && chiefByProfile[session.ProfileID] == session.ID {
 		session.ChiefOfStaff = protocol.Ptr(true)
 		return
 	}
@@ -124,11 +120,10 @@ func (d *Daemon) clearChiefOfStaffIfSession(sessionID string) {
 	}
 }
 
-func (d *Daemon) nudgeChiefOfStaff(attemptKey, prompt string) bool {
+func (d *Daemon) nudgeChiefOfStaff(sessionID, attemptKey, prompt string) bool {
 	if d.store == nil {
 		return false
 	}
-	sessionID := d.chiefForCaller("")
 	if sessionID == "" || d.store.Get(sessionID) == nil {
 		return false
 	}

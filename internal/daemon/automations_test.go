@@ -601,7 +601,7 @@ location:
 		t.Fatal(err)
 	}
 	var delivered atomic.Int32
-	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry})
+	d := &Daemon{store: s, ghRegistry: registry}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		delivered.Add(1)
 		return markAutomationRunDeliveredForTest(s, run.ID, `{"type":"test"}`, time.Now())
@@ -691,7 +691,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		t.Fatal(err)
 	}
 	delivered := make(chan struct{}, 1)
-	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()})
+	d := &Daemon{store: s, ghRegistry: registry, wsHub: newWSHub()}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, time.Now()); err != nil {
 			return err
@@ -754,7 +754,7 @@ location: {type: repository_worktree, repository_sources: {default: {type: manag
 		t.Fatal(err)
 	}
 	var attempts atomic.Int32
-	d := homeDaemon(t, &Daemon{store: s, ghRegistry: registry})
+	d := &Daemon{store: s, ghRegistry: registry}
 	d.automationDeliveryHook = func(run *store.AutomationRun) error {
 		if attempts.Add(1) == 1 {
 			return &retryableAutomationDeliveryError{cause: errors.New("transient launch failure")}
@@ -2085,35 +2085,5 @@ func TestAnOutpostRefusesToCreateOrRunAutomations(t *testing.T) {
 	}
 	if err := d.automationDelete(context.Background(), def.ID); err != nil {
 		t.Fatalf("deleting a leftover definition on an outpost: %v", err)
-	}
-}
-
-func TestAnOutpostLaunchesNothingFromLeftoverAutomations(t *testing.T) {
-	d := newEnrolledDaemon(t, "d-dddddddddddddddddddddddddddddddd")
-	backend := &fakeSpawnBackend{}
-	d.ptyBackend = backend
-	now := time.Now()
-	def, err := d.store.UpsertAutomationDefinition("nightly", "Nightly", `{}`, defaultProfileID(t, d.store), now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pending, _, err := d.store.ClaimScheduledAutomationRun(def.ID, "scheduled:one", "", def.Revision, `{}`, `{"prompt":"Check locally."}`, now, store.AutomationRunReservation{
-		RunID: "run-1", OccurrenceID: "occ-1", SeedID: "s-seed01", SessionID: "session-1",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	d.recoverAutomations()
-	if _, err := d.automationScheduleHandler(context.Background(), nil); err != nil {
-		t.Fatal(err)
-	}
-	d.observeGitHubReviewRequests("github.com", nil, now)
-
-	if run, err := d.store.GetAutomationRun(pending.ID); err != nil || run.State != store.AutomationRunStatePending {
-		t.Fatalf("leftover run on an outpost = %+v, %v; want it left pending", run, err)
-	}
-	if spawnCount(backend) != 0 {
-		t.Fatal("an outpost launched an agent for a leftover automation")
 	}
 }

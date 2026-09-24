@@ -233,7 +233,7 @@ func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) 
 		if err := d.writeSessionPTY(chiefID, []byte("half written"), "user"); err != nil {
 			t.Fatalf("user input: %v", err)
 		}
-		if d.nudgeChiefOfStaff("inbox-1", prompt) {
+		if d.nudgeChiefOfStaff(chiefID, "inbox-1", prompt) {
 			t.Fatal("the nudge claimed a composer the user had just used")
 		}
 		if chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {

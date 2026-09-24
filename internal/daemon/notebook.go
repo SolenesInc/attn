@@ -334,7 +334,7 @@ func (d *Daemon) sendNotebookToChiefWSResult(client *wsClient, requestID, source
 			d.broadcastNotebookChanged(originUI, relPath)
 			result = &protocol.NotebookSendToChiefResult{
 				Path:   relPath,
-				Nudged: d.nudgeChiefOfStaff(requestID, chiefInboxNudgePrompt(store.Root())),
+				Nudged: d.nudgeChiefOfStaff(d.chiefForClient(client), requestID, chiefInboxNudgePrompt(store.Root())),
 			}
 		}
 	}

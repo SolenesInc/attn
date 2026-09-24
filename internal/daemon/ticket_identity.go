@@ -11,14 +11,21 @@ func (d *Daemon) ticketDurableIdentitiesForSession(sessionID string) []string {
 		identities = append(identities, store.TicketMemberIdentity(member))
 	}
 	if d.isChiefOfStaffSession(sessionID) {
-		identities = append(identities, store.TicketRoleIdentity(store.TicketRoleChiefOfStaff))
+		if d.defaultProfileChief() == sessionID {
+			identities = append(identities, store.TicketRoleIdentity(store.TicketRoleChiefOfStaff))
+		}
+		profileID, _ := d.store.SessionProfileID(sessionID)
+		identities = append(identities, store.TicketChiefIdentity(profileID))
 	}
 	return identities
 }
 
 func (d *Daemon) ticketSessionForIdentity(identity string) string {
-	if identity == store.TicketRoleIdentity(store.TicketRoleChiefOfStaff) {
-		return d.defaultProfileChief()
+	if profileID, legacy, ok := store.ParseTicketChiefIdentity(identity); ok {
+		if legacy {
+			return d.defaultProfileChief()
+		}
+		return d.chiefOfProfile(profileID)
 	}
 	if memberID, ok := store.ParseTicketMemberIdentity(identity); ok {
 		member, _, err := d.crewMember(memberID)

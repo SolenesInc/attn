@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GardenFrame, type FrameRect } from './GardenFrame';
 import { useGardenWalk } from '../store/gardenWalk';
-import type { Seed } from '../hooks/useDaemonSocket';
+import type { Seed, SeedReviewOverview } from '../hooks/useDaemonSocket';
 import {
   GARDEN_FRAME_MODE_STORAGE_KEY,
   GARDEN_FULLSCREEN_VIEW_STORAGE_KEY,
@@ -251,6 +251,63 @@ describe('GardenFrame', () => {
         's-quiet1', 'park', undefined, false, 'waiting for product input',
       ));
       expect(noteSeed).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('review', () => {
+    const reviewed = seed({ id: 's-review1', title: 'quiet work', status: 'growing' });
+    const overview: SeedReviewOverview = {
+      candidateCount: 1,
+      review: {
+        run: {
+          id: 'r-review1',
+          candidate_ids: [reviewed.id],
+          recipe: { agent: 'codex', model: 'gpt-5.6-luna', effort: 'xhigh' },
+          status: 'running',
+          captured_at: '2026-08-30T09:00:00Z',
+        },
+        items: [{
+          id: 'r-review1.s-review1', run_id: 'r-review1', seed_id: reviewed.id, seed_rev: 1,
+          evidence_version: 'evidence-1', title: reviewed.title, body: '', evidence: [],
+          actions: ['send_to_chief', 'park'], status: 'ready', resolution: 'unresolved',
+        }],
+      },
+    };
+
+    function openReviewWith(chiefAvailable: boolean) {
+      render(
+        <GardenFrame
+          {...props('full')}
+          seeds={[reviewed]}
+          seedsTotal={1}
+          loaded
+          reviewOverview={overview}
+          showReview={vi.fn().mockResolvedValue(overview)}
+          startReview={vi.fn().mockResolvedValue(overview)}
+          retryReviewItem={vi.fn()}
+          keepReviewItem={vi.fn()}
+          draftReviewHandover={vi.fn()}
+          fetchSeedDocument={vi.fn().mockImplementation(() => new Promise(() => {}))}
+          moveSeed={vi.fn()}
+          noteSeed={vi.fn()}
+          onResumeSeed={vi.fn()}
+          onHandoverSeed={vi.fn()}
+          onSendSeedToChief={vi.fn()}
+          chiefAvailable={chiefAvailable}
+        />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Continue review' }));
+    }
+
+    it('offers Send to Chief when the selected profile has a chief', async () => {
+      openReviewWith(true);
+      expect(await screen.findByRole('button', { name: 'Send to Chief' })).toBeInTheDocument();
+    });
+
+    it('hides Send to Chief when the selected profile has no chief', async () => {
+      openReviewWith(false);
+      expect(await screen.findByRole('button', { name: 'Park' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Send to Chief' })).not.toBeInTheDocument();
     });
   });
 });

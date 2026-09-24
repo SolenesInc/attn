@@ -149,7 +149,7 @@ func (d *Daemon) agentCloseRule(caller, target *protocol.Session) (protocol.Agen
 	if caller.ID == target.ID {
 		return protocol.AgentCloseRuleSelf, nil
 	}
-	if d.isChiefOfStaffSession(caller.ID) && (target.ProfileID == "" || caller.ProfileID == target.ProfileID) {
+	if d.chiefOfProfile(target.ProfileID) == caller.ID || (target.ProfileID == "" && d.isChiefOfStaffSession(caller.ID)) {
 		return protocol.AgentCloseRuleChiefOfStaff, nil
 	}
 	dispatcher := ""

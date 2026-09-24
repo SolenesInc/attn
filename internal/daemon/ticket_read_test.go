@@ -223,8 +223,8 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	ticketID := bindLegacyTicketTitled(t, d, agentSession, chiefSessionID, "Migrate the store to X")
 
 	observers := d.ticketObserversForSession(chiefSessionID)
-	if len(observers) != 2 {
-		t.Fatalf("chief observers = %+v, want session and role identities", observers)
+	if len(observers) != 3 {
+		t.Fatalf("chief observers = %+v, want session, legacy chief and profile chief identities", observers)
 	}
 	subscribed, err := d.store.IsTicketSubscribed(chiefSessionID, ticketID)
 	if err != nil || subscribed {

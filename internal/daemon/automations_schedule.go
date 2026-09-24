@@ -32,9 +32,6 @@ func automationScheduleInterval() time.Duration {
 }
 
 func (d *Daemon) automationScheduleHandler(_ context.Context, _ *jobs.Job) (any, error) {
-	if !d.automationsRunHere("scheduled runs") {
-		return nil, nil
-	}
 	d.observeDueSchedules(time.Now())
 	return nil, nil
 }

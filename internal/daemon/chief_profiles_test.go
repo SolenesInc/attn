@@ -2,6 +2,7 @@ package daemon
 
 import (
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -82,8 +83,64 @@ func TestChiefLookupsFollowTheirCaller(t *testing.T) {
 	if got := d.chiefForCaller(""); got != "home-chief" {
 		t.Fatalf("with no caller the most recently used profile's chief is %q, want home-chief", got)
 	}
-	if got := d.ticketSessionForIdentity(store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)); got != "home-chief" {
-		t.Fatalf("a legacy chief ticket reaches %q, want the Default profile's chief home-chief", got)
+}
+
+func TestAChiefsTicketIdentityCarriesItsProfile(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	t.Cleanup(func() { _ = d.store.Close() })
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	spawnChiefCandidate(t, d, client, "home-chief", home)
+	spawnChiefCandidate(t, d, client, "work-chief", work.ID)
+	legacy := store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)
+
+	if got := d.ticketDurableIdentitiesForSession("work-chief"); !slices.Equal(got, []string{store.TicketChiefIdentity(work.ID)}) {
+		t.Fatalf("Work's chief observes tickets as %v, want only Work's chief identity", got)
+	}
+	if got := d.ticketDurableIdentitiesForSession("home-chief"); !slices.Equal(got, []string{legacy, store.TicketChiefIdentity(home)}) {
+		t.Fatalf("Default's chief observes tickets as %v, want the legacy identity and its profile's", got)
+	}
+	for identity, want := range map[string]string{
+		store.TicketChiefIdentity(work.ID): "work-chief",
+		store.TicketChiefIdentity(home):    "home-chief",
+		legacy:                             "home-chief",
+	} {
+		if got := d.ticketSessionForIdentity(identity); got != want {
+			t.Fatalf("ticket identity %s reaches %q, want %q", identity, got, want)
+		}
+	}
+}
+
+func TestDeletingAProfileDemotesItsChiefAndKeepsTheDestinations(t *testing.T) {
+	d := newEnrolledDaemon(t, "")
+	d.ptyBackend = &fakeSpawnBackend{}
+	client := newWorkspaceProtocolTestClient()
+	home := defaultProfileID(t, d.store)
+	work := createTestProfile(t, d.store, "Work")
+	spawnChiefCandidate(t, d, client, "home-chief", home)
+	spawnChiefCandidate(t, d, client, "work-chief", work.ID)
+	current, err := d.store.GetProfile(work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	d.handleProfileDelete(client, &protocol.ProfileDeleteMessage{
+		Cmd: protocol.CmdProfileDelete, RequestID: "delete-work", ProfileID: work.ID, ExpectedRevision: int(current.Revision), DestinationProfileID: home,
+	})
+
+	if profileID, _ := d.store.SessionProfileID("work-chief"); profileID != home {
+		t.Fatalf("Work's chief moved to %q, want %s", profileID, home)
+	}
+	if d.chiefOfProfile(home) != "home-chief" {
+		t.Fatalf("the destination's chief is %q, want home-chief kept", d.chiefOfProfile(home))
+	}
+	if d.isChiefOfStaffSession("work-chief") {
+		t.Fatal("the deleted profile's chief kept the role in the destination")
+	}
+	if decorated := d.sessionForBroadcast(d.store.Get("work-chief")); decorated.ChiefOfStaff != nil {
+		t.Fatalf("the deleted profile's chief broadcasts chief_of_staff = %v", *decorated.ChiefOfStaff)
 	}
 }
 

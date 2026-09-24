@@ -51,6 +51,38 @@ func TestEachProfileHasItsOwnChief(t *testing.T) {
 	wantCode(t, err, profiles.CodeNotFound)
 }
 
+func TestDeletingAProfileDemotesItsChiefInTheSameTransaction(t *testing.T) {
+	s, _ := openProfileStore(t)
+	home, _ := mustCreateProfile(t, s, "Home")
+	work, _ := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "home-chief", home.ID)
+	addProfileSession(t, s, "work-chief", work.ID)
+	for _, id := range []string{"home-chief", "work-chief"} {
+		if _, _, err := s.SetProfileChief(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	current, err := s.GetProfile(work.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deletion, err := s.DeleteProfile(work.ID, current.Revision, home.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deletion.DemotedChiefID != "work-chief" || deletion.Deleted.ChiefSessionID != "" {
+		t.Fatalf("deletion demoted %q and left the deleted profile's chief %q; want work-chief demoted and cleared", deletion.DemotedChiefID, deletion.Deleted.ChiefSessionID)
+	}
+	var stored string
+	if err := s.db.QueryRow(`SELECT chief_session_id FROM profiles WHERE id = ?`, work.ID).Scan(&stored); err != nil || stored != "" {
+		t.Fatalf("deleted profile row keeps chief %q, %v", stored, err)
+	}
+	if destination, err := s.GetProfile(home.ID); err != nil || destination.ChiefSessionID != "home-chief" {
+		t.Fatalf("destination chief = %q, %v; want home-chief kept", destination.ChiefSessionID, err)
+	}
+}
+
 func TestMigration155MovesTheChiefIntoItsProfile(t *testing.T) {
 	s, _ := openProfileStore(t)
 	work, _ := mustCreateProfile(t, s, "Work")

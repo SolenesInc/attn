@@ -3088,7 +3088,7 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Session {
 	decorated := d.sessionForBroadcastWithChiefOfStaff(
 		session,
-		d.chiefSessionIDs(),
+		d.profileChiefs(),
 		d.delegatedFromChiefSessionIDs(),
 		d.crewMembersBySession(),
 		d.gardenDispatchSeedsBySession(),
@@ -3104,7 +3104,7 @@ func (d *Daemon) sessionForBroadcast(session *protocol.Session) *protocol.Sessio
 
 func (d *Daemon) sessionForBroadcastWithChiefOfStaff(
 	session *protocol.Session,
-	chiefs map[string]bool,
+	chiefs map[string]string,
 	delegatedFromChief map[string]bool,
 	crewBySession map[string]string,
 	seedBySession map[string]string,
@@ -3135,7 +3135,7 @@ func (d *Daemon) sessionsForBroadcast(sessions []*protocol.Session) []protocol.S
 	if len(sessions) == 0 {
 		return nil
 	}
-	chiefs := d.chiefSessionIDs()
+	chiefs := d.profileChiefs()
 	delegatedFromChief := d.delegatedFromChiefSessionIDs()
 	crewBySession := d.crewMembersBySession()
 	seedBySession := d.gardenDispatchSeedsBySession()
@@ -3184,7 +3184,7 @@ func (d *Daemon) remoteSessionsForBroadcast() []protocol.Session {
 		return nil
 	}
 	sessions := d.hubManager.RemoteSessions()
-	chiefs := d.chiefSessionIDs()
+	chiefs := d.profileChiefs()
 	for i := range sessions {
 		d.decorateChiefOfStaff(&sessions[i], chiefs)
 	}
