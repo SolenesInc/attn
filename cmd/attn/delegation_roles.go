@@ -94,9 +94,10 @@ changing (each accepts -m TEXT, the reason recorded in history):
         a custom role. Its default model comes from the model flags.
   add <role> --builtin pathfinder|builder|reviewer|orchestrator [model]
         one of Attn's maintained roles (needs Add Attn roles in Settings once).
-  add <role>/<alt> --when TEXT [--name NAME] [model]
+  add <role>/<alt> [--when TEXT] [--name NAME] [model]
         an alternative model for a role, starting from its default model.
-        --when says when an agent should pick it instead of the default.
+        --when says when an agent should pick it instead of the default;
+        without a condition it is saved but never picked.
 
   set <role>[/<alt>] [--name NAME] [guidance] [--when TEXT] [--default] [model]
         change a role, or one of its alternatives. --default makes the
