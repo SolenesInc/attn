@@ -2,9 +2,10 @@ import type {
   SessionLedgerEntry,
   SessionLedgerFacets,
   SessionReopen,
-  SessionReopenEntry,
   SessionReopenResult,
 } from '../types/generated';
+import { reopenVerdictView } from '../components/sessionsLedger';
+import type { ReopenVerdictView } from '../components/sessionsLedger';
 import type { PendingRequests } from './daemonPendingRequests';
 import { settlePendingRequest } from './daemonPendingRequests';
 
@@ -15,7 +16,6 @@ export interface SessionLedgerPage {
   facets?: SessionLedgerFacets;
   next_before?: string;
   omitted: number;
-  reopen?: SessionReopenEntry[];
 }
 
 export interface SessionLedgerQuery {
@@ -27,13 +27,27 @@ export interface SessionLedgerQuery {
   repository?: string;
   since?: string;
   until?: string;
-  reopen?: boolean;
 }
+
+export class SessionReopenRefusal extends Error {
+  readonly verdict: ReopenVerdictView;
+
+  constructor(message: string, reopen: SessionReopen) {
+    super(message);
+    this.name = 'SessionReopenRefusal';
+    this.verdict = reopenVerdictView(reopen);
+  }
+}
+
+export type SessionLedgerUpdate = { type: 'closed'; entry: SessionLedgerEntry };
+
+export type SessionLedgerConnectionEvent =
+  | { type: 'connection'; connected: boolean; connectionGeneration: number }
+  | (SessionLedgerUpdate & { connectionGeneration: number });
 
 export interface SessionLedgerEventContext {
   pending: PendingRequests;
-  onSessionClosed?: (entry: SessionLedgerEntry, reopen?: SessionReopen) => void;
-  onSessionReopenRefreshed?: (sessionId: string, reopen: SessionReopen) => void;
+  onUpdate?: (update: SessionLedgerUpdate) => void;
 }
 
 type SessionLedgerEvent = {
@@ -44,8 +58,7 @@ type SessionLedgerEvent = {
   result?: unknown;
   entry?: unknown;
   session_ledger_entry?: unknown;
-  session_id?: unknown;
-  reopen?: unknown;
+  reopen?: SessionReopen;
 };
 
 export function handleSessionLedgerDaemonEvent(
@@ -78,17 +91,12 @@ export function handleSessionLedgerDaemonEvent(
         event,
         (value) => value.result as SessionReopenResult | undefined,
         'Reopening that session failed',
+        event.reopen ? new SessionReopenRefusal(event.error || 'Reopening that session was refused', event.reopen) : undefined,
       );
       return true;
-    case 'session_reopen_refreshed': {
-      const sessionId = typeof event.session_id === 'string' ? event.session_id : '';
-      const reopen = event.reopen as SessionReopen | undefined;
-      if (sessionId && reopen) context.onSessionReopenRefreshed?.(sessionId, reopen);
-      return true;
-    }
     case 'session_closed': {
       const entry = event.session_ledger_entry as SessionLedgerEntry | undefined;
-      if (entry) context.onSessionClosed?.(entry, event.reopen as SessionReopen | undefined);
+      if (entry) context.onUpdate?.({ type: 'closed', entry });
       return true;
     }
     default:

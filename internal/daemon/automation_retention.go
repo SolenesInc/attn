@@ -127,17 +127,8 @@ const (
 )
 
 func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automationRunCleanupBlock, error) {
-	if run.SessionID != "" && d.store.Get(run.SessionID) != nil {
-		return automationRunCleanupLiveSession, nil
-	}
-	if run.SessionID != "" {
-		bound, err := d.store.AutomationSessionHasContinuityBinding(run.SessionID)
-		if err != nil {
-			return automationRunCleanupOK, err
-		}
-		if bound {
-			return automationRunCleanupBoundThread, nil
-		}
+	if block, err := d.automationRunActivityBlock(run); err != nil || block != automationRunCleanupOK {
+		return block, err
 	}
 	worktree, err := automationRunWorktreePath(run)
 	if err != nil {
@@ -152,7 +143,9 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 		}
 		return automationRunCleanupOK, statErr
 	}
-	clean, err := git.IsWorktreeClean(worktree)
+	clean, err := gitValue(context.Background(), d.gitExecution(), gitTask{Kind: gitTaskAutomation, Lane: gitDeferred}, func(ctx context.Context, client *git.Client) (bool, error) {
+		return client.IsWorktreeClean(ctx, worktree)
+	})
 	if err != nil {
 		return automationRunCleanupOK, err
 	}
@@ -160,6 +153,34 @@ func (d *Daemon) automationRunCleanupSafety(run store.AutomationRun) (automation
 		return automationRunCleanupDirtyWorktree, nil
 	}
 	return automationRunCleanupOK, nil
+}
+
+func (d *Daemon) automationRunActivityBlock(run store.AutomationRun) (automationRunCleanupBlock, error) {
+	if run.SessionID == "" {
+		return automationRunCleanupOK, nil
+	}
+	if d.store.Get(run.SessionID) != nil {
+		return automationRunCleanupLiveSession, nil
+	}
+	bound, err := d.store.AutomationSessionHasContinuityBinding(run.SessionID)
+	if err != nil {
+		return automationRunCleanupOK, err
+	}
+	if bound {
+		return automationRunCleanupBoundThread, nil
+	}
+	return automationRunCleanupOK, nil
+}
+
+func (d *Daemon) requireAutomationRunStillInactive(run store.AutomationRun) error {
+	block, err := d.automationRunActivityBlock(run)
+	if err != nil {
+		return err
+	}
+	if block != automationRunCleanupOK {
+		return errAutomaticWorktreeCleanupPreempted
+	}
+	return nil
 }
 
 func automationRunWorktreePath(run store.AutomationRun) (string, error) {
@@ -184,13 +205,21 @@ func (d *Daemon) removeAutomationRunWorktree(run store.AutomationRun) error {
 	if resolved.Worktree == "" {
 		return nil
 	}
-	if _, err := os.Stat(resolved.Worktree); err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil
+	return d.worktreeMaintenance.TryAutomaticRemoval(context.Background(), func(protection automaticWorktreeCleanupProtection) error {
+		if err := d.requireAutomationRunStillInactive(run); err != nil {
+			return err
 		}
-		return err
-	}
-	return git.DeleteWorktree(resolved.MainRepository, resolved.Worktree, false)
+		if _, err := os.Stat(resolved.Worktree); err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				return nil
+			}
+			return err
+		}
+		gatedDelete := gitTask{Kind: gitTaskAutomation, Lane: gitInteractive}
+		return d.gitExecution().Run(protection.Context(), gatedDelete, func(ctx context.Context, client *git.Client) error {
+			return client.DeleteWorktree(ctx, resolved.MainRepository, resolved.Worktree, false)
+		})
+	})
 }
 
 func (d *Daemon) removeAutomationOccurrenceArtifact(runID string) error {

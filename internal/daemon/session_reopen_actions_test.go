@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -79,9 +80,39 @@ func TestARefusedReopenNamesTheActionsItOffersInstead(t *testing.T) {
 	}
 }
 
+func TestReopenEligibilityAndLaunchShareOneMaintenanceLease(t *testing.T) {
+	d, _, _ := closedWorktreeWithDeletedDirectory(t, "guarded", "feat/guarded", false)
+	reopenDaemonWithBackend(t, d)
+	gitClient := attngit.NewClient()
+	leaseHeldDuringEligibility := false
+	d.gitExec = gitExecutorFunc(func(ctx context.Context, task gitTask, run func(context.Context, *attngit.Client) error) error {
+		if task.Kind == gitTaskReopen && !leaseHeldDuringEligibility {
+			leaseHeldDuringEligibility = worktreeAutomaticCleanupExcluded(d)
+		}
+		return run(ctx, gitClient)
+	})
+
+	if _, err := d.reopenSession("guarded", protocol.SessionReopenActionRecreateWorktreeAndReopen, ""); err != nil {
+		t.Fatal(err)
+	}
+	if !leaseHeldDuringEligibility {
+		t.Fatal("reopen eligibility ran before acquiring the foreground automatic cleanup exclusion")
+	}
+}
+
 func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	d, _, worktree := closedWorktreeWithDeletedDirectory(t, "recreate", "feat/recreate", false)
 	backend := reopenDaemonWithBackend(t, d)
+	executor, ok := d.gitExecution().(*coordinatedGitExecutor)
+	if !ok {
+		t.Fatalf("git executor = %T, want coordinated executor", d.gitExecution())
+	}
+	mutations := 0
+	executor.enqueueObserver = func(task gitTask) {
+		if task.Kind == gitTaskWorktreeMutation {
+			mutations++
+		}
+	}
 	before := spawnCount(backend)
 
 	outcome, err := d.reopenSession("recreate", protocol.SessionReopenActionRecreateWorktreeAndReopen, "")
@@ -95,7 +126,7 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if info, err := os.Stat(worktree); err != nil || !info.IsDir() {
 		t.Fatalf("the worktree is not back at %s: %v", worktree, err)
 	}
-	if branch, err := attngit.GetCurrentBranch(worktree); err != nil || branch != "feat/recreate" {
+	if branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), worktree); err != nil || branch != "feat/recreate" {
 		t.Errorf("the recreated worktree is on %q (%v), want feat/recreate", branch, err)
 	}
 	if d.store.SessionClosed("recreate") {
@@ -114,6 +145,9 @@ func TestRecreatingTheWorktreeBringsTheSessionBackOnItsOwnBranch(t *testing.T) {
 	if spawn.ResumeSessionID != "conv-recreate" {
 		t.Errorf("resume id = %q, want the saved conversation conv-recreate", spawn.ResumeSessionID)
 	}
+	if mutations != 1 {
+		t.Errorf("worktree mutation admissions = %d, want one authoritative admission", mutations)
+	}
 }
 
 func TestFetchingTheBranchBackRecreatesTheWorktreeFromTheRemote(t *testing.T) {
@@ -131,7 +165,7 @@ func TestFetchingTheBranchBackRecreatesTheWorktreeFromTheRemote(t *testing.T) {
 		t.Fatalf("fetch_recreate_and_reopen: %v", err)
 	}
 
-	if branch, err := attngit.GetCurrentBranch(worktree); err != nil || branch != "feat/fetch" {
+	if branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), worktree); err != nil || branch != "feat/fetch" {
 		t.Errorf("the recreated worktree is on %q (%v), want feat/fetch", branch, err)
 	}
 	if d.store.SessionClosed("fetch") {
@@ -241,6 +275,32 @@ func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	}
 	if reason := protocol.Deref(entry.CloseReason); reason != "brief delivered" {
 		t.Errorf("close_reason = %q, want the original reason restored", reason)
+	}
+}
+
+func TestAFailedReopenAfterWorktreeCreationRollsBackOutsideGitAdmission(t *testing.T) {
+	d, _, worktree := closedWorktreeWithDeletedDirectory(t, "failed-worktree", "feat/failed-worktree", false)
+	backend := reopenDaemonWithBackend(t, d)
+	backend.spawnErr = errSpawnRefusedInThisTest
+	closedAt := protocol.Deref(d.store.SessionLedgerEntry("failed-worktree").ClosedAt)
+
+	_, err := d.reopenSession(
+		"failed-worktree",
+		protocol.SessionReopenActionRecreateWorktreeAndReopen,
+		"",
+	)
+	if err == nil {
+		t.Fatal("reopen succeeded although the spawn failed")
+	}
+	if errors.Is(err, ErrNestedGitExecution) {
+		t.Fatalf("rollback re-entered Git admission from an admitted callback: %v", err)
+	}
+	if _, statErr := os.Stat(worktree); !os.IsNotExist(statErr) {
+		t.Fatalf("rollback left recreated worktree %s behind: %v", worktree, statErr)
+	}
+	entry := d.store.SessionLedgerEntry("failed-worktree")
+	if entry == nil || protocol.Deref(entry.ClosedAt) != closedAt {
+		t.Fatalf("rollback close = %+v, want generation %s restored", entry, closedAt)
 	}
 }
 
@@ -383,7 +443,7 @@ func sessionShowResult(t *testing.T, d *Daemon, sessionID string) protocol.Sessi
 	return *response.SessionShowResult
 }
 
-func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
+func TestAskingForAVerdictReadsTheCurrentBranchState(t *testing.T) {
 	d, repo, _ := closedWorktreeWithDeletedDirectory(t, "refreshed", "feat/refreshed", false)
 	reopenDaemonWithBackend(t, d)
 	runGitDaemon(t, repo, "worktree", "prune")
@@ -399,25 +459,9 @@ func TestAskingForAVerdictRefreshesTheBranchItRead(t *testing.T) {
 		t.Fatalf("session_show carried %+v, want the branch reported gone", shown.Reopen)
 	}
 
-	waitForBranchInspection(t, d, repo, "feat/refreshed")
-
 	runGitDaemon(t, repo, "branch", "feat/refreshed", "main")
-	sessionShowResult(t, d, "refreshed")
-	waitForBranchInspection(t, d, repo, "feat/refreshed")
-
 	back := sessionShowResult(t, d, "refreshed")
 	if back.Reopen == nil || protocol.Deref(back.Reopen.BranchState) != branchStateLocal {
 		t.Fatalf("session_show carried %+v, want the branch back as local", back.Reopen)
-	}
-}
-
-func waitForBranchInspection(t *testing.T, d *Daemon, repo, branch string) {
-	t.Helper()
-	key := branchInspectionKey(repo, branch)
-	d.branchInspectionsMu.Lock()
-	running := d.branchInspectionsRunning[key]
-	d.branchInspectionsMu.Unlock()
-	if running != nil {
-		<-running
 	}
 }

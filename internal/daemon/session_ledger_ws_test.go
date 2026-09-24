@@ -224,6 +224,9 @@ func TestTheWebSocketAnswersSessionReopenWithTheRefusalAndItsOffers(t *testing.T
 	if !strings.Contains(*reply.Error, "Offered instead: start_fresh_elsewhere") {
 		t.Errorf("error = %q, want it to name the action offered instead", *reply.Error)
 	}
+	if reply.Reopen == nil || !slices.Equal(reply.Reopen.Actions, []protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere}) {
+		t.Errorf("reopen = %+v, want the verdict offering start_fresh_elsewhere so the row can offer it", reply.Reopen)
+	}
 }
 
 func TestTheWebSocketAnswersSessionReopenForAnUnknownSession(t *testing.T) {

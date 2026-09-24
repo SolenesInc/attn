@@ -196,7 +196,6 @@ func TestSessionListPrintsWhatWouldBringEachClosedRowBack(t *testing.T) {
 					protocol.SessionReopenActionRecreateWorktreeAndReopen,
 					protocol.SessionReopenActionStartFreshElsewhere,
 				},
-				Checking: true,
 			}},
 			{SessionID: "stuck", Reopen: protocol.SessionReopen{
 				Reason: protocol.Ptr("its repository is gone too"),
@@ -213,9 +212,6 @@ func TestSessionListPrintsWhatWouldBringEachClosedRowBack(t *testing.T) {
 	}
 	if !strings.Contains(out, string(protocol.SessionReopenActionRecreateWorktreeAndReopen)) {
 		t.Errorf("the row does not name the action that would bring it back:\n%s", out)
-	}
-	if !strings.Contains(out, "1 row is still checking a branch") {
-		t.Errorf("a row still checking its branch says so nowhere:\n%s", out)
 	}
 
 	var plain bytes.Buffer

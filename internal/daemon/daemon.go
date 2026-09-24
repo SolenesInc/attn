@@ -137,12 +137,14 @@ type Daemon struct {
 	repoVisibilityKnown               map[string]string
 	repoVisibilityPending             map[string]bool
 	repoVisibilityMu                  sync.Mutex
-	branchInspections                 map[string]branchInspection
-	branchInspectionsRunning          map[string]chan struct{}
-	branchInspectionsMu               sync.Mutex
+	reopenGitMu                       sync.Mutex
+	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
+	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
 	sessionPaneAddMu                  sync.Mutex
-	gitCoordMu                        sync.Mutex
-	gitCoord                          *gitCoordinator
+	gitReaderMu                       sync.Mutex
+	gitStatus                         *gitStatusReader
+	fileDiff                          *fileDiffReader
+	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
 	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
 	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
@@ -628,7 +630,6 @@ func New(socketPath string) *Daemon {
 		debugLogging:        logger != nil && logger.DebugEnabled(),
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		warnings:            startupWarnings,
 		workflowDirty:       make(map[string]bool),
 		workflowEngineConn:  make(map[string]workflowEngineSink),
@@ -649,6 +650,7 @@ func New(socketPath string) *Daemon {
 		workspaces:          newWorkspaceRegistry(),
 		spawnLocks:          make(map[string]*spawnLock),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.delegationWaitsForFirstTurn = true
 	d.ticketReconcileExec = d.execTicketReconcileClassifier
 	d.ensureEventBus()
@@ -671,7 +673,6 @@ func NewForTesting(socketPath string) *Daemon {
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -691,6 +692,7 @@ func NewForTesting(socketPath string) *Daemon {
 		spawnLocks:          make(map[string]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
 }
@@ -714,7 +716,6 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		logger:              nil,
 		ghRegistry:          registry,
 		hubManager:          nil,
-		gitCoord:            newGitCoordinator(),
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
 		pendingInitialWS:    make(map[*wsClient]struct{}),
@@ -734,6 +735,7 @@ func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemo
 		spawnLocks:          make(map[string]*spawnLock),
 		jobQueue:            jobs.New(jobs.Options{}),
 	}
+	d.wireGitExecution(productionGitExecutorConfig)
 	d.ensureEventBus()
 	return d
 }
@@ -1386,7 +1388,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				StateUpdatedAt: now,
 				LastSeen:       now,
 			}
-			_ = d.worktreeMaintenance.RunForeground(context.Background(), "register recovered session", func(context.Context) error {
+			_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
 				d.store.Add(recoveredSession)
 				return nil
 			})
@@ -1636,6 +1638,7 @@ func (d *Daemon) Stop() {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
 	d.stopNotebookWatcher()
@@ -2018,7 +2021,8 @@ func (d *Daemon) recordSessionClose(sessionID string, commit func() (bool, error
 	d.forgetSessionTrace(sessionID)
 	if recorded {
 		d.invalidateGardenSeedParties("session close")
-		d.publishFact(FactSessionClosed, sessionID, d.store.SessionLedgerEntry(sessionID))
+		entry := d.store.SessionLedgerEntry(sessionID)
+		d.publishFact(FactSessionClosed, sessionID, entry)
 	}
 	d.clearChiefOfStaffIfSession(sessionID)
 	d.releaseCrewBindingIfSession(sessionID)
@@ -2499,6 +2503,14 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 		d.handleAutomationCommand(conn, cmd, msg)
 	case protocol.CmdDelegationRoles:
 		d.handleDelegationRoles(conn)
+	case protocol.CmdDelegationPreferencesShow:
+		d.handleDelegationPreferencesShow(conn)
+	case protocol.CmdDelegationPreferencesCommit:
+		d.handleDelegationPreferencesCommit(conn, msg.(*protocol.DelegationPreferencesCommitMessage))
+	case protocol.CmdDelegationPreferencesHistory:
+		d.handleDelegationPreferencesHistory(conn, msg.(*protocol.DelegationPreferencesHistoryMessage))
+	case protocol.CmdDelegationPreferencesRollback:
+		d.handleDelegationPreferencesRollback(conn, msg.(*protocol.DelegationPreferencesRollbackMessage))
 	case protocol.CmdDelegateStatus:
 		d.handleDelegateStatus(conn, msg.(*protocol.DelegateStatusMessage))
 	case protocol.CmdSetTicketStatus:
@@ -2781,17 +2793,17 @@ func (d *Daemon) handleConnection(conn net.Conn) {
 }
 
 func (d *Daemon) handleRegister(conn net.Conn, msg *protocol.RegisterMessage) {
-	_ = d.worktreeMaintenance.RunForeground(context.Background(), "register live session", func(context.Context) error {
-		d.handleRegisterForeground(conn, msg)
+	_ = d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		d.handleRegisterProtected(protection, conn, msg)
 		return nil
 	})
 }
 
-func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterMessage) {
+func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection, conn net.Conn, msg *protocol.RegisterMessage) {
 	d.logf("session registered: id=%s label=%s dir=%s", msg.ID, protocol.Deref(msg.Label), msg.Dir)
 	existing := d.store.Get(msg.ID)
 
-	branchInfo, _ := git.GetBranchInfo(msg.Dir)
+	branchInfo, _ := d.readBranchInfo(protection.Context(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitInteractive}, msg.Dir)
 
 	nowStr := string(protocol.TimestampNow())
 	agent := normalizeStoredSessionAgent(string(protocol.Deref(msg.Agent)), protocol.SessionAgentClaude)
@@ -2839,9 +2851,10 @@ func (d *Daemon) handleRegisterForeground(conn net.Conn, msg *protocol.RegisterM
 		d.releaseCrewBindingIfSession(msg.ID)
 	}
 	session.WorkspaceID = workspaceID
-	if err := d.store.AddCheckedUnlessTeardown(session); err != nil {
+	persistErr := d.store.AddCheckedUnlessTeardown(session)
+	if persistErr != nil {
 		d.releaseCrewBindingIfSession(session.ID)
-		d.sendError(conn, err.Error())
+		d.sendError(conn, persistErr.Error())
 		return
 	}
 	existingWS := d.store.GetWorkspace(workspaceID)
@@ -4033,7 +4046,7 @@ func (d *Daemon) checkAllBranches() {
 
 	d.coalesceSnapshots(func() {
 		for _, session := range sessions {
-			info, err := git.GetBranchInfo(session.Directory)
+			info, err := d.readBranchInfo(context.Background(), gitTask{Kind: gitTaskSessionIdentity, Lane: gitDeferred}, session.Directory)
 			if err != nil {
 				continue
 			}

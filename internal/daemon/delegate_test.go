@@ -206,6 +206,14 @@ func TestDelegateDefaultsToNewWorktreeForGitRepository(t *testing.T) {
 	backend := &fakeSpawnBackend{}
 	workspaceID, sourceSessionID, _ := setupDelegationSourceAt(t, d, backend, mainRepo)
 	consumeDelegatedPrompt(t, backend)
+	leaseHeldThroughLaunch := false
+	d.delegationFinalizeHook = func() error {
+		leaseHeldThroughLaunch = worktreeAutomaticCleanupExcluded(d)
+		if !leaseHeldThroughLaunch {
+			return errors.New("delegation released the automatic cleanup exclusion before finalization")
+		}
+		return nil
+	}
 
 	result, err := d.delegateResolved(&resolvedDelegationLaunch{
 		Cmd:             protocol.CmdDelegate,
@@ -228,6 +236,9 @@ func TestDelegateDefaultsToNewWorktreeForGitRepository(t *testing.T) {
 	session := d.store.Get(result.SessionID)
 	if session == nil || !strings.HasPrefix(protocol.Deref(session.Branch), "delegate/parser-") {
 		t.Fatalf("delegated session = %+v, want generated branch", session)
+	}
+	if !leaseHeldThroughLaunch {
+		t.Fatal("delegation preparation and launch did not share one automatic cleanup exclusion")
 	}
 }
 

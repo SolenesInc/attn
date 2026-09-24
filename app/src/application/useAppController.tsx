@@ -55,8 +55,6 @@ export function useAppController({
   notificationsChangeSignal,
   fsChangeSignals,
   notebookTaskChangeSignal,
-  sessionCloseNotice,
-  sessionVerdictNotice,
   registerSessionExitHandler,
 }: AppContentProps) {
   const hasCriticalNotification = criticalNotifications.count > 0;
@@ -646,8 +644,6 @@ export function useAppController({
       notificationsChangeSignal,
       fsChangeSignals,
       notebookTaskChangeSignal,
-      sessionCloseNotice,
-      sessionVerdictNotice,
       registerSessionExitHandler,
     },
     workspaces: {

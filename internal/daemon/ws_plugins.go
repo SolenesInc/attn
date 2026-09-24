@@ -1,12 +1,14 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/plugins"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -41,7 +43,14 @@ func (d *Daemon) handleInstallPluginWS(client *wsClient, msg *protocol.InstallPl
 		return
 	}
 
-	options := plugins.InstallOptions{Env: d.pluginCommandEnv()}
+	options := plugins.InstallOptions{
+		Env: d.pluginCommandEnv(),
+		CloneGit: func(ctx context.Context, source, target string, environment []string) ([]byte, error) {
+			return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskPluginInstall, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) ([]byte, error) {
+				return client.CloneDepthOne(runCtx, source, target, environment)
+			})
+		},
+	}
 	var manifest plugins.Manifest
 	var err error
 	if link {

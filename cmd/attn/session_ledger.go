@@ -184,11 +184,6 @@ func fprintSessionList(w io.Writer, result *protocol.SessionListResult, args ses
 	}
 	table.Flush()
 
-	if checking := countCheckingVerdicts(result.Reopen); checking > 0 {
-		fmt.Fprintf(w, "\n%s still checking a branch; ask again for a sharper verdict\n",
-			pluralRows(checking))
-	}
-
 	for _, entry := range result.Entries {
 		if reason := strings.TrimSpace(protocol.Deref(entry.CloseReason)); reason != "" {
 			fmt.Fprintf(w, "\n%s closed because: %s\n", entry.ID, reason)
@@ -233,23 +228,6 @@ func sessionReopenColumn(verdict *protocol.SessionReopen) string {
 	default:
 		return string(verdict.Actions[0])
 	}
-}
-
-func countCheckingVerdicts(entries []protocol.SessionReopenEntry) int {
-	checking := 0
-	for _, entry := range entries {
-		if entry.Reopen.Checking {
-			checking++
-		}
-	}
-	return checking
-}
-
-func pluralRows(n int) string {
-	if n == 1 {
-		return "1 row is"
-	}
-	return fmt.Sprintf("%d rows are", n)
 }
 
 func sessionLedgerState(entry protocol.SessionLedgerEntry) string {

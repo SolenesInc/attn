@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -13,7 +14,7 @@ func TestGetBranchInfo_MainRepo(t *testing.T) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 
-	info, err := GetBranchInfo(dir)
+	info, err := NewClient().GetBranchInfo(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}
@@ -41,7 +42,7 @@ func TestGetBranchInfo_Worktree(t *testing.T) {
 	wtDir := filepath.Join(tmpDir, "wt")
 	runGit(t, mainDir, "worktree", "add", "-b", "feature", wtDir)
 
-	info, err := GetBranchInfo(wtDir)
+	info, err := NewClient().GetBranchInfo(context.Background(), wtDir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestGetBranchInfo_Worktree(t *testing.T) {
 func TestGetBranchInfo_NotGitRepo(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	info, err := GetBranchInfo(dir)
+	info, err := NewClient().GetBranchInfo(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestGetBranchInfo_DetachedHead(t *testing.T) {
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 	runGit(t, dir, "checkout", "--detach", "HEAD")
 
-	info, err := GetBranchInfo(dir)
+	info, err := NewClient().GetBranchInfo(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("GetBranchInfo failed: %v", err)
 	}

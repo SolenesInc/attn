@@ -155,18 +155,6 @@
 --- 11 session_closed
 {
   "event": "session_closed",
-  "reopen": {
-    "actions": [
-      "start_fresh_same_place"
-    ],
-    "checking": false,
-    "directory_state": "present",
-    "pane_plan": "reuse",
-    "reason": "session sess-1 has no saved launch contract, so its exact agent configuration cannot be restored",
-    "reopenable": false,
-    "workspace_id": "workspace-1",
-    "workspace_plan": "reuse"
-  },
   "session_ledger_entry": {
     "agent": "claude",
     "closed_at": "<timestamp>",

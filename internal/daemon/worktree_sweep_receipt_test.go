@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,7 +28,7 @@ func TestWorktreeSweepReceipt(t *testing.T) {
 	for _, repo := range repos {
 		repo = git.CanonicalizePath(strings.TrimSpace(repo))
 		facts := receiptFacts(t, repo, now)
-		states, err := git.ListWorktreeStates(repo)
+		states, err := git.NewClient().ListWorktreeStates(context.Background(), repo)
 		if err != nil {
 			t.Fatalf("%s: listing worktrees: %v", repo, err)
 		}
@@ -38,7 +39,7 @@ func TestWorktreeSweepReceipt(t *testing.T) {
 			if state.Path == repo {
 				continue
 			}
-			observation, _ := observeWorktree(facts, state, now)
+			observation, _ := observeWorktreeWithClient(context.Background(), git.NewClient(), facts, state, now)
 			row := &store.Worktree{
 				Path: state.Path, Branch: observation.Branch, MainRepo: repo,
 				HeadSHA: observation.HeadSHA, Detached: observation.Detached,
@@ -133,19 +134,22 @@ func receiptFacts(t *testing.T, repo string, now time.Time) *repositoryFacts {
 
 	base, ok := modalBaseBranch(baseCounts)
 	if !ok {
-		if fallback, err := git.GetDefaultBranch(repo); err == nil {
+		if fallback, err := git.NewClient().GetDefaultBranch(context.Background(), repo); err == nil {
 			base = fallback
 		}
 	}
-	facts.integrationBranch = resolveIntegrationRef(repo, base)
-	if resolved, err := git.Output(git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}"); err == nil {
+	facts.integrationBranch = base
+	if exists, _ := git.NewClient().RefExists(context.Background(), repo, "origin/"+base); exists {
+		facts.integrationBranch = "origin/" + base
+	}
+	if resolved, err := git.NewClient().Output(context.Background(), git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}"); err == nil {
 		facts.integrationSHA = strings.TrimSpace(string(resolved))
 	}
 
-	if hashes, err := git.TreeHashesOnHistory(repo, facts.integrationSHA); err == nil {
+	if hashes, err := git.NewClient().TreeHashesOnHistory(context.Background(), repo, facts.integrationSHA); err == nil {
 		facts.treeHashes = hashes
 	}
-	if stashes, err := git.StashCountsByBranch(repo); err == nil {
+	if stashes, err := git.NewClient().StashCountsByBranch(context.Background(), repo); err == nil {
 		facts.stashes = stashes
 	}
 	_ = now

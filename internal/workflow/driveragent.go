@@ -146,28 +146,30 @@ func (d *driverAgent) runInCWD(ctx context.Context, call AgentCall, cwd, model s
 }
 
 func (d *driverAgent) runIsolated(ctx context.Context, call AgentCall, model string) (json.RawMessage, error) {
-	repoRoot := git.ResolveMainRepoPath(d.defaultRunCWD())
+	client := git.NewClient()
+	repoRoot := client.ResolveMainRepoPath(ctx, d.defaultRunCWD())
 	if repoRoot == "" {
 		return nil, fmt.Errorf("worktree isolation: cannot resolve repo root from working tree %q", d.defaultRunCWD())
 	}
 
 	branch := worktreeBranchFor(call.Ordinal)
 	path := git.GenerateWorktreePath(repoRoot, branch)
-	if err := git.CreateWorktree(repoRoot, branch, path); err != nil {
+	if err := client.CreateWorktree(ctx, repoRoot, branch, path); err != nil {
 		return nil, fmt.Errorf("worktree isolation: create worktree for %s: %w", call.Ordinal.String(), err)
 	}
 
 	result, runErr := d.runInCWD(ctx, call, path, model)
 
-	clean, cleanErr := git.IsWorktreeClean(path)
+	cleanupCtx := context.WithoutCancel(ctx)
+	clean, cleanErr := client.IsWorktreeClean(cleanupCtx, path)
 	switch {
 	case cleanErr != nil:
 		d.logf("worktree isolation: could not determine cleanliness of %q (%v); keeping it", path, cleanErr)
 	case clean:
-		if err := git.DeleteWorktree(repoRoot, path, true); err != nil {
+		if err := client.DeleteWorktree(cleanupCtx, repoRoot, path, true); err != nil {
 			d.logf("worktree isolation: remove clean worktree %q failed: %v", path, err)
 		} else {
-			_ = git.DeleteBranch(repoRoot, branch, true)
+			_ = client.DeleteBranch(cleanupCtx, repoRoot, branch, true)
 		}
 	default:
 		d.logf("worktree isolation: agent left changes; keeping worktree %q (branch %s)", path, branch)

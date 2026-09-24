@@ -38,8 +38,8 @@ func ExpandPath(path string) string {
 	return path
 }
 
-func ListBranches(repoDir string) ([]string, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "branch", "--format=%(refname:short)")
+func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("git branch failed: %w", err)
 	}
@@ -49,7 +49,7 @@ func ListBranches(repoDir string) ([]string, error) {
 		return nil, nil
 	}
 
-	worktrees, err := ListWorktrees(repoDir)
+	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
@@ -71,10 +71,10 @@ func ListBranches(repoDir string) ([]string, error) {
 	return available, nil
 }
 
-func ListBranchesWithCommits(repoDir string) ([]BranchWithCommit, error) {
-	currentBranch, _ := GetCurrentBranch(repoDir)
+func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([]BranchWithCommit, error) {
+	currentBranch, _ := c.GetCurrentBranch(ctx, repoDir)
 
-	out, err := runGitOutput(OpMetadata, repoDir, "branch", "--format=%(refname:short)|%(committerdate:iso-strict)|%(objectname:short)")
+	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)|%(committerdate:iso-strict)|%(objectname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("git branch failed: %w", err)
 	}
@@ -84,7 +84,7 @@ func ListBranchesWithCommits(repoDir string) ([]BranchWithCommit, error) {
 		return nil, nil
 	}
 
-	worktrees, err := ListWorktrees(repoDir)
+	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
 	if err != nil {
 		return nil, fmt.Errorf("listing worktrees: %w", err)
 	}
@@ -117,51 +117,51 @@ func ListBranchesWithCommits(repoDir string) ([]BranchWithCommit, error) {
 	return result, nil
 }
 
-func DeleteBranch(repoDir, branch string, force bool) error {
+func (c *Client) DeleteBranch(ctx context.Context, repoDir, branch string, force bool) error {
 	flag := "-d"
 	if force {
 		flag = "-D"
 	}
 
-	if out, err := runGitCombined(OpMetadata, repoDir, "branch", flag, branch); err != nil {
+	if out, err := c.Combined(ctx, OpMetadata, repoDir, "branch", flag, branch); err != nil {
 		return fmt.Errorf("git branch %s failed: %s", flag, out)
 	}
 	return nil
 }
 
-func SwitchBranch(repoDir, branch string) error {
-	if out, err := runGitCombined(OpWorktree, repoDir, "checkout", branch); err != nil {
+func (c *Client) SwitchBranch(ctx context.Context, repoDir, branch string) error {
+	if out, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", branch); err != nil {
 		return fmt.Errorf("git checkout failed: %s", out)
 	}
 	return nil
 }
 
-func CreateBranch(repoDir, branch string) error {
-	if out, err := runGitCombined(OpMetadata, repoDir, "branch", branch); err != nil {
+func (c *Client) CreateBranch(ctx context.Context, repoDir, branch string) error {
+	if out, err := c.Combined(ctx, OpMetadata, repoDir, "branch", branch); err != nil {
 		return fmt.Errorf("git branch failed: %s", out)
 	}
 	return nil
 }
 
-func GetCurrentBranch(repoDir string) (string, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "symbolic-ref", "--short", "HEAD")
+func (c *Client) GetCurrentBranch(ctx context.Context, repoDir string) (string, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "symbolic-ref", "--short", "HEAD")
 	if err == nil {
 		return strings.TrimSpace(string(out)), nil
 	}
 
-	out, err = runGitOutput(OpMetadata, repoDir, "rev-parse", "--short", "HEAD")
+	out, err = c.Output(ctx, OpMetadata, repoDir, "rev-parse", "--short", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("git current branch failed: %w", err)
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func ListRemotes(repoDir string) ([]string, error) {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) ListRemotes(ctx context.Context, repoDir string) ([]string, error) {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return nil, err
 	}
-	out, err := runGitOutput(OpMetadata, resolvedDir, "remote")
+	out, err := c.Output(ctx, OpMetadata, resolvedDir, "remote")
 	if err != nil {
 		return nil, fmt.Errorf("git remote failed: %w", err)
 	}
@@ -174,17 +174,12 @@ func ListRemotes(repoDir string) ([]string, error) {
 	return remotes, nil
 }
 
-func RefExists(repoDir, ref string) bool {
-	exists, _ := RefExistsContext(context.Background(), repoDir, ref)
-	return exists
-}
-
-func RefExistsContext(ctx context.Context, repoDir, ref string) (bool, error) {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) RefExists(ctx context.Context, repoDir, ref string) (bool, error) {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return false, err
 	}
-	err = NoOutputContext(ctx, OpMetadata, resolvedDir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
+	err = c.NoOutput(ctx, OpMetadata, resolvedDir, "rev-parse", "--verify", "--quiet", ref+"^{commit}")
 	if cause := context.Cause(ctx); cause != nil {
 		return false, cause
 	}
@@ -198,12 +193,12 @@ func RefExistsContext(ctx context.Context, repoDir, ref string) (bool, error) {
 	return false, err
 }
 
-func FetchRemoteBranch(repoDir, remote, branch string) error {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) FetchRemoteBranch(ctx context.Context, repoDir, remote, branch string) error {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return err
 	}
-	if out, err := runGitCombined(OpNetwork, resolvedDir, "fetch", remote, branch); err != nil {
+	if out, err := c.Combined(ctx, OpNetwork, resolvedDir, "fetch", remote, branch); err != nil {
 		outStr := strings.TrimSpace(string(out))
 		if outStr == "" {
 			return fmt.Errorf("git fetch failed: %w", err)
@@ -213,16 +208,16 @@ func FetchRemoteBranch(repoDir, remote, branch string) error {
 	return nil
 }
 
-func EnsurePullRequestRevision(repoDir, remote string, number int, expectedSHA, authorization string) error {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) EnsurePullRequestRevision(ctx context.Context, repoDir, remote string, number int, expectedSHA, authorization string) error {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return err
 	}
 	ref := fmt.Sprintf("refs/pull/%d/head", number)
-	if RefExists(resolvedDir, expectedSHA) {
+	if exists, _ := c.RefExists(ctx, resolvedDir, expectedSHA); exists {
 		return nil
 	}
-	remoteURL, err := runGitOutput(OpMetadata, resolvedDir, "remote", "get-url", remote)
+	remoteURL, err := c.Output(ctx, OpMetadata, resolvedDir, "remote", "get-url", remote)
 	if err != nil {
 		return fmt.Errorf("read pull request remote: %w", err)
 	}
@@ -230,25 +225,25 @@ func EnsurePullRequestRevision(repoDir, remote string, number int, expectedSHA, 
 	if err != nil {
 		return err
 	}
-	if out, err := runGitCombinedWithHTTPAuthorization(OpNetwork, resolvedDir, strings.TrimSpace(string(remoteURL)), authorization, "fetch", "--no-tags", remote, ref); err != nil {
+	if out, err := c.combinedWithHTTPAuthorization(ctx, OpNetwork, resolvedDir, strings.TrimSpace(string(remoteURL)), authorization, "fetch", "--no-tags", remote, ref); err != nil {
 		message := strings.TrimSpace(string(out))
 		if message == "" {
 			message = err.Error()
 		}
 		return fmt.Errorf("fetch pull request head: %s", message)
 	}
-	if !RefExists(resolvedDir, expectedSHA) {
+	if exists, _ := c.RefExists(ctx, resolvedDir, expectedSHA); !exists {
 		return fmt.Errorf("snapshotted pull request revision %s is unavailable after fetching %s", expectedSHA, ref)
 	}
 	return nil
 }
 
-func FetchRemotes(repoDir string) error {
-	resolvedDir, err := ResolveRepoDir(repoDir)
+func (c *Client) FetchRemotes(ctx context.Context, repoDir string) error {
+	resolvedDir, err := c.ResolveRepoDir(ctx, repoDir)
 	if err != nil {
 		return err
 	}
-	if out, err := runGitCombined(OpNetwork, resolvedDir, "fetch", "--all", "--prune"); err != nil {
+	if out, err := c.Combined(ctx, OpNetwork, resolvedDir, "fetch", "--all", "--prune"); err != nil {
 		outStr := strings.TrimSpace(string(out))
 		if outStr == "" {
 			return fmt.Errorf("git fetch failed: %w", err)
@@ -258,8 +253,8 @@ func FetchRemotes(repoDir string) error {
 	return nil
 }
 
-func ListRemoteBranches(repoDir string) ([]string, error) {
-	out, err := runGitOutput(OpMetadata, repoDir, "branch", "-r", "--format=%(refname:short)")
+func (c *Client) ListRemoteBranches(ctx context.Context, repoDir string) ([]string, error) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "-r", "--format=%(refname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("git branch -r failed: %w", err)
 	}
@@ -269,7 +264,7 @@ func ListRemoteBranches(repoDir string) ([]string, error) {
 		return nil, nil
 	}
 
-	localOut, err := runGitOutput(OpMetadata, repoDir, "branch", "--format=%(refname:short)")
+	localOut, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)")
 	if err != nil {
 		return nil, fmt.Errorf("git branch failed: %w", err)
 	}
@@ -295,19 +290,19 @@ func ListRemoteBranches(repoDir string) ([]string, error) {
 	return available, nil
 }
 
-func CheckoutBranch(repoDir, branch string) error {
-	if _, err := runGitCombined(OpWorktree, repoDir, "checkout", branch); err == nil {
+func (c *Client) CheckoutBranch(ctx context.Context, repoDir, branch string) error {
+	if _, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", branch); err == nil {
 		return nil
 	}
 
-	if out, err := runGitCombined(OpWorktree, repoDir, "checkout", "-b", branch, "origin/"+branch); err != nil {
+	if out, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", "-b", branch, "origin/"+branch); err != nil {
 		return fmt.Errorf("git checkout failed: %s", out)
 	}
 	return nil
 }
 
-func GetHeadCommitInfo(repoDir string) (hash string, time string) {
-	out, err := runGitOutput(OpMetadata, repoDir, "log", "-1", "--format=%h|%cI")
+func (c *Client) GetHeadCommitInfo(ctx context.Context, repoDir string) (hash string, time string) {
+	out, err := c.Output(ctx, OpMetadata, repoDir, "log", "-1", "--format=%h|%cI")
 	if err != nil {
 		return "", ""
 	}
@@ -318,19 +313,15 @@ func GetHeadCommitInfo(repoDir string) (hash string, time string) {
 	return "", ""
 }
 
-func GetDefaultBranch(repoDir string) (string, error) {
-	return GetDefaultBranchContext(context.Background(), repoDir)
-}
-
-func GetDefaultBranchContext(ctx context.Context, repoDir string) (string, error) {
-	if out, err := OutputContext(ctx, OpMetadata, repoDir, "config", "--get", "attn.baseBranch"); err == nil {
+func (c *Client) GetDefaultBranch(ctx context.Context, repoDir string) (string, error) {
+	if out, err := c.Output(ctx, OpMetadata, repoDir, "config", "--get", "attn.baseBranch"); err == nil {
 		if branch := strings.TrimSpace(string(out)); branch != "" {
 			return branch, nil
 		}
 	} else if cause := context.Cause(ctx); cause != nil {
 		return "", cause
 	}
-	out, err := OutputContext(ctx, OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
+	out, err := c.Output(ctx, OpMetadata, repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")
 	if err == nil {
 		ref := strings.TrimSpace(string(out))
 		parts := strings.Split(ref, "/")
@@ -342,7 +333,7 @@ func GetDefaultBranchContext(ctx context.Context, repoDir string) (string, error
 	}
 
 	for _, branch := range []string{"main", "master"} {
-		if err := NoOutputContext(ctx, OpMetadata, repoDir, "rev-parse", "--verify", branch); err == nil {
+		if err := c.NoOutput(ctx, OpMetadata, repoDir, "rev-parse", "--verify", branch); err == nil {
 			return branch, nil
 		} else if cause := context.Cause(ctx); cause != nil {
 			return "", cause

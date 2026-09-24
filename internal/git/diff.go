@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"sort"
 	"strconv"
 	"strings"
@@ -15,10 +16,10 @@ type DiffFileInfo struct {
 	HasUncommitted bool   `json:"has_uncommitted,omitempty"`
 }
 
-func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
+func (c *Client) GetBranchDiffFiles(ctx context.Context, repoDir, baseRef string) ([]DiffFileInfo, error) {
 	fileMap := make(map[string]*DiffFileInfo)
 
-	statusOut, err := runGitOutput(OpDiff, repoDir, "diff", "--name-status", baseRef+"...HEAD")
+	statusOut, err := c.Output(ctx, OpDiff, repoDir, "diff", "--name-status", baseRef+"...HEAD")
 	if err != nil {
 		statusOut = []byte{}
 	}
@@ -50,7 +51,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	numstatOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", baseRef+"...HEAD")
+	numstatOut, _ := c.Output(ctx, OpDiff, repoDir, "diff", "--numstat", baseRef+"...HEAD")
 
 	if len(numstatOut) > 0 {
 		lines := strings.Split(strings.TrimSpace(string(numstatOut)), "\n")
@@ -75,7 +76,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 		}
 	}
 
-	porcelainOut, _ := runGitOutput(OpStatus, repoDir, "status", "--porcelain", "--untracked-files=all")
+	porcelainOut, _ := c.Output(ctx, OpStatus, repoDir, "status", "--porcelain", "--untracked-files=all")
 
 	uncommittedFiles := make(map[string]bool)
 	if len(porcelainOut) > 0 {
@@ -110,7 +111,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 	}
 
 	if len(uncommittedFiles) > 0 {
-		unstatsOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat")
+		unstatsOut, _ := c.Output(ctx, OpDiff, repoDir, "diff", "--numstat")
 
 		if len(unstatsOut) > 0 {
 			lines := strings.Split(strings.TrimSpace(string(unstatsOut)), "\n")
@@ -130,7 +131,7 @@ func GetBranchDiffFiles(repoDir, baseRef string) ([]DiffFileInfo, error) {
 			}
 		}
 
-		stagedStatsOut, _ := runGitOutput(OpDiff, repoDir, "diff", "--numstat", "--cached")
+		stagedStatsOut, _ := c.Output(ctx, OpDiff, repoDir, "diff", "--numstat", "--cached")
 
 		if len(stagedStatsOut) > 0 {
 			lines := strings.Split(strings.TrimSpace(string(stagedStatsOut)), "\n")

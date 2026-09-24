@@ -121,9 +121,6 @@ func fprintSessionReopenVerdict(w io.Writer, sessionID string, reopen *protocol.
 	if warning := strings.TrimSpace(protocol.Deref(reopen.Warning)); warning != "" {
 		fmt.Fprintf(w, "warning    %s\n", warning)
 	}
-	if reopen.Checking {
-		fmt.Fprintln(w, "checking   a branch check is running; ask again for a sharper verdict")
-	}
 	fmt.Fprintf(w, "lands in   workspace %s (%s), pane %s\n",
 		reopen.WorkspaceID, reopen.WorkspacePlan, reopen.PanePlan)
 	fmt.Fprintf(w, "place      directory %s", reopen.DirectoryState)

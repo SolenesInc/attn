@@ -1,6 +1,7 @@
 package present
 
 import (
+	"context"
 	"fmt"
 	"strconv"
 	"strings"
@@ -22,6 +23,10 @@ type AnchorIssue struct {
 }
 
 func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]ResolvedAnnotation, []AnchorIssue) {
+	return ResolveAnnotationsWithGit(context.Background(), git.NewClient(), m, repoDir, headSHA)
+}
+
+func ResolveAnnotationsWithGit(ctx context.Context, client presentGit, m *Manifest, repoDir, headSHA string) (map[string][]ResolvedAnnotation, []AnchorIssue) {
 	resolved := make(map[string][]ResolvedAnnotation)
 	var issues []AnchorIssue
 
@@ -30,7 +35,7 @@ func ResolveAnnotations(m *Manifest, repoDir, headSHA string) (map[string][]Reso
 			continue
 		}
 
-		lines, err := headFileLines(repoDir, headSHA, f.Path)
+		lines, err := headFileLines(ctx, client, repoDir, headSHA, f.Path)
 		if err != nil {
 			issues = append(issues, AnchorIssue{
 				Path:    f.Path,
@@ -145,8 +150,8 @@ func commentsOf(a AnnotationEntry) []string {
 	return a.Thread
 }
 
-func headFileLines(repoDir, headSHA, path string) ([]string, error) {
-	out, err := git.Output(git.OpDiff, repoDir, "show", headSHA+":"+path)
+func headFileLines(ctx context.Context, client presentGit, repoDir, headSHA, path string) ([]string, error) {
+	out, err := client.Output(ctx, git.OpDiff, repoDir, "show", headSHA+":"+path)
 	if err != nil {
 		return nil, err
 	}

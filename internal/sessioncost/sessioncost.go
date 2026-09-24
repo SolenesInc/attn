@@ -65,9 +65,12 @@ func (u Usage) Subtract(other Usage) Usage {
 }
 
 type LedgerKey struct {
-	Model   string
-	Purpose string
+	Model       string
+	Purpose     string
+	LongContext bool
 }
+
+const longContextKeySuffix = "|long-context"
 
 func NewLedgerKey(model, purpose string) LedgerKey {
 	purpose = strings.TrimSpace(purpose)
@@ -85,18 +88,37 @@ func GuardianKey(model string) LedgerKey {
 	return NewLedgerKey(model, PurposeGuardian)
 }
 
+func RequestLedgerKey(model, purpose string, request Usage) LedgerKey {
+	key := NewLedgerKey(model, purpose)
+	key.LongContext = openAILongContextModels[key.Model] &&
+		request.promptTokens() > openAILongContextPromptTokens
+	return key
+}
+
+func (k LedgerKey) normalized() LedgerKey {
+	normalized := NewLedgerKey(k.Model, k.Purpose)
+	normalized.LongContext = k.LongContext
+	return normalized
+}
+
 func (k LedgerKey) MarshalText() ([]byte, error) {
-	return []byte(NewLedgerKey(k.Model, k.Purpose).Purpose + "|" + strings.TrimSpace(k.Model)), nil
+	normalized := k.normalized()
+	text := normalized.Purpose + "|" + normalized.Model
+	if normalized.LongContext {
+		text += longContextKeySuffix
+	}
+	return []byte(text), nil
 }
 
 func (k *LedgerKey) UnmarshalText(text []byte) error {
-	raw := string(text)
+	raw, longContext := strings.CutSuffix(string(text), longContextKeySuffix)
 	purpose, model, found := strings.Cut(raw, "|")
 	if !found {
 		*k = NewLedgerKey(raw, PurposeAgent)
-		return nil
+	} else {
+		*k = NewLedgerKey(model, purpose)
 	}
-	*k = NewLedgerKey(model, purpose)
+	k.LongContext = longContext
 	return nil
 }
 
@@ -106,7 +128,7 @@ func (l Ledger) Add(key LedgerKey, usage Usage) bool {
 	if l == nil || !usage.hasUsage() || !usage.valid() {
 		return false
 	}
-	key = NewLedgerKey(key.Model, key.Purpose)
+	key = key.normalized()
 	current := l[key]
 	if !current.valid() {
 		return false
@@ -185,19 +207,31 @@ func Price(ledger Ledger, settings map[string]string) (usd float64, known bool, 
 	return *summary.CostUSD, true, true
 }
 
+type tieredUsage struct {
+	standard    Usage
+	longContext Usage
+}
+
 func Summarize(ledger Ledger, settings map[string]string) Summary {
 	summary := Summary{Valid: true}
-	rows := make(Ledger, len(ledger))
+	rows := make(map[LedgerKey]*tieredUsage, len(ledger))
 	keys := make([]LedgerKey, 0, len(ledger))
 	for key, usage := range ledger {
 		if !usage.hasAnyValue() {
 			continue
 		}
-		normalized := NewLedgerKey(key.Model, key.Purpose)
-		if _, seen := rows[normalized]; !seen {
-			keys = append(keys, normalized)
+		rowKey := NewLedgerKey(key.Model, key.Purpose)
+		row, seen := rows[rowKey]
+		if !seen {
+			row = &tieredUsage{}
+			rows[rowKey] = row
+			keys = append(keys, rowKey)
 		}
-		rows[normalized] = rows[normalized].Add(usage)
+		if key.LongContext {
+			row.longContext = row.longContext.Add(usage)
+		} else {
+			row.standard = row.standard.Add(usage)
+		}
 	}
 	sort.Slice(keys, func(i, j int) bool {
 		if keys[i].Purpose != keys[j].Purpose {
@@ -206,47 +240,13 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 		return keys[i].Model < keys[j].Model
 	})
 	for _, key := range keys {
-		model := key.Model
-		usage := rows[key]
 		summary.HasUsage = true
-		if !usage.valid() {
+		row, ok := summarizeRow(key, *rows[key], settings)
+		if !ok || row.TotalTokens > math.MaxInt64-summary.TotalTokens {
 			summary.Valid = false
 			return summary
 		}
-		total, ok := usage.totalTokens()
-		if !ok || total > math.MaxInt64-summary.TotalTokens {
-			summary.Valid = false
-			return summary
-		}
-		row := ModelSummary{Model: model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
-		summary.TotalTokens += total
-
-		card, cardKnown, invalidOverride := rateCardForModel(model, settings)
-		if invalidOverride {
-			row.HasUnpricedUsage = true
-			row.UnpricedReason = "Price override is invalid."
-		} else if reported, ok := reportedCost(usage, cardKnown); ok {
-			row.CostUSD = floatPtr(reported)
-		} else if !cardKnown {
-			row.HasUnpricedUsage = true
-			row.UnpricedReason = "No price is configured for this model."
-		} else {
-			classified := usage
-			classified.UnclassifiedCacheWriteTokens = 0
-			if classified.hasUsage() {
-				priced := priceUsage(classified, card)
-				if math.IsNaN(priced) || math.IsInf(priced, 0) {
-					summary.Valid = false
-					return summary
-				}
-				row.CostUSD = floatPtr(priced)
-			}
-			if usage.UnclassifiedCacheWriteTokens > 0 {
-				row.HasUnpricedUsage = true
-				row.UnpricedReason = "Cache write duration is unavailable."
-			}
-		}
-
+		summary.TotalTokens += row.TotalTokens
 		if row.CostUSD != nil {
 			if summary.CostUSD == nil {
 				summary.CostUSD = floatPtr(0)
@@ -261,6 +261,71 @@ func Summarize(ledger Ledger, settings map[string]string) Summary {
 		summary.Models = append(summary.Models, row)
 	}
 	return summary
+}
+
+func summarizeRow(key LedgerKey, tiers tieredUsage, settings map[string]string) (ModelSummary, bool) {
+	usage := tiers.standard.Add(tiers.longContext)
+	if !usage.valid() {
+		return ModelSummary{}, false
+	}
+	total, ok := usage.totalTokens()
+	if !ok {
+		return ModelSummary{}, false
+	}
+	row := ModelSummary{Model: key.Model, Purpose: key.Purpose, Usage: usage, TotalTokens: total}
+	card, cardKnown, invalidOverride := rateCardForModel(key.Model, settings)
+	for _, tier := range []struct {
+		usage Usage
+		card  RateCard
+	}{
+		{tiers.standard, card},
+		{tiers.longContext, longContextRates(card)},
+	} {
+		if !tier.usage.hasAnyValue() {
+			continue
+		}
+		cost, unpricedReason, ok := priceTier(tier.usage, tier.card, cardKnown, invalidOverride)
+		if !ok {
+			return ModelSummary{}, false
+		}
+		if cost != nil {
+			if row.CostUSD == nil {
+				row.CostUSD = floatPtr(0)
+			}
+			*row.CostUSD += *cost
+		}
+		if unpricedReason != "" && !row.HasUnpricedUsage {
+			row.HasUnpricedUsage = true
+			row.UnpricedReason = unpricedReason
+		}
+	}
+	return row, true
+}
+
+func priceTier(usage Usage, card RateCard, cardKnown, invalidOverride bool) (*float64, string, bool) {
+	if invalidOverride {
+		return nil, "Price override is invalid.", true
+	}
+	if reported, ok := reportedCost(usage, cardKnown); ok {
+		return floatPtr(reported), "", true
+	}
+	if !cardKnown {
+		return nil, "No price is configured for this model.", true
+	}
+	var cost *float64
+	classified := usage
+	classified.UnclassifiedCacheWriteTokens = 0
+	if classified.hasUsage() {
+		priced := priceUsage(classified, card)
+		if math.IsNaN(priced) || math.IsInf(priced, 0) {
+			return nil, "", false
+		}
+		cost = floatPtr(priced)
+	}
+	if usage.UnclassifiedCacheWriteTokens > 0 {
+		return cost, "Cache write duration is unavailable.", true
+	}
+	return cost, "", true
 }
 
 func reportedCost(usage Usage, priceable bool) (float64, bool) {
@@ -294,6 +359,14 @@ func (u Usage) hasUsage() bool {
 		u.CacheWrite5mInputTokens > 0 ||
 		u.CacheWrite1hInputTokens > 0 ||
 		u.UnclassifiedCacheWriteTokens > 0
+}
+
+func (u Usage) promptTokens() int64 {
+	return u.InputTokens +
+		u.CacheReadInputTokens +
+		u.CacheWrite5mInputTokens +
+		u.CacheWrite1hInputTokens +
+		u.UnclassifiedCacheWriteTokens
 }
 
 func (u Usage) hasAnyValue() bool {

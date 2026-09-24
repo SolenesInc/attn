@@ -113,9 +113,9 @@ func initTestRepo(t *testing.T) string {
 
 func worktreePaths(t *testing.T, repo string) map[string]bool {
 	t.Helper()
-	entries, err := git.ListWorktrees(repo)
+	entries, err := git.NewClient().ObserveLiveWorktrees(context.Background(), repo)
 	if err != nil {
-		t.Fatalf("ListWorktrees: %v", err)
+		t.Fatalf("ObserveLiveWorktrees: %v", err)
 	}
 	set := map[string]bool{}
 	for _, e := range entries {

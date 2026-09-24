@@ -3402,6 +3402,17 @@ type DelegationPreferencesChangedMessage struct {
 	Revision int `json:"revision"`
 }
 
+type DelegationPreferencesCommitMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// Preferences corresponds to the JSON schema field "preferences".
+	Preferences DelegationPreferences `json:"preferences"`
+}
+
 type DelegationPreferencesGetMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3409,6 +3420,24 @@ type DelegationPreferencesGetMessage struct {
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
 }
+
+type DelegationPreferencesHistoryMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Limit corresponds to the JSON schema field "limit".
+	Limit *int `json:"limit,omitempty,omitzero"`
+}
+
+type DelegationPreferencesHistoryResult struct {
+	// Revisions corresponds to the JSON schema field "revisions".
+	Revisions []DelegationPreferencesRevision `json:"revisions"`
+}
+
+type DelegationPreferencesOrigin string
+
+const DelegationPreferencesOriginCli DelegationPreferencesOrigin = "cli"
+const DelegationPreferencesOriginSettings DelegationPreferencesOrigin = "settings"
 
 type DelegationPreferencesResultMessage struct {
 	// Error corresponds to the JSON schema field "error".
@@ -3439,6 +3468,37 @@ type DelegationPreferencesResultMessage struct {
 	WorkflowSkillPaths []string `json:"workflow_skill_paths,omitempty,omitzero"`
 }
 
+type DelegationPreferencesRevision struct {
+	// Changes corresponds to the JSON schema field "changes".
+	Changes []string `json:"changes"`
+
+	// CreatedAt corresponds to the JSON schema field "created_at".
+	CreatedAt *string `json:"created_at,omitempty,omitzero"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// Origin corresponds to the JSON schema field "origin".
+	Origin *DelegationPreferencesOrigin `json:"origin,omitempty,omitzero"`
+
+	// Preferences corresponds to the JSON schema field "preferences".
+	Preferences DelegationPreferences `json:"preferences"`
+
+	// Restores corresponds to the JSON schema field "restores".
+	Restores *int `json:"restores,omitempty,omitzero"`
+}
+
+type DelegationPreferencesRollbackMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
+
+	// Message corresponds to the JSON schema field "message".
+	Message *string `json:"message,omitempty,omitzero"`
+
+	// Revision corresponds to the JSON schema field "revision".
+	Revision *int `json:"revision,omitempty,omitzero"`
+}
+
 type DelegationPreferencesSaveMessage struct {
 	// Cmd corresponds to the JSON schema field "cmd".
 	Cmd string `json:"cmd"`
@@ -3452,6 +3512,11 @@ type DelegationPreferencesSaveMessage struct {
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
+}
+
+type DelegationPreferencesShowMessage struct {
+	// Cmd corresponds to the JSON schema field "cmd".
+	Cmd string `json:"cmd"`
 }
 
 type DelegationRole struct {
@@ -7403,6 +7468,14 @@ type Response struct {
 	// "delegation_operation".
 	DelegationOperation *DelegationOperation `json:"delegation_operation,omitempty,omitzero"`
 
+	// DelegationPreferencesHistory corresponds to the JSON schema field
+	// "delegation_preferences_history".
+	DelegationPreferencesHistory *DelegationPreferencesHistoryResult `json:"delegation_preferences_history,omitempty,omitzero"`
+
+	// DelegationPreferencesRevision corresponds to the JSON schema field
+	// "delegation_preferences_revision".
+	DelegationPreferencesRevision *DelegationPreferencesRevision `json:"delegation_preferences_revision,omitempty,omitzero"`
+
 	// DelegationRoles corresponds to the JSON schema field "delegation_roles".
 	DelegationRoles *DelegationRolesResult `json:"delegation_roles,omitempty,omitzero"`
 
@@ -9073,9 +9146,6 @@ type SessionClosedMessage struct {
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
-
 	// SessionLedgerEntry corresponds to the JSON schema field "session_ledger_entry".
 	SessionLedgerEntry SessionLedgerEntry `json:"session_ledger_entry"`
 }
@@ -9423,9 +9493,6 @@ type SessionReopen struct {
 	// BranchState corresponds to the JSON schema field "branch_state".
 	BranchState *string `json:"branch_state,omitempty,omitzero"`
 
-	// Checking corresponds to the JSON schema field "checking".
-	Checking bool `json:"checking"`
-
 	// DirectoryState corresponds to the JSON schema field "directory_state".
 	DirectoryState string `json:"directory_state"`
 
@@ -9482,17 +9549,6 @@ type SessionReopenMessage struct {
 	SessionID string `json:"session_id"`
 }
 
-type SessionReopenRefreshedMessage struct {
-	// Event corresponds to the JSON schema field "event".
-	Event string `json:"event"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen SessionReopen `json:"reopen"`
-
-	// SessionID corresponds to the JSON schema field "session_id".
-	SessionID string `json:"session_id"`
-}
-
 type SessionReopenResult struct {
 	// Action corresponds to the JSON schema field "action".
 	Action SessionReopenAction `json:"action"`
@@ -9519,6 +9575,9 @@ type SessionReopenResultMessage struct {
 
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
+
+	// Reopen corresponds to the JSON schema field "reopen".
+	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// RequestID corresponds to the JSON schema field "request_id".
 	RequestID string `json:"request_id"`
@@ -10957,9 +11016,6 @@ type WebSocketEvent struct {
 
 	// RecentLocations corresponds to the JSON schema field "recent_locations".
 	RecentLocations []RecentLocation `json:"recent_locations,omitempty,omitzero"`
-
-	// Reopen corresponds to the JSON schema field "reopen".
-	Reopen *SessionReopen `json:"reopen,omitempty,omitzero"`
 
 	// Repos corresponds to the JSON schema field "repos".
 	Repos []RepoState `json:"repos,omitempty,omitzero"`

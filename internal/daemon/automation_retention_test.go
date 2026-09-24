@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -152,13 +153,7 @@ func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
 func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--dirty")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/dirty", worktree)
 	if err := os.WriteFile(filepath.Join(worktree, "untracked.txt"), []byte("uncommitted"), 0o644); err != nil {
@@ -166,7 +161,7 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 	}
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -188,18 +183,12 @@ func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
 func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	if err := os.MkdirAll(mainRepo, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	runGitDaemon(t, mainRepo, "init")
-	runGitDaemon(t, mainRepo, "commit", "--allow-empty", "-m", "init")
+	root, mainRepo := initProviderTestRepo(t)
 	worktree := filepath.Join(root, "repo--clean")
 	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/clean", worktree)
 
 	s := store.New()
-	d := &Daemon{store: s, dataRoot: root, wsHub: newWSHub()}
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
 	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
 	def, err := d.automationApply(raw)
 	if err != nil {
@@ -227,6 +216,25 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	}
 	if _, err := os.Stat(artifactPath); !os.IsNotExist(err) {
 		t.Fatalf("expected the occurrence artifact to be removed, stat err=%v", err)
+	}
+}
+
+func TestAutomationRetentionRemovalYieldsToForegroundWork(t *testing.T) {
+	worktree := t.TempDir()
+	d := &Daemon{store: store.New(), wsHub: newWSHub()}
+	run := store.AutomationRun{
+		ID:                   "run-protected",
+		ResolvedLocationJSON: automationResolvedLocationJSON(t, t.TempDir(), worktree),
+	}
+
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
+		return d.removeAutomationRunWorktree(run)
+	})
+	if !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		t.Fatalf("removal error = %v, want automatic cleanup preemption", err)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("automatic retention removed foreground worktree: %v", err)
 	}
 }
 
@@ -275,5 +283,56 @@ func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
 
 	if got, err := s.GetAutomationRun(run.ID); err != nil || got != nil {
 		t.Fatalf("expected a soft-deleted definition's old run to still be reached and pruned, got %#v err=%v", got, err)
+	}
+}
+
+func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *testing.T) {
+	root, mainRepo := initProviderTestRepo(t)
+	worktree := filepath.Join(root, "repo--retained")
+	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/retained", worktree)
+
+	executor := testGitExecutor(t, testGitConfig())
+	var lanes []gitLane
+	executor.enqueueObserver = func(task gitTask) { lanes = append(lanes, task.Lane) }
+	d := &Daemon{gitExec: executor}
+	run := store.AutomationRun{ID: "run-retained", ResolvedLocationJSON: automationResolvedLocationJSON(t, mainRepo, worktree)}
+	if err := d.removeAutomationRunWorktree(run); err != nil {
+		t.Fatal(err)
+	}
+	if len(lanes) != 1 || lanes[0] != gitInteractive {
+		t.Fatalf("lanes=%v, want one interactive delete so foreground work never waits on the deferred queue", lanes)
+	}
+	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+		t.Fatalf("worktree still present: %v", err)
+	}
+}
+
+func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
+	root, mainRepo := initProviderTestRepo(t)
+	worktree := filepath.Join(root, "repo--auto")
+	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/auto", worktree)
+
+	s := store.New()
+	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
+	def, err := d.automationApply(fmt.Sprintf(manualAutomationYAML, t.TempDir()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+	run := claimTerminalAutomationRun(t, s, def, "race-1", old, automationResolvedLocationJSON(t, mainRepo, worktree))
+	if block, err := d.automationRunCleanupSafety(*run); err != nil || block != automationRunCleanupOK {
+		t.Fatalf("safety = %v err=%v, want OK", block, err)
+	}
+
+	s.Add(&protocol.Session{
+		ID: run.SessionID, Label: "auto", Agent: string(protocol.SessionAgentCodex), Directory: worktree, State: protocol.SessionStateWorking,
+		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
+	})
+
+	if err := d.removeAutomationRunWorktree(*run); !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
+		t.Fatalf("remove err=%v, want preempted by the revived session", err)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("retention deleted the worktree of live session %s: %v", run.SessionID, err)
 	}
 }

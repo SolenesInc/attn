@@ -104,18 +104,21 @@ func (d *Daemon) bindSeedHandover(
 	operationID, sessionID, directory, agent string,
 	fromChief bool,
 ) (*protocol.SeedNote, error) {
+	observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
 	var note *protocol.SeedNote
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "handover seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		note, err = d.bindSeedHandoverForeground(msg, operationID, sessionID, directory, agent, fromChief)
+		note, err = d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, directory, agent, observed, fromChief)
 		return err
 	})
 	return note, err
 }
 
-func (d *Daemon) bindSeedHandoverForeground(
+func (d *Daemon) bindSeedHandoverProtected(
+	_ foregroundCleanupProtection,
 	msg *resolvedDelegationLaunch,
 	operationID, sessionID, directory, agent string,
+	observed garden.Dispatch,
 	fromChief bool,
 ) (*protocol.SeedNote, error) {
 	request := msg.Handover
@@ -157,10 +160,6 @@ func (d *Daemon) bindSeedHandoverForeground(
 	}
 	next.LastExecutionID = sessionID
 
-	session := d.store.Get(sessionID)
-	if session == nil {
-		session = &protocol.Session{ID: sessionID, Directory: directory, Agent: protocol.SessionAgent(agent)}
-	}
 	seedSchema, err := d.seedsCollection()
 	if err != nil {
 		return nil, err
@@ -206,7 +205,7 @@ func (d *Daemon) bindSeedHandoverForeground(
 	var written []store.DocumentWriteResult
 	var dispatches handoverDispatchCommits
 	for attempt := 1; ; attempt++ {
-		dispatches, err = d.handoverDispatchCommits(msg, operationID, sessionID, directory, agent, fromChief, seed, session)
+		dispatches, err = d.handoverDispatchCommits(msg, operationID, sessionID, directory, agent, observed, fromChief, seed)
 		if err != nil {
 			return nil, err
 		}
@@ -307,8 +306,8 @@ type handoverDispatchCommits struct {
 }
 
 func (d *Daemon) handoverDispatchCommits(
-	msg *resolvedDelegationLaunch, operationID, sessionID, directory, agent string, fromChief bool,
-	seed garden.Seed, session *protocol.Session,
+	msg *resolvedDelegationLaunch, operationID, sessionID, directory, agent string, observed garden.Dispatch, fromChief bool,
+	seed garden.Seed,
 ) (handoverDispatchCommits, error) {
 	var out handoverDispatchCommits
 	dispatchSchema, err := d.dispatchesCollection()
@@ -327,7 +326,7 @@ func (d *Daemon) handoverDispatchCommits(
 			return out, fmt.Errorf("handed-over session %s belongs to another operation", sessionID)
 		}
 	}
-	newDispatch = mergeGardenExecution(newDispatch, observedGardenExecution(session, d.store.GetResumeSessionID(sessionID), d.gardenTime()))
+	newDispatch = mergeGardenExecution(newDispatch, observed)
 	newDispatch.Crown = seed.ID
 	newDispatch.SupersededBy = ""
 	newDispatch.DispatcherSession = strings.TrimSpace(protocol.Deref(msg.SourceSessionID))

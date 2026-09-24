@@ -19,10 +19,11 @@ import {
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
 import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
-import type { Presentation, SessionLedgerEntry, SessionReopen } from './types/generated';
+import type { Presentation } from './types/generated';
 import { hideBootSplash } from './utils/bootSplash';
 import { bumpFsChangeSignal } from './utils/fsChangeSignals';
 import { seedPresentationNotices, upsertPresentationNotice } from './utils/presentationNotices';
+
 function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingError, setSettingError] = useState<string | null>(null);
@@ -54,16 +55,6 @@ function App() {
     useReleaseUpdates();
 
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
-  const [sessionCloseNotice, setSessionCloseNotice] = useState<{
-    entry: SessionLedgerEntry;
-    reopen?: SessionReopen;
-    nonce: number;
-  }>();
-  const [sessionVerdictNotice, setSessionVerdictNotice] = useState<{
-    verdicts: Record<string, SessionReopen>;
-    nonce: number;
-  }>();
-
   const {
     daemonSessions,
     setDaemonSessions,
@@ -154,14 +145,6 @@ function App() {
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
     onSessionExited: handleSessionExited,
-    onSessionClosed: (entry, reopen) =>
-      setSessionCloseNotice((prev) => ({ entry, reopen, nonce: (prev?.nonce ?? 0) + 1 })),
-    // Checks finish in bursts; one slot per session keeps every verdict of a burst.
-    onSessionReopenRefreshed: (sessionId, reopen) =>
-      setSessionVerdictNotice((prev) => ({
-        verdicts: { ...prev?.verdicts, [sessionId]: reopen },
-        nonce: (prev?.nonce ?? 0) + 1,
-      })),
   });
 
   const {
@@ -249,8 +232,6 @@ function App() {
             notificationsChangeSignal={notificationsChangeSignal}
             fsChangeSignals={fsChangeSignals}
             notebookTaskChangeSignal={notebookTaskChangeSignal}
-            sessionCloseNotice={sessionCloseNotice}
-            sessionVerdictNotice={sessionVerdictNotice}
             registerSessionExitHandler={registerSessionExitHandler}
           />
         </DaemonApiProvider>

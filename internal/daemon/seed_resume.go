@@ -26,15 +26,16 @@ func (d *Daemon) resumeSeedFromReview(
 	review *protocol.SeedReviewActionContext,
 ) (*seedResumeOutcome, error) {
 	var outcome *seedResumeOutcome
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "resume seed session", func(context.Context) error {
-		var err error
-		outcome, err = d.resumeSeedFromReviewForeground(seedID, review)
-		return err
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var resumeErr error
+		outcome, resumeErr = d.resumeSeedFromReviewProtected(protection, seedID, review)
+		return resumeErr
 	})
 	return outcome, err
 }
 
-func (d *Daemon) resumeSeedFromReviewForeground(
+func (d *Daemon) resumeSeedFromReviewProtected(
+	protection foregroundCleanupProtection,
 	seedID string,
 	review *protocol.SeedReviewActionContext,
 ) (*seedResumeOutcome, error) {
@@ -81,7 +82,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 	}
 	if existing := d.gardenSession(sessionID); existing != nil &&
 		(execution.HostKind == garden.HostRemote || d.sessionHasLiveWorker(sessionID)) {
-		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionForeground(
+		if _, _, _, err := d.applySeedTransitionDetailedAsAtRevisionProtected(protection,
 			seedID, garden.VerbTend, garden.Ask{Actor: actor}, "", d.sessionExists, expectedRev); err != nil {
 			return nil, err
 		}
@@ -103,10 +104,10 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 		if _, err := d.validateGardenReviewAction(review, seedID, "resume"); err != nil {
 			return err
 		}
-		return d.bindResumedSeed(seed, seedDoc, sessionID, strings.TrimSpace(execution.Cwd),
+		return d.bindResumedSeed(protection, seed, seedDoc, sessionID, strings.TrimSpace(execution.Cwd),
 			strings.TrimSpace(execution.Agent), strings.TrimSpace(execution.Resume))
 	}
-	reopened, err := d.reopenSessionRuntime(sessionReopenPlan{
+	reopened, err := d.reopenSessionRuntimeWithProtection(protection, sessionReopenPlan{
 		SessionID:   sessionID,
 		Directory:   execution.Cwd,
 		Title:       seed.Title,
@@ -124,6 +125,7 @@ func (d *Daemon) resumeSeedFromReviewForeground(
 }
 
 func (d *Daemon) bindResumedSeed(
+	_ foregroundCleanupProtection,
 	seed garden.Seed,
 	seedDoc docstore.Document,
 	sessionID, directory, agent, resumeID string,
@@ -160,7 +162,7 @@ func (d *Daemon) bindResumedSeed(
 	if session == nil {
 		return fmt.Errorf("resumed session %s is not tracked", sessionID)
 	}
-	dispatch = mergeGardenExecution(dispatch, observedGardenExecution(session, resumeID, d.gardenTime()))
+	dispatch = mergeGardenExecution(dispatch, d.observedGardenExecution(session, resumeID, d.gardenTime()))
 	dispatch.SessionID = sessionID
 	dispatch.Crown = seed.ID
 	dispatch.SupersededBy = ""

@@ -870,7 +870,8 @@ model SessionListMessage {
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
   since?: string;
   until?: string;
-  // Also judge every closed row of this page, so a surface renders it in one call.
+  // Request reopen eligibility for every closed row of this page, inline in
+  // the result.
   reopen?: boolean;
 }
 
@@ -1184,6 +1185,45 @@ model DelegationRolesResult {
   roles: DelegationRole[];
   fallback?: DelegationFallback;
   guidance: string;
+}
+
+enum DelegationPreferencesOrigin {
+  settings,
+  cli,
+}
+
+model DelegationPreferencesRevision {
+  preferences: DelegationPreferences;
+  restores?: safeint;
+  origin?: DelegationPreferencesOrigin;
+  message?: string;
+  created_at?: string;
+  changes: string[];
+}
+
+model DelegationPreferencesShowMessage {
+  cmd: "delegation_preferences_show";
+}
+
+model DelegationPreferencesCommitMessage {
+  cmd: "delegation_preferences_commit";
+  preferences: DelegationPreferences;
+  message?: string;
+}
+
+model DelegationPreferencesHistoryMessage {
+  cmd: "delegation_preferences_history";
+  limit?: safeint;
+}
+
+model DelegationPreferencesHistoryResult {
+  revisions: DelegationPreferencesRevision[];
+}
+
+model DelegationPreferencesRollbackMessage {
+  cmd: "delegation_preferences_rollback";
+  revision?: safeint;
+  message?: string;
 }
 
 enum DelegateAssignmentKind {
@@ -6351,6 +6391,8 @@ model Response {
   delegate_result?: DelegateResult;
   delegation_operation?: DelegationOperation;
   delegation_roles?: DelegationRolesResult;
+  delegation_preferences_revision?: DelegationPreferencesRevision;
+  delegation_preferences_history?: DelegationPreferencesHistoryResult;
   sessions?: Session[];
   workspaces?: Workspace[];
   prs?: PR[];
@@ -7055,8 +7097,6 @@ model SessionReopen {
   // Offered actions, best first. Empty means nothing here brings it back.
   actions: SessionReopenAction[];
   warning?: string;
-  // A branch check is running; ask again for a sharper verdict.
-  checking: boolean;
   // present | missing | unavailable | unknown | remote
   directory_state: string;
   // local | remote_only | gone | merged | unknown
@@ -7354,12 +7394,8 @@ model SessionReopenResultMessage {
   success: boolean;
   error?: string;
   result?: SessionReopenResult;
-}
-
-model SessionReopenRefreshedMessage {
-  event: "session_reopen_refreshed";
-  session_id: string;
-  reopen: SessionReopen;
+  // Present when the session refused the action: what it offers instead.
+  reopen?: SessionReopen;
 }
 
 // session_unregistered says the live session left; this says where it went, so
@@ -7367,8 +7403,6 @@ model SessionReopenRefreshedMessage {
 model SessionClosedMessage {
   event: "session_closed";
   session_ledger_entry: SessionLedgerEntry;
-  // So a surface that updates in place judges the new row without a re-list.
-  reopen?: SessionReopen;
 }
 
 // Result of notification_mark_read. unread_count is the post-mark count so the
@@ -7597,7 +7631,6 @@ model WebSocketEvent {
   plugin_issues?: PluginIssue[];
   operation?: GitOperation;
   session_ledger_entry?: SessionLedgerEntry;
-  reopen?: SessionReopen;
   branches?: Branch[];
   recent_locations?: RecentLocation[];
   settings?: Record<string>;
@@ -7782,7 +7815,6 @@ alias DaemonEvent =
   | SessionListResultMessage
   | SessionShowResultMessage
   | SessionReopenResultMessage
-  | SessionReopenRefreshedMessage
   | SessionClosedMessage
   | NotificationListResultMessage
   | NotificationMarkReadResultMessage

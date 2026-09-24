@@ -27,6 +27,8 @@ const (
 	delegationWorktreeOwnerFile = "attn-delegation-owner"
 )
 
+var delegationGitTask = gitTask{Kind: gitTaskDelegation, Lane: gitInteractive}
+
 type internalActionResult struct {
 	Event   string  `json:"event"`
 	Success bool    `json:"success"`
@@ -154,23 +156,23 @@ func (d *Daemon) defaultDelegationEffort(agent, effort string) string {
 	return ""
 }
 
-func resolveDelegationRepository(path, flagName string) (string, error) {
-	root, err := git.GetRepoRoot(path)
+func (d *Daemon) resolveDelegationRepository(path, flagName string) (string, error) {
+	root, err := d.resolveMainRepo(context.Background(), delegationGitTask, path)
 	if err != nil {
 		return "", fmt.Errorf("%s %s is not in a Git repository", flagName, git.CanonicalizePath(path))
 	}
-	return git.ResolveMainRepoPath(root), nil
+	return root, nil
 }
 
-func validateDelegationRepositoryInputs(cwd string, request *protocol.DelegateWorktreeRequest) error {
+func (d *Daemon) validateDelegationRepositoryInputs(cwd string, request *protocol.DelegateWorktreeRequest) error {
 	if request == nil || strings.TrimSpace(cwd) == "" || strings.TrimSpace(protocol.Deref(request.Repo)) == "" {
 		return nil
 	}
-	cwdRepo, err := resolveDelegationRepository(cwd, "--cwd")
+	cwdRepo, err := d.resolveDelegationRepository(cwd, "--cwd")
 	if err != nil {
 		return err
 	}
-	explicitRepo, err := resolveDelegationRepository(protocol.Deref(request.Repo), "--repo")
+	explicitRepo, err := d.resolveDelegationRepository(protocol.Deref(request.Repo), "--repo")
 	if err != nil {
 		return err
 	}
@@ -207,7 +209,7 @@ func validateDelegationDirectory(path string) (string, error) {
 }
 
 func (d *Daemon) activeSessionInCheckout(directory string, excluded ...string) (string, []string) {
-	worktreeRoot, err := git.GetRepoRoot(directory)
+	worktreeRoot, err := d.readRepoRoot(context.Background(), delegationGitTask, directory)
 	if err != nil {
 		return "", nil
 	}
@@ -221,7 +223,7 @@ func (d *Daemon) activeSessionInCheckout(directory string, excluded ...string) (
 		if skip[session.ID] || !d.sessionHasLiveWorker(session.ID) {
 			continue
 		}
-		sessionRoot, err := git.GetRepoRoot(session.Directory)
+		sessionRoot, err := d.readRepoRoot(context.Background(), delegationGitTask, session.Directory)
 		if err == nil && git.CanonicalizePath(sessionRoot) == worktreeRoot {
 			occupants = append(occupants, session.ID)
 		}
@@ -237,16 +239,16 @@ func (d *Daemon) activeSessionInLinkedWorktree(directory string) (string, bool) 
 
 type delegationRollback struct {
 	d    *Daemon
-	undo []func() error
+	undo []func(foregroundCleanupProtection) error
 }
 
 func (d *Daemon) newDelegationRollback() *delegationRollback {
 	return &delegationRollback{d: d}
 }
 
-func (r *delegationRollback) fail(cause error) error {
+func (r *delegationRollback) fail(protection foregroundCleanupProtection, cause error) error {
 	for i := len(r.undo) - 1; i >= 0; i-- {
-		if err := r.undo[i](); err != nil {
+		if err := r.undo[i](protection); err != nil {
 			cause = fmt.Errorf("%w; %v", cause, err)
 		}
 	}
@@ -259,8 +261,8 @@ func (r *delegationRollback) abandon() {
 }
 
 func (r *delegationRollback) onWorktreeCreated(path string) {
-	r.undo = append(r.undo, func() error {
-		if err := r.d.doDeleteWorktreeForeground(path, nil, deleteWorktreeOptions{}); err != nil {
+	r.undo = append(r.undo, func(protection foregroundCleanupProtection) error {
+		if err := r.d.doDeleteWorktreeProtected(protection, path, nil, deleteWorktreeOptions{}); err != nil {
 			return fmt.Errorf("rollback worktree %s: %v", path, err)
 		}
 		return nil
@@ -268,28 +270,28 @@ func (r *delegationRollback) onWorktreeCreated(path string) {
 }
 
 func (r *delegationRollback) onWorkspaceCreated(workspaceID string) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.unregisterWorkspaceIfEmpty(workspaceID)
 		return nil
 	})
 }
 
 func (r *delegationRollback) onPaneCreated(sessionID string) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.removeWorkspaceLayoutPaneForSession(sessionID)
 		return nil
 	})
 }
 
 func (r *delegationRollback) onSessionSpawned(sessionID string) {
-	r.undo = append(r.undo, func() error {
+	r.undo = append(r.undo, func(foregroundCleanupProtection) error {
 		r.d.unregisterSession(sessionID, syscall.SIGTERM)
 		return nil
 	})
 }
 
-func delegationWorktreeOwnerPath(worktreePath string) (string, error) {
-	out, err := git.Output(git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
+func (d *Daemon) delegationWorktreeOwnerPath(worktreePath string) (string, error) {
+	out, err := d.gitOutput(context.Background(), delegationGitTask, git.OpMetadata, worktreePath, "rev-parse", "--git-path", delegationWorktreeOwnerFile)
 	if err != nil {
 		return "", fmt.Errorf("resolve delegation worktree owner marker: %w", err)
 	}
@@ -303,8 +305,8 @@ func delegationWorktreeOwnerPath(worktreePath string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-func writeDelegationWorktreeOwner(worktreePath, token string) error {
-	path, err := delegationWorktreeOwnerPath(worktreePath)
+func (d *Daemon) writeDelegationWorktreeOwner(worktreePath, token string) error {
+	path, err := d.delegationWorktreeOwnerPath(worktreePath)
 	if err != nil {
 		return err
 	}
@@ -314,8 +316,8 @@ func writeDelegationWorktreeOwner(worktreePath, token string) error {
 	return nil
 }
 
-func verifyDelegationWorktreeOwner(worktreePath, token string) error {
-	path, err := delegationWorktreeOwnerPath(worktreePath)
+func (d *Daemon) verifyDelegationWorktreeOwner(worktreePath, token string) error {
+	path, err := d.delegationWorktreeOwnerPath(worktreePath)
 	if err != nil {
 		return err
 	}
@@ -337,11 +339,10 @@ func (d *Daemon) delegationWorktreeRepo(workspaceID string) (string, error) {
 		if session == nil || strings.TrimSpace(session.Directory) == "" {
 			continue
 		}
-		root, err := git.GetRepoRoot(session.Directory)
+		_, repo, err := d.readCheckoutRepo(context.Background(), delegationGitTask, session.Directory)
 		if err != nil {
 			continue
 		}
-		repo := git.ResolveMainRepoPath(root)
 		if _, ok := seen[repo]; ok {
 			continue
 		}
@@ -386,6 +387,13 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 		strings.TrimSpace(protocol.Deref(request.Path)) != "" ||
 		strings.TrimSpace(protocol.Deref(request.StartingFrom)) != ""
 	repo := strings.TrimSpace(protocol.Deref(request.Repo))
+	if repo != "" {
+		resolvedRepo, err := d.resolveMainRepo(context.Background(), delegationGitTask, repo)
+		if err != nil {
+			return err
+		}
+		repo = resolvedRepo
+	}
 	if repo == "" && placement == delegationPlacementExisting {
 		resolvedRepo, err := d.delegationWorktreeRepo(workspaceID)
 		if err != nil {
@@ -394,7 +402,7 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 		repo = resolvedRepo
 	}
 	if repo == "" {
-		root, err := git.GetRepoRoot(directory)
+		root, err := d.resolveMainRepo(context.Background(), delegationGitTask, directory)
 		if err != nil {
 			if configuredWorktree {
 				return fmt.Errorf("workspace directory is not in a git repository; pass --repo")
@@ -407,7 +415,6 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 		}
 		repo = root
 	}
-	repo = git.ResolveMainRepoPath(repo)
 
 	request.Repo = protocol.Ptr(repo)
 	request.Branch = automaticDelegationBranch(label, sessionID)
@@ -415,7 +422,7 @@ func (d *Daemon) applyDefaultDelegationWorktree(msg *resolvedDelegationLaunch, p
 	return nil
 }
 
-func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, request *protocol.DelegateWorktreeRequest, operationID, ownedPath string, worktreeOwned bool, ownedToken string, _ bool) (string, bool, error) {
+func (d *Daemon) createDelegationWorktree(protection foregroundCleanupProtection, baseDirectory, inferredRepo string, request *protocol.DelegateWorktreeRequest, operationID, ownedPath string, worktreeOwned bool, ownedToken string, _ bool) (string, bool, error) {
 	branch := strings.TrimSpace(request.Branch)
 	if branch == "" {
 		return "", false, fmt.Errorf("worktree branch is required")
@@ -428,11 +435,11 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		if baseDirectory == "" {
 			return "", false, fmt.Errorf("cannot determine which repository the worktree belongs to; pass --repo")
 		}
-		repoRoot, err := git.GetRepoRoot(baseDirectory)
+		repoRoot, err := d.resolveMainRepo(protection.Context(), delegationGitTask, baseDirectory)
 		if err != nil {
 			return "", false, fmt.Errorf("workspace directory is not in a git repository; pass --repo")
 		}
-		repo = git.ResolveMainRepoPath(repoRoot)
+		repo = repoRoot
 	}
 	expectedPath := strings.TrimSpace(protocol.Deref(request.Path))
 	if expectedPath == "" {
@@ -440,15 +447,15 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 	}
 	expectedPath = git.CanonicalizePath(expectedPath)
 	if _, statErr := os.Stat(expectedPath); statErr == nil {
-		if pathRepo, pathErr := resolveDelegationRepository(expectedPath, "--worktree-path"); pathErr == nil && git.CanonicalizePath(pathRepo) != git.CanonicalizePath(repo) {
+		if pathRepo, pathErr := d.resolveDelegationRepository(expectedPath, "--worktree-path"); pathErr == nil && git.CanonicalizePath(pathRepo) != git.CanonicalizePath(repo) {
 			return "", false, fmt.Errorf("repository placement conflict: selected repository resolves to %s, but --worktree-path resolves to %s; choose a worktree path from the selected repository or correct --repo/--cwd", repo, pathRepo)
 		}
-		wt := d.discoverWorktree(expectedPath)
+		wt := d.discoverWorktree(protection, expectedPath)
 		if wt == nil || strings.TrimSpace(wt.Branch) != branch {
 			return "", false, fmt.Errorf("worktree path already exists and is not branch %q: %s", branch, expectedPath)
 		}
 		if worktreeOwned && git.CanonicalizePath(ownedPath) == expectedPath {
-			if err := verifyDelegationWorktreeOwner(expectedPath, ownedToken); err != nil {
+			if err := d.verifyDelegationWorktreeOwner(expectedPath, ownedToken); err != nil {
 				return "", false, fmt.Errorf("worktree %s was created before delegation preparation was interrupted, but its current ownership cannot be proven (%v), so it was left untouched", expectedPath, err)
 			}
 			return expectedPath, true, nil
@@ -481,11 +488,11 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 		err          error
 	)
 	if protocol.Deref(request.ExistingBranch) {
-		worktreePath, err = d.doCreateWorktreeFromBranchForeground(&protocol.CreateWorktreeFromBranchMessage{
+		worktreePath, err = d.doCreateWorktreeFromBranchProtected(protection, &protocol.CreateWorktreeFromBranchMessage{
 			Cmd: protocol.CmdCreateWorktreeFromBranch, MainRepo: repo, Branch: branch, Path: request.Path,
 		})
 	} else {
-		worktreePath, err = d.doCreateWorktreeForeground(&protocol.CreateWorktreeMessage{
+		worktreePath, err = d.doCreateWorktreeProtected(protection, &protocol.CreateWorktreeMessage{
 			Cmd:          protocol.CmdCreateWorktree,
 			MainRepo:     repo,
 			Branch:       branch,
@@ -498,7 +505,7 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 	}
 	if operationID != "" {
 		ownerToken := uuid.NewString()
-		if err := writeDelegationWorktreeOwner(worktreePath, ownerToken); err != nil {
+		if err := d.writeDelegationWorktreeOwner(worktreePath, ownerToken); err != nil {
 			return worktreePath, true, err
 		}
 		if err := d.store.MarkDelegationWorktreeOwned(operationID, worktreePath, ownerToken, time.Now()); err != nil {
@@ -510,15 +517,15 @@ func (d *Daemon) createDelegationWorktree(baseDirectory, inferredRepo string, re
 
 func (d *Daemon) delegate(msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
 	var result *protocol.DelegateResult
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "delegate", func(context.Context) error {
-		var err error
-		result, err = d.delegateForeground(msg)
-		return err
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var delegateErr error
+		result, delegateErr = d.delegateProtected(protection, msg)
+		return delegateErr
 	})
 	return result, err
 }
 
-func (d *Daemon) delegateForeground(msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateProtected(protection foregroundCleanupProtection, msg *protocol.DelegateMessage) (*protocol.DelegateResult, error) {
 	resolved, err := d.resolveDelegationPreferences(msg)
 	if err != nil {
 		return nil, err
@@ -528,20 +535,20 @@ func (d *Daemon) delegateForeground(msg *protocol.DelegateMessage) (*protocol.De
 	if err != nil {
 		return nil, err
 	}
-	return d.delegateOperationForeground(runtime, "", sessionID, "", false, "", "", resolved)
+	return d.delegateOperationProtected(protection, runtime, "", sessionID, "", false, "", "", resolved)
 }
 
 func (d *Daemon) delegateResolved(msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
 	var result *protocol.DelegateResult
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "delegate resolved", func(context.Context) error {
-		var err error
-		result, err = d.delegateResolvedForeground(msg)
-		return err
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var delegateErr error
+		result, delegateErr = d.delegateResolvedProtected(protection, msg)
+		return delegateErr
 	})
 	return result, err
 }
 
-func (d *Daemon) delegateResolvedForeground(msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateResolvedProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch) (*protocol.DelegateResult, error) {
 	resolved, err := d.resolveDelegationPreferences(msg.preferenceRequest())
 	if err != nil {
 		return nil, err
@@ -551,10 +558,10 @@ func (d *Daemon) delegateResolvedForeground(msg *resolvedDelegationLaunch) (*pro
 	if msg.Handover != nil {
 		operationID = "legacy-" + sessionID
 	}
-	return d.delegateOperationForeground(msg, operationID, sessionID, "", false, "", "", resolved)
+	return d.delegateOperationProtected(protection, msg, operationID, sessionID, "", false, "", "", resolved)
 }
 
-func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID, workspaceID, directory, name, agent, model, effort, seedID string, guidance string) error {
+func (d *Daemon) spawnDelegatedRuntimeProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, sessionID, workspaceID, directory, name, agent, model, effort, seedID string, guidance string) error {
 	initialPrompt := delegatedSeedPrompt(seedID)
 	if guidance != "" {
 		initialPrompt = prompts.DelegationOpeningWithGuidance(initialPrompt, guidance)
@@ -578,12 +585,12 @@ func (d *Daemon) spawnDelegatedRuntime(msg *resolvedDelegationLaunch, sessionID,
 		spawnMsg.Effort = protocol.Ptr(effort)
 	}
 	spawnClient := newInternalWSClient()
-	d.handleSpawnSessionWithPolicyForeground(spawnClient, spawnMsg, internalSpawnPolicy{})
+	d.handleSpawnSessionWithPolicyProtected(protection, spawnClient, spawnMsg, internalSpawnPolicy{})
 	_, err := readInternalActionResult(spawnClient)
 	return err
 }
 
-func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
+func (d *Daemon) delegateOperationProtected(protection foregroundCleanupProtection, msg *resolvedDelegationLaunch, operationID, reservedSessionID, ownedWorktreePath string, worktreeOwned bool, worktreeToken, initiatingChiefSessionID string, resolved *delegationprefs.Resolved) (*protocol.DelegateResult, error) {
 	guidance := ""
 	if resolved != nil {
 		if err := d.ensureDelegationWorkflowSkill(resolved); err != nil {
@@ -706,7 +713,8 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		if msg.Handover != nil {
 			seedID = strings.TrimSpace(msg.Handover.SeedID)
 			if handover != nil && !handover.alreadyBound {
-				if _, err := d.bindSeedHandoverForeground(msg, operationID, sessionID, existing.Directory, agent, delegatedByChief); err != nil {
+				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
+				if _, err := d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, existing.Directory, agent, observed, delegatedByChief); err != nil {
 					return nil, fmt.Errorf("bind seed handover: %w", err)
 				}
 			}
@@ -714,9 +722,11 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 			seedID = bound
 		} else {
 			if msg.Assignment.Kind == "" {
-				seedID, err = d.bindDelegationSeedForeground(sessionID, sourceSessionID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief)
+				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
+				seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, existing.Label, seedID, observed, delegatedByChief)
 			} else {
-				seedID, err = d.bindDelegationAssignmentForeground(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, existing.Directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+				observed := d.observeGardenDispatchExecution(sessionID, existing.Directory, agent)
+				seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, existing.Label, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 			}
 			if err != nil {
 				return nil, err
@@ -728,7 +738,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 					"recovering delegated runtime", existing.WorkspaceID, "", existing.Directory, nil, nil, time.Now())
 			}
 			watch = d.watchLaunch(sessionID)
-			if err := d.spawnDelegatedRuntime(msg, sessionID, existing.WorkspaceID, existing.Directory, existing.Label, agent, model, effort, seedID, guidance); err != nil {
+			if err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, existing.WorkspaceID, existing.Directory, existing.Label, agent, model, effort, seedID, guidance); err != nil {
 				d.forgetLaunchWatch(sessionID, watch)
 				return nil, fmt.Errorf("recover delegated session runtime: %w", err)
 			}
@@ -795,7 +805,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 				return nil, cwdErr
 			}
 			directory = validatedCwd
-			if repoErr := validateDelegationRepositoryInputs(directory, msg.Worktree); repoErr != nil {
+			if repoErr := d.validateDelegationRepositoryInputs(directory, msg.Worktree); repoErr != nil {
 				return nil, repoErr
 			}
 		}
@@ -835,8 +845,8 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 				return nil, repoErr
 			}
 			if resolvedRepo == "" {
-				if root, rootErr := git.GetRepoRoot(directory); rootErr == nil {
-					resolvedRepo = git.ResolveMainRepoPath(root)
+				if root, rootErr := d.resolveMainRepo(protection.Context(), delegationGitTask, directory); rootErr == nil {
+					resolvedRepo = root
 				}
 			}
 			inferredWorktreeRepo = resolvedRepo
@@ -846,7 +856,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	if msg.Worktree != nil {
 		repositorySubdir := ""
 		if explicitLaunch {
-			sourceRoot, rootErr := git.GetRepoRoot(directory)
+			sourceRoot, rootErr := d.readRepoRoot(protection.Context(), delegationGitTask, directory)
 			if rootErr != nil {
 				return nil, rootErr
 			}
@@ -856,7 +866,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 				return nil, fmt.Errorf("resolve cwd subdirectory inside checkout: %v", relErr)
 			}
 		}
-		worktreePath, created, createErr := d.createDelegationWorktree(directory, inferredWorktreeRepo, msg.Worktree, operationID, ownedWorktreePath, worktreeOwned, worktreeToken, protocol.Deref(msg.AllowWorktreeReuse))
+		worktreePath, created, createErr := d.createDelegationWorktree(protection, directory, inferredWorktreeRepo, msg.Worktree, operationID, ownedWorktreePath, worktreeOwned, worktreeToken, protocol.Deref(msg.AllowWorktreeReuse))
 		if createErr != nil {
 			if operationID != "" && strings.TrimSpace(worktreePath) != "" {
 				actualPath := git.CanonicalizePath(worktreePath)
@@ -871,7 +881,9 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		if requestedPath := strings.TrimSpace(protocol.Deref(msg.Worktree.Path)); requestedPath != "" && worktreePath != git.CanonicalizePath(requestedPath) {
 			return nil, fmt.Errorf("worktree provider returned %s, expected requested path %s; checkout was left in place", worktreePath, requestedPath)
 		}
-		actualBranch, branchErr := git.GetCurrentBranch(worktreePath)
+		actualBranch, branchErr := gitValue(protection.Context(), d.gitExecution(), delegationGitTask, func(ctx context.Context, client *git.Client) (string, error) {
+			return client.GetCurrentBranch(ctx, worktreePath)
+		})
 		if branchErr != nil || actualBranch != msg.Worktree.Branch {
 			return nil, fmt.Errorf("worktree provider returned branch %q at %s, expected %q; checkout was left in place", actualBranch, worktreePath, msg.Worktree.Branch)
 		}
@@ -884,7 +896,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 		}
 		validatedDirectory, directoryErr := validateDelegationDirectory(resolvedDirectory)
 		if directoryErr != nil {
-			return nil, rollback.fail(directoryErr)
+			return nil, rollback.fail(protection, directoryErr)
 		}
 		directory = validatedDirectory
 		operationWorktreePath = worktreePath
@@ -892,7 +904,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	if placement == delegationPlacementNew {
 		validatedDirectory, directoryErr := validateDelegationDirectory(directory)
 		if directoryErr != nil {
-			return nil, rollback.fail(directoryErr)
+			return nil, rollback.fail(protection, directoryErr)
 		}
 		directory = validatedDirectory
 	}
@@ -915,22 +927,25 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	if name == "" {
 		name = truncateDelegationName(filepath.Base(directory))
 		if err := d.validateDelegationName(name, creatingWorkspace, sessionNameWorkspaceID); err != nil {
-			return nil, rollback.fail(err)
+			return nil, rollback.fail(protection, err)
 		}
 	}
 	seedID := strings.TrimSpace(protocol.Deref(msg.Plot))
 	if handover != nil {
 		seedID = strings.TrimSpace(msg.Handover.SeedID)
 		if !handover.alreadyBound {
-			if _, err := d.bindSeedHandoverForeground(msg, operationID, sessionID, directory, agent, delegatedByChief); err != nil {
+			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
+			if _, err := d.bindSeedHandoverProtected(protection, msg, operationID, sessionID, directory, agent, observed, delegatedByChief); err != nil {
 				return nil, fmt.Errorf("bind seed handover: %w", err)
 			}
 		}
 	} else {
 		if msg.Assignment.Kind == "" {
-			seedID, err = d.bindDelegationSeedForeground(sessionID, sourceSessionID, brief, name, seedID, directory, agent, delegatedByChief)
+			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
+			seedID, err = d.bindDelegationSeedProtected(protection, sessionID, sourceSessionID, brief, name, seedID, observed, delegatedByChief)
 		} else {
-			seedID, err = d.bindDelegationAssignmentForeground(operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, directory, agent, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
+			observed := d.observeGardenDispatchExecution(sessionID, directory, agent)
+			seedID, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, sourceSessionID, msg.ParentSeedID, brief, name, seedID, observed, delegatedByChief, msg.Assignment.Kind == protocol.DelegateAssignmentKindNew)
 		}
 		if err != nil {
 			return nil, err
@@ -946,20 +961,20 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 			Directory: directory,
 		})
 		if d.store.GetWorkspace(workspaceID) == nil {
-			return nil, rollback.fail(fmt.Errorf("create delegated workspace"))
+			return nil, rollback.fail(protection, fmt.Errorf("create delegated workspace"))
 		}
 		rollback.onWorkspaceCreated(workspaceID)
 	}
 	if operationID != "" {
 		if err := d.store.UpdateDelegationOperation(operationID, protocol.DelegationOperationStatePreparing,
 			"assembling workspace and session", workspaceID, "", operationWorktreePath, nil, nil, time.Now()); err != nil {
-			return nil, rollback.fail(err)
+			return nil, rollback.fail(protection, err)
 		}
 	}
 
 	if existingWorkspaceID, _, found := d.store.FindWorkspaceLayoutPaneBySessionID(sessionID); found {
 		if existingWorkspaceID != workspaceID {
-			return nil, rollback.fail(
+			return nil, rollback.fail(protection,
 				fmt.Errorf("reserved delegated pane belongs to workspace %s, want %s", existingWorkspaceID, workspaceID))
 		}
 	} else {
@@ -972,32 +987,32 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 			Title:       protocol.Ptr(name),
 		})
 		if _, err := readInternalActionResult(paneClient); err != nil {
-			return nil, rollback.fail(fmt.Errorf("create delegated pane: %w", err))
+			return nil, rollback.fail(protection, fmt.Errorf("create delegated pane: %w", err))
 		}
 	}
 	rollback.onPaneCreated(sessionID)
 
 	watch := d.watchLaunch(sessionID)
-	if err := d.spawnDelegatedRuntime(msg, sessionID, workspaceID, directory, name, agent, model, effort, seedID, guidance); err != nil {
+	if err := d.spawnDelegatedRuntimeProtected(protection, msg, sessionID, workspaceID, directory, name, agent, model, effort, seedID, guidance); err != nil {
 		d.forgetLaunchWatch(sessionID, watch)
-		return nil, rollback.fail(fmt.Errorf("spawn delegated session: %w", err))
+		return nil, rollback.fail(protection, fmt.Errorf("spawn delegated session: %w", err))
 	}
 
 	session := d.store.Get(sessionID)
 	if session == nil {
-		return nil, rollback.fail(fmt.Errorf("delegated session was not persisted"))
+		return nil, rollback.fail(protection, fmt.Errorf("delegated session was not persisted"))
 	}
 	rollback.onSessionSpawned(sessionID)
 	d.delegationCheckoutMu.Unlock()
 	checkoutLocked = false
 	if d.delegationFinalizeHook != nil {
 		if err := d.delegationFinalizeHook(); err != nil {
-			return nil, rollback.fail(err)
+			return nil, rollback.fail(protection, err)
 		}
 	}
 	if delegatedByChief {
 		if _, errMsg := d.setWorkspaceMuted(workspaceID, false); errMsg != "" {
-			return nil, rollback.fail(fmt.Errorf("make delegated workspace visible: %s", errMsg))
+			return nil, rollback.fail(protection, fmt.Errorf("make delegated workspace visible: %s", errMsg))
 		}
 	}
 	if operationID != "" {

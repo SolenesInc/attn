@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,7 +12,10 @@ import (
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"golang.org/x/sync/errgroup"
 )
+
+const sessionListReopenConcurrency = 4
 
 func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.SessionLedgerQuery, error) {
 	scope := store.SessionLedgerLive
@@ -100,18 +104,32 @@ func (d *Daemon) handleSessionList(conn net.Conn, msg *protocol.SessionListMessa
 }
 
 func (d *Daemon) reopenVerdictsForPage(entries []protocol.SessionLedgerEntry) []protocol.SessionReopenEntry {
-	verdicts := make([]protocol.SessionReopenEntry, 0, len(entries))
-	for i := range entries {
-		if protocol.Deref(entries[i].ClosedAt) == "" {
+	verdicts := make([]*protocol.SessionReopenEntry, len(entries))
+	gitView := d.scheduledReopenGit()
+	var group errgroup.Group
+	group.SetLimit(sessionListReopenConcurrency)
+	for i, entry := range entries {
+		if protocol.Deref(entry.ClosedAt) == "" {
 			continue
 		}
-		verdict := d.reopenVerdictForEntry(&entries[i])
-		verdicts = append(verdicts, protocol.SessionReopenEntry{
-			SessionID: entries[i].ID,
-			Reopen:    *verdict.toProtocol(),
+		group.Go(func() error {
+			verdict, err := d.resolveReopen(context.Background(), entry, gitView)
+			if err != nil {
+				d.logf("session list: resolve reopen eligibility for session %s: %v", entry.ID, err)
+				return nil
+			}
+			verdicts[i] = &protocol.SessionReopenEntry{SessionID: entry.ID, Reopen: *verdict.toProtocol()}
+			return nil
 		})
 	}
-	return verdicts
+	_ = group.Wait()
+	resolved := make([]protocol.SessionReopenEntry, 0, len(verdicts))
+	for _, verdict := range verdicts {
+		if verdict != nil {
+			resolved = append(resolved, *verdict)
+		}
+	}
+	return resolved
 }
 
 func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessage) {
@@ -121,9 +139,11 @@ func (d *Daemon) handleSessionShow(conn net.Conn, msg *protocol.SessionShowMessa
 		return
 	}
 	result := &protocol.SessionShowResult{Entry: *entry}
-	if verdict, found := d.reopenVerdict(entry.ID); found {
+	verdict, err := d.resolveReopen(context.Background(), *entry, d.scheduledReopenGit())
+	if err != nil {
+		d.logf("session show: resolve reopen eligibility for session %s: %v", entry.ID, err)
+	} else {
 		result.Reopen = verdict.toProtocol()
-		d.refreshReopenBranch(verdict)
 	}
 	_ = json.NewEncoder(conn).Encode(protocol.Response{Ok: true, SessionShowResult: result})
 }
@@ -152,6 +172,10 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		RequestID: protocol.Deref(msg.RequestID),
 	}
 	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	var refused *reopenRefusedError
+	if errors.As(err, &refused) {
+		reply.Reopen = refused.verdict.toProtocol()
+	}
 	if err != nil {
 		reply.Error = protocol.Ptr(err.Error())
 	} else {
@@ -175,18 +199,6 @@ func (d *Daemon) sendSessionShowWSResult(client *wsClient, msg *protocol.Session
 	d.sendToClient(client, reply)
 }
 
-func projectSessionReopenRefreshed(d *Daemon, event bus.Event) {
-	reopen, ok := decodeFact[protocol.SessionReopen](d, event)
-	if !ok {
-		return
-	}
-	d.wsHub.BroadcastValue(&protocol.SessionReopenRefreshedMessage{
-		Event:     protocol.EventSessionReopenRefreshed,
-		SessionID: event.Subject,
-		Reopen:    reopen,
-	})
-}
-
 func projectSessionClosed(d *Daemon, event bus.Event) {
 	entry, ok := decodeFact[protocol.SessionLedgerEntry](d, event)
 	if !ok {
@@ -195,6 +207,5 @@ func projectSessionClosed(d *Daemon, event bus.Event) {
 	d.wsHub.Broadcast(&protocol.WebSocketEvent{
 		Event:              protocol.EventSessionClosed,
 		SessionLedgerEntry: &entry,
-		Reopen:             d.reopenVerdictForEntry(&entry).toProtocol(),
 	})
 }

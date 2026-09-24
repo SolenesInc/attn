@@ -52,6 +52,16 @@ func (d *Daemon) seedsCollection() (*docstore.CollectionSchema, error) {
 }
 
 func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
+	var doc docstore.Document
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var plantErr error
+		doc, plantErr = d.plantSeedProtected(protection, schema, seed)
+		return plantErr
+	})
+	return doc, err
+}
+
+func (d *Daemon) plantSeedProtected(_ foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed) (docstore.Document, error) {
 	seed = d.initializeSeedLifecycle(seed)
 	body, err := seed.Encode()
 	if err != nil {
@@ -87,15 +97,9 @@ func (d *Daemon) plantSeed(schema docstore.CollectionSchema, seed garden.Seed) (
 	if err != nil {
 		return docstore.Document{}, err
 	}
-	var written store.DocumentWriteResult
-	var eventSeqs []int64
-	err = d.worktreeMaintenance.RunForeground(context.Background(), "plant seed protection", func(context.Context) error {
-		var commitErr error
-		written, eventSeqs, commitErr = d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
-			Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
-		}, fact, events, d.gardenTime())
-		return commitErr
-	})
+	written, eventSeqs, err := d.store.CommitDocumentWriteWithEvents(store.DocumentWrite{
+		Schema: schema, ID: seed.ID, Body: body, Expected: &expected,
+	}, fact, events, d.gardenTime())
 	if err != nil {
 		return docstore.Document{}, err
 	}
@@ -113,15 +117,16 @@ func (d *Daemon) writeSeedWithEvents(
 	schema docstore.CollectionSchema, seed garden.Seed, expected int64, occurrences ...seedEvents.Occurrence,
 ) (docstore.Document, error) {
 	var written docstore.Document
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "write seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		written, err = d.writeSeedWithEventsForeground(schema, seed, expected, occurrences...)
+		written, err = d.writeSeedWithEventsProtected(protection, schema, seed, expected, occurrences...)
 		return err
 	})
 	return written, err
 }
 
-func (d *Daemon) writeSeedWithEventsForeground(
+func (d *Daemon) writeSeedWithEventsProtected(
+	_ foregroundCleanupProtection,
 	schema docstore.CollectionSchema, seed garden.Seed, expected int64, occurrences ...seedEvents.Occurrence,
 ) (docstore.Document, error) {
 	body, err := seed.Encode()
@@ -547,6 +552,17 @@ func (d *Daemon) handleSeedPlot(conn net.Conn, msg *protocol.SeedPlotMessage) {
 }
 
 func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
+	var planted garden.Seed
+	var doc docstore.Document
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		var plantErr error
+		planted, doc, plantErr = d.mintAndPlantProtected(protection, schema, seed)
+		return plantErr
+	})
+	return planted, doc, err
+}
+
+func (d *Daemon) mintAndPlantProtected(protection foregroundCleanupProtection, schema docstore.CollectionSchema, seed garden.Seed) (garden.Seed, docstore.Document, error) {
 	seed = d.initializeSeedLifecycle(seed)
 	const mintAttempts = 3
 	var lastErr error
@@ -556,7 +572,7 @@ func (d *Daemon) mintAndPlant(schema docstore.CollectionSchema, seed garden.Seed
 			return seed, docstore.Document{}, err
 		}
 		seed.ID = id
-		doc, err := d.plantSeed(schema, seed)
+		doc, err := d.plantSeedProtected(protection, schema, seed)
 		if err == nil {
 			return seed, doc, nil
 		}
@@ -1033,8 +1049,19 @@ func (d *Daemon) dispatchesCollection() (*docstore.CollectionSchema, error) {
 }
 
 func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, agent string, fromChief bool) error {
+	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
+	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
+		return d.recordGardenDispatchProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
+	})
+}
+
+func (d *Daemon) recordGardenDispatchProtected(protection foregroundCleanupProtection, sessionID, crown, dispatcherSession string, fromChief bool, observed garden.Dispatch) error {
+	return d.recordGardenDispatchObservedProtected(protection, sessionID, crown, dispatcherSession, fromChief, observed)
+}
+
+func (d *Daemon) observeGardenDispatchExecution(sessionID, cwd, agent string) garden.Dispatch {
 	sessionID = strings.TrimSpace(sessionID)
-	observed := observedGardenExecution(&protocol.Session{
+	observed := d.observedGardenExecution(&protocol.Session{
 		ID: sessionID, Directory: cwd, Agent: protocol.SessionAgent(agent),
 	}, "", d.gardenTime())
 	if session := d.gardenSession(sessionID); session != nil {
@@ -1042,8 +1069,12 @@ func (d *Daemon) recordGardenDispatch(sessionID, crown, dispatcherSession, cwd, 
 		if d.store.Get(sessionID) != nil {
 			resumeID = d.store.GetResumeSessionID(sessionID)
 		}
-		observed = observedGardenExecution(session, resumeID, d.gardenTime())
+		observed = d.observedGardenExecution(session, resumeID, d.gardenTime())
 	}
+	return observed
+}
+
+func (d *Daemon) recordGardenDispatchObservedProtected(_ foregroundCleanupProtection, sessionID, crown, dispatcherSession string, fromChief bool, observed garden.Dispatch) error {
 	_, err := d.updateGardenDispatch(sessionID, func(current garden.Dispatch) (garden.Dispatch, bool, error) {
 		next := mergeGardenExecution(current, observed)
 		if wanted := strings.TrimSpace(crown); wanted != "" {
@@ -1400,15 +1431,16 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevision(
 	var seed garden.Seed
 	var doc docstore.Document
 	var notes seedTransitionNotes
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "move seed protection", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionForeground(id, verb, ask, comment, sessionLive, expectedRev)
+		seed, doc, notes, err = d.applySeedTransitionDetailedAsAtRevisionProtected(protection, id, verb, ask, comment, sessionLive, expectedRev)
 		return err
 	})
 	return seed, doc, notes, err
 }
 
-func (d *Daemon) applySeedTransitionDetailedAsAtRevisionForeground(
+func (d *Daemon) applySeedTransitionDetailedAsAtRevisionProtected(
+	protection foregroundCleanupProtection,
 	id string, verb garden.Verb, ask garden.Ask, comment string, sessionLive func(string) bool, expectedRev int64,
 ) (garden.Seed, docstore.Document, seedTransitionNotes, error) {
 	comment = strings.TrimSpace(comment)
@@ -1508,7 +1540,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionForeground(
 			}
 		}
 		if displaced == nil && comment == "" {
-			written, err = d.writeSeedWithEventsForeground(*schema, next, doc.Rev, occurrences...)
+			written, err = d.writeSeedWithEventsProtected(protection, *schema, next, doc.Rev, occurrences...)
 		} else {
 			var entries []garden.Note
 			auditIndex, commentIndex := -1, -1
@@ -1528,7 +1560,7 @@ func (d *Daemon) applySeedTransitionDetailedAsAtRevisionForeground(
 				})
 			}
 			var writtenNotes []protocol.SeedNote
-			written, writtenNotes, err = d.writeSeedMoveWithNotesForeground(*schema, next, doc.Rev, occurrences, entries)
+			written, writtenNotes, err = d.writeSeedMoveWithNotesProtected(protection, *schema, next, doc.Rev, occurrences, entries)
 			if err == nil {
 				if auditIndex >= 0 {
 					notes.Audit = &writtenNotes[auditIndex]
@@ -1576,15 +1608,16 @@ func (d *Daemon) writeSeedMoveWithNotes(
 ) (docstore.Document, []protocol.SeedNote, error) {
 	var written docstore.Document
 	var wireNotes []protocol.SeedNote
-	err := d.worktreeMaintenance.RunForeground(context.Background(), "write seed move", func(context.Context) error {
+	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
 		var err error
-		written, wireNotes, err = d.writeSeedMoveWithNotesForeground(seedSchema, seed, expected, occurrences, notes)
+		written, wireNotes, err = d.writeSeedMoveWithNotesProtected(protection, seedSchema, seed, expected, occurrences, notes)
 		return err
 	})
 	return written, wireNotes, err
 }
 
-func (d *Daemon) writeSeedMoveWithNotesForeground(
+func (d *Daemon) writeSeedMoveWithNotesProtected(
+	_ foregroundCleanupProtection,
 	seedSchema docstore.CollectionSchema,
 	seed garden.Seed,
 	expected int64,

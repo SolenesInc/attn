@@ -67,7 +67,9 @@ func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, erro
 		if mapped {
 			continue
 		}
-		root, err := git.RepositoryRootContext(ctx, session.Directory)
+		root, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (string, error) {
+			return client.RepositoryRoot(runCtx, session.Directory)
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +154,9 @@ func (d *Daemon) listWorktreeStatesContext(ctx context.Context, repo string) ([]
 	if d.worktreeListStates != nil {
 		return d.worktreeListStates(ctx, repo)
 	}
-	return git.ListWorktreeStatesContext(ctx, repo)
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
+		return client.ListWorktreeStates(runCtx, repo)
+	})
 }
 
 func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now time.Time) (*repositoryFacts, error) {
@@ -169,29 +173,45 @@ func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now ti
 		return nil, err
 	}
 	facts.integrationBranch = integrationBranch
-	integrationSHA, err := git.OutputContext(ctx, git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}")
-	if err != nil {
-		return nil, fmt.Errorf("resolve integration ref %s: %w", facts.integrationBranch, err)
+	type gitFacts struct {
+		integrationSHA string
+		treeHashes     map[string]bool
+		stashes        map[string]int
+		treeErr        error
 	}
-	facts.integrationSHA = strings.TrimSpace(string(integrationSHA))
-
 	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
-	treeHashes, err := git.TreeHashesOnHistoryContext(ctx, repo, facts.integrationSHA)
+	observed, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (gitFacts, error) {
+		integrationSHA, resolveErr := client.Output(runCtx, git.OpMetadata, repo, "rev-parse", facts.integrationBranch+"^{commit}")
+		if resolveErr != nil {
+			return gitFacts{}, fmt.Errorf("resolve integration ref %s: %w", facts.integrationBranch, resolveErr)
+		}
+		sha := strings.TrimSpace(string(integrationSHA))
+		treeHashes, treeErr := client.TreeHashesOnHistory(runCtx, repo, sha)
+		if context.Cause(runCtx) != nil {
+			return gitFacts{}, context.Cause(runCtx)
+		}
+		stashes, stashErr := client.StashCountsByBranch(runCtx, repo)
+		if stashErr != nil {
+			return gitFacts{}, fmt.Errorf("%w for %s: %v", errWorktreeStashCounts, repo, stashErr)
+		}
+		return gitFacts{integrationSHA: sha, treeHashes: treeHashes, stashes: stashes, treeErr: treeErr}, nil
+	})
 	if context.Cause(ctx) != nil {
 		finish(context.Cause(ctx))
 		return nil, context.Cause(ctx)
 	}
 	if err != nil {
-		d.logf("worktree refresh: %s: tree hashes for %s: %v", repo, facts.integrationBranch, err)
-		treeHashes = nil
+		finish(err)
+		return nil, err
 	}
-	stashes, stashErr := git.StashCountsByBranchContext(ctx, repo)
-	finish(stashErr)
-	if stashErr != nil {
-		return nil, fmt.Errorf("%w for %s: %v", errWorktreeStashCounts, repo, stashErr)
+	finish(nil)
+	facts.integrationSHA = observed.integrationSHA
+	facts.treeHashes = observed.treeHashes
+	facts.stashes = observed.stashes
+	if observed.treeErr != nil {
+		d.logf("worktree refresh: %s: tree hashes for %s: %v", repo, facts.integrationBranch, observed.treeErr)
+		facts.treeHashes = nil
 	}
-	facts.treeHashes = treeHashes
-	facts.stashes = stashes
 
 	facts.mergedBranches = d.store.RepoMergedBranches(repo)
 	if facts.mergedBranches == nil {
@@ -227,7 +247,11 @@ func (d *Daemon) sessionActivityByWorktree(liveSessions map[string][]string) map
 }
 
 func (d *Daemon) refreshMergedPullRequestsContext(ctx context.Context, repo string, now time.Time) error {
-	host, ownerRepo, err := git.OriginHostOwnerRepoContext(ctx, repo)
+	identity, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([2]string, error) {
+		host, ownerRepo, runErr := client.OriginHostOwnerRepo(runCtx, repo)
+		return [2]string{host, ownerRepo}, runErr
+	})
+	host, ownerRepo := identity[0], identity[1]
 	if err != nil {
 		if cause := context.Cause(ctx); cause != nil {
 			return cause
@@ -295,13 +319,15 @@ func (d *Daemon) integrationBranchContext(ctx context.Context, repo string, now 
 	if record := d.store.RepoIntegrationBranch(repo); record != nil && record.Branch != "" {
 		resolvedAt, err := time.Parse(time.RFC3339, record.ResolvedAt)
 		if err == nil && now.Sub(resolvedAt) < integrationBranchTTL {
-			return resolveIntegrationRefContext(ctx, repo, record.Branch)
+			return d.resolveIntegrationRefContext(ctx, repo, record.Branch)
 		}
 		if record.Source == "pull_requests" {
-			return resolveIntegrationRefContext(ctx, repo, record.Branch)
+			return d.resolveIntegrationRefContext(ctx, repo, record.Branch)
 		}
 	}
-	branch, err := git.GetDefaultBranchContext(ctx, repo)
+	branch, err := gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (string, error) {
+		return client.GetDefaultBranch(runCtx, repo)
+	})
 	if context.Cause(ctx) != nil {
 		return "", context.Cause(ctx)
 	}
@@ -309,19 +335,14 @@ func (d *Daemon) integrationBranchContext(ctx context.Context, repo string, now 
 		branch = "main"
 	}
 	d.store.SetRepoIntegrationBranch(repo, branch, "origin_head", now)
-	return resolveIntegrationRefContext(ctx, repo, branch)
+	return d.resolveIntegrationRefContext(ctx, repo, branch)
 }
 
-func resolveIntegrationRef(repo, branch string) string {
-	ref, _ := resolveIntegrationRefContext(context.Background(), repo, branch)
-	return ref
-}
-
-func resolveIntegrationRefContext(ctx context.Context, repo, branch string) (string, error) {
+func (d *Daemon) resolveIntegrationRefContext(ctx context.Context, repo, branch string) (string, error) {
 	if strings.HasPrefix(branch, "origin/") {
 		return branch, nil
 	}
-	exists, err := git.RefExistsContext(ctx, repo, "origin/"+branch)
+	exists, err := d.refExists(ctx, gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, repo, "origin/"+branch)
 	if err != nil {
 		return "", err
 	}
@@ -338,7 +359,7 @@ func (d *Daemon) refreshWorktreeRowContext(ctx context.Context, facts *repositor
 	}
 
 	finish := d.beginGitOperation(protocol.GitOperationKindRefreshWorktree, state.Path, nil)
-	observation, err := observeWorktreeContext(ctx, facts, state, now)
+	observation, err := d.observeWorktreeContext(ctx, facts, state, now)
 	finish(err)
 
 	if err != nil {
@@ -369,11 +390,13 @@ func sameObservation(before, after *store.Worktree) bool {
 		before.RefreshError == after.RefreshError
 }
 
-func observeWorktree(facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
-	return observeWorktreeContext(context.Background(), facts, state, now)
+func (d *Daemon) observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
+	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) (store.WorktreeObservation, error) {
+		return observeWorktreeWithClient(runCtx, client, facts, state, now)
+	})
 }
 
-func observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
+func observeWorktreeWithClient(ctx context.Context, client *git.Client, facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
 	observation := store.WorktreeObservation{
 		Branch:   state.Branch,
 		HeadSHA:  state.HeadSHA,
@@ -387,7 +410,7 @@ func observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state g
 	}
 	observation.Prunable = state.Prunable
 
-	dirtyFiles, err := git.WorktreeDirtyCountContext(ctx, state.Path)
+	dirtyFiles, err := client.WorktreeDirtyCount(ctx, state.Path)
 	if err != nil {
 		observation.Error = err.Error()
 		return observation, err
@@ -395,24 +418,24 @@ func observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state g
 	observation.DirtyFiles = dirtyFiles
 	observation.Dirty = dirtyFiles > 0
 
-	observation.MergedSignal, err = mergedSignalContext(ctx, facts, state)
+	observation.MergedSignal, err = mergedSignalContext(ctx, client, facts, state)
 	if err != nil {
 		return observation, err
 	}
-	unpushed, err := commitsBeyondTheMergeContext(ctx, facts, state, observation.MergedSignal)
+	unpushed, err := commitsBeyondTheMergeContext(ctx, client, facts, state, observation.MergedSignal)
 	if err != nil {
 		observation.Error = err.Error()
 		return observation, err
 	}
 	observation.Unpushed = unpushed
-	observation.LastActivityAt, err = worktreeLastActivityContext(ctx, facts, state, now)
+	observation.LastActivityAt, err = worktreeLastActivityContext(ctx, client, facts, state, now)
 	if err != nil {
 		return observation, err
 	}
 	return observation, nil
 }
 
-func mergedSignalContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState) (store.MergedSignal, error) {
+func mergedSignalContext(ctx context.Context, client *git.Client, facts *repositoryFacts, state git.WorktreeState) (store.MergedSignal, error) {
 	if _, merged := facts.mergedBranches[state.Branch]; merged && state.Branch != "" {
 		return store.MergedSignalPullRequest, nil
 	}
@@ -423,7 +446,7 @@ func mergedSignalContext(ctx context.Context, facts *repositoryFacts, state git.
 	if ref == "" || facts.integrationBranch == "" {
 		return store.MergedSignalNone, nil
 	}
-	ancestor, err := git.IsAncestorContext(ctx, facts.repo, ref, facts.integrationSHA)
+	ancestor, err := client.IsAncestor(ctx, facts.repo, ref, facts.integrationSHA)
 	if err != nil {
 		return store.MergedSignalNone, err
 	}
@@ -431,7 +454,7 @@ func mergedSignalContext(ctx context.Context, facts *repositoryFacts, state git.
 		return store.MergedSignalAncestor, nil
 	}
 	if len(facts.treeHashes) > 0 {
-		if hash, err := git.TreeHashContext(ctx, facts.repo, ref); err == nil && facts.treeHashes[hash] {
+		if hash, err := client.TreeHash(ctx, facts.repo, ref); err == nil && facts.treeHashes[hash] {
 			return store.MergedSignalTree, nil
 		} else if context.Cause(ctx) != nil {
 			return store.MergedSignalNone, context.Cause(ctx)
@@ -440,7 +463,7 @@ func mergedSignalContext(ctx context.Context, facts *repositoryFacts, state git.
 	return store.MergedSignalNone, nil
 }
 
-func commitsBeyondTheMergeContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, signal store.MergedSignal) (int, error) {
+func commitsBeyondTheMergeContext(ctx context.Context, client *git.Client, facts *repositoryFacts, state git.WorktreeState, signal store.MergedSignal) (int, error) {
 	if facts.integrationBranch == "" || state.Branch == "" {
 		return 0, nil
 	}
@@ -448,7 +471,7 @@ func commitsBeyondTheMergeContext(ctx context.Context, facts *repositoryFacts, s
 	case store.MergedSignalAncestor, store.MergedSignalTree:
 		return 0, nil
 	}
-	ahead, err := git.CommitsAheadContext(ctx, facts.repo, facts.integrationSHA, state.Branch)
+	ahead, err := client.CommitsAhead(ctx, facts.repo, facts.integrationSHA, state.Branch)
 	if err != nil {
 		return 0, fmt.Errorf("counting %s past %s: %w", state.Branch, facts.integrationBranch, err)
 	}
@@ -465,14 +488,14 @@ func commitsBeyondTheMergeContext(ctx context.Context, facts *repositoryFacts, s
 	if record.HeadSHA == "" {
 		return 0, nil
 	}
-	beyond, err := git.CommitsAheadContext(ctx, facts.repo, record.HeadSHA, state.Branch)
+	beyond, err := client.CommitsAhead(ctx, facts.repo, record.HeadSHA, state.Branch)
 	if err != nil {
 		return ahead, nil
 	}
 	return beyond, nil
 }
 
-func worktreeLastActivityContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) (time.Time, error) {
+func worktreeLastActivityContext(ctx context.Context, client *git.Client, facts *repositoryFacts, state git.WorktreeState, now time.Time) (time.Time, error) {
 	newest := time.Time{}
 	consider := func(candidate time.Time) {
 		if candidate.After(newest) && !candidate.After(now) {
@@ -484,7 +507,7 @@ func worktreeLastActivityContext(ctx context.Context, facts *repositoryFacts, st
 	} else if context.Cause(ctx) != nil {
 		return time.Time{}, context.Cause(ctx)
 	}
-	if committed, err := git.LastCommitTimeContext(ctx, state.Path); err == nil {
+	if committed, err := client.LastCommitTime(ctx, state.Path); err == nil {
 		consider(committed)
 	} else if context.Cause(ctx) != nil {
 		return time.Time{}, context.Cause(ctx)

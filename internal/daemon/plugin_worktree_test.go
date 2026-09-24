@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,8 +26,11 @@ func TestDoCreateWorktree_ProviderHandledRegistersValidatedWorktree(t *testing.T
 
 	providerPath := filepath.Join(tmpDir, "provider-created")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if !worktreeAutomaticCleanupExcluded(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without automatic cleanup exclusion"}
+		}
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			t.Fatalf("provider main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/provider-create" {
 			t.Fatalf("provider branch=%q, want feat/provider-create", params.Branch)
@@ -75,8 +79,8 @@ func TestDoCreateWorktree_BeforeCreateHookRunsBeforeBuiltInCreate(t *testing.T) 
 	defer client.Close()
 
 	hookDone := respondToBeforeCreateHookCall(t, client, func(params worktreeCreateProviderParams) error {
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			return fmt.Errorf("before hook main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			return fmt.Errorf("before hook main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/before-hook" {
 			return fmt.Errorf("before hook branch=%q, want feat/before-hook", params.Branch)
@@ -112,8 +116,8 @@ func TestDoCreateWorktree_AfterCreateHookErrorReturnsCreatedPath(t *testing.T) {
 	defer client.Close()
 
 	hookDone := respondToAfterCreateHookCall(t, client, func(params worktreeAfterCreateHookParams) error {
-		if params.MainRepo != git.ResolveMainRepoPath(mainDir) {
-			return fmt.Errorf("after hook main repo=%q, want %q", params.MainRepo, git.ResolveMainRepoPath(mainDir))
+		if params.MainRepo != git.NewClient().ResolveMainRepoPath(context.Background(), mainDir) {
+			return fmt.Errorf("after hook main repo=%q, want %q", params.MainRepo, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir))
 		}
 		if params.Branch != "feat/after-hook" {
 			return fmt.Errorf("after hook branch=%q, want feat/after-hook", params.Branch)
@@ -343,6 +347,9 @@ func TestDoCreateWorktreeFromBranch_ProviderHandledRegistersValidatedWorktree(t 
 
 	providerPath := filepath.Join(tmpDir, "provider-existing-branch")
 	responseDone := respondToCreateProviderCall(t, client, func(params worktreeCreateProviderParams) worktreeCreateProviderResult {
+		if !worktreeAutomaticCleanupExcluded(d) {
+			return worktreeCreateProviderResult{Status: providerStatusError, Error: "provider ran without automatic cleanup exclusion"}
+		}
 		if params.Branch != "feature/existing" {
 			t.Fatalf("provider branch=%q, want feature/existing", params.Branch)
 		}
@@ -493,8 +500,9 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
+	d.ensureGardenCollections()
 	logPath := attachPluginTestLogger(t, d)
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-delete")
 
 	client, done := startPluginPipe(t, d, "custom-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -509,7 +517,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 		if !params.Force {
 			t.Fatalf("provider delete force=false, want true")
 		}
-		if err := git.DeleteWorktree(mainDir, worktreePath, params.Force); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), mainDir, worktreePath, params.Force); err != nil {
 			t.Fatalf("provider delete worktree failed: %v", err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusHandled}
@@ -523,7 +531,7 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	if wt := d.store.GetWorktree(worktreePath); wt != nil {
 		t.Fatalf("expected deleted worktree removed from store, got %#v", wt)
 	}
-	worktrees, err := git.ListWorktrees(mainDir)
+	worktrees, err := git.NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if err != nil {
 		t.Fatalf("list worktrees after provider delete: %v", err)
 	}
@@ -531,6 +539,9 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 		if worktree.Path == worktreePath {
 			t.Fatalf("provider-deleted worktree still listed: %#v", worktree)
 		}
+	}
+	if exists, _ := git.NewClient().RefExists(context.Background(), mainDir, "feat/provider-delete"); exists {
+		t.Fatal("provider-deleted worktree branch remains")
 	}
 	assertLogContains(t, logPath,
 		"worktree provider plugin=custom-delete-provider surface=worktree.delete status=handled",
@@ -545,6 +556,131 @@ func TestDoDeleteWorktree_ProviderHandledFinalizesDaemonState(t *testing.T) {
 	}
 }
 
+func TestWorktreeSweepProviderHandledDeletesBranch(t *testing.T) {
+	for _, provider := range []struct {
+		name   string
+		remove func(t *testing.T, mainRepo, path string)
+	}{
+		{"git worktree remove", func(t *testing.T, mainRepo, path string) {
+			if err := git.NewClient().DeleteWorktree(context.Background(), mainRepo, path, false); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"directory only", func(t *testing.T, _, path string) {
+			if err := os.RemoveAll(path); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(provider.name, func(t *testing.T) {
+			t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+			repo := newSweepRepo(t)
+			d := sweepDaemon(t)
+			d.ensureGardenCollections()
+			base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+			worktreePath := repo.worktree("provider-swept", "feat/provider-swept", base)
+			d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+			client, done := startPluginPipe(t, d, "sweep-delete-provider", []string{worktreeDeleteProviderSurface})
+			defer client.Close()
+			responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+				if params.Path != worktreePath {
+					t.Fatalf("provider delete path=%q, want %q", params.Path, worktreePath)
+				}
+				provider.remove(t, repo.main, worktreePath)
+				return worktreeDeleteProviderResult{Status: providerStatusHandled}
+			})
+
+			if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
+				t.Fatalf("sweep removed %d worktrees, want 1", removed)
+			}
+			waitForProviderResponse(t, responseDone)
+			if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-swept"); exists {
+				t.Fatal("provider-handled sweep left the branch behind")
+			}
+
+			_ = client.Close()
+			select {
+			case <-done:
+			case <-time.After(2 * time.Second):
+				t.Fatal("sweep delete provider connection did not close")
+			}
+		})
+	}
+}
+
+func TestWorktreeSweepKeepsAProviderDeletionItCannotPrune(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	d.ensureGardenCollections()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+	worktreePath := repo.worktree("provider-unpruned", "feat/provider-unpruned", base)
+	d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+	client, done := startPluginPipe(t, d, "sweep-delete-unpruned-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+	responseDone := respondToDeleteProviderCall(t, client, func(worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := os.RemoveAll(worktreePath); err != nil {
+			t.Fatal(err)
+		}
+		d.closeGitExecution(ErrGitExecutorClosed)
+		return worktreeDeleteProviderResult{Status: providerStatusHandled}
+	})
+
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 0 {
+		t.Fatalf("sweep removed %d worktrees, want none while their registration cannot be pruned", removed)
+	}
+	waitForProviderResponse(t, responseDone)
+	if d.store.GetWorktree(worktreePath) == nil {
+		t.Fatal("the daemon dropped a worktree whose Git registration was never pruned, so no retry can clean it up")
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweep delete provider connection did not close")
+	}
+}
+
+func TestWorktreeSweepFinalizesProviderDeletionReportedAsError(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	repo := newSweepRepo(t)
+	d := sweepDaemon(t)
+	d.ensureGardenCollections()
+	base := strings.TrimSpace(gitOutput(t, repo.main, "rev-parse", "HEAD"))
+	worktreePath := repo.worktree("provider-error-after-delete", "feat/provider-error-after-delete", base)
+	d.refreshRepositoryWorktrees(repo.main, time.Now())
+
+	client, done := startPluginPipe(t, d, "sweep-delete-error-provider", []string{worktreeDeleteProviderSurface})
+	defer client.Close()
+	responseDone := respondToDeleteProviderCall(t, client, func(worktreeDeleteProviderParams) worktreeDeleteProviderResult {
+		if err := git.NewClient().DeleteWorktree(context.Background(), repo.main, worktreePath, false); err != nil {
+			t.Fatal(err)
+		}
+		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "provider lost its response after deletion"}
+	})
+
+	if _, removed, _ := d.worktreeSweepPass(time.Now()); removed != 1 {
+		t.Fatalf("sweep removed %d worktrees, want 1", removed)
+	}
+	waitForProviderResponse(t, responseDone)
+	if d.store.GetWorktree(worktreePath) != nil {
+		t.Fatal("provider-deleted worktree remained in the daemon registry")
+	}
+	if exists, _ := git.NewClient().RefExists(context.Background(), repo.main, "feat/provider-error-after-delete"); exists {
+		t.Fatal("provider-deleted worktree branch remains")
+	}
+
+	_ = client.Close()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("sweep delete provider connection did not close")
+	}
+}
+
 func TestDoDeleteWorktree_ProviderDeclineFallsBackToBuiltInGit(t *testing.T) {
 	tmpDir, mainDir := initProviderTestRepo(t)
 	worktreePath := filepath.Join(tmpDir, "declined-delete")
@@ -553,7 +689,7 @@ func TestDoDeleteWorktree_ProviderDeclineFallsBackToBuiltInGit(t *testing.T) {
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
 	logPath := attachPluginTestLogger(t, d)
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/declined-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/declined-delete")
 
 	client, done := startPluginPipe(t, d, "declining-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -599,7 +735,7 @@ func TestDoDeleteWorktree_ProviderDirtyWorktreeErrorIsForceable(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-dirty-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-dirty-delete")
 
 	client, done := startPluginPipe(t, d, "dirty-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -646,7 +782,7 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-error-delete")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-error-delete")
 
 	client, done := startPluginPipe(t, d, "failing-delete-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
@@ -674,7 +810,7 @@ func TestDoDeleteWorktree_ProviderErrorPreservesDaemonState(t *testing.T) {
 	if wt := d.store.GetWorktree(worktreePath); wt == nil {
 		t.Fatal("provider failure removed worktree from store")
 	}
-	worktrees, listErr := git.ListWorktrees(mainDir)
+	worktrees, listErr := git.NewClient().ObserveLiveWorktrees(context.Background(), mainDir)
 	if listErr != nil {
 		t.Fatalf("list worktrees after provider error: %v", listErr)
 	}
@@ -703,12 +839,12 @@ func TestDoDeleteWorktree_ProviderDeleteBeforeErrorFinalizesOnce(t *testing.T) {
 	worktreePath = git.CanonicalizePath(worktreePath)
 
 	d := NewForTesting(filepath.Join(tmpDir, "attn.sock"))
-	d.registerCreatedWorktree(mainDir, worktreePath, "feat/provider-delete-before-error")
+	d.registerCreatedWorktree(testForegroundCleanupProtection(), mainDir, worktreePath, "feat/provider-delete-before-error")
 	client, done := startPluginPipe(t, d, "delete-before-error-provider", []string{worktreeDeleteProviderSurface})
 	defer client.Close()
 
 	responseDone := respondToDeleteProviderCall(t, client, func(params worktreeDeleteProviderParams) worktreeDeleteProviderResult {
-		if err := git.DeleteWorktree(mainDir, worktreePath, true); err != nil {
+		if err := git.NewClient().DeleteWorktree(context.Background(), mainDir, worktreePath, true); err != nil {
 			t.Fatalf("provider delete worktree: %v", err)
 		}
 		return worktreeDeleteProviderResult{Status: providerStatusError, Error: "connection lost after delete"}
@@ -771,7 +907,7 @@ func initProviderTestRepo(t *testing.T) (string, string) {
 	}
 	runGitDaemon(t, mainDir, "init")
 	runGitDaemon(t, mainDir, "commit", "--allow-empty", "-m", "init")
-	return tmpDir, git.ResolveMainRepoPath(mainDir)
+	return tmpDir, git.NewClient().ResolveMainRepoPath(context.Background(), mainDir)
 }
 
 func respondToCreateProviderCall(

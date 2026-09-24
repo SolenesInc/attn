@@ -12,13 +12,10 @@ func TestOriginHostOwnerRepo(t *testing.T) {
 	runGit(t, dir, "init")
 	runGit(t, dir, "remote", "add", "origin", "ssh://git@github.com:2222/owner/name.git")
 
-	host, slug := OriginHostOwnerRepo(dir)
-	if host != "github.com" || slug != "owner/name" {
-		t.Errorf("OriginHostOwnerRepo() = (%q, %q), want (%q, %q)",
-			host, slug, "github.com", "owner/name")
-	}
-	if got := OriginOwnerRepo(dir); got != "owner/name" {
-		t.Errorf("OriginOwnerRepo() = %q, want %q", got, "owner/name")
+	host, slug, err := NewClient().OriginHostOwnerRepo(context.Background(), dir)
+	if err != nil || host != "github.com" || slug != "owner/name" {
+		t.Errorf("OriginHostOwnerRepo() = (%q, %q, %v), want (%q, %q)",
+			host, slug, err, "github.com", "owner/name")
 	}
 }
 
@@ -27,7 +24,7 @@ func TestOriginHostOwnerRepoContextReturnsCancellationCause(t *testing.T) {
 	ctx, cancel := context.WithCancelCause(context.Background())
 	cancel(cause)
 
-	_, _, err := OriginHostOwnerRepoContext(ctx, t.TempDir())
+	_, _, err := NewClient().OriginHostOwnerRepo(ctx, t.TempDir())
 	if !errors.Is(err, cause) {
 		t.Fatalf("error = %v, want cancellation cause", err)
 	}
@@ -64,7 +61,7 @@ func TestHostOwnerRepoFromRemote(t *testing.T) {
 func TestOriginHostOwnerRepo_NotGitRepo(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	if host, slug := OriginHostOwnerRepo(dir); host != "" || slug != "" {
+	if host, slug, _ := NewClient().OriginHostOwnerRepo(context.Background(), dir); host != "" || slug != "" {
 		t.Errorf("OriginHostOwnerRepo(non-repo) = (%q, %q), want empty", host, slug)
 	}
 }
@@ -73,7 +70,7 @@ func TestOriginHostOwnerRepo_NoOrigin(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	runGit(t, dir, "init")
-	if host, slug := OriginHostOwnerRepo(dir); host != "" || slug != "" {
+	if host, slug, _ := NewClient().OriginHostOwnerRepo(context.Background(), dir); host != "" || slug != "" {
 		t.Errorf("OriginHostOwnerRepo(no origin) = (%q, %q), want empty", host, slug)
 	}
 }

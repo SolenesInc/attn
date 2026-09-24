@@ -17,7 +17,8 @@ func TestSessionDelegationRolesSurviveRestartAndRoleDeletion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg, err := s.SaveDelegationPreferences(delegationprefs.Config{Enabled: true})
+	saved, err := s.SaveDelegationPreferences(delegationprefs.Config{Enabled: true}, DelegationPreferencesNote{})
+	cfg := saved.Config
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,7 +47,7 @@ func TestSessionDelegationRolesSurviveRestartAndRoleDeletion(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.Enabled = false
-	if _, err := s.SaveDelegationPreferences(cfg); err != nil {
+	if _, err := s.SaveDelegationPreferences(cfg, DelegationPreferencesNote{}); err != nil {
 		t.Fatal(err)
 	}
 	want := map[string]*protocol.SessionDelegationRole{

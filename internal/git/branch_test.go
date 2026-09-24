@@ -1,8 +1,10 @@
 package git
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -21,7 +23,7 @@ func TestListRemoteBranches(t *testing.T) {
 	}
 
 	dir, _ := os.Getwd()
-	branches, err := ListRemoteBranches(dir)
+	branches, err := NewClient().ListRemoteBranches(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ListRemoteBranches failed: %v", err)
 	}
@@ -41,12 +43,12 @@ func TestCheckoutRemoteBranch(t *testing.T) {
 
 	runGit(t, dir, "branch", "feature-x")
 
-	err := CheckoutBranch(dir, "feature-x")
+	err := NewClient().CheckoutBranch(context.Background(), dir, "feature-x")
 	if err != nil {
 		t.Fatalf("CheckoutBranch failed: %v", err)
 	}
 
-	branch, _ := GetCurrentBranch(dir)
+	branch, _ := NewClient().GetCurrentBranch(context.Background(), dir)
 	if branch != "feature-x" {
 		t.Errorf("Expected branch 'feature-x', got %q", branch)
 	}
@@ -68,8 +70,8 @@ func TestRefExists(t *testing.T) {
 		{"does-not-exist", false},
 	}
 	for _, tc := range cases {
-		if got := RefExists(dir, tc.ref); got != tc.want {
-			t.Errorf("RefExists(%q) = %v, want %v", tc.ref, got, tc.want)
+		if got, err := NewClient().RefExists(context.Background(), dir, tc.ref); err != nil || got != tc.want {
+			t.Errorf("RefExists(%q) = %v, %v, want %v", tc.ref, got, err, tc.want)
 		}
 	}
 }
@@ -79,7 +81,7 @@ func TestGetCurrentBranchEmptyRepo(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-b", "main")
 
-	branch, err := GetCurrentBranch(dir)
+	branch, err := NewClient().GetCurrentBranch(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("GetCurrentBranch failed: %v", err)
 	}
@@ -93,7 +95,7 @@ func TestListBranchesWithCommitsEmptyRepo(t *testing.T) {
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-b", "main")
 
-	branches, err := ListBranchesWithCommits(dir)
+	branches, err := NewClient().ListBranchesWithCommits(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("ListBranchesWithCommits failed: %v", err)
 	}
@@ -131,7 +133,7 @@ func TestListBranchesWithCommits(t *testing.T) {
 	wtDir := filepath.Join(tmpDir, "wt")
 	runGit(t, mainDir, "worktree", "add", wtDir, "feature-a")
 
-	branches, err := ListBranchesWithCommits(mainDir)
+	branches, err := NewClient().ListBranchesWithCommits(context.Background(), mainDir)
 	if err != nil {
 		t.Fatalf("ListBranchesWithCommits failed: %v", err)
 	}
@@ -159,17 +161,55 @@ func TestListBranchesWithCommits(t *testing.T) {
 	}
 }
 
+func TestBranchListsOfferBranchFromPrunableWorktreeWithoutMutatingMetadata(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	repo := filepath.Join(root, "main")
+	if err := os.MkdirAll(repo, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runGit(t, repo, "init", "-b", "main")
+	runGit(t, repo, "commit", "--allow-empty", "-m", "init")
+	worktree := filepath.Join(root, "missing")
+	runGit(t, repo, "worktree", "add", "-b", "feature-stale", worktree)
+	if err := os.RemoveAll(worktree); err != nil {
+		t.Fatal(err)
+	}
+
+	branches, err := NewClient().ListBranches(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Contains(branches, "feature-stale") {
+		t.Fatalf("available branches = %v, want feature-stale", branches)
+	}
+	withCommits, err := NewClient().ListBranchesWithCommits(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(withCommits, func(branch BranchWithCommit) bool { return branch.Name == "feature-stale" }) {
+		t.Fatalf("available branches with commits = %v, want feature-stale", withCommits)
+	}
+	observed, err := NewClient().ObserveWorktrees(context.Background(), repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.ContainsFunc(observed, func(entry WorktreeEntry) bool { return entry.Branch == "feature-stale" && entry.Prunable }) {
+		t.Fatalf("branch reads mutated stale metadata: %+v", observed)
+	}
+}
+
 func TestGetDefaultBranchPrefersConfiguredBase(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	runGit(t, dir, "init", "-b", "main")
 	runGit(t, dir, "commit", "--allow-empty", "-m", "init")
 
-	if got, _ := GetDefaultBranch(dir); got != "main" {
+	if got, _ := NewClient().GetDefaultBranch(context.Background(), dir); got != "main" {
 		t.Fatalf("GetDefaultBranch without config = %q, want main", got)
 	}
 	runGit(t, dir, "config", "attn.baseBranch", "next")
-	if got, _ := GetDefaultBranch(dir); got != "next" {
+	if got, _ := NewClient().GetDefaultBranch(context.Background(), dir); got != "next" {
 		t.Fatalf("GetDefaultBranch with attn.baseBranch = %q, want next", got)
 	}
 }

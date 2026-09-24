@@ -1,10 +1,13 @@
 package present
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"strings"
 	"testing"
+
+	attngit "github.com/victorarias/attn/internal/git"
 )
 
 func runGit(t *testing.T, dir string, args ...string) string {
@@ -65,6 +68,10 @@ func TestPin(t *testing.T) {
 	}
 	if len(gotHead) != 40 {
 		t.Errorf("head SHA %q is not 40 chars", gotHead)
+	}
+	injectedBase, injectedHead, err := PinWithGit(context.Background(), attngit.NewClient(), m)
+	if err != nil || injectedBase != gotBase || injectedHead != gotHead {
+		t.Fatalf("injected Pin = (%q, %q, %v), direct = (%q, %q, nil)", injectedBase, injectedHead, err, gotBase, gotHead)
 	}
 }
 

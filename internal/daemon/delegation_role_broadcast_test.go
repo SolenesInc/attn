@@ -7,13 +7,15 @@ import (
 
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 func TestBroadcastPreservesAcceptedDelegationRole(t *testing.T) {
 	d := newCrewDaemon(t)
 	addSession(t, d, "role-session")
 	addSession(t, d, "roleless-session")
-	cfg, err := d.store.SaveDelegationPreferences(delegationprefs.Config{Enabled: true})
+	saved, err := d.store.SaveDelegationPreferences(delegationprefs.Config{Enabled: true}, store.DelegationPreferencesNote{})
+	cfg := saved.Config
 	if err != nil {
 		t.Fatal(err)
 	}

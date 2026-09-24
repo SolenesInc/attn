@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
 
+	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -89,11 +91,11 @@ func TestInspectPickerPathTreatsSlashVariantsTheSameForRepoRoots(t *testing.T) {
 	runGit(t, repoDir, "add", "README.md")
 	runGit(t, repoDir, "commit", "-m", "initial")
 
-	noSlash, err := inspectPickerPath(repoDir)
+	noSlash, err := inspectPickerPath(context.Background(), git.NewClient(), repoDir)
 	if err != nil {
 		t.Fatalf("inspect repo without slash: %v", err)
 	}
-	withSlash, err := inspectPickerPath(repoDir + string(os.PathSeparator))
+	withSlash, err := inspectPickerPath(context.Background(), git.NewClient(), repoDir+string(os.PathSeparator))
 	if err != nil {
 		t.Fatalf("inspect repo with slash: %v", err)
 	}
@@ -134,7 +136,7 @@ func TestInspectPickerPathOnlyMarksActualRepoRoots(t *testing.T) {
 		t.Fatalf("mkdir subdir: %v", err)
 	}
 
-	worktreeInspection, err := inspectPickerPath(worktreeDir)
+	worktreeInspection, err := inspectPickerPath(context.Background(), git.NewClient(), worktreeDir)
 	if err != nil {
 		t.Fatalf("inspect worktree: %v", err)
 	}
@@ -142,7 +144,7 @@ func TestInspectPickerPathOnlyMarksActualRepoRoots(t *testing.T) {
 		t.Fatalf("worktree repo root = %v, want same directory as %q", worktreeInspection.RepoRoot, repoDir)
 	}
 
-	subdirInspection, err := inspectPickerPath(subdir)
+	subdirInspection, err := inspectPickerPath(context.Background(), git.NewClient(), subdir)
 	if err != nil {
 		t.Fatalf("inspect subdir: %v", err)
 	}
@@ -171,7 +173,7 @@ func TestInspectPickerPathCanonicalizesSymlinkedRepoRoots(t *testing.T) {
 		t.Fatalf("symlink repo: %v", err)
 	}
 
-	inspection, err := inspectPickerPath(symlinkRepoDir)
+	inspection, err := inspectPickerPath(context.Background(), git.NewClient(), symlinkRepoDir)
 	if err != nil {
 		t.Fatalf("inspect symlink repo: %v", err)
 	}
