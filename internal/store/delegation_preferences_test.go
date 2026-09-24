@@ -25,16 +25,18 @@ func TestDelegationPreferencesRoundTripAndDisable(t *testing.T) {
 	if err != nil || cfg.Enabled || cfg.Revision != 0 || len(cfg.Roles) != 0 {
 		t.Fatalf("fresh config: %+v, %v", cfg, err)
 	}
-	cfg, err = s.SaveDelegationPreferences(configuredDelegationPreferences())
+	first, err := s.SaveDelegationPreferences(configuredDelegationPreferences(), DelegationPreferencesNote{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	saved := cfg
+	saved := first.Config
+	cfg = first.Config
 	cfg.Enabled = false
-	cfg, err = s.SaveDelegationPreferences(cfg)
+	second, err := s.SaveDelegationPreferences(cfg, DelegationPreferencesNote{})
 	if err != nil {
 		t.Fatal(err)
 	}
+	cfg = second.Config
 	if cfg.Revision != 2 || !reflect.DeepEqual(saved.Roles, cfg.Roles) {
 		t.Fatalf("disable changed saved roles: %+v", cfg)
 	}
@@ -55,14 +57,15 @@ func TestDelegationPreferencesRoundTripAndDisable(t *testing.T) {
 func TestDelegationPreferencesConcurrentEditsRefuseLostUpdate(t *testing.T) {
 	s := New()
 	defer s.Close()
-	cfg, err := s.SaveDelegationPreferences(configuredDelegationPreferences())
+	saved, err := s.SaveDelegationPreferences(configuredDelegationPreferences(), DelegationPreferencesNote{})
+	cfg := saved.Config
 	if err != nil {
 		t.Fatal(err)
 	}
 	results := make(chan error, 2)
 	var wg sync.WaitGroup
 	for range 2 {
-		wg.Go(func() { _, err := s.SaveDelegationPreferences(cfg); results <- err })
+		wg.Go(func() { _, err := s.SaveDelegationPreferences(cfg, DelegationPreferencesNote{}); results <- err })
 	}
 	wg.Wait()
 	close(results)
@@ -97,7 +100,7 @@ func TestDelegationPreferencesInvalidEditsDoNotPersist(t *testing.T) {
 	} {
 		c := configuredDelegationPreferences()
 		mutate(&c)
-		if _, err := s.SaveDelegationPreferences(c); err == nil {
+		if _, err := s.SaveDelegationPreferences(c, DelegationPreferencesNote{}); err == nil {
 			t.Fatalf("accepted %+v", c)
 		}
 	}
@@ -105,7 +108,7 @@ func TestDelegationPreferencesInvalidEditsDoNotPersist(t *testing.T) {
 	if err != nil || c.Revision != 0 {
 		t.Fatalf("invalid edit persisted: %+v %v", c, err)
 	}
-	if _, err := s.db.Exec(`INSERT INTO delegation_preferences(id,config) VALUES (1,'broken')`); err != nil {
+	if _, err := s.db.Exec(`INSERT INTO delegation_preference_revisions(revision,config,created_at) VALUES (1,'broken','')`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := s.GetDelegationPreferences(); err == nil {

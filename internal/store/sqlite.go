@@ -1249,6 +1249,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
 	{152, "file long-context session cost observations under their tier", ``},
+	{153, "keep every delegation preferences revision", ``},
 }
 
 const migration99SQL = `
@@ -1833,6 +1834,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 152 {
 			if err := applyMigration152(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 153 {
+			if err := applyMigration153(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}

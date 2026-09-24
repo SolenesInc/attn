@@ -92,8 +92,6 @@
 - Nap: replaces the current day using its handoff.
 - Heartbeat: refreshes a crew member's working context.
 
-See [delegation preferences](delegation-preferences.md) for role settings.
-
 ## Knowledge
 
 - Notebook: an instance's collection of Markdown documents.
