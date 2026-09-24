@@ -68,8 +68,8 @@ func (d *Daemon) startDelegationForeground(msg *protocol.DelegateMessage) (*prot
 		resolvedJSON = string(raw)
 	}
 	chiefSessionID := ""
-	if currentChief := d.chiefOfStaffSessionID(); currentChief == strings.TrimSpace(protocol.Deref(msg.SourceSessionID)) {
-		chiefSessionID = currentChief
+	if d.isChiefOfStaffSession(protocol.Deref(msg.SourceSessionID)) {
+		chiefSessionID = strings.TrimSpace(protocol.Deref(msg.SourceSessionID))
 	}
 	seedID := ""
 	parentSeedID := ""

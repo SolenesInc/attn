@@ -718,10 +718,11 @@ commands:
         A message that starts with - goes after --, as: agent msg -- <target> "-text"
   close <session-or-seed> -m "reason" [--source-session <id>] [--json]
         close a session for good. A session may close itself and the sessions it
-        dispatched; the chief of staff may close any. The reason is required: the
-        session row stays in the ledger, and the reason is what the next reader
-        gets. It is immediate, so say what you have to say first. A seed id closes
-        whoever tends it, and the seed keeps its tender with a note about the close.
+        dispatched; a profile's chief of staff may close any agent of that
+        profile. The reason is required: the session row stays in the ledger,
+        and the reason is what the next reader gets. It is immediate, so say
+        what you have to say first. A seed id closes whoever tends it, and the
+        seed keeps its tender with a note about the close.
         The caller defaults to this session (ATTN_SESSION_ID).
   inbox [message-id] [--limit <count>] [--session <id>] [--json]
         read up to 20 unread notifications in FIFO order, or one notified peer

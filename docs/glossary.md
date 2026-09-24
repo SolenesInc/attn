@@ -87,7 +87,7 @@
 - Binding: a crew member's active session.
 - Launch settings: a member's optional harness, model and effort pins. Blanks resolve through daemon and harness defaults.
 - Charter token: the receipt for the exact charter bytes read. A replacement needs it and advances it, so a stale write cannot overwrite a newer one.
-- Chief of staff: the agent coordinating work across workspaces.
+- Chief of staff: the agent coordinating the work of one profile. Each profile has at most one; all chiefs share the Notebook.
 - Day: a crew member's current session.
 - Member home: the directory holding a crew member's charter and handoff.
 - Wake: starts a crew member's day.

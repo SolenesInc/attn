@@ -242,8 +242,8 @@ func (d *Daemon) resolveSpawnIntent(req *spawnRequest) (*spawnPlan, *spawnReject
 		plan.rollback(d, msg.ID)
 		return nil, &spawnRejection{err: fmt.Errorf("agent %q cannot be chief of staff without resume capability", req.agent)}
 	}
-	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, requestedChief, req.existingSession)
-	plan.isChief = d.isChiefOfStaffSession(msg.ID)
+	plan.chiefAssigned = d.maybeAssignChiefOnSpawn(msg.ID, req.agent, req.profile.ID, requestedChief, req.existingSession)
+	plan.isChief = d.chiefOfProfile(req.profile.ID) == msg.ID
 	plan.spawnOpts.Model = d.resolveLaunchModel(req.agent, plan.isChief, plan.spawnOpts.Model)
 	plan.spawnOpts.Effort = d.resolveLaunchEffort(req.agent, plan.isChief, plan.spawnOpts.Effort)
 	if launch := req.policy.unattendedLaunch; !launch.IsZero() {

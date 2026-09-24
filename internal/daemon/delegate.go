@@ -605,7 +605,7 @@ func (d *Daemon) delegateOperationForeground(msg *resolvedDelegationLaunch, oper
 	}
 	name := strings.TrimSpace(protocol.Deref(msg.Label))
 	delegatedByChief := initiatingChiefSessionID != "" ||
-		(operationID == "" && d.chiefOfStaffSessionID() == sourceSessionID)
+		(operationID == "" && d.isChiefOfStaffSession(sourceSessionID))
 	createdWorktreePath := ""
 	operationWorktreePath := ""
 	rollback := d.newDelegationRollback()

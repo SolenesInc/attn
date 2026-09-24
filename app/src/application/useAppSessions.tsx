@@ -1,5 +1,6 @@
 import { useEffect, useMemo } from 'react';
 import { useSessionStore } from '../store/sessions';
+import { useProfilesStore } from '../store/profiles';
 import { normalizeSessionAgent } from '../types/sessionAgent';
 import { normalizeSessionState } from '../types/sessionState';
 import { sessionAttentionFields } from '../navigation/sessionNavigation';
@@ -87,7 +88,11 @@ export function useAppSessions({
     enrichedLocalSessions,
   );
 
-  const notebookChiefSession = enrichedLocalSessions.find((session) => session.chiefOfStaff);
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const selectedProfileChiefId = daemonSessions.find(
+    (session) => session.chief_of_staff === true && session.profile_id === selectedProfileId,
+  )?.id;
+  const notebookChiefSession = enrichedLocalSessions.find((session) => session.id === selectedProfileChiefId);
   const notebookChiefActive = notebookChiefSession
     ? notebookChiefSession.state === 'working'
     : undefined;

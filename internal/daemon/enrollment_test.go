@@ -147,3 +147,19 @@ func TestDaemon_UnreadableRecordFailsTheFenceClosed(t *testing.T) {
 		t.Fatalf("initial_state home_daemon_id = %q, want empty on an unreadable record", got)
 	}
 }
+
+func homeDaemon(t *testing.T, d *Daemon) *Daemon {
+	t.Helper()
+	if d.dataRoot == "" {
+		d.dataRoot = t.TempDir()
+	}
+	id, err := enrollment.EnsureDaemonID(d.dataRoot)
+	if err != nil {
+		t.Fatalf("EnsureDaemonID: %v", err)
+	}
+	d.daemonInstanceID = id
+	if err := d.ensureEnrollment(); err != nil {
+		t.Fatalf("ensureEnrollment: %v", err)
+	}
+	return d
+}

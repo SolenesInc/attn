@@ -65,6 +65,9 @@ func (d *Daemon) automationApply(raw string) (*store.AutomationDefinition, error
 }
 
 func (d *Daemon) automationApplyWithGuards(ctx context.Context, raw, profileID string, expectedID *string, expectedRevision *int) (*store.AutomationDefinition, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	spec, canonical, err := d.validateAutomationSpec(raw)
 	if err != nil {
 		return nil, &automationRefusal{Code: automationErrCodeValidation, Err: err}
@@ -171,6 +174,11 @@ func (d *Daemon) cancelPendingAutomationRuns(definitionID, reason string) error 
 }
 
 func (d *Daemon) automationSetEnabled(ctx context.Context, definitionID string, enabled bool) (*store.AutomationDefinition, error) {
+	if enabled {
+		if err := d.requireHome(automation.Surface); err != nil {
+			return nil, err
+		}
+	}
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
 	if err := ctx.Err(); err != nil {

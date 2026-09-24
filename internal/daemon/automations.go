@@ -17,6 +17,9 @@ import (
 )
 
 func (d *Daemon) automationRun(ctx context.Context, definitionID, requestID, input string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, fmt.Errorf("request_id is required")
 	}

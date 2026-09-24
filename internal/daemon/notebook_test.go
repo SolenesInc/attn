@@ -413,7 +413,7 @@ func TestNotebookGuideChiefVsNonChief(t *testing.T) {
 	wantRoot := d.store.GetSetting(SettingNotebookRoot)
 	addIdleNotebookSession(d, "chief", protocol.SessionStateIdle)
 	addIdleNotebookSession(d, "worker", protocol.SessionStateIdle)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -454,7 +454,7 @@ func TestNotebookGuideUsesTheSameSeedWaitingGuidanceOnCodex(t *testing.T) {
 	session := d.store.Get("chief")
 	session.Agent = protocol.SessionAgentCodex
 	d.store.Add(session)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -593,7 +593,7 @@ func TestNotebookSendToChiefAppendsAndNudges(t *testing.T) {
 	var inputs []string
 	d.ptyBackend = recordingBackend(&inputs, &mu)
 	addIdleNotebookSession(d, "chief", protocol.SessionStateIdle)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	client := &wsClient{send: make(chan outboundMessage, 4)}
@@ -656,7 +656,7 @@ func TestNotebookSendToChiefQueuesForWorkingChiefAndWakesOnIdle(t *testing.T) {
 	var inputs []string
 	d.ptyBackend = recordingBackend(&inputs, &mu)
 	addIdleNotebookSession(d, "chief", protocol.SessionStateWorking)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	client := &wsClient{send: make(chan outboundMessage, 4)}
@@ -697,7 +697,7 @@ func TestNotebookSendToChiefDoesNotNudgePendingApprovalChief(t *testing.T) {
 	var inputs []string
 	d.ptyBackend = recordingBackend(&inputs, &mu)
 	addIdleNotebookSession(d, "chief", protocol.SessionStatePendingApproval)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 	client := &wsClient{send: make(chan outboundMessage, 4)}

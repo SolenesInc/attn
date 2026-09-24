@@ -87,7 +87,7 @@ func TestAPinnedSessionStillAccumulatesTurns(t *testing.T) {
 func TestPinningTheChiefIsRefused(t *testing.T) {
 	d := newTurnDaemon(t)
 	addTurnSession(t, d, "chief", protocol.SessionAgentCodex, "ws1")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatalf("assign the chief role: %v", err)
 	}
 

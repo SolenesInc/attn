@@ -77,13 +77,12 @@ func (d *Daemon) deliverChiefSeedAssignment(chiefSessionID, seedID string) (prot
 	return protocol.AgentMsgStatusNotified, "notified Chief"
 }
 
-func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protocol.SeedSendToChiefResult, error) {
+func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage, chiefSessionID string) (*protocol.SeedSendToChiefResult, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return nil, err
 	}
-	chiefSessionID := d.chiefOfStaffSessionID()
 	if chiefSessionID == "" || d.store.Get(chiefSessionID) == nil {
-		return nil, fmt.Errorf("no Chief is available")
+		return nil, fmt.Errorf("this profile has no Chief; make one of its agents the Chief first")
 	}
 	seedID := strings.TrimSpace(msg.SeedID)
 	guidance := strings.TrimSpace(protocol.Deref(msg.Guidance))
@@ -177,7 +176,7 @@ func (d *Daemon) sendSeedToChief(msg *protocol.SeedSendToChiefMessage) (*protoco
 }
 
 func (d *Daemon) handleSeedSendToChief(conn net.Conn, msg *protocol.SeedSendToChiefMessage) {
-	result, err := d.sendSeedToChief(msg)
+	result, err := d.sendSeedToChief(msg, d.chiefForCaller(protocol.Deref(msg.SourceSessionID)))
 	if err != nil {
 		d.sendGardenError(conn, "send-to-chief", err)
 		return
@@ -189,7 +188,7 @@ func (d *Daemon) handleSeedSendToChiefWS(client *wsClient, msg *protocol.SeedSen
 	response := protocol.SeedSendToChiefResultMessage{
 		Event: protocol.EventSeedSendToChiefResult, RequestID: protocol.Deref(msg.RequestID),
 	}
-	result, err := d.sendSeedToChief(msg)
+	result, err := d.sendSeedToChief(msg, d.chiefForClient(client))
 	if err != nil {
 		response.Error = protocol.Ptr(err.Error())
 	} else {

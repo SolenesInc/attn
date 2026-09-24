@@ -26,13 +26,13 @@ func TestTicketIdentityRoundTripsForOrdinarySession(t *testing.T) {
 func TestTicketIdentityRoundTripsForChiefSession(t *testing.T) {
 	d, _ := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "chief", "Chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
+	if err := setTestChief(d, "chief"); err != nil {
 		t.Fatal(err)
 	}
 
 	observers := d.ticketObserversForSession("chief")
-	if len(observers) != 2 {
-		t.Fatalf("chief observers = %+v, want its session identity plus the durable role", observers)
+	if len(observers) != 3 {
+		t.Fatalf("chief observers = %+v, want its session identity plus the legacy and profile chief identities", observers)
 	}
 	for _, obs := range observers {
 		if got := d.ticketSessionForIdentity(obs.ID); got != "chief" {
@@ -57,14 +57,14 @@ func TestTicketIdentityFollowsRoleTransfer(t *testing.T) {
 	addChiefOfStaffTestSession(d, "chief-b", "Chief B")
 	roleIdentity := store.TicketRoleIdentity(store.TicketRoleChiefOfStaff)
 
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief-a"); err != nil {
+	if err := setTestChief(d, "chief-a"); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.ticketSessionForIdentity(roleIdentity); got != "chief-a" {
 		t.Fatalf("role delivers to %q, want chief-a", got)
 	}
 
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief-b"); err != nil {
+	if err := setTestChief(d, "chief-b"); err != nil {
 		t.Fatal(err)
 	}
 	if got := d.ticketSessionForIdentity(roleIdentity); got != "chief-b" {

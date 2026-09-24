@@ -268,7 +268,7 @@ func TestChiefOfStaffDelegateBindsSeedAndPrompt(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceSessionID); err != nil {
+	if err := setTestChief(d, sourceSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 
@@ -327,7 +327,7 @@ func TestChiefOfStaffDelegationPreservesCoordinationIdentityWithAndWithoutACwd(t
 			d := newDelegationDaemon(t)
 			backend := &fakeSpawnBackend{}
 			_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-			if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
+			if err := setTestChief(d, chiefSessionID); err != nil {
 				t.Fatalf("set chief role: %v", err)
 			}
 			consumeDelegatedPrompt(t, backend)
@@ -367,7 +367,7 @@ func TestDelegatedFromChiefDecoratesBroadcastSession(t *testing.T) {
 	d := newDelegationDaemon(t)
 	backend := &fakeSpawnBackend{}
 	_, sourceSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceSessionID); err != nil {
+	if err := setTestChief(d, sourceSessionID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	consumeDelegatedPrompt(t, backend)

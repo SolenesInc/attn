@@ -31,6 +31,7 @@ type Profile struct {
 	LastUsedAt       string
 	Revision         int64
 	DeletedAt        string
+	ChiefSessionID   string
 }
 
 func (s Profile) Deleted() bool { return s.DeletedAt != "" }

@@ -53,8 +53,8 @@ func TestSetChiefOfStaffTransfersSingletonRole(t *testing.T) {
 		Cmd: protocol.CmdSetChiefOfStaff, SessionID: "session-a", ChiefOfStaff: true,
 	})
 	first := readChiefOfStaffResult(t, client)
-	if !first.Success || d.chiefOfStaffSessionID() != "session-a" {
-		t.Fatalf("first assignment = %+v role=%q", first, d.chiefOfStaffSessionID())
+	if !first.Success || d.chiefForCaller("") != "session-a" {
+		t.Fatalf("first assignment = %+v role=%q", first, d.chiefForCaller(""))
 	}
 
 	d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
@@ -64,7 +64,7 @@ func TestSetChiefOfStaffTransfersSingletonRole(t *testing.T) {
 	if !second.Success || protocol.Deref(second.PreviousSessionID) != "session-a" {
 		t.Fatalf("transfer result = %+v", second)
 	}
-	if got := d.chiefOfStaffSessionID(); got != "session-b" {
+	if got := d.chiefForCaller(""); got != "session-b" {
 		t.Fatalf("role after transfer = %q, want session-b", got)
 	}
 
@@ -93,7 +93,7 @@ func TestSetChiefOfStaffRejectsUnknownSession(t *testing.T) {
 	if result.Success || protocol.Deref(result.Error) == "" {
 		t.Fatalf("result = %+v, want failure", result)
 	}
-	if got := d.chiefOfStaffSessionID(); got != "" {
+	if got := d.chiefForCaller(""); got != "" {
 		t.Fatalf("role = %q, want empty", got)
 	}
 }
@@ -102,7 +102,7 @@ func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
 	d, client := newChiefOfStaffTestDaemon(t)
 	addChiefOfStaffTestSession(d, "session-a", "first")
 	addChiefOfStaffTestSession(d, "session-b", "second")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "session-b"); err != nil {
+	if err := setTestChief(d, "session-b"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -113,7 +113,7 @@ func TestClearChiefOfStaffKeepsTransferredRole(t *testing.T) {
 	if !result.Success {
 		t.Fatalf("clear result = %+v", result)
 	}
-	if got := d.chiefOfStaffSessionID(); got != "session-b" {
+	if got := d.chiefForCaller(""); got != "session-b" {
 		t.Fatalf("role after stale clear = %q, want session-b", got)
 	}
 }
@@ -233,7 +233,7 @@ func TestNudgeChiefOfStaffHeldOffByTypingLandsAfterTheQuietWindow(t *testing.T) 
 		if err := d.writeSessionPTY(chiefID, []byte("half written"), "user"); err != nil {
 			t.Fatalf("user input: %v", err)
 		}
-		if d.nudgeChiefOfStaff("inbox-1", prompt) {
+		if d.nudgeChiefOfStaff(chiefID, "inbox-1", prompt) {
 			t.Fatal("the nudge claimed a composer the user had just used")
 		}
 		if chiefWasNudged(inputs(chiefID), agentMailboxDoorbellText) {

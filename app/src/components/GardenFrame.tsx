@@ -259,7 +259,7 @@ export function GardenFrame({
                 onResumeSeed={(seedId, review) => onResumeSeed(seedId, review)}
                 onKeepSeed={keepReviewItem}
                 onHandoverSeed={onHandoverSeed}
-                onSendSeedToChief={onSendSeedToChief}
+                onSendSeedToChief={chiefAvailable ? onSendSeedToChief : undefined}
                 onRetry={retryReviewItem}
                 onDraft={draftReviewHandover}
                 onRefresh={showReview}

@@ -20,6 +20,9 @@ const automationReviewWithdrawnMessage = "GitHub review request withdrawn before
 var errAutomationReviewWithdrawn = errors.New(automationReviewWithdrawnMessage)
 
 func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, requestID, rawURL string) (*store.AutomationRun, error) {
+	if err := d.requireHome(automation.Surface); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(requestID) == "" {
 		return nil, errors.New("request_id is required")
 	}

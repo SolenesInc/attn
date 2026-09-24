@@ -1,11 +1,11 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useErrorToast } from '../components/ErrorToast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
+import { useProfilesStore } from '../store/profiles';
 import { AppContentProps } from './appSupport';
-import { useAppSessions } from './useAppSessions';
 
 interface Options {
-  enrichedLocalSessions: ReturnType<typeof useAppSessions>['enrichedLocalSessions'];
+  enrichedLocalSessions: ReadonlyArray<{ id: string; label: string; chiefOfStaff?: boolean }>;
   daemonSessions: AppContentProps['daemonSessions'];
   showError: ReturnType<typeof useErrorToast>['showError'];
 }
@@ -29,6 +29,12 @@ export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showErr
     [sendSetChiefOfStaff, showError],
   );
 
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const profileOfSession = useMemo(
+    () => new Map(daemonSessions.map((session) => [session.id, session.profile_id])),
+    [daemonSessions],
+  );
+
   const handleChangeChiefOfStaff = useCallback(
     (sessionId: string, enabled: boolean) => {
       const target = enrichedLocalSessions.find((session) => session.id === sessionId);
@@ -40,7 +46,9 @@ export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showErr
         void applyChiefOfStaffChange(sessionId, false).catch(() => {});
         return;
       }
-      const current = enrichedLocalSessions.find((session) => session.chiefOfStaff);
+      const current = enrichedLocalSessions.find(
+        (session) => session.chiefOfStaff && profileOfSession.get(session.id) === selectedProfileId,
+      );
       if (current && current.id !== sessionId) {
         setChiefTransferTarget({
           sessionId,
@@ -51,7 +59,7 @@ export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showErr
       }
       void applyChiefOfStaffChange(sessionId, true).catch(() => {});
     },
-    [applyChiefOfStaffChange, enrichedLocalSessions, showError],
+    [applyChiefOfStaffChange, enrichedLocalSessions, profileOfSession, selectedProfileId, showError],
   );
 
   const handleConfirmChiefTransfer = useCallback(async () => {
@@ -67,8 +75,8 @@ export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showErr
   }, [applyChiefOfStaffChange, chiefTransferSaving, chiefTransferTarget]);
 
   const hasChiefOfStaff = useMemo(
-    () => daemonSessions.some((ds) => ds.chief_of_staff === true),
-    [daemonSessions],
+    () => daemonSessions.some((ds) => ds.chief_of_staff === true && ds.profile_id === selectedProfileId),
+    [daemonSessions, selectedProfileId],
   );
 
   return {

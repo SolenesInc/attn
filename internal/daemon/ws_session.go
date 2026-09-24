@@ -123,7 +123,9 @@ func (d *Daemon) clearAllSessions() {
 			d.terminateSession(sessionID, syscall.SIGTERM)
 		}
 		d.store.ClearSessions()
-		d.clearChiefOfStaffIfSession(d.chiefOfStaffSessionID())
+		if err := d.store.ClearAllProfileChiefs(); err != nil {
+			d.logf("clear sessions: clearing profile chiefs: %v", err)
+		}
 		for sessionID := range sessionIDs {
 			d.publishFact(FactSessionTerminated, sessionID, nil)
 		}

@@ -26,7 +26,7 @@ func delegateForNotify(t *testing.T, d *Daemon, agent string) (chiefID, agentID 
 		mu.Unlock()
 	}
 	_, chiefID, _ = setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefID); err != nil {
+	if err := setTestChief(d, chiefID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
@@ -70,7 +70,7 @@ func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chie
 		mu.Unlock()
 	}
 	_, chiefID, _ = setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefID); err != nil {
+	if err := setTestChief(d, chiefID); err != nil {
 		t.Fatalf("set chief role: %v", err)
 	}
 	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
@@ -321,7 +321,7 @@ func TestChiefTicketContinuityAcrossRoleTransfer(t *testing.T) {
 		}
 		nudgesA := nudgeCount(inputs(chiefA))
 
-		if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefB); err != nil {
+		if err := setTestChief(d, chiefB); err != nil {
 			t.Fatalf("transfer chief role: %v", err)
 		}
 		d.retargetChiefTicketDelivery(chiefA, chiefB)

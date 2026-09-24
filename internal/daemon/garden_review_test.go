@@ -31,7 +31,7 @@ func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T
 	if first.Status != garden.ReviewRunStatusRunning || len(items) != 1 || items[0].SeedID != seed.ID {
 		t.Fatalf("first review = %+v items=%+v", first, items)
 	}
-	wantActions := []string{"keep_growing", "park", "harvest", "wither"}
+	wantActions := []string{"send_to_chief", "keep_growing", "park", "harvest", "wither"}
 	if !slices.Equal(items[0].Actions, wantActions) {
 		t.Fatalf("actions = %v, want %v", items[0].Actions, wantActions)
 	}
@@ -50,25 +50,6 @@ func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T
 	job, err := d.jobQueue.GetByKey(gardenReviewClassifyKind, items[0].ID)
 	if err != nil || job == nil {
 		t.Fatalf("classification job = %+v error=%v", job, err)
-	}
-}
-
-func TestGardenReviewOffersChiefWithoutAReconstructableHandover(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	addGardenSession(t, d, "chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
-		t.Fatal(err)
-	}
-
-	capture, err := d.captureGardenReview()
-	if err != nil {
-		t.Fatalf("captureGardenReview: %v", err)
-	}
-	want := []string{"send_to_chief", "keep_growing", "park", "harvest", "wither"}
-	if got := capture.items[seed.ID].Actions; !slices.Equal(got, want) {
-		t.Fatalf("actions = %v, want %v", got, want)
 	}
 }
 
@@ -94,7 +75,7 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 		t.Fatalf("captureGardenReview: %v", err)
 	}
 	item := capture.items[seed.ID]
-	if !slices.Equal(item.Actions, []string{"resume", "handover", "keep_growing", "park", "harvest", "wither"}) {
+	if !slices.Equal(item.Actions, []string{"resume", "handover", "send_to_chief", "keep_growing", "park", "harvest", "wither"}) {
 		t.Fatalf("resumable actions = %v", item.Actions)
 	}
 }

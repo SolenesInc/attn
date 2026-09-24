@@ -36,7 +36,6 @@ type Store struct {
 	teardownIntents        map[string]SessionTeardownIntent
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
-	instanceRoles          map[string]string
 	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
 }
@@ -90,7 +89,6 @@ func newMapBackedStore() *Store {
 		sessionCloses:   make(map[string]sessionCloseMark),
 		sessionCosts:    make(map[string]SessionCostState),
 		agentMetadata:   make(map[string]string),
-		instanceRoles:   make(map[string]string),
 		workspaces:      make(map[string]workspacelayout.WorkspaceLayout),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
@@ -2157,81 +2155,6 @@ func (s *Store) GetAllSettings() map[string]string {
 		}
 	}
 	return result
-}
-
-func (s *Store) GetInstanceRole(role string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	role = strings.TrimSpace(role)
-	if role == "" {
-		return ""
-	}
-	if s.db == nil {
-		return strings.TrimSpace(s.instanceRoles[role])
-	}
-
-	var sessionID string
-	if err := s.db.QueryRow(
-		"SELECT session_id FROM instance_roles WHERE role = ?",
-		role,
-	).Scan(&sessionID); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(sessionID)
-}
-
-func (s *Store) SetInstanceRole(role, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	role = strings.TrimSpace(role)
-	sessionID = strings.TrimSpace(sessionID)
-	if role == "" {
-		return fmt.Errorf("role cannot be empty")
-	}
-	if sessionID == "" {
-		return fmt.Errorf("session id cannot be empty")
-	}
-	if s.db == nil {
-		if s.instanceRoles == nil {
-			s.instanceRoles = make(map[string]string)
-		}
-		s.instanceRoles[role] = sessionID
-		return nil
-	}
-
-	_, err := s.db.Exec(`
-		INSERT INTO instance_roles (role, session_id) VALUES (?, ?)
-		ON CONFLICT(role) DO UPDATE SET session_id = excluded.session_id`,
-		role,
-		sessionID,
-	)
-	return err
-}
-
-func (s *Store) ClearInstanceRole(role, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	role = strings.TrimSpace(role)
-	sessionID = strings.TrimSpace(sessionID)
-	if role == "" {
-		return fmt.Errorf("role cannot be empty")
-	}
-	if s.db == nil {
-		if strings.TrimSpace(s.instanceRoles[role]) == sessionID {
-			delete(s.instanceRoles, role)
-		}
-		return nil
-	}
-
-	_, err := s.db.Exec(
-		"DELETE FROM instance_roles WHERE role = ? AND session_id = ?",
-		role,
-		sessionID,
-	)
-	return err
 }
 
 func resolveRecentLocationPath(path string) string {
