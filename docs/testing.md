@@ -14,7 +14,7 @@ attn makes these promises:
 - **Durability**: sessions, terminals, and the database survive app, daemon,
   and machine restarts, and upgrades between versions.
 - **CLI**: commands, output, and exit codes that users and agents rely on.
-- **Screen**: what the user sees and does with the keyboard.
+- **Screen**: what the user sees, and what keyboard and pointer input does.
 - **App SDK**: the API that apps and their views build against. Its declared
   types must match the protocol shapes they mirror; a check comparing the two
   guards both promises.
@@ -53,7 +53,7 @@ Each kind is defined by where the test enters and what it may fake.
 | Kernel   | A function with a written specification                    | The function                                 | Nothing                                                                                   |
 | Wire     | The protocol, from one side                                | Everything on the other side of the protocol | Agent binaries, external services, clock, network; the browser and Tauri host for the app |
 | Stack    | The CLI, the protocol, or a browser page, across processes | Daemon, PTY workers and host, CLI, frontend  | Agent binaries, external services such as GitHub                                          |
-| Scenario | Keyboard; observes the screen, the protocol, and the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub                                          |
+| Scenario | Native input; observes the screen, the protocol, the CLI   | Everything attn ships, packaged as shipped   | Agent binaries, external services such as GitHub                                          |
 
 ### Wire
 
@@ -66,8 +66,9 @@ both at once. App wire tests run in a simulated browser with the Tauri host
 stubbed; everything attn itself ships in the frontend runs for real.
 
 Fake agent binaries follow the real harness's observable contract: its hooks,
-transcript files, and terminal output. Time uses `synctest`; network failures
-use `newToxiProxy`. No test sleeps or polls.
+transcript files, and terminal output. Time is controlled, never waited on:
+`synctest` in Go, Vitest fake timers in the app. Network failures use
+`newToxiProxy`. No test sleeps or polls.
 
 ### Stack
 
@@ -80,7 +81,8 @@ suite is a stack test: a real daemon serving the frontend in a browser.
 Scenarios run the packaged app in CI under Xvfb, per the
 [verification requirements](instances.md#verification-requirements) and the
 [harness guide](../app/scripts/real-app-harness/AGENTS.md). They cover
-rendering, focus, keyboard flow, and whole-product behavior such as queue mode.
+rendering, focus, native keyboard and pointer input, menus, scrolling, and
+whole-product behavior such as queue mode.
 Their verdicts come from the screen, the protocol, or the CLI, never from the
 daemon's database.
 
@@ -103,7 +105,7 @@ Use the lowest kind that can observe the behavior:
 
 1. Wire, by default.
 2. Stack, when the behavior crosses a process boundary.
-3. Scenario, when the behavior is pixels, focus, or keyboard.
+3. Scenario, when the behavior is pixels, focus, or native input.
 4. Kernel, only under the conditions above.
 
 A bug fix adds a regression test at the lowest kind that reproduces what the
