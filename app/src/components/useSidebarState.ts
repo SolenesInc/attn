@@ -4,6 +4,7 @@ import { isAttentionSessionState } from '../types/sessionState';
 import { type TileContentState } from '../types/workspace';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
+import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
 import { groupAutomationSessions, isSessionless } from './sidebarModel';
 import type { DockItem, LocalSession, SidebarProps, SidebarWorkspace } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
@@ -204,6 +205,7 @@ export function useSidebarState({
     Boolean(
       leafDrag &&
         workspace.id !== leafDrag.sourceWorkspaceId &&
+        workspace.id !== UNPLACED_GROUP_ID &&
         (workspace.endpointId || '') === (leafDrag.endpointId || ''),
     );
 

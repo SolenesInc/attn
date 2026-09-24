@@ -16,6 +16,7 @@ import {
   useChiefOfStaffContext,
   useCrewPanelContext,
   useDesktopResidencyContext,
+  useLeafDragContext,
   useNavigationContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
@@ -70,6 +71,16 @@ export function AppSidebar() {
     openSnoozeMenu,
   } = useAttentionQueueContext();
   const { onScreenSessionIds } = useDesktopResidencyContext();
+  const {
+    leafDesktopDrag,
+    dragHoverDesktopId,
+    handleDesktopDragEnter,
+    handleDesktopDragLeave,
+    handleDesktopDragDrop,
+    handleNewDesktopDrop,
+    handleSessionDragStart,
+    handleLeafDragEnd,
+  } = useLeafDragContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleRequestCloseSession, handleReloadSession } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
@@ -107,6 +118,14 @@ export function AppSidebar() {
       onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
       workspaceSelectionStyle={workspaceSelectionStyle}
       onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
+      leafDrag={leafDesktopDrag ? { sourceWorkspaceId: leafDesktopDrag.sourceDesktopId } : null}
+      dragHoverWorkspaceId={dragHoverDesktopId}
+      onWorkspaceDragEnter={handleDesktopDragEnter}
+      onWorkspaceDragLeave={handleDesktopDragLeave}
+      onWorkspaceDragDrop={handleDesktopDragDrop}
+      onNewWorkspaceDrop={handleNewDesktopDrop}
+      onSessionDragStart={handleSessionDragStart}
+      onSessionDragEnd={handleLeafDragEnd}
       queue={queueBands}
       onSettleTurn={sendSettleTurn}
       onOpenSnooze={openSnoozeMenu}

@@ -56,6 +56,43 @@ test.describe('Desktop Sessions', () => {
     await expect(page.locator('[data-testid="sidebar-session-side-two"]')).toHaveClass(/selected/);
   });
 
+  test('dragging a sidebar row moves its pane to a new desktop and back', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectSessions(page, daemon, [
+      { id: 'drag-stay', label: 'drag-stay', cwd: '/tmp/desktop-drag' },
+      { id: 'drag-move', label: 'drag-move', cwd: '/tmp/desktop-drag' },
+    ]);
+    await openSide(page, 'drag-stay', 'drag-move');
+
+    const groupHolding = (sessionId: string) =>
+      page.locator('[data-testid^="sidebar-workspace-"]').filter({ has: page.locator(`[data-testid="sidebar-session-${sessionId}"]`) });
+    const dragRowOnto = async (sessionId: string, target: import('@playwright/test').Locator) => {
+      const row = (await page.locator(`[data-testid="sidebar-session-${sessionId}"]`).boundingBox())!;
+      await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(row.x + row.width / 2, row.y + row.height / 2 + 24, { steps: 4 });
+      await expect(target).toBeVisible();
+      const box = (await target.boundingBox())!;
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 });
+      await page.mouse.up();
+    };
+    const firstDesktopId = await groupHolding('drag-stay').getAttribute('data-testid');
+
+    await dragRowOnto('drag-move', page.locator('[data-testid="new-workspace-dropzone"]'));
+
+    await expect(groupHolding('drag-move')).not.toHaveAttribute('data-testid', firstDesktopId!);
+    await expect(groupHolding('drag-stay')).toHaveAttribute('data-testid', firstDesktopId!);
+    await expect(currentDesktop(page).locator(paneOf('drag-move'))).toBeVisible();
+
+    await dragRowOnto('drag-move', page.locator(`[data-testid="${firstDesktopId}"]`));
+
+    await expect(groupHolding('drag-move')).toHaveAttribute('data-testid', firstDesktopId!);
+    await expect(currentDesktop(page).locator(paneOf('drag-move'))).toBeVisible();
+    await expect(currentDesktop(page).locator(paneOf('drag-stay'))).toBeVisible();
+  });
+
   test('clicking and keyboard navigation focus panes across agents on one desktop', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');

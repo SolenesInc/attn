@@ -147,14 +147,13 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
   ]);
 
   useEffect(() => {
-    if (view !== 'session' || activeSessionId || pendingSessionId) return;
+    if (view !== 'session' || activeSessionId || pendingSessionId || tileSelected) return;
     const state = useProfilesStore.getState();
     const shown = shownOf(state);
     const sessionId = agentToShow(state, shown, null);
-    if (!sessionId) return;
-    useSessionStore.getState().setActiveSession(sessionId);
+    if (sessionId) useSessionStore.getState().setActiveSession(sessionId);
     mirrorShownTile(shown);
-  }, [view, activeSessionId, pendingSessionId, currentDesktopId]);
+  }, [view, activeSessionId, pendingSessionId, tileSelected, currentDesktopId]);
 
   const focusRef = useRef(focusSessionPane);
   useEffect(() => {

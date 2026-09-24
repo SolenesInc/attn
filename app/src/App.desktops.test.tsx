@@ -550,6 +550,32 @@ describe('desktop surface', () => {
     await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe(''));
   });
 
+  it('shows the focused tile again when the user comes back from Home to a tile-only desktop', async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByTestId('select-d2'));
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));
+
+    act(() => useSessionStore.getState().goToDashboard());
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
+    await userEvent.click(screen.getByTestId('select-d2'));
+
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d2:tile-readme'));
+    expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
+  });
+
+  it('keeps a tile the user picks from Home while the daemon applies it', async () => {
+    arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(() => new Promise(() => {}));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    act(() => useSessionStore.getState().goToDashboard());
+
+    await userEvent.click(screen.getByTestId('select-notes-tile'));
+
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
+    expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'tile-notes']]);
+  });
+
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));

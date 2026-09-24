@@ -492,7 +492,7 @@ export function useAppController({
     return () => sendCancelCountdown(armDismissSessionId);
   }, [visibleCountdownSessionIds, armDismissSessionId, sendCancelCountdown]);
 
-  const leafDrag = useLeafDrag({ currentDesktopIdRef, getDesktopLeafDropSnapshot });
+  const leafDrag = useLeafDrag({ currentDesktopIdRef, getDesktopLeafDropSnapshot, handleSelectDesktop, showError });
 
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,

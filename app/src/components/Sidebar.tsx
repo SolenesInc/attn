@@ -113,7 +113,7 @@ function SidebarExpanded() {
             }}
           >
             <span className="new-workspace-dropzone-plus">＋</span>
-            <span className="new-workspace-dropzone-label">New workspace</span>
+            <span className="new-workspace-dropzone-label">New desktop</span>
           </div>
         )}
         {sessionDragGhost && (

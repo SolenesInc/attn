@@ -76,6 +76,13 @@ export interface LeafDragPreviewState {
   ghostPos: { x: number; y: number } | null;
 }
 
+export interface LeafDesktopDragState {
+  sourceDesktopId: string;
+  leafId: string;
+}
+
+export const SIDEBAR_LEAF_DROP_PLACEMENT = { edge: 'left' as const, leafShare: 0.32 };
+
 
 export function activePaneIdForWorkspace(
   workspace: TerminalWorkspaceState,
