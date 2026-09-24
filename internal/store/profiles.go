@@ -896,8 +896,8 @@ func (s *Store) SetActivePane(desktopID, paneID string) (profiles.Profile, profi
 		if desktop, err = loadDesktop(tx, desktopID); err != nil {
 			return err
 		}
-		if !layouttree.HasPane(desktop.Tree, paneID) {
-			return profiles.Errorf(profiles.CodeNotFound, "pane %q does not belong to desktop %s", paneID, desktopID)
+		if !layouttree.HasLeaf(desktop.Tree, paneID) {
+			return profiles.Errorf(profiles.CodeNotFound, "leaf %q does not belong to desktop %s", paneID, desktopID)
 		}
 		if profile, err = loadLiveProfile(tx, desktop.ProfileID); err != nil {
 			return err
@@ -1076,8 +1076,8 @@ func (s *Store) UpdateDesktopArrangement(id string, expectedRevision int64, edit
 
 func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementRequest, paneID string) (profiles.Desktop, error) {
 	anchor := strings.TrimSpace(request.AnchorPaneID)
-	if anchor != "" && !layouttree.HasPane(desktop.Tree, anchor) {
-		return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+	if anchor != "" && !layouttree.HasLeaf(desktop.Tree, anchor) {
+		return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor leaf %q does not belong to desktop %s", anchor, desktop.ID)
 	}
 	if anchor == "" {
 		anchor = desktop.ActivePaneID
@@ -1097,7 +1097,7 @@ func placeSessionInTree(desktop profiles.Desktop, request SessionPlacementReques
 		ratio := firstChildRatio(request.NewPaneShare, false)
 		next, ok := layouttree.Split(desktop.Tree, anchor, paneID, splitID, request.Direction, ratio)
 		if !ok {
-			return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor pane %q does not belong to desktop %s", anchor, desktop.ID)
+			return desktop, profiles.Errorf(profiles.CodeNotFound, "anchor leaf %q does not belong to desktop %s", anchor, desktop.ID)
 		}
 		if request.NewPaneShare > 0 && request.NewPaneShare < 1 {
 			next, _ = layouttree.SetSplitRatio(next, splitID, ratio)
@@ -1251,7 +1251,6 @@ func handOverPane(source, target *profiles.Desktop, leafID, finalLeafID string) 
 		if pane.PaneID == leafID {
 			pane.PaneID = finalLeafID
 			target.Panes = append(target.Panes, pane)
-			target.ActivePaneID = finalLeafID
 		}
 	}
 	source.Panes = withoutPane(source.Panes, leafID)
@@ -1273,6 +1272,7 @@ func (s *Store) MoveLeaf(request LeafMoveRequest) (LeafMove, error) {
 		}
 		source.Tree, target.Tree = moved.SourceLayout, moved.TargetLayout
 		handOverPane(&source, &target, request.LeafID, moved.FinalLeafID)
+		target.ActivePaneID = moved.FinalLeafID
 		if err := writeDesktopArrangement(tx, now, &source); err != nil {
 			return err
 		}

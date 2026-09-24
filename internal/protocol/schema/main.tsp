@@ -731,8 +731,8 @@ model DesktopPane {
 }
 
 // revision counts changes to the desktop's name, shortcut slot, order, tree and
-// panes. active_pane_id is selection and never moves it; it names a pane of
-// this desktop, or is empty when the desktop has no panes.
+// panes. active_pane_id is selection and never moves it; it names a leaf of
+// this desktop, an agent pane or a tile, or is empty when the desktop has no leaves.
 model Desktop {
   id: string;
   profile_id: string;
@@ -3351,7 +3351,8 @@ model DesktopSetCurrentMessage {
   desktop_id: string;
 }
 
-// Selection: last writer wins, no revision.
+// Selection: last writer wins, no revision. pane_id is any leaf of the
+// desktop, an agent pane or a tile.
 model DesktopSetActivePaneMessage {
   cmd: "desktop_set_active_pane";
   request_id: string;
@@ -3360,7 +3361,7 @@ model DesktopSetActivePaneMessage {
 }
 
 // Gives an unplaced agent of the desktop's profile a pane, split beside
-// anchor_pane_id or, absent, beside the active pane. The new pane becomes active.
+// anchor_pane_id or, absent, beside the active leaf. The new pane becomes active.
 model DesktopPlaceSessionMessage {
   cmd: "desktop_place_session";
   request_id: string;
@@ -3406,6 +3407,8 @@ model DesktopSetSplitRatioMessage {
   expected_revision: safeint;
 }
 
+// Docks a tile beside anchor_id or, absent, beside the active leaf. The tile
+// becomes the active leaf.
 model DesktopDockTileMessage {
   cmd: "desktop_dock_tile";
   request_id: string;

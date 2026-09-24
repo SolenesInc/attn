@@ -145,6 +145,7 @@ func (d *Daemon) agentTileEdit(desktop profiles.Desktop, anchorPaneID string, ti
 				return updated, err
 			}
 			updated.Tree, _ = layouttree.UpdateTileSessionID(updated.Tree, tileID, tile.sessionID)
+			updated.ActivePaneID = tileID
 			return updated, nil
 		}, err
 	}

@@ -277,8 +277,8 @@ func collapsed(children []Node) (Node, bool) {
 	return children[0], false
 }
 
-func Split(node Node, targetPaneID, newPaneID, splitID string, direction Direction, ratio float64) (Node, bool) {
-	target := isPane(targetPaneID)
+func Split(node Node, targetLeafID, newPaneID, splitID string, direction Direction, ratio float64) (Node, bool) {
+	target := isLeafWithID(targetLeafID)
 	return rewriteFirst(node, func(candidate Node) (Node, bool) {
 		if !target(candidate) {
 			return candidate, false
@@ -290,7 +290,7 @@ func Split(node Node, targetPaneID, newPaneID, splitID string, direction Directi
 			Ratio:     ratioOrDefault(ratio),
 			RatioMode: RatioModeAutomatic,
 			Children: []Node{
-				{Type: "pane", PaneID: targetPaneID},
+				candidate,
 				{Type: "pane", PaneID: newPaneID},
 			},
 		}, true
@@ -379,7 +379,7 @@ func TileIDs(node Node) []string {
 	return ids
 }
 
-func hasLeaf(node Node, leafID string) bool {
+func HasLeaf(node Node, leafID string) bool {
 	return HasPane(node, leafID) || HasTile(node, leafID)
 }
 
@@ -572,7 +572,7 @@ func MoveLeafBetweenLayouts(source, target Node, leafID, anchorID, splitID strin
 	cleanedSource, _ := Remove(source, leafID)
 
 	moved = renamedToAvoid(target, moved, conflictSuffix)
-	if hasLeaf(target, leafIDOf(moved)) {
+	if HasLeaf(target, leafIDOf(moved)) {
 		return MoveBetweenLayoutsResult{}, false
 	}
 
@@ -593,7 +593,7 @@ func MoveLeafBetweenLayouts(source, target Node, leafID, anchorID, splitID strin
 }
 
 func renamedToAvoid(target, leaf Node, conflictSuffix string) Node {
-	if !hasLeaf(target, leafIDOf(leaf)) {
+	if !HasLeaf(target, leafIDOf(leaf)) {
 		return leaf
 	}
 	suffix := strings.TrimSpace(conflictSuffix)

@@ -86,7 +86,7 @@ func TestATileDockedOnAnEmptyDesktopBecomesItsWholeTree(t *testing.T) {
 	}
 }
 
-func TestATileDocksBesideTheActivePaneAndReDockingKeepsItsParams(t *testing.T) {
+func TestATileDocksBesideTheActiveLeafTakesFocusAndReDockingKeepsItsParams(t *testing.T) {
 	w := newDesktopTilesWorld(t)
 	w.agent("agent-a", w.profileID)
 	placed := w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"})
@@ -101,8 +101,8 @@ func TestATileDocksBesideTheActivePaneAndReDockingKeepsItsParams(t *testing.T) {
 	if tree.Type != "split" || tree.Children[0].PaneID != paneID || tree.Children[1].TileID != "tile-md" || tree.Ratio != 0.6 {
 		t.Fatalf("docking beside the active pane produced %s, want pane %s then the tile at 40%%", w.desktop.TreeJson, paneID)
 	}
-	if w.desktop.ActivePaneID != paneID {
-		t.Fatalf("docking a tile moved the active pane to %q", w.desktop.ActivePaneID)
+	if w.desktop.ActivePaneID != "tile-md" {
+		t.Fatalf("docking a tile left the active leaf at %q, want the new tile", w.desktop.ActivePaneID)
 	}
 
 	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-md", "tile_kind": "markdown", "edge": "left"})
@@ -504,5 +504,80 @@ func TestTileContentAlwaysFollowsTheArrangementItBelongsTo(t *testing.T) {
 	}
 	if contents == 0 {
 		t.Fatal("no tile content was sent at all")
+	}
+}
+
+func (w *desktopTilesWorld) focus(leafID string) protocol.ProfileActionResultMessage {
+	w.t.Helper()
+	result := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopSetActivePane, "desktop_id": w.desktop.ID, "pane_id": leafID})
+	w.desktop = result.Desktops[0]
+	return result
+}
+
+func TestTheActiveLeafIsAnAgentPaneOrATileOfTheDesktop(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.agent("agent-a", w.profileID)
+	paneID := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
+	second, _ := w.connect(w.profileID)
+
+	w.focus(paneID)
+	w.focus("tile-notebook")
+
+	if w.desktop.ActivePaneID != "tile-notebook" {
+		t.Fatalf("active leaf after focusing the tile is %q", w.desktop.ActivePaneID)
+	}
+	seen := arrangementChanges(t, second)
+	if len(seen) != 2 || seen[1].Desktops[0].ActivePaneID != "tile-notebook" {
+		t.Fatalf("the other client saw %+v, want the pane then the tile as the active leaf", seen)
+	}
+	unknown := w.send(w.client, map[string]any{"cmd": protocol.CmdDesktopSetActivePane, "desktop_id": w.desktop.ID, "pane_id": "tile-elsewhere"})
+	wantErrorCode(t, unknown, protocol.ProfileErrorCodeNotFound)
+}
+
+func TestAnAgentPlacedWhileATileIsFocusedSplitsBesideTheTile(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.agent("agent-a", w.profileID)
+	w.agent("agent-b", w.profileID)
+	paneA := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
+
+	paneB := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-b"}).PaneID)
+
+	tree := w.tree()
+	if tree.Children[0].PaneID != paneA {
+		t.Fatalf("placing beside the focused tile moved agent-a: %s", w.desktop.TreeJson)
+	}
+	beside := tree.Children[1]
+	if beside.Type != "split" || beside.Children[0].TileID != "tile-notebook" || beside.Children[1].PaneID != paneB {
+		t.Fatalf("placing while the tile is focused produced %s, want agent-b split beside the tile", w.desktop.TreeJson)
+	}
+	if w.desktop.ActivePaneID != paneB {
+		t.Fatalf("active leaf after placing is %q, want agent-b's pane", w.desktop.ActivePaneID)
+	}
+}
+
+func TestSendingAFocusedTileToAnotherDesktopKeepsItFocusedThere(t *testing.T) {
+	w := newDesktopTilesWorld(t)
+	w.agent("agent-a", w.profileID)
+	paneA := protocol.Deref(w.apply(map[string]any{"cmd": protocol.CmdDesktopPlaceSession, "session_id": "agent-a"}).PaneID)
+	w.apply(map[string]any{"cmd": protocol.CmdDesktopDockTile, "tile_id": "tile-notebook", "tile_kind": "notebook", "edge": "right"})
+	other := w.mustSend(w.client, map[string]any{"cmd": protocol.CmdDesktopCreate, "profile_id": w.profileID}).Desktops[0]
+
+	moved := w.mustSend(w.client, map[string]any{
+		"cmd": protocol.CmdDesktopMoveLeaf, "source_desktop_id": w.desktop.ID, "target_desktop_id": other.ID,
+		"leaf_id": "tile-notebook", "edge": "right",
+		"expected_source_revision": w.desktop.Revision, "expected_target_revision": other.Revision,
+	})
+
+	byID := map[string]protocol.Desktop{}
+	for _, desktop := range moved.Desktops {
+		byID[desktop.ID] = desktop
+	}
+	if got := byID[other.ID].ActivePaneID; got != "tile-notebook" {
+		t.Fatalf("the target desktop's active leaf is %q, want the sent tile", got)
+	}
+	if got := byID[w.desktop.ID].ActivePaneID; got != paneA {
+		t.Fatalf("the source desktop's active leaf is %q, want agent-a's pane", got)
 	}
 }

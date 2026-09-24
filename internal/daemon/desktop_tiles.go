@@ -47,6 +47,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
 	}
 	anchor := dockAnchor(desktop, dock.anchorID, dock.tileID)
+	desktop.ActivePaneID = dock.tileID
 	if anchor == "" {
 		desktop.Tree = layouttree.Node{Type: "tile", TileID: dock.tileID, TileKind: dock.tileKind, TileParams: dock.params, TileSessionID: dock.sessionID}
 		return desktop, nil
