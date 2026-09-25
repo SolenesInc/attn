@@ -433,19 +433,14 @@ func (c *Codex) RecoveredRunningState(ptyState string) (protocol.SessionState, b
 }
 
 func (c *Codex) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
-	requested := strings.TrimSpace(requestedResumeID)
-	stored := strings.TrimSpace(storedResumeID)
-	if stored != "" && (requested == "" || requested == strings.TrimSpace(existingSessionID)) {
-		return stored
-	}
-	return requested
+	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
 }
 
 func (c *Codex) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
 	return strings.TrimSpace(resolvedResumeID)
 }
 
-func (c *Codex) ResumeSessionIDFromStopTranscriptPath(transcriptPath string) string {
+func (c *Codex) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
 	return ""
 }
 

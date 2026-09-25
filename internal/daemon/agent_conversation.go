@@ -3,7 +3,6 @@ package daemon
 import (
 	"net"
 	"strings"
-	"time"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
@@ -120,7 +119,7 @@ func (d *Daemon) rebindTranscriptWatcherForConversation(event bus.Event) {
 		session.ID,
 		session.Agent,
 		session.Directory,
-		time.Now(),
+		d.sessionStartedAt(session.ID),
 		observation.TranscriptPath,
 	)
 }

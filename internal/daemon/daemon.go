@@ -2964,10 +2964,14 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.recordBracketEvidence(msg.ID, protocol.StateIdle)
 
 	if session := d.store.Get(msg.ID); session != nil {
-		if resumeSessionID := agentdriver.ResumeSessionIDFromStopTranscriptPath(
-			agentdriver.Get(string(session.Agent)),
-			msg.TranscriptPath,
-		); resumeSessionID != "" {
+		driver := agentdriver.Get(string(session.Agent))
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		if resumeSessionID != "" && !agentdriver.EffectiveCapabilities(driver).HasHooks &&
+			d.store.ConversationBoundToOtherSession(msg.ID, resumeSessionID) {
+			d.logf("handleStop: ignoring conversation %s bound to another session, session=%s", resumeSessionID, msg.ID)
+			resumeSessionID = ""
+		}
+		if resumeSessionID != "" {
 			d.observeAgentConversation(agentConversationObservation{
 				SessionID:      msg.ID,
 				NativeID:       resumeSessionID,
