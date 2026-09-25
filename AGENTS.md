@@ -79,6 +79,9 @@ satisfy the full requirement?
   [Testing](docs/testing.md) needs it, and name which. Do not request tests
   that guard no promise, unit tests for behavior a wire test covers, or
   validation, fallbacks, and edge-case handling for hypothetical inputs.
+- Apply a rule for its purpose. When a change leaves untouched what a rule
+  protects, do not ask for the rule's ceremony, such as a protocol bump for a
+  schema edit that leaves the wire unchanged.
 
 ### Author
 
