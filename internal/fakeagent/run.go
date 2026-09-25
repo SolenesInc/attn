@@ -40,8 +40,8 @@ func (r *Run) Exit(code int) {
 	}
 	select {
 	case <-r.fake.peer.done:
-	case <-time.After(hangGuard):
-		r.t.Fatalf("%s for session %s (pid %d) still running %s after exit %d", r.Harness, r.SessionID, r.fake.Pid, hangGuard, code)
+	case <-time.After(HangGuard):
+		r.t.Fatalf("%s for session %s (pid %d) still running %s after exit %d", r.Harness, r.SessionID, r.fake.Pid, HangGuard, code)
 	}
 	if got := r.fake.exited(); got != code {
 		r.t.Fatalf("%s for session %s exited %d, want %d", r.Harness, r.SessionID, got, code)
@@ -50,7 +50,7 @@ func (r *Run) Exit(code int) {
 
 func (r *Run) call(method string, params, result any) {
 	r.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), hangGuard)
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
 	defer cancel()
 	if err := r.fake.peer.call(ctx, method, params, result); err != nil {
 		r.t.Fatalf("%s %s for session %s: %v", r.Harness, method, r.SessionID, err)

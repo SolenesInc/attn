@@ -33,6 +33,7 @@ import (
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/testworld"
 	"github.com/victorarias/attn/internal/toolhome"
 	"github.com/victorarias/attn/internal/workspacelayout"
 	"nhooyr.io/websocket"
@@ -102,40 +103,18 @@ func (c *blockingClassifier) CallCount() int {
 
 func TestMain(m *testing.M) {
 	fakeagent.Main()
-	_ = os.Setenv("ATTN_PTY_BACKEND", "embedded")
-	_ = os.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
-
-	sessionInputSubmitDelay = 0
-
-	sessionInputTakenWindow = 0
-
 	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" || os.Getenv("ATTN_PLUGIN_DRIVER_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
-
-	dataDir, err := os.MkdirTemp("", "attn-test-data-*")
-	if err != nil {
-		panic("daemon: TestMain: MkdirTemp: " + err.Error())
-	}
-	config.ScopeTestEnvironment(dataDir)
-	testProcessDir = dataDir
-
-	toolHomeDir, err := os.MkdirTemp("", "attn-test-toolhome-*")
-	if err != nil {
-		panic("daemon: TestMain: MkdirTemp: " + err.Error())
-	}
-	_ = os.Setenv(toolhome.EnvVar, toolHomeDir)
-	_ = os.Setenv("CODEX_HOME", filepath.Join(toolHomeDir, ".codex"))
-
-	_ = os.Setenv("ATTN_CLIENT_TOKEN", "daemon-test-client-token")
-
-	_ = os.Setenv("ATTN_MOCK_GH_URL", "http://127.0.0.1:1")
-	_ = os.Unsetenv("ATTN_MOCK_GH_TOKEN")
-
-	code := m.Run()
-	os.RemoveAll(dataDir)
-	os.RemoveAll(toolHomeDir)
-	os.Exit(code)
+	sessionInputSubmitDelay = 0
+	sessionInputTakenWindow = 0
+	os.Exit(testworld.Main(m,
+		"ATTN_PTY_BACKEND=embedded",
+		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
+		"ATTN_CLIENT_TOKEN=daemon-test-client-token",
+		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
+		"ATTN_MOCK_GH_TOKEN=",
+	))
 }
 
 func waitForSocket(t *testing.T, sockPath string, timeout time.Duration) {

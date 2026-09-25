@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 	"nhooyr.io/websocket"
 )
 
@@ -39,7 +40,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	}
 
 	tmpDir := shortTempDir(t)
-	attnBin := AttnWrapper(t)
+	attnBin := testworld.AttnBinary(t)
 
 	port, err := freeTCPPort()
 	if err != nil {

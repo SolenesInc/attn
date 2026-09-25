@@ -6,27 +6,28 @@ import (
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
-	w := newWorld(t, withAgents(fakeagent.Claude))
-	app := w.app()
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
 
-	talked := w.spawn(app, fakeagent.Claude, w.path("shop"))
-	first := w.launched(talked)
-	app.typeLine(talked, "add a discount field to checkout")
+	talked := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	first := w.Launched(talked)
+	app.TypeLine(talked, "add a discount field to checkout")
 	if got := first.Prompted(); got != "add a discount field to checkout" {
 		t.Fatalf("claude received %q", got)
 	}
 	first.Reply("Before or after tax? <!-- attn:state=waiting_input -->")
-	awaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
+	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 
-	untouched := w.spawn(app, fakeagent.Claude, w.path("blog"))
-	w.launched(untouched)
+	untouched := w.Spawn(app, fakeagent.Claude, w.Path("blog"))
+	w.Launched(untouched)
 
 	w.restart()
-	app = w.app()
-	initial := app.initial
+	app = w.App()
+	initial := app.Initial
 	states := map[string]protocol.SessionState{}
 	for _, s := range initial.Sessions {
 		states[s.ID] = s.State
@@ -41,18 +42,18 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 		t.Fatalf("warnings = %+v, want stale_sessions_pruned", initial.Warnings)
 	}
 
-	w.spawn(app, fakeagent.Claude, w.path("shop"), func(m *protocol.SpawnSessionMessage) {
+	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.ID = talked
 		m.ResumeSessionID = protocol.Ptr(talked)
 	})
-	resumed := w.launched(talked)
+	resumed := w.Launched(talked)
 	if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("respawn ran claude %q, want -r %s", resumed.Argv, first.ConversationID)
 	}
-	app.typeLine(talked, "after tax")
+	app.TypeLine(talked, "after tax")
 	if got := resumed.Prompted(); got != "after tax" {
 		t.Fatalf("resumed claude received %q", got)
 	}
 	resumed.Reply("Applied after tax. <!-- attn:state=idle -->")
-	awaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }

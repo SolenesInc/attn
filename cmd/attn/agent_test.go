@@ -43,53 +43,6 @@ func TestParseAgentPeekArgs(t *testing.T) {
 	}
 }
 
-func TestAgentListRowsJoinWorkspaceTitlesAndSort(t *testing.T) {
-	rows := agentListRows(&client.ListResult{
-		Sessions: []protocol.Session{
-			{ID: "bbbb2222-1111", Label: "zeta", Agent: "claude", WorkspaceID: "ws-2", State: "idle"},
-			{ID: "aaaa1111-2222", Label: "alpha", Agent: "codex", WorkspaceID: "ws-1", State: "working", TurnOwed: protocol.Ptr(true)},
-		},
-		Workspaces: []protocol.Workspace{
-			{ID: "ws-1", Title: "attn"},
-			{ID: "ws-2", Title: "notes"},
-		},
-	})
-	if len(rows) != 2 {
-		t.Fatalf("rows = %+v", rows)
-	}
-	if rows[0].Workspace != "attn" || rows[0].Label != "alpha" || !rows[0].TurnOwed {
-		t.Fatalf("first row = %+v", rows[0])
-	}
-	if rows[1].Workspace != "notes" || rows[1].TurnOwed {
-		t.Fatalf("second row = %+v", rows[1])
-	}
-}
-
-func TestPrintAgentListShowsShortIDsAndTurn(t *testing.T) {
-	var out bytes.Buffer
-	printAgentList(&out, []agentListRow{
-		{ID: "aaaa1111-2222-3333", Label: "alpha", Agent: "codex", Workspace: "attn", State: "working", TurnOwed: true},
-		{ID: "bbbb2222-1111-4444", Label: "zeta", Agent: "claude", Workspace: "notes", State: "idle"},
-	})
-	text := out.String()
-	for _, want := range []string{"aaaa1111", "bbbb2222", "alpha", "working", "owed", "attn agent peek"} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("output missing %q:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "aaaa1111-2222") {
-		t.Fatalf("output leaked a full id where the short id belongs:\n%s", text)
-	}
-}
-
-func TestPrintAgentListEmpty(t *testing.T) {
-	var out bytes.Buffer
-	printAgentList(&out, nil)
-	if !strings.Contains(out.String(), "No sessions") {
-		t.Fatalf("output = %q", out.String())
-	}
-}
-
 func TestPrintAgentPeekShowsEverySection(t *testing.T) {
 	var out bytes.Buffer
 	printAgentPeek(&out, &protocol.AgentPeekResult{

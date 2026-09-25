@@ -21,6 +21,7 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
+	"github.com/victorarias/attn/internal/testworld"
 	"nhooyr.io/websocket"
 )
 
@@ -30,7 +31,7 @@ func TestPTYUpgradeAcrossDaemonBinaries(t *testing.T) {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
 	}
 	root := shortTempDir(t)
-	newBinary := AttnWrapper(t)
+	newBinary := testworld.AttnBinary(t)
 	fixture := filepath.Join(root, "fixture-codex")
 	script := `#!/bin/sh
 set -eu

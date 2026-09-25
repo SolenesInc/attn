@@ -130,7 +130,7 @@ func loadConfig(dir string) (config, error) {
 }
 
 func runWrapperTripwire(cfg config) int {
-	return tripwire(cfg, wrapperName, "agent spawned in a world without withAgents")
+	return tripwire(cfg, wrapperName, "agent spawned in a world that named no agents")
 }
 
 func tripwire(cfg config, program, reason string) int {
