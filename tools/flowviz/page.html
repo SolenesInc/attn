@@ -1,0 +1,844 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>attn Flow Traces</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root {
+  --bg: #f3f5f4;
+  --surface: #ffffff;
+  --surface-2: #eaeeec;
+  --ink: #17201d;
+  --muted: #5b6863;
+  --faint: #8a9690;
+  --line: #d8dfdb;
+  --guide: #dfe5e2;
+  --accent: #0d6b66;
+  --accent-soft: #d6ecea;
+  --ran: #1f7a4d;
+  --ran-soft: #dff1e6;
+  --unran: #a3aea9;
+  --k-dynamic: #6a4bb5;
+  --k-go: #a86412;
+  --k-defer: #6b7280;
+  --k-bus: #b02a62;
+  --k-consumer: #b02a62;
+  --k-boundary: #1f5fa8;
+  --k-cycle: #9a3412;
+  --code-kw: #7a2e8e;
+  --code-str: #1f6f3a;
+  --code-com: #7b8782;
+  --code-num: #9a4a07;
+  --shadow: 0 10px 40px rgba(18, 30, 26, 0.18);
+  --ind: 14px;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1413;
+    --surface: #161c1b;
+    --surface-2: #1d2524;
+    --ink: #e2e9e6;
+    --muted: #9aa8a2;
+    --faint: #6e7c76;
+    --line: #28312f;
+    --guide: #242d2b;
+    --accent: #52b8af;
+    --accent-soft: #173331;
+    --ran: #5cc98f;
+    --ran-soft: #173226;
+    --unran: #53605b;
+    --k-dynamic: #a78bfa;
+    --k-go: #e0a24a;
+    --k-defer: #9ca3af;
+    --k-bus: #f0739f;
+    --k-consumer: #f0739f;
+    --k-boundary: #6aa8f0;
+    --k-cycle: #f19a6b;
+    --code-kw: #d19be6;
+    --code-str: #8fd19e;
+    --code-com: #6e7c76;
+    --code-num: #f0b36a;
+    --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1413;
+  --surface: #161c1b;
+  --surface-2: #1d2524;
+  --ink: #e2e9e6;
+  --muted: #9aa8a2;
+  --faint: #6e7c76;
+  --line: #28312f;
+  --guide: #242d2b;
+  --accent: #52b8af;
+  --accent-soft: #173331;
+  --ran: #5cc98f;
+  --ran-soft: #173226;
+  --unran: #53605b;
+  --k-dynamic: #a78bfa;
+  --k-go: #e0a24a;
+  --k-defer: #9ca3af;
+  --k-bus: #f0739f;
+  --k-consumer: #f0739f;
+  --k-boundary: #6aa8f0;
+  --k-cycle: #f19a6b;
+  --code-kw: #d19be6;
+  --code-str: #8fd19e;
+  --code-com: #6e7c76;
+  --code-num: #f0b36a;
+  --shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+}
+
+* { box-sizing: border-box; }
+html, body { background: var(--bg); }
+body {
+  margin: 0;
+  color: var(--ink);
+  font: 14px/1.45 var(--sans);
+  padding-inline: 16px;
+  padding-block: 0 24px;
+}
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.page { max-width: 1320px; margin: 0 auto; display: grid; gap: 14px; }
+
+header.top {
+  display: grid;
+  gap: 10px;
+  padding-block: 18px 4px;
+}
+.brand { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.brand h1 {
+  margin: 0;
+  font: 600 20px/1.2 var(--mono);
+  letter-spacing: -0.01em;
+}
+.brand h1 span { color: var(--accent); }
+.stamp { font: 12px/1.3 var(--mono); color: var(--faint); }
+
+.flows { display: flex; gap: 8px; flex-wrap: wrap; }
+.flow-chip {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 999px;
+  padding: 6px 12px;
+  display: inline-flex;
+  gap: 8px;
+  align-items: baseline;
+  min-height: 36px;
+}
+.flow-chip code { font: 500 12px var(--mono); color: var(--muted); }
+.flow-chip[aria-pressed="true"] {
+  background: var(--ink);
+  color: var(--bg);
+  border-color: var(--ink);
+}
+.flow-chip[aria-pressed="true"] code { color: inherit; opacity: 0.75; }
+
+.summary { display: grid; gap: 6px; max-width: 72ch; }
+.summary h2 { margin: 0; font: 600 17px/1.3 var(--sans); text-wrap: balance; }
+.summary p { margin: 0; color: var(--muted); }
+.stats { display: flex; gap: 6px 18px; flex-wrap: wrap; font: 12px/1.4 var(--mono); color: var(--muted); }
+.stats b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats .ranb { color: var(--ran); }
+
+.controls {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 5;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-block: 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+.search {
+  flex: 1 1 200px;
+  min-width: 0;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 7px 10px; font-size: 13px; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.seg button:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+.crumbs { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font: 12px var(--mono); color: var(--muted); }
+.crumbs button { border: 0; background: none; padding: 2px 4px; color: var(--accent); border-radius: 4px; }
+.crumbs button:hover { background: var(--accent-soft); }
+.crumbs .sep { color: var(--faint); }
+
+.layout { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+@media (min-width: 980px) {
+  .layout { grid-template-columns: minmax(0, 1fr) minmax(380px, 440px); }
+}
+
+.tree {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding-block: 6px;
+  overflow: hidden;
+}
+.row {
+  --d: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding-inline: 8px 10px;
+  padding-left: calc(8px + var(--d) * var(--ind));
+  cursor: pointer;
+  user-select: none;
+}
+.row::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: calc(var(--d) * var(--ind));
+  background-image: repeating-linear-gradient(to right, var(--guide) 0 1px, transparent 1px var(--ind));
+  background-position: 7px 0;
+  pointer-events: none;
+}
+.row:hover { background: var(--surface-2); }
+.row[aria-selected="true"] { background: var(--accent-soft); }
+.row.flash { animation: flash 1.2s ease-out; }
+@keyframes flash { 0% { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); } 100% { background: transparent; } }
+.row.unran .nm, .row.unran .pk { color: var(--faint); }
+.row.hit .nm { background: var(--accent-soft); border-radius: 3px; }
+
+.tw {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border: 0;
+  background: none;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  border-radius: 4px;
+}
+.tw:hover { background: var(--line); }
+.tw svg { width: 10px; height: 10px; transition: transform 0.12s; }
+.tw[aria-expanded="true"] svg { transform: rotate(90deg); }
+.tw.leaf { visibility: hidden; }
+
+.dot { flex: none; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid var(--unran); }
+.dot.yes { background: var(--ran); border-color: var(--ran); }
+.dot.none { border-style: dotted; }
+
+.tag {
+  flex: none;
+  font: 600 10px/1 var(--mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 5px;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+}
+.k-dynamic { color: var(--k-dynamic); }
+.k-go { color: var(--k-go); }
+.k-defer { color: var(--k-defer); }
+.k-bus { color: var(--k-bus); }
+.k-consumer { color: var(--k-consumer); }
+.k-boundary { color: var(--k-boundary); }
+.k-cycle { color: var(--k-cycle); }
+.k-entry { color: var(--accent); }
+.k-ref { color: var(--muted); }
+
+.nm {
+  font: 500 13px/1.3 var(--mono);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-inline: 2px;
+}
+.row.lbl .nm { font-family: var(--sans); font-weight: 600; }
+.row.kind-bus .nm { color: var(--k-bus); }
+.row.kind-boundary .nm { color: var(--k-boundary); }
+.pk { flex: none; font: 11px var(--mono); color: var(--faint); }
+.aux { font: 11px var(--mono); color: var(--faint); white-space: nowrap; }
+.wt { margin-left: auto; flex: none; width: 54px; height: 4px; border-radius: 2px; background: var(--surface-2); overflow: hidden; }
+.wt i { display: block; height: 100%; background: var(--faint); opacity: 0.55; }
+.row.yes-row .wt i { background: var(--ran); opacity: 0.7; }
+.cnt { flex: none; font: 11px var(--mono); color: var(--faint); font-variant-numeric: tabular-nums; min-width: 3ch; text-align: right; }
+
+@media (max-width: 560px) {
+  :root { --ind: 11px; }
+  .controls { gap: 6px; }
+  .search { flex-basis: 100%; order: -1; }
+  .seg button, .btn { padding: 6px 8px; font-size: 12px; }
+  .detail { max-height: 70vh; }
+  .pk, .wt, .aux { display: none; }
+  .row { min-height: 40px; }
+}
+
+.empty { padding: 24px 16px; color: var(--muted); }
+
+.detail {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+}
+@media (min-width: 980px) {
+  .detail {
+    position: sticky;
+    top: calc(env(safe-area-inset-top, 0px) + 64px);
+    max-height: calc(100vh - 84px);
+  }
+}
+@media (max-width: 979px) {
+  .detail {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    max-height: 78vh;
+    border-radius: 14px 14px 0 0;
+    border-bottom: 0;
+    box-shadow: var(--shadow);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateY(0);
+    transition: transform 0.2s ease;
+  }
+  .detail.closed { transform: translateY(105%); box-shadow: none; }
+  .grab { display: block; width: 40px; height: 4px; border-radius: 2px; background: var(--line); margin: 8px auto 0; }
+}
+@media (min-width: 980px) {
+  .grab, .close { display: none; }
+  .detail.closed .dbody { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .detail, .tw svg { transition: none; }
+  .row.flash { animation: none; }
+}
+.dhead { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); display: grid; gap: 6px; }
+.dtop { display: flex; gap: 8px; align-items: flex-start; }
+.dtop h3 { margin: 0; font: 600 15px/1.35 var(--mono); overflow-wrap: anywhere; flex: 1; }
+.close { border: 0; background: var(--surface-2); border-radius: 999px; width: 30px; height: 30px; flex: none; color: var(--muted); }
+.dkind { font-size: 12px; color: var(--muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.dbody { overflow: auto; padding: 12px 16px 16px; display: grid; gap: 14px; align-content: start; }
+dl.meta { margin: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 5px 12px; font-size: 13px; }
+dl.meta dt { color: var(--muted); }
+dl.meta dd { margin: 0; font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+dl.meta a { color: var(--accent); }
+.acts { display: flex; gap: 8px; flex-wrap: wrap; }
+.note { font-size: 13px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 10px; }
+.src-h { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: var(--muted); }
+.src {
+  margin: 0;
+  background: var(--surface-2);
+  border-radius: 8px;
+  padding-block: 8px;
+  overflow-x: auto;
+  font: 12px/1.55 var(--mono);
+  tab-size: 4;
+}
+.src .ln { display: block; padding-inline: 0 12px; white-space: pre; min-width: max-content; }
+.src .ln::before {
+  content: attr(data-n);
+  display: inline-block;
+  width: 5ch;
+  padding-right: 1.2ch;
+  text-align: right;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+.src .ln.site { background: color-mix(in srgb, var(--faint) 14%, transparent); }
+.src .ln.site.ran { background: var(--ran-soft); box-shadow: inset 3px 0 0 var(--ran); }
+.src .ln.here { box-shadow: inset 3px 0 0 var(--accent); background: var(--accent-soft); }
+.kw { color: var(--code-kw); }
+.st { color: var(--code-str); }
+.cm { color: var(--code-com); font-style: italic; }
+.nu { color: var(--code-num); }
+
+details.guide { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+details.guide summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.guide-body { display: grid; gap: 10px; padding-top: 10px; font-size: 13px; color: var(--muted); max-width: 80ch; }
+.guide-body p { margin: 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.legend span { display: inline-flex; gap: 6px; align-items: center; }
+</style>
+
+<div class="page">
+  <header class="top">
+    <div class="brand">
+      <h1>attn<span>/</span>flows</h1>
+      <span class="stamp" id="stamp"></span>
+    </div>
+    <nav class="flows" id="flows" aria-label="Flows"></nav>
+    <section class="summary">
+      <h2 id="flow-title"></h2>
+      <p id="flow-summary"></p>
+      <div class="stats" id="flow-stats"></div>
+    </section>
+  </header>
+
+  <details class="guide">
+    <summary>How to read a flow</summary>
+    <div class="guide-body">
+      <p>Each row is a span: a Go function reached from the flow's entry, in the order its call sites appear in the caller. The tree comes from a static call graph (SSA + VTA), so it lists every path the code could take. Command dispatch and bus facts are linked by name, so the tree crosses the socket into the handler and jumps from a published fact to the consumers subscribed to it.</p>
+      <p>A scenario test then narrows it. The generator runs one Go test with coverage and marks each call site that executed. "Ran in scenario" keeps only those spans. A site counts as ran if it executed at any point during the test, so a shared helper can light up from another caller.</p>
+      <div class="legend">
+        <span><i class="dot yes"></i> ran in scenario</span>
+        <span><i class="dot"></i> did not run</span>
+        <span><i class="tag k-dynamic">iface</i> interface or closure call</span>
+        <span><i class="tag k-go">go</i> new goroutine</span>
+        <span><i class="tag k-defer">defer</i> deferred</span>
+        <span><i class="tag k-bus">fact</i> bus fact published</span>
+        <span><i class="tag k-consumer">sub</i> fact consumer</span>
+        <span><i class="tag k-boundary">wire</i> process boundary</span>
+        <span><i class="tag k-ref">seen</i> expanded earlier</span>
+        <span><i class="tag k-cycle">cycle</i> recursion</span>
+      </div>
+    </div>
+  </details>
+
+  <div class="controls">
+    <div class="seg" role="group" aria-label="Paths">
+      <button id="mode-ran" type="button">Ran in scenario</button>
+      <button id="mode-all" type="button">Every static path</button>
+    </div>
+    <input class="search" id="q" type="search" placeholder="Find a function…" autocomplete="off" spellcheck="false">
+    <button class="btn" id="expand" type="button">Expand</button>
+    <button class="btn" id="collapse" type="button">Collapse</button>
+  </div>
+
+  <nav class="crumbs" id="crumbs" aria-label="Focus" hidden></nav>
+
+  <div class="layout">
+    <div class="tree" id="tree" role="tree"></div>
+    <aside class="detail closed" id="detail" aria-label="Span details">
+      <div class="dhead" id="dhead">
+        <span class="grab" aria-hidden="true"></span>
+      </div>
+      <div class="dbody" id="dbody"></div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const DATA = /*FLOW_DATA*/null;
+</script>
+<script>
+(() => {
+  const F = DATA.funcs;
+  const $ = (id) => document.getElementById(id);
+  const TW = '<svg viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 7 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  const KIND = {
+    flow: { tag: "", say: "Flow" },
+    entry: { tag: "", say: "Entry point" },
+    call: { tag: "", say: "Direct call" },
+    dynamic: { tag: "iface", say: "Interface or closure call" },
+    go: { tag: "go", say: "Starts a goroutine" },
+    defer: { tag: "defer", say: "Deferred call" },
+    bus: { tag: "fact", say: "Publishes a bus fact" },
+    consumer: { tag: "sub", say: "Bus consumer, runs asynchronously" },
+    boundary: { tag: "wire", say: "Crosses a process boundary" },
+    cycle: { tag: "cycle", say: "Recursive call back into an active span" },
+  };
+
+  const state = { flow: 0, onlyRan: true, q: "", focus: null, open: new Set(), sel: null };
+  let index = null;
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+  function store(k, v) { try { localStorage.setItem("flowviz." + k, v); } catch (_) {} }
+  function recall(k) { try { return localStorage.getItem("flowviz." + k); } catch (_) { return null; } }
+
+  function buildIndex(flow) {
+    const byId = new Map(), parent = new Map();
+    const walk = (s, p) => {
+      byId.set(s.id, s);
+      if (p) parent.set(s.id, p);
+      (s.c || []).forEach((c) => walk(c, s));
+    };
+    walk(flow.root, null);
+    const ranW = new Map();
+    const weigh = (s) => {
+      let w = 1;
+      (s.c || []).forEach((c) => { const cw = weigh(c); if (c.ran === "yes") w += cw; });
+      ranW.set(s.id, w);
+      return w;
+    };
+    weigh(flow.root);
+    return { byId, parent, ranW };
+  }
+
+  const flow = () => DATA.flows[state.flow];
+  const hasCoverage = () => !!flow().scenario;
+  const showsRan = () => state.onlyRan && hasCoverage();
+  const kids = (s) => (s.c || []).filter((c) => !showsRan() || c.ran === "yes");
+  const weight = (s) => (showsRan() ? index.ranW.get(s.id) : s.w);
+  const name = (s) => (s.fn ? F[s.fn].name : s.label);
+  const fnOf = (s) => (s.fn ? F[s.fn] : null);
+
+  function matches(s) {
+    if (!state.q) return false;
+    const f = fnOf(s);
+    const hay = (name(s) + " " + (f ? f.pkg : "")).toLowerCase();
+    return hay.includes(state.q);
+  }
+
+  function searchSet(root) {
+    const keep = new Set(), hits = new Set();
+    const walk = (s) => {
+      let any = matches(s);
+      if (any) hits.add(s.id);
+      kids(s).forEach((c) => { if (walk(c)) any = true; });
+      if (any) keep.add(s.id);
+      return any;
+    };
+    walk(root);
+    return { keep, hits };
+  }
+
+  function defaultOpen() {
+    state.open.clear();
+    const root = flow().root;
+    const walk = (s, d) => {
+      const ks = kids(s);
+      if (!ks.length) return;
+      if (showsRan() || d < 3) state.open.add(s.id);
+      ks.forEach((c) => walk(c, d + 1));
+    };
+    walk(root, 0);
+  }
+
+  function viewRoot() {
+    return (state.focus && index.byId.get(state.focus)) || flow().root;
+  }
+
+  function render() {
+    const tree = $("tree");
+    const root = viewRoot();
+    const search = state.q ? searchSet(root) : null;
+    const rootW = Math.max(1, weight(root));
+    const frag = document.createDocumentFragment();
+    let rows = 0;
+
+    const row = (s, depth) => {
+      if (search && !search.keep.has(s.id)) return;
+      const ks = kids(s).filter((c) => !search || search.keep.has(c.id));
+      const open = search ? true : state.open.has(s.id);
+      const el = document.createElement("div");
+      const ranCls = hasCoverage() ? (s.ran === "yes" ? " yes-row" : " unran") : "";
+      el.className = "row kind-" + s.kind + (s.fn ? "" : " lbl") + ranCls + (search && search.hits.has(s.id) ? " hit" : "");
+      el.style.setProperty("--d", depth);
+      el.dataset.id = s.id;
+      el.setAttribute("role", "treeitem");
+      el.setAttribute("aria-level", depth + 1);
+      if (state.sel === s.id) el.setAttribute("aria-selected", "true");
+      const f = fnOf(s);
+      const tag = s.ref ? "seen" : (KIND[s.kind] || {}).tag;
+      const tagCls = s.ref ? "k-ref" : "k-" + s.kind;
+      const dotCls = !hasCoverage() ? "dot none" : s.ran === "yes" ? "dot yes" : "dot";
+      const w = weight(s);
+      el.innerHTML =
+        `<button class="tw${ks.length ? "" : " leaf"}" type="button" aria-label="${open ? "Collapse" : "Expand"}" aria-expanded="${open}" tabindex="-1">${TW}</button>` +
+        `<i class="${dotCls}"></i>` +
+        (tag ? `<i class="tag ${tagCls}">${tag}</i>` : "") +
+        `<span class="nm">${esc(name(s))}</span>` +
+        (f ? `<span class="pk">${esc(f.pkg.replace(/^internal\//, ""))}</span>` : "") +
+        (ks.length && !open ? `<span class="aux">+${w - 1}</span>` : "") +
+        `<span class="wt" title="${w} spans below"><i style="width:${Math.max(2, Math.round((w / rootW) * 100))}%"></i></span>`;
+      frag.appendChild(el);
+      rows++;
+      if (open) ks.forEach((c) => row(c, depth + 1));
+    };
+    row(root, 0);
+    tree.replaceChildren(frag);
+    if (!rows) tree.innerHTML = `<div class="empty">No span matches “${esc(state.q)}”.</div>`;
+    renderCrumbs();
+  }
+
+  function renderCrumbs() {
+    const c = $("crumbs");
+    if (!state.focus) { c.hidden = true; c.replaceChildren(); return; }
+    const chain = [];
+    for (let s = index.byId.get(state.focus); s; s = index.parent.get(s.id)) chain.unshift(s);
+    c.hidden = false;
+    c.innerHTML = '<span>Focused on</span>' + chain.map((s, i) =>
+      (i ? '<span class="sep">›</span>' : "") + `<button type="button" data-focus="${i === 0 ? "" : s.id}">${esc(name(s))}</button>`).join("");
+  }
+
+  function renderHeader() {
+    const f = flow();
+    $("flow-title").textContent = f.title;
+    $("flow-summary").innerHTML = esc(f.summary).replace(/`([^`]+)`/g, "<code>$1</code>");
+    const parts = [
+      `<span>command <b>${esc(f.command)}</b></span>`,
+      `<span><b>${f.spans.toLocaleString()}</b> static spans</span>`,
+    ];
+    if (f.scenario) {
+      parts.push(`<span><b class="ranb">${f.ran.toLocaleString()}</b> ran in <b>${esc(f.scenario.split(" ").pop())}</b></span>`);
+    } else {
+      parts.push("<span>no scenario coverage</span>");
+    }
+    $("flow-stats").innerHTML = parts.join("");
+    $("flows").querySelectorAll("button").forEach((b, i) => b.setAttribute("aria-pressed", String(i === state.flow)));
+    $("mode-ran").disabled = !hasCoverage();
+    $("mode-ran").setAttribute("aria-pressed", String(showsRan()));
+    $("mode-all").setAttribute("aria-pressed", String(!showsRan()));
+  }
+
+  function srcURL(file, line) {
+    if (!DATA.repo || !DATA.commit) return "";
+    return `${DATA.repo}/blob/${DATA.commit}/${file}#L${line}`;
+  }
+
+  const GO_KW = /\b(func|return|if|else|for|range|switch|case|default|go|defer|select|var|const|type|struct|interface|map|chan|nil|true|false|break|continue|fallthrough)\b/g;
+  function highlight(line) {
+    let out = "", i = 0;
+    const re = /(\/\/.*$)|("(?:[^"\\]|\\.)*"|`[^`]*`|'(?:[^'\\]|\\.)*')|(\b\d+(?:\.\d+)?\b)/g;
+    let m;
+    while ((m = re.exec(line))) {
+      out += esc(line.slice(i, m.index)).replace(GO_KW, '<span class="kw">$1</span>');
+      const cls = m[1] ? "cm" : m[2] ? "st" : "nu";
+      out += `<span class="${cls}">${esc(m[0])}</span>`;
+      i = m.index + m[0].length;
+    }
+    return out + esc(line.slice(i)).replace(GO_KW, '<span class="kw">$1</span>');
+  }
+
+  function renderDetail() {
+    const panel = $("detail");
+    const s = state.sel && index.byId.get(state.sel);
+    if (!s) {
+      panel.classList.add("closed");
+      $("dhead").innerHTML = '<span class="grab" aria-hidden="true"></span><div class="dkind">Select a span to see where it lives and what it calls.</div>';
+      $("dbody").replaceChildren();
+      return;
+    }
+    panel.classList.remove("closed");
+    const f = fnOf(s);
+    const k = KIND[s.kind] || { say: s.kind };
+    const ranTxt = !hasCoverage() ? "no scenario" : s.ran === "yes" ? "ran" : "did not run";
+    $("dhead").innerHTML =
+      '<span class="grab" aria-hidden="true"></span>' +
+      `<div class="dtop"><h3>${esc(name(s))}</h3><button class="close" type="button" id="close" aria-label="Close details">✕</button></div>` +
+      `<div class="dkind"><i class="${!hasCoverage() ? "dot none" : s.ran === "yes" ? "dot yes" : "dot"}"></i><span>${esc(ranTxt)}</span><span>·</span><span>${esc(k.say)}</span>${s.ref ? "<span>· expanded earlier in this flow</span>" : ""}</div>`;
+
+    const meta = [];
+    if (f) {
+      const url = srcURL(f.file, f.line);
+      const loc = `${esc(f.file)}:${f.line}`;
+      meta.push(["Defined", url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${loc}</a>` : loc]);
+      meta.push(["Package", esc(f.pkg)]);
+    }
+    if (s.site) {
+      const [file, line] = s.site.split(":");
+      const url = srcURL(file, line);
+      meta.push([s.kind === "consumer" ? "Subscribed" : "Called at", url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(s.site)}</a>` : esc(s.site)]);
+    }
+    meta.push(["Below", `${(weight(s) - 1).toLocaleString()} spans${showsRan() ? " that ran" : ""}`]);
+    if (f) meta.push(["Symbol", esc(f.full)]);
+
+    let html = `<dl class="meta">${meta.map(([a, b]) => `<dt>${a}</dt><dd>${b}</dd>`).join("")}</dl>`;
+    if (s.note) html += `<div class="note">${esc(s.note)}</div>`;
+    const acts = [];
+    if (kids(s).length) acts.push(`<button class="btn" type="button" data-act="focus">Focus on this span</button>`);
+    if (s.ref) acts.push(`<button class="btn" type="button" data-act="jump">Go to its expansion</button>`);
+    if (f) acts.push(`<button class="btn" type="button" data-act="copy">Copy location</button>`);
+    if (acts.length) html += `<div class="acts">${acts.join("")}</div>`;
+
+    if (f && f.src) {
+      const origin = s.ref ? index.byId.get(s.ref) : s;
+      const sites = new Map();
+      (origin && origin.c || []).forEach((c) => {
+        if (!c.site) return;
+        const [file, line] = c.site.split(":");
+        if (file !== f.file) return;
+        const n = Number(line);
+        sites.set(n, sites.get(n) === "yes" || c.ran === "yes" ? "yes" : "no");
+      });
+      const lines = f.src.split("\n").map((ln, i) => {
+        const n = f.line + i;
+        const site = sites.get(n);
+        const cls = "ln" + (site ? " site" + (site === "yes" && hasCoverage() ? " ran" : "") : "");
+        return `<span class="${cls}" data-n="${n}">${highlight(ln) || " "}</span>`;
+      }).join("");
+      html += `<div class="src-h"><span>Source</span><span>${sites.size ? "highlighted lines call the child spans" : ""}${f.trunc ? " · truncated" : ""}</span></div><pre class="src">${lines}</pre>`;
+    }
+    $("dbody").innerHTML = html;
+    $("dbody").scrollTop = 0;
+  }
+
+  function select(id, opts = {}) {
+    state.sel = id;
+    document.querySelectorAll('.row[aria-selected="true"]').forEach((r) => r.removeAttribute("aria-selected"));
+    const el = document.querySelector(`.row[data-id="${id}"]`);
+    if (el) {
+      el.setAttribute("aria-selected", "true");
+      if (opts.reveal) {
+        el.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+        el.classList.remove("flash");
+        void el.offsetWidth;
+        el.classList.add("flash");
+      }
+    }
+    renderDetail();
+  }
+
+  function reveal(id) {
+    const target = index.byId.get(id);
+    if (!target) return;
+    if (showsRan() && target.ran !== "yes") setMode(false);
+    for (let p = index.parent.get(id); p; p = index.parent.get(p.id)) state.open.add(p.id);
+    if (state.focus) {
+      let inside = false;
+      for (let p = target; p; p = index.parent.get(p.id)) if (p.id === state.focus) inside = true;
+      if (!inside) state.focus = null;
+    }
+    state.q = "";
+    $("q").value = "";
+    render();
+    select(id, { reveal: true });
+  }
+
+  function setFlow(i) {
+    state.flow = i;
+    index = buildIndex(flow());
+    state.focus = null;
+    state.sel = null;
+    state.q = "";
+    $("q").value = "";
+    defaultOpen();
+    renderHeader();
+    render();
+    renderDetail();
+    store("flow", flow().name);
+    if (location.hash.slice(1) !== flow().name) history.replaceState(null, "", "#" + flow().name);
+  }
+
+  function setMode(onlyRan) {
+    state.onlyRan = onlyRan;
+    store("mode", onlyRan ? "ran" : "all");
+    defaultOpen();
+    renderHeader();
+    render();
+    renderDetail();
+  }
+
+  $("flows").innerHTML = DATA.flows.map((f, i) =>
+    `<button class="flow-chip" type="button" data-flow="${i}">${esc(f.title)} <code>${esc(f.command)}</code></button>`).join("");
+  $("flows").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-flow]");
+    if (b) setFlow(Number(b.dataset.flow));
+  });
+  $("mode-ran").addEventListener("click", () => setMode(true));
+  $("mode-all").addEventListener("click", () => setMode(false));
+  let qTimer;
+  $("q").addEventListener("input", (e) => {
+    clearTimeout(qTimer);
+    qTimer = setTimeout(() => { state.q = e.target.value.trim().toLowerCase(); render(); }, 120);
+  });
+  $("expand").addEventListener("click", () => {
+    const walk = (s, d) => { const ks = kids(s); if (ks.length && d < 60) { state.open.add(s.id); ks.forEach((c) => walk(c, d + 1)); } };
+    if (!showsRan() && weight(viewRoot()) > 1500) {
+      const shallow = (s, d) => { const ks = kids(s); if (ks.length && d < 4) { state.open.add(s.id); ks.forEach((c) => shallow(c, d + 1)); } };
+      shallow(viewRoot(), 0);
+    } else walk(viewRoot(), 0);
+    render();
+  });
+  $("collapse").addEventListener("click", () => { state.open.clear(); state.open.add(viewRoot().id); render(); });
+
+  $("tree").addEventListener("click", (e) => {
+    const r = e.target.closest(".row");
+    if (!r) return;
+    const id = Number(r.dataset.id);
+    if (e.target.closest(".tw")) {
+      state.open.has(id) ? state.open.delete(id) : state.open.add(id);
+      render();
+      return;
+    }
+    select(id);
+  });
+  $("tree").addEventListener("dblclick", (e) => {
+    const r = e.target.closest(".row");
+    if (!r) return;
+    const id = Number(r.dataset.id);
+    state.open.has(id) ? state.open.delete(id) : state.open.add(id);
+    render();
+  });
+  $("crumbs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-focus]");
+    if (!b) return;
+    state.focus = b.dataset.focus ? Number(b.dataset.focus) : null;
+    render();
+  });
+  $("detail").addEventListener("click", (e) => {
+    if (e.target.closest("#close")) { state.sel = null; select(null); return; }
+    const a = e.target.closest("[data-act]");
+    if (!a) return;
+    const s = index.byId.get(state.sel);
+    if (a.dataset.act === "focus") {
+      state.focus = s.id;
+      state.open.add(s.id);
+      render();
+      window.scrollTo({ top: $("crumbs").offsetTop - 60 });
+    } else if (a.dataset.act === "jump") {
+      reveal(s.ref);
+    } else if (a.dataset.act === "copy") {
+      const f = fnOf(s);
+      const text = `${f.file}:${f.line}`;
+      const done = () => { a.textContent = "Copied"; setTimeout(() => (a.textContent = "Copy location"), 1400); };
+      navigator.clipboard.writeText(text).then(done, () => { a.textContent = text; });
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.target.matches("input")) {
+      if (e.key === "Escape") { e.target.value = ""; state.q = ""; render(); e.target.blur(); }
+      return;
+    }
+    if (e.key === "/") { e.preventDefault(); $("q").focus(); return; }
+    if (e.key === "Escape") { select(null); return; }
+    const rows = [...document.querySelectorAll("#tree .row")];
+    const at = rows.findIndex((r) => Number(r.dataset.id) === state.sel);
+    const move = (i) => { const r = rows[Math.max(0, Math.min(rows.length - 1, i))]; if (r) { select(Number(r.dataset.id)); r.scrollIntoView({ block: "nearest" }); } };
+    if (e.key === "ArrowDown" || e.key === "j") { e.preventDefault(); move(at + 1); }
+    else if (e.key === "ArrowUp" || e.key === "k") { e.preventDefault(); move(at - 1); }
+    else if ((e.key === "ArrowRight" || e.key === "l") && state.sel) { state.open.add(state.sel); render(); }
+    else if ((e.key === "ArrowLeft" || e.key === "h") && state.sel) {
+      if (state.open.has(state.sel)) { state.open.delete(state.sel); render(); }
+      else { const p = index.parent.get(state.sel); if (p) { select(p.id); document.querySelector(`.row[data-id="${p.id}"]`)?.scrollIntoView({ block: "nearest" }); } }
+    }
+  });
+
+  $("stamp").textContent = `generated ${DATA.generatedAt.replace("T", " ").replace("Z", " UTC")}${DATA.commit ? " · " + DATA.commit.slice(0, 9) : ""}`;
+  if (recall("mode") === "all") state.onlyRan = false;
+  const want = location.hash.slice(1) || recall("flow");
+  const start = Math.max(0, DATA.flows.findIndex((f) => f.name === want));
+  setFlow(start);
+})();
+</script>
