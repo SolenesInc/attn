@@ -1,0 +1,58 @@
+package fakeagent
+
+import (
+	"context"
+	"testing"
+	"time"
+)
+
+type Run struct {
+	Harness        Harness
+	SessionID      string
+	ConversationID string
+	Resumed        bool
+	Argv           []string
+	t              testing.TB
+	fake           *fake
+}
+
+func (r *Run) Prompted() string {
+	r.t.Helper()
+	var prompted textParams
+	r.call(methodPrompted, struct{}{}, &prompted)
+	return prompted.Text
+}
+
+func (r *Run) Reply(text string) {
+	r.t.Helper()
+	r.call(methodReply, textParams{Text: text}, nil)
+}
+
+func (r *Run) ReplyAfterStop(text string) {
+	r.t.Helper()
+	r.call(methodReplyLate, textParams{Text: text}, nil)
+}
+
+func (r *Run) Exit(code int) {
+	r.t.Helper()
+	if err := r.fake.peer.notify(methodExit, exitParams{Code: code}); err != nil {
+		r.t.Fatalf("%s for session %s: exit %d: %v", r.Harness, r.SessionID, code, err)
+	}
+	select {
+	case <-r.fake.peer.done:
+	case <-time.After(hangGuard):
+		r.t.Fatalf("%s for session %s (pid %d) still running %s after exit %d", r.Harness, r.SessionID, r.fake.Pid, hangGuard, code)
+	}
+	if got := r.fake.exited(); got != code {
+		r.t.Fatalf("%s for session %s exited %d, want %d", r.Harness, r.SessionID, got, code)
+	}
+}
+
+func (r *Run) call(method string, params, result any) {
+	r.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), hangGuard)
+	defer cancel()
+	if err := r.fake.peer.call(ctx, method, params, result); err != nil {
+		r.t.Fatalf("%s %s for session %s: %v", r.Harness, method, r.SessionID, err)
+	}
+}

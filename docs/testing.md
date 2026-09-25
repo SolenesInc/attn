@@ -75,6 +75,24 @@ transcript files, and terminal output. Time is controlled, never waited on:
 `synctest` in Go, Vitest fake timers in the app. Network failures use
 `newToxiProxy`. No test sleeps or polls.
 
+#### Writing a daemon wire test
+
+Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
+reach the daemon only through the protocol and the CLI client. `newWorld(t)`
+runs a production daemon in its own data directory; `w.restart()` replaces it
+with a new daemon over the same data. `w.app()` connects as the app and
+`w.cli()` returns a CLI client. Add `withAgents(fakeagent.Claude, ...)` when
+the test spawns sessions: `w.spawn` starts one and `w.launched` returns the
+`fakeagent.Run` for its agent. The test plays the model behind that agent.
+`Prompted` returns the prompt the agent received, `Reply` ends the turn with
+text that carries the `<!-- attn:state=... -->` marker, `ReplyAfterStop` writes
+that reply only after the Stop hook, and `Exit` quits with an exit code. Each
+call returns once the daemon holds the evidence, so the next line can await
+the resulting event. For behavior on a timer, write the test as
+`inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under
+`synctest`, and move the clock with `w.advance(d)`. Bubbled worlds cannot run
+agents.
+
 ### Stack
 
 Stack tests cover what only exists between processes: restarts, reconnects,

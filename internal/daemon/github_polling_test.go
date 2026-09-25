@@ -16,7 +16,8 @@ func newDaemonWithRealGitHubHost(t *testing.T) (*Daemon, func() string) {
 	if err != nil {
 		t.Fatalf("NewClientForHost error: %v", err)
 	}
-	d := NewWithGitHubClient(filepath.Join(shortTempDir(t), "attn.sock"), realClient)
+	d := NewForTesting(filepath.Join(shortTempDir(t), "attn.sock"))
+	d.ghRegistry.Register(realClient.Host(), realClient)
 	logPath := filepath.Join(t.TempDir(), "daemon.log")
 	logger, err := logging.New(logPath)
 	if err != nil {

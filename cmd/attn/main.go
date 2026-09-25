@@ -536,6 +536,8 @@ func runDaemon() {
 		os.Exit(1)
 	}
 	d := daemon.New(socketPath)
+	d.RecoverGUIPath()
+	d.RemoveLegacyStateFile()
 	d.ScrubInheritedAgentSessionEnv()
 	startResult := make(chan error, 1)
 	go func() {
