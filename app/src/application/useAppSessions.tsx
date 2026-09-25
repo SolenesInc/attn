@@ -117,7 +117,7 @@ export function useAppSessions({
 
   const workspaceNamesById = useMemo(() => {
     const names: Record<string, string> = {};
-    for (const workspace of daemonWorkspaces) names[workspace.id] = workspace.name || workspace.id;
+    for (const workspace of daemonWorkspaces) names[workspace.id] = workspace.title || workspace.id;
     return names;
   }, [daemonWorkspaces]);
 

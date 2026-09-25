@@ -4288,6 +4288,7 @@ model CommandErrorMessage {
   cmd?: string;
   success: boolean;
   error: string;
+  error_code?: string;
 }
 
 // Sent once to a reconnecting client that the hub had hung up on for falling

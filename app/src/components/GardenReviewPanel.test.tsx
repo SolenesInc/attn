@@ -1,7 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { GardenReviewPanel } from './GardenReviewPanel';
-import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import type { GardenReview, GardenReviewItem, Seed, SeedDocument } from '../hooks/useDaemonSocket';
 
 function seed(overrides: Partial<Seed> = {}): Seed {
@@ -110,7 +109,6 @@ function props(value = review()) {
   };
 }
 
-afterEach(() => _resetEscapeStackForTest());
 
 describe('GardenReviewPanel', () => {
   it('shows only the actions supplied by the captured item', () => {

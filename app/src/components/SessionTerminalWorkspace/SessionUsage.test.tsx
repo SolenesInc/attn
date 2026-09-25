@@ -1,7 +1,6 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SessionUsage } from '../../types/generated';
-import { _resetEscapeStackForTest } from '../../hooks/useEscapeStack';
 import { HeaderSessionUsage } from './SessionUsage';
 
 const mixedUsage: SessionUsage = {
@@ -64,7 +63,6 @@ const piUsage: SessionUsage = {
 
 afterEach(() => {
   vi.useRealTimers();
-  _resetEscapeStackForTest();
 });
 
 describe('HeaderSessionUsage', () => {

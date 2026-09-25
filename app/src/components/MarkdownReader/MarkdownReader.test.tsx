@@ -1,11 +1,21 @@
-import { createMockDaemonApi } from '../../test/mocks/daemon';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MarkdownReader } from './index';
 import { sanitizeLinkUrl } from './markdownLinks';
 import { fileMarkdownSource, seedMarkdownSource } from './documentSource';
-import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
+import { gesture, renderApp } from '../../test/renderApp';
+import type { EventMessage } from '../../test/protocol';
+import {
+  agentPane,
+  agentWorkspace,
+  daemonSeed,
+  daemonSession,
+  daemonWorkspace,
+  dockTiles,
+  seedDocument,
+  type DaemonSeedDocument,
+} from '../../test/daemonFixtures';
 import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/plugin-opener', () => ({
@@ -40,8 +50,57 @@ function renderReader(content: string, allowLocalTargets = true) {
   );
 }
 
-function seedReaderApi(resolveTarget: DaemonApi['sendSeedArtifactTarget']): DaemonApi {
-  return createMockDaemonApi({ sendSeedArtifactTarget: resolveTarget });
+type TargetResult = NonNullable<EventMessage<'seed_artifact_target_result'>['result']>;
+type SeedArtifact = DaemonSeedDocument['artifacts'][number];
+
+const SEED_ID = 's-7k3f9m';
+const REPORT_PATH = '/notebook/seeds/s-7k3f9m/report.pdf';
+
+function seedTarget(target: string, purpose: string): TargetResult {
+  return purpose === 'image'
+    ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
+    : { relative_target: target, path: REPORT_PATH };
+}
+
+function artifact(filename: string, relativeTarget = filename, modifiedAt = '2026-08-29T20:00:00Z'): SeedArtifact {
+  return { filename, relative_target: relativeTarget, size: 5, modified_at: modifiedAt };
+}
+
+async function openSeedReader(
+  body: string,
+  artifacts: () => SeedArtifact[] = () => [],
+  resolve: (target: string, purpose: string) => TargetResult = seedTarget,
+) {
+  const seed = daemonSeed(SEED_ID, { body });
+  const { daemon } = await renderApp({
+    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')], seeds: [seed] },
+  });
+  daemon.on('seed_document_get', () => ({
+    event: 'seed_document_get_result',
+    success: true,
+    document: seedDocument(seed, { artifacts: artifacts() }),
+  }));
+  daemon.on('seed_artifact_target', ({ seed_id, relative_target, purpose }) => (
+    seed_id === SEED_ID
+      ? { event: 'seed_artifact_target_result', success: true, result: resolve(relative_target, purpose) }
+      : { event: 'seed_artifact_target_result', success: false, error: `unknown seed ${seed_id}` }
+  ));
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
+  await gesture(daemon, () => daemon.emit({
+    event: 'workspace_layout_updated',
+    workspace_layout: daemonWorkspace('workspace-s1', {
+      root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: SEED_ID }]),
+      panes: [agentPane('s1', 'workspace-s1')],
+    }).layout!,
+  }));
+  const tile = document.querySelector<HTMLElement>('[data-pane-id="tile-seed"]')!;
+  const targets = () => daemon.sentOf('seed_artifact_target').map((command) => [command.relative_target, command.purpose]);
+  return { daemon, seed, tile, reader: within(tile), targets };
+}
+
+async function pressEnter(control: HTMLElement) {
+  control.focus();
+  await Promise.all([userEvent.setup({ delay: null }).keyboard('{Enter}'), vi.advanceTimersByTimeAsync(10)]);
 }
 
 describe('MarkdownReader source anchoring', () => {
@@ -131,143 +190,65 @@ describe('MarkdownReader link sanitization', () => {
   });
 
   it('resolves direct seed links and images through the owning daemon', async () => {
-    const user = userEvent.setup();
-    const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (
-      purpose === 'image'
-        ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
-        : { relative_target: target, path: '/notebook/seeds/s-7k3f9m/report.pdf' }
-    ));
-    render(
-      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
-        <MarkdownReader
-          content={'[report](report.pdf)\n\n![cover](cover%20art.png)'}
-          source={seedMarkdownSource('s-7k3f9m')}
-          seedArtifacts={[{ filename: 'cover art.png', relative_target: 'cover%20art.png', size: 5, modified_at: '2026-08-29T20:00:00Z' }]}
-        />
-      </DaemonApiProvider>,
+    const { daemon, reader, targets } = await openSeedReader(
+      '[report](report.pdf)\n\n![cover](cover%20art.png)',
+      () => [artifact('cover art.png', 'cover%20art.png')],
     );
 
-    const image = await screen.findByRole('img', { name: 'cover' });
-    expect(image).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
-    const imageButton = screen.getByRole('button', { name: 'cover' });
-    imageButton.focus();
-    await user.keyboard('{Enter}');
+    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
+    await pressEnter(reader.getByRole('button', { name: 'cover' }));
     expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
-    fireEvent.click(screen.getByRole('button', { name: 'report' }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
-      path: '/notebook/seeds/s-7k3f9m/report.pdf',
-    }));
-    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'cover%20art.png', 'image');
-    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
-  });
-
-  it('keeps artifact links on the artifact path when seed navigation is enabled', async () => {
-    const onOpenSeed = vi.fn();
-    const resolveTarget = vi.fn(async (_seedId: string, target: string) => ({
-      relative_target: target,
-      path: '/notebook/seeds/s-7k3f9m/report.pdf',
-    }));
-    render(
-      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
-        <MarkdownReader
-          content={'[report](report.pdf) [work](s-rnaq01)'}
-          source={seedMarkdownSource('s-7k3f9m')}
-          onOpenSeed={onOpenSeed}
-        />
-      </DaemonApiProvider>,
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'report' }));
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
-      path: '/notebook/seeds/s-7k3f9m/report.pdf',
-    }));
-    expect(resolveTarget).toHaveBeenCalledWith('s-7k3f9m', 'report.pdf', 'link');
-    expect(onOpenSeed).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'work' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-rnaq01');
+    await gesture(daemon, () => fireEvent.click(reader.getByRole('button', { name: 'report' })));
+    expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', { path: REPORT_PATH });
+    expect(targets()).toEqual(expect.arrayContaining([['cover%20art.png', 'image'], ['report.pdf', 'link']]));
   });
 
   it('keeps a linked seed image and its target as sibling keyboard controls', async () => {
-    const user = userEvent.setup();
-    const resolveTarget = vi.fn(async (_seedId: string, target: string, purpose: string) => (
-      purpose === 'image'
-        ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
-        : { relative_target: target, path: '/notebook/seeds/s-7k3f9m/report.pdf' }
-    ));
-    const { container } = render(
-      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
-        <MarkdownReader
-          content="[![cover](cover.png)](report.pdf)"
-          source={seedMarkdownSource('s-7k3f9m')}
-          seedArtifacts={[{ filename: 'cover.png', relative_target: 'cover.png', size: 5, modified_at: '2026-08-29T20:00:00Z' }]}
-        />
-      </DaemonApiProvider>,
-    );
+    const { daemon, tile, reader } = await openSeedReader('[![cover](cover.png)](report.pdf)', () => [artifact('cover.png')]);
 
-    const imageButton = await screen.findByRole('button', { name: 'cover' });
-    const linkButton = screen.getByRole('button', { name: 'Open report.pdf' });
-    expect(container.querySelector('button button')).toBeNull();
+    const imageButton = reader.getByRole('button', { name: 'cover' });
+    const linkButton = reader.getByRole('button', { name: 'Open report.pdf' });
+    expect(tile.querySelector('button button')).toBeNull();
 
-    imageButton.focus();
-    await user.keyboard('{Enter}');
+    await pressEnter(imageButton);
     expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
     fireEvent.keyDown(window, { key: 'Escape' });
 
-    linkButton.focus();
-    await user.keyboard('{Enter}');
-    await waitFor(() => expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
-      path: '/notebook/seeds/s-7k3f9m/report.pdf',
-    }));
+    await pressEnter(linkButton);
+    await daemon.idle();
+    expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', { path: REPORT_PATH });
   });
 
-  it('rejects nested, escaped, and active-content seed targets', () => {
-    const resolveTarget = vi.fn();
-    render(
-      <DaemonApiProvider api={seedReaderApi(resolveTarget)}>
-        <MarkdownReader
-          content={'[up](../secret.pdf) [nested](docs/report.pdf) [html](page.html) [encoded](%2e%2e%2fsecret.pdf) ![svg](art.svg)'}
-          source={seedMarkdownSource('s-7k3f9m')}
-        />
-      </DaemonApiProvider>,
+  it('rejects nested, escaped, and active-content seed targets', async () => {
+    const { reader, targets } = await openSeedReader(
+      '[up](../secret.pdf) [nested](docs/report.pdf) [html](page.html) [encoded](%2e%2e%2fsecret.pdf) ![svg](art.svg)',
     );
 
-    expect(screen.queryByRole('link', { name: 'up' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'nested' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'html' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'encoded' })).toBeNull();
-    expect(screen.getByText(/blocked image: svg/)).toBeInTheDocument();
-    expect(resolveTarget).not.toHaveBeenCalled();
+    expect(reader.getByText(/blocked image: svg/)).toBeInTheDocument();
+    for (const name of ['up', 'nested', 'html', 'encoded']) {
+      expect(reader.queryByRole('link', { name })).toBeNull();
+      expect(reader.queryByRole('button', { name })).toBeNull();
+    }
+    expect(targets()).toEqual([]);
   });
 
-  it('refreshes a seed image without remounting the Markdown tree', async () => {
-    const resolveTarget = vi.fn(async () => ({
-      relative_target: 'cover.png', mime_type: 'image/png', data_base64: resolveTarget.mock.calls.length === 1 ? 'b25l' : 'dHdv',
-    }));
-    const api = seedReaderApi(resolveTarget);
-    const content = '<details><summary>Receipt</summary>\n\n![cover](cover.png)\n\n</details>';
-    const first = [{ filename: 'cover.png', relative_target: 'cover.png', size: 3, modified_at: '2026-08-29T20:00:00Z' }];
-    const { container, rerender } = render(
-      <DaemonApiProvider api={api}>
-        <MarkdownReader content={content} source={seedMarkdownSource('s-7k3f9m')} seedArtifacts={first} />
-      </DaemonApiProvider>,
+  it('refreshes a seed image the garden changed without remounting the Markdown tree', async () => {
+    const images = ['b25l', 'dHdv'];
+    let modifiedAt = '2026-08-29T20:00:00Z';
+    const { daemon, seed, tile, reader } = await openSeedReader(
+      '<details><summary>Receipt</summary>\n\n![cover](cover.png)\n\n</details>',
+      () => [artifact('cover.png', 'cover.png', modifiedAt)],
+      () => ({ relative_target: 'cover.png', mime_type: 'image/png', data_base64: images.shift() }),
     );
-    const image = await screen.findByRole('img', { name: 'cover' });
-    expect(image).toHaveAttribute('src', 'data:image/png;base64,b25l');
-    const details = container.querySelector('details')!;
+    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,b25l');
+    const details = tile.querySelector('details')!;
     details.open = true;
 
-    rerender(
-      <DaemonApiProvider api={api}>
-        <MarkdownReader
-          content={content}
-          source={seedMarkdownSource('s-7k3f9m')}
-          seedArtifacts={[{ ...first[0], modified_at: '2026-08-29T20:01:00Z' }]}
-        />
-      </DaemonApiProvider>,
-    );
-    await waitFor(() => expect(screen.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,dHdv'));
+    modifiedAt = '2026-08-29T20:01:00Z';
+    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [{ ...seed, rev: 2 }], total: 1 }));
+
+    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,dHdv');
     expect(details.open).toBe(true);
   });
 

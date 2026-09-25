@@ -87,7 +87,6 @@ export interface PtyBackend {
     pixels?: PtyPixelGeometry,
   ) => Promise<void>;
   detach: (id: string) => Promise<void>;
-  kill: (id: string) => Promise<void>;
   reload: (id: string, cols: number, rows: number) => Promise<void>;
 }
 
@@ -248,21 +247,6 @@ export async function ptyDetach(request: { id: string }) {
     return;
   }
   await backend.detach(request.id);
-}
-
-export async function ptyKill(request: { id: string }) {
-  if (mockEnabled()) {
-    if (!mockSessions.has(request.id)) {
-      return;
-    }
-    mockSessions.delete(request.id);
-    emitPtyEvent({ event: 'exit', id: request.id, code: 0 });
-    return;
-  }
-  if (!backend) {
-    throw new Error('PTY backend is not configured');
-  }
-  await backend.kill(request.id);
 }
 
 export async function ptyReload(request: { id: string; cols: number; rows: number }) {

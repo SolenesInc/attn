@@ -1,279 +1,210 @@
-import { createMockDaemonApi } from '../test/mocks/daemon';
-import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { PaneSeedChip } from './PaneSeedChip';
-import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
-import { DaemonApiProvider } from '../contexts/DaemonApiContext';
-import { derivePaneSeedDisplay } from './paneSeedDisplay';
+import { describe, expect, it } from 'vitest';
+import { fireEvent, screen, within } from '@testing-library/react';
+import {
+  agentWorkspace,
+  daemonSeed,
+  daemonSession,
+  seedDocument,
+  type DaemonSeed,
+  type DaemonSeedDocument,
+  type DaemonSession,
+} from '../test/daemonFixtures';
+import { gesture, pressShortcut, renderApp } from '../test/renderApp';
+import type { Reply, ScriptedDaemon } from '../test/scriptedDaemon';
 
-function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
-  return {
-    body: '',
-    status: 'growing',
-    state_changed_at: new Date().toISOString(),
-    state_changed_at_exact: true,
-    step_slug: overrides.title,
-    planter_session: '',
-    planter_member: '',
-    tender_session: '',
-    tender_member: '',
-    edges: [],
-    ready: false,
-    template: false,
-    gate: false,
-    vars: [],
-    rev: 1,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    ...overrides,
-  };
+async function openAgent(seeds: DaemonSeed[], session: Partial<DaemonSession> = {}) {
+  const { daemon } = await renderApp({
+    initialState: { sessions: [daemonSession('s1', session)], workspaces: [agentWorkspace('s1')], seeds },
+  });
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
+  return daemon;
 }
 
+const chip = () => screen.getByTestId('seed-chip-s1');
+
+async function showSeeds(daemon: ScriptedDaemon) {
+  pressShortcut('ui.actionMenu');
+  await gesture(daemon, () => fireEvent.click(screen.getByRole('option', { name: /Show s1's seeds/ })));
+}
+
+const openedSeeds = (daemon: ScriptedDaemon) =>
+  daemon.sentOf('open_seed').map(({ seed_id, session_id }) => ({ seed_id, session_id }));
+
+const tendingTwo = [
+  daemonSeed('s-a', { title: 'first', tender_session: 's1' }),
+  daemonSeed('s-b', { title: 'second', tender_session: 's1' }),
+];
+
 describe('PaneSeedChip', () => {
-  it('shows a tended seed and opens it on click', () => {
-    const onOpenSeed = vi.fn();
-    render(
-      <PaneSeedChip
-        display={{ kind: 'seed', seed: seed({ id: 's-work11', title: 'move the wire' }) }}
-        unread={false}
-        sessionId="sess-a"
-        pinned={false}
-        onOpenSeed={onOpenSeed}
-        onPopoverClosed={vi.fn()}
-      />,
-    );
+  it('shows a tended seed and opens it beside the agent on click', async () => {
+    const daemon = await openAgent([daemonSeed('s-work11', { title: 'move the wire', tender_session: 's1' })]);
 
-    expect(screen.getByText('move the wire')).toBeInTheDocument();
-    expect(screen.getByText('Growing')).toBeInTheDocument();
-    expect(screen.getByTestId('seed-chip-sess-a')).toHaveAttribute('data-seed-id', 's-work11');
-    expect(screen.queryByTestId('seed-chip-unread-sess-a')).not.toBeInTheDocument();
+    expect(within(chip()).getByText('move the wire')).toBeInTheDocument();
+    expect(within(chip()).getByText('Growing')).toBeInTheDocument();
+    expect(chip()).toHaveAttribute('data-seed-id', 's-work11');
+    expect(screen.queryByTestId('seed-chip-unread-s1')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('seed-chip-sess-a'));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-work11');
+    await gesture(daemon, () => fireEvent.click(chip()));
+    expect(openedSeeds(daemon)).toEqual([{ seed_id: 's-work11', session_id: 's1' }]);
   });
 
-  it('falls back to the crown id when the seed is not in the pushed list', () => {
-    render(
-      <PaneSeedChip
-        display={{ kind: 'crown', seedId: 's-late11' }}
-        crownSeedId="s-late11"
-        unread
-        sessionId="sess-b"
-        pinned={false}
-        onOpenSeed={vi.fn()}
-        onPopoverClosed={vi.fn()}
-      />,
-    );
+  it('falls back to the reporting seed id when the seed is not in the pushed list', async () => {
+    await openAgent([], { seed_id: 's-late11', ticket_unread: true });
 
-    expect(screen.getByText('s-late11')).toBeInTheDocument();
-    expect(screen.getByTestId('seed-chip-unread-sess-b')).toBeInTheDocument();
+    expect(within(chip()).getByText('s-late11')).toBeInTheDocument();
+    expect(screen.getByTestId('seed-chip-unread-s1')).toBeInTheDocument();
   });
 
-  it('shows the plot with its progress and pins the popover on click', () => {
-    const onOpenSeed = vi.fn();
-    render(
-      <PaneSeedChip
-        display={{
-          kind: 'plot',
-          plot: seed({
-            id: 's-plot11',
-            title: 'the arc',
-            plot_progress: { done: 2, total: 5, ready: 1, growing: 1, blocked: 1, dormant: 0, withered: 0 },
-          }),
-          tended: [seed({ id: 's-a', title: 'first step', tender_session: 'sess-c' })],
-        }}
-        unread={false}
-        sessionId="sess-c"
-        pinned={false}
-        onOpenSeed={onOpenSeed}
-        onPopoverClosed={vi.fn()}
-      />,
-    );
+  it('shows the plot with its progress and pins the popover on click', async () => {
+    const daemon = await openAgent([
+      daemonSeed('s-plot11', {
+        title: 'the arc',
+        plot_progress: { done: 2, total: 5, ready: 1, growing: 1, blocked: 1, dormant: 0, withered: 0 },
+      }),
+      daemonSeed('s-a', { title: 'first step', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+      daemonSeed('s-b', { title: 'second step', tender_session: 's1', edges: [{ kind: 'part-of', to: 's-plot11' }] }),
+    ]);
 
-    expect(screen.getByText('the arc')).toBeInTheDocument();
-    expect(screen.getByText('2/5')).toBeInTheDocument();
+    expect(within(chip()).getByText('the arc')).toBeInTheDocument();
+    expect(within(chip()).getByText('2/5')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('seed-chip-sess-c'));
-    expect(onOpenSeed).not.toHaveBeenCalled();
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
+    fireEvent.click(chip());
+    expect(screen.getByRole('listbox', { name: 'Seeds this agent is tending' })).toBeInTheDocument();
     expect(screen.getByText('first step')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByTestId('seed-chip-sess-c'));
-    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
-    expect(onOpenSeed).not.toHaveBeenCalled();
+    fireEvent.click(chip());
+    await daemon.idle();
+    expect(screen.queryByRole('listbox', { name: 'Seeds this agent is tending' })).not.toBeInTheDocument();
+    expect(daemon.sentOf('open_seed')).toEqual([]);
   });
 
-  it('dismisses the pinned popover on an outside pointerdown', () => {
-    const onPopoverClosed = vi.fn();
-    render(
-      <PaneSeedChip
-        display={{
-          kind: 'multi',
-          tended: [
-            seed({ id: 's-a', title: 'first', tender_session: 'sess-e' }),
-            seed({ id: 's-b', title: 'second', tender_session: 'sess-e' }),
-          ],
-        }}
-        unread={false}
-        sessionId="sess-e"
-        pinned
-        onOpenSeed={vi.fn()}
-        onPopoverClosed={onPopoverClosed}
-      />,
-    );
+  it('dismisses the pinned popover on an outside pointerdown and pins it again on request', async () => {
+    const daemon = await openAgent(tendingTwo);
+    await showSeeds(daemon);
+    expect(screen.getByRole('listbox', { name: 'Seeds this agent is tending' })).toBeInTheDocument();
 
-    expect(screen.getByRole('listbox')).toBeInTheDocument();
     fireEvent.pointerDown(document.body);
-    expect(onPopoverClosed).toHaveBeenCalled();
+    expect(screen.queryByRole('listbox', { name: 'Seeds this agent is tending' })).not.toBeInTheDocument();
+
+    await showSeeds(daemon);
+    expect(screen.getByRole('listbox', { name: 'Seeds this agent is tending' })).toBeInTheDocument();
   });
 
-  it('keeps the pinned popover open when the pointerdown lands inside it', () => {
-    const onPopoverClosed = vi.fn();
-    render(
-      <PaneSeedChip
-        display={{
-          kind: 'multi',
-          tended: [
-            seed({ id: 's-a', title: 'first', tender_session: 'sess-f' }),
-            seed({ id: 's-b', title: 'second', tender_session: 'sess-f' }),
-          ],
-        }}
-        unread={false}
-        sessionId="sess-f"
-        pinned
-        onOpenSeed={vi.fn()}
-        onPopoverClosed={onPopoverClosed}
-      />,
-    );
+  it('keeps the pinned popover open when the pointerdown lands inside it', async () => {
+    const daemon = await openAgent(tendingTwo);
+    await showSeeds(daemon);
 
-    fireEvent.pointerDown(screen.getByRole('listbox'));
-    expect(onPopoverClosed).not.toHaveBeenCalled();
+    fireEvent.pointerDown(screen.getByRole('listbox', { name: 'Seeds this agent is tending' }));
+    expect(screen.getByRole('listbox', { name: 'Seeds this agent is tending' })).toBeInTheDocument();
   });
 
-  it('renders the pinned popover with keyboard navigation', () => {
-    const onOpenSeed = vi.fn();
-    const onPopoverClosed = vi.fn();
-    render(
-      <PaneSeedChip
-        display={{
-          kind: 'multi',
-          tended: [
-            seed({ id: 's-a', title: 'first', tender_session: 'sess-d' }),
-            seed({ id: 's-b', title: 'second', tender_session: 'sess-d' }),
-          ],
-        }}
-        unread={false}
-        sessionId="sess-d"
-        pinned
-        onOpenSeed={onOpenSeed}
-        onPopoverClosed={onPopoverClosed}
-      />,
-    );
+  it('opens a seed from the pinned popover with the keyboard', async () => {
+    const daemon = await openAgent(tendingTwo);
+    await showSeeds(daemon);
 
-    expect(screen.getByText('tending 2')).toBeInTheDocument();
-    const listbox = screen.getByRole('listbox');
+    expect(within(chip()).getByText('tending 2')).toBeInTheDocument();
+    const listbox = screen.getByRole('listbox', { name: 'Seeds this agent is tending' });
     fireEvent.keyDown(listbox, { key: 'ArrowDown' });
-    fireEvent.keyDown(listbox, { key: 'Enter' });
-    expect(onOpenSeed).toHaveBeenCalledWith('s-b');
-    expect(onPopoverClosed).toHaveBeenCalled();
+    await gesture(daemon, () => fireEvent.keyDown(listbox, { key: 'Enter' }));
+    expect(openedSeeds(daemon)).toEqual([{ seed_id: 's-b', session_id: 's1' }]);
+    expect(screen.queryByRole('listbox', { name: 'Seeds this agent is tending' })).not.toBeInTheDocument();
   });
 });
 
-const props = { unread: false, sessionId: 'sess-a', pinned: false, onOpenSeed: vi.fn(), onPopoverClosed: vi.fn() };
+function documentResult(document: DaemonSeedDocument): Reply {
+  return { event: 'seed_document_get_result', success: true, document };
+}
 
-function documentFor(value: Seed, body = 'Leaves look good at header size.'): SeedDocument {
-  return {
-    seed: value, children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
+function documentFor(value: DaemonSeed, body = 'Leaves look good at header size.'): DaemonSeedDocument {
+  return seedDocument(value, {
+    notes_total: 1,
     notes: [{ id: 'n-1', seed_id: value.id, body, kind: 'note', author_member: '', author_session: '', created_at: value.updated_at }],
-  };
+  });
+}
+
+function pushSeeds(daemon: ScriptedDaemon, seeds: DaemonSeed[]) {
+  daemon.emit({ event: 'garden_seeds_updated', seeds, total: seeds.length });
 }
 
 describe('seed lifecycle and context', () => {
-  it.each(['planted', 'dormant', 'harvested', 'withered'])('keeps %s visible when tending ends', (status) => {
-    const value = seed({ id: 's-work11', title: 'Garden icons', tender_session: props.sessionId });
-    const { rerender } = render(<PaneSeedChip {...props} crownSeedId={value.id} display={derivePaneSeedDisplay([value], props.sessionId, value.id)} />);
-    const ended = { ...value, status, tender_session: '' };
-    rerender(<PaneSeedChip {...props} crownSeedId={value.id} display={derivePaneSeedDisplay([ended], props.sessionId, value.id)} />);
-    const chip = screen.getByTestId('seed-chip-sess-a');
-    expect(chip).toHaveAttribute('data-kind', 'crown');
-    expect(chip).toHaveAttribute('data-status', status);
-    expect(within(chip).getByText(status[0].toUpperCase() + status.slice(1))).toBeVisible();
-    fireEvent.keyDown(chip, { key: 'ArrowDown' });
+  it.each(['planted', 'dormant', 'harvested', 'withered'])('keeps %s visible when tending ends', async (status) => {
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const daemon = await openAgent([value], { seed_id: value.id });
+    pushSeeds(daemon, [{ ...value, status, tender_session: '' }]);
+    await daemon.idle();
+
+    const stateLabel = status[0].toUpperCase() + status.slice(1);
+    expect(chip()).toHaveAttribute('data-kind', 'crown');
+    expect(chip()).toHaveAttribute('data-status', status);
+    expect(within(chip()).getByText(stateLabel)).toBeVisible();
+    fireEvent.keyDown(chip(), { key: 'ArrowDown' });
     const context = screen.getByRole('dialog', { name: 'Seed context' });
-    expect(within(context).getByText(status[0].toUpperCase() + status.slice(1))).toBeVisible();
+    expect(within(context).getByText(stateLabel)).toBeVisible();
     expect(within(context).getByText('This agent reports to this seed.')).toBeVisible();
   });
 
-  it('does not invent a state for an unavailable reporting seed', () => {
-    render(<PaneSeedChip {...props} display={{ kind: 'crown', seedId: 's-missing' }} />);
-    expect(screen.getByText('Unknown')).toBeVisible();
+  it('does not invent a state for an unavailable reporting seed', async () => {
+    await openAgent([], { seed_id: 's-missing' });
+    expect(within(chip()).getByText('Unknown')).toBeVisible();
   });
 
   it('loads a real note only when opened, filters artifact activity, and keeps the outcome', async () => {
-    const value = seed({ id: 's-work11', title: 'Garden icons', status: 'harvested', reason: 'All five states are legible.' });
+    const value = daemonSeed('s-work11', { title: 'Garden icons', status: 'harvested', reason: 'All five states are legible.' });
     const doc = documentFor(value);
     doc.notes.push({ ...doc.notes[0], id: 'n-2', kind: 'attach', body: 'attached screenshot', created_at: '2099-01-01T00:00:00Z' });
-    const fetchDocument = vi.fn().mockResolvedValue(doc);
-    render(
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
-        <PaneSeedChip {...props} display={{ kind: 'crown', seedId: value.id, seed: value }} />
-      </DaemonApiProvider>,
-    );
-    expect(fetchDocument).not.toHaveBeenCalled();
-    fireEvent.keyDown(screen.getByTestId('seed-chip-sess-a'), { key: 'ArrowDown' });
-    expect(await screen.findByText('Leaves look good at header size.')).toBeVisible();
+    const daemon = await openAgent([value], { seed_id: value.id });
+    daemon.on('seed_document_get', () => documentResult(doc));
+    await daemon.idle();
+    expect(daemon.sentOf('seed_document_get')).toEqual([]);
+
+    await gesture(daemon, () => fireEvent.keyDown(chip(), { key: 'ArrowDown' }));
+    expect(screen.getByText('Leaves look good at header size.')).toBeVisible();
     expect(screen.getByText('All five states are legible.')).toBeVisible();
     expect(screen.queryByText('attached screenshot')).not.toBeInTheDocument();
-    expect(fetchDocument).toHaveBeenCalledExactlyOnceWith(value.id);
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(daemon.sentOf('seed_document_get').map((command) => command.seed_id)).toEqual([value.id]);
+    fireEvent.keyDown(screen.getByRole('dialog', { name: 'Seed context' }), { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Seed context' })).not.toBeInTheDocument();
   });
 
   it('ignores a late note response after a lifecycle revision', async () => {
-    const value = seed({ id: 's-work11', title: 'Garden icons' });
-    let resolveOld!: (value: SeedDocument) => void;
-    const fetchDocument = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
-      .mockResolvedValueOnce(documentFor({ ...value, rev: 2, status: 'harvested' }, 'Finished and verified.'));
-    const view = (current: Seed) => (
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
-        <PaneSeedChip {...props} pinned display={{ kind: 'crown', seedId: current.id, seed: current }} />
-      </DaemonApiProvider>
-    );
-    const { rerender } = render(view(value));
-    rerender(view({ ...value, rev: 2, status: 'harvested' }));
-    expect(await screen.findByText('Finished and verified.')).toBeVisible();
-    await act(async () => resolveOld(documentFor(value, 'Still exploring.')));
+    const value = daemonSeed('s-work11', { title: 'Garden icons' });
+    const revised = { ...value, rev: 2, status: 'harvested' };
+    const daemon = await openAgent([value], { seed_id: value.id });
+    daemon.on('seed_document_get', () => (daemon.sentOf('seed_document_get').length === 1 ? undefined : documentResult(documentFor(revised, 'Finished and verified.'))));
+    await showSeeds(daemon);
+    pushSeeds(daemon, [revised]);
+    await daemon.idle();
+    expect(screen.getByText('Finished and verified.')).toBeVisible();
+
+    const [late] = daemon.sentOf('seed_document_get');
+    daemon.emit({ ...documentResult(documentFor(value, 'Still exploring.')), request_id: late.request_id });
+    await daemon.idle();
     expect(screen.queryByText('Still exploring.')).not.toBeInTheDocument();
-    expect(fetchDocument).toHaveBeenCalledTimes(2);
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
   });
 
   it('keeps opening the seed available after a context fetch fails', async () => {
-    const value = seed({ id: 's-work11', title: 'Garden icons' });
-    const onOpenSeed = vi.fn();
-    render(
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('offline')) })}>
-        <PaneSeedChip {...props} onOpenSeed={onOpenSeed} pinned display={{ kind: 'seed', seed: value }} />
-      </DaemonApiProvider>,
-    );
-    expect(await screen.findByText('Latest note unavailable.')).toBeVisible();
-    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
-    expect(onOpenSeed).toHaveBeenCalledWith(value.id);
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const daemon = await openAgent([value]);
+    daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: false, error: 'offline' }));
+    await showSeeds(daemon);
+    expect(screen.getByText('Latest note unavailable.')).toBeVisible();
+
+    await gesture(daemon, () => fireEvent.keyDown(screen.getByRole('dialog', { name: 'Seed context' }), { key: 'Enter' }));
+    expect(openedSeeds(daemon)).toEqual([{ seed_id: value.id, session_id: 's1' }]);
   });
 
   it('refreshes a visible note when a Garden snapshot arrives at the same seed revision', async () => {
-    const value = seed({ id: 's-work11', title: 'Garden icons' });
-    const fetchDocument = vi.fn().mockResolvedValueOnce(documentFor(value, 'First note.'))
-      .mockResolvedValueOnce(documentFor(value, 'A new observation.'));
-    const api = createMockDaemonApi({ sendSeedDocumentGet: fetchDocument });
-    const view = (current: Seed) => (
-      <DaemonApiProvider api={api}>
-        <PaneSeedChip {...props} pinned display={{ kind: 'seed', seed: current }} />
-      </DaemonApiProvider>
-    );
-    const { rerender } = render(view(value));
-    expect(await screen.findByText('First note.')).toBeVisible();
-    rerender(view({ ...value }));
-    expect(await screen.findByText('A new observation.')).toBeVisible();
-    expect(fetchDocument).toHaveBeenCalledTimes(2);
+    const value = daemonSeed('s-work11', { title: 'Garden icons', tender_session: 's1' });
+    const notes = ['First note.', 'A new observation.'];
+    const daemon = await openAgent([value]);
+    daemon.on('seed_document_get', () => documentResult(documentFor(value, notes.shift())));
+    await showSeeds(daemon);
+    expect(screen.getByText('First note.')).toBeVisible();
+
+    pushSeeds(daemon, [{ ...value }]);
+    await daemon.idle();
+    expect(screen.getByText('A new observation.')).toBeVisible();
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
   });
 });

@@ -4,7 +4,7 @@ import { SessionReopenAction, SessionState } from '../types/generated';
 export const NOW = new Date('2026-09-05T14:30:00Z');
 export const now = () => NOW;
 
-export const CLOSED_AT = '2026-09-05T10:00:00Z';
+const CLOSED_AT = '2026-09-05T10:00:00Z';
 
 export function entry(overrides: Partial<SessionLedgerEntry> & { id: string }): SessionLedgerEntry {
   return {
