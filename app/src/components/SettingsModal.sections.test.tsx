@@ -1,6 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { gesture, openSection, renderSettings, savedSettings } from '../test/settings';
+import { gesture } from '../test/renderApp';
+import { openSection, renderSettings, savedSettings } from '../test/settings';
 import { assertValidSettingsSectionID } from './settingsAutomation';
 
 const SECTION_IDS = [

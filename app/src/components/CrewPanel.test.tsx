@@ -1,11 +1,18 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CrewRestartState, type CrewMember } from '../types/generated';
-import type { Seed } from '../hooks/useDaemonSocket';
-import { renderWithDaemon } from '../test/renderApp';
+import {
+  agentPane,
+  agentWorkspace,
+  daemonSeed,
+  daemonSession,
+  daemonWorkspace,
+  type DaemonSeed,
+  type DaemonSession,
+} from '../test/daemonFixtures';
+import { gesture, renderApp } from '../test/renderApp';
 import type { CommandMessage, CommandName } from '../test/protocol';
 import type { Reply, ScriptedDaemon } from '../test/scriptedDaemon';
-import { CrewPanel } from './CrewPanel';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
   return {
@@ -16,15 +23,6 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
     awareness_dirs: [],
     resolved_agent: 'claude',
     ...values,
-  };
-}
-
-function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
-  return {
-    body: '', status: 'planted', state_changed_at: '2026-09-06T16:50:50Z', state_changed_at_exact: true,
-    step_slug: overrides.title, planter_session: '', planter_member: '', tender_session: '', tender_member: '',
-    edges: [], ready: false, template: false, gate: false, vars: [], rev: 1,
-    created_at: '2026-09-06T16:50:50Z', updated_at: '2026-09-06T16:50:50Z', ...overrides,
   };
 }
 
@@ -84,66 +82,50 @@ function answerInTurn(daemon: ScriptedDaemon, cmd: CommandName, answers: Answer[
   });
 }
 
+const panel = () => within(screen.getByTestId('crew-panel'));
+const isPanelOpen = () => screen.getByTestId('crew-panel').hasAttribute('open');
+
 async function renderPanel({
   script = {},
   members = [member('trellis', 4)],
   sessions = [],
-  initialMember,
   isOpen = true,
   seeds = [],
 }: {
   script?: Script;
   members?: CrewMember[];
-  sessions?: Parameters<typeof CrewPanel>[0]['sessions'];
-  initialMember?: string;
+  sessions?: DaemonSession[];
   isOpen?: boolean;
-  seeds?: Seed[];
+  seeds?: DaemonSeed[];
 } = {}) {
-  const onClose = vi.fn();
-  const onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>();
-  let visit = 1;
-  let open = isOpen;
-  const panel = (nextMembers: CrewMember[], nextOpen: boolean) => (
-    <CrewPanel
-      visit={visit}
-      isOpen={nextOpen}
-      initialMember={initialMember}
-      members={nextMembers}
-      sessions={sessions}
-      seeds={seeds}
-      seedsTotal={seeds.length}
-      onClose={onClose}
-      onOpenSeed={onOpenSeed}
-    />
-  );
-  const view = await renderWithDaemon();
-  const { daemon } = view;
+  const everySession = [daemonSession('s1'), ...sessions];
+  const { daemon } = await renderApp({
+    initialState: { crew: members, seeds, sessions: everySession, workspaces: everySession.map((session) => agentWorkspace(session.id)) },
+  });
   for (const [cmd, answers] of Object.entries({ ...defaults, ...script })) {
     answerInTurn(daemon, cmd as CrewCommand, answers);
   }
-  view.rerender(panel(members, isOpen));
-  await daemon.idle();
-  const rerenderPanel = async (nextMembers: CrewMember[], nextOpen = open, preserve = false) => {
-    if (nextOpen && !open && !preserve) visit += 1;
-    open = nextOpen;
-    view.rerender(panel(nextMembers, nextOpen));
+  const openCrew = () => gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
+  if (isOpen) await openCrew();
+  const pushMembers = async (next: CrewMember[]) => {
+    daemon.emit({ event: 'crew_updated', members: next });
     await daemon.idle();
   };
+  const closeWithEscape = () => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
   const answer = async (command: CommandMessage & { request_id?: string }, reply: Reply) => {
     daemon.replyTo(command, { ...reply, request_id: command.request_id });
     await daemon.idle();
   };
-  const settle = () => daemon.idle();
-  return { ...view, daemon, onClose, onOpenSeed, rerenderPanel, answer, settle };
+  return { daemon, openCrew, pushMembers, closeWithEscape, answer };
 }
 
 async function click(daemon: ScriptedDaemon, name: string | RegExp) {
-  fireEvent.click(screen.getByRole('button', { name }));
-  await daemon.idle();
+  await gesture(daemon, () => fireEvent.click(panel().getByRole('button', { name })));
 }
 
 const crewSets = (daemon: ScriptedDaemon) => daemon.sentOf('crew_set').map(({ member: id, expected_revision, agent, model, effort }) => ({ member: id, expected_revision, agent, model, effort }));
 const restartGuards = (daemon: ScriptedDaemon) => daemon.sentOf('crew_restart').map(({ member: id, request_id, expected_session_id, expected_revision }) => ({ member: id, request_id, expected_session_id, expected_revision }));
+const openedSeeds = (daemon: ScriptedDaemon) => daemon.sentOf('open_seed').map(({ seed_id, session_id, standalone }) => ({ seed_id, session_id, standalone }));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -152,31 +134,49 @@ afterEach(() => {
 describe('CrewPanel', () => {
   it('uses a native dialog inside the sidebar-adjacent panel layer', async () => {
     await renderPanel();
-    const panel = screen.getByTestId('crew-panel');
-    expect(panel.tagName).toBe('DIALOG');
-    expect(panel).toHaveAttribute('open');
-    expect(panel.closest('.crew-panel-layer')).toBeInTheDocument();
+    const dialog = screen.getByTestId('crew-panel');
+    expect(dialog.tagName).toBe('DIALOG');
+    expect(dialog).toHaveAttribute('open');
+    expect(dialog.closest('.crew-panel-layer')).toBeInTheDocument();
   });
 
   it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
-    const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
+    const planted = daemonSeed('s-g9yxwv', { title: 'Artifact presence comes from the daemon', status: 'planted', planter_member: 'keel' });
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
-    const { onOpenSeed, rerenderPanel } = await renderPanel({ members, seeds: [planted] });
+    const { daemon } = await renderPanel({ members, seeds: [planted], sessions: [daemonSession('session-keel')] });
+    daemon.on('open_seed', ({ seed_id, session_id }) => ({
+      event: 'open_seed_result', success: true, seed_id, workspace_id: `workspace-${session_id}`, tile_id: 'tile-seed',
+    }));
 
-    expect(screen.getByLabelText('Harness')).toBeEnabled();
-    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
-    fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
-    fireEvent.change(screen.getByLabelText('Find a seed'), { target: { value: 'Artifact presence' } });
-    fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
-    expect(onOpenSeed).toHaveBeenCalledWith(planted.id, 'session-keel');
+    expect(panel().getByLabelText('Harness')).toBeEnabled();
+    fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
+    fireEvent.click(panel().getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(panel().getByRole('button', { name: /Planted/ }));
+    fireEvent.change(panel().getByLabelText('Find a seed'), { target: { value: 'Artifact presence' } });
+    await click(daemon, /Artifact presence comes from the daemon/);
+    expect(openedSeeds(daemon)).toEqual([{ seed_id: planted.id, session_id: 'session-keel', standalone: undefined }]);
+    expect(isPanelOpen()).toBe(false);
 
-    await rerenderPanel(members, false);
-    await rerenderPanel(members, true, true);
-    expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByLabelText('Find a seed')).toHaveValue('Artifact presence');
+    daemon.emit({
+      event: 'workspace_state_changed',
+      workspace: daemonWorkspace('workspace-session-keel', {
+        root: {
+          type: 'split', split_id: 'split-seed', direction: 'vertical',
+          children: [
+            { type: 'pane', pane_id: 'pane-session-keel' },
+            { type: 'tile', tile_id: 'tile-seed', tile_kind: 'seed', tile_params: planted.id },
+          ],
+        },
+        panes: [agentPane('session-keel', 'workspace-session-keel')],
+      }, { title: 'session-keel', directory: '/tmp/session-keel' }),
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-seed-back')));
+
+    expect(isPanelOpen()).toBe(true);
+    expect(panel().getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(panel().getByLabelText('Find a seed')).toHaveValue('Artifact presence');
   });
 
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
@@ -186,16 +186,16 @@ describe('CrewPanel', () => {
         agent: 'codex', model: 'gpt-6-astra', effort: 'high',
         resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
       })],
-      sessions: [{ id: 'session-trellis', agent: 'claude' } as Parameters<typeof CrewPanel>[0]['sessions'][number]],
+      sessions: [daemonSession('session-trellis', { agent: 'claude' })],
     });
 
-    const running = screen.getByLabelText('Running now');
+    const running = panel().getByLabelText('Running now');
     expect(running).toHaveTextContent('Harnessclaude');
     expect(running).toHaveTextContent('ModelNot reported');
     expect(running).toHaveTextContent('EffortNot reported');
-    expect(screen.getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
-    expect(screen.getByLabelText('Harness')).toHaveValue('codex');
-    expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
+    expect(panel().getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
+    expect(panel().getByLabelText('Harness')).toHaveValue('codex');
+    expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
     expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
@@ -209,16 +209,16 @@ describe('CrewPanel', () => {
       })],
     });
 
-    const harness = screen.getByLabelText('Harness');
+    const harness = panel().getByLabelText('Harness');
     fireEvent.change(harness, { target: { value: '' } });
 
     expect(crewSets(daemon)).toEqual([{ member: 'alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
-    expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Saving…');
-    expect(screen.getByRole('button', { name: 'Handoff and restart' })).toBeDisabled();
+    expect(panel().getByRole('status', { name: '' })).toHaveTextContent('Saving…');
+    expect(panel().getByRole('button', { name: 'Handoff and restart' })).toBeDisabled();
 
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }) }));
-    expect(screen.getByText('Saved')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Handoff and restart' })).toBeEnabled();
+    expect(panel().getByText('Saved')).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: 'Handoff and restart' })).toBeEnabled();
     expect(harness).toHaveValue('');
   });
 
@@ -228,21 +228,21 @@ describe('CrewPanel', () => {
       members: [member('alder', 2), member('keel', 3)],
     });
 
-    const effort = screen.getByLabelText('Reasoning effort');
-    fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
+    const effort = panel().getByLabelText('Reasoning effort');
+    fireEvent.change(panel().getByLabelText('Harness'), { target: { value: 'codex' } });
     await daemon.idle();
-    expect(screen.getByText('Not saved')).toBeInTheDocument();
-    expect(screen.getByText('model discovery is unavailable')).toBeInTheDocument();
+    expect(panel().getByText('Not saved')).toBeInTheDocument();
+    expect(panel().getByText('model discovery is unavailable')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
-    fireEvent.click(screen.getByRole('button', { name: /Alder/ }));
-    expect(screen.getByLabelText('Harness')).toHaveValue('codex');
+    fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
+    fireEvent.click(panel().getByRole('button', { name: /Alder/ }));
+    expect(panel().getByLabelText('Harness')).toHaveValue('codex');
     expect(effort).toHaveValue('');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Retry' }));
     expect(daemon.sentOf('crew_set')).toHaveLength(2);
     await answer(daemon.sentOf('crew_set')[1], saved({ member: member('alder', 3, { agent: 'codex', resolved_agent: 'codex' }) }));
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    expect(panel().getByText('Saved')).toBeInTheDocument();
   });
 
   it('retries an unacknowledged restart with the same identity and original guards', async () => {
@@ -262,7 +262,7 @@ describe('CrewPanel', () => {
     await click(daemon, 'Handoff and restart');
     await click(daemon, 'Request handoff and restart');
     await act(() => vi.advanceTimersByTimeAsync(120_000));
-    expect(screen.getByText('Restarting Trellis timed out')).toBeInTheDocument();
+    expect(panel().getByText('Restarting Trellis timed out')).toBeInTheDocument();
     await click(daemon, 'Retry delivery');
 
     const guards = restartGuards(daemon);
@@ -274,6 +274,35 @@ describe('CrewPanel', () => {
       expected_session_id: 'session-trellis',
       expected_revision: 9,
     });
+  });
+
+  it('settles a restart only on the answer to its own request', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockReturnValue('44444444-4444-4444-8444-444444444444');
+    const { daemon, answer } = await renderPanel({
+      script: { crew_restart: [HOLD] },
+      members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
+    });
+    await click(daemon, 'Handoff and restart');
+    await click(daemon, 'Request handoff and restart');
+
+    daemon.emit(restarted({ request_id: 'another-request', success: false, error: 'Another restart failed' }));
+    await daemon.idle();
+    expect(panel().getByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
+    expect(panel().queryByText('Another restart failed')).not.toBeInTheDocument();
+
+    await answer(daemon.sentOf('crew_restart')[0], restarted({
+      member: member('trellis', 10, {
+        binding_session: 'successor-session',
+        resolved_agent: 'claude',
+        restart: {
+          request_id: '44444444-4444-4444-8444-444444444444',
+          session_id: 'session-trellis',
+          state: CrewRestartState.Completed,
+          successor_session_id: 'successor-session',
+        },
+      }),
+    }));
+    expect(panel().getByText(/New day started/)).toBeInTheDocument();
   });
 
   it('retries an accepted queued restart whose first delivery failed', async () => {
@@ -289,7 +318,7 @@ describe('CrewPanel', () => {
 
     await click(daemon, 'Handoff and restart');
     await click(daemon, 'Request handoff and restart');
-    expect(screen.getByText('Session lookup failed')).toBeInTheDocument();
+    expect(panel().getByText('Session lookup failed')).toBeInTheDocument();
     await click(daemon, 'Retry delivery');
 
     const guards = restartGuards(daemon);
@@ -309,9 +338,9 @@ describe('CrewPanel', () => {
         })],
       });
 
-      expect(screen.getByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
+      expect(panel().getByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
       await click(daemon, 'Retry restart');
-      expect(screen.getByText('Successor probe unavailable')).toBeInTheDocument();
+      expect(panel().getByText('Successor probe unavailable')).toBeInTheDocument();
       await click(daemon, 'Retry delivery');
 
       const guards = restartGuards(daemon);
@@ -328,11 +357,11 @@ describe('CrewPanel', () => {
 
   it('keeps the panel behind the restart confirmation out of the tab order', async () => {
     await renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoff and restart' }));
-    const dialog = screen.getByRole('alertdialog');
+    fireEvent.click(panel().getByRole('button', { name: 'Handoff and restart' }));
+    const dialog = panel().getByRole('alertdialog');
     expect(dialog.tagName).toBe('DIALOG');
     expect(screen.getByTestId('crew-panel-close').closest('[inert]')).not.toBeNull();
-    expect(screen.getByLabelText('Crew roster').closest('[inert]')).not.toBeNull();
+    expect(panel().getByLabelText('Crew roster').closest('[inert]')).not.toBeNull();
     expect(dialog.closest('[inert]')).toBeNull();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
     expect(screen.getByTestId('crew-panel-close').closest('[inert]')).toBeNull();
@@ -343,16 +372,16 @@ describe('CrewPanel', () => {
     [CrewRestartState.Failed, 'Successor launch failed'],
   ])('reconciles a lost restart response with authoritative %s state', async (state, copy) => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('22222222-2222-4222-8222-222222222222');
-    const { daemon, rerenderPanel } = await renderPanel({
+    const { daemon, pushMembers } = await renderPanel({
       script: { crew_restart: [restarted({ success: false, error: 'Restart response was lost' })] },
       members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
     });
 
     await click(daemon, 'Handoff and restart');
     await click(daemon, 'Request handoff and restart');
-    expect(screen.getByText('Restart response was lost')).toBeInTheDocument();
+    expect(panel().getByText('Restart response was lost')).toBeInTheDocument();
 
-    await rerenderPanel([member('trellis', 10, {
+    await pushMembers([member('trellis', 10, {
       binding_session: state === CrewRestartState.Completed ? 'successor-session' : 'session-trellis',
       resolved_agent: 'claude',
       restart: {
@@ -363,8 +392,8 @@ describe('CrewPanel', () => {
       },
     })]);
 
-    expect(screen.getByText(new RegExp(copy))).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Retry delivery' })).not.toBeInTheDocument();
+    expect(panel().getByText(new RegExp(copy))).toBeInTheDocument();
+    expect(panel().queryByRole('button', { name: 'Retry delivery' })).not.toBeInTheDocument();
   });
 
   it('shows a newer authoritative restart after the local attempt completed', async () => {
@@ -379,51 +408,50 @@ describe('CrewPanel', () => {
         successor_session_id: 'successor-session',
       },
     });
-    const { daemon, rerenderPanel } = await renderPanel({
+    const { daemon, pushMembers } = await renderPanel({
       script: { crew_restart: [restarted({ member: localCompleted })] },
       members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
     });
 
     await click(daemon, 'Handoff and restart');
     await click(daemon, 'Request handoff and restart');
-    expect(screen.getByText(/New day started/)).toBeInTheDocument();
+    expect(panel().getByText(/New day started/)).toBeInTheDocument();
 
-    await rerenderPanel([member('trellis', 11, {
+    await pushMembers([member('trellis', 11, {
       binding_session: 'successor-session',
       resolved_agent: 'claude',
       restart: { request_id: '44444444-4444-4444-8444-444444444444', session_id: 'successor-session', state: CrewRestartState.Requested },
     })]);
 
-    expect(screen.getByText('Handoff requested')).toBeInTheDocument();
-    expect(screen.queryByText(/New day started/)).not.toBeInTheDocument();
+    expect(panel().getByText('Handoff requested')).toBeInTheDocument();
+    expect(panel().queryByText(/New day started/)).not.toBeInTheDocument();
   });
 
   it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
-    const { daemon, onClose } = await renderPanel({ members: [member('keel', 5)] });
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({ members: [member('keel', 5)] });
 
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await closeWithEscape();
+    expect(isPanelOpen()).toBe(false);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Wake' }));
-    const dialog = screen.getByRole('alertdialog');
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' }));
-    await daemon.idle();
+    await openCrew();
+    fireEvent.click(panel().getByRole('button', { name: 'Wake' }));
+    const dialog = panel().getByRole('alertdialog');
+    await gesture(daemon, () => fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' })));
     expect(restartGuards(daemon)).toEqual([expect.objectContaining({ member: 'keel', expected_session_id: '', expected_revision: 5 })]);
   });
 
   it('keeps roster navigation while async harness discovery settles', async () => {
     const { daemon, answer } = await renderPanel({
       script: { delegation_preferences_get: [HOLD] },
-      initialMember: 'alder',
       members: [member('alder', 2), member('keel', 3)],
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
-    expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
+    fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
+    expect(panel().getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
 
     await answer(daemon.sentOf('delegation_preferences_get')[0], preferences([harnesses[0]]));
-    expect(screen.getByLabelText('Harness')).toBeEnabled();
-    expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
+    expect(panel().getByLabelText('Harness')).toBeEnabled();
+    expect(panel().getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
     expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
@@ -438,13 +466,13 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { resolved_agent: 'codex' })],
     });
 
-    const model = screen.getByLabelText('Model');
+    const model = panel().getByLabelText('Model');
     expect(model).toBeEnabled();
-    expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
+    expect(panel().getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'openai/gpt-6-astra' } });
     await daemon.idle();
-    expect(screen.getByText('Saved')).toBeInTheDocument();
-    const effort = screen.getByLabelText('Reasoning effort');
+    expect(panel().getByText('Saved')).toBeInTheDocument();
+    const effort = panel().getByLabelText('Reasoning effort');
     fireEvent.change(effort, { target: { value: 'hig' } });
     fireEvent.change(effort, { target: { value: 'high' } });
     expect(daemon.sentOf('crew_set')).toHaveLength(1);
@@ -458,17 +486,16 @@ describe('CrewPanel', () => {
   });
 
   it('commits a typed model id on Enter as one write and keeps the draft over roster pushes', async () => {
-    const { daemon, rerenderPanel } = await renderPanel({ members: [member('keel', 6)] });
-    const model = screen.getByLabelText('Model');
+    const { daemon, pushMembers } = await renderPanel({ members: [member('keel', 6)] });
+    const model = panel().getByLabelText('Model');
     expect(model).toBeEnabled();
     fireEvent.change(model, { target: { value: '__custom' } });
-    const custom = screen.getByTestId('crew-custom-model');
+    const custom = panel().getByTestId('crew-custom-model');
     fireEvent.change(custom, { target: { value: 'gpt-7' } });
-    await rerenderPanel([member('keel', 7)]);
+    await pushMembers([member('keel', 7)]);
     expect(custom).toHaveValue('gpt-7');
     expect(daemon.sentOf('crew_set')).toEqual([]);
-    fireEvent.keyDown(custom, { key: 'Enter' });
-    await daemon.idle();
+    await gesture(daemon, () => fireEvent.keyDown(custom, { key: 'Enter' }));
     expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 7, agent: '', model: 'gpt-7', effort: '' }]);
   });
 
@@ -478,12 +505,12 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra' })],
     });
 
-    const model = screen.getByLabelText('Model');
+    const model = panel().getByLabelText('Model');
     expect(model).toBeEnabled();
-    fireEvent.change(screen.getByLabelText('Harness'), { target: { value: '' } });
+    fireEvent.change(panel().getByLabelText('Harness'), { target: { value: '' } });
 
     expect(model).toBeDisabled();
-    expect(screen.getByLabelText('Reasoning effort')).toBeDisabled();
+    expect(panel().getByLabelText('Reasoning effort')).toBeDisabled();
 
     await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'claude' }) }));
     expect(model).toBeEnabled();
@@ -501,8 +528,8 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
 
-    const model = screen.getByLabelText('Model');
-    expect(screen.getByRole('option', { name: 'second / Shared two' })).toBeInTheDocument();
+    const model = panel().getByLabelText('Model');
+    expect(panel().getByRole('option', { name: 'second / Shared two' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'second/shared' } });
     await daemon.idle();
 
@@ -524,16 +551,16 @@ describe('CrewPanel', () => {
       members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
 
-    const model = screen.getByLabelText('Model');
-    expect(screen.getByRole('option', { name: 'local / Fixed' })).toBeInTheDocument();
+    const model = panel().getByLabelText('Model');
+    expect(panel().getByRole('option', { name: 'local / Fixed' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'local/fixed' } });
     await daemon.idle();
-    expect(screen.getByText('Not saved')).toBeInTheDocument();
+    expect(panel().getByText('Not saved')).toBeInTheDocument();
     await click(daemon, 'Retry');
 
     expect(crewSets(daemon)[1]).toEqual({ member: 'keel', expected_revision: 6, agent: 'codex', model: 'local/fixed', effort: '' });
     await answer(daemon.sentOf('crew_set')[1], saved({ member: member('keel', 7, { agent: 'codex', model: 'local/fixed', resolved_agent: 'codex', resolved_model: 'local/fixed' }) }));
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    expect(panel().getByText('Saved')).toBeInTheDocument();
   });
 
   it('loads the full charter on demand and flushes it before tab navigation', async () => {
@@ -545,20 +572,20 @@ describe('CrewPanel', () => {
     });
 
     await click(daemon, 'Charter');
-    const editor = screen.getByTestId('crew-charter-editor');
+    const editor = panel().getByTestId('crew-charter-editor');
     expect(editor).toHaveValue('# Trellis\n\nFull **Markdown** charter.\n');
     fireEvent.change(editor, { target: { value: '# Trellis\n\nChanged while the idea is hot.\n' } });
-    expect(screen.getByRole('status')).toHaveTextContent('Waiting to save');
+    expect(panel().getByRole('status')).toHaveTextContent('Waiting to save');
 
     await click(daemon, 'Handoffs');
-    expect(screen.getByTestId('crew-charter-editor')).toBeInTheDocument();
+    expect(panel().getByTestId('crew-charter-editor')).toBeInTheDocument();
     expect(daemon.sentOf('crew_charter_set')).toEqual([expect.objectContaining({
       member: 'trellis', content: '# Trellis\n\nChanged while the idea is hot.\n', expected_token: 'charter-old',
     })]);
-    expect(screen.getByRole('status')).toHaveTextContent('Saving');
+    expect(panel().getByRole('status')).toHaveTextContent('Saving');
 
     await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('# Trellis\n\nChanged while the idea is hot.\n', 'charter-new'));
-    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(panel().getByText('No handoffs recorded.')).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoffs_get').map((command) => command.member)).toEqual(['trellis']);
   });
 
@@ -568,44 +595,43 @@ describe('CrewPanel', () => {
       members: [member('trellis', 4), member('keel', 5)],
     });
     await click(daemon, 'Charter');
-    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'new' } });
+    fireEvent.change(panel().getByTestId('crew-charter-editor'), { target: { value: 'new' } });
 
-    fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
+    fireEvent.click(panel().getByRole('button', { name: /Keel/ }));
     await click(daemon, 'Handoffs');
     expect(daemon.sentOf('crew_charter_set')).toHaveLength(1);
     await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('new', 'new-token'));
 
-    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(panel().getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
     expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
   });
 
   it('returns to launch settings on a normal reopen', async () => {
-    const members = [member('alder', 2), member('trellis', 3)];
-    const { daemon, rerenderPanel } = await renderPanel({ members, initialMember: 'alder' });
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({ members: [member('alder', 2), member('trellis', 3)] });
+    fireEvent.click(panel().getByRole('button', { name: /Trellis/ }));
     await click(daemon, 'Handoffs');
-    expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
 
-    await rerenderPanel(members, false);
-    await rerenderPanel(members, true);
+    await closeWithEscape();
+    await openCrew();
 
-    expect(screen.getByRole('heading', { name: 'Alder' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('heading', { name: 'Alder' })).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('flushes a charter before closing the panel', async () => {
-    const { daemon, onClose, answer } = await renderPanel({
+    const { daemon, answer } = await renderPanel({
       script: { crew_charter_get: [charter('old', 'old-token')], crew_charter_set: [HOLD] },
     });
     await click(daemon, 'Charter');
-    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'new' } });
-    fireEvent.click(screen.getByTestId('crew-panel-close'));
-    await daemon.idle();
-    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.change(panel().getByTestId('crew-charter-editor'), { target: { value: 'new' } });
+    await gesture(daemon, () => fireEvent.click(screen.getByTestId('crew-panel-close')));
+    expect(isPanelOpen()).toBe(true);
 
     await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('new', 'new-token'));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(isPanelOpen()).toBe(false);
   });
 
   it('keeps a failed navigation flush visible and retries the retained edit', async () => {
@@ -616,17 +642,17 @@ describe('CrewPanel', () => {
       },
     });
     await click(daemon, 'Charter');
-    const editor = screen.getByTestId('crew-charter-editor');
+    const editor = panel().getByTestId('crew-charter-editor');
     fireEvent.change(editor, { target: { value: 'local edit' } });
     await click(daemon, 'Launch settings');
 
-    expect(screen.getByText('disk is read-only')).toBeInTheDocument();
+    expect(panel().getByText('disk is read-only')).toBeInTheDocument();
     expect(editor).toHaveValue('local edit');
-    expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
     await click(daemon, 'Retry');
-    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    expect(panel().getByRole('status')).toHaveTextContent('Saved');
     await click(daemon, 'Launch settings');
-    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('lets the user leave after a charter save failure has been shown, keeping the edit for later', async () => {
@@ -634,38 +660,36 @@ describe('CrewPanel', () => {
     await click(daemon, 'Charter');
     daemon.disconnect();
     await daemon.idle();
-    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
+    fireEvent.change(panel().getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
     await click(daemon, 'Launch settings');
-    expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByText('WebSocket not connected')).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
 
     await click(daemon, 'Launch settings');
-    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
     await click(daemon, 'Charter');
-    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
-    expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
+    expect(panel().getByTestId('crew-charter-editor')).toHaveValue('offline edit');
+    expect(panel().getByText('WebSocket not connected')).toBeInTheDocument();
     expect(daemon.sentOf('crew_charter_set')).toEqual([]);
   });
 
   it('keeps a retained offline charter edit across close and a fresh reopen', async () => {
-    const members = [member('trellis', 4)];
-    const { daemon, onClose, rerenderPanel } = await renderPanel({ members, script: { crew_charter_get: [charter('old', 'old')] } });
+    const { daemon, openCrew, closeWithEscape } = await renderPanel({ script: { crew_charter_get: [charter('old', 'old')] } });
     await click(daemon, 'Charter');
     daemon.disconnect();
     await daemon.idle();
-    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
+    fireEvent.change(panel().getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
     await click(daemon, 'Launch settings');
-    expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
+    expect(panel().getByText('WebSocket not connected')).toBeInTheDocument();
 
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await rerenderPanel(members, false);
-    await rerenderPanel(members, true);
+    await closeWithEscape();
+    expect(isPanelOpen()).toBe(false);
+    await openCrew();
 
-    expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
+    expect(panel().getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
     await click(daemon, 'Charter');
-    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
-    expect(screen.getByTestId('crew-charter-status')).not.toHaveTextContent('Saved');
+    expect(panel().getByTestId('crew-charter-editor')).toHaveValue('offline edit');
+    expect(panel().getByTestId('crew-charter-status')).not.toHaveTextContent('Saved');
   });
 
   it('rereads a saved charter when the tab is entered again', async () => {
@@ -674,25 +698,23 @@ describe('CrewPanel', () => {
       script: { crew_charter_get: [charter('first', 'first'), charter('edited elsewhere', 'second')] },
     });
     await click(daemon, 'Charter');
-    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('first');
+    expect(panel().getByTestId('crew-charter-editor')).toHaveValue('first');
 
     await click(daemon, 'Launch settings');
     await click(daemon, 'Charter');
-    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('edited elsewhere');
+    expect(panel().getByTestId('crew-charter-editor')).toHaveValue('edited elsewhere');
     expect(daemon.sentOf('crew_charter_get')).toHaveLength(2);
   });
 
   it('commits a launch field that still has focus when Escape closes the panel', async () => {
-    const { daemon, onClose, rerenderPanel } = await renderPanel({ members: [member('keel', 6)] });
-    const effort = screen.getByLabelText('Reasoning effort');
+    const { daemon, closeWithEscape } = await renderPanel({ members: [member('keel', 6)] });
+    const effort = panel().getByLabelText('Reasoning effort');
     effort.focus();
     fireEvent.change(effort, { target: { value: 'high' } });
     expect(daemon.sentOf('crew_set')).toEqual([]);
 
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(onClose).toHaveBeenCalledTimes(1);
-    await rerenderPanel([member('keel', 6)], false);
-
+    await closeWithEscape();
+    expect(isPanelOpen()).toBe(false);
     expect(crewSets(daemon)).toEqual([expect.objectContaining({ member: 'keel', effort: 'high' })]);
   });
 
@@ -708,23 +730,22 @@ describe('CrewPanel', () => {
       script: { crew_charter_get: [charter('old', 'old')], crew_charter_set: [charterSaved('external edit', 'external', true)] },
     });
     await click(daemon, 'Charter');
-    const editor = screen.getByTestId('crew-charter-editor');
+    const editor = panel().getByTestId('crew-charter-editor');
     fireEvent.change(editor, { target: { value: 'my edit' } });
-    fireEvent.blur(editor);
-    await daemon.idle();
-    expect(screen.getByText('The file changed outside this editor.')).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.blur(editor));
+    expect(panel().getByText('The file changed outside this editor.')).toBeInTheDocument();
     expect(editor).toHaveValue('my edit');
-    fireEvent.click(screen.getByRole('button', { name: 'Use file version' }));
+    fireEvent.click(panel().getByRole('button', { name: 'Use file version' }));
     expect(editor).toHaveValue('external edit');
-    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    expect(panel().getByRole('status')).toHaveTextContent('Saved');
   });
 
   it.each([
-    ['an asleep member opens the seed without placement', undefined],
+    ['an asleep member opens the seed as a standalone reader', undefined],
     ['an awake member places the seed beside its current day', 'session-trellis'],
   ])('renders complete dated handoffs and %s', async (_, bindingSession) => {
     const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-w0rk11)\n';
-    const { daemon, onOpenSeed } = await renderPanel({
+    const { daemon } = await renderPanel({
       members: [member('trellis', 4, bindingSession ? { binding_session: bindingSession } : {})],
       script: {
         crew_handoffs_get: [handoffs('trellis', [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z' }])],
@@ -732,12 +753,14 @@ describe('CrewPanel', () => {
       },
     });
     await click(daemon, 'Handoffs');
-    expect(screen.getByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
+    expect(panel().getByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-01T21-37Z-trellis.md']]);
-    expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
-    expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
-    fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
-    expect(onOpenSeed).toHaveBeenCalledWith('s-w0rk11', bindingSession);
+    expect(panel().getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
+    expect(panel().getAllByText(/Sep 1, 2026/)).toHaveLength(2);
+    await click(daemon, 'Open the seed');
+    expect(openedSeeds(daemon)).toEqual([bindingSession
+      ? { seed_id: 's-w0rk11', session_id: bindingSession, standalone: undefined }
+      : { seed_id: 's-w0rk11', session_id: undefined, standalone: true }]);
   });
 
   it('shows one handoff read failure and retries to an honest empty history', async () => {
@@ -746,10 +769,10 @@ describe('CrewPanel', () => {
       script: { crew_handoffs_get: [handoffsRefused('handoffs are temporarily unavailable'), handoffs('keel', [])] },
     });
     await click(daemon, 'Handoffs');
-    expect(screen.getByText('handoffs are temporarily unavailable')).toBeInTheDocument();
+    expect(panel().getByText('handoffs are temporarily unavailable')).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
     await click(daemon, 'Retry');
-    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(panel().getByText('No handoffs recorded.')).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(2);
   });
 
@@ -768,11 +791,11 @@ describe('CrewPanel', () => {
     const [, newer] = daemon.sentOf('crew_handoffs_get');
     expect(newer).toBeDefined();
     await answer(newer, handoffs('trellis', [{ filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' }]));
-    expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
+    expect(panel().getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
 
     await act(() => vi.advanceTimersByTimeAsync(60_000));
     await daemon.idle();
-    expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
+    expect(panel().getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-02T09-00Z-trellis.md']]);
   });
 
@@ -793,22 +816,19 @@ describe('CrewPanel', () => {
       },
     });
     await click(daemon, 'Handoffs');
-    expect(screen.getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    expect(panel().getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoff_get')).toHaveLength(1);
 
-    fireEvent.click(screen.getByTestId('crew-handoff-1'));
-    await daemon.idle();
-    expect(screen.getByText('the older letter is unreadable')).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Latest letter' })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTestId('crew-handoff-letter-retry'));
-    await daemon.idle();
-    expect(screen.getByRole('heading', { name: 'Older letter' })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(panel().getByTestId('crew-handoff-1')));
+    expect(panel().getByText('the older letter is unreadable')).toBeInTheDocument();
+    expect(panel().queryByRole('heading', { name: 'Latest letter' })).not.toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(panel().getByTestId('crew-handoff-letter-retry')));
+    expect(panel().getByRole('heading', { name: 'Older letter' })).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoff_get')).toHaveLength(3);
     expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
 
-    fireEvent.click(screen.getByTestId('crew-handoff-0'));
-    await daemon.idle();
-    expect(screen.getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    await gesture(daemon, () => fireEvent.click(panel().getByTestId('crew-handoff-0')));
+    expect(panel().getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
     expect(daemon.sentOf('crew_handoff_get')).toHaveLength(4);
   });
 });

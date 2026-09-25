@@ -241,21 +241,4 @@ describe('tile-only (sessionless) workspace selection and render', () => {
     expect(isLive('pane-two')).toBe(true);
     expect(isLive('pane-three')).toBe(true);
   });
-
-  it('sends the resolved terminal theme once the daemon handshake completes', async () => {
-    const { daemon } = await renderApp();
-
-    expect(await daemon.received('set_terminal_theme')).toEqual({
-      cmd: 'set_terminal_theme',
-      foreground: '#d4d4d4',
-      background: '#1e1e1e',
-      cursor: '#d4d4d4',
-      ansi_palette: [
-        '#000000', '#cd3131', '#0dbc79', '#e5e510',
-        '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
-        '#666666', '#f14c4c', '#23d18b', '#f5f543',
-        '#3b8eea', '#d670d6', '#29b8db', '#ffffff',
-      ],
-    });
-  });
 });

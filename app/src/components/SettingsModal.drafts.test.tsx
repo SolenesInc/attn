@@ -1,9 +1,9 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp } from '../test/renderApp';
+import { gesture, renderApp } from '../test/renderApp';
 import type { CommandMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
-import { gesture, openSection, openSettings, savedSettings } from '../test/settings';
+import { openSection, openSettings, savedSettings } from '../test/settings';
 
 function holdSaves(daemon: ScriptedDaemon) {
   const held: CommandMessage<'set_setting'>[] = [];

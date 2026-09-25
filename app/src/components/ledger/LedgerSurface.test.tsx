@@ -1,112 +1,99 @@
-import type { ComponentProps } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { fireEvent, screen, within } from '@testing-library/react';
-import { LedgerSurface } from './LedgerSurface';
-import type { LedgerTab } from './LedgerSurface';
-import { page, pages, rows, serveLedger, useLedgerConnection } from './testSupport';
-import { useWorktreeStore } from '../../store/worktrees';
-import { renderWithDaemon } from '../../test/renderApp';
-import { closedEntry, liveEntry, now } from '../../test/sessionLedgerFixtures';
+import { openSessionsLedger, page, pages, rows } from './testSupport';
+import { agentWorkspace, daemonSession } from '../../test/daemonFixtures';
+import { closedEntry, liveEntry } from '../../test/sessionLedgerFixtures';
 
-type SurfaceProps = ComponentProps<typeof LedgerSurface>;
+const WORKTREE = '/projects/attn--feat-one';
 
-function DaemonLedgerSurface({ sessions, ...props }: Omit<SurfaceProps, 'sessions'> & { sessions: Omit<SurfaceProps['sessions'], 'connection'> }) {
-  return <LedgerSurface {...props} sessions={{ ...sessions, connection: useLedgerConnection() }} />;
+async function openLedger() {
+  const view = await openSessionsLedger(
+    pages([page({ entries: [liveEntry('live'), closedEntry('wt', { is_worktree: true, directory: WORKTREE })] })]),
+    {
+      initialState: {
+        sessions: [
+          daemonSession('live', { label: 'run live', directory: liveEntry('live').directory }),
+          daemonSession('builder', { label: 'run builder', directory: WORKTREE }),
+        ],
+        workspaces: [agentWorkspace('live'), agentWorkspace('builder')],
+      },
+    },
+  );
+  view.daemon.on('worktree_list', () => ({
+    event: 'worktree_list_result',
+    success: true,
+    worktree_list_result: {
+      worktrees: [{ path: WORKTREE, branch: 'feat/one', main_repo: '/projects/attn', observed_at: '2026-09-05T10:00:00Z' }],
+      repositories: [{ main_repo: '/projects/attn' }],
+      omitted: 0,
+    },
+  }));
+  view.daemon.on('worktree_sweep_log', () => ({
+    event: 'worktree_sweep_log_result',
+    success: true,
+    worktree_sweep_log_result: { entries: [], omitted: 0 },
+  }));
+  return view;
 }
 
-async function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onFocusSession?: (id: string) => void; onSelectSession?: (id: string) => void } = {}) {
-  useWorktreeStore.getState().clear();
-  const onTabChange = vi.fn();
-  const view = await renderWithDaemon();
-  serveLedger(view.daemon, pages([page({
-    entries: [liveEntry('live'), closedEntry('wt', { is_worktree: true, directory: '/projects/attn--feat-one' })],
-  })]));
-  const props = (current: LedgerTab) => ({
-    isOpen: true,
-    tab: current,
-    onTabChange,
-    onClose: extra.onClose ?? vi.fn(),
-    now,
-    sessions: {
-      workspaceNames: {},
-      onFocusSession: extra.onFocusSession ?? vi.fn(),
-      onReopen: vi.fn(),
-    },
-    worktrees: {
-      listWorktrees: vi.fn().mockResolvedValue({ worktrees: [{ path: '/projects/attn--feat-one', branch: 'feat/one', main_repo: '/projects/attn' }], repositories: [{ main_repo: '/projects/attn' }], omitted: 0 }),
-      getSweepLog: vi.fn().mockResolvedValue({ entries: [], omitted: 0 }),
-      setKeep: vi.fn(),
-      refreshWorktrees: vi.fn().mockResolvedValue(true),
-      deleteWorktree: vi.fn(),
-      sessions: [{ id: 'live', label: 'run live', directory: '/projects/attn--feat-one' }],
-      gitOperations: {},
-      onSelectSession: extra.onSelectSession ?? vi.fn(),
-    },
-  });
-  view.rerender(<DaemonLedgerSurface {...props(tab)} />);
-  await view.daemon.idle();
-  return {
-    onTabChange,
-    retab: async (next: LedgerTab) => {
-      view.rerender(<DaemonLedgerSurface {...props(next)} />);
-      await view.daemon.idle();
-    },
-  };
-}
+const ledger = () => screen.queryByRole('dialog', { name: 'Sessions and worktrees' });
+const shownList = () => within(within(ledger()!).getByRole('navigation', { name: 'Which list' })).getByRole('button', { current: 'page' }).textContent;
+const row = (label: string) => rows().getByText(label).closest<HTMLElement>('.ledger-row')!;
+const selectedAgent = () => document.querySelector('.session-item.selected .session-label')?.textContent ?? null;
 
-describe('LedgerSurface', () => {
+describe('the sessions and worktrees ledger', () => {
   it('switches lists with the bracket keys and lands on the first row', async () => {
-    const { onTabChange } = await surface();
-    const first = rows().getByText('run live');
-    expect(document.activeElement).toBe(first.closest('.ledger-row'));
+    const { daemon } = await openLedger();
+    expect(document.activeElement).toBe(row('run live'));
 
-    fireEvent.keyDown(first, { key: ']' });
-    expect(onTabChange).toHaveBeenCalledWith('worktrees');
+    fireEvent.keyDown(row('run live'), { key: ']' });
+    await daemon.idle();
+
+    expect(shownList()).toBe('Worktrees');
+    expect(document.activeElement).toBe(row('attn--feat-one'));
   });
 
   it('shows a session\'s worktree, and a worktree\'s sessions, across the two lists', async () => {
-    const { onTabChange, retab } = await surface();
-    const wt = (rows().getByText('run wt')).closest('.ledger-row') as HTMLElement;
-    fireEvent.click(wt);
-    fireEvent.keyDown(wt, { key: '2' });
-    expect(onTabChange).toHaveBeenCalledWith('worktrees');
+    const { daemon } = await openLedger();
+    fireEvent.click(row('run wt'));
+    fireEvent.keyDown(row('run wt'), { key: '2' });
+    await daemon.idle();
 
-    await retab('worktrees');
-    const row = (rows().getByText('attn--feat-one')).closest('.ledger-row') as HTMLElement;
-    expect(row.getAttribute('aria-selected')).toBe('true');
-    fireEvent.keyDown(row, { key: '2' });
-    expect(onTabChange).toHaveBeenCalledWith('sessions');
+    expect(shownList()).toBe('Worktrees');
+    expect(row('attn--feat-one').getAttribute('aria-selected')).toBe('true');
 
-    await retab('sessions');
-    expect((screen.getByLabelText('Filter') as HTMLInputElement).value).toBe('dir:/projects/attn--feat-one');
+    fireEvent.keyDown(row('attn--feat-one'), { key: '2' });
+    await daemon.idle();
+
+    expect(shownList()).toBe('Sessions');
+    expect((screen.getByLabelText('Filter') as HTMLInputElement).value).toBe(`dir:${WORKTREE}`);
   });
 
   it('leaves the surface behind when a row goes to its agent', async () => {
-    const onClose = vi.fn();
-    const onFocusSession = vi.fn();
-    const onSelectSession = vi.fn();
-    const { retab } = await surface('sessions', { onClose, onFocusSession, onSelectSession });
+    const { daemon } = await openLedger();
 
-    fireEvent.keyDown(rows().getByText('run live'), { key: 'Enter' });
-    expect(onFocusSession).toHaveBeenCalledWith('live');
-    expect(onClose).toHaveBeenCalledTimes(1);
+    fireEvent.keyDown(row('run live'), { key: 'Enter' });
+    await daemon.idle();
+    expect(ledger()).toBeNull();
+    expect(selectedAgent()).toBe('run live');
 
-    await retab('worktrees');
-    const row = (rows().getByText('attn--feat-one')).closest('.ledger-row') as HTMLElement;
-    fireEvent.keyDown(row, { key: '3' });
-    expect(onSelectSession).toHaveBeenCalledWith('live');
-    expect(onClose).toHaveBeenCalledTimes(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Open Worktrees' }));
+    await daemon.idle();
+    fireEvent.keyDown(row('attn--feat-one'), { key: '3' });
+    await daemon.idle();
+
+    expect(ledger()).toBeNull();
+    expect(selectedAgent()).toBe('run builder');
   });
 
   it('gives / to the query and lets an empty query hand focus back to the list', async () => {
-    await surface();
-    const first = rows().getByText('run live');
-    fireEvent.keyDown(first, { key: '/' });
+    await openLedger();
+    fireEvent.keyDown(row('run live'), { key: '/' });
     const query = screen.getByLabelText('Filter');
     expect(document.activeElement).toBe(query);
 
     fireEvent.keyDown(query, { key: 'Escape' });
-    expect(document.activeElement).toBe(first.closest('.ledger-row'));
-    expect(within(screen.getByRole('dialog', { name: 'Sessions and worktrees' })).getByRole('button', { name: /keys/ })).toBeTruthy();
+    expect(document.activeElement).toBe(row('run live'));
+    expect(ledger()).not.toBeNull();
   });
 });

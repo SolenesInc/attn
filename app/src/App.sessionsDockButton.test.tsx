@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { renderApp } from './test/renderApp';
+import { pressShortcut, renderApp } from './test/renderApp';
 
 function sessionsButton() {
   return screen.getByRole('button', { name: /^Open Sessions \(/ });
@@ -22,7 +22,7 @@ function shownList() {
 }
 
 function pressSessionsKey() {
-  fireEvent.keyDown(window, { key: 'L', metaKey: true, shiftKey: true });
+  pressShortcut('sessions.open');
 }
 
 describe('sessions dock button', () => {

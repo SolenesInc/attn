@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { emptySelection, openDelegationSettings, type DelegationTable, type Role } from '../test/delegationDaemon';
-import { gesture } from '../test/settings';
+import { gesture } from '../test/renderApp';
 
 const build: Role = { id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: '', stopping_point: '', default_choice_id: 'default', choices: [{ id: 'default', name: 'Default', when: '', selection: emptySelection() }] };
 const builder: Role = { ...build, id: 'builder', builtin: 'builder', name: 'Builder' };

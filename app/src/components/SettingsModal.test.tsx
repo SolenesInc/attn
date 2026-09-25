@@ -1,9 +1,9 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { renderApp } from '../test/renderApp';
+import { gesture, renderApp } from '../test/renderApp';
 import type { EventMessage } from '../test/protocol';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
-import { gesture, openSection, renderSettings, savedSettings } from '../test/settings';
+import { openSection, renderSettings, savedSettings } from '../test/settings';
 import { getSettingsAutomationHandle } from './settingsAutomation';
 
 type InitialState = EventMessage<'initial_state'>;

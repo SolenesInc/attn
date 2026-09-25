@@ -1,7 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { expect, it } from 'vitest';
 import { emptySelection, openDelegationSettings, type DelegationTable, type Role } from '../test/delegationDaemon';
-import { gesture } from '../test/settings';
+import { gesture } from '../test/renderApp';
 
 const custom: Role = { id: 'build', name: 'Build', icon: 'code', enabled: true, description: 'Implement a change', instructions: 'Run relevant tests', stopping_point: 'Return for review', default_choice_id: 'default', choices: [{ id: 'default', name: 'Everyday', when: '', selection: emptySelection() }] };
 const template: Role = { ...custom, id: 'builder', builtin: 'builder', name: '', icon: '', description: '', instructions: '', stopping_point: '' };

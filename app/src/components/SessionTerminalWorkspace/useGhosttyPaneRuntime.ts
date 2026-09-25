@@ -257,9 +257,9 @@ export function useGhosttyPaneRuntime(
     // default size must not claim PTY geometry authority until a real fit.
     const geometryMeasured = terminal.hasMeasuredSize();
     const forceResizeBeforeAttach = attachPolicy !== 'revive' && geometryMeasured;
-    const measuredResize = pendingResizeRef.current.get(pane.runtimeId);
+    const measuredResize = geometryMeasured ? pendingResizeRef.current.get(pane.runtimeId) : undefined;
     const attachResize = forceResizeBeforeAttach ? measuredResize : undefined;
-    const size = attachResize ?? modelSize;
+    const size = measuredResize ?? modelSize;
     if (forceResizeBeforeAttach && attachResize) {
       pendingResizeRef.current.delete(pane.runtimeId);
     }

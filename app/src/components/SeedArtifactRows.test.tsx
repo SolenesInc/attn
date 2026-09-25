@@ -1,15 +1,35 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
 import { open, save } from '@tauri-apps/plugin-dialog';
-import { SeedArtifactRows } from './SeedArtifactRows';
-import { renderWithDaemon } from '../test/renderApp';
+import { agentWorkspace, daemonSeed, daemonSession, seedDocument, type DaemonSeedDocument } from '../test/daemonFixtures';
+import { gesture, pressShortcut, renderApp } from '../test/renderApp';
 import type { ScriptedDaemon } from '../test/scriptedDaemon';
 
-type Rows = Parameters<typeof SeedArtifactRows>[0];
+const AT = '2026-08-29T20:00:00Z';
 
-async function renderRows(rows: Omit<Rows, 'seedId'>, { transferRefusal = '' } = {}) {
-  const { daemon } = await renderWithDaemon(<SeedArtifactRows seedId="s-1" {...rows} />);
+const SEED = daemonSeed('s-1', { title: 'ship the report' });
+
+interface Contents {
+  artifacts?: DaemonSeedDocument['artifacts'];
+  references?: DaemonSeedDocument['references'];
+  missingPaths?: string[];
+  transferRefusal?: string;
+}
+
+async function openSeedArtifacts({ artifacts = [], references = [], missingPaths = [], transferRefusal = '' }: Contents) {
+  const { daemon } = await renderApp({
+    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')], seeds: [SEED] },
+  });
+  daemon.on('seed_document_get', () => ({
+    event: 'seed_document_get_result',
+    success: true,
+    document: seedDocument(SEED, { artifacts, references }),
+  }));
+  daemon.on('fs_exists', ({ path, root = '' }) => {
+    const full = `${root}/${path}`;
+    return { event: 'fs_exists_result', success: true, result: { path: full, exists: !missingPaths.includes(full) } };
+  });
   daemon.on('seed_artifact_target', ({ relative_target }) => ({
     event: 'seed_artifact_target_result',
     success: true,
@@ -25,13 +45,17 @@ async function renderRows(rows: Omit<Rows, 'seedId'>, { transferRefusal = '' } =
         destination_path, relative_target: 'report.bin', recovered: false,
       },
     }));
-  await daemon.idle();
+  await gesture(daemon, () => pressShortcut('board.open'));
+  await gesture(daemon, () => fireEvent.click(document.querySelector('[data-seed-row="s-1"]')!));
   return daemon;
 }
 
+function artifactsSection() {
+  return within(screen.getByRole('heading', { name: 'Artifacts' }).closest('section')!);
+}
+
 async function click(daemon: ScriptedDaemon, name: string) {
-  fireEvent.click(screen.getByRole('button', { name }));
-  await daemon.idle();
+  await gesture(daemon, () => fireEvent.click(artifactsSection().getByRole('button', { name })));
 }
 
 describe('SeedArtifactRows', () => {
@@ -43,11 +67,11 @@ describe('SeedArtifactRows', () => {
 
   it('opens, reveals, and moves a safe managed file out through typed actions', async () => {
     vi.mocked(save).mockResolvedValue('/tmp/out/report.pdf');
-    const daemon = await renderRows({
-      artifacts: [{ filename: 'report.pdf', relative_target: 'report.pdf', size: 12, modified_at: '2026-08-29T20:00:00Z' }],
+    const daemon = await openSeedArtifacts({
+      artifacts: [{ filename: 'report.pdf', relative_target: 'report.pdf', size: 12, modified_at: AT }],
     });
 
-    expect(screen.getByText('report.pdf').closest('li')).toHaveTextContent('12 bytes');
+    expect(artifactsSection().getByText('report.pdf').closest('li')).toHaveTextContent('12 bytes');
     await click(daemon, 'Open');
     expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
       path: '/notebook/seeds/s-1/report.pdf', reveal: false,
@@ -63,11 +87,11 @@ describe('SeedArtifactRows', () => {
   });
 
   it('keeps active managed files reveal-only', async () => {
-    const daemon = await renderRows({
-      artifacts: [{ filename: 'setup.command', relative_target: 'setup.command', size: 12, modified_at: '2026-08-29T20:00:00Z' }],
+    const daemon = await openSeedArtifacts({
+      artifacts: [{ filename: 'setup.command', relative_target: 'setup.command', size: 12, modified_at: AT }],
     });
 
-    expect(screen.queryByRole('button', { name: 'Open' })).toBeNull();
+    expect(artifactsSection().queryByRole('button', { name: 'Open' })).toBeNull();
     await click(daemon, 'Reveal');
     expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', {
       path: '/notebook/seeds/s-1/setup.command', reveal: true,
@@ -76,10 +100,10 @@ describe('SeedArtifactRows', () => {
 
   it('keeps a missing linked file visible and migrates it only through explicit Move or Copy', async () => {
     const reference = { kind: 'markdown_file', path: '/gone/legacy.md' };
-    const daemon = await renderRows({ artifacts: [], references: [reference], checkArtifactPath: async () => false });
+    const daemon = await openSeedArtifacts({ references: [reference], missingPaths: ['/gone/legacy.md'] });
 
-    expect(screen.getByText('not on disk')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Move into seed' })).toBeInTheDocument();
+    expect(artifactsSection().getByText('not on disk')).toBeInTheDocument();
+    expect(artifactsSection().getByRole('button', { name: 'Move into seed' })).toBeInTheDocument();
     expect(daemon.sentOf('seed_artifact_transfer')).toEqual([]);
     await click(daemon, 'Copy into seed');
     expect(daemon.sentOf('seed_artifact_transfer')).toEqual([expect.objectContaining({
@@ -90,7 +114,7 @@ describe('SeedArtifactRows', () => {
   it('asks for an exact source before bringing a repository-relative legacy link', async () => {
     vi.mocked(open).mockResolvedValue('/chosen/legacy.md');
     const reference = { kind: 'markdown_file', path: 'docs/legacy.md' };
-    const daemon = await renderRows({ artifacts: [], references: [reference] });
+    const daemon = await openSeedArtifacts({ references: [reference] });
 
     await click(daemon, 'Move into seed');
     expect(daemon.sentOf('seed_artifact_transfer')).toEqual([expect.objectContaining({
@@ -99,13 +123,13 @@ describe('SeedArtifactRows', () => {
   });
 
   it('leaves the linked row intact when a transfer is refused', async () => {
-    const daemon = await renderRows(
-      { artifacts: [], references: [{ kind: 'markdown_file', path: '/tmp/legacy.md' }] },
-      { transferRefusal: 'destination already exists' },
-    );
+    const daemon = await openSeedArtifacts({
+      references: [{ kind: 'markdown_file', path: '/tmp/legacy.md' }],
+      transferRefusal: 'destination already exists',
+    });
 
     await click(daemon, 'Move into seed');
-    expect(screen.getByRole('alert')).toHaveTextContent('destination already exists');
-    expect(screen.getByText('legacy.md')).toBeInTheDocument();
+    expect(artifactsSection().getByRole('alert')).toHaveTextContent('destination already exists');
+    expect(artifactsSection().getByText('legacy.md')).toBeInTheDocument();
   });
 });

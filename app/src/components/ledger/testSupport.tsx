@@ -2,18 +2,13 @@ import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
-import type { Mock } from 'vitest';
-import { SettingsProvider } from '../../contexts/SettingsContext';
-import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
-import type { SessionLedgerConnection } from '../../hooks/useSessionLedger';
 import type { SessionLedgerEntry } from '../../types/generated';
-import { renderWithDaemon } from '../../test/renderApp';
+import { pressShortcut, renderApp } from '../../test/renderApp';
 import type { CommandMessage } from '../../test/protocol';
-import type { ScriptedDaemon } from '../../test/scriptedDaemon';
-import { now } from '../../test/sessionLedgerFixtures';
-import { SessionsTab } from './SessionsTab';
-import type { SessionsTabProps } from './SessionsTab';
+import type { ScriptedDaemon, ScriptedDaemonOptions } from '../../test/scriptedDaemon';
+import { daemonWorkspace } from '../../test/daemonFixtures';
+import { NOW, now } from '../../test/sessionLedgerFixtures';
 import { WorktreesTab } from './WorktreesTab';
 import type { WorktreesTabProps } from './WorktreesTab';
 
@@ -33,12 +28,7 @@ export function page(overrides: Partial<SessionLedgerPage> = {}): SessionLedgerP
 
 export const rows = () => within(screen.getByRole('listbox', { name: 'Rows' }));
 
-export function useLedgerConnection(): SessionLedgerConnection {
-  const { sendSessionList, subscribeSessionLedger } = useDaemonApi();
-  return { list: sendSessionList, subscribe: subscribeSessionLedger };
-}
-
-export function serveLedger(daemon: ScriptedDaemon, answer: LedgerAnswer) {
+function serveLedger(daemon: ScriptedDaemon, answer: LedgerAnswer) {
   const held: SessionListCommand[] = [];
   const queryOf = ({ cmd: _cmd, request_id: _requestId, ...query }: SessionListCommand) => query as SessionLedgerQuery;
   daemon.on('session_list', (command) => {
@@ -65,6 +55,15 @@ export function serveLedger(daemon: ScriptedDaemon, answer: LedgerAnswer) {
   };
 }
 
+export async function openSessionsLedger(answer: LedgerAnswer, options: ScriptedDaemonOptions = {}) {
+  const view = await renderApp(options);
+  vi.setSystemTime(NOW);
+  const ledger = serveLedger(view.daemon, answer);
+  pressShortcut('sessions.open');
+  await view.daemon.idle();
+  return { ...view, ...ledger };
+}
+
 function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLInputElement | null>; onStatus: (status: ReactNode) => void }) => ReactNode }) {
   const queryRef = useRef<HTMLInputElement | null>(null);
   const [status, setStatus] = useState<ReactNode>(null);
@@ -74,32 +73,6 @@ function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLI
       <div data-testid="status">{status}</div>
     </>
   );
-}
-
-function DaemonSessionsTab(props: TabOnly<Omit<SessionsTabProps, 'connection'>> & Pick<SessionsTabProps, 'queryRef' | 'onStatus'>) {
-  return <SessionsTab {...props} connection={useLedgerConnection()} now={now} />;
-}
-
-type SessionsTabTestProps = Partial<Omit<TabOnly<SessionsTabProps>, 'connection'>> & { answer: LedgerAnswer };
-
-export async function renderSessionsTab(
-  { answer, ...props }: SessionsTabTestProps,
-  settings: { values?: Record<string, string>; setSetting?: Mock<(key: string, value: string) => void> } = {},
-) {
-  const setSetting = settings.setSetting ?? vi.fn<(key: string, value: string) => void>();
-  const view = await renderWithDaemon();
-  const ledger = serveLedger(view.daemon, answer);
-  view.rerender(
-    <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
-      <Host>
-        {(host) => (
-          <DaemonSessionsTab workspaceNames={{}} {...props} queryRef={host.queryRef} onStatus={host.onStatus} />
-        )}
-      </Host>
-    </SettingsProvider>,
-  );
-  await view.daemon.idle();
-  return { ...view, ...ledger, setSetting, settle: () => view.daemon.idle() };
 }
 
 export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = {}) {
@@ -120,4 +93,8 @@ export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = 
       {(host) => <WorktreesTab {...full} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
     </Host>,
   );
+}
+
+export function namedWorkspaces(names: Record<string, string>) {
+  return Object.entries(names).map(([id, title]) => daemonWorkspace(id, { root: { type: 'pane', pane_id: `pane-${id}` } }, { title }));
 }

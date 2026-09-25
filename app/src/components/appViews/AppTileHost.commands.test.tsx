@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, screen } from '@testing-library/react';
 import { Button, useCommand } from '@victorarias/attn-app';
-import { AppTileHost } from './AppTileHost';
-import { renderWithDaemon } from '../../test/renderApp';
+import { openDockedApprovals, reviewerApp } from './testSupport';
+import { gesture } from '../../test/renderApp';
 import type { Reply } from '../../test/scriptedDaemon';
 
 const loadAppView = vi.hoisted(() => vi.fn());
@@ -29,31 +29,10 @@ function ActingView() {
   );
 }
 
-async function renderHost(answer: Reply) {
+async function openActingView(answer: Reply) {
   loadAppView.mockResolvedValue(ActingView);
-  const { daemon } = await renderWithDaemon(
-    <AppTileHost
-      app="reviewer"
-      view="approvals"
-      workspaceId="ws-1"
-      sessionId={null}
-      tileId="tile-7"
-      params=""
-    />,
-    {
-      initialState: {
-        apps: [{
-          name: 'reviewer',
-          enabled: true,
-          version_id: 7,
-          content_hash: 'a'.repeat(64),
-          views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals' }],
-        }],
-      },
-    },
-  );
+  const daemon = await openDockedApprovals([reviewerApp()]);
   daemon.on('app_command', () => answer);
-  await daemon.idle();
   return daemon;
 }
 
@@ -63,10 +42,9 @@ beforeEach(() => {
 
 describe('a view invoking a command', () => {
   it('is addressed to the app the host mounted, not to one the view named', async () => {
-    const daemon = await renderHost({ event: 'app_command_result', success: true, payload: JSON.stringify({ approved: true }) });
+    const daemon = await openActingView({ event: 'app_command_result', success: true, payload: JSON.stringify({ approved: true }) });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
     expect(daemon.sentOf('app_command')).toEqual([
       expect.objectContaining({ app: 'reviewer', command: 'approve', payload: JSON.stringify({ id: 'tk-1' }) }),
@@ -76,10 +54,9 @@ describe('a view invoking a command', () => {
   });
 
   it('carries no payload for a command that takes none, and answers nothing when the handler returns nothing', async () => {
-    const daemon = await renderHost({ event: 'app_command_result', success: true });
+    const daemon = await openActingView({ event: 'app_command_result', success: true });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Refresh' })));
 
     const [sent] = daemon.sentOf('app_command');
     expect(sent).toMatchObject({ app: 'reviewer', command: 'refresh' });
@@ -88,14 +65,13 @@ describe('a view invoking a command', () => {
   });
 
   it('shows the daemon’s own refusal instead of throwing it away', async () => {
-    const daemon = await renderHost({
+    const daemon = await openActingView({
       event: 'app_command_result',
       success: false,
       error: 'reviewer is disabled, so it runs nothing; `attn app enable reviewer` turns it back on',
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
-    await daemon.idle();
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
     expect(screen.getByTestId('command-error').textContent).toContain('attn app enable reviewer');
   });

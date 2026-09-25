@@ -6,7 +6,7 @@ import {
   daemonWorkspace,
   type DaemonSession,
 } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 const WORKSPACE = 'workspace-main';
@@ -78,7 +78,7 @@ describe('who ⌘. names', () => {
   it('names nothing when no tile is on screen at all', async () => {
     const { daemon } = await focusFirstPane();
 
-    fireEvent.keyDown(window, { key: 'H', metaKey: true, shiftKey: true });
+    pressShortcut('session.goToDashboard');
     expect(screen.getByTestId('sidebar-home')).toHaveAttribute('aria-current', 'page');
 
     expect(pressCancelCountdown(daemon)).toEqual([]);
