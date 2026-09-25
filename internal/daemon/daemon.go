@@ -2964,15 +2964,15 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.recordBracketEvidence(msg.ID, protocol.StateIdle)
 
 	if session := d.store.Get(msg.ID); session != nil {
-		if resumeSessionID := agentdriver.ResumeSessionIDFromStopTranscriptPath(
-			agentdriver.Get(string(session.Agent)),
-			msg.TranscriptPath,
-		); resumeSessionID != "" {
-			d.observeAgentConversation(agentConversationObservation{
-				SessionID:      msg.ID,
-				NativeID:       resumeSessionID,
-				TranscriptPath: msg.TranscriptPath,
-			})
+		driver := agentdriver.Get(string(session.Agent))
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		observation := agentConversationObservation{SessionID: msg.ID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
+		case d.claimAgentConversation(observation):
 			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}

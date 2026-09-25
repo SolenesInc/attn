@@ -1249,6 +1249,7 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{150, "durable pull request readiness watches", ``},
 	{151, "rename install profiles to instances", ``},
 	{152, "file long-context session cost observations under their tier", ``},
+	{153, "record when a session's agent process launched", ""},
 }
 
 const migration99SQL = `
@@ -1838,6 +1839,11 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 151 {
 			if err := applyMigration151(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 153 {
+			if err := applyMigration153(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -3766,6 +3772,18 @@ func foldModelLists(lists ...string) ([]string, error) {
 		}
 	}
 	return folded, nil
+}
+
+func applyMigration153(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "launched_at")
+	if err != nil || has {
+		return err
+	}
+	if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN launched_at TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE sessions SET launched_at = state_since WHERE state = 'launching' AND closed_at = ''")
+	return err
 }
 
 func applyMigration106(tx *sql.Tx) error {

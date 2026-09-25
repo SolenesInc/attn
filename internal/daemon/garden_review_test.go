@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"testing"
@@ -15,6 +17,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/toolhome"
 )
 
 func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T) {
@@ -78,6 +81,15 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	old := now.Add(-garden.DefaultStaleWindow)
 	d.gardenNow = func() time.Time { return old }
 	cwd := t.TempDir()
+	toolHome := t.TempDir()
+	t.Setenv(toolhome.EnvVar, toolHome)
+	conversation := filepath.Join(toolHome, ".copilot", "session-state", "native-1")
+	if err := os.MkdirAll(conversation, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(conversation, "events.jsonl"), nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	d.store.Remove("sess-a")
 	d.store.Add(&protocol.Session{
 		ID: "sess-a", Directory: cwd, Agent: protocol.SessionAgentCopilot, State: protocol.SessionStateIdle,
