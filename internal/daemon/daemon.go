@@ -2966,17 +2966,13 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	if session := d.store.Get(msg.ID); session != nil {
 		driver := agentdriver.Get(string(session.Agent))
 		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
-		if resumeSessionID != "" && !agentdriver.EffectiveCapabilities(driver).HasHooks &&
-			d.store.ConversationBoundToOtherSession(msg.ID, resumeSessionID) {
-			d.logf("handleStop: ignoring conversation %s bound to another session, session=%s", resumeSessionID, msg.ID)
-			resumeSessionID = ""
-		}
-		if resumeSessionID != "" {
-			d.observeAgentConversation(agentConversationObservation{
-				SessionID:      msg.ID,
-				NativeID:       resumeSessionID,
-				TranscriptPath: msg.TranscriptPath,
-			})
+		observation := agentConversationObservation{SessionID: msg.ID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
+		case d.claimAgentConversation(observation):
 			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}

@@ -1,11 +1,13 @@
 package daemon
 
 import (
+	"errors"
 	"net"
 	"strings"
 
 	"github.com/victorarias/attn/internal/bus"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type agentConversationObservation struct {
@@ -64,23 +66,32 @@ func (d *Daemon) consumePendingAgentConversation(sessionID string) (agentConvers
 }
 
 func (d *Daemon) observeAgentConversation(observation agentConversationObservation) {
-	changed, err := d.store.TransitionSessionConversation(
-		observation.SessionID,
-		observation.NativeID,
-		observation.TranscriptPath,
-	)
+	d.applyAgentConversation(observation, d.store.TransitionSessionConversation)
+}
+
+func (d *Daemon) claimAgentConversation(observation agentConversationObservation) bool {
+	return d.applyAgentConversation(observation, d.store.ClaimSessionConversation)
+}
+
+func (d *Daemon) applyAgentConversation(observation agentConversationObservation, transition func(sessionID, nativeID, transcriptPath string) (bool, error)) bool {
+	changed, err := transition(observation.SessionID, observation.NativeID, observation.TranscriptPath)
+	if errors.Is(err, store.ErrConversationClaimed) {
+		d.logf("agent conversation: %s is bound to another session, session=%s", observation.NativeID, observation.SessionID)
+		return false
+	}
 	if err != nil {
 		d.logf("agent conversation: transition failed session=%s native=%s: %v", observation.SessionID, observation.NativeID, err)
-		return
+		return false
 	}
 	if !changed {
 		d.ensureTranscriptWatcherAtPath(observation.SessionID, observation.TranscriptPath)
-		return
+		return true
 	}
 
 	d.rememberDispatchResume(observation.SessionID, observation.NativeID)
 	d.resetSessionActivityRuntime(observation.SessionID)
 	d.publishFact(FactSessionConversationChanged, observation.SessionID, observation)
+	return true
 }
 
 func (d *Daemon) resetSessionActivityRuntime(sessionID string) {

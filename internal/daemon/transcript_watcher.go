@@ -212,8 +212,10 @@ func (d *Daemon) bindLaunchConversation(w *transcriptWatcher) bool {
 	if nativeID == "" {
 		return false
 	}
+	if !d.claimAgentConversation(agentConversationObservation{SessionID: w.sessionID, NativeID: nativeID, TranscriptPath: path}) {
+		return false
+	}
 	d.logf("transcript watcher: bound launch conversation session=%s native=%s path=%s", w.sessionID, nativeID, path)
-	d.observeAgentConversation(agentConversationObservation{SessionID: w.sessionID, NativeID: nativeID, TranscriptPath: path})
 	return true
 }
 

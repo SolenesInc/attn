@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -13,15 +14,21 @@ type SessionConversation struct {
 	TranscriptPath string
 }
 
+var ErrConversationClaimed = errors.New("conversation is bound to another open session")
+
 func (s *Store) TransitionSessionConversation(sessionID, nativeID, transcriptPath string) (bool, error) {
-	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true)
+	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, false)
+}
+
+func (s *Store) ClaimSessionConversation(sessionID, nativeID, transcriptPath string) (bool, error) {
+	return s.transitionSessionConversation(sessionID, nativeID, transcriptPath, true, true)
 }
 
 func (s *Store) TransitionSessionResumeID(sessionID, nativeID string) (bool, error) {
-	return s.transitionSessionConversation(sessionID, nativeID, "", false)
+	return s.transitionSessionConversation(sessionID, nativeID, "", false, false)
 }
 
-func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPath string, pathRequired bool) (bool, error) {
+func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPath string, pathRequired, exclusive bool) (bool, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	nativeID = strings.TrimSpace(nativeID)
 	transcriptPath = strings.TrimSpace(transcriptPath)
@@ -65,6 +72,19 @@ func (s *Store) transitionSessionConversation(sessionID, nativeID, transcriptPat
 	}
 	current.NativeID = strings.TrimSpace(current.NativeID)
 	current.TranscriptPath = strings.TrimSpace(current.TranscriptPath)
+	if exclusive {
+		var claimed bool
+		if err := tx.QueryRow(
+			`SELECT EXISTS(SELECT 1 FROM sessions WHERE resume_session_id = ? AND id != ? AND closed_at = '')`,
+			nativeID,
+			sessionID,
+		).Scan(&claimed); err != nil {
+			return false, fmt.Errorf("check conversation claim for session %s: %w", sessionID, err)
+		}
+		if claimed {
+			return false, ErrConversationClaimed
+		}
+	}
 	if pathRequired {
 		if current.NativeID == nativeID && current.TranscriptPath == transcriptPath {
 			return false, nil
