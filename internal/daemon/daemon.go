@@ -547,6 +547,19 @@ func (d *Daemon) setCurrentTerminalTheme(theme pty.TerminalTheme) {
 	d.terminalThemeMu.Unlock()
 }
 
+func (d *Daemon) RecoverGUIPath() {
+	if err := pathutil.EnsureGUIPath(); err != nil {
+		d.logf("PATH recovery failed: %v", err)
+	}
+}
+
+func (d *Daemon) RemoveLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if os.Remove(legacyPath) == nil {
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
+}
+
 func (d *Daemon) ScrubInheritedAgentSessionEnv() {
 	if scrubbed := config.ScrubInheritedAgentSessionEnv(); len(scrubbed) > 0 {
 		d.logf("scrubbed inherited agent session env before startup: %v", scrubbed)
@@ -581,10 +594,6 @@ func (d *Daemon) Started() <-chan struct{} {
 func New(socketPath string) *Daemon {
 	logger, _ := logging.New(logging.DefaultLogPath())
 
-	if err := pathutil.EnsureGUIPath(); err != nil {
-		logger.Infof("PATH recovery failed: %v", err)
-	}
-
 	classifier.SetLogger(func(format string, args ...interface{}) {
 		logger.Infof(format, args...)
 	})
@@ -606,12 +615,6 @@ func New(socketPath string) *Daemon {
 				config.LogPath(),
 			),
 		})
-	}
-
-	legacyPath := config.StatePath()
-	if _, err := os.Stat(legacyPath); err == nil {
-		os.Remove(legacyPath)
-		logger.Infof("Removed legacy state file: %s", legacyPath)
 	}
 
 	dataRoot := filepath.Dir(socketPath)
@@ -672,49 +675,6 @@ func NewForTesting(socketPath string) *Daemon {
 		done:                make(chan struct{}),
 		logger:              nil,
 		ghRegistry:          github.NewClientRegistry(),
-		hubManager:          nil,
-		ptyBackend:          ptybackend.NewEmbedded(manager),
-		transcriptWatch:     make(map[string]*transcriptWatcher),
-		pendingInitialWS:    make(map[*wsClient]struct{}),
-		startedCh:           make(chan struct{}),
-		classifiedTurn:      make(map[string]string),
-		classifyingTurn:     make(map[string]string),
-		forcedStop:          make(map[string]time.Time),
-		pendingConversation: make(map[string]agentConversationObservation),
-		tailscale:           newTailscaleRuntime(),
-		plugins:             newPluginRegistry(),
-		pluginDir:           pluginDirForSocket(socketPath),
-		bundledPluginDir:    bundledPluginDirForExecutable(),
-		appsDir:             config.AppsDir(),
-		workspaces:          newWorkspaceRegistry(),
-		workflowDirty:       make(map[string]bool),
-		workflowEngineConn:  make(map[string]workflowEngineSink),
-		spawnLocks:          make(map[string]*spawnLock),
-		jobQueue:            jobs.New(jobs.Options{}),
-	}
-	d.wireGitExecution(productionGitExecutorConfig)
-	d.ensureEventBus()
-	return d
-}
-
-func NewWithGitHubClient(socketPath string, ghClient github.GitHubClient) *Daemon {
-	dataRoot := filepath.Dir(socketPath)
-	pidPath := filepath.Join(dataRoot, "attn.pid")
-	registry := github.NewClientRegistry()
-	if client, ok := ghClient.(*github.Client); ok {
-		registry.Register(client.Host(), client)
-	}
-	manager := pty.NewManager(nil)
-	d := &Daemon{
-		socketPath:          socketPath,
-		pidPath:             pidPath,
-		dataRoot:            dataRoot,
-		store:               store.New(),
-		wsHub:               newWSHub(),
-		presentSince:        time.Now(),
-		done:                make(chan struct{}),
-		logger:              nil,
-		ghRegistry:          registry,
 		hubManager:          nil,
 		ptyBackend:          ptybackend.NewEmbedded(manager),
 		transcriptWatch:     make(map[string]*transcriptWatcher),
@@ -941,11 +901,14 @@ func (d *Daemon) Start() error {
 		}
 	}()
 
-	listener, err := listenUnixAtomically(d.socketPath)
-	if err != nil {
-		return err
+	if d.listener == nil {
+		unixListener, err := listenUnixAtomically(d.socketPath)
+		if err != nil {
+			return err
+		}
+		d.listener = unixListener
 	}
-	d.listener = listener
+	listener := d.listener
 	d.log("daemon started")
 	d.startInstalledPlugins()
 	d.restoreAppRuntimePark()
@@ -2138,6 +2101,9 @@ func (d *Daemon) initHTTPServer() {
 }
 
 func (d *Daemon) listenHTTP() error {
+	if d.httpListener != nil {
+		return nil
+	}
 	addr := d.httpServer.Addr
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -2998,15 +2964,15 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.recordBracketEvidence(msg.ID, protocol.StateIdle)
 
 	if session := d.store.Get(msg.ID); session != nil {
-		if resumeSessionID := agentdriver.ResumeSessionIDFromStopTranscriptPath(
-			agentdriver.Get(string(session.Agent)),
-			msg.TranscriptPath,
-		); resumeSessionID != "" {
-			d.observeAgentConversation(agentConversationObservation{
-				SessionID:      msg.ID,
-				NativeID:       resumeSessionID,
-				TranscriptPath: msg.TranscriptPath,
-			})
+		driver := agentdriver.Get(string(session.Agent))
+		resumeSessionID := agentdriver.ResumeSessionIDFromTranscriptPath(driver, msg.TranscriptPath)
+		observation := agentConversationObservation{SessionID: msg.ID, NativeID: resumeSessionID, TranscriptPath: msg.TranscriptPath}
+		switch {
+		case resumeSessionID == "":
+		case agentdriver.EffectiveCapabilities(driver).HasHooks:
+			d.observeAgentConversation(observation)
+			d.rememberDispatchResume(msg.ID, resumeSessionID)
+		case d.claimAgentConversation(observation):
 			d.rememberDispatchResume(msg.ID, resumeSessionID)
 		}
 	}

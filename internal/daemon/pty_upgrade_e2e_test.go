@@ -30,7 +30,7 @@ func TestPTYUpgradeAcrossDaemonBinaries(t *testing.T) {
 		t.Skip("run scripts/test-pty-upgrade.sh for the two-binary upgrade test")
 	}
 	root := shortTempDir(t)
-	newBinary := attnBinaryForE2ETest(t, root)
+	newBinary := AttnWrapper(t)
 	fixture := filepath.Join(root, "fixture-codex")
 	script := `#!/bin/sh
 set -eu

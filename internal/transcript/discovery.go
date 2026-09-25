@@ -354,6 +354,62 @@ func FindCopilotTranscript(cwd string, startedAt time.Time) string {
 	return bestPath
 }
 
+func FindCopilotLaunchTranscript(cwd string, launchedAt time.Time, claimed func(conversationID string) bool) string {
+	homeDir, err := toolhome.Dir()
+	if err != nil {
+		return ""
+	}
+	sessionsDir := filepath.Join(homeDir, ".copilot", "session-state")
+	entries, err := os.ReadDir(sessionsDir)
+	if err != nil {
+		return ""
+	}
+	notBefore := launchedAt.Truncate(time.Millisecond)
+	var launchPath string
+	var launchStart time.Time
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		conversationDir := filepath.Join(sessionsDir, entry.Name())
+		eventsPath := filepath.Join(conversationDir, "events.jsonl")
+		info, err := os.Stat(eventsPath)
+		if err != nil || info.ModTime().Before(notBefore.Truncate(time.Second)) {
+			continue
+		}
+		workspaceCWD := readCopilotWorkspaceCWD(filepath.Join(conversationDir, "workspace.yaml"))
+		if workspaceCWD == "" || !pathsEquivalent(workspaceCWD, cwd) {
+			continue
+		}
+		start, ok := readCopilotSessionStart(eventsPath)
+		if !ok || start.Before(notBefore) || (launchPath != "" && !start.Before(launchStart)) {
+			continue
+		}
+		if claimed(entry.Name()) {
+			continue
+		}
+		launchPath, launchStart = eventsPath, start
+	}
+	return launchPath
+}
+
+func readCopilotSessionStart(eventsPath string) (time.Time, bool) {
+	line, err := readFirstJSONLLine(eventsPath)
+	if err != nil {
+		return time.Time{}, false
+	}
+	var evt copilotEventEnvelope
+	if err := json.Unmarshal(line, &evt); err != nil || evt.Type != "session.start" {
+		return time.Time{}, false
+	}
+	var data copilotSessionStartData
+	if err := json.Unmarshal(evt.Data, &data); err != nil {
+		return time.Time{}, false
+	}
+	start, err := time.Parse(time.RFC3339Nano, data.StartTime)
+	return start, err == nil
+}
+
 func FindCopilotTranscriptForResume(resumeID string) string {
 	if strings.TrimSpace(resumeID) == "" {
 		return ""

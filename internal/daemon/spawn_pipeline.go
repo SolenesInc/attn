@@ -477,6 +477,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		d.logf("clear ticket reconciliation on spawn for %s: %v", session.ID, err)
 	}
 	d.reviveCrashedTicketsForSession(session.ID)
+	d.store.SetSessionLaunchedAt(session.ID, req.spawnStartedAt)
 	if !req.isShell {
 		d.startTranscriptWatcher(session.ID, session.Agent, session.Directory, req.spawnStartedAt)
 	}

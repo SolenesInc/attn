@@ -12,6 +12,10 @@ import (
 	"github.com/victorarias/attn/internal/statemarker"
 )
 
+type Classifier interface {
+	Classify(text string, timeout time.Duration) (string, error)
+}
+
 type classifyAction int
 
 const (

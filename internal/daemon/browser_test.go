@@ -50,7 +50,8 @@ func TestBrowserHostRequiresMatchingToken(t *testing.T) {
 	t.Setenv("ATTN_BROWSER_HOST_TOKEN", "expected-secret")
 	client := newWorkspaceProtocolTestClient()
 	client.trustedTauriOrigin = true
-	d := newHelloTestDaemon(t, "client-token")
+	d := NewForTesting(filepath.Join(shortTempDir(t), "test.sock"))
+	d.clientToken = "client-token"
 
 	d.handleClientHello(client, &protocol.ClientHelloMessage{
 		ClientKind:       "tauri-app",

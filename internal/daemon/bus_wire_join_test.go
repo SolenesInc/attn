@@ -18,94 +18,94 @@ import (
 
 type wireFixture struct {
 	events  []string
-	subject func(*wireWorld) string
-	payload func(*wireWorld) any
+	subject func(*factFixture) string
+	payload func(*factFixture) any
 }
 
 var wireFixtures = map[string]wireFixture{
 	FactSessionStateChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionRegistered: {
 		events:  []string{protocol.EventSessionRegistered, protocol.EventGardenSeedsUpdated},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionReregistered: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionRenamed: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionPinChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionCapChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionModelRequestStarted: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionActivityChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionCostChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionConversationChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionPullRequestChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionTerminalBuildChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionAssistantWindowChanged: {
 		events:  []string{protocol.EventSessionMessagesChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionWorkspaceChanged: {
 		events:  []string{protocol.EventSessionStateChanged},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionTodosChanged: {
 		events:  []string{protocol.EventSessionTodosUpdated},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionClosed: {
 		events:  []string{protocol.EventSessionClosed},
-		subject: (*wireWorld).session,
-		payload: func(w *wireWorld) any { return w.d.store.SessionLedgerEntry(w.sessionID) },
+		subject: (*factFixture).session,
+		payload: func(w *factFixture) any { return w.d.store.SessionLedgerEntry(w.sessionID) },
 	},
 	FactSessionUnregistered: {
 		events:  []string{protocol.EventSessionUnregistered, protocol.EventGardenSeedsUpdated},
-		subject: (*wireWorld).session,
-		payload: func(w *wireWorld) any { return w.d.sessionForBroadcast(w.d.store.Get(w.sessionID)) },
+		subject: (*factFixture).session,
+		payload: func(w *factFixture) any { return w.d.sessionForBroadcast(w.d.store.Get(w.sessionID)) },
 	},
 	FactSessionRespawned: {
 		events:  []string{protocol.EventRuntimeRespawned, protocol.EventGardenSeedsUpdated},
-		subject: (*wireWorld).session,
+		subject: (*factFixture).session,
 	},
 	FactSessionPTYResized: {
 		events:  []string{protocol.EventPtyResized},
-		subject: (*wireWorld).session,
-		payload: func(*wireWorld) any { return ptyGeometry{Cols: 80, Rows: 24} },
+		subject: (*factFixture).session,
+		payload: func(*factFixture) any { return ptyGeometry{Cols: 80, Rows: 24} },
 	},
 	FactSessionPTYExited: {
 		events:  []string{protocol.EventSessionExited},
-		subject: (*wireWorld).session,
-		payload: func(*wireWorld) any { return ptyExit{ExitCode: 0} },
+		subject: (*factFixture).session,
+		payload: func(*factFixture) any { return ptyExit{ExitCode: 0} },
 	},
 
 	FactSessionTerminated:       {events: []string{protocol.EventSessionsUpdated}},
@@ -117,56 +117,56 @@ var wireFixtures = map[string]wireFixture{
 
 	FactWorkspaceRegistered: {
 		events:  []string{protocol.EventWorkspaceRegistered},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceReregistered: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceRenamed: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceStatusChanged: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceMuteChanged: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspacePinChanged: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceRankChanged: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceSessionAssociated: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceSessionDissociated: {
 		events:  []string{protocol.EventWorkspaceStateChanged},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 	FactWorkspaceUnregistered: {
 		events:  []string{protocol.EventWorkspaceUnregistered},
-		subject: (*wireWorld).workspace,
-		payload: func(w *wireWorld) any {
+		subject: (*factFixture).workspace,
+		payload: func(w *factFixture) any {
 			snapshot, _ := w.d.workspaces.snapshot(w.workspaceID)
 			return snapshot
 		},
 	},
 	FactWorkspaceLayoutChanged: {
 		events:  []string{protocol.EventWorkspaceLayoutUpdated},
-		subject: (*wireWorld).workspace,
-		payload: func(w *wireWorld) any { return w.layout() },
+		subject: (*factFixture).workspace,
+		payload: func(w *factFixture) any { return w.layout() },
 	},
 	FactWorkspaceLayoutRepublished: {
 		events:  []string{protocol.EventWorkspaceLayout},
-		subject: (*wireWorld).workspace,
+		subject: (*factFixture).workspace,
 	},
 
 	seedEvents.NamePlanted:                  {events: []string{protocol.EventGardenSeedsUpdated}},
@@ -188,7 +188,7 @@ var wireFixtures = map[string]wireFixture{
 	seedEvents.NameWorkReady:                {events: []string{protocol.EventGardenSeedsUpdated}},
 	FactGardenReviewChanged: {
 		events:  []string{protocol.EventGardenReviewUpdated},
-		subject: (*wireWorld).gardenReview,
+		subject: (*factFixture).gardenReview,
 	},
 
 	FactPRAppeared:       {events: []string{protocol.EventPRsUpdated}},
@@ -205,45 +205,45 @@ var wireFixtures = map[string]wireFixture{
 
 	FactWorktreeCreated: {
 		events:  []string{protocol.EventWorktreeCreated},
-		subject: (*wireWorld).worktree,
-		payload: func(w *wireWorld) any { return protocol.Worktree{Path: w.worktreePath} },
+		subject: (*factFixture).worktree,
+		payload: func(w *factFixture) any { return protocol.Worktree{Path: w.worktreePath} },
 	},
 	FactWorktreeDeleted: {
 		events:  []string{protocol.EventWorktreeDeleted},
-		subject: (*wireWorld).worktree,
+		subject: (*factFixture).worktree,
 	},
 	FactWorktreeStateChanged: {
 		events:  []string{protocol.EventWorktreeStateChanged},
-		subject: (*wireWorld).worktree,
-		payload: func(w *wireWorld) any { return protocol.Worktree{Path: w.worktreePath} },
+		subject: (*factFixture).worktree,
+		payload: func(w *factFixture) any { return protocol.Worktree{Path: w.worktreePath} },
 	},
 	FactWorktreeSwept: {
 		events:  []string{protocol.EventWorktreeSwept},
-		subject: (*wireWorld).worktree,
-		payload: func(w *wireWorld) any {
+		subject: (*factFixture).worktree,
+		payload: func(w *factFixture) any {
 			return protocol.WorktreeSweepEntry{ID: "swept-1", Path: w.worktreePath, Action: "removed"}
 		},
 	},
 	FactWorktreeListReconciled: {
 		events:  []string{protocol.EventWorktreesUpdated},
-		subject: (*wireWorld).worktree,
-		payload: func(w *wireWorld) any { return []protocol.Worktree{{Path: w.worktreePath}} },
+		subject: (*factFixture).worktree,
+		payload: func(w *factFixture) any { return []protocol.Worktree{{Path: w.worktreePath}} },
 	},
 	FactGitOperationStarted: {
 		events:  []string{protocol.EventGitOperationStarted},
-		subject: func(*wireWorld) string { return "operation-1" },
-		payload: func(*wireWorld) any { return gitOperationFixture("operation-1") },
+		subject: func(*factFixture) string { return "operation-1" },
+		payload: func(*factFixture) any { return gitOperationFixture("operation-1") },
 	},
 	FactGitOperationFinished: {
 		events:  []string{protocol.EventGitOperationFinished},
-		subject: func(*wireWorld) string { return "operation-1" },
-		payload: func(*wireWorld) any { return gitOperationFixture("operation-1") },
+		subject: func(*factFixture) string { return "operation-1" },
+		payload: func(*factFixture) any { return gitOperationFixture("operation-1") },
 	},
 
 	FactRateLimited: {
 		events:  []string{protocol.EventRateLimited},
-		subject: func(*wireWorld) string { return "core" },
-		payload: func(*wireWorld) any { return rateLimitWindow{ResetAt: "2026-08-12T00:00:00Z"} },
+		subject: func(*factFixture) string { return "core" },
+		payload: func(*factFixture) any { return rateLimitWindow{ResetAt: "2026-08-12T00:00:00Z"} },
 	},
 	FactGitHubHostAdded:   {events: []string{protocol.EventGitHubHostsUpdated}},
 	FactGitHubHostRemoved: {events: []string{protocol.EventGitHubHostsUpdated}},
@@ -253,7 +253,7 @@ var wireFixtures = map[string]wireFixture{
 	FactEndpointChanged: {events: []string{protocol.EventEndpointsUpdated}},
 	FactEndpointStatusChanged: {
 		events:  []string{protocol.EventEndpointStatusChanged},
-		payload: func(*wireWorld) any { return protocol.EndpointInfo{ID: "endpoint-1", Status: "connected"} },
+		payload: func(*factFixture) any { return protocol.EndpointInfo{ID: "endpoint-1", Status: "connected"} },
 	},
 
 	FactPluginInstalled:        {events: []string{protocol.EventPluginsUpdated}},
@@ -273,18 +273,18 @@ var wireFixtures = map[string]wireFixture{
 	FactDelegationPreferencesChanged: {events: []string{protocol.EventDelegationPreferencesChanged}},
 	FactAutoModeConfigChanged: {
 		events:  []string{protocol.EventAutoModeStateChanged},
-		subject: func(*wireWorld) string { return AutoModeConfigSubject },
+		subject: func(*factFixture) string { return AutoModeConfigSubject },
 	},
 	FactAutomationChanged: {events: []string{protocol.EventAutomationsChanged}},
 	FactTaskChanged:       {events: []string{protocol.EventTasksChanged}},
 	FactNotebookFileChanged: {
 		events:  []string{protocol.EventNotebookChanged},
-		subject: func(*wireWorld) string { return "note.md" },
+		subject: func(*factFixture) string { return "note.md" },
 	},
 	FactWorkflowRunUpdated: {
 		events:  []string{protocol.EventWorkflowRunUpdated},
-		subject: func(*wireWorld) string { return "run-1" },
-		payload: func(*wireWorld) any {
+		subject: func(*factFixture) string { return "run-1" },
+		payload: func(*factFixture) any {
 			return &protocol.WorkflowRun{RunID: "run-1", Status: protocol.WorkflowRunStatusRunning}
 		},
 	},
@@ -295,23 +295,23 @@ var wireFixtures = map[string]wireFixture{
 
 	FactPresentationAdded: {
 		events:  []string{protocol.EventPresentationAdded},
-		subject: (*wireWorld).presentation,
+		subject: (*factFixture).presentation,
 	},
 	FactPresentationUpdated: {
 		events:  []string{protocol.EventPresentationUpdated},
-		subject: (*wireWorld).presentation,
+		subject: (*factFixture).presentation,
 	},
 	FactAppVersionChanged: {
 		events:  []string{protocol.EventAppsUpdated},
-		subject: func(*wireWorld) string { return "wire-app" },
+		subject: func(*factFixture) string { return "wire-app" },
 	},
 	FactAppEnabledChanged: {
 		events:  []string{protocol.EventAppsUpdated},
-		subject: func(*wireWorld) string { return "wire-app" },
+		subject: func(*factFixture) string { return "wire-app" },
 	},
 	FactAppRemoved: {
 		events:  []string{protocol.EventAppsUpdated},
-		subject: func(*wireWorld) string { return "wire-app" },
+		subject: func(*factFixture) string { return "wire-app" },
 	},
 }
 
@@ -355,7 +355,7 @@ func TestEveryProjectedFactReachesTheWire(t *testing.T) {
 			continue
 		}
 		t.Run(fact, func(t *testing.T) {
-			w := newWireWorld(t)
+			w := newFactFixture(t)
 			subject := "no-such-entity"
 			if fixture.subject != nil {
 				subject = fixture.subject(w)
@@ -394,7 +394,7 @@ func TestEveryProjectedFactReachesTheWire(t *testing.T) {
 	}
 }
 
-type wireWorld struct {
+type factFixture struct {
 	t              *testing.T
 	d              *Daemon
 	trace          *WireTrace
@@ -404,14 +404,14 @@ type wireWorld struct {
 	worktreePath   string
 }
 
-func newWireWorld(t *testing.T) *wireWorld {
+func newFactFixture(t *testing.T) *factFixture {
 	t.Helper()
 	dir := t.TempDir()
 	d := NewForTesting(filepath.Join(dir, "attn.sock"))
 	trace := &WireTrace{}
 	d.wsHub.wireTap = trace.record
 
-	w := &wireWorld{t: t, d: d, trace: trace}
+	w := &factFixture{t: t, d: d, trace: trace}
 
 	w.sessionID = "wire-session"
 	d.store.Add(&protocol.Session{
@@ -450,12 +450,12 @@ func newWireWorld(t *testing.T) *wireWorld {
 	return w
 }
 
-func (w *wireWorld) session() string      { return w.sessionID }
-func (w *wireWorld) workspace() string    { return w.workspaceID }
-func (w *wireWorld) presentation() string { return w.presentationID }
-func (w *wireWorld) worktree() string     { return w.worktreePath }
+func (w *factFixture) session() string      { return w.sessionID }
+func (w *factFixture) workspace() string    { return w.workspaceID }
+func (w *factFixture) presentation() string { return w.presentationID }
+func (w *factFixture) worktree() string     { return w.worktreePath }
 
-func (w *wireWorld) gardenReview() string {
+func (w *factFixture) gardenReview() string {
 	w.d.ensureGardenCollections()
 	run := garden.ReviewRun{
 		ID: "r-wire", Status: garden.ReviewRunStatusComplete,
@@ -468,7 +468,7 @@ func (w *wireWorld) gardenReview() string {
 	return run.ID
 }
 
-func (w *wireWorld) layout() *protocol.WorkspaceLayout {
+func (w *factFixture) layout() *protocol.WorkspaceLayout {
 	layout, err := w.d.protocolWorkspaceLayout(w.workspaceID)
 	if err != nil {
 		w.t.Fatalf("read seeded layout: %v", err)

@@ -63,8 +63,8 @@ func classifyWithMarker(t *testing.T, agent protocol.SessionAgent, line string) 
 	d.classifySessionState(id, writeTranscript(t, line))
 	d.resolveAllSessions(time.Now())
 
-	if calls := fake.Calls(); len(calls) != 0 {
-		t.Fatalf("a model-backed classifier ran %d times with headless tasks off", len(calls))
+	if calls := fake.CallCount(); calls != 0 {
+		t.Fatalf("a model-backed classifier ran %d times with headless tasks off", calls)
 	}
 	session := d.store.Get(id)
 	if session == nil {

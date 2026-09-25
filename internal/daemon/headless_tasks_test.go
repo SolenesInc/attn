@@ -61,8 +61,8 @@ func TestHeadlessSwitchOffRefusesTheStopClassifier(t *testing.T) {
 	if state != protocol.StateUnknown {
 		t.Fatalf("state = %q, want %q", state, protocol.StateUnknown)
 	}
-	if calls := fake.Calls(); len(calls) != 0 {
-		t.Fatalf("classifier ran %d times, want 0", len(calls))
+	if calls := fake.CallCount(); calls != 0 {
+		t.Fatalf("classifier ran %d times, want 0", calls)
 	}
 	requireRefusal(t, readLog, "classifier")
 }
@@ -106,8 +106,8 @@ func TestHeadlessSwitchOffStillSettlesASession(t *testing.T) {
 	if session.State != protocol.StateIdle {
 		t.Fatalf("state = %s, want %s: a refused classifier must not strand the turn", session.State, protocol.StateIdle)
 	}
-	if calls := fake.Calls(); len(calls) != 0 {
-		t.Fatalf("classifier ran %d times, want 0", len(calls))
+	if calls := fake.CallCount(); calls != 0 {
+		t.Fatalf("classifier ran %d times, want 0", calls)
 	}
 }
 
