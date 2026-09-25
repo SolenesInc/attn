@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { GardenPanel } from './GardenPanel';
 import { useGardenWalk } from '../store/gardenWalk';
-import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 import type { Seed } from '../hooks/useDaemonSocket';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
@@ -82,7 +81,6 @@ describe('GardenPanel in its frame', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
-    _resetEscapeStackForTest();
   });
 
   describe('the walk follows the width, not the caller', () => {

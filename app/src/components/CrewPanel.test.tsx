@@ -1,11 +1,10 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { DaemonApiProvider, type DaemonApi } from '../contexts/DaemonApiContext';
 import { CrewRestartState, type CrewMember } from '../types/generated';
 import type { Seed } from '../hooks/useDaemonSocket';
-import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
-import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
-import { createMockDaemonApi, createMockDaemon, type MockDaemon } from '../test/mocks/daemon';
+import { renderWithDaemon } from '../test/renderApp';
+import type { CommandMessage, CommandName } from '../test/protocol';
+import type { Reply, ScriptedDaemon } from '../test/scriptedDaemon';
 import { CrewPanel } from './CrewPanel';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
@@ -29,130 +28,130 @@ function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
   };
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (error: unknown) => void;
-  const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; });
-  return { promise, resolve, reject };
-}
+const HOLD = 'hold';
+type Answer = Reply | typeof HOLD;
 
-type CrewDaemonMethod =
-  | 'sendCrewSet'
-  | 'sendCrewRestart'
-  | 'sendCrewCharterGet'
-  | 'sendCrewCharterSet'
-  | 'sendCrewHandoffsGet'
-  | 'sendCrewHandoffGet'
-  | 'sendDelegationPreferencesGet'
-  | 'sendDelegationModels';
-type CrewDaemonOverrides = Partial<Pick<DaemonApi, CrewDaemonMethod>>;
-type CrewDaemonApi = DaemonApi & { mockDaemon: MockDaemon };
+const saved = (values: Partial<Extract<Reply, { event: 'crew_set_result' }>> = {}): Reply => ({ event: 'crew_set_result', success: true, conflict: false, ...values });
+const restarted = (values: Partial<Extract<Reply, { event: 'crew_restart_result' }>> = {}): Reply => ({ event: 'crew_restart_result', success: true, conflict: false, ...values });
+const charter = (content: string, token: string): Reply => ({ event: 'crew_charter_get_result', success: true, member: 'trellis', charter: { content, token } });
+const charterSaved = (content: string, token: string, conflict = false): Reply => ({ event: 'crew_charter_set_result', success: true, member: 'trellis', conflict, charter: { content, token } });
+const handoffs = (member: string, list: { filename: string; occurred_at: string }[]): Reply => ({ event: 'crew_handoffs_get_result', success: true, member, handoffs: list });
+const handoff = (filename: string, occurredAt: string, content: string, token: string): Reply => ({ event: 'crew_handoff_get_result', success: true, member: 'trellis', handoff: { filename, occurred_at: occurredAt, content, token } });
+const charterRefused = (error: string): Reply => ({ event: 'crew_charter_set_result', success: false, conflict: false, error });
+const handoffsRefused = (error: string): Reply => ({ event: 'crew_handoffs_get_result', success: false, handoffs: [], error });
+const handoffRefused = (error: string): Reply => ({ event: 'crew_handoff_get_result', success: false, error });
 
-function api(overrides: CrewDaemonOverrides = {}): CrewDaemonApi {
-  const mockDaemon = createMockDaemon();
-  const implementations: Pick<DaemonApi, CrewDaemonMethod> = {
-    sendCrewSet: vi.fn().mockResolvedValue({ success: true, conflict: false }),
-    sendCrewRestart: vi.fn().mockResolvedValue({ success: true, conflict: false }),
-    sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: '# Trellis\n', token: 'charter-1' } }),
-    sendCrewCharterSet: vi.fn().mockResolvedValue({ member: 'trellis', conflict: false, charter: { content: '# Trellis\n', token: 'charter-2' } }),
-    sendCrewHandoffsGet: vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] }),
-    sendCrewHandoffGet: vi.fn().mockRejectedValue(new Error('no handoff body in this fixture')),
-    sendDelegationPreferencesGet: vi.fn().mockResolvedValue({
-      preferences: { enabled: false, revision: 0, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
-      templates: [],
-      harnesses: [
-        { id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true },
-        { id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true },
-        { id: 'fixture', name: 'Fixture', available: false, model_pin: false, effort_pin: false, discovery: false },
-      ],
-    }),
-    sendDelegationModels: vi.fn().mockResolvedValue({
-      detail: '',
-      models: [
-        { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', access: 'supported', effort_support: 'supported', effort_levels: ['medium', 'high'] },
-        { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', access: 'unsupported', effort_support: 'unknown', effort_levels: [] },
-      ],
-    }),
-    ...overrides,
-  };
-  const request = <K extends CrewDaemonMethod>(method: K): DaemonApi[K] => {
-    const implementation = implementations[method] as (...args: unknown[]) => unknown;
-    mockDaemon.setResponse(method, (args) => implementation(...args));
-    const recorded = mockDaemon.createRequest<unknown>(method);
-    return vi.fn((...args: unknown[]) => recorded(...args)) as DaemonApi[K];
-  };
-  const provider = createMockDaemonApi({
-    isConnected: true,
-    connectionGeneration: 1,
-    sendCrewSet: request('sendCrewSet'),
-    sendCrewRestart: request('sendCrewRestart'),
-    sendCrewCharterGet: request('sendCrewCharterGet'),
-    sendCrewCharterSet: request('sendCrewCharterSet'),
-    sendCrewHandoffsGet: request('sendCrewHandoffsGet'),
-    sendCrewHandoffGet: request('sendCrewHandoffGet'),
-    sendDelegationPreferencesGet: request('sendDelegationPreferencesGet'),
-    sendDelegationModels: request('sendDelegationModels'),
+const harnesses = [
+  { id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true },
+  { id: 'codex', name: 'Codex', available: true, model_pin: true, effort_pin: true, discovery: true },
+  { id: 'fixture', name: 'Fixture', available: false, model_pin: false, effort_pin: false, discovery: false },
+];
+
+const preferences = (available = harnesses): Reply => ({
+  event: 'delegation_preferences_result',
+  success: true,
+  preferences: { enabled: false, revision: 0, workflow_skill_enabled: false, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
+  templates: [],
+  harnesses: available,
+});
+
+const models = (list: Extract<Reply, { event: 'delegation_models_result' }>['models']): Reply => ({ event: 'delegation_models_result', success: true, detail: '', models: list });
+
+const astra = models([
+  { harness: 'codex', provider: 'openai', id: 'gpt-6-astra', name: 'Astra', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['medium', 'high'] },
+  { harness: 'codex', provider: 'openai', id: 'retired', name: 'Retired', description: '', detail: '', access: 'unsupported', effort_support: 'unknown', effort_levels: [] },
+]);
+
+type CrewCommand = 'crew_set' | 'crew_restart' | 'crew_charter_get' | 'crew_charter_set' | 'crew_handoffs_get' | 'crew_handoff_get' | 'delegation_preferences_get' | 'delegation_models';
+type Script = Partial<Record<CrewCommand, Answer[]>>;
+
+const defaults: Record<CrewCommand, Answer[]> = {
+  crew_set: [saved()],
+  crew_restart: [restarted()],
+  crew_charter_get: [charter('# Trellis\n', 'charter-1')],
+  crew_charter_set: [charterSaved('# Trellis\n', 'charter-2')],
+  crew_handoffs_get: [handoffs('trellis', [])],
+  crew_handoff_get: [handoffRefused('no handoff body in this fixture')],
+  delegation_preferences_get: [preferences()],
+  delegation_models: [astra],
+};
+
+function answerInTurn(daemon: ScriptedDaemon, cmd: CommandName, answers: Answer[]) {
+  let turn = 0;
+  daemon.on(cmd, () => {
+    const answer = answers[Math.min(turn++, answers.length - 1)];
+    return answer === HOLD ? undefined : answer;
   });
-  return Object.assign(provider, { mockDaemon });
 }
 
-function renderPanel({
-  daemon = api(),
+async function renderPanel({
+  script = {},
   members = [member('trellis', 4)],
   sessions = [],
   initialMember,
   isOpen = true,
-  onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>(),
   seeds = [],
 }: {
-  daemon?: CrewDaemonApi;
+  script?: Script;
   members?: CrewMember[];
-  sessions?: any[];
+  sessions?: Parameters<typeof CrewPanel>[0]['sessions'];
   initialMember?: string;
   isOpen?: boolean;
-  onOpenSeed?: ReturnType<typeof vi.fn<(seedId: string, placementSessionId?: string) => void>>;
   seeds?: Seed[];
 } = {}) {
   const onClose = vi.fn();
+  const onOpenSeed = vi.fn<(seedId: string, placementSessionId?: string) => void>();
   let visit = 1;
   let open = isOpen;
   const panel = (nextMembers: CrewMember[], nextOpen: boolean) => (
-    <DaemonApiProvider api={daemon}>
-      <CrewPanel
-        visit={visit}
-        isOpen={nextOpen}
-        initialMember={initialMember}
-        members={nextMembers}
-        sessions={sessions}
-        seeds={seeds}
-        seedsTotal={seeds.length}
-        onClose={onClose}
-        onOpenSeed={onOpenSeed}
-      />
-    </DaemonApiProvider>
+    <CrewPanel
+      visit={visit}
+      isOpen={nextOpen}
+      initialMember={initialMember}
+      members={nextMembers}
+      sessions={sessions}
+      seeds={seeds}
+      seedsTotal={seeds.length}
+      onClose={onClose}
+      onOpenSeed={onOpenSeed}
+    />
   );
-  const view = render(panel(members, isOpen));
-  const rerenderPanel = (
-    nextMembers: CrewMember[],
-    nextOpen = open,
-    preserve = false,
-  ) => {
+  const view = await renderWithDaemon();
+  const { daemon } = view;
+  for (const [cmd, answers] of Object.entries({ ...defaults, ...script })) {
+    answerInTurn(daemon, cmd as CrewCommand, answers);
+  }
+  view.rerender(panel(members, isOpen));
+  await daemon.idle();
+  const rerenderPanel = async (nextMembers: CrewMember[], nextOpen = open, preserve = false) => {
     if (nextOpen && !open && !preserve) visit += 1;
     open = nextOpen;
     view.rerender(panel(nextMembers, nextOpen));
+    await daemon.idle();
   };
-  return { ...view, daemon, onClose, onOpenSeed, rerenderPanel };
+  const answer = async (command: CommandMessage & { request_id?: string }, reply: Reply) => {
+    daemon.replyTo(command, { ...reply, request_id: command.request_id });
+    await daemon.idle();
+  };
+  const settle = () => daemon.idle();
+  return { ...view, daemon, onClose, onOpenSeed, rerenderPanel, answer, settle };
 }
 
+async function click(daemon: ScriptedDaemon, name: string | RegExp) {
+  fireEvent.click(screen.getByRole('button', { name }));
+  await daemon.idle();
+}
+
+const crewSets = (daemon: ScriptedDaemon) => daemon.sentOf('crew_set').map(({ member: id, expected_revision, agent, model, effort }) => ({ member: id, expected_revision, agent, model, effort }));
+const restartGuards = (daemon: ScriptedDaemon) => daemon.sentOf('crew_restart').map(({ member: id, request_id, expected_session_id, expected_revision }) => ({ member: id, request_id, expected_session_id, expected_revision }));
+
 afterEach(() => {
-  _resetEscapeStackForTest();
-  clearDelegationModelCatalogs();
   vi.restoreAllMocks();
 });
 
 describe('CrewPanel', () => {
-  it('uses a native dialog inside the sidebar-adjacent panel layer', () => {
-    renderPanel();
+  it('uses a native dialog inside the sidebar-adjacent panel layer', async () => {
+    await renderPanel();
     const panel = screen.getByTestId('crew-panel');
     expect(panel.tagName).toBe('DIALOG');
     expect(panel).toHaveAttribute('open');
@@ -161,11 +160,10 @@ describe('CrewPanel', () => {
 
   it('keeps member, tab, seed filter and search when a workspace seed returns to Crew', async () => {
     const planted = seed({ id: 's-g9yxwv', title: 'Artifact presence comes from the daemon', planter_member: 'keel' });
-    const onOpenSeed = vi.fn();
     const members = [member('alder', 2), member('keel', 3, { binding_session: 'session-keel' })];
-    const { rerenderPanel } = renderPanel({ members, seeds: [planted], onOpenSeed });
+    const { onOpenSeed, rerenderPanel } = await renderPanel({ members, seeds: [planted] });
 
-    await waitFor(() => expect(screen.getByLabelText('Harness')).toBeEnabled());
+    expect(screen.getByLabelText('Harness')).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Seeds' }));
     fireEvent.click(screen.getByRole('button', { name: /Planted/ }));
@@ -173,10 +171,8 @@ describe('CrewPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Artifact presence comes from the daemon/ }));
     expect(onOpenSeed).toHaveBeenCalledWith(planted.id, 'session-keel');
 
-    await act(async () => {
-      rerenderPanel(members, false);
-      rerenderPanel(members, true, true);
-    });
+    await rerenderPanel(members, false);
+    await rerenderPanel(members, true, true);
     expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Seeds' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('button', { name: /^Planted/ })).toHaveAttribute('aria-pressed', 'true');
@@ -184,63 +180,58 @@ describe('CrewPanel', () => {
   });
 
   it('keeps actual running values separate from acknowledged next-wake settings', async () => {
-    const { daemon } = renderPanel({
+    const { daemon } = await renderPanel({
       members: [member('trellis', 4, {
         binding_session: 'session-trellis',
         agent: 'codex', model: 'gpt-6-astra', effort: 'high',
         resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
       })],
-      sessions: [{ id: 'session-trellis', agent: 'claude' }],
+      sessions: [{ id: 'session-trellis', agent: 'claude' } as Parameters<typeof CrewPanel>[0]['sessions'][number]],
     });
 
-    const running = await screen.findByLabelText('Running now');
+    const running = screen.getByLabelText('Running now');
     expect(running).toHaveTextContent('Harnessclaude');
     expect(running).toHaveTextContent('ModelNot reported');
     expect(running).toHaveTextContent('EffortNot reported');
     expect(screen.getByText('Acknowledged next wake').parentElement).toHaveTextContent('codex / gpt-6-astra / high');
     expect(screen.getByLabelText('Harness')).toHaveValue('codex');
-    await screen.findByRole('option', { name: 'openai / Astra' });
-    expect(daemon.mockDaemon.getCalls('sendDelegationModels').map((call) => call.args)).toEqual([['codex']]);
-    expect(daemon.mockDaemon.getCalls('sendDelegationPreferencesGet').map((call) => call.args)).toEqual([[]]);
+    expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
+    expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['codex']);
+    expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
   it('saves a full atomic selection, blocks restart until acknowledgment, and clears to defaults', async () => {
-    const pending = deferred<any>();
-    const sendCrewSet = vi.fn().mockReturnValue(pending.promise);
-    const daemon = api({ sendCrewSet });
-    renderPanel({ daemon, members: [member('alder', 7, {
-      binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high',
-      resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
-    })] });
+    const { daemon, answer } = await renderPanel({
+      script: { crew_set: [HOLD] },
+      members: [member('alder', 7, {
+        binding_session: 'session-alder', agent: 'codex', model: 'gpt-6-astra', effort: 'high',
+        resolved_agent: 'codex', resolved_model: 'gpt-6-astra', resolved_effort: 'high',
+      })],
+    });
 
-    const harness = await screen.findByLabelText('Harness');
+    const harness = screen.getByLabelText('Harness');
     fireEvent.change(harness, { target: { value: '' } });
 
-    expect(sendCrewSet).toHaveBeenCalledWith({
-      member: 'alder', expectedRevision: 7, agent: '', model: '', effort: '',
-    });
+    expect(crewSets(daemon)).toEqual([{ member: 'alder', expected_revision: 7, agent: '', model: '', effort: '' }]);
     expect(screen.getByRole('status', { name: '' })).toHaveTextContent('Saving…');
     expect(screen.getByRole('button', { name: 'Handoff and restart' })).toBeDisabled();
 
-    await act(async () => pending.resolve({
-      success: true, conflict: false,
-      member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }),
-    }));
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    await answer(daemon.sentOf('crew_set')[0], saved({ member: member('alder', 8, { binding_session: 'session-alder', resolved_agent: 'claude' }) }));
+    expect(screen.getByText('Saved')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Handoff and restart' })).toBeEnabled();
     expect(harness).toHaveValue('');
   });
 
   it('keeps a failed member edit through roster navigation and retries it', async () => {
-    const retry = deferred<any>();
-    const sendCrewSet = vi.fn()
-      .mockResolvedValueOnce({ success: false, conflict: false, error: 'model discovery is unavailable' })
-      .mockReturnValueOnce(retry.promise);
-    renderPanel({ daemon: api({ sendCrewSet }), members: [member('alder', 2), member('keel', 3)] });
+    const { daemon, answer } = await renderPanel({
+      script: { crew_set: [saved({ success: false, error: 'model discovery is unavailable' }), HOLD] },
+      members: [member('alder', 2), member('keel', 3)],
+    });
 
-    const effort = await screen.findByLabelText('Reasoning effort');
+    const effort = screen.getByLabelText('Reasoning effort');
     fireEvent.change(screen.getByLabelText('Harness'), { target: { value: 'codex' } });
-    await waitFor(() => expect(screen.getByText('Not saved')).toBeInTheDocument());
+    await daemon.idle();
+    expect(screen.getByText('Not saved')).toBeInTheDocument();
     expect(screen.getByText('model discovery is unavailable')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
@@ -249,41 +240,39 @@ describe('CrewPanel', () => {
     expect(effort).toHaveValue('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(sendCrewSet).toHaveBeenCalledTimes(2);
-    await act(async () => retry.resolve({
-      success: true, conflict: false,
-      member: member('alder', 3, { agent: 'codex', resolved_agent: 'codex' }),
-    }));
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    expect(daemon.sentOf('crew_set')).toHaveLength(2);
+    await answer(daemon.sentOf('crew_set')[1], saved({ member: member('alder', 3, { agent: 'codex', resolved_agent: 'codex' }) }));
+    expect(screen.getByText('Saved')).toBeInTheDocument();
   });
 
   it('retries an unacknowledged restart with the same identity and original guards', async () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('11111111-1111-4111-8111-111111111111');
-    const sendCrewRestart = vi.fn()
-      .mockRejectedValueOnce(new Error('Restarting Trellis timed out'))
-      .mockResolvedValueOnce({
-        success: true, conflict: false,
-        member: member('trellis', 10, {
-          binding_session: 'session-trellis', resolved_agent: 'claude',
-          restart: { request_id: '11111111-1111-4111-8111-111111111111', session_id: 'session-trellis', state: CrewRestartState.Queued },
-        }),
-      });
-    renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
-      binding_session: 'session-trellis', resolved_agent: 'claude',
-    })] });
+    const { daemon } = await renderPanel({
+      script: {
+        crew_restart: [HOLD, restarted({
+          member: member('trellis', 10, {
+            binding_session: 'session-trellis', resolved_agent: 'claude',
+            restart: { request_id: '11111111-1111-4111-8111-111111111111', session_id: 'session-trellis', state: CrewRestartState.Queued },
+          }),
+        })],
+      },
+      members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
+    });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
-    await screen.findByText('Restarting Trellis timed out');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+    await click(daemon, 'Handoff and restart');
+    await click(daemon, 'Request handoff and restart');
+    await act(() => vi.advanceTimersByTimeAsync(120_000));
+    expect(screen.getByText('Restarting Trellis timed out')).toBeInTheDocument();
+    await click(daemon, 'Retry delivery');
 
-    await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
-    expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
-    expect(sendCrewRestart).toHaveBeenCalledWith({
+    const guards = restartGuards(daemon);
+    expect(guards).toHaveLength(2);
+    expect(guards[0]).toEqual(guards[1]);
+    expect(guards[1]).toEqual({
       member: 'trellis',
-      requestId: '11111111-1111-4111-8111-111111111111',
-      expectedSessionId: 'session-trellis',
-      expectedRevision: 9,
+      request_id: '11111111-1111-4111-8111-111111111111',
+      expected_session_id: 'session-trellis',
+      expected_revision: 9,
     });
   });
 
@@ -291,63 +280,55 @@ describe('CrewPanel', () => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('12121212-1212-4212-8212-121212121212');
     const queued = member('trellis', 10, {
       binding_session: 'session-trellis', resolved_agent: 'claude',
-      restart: {
-        request_id: '12121212-1212-4212-8212-121212121212',
-        session_id: 'session-trellis',
-        state: CrewRestartState.Queued,
-      },
+      restart: { request_id: '12121212-1212-4212-8212-121212121212', session_id: 'session-trellis', state: CrewRestartState.Queued },
     });
-    const sendCrewRestart = vi.fn()
-      .mockResolvedValueOnce({ success: false, conflict: false, error: 'Session lookup failed', member: queued })
-      .mockResolvedValueOnce({ success: true, conflict: false, member: queued });
-    renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
-      binding_session: 'session-trellis', resolved_agent: 'claude',
-    })] });
+    const { daemon } = await renderPanel({
+      script: { crew_restart: [restarted({ success: false, error: 'Session lookup failed', member: queued }), restarted({ member: queued })] },
+      members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
+    });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
-    await screen.findByText('Session lookup failed');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+    await click(daemon, 'Handoff and restart');
+    await click(daemon, 'Request handoff and restart');
+    expect(screen.getByText('Session lookup failed')).toBeInTheDocument();
+    await click(daemon, 'Retry delivery');
 
-    await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
-    expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
+    const guards = restartGuards(daemon);
+    expect(guards).toHaveLength(2);
+    expect(guards[0]).toEqual(guards[1]);
   });
 
   it.each([CrewRestartState.Queued, CrewRestartState.Requested])(
     'retries an authoritative %s restart after the panel reloads',
     async (state) => {
-      const sendCrewRestart = vi.fn()
-        .mockRejectedValueOnce(new Error('Successor probe unavailable'))
-        .mockResolvedValueOnce({ success: true, conflict: false });
-      renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 10, {
-        binding_session: 'session-trellis',
-        resolved_agent: 'claude',
-        restart: {
-          request_id: '13131313-1313-4313-8313-131313131313',
-          session_id: 'session-trellis',
-          state,
-        },
-      })] });
+      const { daemon } = await renderPanel({
+        script: { crew_restart: [restarted({ success: false, error: 'Successor probe unavailable' }), restarted()] },
+        members: [member('trellis', 10, {
+          binding_session: 'session-trellis',
+          resolved_agent: 'claude',
+          restart: { request_id: '13131313-1313-4313-8313-131313131313', session_id: 'session-trellis', state },
+        })],
+      });
 
-      expect(await screen.findByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
-      fireEvent.click(screen.getByRole('button', { name: 'Retry restart' }));
-      await screen.findByText('Successor probe unavailable');
-      fireEvent.click(screen.getByRole('button', { name: 'Retry delivery' }));
+      expect(screen.getByRole('button', { name: 'Restart in progress…' })).toBeDisabled();
+      await click(daemon, 'Retry restart');
+      expect(screen.getByText('Successor probe unavailable')).toBeInTheDocument();
+      await click(daemon, 'Retry delivery');
 
-      await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledTimes(2));
-      expect(sendCrewRestart.mock.calls[0][0]).toEqual(sendCrewRestart.mock.calls[1][0]);
-      expect(sendCrewRestart).toHaveBeenCalledWith({
+      const guards = restartGuards(daemon);
+      expect(guards).toHaveLength(2);
+      expect(guards[0]).toEqual(guards[1]);
+      expect(guards[1]).toEqual({
         member: 'trellis',
-        requestId: '13131313-1313-4313-8313-131313131313',
-        expectedSessionId: 'session-trellis',
-        expectedRevision: 10,
+        request_id: '13131313-1313-4313-8313-131313131313',
+        expected_session_id: 'session-trellis',
+        expected_revision: 10,
       });
     },
   );
 
   it('keeps the panel behind the restart confirmation out of the tab order', async () => {
-    renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
-    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
+    await renderPanel({ members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })] });
+    fireEvent.click(screen.getByRole('button', { name: 'Handoff and restart' }));
     const dialog = screen.getByRole('alertdialog');
     expect(dialog.tagName).toBe('DIALOG');
     expect(screen.getByTestId('crew-panel-close').closest('[inert]')).not.toBeNull();
@@ -362,31 +343,27 @@ describe('CrewPanel', () => {
     [CrewRestartState.Failed, 'Successor launch failed'],
   ])('reconciles a lost restart response with authoritative %s state', async (state, copy) => {
     vi.spyOn(crypto, 'randomUUID').mockReturnValue('22222222-2222-4222-8222-222222222222');
-    const sendCrewRestart = vi.fn().mockRejectedValue(new Error('Restart response was lost'));
-    const daemon = api({ sendCrewRestart });
-    const initial = member('trellis', 9, {
-      binding_session: 'session-trellis', resolved_agent: 'claude',
+    const { daemon, rerenderPanel } = await renderPanel({
+      script: { crew_restart: [restarted({ success: false, error: 'Restart response was lost' })] },
+      members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
     });
-    const { rerenderPanel } = renderPanel({ daemon, members: [initial] });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
-    await screen.findByText('Restart response was lost');
+    await click(daemon, 'Handoff and restart');
+    await click(daemon, 'Request handoff and restart');
+    expect(screen.getByText('Restart response was lost')).toBeInTheDocument();
 
-    rerenderPanel([member('trellis', 10, {
+    await rerenderPanel([member('trellis', 10, {
       binding_session: state === CrewRestartState.Completed ? 'successor-session' : 'session-trellis',
       resolved_agent: 'claude',
       restart: {
         request_id: '22222222-2222-4222-8222-222222222222',
         session_id: 'session-trellis',
         state,
-        ...(state === CrewRestartState.Completed
-          ? { successor_session_id: 'successor-session' }
-          : { error: 'Successor launch failed' }),
+        ...(state === CrewRestartState.Completed ? { successor_session_id: 'successor-session' } : { error: 'Successor launch failed' }),
       },
     })]);
 
-    await screen.findByText(new RegExp(copy));
+    expect(screen.getByText(new RegExp(copy))).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Retry delivery' })).not.toBeInTheDocument();
   });
 
@@ -402,426 +379,340 @@ describe('CrewPanel', () => {
         successor_session_id: 'successor-session',
       },
     });
-    const sendCrewRestart = vi.fn().mockResolvedValue({
-      success: true, conflict: false, member: localCompleted,
+    const { daemon, rerenderPanel } = await renderPanel({
+      script: { crew_restart: [restarted({ member: localCompleted })] },
+      members: [member('trellis', 9, { binding_session: 'session-trellis', resolved_agent: 'claude' })],
     });
-    const { rerenderPanel } = renderPanel({ daemon: api({ sendCrewRestart }), members: [member('trellis', 9, {
-      binding_session: 'session-trellis', resolved_agent: 'claude',
-    })] });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Handoff and restart' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Request handoff and restart' }));
-    await screen.findByText(/New day started/);
+    await click(daemon, 'Handoff and restart');
+    await click(daemon, 'Request handoff and restart');
+    expect(screen.getByText(/New day started/)).toBeInTheDocument();
 
-    rerenderPanel([member('trellis', 11, {
+    await rerenderPanel([member('trellis', 11, {
       binding_session: 'successor-session',
       resolved_agent: 'claude',
-      restart: {
-        request_id: '44444444-4444-4444-8444-444444444444',
-        session_id: 'successor-session',
-        state: CrewRestartState.Requested,
-      },
+      restart: { request_id: '44444444-4444-4444-8444-444444444444', session_id: 'successor-session', state: CrewRestartState.Requested },
     })]);
 
-    await screen.findByText('Handoff requested');
+    expect(screen.getByText('Handoff requested')).toBeInTheDocument();
     expect(screen.queryByText(/New day started/)).not.toBeInTheDocument();
   });
 
   it('closes with Escape and wakes an asleep member through the guarded restart action', async () => {
-    const sendCrewRestart = vi.fn().mockResolvedValue({ success: true, conflict: false });
-    const { onClose } = renderPanel({ daemon: api({ sendCrewRestart }), members: [member('keel', 5)] });
+    const { daemon, onClose } = await renderPanel({ members: [member('keel', 5)] });
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Wake' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Wake' }));
     const dialog = screen.getByRole('alertdialog');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Wake member' }));
-    await waitFor(() => expect(sendCrewRestart).toHaveBeenCalledWith(expect.objectContaining({
-      member: 'keel', expectedSessionId: '', expectedRevision: 5,
-    })));
+    await daemon.idle();
+    expect(restartGuards(daemon)).toEqual([expect.objectContaining({ member: 'keel', expected_session_id: '', expected_revision: 5 })]);
   });
 
   it('keeps roster navigation while async harness discovery settles', async () => {
-    const preferences = deferred<any>();
-    const daemon = api({ sendDelegationPreferencesGet: vi.fn().mockReturnValue(preferences.promise) });
-    renderPanel({ daemon, initialMember: 'alder', members: [member('alder', 2), member('keel', 3)] });
+    const { daemon, answer } = await renderPanel({
+      script: { delegation_preferences_get: [HOLD] },
+      initialMember: 'alder',
+      members: [member('alder', 2), member('keel', 3)],
+    });
 
     fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
     expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
 
-    await act(async () => preferences.resolve({
-      preferences: { enabled: false, revision: 0, roles: [], fallback: { selection: { harness: '', provider: '', model: '', effort: '' }, instructions: '' } },
-      templates: [],
-      harnesses: [{ id: 'claude', name: 'Claude Code', available: true, model_pin: true, effort_pin: true, discovery: true }],
-    }));
-    await waitFor(() => expect(screen.getByLabelText('Harness')).toBeEnabled());
+    await answer(daemon.sentOf('delegation_preferences_get')[0], preferences([harnesses[0]]));
+    expect(screen.getByLabelText('Harness')).toBeEnabled();
     expect(screen.getByRole('heading', { name: 'Keel' })).toBeInTheDocument();
-    expect(daemon.sendDelegationPreferencesGet).toHaveBeenCalledTimes(1);
+    expect(daemon.sentOf('delegation_preferences_get')).toHaveLength(1);
   });
 
   it('allows model and effort pins while the harness follows the crew default', async () => {
-    const sendCrewSet = vi.fn()
-      .mockResolvedValueOnce({
-        success: true,
-        conflict: false,
-        member: member('keel', 6, {
-          model: 'openai/gpt-6-astra',
-          resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra',
-        }),
-      })
-      .mockResolvedValueOnce({
-        success: true,
-        conflict: false,
-        member: member('keel', 7, {
-          model: 'openai/gpt-6-astra', effort: 'high',
-          resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra', resolved_effort: 'high',
-        }),
-      });
-    renderPanel({ daemon: api({ sendCrewSet }), members: [member('keel', 5, { resolved_agent: 'codex' })] });
+    const { daemon } = await renderPanel({
+      script: {
+        crew_set: [
+          saved({ member: member('keel', 6, { model: 'openai/gpt-6-astra', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra' }) }),
+          saved({ member: member('keel', 7, { model: 'openai/gpt-6-astra', effort: 'high', resolved_agent: 'codex', resolved_model: 'openai/gpt-6-astra', resolved_effort: 'high' }) }),
+        ],
+      },
+      members: [member('keel', 5, { resolved_agent: 'codex' })],
+    });
 
-    const model = await screen.findByLabelText('Model');
-    await waitFor(() => expect(model).toBeEnabled());
-    await waitFor(() => expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument());
+    const model = screen.getByLabelText('Model');
+    expect(model).toBeEnabled();
+    expect(screen.getByRole('option', { name: 'openai / Astra' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'openai/gpt-6-astra' } });
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    await daemon.idle();
+    expect(screen.getByText('Saved')).toBeInTheDocument();
     const effort = screen.getByLabelText('Reasoning effort');
     fireEvent.change(effort, { target: { value: 'hig' } });
     fireEvent.change(effort, { target: { value: 'high' } });
-    expect(sendCrewSet).toHaveBeenCalledTimes(1);
+    expect(daemon.sentOf('crew_set')).toHaveLength(1);
     fireEvent.blur(effort);
+    await daemon.idle();
 
-    await waitFor(() => expect(sendCrewSet).toHaveBeenLastCalledWith({
-      member: 'keel', expectedRevision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high',
-    }));
-    expect(sendCrewSet).toHaveBeenCalledTimes(2);
+    expect(crewSets(daemon)).toEqual([
+      { member: 'keel', expected_revision: 5, agent: '', model: 'openai/gpt-6-astra', effort: '' },
+      { member: 'keel', expected_revision: 6, agent: '', model: 'openai/gpt-6-astra', effort: 'high' },
+    ]);
   });
 
   it('commits a typed model id on Enter as one write and keeps the draft over roster pushes', async () => {
-    const sendCrewSet = vi.fn().mockResolvedValue({ success: true, conflict: false });
-    const members = [member('keel', 6)];
-    const { rerenderPanel } = renderPanel({ daemon: api({ sendCrewSet }), members });
-    const model = await screen.findByLabelText('Model');
-    await waitFor(() => expect(model).toBeEnabled());
+    const { daemon, rerenderPanel } = await renderPanel({ members: [member('keel', 6)] });
+    const model = screen.getByLabelText('Model');
+    expect(model).toBeEnabled();
     fireEvent.change(model, { target: { value: '__custom' } });
     const custom = screen.getByTestId('crew-custom-model');
     fireEvent.change(custom, { target: { value: 'gpt-7' } });
-    await act(async () => { rerenderPanel([member('keel', 7)]); });
+    await rerenderPanel([member('keel', 7)]);
     expect(custom).toHaveValue('gpt-7');
-    expect(sendCrewSet).not.toHaveBeenCalled();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
     fireEvent.keyDown(custom, { key: 'Enter' });
-    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledExactlyOnceWith({
-      member: 'keel', expectedRevision: 7, agent: '', model: 'gpt-7', effort: '',
-    }));
+    await daemon.idle();
+    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 7, agent: '', model: 'gpt-7', effort: '' }]);
   });
 
   it('keeps dependent controls pending while an explicit harness pin clears', async () => {
-    const pending = deferred<any>();
-    const daemon = api({ sendCrewSet: vi.fn().mockReturnValue(pending.promise) });
-    renderPanel({ daemon, members: [member('keel', 5, {
-      agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra',
-    })] });
+    const { daemon, answer } = await renderPanel({
+      script: { crew_set: [HOLD] },
+      members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex', model: 'openai/gpt-6-astra', resolved_model: 'openai/gpt-6-astra' })],
+    });
 
-    const model = await screen.findByLabelText('Model');
-    await waitFor(() => expect(model).toBeEnabled());
+    const model = screen.getByLabelText('Model');
+    expect(model).toBeEnabled();
     fireEvent.change(screen.getByLabelText('Harness'), { target: { value: '' } });
 
     expect(model).toBeDisabled();
     expect(screen.getByLabelText('Reasoning effort')).toBeDisabled();
 
-    await act(async () => pending.resolve({
-      success: true,
-      conflict: false,
-      member: member('keel', 6, { resolved_agent: 'claude' }),
-    }));
-    await waitFor(() => expect(model).toBeEnabled());
+    await answer(daemon.sentOf('crew_set')[0], saved({ member: member('keel', 6, { resolved_agent: 'claude' }) }));
+    expect(model).toBeEnabled();
   });
 
   it('selects provider-qualified model identities when bare ids collide', async () => {
-    const sendCrewSet = vi.fn().mockResolvedValue({
-      success: true,
-      conflict: false,
-      member: member('keel', 6, {
-        agent: 'codex', model: 'second/shared', resolved_agent: 'codex', resolved_model: 'second/shared',
-      }),
+    const { daemon } = await renderPanel({
+      script: {
+        crew_set: [saved({ member: member('keel', 6, { agent: 'codex', model: 'second/shared', resolved_agent: 'codex', resolved_model: 'second/shared' }) })],
+        delegation_models: [models([
+          { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['low'] },
+          { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['high'] },
+        ])],
+      },
+      members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
-    const sendDelegationModels = vi.fn().mockResolvedValue({
-      detail: '',
-      models: [
-        { harness: 'codex', provider: 'first', id: 'shared', name: 'Shared one', access: 'supported', effort_support: 'supported', effort_levels: ['low'] },
-        { harness: 'codex', provider: 'second', id: 'shared', name: 'Shared two', access: 'supported', effort_support: 'supported', effort_levels: ['high'] },
-      ],
-    });
-    renderPanel({ daemon: api({ sendCrewSet, sendDelegationModels }), members: [member('keel', 5, {
-      agent: 'codex', resolved_agent: 'codex',
-    })] });
 
-    const model = await screen.findByLabelText('Model');
-    await screen.findByRole('option', { name: 'second / Shared two' });
+    const model = screen.getByLabelText('Model');
+    expect(screen.getByRole('option', { name: 'second / Shared two' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'second/shared' } });
+    await daemon.idle();
 
-    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledWith({
-      member: 'keel', expectedRevision: 5, agent: 'codex', model: 'second/shared', effort: '',
-    }));
+    expect(crewSets(daemon)).toEqual([{ member: 'keel', expected_revision: 5, agent: 'codex', model: 'second/shared', effort: '' }]);
     expect(model).toHaveValue('second/shared');
   });
 
   it('keeps an unsupported models explicit effort clear through a concurrent update', async () => {
-    const retry = deferred<any>();
-    const sendCrewSet = vi.fn()
-      .mockResolvedValueOnce({
-        success: false,
-        conflict: true,
-        error: 'revision conflict',
-        member: member('keel', 6, {
-          agent: 'codex', effort: 'high', resolved_agent: 'codex', resolved_effort: 'high',
-        }),
-      })
-      .mockReturnValueOnce(retry.promise);
-    const sendDelegationModels = vi.fn().mockResolvedValue({
-      detail: '',
-      models: [{
-        harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', access: 'supported',
-        effort_support: 'unsupported', effort_levels: [],
-      }],
+    const { daemon, answer } = await renderPanel({
+      script: {
+        crew_set: [
+          saved({ success: false, conflict: true, error: 'revision conflict', member: member('keel', 6, { agent: 'codex', effort: 'high', resolved_agent: 'codex', resolved_effort: 'high' }) }),
+          HOLD,
+        ],
+        delegation_models: [models([
+          { harness: 'codex', provider: 'local', id: 'fixed', name: 'Fixed', description: '', detail: '', access: 'supported', effort_support: 'unsupported', effort_levels: [] },
+        ])],
+      },
+      members: [member('keel', 5, { agent: 'codex', resolved_agent: 'codex' })],
     });
-    renderPanel({ daemon: api({ sendCrewSet, sendDelegationModels }), members: [member('keel', 5, {
-      agent: 'codex', resolved_agent: 'codex',
-    })] });
 
-    const model = await screen.findByLabelText('Model');
-    await screen.findByRole('option', { name: 'local / Fixed' });
+    const model = screen.getByLabelText('Model');
+    expect(screen.getByRole('option', { name: 'local / Fixed' })).toBeInTheDocument();
     fireEvent.change(model, { target: { value: 'local/fixed' } });
-    await screen.findByText('Not saved');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await daemon.idle();
+    expect(screen.getByText('Not saved')).toBeInTheDocument();
+    await click(daemon, 'Retry');
 
-    await waitFor(() => expect(sendCrewSet).toHaveBeenLastCalledWith({
-      member: 'keel', expectedRevision: 6, agent: 'codex', model: 'local/fixed', effort: '',
-    }));
-    await act(async () => retry.resolve({
-      success: true,
-      conflict: false,
-      member: member('keel', 7, {
-        agent: 'codex', model: 'local/fixed', resolved_agent: 'codex', resolved_model: 'local/fixed',
-      }),
-    }));
-    await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
+    expect(crewSets(daemon)[1]).toEqual({ member: 'keel', expected_revision: 6, agent: 'codex', model: 'local/fixed', effort: '' });
+    await answer(daemon.sentOf('crew_set')[1], saved({ member: member('keel', 7, { agent: 'codex', model: 'local/fixed', resolved_agent: 'codex', resolved_model: 'local/fixed' }) }));
+    expect(screen.getByText('Saved')).toBeInTheDocument();
   });
 
   it('loads the full charter on demand and flushes it before tab navigation', async () => {
-    const save = deferred<any>();
-    const sendCrewCharterGet = vi.fn().mockResolvedValue({
-      member: 'trellis',
-      charter: { content: '# Trellis\n\nFull **Markdown** charter.\n', token: 'charter-old' },
+    const { daemon, answer } = await renderPanel({
+      script: {
+        crew_charter_get: [charter('# Trellis\n\nFull **Markdown** charter.\n', 'charter-old')],
+        crew_charter_set: [HOLD],
+      },
     });
-    const sendCrewCharterSet = vi.fn().mockReturnValue(save.promise);
-    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] });
-    renderPanel({ daemon: api({ sendCrewCharterGet, sendCrewCharterSet, sendCrewHandoffsGet }) });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
+    await click(daemon, 'Charter');
+    const editor = screen.getByTestId('crew-charter-editor');
     expect(editor).toHaveValue('# Trellis\n\nFull **Markdown** charter.\n');
     fireEvent.change(editor, { target: { value: '# Trellis\n\nChanged while the idea is hot.\n' } });
     expect(screen.getByRole('status')).toHaveTextContent('Waiting to save');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    await click(daemon, 'Handoffs');
     expect(screen.getByTestId('crew-charter-editor')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(sendCrewCharterSet).toHaveBeenCalledWith(
-        'trellis', '# Trellis\n\nChanged while the idea is hot.\n', 'charter-old',
-      );
-      expect(screen.getByRole('status')).toHaveTextContent('Saving');
-    });
+    expect(daemon.sentOf('crew_charter_set')).toEqual([expect.objectContaining({
+      member: 'trellis', content: '# Trellis\n\nChanged while the idea is hot.\n', expected_token: 'charter-old',
+    })]);
+    expect(screen.getByRole('status')).toHaveTextContent('Saving');
 
-    await act(async () => save.resolve({
-      member: 'trellis', conflict: false,
-      charter: { content: '# Trellis\n\nChanged while the idea is hot.\n', token: 'charter-new' },
-    }));
-    await screen.findByText('No handoffs recorded.');
-    expect(sendCrewHandoffsGet).toHaveBeenCalledWith('trellis');
+    await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('# Trellis\n\nChanged while the idea is hot.\n', 'charter-new'));
+    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoffs_get').map((command) => command.member)).toEqual(['trellis']);
   });
 
   it('uses only the latest navigation intent while one charter flush is pending', async () => {
-    const save = deferred<any>();
-    const sendCrewCharterSet = vi.fn().mockReturnValue(save.promise);
-    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({ member: 'trellis', handoffs: [] });
-    renderPanel({
-      daemon: api({
-        sendCrewCharterGet: vi.fn().mockResolvedValue({
-          member: 'trellis', charter: { content: 'old', token: 'old-token' },
-        }),
-        sendCrewCharterSet,
-        sendCrewHandoffsGet,
-      }),
+    const { daemon, answer } = await renderPanel({
+      script: { crew_charter_get: [charter('old', 'old-token')], crew_charter_set: [HOLD] },
       members: [member('trellis', 4), member('keel', 5)],
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
-    fireEvent.change(editor, { target: { value: 'new' } });
+    await click(daemon, 'Charter');
+    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'new' } });
 
     fireEvent.click(screen.getByRole('button', { name: /Keel/ }));
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
-    await waitFor(() => expect(sendCrewCharterSet).toHaveBeenCalledTimes(1));
-    await act(async () => save.resolve({
-      member: 'trellis', conflict: false, charter: { content: 'new', token: 'new-token' },
-    }));
+    await click(daemon, 'Handoffs');
+    expect(daemon.sentOf('crew_charter_set')).toHaveLength(1);
+    await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('new', 'new-token'));
 
-    expect(await screen.findByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Trellis' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
-    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+    expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
   });
 
   it('returns to launch settings on a normal reopen', async () => {
     const members = [member('alder', 2), member('trellis', 3)];
-    const { rerenderPanel } = renderPanel({ members, initialMember: 'alder' });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
+    const { daemon, rerenderPanel } = await renderPanel({ members, initialMember: 'alder' });
+    await click(daemon, 'Handoffs');
     expect(screen.getByRole('button', { name: 'Handoffs' })).toHaveAttribute('aria-current', 'page');
 
-    await act(async () => { rerenderPanel(members, false); });
-    await act(async () => { rerenderPanel(members, true); });
+    await rerenderPanel(members, false);
+    await rerenderPanel(members, true);
 
     expect(screen.getByRole('heading', { name: 'Alder' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('flushes a charter before closing the panel', async () => {
-    const save = deferred<any>();
-    const { onClose } = renderPanel({ daemon: api({
-      sendCrewCharterGet: vi.fn().mockResolvedValue({
-        member: 'trellis', charter: { content: 'old', token: 'old-token' },
-      }),
-      sendCrewCharterSet: vi.fn().mockReturnValue(save.promise),
-    }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
-    fireEvent.change(editor, { target: { value: 'new' } });
+    const { daemon, onClose, answer } = await renderPanel({
+      script: { crew_charter_get: [charter('old', 'old-token')], crew_charter_set: [HOLD] },
+    });
+    await click(daemon, 'Charter');
+    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'new' } });
     fireEvent.click(screen.getByTestId('crew-panel-close'));
+    await daemon.idle();
     expect(onClose).not.toHaveBeenCalled();
 
-    await act(async () => save.resolve({
-      member: 'trellis', conflict: false, charter: { content: 'new', token: 'new-token' },
-    }));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    await answer(daemon.sentOf('crew_charter_set')[0], charterSaved('new', 'new-token'));
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('keeps a failed navigation flush visible and retries the retained edit', async () => {
-    const sendCrewCharterSet = vi.fn()
-      .mockRejectedValueOnce(new Error('disk is read-only'))
-      .mockResolvedValueOnce({ member: 'trellis', conflict: false, charter: { content: 'local edit', token: 'new' } });
-    renderPanel({ daemon: api({
-      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
-      sendCrewCharterSet,
-    }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
+    const { daemon } = await renderPanel({
+      script: {
+        crew_charter_get: [charter('old', 'old')],
+        crew_charter_set: [charterRefused('disk is read-only'), charterSaved('local edit', 'new')],
+      },
+    });
+    await click(daemon, 'Charter');
+    const editor = screen.getByTestId('crew-charter-editor');
     fireEvent.change(editor, { target: { value: 'local edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    await click(daemon, 'Launch settings');
 
-    await screen.findByText('disk is read-only');
+    expect(screen.getByText('disk is read-only')).toBeInTheDocument();
     expect(editor).toHaveValue('local edit');
     expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Saved'));
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    await click(daemon, 'Retry');
+    expect(screen.getByRole('status')).toHaveTextContent('Saved');
+    await click(daemon, 'Launch settings');
     expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('lets the user leave after a charter save failure has been shown, keeping the edit for later', async () => {
-    const sendCrewCharterSet = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
-    renderPanel({ daemon: api({
-      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
-      sendCrewCharterSet,
-    }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
-    fireEvent.change(editor, { target: { value: 'offline edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
-    await screen.findByText('WebSocket not connected');
+    const { daemon } = await renderPanel({ script: { crew_charter_get: [charter('old', 'old')] } });
+    await click(daemon, 'Charter');
+    daemon.disconnect();
+    await daemon.idle();
+    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
+    await click(daemon, 'Launch settings');
+    expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Charter' })).toHaveAttribute('aria-current', 'page');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
+    await click(daemon, 'Launch settings');
     expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
+    await click(daemon, 'Charter');
     expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
     expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
-    expect(sendCrewCharterSet).toHaveBeenCalledTimes(1);
+    expect(daemon.sentOf('crew_charter_set')).toEqual([]);
   });
 
   it('keeps a retained offline charter edit across close and a fresh reopen', async () => {
     const members = [member('trellis', 4)];
-    const sendCrewCharterSet = vi.fn().mockRejectedValue(new Error('WebSocket not connected'));
-    const { onClose, rerenderPanel } = renderPanel({ members, daemon: api({
-      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
-      sendCrewCharterSet,
-    }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
-    fireEvent.change(editor, { target: { value: 'offline edit' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
-    await screen.findByText('WebSocket not connected');
+    const { daemon, onClose, rerenderPanel } = await renderPanel({ members, script: { crew_charter_get: [charter('old', 'old')] } });
+    await click(daemon, 'Charter');
+    daemon.disconnect();
+    await daemon.idle();
+    fireEvent.change(screen.getByTestId('crew-charter-editor'), { target: { value: 'offline edit' } });
+    await click(daemon, 'Launch settings');
+    expect(screen.getByText('WebSocket not connected')).toBeInTheDocument();
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    rerenderPanel(members, false);
-    rerenderPanel(members, true);
+    await rerenderPanel(members, false);
+    await rerenderPanel(members, true);
 
     expect(screen.getByRole('button', { name: 'Launch settings' })).toHaveAttribute('aria-current', 'page');
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    expect(await screen.findByTestId('crew-charter-editor')).toHaveValue('offline edit');
+    await click(daemon, 'Charter');
+    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('offline edit');
     expect(screen.getByTestId('crew-charter-status')).not.toHaveTextContent('Saved');
   });
 
   it('rereads a saved charter when the tab is entered again', async () => {
-    const sendCrewCharterGet = vi.fn()
-      .mockResolvedValueOnce({ member: 'trellis', charter: { content: 'first', token: 'first' } })
-      .mockResolvedValueOnce({ member: 'trellis', charter: { content: 'edited elsewhere', token: 'second' } });
-    renderPanel({ members: [member('trellis', 4)], daemon: api({ sendCrewCharterGet }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    expect(await screen.findByTestId('crew-charter-editor')).toHaveValue('first');
+    const { daemon } = await renderPanel({
+      members: [member('trellis', 4)],
+      script: { crew_charter_get: [charter('first', 'first'), charter('edited elsewhere', 'second')] },
+    });
+    await click(daemon, 'Charter');
+    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('first');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Launch settings' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    await waitFor(() => expect(screen.getByTestId('crew-charter-editor')).toHaveValue('edited elsewhere'));
-    expect(sendCrewCharterGet).toHaveBeenCalledTimes(2);
+    await click(daemon, 'Launch settings');
+    await click(daemon, 'Charter');
+    expect(screen.getByTestId('crew-charter-editor')).toHaveValue('edited elsewhere');
+    expect(daemon.sentOf('crew_charter_get')).toHaveLength(2);
   });
 
   it('commits a launch field that still has focus when Escape closes the panel', async () => {
-    const sendCrewSet = vi.fn().mockResolvedValue({ success: true, conflict: false });
-    const { onClose, rerenderPanel } = renderPanel({ daemon: api({ sendCrewSet }), members: [member('keel', 6)] });
-    const effort = await screen.findByLabelText('Reasoning effort');
+    const { daemon, onClose, rerenderPanel } = await renderPanel({ members: [member('keel', 6)] });
+    const effort = screen.getByLabelText('Reasoning effort');
     effort.focus();
     fireEvent.change(effort, { target: { value: 'high' } });
-    expect(sendCrewSet).not.toHaveBeenCalled();
+    expect(daemon.sentOf('crew_set')).toEqual([]);
 
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
-    rerenderPanel([member('keel', 6)], false);
+    await rerenderPanel([member('keel', 6)], false);
 
-    await waitFor(() => expect(sendCrewSet).toHaveBeenCalledWith(expect.objectContaining({ member: 'keel', effort: 'high' })));
-    expect(sendCrewSet).toHaveBeenCalledTimes(1);
+    expect(crewSets(daemon)).toEqual([expect.objectContaining({ member: 'keel', effort: 'high' })]);
   });
 
-  it('renders no roster or member content while closed', () => {
-    renderPanel({ isOpen: false });
+  it('renders no roster or member content while closed', async () => {
+    await renderPanel({ isOpen: false });
     expect(screen.queryByRole('region', { name: 'Crew roster' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Crew roster')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Harness')).not.toBeInTheDocument();
   });
 
   it('returns the authoritative charter on conflict and requires an explicit choice', async () => {
-    const sendCrewCharterSet = vi.fn().mockResolvedValue({
-      member: 'trellis', conflict: true, charter: { content: 'external edit', token: 'external' },
+    const { daemon } = await renderPanel({
+      script: { crew_charter_get: [charter('old', 'old')], crew_charter_set: [charterSaved('external edit', 'external', true)] },
     });
-    renderPanel({ daemon: api({
-      sendCrewCharterGet: vi.fn().mockResolvedValue({ member: 'trellis', charter: { content: 'old', token: 'old' } }),
-      sendCrewCharterSet,
-    }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Charter' }));
-    const editor = await screen.findByTestId('crew-charter-editor');
+    await click(daemon, 'Charter');
+    const editor = screen.getByTestId('crew-charter-editor');
     fireEvent.change(editor, { target: { value: 'my edit' } });
     fireEvent.blur(editor);
-    await screen.findByText('The file changed outside this editor.');
+    await daemon.idle();
+    expect(screen.getByText('The file changed outside this editor.')).toBeInTheDocument();
     expect(editor).toHaveValue('my edit');
     fireEvent.click(screen.getByRole('button', { name: 'Use file version' }));
     expect(editor).toHaveValue('external edit');
@@ -832,26 +723,17 @@ describe('CrewPanel', () => {
     ['an asleep member opens the seed without placement', undefined],
     ['an awake member places the seed beside its current day', 'session-trellis'],
   ])('renders complete dated handoffs and %s', async (_, bindingSession) => {
-    const onOpenSeed = vi.fn();
     const body = '# Full handoff\n\nA paragraph at the end that must not be truncated.\n\n[Open the seed](s-w0rk11)\n';
-    const sendCrewHandoffGet = vi.fn().mockResolvedValue({
-      member: 'trellis',
-      handoff: { filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z', content: body, token: 'letter' },
-    });
-    renderPanel({
-      onOpenSeed,
+    const { daemon, onOpenSeed } = await renderPanel({
       members: [member('trellis', 4, bindingSession ? { binding_session: bindingSession } : {})],
-      daemon: api({
-        sendCrewHandoffsGet: vi.fn().mockResolvedValue({
-          member: 'trellis',
-          handoffs: [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z' }],
-        }),
-        sendCrewHandoffGet,
-      }),
+      script: {
+        crew_handoffs_get: [handoffs('trellis', [{ filename: '2026-09-01T21-37Z-trellis.md', occurred_at: '2026-09-01T21:37:00Z' }])],
+        crew_handoff_get: [handoff('2026-09-01T21-37Z-trellis.md', '2026-09-01T21:37:00Z', body, 'letter')],
+      },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
-    expect(await screen.findByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
-    expect(sendCrewHandoffGet).toHaveBeenCalledExactlyOnceWith('trellis', '2026-09-01T21-37Z-trellis.md');
+    await click(daemon, 'Handoffs');
+    expect(screen.getByRole('heading', { name: 'Full handoff' })).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-01T21-37Z-trellis.md']]);
     expect(screen.getByText('A paragraph at the end that must not be truncated.')).toBeInTheDocument();
     expect(screen.getAllByText(/Sep 1, 2026/)).toHaveLength(2);
     fireEvent.click(screen.getByRole('button', { name: 'Open the seed' }));
@@ -859,83 +741,74 @@ describe('CrewPanel', () => {
   });
 
   it('shows one handoff read failure and retries to an honest empty history', async () => {
-    const sendCrewHandoffsGet = vi.fn()
-      .mockRejectedValueOnce(new Error('handoffs are temporarily unavailable'))
-      .mockResolvedValueOnce({ member: 'keel', handoffs: [] });
-    renderPanel({
-      daemon: api({ sendCrewHandoffsGet }),
+    const { daemon } = await renderPanel({
       members: [member('keel', 5)],
+      script: { crew_handoffs_get: [handoffsRefused('handoffs are temporarily unavailable'), handoffs('keel', [])] },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
-    expect(await screen.findByText('handoffs are temporarily unavailable')).toBeInTheDocument();
-    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByText('No handoffs recorded.')).toBeInTheDocument();
-    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2);
+    await click(daemon, 'Handoffs');
+    expect(screen.getByText('handoffs are temporarily unavailable')).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
+    await click(daemon, 'Retry');
+    expect(screen.getByText('No handoffs recorded.')).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(2);
   });
 
-  it('keeps a newer reconnect handoff result when the older read arrives last', async () => {
-    const older = deferred<any>();
-    const newer = deferred<any>();
-    const sendCrewHandoffsGet = vi.fn()
-      .mockReturnValueOnce(older.promise)
-      .mockReturnValueOnce(newer.promise);
-    const sendCrewHandoffGet = vi.fn().mockResolvedValue({
-      member: 'trellis',
-      handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Newer reconnect result\n', token: 'newer' },
+  it('keeps a newer reconnect handoff result when the read from the dropped connection never returns', async () => {
+    const { daemon, answer } = await renderPanel({
+      script: {
+        crew_handoffs_get: [HOLD],
+        crew_handoff_get: [handoff('2026-09-02T09-00Z-trellis.md', '2026-09-02T09:00:00Z', '# Newer reconnect result\n', 'newer')],
+      },
     });
-    const daemon = api({ sendCrewHandoffsGet, sendCrewHandoffGet });
-    const members = [member('trellis', 4)];
-    const { rerenderPanel } = renderPanel({ daemon, members });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
-    await waitFor(() => expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1));
+    await click(daemon, 'Handoffs');
+    expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
 
-    (daemon as any).connectionGeneration = 2;
-    await act(async () => { rerenderPanel(members); });
-    await waitFor(() => expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(2));
-    await act(async () => newer.resolve({
-      member: 'trellis',
-      handoffs: [{ filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' }],
-    }));
-    expect(await screen.findByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
-
-    await act(async () => older.resolve({
-      member: 'trellis',
-      handoffs: [{ filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z' }],
-    }));
+    await daemon.reconnect();
+    await daemon.idle();
+    const [, newer] = daemon.sentOf('crew_handoffs_get');
+    expect(newer).toBeDefined();
+    await answer(newer, handoffs('trellis', [{ filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' }]));
     expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Obsolete delayed result' })).not.toBeInTheDocument();
-    expect(sendCrewHandoffGet).toHaveBeenCalledExactlyOnceWith('trellis', '2026-09-02T09-00Z-trellis.md');
+
+    await act(() => vi.advanceTimersByTimeAsync(60_000));
+    await daemon.idle();
+    expect(screen.getByRole('heading', { name: 'Newer reconnect result' })).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoff_get').map(({ member: id, filename }) => [id, filename])).toEqual([['trellis', '2026-09-02T09-00Z-trellis.md']]);
   });
 
   it('reads one letter at a time and retries a failed letter without reloading the history', async () => {
-    const sendCrewHandoffsGet = vi.fn().mockResolvedValue({
-      member: 'trellis',
-      handoffs: [
-        { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' },
-        { filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z' },
-      ],
+    const latest = handoff('2026-09-02T09-00Z-trellis.md', '2026-09-02T09:00:00Z', '# Latest letter\n', 'a');
+    const { daemon } = await renderPanel({
+      script: {
+        crew_handoffs_get: [handoffs('trellis', [
+          { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z' },
+          { filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z' },
+        ])],
+        crew_handoff_get: [
+          latest,
+          handoffRefused('the older letter is unreadable'),
+          handoff('2026-09-01T09-00Z-trellis.md', '2026-09-01T09:00:00Z', '# Older letter\n', 'b'),
+          latest,
+        ],
+      },
     });
-    const sendCrewHandoffGet = vi.fn()
-      .mockResolvedValueOnce({ member: 'trellis', handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Latest letter\n', token: 'a' } })
-      .mockRejectedValueOnce(new Error('the older letter is unreadable'))
-      .mockResolvedValueOnce({ member: 'trellis', handoff: { filename: '2026-09-01T09-00Z-trellis.md', occurred_at: '2026-09-01T09:00:00Z', content: '# Older letter\n', token: 'b' } })
-      .mockResolvedValue({ member: 'trellis', handoff: { filename: '2026-09-02T09-00Z-trellis.md', occurred_at: '2026-09-02T09:00:00Z', content: '# Latest letter\n', token: 'a' } });
-    renderPanel({ daemon: api({ sendCrewHandoffsGet, sendCrewHandoffGet }) });
-    fireEvent.click(screen.getByRole('button', { name: 'Handoffs' }));
-    expect(await screen.findByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
-    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(1);
+    await click(daemon, 'Handoffs');
+    expect(screen.getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoff_get')).toHaveLength(1);
 
     fireEvent.click(screen.getByTestId('crew-handoff-1'));
-    expect(await screen.findByText('the older letter is unreadable')).toBeInTheDocument();
+    await daemon.idle();
+    expect(screen.getByText('the older letter is unreadable')).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Latest letter' })).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId('crew-handoff-letter-retry'));
-    expect(await screen.findByRole('heading', { name: 'Older letter' })).toBeInTheDocument();
-    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(3);
-    expect(sendCrewHandoffsGet).toHaveBeenCalledTimes(1);
+    await daemon.idle();
+    expect(screen.getByRole('heading', { name: 'Older letter' })).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoff_get')).toHaveLength(3);
+    expect(daemon.sentOf('crew_handoffs_get')).toHaveLength(1);
 
     fireEvent.click(screen.getByTestId('crew-handoff-0'));
-    expect(await screen.findByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
-    expect(sendCrewHandoffGet).toHaveBeenCalledTimes(4);
+    await daemon.idle();
+    expect(screen.getByRole('heading', { name: 'Latest letter' })).toBeInTheDocument();
+    expect(daemon.sentOf('crew_handoff_get')).toHaveLength(4);
   });
 });

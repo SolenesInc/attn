@@ -119,6 +119,7 @@ export default defineConfig(async ({ command }) => ({
   test: {
     globals: true,
     environment: "happy-dom",
+    env: { VITE_ATTN_BUILD_INSTANCE: "", VITE_CLIENT_TOKEN: "" },
     setupFiles: ["./src/test/setup.ts"],
     include: [
       "src/**/*.test.{ts,tsx}",

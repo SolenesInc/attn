@@ -1,581 +1,261 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
-import App from './App';
-import { useSessionStore, type Session } from './store/sessions';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
-import type { TerminalLayoutNode } from './types/workspace';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY } from './application/appSupport';
+import {
+  agentPane,
+  daemonSession,
+  daemonWorkspace,
+  type DaemonPane,
+  type DaemonSession,
+  type DaemonWorkspace,
+} from './test/daemonFixtures';
+import { renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
 
-
-const mockUseDaemonStore = vi.fn();
-const mockUseDaemonSocket = vi.fn();
-const SHOW_SESSIONLESS_KEY = 'attn.sidebar.showSessionless';
-
-let mockDaemonWorkspaces: Array<Record<string, unknown>>;
-let mockSendWorkspaceSelected: ReturnType<typeof vi.fn>;
-let mockSendWorkspaceClosePane: ReturnType<typeof vi.fn>;
-let mockOpenUrlListener: ((urls: string[]) => void) | null;
-let mockPushWorkspaces: ((workspaces: unknown[]) => void) | undefined;
-const { mockFocusWorkspaceLeaf } = vi.hoisted(() => ({ mockFocusWorkspaceLeaf: vi.fn() }));
-
-function collectTileIds(node: TerminalLayoutNode | null): string[] {
-  if (!node) {
-    return [];
-  }
-  if (node.type === 'split') {
-    return [...collectTileIds(node.children[0]), ...collectTileIds(node.children[1])];
-  }
-  return node.type === 'tile' ? [node.tileId] : [];
+function repoSession(id: string, workspaceId: string, overrides: Partial<DaemonSession> = {}) {
+  return daemonSession(id, { directory: '/tmp/repo', workspace_id: workspaceId, ...overrides });
 }
 
-vi.mock('@tauri-apps/plugin-deep-link', () => ({
-  onOpenUrl: vi.fn(async (listener: (urls: string[]) => void) => {
-    mockOpenUrlListener = listener;
-    return () => {};
-  }),
-  getCurrent: vi.fn(async () => []),
-}));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
+function loneAgentWorkspace(id: string, title: string, sessionId: string, paneId = `pane-${sessionId}`) {
+  return daemonWorkspace(
+    id,
+    { root: { type: 'pane', pane_id: paneId }, panes: [{ ...agentPane(sessionId, id), pane_id: paneId }] },
+    { title, directory: '/tmp/repo' },
+  );
+}
 
-vi.mock('./components/GhosttyTerminal', async () => {
-  const React = await import('react');
-  return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
-});
+function tileWorkspace(id: string, title: string, tile: Record<string, string>): DaemonWorkspace {
+  return daemonWorkspace(id, { root: { type: 'tile', ...tile } }, { title, directory: '/tmp/repo' });
+}
 
-vi.mock('./components/Sidebar', () => ({
-  EditorIcon: () => null,
-  WorkflowIcon: () => null,
-  DiffIcon: () => null,
-  PRsIcon: () => null,
-  NotebookIcon: () => null,
-  MarkdownIcon: () => null,
-  Sidebar: ({
-    visualOrder,
-    selectedWorkspaceId,
-    selectedTile,
-    onSelectWorkspace,
-    onSelectTile,
-    onSelectGridLayout,
-    collapsed,
-  }: {
-    visualOrder: Array<{ id: string; sessions: unknown[] }>;
-    selectedWorkspaceId: string | null;
-    selectedTile?: { workspaceId: string; tileId: string } | null;
-    onSelectWorkspace: (id: string) => void;
-    onSelectTile: (workspaceId: string, tileId: string) => void;
-    onSelectGridLayout?: (layout: { mode: 'auto' }) => void;
-    collapsed: boolean;
-  }) => (
-    <div
-      data-testid="sidebar"
-      data-collapsed={collapsed ? '1' : '0'}
-      data-selected-workspace={selectedWorkspaceId ?? ''}
-      data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
-    >
-      {visualOrder.map((workspace) => (
-        <button
-          key={workspace.id}
-          data-testid={`select-${workspace.id}`}
-          onClick={() => onSelectWorkspace(workspace.id)}
-        >
-          {workspace.id}
-        </button>
-      ))}
-      <button
-        type="button"
-        data-testid="open-grid"
-        onClick={() => onSelectGridLayout?.({ mode: 'auto' })}
-      >
-        grid
-      </button>
-      <button
-        type="button"
-        data-testid="select-late-tile"
-        onClick={() => onSelectTile('ws-late', 'tile-seed')}
-      >
-        late tile
-      </button>
-    </div>
-  ),
-}));
-
-vi.mock('./components/grid/GridView', () => ({
-  GridView: ({ tiles }: { tiles: Array<{ runtimeId: string }> }) => (
-    <div data-testid="grid-view" data-runtime-ids={tiles.map((tile) => tile.runtimeId).join(',')} />
-  ),
-}));
-
-vi.mock('./components/SessionTerminalWorkspace', async () => {
-  const React = await import('react');
-  return { SessionTerminalWorkspace: React.forwardRef(function MockWorkspace({
-    workspaceId,
-    workspace,
-    isActiveSession,
-    selectedSessionId,
-    terminalsLive,
-    onFocusPane,
-    onClosePane,
-  }: {
-    workspaceId: string;
-    workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
-    isActiveSession: boolean;
-    selectedSessionId?: string | null;
-    terminalsLive?: boolean;
-    onFocusPane?: (paneId: string) => void;
-    onClosePane?: (paneId: string) => void;
-  }, ref) {
-    React.useImperativeHandle(ref, () => ({ focusLeaf: mockFocusWorkspaceLeaf, focusPane: vi.fn() }));
-    return (
-    <div>
-      <div
-        data-testid={`workspace-${workspaceId}`}
-        data-active={isActiveSession ? '1' : '0'}
-        data-selected-session={selectedSessionId ?? ''}
-        data-live={terminalsLive === false ? '0' : '1'}
-        data-agent-count={workspace.agents.length}
-        data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
-      />
-      {workspace.agents.map((agent) => {
-        const pane = agent as { id: string };
-        return (
-          <div key={pane.id}>
-            <button
-              type="button"
-              data-testid={`focus-${pane.id}`}
-              onClick={() => onFocusPane?.(pane.id)}
-            />
-            <button
-              type="button"
-              data-testid={`close-${pane.id}`}
-              onClick={() => onClosePane?.(pane.id)}
-            />
-          </div>
-        );
-      })}
-    </div>
-    );
-  }) };
-});
-
-vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
-vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
-vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/ErrorToast', () => ({
-  ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
-}));
-vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
-vi.mock('./hooks/useUIScale', () => ({
-  useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
-}));
-vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
-vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/daemonSessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
-});
-vi.mock('./hooks/useDaemonSocket', async () => {
-  const React = await import('react');
-  return {
-    useDaemonSocket: (args: { onWorkspacesUpdate?: (workspaces: unknown[]) => void }) => {
-      mockPushWorkspaces = args.onWorkspacesUpdate;
-      React.useEffect(() => {
-        args.onWorkspacesUpdate?.(mockDaemonWorkspaces);
-      }, []);
-      return mockUseDaemonSocket(args);
-    },
-  };
-});
-vi.mock('./pty/bridge', async () => {
-  const actual = await vi.importActual<typeof import('./pty/bridge')>('./pty/bridge');
-  return { ...actual, ptySpawn: vi.fn(async () => {}) };
-});
-
-const TILE_LAYOUT_JSON = JSON.stringify({
-  type: 'tile',
+const sessionWorkspace = loneAgentWorkspace('ws-session', 'working-session', 's1');
+const notesWorkspace = tileWorkspace('ws-tiles', 'Notes', {
   tile_id: 'tile-readme',
   tile_kind: 'markdown',
   tile_params: '/tmp/project/README.md',
 });
 
-describe('tile-only (sessionless) workspace selection and render', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useSessionStore.setState(useSessionStore.getInitialState(), true);
-    localStorage.clear();
-    localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
-    localStorage.setItem(SHOW_SESSIONLESS_KEY, '1');
-    mockSendWorkspaceSelected = vi.fn();
-    mockSendWorkspaceClosePane = vi.fn(async () => ({ success: true }));
-    mockOpenUrlListener = null;
-    mockPushWorkspaces = undefined;
-    mockFocusWorkspaceLeaf.mockClear();
-
-    mockDaemonWorkspaces = [
-      {
-        id: 'ws-session',
-        title: 'working-session',
-        directory: '/tmp/repo',
-        status: 'active',
-        layout: {
-          active_pane_id: 'pane-s1',
-          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-s1' }),
-          panes: [{
-            workspace_id: 'ws-session',
-            pane_id: 'pane-s1',
-            kind: 'agent',
-            runtime_id: 's1',
-            session_id: 's1',
-            title: 'working-session',
-          }],
-        },
-      },
-      {
-        id: 'ws-tiles',
-        title: 'Notes',
-        directory: '/tmp/repo',
-        status: 'active',
-        layout: {
-          active_pane_id: '',
-          layout_json: TILE_LAYOUT_JSON,
-          panes: [],
-        },
-      },
-    ];
-
-    useSessionStore.setState({
-      sessions: [{
-        id: 's1',
-        label: 'working-session',
-        state: 'working',
-        cwd: '/tmp/repo',
-        workspaceId: 'ws-session',
-        agent: 'claude',
-        transcriptMatched: true,
-        daemonActivePaneId: 'pane-s1',
-        workspace: {
-          agents: [{ id: 'pane-s1', runtimeId: 's1', sessionId: 's1', title: 'working-session' }],
-          layoutTree: { type: 'pane', paneId: 'pane-s1' },
-        },
-      }],
-      activeSessionId: 's1',
-      view: 'session',
-      connect: vi.fn(async () => {}),
-      connected: true,
-      launcherConfig: { executables: {} },
-      createSession: vi.fn(async () => 's1'),
-      closeSession: vi.fn(),
-      takeSessionSpawnArgs: vi.fn(() => null),
-      reloadSession: vi.fn(async () => {}),
-    });
-
-    mockUseDaemonStore.mockReturnValue({
-      daemonSessions: [{ id: 's1', label: 'working-session', directory: '/tmp/repo', state: 'working' }],
-      crew: [],
-      setDaemonSessions: vi.fn(),
-      prs: [], setPRs: vi.fn(),
-      repoStates: [], setRepoStates: vi.fn(),
-      authorStates: [], setAuthorStates: vi.fn(),
-      seeds: [], setSeeds: vi.fn(),
-    });
-
-    const fn = vi.fn();
-    mockUseDaemonSocket.mockReturnValue({
-      sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
-      sendRefreshPRs: vi.fn(async () => ({ success: true })),
-      sendUnregisterSession: fn, sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
-      sendMuteWorkspace: vi.fn(async () => ({ success: true })),
-      sendSetSetting: fn,
-      sendSetClientPresence: fn,
-      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendDeleteWorktree: vi.fn(async () => ({ success: true })),
-      sendGetRecentLocations: vi.fn(async () => ({ success: true, locations: [] })),
-      sendCreateWorktreeFromBranch: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendFetchRemotes: vi.fn(async () => ({ success: true })),
-      sendFetchPRDetails: vi.fn(async () => ({ success: true })),
-      sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
-      sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendSessionSelected: fn, sendWorkspaceSelected: mockSendWorkspaceSelected,
-      sendWorkspaceClosePane: mockSendWorkspaceClosePane,
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
-      sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
-      getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
-      getPresentations: vi.fn(async () => []),
-      connectionError: null,
-      hasReceivedInitialState: true,
-      sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),
-      sendNotificationMarkRead: vi.fn(async () => 0),
-      rateLimit: null,
-      warnings: [],
-      clearWarnings: fn,
-      sendSetTerminalTheme: fn,
-    });
+function renderSessionAndNotes(sessionOverrides: Partial<DaemonSession> = {}) {
+  return renderApp({
+    initialState: {
+      sessions: [repoSession('s1', 'ws-session', { label: 'working-session', ...sessionOverrides })],
+      workspaces: [sessionWorkspace, notesWorkspace],
+    },
   });
+}
 
+function workspaceElement(id: string) {
+  return document.querySelector<HTMLElement>(`.session-terminal-workspace[data-workspace-id="${id}"]`);
+}
+
+function isShown(id: string) {
+  return workspaceElement(id)?.getAttribute('data-session-visible') === '1';
+}
+
+function leavesOf(id: string) {
+  return Array.from(workspaceElement(id)?.querySelectorAll('[data-pane-id]') ?? []).map((leaf) => ({
+    id: leaf.getAttribute('data-pane-id'),
+    kind: leaf.getAttribute('data-pane-kind'),
+  }));
+}
+
+function selectedSidebarRows() {
+  return Array.from(document.querySelectorAll('.sidebar .selected')).map((row) =>
+    row.getAttribute('data-testid'),
+  );
+}
+
+function open(name: string) {
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
+function lastSelectedWorkspace(daemon: ScriptedDaemon) {
+  const selections = daemon.sent.flatMap((command) =>
+    command.cmd === 'workspace_selected' ? [command.workspace_id] : [],
+  );
+  return selections[selections.length - 1];
+}
+
+function isLive(paneId: string) {
+  return screen.queryByTestId(`pane-virtualized-${paneId}`) === null;
+}
+
+beforeEach(() => {
+  localStorage.setItem(SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY, '1');
+});
+
+describe('tile-only (sessionless) workspace selection and render', () => {
   it('renders the tile-only workspace layout but leaves it inactive until selected', async () => {
-    render(<App />);
+    await renderSessionAndNotes();
+    open('Open working-session');
 
-    const tileWorkspace = await screen.findByTestId('workspace-ws-tiles');
-    expect(tileWorkspace.getAttribute('data-agent-count')).toBe('0');
-    expect(tileWorkspace.getAttribute('data-tile-ids')).toBe('tile-readme');
-
-    expect(screen.getByTestId('workspace-ws-session').getAttribute('data-active')).toBe('1');
-    expect(tileWorkspace.getAttribute('data-active')).toBe('0');
+    expect(leavesOf('ws-tiles')).toEqual([{ id: 'tile-readme', kind: 'tile' }]);
+    expect(isShown('ws-session')).toBe(true);
+    expect(isShown('ws-tiles')).toBe(false);
   });
 
   it('activates the tile-only workspace when it is selected from the sidebar', async () => {
-    render(<App />);
-    await screen.findByTestId('workspace-ws-tiles');
+    const { daemon } = await renderSessionAndNotes();
+    open('Open working-session');
 
-    await userEvent.click(screen.getByTestId('select-ws-tiles'));
+    open('Open workspace Notes');
 
-    await waitFor(() => {
-      expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-active')).toBe('1');
-    });
-    expect(screen.getByTestId('workspace-ws-session').getAttribute('data-active')).toBe('0');
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-workspace')).toBe('ws-tiles');
-    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-tiles');
-    expect(screen.getByTestId('workspace-ws-tiles').getAttribute('data-tile-ids')).toBe('tile-readme');
+    expect(isShown('ws-tiles')).toBe(true);
+    expect(isShown('ws-session')).toBe(false);
+    expect(selectedSidebarRows()).toContain('sidebar-workspace-ws-tiles');
+    expect(selectedSidebarRows()).not.toContain('sidebar-workspace-ws-session');
+    expect(lastSelectedWorkspace(daemon)).toBe('ws-tiles');
+    expect(leavesOf('ws-tiles')).toEqual([{ id: 'tile-readme', kind: 'tile' }]);
   });
 
-  it('takes the session selection away from every workspace while a tile-only workspace is selected', async () => {
-    render(<App />);
-    const sessionWorkspace = await screen.findByTestId('workspace-ws-session');
-    expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('s1');
+  it('releases a focused agent pane while a tile-only workspace is selected', async () => {
+    await renderSessionAndNotes();
+    open('Open working-session');
+    open('Focus agent working-session');
+    expect(workspaceElement('ws-session')).toHaveAttribute('data-maximized-pane-id', 'pane-s1');
 
-    await userEvent.click(screen.getByTestId('select-ws-tiles'));
+    open('Open workspace Notes');
+    expect(workspaceElement('ws-session')).toHaveAttribute('data-maximized-pane-id', '');
 
-    await waitFor(() => {
-      expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('');
-    });
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-
-    await userEvent.click(screen.getByTestId('select-ws-session'));
-
-    await waitFor(() => {
-      expect(sessionWorkspace.getAttribute('data-selected-session')).toBe('s1');
-    });
+    open('Open workspace working-session');
+    expect(isShown('ws-session')).toBe(true);
+    expect(selectedSidebarRows()).toContain('sidebar-session-s1');
   });
 
-  it('routes an already-active pane focus through the shared session selector', async () => {
-    render(<App />);
-
-    await userEvent.click(screen.getByTestId('focus-pane-s1'));
-
-    expect(useSessionStore.getState().focusRequest?.sessionId).toBe('s1');
-  });
-
-  it('keeps the sidebar expanded for a failed pane whose session is no longer live', async () => {
-    mockDaemonWorkspaces = [{
-      id: 'ws-failed',
+  it('keeps the sidebar expanded for failed panes whose sessions are no longer live', async () => {
+    const failedPane = (paneId: string, sessionId: string): DaemonPane => ({
+      ...agentPane(sessionId, 'ws-failed'),
+      pane_id: paneId,
       title: 'Failed automation',
-      directory: '/tmp/repo',
-      status: 'idle',
-      layout: {
-        active_pane_id: 'pane-failed',
-        layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-failed' }),
-        panes: [{
-          workspace_id: 'ws-failed',
-          pane_id: 'pane-failed',
-          kind: 'agent',
-          runtime_id: 'closed-session',
-          session_id: 'closed-session',
-          title: 'Failed automation',
-          status: 'failed',
-          error: 'launch failed',
-        }],
+      status: 'failed',
+      error: 'launch failed',
+    });
+    const { daemon } = await renderApp({
+      initialState: {
+        workspaces: [
+          daemonWorkspace(
+            'ws-failed',
+            {
+              root: {
+                type: 'split',
+                split_id: 'split-failed',
+                direction: 'vertical',
+                ratio: 0.5,
+                children: [
+                  { type: 'pane', pane_id: 'pane-failed' },
+                  { type: 'pane', pane_id: 'pane-retry' },
+                ],
+              },
+              panes: [failedPane('pane-failed', 'closed-session'), failedPane('pane-retry', 'closed-retry')],
+            },
+            { title: 'Failed automation', directory: '/tmp/repo' },
+          ),
+        ],
       },
-    }];
-    useSessionStore.setState({
-      ...useSessionStore.getState(),
-      sessions: [],
-      activeSessionId: null,
-    });
-    mockUseDaemonStore.mockReturnValue({
-      ...mockUseDaemonStore(),
-      daemonSessions: [],
     });
 
-    render(<App />);
+    expect(screen.getByRole('button', { name: 'Collapse sidebar' })).toBeInTheDocument();
 
-    await screen.findByTestId('workspace-ws-failed');
-    await waitFor(() => {
-      expect(screen.getByTestId('sidebar').getAttribute('data-collapsed')).toBe('0');
-    });
+    open('Open workspace Failed automation');
+    const pane = document.querySelector<HTMLElement>('[data-pane-id="pane-failed"]')!;
+    fireEvent.keyDown(pane, { key: 'w', metaKey: true });
 
-    await userEvent.click(screen.getByTestId('close-pane-failed'));
-    expect(mockSendWorkspaceClosePane).toHaveBeenCalledWith('ws-failed', 'pane-failed');
+    expect(daemon.sent.filter((command) => command.cmd === 'workspace_layout_close_pane')).toEqual([
+      expect.objectContaining({ workspace_id: 'ws-failed', pane_id: 'pane-failed' }),
+    ]);
   });
 
   it('uses sessions loaded after mount when an existing-session deep link arrives', async () => {
-    const loadedStore = useSessionStore.getState();
-    useSessionStore.setState({
-      ...loadedStore,
-      sessions: [],
-      activeSessionId: null,
+    const { daemon } = await renderApp();
+
+    daemon.emit({
+      event: 'sessions_updated',
+      sessions: [repoSession('s1', 'ws-session', { label: 'working-session' })],
     });
-    const { rerender } = render(<App />);
+    daemon.emit({ event: 'workspace_state_changed', workspace: sessionWorkspace });
+    act(() => vi.mocked(onOpenUrl).mock.lastCall![0](['attn://spawn?cwd=%2Ftmp%2Frepo']));
 
-    await waitFor(() => expect(mockOpenUrlListener).not.toBeNull());
-
-    useSessionStore.setState(loadedStore);
-    rerender(<App />);
-    await screen.findByTestId('workspace-ws-session');
-
-    await act(async () => {
-      mockOpenUrlListener?.(['attn://spawn?cwd=%2Ftmp%2Frepo']);
-    });
-
-    expect(useSessionStore.getState().focusRequest?.sessionId).toBe('s1');
+    expect(isShown('ws-session')).toBe(true);
+    expect(selectedSidebarRows()).toContain('sidebar-session-s1');
+    expect(daemon.sent.some((command) => command.cmd === 'register_workspace')).toBe(false);
   });
 
   it('waits for an opened tile to reach workspace state before selecting and focusing it', async () => {
-    useSessionStore.setState({
-      ...useSessionStore.getState(),
-      activeSessionId: null,
+    const { daemon } = await renderSessionAndNotes({ seed_id: 's-work11' });
+    daemon.on('open_seed', (command) => ({
+      event: 'open_seed_result',
+      seed_id: command.seed_id,
+      success: true,
+      workspace_id: 'ws-late',
+      tile_id: 'tile-seed',
+    }));
+    open('Open working-session');
+
+    fireEvent.click(screen.getByTestId('seed-chip-s1'));
+    await act(async () => {
+      await daemon.received('open_seed');
     });
-    render(<App />);
-    await screen.findByTestId('workspace-ws-tiles');
+    expect(workspaceElement('ws-late')).toBeNull();
+    expect(isShown('ws-session')).toBe(true);
 
-    await userEvent.click(screen.getByTestId('select-late-tile'));
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('');
-
+    daemon.emit({
+      event: 'workspace_state_changed',
+      workspace: tileWorkspace('ws-late', 'Seed reader', {
+        tile_id: 'tile-seed',
+        tile_kind: 'document',
+        tile_params: 'seed:s-work11',
+      }),
+    });
     act(() => {
-      mockPushWorkspaces?.([
-        ...mockDaemonWorkspaces,
-        {
-          id: 'ws-late',
-          title: 'Seed reader',
-          directory: '/tmp/repo',
-          status: 'active',
-          layout: {
-            active_pane_id: '',
-            layout_json: JSON.stringify({
-              type: 'tile',
-              tile_id: 'tile-seed',
-              tile_kind: 'document',
-              tile_params: 'seed:s-work11',
-            }),
-            panes: [],
-          },
-        },
-      ]);
+      vi.advanceTimersToNextFrame();
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId('workspace-ws-late').getAttribute('data-active')).toBe('1');
-      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('ws-late:tile-seed');
-      expect(mockFocusWorkspaceLeaf).toHaveBeenCalledWith('tile-seed');
-    });
-    expect(mockSendWorkspaceSelected).toHaveBeenLastCalledWith('ws-late');
+    expect(isShown('ws-late')).toBe(true);
+    expect(workspaceElement('ws-late')).toHaveAttribute('data-active-leaf-id', 'tile-seed');
+    expect(selectedSidebarRows()).toContain('sidebar-tile-ws-late-tile-seed');
+    expect(lastSelectedWorkspace(daemon)).toBe('ws-late');
   });
 
   it('keeps visible grid workspaces mounted even when they are cold and idle', async () => {
     localStorage.setItem(WARM_WORKSPACE_LIMIT_STORAGE_KEY, '0');
-    mockDaemonWorkspaces = [
-      {
-        id: 'ws-one',
-        title: 'one',
-        directory: '/tmp/repo',
-        status: 'active',
-        layout: {
-          active_pane_id: 'pane-one',
-          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-one' }),
-          panes: [{ workspace_id: 'ws-one', pane_id: 'pane-one', kind: 'agent', runtime_id: 's1', session_id: 's1', title: 'one' }],
-        },
+    onTestFinished(() => localStorage.removeItem(WARM_WORKSPACE_LIMIT_STORAGE_KEY));
+    const names = ['one', 'two', 'three'];
+    await renderApp({
+      initialState: {
+        sessions: names.map((name, index) =>
+          repoSession(`s${index + 1}`, `ws-${name}`, { label: name, state: 'idle' }),
+        ),
+        workspaces: names.map((name, index) =>
+          loneAgentWorkspace(`ws-${name}`, name, `s${index + 1}`, `pane-${name}`),
+        ),
       },
-      {
-        id: 'ws-two',
-        title: 'two',
-        directory: '/tmp/repo',
-        status: 'active',
-        layout: {
-          active_pane_id: 'pane-two',
-          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-two' }),
-          panes: [{ workspace_id: 'ws-two', pane_id: 'pane-two', kind: 'agent', runtime_id: 's2', session_id: 's2', title: 'two' }],
-        },
-      },
-      {
-        id: 'ws-three',
-        title: 'three',
-        directory: '/tmp/repo',
-        status: 'active',
-        layout: {
-          active_pane_id: 'pane-three',
-          layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-three' }),
-          panes: [{ workspace_id: 'ws-three', pane_id: 'pane-three', kind: 'agent', runtime_id: 's3', session_id: 's3', title: 'three' }],
-        },
-      },
-    ];
-    const sessions: Session[] = ['one', 'two', 'three'].map((name, index) => {
-      const sessionId = `s${index + 1}`;
-      const paneId = `pane-${name}`;
-      const workspaceId = `ws-${name}`;
-      return {
-        id: sessionId,
-        label: name,
-        state: 'idle',
-        cwd: '/tmp/repo',
-        workspaceId,
-        agent: 'claude',
-        transcriptMatched: true,
-        daemonActivePaneId: paneId,
-        workspace: {
-          agents: [{ id: paneId, runtimeId: sessionId, sessionId, title: name }],
-          layoutTree: { type: 'pane' as const, paneId },
-        },
-      };
     });
-    useSessionStore.setState({
-      ...useSessionStore.getState(),
-      sessions,
-      activeSessionId: 's1',
-      view: 'session',
-    });
-    mockUseDaemonStore.mockReturnValue({
-      ...mockUseDaemonStore(),
-      daemonSessions: sessions.map((session) => ({
-        id: session.id,
-        label: session.label,
-        directory: session.cwd,
-        state: 'idle',
-      })),
-    });
+    open('Open one');
+    expect(isLive('pane-two')).toBe(false);
 
-    render(<App />);
+    fireEvent.keyDown(window, { key: 'g', metaKey: true });
 
-    const coldWorkspace = await screen.findByTestId('workspace-ws-two');
-    expect(coldWorkspace.getAttribute('data-live')).toBe('0');
-
-    await userEvent.click(screen.getByTestId('open-grid'));
-
-    await waitFor(() => {
-      expect(screen.getByTestId('grid-view').getAttribute('data-runtime-ids')).toContain('s2');
-      expect(screen.getByTestId('workspace-ws-two').getAttribute('data-live')).toBe('1');
-      expect(screen.getByTestId('workspace-ws-three').getAttribute('data-live')).toBe('1');
-    });
+    expect(screen.getByRole('region', { name: 'Session grid' })).toBeInTheDocument();
+    expect(isLive('pane-two')).toBe(true);
+    expect(isLive('pane-three')).toBe(true);
   });
 
   it('sends the resolved terminal theme once the daemon handshake completes', async () => {
-    render(<App />);
+    const { daemon } = await renderApp();
 
-    await waitFor(() => {
-      expect(mockUseDaemonSocket.mock.results[0]?.value.sendSetTerminalTheme).toHaveBeenCalledWith({
-        foreground: '#d4d4d4',
-        background: '#1e1e1e',
-        cursor: '#d4d4d4',
-        ansi_palette: [
-          '#000000', '#cd3131', '#0dbc79', '#e5e510',
-          '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
-          '#666666', '#f14c4c', '#23d18b', '#f5f543',
-          '#3b8eea', '#d670d6', '#29b8db', '#ffffff',
-        ],
-      });
+    expect(await daemon.received('set_terminal_theme')).toEqual({
+      cmd: 'set_terminal_theme',
+      foreground: '#d4d4d4',
+      background: '#1e1e1e',
+      cursor: '#d4d4d4',
+      ansi_palette: [
+        '#000000', '#cd3131', '#0dbc79', '#e5e510',
+        '#2472c8', '#bc3fbc', '#11a8cd', '#e5e5e5',
+        '#666666', '#f14c4c', '#23d18b', '#f5f543',
+        '#3b8eea', '#d670d6', '#29b8db', '#ffffff',
+      ],
     });
   });
 });

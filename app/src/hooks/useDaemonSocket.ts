@@ -598,7 +598,7 @@ export interface RecentFile {
   sessionId?: string;
 }
 
-interface UseDaemonSocketOptions {
+export interface UseDaemonSocketOptions {
   onSessionsUpdate: (sessions: DaemonSession[]) => void;
   onNotebookChanged?: (origin: string, paths: string[]) => void;
   onTasksChanged?: () => void;
@@ -800,7 +800,7 @@ const BINARY_PTY_OUTPUT_CAPABILITY = 'binary_pty_output';
 // binary_pty_output, which decides only how a blob TRAVELS — the hub relay takes its pixels as base64.
 const KITTY_IMAGES_CAPABILITY = 'kitty_images';
 
-export function isTransientAttachError(error: unknown): boolean {
+function isTransientAttachError(error: unknown): boolean {
   const message = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
   if (message.includes('websocket not connected') || message.includes('daemon is recovering')) {
     return false;
@@ -822,18 +822,10 @@ function waitForAttachRetry(delayMs: number): Promise<void> {
   });
 }
 
-export async function retryTransientAttachRequest<T>(
+async function retryTransientAttachRequest<T>(
   request: () => Promise<T>,
-  options?: {
-    timeoutMs?: number;
-    delayMs?: number;
-    wait?: (delayMs: number) => Promise<void>;
-    onRetry?: (attempt: number, error: unknown, elapsedMs: number) => void;
-  },
+  onRetry: (attempt: number, error: unknown, elapsedMs: number) => void,
 ): Promise<T> {
-  const timeoutMs = options?.timeoutMs ?? ATTACH_RETRY_TIMEOUT_MS;
-  const delayMs = options?.delayMs ?? ATTACH_RETRY_DELAY_MS;
-  const wait = options?.wait ?? waitForAttachRetry;
   const startedAt = Date.now();
   let attempt = 0;
 
@@ -843,11 +835,11 @@ export async function retryTransientAttachRequest<T>(
       return await request();
     } catch (error) {
       const elapsedMs = Date.now() - startedAt;
-      if (!isTransientAttachError(error) || elapsedMs >= timeoutMs) {
+      if (!isTransientAttachError(error) || elapsedMs >= ATTACH_RETRY_TIMEOUT_MS) {
         throw error;
       }
-      options?.onRetry?.(attempt, error, elapsedMs);
-      await wait(delayMs);
+      onRetry(attempt, error, elapsedMs);
+      await waitForAttachRetry(ATTACH_RETRY_DELAY_MS);
     }
   }
 }
@@ -2826,7 +2818,7 @@ export function useDaemonSocket({
             if ((data as any).success) {
               pending.resolve(data);
             } else {
-              const errorCode = (data as any).error_code;
+              const errorCode = data.error_code;
               pending.reject(
                 new AutomationActionError(
                   (data as any).error || 'Automation action failed',
@@ -3056,15 +3048,13 @@ export function useDaemonSocket({
   const sendAttachSessionWithRetry = useCallback(async (id: string, context?: AttachRequestContext): Promise<AttachResult> => {
     return retryTransientAttachRequest(
       () => sendAttachSession(id, context),
-      {
-        onRetry: (attempt, error, elapsedMs) => {
+      (attempt, error, elapsedMs) => {
         console.warn('[DaemonSocket] Retrying transient attach failure', {
           id,
           attempt,
           elapsedMs,
           error: error instanceof Error ? error.message : String(error),
         });
-        },
       },
     );
   }, [sendAttachSession]);

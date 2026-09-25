@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '../../test/utils';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RepoOptions } from './RepoOptions';
 
 const repoInfo = {

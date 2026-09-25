@@ -2,7 +2,6 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, expect, it, vi } from 'vitest';
 import { useState } from 'react';
 import { DelegationModelPopover } from './DelegationModelPopover';
-import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
 import { ModelCapabilitySupport, type DelegationHarness, type DelegationSelection } from '../types/generated';
 import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
 
@@ -30,7 +29,7 @@ function open(value: DelegationSelection) {
   return { loadModels, onChange, onClose, rerender: (next: DelegationSelection) => view.rerender(<DelegationModelPopover value={next} harnesses={harnesses} anchor={anchor} onChange={onChange} onClose={onClose} loadModels={loadModels} />) };
 }
 
-afterEach(() => { cleanup(); clearDelegationModelCatalogs(); });
+afterEach(() => { cleanup(); });
 
 it('discovers on open once per harness, refreshes on demand, and commits model then effort', async () => {
   const { loadModels, onChange, rerender } = open({ harness: 'claude', provider: '', model: '', effort: '' });

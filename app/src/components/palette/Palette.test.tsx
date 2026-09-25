@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
-import { render, screen, fireEvent } from '../../test/utils';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Palette } from './Palette';
 
 interface Row { path: string }

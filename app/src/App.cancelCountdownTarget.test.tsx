@@ -1,271 +1,86 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, render } from '@testing-library/react';
-import App from './App';
-import { useSessionStore } from './store/sessions';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it } from 'vitest';
+import {
+  agentPane,
+  daemonSession,
+  daemonWorkspace,
+  type DaemonSession,
+} from './test/daemonFixtures';
+import { renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-const mockUseDaemonStore = vi.fn();
-const mockUseDaemonSocket = vi.fn();
-const mockUseKeyboardShortcuts = vi.fn();
+const WORKSPACE = 'workspace-main';
+const COUNTING_DOWN = '2999-01-01T00:00:00.000Z';
 
-const { mockSetActiveSession, mockSendCancelCountdown } = vi.hoisted(() => ({
-  mockSetActiveSession: vi.fn(),
-  mockSendCancelCountdown: vi.fn(),
-}));
-
-let autoSettleFiresAt: Record<string, string | undefined>;
-let activeSessionId: string | null;
-
-vi.mock('@tauri-apps/plugin-deep-link', () => ({
-  onOpenUrl: vi.fn(async () => () => {}),
-  getCurrent: vi.fn(async () => []),
-}));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
-
-vi.mock('./components/GhosttyTerminal', async () => {
-  const React = await import('react');
-  return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
-});
-
-vi.mock('./components/Sidebar', () => ({
-  EditorIcon: () => null,
-  WorkflowIcon: () => null,
-  DiffIcon: () => null,
-  PRsIcon: () => null,
-  NotebookIcon: () => null,
-  MarkdownIcon: () => null,
-  Sidebar: () => null,
-}));
-
-vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
-vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
-vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
-vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/SessionTerminalWorkspace', () => ({ SessionTerminalWorkspace: () => null }));
-vi.mock('./components/ErrorToast', () => ({
-  ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
-}));
-vi.mock('./hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: (args: unknown) => mockUseKeyboardShortcuts(args),
-}));
-vi.mock('./hooks/useUIScale', () => ({
-  useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
-}));
-vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
-vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/daemonSessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
-});
-vi.mock('./hooks/useDaemonSocket', () => ({
-  useDaemonSocket: (args: unknown) => mockUseDaemonSocket(args),
-}));
-vi.mock('./pty/bridge', async () => {
-  const actual = await vi.importActual<typeof import('./pty/bridge')>('./pty/bridge');
-  return { ...actual, ptySpawn: vi.fn(async () => {}) };
-});
-
-type SocketArgs = {
-  onWorkspacesUpdate?: (workspaces: unknown[]) => void;
-  onSettingsUpdate?: (settings: Record<string, string>) => void;
-};
-
-function socketArgs(): SocketArgs {
-  const calls = mockUseDaemonSocket.mock.calls;
-  return calls[calls.length - 1]?.[0] as SocketArgs;
-}
-
-function shortcutHandlers<T>(): T {
-  const calls = mockUseKeyboardShortcuts.mock.calls;
-  return calls[calls.length - 1]?.[0] as T;
-}
-
-const PANES = ['s1', 's2'];
-
-function workspacePayload() {
-  return [{
-    id: 'workspace-main',
-    title: 'main',
+function agent(id: string, overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, {
+    workspace_id: WORKSPACE,
     directory: '/tmp/main',
-    status: 'active',
-    layout: {
-      active_pane_id: 'pane-s1',
-      layout_json: JSON.stringify({
-        type: 'split',
-        split_id: 'split-1',
-        direction: 'horizontal',
-        ratio: 0.5,
-        first: { type: 'pane', pane_id: 'pane-s1' },
-        second: { type: 'pane', pane_id: 'pane-s2' },
-      }),
-      panes: PANES.map((id) => ({
-        workspace_id: 'workspace-main',
-        pane_id: `pane-${id}`,
-        kind: 'agent',
-        runtime_id: id,
-        session_id: id,
-        title: id,
-      })),
-    },
-  }];
-}
-
-function broadcast() {
-  act(() => {
-    socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
-    socketArgs().onWorkspacesUpdate?.(workspacePayload());
+    turn_owed: true,
+    turn_opened_at: '2026-08-03T09:00:00Z',
+    ...overrides,
   });
 }
 
-function pressCancelCountdown(): string[] {
-  mockSendCancelCountdown.mockClear();
-  const shortcuts = shortcutHandlers<{ onCancelCountdown?: () => void }>();
-  act(() => { shortcuts.onCancelCountdown?.(); });
-  return mockSendCancelCountdown.mock.calls.map((call) => call[0] as string);
+const splitWorkspace = daemonWorkspace(WORKSPACE, {
+  root: {
+    type: 'split',
+    split_id: 'split-1',
+    direction: 'horizontal',
+    ratio: 0.5,
+    children: [
+      { type: 'pane', pane_id: 'pane-s1' },
+      { type: 'pane', pane_id: 'pane-s2' },
+    ],
+  },
+  panes: [agentPane('s1', WORKSPACE), agentPane('s2', WORKSPACE)],
+});
+
+async function focusFirstPane() {
+  const rendered = await renderApp({
+    initialState: {
+      sessions: [agent('s1'), agent('s2')],
+      workspaces: [splitWorkspace],
+      settings: { queue_mode_enabled: 'true' },
+    },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
+  return rendered;
 }
 
-function shortcutRegistered(): boolean {
-  return Boolean(shortcutHandlers<{ onCancelCountdown?: () => void }>().onCancelCountdown);
+function pressCancelCountdown(daemon: ScriptedDaemon): string[] {
+  const before = daemon.sent.length;
+  act(() => {
+    window.dispatchEvent(new CustomEvent('attn:native-shortcut', { detail: 'session.cancelCountdown' }));
+  });
+  return daemon.sent
+    .slice(before)
+    .flatMap((command) => (command.cmd === 'cancel_countdown' ? [command.session_id] : []));
 }
 
 describe('who ⌘. names', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useSessionStore.setState(useSessionStore.getInitialState(), true);
-    localStorage.clear();
-    localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
-    autoSettleFiresAt = {};
-    activeSessionId = null;
+  it('names the focused session alone when nothing is counting down', async () => {
+    const { daemon } = await focusFirstPane();
 
-    mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
+    expect(pressCancelCountdown(daemon)).toEqual(['s1']);
+  });
 
-    useSessionStore.setState({
-      sessions: PANES.map((id) => ({
-        id,
-        label: id,
-        state: 'working',
-        cwd: '/tmp/main',
-        workspaceId: 'workspace-main',
-        agent: 'claude',
-        transcriptMatched: true,
-        daemonActivePaneId: 'pane-s1',
-        workspace: {
-          agents: PANES.map((paneSession) => ({
-            id: `pane-${paneSession}`,
-            runtimeId: paneSession,
-            sessionId: paneSession,
-            title: paneSession,
-          })),
-          layoutTree: {
-            type: 'split',
-            splitId: 'split-1',
-            direction: 'horizontal',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', paneId: 'pane-s1' },
-              { type: 'pane', paneId: 'pane-s2' },
-            ],
-          },
-        },
-      })),
-      activeSessionId,
-      connect: vi.fn(async () => {}),
-      connected: true,
-      launcherConfig: { executables: {} },
-      createSession: vi.fn(async () => 's1'),
-      closeSession: vi.fn(),
-      takeSessionSpawnArgs: vi.fn(() => null),
-      reloadSession: vi.fn(async () => {}),
+  it('names every visible countdown instead, wherever it is running', async () => {
+    const { daemon } = await focusFirstPane();
+    daemon.emit({
+      event: 'session_state_changed',
+      session: agent('s2', { auto_settle_fires_at: COUNTING_DOWN }),
     });
 
-    mockUseDaemonStore.mockImplementation(() => ({
-      daemonSessions: PANES.map((id) => ({
-        id,
-        label: id,
-        directory: '/tmp/main',
-        state: 'working',
-        turn_owed: true,
-        turn_opened_at: '2026-08-03T09:00:00Z',
-        auto_settle_fires_at: autoSettleFiresAt[id],
-      })),
-      crew: [],
-      setDaemonSessions: vi.fn(),
-      prs: [], setPRs: vi.fn(),
-      repoStates: [], setRepoStates: vi.fn(),
-      authorStates: [], setAuthorStates: vi.fn(),
-      seeds: [], setSeeds: vi.fn(),
-    }));
-
-    const fn = vi.fn();
-    mockUseDaemonSocket.mockReturnValue({
-      sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
-      sendRefreshPRs: vi.fn(async () => ({ success: true })),
-      sendUnregisterSession: vi.fn(async () => {}),
-      sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
-      sendMuteWorkspace: vi.fn(async () => ({ success: true })),
-      sendSetSetting: fn,
-      sendSetClientPresence: fn,
-      sendCancelCountdown: mockSendCancelCountdown,
-      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendDeleteWorktree: vi.fn(async () => ({ success: true })),
-      sendGetRecentLocations: vi.fn(async () => ({ success: true, locations: [] })),
-      sendCreateWorktreeFromBranch: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendFetchRemotes: vi.fn(async () => ({ success: true })),
-      sendFetchPRDetails: vi.fn(async () => ({ success: true })),
-      sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
-      sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendSessionSelected: fn, sendWorkspaceSelected: fn,
-      sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
-      sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
-      getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
-      getPresentations: vi.fn(async () => []),
-      connectionError: null,
-      hasReceivedInitialState: true,
-      sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),
-      sendNotificationMarkRead: vi.fn(async () => 0),
-      rateLimit: null,
-      warnings: [],
-      clearWarnings: fn,
-      sendSetTerminalTheme: fn,
-    });
+    expect(pressCancelCountdown(daemon)).toEqual(['s2']);
   });
 
-  function focusFirstPane() {
-    render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    broadcast();
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-  }
+  it('names nothing when no tile is on screen at all', async () => {
+    const { daemon } = await focusFirstPane();
 
-  it('names the focused session alone when nothing is counting down', () => {
-    focusFirstPane();
+    fireEvent.keyDown(window, { key: 'H', metaKey: true, shiftKey: true });
+    expect(screen.getByTestId('sidebar-home')).toHaveAttribute('aria-current', 'page');
 
-    expect(pressCancelCountdown()).toEqual(['s1']);
-  });
-
-  it('names every visible countdown instead, wherever it is running', () => {
-    focusFirstPane();
-    autoSettleFiresAt.s2 = '2999-01-01T00:00:00.000Z';
-    broadcast();
-
-    expect(pressCancelCountdown()).toEqual(['s2']);
-  });
-
-  it('names nothing when no tile is on screen at all', () => {
-    focusFirstPane();
-
-    const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
-    act(() => { shortcuts.onGoToDashboard(); });
-    broadcast();
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-
-    expect(shortcutRegistered()).toBe(false);
+    expect(pressCancelCountdown(daemon)).toEqual([]);
   });
 });

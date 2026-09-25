@@ -1,207 +1,44 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isTauri } from '@tauri-apps/api/core';
-import { PROTOCOL_VERSION, useDaemonSocket } from './useDaemonSocket';
+import { describe, expect, it, vi } from 'vitest';
+import { renderWithDaemon } from '../test/renderApp';
 
-class FakeWebSocket {
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
-  static instances: FakeWebSocket[] = [];
-
-  readonly url: string;
-  readyState = FakeWebSocket.CONNECTING;
-  onopen: ((event: Event) => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
-  onclose: ((event: CloseEvent) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-  sent: string[] = [];
-
-  constructor(url: string) {
-    this.url = url;
-    FakeWebSocket.instances.push(this);
-    queueMicrotask(() => {
-      this.readyState = FakeWebSocket.OPEN;
-      this.onopen?.(new Event('open'));
-    });
-  }
-
-  send(data: string) {
-    this.sent.push(data);
-  }
-
-  close() {
-    this.readyState = FakeWebSocket.CLOSED;
-    this.onclose?.(new CloseEvent('close'));
-  }
-
-  emit(data: unknown) {
-    this.onmessage?.({ data: JSON.stringify(data) } as MessageEvent);
-  }
-}
-
-async function waitForOpenSocket(): Promise<FakeWebSocket> {
-  await waitFor(() => {
-    expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
-  });
-  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-  expect(ws).toBeDefined();
-  await waitFor(() => {
-    expect(ws.readyState).toBe(FakeWebSocket.OPEN);
-  });
-  return ws;
-}
-
-function renderSocket() {
-  return renderHook(() =>
-    useDaemonSocket({
-      onSessionsUpdate: vi.fn(),
-      onWorkspacesUpdate: vi.fn(),
-      onPRsUpdate: vi.fn(),
-      onReposUpdate: vi.fn(),
-      onAuthorsUpdate: vi.fn(),
-      wsUrl: 'ws://localhost:9999/ws',
-    }),
-  );
-}
-
-function emitInitialState(ws: FakeWebSocket) {
-  act(() => {
-    ws.emit({
-      event: 'initial_state',
-      protocol_version: PROTOCOL_VERSION,
-      sessions: [],
-      workspaces: [],
-      prs: [],
-      repos: [],
-      authors: [],
-      settings: {},
-    });
-  });
-}
-
-// A `command_error` carries no correlation id, so it has to be matched by command name
-// with the `<cmd>:<id>` suffix allowed, or the caller reports "timed out" instead.
 describe('useDaemonSocket keyed command errors', () => {
-
-
-  beforeEach(() => {
-
-    FakeWebSocket.instances = [];
-    vi.stubGlobal('WebSocket', FakeWebSocket);
-    vi.mocked(isTauri).mockReturnValue(false);
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
-    vi.clearAllMocks();
-  });
-
   it('matches setting acknowledgements by request id and propagates save failures', async () => {
-    const { result, unmount } = renderSocket();
-    const ws = await waitForOpenSocket();
-    emitInitialState(ws);
-    let first!: Promise<void>, second!: Promise<void>;
-    act(() => {
-      first = result.current.sendSaveSetting('default_model_claude', 'sonnet');
-      second = result.current.sendSaveSetting('default_model_codex', 'test-model');
-    });
-    const requests = ws.sent.map((value) => JSON.parse(value)).filter((value) => value.cmd === 'set_setting');
+    const { daemon, api } = await renderWithDaemon();
     const settled: string[] = [];
-    const firstResult = first.then(() => settled.push('first'));
-    const secondResult = second.catch((error: Error) => { settled.push(error.message); });
-    await act(async () => {
-      ws.emit({ event: 'settings_updated', changed_key: 'default_model_claude', settings: { default_model_claude: 'sonnet' } });
-      ws.emit({ event: 'settings_updated', request_id: 'another-client', success: true });
-    });
+    const first = api.current.sendSaveSetting('default_model_claude', 'sonnet').then(() => settled.push('first'));
+    const second = api.current.sendSaveSetting('default_model_codex', 'test-model')
+      .catch((error: Error) => { settled.push(error.message); });
+    const [firstRequest, secondRequest] = daemon.sent.filter((command) => command.cmd === 'set_setting');
+
+    daemon.emit({ event: 'settings_updated', changed_key: 'default_model_claude', settings: { default_model_claude: 'sonnet' } });
+    daemon.emit({ event: 'settings_updated', request_id: 'another-client', success: true });
+    await daemon.idle();
     expect(settled).toEqual([]);
-    await act(async () => {
-      ws.emit({ event: 'settings_updated', request_id: requests[1].request_id, success: false, error: 'Storage unavailable' });
-      await secondResult;
-    });
+
+    daemon.emit({ event: 'settings_updated', request_id: secondRequest.request_id, success: false, error: 'Storage unavailable' });
+    await second;
     expect(settled).toEqual(['Storage unavailable']);
-    await act(async () => {
-      ws.emit({ event: 'settings_updated', request_id: requests[0].request_id, success: true });
-      await firstResult;
-    });
+
+    daemon.emit({ event: 'settings_updated', request_id: firstRequest.request_id, success: true });
+    await first;
     expect(settled).toEqual(['Storage unavailable', 'first']);
-    unmount();
   });
 
   it('rejects a pending session rename with the parked endpoint reason instead of timing out', async () => {
-    const { result, unmount } = renderSocket();
-    const ws = await waitForOpenSocket();
-    emitInitialState(ws);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const parked = 'endpoint gpu-box is parked: remote binary (abc1234) differs from this client (def5678) — click Sync to update';
+    const { daemon, api } = await renderWithDaemon();
+    daemon.on('rename_session', () => ({ event: 'command_error', success: false, cmd: 'rename_session', error: parked }));
 
-    let rename!: Promise<void>;
-    act(() => {
-      rename = result.current.sendRenameSession('session-1', 'new name');
-    });
-    const settled = rename.then(
-      () => 'resolved',
-      (err: Error) => err.message,
-    );
-
-    await waitFor(() => {
-      expect(ws.sent.map((entry) => JSON.parse(entry)).some((entry) => entry.cmd === 'rename_session')).toBe(true);
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'command_error',
-        cmd: 'rename_session',
-        error: 'endpoint gpu-box is parked: remote binary (abc1234) differs from this client (def5678) — click Sync to update',
-      });
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_000);
-    });
-
-    await expect(settled).resolves.toBe(
-      'endpoint gpu-box is parked: remote binary (abc1234) differs from this client (def5678) — click Sync to update',
-    );
-
-    unmount();
+    await expect(api.current.sendRenameSession('session-1', 'new name')).rejects.toThrow(parked);
   });
 
   it('rejects a pending workspace rename with the daemon error instead of timing out', async () => {
-    const { result, unmount } = renderSocket();
-    const ws = await waitForOpenSocket();
-    emitInitialState(ws);
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const parked = 'endpoint gpu-box is parked: remote binary differs from this client — click Sync to update';
+    const { daemon, api } = await renderWithDaemon();
+    daemon.on('rename_workspace', () => ({ event: 'command_error', success: false, cmd: 'rename_workspace', error: parked }));
 
-    let rename!: Promise<void>;
-    act(() => {
-      rename = result.current.sendRenameWorkspace('workspace-1', 'new name');
-    });
-    const settled = rename.then(
-      () => 'resolved',
-      (err: Error) => err.message,
-    );
-
-    await waitFor(() => {
-      expect(ws.sent.map((entry) => JSON.parse(entry)).some((entry) => entry.cmd === 'rename_workspace')).toBe(true);
-    });
-
-    act(() => {
-      ws.emit({
-        event: 'command_error',
-        cmd: 'rename_workspace',
-        error: 'endpoint gpu-box is parked: remote binary differs from this client — click Sync to update',
-      });
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(30_000);
-    });
-
-    await expect(settled).resolves.toBe(
-      'endpoint gpu-box is parked: remote binary differs from this client — click Sync to update',
-    );
-
-    unmount();
+    await expect(api.current.sendRenameWorkspace('workspace-1', 'new name')).rejects.toThrow(parked);
   });
 });

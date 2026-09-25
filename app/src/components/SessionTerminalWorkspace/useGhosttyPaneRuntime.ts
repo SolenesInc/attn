@@ -95,7 +95,8 @@ export function useGhosttyPaneRuntime(
     );
     attachedRuntimesRef.current.delete(runtimeId);
     pendingResizeRef.current.delete(runtimeId);
-    if (runtimeAttachHolds.release(runtimeId, attachHolderRef.current) > 0) {
+    const heldByThisWorkspace = runtimeAttachHolds.holds(runtimeId, attachHolderRef.current);
+    if (runtimeAttachHolds.release(runtimeId, attachHolderRef.current) > 0 || !heldByThisWorkspace) {
       return;
     }
     void ptyDetach({ id: runtimeId });

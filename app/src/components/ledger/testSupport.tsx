@@ -4,8 +4,13 @@ import { render, screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import type { Mock } from 'vitest';
 import { SettingsProvider } from '../../contexts/SettingsContext';
+import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
-import { createSessionLedgerTestConnection } from '../../test/sessionLedgerTestConnection';
+import type { SessionLedgerConnection } from '../../hooks/useSessionLedger';
+import type { SessionLedgerEntry } from '../../types/generated';
+import { renderWithDaemon } from '../../test/renderApp';
+import type { CommandMessage } from '../../test/protocol';
+import type { ScriptedDaemon } from '../../test/scriptedDaemon';
 import { now } from '../../test/sessionLedgerFixtures';
 import { SessionsTab } from './SessionsTab';
 import type { SessionsTabProps } from './SessionsTab';
@@ -14,11 +19,51 @@ import type { WorktreesTabProps } from './WorktreesTab';
 
 type TabOnly<T> = Omit<T, 'queryRef' | 'now' | 'onStatus'>;
 
-type SessionsTabTestProps = Partial<Omit<TabOnly<SessionsTabProps>, 'connection'>> & {
-  listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
-};
+export type LedgerAnswer = (query: SessionLedgerQuery, index: number) => SessionLedgerPage | Error | 'hold';
+
+type SessionListCommand = CommandMessage<'session_list'>;
+
+export function pages(answers: SessionLedgerPage[]): LedgerAnswer {
+  return (_query, index) => answers[Math.min(index, answers.length - 1)];
+}
+
+export function page(overrides: Partial<SessionLedgerPage> = {}): SessionLedgerPage {
+  return { entries: [], omitted: 0, ...overrides };
+}
 
 export const rows = () => within(screen.getByRole('listbox', { name: 'Rows' }));
+
+export function useLedgerConnection(): SessionLedgerConnection {
+  const { sendSessionList, subscribeSessionLedger } = useDaemonApi();
+  return { list: sendSessionList, subscribe: subscribeSessionLedger };
+}
+
+export function serveLedger(daemon: ScriptedDaemon, answer: LedgerAnswer) {
+  const held: SessionListCommand[] = [];
+  const queryOf = ({ cmd: _cmd, request_id: _requestId, ...query }: SessionListCommand) => query as SessionLedgerQuery;
+  daemon.on('session_list', (command) => {
+    const reply = answer(queryOf(command), daemon.sentOf('session_list').length - 1);
+    if (reply === 'hold') {
+      held.push(command);
+      return;
+    }
+    return reply instanceof Error
+      ? { event: 'session_list_result', success: false, error: reply.message }
+      : { event: 'session_list_result', success: true, result: reply };
+  });
+  return {
+    queries: () => daemon.sentOf('session_list').map(queryOf),
+    release: async (index: number, result: SessionLedgerPage) => {
+      const command = held[index];
+      daemon.replyTo(command, { event: 'session_list_result', request_id: command.request_id, success: true, result });
+      await daemon.idle();
+    },
+    closed: async (entry: SessionLedgerEntry) => {
+      daemon.emit({ event: 'session_closed', session_ledger_entry: entry });
+      await daemon.idle();
+    },
+  };
+}
 
 function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLInputElement | null>; onStatus: (status: ReactNode) => void }) => ReactNode }) {
   const queryRef = useRef<HTMLInputElement | null>(null);
@@ -31,22 +76,30 @@ function Host({ children }: { children: (host: { queryRef: React.RefObject<HTMLI
   );
 }
 
-export function renderSessionsTab(
-  { listSessions, ...props }: SessionsTabTestProps,
+function DaemonSessionsTab(props: TabOnly<Omit<SessionsTabProps, 'connection'>> & Pick<SessionsTabProps, 'queryRef' | 'onStatus'>) {
+  return <SessionsTab {...props} connection={useLedgerConnection()} now={now} />;
+}
+
+type SessionsTabTestProps = Partial<Omit<TabOnly<SessionsTabProps>, 'connection'>> & { answer: LedgerAnswer };
+
+export async function renderSessionsTab(
+  { answer, ...props }: SessionsTabTestProps,
   settings: { values?: Record<string, string>; setSetting?: Mock<(key: string, value: string) => void> } = {},
 ) {
   const setSetting = settings.setSetting ?? vi.fn<(key: string, value: string) => void>();
-  const { connection, emit, setConnected } = createSessionLedgerTestConnection(listSessions);
-  const view = render(
+  const view = await renderWithDaemon();
+  const ledger = serveLedger(view.daemon, answer);
+  view.rerender(
     <SettingsProvider settings={settings.values ?? {}} setSetting={setSetting}>
       <Host>
         {(host) => (
-          <SessionsTab workspaceNames={{}} {...props} connection={connection} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />
+          <DaemonSessionsTab workspaceNames={{}} {...props} queryRef={host.queryRef} onStatus={host.onStatus} />
         )}
       </Host>
     </SettingsProvider>,
   );
-  return { ...view, setSetting, emit, setConnected };
+  await view.daemon.idle();
+  return { ...view, ...ledger, setSetting, settle: () => view.daemon.idle() };
 }
 
 export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = {}) {
@@ -67,17 +120,4 @@ export function renderWorktreesTab(props: Partial<TabOnly<WorktreesTabProps>> = 
       {(host) => <WorktreesTab {...full} queryRef={host.queryRef} now={now} onStatus={host.onStatus} />}
     </Host>,
   );
-}
-
-export function listing(pages: SessionLedgerPage[]) {
-  const calls: SessionLedgerQuery[] = [];
-  const list = vi.fn(async (query: SessionLedgerQuery) => {
-    calls.push(query);
-    return pages[Math.min(calls.length - 1, pages.length - 1)];
-  });
-  return { list, calls };
-}
-
-export function page(overrides: Partial<SessionLedgerPage> = {}): SessionLedgerPage {
-  return { entries: [], omitted: 0, ...overrides };
 }

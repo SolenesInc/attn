@@ -2,7 +2,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import './App.css';
 import { AppContent } from './application/AppContent';
-import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
+import { useAppDaemon } from './application/useAppDaemon';
 import { DaemonApiProvider } from './contexts/DaemonApiContext';
 import { KeybindingsProvider } from './contexts/KeybindingsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -14,10 +14,8 @@ import {
   DaemonWorkspace,
   DaemonWorktree,
   SessionExitInfo,
-  useDaemonSocket,
 } from './hooks/useDaemonSocket';
 import { useReleaseUpdates } from './hooks/useReleaseUpdates';
-import { useSessionStore } from './store/sessions';
 import { useDaemonStore } from './store/daemonSessions';
 import type { Presentation } from './types/generated';
 import { hideBootSplash } from './utils/bootSplash';
@@ -55,17 +53,7 @@ function App() {
     useReleaseUpdates();
 
   const [presentationNotices, setPresentationNotices] = useState<Presentation[]>([]);
-  const {
-    daemonSessions,
-    setDaemonSessions,
-    setSeeds,
-    setApps,
-    setCrew,
-    prs,
-    setPRs,
-    setRepoStates,
-    setAuthorStates,
-  } = useDaemonStore();
+  const { daemonSessions, prs } = useDaemonStore();
 
   useEffect(() => {
     hideBootSplash();
@@ -106,11 +94,7 @@ function App() {
     );
   }, []);
 
-  const daemon = useDaemonSocket({
-    onSessionsUpdate: (sessions) => {
-      useSessionStore.getState().syncFromDaemonSessions(sessions);
-      setDaemonSessions(sessions);
-    },
+  const daemon = useAppDaemon({
     onPresentationAdded: (p) => setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
     onPresentationUpdated: (p) =>
       setPresentationNotices((prev) => upsertPresentationNotice(prev, p)),
@@ -125,55 +109,22 @@ function App() {
       setCriticalNotifications(critical);
       setNotificationsChangeSignal((n) => n + 1);
     },
-    onSeedsUpdate: setSeeds,
-    onAppsUpdate: setApps,
-    onCrewUpdate: setCrew,
-    onWorkspacesUpdate: (workspaces) => {
-      useSessionStore.getState().syncFromDaemonWorkspaces(workspaces);
-      setDaemonWorkspaces(workspaces);
-    },
-    onPRsUpdate: setPRs,
+    onWorkspacesUpdate: setDaemonWorkspaces,
     onEndpointsUpdate: setDaemonEndpoints,
     onPluginsUpdate: handlePluginsUpdate,
     onGitHubHostsUpdate: handleGitHubHostsUpdate,
-    onReposUpdate: setRepoStates,
-    onAuthorsUpdate: setAuthorStates,
-    onSettingsUpdate: (nextSettings) => {
-      useSessionStore.getState().syncNavigationSettings(nextSettings);
-      setSettings(nextSettings);
-    },
+    onSettingsUpdate: setSettings,
     onSettingError: setSettingError,
     onWorktreesUpdate: setWorktrees,
     onSessionExited: handleSessionExited,
   });
 
   const {
-    getMarkdownAnnotations,
-    saveMarkdownAnnotations,
-    clearMarkdownAnnotations,
-    submitMarkdownAnnotations,
     sendSetSetting,
     sendNotificationList,
     getPresentations,
     hasReceivedInitialState,
   } = daemon;
-
-  useEffect(() => {
-    setMarkdownAnnotationsTransport({
-      getMarkdownAnnotations,
-      saveMarkdownAnnotations,
-      clearMarkdownAnnotations,
-      submitMarkdownAnnotations,
-    });
-    return () => {
-      setMarkdownAnnotationsTransport(null);
-    };
-  }, [
-    getMarkdownAnnotations,
-    saveMarkdownAnnotations,
-    clearMarkdownAnnotations,
-    submitMarkdownAnnotations,
-  ]);
 
   useEffect(() => {
     if (!hasReceivedInitialState) return;

@@ -1,6 +1,6 @@
 import { useState, type ComponentProps } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor, within } from '../test/utils';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { LocationPicker } from './LocationPicker';
 import { SettingsProvider } from '../contexts/SettingsContext';
 import type { RecentLocation } from '../hooks/useDaemonSocket';

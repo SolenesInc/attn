@@ -1,8 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { GardenBoard } from './GardenBoard';
 import type { Seed } from '../hooks/useDaemonSocket';
-import { _resetEscapeStackForTest } from '../hooks/useEscapeStack';
 
 function seed(overrides: Partial<Seed> & Pick<Seed, 'id' | 'title'>): Seed {
   return {
@@ -81,7 +80,6 @@ function renderBoard() {
   );
 }
 
-afterEach(() => _resetEscapeStackForTest());
 
 describe('GardenBoard visual language', () => {
   it('names active work In progress while keeping the Garden state internal', () => {

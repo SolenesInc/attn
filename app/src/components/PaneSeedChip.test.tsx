@@ -1,9 +1,9 @@
-import { createMockDaemonApi } from '../test/mocks/daemon';
 import { describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { PaneSeedChip } from './PaneSeedChip';
 import type { Seed, SeedDocument } from '../hooks/useDaemonSocket';
-import { DaemonApiProvider } from '../contexts/DaemonApiContext';
+import { renderWithDaemon } from '../test/renderApp';
+import type { Reply } from '../test/scriptedDaemon';
 import { derivePaneSeedDisplay } from './paneSeedDisplay';
 
 function seed(overrides: Partial<Seed> & { id: string; title: string }): Seed {
@@ -181,6 +181,10 @@ describe('PaneSeedChip', () => {
 
 const props = { unread: false, sessionId: 'sess-a', pinned: false, onOpenSeed: vi.fn(), onPopoverClosed: vi.fn() };
 
+function documentResult(document: SeedDocument): Reply {
+  return { event: 'seed_document_get_result', success: true, document };
+}
+
 function documentFor(value: Seed, body = 'Leaves look good at header size.'): SeedDocument {
   return {
     seed: value, children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
@@ -213,67 +217,61 @@ describe('seed lifecycle and context', () => {
     const value = seed({ id: 's-work11', title: 'Garden icons', status: 'harvested', reason: 'All five states are legible.' });
     const doc = documentFor(value);
     doc.notes.push({ ...doc.notes[0], id: 'n-2', kind: 'attach', body: 'attached screenshot', created_at: '2099-01-01T00:00:00Z' });
-    const fetchDocument = vi.fn().mockResolvedValue(doc);
-    render(
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
-        <PaneSeedChip {...props} display={{ kind: 'crown', seedId: value.id, seed: value }} />
-      </DaemonApiProvider>,
-    );
-    expect(fetchDocument).not.toHaveBeenCalled();
+    const { daemon } = await renderWithDaemon(<PaneSeedChip {...props} display={{ kind: 'crown', seedId: value.id, seed: value }} />);
+    daemon.on('seed_document_get', () => documentResult(doc));
+    await daemon.idle();
+    expect(daemon.sentOf('seed_document_get')).toEqual([]);
     fireEvent.keyDown(screen.getByTestId('seed-chip-sess-a'), { key: 'ArrowDown' });
-    expect(await screen.findByText('Leaves look good at header size.')).toBeVisible();
+    await daemon.idle();
+    expect(screen.getByText('Leaves look good at header size.')).toBeVisible();
     expect(screen.getByText('All five states are legible.')).toBeVisible();
     expect(screen.queryByText('attached screenshot')).not.toBeInTheDocument();
-    expect(fetchDocument).toHaveBeenCalledExactlyOnceWith(value.id);
+    expect(daemon.sentOf('seed_document_get').map((command) => command.seed_id)).toEqual([value.id]);
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
   it('ignores a late note response after a lifecycle revision', async () => {
     const value = seed({ id: 's-work11', title: 'Garden icons' });
-    let resolveOld!: (value: SeedDocument) => void;
-    const fetchDocument = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { resolveOld = resolve; }))
-      .mockResolvedValueOnce(documentFor({ ...value, rev: 2, status: 'harvested' }, 'Finished and verified.'));
-    const view = (current: Seed) => (
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: fetchDocument })}>
-        <PaneSeedChip {...props} pinned display={{ kind: 'crown', seedId: current.id, seed: current }} />
-      </DaemonApiProvider>
-    );
-    const { rerender } = render(view(value));
-    rerender(view({ ...value, rev: 2, status: 'harvested' }));
-    expect(await screen.findByText('Finished and verified.')).toBeVisible();
-    await act(async () => resolveOld(documentFor(value, 'Still exploring.')));
+    const revised = { ...value, rev: 2, status: 'harvested' };
+    const view = (current: Seed) => <PaneSeedChip {...props} pinned display={{ kind: 'crown', seedId: current.id, seed: current }} />;
+    const { daemon, rerender } = await renderWithDaemon(null);
+    daemon.on('seed_document_get', () => (daemon.sentOf('seed_document_get').length === 1 ? undefined : documentResult(documentFor(revised, 'Finished and verified.'))));
+    rerender(view(value));
+    rerender(view(revised));
+    await daemon.idle();
+    expect(screen.getByText('Finished and verified.')).toBeVisible();
+    const [late] = daemon.sentOf('seed_document_get');
+    daemon.emit({ ...documentResult(documentFor(value, 'Still exploring.')), request_id: late.request_id });
+    await daemon.idle();
     expect(screen.queryByText('Still exploring.')).not.toBeInTheDocument();
-    expect(fetchDocument).toHaveBeenCalledTimes(2);
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
   });
 
   it('keeps opening the seed available after a context fetch fails', async () => {
     const value = seed({ id: 's-work11', title: 'Garden icons' });
     const onOpenSeed = vi.fn();
-    render(
-      <DaemonApiProvider api={createMockDaemonApi({ sendSeedDocumentGet: vi.fn().mockRejectedValue(new Error('offline')) })}>
-        <PaneSeedChip {...props} onOpenSeed={onOpenSeed} pinned display={{ kind: 'seed', seed: value }} />
-      </DaemonApiProvider>,
-    );
-    expect(await screen.findByText('Latest note unavailable.')).toBeVisible();
+    const { daemon, rerender } = await renderWithDaemon(null);
+    daemon.on('seed_document_get', () => ({ event: 'seed_document_get_result', success: false, error: 'offline' }));
+    rerender(<PaneSeedChip {...props} onOpenSeed={onOpenSeed} pinned display={{ kind: 'seed', seed: value }} />);
+    await daemon.idle();
+    expect(screen.getByText('Latest note unavailable.')).toBeVisible();
     fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
     expect(onOpenSeed).toHaveBeenCalledWith(value.id);
   });
 
   it('refreshes a visible note when a Garden snapshot arrives at the same seed revision', async () => {
     const value = seed({ id: 's-work11', title: 'Garden icons' });
-    const fetchDocument = vi.fn().mockResolvedValueOnce(documentFor(value, 'First note.'))
-      .mockResolvedValueOnce(documentFor(value, 'A new observation.'));
-    const api = createMockDaemonApi({ sendSeedDocumentGet: fetchDocument });
-    const view = (current: Seed) => (
-      <DaemonApiProvider api={api}>
-        <PaneSeedChip {...props} pinned display={{ kind: 'seed', seed: current }} />
-      </DaemonApiProvider>
-    );
-    const { rerender } = render(view(value));
-    expect(await screen.findByText('First note.')).toBeVisible();
+    const notes = ['First note.', 'A new observation.'];
+    const view = (current: Seed) => <PaneSeedChip {...props} pinned display={{ kind: 'seed', seed: current }} />;
+    const { daemon, rerender } = await renderWithDaemon(null);
+    daemon.on('seed_document_get', () => documentResult(documentFor(value, notes.shift())));
+    rerender(view(value));
+    await daemon.idle();
+    expect(screen.getByText('First note.')).toBeVisible();
     rerender(view({ ...value }));
-    expect(await screen.findByText('A new observation.')).toBeVisible();
-    expect(fetchDocument).toHaveBeenCalledTimes(2);
+    await daemon.idle();
+    expect(screen.getByText('A new observation.')).toBeVisible();
+    expect(daemon.sentOf('seed_document_get')).toHaveLength(2);
   });
 });
