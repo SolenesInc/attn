@@ -1,0 +1,182 @@
+package fakeagent
+
+import (
+	"errors"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
+
+	"github.com/google/uuid"
+)
+
+const (
+	claudeRestingTitle = "✳ Claude Code"
+	claudeBusyTitle    = "✶ Claude Code"
+	claudeDefaultModel = "claude-opus-5-5"
+)
+
+var claudeComposer = composer{prompt: "❯ ", footer: "  ? for shortcuts"}
+
+var claudeFlags = flagSpec{
+	values: map[string]bool{
+		"--session-id": true, "--settings": true, "--append-system-prompt": true,
+		"--model": true, "--effort": true, "--permission-mode": true,
+	},
+	variadic: map[string]bool{"--disallowed-tools": true, "--add-dir": true},
+	optional: map[string]bool{"-r": true, "--resume": true},
+}
+
+type claude struct {
+	cfg          config
+	term         *terminal
+	hooks        hookSet
+	cwd          string
+	conversation string
+	resumed      bool
+	transcript   string
+	model        string
+	permission   string
+	prompt       string
+}
+
+func runClaude(cfg config) int {
+	return serve(cfg, claudeComposer, &claude{cfg: cfg})
+}
+
+func (c *claude) begin(term *terminal) error {
+	c.term = term
+	args := claudeFlags.parse(os.Args[1:])
+	var err error
+	if c.cwd, err = os.Getwd(); err != nil {
+		return err
+	}
+	c.conversation = args.value("--session-id")
+	if args.has("-r", "--resume") {
+		c.conversation, c.resumed = args.value("-r", "--resume"), true
+		if c.conversation == "" {
+			return errors.New("claude -r without a session id opens the resume picker, which the fake does not script")
+		}
+	}
+	if c.conversation == "" {
+		return errors.New("claude launched without --session-id or -r <id>")
+	}
+	c.model = args.value("--model")
+	if c.model == "" {
+		c.model = claudeDefaultModel
+	}
+	c.permission = claudePermissionMode(args)
+	c.prompt = strings.Join(args.afterDashes, " ")
+	c.transcript = filepath.Join(c.cfg.ToolHome, ".claude", "projects", claudeProjectName(c.cwd), c.conversation+".jsonl")
+	if c.hooks, err = claudeHooks(args.value("--settings"), c.cwd); err != nil {
+		return err
+	}
+	source := "startup"
+	if c.resumed {
+		source = "resume"
+	}
+	term.title(claudeRestingTitle)
+	return c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source}))
+}
+
+func claudePermissionMode(args parsedArgs) string {
+	switch {
+	case args.has("--dangerously-skip-permissions"):
+		return "bypassPermissions"
+	case args.value("--permission-mode") != "":
+		return args.value("--permission-mode")
+	default:
+		return "default"
+	}
+}
+
+var claudeProjectNameUnsafe = regexp.MustCompile(`[^A-Za-z0-9]`)
+
+func claudeProjectName(cwd string) string {
+	return claudeProjectNameUnsafe.ReplaceAllString(cwd, "-")
+}
+
+func (c *claude) launch() launch {
+	return launch{
+		Harness:        Claude,
+		ConversationID: c.conversation,
+		Resumed:        c.resumed,
+	}
+}
+
+func (c *claude) initialPrompt() string { return c.prompt }
+
+func (c *claude) hookInput(event string, extra map[string]any) map[string]any {
+	input := map[string]any{
+		"session_id":      c.conversation,
+		"transcript_path": c.transcript,
+		"cwd":             c.cwd,
+		"permission_mode": c.permission,
+		"hook_event_name": event,
+	}
+	for key, value := range extra {
+		input[key] = value
+	}
+	return input
+}
+
+func (c *claude) submit(prompt string) error {
+	c.term.title(claudeBusyTitle)
+	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
+		return err
+	}
+	return c.record("user", map[string]any{"role": "user", "content": prompt}, map[string]any{"permissionMode": c.permission})
+}
+
+func (c *claude) reply(text string, afterStop bool) error {
+	if afterStop {
+		if err := c.stop(); err != nil {
+			return err
+		}
+		return c.answer(text)
+	}
+	if err := c.answer(text); err != nil {
+		return err
+	}
+	return c.stop()
+}
+
+func (c *claude) answer(text string) error {
+	message := map[string]any{
+		"id":      "msg_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
+		"role":    "assistant",
+		"model":   c.model,
+		"content": []map[string]any{{"type": "text", "text": text}},
+		"usage": map[string]any{
+			"input_tokens":                len(text),
+			"output_tokens":               len(text),
+			"cache_creation_input_tokens": 0,
+			"cache_read_input_tokens":     0,
+		},
+	}
+	if err := c.record("assistant", message, nil); err != nil {
+		return err
+	}
+	c.term.print(text)
+	return nil
+}
+
+func (c *claude) stop() error {
+	c.term.title(claudeRestingTitle)
+	return c.hooks.run("Stop", "", c.hookInput("Stop", map[string]any{"stop_hook_active": false}))
+}
+
+func (c *claude) record(kind string, message map[string]any, extra map[string]any) error {
+	line := map[string]any{
+		"type":      kind,
+		"uuid":      uuid.NewString(),
+		"timestamp": now(),
+		"sessionId": c.conversation,
+		"cwd":       c.cwd,
+		"message":   message,
+	}
+	for key, value := range extra {
+		line[key] = value
+	}
+	return appendLines(c.transcript, line)
+}

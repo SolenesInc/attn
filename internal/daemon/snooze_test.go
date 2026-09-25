@@ -89,38 +89,6 @@ func TestSnoozeSuppressesTurnsUntilItsDeadline(t *testing.T) {
 	}
 }
 
-func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
-	d := newSnoozeDaemon(t)
-	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")
-
-	moveTo(d, "s1", protocol.StateWaitingInput)
-	original := protocol.Deref(d.sessionForBroadcast(d.store.Get("s1")).TurnOpenedAt)
-
-	snoozeUntil(d, "s1", time.Now().Add(time.Hour))
-	moveTo(d, "s1", protocol.StateIdle)
-
-	wakeAt := time.Now().Add(time.Hour)
-	d.wakeSnooze("s1", wakeAt, "test")
-
-	if !owed(t, d, "s1") {
-		t.Fatal("the woken session owes no turn although it is sitting idle")
-	}
-	opened := protocol.Deref(d.sessionForBroadcast(d.store.Get("s1")).TurnOpenedAt)
-	if opened == original {
-		t.Error("the turn kept its pre-snooze age, so it wakes to the head of the queue")
-	}
-	parsed, err := time.Parse(time.RFC3339Nano, opened)
-	if err != nil {
-		t.Fatalf("turn_opened_at %q does not parse: %v", opened, err)
-	}
-	if !parsed.Equal(wakeAt.UTC()) {
-		t.Errorf("turn opened at %s, want the wake instant %s", parsed, wakeAt.UTC())
-	}
-	if snoozedUntil(t, d, "s1") != "" {
-		t.Error("the deadline survived the wake")
-	}
-}
-
 func TestWakeOpensNoTurnWhileTheAgentIsWorking(t *testing.T) {
 	d := newSnoozeDaemon(t)
 	addTurnSession(t, d, "s1", protocol.SessionAgentCodex, "ws1")

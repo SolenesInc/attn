@@ -535,11 +535,9 @@ func runDaemon() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := pathutil.EnsureGUIPath(); err != nil {
-		fmt.Fprintf(os.Stderr, "PATH recovery failed: %v\n", err)
-	}
-	removeLegacyStateFile()
 	d := daemon.New(socketPath)
+	d.RecoverGUIPath()
+	d.RemoveLegacyStateFile()
 	d.ScrubInheritedAgentSessionEnv()
 	startResult := make(chan error, 1)
 	go func() {
@@ -563,10 +561,6 @@ func runDaemon() {
 		fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
 		os.Exit(1)
 	}
-}
-
-func removeLegacyStateFile() {
-	_ = os.Remove(config.StatePath())
 }
 
 func daemonPreflight() (string, error) {

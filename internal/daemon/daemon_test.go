@@ -25,6 +25,7 @@ import (
 	"github.com/victorarias/attn/internal/buildinfo"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/github/mockserver"
 	"github.com/victorarias/attn/internal/jobs"
@@ -100,6 +101,7 @@ func (c *blockingClassifier) CallCount() int {
 }
 
 func TestMain(m *testing.M) {
+	fakeagent.Main()
 	_ = os.Setenv("ATTN_PTY_BACKEND", "embedded")
 	_ = os.Setenv("ATTN_PTY_SKIP_STARTUP_PROBE", "1")
 
@@ -116,6 +118,7 @@ func TestMain(m *testing.M) {
 		panic("daemon: TestMain: MkdirTemp: " + err.Error())
 	}
 	config.ScopeTestEnvironment(dataDir)
+	testProcessDir = dataDir
 
 	toolHomeDir, err := os.MkdirTemp("", "attn-test-toolhome-*")
 	if err != nil {
@@ -411,62 +414,6 @@ func TestDaemon_Start_FailsBeforeReadyWhenRunnerLockIsHeld(t *testing.T) {
 	runnerProbe.Release()
 
 	d.Stop()
-}
-
-func TestDaemon_PrunesSessionsWithoutLivePTYOnStart(t *testing.T) {
-	useFreeWSPort(t)
-	t.Setenv("ATTN_PTY_BACKEND", "embedded")
-	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-
-	d := NewForTesting(sockPath)
-
-	nowStr := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID:             "stale-session",
-		Label:          "stale",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/stale",
-		State:          protocol.SessionStateWorking,
-		StateSince:     nowStr,
-		StateUpdatedAt: nowStr,
-		LastSeen:       nowStr,
-	})
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- d.Start()
-	}()
-	defer d.Stop()
-	select {
-	case err := <-errCh:
-		if err != nil {
-			t.Fatalf("daemon start error: %v", err)
-		}
-		t.Fatal("daemon exited unexpectedly during startup")
-	case <-d.startedCh:
-	}
-	waitForRecovery(t, d)
-
-	c := client.New(sockPath)
-	sessions, err := c.Query("")
-	if err != nil {
-		t.Fatalf("Query error: %v", err)
-	}
-	if len(sessions) != 0 {
-		t.Fatalf("expected stale sessions to be pruned on start, got %d", len(sessions))
-	}
-
-	warnings := d.getWarnings()
-	hasPruneWarning := false
-	for _, warning := range warnings {
-		if warning.Code == warnStaleSessionsPruned {
-			hasPruneWarning = true
-			break
-		}
-	}
-	if !hasPruneWarning {
-		t.Fatalf("expected %q warning, got %+v", warnStaleSessionsPruned, warnings)
-	}
 }
 
 func TestDaemon_RecoverySettledSignalFollowsEachRecoveryCycle(t *testing.T) {

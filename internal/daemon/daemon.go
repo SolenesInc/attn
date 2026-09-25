@@ -39,6 +39,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/notebook"
+	"github.com/victorarias/attn/internal/pathutil"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
@@ -544,6 +545,19 @@ func (d *Daemon) setCurrentTerminalTheme(theme pty.TerminalTheme) {
 	d.terminalThemeMu.Lock()
 	d.terminalTheme = theme
 	d.terminalThemeMu.Unlock()
+}
+
+func (d *Daemon) RecoverGUIPath() {
+	if err := pathutil.EnsureGUIPath(); err != nil {
+		d.logf("PATH recovery failed: %v", err)
+	}
+}
+
+func (d *Daemon) RemoveLegacyStateFile() {
+	legacyPath := config.StatePath()
+	if os.Remove(legacyPath) == nil {
+		d.logf("Removed legacy state file: %s", legacyPath)
+	}
 }
 
 func (d *Daemon) ScrubInheritedAgentSessionEnv() {
