@@ -1,0 +1,3 @@
+kind: fixed
+area: terminal
+change: A revived agent starts at its pane's size instead of 80x24 and no longer redraws right after it appears.
