@@ -15,7 +15,7 @@ import (
 
 func TestApplyingABundleServesItAndReapplyingItMintsNothing(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 
 	first := applyApp(t, cli, "approval-gate", "first")
 	second := applyApp(t, cli, "approval-gate", "second")
@@ -45,7 +45,7 @@ func TestApplyingABundleServesItAndReapplyingItMintsNothing(t *testing.T) {
 
 func TestNamedRollbackSwitchesServingAndKeepsHistory(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	older := applyApp(t, cli, "approval-gate", "older")
 	newer := applyApp(t, cli, "approval-gate", "newer")
 	other := applyApp(t, cli, "standup-digest", "only")
@@ -71,7 +71,7 @@ func TestNamedRollbackSwitchesServingAndKeepsHistory(t *testing.T) {
 
 func TestBareRollbackWalksDownTheServingHistory(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	v1 := applyApp(t, cli, "approval-gate", "v1")
 	v2 := applyApp(t, cli, "approval-gate", "v2")
 	v3 := applyApp(t, cli, "approval-gate", "v3")
@@ -103,7 +103,7 @@ func TestBareRollbackWalksDownTheServingHistory(t *testing.T) {
 
 func TestAppServingHistoryIsCappedButCountsEveryStep(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	var applied []int
 	for i := range 12 {
 		applied = append(applied, applyApp(t, cli, "approval-gate", fmt.Sprintf("v%d", i)).VersionID)
@@ -119,7 +119,7 @@ func TestAppServingHistoryIsCappedButCountsEveryStep(t *testing.T) {
 
 func TestAppListIsByNameAndRemovalDropsTheApp(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	applyApp(t, cli, "standup-digest", "only")
 	applyApp(t, cli, "approval-gate", "only")
 

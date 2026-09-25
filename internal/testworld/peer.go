@@ -1,4 +1,4 @@
-package daemon_test
+package testworld
 
 import (
 	"bytes"
@@ -10,14 +10,12 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
 	"nhooyr.io/websocket"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-const hangGuard = 10 * time.Second
 
 type frame struct {
 	event    string
@@ -25,8 +23,9 @@ type frame struct {
 	consumed bool
 }
 
-type peer struct {
-	t        *testing.T
+type Peer struct {
+	T        testing.TB
+	Initial  protocol.InitialStateMessage
 	conn     *websocket.Conn
 	mu       sync.Mutex
 	grew     chan struct{}
@@ -34,12 +33,11 @@ type peer struct {
 	screens  map[string][]byte
 	attached map[string]bool
 	closeErr error
-	initial  protocol.InitialStateMessage
 }
 
-func newPeer(t *testing.T, conn *websocket.Conn) *peer {
-	p := &peer{
-		t:        t,
+func newPeer(t testing.TB, conn *websocket.Conn) *Peer {
+	p := &Peer{
+		T:        t,
 		conn:     conn,
 		grew:     make(chan struct{}),
 		screens:  map[string][]byte{},
@@ -49,7 +47,7 @@ func newPeer(t *testing.T, conn *websocket.Conn) *peer {
 	return p
 }
 
-func (p *peer) read() {
+func (p *Peer) read() {
 	for {
 		kind, data, err := p.conn.Read(context.Background())
 		p.mu.Lock()
@@ -70,7 +68,7 @@ func (p *peer) read() {
 	}
 }
 
-func (p *peer) recordOutput(data []byte) {
+func (p *Peer) recordOutput(data []byte) {
 	sessionID, _, output, err := protocol.DecodePtyOutputFrame(data)
 	if err != nil {
 		return
@@ -78,12 +76,12 @@ func (p *peer) recordOutput(data []byte) {
 	p.screens[sessionID] = append(p.screens[sessionID], output...)
 }
 
-func (p *peer) recordEvent(data []byte) {
+func (p *Peer) recordEvent(data []byte) {
 	var envelope struct {
 		Event string `json:"event"`
 	}
 	if err := json.Unmarshal(data, &envelope); err != nil {
-		p.t.Errorf("daemon sent a frame that is not JSON: %v: %s", err, data)
+		p.T.Errorf("daemon sent a frame that is not JSON: %v: %s", err, data)
 		return
 	}
 	p.frames = append(p.frames, frame{event: envelope.Event, raw: data})
@@ -92,7 +90,7 @@ func (p *peer) recordEvent(data []byte) {
 	}
 }
 
-func (p *peer) recordSnapshot(data []byte) {
+func (p *Peer) recordSnapshot(data []byte) {
 	var result protocol.AttachResultMessage
 	if err := json.Unmarshal(data, &result); err != nil || !result.Success {
 		return
@@ -104,27 +102,27 @@ func (p *peer) recordSnapshot(data []byte) {
 	}
 	screen, err := base64.StdEncoding.DecodeString(result.Snapshot.SnapshotB64)
 	if err != nil {
-		p.t.Errorf("attach snapshot for %s is not base64: %v", result.ID, err)
+		p.T.Errorf("attach snapshot for %s is not base64: %v", result.ID, err)
 		return
 	}
 	p.screens[result.ID] = screen
 }
 
-func (p *peer) send(cmd any) {
-	p.t.Helper()
+func (p *Peer) Send(cmd any) {
+	p.T.Helper()
 	payload, err := json.Marshal(cmd)
 	if err != nil {
-		p.t.Fatalf("encode %T: %v", cmd, err)
+		p.T.Fatalf("encode %T: %v", cmd, err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), hangGuard)
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	if err := p.conn.Write(ctx, websocket.MessageText, payload); err != nil {
-		p.t.Fatalf("send %s: %v", payload, err)
+		p.T.Fatalf("send %s: %v", payload, err)
 	}
 }
 
-func (p *peer) closed() websocket.CloseError {
-	p.t.Helper()
+func (p *Peer) Closed() websocket.CloseError {
+	p.T.Helper()
 	var closeErr error
 	p.until(func() string { return "the daemon to close the connection" }, func() (bool, error) {
 		closeErr = p.closeErr
@@ -132,12 +130,12 @@ func (p *peer) closed() websocket.CloseError {
 	})
 	var status websocket.CloseError
 	if !errors.As(closeErr, &status) {
-		p.t.Fatalf("the connection dropped without a close frame: %v", closeErr)
+		p.T.Fatalf("the connection dropped without a close frame: %v", closeErr)
 	}
 	return status
 }
 
-func (p *peer) events() []string {
+func (p *Peer) Events() []string {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	names := make([]string, 0, len(p.frames))
@@ -147,18 +145,18 @@ func (p *peer) events() []string {
 	return names
 }
 
-func (p *peer) close() {
+func (p *Peer) Close() {
 	_ = p.conn.Close(websocket.StatusNormalClosure, "")
 }
 
-func (p *peer) typeLine(sessionID, text string) {
-	p.t.Helper()
+func (p *Peer) TypeLine(sessionID, text string) {
+	p.T.Helper()
 	p.attach(sessionID)
-	p.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: sessionID, Data: text + "\r"})
+	p.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: sessionID, Data: text + "\r"})
 }
 
-func (p *peer) awaitScreen(sessionID, text string) {
-	p.t.Helper()
+func (p *Peer) AwaitScreen(sessionID, text string) {
+	p.T.Helper()
 	p.attach(sessionID)
 	p.until(func() string {
 		return "the screen of " + sessionID + " to show " + text + "; it shows " + strconv.Quote(string(p.screens[sessionID]))
@@ -167,24 +165,24 @@ func (p *peer) awaitScreen(sessionID, text string) {
 	})
 }
 
-func (p *peer) attach(sessionID string) {
-	p.t.Helper()
+func (p *Peer) attach(sessionID string) {
+	p.T.Helper()
 	p.mu.Lock()
 	attached := p.attached[sessionID]
 	p.mu.Unlock()
 	if attached {
 		return
 	}
-	result := request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: sessionID},
+	result := Request(p, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: sessionID},
 		protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == sessionID })
 	if !result.Success {
-		p.t.Fatalf("attach %s refused: %s", sessionID, protocol.Deref(result.Error))
+		p.T.Fatalf("attach %s refused: %s", sessionID, protocol.Deref(result.Error))
 	}
 }
 
-func (p *peer) until(awaiting func() string, check func() (bool, error)) {
-	p.t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), hangGuard)
+func (p *Peer) until(awaiting func() string, check func() (bool, error)) {
+	p.T.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
 	for {
 		p.mu.Lock()
@@ -193,11 +191,11 @@ func (p *peer) until(awaiting func() string, check func() (bool, error)) {
 		p.mu.Unlock()
 		switch {
 		case err != nil:
-			p.t.Fatalf("while awaiting %s: %v", described, err)
+			p.T.Fatalf("while awaiting %s: %v", described, err)
 		case done:
 			return
 		case closeErr != nil:
-			p.t.Fatalf("connection closed (%v) while awaiting %s", closeErr, described)
+			p.T.Fatalf("connection closed (%v) while awaiting %s", closeErr, described)
 		}
 		select {
 		case <-grew:
@@ -205,13 +203,13 @@ func (p *peer) until(awaiting func() string, check func() (bool, error)) {
 			p.mu.Lock()
 			described = awaiting()
 			p.mu.Unlock()
-			p.t.Fatalf("still awaiting %s after %s", described, hangGuard)
+			p.T.Fatalf("still awaiting %s after %s", described, fakeagent.HangGuard)
 		}
 	}
 }
 
-func await[T any](p *peer, event string, match func(T) bool) T {
-	p.t.Helper()
+func Await[T any](p *Peer, event string, match func(T) bool) T {
+	p.T.Helper()
 	var found T
 	p.take(event, func(f frame) (bool, error) {
 		if f.event != event {
@@ -230,19 +228,19 @@ func await[T any](p *peer, event string, match func(T) bool) T {
 	return found
 }
 
-func request[T any](p *peer, cmd any, event string, match func(T) bool) T {
-	p.t.Helper()
-	p.send(cmd)
-	return await(p, event, match)
+func Request[T any](p *Peer, cmd any, event string, match func(T) bool) T {
+	p.T.Helper()
+	p.Send(cmd)
+	return Await(p, event, match)
 }
 
-func refused(p *peer) protocol.WebSocketEvent {
-	p.t.Helper()
-	return await[protocol.WebSocketEvent](p, protocol.EventCommandError, nil)
+func Refused(p *Peer) protocol.WebSocketEvent {
+	p.T.Helper()
+	return Await[protocol.WebSocketEvent](p, protocol.EventCommandError, nil)
 }
 
-func awaitSession(p *peer, id string, match func(protocol.Session) bool) protocol.Session {
-	p.t.Helper()
+func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
 	var found protocol.Session
 	p.take("an update of session "+id, func(f frame) (bool, error) {
 		var carrier struct {
@@ -266,8 +264,8 @@ func awaitSession(p *peer, id string, match func(protocol.Session) bool) protoco
 	return found
 }
 
-func (p *peer) take(awaiting string, accept func(frame) (bool, error)) {
-	p.t.Helper()
+func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {
+	p.T.Helper()
 	scanned := 0
 	p.until(func() string { return awaiting }, func() (bool, error) {
 		for ; scanned < len(p.frames); scanned++ {

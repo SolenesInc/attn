@@ -1,4 +1,4 @@
-package daemon
+package testworld
 
 import (
 	"fmt"
@@ -9,9 +9,18 @@ import (
 	"testing"
 )
 
-var testProcessDir string
+var attnBinary = sync.OnceValues(buildAttn)
 
-var buildAttnWrapper = sync.OnceValues(func() (string, error) {
+func AttnBinary(t testing.TB) string {
+	t.Helper()
+	binary, err := attnBinary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return binary
+}
+
+func buildAttn() (string, error) {
 	if binary := os.Getenv("ATTN_E2E_BIN"); binary != "" {
 		info, err := os.Stat(binary)
 		if err != nil {
@@ -22,19 +31,13 @@ var buildAttnWrapper = sync.OnceValues(func() (string, error) {
 		}
 		return binary, nil
 	}
-	binary := filepath.Join(testProcessDir, "attn")
+	if processDir == "" {
+		return "", fmt.Errorf("testworld.AttnBinary builds into the process directory that testworld.Main creates; call it from TestMain")
+	}
+	binary := filepath.Join(processDir, "bin", "attn")
 	build := exec.Command("go", "build", "-o", binary, "github.com/victorarias/attn/cmd/attn")
 	if output, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("build attn: %w\n%s", err, output)
 	}
 	return binary, nil
-})
-
-func AttnWrapper(t testing.TB) string {
-	t.Helper()
-	binary, err := buildAttnWrapper()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return binary
 }

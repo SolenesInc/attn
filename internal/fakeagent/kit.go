@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-const hangGuard = 10 * time.Second
+const HangGuard = 10 * time.Second
 
 var piManifest = fmt.Sprintf(`name = %q
 version = %q
@@ -28,6 +28,7 @@ path = %q
 
 type Kit struct {
 	t        testing.TB
+	cfg      config
 	control  net.Listener
 	mu       sync.Mutex
 	launches map[string]chan *Run
@@ -48,19 +49,12 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	toolHome := os.Getenv("ATTN_TOOL_HOME")
-	if toolHome == "" {
-		t.Fatal("fakeagent.Install needs ATTN_TOOL_HOME: the fakes write their transcripts where attn reads them")
-	}
-	codexHome := os.Getenv("CODEX_HOME")
-	if codexHome == "" {
-		t.Fatal("fakeagent.Install needs CODEX_HOME: the codex fake writes its rollouts where attn reads them")
-	}
+	toolHome := filepath.Join(dir, "toolhome")
 	cfg := config{
 		Control:   filepath.Join(dir, "fakeagent.sock"),
 		Bin:       filepath.Join(dir, "bin"),
 		ToolHome:  toolHome,
-		CodexHome: codexHome,
+		CodexHome: filepath.Join(toolHome, ".codex"),
 		Harnesses: harnesses,
 	}
 	encoded, err := json.Marshal(cfg)
@@ -84,10 +78,22 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &Kit{t: t, control: listener, launches: map[string]chan *Run{}}
+	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}}
 	go k.accept()
 	t.Cleanup(k.verify)
 	return k
+}
+
+func (k *Kit) Env() []string {
+	return []string{
+		"ATTN_TOOL_HOME=" + k.cfg.ToolHome,
+		"CODEX_HOME=" + k.cfg.CodexHome,
+		"PATH=" + k.cfg.Bin + string(os.PathListSeparator) + os.Getenv("PATH"),
+		"ATTN_CLAUDE_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Claude)),
+		"ATTN_CODEX_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Codex)),
+		"ATTN_COPILOT_EXECUTABLE=" + filepath.Join(k.cfg.Bin, string(Copilot)),
+		"ATTN_WRAPPER_PATH=" + filepath.Join(k.cfg.Bin, wrapperName),
+	}
 }
 
 func mustInstall(t testing.TB, dir string, links, files map[string]string) {
@@ -115,8 +121,8 @@ func (k *Kit) Launched(sessionID string) *Run {
 			k.t.Fatalf("fake %s for session %s failed to launch: %s", run.Harness, sessionID, run.fake.Error)
 		}
 		return run
-	case <-time.After(hangGuard):
-		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, hangGuard, k.failureSummary())
+	case <-time.After(HangGuard):
+		k.t.Fatalf("no fake agent launched for session %s within %s%s", sessionID, HangGuard, k.failureSummary())
 		return nil
 	}
 }
@@ -214,7 +220,7 @@ func (k *Kit) failureSummary() string {
 }
 
 func (k *Kit) verify() {
-	ctx, cancel := context.WithTimeout(context.Background(), hangGuard)
+	ctx, cancel := context.WithTimeout(context.Background(), HangGuard)
 	defer cancel()
 	k.mu.Lock()
 	fakes := slices.Clone(k.fakes)

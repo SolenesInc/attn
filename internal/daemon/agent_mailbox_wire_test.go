@@ -2,6 +2,7 @@ package daemon_test
 
 import (
 	"fmt"
+	"github.com/victorarias/attn/internal/testworld"
 	"strings"
 	"testing"
 	"time"
@@ -15,7 +16,7 @@ const inboxDoorbell = "You have unread items in your attn inbox. Run attn agent 
 
 func TestAgentInboxReadsItsOwnMessagesOldestFirstInBoundedBatches(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	registerSessions(t, w, cli, "sender", "target", "elsewhere")
 
 	for _, body := range []string{"first", "second", "third"} {
@@ -43,7 +44,7 @@ func TestAgentInboxReadsItsOwnMessagesOldestFirstInBoundedBatches(t *testing.T) 
 
 func TestAgentInboxDefaultsToTwentyAndRefusesMailPastTheQueueCap(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	senders := []string{"s0", "s1", "s2", "s3", "s4", "s5", "s6"}
 	registerSessions(t, w, cli, append(senders, "target")...)
 
@@ -71,7 +72,7 @@ func TestAgentInboxDefaultsToTwentyAndRefusesMailPastTheQueueCap(t *testing.T) {
 
 func TestAgentMessageRefusesARecentDuplicateFromTheSameSender(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.cli()
+		cli := w.Client()
 		registerSessions(t, w, cli, "sender", "someone-else", "target")
 
 		sendAgentMessage(t, cli, "sender", "target", "same words")
@@ -93,14 +94,14 @@ func TestAgentMessageRefusesARecentDuplicateFromTheSameSender(t *testing.T) {
 }
 
 func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *testing.T) {
-	w := newWorld(t, withAgents(fakeagent.Claude))
-	app, cli := w.app(), w.cli()
-	recipient := w.spawn(app, fakeagent.Claude, w.path("shop"))
-	agent := w.launched(recipient)
-	app.typeLine(recipient, "wait for the reviewer")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	recipient := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	agent := w.Launched(recipient)
+	app.TypeLine(recipient, "wait for the reviewer")
 	agent.Prompted()
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	awaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	registerSessions(t, w, cli, "reviewer", "bystander")
 
 	sent := sendAgentMessage(t, cli, "reviewer", recipient, "the discount is applied after tax")
@@ -115,12 +116,12 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 	}
 
 	w.restart()
-	app = w.app()
-	w.spawn(app, fakeagent.Claude, w.path("shop"), func(m *protocol.SpawnSessionMessage) {
+	app = w.App()
+	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.ID = recipient
 		m.ResumeSessionID = protocol.Ptr(recipient)
 	})
-	if got := w.launched(recipient).Prompted(); !strings.Contains(got, inboxDoorbell) {
+	if got := w.Launched(recipient).Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("after the restart the recipient was prompted with %q, want the doorbell again", got)
 	}
 
@@ -143,7 +144,7 @@ func TestAgentMessageIsReadableByIDOnlyByItsRecipientAndSurvivesARestart(t *test
 func registerSessions(t *testing.T, w *world, cli *client.Client, ids ...string) {
 	t.Helper()
 	for _, id := range ids {
-		if err := cli.Register(id, id, w.path(id)); err != nil {
+		if err := cli.Register(id, id, w.Path(id)); err != nil {
 			t.Fatalf("register %s: %v", id, err)
 		}
 	}

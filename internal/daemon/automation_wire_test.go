@@ -11,8 +11,8 @@ import (
 
 func TestAutomationReapplyEditsOnlyOnChangeAndTogglesAreIdempotent(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
-	if err := os.MkdirAll(w.path("check"), 0o755); err != nil {
+	cli := w.Client()
+	if err := os.MkdirAll(w.Path("check"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,7 +53,7 @@ trigger: {type: manual}
 prompt: %s
 launch: {driver: codex}
 location: {type: directory, path: %q}
-`, prompt, w.path("check"))
+`, prompt, w.Path("check"))
 }
 
 func applyAutomation(t *testing.T, cli *client.Client, spec string) protocol.AutomationDefinitionSummary {

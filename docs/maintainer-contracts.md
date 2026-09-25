@@ -7,6 +7,7 @@
   `config.ScopeTestEnvironment(dir)` before `m.Run()`. It sets `ATTN_DATA_DIR`
   and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv`
   is insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
+  `testworld.Main(m)` does this for packages that run wire or stack worlds.
 - Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Use `synctest.Test` for elapsed-time or never-happens assertions; no sleeps/polls.
 - Use `pgregory.net/rapid` for invariants over large inputs; commit failure seeds.

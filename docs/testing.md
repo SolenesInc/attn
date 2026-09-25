@@ -80,10 +80,12 @@ transcript files, and terminal output. Time is controlled, never waited on:
 Daemon wire tests live in `package daemon_test` in `internal/daemon`, so they
 reach the daemon only through the protocol and the CLI client. `newWorld(t)`
 runs a production daemon in its own data directory; `w.restart()` replaces it
-with a new daemon over the same data. `w.app()` connects as the app and
-`w.cli()` returns a CLI client. Add `withAgents(fakeagent.Claude, ...)` when
-the test spawns sessions: `w.spawn` starts one and `w.launched` returns the
-`fakeagent.Run` for its agent. The test plays the model behind that agent.
+with a new daemon over the same data. `w.App()` connects as the app and
+`w.Client()` returns a CLI client; `testworld.Await`, `testworld.Request` and
+`testworld.AwaitSession` read what the daemon sends. Name the agents when the
+test spawns sessions, as in `newWorld(t, fakeagent.Claude, ...)`: `w.Spawn`
+starts one and `w.Launched` returns the `fakeagent.Run` for its agent. The test
+plays the model behind that agent.
 `Prompted` returns the prompt the agent received, `Reply` ends the turn with
 text that carries the `<!-- attn:state=... -->` marker, `ReplyAfterStop` writes
 that reply only after the Stop hook, and `Exit` quits with an exit code. Each
@@ -99,6 +101,19 @@ Stack tests cover what only exists between processes: restarts, reconnects,
 signals, PTY ownership, CLI behavior, and Linux paths. The browser end-to-end
 suite is a stack test: a real daemon serving the frontend in a browser. It
 mocks the PTY unless a test needs real terminals.
+
+#### Writing a CLI stack test
+
+CLI stack tests live in `package main_test` in `cmd/attn`, whose `TestMain`
+returns `testworld.Main(m)`. `testworld.NewStack(t,
+testworld.WithAgents(fakeagent.Claude, ...))` prepares a data directory for the
+built `attn` binary; `s.Start()` runs `attn daemon` and returns once it signals
+ready, and `s.Stop()` ends it, so a `Start` after `Stop` restarts over the same
+data. The world helpers of a daemon wire test work here too. `s.Attn(args...)`
+runs a CLI command to completion; `s.Run` takes an `Invocation` for stdin, a
+session, extra env, or another binary. `s.Launch` starts a long-running
+command, and the test awaits its output with `AwaitStderr`; the stack
+interrupts it at cleanup.
 
 ### Scenario
 
