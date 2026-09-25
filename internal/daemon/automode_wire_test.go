@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/victorarias/attn/internal/testworld"
 	"os"
 	"path/filepath"
 	"slices"
@@ -19,7 +20,7 @@ import (
 
 func TestAutoModeStartsOnWithCodexDefaultsAndOnlyTheShippedEntries(t *testing.T) {
 	w := newWorld(t)
-	cfg := autoModeConfig(t, w.cli())
+	cfg := autoModeConfig(t, w.Client())
 
 	if !cfg.EnabledDefault {
 		t.Error("auto mode is off on a fresh daemon")
@@ -43,7 +44,7 @@ func TestAutoModeStartsOnWithCodexDefaultsAndOnlyTheShippedEntries(t *testing.T)
 
 func TestAutoModeEnvironmentSlotsAreTrimmedDeduplicatedAndSchemaBound(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 
 	set, err := cli.AutoModeEnvSlot("domains", []string{"grafana.acme.corp", "  ", "grafana.acme.corp"})
 	if err != nil {
@@ -70,7 +71,7 @@ func TestAutoModeEnvironmentSlotsAreTrimmedDeduplicatedAndSchemaBound(t *testing
 
 func TestAutoModeProposalWaitsForTheUserAndPromotesOnce(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 
 	rule := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "git", "push"), "session-1")
 	host := proposeAmendment(t, cli, automode.KindHost, hostValue(t, "github.com", automode.HostAllow), "")
@@ -117,10 +118,10 @@ func TestAutoModeProposalWaitsForTheUserAndPromotesOnce(t *testing.T) {
 
 func TestAutoModeDiscardLeavesTheConfigAlone(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	proposal := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl"), "")
 
-	discarded := request(app, protocol.AutoModeDiscardMessage{
+	discarded := testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: proposal.ID, RequestID: uuid.NewString(),
 	}, protocol.EventAutoModeDiscardResult, func(protocol.AutoModeDiscardResultMessage) bool { return true })
 	if !discarded.Success || discarded.Proposal.State != automode.StateDiscarded {
@@ -136,7 +137,7 @@ func TestAutoModeDiscardLeavesTheConfigAlone(t *testing.T) {
 
 func TestAutoModeRepeatedAsksDedupePerAskerAndOnePromotionAnswersThemAll(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	value := ruleValue(t, automode.DecisionAllow, "", "git", "push")
 
 	first := proposeAmendment(t, cli, automode.KindRule, value, "session-a")
@@ -159,7 +160,7 @@ func TestAutoModeRepeatedAsksDedupePerAskerAndOnePromotionAnswersThemAll(t *test
 	}
 
 	retracted := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
-	request(app, protocol.AutoModeDiscardMessage{
+	testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: retracted.ID, RequestID: uuid.NewString(),
 	}, protocol.EventAutoModeDiscardResult, func(protocol.AutoModeDiscardResultMessage) bool { return true })
 	anew := proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "session-a")
@@ -170,7 +171,7 @@ func TestAutoModeRepeatedAsksDedupePerAskerAndOnePromotionAnswersThemAll(t *test
 
 func TestAutoModeProposalCapNamesTheProposerTheLimitAndTheAsk(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	var ids []int
 	for i := range automode.MaxPendingProposalsPerProposer {
 		ids = append(ids, proposeAmendment(t, cli, automode.KindRule,
@@ -188,7 +189,7 @@ func TestAutoModeProposalCapNamesTheProposerTheLimitAndTheAsk(t *testing.T) {
 	}
 	proposeAmendment(t, cli, automode.KindRule, last, "session-b")
 
-	request(app, protocol.AutoModeDiscardMessage{
+	testworld.Request(app, protocol.AutoModeDiscardMessage{
 		Cmd: protocol.CmdAutoModeDiscard, ID: ids[0], RequestID: uuid.NewString(),
 	}, protocol.EventAutoModeDiscardResult, func(protocol.AutoModeDiscardResultMessage) bool { return true })
 	proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionAllow, "", "curl", "https://example.com/after"), "session-a")
@@ -196,7 +197,7 @@ func TestAutoModeProposalCapNamesTheProposerTheLimitAndTheAsk(t *testing.T) {
 
 func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	promoteValue := func(kind, value string) protocol.AutoModeConfigInfo {
 		t.Helper()
 		result := promoteProposal(app, proposeAmendment(t, cli, kind, value, "session-a").ID)
@@ -246,7 +247,7 @@ func TestPromotingEveryAmendmentKindMovesTheConfig(t *testing.T) {
 
 func TestAutoModeShippedEntriesStayAheadOfUserRulesAndCannotBeTakenAway(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	shipped := automode.ShippedRules()[0]
 
 	if !promoteProposal(app, proposeAmendment(t, cli, automode.KindRule, ruleValue(t, automode.DecisionPrompt, "", "ssh", "prod"), "").ID).Success {
@@ -313,7 +314,7 @@ func TestAutoModeShippedEntriesStayAheadOfUserRulesAndCannotBeTakenAway(t *testi
 
 func TestAutoModeRuleEditsReplaceInPlaceAndRemoveOnlyTheNamedRule(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	add := func(decision, justification string, pattern ...string) protocol.AutoModeConfigResultMessage {
 		t.Helper()
 		id := uuid.NewString()
@@ -362,7 +363,7 @@ func TestAutoModeRuleEditsReplaceInPlaceAndRemoveOnlyTheNamedRule(t *testing.T) 
 
 func TestAutoModeHostEditsMoveAHostBetweenLists(t *testing.T) {
 	w := newWorld(t)
-	app := w.app()
+	app := w.App()
 	host := func(cmd, decision string) protocol.AutoModeConfigResultMessage {
 		t.Helper()
 		id := uuid.NewString()
@@ -390,7 +391,7 @@ func TestAutoModeHostEditsMoveAHostBetweenLists(t *testing.T) {
 
 func TestAutoModePolicyFieldsAndTheGuardianAreSetIndependently(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.app(), w.cli()
+	app, cli := w.App(), w.Client()
 	set := func(msg protocol.AutoModePolicySetMessage) protocol.AutoModeConfigResultMessage {
 		t.Helper()
 		id := uuid.NewString()
@@ -430,7 +431,7 @@ func TestAutoModePolicyFieldsAndTheGuardianAreSetIndependently(t *testing.T) {
 
 func TestAutoModeDenialLogListsNewestFirstOncePerDenialWithinItsCap(t *testing.T) {
 	w := newWorld(t)
-	cli := w.cli()
+	cli := w.Client()
 	base := time.Date(2026, 8, 18, 10, 0, 0, 123_000_000, time.UTC)
 	denial := func(session, action string, at time.Time) map[string]string {
 		return map[string]string{
@@ -524,16 +525,16 @@ func proposeAmendment(t *testing.T, cli *client.Client, kind, value, proposedBy 
 	return result.Proposal
 }
 
-func promoteProposal(app *peer, id int) protocol.AutoModePromoteResultMessage {
-	app.t.Helper()
+func promoteProposal(app *testworld.Peer, id int) protocol.AutoModePromoteResultMessage {
+	app.T.Helper()
 	requestID := uuid.NewString()
-	return request(app, protocol.AutoModePromoteMessage{Cmd: protocol.CmdAutoModePromote, ID: id, RequestID: requestID},
+	return testworld.Request(app, protocol.AutoModePromoteMessage{Cmd: protocol.CmdAutoModePromote, ID: id, RequestID: requestID},
 		protocol.EventAutoModePromoteResult, func(r protocol.AutoModePromoteResultMessage) bool { return r.RequestID == requestID })
 }
 
-func editAutoModeConfig(app *peer, requestID string, msg any) protocol.AutoModeConfigResultMessage {
-	app.t.Helper()
-	return request(app, msg, protocol.EventAutoModeConfigResult,
+func editAutoModeConfig(app *testworld.Peer, requestID string, msg any) protocol.AutoModeConfigResultMessage {
+	app.T.Helper()
+	return testworld.Request(app, msg, protocol.EventAutoModeConfigResult,
 		func(r protocol.AutoModeConfigResultMessage) bool { return r.RequestID == requestID })
 }
 
@@ -606,7 +607,7 @@ func writeDenialLedger(t *testing.T, w *world, records []map[string]string) {
 		}
 		lines = append(append(lines, line...), '\n')
 	}
-	if err := os.WriteFile(filepath.Join(w.dir, automode.DenialLedgerFileName), lines, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(w.Dir, automode.DenialLedgerFileName), lines, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
