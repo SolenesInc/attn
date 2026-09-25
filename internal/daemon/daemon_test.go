@@ -4301,7 +4301,8 @@ func TestDaemon_ApprovePR_ViaWebSocket(t *testing.T) {
 
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
 	os.Remove(sockPath)
-	d := NewWithGitHubClient(sockPath, ghClient)
+	d := NewForTesting(sockPath)
+	d.ghRegistry.Register(ghClient.Host(), ghClient)
 
 	go func() {
 		if err := d.Start(); err != nil {
@@ -5364,7 +5365,8 @@ func TestRefreshGitHubHosts_MockURLReplacesEveryDiscoveredHost(t *testing.T) {
 		t.Fatalf("NewClientForHost error: %v", err)
 	}
 	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	d := NewWithGitHubClient(sockPath, realClient)
+	d := NewForTesting(sockPath)
+	d.ghRegistry.Register(realClient.Host(), realClient)
 	if hosts := d.gitHubHosts(); len(hosts) != 1 || hosts[0] != "github.com" {
 		t.Fatalf("precondition: hosts = %v, want [github.com]", hosts)
 	}
