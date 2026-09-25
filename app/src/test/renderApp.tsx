@@ -1,6 +1,6 @@
 // @ts-expect-error -- @types/node is not an app dependency
 import { readFileSync } from 'node:fs';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { act, render, type RenderResult } from '@testing-library/react';
 import { vi } from 'vitest';
 import App from '../App';
@@ -66,7 +66,7 @@ interface DaemonRender extends Omit<RenderResult, 'rerender'> {
 
 function DaemonHost({ onApi, children }: { onApi: (api: DaemonApi) => void; children: ReactNode }) {
   const daemonApi = useAppDaemon({});
-  onApi(daemonApi);
+  useLayoutEffect(() => onApi(daemonApi), [onApi, daemonApi]);
   return <DaemonApiProvider api={daemonApi}>{children}</DaemonApiProvider>;
 }
 
