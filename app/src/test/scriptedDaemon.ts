@@ -263,6 +263,17 @@ export class ScriptedDaemon {
   }
 }
 
+export const HOLD = 'hold';
+export type Answer = Reply | typeof HOLD;
+
+export function answerInTurn<C extends CommandName>(daemon: ScriptedDaemon, cmd: C, answers: Answer[]) {
+  let turn = 0;
+  daemon.on(cmd, () => {
+    const answer = answers[Math.min(turn++, answers.length - 1)];
+    return answer === HOLD ? undefined : answer;
+  });
+}
+
 export function installScriptedDaemon(options: ScriptedDaemonOptions = {}): ScriptedDaemon {
   const daemon = new ScriptedDaemon(options);
   vi.useFakeTimers();
