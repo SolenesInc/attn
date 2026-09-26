@@ -53,6 +53,11 @@ func (r *Run) DeleteSubagentTranscripts() {
 	r.call(methodDropSubs, textParams{}, nil)
 }
 
+func (r *Run) Halt() {
+	r.t.Helper()
+	r.call(methodHalt, struct{}{}, nil)
+}
+
 type Denial struct {
 	Tool   string `json:"tool"`
 	Action string `json:"action"`
