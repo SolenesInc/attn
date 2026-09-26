@@ -28,8 +28,14 @@ func TestAClientThatFallsBehindIsDroppedWithoutItsBacklogAndToldWhyOnce(t *testi
 		}
 		w.advance(2 * time.Second)
 
-		if delivered := evictionDrain(t, stalled); delivered > 1<<20 {
-			t.Errorf("the dropped client was fed %d bytes of the backlog it fell behind on", delivered)
+		backlog := 0
+		for _, event := range evictionDrain(t, stalled) {
+			if event == protocol.EventSettingsUpdated {
+				backlog++
+			}
+		}
+		if backlog > 0 {
+			t.Errorf("the dropped client was fed %d settings_updated frames of the backlog it fell behind on", backlog)
 		}
 		notice := evictionNotice(t, w, "fell-behind")
 		if notice == nil || notice.Reason != "client too slow" || notice.UndeliveredMessages < 256 {
@@ -51,8 +57,8 @@ func TestAClientWhoseSocketStopsAcceptingWritesIsDroppedAndToldWhyWhileItIsRemem
 		w.advance(16 * time.Second)
 
 		for _, conn := range []*websocket.Conn{prompt, late} {
-			if delivered := evictionDrain(t, conn); delivered > 0 {
-				t.Errorf("a client that accepted no writes read %d bytes after being dropped", delivered)
+			if delivered := evictionDrain(t, conn); len(delivered) > 0 {
+				t.Errorf("a client that accepted no writes read %q after being dropped", delivered)
 			}
 		}
 		if notice := evictionNotice(t, w, "returns-soon"); notice == nil || notice.Reason != "client too slow" || notice.UndeliveredMessages < 1 {
@@ -161,11 +167,11 @@ func evictionHello(t *testing.T, ctx context.Context, conn *websocket.Conn, clie
 	}
 }
 
-func evictionDrain(t *testing.T, conn *websocket.Conn) int {
+func evictionDrain(t *testing.T, conn *websocket.Conn) []string {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), fakeagent.HangGuard)
 	defer cancel()
-	delivered := 0
+	var delivered []string
 	for {
 		_, data, err := conn.Read(ctx)
 		if err != nil {
@@ -174,7 +180,11 @@ func evictionDrain(t *testing.T, conn *websocket.Conn) int {
 			}
 			return delivered
 		}
-		delivered += len(data)
+		var frame struct {
+			Event string `json:"event"`
+		}
+		_ = json.Unmarshal(data, &frame)
+		delivered = append(delivered, frame.Event)
 	}
 }
 

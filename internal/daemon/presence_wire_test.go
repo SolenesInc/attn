@@ -97,6 +97,7 @@ func TestUserActionsStampTheLastActivityAgentsSee(t *testing.T) {
 			{"selecting a session", protocol.SessionSelectedMessage{Cmd: protocol.CmdSessionSelected, ID: "session-1"}, true},
 			{"reading settings", protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings}, false},
 			{"selecting a workspace", protocol.WorkspaceSelectedMessage{Cmd: protocol.CmdWorkspaceSelected, WorkspaceID: "workspace-1"}, true},
+			{"visiting a PR", protocol.PRVisitedMessage{Cmd: protocol.CmdPRVisited, ID: protocol.FormatPRID("", "acme/shop", 7)}, true},
 		} {
 			w.advance(time.Minute)
 			app.Send(tc.action)
@@ -113,6 +114,43 @@ func TestUserActionsStampTheLastActivityAgentsSee(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestUsingATerminalStampsTheLastActivityAgentsSee(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		use  func(app *testworld.Peer, session string)
+	}{
+		{"typing into it", func(app *testworld.Peer, session string) {
+			app.TypeLine(session, `printf 'ty%s\n' ped`)
+			app.AwaitScreen(session, "typed")
+		}},
+		{"resizing it", func(app *testworld.Peer, session string) {
+			app.Send(protocol.PtyResizeMessage{Cmd: protocol.CmdPtyResize, ID: session, Cols: 91, Rows: 21})
+			testworld.Await(app, protocol.EventPtyResized, func(e protocol.PtyResizedMessage) bool { return e.ID == session && e.Cols == 91 })
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			w := newWorld(t)
+			cli, app := w.Client(), w.App()
+			session := w.Spawn(app, workspaceShell, w.Path("shop"))
+			testworld.Request(app, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session},
+				protocol.EventAttachResult, func(r protocol.AttachResultMessage) bool { return r.ID == session })
+			if inbox, err := cli.TicketInbox(session); err != nil {
+				t.Fatal(err)
+			} else if inbox.LastUserActivityAt != nil {
+				t.Fatalf("before the user touched the terminal the ticket inbox says they were last active at %s", *inbox.LastUserActivityAt)
+			}
+
+			tc.use(app, session)
+
+			if inbox, err := cli.TicketInbox(session); err != nil {
+				t.Fatal(err)
+			} else if inbox.LastUserActivityAt == nil {
+				t.Errorf("after %s the ticket inbox has no last user activity", tc.name)
+			}
+		})
+	}
 }
 
 type presenceCheck struct {
