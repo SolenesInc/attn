@@ -174,21 +174,25 @@ export function useAppCommands(): PaletteCommand[] {
         shortcut: keys('session.toggleSidebar'),
         run: toggleSidebarCollapse,
       },
-      {
-        id: 'open-in-editor',
-        title: 'Open in editor',
-        description: 'The active agent\u2019s folder in your editor',
-        keywords: ['editor', 'zed', 'code', 'folder'],
-        icon: <EditorIcon />,
-        run: openActiveSessionInEditor,
-      },
-      {
-        id: 'workflow-runs',
-        title: workflowRunPanelOpen ? 'Hide workflow runs' : 'Show workflow runs',
-        keywords: ['workflow', 'runs', 'agents', 'panel'],
-        icon: <WorkflowIcon />,
-        run: () => toggleDockPanel('workflowRun'),
-      },
+      ...(activeSessionId
+        ? [
+            {
+              id: 'open-in-editor',
+              title: 'Open in editor',
+              description: 'The active agent\u2019s folder in your editor',
+              keywords: ['editor', 'zed', 'code', 'folder'],
+              icon: <EditorIcon />,
+              run: openActiveSessionInEditor,
+            },
+            {
+              id: 'workflow-runs',
+              title: workflowRunPanelOpen ? 'Hide workflow runs' : 'Show workflow runs',
+              keywords: ['workflow', 'runs', 'agents', 'panel'],
+              icon: <WorkflowIcon />,
+              run: () => toggleDockPanel('workflowRun'),
+            },
+          ]
+        : []),
       {
         id: 'notebook',
         title: 'Open the notebook',
@@ -230,6 +234,7 @@ export function useAppCommands(): PaletteCommand[] {
     ];
     return commands;
   }, [
+    activeSessionId,
     automationsPanelOpen,
     desktopNavigation,
     desktops,

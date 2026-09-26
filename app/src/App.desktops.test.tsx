@@ -340,6 +340,30 @@ describe('desktop surface', () => {
     expect(screen.queryByRole('dialog', { name: 'Agents' })).toBeNull();
   });
 
+  it('offers agent-scoped commands only while an agent is active', async () => {
+    render(<App />);
+    await screen.findByTestId('sidebar');
+    const commandTitles = async () => {
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      const palette = await screen.findByRole('dialog');
+      const titles = within(palette).getAllByRole('option').map((option) => option.textContent ?? '');
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return titles;
+    };
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    const withAgent = await commandTitles();
+    expect(withAgent.some((text) => text.includes('Show workflow runs'))).toBe(true);
+    expect(withAgent.some((text) => text.includes('Open in editor'))).toBe(true);
+
+    act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onGoToDashboard());
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBeNull());
+    const atHome = await commandTitles();
+    expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
+    expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+  });
+
   it('mounts only the current desktop until the user leaves it', async () => {
     render(<App />);
 
