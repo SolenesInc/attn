@@ -65,6 +65,8 @@ describe('App location picker', () => {
       const { daemon } = await openPicker({ directories: { [HOME]: ['projects', 'project-archive'] } });
 
       await typePath(daemon, '~/pro');
+      expect(daemon.sentOf('get_recent_locations')).toHaveLength(1);
+      expect(daemon.sentOf('browse_directory').map(({ input_path }) => input_path)).toEqual(['~/pro']);
       await gesture(daemon, () => fireEvent.click(row(0)));
 
       expect(launchedAt(daemon)).toEqual([{ cwd: `${HOME}/projects`, agent: 'claude' }]);
