@@ -10,7 +10,6 @@ interface Shown {
   paneId: string;
   sessionId: string | null;
   tileId: string | null;
-  agentIds: string;
 }
 
 function shownOf(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): Shown {
@@ -18,8 +17,7 @@ function shownOf(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): S
   const paneId = desktop?.active_pane_id ?? '';
   const sessionId = desktop?.panes.find((pane) => pane.pane_id === paneId)?.session_id ?? null;
   const tileId = paneId && !sessionId ? paneId : null;
-  const agentIds = (desktop?.panes ?? []).map((pane) => pane.session_id).join(' ');
-  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId, agentIds };
+  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId };
 }
 
 function agentToShow(
@@ -28,9 +26,20 @@ function agentToShow(
   activeSessionId: string | null,
 ): string | null {
   if (shown.sessionId || !shown.tileId) return shown.sessionId;
-  const panes = state.desktops.find((desktop) => desktop.id === shown.desktopId)?.panes ?? [];
-  if (panes.some((pane) => pane.session_id === activeSessionId)) return activeSessionId;
-  return panes[0]?.session_id ?? null;
+  const known = new Set(useSessionStore.getState().sessions.map((session) => session.id));
+  const agents = (state.desktops.find((desktop) => desktop.id === shown.desktopId)?.panes ?? [])
+    .map((pane) => pane.session_id)
+    .filter((sessionId) => known.has(sessionId));
+  if (activeSessionId && agents.includes(activeSessionId)) return activeSessionId;
+  return agents[0] ?? null;
+}
+
+function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>) {
+  const sessions = useSessionStore.getState();
+  const shown = shownOf(state);
+  if (sessions.view !== 'session' || !sessions.selectedTile || !shown.tileId) return;
+  const context = agentToShow(state, shown, sessions.activeSessionId);
+  if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
 }
 
 export function resyncShownTile() {
@@ -165,12 +174,17 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
   ]);
 
   useEffect(() => {
-    if (view !== 'session' || activeSessionId || pendingSessionId || tileSelected) return;
+    if (view !== 'session' || activeSessionId || pendingSessionId) return;
     const state = useProfilesStore.getState();
     const shown = shownOf(state);
+    if (shown.tileId) {
+      mirrorShownTile(shown);
+      keepTileContext(state);
+      return;
+    }
+    if (tileSelected) return;
     const sessionId = agentToShow(state, shown, null);
     if (sessionId) useSessionStore.getState().setActiveSession(sessionId);
-    mirrorShownTile(shown);
   }, [view, activeSessionId, pendingSessionId, tileSelected, currentDesktopId]);
 
   const focusRef = useRef(focusSessionPane);
@@ -183,8 +197,10 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
       useProfilesStore.subscribe((state, previous) => {
         const shown = shownOf(state);
         const before = shownOf(previous);
-        const sameFocus = shown.desktopId === before.desktopId && shown.paneId === before.paneId;
-        if (sameFocus && (!shown.tileId || shown.agentIds === before.agentIds)) return;
+        if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) {
+          keepTileContext(state);
+          return;
+        }
         const sessions = useSessionStore.getState();
         if (arrivedInPendingProfile(state, previous, sessions)) return;
         if (sessions.view === 'session') {

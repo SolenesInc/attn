@@ -151,33 +151,6 @@ function samePullRequests(
   });
 }
 
-function pushRecent(recent: string[], id: string | null): string[] {
-  if (!id) return recent;
-  const filtered = recent.filter((entry) => entry !== id);
-  filtered.unshift(id);
-  return filtered;
-}
-
-function pickFallbackActive(
-  removedId: string,
-  remainingSessions: Session[],
-  recent: string[],
-  removedSession?: Session | null,
-): string | null {
-  const existing = new Set(remainingSessions.map((entry) => entry.id));
-  for (const candidate of recent) {
-    if (candidate !== removedId && existing.has(candidate)) {
-      return candidate;
-    }
-  }
-  if (removedSession?.desktopId) {
-    const sameDesktop = remainingSessions.find((entry) => entry.desktopId === removedSession.desktopId);
-    if (sameDesktop) {
-      return sameDesktop.id;
-    }
-  }
-  return remainingSessions[0]?.id ?? null;
-}
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
   sessions: [],
@@ -259,10 +232,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       sessions: [...state.sessions, session],
       activeSessionId: id,
       agentHistory: recordAgentVisit(state.agentHistory, id),
-      recentSessionIds:
-        state.activeSessionId && state.activeSessionId !== id
-          ? pushRecent(state.recentSessionIds, state.activeSessionId)
-          : state.recentSessionIds.filter((entry) => entry !== id),
     }));
 
     return id;
@@ -270,26 +239,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   removeSessionLocalState: (id: string) => {
     set((state) => {
-      const removedSession = state.sessions.find((session) => session.id === id) ?? null;
       const sessions = state.sessions.filter((session) => session.id !== id);
       const liveSessionIds = new Set(sessions.map((session) => session.id));
       const agentHistory = reconcileAgentHistory(state.agentHistory, liveSessionIds);
-      const recentSessionIds = state.recentSessionIds.filter((entry) => entry !== id);
-
-      if (state.activeSessionId !== id) {
-        return reconcileSessionNavigation(state, { sessions, agentHistory, recentSessionIds });
-      }
-
-      const activeSessionId = pickFallbackActive(id, sessions, recentSessionIds, removedSession);
       return reconcileSessionNavigation(state, {
         sessions,
-        activeSessionId,
-        agentHistory: activeSessionId
-          ? recordAgentVisit(agentHistory, activeSessionId)
-          : agentHistory,
-        recentSessionIds: activeSessionId
-          ? recentSessionIds.filter((entry) => entry !== activeSessionId)
-          : recentSessionIds,
+        agentHistory,
+        activeSessionId: state.activeSessionId === id ? null : state.activeSessionId,
       });
     });
   },
@@ -431,29 +387,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       ));
       const allSessions = [...syncedSessions, ...pendingSessions];
       const syncedIds = new Set(allSessions.map((session) => session.id));
-      const prunedRecent = state.recentSessionIds.filter((entry) => syncedIds.has(entry));
-      let nextAgentHistory = reconcileAgentHistory(state.agentHistory, syncedIds);
-
-      let nextActiveSessionID = state.activeSessionId;
-      let nextRecent = prunedRecent;
-      if (nextActiveSessionID && !syncedIds.has(nextActiveSessionID)) {
-        const removedSession = state.sessions.find((session) => session.id === nextActiveSessionID) ?? null;
-        const fallback = pickFallbackActive(nextActiveSessionID, allSessions, prunedRecent, removedSession);
-        nextActiveSessionID = fallback;
-        nextRecent = fallback
-          ? prunedRecent.filter((entry) => entry !== fallback)
-          : prunedRecent;
-        nextAgentHistory = fallback
-          ? recordAgentVisit(nextAgentHistory, fallback)
-          : nextAgentHistory;
-      }
-
+      const activeSessionId =
+        state.activeSessionId && syncedIds.has(state.activeSessionId) ? state.activeSessionId : null;
       return reconcileSessionNavigation(state, {
         navigationSessions: daemonSessions,
         sessions: allSessions,
-        activeSessionId: nextActiveSessionID,
-        recentSessionIds: nextRecent,
-        agentHistory: nextAgentHistory,
+        activeSessionId,
+        agentHistory: reconcileAgentHistory(state.agentHistory, syncedIds),
       });
     });
   },

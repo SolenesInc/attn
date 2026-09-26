@@ -53,7 +53,6 @@ describe('sessions store', () => {
     useSessionStore.setState({
       sessions: [],
       activeSessionId: null,
-      recentSessionIds: [],
       agentHistory: createAgentHistory(),
       connected: false,
       launcherConfig: { executables: {} },
@@ -111,7 +110,7 @@ describe('sessions store', () => {
     });
   });
 
-  it('reconciles history before applying an MRU fallback when the active session closes', async () => {
+  it('reconciles history and leaves the next agent to the arrangement when the active session closes', async () => {
     for (const id of ['sess-a', 'sess-b', 'sess-c']) {
       await useSessionStore.getState().createSession(
         id,
@@ -128,11 +127,8 @@ describe('sessions store', () => {
     useSessionStore.getState().removeSessionLocalState('sess-b');
 
     const state = useSessionStore.getState();
-    expect(state.activeSessionId).toBe('sess-c');
-    expect(state.agentHistory).toEqual({
-      entries: ['sess-a', 'sess-c'],
-      cursor: 1,
-    });
+    expect(state.activeSessionId).toBeNull();
+    expect(state.agentHistory.entries).toEqual(['sess-a', 'sess-c']);
   });
 
   it('syncFromDaemonSessions hydrates canonical session data and keeps the session on its desktop', () => {
@@ -268,10 +264,9 @@ describe('sessions store', () => {
     expect(useSessionStore.getState().sessions[0].daemonActivePaneId).toBe('');
   });
 
-  it('syncFromDaemonSessions removes closed ready workspace sessions and restores recent selection', () => {
+  it('syncFromDaemonSessions removes a closed active session and leaves the next agent to the arrangement', () => {
     useSessionStore.setState({
       activeSessionId: 'split-session',
-      recentSessionIds: ['root-session'],
       agentHistory: { entries: ['root-session', 'split-session'], cursor: 1 },
       sessions: [
         {
@@ -346,9 +341,8 @@ describe('sessions store', () => {
 
     const state = useSessionStore.getState();
     expect(state.sessions.map((session) => session.id)).toEqual(['root-session']);
-    expect(state.activeSessionId).toBe('root-session');
-    expect(state.recentSessionIds).toEqual([]);
-    expect(state.agentHistory).toEqual({ entries: ['root-session'], cursor: 0 });
+    expect(state.activeSessionId).toBeNull();
+    expect(state.agentHistory.entries).toEqual(['root-session']);
   });
 
   it('syncFromDaemonSessions puts a session that comes back on the desktop it is placed on', () => {
@@ -384,7 +378,6 @@ describe('sessions store', () => {
   it('syncFromDaemonSessions retains a genuinely launching session with a pending workspace pane', () => {
     useSessionStore.setState({
       activeSessionId: 'launching-session',
-      recentSessionIds: [],
       sessions: [
         {
           id: 'launching-session',
@@ -469,7 +462,6 @@ describe('sessions store', () => {
   it('syncFromDaemonSessions removes an exited session with a stale spawning pane', () => {
     useSessionStore.setState({
       activeSessionId: 'exited-session',
-      recentSessionIds: [],
       sessions: [
         {
           id: 'exited-session',
@@ -500,124 +492,6 @@ describe('sessions store', () => {
 
     expect(useSessionStore.getState().sessions).toEqual([]);
     expect(useSessionStore.getState().activeSessionId).toBeNull();
-  });
-
-  it('syncFromDaemonSessions falls back to a remaining same-workspace session when recent selection is empty', () => {
-    useSessionStore.setState({
-      activeSessionId: 'split-session',
-      recentSessionIds: [],
-      sessions: [
-        {
-          id: 'root-session',
-          label: 'Root',
-          state: 'idle',
-          cwd: '/tmp/workspace',
-          workspaceId: 'workspace-root',
-          profileId: '',
-          desktopId: 'workspace-root',
-          agent: 'shell',
-          transcriptMatched: true,
-          daemonActivePaneId: 'pane-split',
-          desktop: {
-            agents: [
-              { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
-              { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
-            ],
-            layoutTree: null,
-          },
-        },
-        {
-          id: 'split-session',
-          label: 'Split',
-          state: 'idle',
-          cwd: '/tmp/workspace',
-          workspaceId: 'workspace-root',
-          profileId: '',
-          desktopId: 'workspace-root',
-          agent: 'shell',
-          transcriptMatched: true,
-          daemonActivePaneId: 'pane-split',
-          desktop: {
-            agents: [
-              { id: 'pane-root', runtimeId: 'root-session', title: 'Root', sessionId: 'root-session' },
-              { id: 'pane-split', runtimeId: 'split-session', title: 'Split', sessionId: 'split-session' },
-            ],
-            layoutTree: null,
-          },
-        },
-      ],
-    });
-
-    useSessionStore.getState().syncFromDaemonSessions([
-      {
-        id: 'root-session',
-        label: 'Root',
-        agent: 'shell',
-        directory: '/tmp/workspace',
-        workspace_id: 'workspace-root',
-        state: 'idle',
-      },
-    ]);
-
-    const state = useSessionStore.getState();
-    expect(state.sessions.map((session) => session.id)).toEqual(['root-session']);
-    expect(state.activeSessionId).toBe('root-session');
-  });
-
-  it('syncFromDaemonSessions falls back to another remaining session when a whole workspace closes', () => {
-    useSessionStore.setState({
-      activeSessionId: 'closing-session',
-      recentSessionIds: [],
-      sessions: [
-        {
-          id: 'previous-session',
-          label: 'Previous',
-          state: 'idle',
-          cwd: '/tmp/previous',
-          workspaceId: 'workspace-previous',
-          profileId: '',
-          desktopId: 'workspace-previous',
-          agent: 'shell',
-          transcriptMatched: true,
-          daemonActivePaneId: 'pane-previous',
-          desktop: {
-            agents: [{ id: 'pane-previous', runtimeId: 'previous-session', title: 'Previous', sessionId: 'previous-session' }],
-            layoutTree: { type: 'pane', paneId: 'pane-previous' },
-          },
-        },
-        {
-          id: 'closing-session',
-          label: 'Closing',
-          state: 'idle',
-          cwd: '/tmp/closing',
-          workspaceId: 'workspace-closing',
-          profileId: '',
-          desktopId: 'workspace-closing',
-          agent: 'shell',
-          transcriptMatched: true,
-          daemonActivePaneId: 'pane-closing',
-          desktop: {
-            agents: [{ id: 'pane-closing', runtimeId: 'closing-session', title: 'Closing', sessionId: 'closing-session' }],
-            layoutTree: { type: 'pane', paneId: 'pane-closing' },
-          },
-        },
-      ],
-    });
-
-    useSessionStore.getState().syncFromDaemonSessions([
-      {
-        id: 'previous-session',
-        label: 'Previous',
-        agent: 'shell',
-        directory: '/tmp/previous',
-        workspace_id: 'workspace-previous',
-        state: 'idle',
-      },
-    ]);
-
-    const state = useSessionStore.getState();
-    expect(state.sessions.map((session) => session.id)).toEqual(['previous-session']);
-    expect(state.activeSessionId).toBe('previous-session');
   });
 
   it('takeSessionSpawnArgs applies launcher overrides', async () => {
