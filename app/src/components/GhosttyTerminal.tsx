@@ -1689,7 +1689,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const seedBlocks = useCallback((blocks: SeededBlock[]) => {
       return enqueueOperation('seedBlocks', () => {
         const terminal = terminalRef.current;
-        if (!terminal) return;
+        if (!terminal || restoreRejectedRef.current) return;
         blockStoreRef.current.seed(
           blocks,
           (row) => selectionLineAtBufferRow(row, 0, terminal.cols),
@@ -1726,7 +1726,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const seedPlacements = useCallback((sessionId: string, placements: PlacementElement[]) => {
       return enqueueOperation('seedPlacements', () => {
         const terminal = terminalRef.current;
-        if (!terminal) return;
+        if (!terminal || restoreRejectedRef.current) return;
         placementSessionRef.current = sessionId;
         placementStoreRef.current.seed(placements, terminal.getScrollbackLength());
         requestPlacementBlobs();
