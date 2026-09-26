@@ -26,10 +26,7 @@ export function useSidebarDrag({
   }, []);
   useEffect(() => cancelActiveGesture, [cancelActiveGesture]);
   const REORDER_THRESHOLD = 6;
-  const [reorderDrag, setReorderDrag] = useState<{
-    workspaceId: string;
-    endpointId?: string;
-  } | null>(null);
+  const [reorderDrag, setReorderDrag] = useState<{ workspaceId: string } | null>(null);
   const [sessionDragGhost, setSessionDragGhost] = useState<{
     x: number;
     y: number;
@@ -46,7 +43,6 @@ export function useSidebarDrag({
   const [reorderSeamIndex, setReorderSeamIndex] = useState<number | null>(null);
   const reorderDragRef = useRef<{
     workspaceId: string;
-    endpointId?: string;
     pointerId: number;
     startX: number;
     startY: number;
@@ -55,9 +51,6 @@ export function useSidebarDrag({
   } | null>(null);
   const reorderSeamIndexRef = useRef<number | null>(null);
   const suppressNextHeaderClickRef = useRef(false);
-
-  const reorderParticipants = (endpointId?: string): SidebarWorkspace[] =>
-    visibleVisualOrder.filter((workspace) => (workspace.endpointId || '') === (endpointId || ''));
 
   const updateReorderSeam = useCallback((index: number | null) => {
     reorderSeamIndexRef.current = index;
@@ -95,14 +88,11 @@ export function useSidebarDrag({
   }, [updateReorderSeam]);
 
   const commitReorder = useCallback(
-    (workspaceId: string, endpointId: string | undefined, seamIndex: number | null) => {
+    (workspaceId: string, seamIndex: number | null) => {
       if (seamIndex == null || !onWorkspaceReorder) {
         return;
       }
-      const participants = visibleVisualOrder.filter(
-        (workspace) => (workspace.endpointId || '') === (endpointId || ''),
-      );
-      const fromIndex = participants.findIndex((workspace) => workspace.id === workspaceId);
+      const fromIndex = visibleVisualOrder.findIndex((workspace) => workspace.id === workspaceId);
       if (fromIndex < 0) {
         return;
       }
@@ -111,7 +101,7 @@ export function useSidebarDrag({
       if (seamIndex === fromIndex || seamIndex === fromIndex + 1) {
         return;
       }
-      const remaining = participants.filter((workspace) => workspace.id !== workspaceId);
+      const remaining = visibleVisualOrder.filter((workspace) => workspace.id !== workspaceId);
       const insertAt = seamIndex > fromIndex ? seamIndex - 1 : seamIndex;
       const prevWorkspaceId = insertAt > 0 ? remaining[insertAt - 1]?.id : undefined;
       const nextWorkspaceId = insertAt < remaining.length ? remaining[insertAt]?.id : undefined;
@@ -130,7 +120,6 @@ export function useSidebarDrag({
       const sourceEl = event.currentTarget;
       reorderDragRef.current = {
         workspaceId: workspace.id,
-        endpointId: workspace.endpointId,
         pointerId: event.pointerId,
         startX: event.clientX,
         startY: event.clientY,
@@ -154,7 +143,7 @@ export function useSidebarDrag({
           } catch {
             // setPointerCapture can throw if the pointer is already gone; ignore.
           }
-          setReorderDrag({ workspaceId: drag.workspaceId, endpointId: drag.endpointId });
+          setReorderDrag({ workspaceId: drag.workspaceId });
         }
         updateReorderSeam(nearestSeamIndex(moveEvent.clientY));
       };
@@ -180,7 +169,7 @@ export function useSidebarDrag({
           return;
         }
         if (drag.armed) {
-          commitReorder(drag.workspaceId, drag.endpointId, reorderSeamIndexRef.current);
+          commitReorder(drag.workspaceId, reorderSeamIndexRef.current);
         }
         endReorderDrag();
       };
@@ -203,13 +192,11 @@ export function useSidebarDrag({
     ],
   );
 
-  const reorderActiveParticipants = reorderDrag ? reorderParticipants(reorderDrag.endpointId) : [];
   const reorderSeamIndexByWorkspaceId = reorderDrag
-    ? new Map(reorderActiveParticipants.map((workspace, index) => [workspace.id, index]))
+    ? new Map(visibleVisualOrder.map((workspace, index) => [workspace.id, index]))
     : null;
-  const reorderTrailingSeamIndex = reorderActiveParticipants.length;
-  const lastReorderParticipantId =
-    reorderActiveParticipants[reorderActiveParticipants.length - 1]?.id;
+  const reorderTrailingSeamIndex = visibleVisualOrder.length;
+  const lastReorderParticipantId = visibleVisualOrder[visibleVisualOrder.length - 1]?.id;
 
   const renderReorderSeam = (index: number) => (
     <div

@@ -663,6 +663,33 @@ describe('Sidebar', () => {
     expect(onSelectWorkspace).not.toHaveBeenCalled();
   });
 
+  it('reorders a desktop whose first agent runs on a remote endpoint among every desktop', () => {
+    const sidebarData = buildSidebarData([
+      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a', endpointId: 'ep-1', endpointName: 'box' },
+      { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
+      { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
+    ]);
+    expect(sidebarData.workspaces[0].endpointId).toBe('ep-1');
+    const onWorkspaceReorder = vi.fn();
+    render(<Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />);
+
+    const header = screen
+      .getByTestId('sidebar-workspace-workspace-/repo/a')
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    expect(screen.getByTestId('workspace-reorder-seam-3')).toBeInTheDocument();
+
+    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-3'));
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
+
+    expect(onWorkspaceReorder).toHaveBeenCalledWith({
+      workspaceId: 'workspace-/repo/a',
+      prevWorkspaceId: 'workspace-/repo/c',
+      nextWorkspaceId: undefined,
+    });
+  });
+
   it('releases an armed workspace reorder on unmount without dropping', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
