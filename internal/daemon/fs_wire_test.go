@@ -116,10 +116,12 @@ func fsDir(t *testing.T, name string) string {
 	return dir
 }
 
-func fsNotebookRoot(t *testing.T, app *testworld.Peer) string {
+func fsNotebookRoot(t *testing.T, w *world) string {
 	t.Helper()
-	root := fsDir(t, "notebook")
-	setSetting(t, app, "notebook.root", root)
+	root := filepath.Join(w.Dir, "notebook")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	return root
 }
 
@@ -149,7 +151,7 @@ func fsRemotePeer(w *world) *testworld.Peer {
 func TestNotebookFileCommandsRoundTripThroughTheApp(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 
 	created := fsAskWrite(app, "", "/notes/todo.txt", "buy milk", "")
 	if !created.Success || created.Result == nil || created.Result.Conflict || created.Result.Hash == nil || created.Result.Path != "notes/todo.txt" {
@@ -204,7 +206,7 @@ func TestFsChangedTellsTheAppsWhoChangedAFileAndOnlyNotesReachTheNotebook(t *tes
 	w := newFsWorld(t)
 	app := pickerApp(w)
 	watcher := w.App()
-	root := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 
 	fsAskWrite(app, "", "/notes/todo.md", "x", "")
 	if ui := fsAwaitChanged(watcher, func(m protocol.FsChangedMessage) bool { return m.Origin == "ui" }); ui.Root != root || !slices.Equal(ui.Paths, []string{"notes/todo.md"}) {
@@ -253,7 +255,7 @@ func TestFsChangedTellsTheAppsWhoChangedAFileAndOnlyNotesReachTheNotebook(t *tes
 func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	root := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 	png := []byte{0x89, 'P', 'N', 'G', 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D}
 	fsWriteFile(t, filepath.Join(root, "assets", "pic.png"), png)
 	fsWriteFile(t, filepath.Join(root, "assets", "doc.pdf"), []byte("not an image"))
@@ -301,7 +303,7 @@ func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
 func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testing.T) {
 	w := newFsWorld(t)
 	app := pickerApp(w)
-	notebookRoot := fsNotebookRoot(t, app)
+	notebookRoot := fsNotebookRoot(t, w)
 	external := fsDir(t, "external")
 	fsWriteFile(t, filepath.Join(external, "secret.txt"), []byte("top secret"))
 

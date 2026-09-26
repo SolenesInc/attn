@@ -23,7 +23,7 @@ func fsAskIndex(p *testworld.Peer, root string, extensions ...string) protocol.F
 func TestFsIndexListsWhatAnEditorWouldOpen(t *testing.T) {
 	w := newFsWorld(t)
 	app := pickerApp(w)
-	fsNotebookRoot(t, app)
+	fsNotebookRoot(t, w)
 
 	plain := fsDir(t, "plain")
 	for _, rel := range []string{"top.md", "nested/dir/deep.md", "nested/dir/deep2.txt", ".hidden-dir/inside.md", ".dotfile", "node_modules/pkg/index.js", ".git/objects/ab/cdef.md"} {

@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -9,9 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
-	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -78,7 +75,6 @@ func notebookSetting(app *testworld.Peer, key, value string) protocol.SettingsUp
 func TestNotebookReadsListsAndBacklinks(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	fsNotebookRoot(t, app)
 	written := notebookAskWrite(app, "knowledge/areas/a.md", notebookNote("body"), "")
 	notebookAskWrite(app, "knowledge/areas/b.md", notebookNote("see [a](/knowledge/areas/a.md)"), "")
 	notebookAskWrite(app, "journal/2026-06-13.md", "---\ntype: journal\n---\nentry\n", "")
@@ -104,7 +100,6 @@ func TestNotebookReadsListsAndBacklinks(t *testing.T) {
 func TestNotebookWritesAreCompareAndSwapWithNormalizedPaths(t *testing.T) {
 	w := newWorld(t)
 	writer, other := w.App(), w.App()
-	fsNotebookRoot(t, writer)
 
 	created := notebookAskWrite(writer, "/knowledge/areas/foo.md", notebookNote("v1"), "")
 	if !created.Success || created.Result == nil || created.Result.Conflict || created.Result.Hash == nil || created.Result.Path != "knowledge/areas/foo.md" {
@@ -130,17 +125,17 @@ func TestNotebookWritesAreCompareAndSwapWithNormalizedPaths(t *testing.T) {
 func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	first := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 	notebookAskList(app, "")
 
 	notebookAskWrite(app, "own.md", notebookNote("attn wrote this"), "")
-	fsWriteFile(t, filepath.Join(first, "ext.md"), []byte(notebookNote("edited externally")))
+	fsWriteFile(t, filepath.Join(root, "ext.md"), []byte(notebookNote("edited externally")))
 	if refused := notebookAskWrite(app, "doc.md", "x", "deadbeef"); refused.Result == nil || !refused.Result.Conflict {
 		t.Fatalf("a write against a hash doc.md never had = %+v, want a conflict", refused.Result)
 	}
-	fsWriteFile(t, filepath.Join(first, "doc.md"), []byte(notebookNote("externally created")))
+	fsWriteFile(t, filepath.Join(root, "doc.md"), []byte(notebookNote("externally created")))
 	notebookAskWrite(app, "race.md", notebookNote("attn wrote this"), "")
-	fsWriteFile(t, filepath.Join(first, "race.md"), []byte(notebookNote("external overwrote it")))
+	fsWriteFile(t, filepath.Join(root, "race.md"), []byte(notebookNote("external overwrote it")))
 
 	heard := map[string]bool{}
 	for !heard["ext.md"] || !heard["doc.md"] || !heard["race.md"] {
@@ -151,17 +146,6 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 		if heard["own.md"] {
 			t.Fatalf("attn's own write was reported as external: %v", external.Paths)
 		}
-	}
-
-	second := fsDir(t, "second-notebook")
-	setSetting(t, app, "notebook.root", second)
-	notebookAskList(app, "")
-	fsWriteFile(t, filepath.Join(first, "a.md"), []byte("# a\n"))
-	fsWriteFile(t, filepath.Join(second, "b.md"), []byte("# b\n"))
-	if moved := testworld.Await(app, protocol.EventNotebookChanged, func(m protocol.NotebookChangedMessage) bool {
-		return m.Origin == "external" && (slices.Contains(m.Paths, "a.md") || slices.Contains(m.Paths, "b.md"))
-	}); !slices.Equal(moved.Paths, []string{"b.md"}) {
-		t.Fatalf("after the root moved the notebook heard %v, want only the edit under the new root", moved.Paths)
 	}
 }
 
@@ -177,7 +161,7 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 		t.Run(string(c.agent), func(t *testing.T) {
 			w := newWorld(t, c.agent)
 			app, cli := w.App(), w.Client()
-			root := fsNotebookRoot(t, app)
+			root := fsNotebookRoot(t, w)
 
 			worker := w.Spawn(app, c.agent, w.Path("worker"))
 			if guide, err := cli.NotebookGuide(worker); err != nil || guide.SessionIsChief || guide.Guidance == "" || guide.Root != root {
@@ -210,29 +194,25 @@ func TestTheNotebookGuideScaffoldsOnlyForTheChief(t *testing.T) {
 func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
+	root := fsNotebookRoot(t, w)
 	custom := fsDir(t, "custom")
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	for _, c := range []struct {
 		key, value string
 		ok         bool
-		effective  string
 	}{
-		{"notebook.root", "relative/path", false, ""},
-		{"notebook.root", filepath.Join(w.Dir, "notebook"), false, ""},
-		{"notebook.root", custom, true, custom},
-		{"notebook.root", "", true, notebook.DefaultRoot(home, config.Instance())},
-		{"notebook.root.effective", "/tmp/whatever", false, ""},
+		{"notebook.root", "relative/path", false},
+		{"notebook.root", filepath.Join(w.Dir, "notebook"), false},
+		{"notebook.root", custom, true},
+		{"notebook.root", "", true},
+		{"notebook.root.effective", "/tmp/whatever", false},
 	} {
 		if updated := notebookSetting(app, c.key, c.value); protocol.Deref(updated.Success) != c.ok {
 			t.Errorf("setting %s to %q succeeded=%v (%s), want %v", c.key, c.value, protocol.Deref(updated.Success), protocol.Deref(updated.Error), c.ok)
 		}
-		if c.effective != "" {
+		if c.ok {
 			testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings["notebook.root.effective"] == c.effective
+				return m.RequestID == nil && protocol.Deref(m.ChangedKey) == c.key && m.Settings[c.key] == c.value && m.Settings["notebook.root.effective"] == root
 			})
 		}
 	}
@@ -241,7 +221,7 @@ func TestNotebookRootSettingIsValidatedAndItsEffectiveValueIsReadOnly(t *testing
 func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	root := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 	chief := w.Spawn(app, fakeagent.Claude, w.Path("chief"), func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
 	agent := w.Launched(chief)
 	app.TypeLine(chief, "keep the notebook")
@@ -287,7 +267,6 @@ func TestSendToChiefAppendsToTheInboxAndRingsOnlyAReadyChief(t *testing.T) {
 func TestSendToChiefWithoutAChiefStillLandsAndRefusesBadSelections(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	fsNotebookRoot(t, app)
 
 	for name, selection := range map[string]string{"an empty selection": "   ", "an oversize selection": strings.Repeat("a", 32<<10+1)} {
 		if refused := notebookAskSendToChief(app, "/index.md", selection); refused.Success || refused.Result != nil || refused.Error == nil {

@@ -98,7 +98,7 @@ func TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin(t *testing.T) {
 		t.Fatalf("the first external change was %v, want the outside edit without attn's own write", external.Paths)
 	}
 
-	root := fsNotebookRoot(t, app)
+	root := fsNotebookRoot(t, w)
 	fsAskList(app, "", "")
 	fsWriteFile(t, filepath.Join(root, "plain.txt"), []byte("hi"))
 	fsAwaitChanged(app, func(m protocol.FsChangedMessage) bool {
@@ -118,7 +118,7 @@ func TestOwnWritesAndNotebookNotesSurfaceWithTheRightOrigin(t *testing.T) {
 func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 	w := newFsWorld(t)
 	app := pickerApp(w)
-	notebookRoot := fsNotebookRoot(t, app)
+	notebookRoot := fsNotebookRoot(t, w)
 	watched := make([]string, fsWatchedRootsCap)
 	for i := range watched {
 		watched[i] = fsDir(t, fmt.Sprintf("watched-%d", i))
