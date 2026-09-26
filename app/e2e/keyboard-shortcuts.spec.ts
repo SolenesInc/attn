@@ -164,10 +164,10 @@ test.describe('Keyboard Shortcuts', () => {
       const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
       await expect(editor).toBeVisible();
 
-      // Rebind "Agent palette" to a chord: ⌘E then A. ⌘E is otherwise unbound, so it can act as an exclusive leader.
+      const unboundLeader = 'Meta+e';
       const row = editor.locator('.shortcut-editor-row', { hasText: 'Agent palette' });
       await row.getByLabel('Record a chord').click();
-      await page.keyboard.press('Meta+e');
+      await page.keyboard.press(unboundLeader);
       await expect(row).toContainText('then');
       await page.keyboard.press('a');
       await expect(row).toContainText('then');
@@ -175,7 +175,7 @@ test.describe('Keyboard Shortcuts', () => {
       await editor.getByRole('button', { name: 'Done' }).click();
       await expect(editor).not.toBeVisible();
 
-      await page.keyboard.press('Meta+e');
+      await page.keyboard.press(unboundLeader);
       await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
 
       await page.keyboard.press('a');

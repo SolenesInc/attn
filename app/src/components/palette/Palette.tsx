@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react';
 import { useEscapeStack } from '../../hooks/useEscapeStack';
 import './Palette.css';
 
@@ -77,6 +77,11 @@ export function Palette<T>({
     if (item !== undefined && isSelectable(item)) onPick(item);
   };
 
+  const pickKeepingInputFocus = (event: MouseEvent, item: T) => {
+    event.preventDefault();
+    pick(item);
+  };
+
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (onKeyDown?.(event, highlighted)) return;
     switch (event.key) {
@@ -143,8 +148,7 @@ export function Palette<T>({
                   aria-selected={index === activeIndex}
                   className={`palette-option ${variant}-option${index === activeIndex ? ' is-selected' : ''}`}
                   onMouseEnter={() => selectIndex(index)}
-                  // mousedown + preventDefault: pick without yanking focus out of the input.
-                  onMouseDown={(event) => { event.preventDefault(); pick(item); }}
+                  onMouseDown={(event) => pickKeepingInputFocus(event, item)}
                 >
                   {renderItem(item, index === activeIndex)}
                 </li>
