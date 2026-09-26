@@ -12,7 +12,7 @@ import (
 func TestATriggeredNudgeWaitsUntilTheAgentCanTakeIt(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "author")
+	author := w.Spawn(app, fakeagent.Claude, w.Path("author"))
 
 	asking := w.Spawn(app, fakeagent.Claude, w.Path("asking"))
 	askingRun := w.Launched(asking)
@@ -27,7 +27,7 @@ func TestATriggeredNudgeWaitsUntilTheAgentCanTakeIt(t *testing.T) {
 
 	for _, session := range []string{booting, asking} {
 		createTicket(t, cli, session, "fix the build", "ticket-"+session)
-		commentOnTicket(t, cli, "author", "ticket-"+session, "take a look")
+		commentOnTicket(t, cli, author, "ticket-"+session, "take a look")
 		testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.TicketUnread) })
 		app.Send(protocol.TriggerNudgeMessage{Cmd: protocol.CmdTriggerNudge, SessionID: session})
 	}

@@ -91,7 +91,7 @@ func TestTheNudgeCountdownRunsOnlyWhileTheSessionIsUnseenAndCanTakeIt(t *testing
 func TestAnUnreadTicketNudgeIsReArmedAfterARestart(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "author")
+	author := w.Spawn(app, fakeagent.Claude, w.Path("author"))
 	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	run := w.Launched(session)
 	app.TypeLine(session, "fix the build")
@@ -99,7 +99,7 @@ func TestAnUnreadTicketNudgeIsReArmedAfterARestart(t *testing.T) {
 	run.Reply("Fixed. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	createTicket(t, cli, session, "fix the build", "fix-build")
-	commentOnTicket(t, cli, "author", "fix-build", "take a look")
+	commentOnTicket(t, cli, author, "fix-build", "take a look")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return protocol.Deref(s.NudgeFiresAt) != "" })
 
 	w.restart()
