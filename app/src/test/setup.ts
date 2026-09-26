@@ -29,6 +29,12 @@ vi.mock('@tauri-apps/api/window', () => ({
   })),
 }));
 
+vi.mock('@tauri-apps/api/path', () => ({
+  downloadDir: vi.fn(async () => '/Users/me/Downloads'),
+  homeDir: vi.fn(async () => '/Users/me'),
+  join: vi.fn(async (...parts: string[]) => parts.join('/')),
+}));
+
 vi.mock('@tauri-apps/plugin-deep-link', () => ({
   onOpenUrl: vi.fn(async () => () => {}),
   getCurrent: vi.fn(async () => []),
@@ -127,13 +133,13 @@ if (typeof window !== 'undefined') {
     });
   };
   ensureLocalStorage();
-
-  // Counts the one-time "what's new" announcement as seen so it never renders
-  // over unrelated tests.
-  window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
 }
 
 beforeEach(() => {
+  if (typeof window !== 'undefined') {
+    window.localStorage.clear();
+    window.localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
+  }
   for (const reset of storeResets) reset();
   gardenScrollMemory.clear();
   clearDelegationModelCatalogs();

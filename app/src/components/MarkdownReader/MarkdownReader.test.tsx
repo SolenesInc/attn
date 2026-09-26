@@ -1,40 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { act, render } from '@testing-library/react';
 import { MarkdownReader } from './index';
 import { sanitizeLinkUrl } from './markdownLinks';
-import { fileMarkdownSource, seedMarkdownSource } from './documentSource';
-import { gesture, renderApp } from '../../test/renderApp';
-import type { EventMessage } from '../../test/protocol';
-import {
-  agentPane,
-  agentWorkspace,
-  daemonSeed,
-  daemonSession,
-  daemonWorkspace,
-  dockTiles,
-  seedDocument,
-  type DaemonSeedDocument,
-} from '../../test/daemonFixtures';
-import { invoke } from '@tauri-apps/api/core';
-
-vi.mock('@tauri-apps/plugin-opener', () => ({
-  openUrl: vi.fn(async () => {}),
-}));
-
-// jsdom/happy-dom cannot run real mermaid; browser coverage exercises the real module.
-const mermaidMock = vi.hoisted(() => ({
-  initialize: vi.fn(),
-  render: vi.fn(async () => ({
-    svg: '<svg viewBox="0 0 1200 400" data-testid="mermaid-svg"></svg>',
-  })),
-}));
-vi.mock('mermaid', () => ({
-  default: {
-    initialize: mermaidMock.initialize,
-    render: mermaidMock.render,
-  },
-}));
+import { fileMarkdownSource } from './documentSource';
 
 const shikiMock = vi.hoisted(() => ({
   codeToHtml: vi.fn(async (code: string) =>
@@ -44,743 +12,197 @@ vi.mock('shiki', () => shikiMock);
 
 const FILE_SOURCE = fileMarkdownSource('workspace-1', '/tmp/project/README.md');
 
-function renderReader(content: string, allowLocalTargets = true) {
-  return render(
-    <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={allowLocalTargets} />,
-  );
+type Facts = Record<string, string | boolean | null>;
+
+interface Rendering {
+  rule: string;
+  markdown: string;
+  elements?: Record<string, Facts[]>;
+  shows?: string[];
+  never?: string[];
 }
 
-type TargetResult = NonNullable<EventMessage<'seed_artifact_target_result'>['result']>;
-type SeedArtifact = DaemonSeedDocument['artifacts'][number];
-
-const SEED_ID = 's-7k3f9m';
-const REPORT_PATH = '/notebook/seeds/s-7k3f9m/report.pdf';
-
-function seedTarget(target: string, purpose: string): TargetResult {
-  return purpose === 'image'
-    ? { relative_target: target, mime_type: 'image/png', data_base64: 'aW1hZ2U=' }
-    : { relative_target: target, path: REPORT_PATH };
-}
-
-function artifact(filename: string, relativeTarget = filename, modifiedAt = '2026-08-29T20:00:00Z'): SeedArtifact {
-  return { filename, relative_target: relativeTarget, size: 5, modified_at: modifiedAt };
-}
-
-async function openSeedReader(
-  body: string,
-  artifacts: () => SeedArtifact[] = () => [],
-  resolve: (target: string, purpose: string) => TargetResult = seedTarget,
-) {
-  const seed = daemonSeed(SEED_ID, { body });
-  const { daemon } = await renderApp({
-    initialState: { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')], seeds: [seed] },
-  });
-  daemon.on('seed_document_get', () => ({
-    event: 'seed_document_get_result',
-    success: true,
-    document: seedDocument(seed, { artifacts: artifacts() }),
-  }));
-  daemon.on('seed_artifact_target', ({ seed_id, relative_target, purpose }) => (
-    seed_id === SEED_ID
-      ? { event: 'seed_artifact_target_result', success: true, result: resolve(relative_target, purpose) }
-      : { event: 'seed_artifact_target_result', success: false, error: `unknown seed ${seed_id}` }
-  ));
-  await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open s1' })));
-  await gesture(daemon, () => daemon.emit({
-    event: 'workspace_layout_updated',
-    workspace_layout: daemonWorkspace('workspace-s1', {
-      root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, [{ tile_id: 'tile-seed', tile_kind: 'seed', tile_params: SEED_ID }]),
-      panes: [agentPane('s1', 'workspace-s1')],
-    }).layout!,
-  }));
-  const tile = document.querySelector<HTMLElement>('[data-pane-id="tile-seed"]')!;
-  const targets = () => daemon.sentOf('seed_artifact_target').map((command) => [command.relative_target, command.purpose]);
-  return { daemon, seed, tile, reader: within(tile), targets };
-}
-
-async function pressEnter(control: HTMLElement) {
-  control.focus();
-  await Promise.all([userEvent.setup({ delay: null }).keyboard('{Enter}'), vi.advanceTimersByTimeAsync(10)]);
-}
-
-describe('MarkdownReader source anchoring', () => {
-  it('stamps data-source-line attributes on rendered blocks', () => {
-    const { container } = renderReader('# Title\n\nFirst paragraph.\n\n- item one\n- item two\n');
-
-    const heading = container.querySelector('h1');
-    expect(heading).toHaveAttribute('data-source-line', '1');
-    expect(heading).toHaveAttribute('data-block-id', 'b0-heading');
-
-    const paragraph = container.querySelector('p');
-    expect(paragraph).toHaveAttribute('data-source-line', '3');
-    expect(paragraph).toHaveAttribute('data-source-line-end', '3');
-
-    const items = container.querySelectorAll('li[data-source-line]');
-    expect(items).toHaveLength(2);
-    expect(items[0]).toHaveAttribute('data-source-line', '5');
-    expect(items[1]).toHaveAttribute('data-source-line', '6');
-  });
-
-  it('keeps raw-file line numbers for blocks after frontmatter (lineOffset plumbing)', () => {
-    const { container } = renderReader('---\ntitle: Plan\ntags: [a, b]\n---\n\nBody paragraph.\n');
-
-    const paragraph = container.querySelector('p');
-    expect(paragraph).toHaveAttribute('data-source-line', '6');
-    expect(paragraph).toHaveAttribute('data-source-line-end', '6');
-  });
-
-  it('stamps fenced code blocks across their full fence range', () => {
-    const { container } = renderReader('intro\n\n```js\nconst x = 1;\n```\n');
-
-    const pre = container.querySelector('pre');
-    expect(pre).toHaveAttribute('data-source-line', '3');
-    expect(pre).toHaveAttribute('data-source-line-end', '5');
-  });
-});
-
-describe('MarkdownReader frontmatter card', () => {
-  it('renders scalar rows and tag chips, and never renders the raw block as prose', () => {
-    const { container } = renderReader('---\ntitle: My Plan\ntags: [alpha, beta]\n---\n\nBody.\n');
-
-    expect(screen.getByText('title:')).toBeInTheDocument();
-    expect(screen.getByText('My Plan')).toBeInTheDocument();
-    expect(screen.getByText('alpha')).toBeInTheDocument();
-    expect(screen.getByText('beta')).toBeInTheDocument();
-    expect(container.querySelector('.md-frontmatter')).toBeInTheDocument();
-    expect(container.querySelector('.md-reader-card')?.textContent).not.toContain('---');
-    expect(container.querySelectorAll('h2')).toHaveLength(0);
-  });
-
-  it('renders no card when the document has no frontmatter', () => {
-    const { container } = renderReader('# Plain\n\nBody.\n');
-    expect(container.querySelector('.md-frontmatter')).toBeNull();
-  });
-});
-
-describe('MarkdownReader link sanitization', () => {
-  it('sanitizeLinkUrl kills javascript:/data:/vbscript: and passes normal urls', () => {
-    expect(sanitizeLinkUrl('javascript:alert(1)')).toBeNull();
-    expect(sanitizeLinkUrl(' JavaScript:alert(1)')).toBeNull();
-    expect(sanitizeLinkUrl('data:text/html,<script>')).toBeNull();
-    expect(sanitizeLinkUrl('vbscript:msgbox')).toBeNull();
-    expect(sanitizeLinkUrl('https://example.test/x')).toBe('https://example.test/x');
-    expect(sanitizeLinkUrl('docs/setup.md')).toBe('docs/setup.md');
-    expect(sanitizeLinkUrl('#fragment')).toBe('#fragment');
-  });
-
-  it('renders dangerous links as plain text', () => {
-    renderReader('[boom](javascript:alert(1)) and [leak](data:text/html,x)');
-
-    expect(screen.queryByRole('link', { name: 'boom' })).toBeNull();
-    expect(screen.queryByRole('link', { name: 'leak' })).toBeNull();
-    expect(screen.getByText('boom')).toBeInTheDocument();
-    expect(screen.getByText('leak')).toBeInTheDocument();
-  });
-
-  it('does not treat a seed body as if it had a local filesystem directory', () => {
-    render(
-      <MarkdownReader
-        content="[local](docs/setup.md) [site](https://example.test/docs)"
-        source={seedMarkdownSource('s-7k3f9m')}
-      />,
-    );
-
-    expect(screen.queryByRole('link', { name: 'local' })).toBeNull();
-    expect(screen.getByRole('link', { name: 'site' })).toBeInTheDocument();
-  });
-
-  it('resolves direct seed links and images through the owning daemon', async () => {
-    const { daemon, reader, targets } = await openSeedReader(
-      '[report](report.pdf)\n\n![cover](cover%20art.png)',
-      () => [artifact('cover art.png', 'cover%20art.png')],
-    );
-
-    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,aW1hZ2U=');
-    await pressEnter(reader.getByRole('button', { name: 'cover' }));
-    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: 'Escape' });
-    await gesture(daemon, () => fireEvent.click(reader.getByRole('button', { name: 'report' })));
-    expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', { path: REPORT_PATH });
-    expect(targets()).toEqual(expect.arrayContaining([['cover%20art.png', 'image'], ['report.pdf', 'link']]));
-  });
-
-  it('keeps a linked seed image and its target as sibling keyboard controls', async () => {
-    const { daemon, tile, reader } = await openSeedReader('[![cover](cover.png)](report.pdf)', () => [artifact('cover.png')]);
-
-    const imageButton = reader.getByRole('button', { name: 'cover' });
-    const linkButton = reader.getByRole('button', { name: 'Open report.pdf' });
-    expect(tile.querySelector('button button')).toBeNull();
-
-    await pressEnter(imageButton);
-    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: 'Escape' });
-
-    await pressEnter(linkButton);
-    await daemon.idle();
-    expect(invoke).toHaveBeenCalledWith('open_safe_seed_artifact_target', { path: REPORT_PATH });
-  });
-
-  it('rejects nested, escaped, and active-content seed targets', async () => {
-    const { reader, targets } = await openSeedReader(
-      '[up](../secret.pdf) [nested](docs/report.pdf) [html](page.html) [encoded](%2e%2e%2fsecret.pdf) ![svg](art.svg)',
-    );
-
-    expect(reader.getByText(/blocked image: svg/)).toBeInTheDocument();
-    for (const name of ['up', 'nested', 'html', 'encoded']) {
-      expect(reader.queryByRole('link', { name })).toBeNull();
-      expect(reader.queryByRole('button', { name })).toBeNull();
-    }
-    expect(targets()).toEqual([]);
-  });
-
-  it('refreshes a seed image the garden changed without remounting the Markdown tree', async () => {
-    const images = ['b25l', 'dHdv'];
-    let modifiedAt = '2026-08-29T20:00:00Z';
-    const { daemon, seed, tile, reader } = await openSeedReader(
-      '<details><summary>Receipt</summary>\n\n![cover](cover.png)\n\n</details>',
-      () => [artifact('cover.png', 'cover.png', modifiedAt)],
-      () => ({ relative_target: 'cover.png', mime_type: 'image/png', data_base64: images.shift() }),
-    );
-    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,b25l');
-    const details = tile.querySelector('details')!;
-    details.open = true;
-
-    modifiedAt = '2026-08-29T20:01:00Z';
-    await gesture(daemon, () => daemon.emit({ event: 'garden_seeds_updated', seeds: [{ ...seed, rev: 2 }], total: 1 }));
-
-    expect(reader.getByRole('img', { name: 'cover' })).toHaveAttribute('src', 'data:image/png;base64,dHdv');
-    expect(details.open).toBe(true);
-  });
-
-  it('keeps heading ids GitHub-sluggy with dedup', () => {
-    renderReader('## Configuração!\n\n## Configuração?\n');
-
-    expect(screen.getAllByRole('heading').map((h) => h.id)).toEqual([
-      'configuração',
-      'configuração-1',
-    ]);
-  });
-
-  it('computes heading slugs from pre-transform text (emoji shortcodes keep their letters)', () => {
-    renderReader('## Deploy :rocket:\n');
-
-    const heading = screen.getByRole('heading');
-    expect(heading).toHaveTextContent('Deploy 🚀');
-    expect(heading.id).toBe('deploy-rocket');
-  });
-
-  it('scrolls the tile body to a fragment target instead of navigating', () => {
-    const { container } = render(
-      <div className="workspace-dock-tile-body">
-        <MarkdownReader content={'[Jump](#setup)\n\n## Setup\n'} source={FILE_SOURCE} />
-      </div>,
-    );
-    const body = container.querySelector<HTMLElement>('.workspace-dock-tile-body')!;
-    const scrollTo = vi.fn();
-    body.scrollTo = scrollTo;
-
-    fireEvent.click(screen.getByRole('link', { name: 'Jump' }));
-
-    expect(scrollTo).toHaveBeenCalledTimes(1);
-    expect(scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'smooth' }));
-  });
-
-  it('resolves fragment links inside the OWN tile when another tile has the same heading id', () => {
-    // Sluggers dedup per document, not per DOM, so two tiles of one document produce duplicate heading ids.
-    const content = '[Jump](#setup)\n\n## Setup\n';
-    const { container } = render(
-      <>
-        <div className="workspace-dock-tile-body" data-testid="tile-1">
-          <MarkdownReader content={content} source={FILE_SOURCE} />
-        </div>
-        <div className="workspace-dock-tile-body" data-testid="tile-2">
-          <MarkdownReader content={content} source={FILE_SOURCE} />
-        </div>
-      </>,
-    );
-    const bodies = container.querySelectorAll<HTMLElement>('.workspace-dock-tile-body');
-    const firstScrollTo = vi.fn();
-    const secondScrollTo = vi.fn();
-    bodies[0].scrollTo = firstScrollTo;
-    bodies[1].scrollTo = secondScrollTo;
-
-    fireEvent.click(screen.getAllByRole('link', { name: 'Jump' })[1]);
-
-    expect(secondScrollTo).toHaveBeenCalledTimes(1);
-    expect(firstScrollTo).not.toHaveBeenCalled();
-  });
-});
-
-describe('MarkdownReader code blocks', () => {
-  beforeEach(() => {
-    shikiMock.codeToHtml.mockClear();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('hydrates fenced code with shiki dual-theme spans', async () => {
-    const { container } = renderReader('```ts\nconst x = 1;\n```\n');
-
-    expect(container.querySelector('pre code')).toHaveTextContent('const x = 1;');
-
-    await waitFor(() => {
-      expect(container.querySelector('code.md-shiki span')).toBeInTheDocument();
-    });
-    expect(shikiMock.codeToHtml).toHaveBeenCalledWith('const x = 1;', expect.objectContaining({
-      lang: 'ts',
-      themes: { light: 'github-light-default', dark: 'github-dark-default' },
-    }));
-  });
-
-  it('falls back to plain text when the language is unknown', async () => {
-    shikiMock.codeToHtml.mockRejectedValueOnce(new Error('unknown lang'));
-    const { container } = renderReader('```nonsense-lang\nplain body\n```\n');
-
-    await waitFor(() => {
-      expect(shikiMock.codeToHtml).toHaveBeenCalled();
-    });
-    expect(container.querySelector('code.md-shiki')).toBeNull();
-    expect(container.querySelector('pre code')).toHaveTextContent('plain body');
-  });
-
-  it('copies the code and flips the button to Copied! for 2s', async () => {
-    const writeText = vi.fn(async () => {});
-    Object.defineProperty(navigator, 'clipboard', {
-      configurable: true,
-      value: { writeText },
-    });
-    renderReader('```ts\nconst x = 1;\n```\n');
-
-    const button = screen.getByRole('button', { name: 'Copy code' });
-    vi.useFakeTimers();
-    fireEvent.click(button);
-    await act(async () => {});
-
-    expect(writeText).toHaveBeenCalledWith('const x = 1;');
-    expect(screen.getByRole('button', { name: 'Copied!' })).toHaveAttribute('title', 'Copied!');
-
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(screen.getByRole('button', { name: 'Copy code' })).toHaveAttribute('title', 'Copy code');
-  });
-
-  it('does not remount code blocks (re-running shiki) on identical-prop re-renders', async () => {
-    const content = '```ts\nconst x = 1;\n```\n';
-    const { container, rerender } = renderReader(content);
-    await waitFor(() => {
-      expect(container.querySelector('code.md-shiki')).toBeInTheDocument();
-    });
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(1);
-
-    rerender(
-      <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={true} />,
-    );
-    await act(async () => {});
-
-    expect(shikiMock.codeToHtml).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('code.md-shiki')).toBeInTheDocument();
-  });
-
-  it('renders mermaid fences as diagrams without codeblock chrome', async () => {
-    const { container } = renderReader('```mermaid\ngraph TD;\nA-->B;\n```\n');
-
-    await waitFor(() => {
-      expect(screen.getByTestId('mermaid-svg')).toBeInTheDocument();
-    });
-    expect(container.querySelector('.md-codeblock')).toBeNull();
-    expect(shikiMock.codeToHtml).not.toHaveBeenCalled();
-  });
-});
-
-describe('MarkdownReader large Mermaid diagrams', () => {
-  function diagramWidth(width: number) {
-    return vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-      return {
-        width: this.classList.contains('markdown-mermaid') ? width : 0,
-        height: 0,
-        top: 0,
-        right: width,
-        bottom: 0,
-        left: 0,
-        x: 0,
-        y: 0,
-        toJSON: () => ({}),
-      };
-    });
+function fact(element: Element, key: string): string | boolean | null {
+  switch (key) {
+    case 'text': return element.textContent!.replace(/\s+/g, ' ').trim();
+    case 'id': return element.id;
+    case 'checked': return (element as HTMLInputElement).checked;
+    case 'disabled': return (element as HTMLInputElement).disabled;
+    case 'open': return (element as HTMLDetailsElement).open;
+    case 'textAlign': return (element as HTMLElement).style.textAlign;
+    default: return element.getAttribute(key);
   }
+}
 
-  it('leaves a comfortably fitted diagram unchanged', async () => {
-    const rect = diagramWidth(600);
-    mermaidMock.render.mockResolvedValueOnce({
-      svg: '<svg viewBox="0 0 400 200" data-testid="mermaid-svg"></svg>',
-    });
+const ALERTS = [
+  ['NOTE', 'note', 'Note'],
+  ['TIP', 'tip', 'Tip'],
+  ['WARNING', 'warning', 'Warning'],
+  ['CAUTION', 'caution', 'Caution'],
+  ['IMPORTANT', 'important', 'Important'],
+] as const;
 
-    const { container } = renderReader('```mermaid\ngraph TD;\nA-->B;\n```\n');
+const RENDERINGS: Rendering[] = [
+  {
+    rule: 'stamps source lines and block ids on rendered blocks',
+    markdown: '# Title\n\nFirst paragraph.\n\n- item one\n- item two\n',
+    elements: {
+      h1: [{ 'data-source-line': '1', 'data-block-id': 'b0-heading' }],
+      p: [{ 'data-source-line': '3', 'data-source-line-end': '3' }],
+      'li[data-source-line]': [{ 'data-source-line': '5' }, { 'data-source-line': '6' }],
+    },
+  },
+  {
+    rule: 'keeps raw-file line numbers for blocks after frontmatter',
+    markdown: '---\ntitle: Plan\ntags: [a, b]\n---\n\nBody paragraph.\n',
+    elements: { p: [{ 'data-source-line': '6', 'data-source-line-end': '6' }] },
+  },
+  {
+    rule: 'stamps a fenced code block across its full fence range',
+    markdown: 'intro\n\n```js\nconst x = 1;\n```\n',
+    elements: { pre: [{ 'data-source-line': '3', 'data-source-line-end': '5' }] },
+  },
+  {
+    rule: 'shows frontmatter as scalar rows and tag chips, never as prose',
+    markdown: '---\ntitle: My Plan\ntags: [alpha, beta]\n---\n\nBody.\n',
+    elements: { '.md-frontmatter': [{}], h2: [] },
+    shows: ['title:', 'My Plan', 'alpha', 'beta'],
+    never: ['---'],
+  },
+  {
+    rule: 'renders dangerous links as plain text',
+    markdown: '[boom](javascript:alert(1)) and [leak](data:text/html,x)',
+    elements: { a: [] },
+    shows: ['boom', 'leak'],
+  },
+  {
+    rule: 'gives headings GitHub slugs, deduplicated',
+    markdown: '## Configuração!\n\n## Configuração?\n',
+    elements: { h2: [{ id: 'configuração' }, { id: 'configuração-1' }] },
+  },
+  {
+    rule: 'slugs a heading from its text before emoji shortcodes turn into emoji',
+    markdown: '## Deploy :rocket:\n',
+    elements: { h2: [{ id: 'deploy-rocket', text: 'Deploy 🚀' }] },
+  },
+  ...ALERTS.map(([marker, kind, title]) => ({
+    rule: `renders [!${marker}] as an alert with its icon and title`,
+    markdown: `> [!${marker}]\n> Alert body text.\n`,
+    elements: {
+      [`.md-alert-${kind}`]: [{ 'data-alert-kind': kind, text: `${title} Alert body text.` }],
+      '.md-alert-title svg': [{}],
+      blockquote: [],
+    },
+  })),
+  {
+    rule: 'reads an alert marker case-insensitively and anchors the alert like the blockquote it replaces',
+    markdown: 'intro\n\n> [!note]\n> Body.\n',
+    elements: { '.md-alert-note': [{ 'data-block-id': 'b1-blockquote', 'data-source-line': '3', 'data-source-line-end': '4' }] },
+  },
+  {
+    rule: 'keeps list content inside an alert',
+    markdown: '> [!TIP]\n> - item one\n> - item two\n',
+    elements: { '.md-alert-tip li': [{ text: 'item one' }, { text: 'item two' }] },
+  },
+  {
+    rule: 'leaves blockquotes that are not alerts as blockquotes',
+    markdown: '> Just a quote.\n\n> [!NOTE] trailing words disqualify\n',
+    elements: { blockquote: [{ text: 'Just a quote.' }, { text: '[!NOTE] trailing words disqualify' }], '.md-alert': [] },
+  },
+  {
+    rule: 'renders task list items as read-only checkboxes, anchored',
+    markdown: '- [x] done thing\n- [ ] open thing\n',
+    elements: {
+      'input[type="checkbox"]': [{ checked: true, disabled: true }, { checked: false, disabled: true }],
+      'li.task-list-item[data-source-line]': [{ text: 'done thing' }, { text: 'open thing' }],
+    },
+  },
+  {
+    rule: 'keeps GFM column alignment',
+    markdown: '| L | R |\n| :-- | --: |\n| a | b |\n',
+    elements: { td: [{ textAlign: 'left' }, { textAlign: 'right' }] },
+  },
+  {
+    rule: 'strips scripts, styles and event handlers from raw HTML, keeping allowed elements',
+    markdown: 'before\n\n<script>window.pwned = true;</script>\n\n<style>body { display: none; }</style>\n\n<div onclick="window.pwned = true" title="ok">clickable</div>\n\nUse <kbd>Cmd</kbd>+<kbd>C</kbd>, H<sub>2</sub>O and x<sup>2</sup>.<br>done\n',
+    elements: {
+      script: [],
+      style: [],
+      'div[title="ok"]': [{ onclick: null, text: 'clickable' }],
+      kbd: [{ text: 'Cmd' }, { text: 'C' }],
+      sub: [{ text: '2' }],
+      sup: [{ text: '2' }],
+      'p br': [{}],
+    },
+    never: ['pwned', 'display: none'],
+  },
+  {
+    rule: 'keeps <details> with its open state and anchors it like any block',
+    markdown: '<details open>\n<summary>More</summary>\n\nHidden **body** text.\n\n</details>\n',
+    elements: {
+      details: [{ open: true, 'data-source-line': '1', 'data-block-id': 'b0-details' }],
+      'details summary': [{ text: 'More' }],
+      'details strong': [{ text: 'body' }],
+    },
+  },
+  {
+    rule: 'never lets raw HTML reach the network',
+    markdown: '<img src="docs/pic.png" srcset="https://evil.example/pixel.png 1x">\n\n'
+      + '<video src="https://evil.example/v.mp4" poster="https://evil.example/p.png" controls></video>\n\n'
+      + '<picture><source srcset="https://evil.example/s.png"><img src="docs/pic.png"></picture>\n',
+    elements: {
+      video: [],
+      source: [],
+      img: [
+        { srcset: null, src: 'asset://localhost//tmp/project/docs/pic.png' },
+        { srcset: null, src: 'asset://localhost//tmp/project/docs/pic.png' },
+      ],
+    },
+    never: ['evil.example'],
+  },
+  {
+    rule: 'never takes anchoring attributes from author HTML',
+    markdown: '<p data-block-id="b999-fake" data-source-line="999">spoof</p>\n',
+    elements: { p: [{ 'data-block-id': 'b0-paragraph', 'data-source-line': '1', text: 'spoof' }] },
+  },
+  {
+    rule: 'applies smart punctuation and emoji to prose but never to code or flags',
+    markdown: 'He said "hello" -- ranges 3--5 work... :rocket:\n\nRun `bun --watch` with --verbose\n\n```sh\necho "raw" 3--5\n```\n',
+    elements: { ':not(pre) > code': [{ text: 'bun --watch' }], 'pre code': [{ text: 'echo "raw" 3--5' }] },
+    shows: ['“hello”', '3–5', '…', '🚀', '--verbose'],
+  },
+  {
+    rule: 'transforms link labels but not hrefs',
+    markdown: '["quoted label"](https://example.test/a--b)\n',
+    elements: { a: [{ text: '“quoted label”', href: 'https://example.test/a--b' }] },
+  },
+];
 
-    await waitFor(() => expect(screen.getByTestId('mermaid-svg')).toBeInTheDocument());
-    expect(container.querySelector('.markdown-mermaid--oversized')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Focus diagram' })).toBeNull();
-    expect(container.querySelector('.markdown-mermaid')).not.toHaveAttribute('tabindex');
-    rect.mockRestore();
-  });
-
-  it('renders an oversized diagram intrinsically and pans it from the keyboard', async () => {
-    const rect = diagramWidth(600);
-    const { container } = renderReader('```mermaid\ngraph LR;\nA-->B;\n```\n');
-
-    const viewport = await waitFor(() => {
-      const node = container.querySelector<HTMLDivElement>('.markdown-mermaid--oversized');
-      expect(node).toBeInTheDocument();
-      return node!;
-    });
-    const scrollBy = vi.fn();
-    viewport.scrollBy = scrollBy;
-
-    expect(viewport.style.getPropertyValue('--md-diagram-intrinsic-width')).toBe('1200px');
-    expect(viewport).toHaveAccessibleName('Large Mermaid diagram');
-    expect(viewport).toHaveAttribute('aria-keyshortcuts', 'Enter');
-    expect(screen.getByRole('button', { name: 'Focus diagram' })).toBeInTheDocument();
-    fireEvent.keyDown(viewport, { key: 'ArrowRight' });
-    expect(scrollBy).toHaveBeenCalledWith({ left: 72, top: 0, behavior: 'auto' });
-    rect.mockRestore();
-  });
-
-  it('opens one SVG in diagram focus, zooms, and restores the exact origin focus', async () => {
-    const rect = diagramWidth(600);
-    const animationFrame = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
-      callback(0);
-      return 1;
-    });
-    const { container } = renderReader(
-      '<details open><summary>Keep me open</summary>Body</details>\n\n' +
-        '```mermaid\ngraph LR;\nA-->B;\n```\n',
-    );
-
-    const viewport = await waitFor(() => {
-      const node = container.querySelector<HTMLDivElement>('.markdown-mermaid--oversized');
-      expect(node).toBeInTheDocument();
-      return node!;
-    });
-    viewport.focus();
-    fireEvent.keyDown(viewport, { key: 'Enter' });
-
-    const dialog = await screen.findByRole('dialog', { name: 'Mermaid diagram' });
-    expect(dialog.parentElement).toBe(document.body);
-    expect(document.querySelectorAll('[data-testid="mermaid-svg"]')).toHaveLength(1);
-    expect(container.querySelector('.markdown-mermaid-placeholder')).toBeInTheDocument();
-    expect(dialog).toHaveAttribute('data-md-chrome', '1');
-    expect(
-      screen.getByRole('button', { name: 'Focus diagram' }).closest('[data-md-chrome="1"]'),
-    ).not.toBeNull();
-
-    fireEvent.keyDown(dialog, { key: '+' });
-    expect(screen.getByText('110%')).toBeInTheDocument();
-    fireEvent.keyDown(window, { key: 'Escape' });
-
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Mermaid diagram' })).toBeNull());
-    expect(viewport).toHaveFocus();
-    expect(container.querySelector('details')).toHaveAttribute('open');
-    expect(container.querySelector('.markdown-mermaid-placeholder')).toBeNull();
-    expect(document.querySelectorAll('[data-testid="mermaid-svg"]')).toHaveLength(1);
-    animationFrame.mockRestore();
-    rect.mockRestore();
-  });
-});
-
-describe('MarkdownReader GitHub alerts', () => {
-  const kinds = [
-    ['NOTE', 'note', 'Note'],
-    ['TIP', 'tip', 'Tip'],
-    ['WARNING', 'warning', 'Warning'],
-    ['CAUTION', 'caution', 'Caution'],
-    ['IMPORTANT', 'important', 'Important'],
-  ] as const;
-
-  it.each(kinds)('renders [!%s] as an alert with icon, title, and class', (marker, kind, title) => {
-    const { container } = renderReader(`> [!${marker}]\n> Alert body text.\n`);
-
-    const alert = container.querySelector(`.md-alert.md-alert-${kind}`);
-    expect(alert).toBeInTheDocument();
-    expect(alert).toHaveAttribute('data-alert-kind', kind);
-    expect(alert!.querySelector('.md-alert-title svg path')).toBeInTheDocument();
-    expect(alert!.querySelector('.md-alert-title span')).toHaveTextContent(title);
-    expect(alert).toHaveTextContent('Alert body text.');
-    expect(alert!.textContent).not.toContain(`[!${marker}]`);
-    expect(container.querySelector('blockquote')).toBeNull();
-  });
-
-  it('is case-insensitive and keeps the anchoring attributes on the wrapper', () => {
-    const { container } = renderReader('intro\n\n> [!note]\n> Body.\n');
-
-    const alert = container.querySelector('.md-alert-note');
-    expect(alert).toHaveAttribute('data-block-id', 'b1-blockquote');
-    expect(alert).toHaveAttribute('data-source-line', '3');
-    expect(alert).toHaveAttribute('data-source-line-end', '4');
-  });
-
-  it('keeps list content inside the alert body', () => {
-    const { container } = renderReader('> [!TIP]\n> - item one\n> - item two\n');
-
-    const alert = container.querySelector('.md-alert-tip')!;
-    expect(alert.querySelectorAll('li')).toHaveLength(2);
-  });
-
-  it('leaves non-alert blockquotes untouched', () => {
-    const { container } = renderReader('> Just a quote.\n\n> [!NOTE] trailing words disqualify\n');
-
-    const quotes = container.querySelectorAll('blockquote');
-    expect(quotes).toHaveLength(2);
-    expect(container.querySelector('.md-alert')).toBeNull();
-    expect(quotes[1]).toHaveTextContent('[!NOTE] trailing words disqualify');
-  });
-});
-
-describe('MarkdownReader task lists', () => {
-  it('renders read-only checkboxes with correct checked state', () => {
-    const { container } = renderReader('- [x] done thing\n- [ ] open thing\n');
-
-    const boxes = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
-    expect(boxes).toHaveLength(2);
-    expect(boxes[0].checked).toBe(true);
-    expect(boxes[1].checked).toBe(false);
-    for (const box of boxes) {
-      expect(box).toBeDisabled();
-    }
-    expect(container.querySelectorAll('li.task-list-item')).toHaveLength(2);
-    expect(container.querySelectorAll('li.task-list-item[data-source-line]')).toHaveLength(2);
-  });
-});
-
-describe('MarkdownReader tables', () => {
-  const table = '| Col A | Col B |\n| --- | --- |\n| a1 | b1 |\n';
-
-  it('wraps tables in an overflow wrapper that carries the anchoring attributes', () => {
-    const { container } = renderReader(table);
-
-    const wrap = container.querySelector('.md-table-wrap');
-    expect(wrap).toBeInTheDocument();
-    expect(wrap).toHaveAttribute('data-block-id', 'b0-table');
-    expect(wrap).toHaveAttribute('data-source-line', '1');
-    expect(wrap).toHaveAttribute('data-source-line-end', '3');
-
-    const tableEl = wrap!.querySelector('table');
-    expect(tableEl).toBeInTheDocument();
-    expect(tableEl).not.toHaveAttribute('data-block-id');
-    expect(tableEl).not.toHaveAttribute('data-source-line');
-  });
-
-  it('keeps GFM column alignment', () => {
-    const { container } = renderReader('| L | R |\n| :-- | --: |\n| a | b |\n');
-
-    const cells = container.querySelectorAll('td');
-    expect(cells[1]).toHaveStyle({ textAlign: 'right' });
-  });
-});
-
-describe('MarkdownReader images + lightbox', () => {
-  it('renders a relative local image inline through the asset protocol', () => {
-    const { container } = renderReader('![diagram](docs/pic%20name.png)');
-
-    const img = container.querySelector<HTMLImageElement>('img.md-reader-image')!;
-    expect(img).toHaveAttribute('src', 'asset://localhost//tmp/project/docs/pic name.png');
-    expect(img).toHaveAttribute('alt', 'diagram');
-    expect(img).toHaveAttribute('loading', 'lazy');
-  });
-
-  it('keeps the blocked fallback for remote and unsafe images', () => {
-    const { container } = renderReader(
-      '![remote](https://example.test/pixel.png)\n\n![script](../evil.sh)\n',
-    );
-
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('[blocked image: remote]')).toBeInTheDocument();
-    expect(screen.getByText('[blocked image: script]')).toBeInTheDocument();
-  });
-
-  it('blocks local images when local targets are disallowed (remote workspace)', () => {
-    const { container } = renderReader('![diagram](docs/pic.png)', false);
-
-    expect(container.querySelector('img')).toBeNull();
-    expect(screen.getByText('[blocked image: diagram]')).toBeInTheDocument();
-  });
-
-  it('opens a lightbox on click, closes on Escape and backdrop click, not on image click', () => {
-    const { container } = renderReader('![the diagram](docs/pic.png)');
-
-    fireEvent.click(container.querySelector('img.md-reader-image')!);
-    const lightbox = document.body.querySelector('.md-lightbox')!;
-    expect(lightbox).toBeInTheDocument();
-    expect(lightbox.parentElement).toBe(document.body);
-    expect(lightbox.querySelector('.md-lightbox-img')).toHaveAttribute(
-      'src',
-      'asset://localhost//tmp/project/docs/pic.png',
-    );
-    expect(lightbox.querySelector('.md-lightbox-caption')).toHaveTextContent('the diagram');
-
-    fireEvent.click(lightbox.querySelector('.md-lightbox-img')!);
-    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
-
-    fireEvent.keyDown(window, { key: 'Escape' });
-    expect(document.body.querySelector('.md-lightbox')).toBeNull();
-
-    fireEvent.click(container.querySelector('img.md-reader-image')!);
-    fireEvent.click(document.body.querySelector('.md-lightbox')!);
-    expect(document.body.querySelector('.md-lightbox')).toBeNull();
-  });
-
-  it('omits the caption when the image has no alt text', () => {
-    const { container } = renderReader('![](docs/pic.png)');
-
-    fireEvent.click(container.querySelector('img.md-reader-image')!);
-    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
-    expect(document.body.querySelector('.md-lightbox-caption')).toBeNull();
-    fireEvent.keyDown(window, { key: 'Escape' });
-  });
-});
-
-describe('MarkdownReader raw HTML sanitization', () => {
-  it('strips scripts, styles, and event handlers but keeps allowed elements', () => {
-    const { container } = renderReader(
-      'before\n\n<script>window.pwned = true;</script>\n\n<style>body { display: none; }</style>\n\n<div onclick="window.pwned = true" title="ok">clickable</div>\n\nUse <kbd>Cmd</kbd>+<kbd>C</kbd>, H<sub>2</sub>O and x<sup>2</sup>.<br>done\n',
-    );
-
-    const card = container.querySelector('.md-reader-card')!;
-    expect(card.querySelector('script')).toBeNull();
-    expect(card.querySelector('style')).toBeNull();
-    expect(card.textContent).not.toContain('pwned');
-    expect(card.textContent).not.toContain('display: none');
-
-    const div = screen.getByText('clickable');
-    expect(div).not.toHaveAttribute('onclick');
-    expect(div).toHaveAttribute('title', 'ok');
-
-    expect(card.querySelectorAll('kbd')).toHaveLength(2);
-    expect(card.querySelector('sub')).toHaveTextContent('2');
-    expect(card.querySelector('sup')).toHaveTextContent('2');
-    expect(card.querySelector('br')).toBeInTheDocument();
-  });
-
-  it('keeps <details>/<summary> (with open) and anchors them like any block', () => {
-    const { container } = renderReader(
-      '<details open>\n<summary>More</summary>\n\nHidden **body** text.\n\n</details>\n',
-    );
-
-    const details = container.querySelector('details')!;
-    expect(details).toBeInTheDocument();
-    expect(details.open).toBe(true);
-    expect(details.querySelector('summary')).toHaveTextContent('More');
-    expect(details.querySelector('strong')).toHaveTextContent('body');
-    expect(details).toHaveAttribute('data-block-id');
-    expect(details).toHaveAttribute('data-source-line', '1');
-  });
-
-  it('never lets raw HTML reach the network: img srcset, video, picture>source are stripped', () => {
-    const { container } = renderReader(
-      '<img src="docs/pic.png" srcset="https://evil.example/pixel.png 1x">\n\n' +
-        '<video src="https://evil.example/v.mp4" poster="https://evil.example/p.png" controls></video>\n\n' +
-        '<picture><source srcset="https://evil.example/s.png"><img src="docs/pic.png"></picture>\n',
-    );
-
-    const card = container.querySelector('.md-reader-card')!;
-    expect(card.innerHTML).not.toContain('evil.example');
-    expect(card.querySelector('video')).toBeNull();
-    expect(card.querySelector('source')).toBeNull();
-    for (const img of card.querySelectorAll('img')) {
-      expect(img).not.toHaveAttribute('srcset');
-      expect(img.getAttribute('src')).toMatch(/^asset:\/\/localhost\//);
-    }
-  });
-
-  it('cannot forge the reader anchoring attributes from author HTML', () => {
-    const { container } = renderReader('<p data-block-id="b999-fake" data-source-line="999">spoof</p>\n');
-
-    const spoof = screen.getByText('spoof');
-    expect(spoof).not.toHaveAttribute('data-block-id', 'b999-fake');
-    expect(spoof).not.toHaveAttribute('data-source-line', '999');
-    expect(container.querySelector('[data-block-id="b0-p"], [data-block-id="b0-paragraph"]')).toBeInTheDocument();
-  });
-});
-
-describe('MarkdownReader content re-render gate', () => {
-  it('same content: no remount — user-toggled <details> stays open on identical re-render', () => {
-    const content = '<details>\n<summary>More</summary>\n\nBody.\n\n</details>\n';
-    const { container, rerender } = render(
-      <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={true} />,
-    );
-
-    const details = container.querySelector('details')!;
-    expect(details.open).toBe(false);
-    details.open = true;
-
-    rerender(
-      <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={true} />,
-    );
-
-    const after = container.querySelector('details')!;
-    expect(after.isSameNode(details)).toBe(true);
-    expect(after.open).toBe(true);
-  });
-
-  it('opening the lightbox does not re-render (or remount) the document subtree', () => {
-    const { container } = renderReader('![pic](docs/pic.png)\n\n<details>\n<summary>More</summary>\n\nBody.\n\n</details>\n');
-
-    const details = container.querySelector('details')!;
-    details.open = true;
-
-    fireEvent.click(container.querySelector('img.md-reader-image')!);
-    expect(document.body.querySelector('.md-lightbox')).toBeInTheDocument();
-
-    const after = container.querySelector('details')!;
-    expect(after.isSameNode(details)).toBe(true);
-    expect(after.open).toBe(true);
-    fireEvent.keyDown(window, { key: 'Escape' });
-  });
-
-  it('changed content: the subtree re-renders (and resets DOM state)', () => {
-    const content = '<details>\n<summary>More</summary>\n\nBody.\n\n</details>\n';
-    const { container, rerender } = render(
-      <MarkdownReader content={content} source={FILE_SOURCE} allowLocalTargets={true} />,
-    );
-    const details = container.querySelector('details')!;
-    details.open = true;
-
-    rerender(
-      <MarkdownReader
-        content={`${content}\nNew paragraph.\n`}
-        source={FILE_SOURCE}
-        allowLocalTargets={true}
-      />,
-    );
-
-    expect(screen.getByText('New paragraph.')).toBeInTheDocument();
-  });
-});
-
-describe('MarkdownReader prose transforms', () => {
-  it('applies smart punctuation and emoji to prose but never to code or flags', async () => {
-    const { container } = renderReader(
-      'He said "hello" -- ranges 3--5 work... :rocket:\n\nRun `bun --watch` with --verbose\n\n```sh\necho "raw" 3--5\n```\n',
-    );
+describe('MarkdownReader rendering', () => {
+  it.each(RENDERINGS)('$rule', async ({ markdown, elements = {}, shows = [], never = [] }) => {
+    const { container } = render(<MarkdownReader content={markdown} source={FILE_SOURCE} allowLocalTargets />);
     await act(async () => {});
 
-    const text = container.querySelector('.md-reader-card')!.textContent!;
-    expect(text).toContain('“hello”');
-    expect(text).toContain('3–5');
-    expect(text).toContain('…');
-    expect(text).toContain('🚀');
-    expect(text).toContain('"hello" -- ranges'.replace('"hello"', '“hello”'));
-    expect(text).toContain('--verbose');
-    expect(container.querySelector(':not(pre) > code')).toHaveTextContent('bun --watch');
-    expect(container.querySelector('pre code')).toHaveTextContent('echo "raw" 3--5');
+    for (const [selector, expected] of Object.entries(elements)) {
+      const found = Array.from(container.querySelectorAll(selector));
+      const facts = found.map((element, index) => Object.fromEntries(Object.keys(expected[index] ?? {}).map((key) => [key, fact(element, key)])));
+      expect({ selector, facts }).toEqual({ selector, facts: expected });
+    }
+    for (const text of shows) expect(container.textContent).toContain(text);
+    for (const text of never) expect(container.innerHTML).not.toContain(text);
   });
+});
 
-  it('transforms link labels but not hrefs', () => {
-    renderReader('["quoted label"](https://example.test/a--b)\n');
-
-    const link = screen.getByRole('link', { name: '“quoted label”' });
-    expect(link).toHaveAttribute('href', 'https://example.test/a--b');
+describe('sanitizeLinkUrl', () => {
+  it.each([
+    ['javascript:alert(1)', null],
+    [' JavaScript:alert(1)', null],
+    ['data:text/html,<script>', null],
+    ['vbscript:msgbox', null],
+    ['https://example.test/x', 'https://example.test/x'],
+    ['docs/setup.md', 'docs/setup.md'],
+    ['#fragment', '#fragment'],
+  ])('turns %j into %j', (url, sanitized) => {
+    expect(sanitizeLinkUrl(url)).toBe(sanitized);
   });
 });

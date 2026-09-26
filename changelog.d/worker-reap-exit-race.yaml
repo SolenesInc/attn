@@ -1,0 +1,3 @@
+kind: fixed
+area: terminals
+change: Cleaning up an instance no longer reports a PTY worker as unidentified when the worker exits on its own during cleanup.

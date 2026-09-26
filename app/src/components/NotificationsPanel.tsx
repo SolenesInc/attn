@@ -12,16 +12,8 @@ interface NotificationsPanelProps {
   changeSignal: number;
 }
 
-// Anything unrecognized is treated as info, so a daemon a version ahead still renders a styled row.
-function severityClass(severity: string | undefined): string {
-  switch (severity) {
-    case 'critical':
-      return 'sev-critical';
-    case 'warning':
-      return 'sev-warning';
-    default:
-      return 'sev-info';
-  }
+function displayedSeverity(severity: string | undefined): 'critical' | 'warning' | 'info' {
+  return severity === 'critical' || severity === 'warning' ? severity : 'info';
 }
 
 function formatCreatedAt(iso: string): string {
@@ -160,10 +152,13 @@ export function NotificationsPanel({
                 const expanded = expandedId === n.id;
                 const unread = !n.read_at;
                 const preview = n.impact || n.body;
+                const severity = displayedSeverity(n.severity);
                 return (
                   <li
                     key={n.id}
-                    className={`notification-row ${severityClass(n.severity)}${unread ? ' is-unread' : ''}${expanded ? ' is-expanded' : ''}`}
+                    className={`notification-row sev-${severity}${unread ? ' is-unread' : ''}${expanded ? ' is-expanded' : ''}`}
+                    data-severity={severity}
+                    data-unread={unread}
                   >
                     <button type="button" className="notification-row-head" onClick={() => handleToggle(n)}>
                       <span className="notification-dot" aria-hidden="true" />

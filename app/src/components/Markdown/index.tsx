@@ -2,7 +2,6 @@ import { createContext, memo, useContext, useMemo, type ReactNode } from 'react'
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkBreaks from 'remark-breaks';
 import remarkGfm from 'remark-gfm';
-import { CodeFrame } from './CodeFrame';
 import { MermaidDiagram } from './MermaidDiagram';
 import { useShikiHighlight } from './shiki';
 
@@ -18,14 +17,6 @@ export function ReaderPresentation({ children }: { children: ReactNode }) {
     </MarkdownPresentationContext.Provider>
   );
 }
-
-const PreRenderer: Components['pre'] = ({ children, className, ...props }) => {
-  const presentation = useContext(MarkdownPresentationContext);
-  if (presentation !== 'reader') {
-    return <pre className={className} {...props}>{children}</pre>;
-  }
-  return <CodeFrame className={className}>{children}</CodeFrame>;
-};
 
 function highlightableLanguage(className: string | undefined): string | undefined {
   const found = /language-([\w-]+)/.exec(className ?? '');
@@ -69,7 +60,7 @@ export const CodeRenderer: Components['code'] = ({ className, children, ...props
   );
 };
 
-const defaultComponents: Components = { code: CodeRenderer, pre: PreRenderer };
+const defaultComponents: Components = { code: CodeRenderer };
 
 const MarkdownDocument = memo(function MarkdownDocument({
   source,
@@ -90,18 +81,16 @@ const MarkdownDocument = memo(function MarkdownDocument({
 interface MarkdownProps {
   children: string;
   className?: string;
-  components?: Components;
   breaks?: boolean;
   onDiagramLayoutChange?: () => void;
 }
 
-export function Markdown({ children, className, components, breaks, onDiagramLayoutChange }: MarkdownProps) {
+export function Markdown({ children, className, breaks, onDiagramLayoutChange }: MarkdownProps) {
   const remarkPlugins = useMemo(() => (breaks ? [remarkGfm, remarkBreaks] : [remarkGfm]), [breaks]);
-  const merged = useMemo(() => ({ ...defaultComponents, ...components }), [components]);
   return (
     <div className={className}>
       <DiagramLayoutChangeContext.Provider value={onDiagramLayoutChange}>
-        <MarkdownDocument source={children} remarkPlugins={remarkPlugins} components={merged} />
+        <MarkdownDocument source={children} remarkPlugins={remarkPlugins} components={defaultComponents} />
       </DiagramLayoutChangeContext.Provider>
     </div>
   );

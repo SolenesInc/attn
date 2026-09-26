@@ -12,6 +12,7 @@ type Run struct {
 	ConversationID string
 	Resumed        bool
 	Argv           []string
+	Env            []string
 	t              testing.TB
 	fake           *fake
 }

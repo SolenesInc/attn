@@ -92,8 +92,10 @@ turn with text that carries the `<!-- attn:state=... -->` marker,
 `ReplyAfterStop` writes that reply only after the Stop hook, and `Exit` quits
 with an exit code. For Claude, `Stream` writes part of the reply that the next
 `Reply` revises under the same message, `Subagent` writes a subagent's
-transcript, and `DeleteSubagentTranscripts` removes those transcripts. Each call returns once the daemon holds the evidence, so the
-next line can await the resulting event. `w.HoldBoot(id)` keeps the agent
+transcript, and `DeleteSubagentTranscripts` removes those transcripts. Each
+call returns once the daemon holds the evidence, so the next line can await the
+resulting event on a peer connected before the call: a new peer's initial state
+is not an event it can await. `w.HoldBoot(id)` keeps the agent
 spawned for session `id` booting, before it paints its resting title or reads
 input, until the returned function runs. For behavior on a timer, write the test as
 `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under
@@ -116,9 +118,10 @@ built `attn` binary; `s.Start()` runs `attn daemon` and returns once it signals
 ready, and `s.Stop()` ends it, so a `Start` after `Stop` restarts over the same
 data. The world helpers of a daemon wire test work here too. `s.Attn(args...)`
 runs a CLI command to completion; `s.Run` takes an `Invocation` for stdin, a
-session, extra env, or another binary. `s.Launch` starts a long-running
-command, and the test awaits its output with `AwaitStderr`; the stack
-interrupts it at cleanup.
+session, extra env, or another binary. `s.Launch` starts a command that
+must wait on something the test does next, such as a long-running watch or a
+request the test answers as the app; the test awaits its output with
+`AwaitStderr` or its result with `Wait`, and the stack interrupts it at cleanup.
 
 ### Scenario
 
