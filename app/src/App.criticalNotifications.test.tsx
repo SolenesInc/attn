@@ -1,7 +1,7 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { agentWorkspace, daemonSession } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { gesture, renderApp } from './test/renderApp';
 
 function renderWithAnAgent() {
   return renderApp({
@@ -52,5 +52,36 @@ describe('critical notifications in the sidebar', () => {
     daemon.emit({ event: 'notifications_updated', unread_count: 2, unread_critical_count: 0 });
 
     expect(criticalStrip()).toBeNull();
+  });
+
+  it('shows a count only when there is more than one', async () => {
+    const { daemon } = await renderWithAnAgent();
+
+    daemon.emit({ event: 'notifications_updated', unread_count: 1, unread_critical_count: 1, critical_title: 'Plugin stopped' });
+    expect(criticalStrip()).toHaveTextContent(/^Plugin stopped$/);
+
+    daemon.emit({ event: 'notifications_updated', unread_count: 3, unread_critical_count: 3, critical_title: 'Plugin stopped' });
+    expect(criticalStrip()).toHaveTextContent(/^Plugin stopped3$/);
+  });
+
+  it('names a critical notification without a title generically', async () => {
+    const { daemon } = await renderWithAnAgent();
+
+    daemon.emit({ event: 'notifications_updated', unread_count: 1, unread_critical_count: 1, critical_title: '' });
+
+    expect(criticalStrip()).toHaveAccessibleName('1 unread critical notification: Critical notification. Open notifications.');
+  });
+
+  it('opens the notifications when clicked', async () => {
+    const { daemon } = await renderWithAnAgent();
+    daemon.on('notification_list', () => ({ event: 'notification_list_result', success: true, notifications: [], unread_count: 0, unread_critical_count: 0 }));
+    daemon.emit({ event: 'notifications_updated', unread_count: 1, unread_critical_count: 1, critical_title: 'Plugin stopped' });
+
+    const listed = daemon.sentOf('notification_list').length;
+
+    await gesture(daemon, () => fireEvent.click(criticalStrip()!));
+
+    expect(screen.getByRole('dialog', { name: 'Notifications' })).toBeInTheDocument();
+    expect(daemon.sentOf('notification_list')).toHaveLength(listed + 1);
   });
 });
