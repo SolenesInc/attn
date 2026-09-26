@@ -3982,32 +3982,6 @@ func TestDaemon_SettingsWithAgentAvailability(t *testing.T) {
 	}
 }
 
-func TestDaemon_AdvertisesClaudeHeadlessTaskWithManagedAuthentication(t *testing.T) {
-	tempDir := t.TempDir()
-	executable := filepath.Join(tempDir, "claude")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("write fake claude: %v", err)
-	}
-	t.Setenv("PATH", tempDir)
-	for _, name := range []string{
-		"ANTHROPIC_API_KEY",
-		"CLAUDE_CODE_USE_BEDROCK",
-		"CLAUDE_CODE_USE_VERTEX",
-		"CLAUDE_CODE_USE_FOUNDRY",
-	} {
-		t.Setenv(name, "")
-	}
-
-	d := &Daemon{store: store.New()}
-	settings := d.settingsWithAgentAvailability()
-	if got := settings[SettingClaudeAvailable]; got != "true" {
-		t.Fatalf("settings[%s] = %v, want true", SettingClaudeAvailable, got)
-	}
-	if got := settings["claude_cap_headless_task"]; got != "true" {
-		t.Fatalf("settings[claude_cap_headless_task] = %v, want true", got)
-	}
-}
-
 func TestDaemon_EnsureTailscaleServeFromSettingsAndBroadcast_BroadcastsUpdatedState(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {

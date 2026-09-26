@@ -171,7 +171,6 @@ type Daemon struct {
 	pendingConversation               map[string]agentConversationObservation
 	ticketReconcileMu                 sync.Mutex
 	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
-	ticketReconcileDone               func(ticketID string)
 	ticketOrphanFirstSeen             map[string]time.Time
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
@@ -378,17 +377,9 @@ type Daemon struct {
 	pendingSnapshots     map[string]func()
 	pendingSnapshotOrder []string
 
-	jobQueueMu               sync.RWMutex
-	jobQueue                 *jobs.Runner
-	taskFailureRenderers     map[string]taskFailureRenderer
-	sessionActivityExecution func(
-		ctx context.Context,
-		provider agentdriver.HeadlessTaskProvider,
-		request agentdriver.HeadlessTaskRequest,
-	) (agentdriver.HeadlessTaskResult, error)
-	gardenAdvisorResolve func(
-		config gardenAdvisorConfig,
-	) (agentdriver.HeadlessTaskProvider, string, error)
+	jobQueueMu           sync.RWMutex
+	jobQueue             *jobs.Runner
+	taskFailureRenderers map[string]taskFailureRenderer
 
 	sessionActivityRunsMu sync.Mutex
 	sessionActivityRuns   map[string]sessionActivityRun

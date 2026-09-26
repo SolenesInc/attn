@@ -10,27 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func delegateBoundSession(t *testing.T, d *Daemon) string {
-	t.Helper()
-	backend := &fakeSpawnBackend{}
-	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
-		t.Fatalf("set chief role: %v", err)
-	}
-	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegateResolved(&resolvedDelegationLaunch{
-		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: protocol.Ptr(chiefSessionID),
-		Brief:           protocol.Ptr("Migrate the store to X"),
-		Agent:           protocol.Ptr("codex"),
-	})
-	if err != nil {
-		t.Fatalf("delegate(): %v", err)
-	}
-	bindLegacyTicket(t, d, result.SessionID, chiefSessionID)
-	return result.SessionID
-}
-
 func bindLegacyTicket(t *testing.T, d *Daemon, sessionID, delegatorSessionID string) string {
 	t.Helper()
 	return bindLegacyTicketTitled(t, d, sessionID, delegatorSessionID, "Migrate the store to X")

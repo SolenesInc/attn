@@ -133,8 +133,8 @@ Playing the model, on a `fakeagent.Run`:
   `DeleteSubagentTranscripts` removes those transcripts.
 - Headless tasks, the one-shot model calls such as titles and turn verdicts,
   are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
-  returns the next task's `Harness` and `Prompt` to `Answer` or `Fail`, and a
-  task the test never takes fails it.
+  returns the next task's `Harness`, `Model`, `Effort` and `Prompt` to `Answer`
+  or `Fail`, and a task the test never takes fails it.
 
 Waiting for results:
 

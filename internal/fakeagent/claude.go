@@ -61,7 +61,7 @@ func runClaude(cfg config) int {
 }
 
 func claudePrint(args parsedArgs) headlessRun {
-	run := headlessRun{harness: Claude}
+	run := headlessRun{harness: Claude, model: args.value("--model"), effort: args.value("--effort")}
 	if len(args.positionals) > 0 {
 		run.prompt = joinSystemPrompt(args.value("--system-prompt"), args.positionals[len(args.positionals)-1])
 	}

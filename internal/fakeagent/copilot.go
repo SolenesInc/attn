@@ -46,6 +46,8 @@ func copilotPrompt(args parsedArgs) headlessRun {
 	return headlessRun{
 		harness: Copilot,
 		prompt:  args.value("-p", "--prompt"),
+		model:   args.value("--model"),
+		effort:  args.value("--effort"),
 		answer: func(text string) error {
 			_, err := fmt.Println(text)
 			return err

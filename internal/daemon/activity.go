@@ -280,16 +280,10 @@ func (d *Daemon) sessionActivityHandler(ctx context.Context, job *jobs.Job) (any
 		return nil, fmt.Errorf("session_activity: resolve scratch cwd: %w", err)
 	}
 
-	run := d.sessionActivityExecution
-	if run == nil {
-		run = func(ctx context.Context, p agentdriver.HeadlessTaskProvider, r agentdriver.HeadlessTaskRequest) (agentdriver.HeadlessTaskResult, error) {
-			return p.RunHeadlessTask(ctx, r)
-		}
-	}
 	d.noteSessionActivityRun(sessionID, func(record *sessionActivityRun) {
 		record.SpentAt = time.Now()
 	})
-	result, err := run(ctx, provider, agentdriver.HeadlessTaskRequest{
+	result, err := provider.RunHeadlessTask(ctx, agentdriver.HeadlessTaskRequest{
 		Executable:      executablePath,
 		Model:           config.Model,
 		ReasoningEffort: config.Effort,

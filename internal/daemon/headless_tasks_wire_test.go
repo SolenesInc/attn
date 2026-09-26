@@ -85,3 +85,25 @@ func TestTheHeadlessTasksSettingIsReportedApartFromItsEnvOverride(t *testing.T) 
 			settings[effective], settings[stored], settings[override])
 	}
 }
+
+func TestClaudeSignedInWithoutAnAPIKeyRunsHeadlessTasks(t *testing.T) {
+	for _, name := range []string{"ANTHROPIC_API_KEY", "CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY"} {
+		t.Setenv(name, "")
+	}
+	w := newTitlingWorld(t, fakeagent.Claude)
+	app := w.App()
+	if got := app.Initial.Settings["claude_cap_headless_task"]; got != "true" {
+		t.Fatalf("the app is told Claude can run headless tasks: %v, want true", got)
+	}
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
+		m.InitialPrompt = protocol.Ptr("investigate the retry queue")
+	})
+	agent := w.Launched(session)
+	if task := w.HeadlessTask(); task.Harness != fakeagent.Claude {
+		t.Fatalf("the title task went to %s, want Claude", task.Harness)
+	} else {
+		task.Answer("Retry queue investigation")
+	}
+	awaitLabel(app, session, "Retry queue investigation")
+	agent.Prompted()
+}

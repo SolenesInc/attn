@@ -17,6 +17,8 @@ const (
 type headlessTask struct {
 	Harness Harness `json:"harness"`
 	Prompt  string  `json:"prompt"`
+	Model   string  `json:"model,omitempty"`
+	Effort  string  `json:"effort,omitempty"`
 	Refusal string  `json:"refusal,omitempty"`
 }
 
@@ -28,6 +30,8 @@ type headlessAnswer struct {
 type HeadlessTask struct {
 	Harness Harness
 	Prompt  string
+	Model   string
+	Effort  string
 	answer  chan headlessAnswer
 }
 
@@ -59,7 +63,7 @@ func (k *Kit) receiveHeadlessTask(f *fake, params json.RawMessage) (headlessAnsw
 		k.fail(fmt.Sprintf("fake %s cannot script this headless task: %s", asked.Harness, asked.Refusal))
 		return headlessAnswer{Failure: asked.Refusal}, nil
 	}
-	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, answer: make(chan headlessAnswer, 1)}
+	task := &HeadlessTask{Harness: asked.Harness, Prompt: asked.Prompt, Model: asked.Model, Effort: asked.Effort, answer: make(chan headlessAnswer, 1)}
 	select {
 	case k.headless <- task:
 	case <-f.peer.done:
@@ -88,6 +92,8 @@ func (k *Kit) failUnansweredHeadlessTasks() {
 type headlessRun struct {
 	harness Harness
 	prompt  string
+	model   string
+	effort  string
 	refusal string
 	answer  func(text string) error
 	fail    func(message string)
@@ -101,7 +107,7 @@ func (run headlessRun) serve(cfg config) int {
 	}
 	defer control.close()
 	var answer headlessAnswer
-	asked := headlessTask{Harness: run.harness, Prompt: run.prompt, Refusal: run.refusal}
+	asked := headlessTask{Harness: run.harness, Prompt: run.prompt, Model: run.model, Effort: run.effort, Refusal: run.refusal}
 	if err := control.start().call(context.Background(), methodHeadless, asked, &answer); err != nil {
 		fmt.Fprintf(os.Stderr, "fake %s: %v\n", run.harness, err)
 		return 1
