@@ -208,21 +208,6 @@ function RowWhereChip({ where }: { where: RowWhere }) {
   );
 }
 
-export function crewRows(
-  crew: CrewMemberView[] | undefined,
-  awake: QueueRow<QueueBandSessionView>[],
-): { member: string; row?: QueueRow<QueueBandSessionView> }[] {
-  const byMember = new Map<string, QueueRow<QueueBandSessionView>>();
-  for (const row of awake) {
-    const member = row.session.crewMember;
-    if (member && !byMember.has(member)) byMember.set(member, row);
-  }
-  const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
-  return [...members]
-    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
-    .map((member) => ({ member, row: byMember.get(member) }));
-}
-
 interface CrewRowProps {
   member: string;
   row?: QueueRow<QueueBandSessionView>;

@@ -375,6 +375,8 @@ export function useAppController({
     [sendDeleteWorktree],
   );
 
+  const queueSidebarShown = queueModeEnabled && !sidebarCollapsed && view !== 'grid';
+
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {
       setPalette(switchPalette(palette, mode));
@@ -578,7 +580,7 @@ export function useAppController({
     onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
-    onShowAgentList: queueModeEnabled && !sidebarCollapsed ? toggleAgentList : () => handleOpenPalette('agents'),
+    onShowAgentList: queueSidebarShown ? toggleAgentList : () => handleOpenPalette('agents'),
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
     onOpenSettings: useCallback(() => {

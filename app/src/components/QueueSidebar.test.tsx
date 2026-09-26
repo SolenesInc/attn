@@ -2,7 +2,7 @@ import { StrictMode, useState, type ComponentProps } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
-import { focusedQueueRowSessionId } from './QueueSidebar';
+import { focusedQueueRow } from './focusedQueueRow';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';
@@ -449,7 +449,7 @@ describe('walking the queue sidebar from the keyboard', () => {
     expect(focusedTestId()).toBe('queue-select-chief');
     walk('ArrowUp');
     expect(focusedTestId()).toBe('queue-select-settled');
-    expect(focusedQueueRowSessionId()).toBe('settled');
+    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'settled' });
   });
 
   it('types into the filter from any row while the list is open', () => {
@@ -490,12 +490,12 @@ describe('walking the queue sidebar from the keyboard', () => {
     screen.getByTestId('queue-select-older').focus();
     fireEvent.keyDown(document.activeElement!, { key: 'e', metaKey: true, shiftKey: true });
     expect(screen.getByTestId('queue-agent-filter')).toHaveValue('');
-    expect(focusedQueueRowSessionId()).toBe('older');
+    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'older' });
   });
 
   it('names no row when focus is elsewhere', () => {
     renderSidebar(sessions, true);
-    expect(focusedQueueRowSessionId()).toBeNull();
+    expect(focusedQueueRow()).toEqual({ kind: 'none' });
   });
 });
 
@@ -576,6 +576,19 @@ describe('the crew in the sidebar', () => {
     expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
     expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
+  });
+
+  it('names each focused row by what it holds: an agent, or nothing for a sleeping member', () => {
+    renderCrew([
+      { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },
+    ], { onWakeCrewMember: () => {} });
+
+    screen.getByTestId('queue-crew-select-alder').focus();
+    expect(focusedQueueRow()).toEqual({ kind: 'other' });
+    within(screen.getByTestId('queue-crew-keel')).getAllByRole('button')[0].focus();
+    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'sess-keel' });
+    within(screen.getByTestId('queue-chief-chief')).getAllByRole('button')[0].focus();
+    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'chief' });
   });
 
   it('opens member details anchored on the row action for awake and asleep members', () => {

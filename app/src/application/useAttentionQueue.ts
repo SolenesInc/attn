@@ -1,6 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
-import { focusedQueueRowSessionId } from '../components/QueueSidebar';
+import { focusedQueueRow } from '../components/focusedQueueRow';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
@@ -10,6 +10,7 @@ import {
   isQueueModeEnabled,
   QUEUE_CREW_SETTING,
   QUEUE_MODE_SETTING,
+  queueActions,
   sessionParticipatesInQueue,
 } from '../utils/queueBands';
 import { AppContentProps } from './appSupport';
@@ -107,52 +108,54 @@ export function useAttentionQueue({
     [],
   );
 
-  const openSnoozeForSession = useCallback(
-    (sessionId: string) => {
-      const session = enrichedLocalSessions.find((s) => s.id === sessionId);
-      if (!session || !sessionParticipatesInQueue(session, crewQueueEnabled)) return;
-      const row = document.querySelector<HTMLElement>(`.queue-row[data-session-id="${sessionId}"]`);
-      const rect = row?.getBoundingClientRect();
-      setSnoozeMenu({
-        session: { id: session.id, label: session.label },
-        anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
-      });
-    },
-    [enrichedLocalSessions, crewQueueEnabled],
+  const openSnoozeForSession = useCallback((session: { id: string; label: string }) => {
+    const row = document.querySelector<HTMLElement>(`.queue-row[data-session-id="${session.id}"]`);
+    const rect = row?.getBoundingClientRect();
+    setSnoozeMenu({
+      session: { id: session.id, label: session.label },
+      anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
+    });
+  }, []);
+
+  const actionsFor = useCallback(
+    (session: EnrichedSession) =>
+      queueActions(session, { queueMode: queueModeEnabled, crewInQueue: crewQueueEnabled, now: Date.now() }),
+    [queueModeEnabled, crewQueueEnabled],
   );
 
-  const handleSnoozeActiveSession = useMemo(
-    () =>
-      queueModeEnabled && activeSessionQueueEligible && activeSessionId
-        ? () => openSnoozeForSession(activeSessionId)
-        : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, openSnoozeForSession],
-  );
+  const handleSnoozeActiveSession = useMemo(() => {
+    const active = activeSessionForCommands;
+    return active && actionsFor(active).snooze ? () => openSnoozeForSession(active) : undefined;
+  }, [activeSessionForCommands, actionsFor, openSnoozeForSession]);
+
+  const shortcutTarget = useCallback(() => {
+    const focused = focusedQueueRow();
+    if (focused.kind === 'other') return null;
+    const id = focused.kind === 'session' ? focused.sessionId : activeSessionId;
+    const session = enrichedLocalSessions.find((entry) => entry.id === id);
+    return session ? { session, actions: actionsFor(session) } : null;
+  }, [activeSessionId, enrichedLocalSessions, actionsFor]);
 
   const handleSettleShortcut = useMemo(
     () =>
       queueModeEnabled || handleSettleActiveTurn
         ? () => {
-            const focusedRow = focusedQueueRowSessionId();
-            if (!focusedRow) {
-              handleSettleActiveTurn?.();
-            } else if (enrichedLocalSessions.find((session) => session.id === focusedRow)?.turnOwed) {
-              sendSettleTurn(focusedRow);
-            }
+            const target = shortcutTarget();
+            if (target?.actions.settle) sendSettleTurn(target.session.id);
           }
         : undefined,
-    [queueModeEnabled, handleSettleActiveTurn, enrichedLocalSessions, sendSettleTurn],
+    [queueModeEnabled, handleSettleActiveTurn, shortcutTarget, sendSettleTurn],
   );
 
   const handleSnoozeShortcut = useMemo(
     () =>
       queueModeEnabled
         ? () => {
-            const target = focusedQueueRowSessionId() ?? (activeSessionQueueEligible ? activeSessionId : null);
-            if (target) openSnoozeForSession(target);
+            const target = shortcutTarget();
+            if (target?.actions.snooze) openSnoozeForSession(target.session);
           }
         : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, openSnoozeForSession],
+    [queueModeEnabled, shortcutTarget, openSnoozeForSession],
   );
 
   return {

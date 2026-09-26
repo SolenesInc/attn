@@ -1,12 +1,12 @@
 import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
-import { formatTurnAge, type QueueRow } from '../utils/queueBands';
+import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
 import { slotShortcut } from '../utils/desktops';
 import { formatWakeTime } from '../utils/snoozeDurations';
 import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
-import { CrewRowView, QueueRowView, crewRows, type QueueBandSessionView, type RowWhere } from './QueueRows';
+import { CrewRowView, QueueRowView, type QueueBandSessionView, type RowWhere } from './QueueRows';
 import './QueueSidebar.css';
 import { SidebarCrewManage, SidebarPopovers } from './SidebarChrome';
 import { useSidebarContext } from './SidebarContext';
@@ -16,12 +16,6 @@ import type { SidebarWorkspace } from './sidebarTypes';
 
 const LEAD_TURNS = 3;
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';
-
-export function focusedQueueRowSessionId(): string | null {
-  const active = document.activeElement;
-  if (!(active instanceof HTMLElement)) return null;
-  return active.closest<HTMLElement>('.queue-sidebar [data-session-id]')?.dataset.sessionId ?? null;
-}
 
 export function QueueSidebar() {
   const {
