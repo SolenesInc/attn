@@ -94,10 +94,11 @@ turn with text that carries the `<!-- attn:state=... -->` marker,
 `ReplyAfterStop` writes that reply only after the Stop hook, and `Exit` quits
 with an exit code. For Claude, `Stream` writes part of the reply that the next
 `Reply` revises under the same message, `Subagent` writes a subagent's
-transcript, and `DeleteSubagentTranscripts` removes those transcripts. Each
-call returns once the daemon holds the evidence, so the next line can await the
-resulting event on a peer connected before the call: a new peer's initial state
-is not an event it can await. `w.HoldBoot(id)` keeps the agent
+transcript, and `DeleteSubagentTranscripts` removes those transcripts.
+`Halt` writes the harness's own record of the user interrupting the turn
+(Claude, Codex and Copilot). Each call returns once the daemon holds the
+evidence, so the next line can await the resulting event on a peer connected
+before the call: a new peer's initial state is not an event it can await. `w.HoldBoot(id)` keeps the agent
 spawned for session `id` booting, before it paints its resting title or reads
 input, until the returned function runs. For behavior on a timer, write the test as
 `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under

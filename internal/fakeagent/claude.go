@@ -177,6 +177,15 @@ func (c *claude) stream(text string) error {
 	return nil
 }
 
+func (c *claude) halt() error {
+	c.streaming = ""
+	c.term.title(claudeRestingTitle)
+	return c.record("user", map[string]any{
+		"role":    "user",
+		"content": []map[string]any{{"type": "text", "text": "[Request interrupted by user]"}},
+	}, map[string]any{"interruptedMessageId": claudeMessageID()})
+}
+
 func (c *claude) subagent(text string) error {
 	line := c.assistantLine(claudeMessageID(), map[string]any{"type": "text", "text": text}, len(text), len(text))
 	line["isSidechain"] = true

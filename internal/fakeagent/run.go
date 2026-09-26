@@ -53,6 +53,11 @@ func (r *Run) DeleteSubagentTranscripts() {
 	r.call(methodDropSubs, textParams{}, nil)
 }
 
+func (r *Run) Halt() {
+	r.t.Helper()
+	r.call(methodHalt, struct{}{}, nil)
+}
+
 func (r *Run) Exit(code int) {
 	r.t.Helper()
 	if err := r.fake.peer.notify(methodExit, exitParams{Code: code}); err != nil {

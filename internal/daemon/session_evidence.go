@@ -76,8 +76,6 @@ func (t *sessionEvidenceTable) forget(sessionID string) {
 	delete(t.sessions, sessionID)
 }
 
-var evidenceRecordGateHook func(sessionID string)
-
 func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) bool {
 	return d.updateEvidence(sessionID, nil, movedAt(at, mutate))
 }
@@ -95,11 +93,7 @@ func (d *Daemon) updateEvidence(
 	mutate func(*sessionstate.Evidence),
 ) bool {
 	changed := d.evidenceTable().updateIf(sessionID, func() bool {
-		live := d.store != nil && d.store.Get(sessionID) != nil
-		if hook := evidenceRecordGateHook; hook != nil {
-			hook(sessionID)
-		}
-		return live
+		return d.store != nil && d.store.Get(sessionID) != nil
 	}, unchanged, mutate)
 	if changed {
 		d.resolveSoon(sessionID)

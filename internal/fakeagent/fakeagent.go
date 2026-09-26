@@ -45,6 +45,7 @@ const (
 	methodStream     = "stream"
 	methodSubagent   = "subagent"
 	methodDropSubs   = "delete_subagent_transcripts"
+	methodHalt       = "halt"
 	methodExit       = "exit"
 	signalExitBase   = 128
 )
@@ -173,6 +174,10 @@ type conversation interface {
 	reply(text string, afterStop bool) error
 }
 
+type halter interface {
+	halt() error
+}
+
 type transcriptAuthor interface {
 	stream(text string) error
 	subagent(text string) error
@@ -274,6 +279,14 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		default:
 			return struct{}{}, author.deleteSubagentTranscripts()
 		}
+	case methodHalt:
+		halting, ok := a.conv.(halter)
+		if !ok {
+			return nil, fmt.Errorf("%T does not script a halt", a.conv)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		return struct{}{}, halting.halt()
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {
