@@ -52,3 +52,24 @@ func TestATriggeredNudgeWaitsUntilTheAgentCanTakeIt(t *testing.T) {
 		t.Errorf("the session that was asking for approval received %q once idle, want the inbox doorbell", nudge)
 	}
 }
+
+func TestATriggeredNudgeReachesAReadyAgentWithoutWaitingOutTheCountdown(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	author := w.Spawn(app, fakeagent.Claude, w.Path("author"))
+	ready := w.Spawn(app, fakeagent.Claude, w.Path("ready"))
+	run := w.Launched(ready)
+	app.TypeLine(ready, "fix the build")
+	run.Prompted()
+	run.Reply("Fixed. <!-- attn:state=idle -->")
+	testworld.AwaitSession(app, ready, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+
+	createTicket(t, cli, ready, "fix the build", "ticket-ready")
+	commentOnTicket(t, cli, author, "ticket-ready", "take a look")
+	testworld.AwaitSession(app, ready, func(s protocol.Session) bool { return protocol.Deref(s.NudgeFiresAt) != "" })
+	app.Send(protocol.TriggerNudgeMessage{Cmd: protocol.CmdTriggerNudge, SessionID: ready})
+
+	if nudge := run.Prompted(); !strings.Contains(nudge, "attn agent inbox") {
+		t.Errorf("the ready session received %q after the trigger, want the inbox doorbell without waiting out the countdown", nudge)
+	}
+}
