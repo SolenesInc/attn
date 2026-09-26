@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useProfilesStore } from '../../store/profiles';
 import type { MigrationState } from '../../types/generated';
 import { resolveDropTarget } from './dropTarget';
@@ -10,14 +10,22 @@ import {
   draftView,
   findDraftDesktop,
   planWithout,
+  plural,
   type DraftDesktopView,
   type DraftView,
   type GroupView,
 } from './migrationDraft';
-import { BottomBar, DestinationPanel, DragOverlay, plural, SourcePanel, type BoardState } from './PickerPanels';
+import { BottomBar, DestinationPanel, DragOverlay, SourcePanel, type BoardState } from './PickerPanels';
 import { useGroupDrag, type GroupDropTarget } from './useGroupDrag';
 import { useLatest } from './useLatest';
-import { currentRevision, useDraftReader, useMigrationActions, type Notice } from './useMigrationActions';
+import {
+  CANCELLED_MOVE_NOTICE,
+  currentRevision,
+  departedNotice,
+  useDraftReader,
+  useMigrationActions,
+  type Notice,
+} from './useMigrationActions';
 import { usePickerKeyboard } from './usePickerKeyboard';
 import './MigrationPicker.css';
 
@@ -57,15 +65,10 @@ function NoticeBanner({ notice }: { notice: Notice | null }) {
   );
 }
 
-function usePickerDialog(view: DraftView, setNotice: (notice: Notice) => void) {
+function usePickerDialog(view: DraftView) {
   const [dialog, setDialog] = useState<Dialog | null>(null);
-  const invalid = dialog !== null && !dialogStillValid(view, dialog);
-  useEffect(() => {
-    if (!invalid) return;
-    setDialog(null);
-    setNotice({ tone: 'info', text: 'The draft changed in another window, so that move was cancelled. Nothing was applied.' });
-  }, [invalid, setNotice]);
-  return { dialog: invalid ? null : dialog, setDialog };
+  const valid = dialog !== null && dialogStillValid(view, dialog);
+  return { dialog: valid ? dialog : null, cancelled: dialog !== null && !valid, setDialog };
 }
 
 interface PlacementBoardProps {
@@ -78,21 +81,24 @@ interface PlacementBoardProps {
 
 function PlacementBoard({ readError, migration, view, profileName, onShowIntro }: PlacementBoardProps) {
   const actions = useMigrationActions();
-  const { keep, move, isBusy, setStatus, setNotice } = actions;
+  const { keep, move, isBusy, setStatus } = actions;
+  const departed = useProfilesStore((state) => state.migrationDeparted);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const { dialog, setDialog } = usePickerDialog(view, setNotice);
+  const { dialog, cancelled, setDialog } = usePickerDialog(view);
   const selected = defaultSelection(view, selectedId);
 
   const keepGroups = useCallback((groupIds: string[], message: string) => {
+    setDialog(null);
     keep(groupIds, message, () => setSelectedId(firstUnconfirmedExcept(groupIds[0])));
-  }, [keep]);
+  }, [keep, setDialog]);
 
   const moveGroup = useCallback((groupId: string, desktop: DraftDesktopView, anchorGroupId: string | null, edge: 'left' | 'right' | 'top' | 'bottom', share: number, expectedRevision: number) => {
+    setDialog(null);
     move(
       { groupId, desktop, choice: { anchorGroupId, edge, share }, expectedRevision, verb: planWithout(desktop.tree, groupId) ? 'merged into' : 'moved to' },
       () => setSelectedId(firstUnconfirmedExcept(groupId) ?? groupId),
     );
-  }, [move]);
+  }, [move, setDialog]);
 
   const requestMove = useCallback((desktop: DraftDesktopView) => {
     if (isBusy()) return;
@@ -164,7 +170,7 @@ function PlacementBoard({ readError, migration, view, profileName, onShowIntro }
           <span>Quit and reopen to resume here.</span>
         </div>
       </div>
-      <NoticeBanner notice={actions.notice ?? readError} />
+      <NoticeBanner notice={actions.notice ?? (cancelled ? CANCELLED_MOVE_NOTICE : null) ?? departedNotice(departed) ?? readError} />
       <div className="mp-board">
         <SourcePanel
           board={board}

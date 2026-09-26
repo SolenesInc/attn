@@ -38,34 +38,12 @@ function failureNotice(error: unknown, finishing: boolean): Notice {
   };
 }
 
-function goneNotice(titles: string[]): Notice {
-  const one = titles.length === 1;
-  return {
-    tone: 'info',
-    text: `${titles.join(', ')} ${one ? 'has' : 'have'} no agents left to place, so ${one ? 'it no longer needs' : 'they no longer need'} confirming.`,
-  };
-}
-
 export function currentRevision(): number {
   return useProfilesStore.getState().migration?.revision ?? 0;
 }
 
 function groupTitle(groupId: string): string {
   return useProfilesStore.getState().migration?.groups.find((group) => group.group_id === groupId)?.title ?? groupId;
-}
-
-function useVanishedGroupsNotice(setNotice: (notice: Notice) => void) {
-  const migration = useProfilesStore((state) => state.migration);
-  const previousRef = useRef<Map<string, string> | null>(null);
-  useEffect(() => {
-    if (!migration) return;
-    const current = new Map(migration.groups.map((group) => [group.group_id, group.title]));
-    const previous = previousRef.current;
-    previousRef.current = current;
-    if (!previous) return;
-    const gone = [...previous].filter(([id]) => !current.has(id)).map(([, title]) => title);
-    if (gone.length > 0) setNotice(goneNotice(gone));
-  }, [migration, setNotice]);
 }
 
 export function useDraftReader(): Notice | null {
@@ -107,8 +85,6 @@ export function useMigrationActions() {
   useEffect(() => {
     setNotice(null);
   }, [connectionGeneration]);
-
-  useVanishedGroupsNotice(setNotice);
 
   const run = useCallback(async (send: () => Promise<unknown>, done?: () => void, finishing = false) => {
     if (busyRef.current) return;
@@ -171,5 +147,19 @@ export function useMigrationActions() {
 
   const isBusy = useCallback(() => busyRef.current, []);
 
-  return { notice, setNotice, status, setStatus, busy, isBusy, keep, move, undo, suggest, finish };
+  return { notice, status, setStatus, busy, isBusy, keep, move, undo, suggest, finish };
 }
+
+export function departedNotice(titles: string[]): Notice | null {
+  if (titles.length === 0) return null;
+  const one = titles.length === 1;
+  return {
+    tone: 'info',
+    text: `${titles.join(', ')} ${one ? 'has' : 'have'} no agents left to place, so ${one ? 'it no longer needs' : 'they no longer need'} confirming.`,
+  };
+}
+
+export const CANCELLED_MOVE_NOTICE: Notice = {
+  tone: 'info',
+  text: 'The draft changed in another window, so that move was cancelled. Nothing was applied.',
+};

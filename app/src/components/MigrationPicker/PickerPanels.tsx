@@ -2,7 +2,7 @@ import { keyCombo } from '../../shortcuts/formatShortcut';
 import { slotShortcut } from '../../utils/desktops';
 import { DraftPreview } from './DraftPreview';
 import { dropOverlayStyle } from './dropTarget';
-import { summarize, type DraftDesktopView, type DraftView, type GroupView } from './migrationDraft';
+import { plural, summarize, type DraftDesktopView, type DraftView, type GroupView } from './migrationDraft';
 import type { GroupDragView } from './useGroupDrag';
 
 export interface BoardState {
@@ -12,10 +12,6 @@ export interface BoardState {
   draggingId: string | null;
   dropTargetKey: string | null;
   busy: boolean;
-}
-
-export function plural(count: number, word: string): string {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
 }
 
 function groupTitles(view: DraftView, ids: string[]): string[] {

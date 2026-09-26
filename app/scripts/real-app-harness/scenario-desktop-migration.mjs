@@ -39,6 +39,9 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM desktops;',
     'DELETE FROM profiles;',
     'DELETE FROM profile_migration;',
+    'DELETE FROM workspace_layout_panes;',
+    'DELETE FROM workspace_layouts;',
+    'DELETE FROM workspaces;',
     "UPDATE sessions SET profile_id = '';",
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {

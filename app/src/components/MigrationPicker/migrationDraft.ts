@@ -204,3 +204,7 @@ export function allDraftDesktops(view: DraftView): DraftDesktopView[] {
 export function findDraftDesktop(view: DraftView, key: string): DraftDesktopView | undefined {
   return allDraftDesktops(view).find((entry) => entry.desktop.key === key);
 }
+
+export function plural(count: number, word: string): string {
+  return `${count} ${word}${count === 1 ? '' : 's'}`;
+}
