@@ -11,7 +11,7 @@ and resume.
 
 - **Authoring a script** — the `meta` block, host functions (`agent`/`parallel`/`pipeline`), the determinism hard-bans.
 - **Designing a workflow** — fan-out / pipeline / verify / judge shapes; picking a model.
-- **CLI** — `run` / `result` / `show` / `list`; running and monitoring a run, including that a long-running call is not a stall — don't cancel a healthy run.
+- **CLI** — `run` / `result` / `show` / `list`, and how to tell a progressing run from a stuck one.
 
 ## Authoring a script
 
@@ -48,8 +48,9 @@ a pure object literal (no computed values, no function calls). Recognized fields
   - `label` — a human-readable label for the call.
   - `phase` — group the call under a named phase.
   - `model` — override the model for this call.
-  - `isolation` — isolation mode for the call.
-  - `agentType` — the workflow agent type to run.
+  - `isolation` — `"worktree"` runs the call in a fresh git worktree and branch of
+    the run's repository; the worktree is removed if the agent leaves it clean and
+    kept if it left changes. Any other value runs in the run's working directory.
   - A workflow agent that fails terminally resolves to `null` (it never throws
     past the `agent()` boundary), so guard results you depend on.
 - `parallel(thunks)` — run an array of zero-arg thunks concurrently and resolve to
@@ -111,21 +112,10 @@ Pitfalls:
 ### Picking a model
 
 `--model` (the run default) and the per-call `model` option both take a harness
-model id; omit it to let the harness pick its default — the right choice unless you
-have a reason to override. Choose by the *job each call does*, not by habit:
-
-- **Hard reasoning, synthesis, adversarial review, ambiguous specs** — the most
-  capable model. These steps set the quality ceiling of the whole run; underpowering
-  them is a false economy.
-- **Broad, mechanical, well-specified fan-out** (extract a field, classify,
-  grep-and-summarize, transform one item) — a smaller, faster model. You run many of
-  these, so a cheaper model keeps a wide fan-out affordable and is usually enough.
-- **Mixed runs** — set a sensible run default with `--model`, then override only the
-  few calls that need more (or less) horsepower via the per-call `model` option.
-  Phase-level reasoning steps justify the upgrade; per-item workers usually don't.
-
-When unsure, start with the harness default and pin a model only once you've seen a
-step underperform.
+model id; omitting both uses the harness default. Choose per call by the job it
+does: the calls that set the run's quality ceiling (synthesis, adversarial review,
+ambiguous specs) warrant the most capable model, while a wide mechanical fan-out
+usually runs well on a smaller, faster one.
 
 Worked example — fan out cheap, judge expensive:
 
@@ -173,22 +163,22 @@ the unix socket. The daemon owns the store and the read-only UI.
 ### Running and monitoring a run
 
 Each `agent()` call runs a real headless workflow agent (codex/claude) and routinely
-takes SEVERAL MINUTES; a multi-call run can run 10+ minutes. Never assume a run
-is stuck just because it is taking a long time.
+takes several minutes; a multi-call run can take 10 minutes or more, so elapsed time
+alone does not mean a run is stuck.
 
 Two ways to run:
 
-- DETACHED (default, recommended for agents): `attn workflow run <script.js>`
+- Detached (default, recommended for agents): `attn workflow run <script.js>`
   returns a runId immediately and the engine keeps running in the background.
-  Capture the runId, then poll `attn workflow show <runId>` on your own schedule.
-  This is the safe pattern when your own shell yields between checks: the run
-  keeps going and you re-read its state on the next poll.
-- BLOCKING: `attn workflow run <script.js> --wait` stays in the foreground for the
-  FULL run duration (often many minutes) and only then prints the terminal result.
-  Use it only if your caller can truly block that whole time. If your shell yields
-  or times out a foreground command (e.g. a ~30s yield) you LOSE the result output
-  — switch to the detached pattern and poll instead. Do NOT cancel the run just
-  because the foreground command yielded.
+  Capture the runId, then poll `attn workflow show <runId>` on your own schedule;
+  the run keeps going while your shell yields between checks.
+- Blocking: `attn workflow run <script.js> --wait` runs the engine in the
+  foreground process for the full run and only then prints the terminal result.
+  Use it only if your caller keeps that process alive the whole time: a timeout
+  that kills the command also kills the run, and its last reported state stays
+  `running`. If your shell only yields a still-running command (e.g. a ~30s
+  yield), the run continues but you lose its result output; poll `workflow show`
+  rather than cancelling it.
 
 Reading progress from `attn workflow show <runId>` (re-read it each poll):
 
@@ -197,13 +187,13 @@ Reading progress from `attn workflow show <runId>` (re-read it each poll):
 - `phase` is the title of the phase currently executing.
 - `progress` summarizes `calls_done` / `calls_running` / `calls_total`.
 - `calls[]` lists every journaled call. The entry with `status: running` is the
-  call IN FLIGHT right now; its `label`, `phase`, `model`, and a climbing
+  call in flight right now; its `label`, `phase`, `model`, and a climbing
   `elapsed_seconds` say exactly what is running and that it is advancing. `ok` /
   `errored` / `skipped` entries are finished.
 
 Progressing vs stuck: a run is progressing if `status` is `running` AND some
 `calls[]` entry has `status: running` (its `elapsed_seconds` climbing across
-polls). A long single `agent()` call is NORMAL — a steady `calls_done` while one
+polls). A long single `agent()` call is normal — a steady `calls_done` while one
 call is in flight is not a stall. Do not run `attn workflow cancel <runId>` on a
 run that is still progressing.
 
@@ -216,12 +206,9 @@ run that is still progressing.
 - `--args <json>` / `--args-file <path>` — JSON args passed to the script as the
   global `args`. Mutually exclusive; use `--args-file` for large or heavily
   escaped payloads.
-- `--wait` — stay in the foreground and block until the run reaches a terminal
-  status. This can be MANY MINUTES (the full run duration); then it prints the same
-  JSON shape as `workflow result` and exits non-zero on failure. Without `--wait`,
-  the run is detached to the background and the runId is printed immediately; poll
-  `workflow show` to monitor it. Prefer the detached form (see "Running and
-  monitoring a run" above) unless your caller can block for the entire run.
+- `--wait` — block in the foreground until the run reaches a terminal status, then
+  print the same JSON shape as `workflow result` and exit non-zero on failure.
+  Without `--wait`, the run is detached and the runId is printed immediately.
 - `--session <id>` — attach the run to a session. Defaults to `ATTN_SESSION_ID`.
 - `--resume <runId>` — resume a prior run, replaying its journaled prefix and
   re-running the first divergent call (and everything structurally after it).
@@ -252,22 +239,15 @@ Prints the frozen result shape and exits 0 only when `status` is `completed`
 `status` is one of `running`, `completed`, `failed`, `canceled`. `calls_total` is
 the number of journaled `agent()` calls; `calls_done` counts those that reached a
 terminal status (`ok`, `errored`, or `skipped`); `calls_running` is the in-flight
-count. A steady `calls_done` while `status` is still `running` is EXPECTED while
-the current call is in flight (each call takes minutes) and is not a stall.
-`result` does not surface the in-flight call — use `workflow show` to see the
-running call (its `label` / `phase` / `model` / `elapsed_seconds`) before deciding
-a run is stuck.
+count. `result` does not surface the in-flight call; use `workflow show` to see it.
 
 ### show
 
     attn workflow show <runId>
 
-This is the monitoring command: use it (not `result`) to watch live progress. It
-prints the run `status`, current `phase`, a `progress` summary
-(`calls_done` / `calls_running` / `calls_total`), and a `calls[]` array. Scan
-`calls[]` for the entry with `status: running` — the call in flight, with its
-`label`, `phase`, `model`, and a climbing `elapsed_seconds`. See "Running and
-monitoring a run" for distinguishing a progressing run from a stuck one.
+This is the monitoring command. It prints the run `status`, current `phase`, a
+`progress` summary (`calls_done` / `calls_running` / `calls_total`), and a
+`calls[]` array whose `status: running` entry is the call in flight.
 
 ### list
 

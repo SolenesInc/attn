@@ -88,15 +88,15 @@ func TestClaudeClassifyRunsBoundedToolLessHeadlessQuery(t *testing.T) {
 	assertContainsNone(t, "Claude classifier args", args, "--mcp-config", "Read,Write,Edit,Grep,Glob")
 }
 
-func TestClaudeClassifyFallsBackToFinalText(t *testing.T) {
+func TestClaudeClassifyWithoutStructuredOutputIsUnknown(t *testing.T) {
 	fakeClaudeClassifierCLI(t, `{"type":"result","result":"DONE"}`, 0)
 
 	state, err := (&Claude{}).Classify("I finished the task.", 30*time.Second)
 	if err != nil {
 		t.Fatalf("Classify unexpected err: %v", err)
 	}
-	if state != "idle" {
-		t.Fatalf("Classify() = %q, want idle", state)
+	if state != "unknown" {
+		t.Fatalf("Classify() = %q, want unknown", state)
 	}
 }
 

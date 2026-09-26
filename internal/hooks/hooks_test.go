@@ -388,7 +388,7 @@ func TestChiefGuidanceLeavesGardenToLaunch(t *testing.T) {
 	}
 	for _, removed := range []string{
 		"When you delegate, attn plants a seed",
-		"Track work in seeds",
+		"Track work that outlives this turn in seeds",
 		"attn seed ls",
 		"attn seed ready",
 		"attn seed tend",

@@ -255,18 +255,8 @@ func TestBuildPrompt_EmptyInput(t *testing.T) {
 	}
 }
 
-func TestParseVerdict_FallsBackToFinalTextWithoutStructuredOutput(t *testing.T) {
-	result, ok := ParseVerdict(nil, "WAITING")
-	if !ok {
-		t.Fatal("expected ParseVerdict to return a verdict")
-	}
-	if result != "waiting_input" {
-		t.Fatalf("result = %q, want waiting_input", result)
-	}
-}
-
-func TestParseVerdict_PrefersStructuredOutputOverFinalText(t *testing.T) {
-	result, ok := ParseVerdict(json.RawMessage(`{"verdict":"DONE"}`), "WAITING")
+func TestParseVerdict_ReadsStructuredOutput(t *testing.T) {
+	result, ok := ParseVerdict(json.RawMessage(`{"verdict":"DONE"}`))
 	if !ok {
 		t.Fatal("expected ParseVerdict to return a verdict")
 	}
@@ -275,19 +265,11 @@ func TestParseVerdict_PrefersStructuredOutputOverFinalText(t *testing.T) {
 	}
 }
 
-func TestParseVerdict_IgnoresVerdictlessStructuredOutput(t *testing.T) {
-	result, ok := ParseVerdict(json.RawMessage(`{"unrelated":true}`), "WAITING")
-	if !ok {
-		t.Fatal("expected ParseVerdict to fall back to the final text")
-	}
-	if result != "waiting_input" {
-		t.Fatalf("result = %q, want waiting_input", result)
-	}
-}
-
-func TestParseVerdict_NoVerdictAnywhere(t *testing.T) {
-	if result, ok := ParseVerdict(nil, "I'll keep going."); ok {
-		t.Fatalf("expected no verdict, got %q", result)
+func TestParseVerdict_NoStructuredVerdict(t *testing.T) {
+	for _, raw := range []json.RawMessage{nil, json.RawMessage(`{"unrelated":true}`)} {
+		if result, ok := ParseVerdict(raw); ok {
+			t.Fatalf("ParseVerdict(%s) = %q, want no verdict", raw, result)
+		}
 	}
 }
 

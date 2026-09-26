@@ -47,7 +47,7 @@ Daemon connection paths are relative to `app/src`.
 - Handle Cmd+C through `GhosttyTerminal`'s DOM `copy` event; verify with
   `real-app:scenario-terminal-block-copy`.
 - Check `Menu::default`; remove conflicting predefined items in
-  `src-tauri/src/lib.rs` so WebView rebindings work.
+  `src-tauri/core/src/lib.rs` so WebView rebindings work.
 - Use `dispatch_native_shortcut` only for required visible native menu items;
   it hardcodes the action.
 
