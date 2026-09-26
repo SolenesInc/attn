@@ -410,6 +410,22 @@ describe('desktop surface', () => {
     expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-agent-count')).toBe('3');
   });
 
+  it('places an unplaced agent selected from Home and shows it', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    act(() => useSessionStore.getState().goToDashboard());
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s4');
+    });
+
+    expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledWith(
+      expect.objectContaining({ desktopId: 'd1', sessionId: 's4' }),
+    );
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s4'));
+    expect(useSessionStore.getState().view).toBe('session');
+  });
+
   it('leaves a selected agent it has not seen yet to its launch placement', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));

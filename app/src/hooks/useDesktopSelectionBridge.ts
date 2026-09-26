@@ -94,7 +94,7 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const pendingSessionId = useSessionStore((state) => state.pendingSelection?.sessionId ?? null);
   const tileSelected = useSessionStore((state) => state.selectedTile !== null);
-  const intentSessionId = view === 'session' ? (pendingSessionId ?? (tileSelected ? null : activeSessionId)) : null;
+  const intentSessionId = pendingSessionId ?? (view === 'session' && !tileSelected ? activeSessionId : null);
   const intentProfileId = useSessionStore(
     (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? null,
   );
