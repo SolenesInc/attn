@@ -35,14 +35,6 @@ func ready(t *testing.T, d *Daemon, msg protocol.SeedReadyMessage) protocol.Seed
 	return *resp.SeedReadyResult
 }
 
-func readyIDs(result protocol.SeedReadyResult) []string {
-	out := make([]string, 0, len(result.Seeds))
-	for _, seed := range result.Seeds {
-		out = append(out, seed.ID)
-	}
-	return out
-}
-
 func TestGardenEdges_ReadyFallsBackWhenTheCrownIsGone(t *testing.T) {
 	d := newGardenDaemon(t)
 	plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "still here"})
