@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Ticket promises (create, take, report, comments, nudges, crashes, revival, reconciliation, and legacy recovery) are now guarded by daemon wire tests instead of in-package tests.

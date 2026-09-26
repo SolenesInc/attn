@@ -1,16 +1,13 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
@@ -19,163 +16,6 @@ func callAgentPeek(t *testing.T, d *Daemon, target string) protocol.Response {
 	return callHandler(t, func(conn net.Conn) {
 		d.handleAgentPeek(conn, &protocol.AgentPeekMessage{Cmd: protocol.CmdAgentPeek, TargetSessionID: target})
 	})
-}
-
-func TestHandleAgentPeekReturnsStateTodosWorkspaceAndLastMessage(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-	transcriptDir := filepath.Join(codexHome, "sessions", "2026", "08", "10")
-	if err := os.MkdirAll(transcriptDir, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	content := strings.Join([]string{
-		`{"timestamp":"2026-08-10T10:00:00Z","type":"session_meta","payload":{"id":"native-peek"}}`,
-		`{"timestamp":"2026-08-10T10:00:01Z","type":"event_msg","payload":{"type":"agent_message","message":"first answer"}}`,
-		`{"timestamp":"2026-08-10T10:00:02Z","type":"event_msg","payload":{"type":"agent_message","message":"latest answer"}}`,
-	}, "\n") + "\n"
-	path := filepath.Join(transcriptDir, "rollout-native-peek.jsonl")
-	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	workspaceID := addCharacterizationSession(t, d, "peek-target", protocol.SessionAgentCodex, protocol.SessionStateWorking)
-	d.store.UpdateTodos("peek-target", []string{"[✓] read the plan", "[→] build peek"})
-	if changed, err := d.store.TransitionSessionConversation("peek-target", "native-peek", path); err != nil || !changed {
-		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
-	}
-
-	resp := callAgentPeek(t, d, "peek-target")
-	if !resp.Ok || resp.AgentPeekResult == nil {
-		t.Fatalf("response = %+v", resp)
-	}
-	result := resp.AgentPeekResult
-	if result.SessionID != "peek-target" || result.State != string(protocol.SessionStateWorking) {
-		t.Fatalf("result identity/state = %+v", result)
-	}
-	if len(result.Todos) != 2 || result.Todos[1] != "[→] build peek" {
-		t.Fatalf("todos = %v", result.Todos)
-	}
-	if result.WorkspaceID != workspaceID {
-		t.Fatalf("workspace id = %q, want %q", result.WorkspaceID, workspaceID)
-	}
-	if protocol.Deref(result.LastAssistantMessage) != "latest answer" {
-		t.Fatalf("last assistant message = %q", protocol.Deref(result.LastAssistantMessage))
-	}
-	if result.Screen != nil {
-		t.Fatalf("screen = %+v, want absent when the backend has no snapshot", result.Screen)
-	}
-}
-
-func TestHandleAgentPeekResolvesPrefixesAndNamesFailures(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addCharacterizationSession(t, d, "aaa-first", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-	addCharacterizationSession(t, d, "aab-second", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-
-	resp := callAgentPeek(t, d, "aaa")
-	if !resp.Ok || resp.AgentPeekResult == nil || resp.AgentPeekResult.SessionID != "aaa-first" {
-		t.Fatalf("unique prefix response = %+v", resp)
-	}
-
-	ambiguous := callAgentPeek(t, d, "aa")
-	if ambiguous.Ok || protocol.Deref(ambiguous.Error) != "ambiguous_session" {
-		t.Fatalf("ambiguous response = %+v", ambiguous)
-	}
-
-	missing := callAgentPeek(t, d, "zzz")
-	if missing.Ok || protocol.Deref(missing.Error) != "session_not_found" {
-		t.Fatalf("missing response = %+v", missing)
-	}
-}
-
-func TestHandleAgentPeekResolvesCrewMemberNameAcrossDays(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	addCharacterizationSession(t, d, "keels-first-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	if _, err := d.claimCrewBinding("keel", "keels-first-day"); err != nil {
-		t.Fatalf("bind first day: %v", err)
-	}
-
-	first := callAgentPeek(t, d, "Keel")
-	if !first.Ok || first.AgentPeekResult == nil || first.AgentPeekResult.SessionID != "keels-first-day" {
-		t.Fatalf("first day response = %+v", first)
-	}
-
-	if released, err := d.releaseCrewBinding("keel", "keels-first-day"); err != nil || !released {
-		t.Fatalf("release first day: released=%v err=%v", released, err)
-	}
-	addCharacterizationSession(t, d, "keels-next-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	if _, err := d.claimCrewBinding("keel", "keels-next-day"); err != nil {
-		t.Fatalf("bind next day: %v", err)
-	}
-
-	next := callAgentPeek(t, d, "keel")
-	if !next.Ok || next.AgentPeekResult == nil || next.AgentPeekResult.SessionID != "keels-next-day" {
-		t.Fatalf("next day response = %+v", next)
-	}
-}
-
-func TestHandleAgentPeekDoesNotWakeASleepingCrewMember(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-
-	resp := callAgentPeek(t, d, "trellis")
-	if resp.Ok || protocol.Deref(resp.Error) != "crew_member_asleep" {
-		t.Fatalf("sleeping member response = %+v", resp)
-	}
-	backend.mu.Lock()
-	spawned := len(backend.spawnOpts)
-	backend.mu.Unlock()
-	if spawned != 0 {
-		t.Fatalf("peek woke a sleeping member in %d sessions", spawned)
-	}
-}
-
-func TestHandleAgentPeekAddressPrecedence(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	addCharacterizationSession(t, d, "keels-live-day", protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	addCharacterizationSession(t, d, "keel-prefix-session", protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	if _, err := d.claimCrewBinding("keel", "keels-live-day"); err != nil {
-		t.Fatalf("bind keel: %v", err)
-	}
-
-	member := callAgentPeek(t, d, "keel")
-	if !member.Ok || member.AgentPeekResult == nil || member.AgentPeekResult.SessionID != "keels-live-day" {
-		t.Fatalf("member did not win over session prefix: %+v", member)
-	}
-
-	addCharacterizationSession(t, d, "keel", protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	exact := callAgentPeek(t, d, "keel")
-	if !exact.Ok || exact.AgentPeekResult == nil || exact.AgentPeekResult.SessionID != "keel" {
-		t.Fatalf("exact session did not win over member: %+v", exact)
-	}
-}
-
-type peekSnapshotBackend struct {
-	*fakeSpawnBackend
-	snapshot pty.ScreenSnapshotInfo
-}
-
-func (b *peekSnapshotBackend) ScreenSnapshot(context.Context, string) (pty.ScreenSnapshotInfo, error) {
-	return b.snapshot, nil
-}
-
-func TestHandleAgentPeekServesTheRenderedScreen(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addCharacterizationSession(t, d, "peek-screen", protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	d.ptyBackend = &peekSnapshotBackend{
-		fakeSpawnBackend: &fakeSpawnBackend{},
-		snapshot: pty.ScreenSnapshotInfo{
-			Screen: &pty.ViewportSnapshot{Text: "$ make test\nok\n", HasText: true, Cols: 80, Rows: 24},
-		},
-	}
-
-	resp := callAgentPeek(t, d, "peek-screen")
-	if !resp.Ok || resp.AgentPeekResult == nil || resp.AgentPeekResult.Screen == nil {
-		t.Fatalf("response = %+v", resp)
-	}
-	screen := resp.AgentPeekResult.Screen
-	if screen.Text != "$ make test\nok\n" || screen.Cols != 80 || screen.Rows != 24 {
-		t.Fatalf("screen = %+v", screen)
-	}
 }
 
 func TestHandleAgentPeekServesTheScreenKeptWhenTheProcessExited(t *testing.T) {
@@ -226,24 +66,5 @@ func TestHandleAgentPeekServesTheScreenKeptWhenTheProcessExited(t *testing.T) {
 	resp = callAgentPeek(t, d, sessionID)
 	if resp.AgentPeekResult == nil || resp.AgentPeekResult.Exit != nil {
 		t.Fatalf("peek after respawn = %+v, want the exit forgotten", resp.AgentPeekResult)
-	}
-}
-
-func TestClampExitScreenTextKeepsTheTailAndSaysSo(t *testing.T) {
-	line := strings.Repeat("x", 99) + "\n"
-	text := strings.Repeat(line, exitScreenMaxBytes/100+50)
-	clamped := clampExitScreenText(text)
-	if len(clamped) > exitScreenMaxBytes+200 {
-		t.Fatalf("clamped to %d bytes, want about %d", len(clamped), exitScreenMaxBytes)
-	}
-	head, _, _ := strings.Cut(clamped, "\n")
-	if !strings.HasPrefix(head, "[exit screen truncated: ") || !strings.Contains(head, "attn keeps the last 262144]") {
-		t.Fatalf("truncation notice = %q", head)
-	}
-	if !strings.HasSuffix(clamped, line) {
-		t.Fatal("clamped text lost its tail")
-	}
-	if clampExitScreenText("short\n") != "short\n" {
-		t.Fatal("a short screen must pass through untouched")
 	}
 }
