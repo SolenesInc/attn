@@ -238,7 +238,6 @@ function pullRequestLineParts(
       key="pr-target"
       type="button"
       className="session-provenance__target"
-      data-testid="session-provenance-pr"
       aria-label={`Pull request ${target} details`}
       onPointerDown={(event) => event.stopPropagation()}
       onPointerEnter={onPointerEnter}

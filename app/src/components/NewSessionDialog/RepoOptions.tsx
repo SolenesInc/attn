@@ -508,6 +508,9 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
     return (
       <div
         className={`repo-option-item ${isSelected ? 'selected' : ''}`}
+        role="option"
+        tabIndex={-1}
+        aria-selected={isSelected}
         data-testid={`repo-option-${itemIndex}`}
         data-option-index={itemIndex}
         data-option-kind={item.kind}
@@ -564,7 +567,6 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
               <button
                 type="button"
                 className="new-worktree-reroll"
-                data-testid="repo-new-worktree-reroll"
                 title={`Pick another name (${keyCombo('ctrl', 'R')})`}
                 aria-label="Pick another name"
                 onClick={rerollWorktreeName}
@@ -615,7 +617,8 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
           <div
             ref={destinationListRef}
             className="repo-destination-list"
-            data-testid="repo-destination-list"
+            role="listbox"
+            aria-label="Open existing"
           >
             {destinationItems.map((item, index) => (
               <div key={item.path}>
