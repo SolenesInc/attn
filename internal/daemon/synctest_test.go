@@ -36,16 +36,6 @@ func requireDone(t *testing.T, done <-chan struct{}, what string) {
 	}
 }
 
-func requireNoOutbound(t *testing.T, client *wsClient, what string) {
-	t.Helper()
-	synctest.Wait()
-	select {
-	case outbound := <-client.send:
-		t.Fatalf("%s: %s", what, string(outbound.payload))
-	default:
-	}
-}
-
 func requireOutbound(t *testing.T, client *wsClient, what string) outboundMessage {
 	t.Helper()
 	synctest.Wait()

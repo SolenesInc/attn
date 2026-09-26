@@ -200,3 +200,23 @@ func TestSessionLedgerCommandsReadClosedSessionsAndBringThemBack(t *testing.T) {
 		t.Errorf("reopening a live session exited %d with %q, want it reported as running", again.Code, again.Stdout+again.Stderr)
 	}
 }
+
+func TestSessionListWindowKeepsALiveSessionWhenTheDaemonRunsOutsideUTC(t *testing.T) {
+	t.Parallel()
+	const zone = "America/Los_Angeles"
+	if _, err := time.LoadLocation(zone); err != nil {
+		t.Fatalf("this machine has no tzdata for %s, so the daemon would run in UTC: %v", zone, err)
+	}
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude))
+	s.Vars = append(s.Vars, "TZ="+zone)
+	s.Start()
+
+	since := time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)
+	live := s.Spawn(s.App(), fakeagent.Claude, s.Path("shop"))
+	s.Launched(live)
+	until := time.Now().Add(time.Minute).UTC().Format(time.RFC3339)
+
+	if got := listedRows(t, s, "--since", since, "--until", until); !slices.Equal(got, []string{live}) {
+		t.Errorf("session list --since %s --until %s = %q, want the session seen inside that window", since, until, got)
+	}
+}

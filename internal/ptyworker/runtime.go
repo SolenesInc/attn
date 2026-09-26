@@ -642,20 +642,21 @@ func (r *Runtime) broadcastLifecycle(evt EventEnvelope) {
 }
 
 type connCtx struct {
-	runtime  *Runtime
-	conn     net.Conn
-	enc      *json.Encoder
-	dec      *json.Decoder
-	sendMu   sync.RWMutex
-	sendQ    chan any
-	sendDone chan struct{}
-	sendOnce sync.Once
-	closed   bool
-	connID   string
-	authed   bool
-	watching bool
-	subID    string
-	shutdown bool
+	runtime      *Runtime
+	conn         net.Conn
+	enc          *json.Encoder
+	dec          *json.Decoder
+	sendMu       sync.RWMutex
+	sendQ        chan any
+	sendDone     chan struct{}
+	sendOnce     sync.Once
+	closed       bool
+	connID       string
+	authed       bool
+	watching     bool
+	subID        string
+	shutdown     bool
+	stopsRuntime bool
 }
 
 func (r *Runtime) handleConn(conn net.Conn) {
@@ -682,6 +683,9 @@ func (r *Runtime) handleConn(conn net.Conn) {
 		ctx.closeSend()
 		<-ctx.sendDone
 		_ = conn.Close()
+		if ctx.stopsRuntime {
+			r.requestStop()
+		}
 	}()
 
 	for {
@@ -1142,9 +1146,9 @@ func (c *connCtx) handleRequest(req RequestEnvelope) {
 	case MethodRemove:
 		c.sendResult(req.ID, map[string]any{"ok": true})
 		c.shutdown = true
+		c.stopsRuntime = true
 		_ = c.runtime.manager.Kill(c.runtime.cfg.SessionID, syscall.SIGTERM)
 		c.runtime.manager.Remove(c.runtime.cfg.SessionID)
-		c.runtime.requestStop()
 	case MethodWatch:
 		c.runtime.deliverMu.Lock()
 		defer c.runtime.deliverMu.Unlock()
