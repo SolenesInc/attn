@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard automation, schedule, retention, cleanup and workflow run promises with daemon wire tests instead of in-package tests of internals.
