@@ -114,9 +114,10 @@ built `attn` binary; `s.Start()` runs `attn daemon` and returns once it signals
 ready, and `s.Stop()` ends it, so a `Start` after `Stop` restarts over the same
 data. The world helpers of a daemon wire test work here too. `s.Attn(args...)`
 runs a CLI command to completion; `s.Run` takes an `Invocation` for stdin, a
-session, extra env, or another binary. `s.Launch` starts a long-running
-command, and the test awaits its output with `AwaitStderr`; the stack
-interrupts it at cleanup.
+session, extra env, or another binary. `s.Launch` starts a command that
+must wait on something the test does next, such as a long-running watch or a
+request the test answers as the app; the test awaits its output with
+`AwaitStderr` or its result with `Wait`, and the stack interrupts it at cleanup.
 
 ### Scenario
 

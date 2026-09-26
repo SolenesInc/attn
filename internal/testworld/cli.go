@@ -59,6 +59,7 @@ func (s *Stack) Launch(inv Invocation) *Running {
 	s.T.Helper()
 	r := &Running{t: s.T, args: inv.Args, grew: make(chan struct{}), done: make(chan struct{})}
 	cmd := s.command(context.Background(), inv)
+	cmd.Stdout = &r.stdout
 	cmd.Stderr = stderrWriter{r}
 	if err := cmd.Start(); err != nil {
 		s.T.Fatalf("start attn %q: %v", inv.Args, err)
@@ -123,8 +124,24 @@ type Running struct {
 	mu      sync.Mutex
 	grew    chan struct{}
 	done    chan struct{}
+	stdout  bytes.Buffer
 	stderr  bytes.Buffer
 	code    int
+}
+
+func (r *Running) Wait() Result {
+	r.t.Helper()
+	select {
+	case <-r.done:
+	case <-time.After(fakeagent.HangGuard):
+		r.mu.Lock()
+		stderr := r.stderr.String()
+		r.mu.Unlock()
+		r.t.Fatalf("attn %q still running after %s\nstderr:\n%s", r.args, fakeagent.HangGuard, stderr)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return Result{Stdout: r.stdout.String(), Stderr: r.stderr.String(), Code: r.code}
 }
 
 type stderrWriter struct{ r *Running }

@@ -193,8 +193,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		} {
 			path := filepath.Join(s.Dir, tc.file)
 			writeFile(t, path, "public", 0o644)
-			ran := make(chan testworld.Result, 1)
-			go func() { ran <- inSession("browser", tc.command, path) }()
+			capture := s.Launch(testworld.Invocation{Args: []string{"browser", tc.command, path}, Session: session})
 			request := testworld.Await(host, protocol.EventBrowserControlRequest, func(r protocol.BrowserControlRequestMessage) bool { return r.Action == tc.action })
 			host.Send(protocol.BrowserControlResultMessage{
 				Cmd:       protocol.CmdBrowserControlResult,
@@ -202,7 +201,7 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 				Success:   true,
 				Data:      protocol.Ptr(base64.StdEncoding.EncodeToString([]byte("private " + tc.command))),
 			})
-			if got := <-ran; got.Code != 0 || strings.TrimSpace(got.Stdout) != path {
+			if got := capture.Wait(); got.Code != 0 || strings.TrimSpace(got.Stdout) != path {
 				t.Errorf("browser %s exited %d printing %q: %s", tc.command, got.Code, got.Stdout, got.Stderr)
 			}
 			info, err := os.Stat(path)
