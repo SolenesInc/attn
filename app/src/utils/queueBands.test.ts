@@ -199,7 +199,7 @@ describe('buildQueueBands', () => {
     const tree = views(sessions);
     buildQueueBands(tree);
 
-    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b'], []]);
+    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b']]);
   });
 
   describe('snoozed', () => {

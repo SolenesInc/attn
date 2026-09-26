@@ -1048,6 +1048,75 @@ describe('Sidebar', () => {
     );
   });
 
+  it('renames a desktop back to its default label with an empty name', async () => {
+    const sessions: TestSession[] = [{ id: 's1', label: 'claude', state: 'idle', agent: 'claude' }];
+    const sidebarData = buildSidebarData(sessions);
+    const workspaces = sidebarData.workspaces.map((workspace) => ({
+      ...workspace,
+      title: 'Reviews',
+      desktop: { name: 'Reviews', defaultLabel: 'Desktop 1' },
+    }));
+    const onRenameWorkspace = vi.fn(async () => {});
+    render(<Sidebar {...baseProps} {...sidebarData} workspaces={workspaces} onRenameWorkspace={onRenameWorkspace} />);
+
+    fireEvent.click(screen.getByTestId('rename-workspace-workspace-s1'));
+    const input = screen.getByRole('textbox') as HTMLInputElement;
+    expect(input.value).toBe('Reviews');
+    expect(input.placeholder).toBe('Desktop 1');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Enter' });
+
+    await waitFor(() => expect(onRenameWorkspace).toHaveBeenCalledWith('workspace-s1', ''));
+  });
+
+  it('neither renames nor reorders the agents that are not on a desktop', () => {
+    const sessions = [
+      { id: 'a1', label: 'A1', state: 'idle' as const, workspaceId: 'workspace-a' },
+      { id: 'b1', label: 'B1', state: 'idle' as const, workspaceId: 'workspace-b' },
+      { id: 'loose', label: 'Loose', state: 'idle' as const },
+    ];
+    const workspaces = desktopGroups(
+      [{ id: 'workspace-a', title: 'A' }, { id: 'workspace-b', title: 'B' }],
+      sessions,
+    );
+    const onWorkspaceReorder = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={workspaces}
+        visualIndexByWorkspaceId={groupIndexes(workspaces)}
+        onRenameWorkspace={vi.fn(async () => {})}
+        onWorkspaceReorder={onWorkspaceReorder}
+      />,
+    );
+
+    const loose = screen.getByTestId('sidebar-workspace-unplaced');
+    expect(within(loose).getByText('Not on a desktop')).toBeInTheDocument();
+    expect(screen.queryByTestId('rename-workspace-unplaced')).not.toBeInTheDocument();
+    expect(screen.getByTestId('rename-workspace-workspace-a')).toBeInTheDocument();
+
+    const header = loose.querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+
+    const aHeader = screen
+      .getByTestId('sidebar-workspace-workspace-a')
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+    fireEvent.pointerDown(aHeader, { button: 0, pointerId: 2, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 2, clientX: 10, clientY: 80 });
+    expect(screen.getByTestId('workspace-reorder-seam-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-reorder-seam-3')).not.toBeInTheDocument();
+    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-2'));
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 10, clientY: 120 });
+
+    expect(onWorkspaceReorder).toHaveBeenCalledWith({
+      workspaceId: 'workspace-a',
+      prevWorkspaceId: 'workspace-b',
+      nextWorkspaceId: undefined,
+    });
+  });
+
   it('shows the chief role and requests removal from the session menu', () => {
     const sessions: TestSession[] = [
       {

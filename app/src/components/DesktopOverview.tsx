@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import type { Desktop } from '../types/generated';
 import { collectLayoutLeaves, getNormalizedPaneBounds, leafSlotId, parseLayoutJSON } from '../types/workspace';
-import { desktopLabel, extraDesktops, isEmptyDesktop, slotShortcut, slottedDesktops } from '../utils/desktops';
+import { desktopInSlot, desktopLabel, isEmptyDesktop, orderedDesktops, slotShortcut } from '../utils/desktops';
 import './DesktopOverview.css';
 
 const GRID_COLUMNS = 3;
@@ -55,9 +55,7 @@ export function DesktopOverview({
   onCreate,
   onClose,
 }: DesktopOverviewProps) {
-  const slotted = useMemo(() => slottedDesktops(desktops), [desktops]);
-  const extras = useMemo(() => extraDesktops(desktops), [desktops]);
-  const ordered = useMemo(() => [...slotted, ...extras], [slotted, extras]);
+  const ordered = useMemo(() => orderedDesktops(desktops), [desktops]);
   const [focusedId, setFocusedId] = useState<string | null>(currentDesktopId);
   const focusedIndex = Math.max(0, ordered.findIndex((desktop) => desktop.id === focusedId));
   const focused = ordered[focusedIndex];
@@ -115,7 +113,7 @@ export function DesktopOverview({
     }
     const digit = /^Digit([1-9])$/.exec(event.code);
     if (digit && !event.metaKey && !event.ctrlKey && !event.altKey) {
-      const target = slotted.find((desktop) => desktop.shortcut_slot === Number(digit[1]));
+      const target = desktopInSlot(desktops, Number(digit[1]));
       if (target) {
         event.preventDefault();
         act(() => onSwitch(target.id));
@@ -200,9 +198,7 @@ export function DesktopOverview({
           Arrows move · ↵ switch · ⇧↵ send the focused pane · digits switch · Delete removes an empty desktop · Esc closes
         </div>
         <div className="desktop-overview-grid">
-          {slotted.map(card)}
-          {extras.length > 0 && <div className="desktop-overview-separator">More desktops · no shortcut</div>}
-          {extras.map(card)}
+          {ordered.map(card)}
           <button type="button" className="desktop-overview-card new" onClick={() => act(onCreate)}>
             + New desktop
           </button>

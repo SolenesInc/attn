@@ -284,12 +284,12 @@ describe('desktop surface', () => {
     });
   });
 
-  it('groups the sidebar by desktop in slot order, then Unplaced', async () => {
+  it('groups the sidebar by desktop in the arrangement order, then those not on a desktop', async () => {
     render(<App />);
 
     await waitFor(() => {
       expect(screen.getByTestId('sidebar').getAttribute('data-groups')).toBe(
-        'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3,Unplaced=s4',
+        'Desktop 1=s1+s2,Desktop 2=,Desktop 3=s3,Not on a desktop=s4',
       );
     });
   });
@@ -336,7 +336,7 @@ describe('desktop surface', () => {
     expect(isActive('d1')).toBe(false);
   });
 
-  it('ignores a click on the Unplaced group, which is not a desktop', async () => {
+  it('ignores a click on the group of agents not on a desktop', async () => {
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
     act(() => {

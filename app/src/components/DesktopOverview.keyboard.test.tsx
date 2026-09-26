@@ -30,15 +30,16 @@ const TWO_PANES = JSON.stringify({
 });
 
 const DESKTOPS = [
-  desktop('d10', { order_key: 'a' }),
-  desktop('d2', { shortcut_slot: 2 }),
+  desktop('d10', { order_key: 'b' }),
+  desktop('d2', { shortcut_slot: 2, order_key: 'c', name: 'Reviews' }),
   desktop('d1', {
     shortcut_slot: 1,
+    order_key: 'a',
     tree_json: TWO_PANES,
     active_pane_id: 'p1',
     panes: [{ desktop_id: 'd1', pane_id: 'p1', kind: 'agent' as never, session_id: 's1', status: 'ready' as never, title: 'reviewer' }],
   }),
-  desktop('d11', { order_key: 'b' }),
+  desktop('d11', { order_key: 'd' }),
 ];
 
 function renderOverview(overrides: Partial<Parameters<typeof DesktopOverview>[0]> = {}) {
@@ -68,11 +69,11 @@ function cardNames(): string[] {
 describe('DesktopOverview', () => {
   afterEach(() => _resetEscapeStackForTest());
 
-  it('lists shortcut desktops by slot, then extras counting on past nine', () => {
+  it('lists desktops in the arrangement order, by name or with extras counting on past nine', () => {
     renderOverview();
 
-    expect(cardNames()).toEqual(['Desktop 1', 'Desktop 2', 'Desktop 10', 'Desktop 11']);
-    expect(screen.getByText('More desktops · no shortcut')).toBeTruthy();
+    expect(cardNames()).toEqual(['Desktop 1', 'Desktop 10', 'Reviews', 'Desktop 11']);
+    expect(screen.getAllByText('no shortcut')).toHaveLength(2);
     expect(screen.getByText('reviewer')).toBeTruthy();
     expect(screen.getByText('markdown')).toBeTruthy();
   });
@@ -84,7 +85,7 @@ describe('DesktopOverview', () => {
     fireEvent.keyDown(dialog, { key: 'ArrowRight' });
     fireEvent.keyDown(dialog, { key: 'Enter' });
 
-    expect(props.onSwitch).toHaveBeenCalledWith('d10');
+    expect(props.onSwitch).toHaveBeenCalledWith('d2');
     expect(props.onClose).toHaveBeenCalled();
   });
 
@@ -123,7 +124,7 @@ describe('DesktopOverview', () => {
     fireEvent.keyDown(dialog, { key: 'Delete' });
 
     expect(props.onDelete).toHaveBeenCalledTimes(1);
-    expect(props.onDelete).toHaveBeenCalledWith('d2');
+    expect(props.onDelete).toHaveBeenCalledWith('d10');
   });
 
   it('offers a shortcut slot only to extra desktops', () => {
@@ -145,7 +146,7 @@ describe('DesktopOverview', () => {
     fireEvent.keyDown(document.activeElement!, { key: 'ArrowRight' });
     fireEvent.keyDown(document.activeElement!, { key: 'Enter' });
 
-    expect(props.onSwitch).toHaveBeenCalledWith('d2');
+    expect(props.onSwitch).toHaveBeenCalledWith('d10');
   });
 
   it('leaves Enter on a focused action button to that button', () => {

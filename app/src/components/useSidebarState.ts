@@ -88,6 +88,7 @@ export function useSidebarState({
     kind: 'session' | 'workspace';
     id: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [sessionActionsTarget, setSessionActionsTarget] = useState<{
@@ -104,15 +105,20 @@ export function useSidebarState({
     anchor: { top: number; left: number };
   } | null>(null);
 
-  const openRename = (
-    kind: 'session' | 'workspace',
-    id: string,
-    name: string,
+  const openDesktopRename = (
+    desktopId: string,
+    desktop: { name: string; defaultLabel: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setRenameTarget({ kind, id, name, anchor: { top: rect.bottom + 4, left: rect.left } });
+    setRenameTarget({
+      kind: 'workspace',
+      id: desktopId,
+      name: desktop.name,
+      defaultName: desktop.defaultLabel,
+      anchor: { top: rect.bottom + 4, left: rect.left },
+    });
   };
   const openSessionActions = (
     session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
@@ -222,6 +228,7 @@ export function useSidebarState({
     return ' workspace-group--drag-target';
   };
   const visibleVisualOrder = workspaces.filter(isWorkspaceVisible);
+  const arrangeableDesktops = visibleVisualOrder.filter((workspace) => workspace.desktop);
   const visualIndexOfWorkspace = (id: string) => visualIndexByWorkspaceId.get(id) ?? -1;
 
   const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
@@ -238,7 +245,7 @@ export function useSidebarState({
     handleSessionPointerDown,
     handleSessionClickCapture,
   } = useSidebarDrag({
-    visibleVisualOrder,
+    visibleVisualOrder: arrangeableDesktops,
     onWorkspaceReorder,
     onSessionDragStart,
     onSessionDragEnd,
@@ -312,7 +319,7 @@ export function useSidebarState({
     setSessionActionsTarget,
     crewActionsTarget,
     setCrewActionsTarget,
-    openRename,
+    openDesktopRename,
     openSessionActions,
     openCrewMemberActions,
     automationGroups,
