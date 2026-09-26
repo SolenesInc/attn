@@ -94,6 +94,16 @@ func TestRetryingADelegationConvergesOnOneOperation(t *testing.T) {
 		t.Errorf("the converged delegation's seed is %+v, %v; want it tended by %s", shown, err, result.SessionID)
 	}
 
+	changed := brief(cwd, "Do different work")
+	changed.RequestID = request.RequestID
+	changed.Agent = request.Agent
+	if conflicting, err := cli.StartDelegation(changed); err == nil || !strings.Contains(err.Error(), "delegation request id already has different inputs") {
+		t.Fatalf("reusing the request id with a different brief = %+v, %v; want the conflict refused", conflicting, err)
+	}
+	if sessions, err := cli.Query(""); err != nil || len(sessions) != 1 || sessions[0].ID != result.SessionID {
+		t.Fatalf("after the conflicting retry the sessions are %+v, %v; want only %s", sessions, err, result.SessionID)
+	}
+
 	failing := brief(cwd, "Fail once")
 	failing.RequestID = "failing-request"
 	failing.Agent = protocol.Ptr("missing-agent")
