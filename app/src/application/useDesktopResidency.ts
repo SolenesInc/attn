@@ -11,8 +11,9 @@ interface Options {
   desktopViews: WorkspaceWithSessions<EnrichedSession>[];
   view: AppView;
   visibleGridTiles: ReturnType<typeof useAppGrid>['visibleGridTiles'];
+  dragSourceDesktopId: string | null;
 }
-export function useDesktopResidency({ desktopViews, view, visibleGridTiles }: Options) {
+export function useDesktopResidency({ desktopViews, view, visibleGridTiles, dragSourceDesktopId }: Options) {
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const previousDesktopId = useProfilesStore((state) => state.previousDesktopId);
   const visibleGridSessionIds = useMemo(
@@ -23,6 +24,7 @@ export function useDesktopResidency({ desktopViews, view, visibleGridTiles }: Op
     const mounted = new Set<string>();
     if (currentDesktopId) mounted.add(currentDesktopId);
     if (previousDesktopId) mounted.add(previousDesktopId);
+    if (dragSourceDesktopId) mounted.add(dragSourceDesktopId);
     if (view === 'grid') {
       for (const group of desktopViews) {
         if (group.sessions.some((session) => visibleGridSessionIds.has(session.id))) {
@@ -31,7 +33,7 @@ export function useDesktopResidency({ desktopViews, view, visibleGridTiles }: Op
       }
     }
     return mounted;
-  }, [currentDesktopId, previousDesktopId, view, desktopViews, visibleGridSessionIds]);
+  }, [currentDesktopId, previousDesktopId, dragSourceDesktopId, view, desktopViews, visibleGridSessionIds]);
   const onScreenSessionIds = useMemo(() => {
     if (view === 'grid') return visibleGridSessionIds;
     if (view !== 'session' || !currentDesktopId) return new Set<string>();

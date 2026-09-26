@@ -103,6 +103,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     workspaceDirectory,
     onFocusPane,
     onUndockTile,
+    onLeafDragStart,
   }: {
     workspaceId: string;
     workspace: { agents: unknown[]; layoutTree: TerminalLayoutNode | null };
@@ -112,6 +113,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
     workspaceDirectory?: string;
     onFocusPane?: (paneId: string) => void;
     onUndockTile?: (tileId: string) => void;
+    onLeafDragStart?: (leafId: string) => void;
   }, ref) {
     React.useImperativeHandle(ref, () => ({ focusPane: vi.fn() }));
     return (
@@ -125,6 +127,7 @@ vi.mock('./components/SessionTerminalWorkspace', async () => {
         data-agent-count={workspace.agents.length}
         data-tile-ids={collectTileIds(workspace.layoutTree).join(',')}
       />
+      <button type="button" data-testid={`drag-from-${workspaceId}`} onClick={() => onLeafDragStart?.('dragged-leaf')} />
       {collectTileIds(workspace.layoutTree).map((tileId) => (
         <button key={tileId} type="button" data-testid={`undock-${tileId}`} onClick={() => onUndockTile?.(tileId)} />
       ))}
@@ -474,6 +477,32 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopPlaceSession).not.toHaveBeenCalled();
   });
 
+  it('keeps a selection in another profile through the profile switch and finishes it there', async () => {
+    const OTHER = 'profile-other';
+    useSessionStore.setState((state) => ({
+      sessions: [...state.sessions, { ...session('s5'), profileId: OTHER }, { ...session('s6'), profileId: OTHER }],
+    }));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    desktopCommands.sendDesktopSetCurrent.mockImplementation(() => new Promise(() => {}));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s5');
+    });
+    expect(desktopCommands.sendProfileSelect).toHaveBeenCalledWith(OTHER);
+    act(() => {
+      const other = { id: OTHER, name: 'Other', current_desktop_id: 'e1', revision: 1 };
+      useProfilesStore.getState().profilesChanged([other]);
+      useProfilesStore.getState().arrangementArrived(other, [
+        { ...agentDesktop('e1', 1, ['s6']), profile_id: OTHER },
+        { ...agentDesktop('e2', 2, ['s5']), profile_id: OTHER },
+      ]);
+    });
+
+    await waitFor(() => expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenCalledWith(OTHER, 'e2'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s5');
+  });
+
   it('lets a broadcast that contradicts a pending selection win', async () => {
     desktopCommands.sendDesktopPlaceSession.mockImplementation(() => new Promise(() => {}));
     render(<App />);
@@ -610,6 +639,19 @@ describe('desktop surface', () => {
     await waitFor(() =>
       expect(screen.getByTestId(desktopTestId('d1')).getAttribute('data-workspace-directory')).toBe(''),
     );
+  });
+
+  it('keeps the desktop a drag started on mounted while hovering switches through others', async () => {
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    await userEvent.click(screen.getByTestId('drag-from-d1'));
+    await userEvent.click(screen.getByTestId('select-d2'));
+    await waitFor(() => expect(isActive('d2')).toBe(true));
+    await userEvent.click(screen.getByTestId('select-d3'));
+    await waitFor(() => expect(isActive('d3')).toBe(true));
+
+    expect(screen.getByTestId(desktopTestId('d1'))).toBeInTheDocument();
   });
 
   it('drops the selected tile when the shown desktop moves to one without agents', async () => {

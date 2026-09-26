@@ -467,7 +467,13 @@ export function useAppController({
   });
   const { visibleGridTiles } = appGrid;
 
-  const desktopResidency = useDesktopResidency({ desktopViews, view, visibleGridTiles });
+  const leafDrag = useLeafDrag({ currentDesktopIdRef, getDesktopLeafDropSnapshot, handleSelectDesktop, showError });
+  const desktopResidency = useDesktopResidency({
+    desktopViews,
+    view,
+    visibleGridTiles,
+    dragSourceDesktopId: leafDrag.leafDesktopDrag?.sourceDesktopId ?? null,
+  });
   const { onScreenSessionIds } = desktopResidency;
 
   const visibleCountdownSessionIds = useMemo(() => {
@@ -491,8 +497,6 @@ export function useAppController({
     if (!armDismissSessionId) return undefined;
     return () => sendCancelCountdown(armDismissSessionId);
   }, [visibleCountdownSessionIds, armDismissSessionId, sendCancelCountdown]);
-
-  const leafDrag = useLeafDrag({ currentDesktopIdRef, getDesktopLeafDropSnapshot, handleSelectDesktop, showError });
 
   const appGardenActions = useAppGardenActions({
     sendOpenSeed,

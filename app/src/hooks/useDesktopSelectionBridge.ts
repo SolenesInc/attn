@@ -35,6 +35,17 @@ export function resyncShownTile() {
   mirrorShownTile(shownOf(useProfilesStore.getState()));
 }
 
+function arrivedInPendingProfile(
+  state: Pick<ProfilesState, 'selectedProfileId'>,
+  previous: Pick<ProfilesState, 'selectedProfileId'>,
+  sessions: ReturnType<typeof useSessionStore.getState>,
+): boolean {
+  const pending = sessions.pendingSelection;
+  if (!pending || state.selectedProfileId === previous.selectedProfileId) return false;
+  const pendingProfileId = sessions.sessions.find((session) => session.id === pending.sessionId)?.profileId;
+  return pendingProfileId === state.selectedProfileId;
+}
+
 function mirrorShownTile(shown: Shown) {
   const current = useSessionStore.getState().selectedTile;
   if (current?.desktopId === shown.desktopId && current.tileId === shown.tileId) return;
@@ -167,6 +178,7 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) return;
         const sessions = useSessionStore.getState();
+        if (arrivedInPendingProfile(state, previous, sessions)) return;
         if (sessions.view === 'session') {
           const sessionId = agentToShow(state, shown, sessions.activeSessionId);
           if (sessionId !== sessions.activeSessionId || sessions.pendingSelection) {
