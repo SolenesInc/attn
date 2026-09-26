@@ -22,6 +22,7 @@ const (
 	piRelayTokenEnv    = "ATTN_PI_TOKEN"
 	piAutoModeEnv      = "ATTN_PI_AUTOMODE_CONFIG"
 	piYoloEnv          = "ATTN_PI_YOLO"
+	PiWithoutResumeEnv = "ATTN_FAKE_PI_NO_RESUME"
 )
 
 var piComposer = composer{prompt: "> "}
@@ -129,6 +130,7 @@ func (p *piTerminal) deny(denial Denial) error {
 
 type piPlugin struct {
 	cfg       config
+	resume    bool
 	relayPath string
 	daemon    *rpcPeer
 	mu        sync.Mutex
@@ -175,7 +177,7 @@ func runPiPlugin(cfg config) int {
 	if err == nil {
 		err = control.start().call(context.Background(), methodLaunched, launch{Role: rolePlugin, Harness: Pi, Pid: os.Getpid(), Argv: os.Args}, nil)
 	}
-	p := &piPlugin{cfg: cfg, runs: map[string]*piRun{}}
+	p := &piPlugin{cfg: cfg, resume: os.Getenv(PiWithoutResumeEnv) == "", runs: map[string]*piRun{}}
 	if err == nil {
 		err = p.connect()
 	}
@@ -223,7 +225,7 @@ func (p *piPlugin) connect() error {
 	err = p.daemon.call(context.Background(), "driver.register", map[string]any{
 		"agent": "pi",
 		"capabilities": map[string]bool{
-			"resume":           true,
+			"resume":           p.resume,
 			"initial_prompt":   true,
 			"state_reporting":  true,
 			"message_delivery": false,
@@ -253,6 +255,9 @@ func (p *piPlugin) handleDaemon(_ *rpcPeer, method string, params json.RawMessag
 	case "driver.spawn":
 		return p.launchRun(params, false)
 	case "driver.resume":
+		if !p.resume {
+			return nil, fmt.Errorf("unknown method %q", method)
+		}
 		return p.launchRun(params, true)
 	case "driver.session_closed":
 		var closed piRunParams

@@ -54,6 +54,23 @@ func TestAPiDriverPublishesItsCapabilitiesAndIsRefusedLaunchesBeyondThem(t *test
 	}
 }
 
+func TestAPiDriverWithoutResumeIsRefusedANamedConversation(t *testing.T) {
+	t.Setenv(fakeagent.PiWithoutResumeEnv, "1")
+	w := newWorld(t, fakeagent.Pi)
+	app := w.App()
+	if got := pluginDriverSettings(app, "pi")["pi_cap_resume"]; got != "false" {
+		t.Fatalf("the app sees pi_cap_resume = %q, want \"false\" from a driver registered without resume", got)
+	}
+	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Pi, w.Path("named-conversation"), func(m *protocol.SpawnSessionMessage) {
+		m.ResumeSessionID = protocol.Ptr("conv-1")
+	})
+	for _, want := range []string{"conv-1", "does not support resume"} {
+		if !strings.Contains(protocol.Deref(refused.Error), want) {
+			t.Errorf("the spawn was refused with %q, want it to say %q", protocol.Deref(refused.Error), want)
+		}
+	}
+}
+
 func TestAPiSessionFollowsItsDriversReportsAndResumesItsConversationAfterItExits(t *testing.T) {
 	w := newWorld(t, fakeagent.Pi)
 	app := w.App()
