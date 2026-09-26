@@ -62,7 +62,7 @@ export function AppSidebar() {
   const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
     useAppPanelsContext();
   const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
-  const { handleOpenPalette, attentionCount, sidebarSurface } = useAppShell();
+  const { handleOpenPalette, attentionCount, sidebarSurface, blockingOverlayOpen } = useAppShell();
   const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { criticalNotifications, settings, notificationsUnread } = useAppInputs();
   const { gridLayout, handleSelectGridLayout } = useAppGridContext();
@@ -160,6 +160,8 @@ export function AppSidebar() {
       profileName={profileName}
       onSwitchProfile={() => setProfileSwitcherOpen(true)}
       onOpenCommands={() => handleOpenPalette('commands')}
+      onOpenAgents={() => handleOpenPalette('agents')}
+      peeksSilenced={blockingOverlayOpen}
       commandsBadge={notificationsUnread + attentionCount}
       agentListOpen={agentListOpen}
       onToggleAgentList={toggleAgentList}

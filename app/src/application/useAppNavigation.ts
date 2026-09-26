@@ -25,7 +25,7 @@ interface Options {
   activeSessionId: string | null;
   daemonSessions: AppContentProps['daemonSessions'];
   desktopViews: ReturnType<typeof useAppSessions>['desktopViews'];
-  unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
+  profileSessions: ReturnType<typeof useAppSessions>['profileSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   showError: (message: string) => void;
   showNotice: (message: string) => void;
@@ -34,7 +34,7 @@ export function useAppNavigation({
   activeSessionId,
   daemonSessions,
   desktopViews,
-  unmutedEnrichedSessions,
+  profileSessions,
   attentionQueue,
   showError,
   showNotice,
@@ -73,11 +73,11 @@ export function useAppNavigation({
   const { wantsAttention } = attentionQueue;
 
   const handleJumpToWaiting = useCallback(() => {
-    const waiting = oldestWantedTurn(unmutedEnrichedSessions, wantsAttention);
+    const waiting = oldestWantedTurn(profileSessions, wantsAttention);
     if (waiting) {
       handleSelectSession(waiting.id);
     }
-  }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+  }, [profileSessions, handleSelectSession, wantsAttention]);
 
   const agentOnScreenId = useAgentOnScreen();
   const handleNextRun = useCallback(() => {

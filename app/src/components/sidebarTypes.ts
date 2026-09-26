@@ -82,6 +82,8 @@ export interface SidebarProps {
   profileName?: string;
   onSwitchProfile?: () => void;
   onOpenCommands?: () => void;
+  onOpenAgents?: () => void;
+  peeksSilenced?: boolean;
   commandsBadge?: number;
   agentListOpen?: boolean;
   onToggleAgentList?: () => void;

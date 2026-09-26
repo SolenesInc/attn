@@ -276,6 +276,7 @@ html, body, #root {
 }
 
 .app.is-agent-focused .sidebar,
+.app.is-agent-focused .queue-bar,
 .app.is-agent-focused .side-panel-shell,
 .app.is-agent-focused .garden-frame,
 .app.is-agent-focused .garden-frame-backdrop,

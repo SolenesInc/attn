@@ -13,7 +13,7 @@ import {
 } from './AppContexts';
 
 export function AppDashboard() {
-  const { unmutedEnrichedSessions } = useAppSessionsContext();
+  const { profileSessions } = useAppSessionsContext();
   const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
   const { prs, daemonEndpoints, settings } = useAppInputs();
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
@@ -28,7 +28,7 @@ export function AppDashboard() {
     <>
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
-          sessions={unmutedEnrichedSessions}
+          sessions={profileSessions}
           prs={prs}
           isLoading={!hasReceivedInitialState}
           isRefreshing={isRefreshingPRs}

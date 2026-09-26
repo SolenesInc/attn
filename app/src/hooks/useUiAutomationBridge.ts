@@ -2244,7 +2244,35 @@ export function useUiAutomationBridge({
         const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
         const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
         const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
+        const bar = document.querySelector('[data-testid="queue-bar"]');
+        const runsChip = bar?.querySelector('[data-testid="queue-bar-runs"]');
+        const peekRows = (testId: string) => {
+          const peek = bar?.querySelector(`[data-testid="${testId}"]`);
+          return peek
+            ? Array.from(peek.querySelectorAll('.queue-bar-peek-row'))
+              .map((row) => (row.getAttribute('data-testid') || '').slice('queue-bar-peek-'.length))
+            : null;
+        };
         return {
+          bar: {
+            present: Boolean(bar),
+            waiting: Number(bar?.querySelector('[data-testid="queue-bar-pill"]')?.getAttribute('data-waiting') || 0),
+            crumbs: Array.from(bar?.querySelectorAll('.queue-bar-crumb') || []).map((crumb) => crumb.textContent || ''),
+            waitingPeek: peekRows('queue-bar-waiting-peek'),
+            runsPeek: peekRows('queue-bar-runs-peek'),
+            runs: runsChip
+              ? {
+                count: Number(runsChip.getAttribute('data-runs') || 0),
+                needing: Number(runsChip.getAttribute('data-needing') || 0),
+              }
+              : null,
+            desktops: Array.from(bar?.querySelectorAll('.queue-bar-desktop[data-desktop-id]') || []).map((chip) => ({
+              desktopId: chip.getAttribute('data-desktop-id') || '',
+              slot: (chip.getAttribute('data-testid') || '').slice('queue-bar-desktop-'.length),
+              waiting: Number(chip.getAttribute('data-waiting') || 0),
+              current: chip.classList.contains('is-current'),
+            })),
+          },
           present: Boolean(band),
           empty: Boolean(band?.querySelector('[data-testid="queue-empty"]')),
           chief: chiefRow ? readRow(chiefRow, 'queue-chief-') : null,

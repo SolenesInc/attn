@@ -1,5 +1,6 @@
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { CriticalNotificationStrip } from './CriticalNotificationStrip';
+import { QueueBar } from './QueueBar';
 import { QueueSidebar } from './QueueSidebar';
 import './Sidebar.css';
 import { SidebarCollapsed, SidebarCrewManage, SidebarFooter, SidebarHeader, SidebarPopovers } from './SidebarChrome';
@@ -15,9 +16,11 @@ export type { DockItem, SidebarHeaderAction } from './sidebarTypes';
 
 export function Sidebar(props: SidebarProps) {
   const state = useSidebarState(props);
+  const QueueChrome = props.collapsed ? QueueBar : QueueSidebar;
+  const TreeChrome = props.collapsed ? SidebarCollapsed : SidebarExpanded;
   return (
     <SidebarContext.Provider value={state}>
-      {props.collapsed ? <SidebarCollapsed /> : props.queue ? <QueueSidebar /> : <SidebarExpanded />}
+      {props.queue ? <QueueChrome /> : <TreeChrome />}
     </SidebarContext.Provider>
   );
 }

@@ -280,6 +280,55 @@ async function main() {
       }
     });
 
+    await runner.step('the_bar_carries_the_queue_when_collapsed', async () => {
+      const open = await queueState(client);
+      const activeBefore = (await client.request('get_state')).activeSessionId;
+      const alphaTextBefore = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
+
+      await client.request('dispatch_shortcut', { shortcutId: 'session.toggleSidebar' });
+      const collapsed = await pollFor(async () => {
+        const state = await client.request('queue_get_state');
+        return state.bar.present && !state.present ? state : null;
+      }, 'the bar to replace the open sidebar', 15_000);
+      runner.assert(collapsed.bar.waiting === 2, `the pill counts both turns: ${JSON.stringify(collapsed.bar)}`);
+      runner.assert(
+        JSON.stringify(collapsed.bar.crumbs) === JSON.stringify(open.turns.map((row) => row.label)),
+        `the pill crumbs the turns oldest first: ${JSON.stringify(collapsed.bar.crumbs)}`,
+      );
+      const badged = open.turns.map((row) => collapsed.bar.desktops.find((chip) => chip.desktopId === row.workspaceId));
+      runner.assert(
+        badged.every((chip) => chip && chip.waiting === 1),
+        `each turn's desktop chip carries its waiting count: ${JSON.stringify(collapsed.bar.desktops)}`,
+      );
+
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-waiting"]' });
+      const peeked = await client.request('queue_get_state');
+      runner.assert(
+        [alpha.sessionId, beta.sessionId].every((id) => peeked.bar.waitingPeek?.includes(`agent:${id}`)),
+        `hovering the pill peeks both turns: ${JSON.stringify(peeked.bar.waitingPeek)}`,
+      );
+      await client.request('dom_hover', { selector: '[data-testid="queue-bar-waiting"]', leave: true });
+
+      await client.request('dom_click', { selector: '[data-testid="queue-bar-pill"]' });
+      const palette = await client.request('dom_wait', { selector: `[data-testid="palette-agent-${alpha.sessionId}"]`, timeoutMs: 10_000 });
+      runner.assert(palette.matched, 'clicking the pill opens the palette on agents');
+      await client.request('dom_key', { selector: '[role="combobox"]', key: 'Escape' });
+
+      const state = await client.request('get_state');
+      runner.assert(state.activeSessionId === activeBefore, `collapsing kept the selection: ${activeBefore} -> ${state.activeSessionId}`);
+      const alphaTextAfter = (await client.request('read_pane_text', { sessionId: alpha.sessionId, paneId: alpha.paneId })).text || '';
+      runner.assert(
+        alphaTextBefore.includes('QUEUE_ALPHA') && alphaTextAfter.includes('QUEUE_ALPHA'),
+        'alpha keeps its terminal through the layout change',
+      );
+
+      await client.request('dom_click', { selector: '[data-testid="queue-bar-show-sidebar"]' });
+      await pollFor(async () => {
+        const reopened = await queueState(client);
+        return reopened.present && !reopened.bar.present ? reopened : null;
+      }, 'the open sidebar to come back from the bar', 15_000);
+    });
+
     await runner.step('clicking_a_row_hands_the_agent_over', async () => {
       await client.request('dom_click', { selector: `[data-testid="queue-select-${alpha.sessionId}"]` });
       await pollFor(async () => {

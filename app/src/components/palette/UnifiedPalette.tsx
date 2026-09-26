@@ -4,15 +4,12 @@ import type { Desktop } from '../../types/generated';
 import { formatShortcut } from '../../shortcuts/formatShortcut';
 import { isChord, matchesShortcut, type ShortcutId } from '../../shortcuts/registry';
 import { resolveBinding } from '../../shortcuts/resolver';
-import { formatTurnAge } from '../../utils/queueBands';
-import { isSnoozed, SNOOZE_CHOICES, snoozeInstant, type SnoozeChoice } from '../../utils/snoozeDurations';
+import { SNOOZE_CHOICES, snoozeInstant, type SnoozeChoice } from '../../utils/snoozeDurations';
 import { slotShortcut } from '../../utils/desktops';
-import { crewDisplayName } from '../../utils/crewName';
 import { KeyCombos } from '../Keycap';
 import { Palette } from './Palette';
 import {
   agentPaletteRows,
-  agentStatus,
   isSelectableRow,
   selectableCount,
   type AgentPaletteInput,
@@ -20,6 +17,7 @@ import {
   type PaletteSession,
 } from './agentPaletteRows';
 import { filterCommands, type PaletteCommand } from './paletteCommands';
+import { AgentRowView } from './AgentRows';
 import { COMMAND_PREFIX, type PaletteState } from './paletteState';
 import './UnifiedPalette.css';
 
@@ -104,75 +102,6 @@ function usePaletteItems<S extends PaletteSession>(
     items: agentRows.map((row): Item<S> => ({ mode: 'agents', row })),
     count: `${selectableCount(agentRows)} of ${selectableCount(allAgentRows)}`,
   };
-}
-
-function AgentRowView<S extends PaletteSession>({
-  row,
-  now,
-  slotOf,
-}: {
-  row: AgentPaletteRow<S>;
-  now: number;
-  slotOf: (desktopId: string | undefined, sessionId?: string) => string;
-}) {
-  switch (row.kind) {
-    case 'divider':
-      return <hr className="unified-palette-divider" />;
-    case 'runs':
-      return (
-        <div className="unified-palette-runs" data-testid={`palette-runs-${row.key}`}>
-          <span className="unified-palette-name">{row.name}</span>
-          <span className="unified-palette-runs-count">
-            {row.needYou > 0 ? `${row.needYou} need you · ` : ''}
-            {row.runs} run{row.runs === 1 ? '' : 's'} · never in the queue
-          </span>
-        </div>
-      );
-    case 'member':
-      return (
-        <div className="unified-palette-row">
-          <span className="unified-palette-dot is-asleep" />
-          <span className="unified-palette-name">
-            {crewDisplayName(row.member)} <span className="unified-palette-muted">· crew</span>
-          </span>
-          <kbd className="unified-palette-slot is-unplaced">—</kbd>
-          <span className="unified-palette-pill">asleep</span>
-          <span className="unified-palette-age">wake</span>
-          <span className="unified-palette-tag" />
-        </div>
-      );
-    case 'tile':
-      return (
-        <div className="unified-palette-row">
-          <span className="unified-palette-dot is-tile" />
-          <span className="unified-palette-name">{row.title}</span>
-          <kbd className="unified-palette-slot">{slotOf(row.desktopId)}</kbd>
-          <span className="unified-palette-pill is-tile">{row.tile.tileKind === 'markdown' ? 'doc' : 'tile'}</span>
-          <span className="unified-palette-age" />
-          <span className="unified-palette-tag" />
-        </div>
-      );
-    case 'agent':
-      return <AgentSessionRow session={row.session} queueHead={row.queueHead} now={now} slot={slotOf(undefined, row.session.id)} />;
-  }
-}
-
-function AgentSessionRow({ session, queueHead, now, slot }: { session: PaletteSession; queueHead: boolean; now: number; slot: string }) {
-  const status = agentStatus(session, now);
-  const owedAge = session.turnOwed && !isSnoozed(session.turnSnoozedUntil, now);
-  return (
-    <div className="unified-palette-row" data-testid={`palette-agent-${session.id}`}>
-      <span className={`unified-palette-dot is-${status}`} />
-      <span className="unified-palette-name">
-        {session.label}
-        {session.crewMember && !session.chiefOfStaff && <span className="unified-palette-muted"> · crew</span>}
-      </span>
-      <kbd className="unified-palette-slot">{slot}</kbd>
-      <span className={`unified-palette-pill is-${status}`}>{status}</span>
-      <span className="unified-palette-age">{owedAge ? formatTurnAge(session.turnOpenedAt, now) : ''}</span>
-      <span className="unified-palette-tag">{queueHead && <kbd>{formatShortcut('session.jumpToWaiting')}</kbd>}</span>
-    </div>
-  );
 }
 
 function CommandRowView({ command }: { command: PaletteCommand }) {

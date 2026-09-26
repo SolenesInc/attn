@@ -134,14 +134,14 @@ export function useAppSessions({
     () => buildDesktopViewModels(desktops, visibleEnrichedSessions),
     [desktops, visibleEnrichedSessions],
   );
-  const unmutedEnrichedSessions = useMemo(
+  const profileSessions = useMemo(
     () => desktopViews.flatMap((group) => group.sessions),
     [desktopViews],
   );
 
   return {
     desktopViews,
-    unmutedEnrichedSessions,
+    profileSessions,
     activeEndpoint,
     activeRemoteSession,
     liveGardenSessions,

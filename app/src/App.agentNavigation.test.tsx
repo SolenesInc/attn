@@ -574,6 +574,28 @@ describe('agent navigation', () => {
     expect(app()).not.toHaveClass('is-agent-focused');
   });
 
+  it('opens the palette on agents from the bar, and silences the bar peeks while it is open', () => {
+    render(<App />);
+    broadcast();
+    const sidebar = () =>
+      mockSidebarProps.mock.lastCall![0] as { collapsed: boolean; agentListOpen: boolean; peeksSilenced: boolean; onOpenAgents: () => void };
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    expect(sidebar().collapsed).toBe(true);
+    expect(sidebar().peeksSilenced).toBe(false);
+
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+    expect(sidebar().agentListOpen).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+    expect(sidebar().peeksSilenced).toBe(true);
+
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Escape' });
+    expect(screen.queryByTestId('palette-agent-s1')).toBeNull();
+    expect(sidebar().peeksSilenced).toBe(false);
+
+    act(() => { sidebar().onOpenAgents(); });
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+  });
+
   it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {
     render(<App />);
     broadcast();
