@@ -34,6 +34,9 @@ type codex struct {
 }
 
 func runCodex(cfg config) int {
+	if len(os.Args) > 1 && os.Args[1] == "exec" {
+		return answerNoHeadlessTask(cfg, Codex)
+	}
 	return serve(cfg, codexComposer, &codex{cfg: cfg})
 }
 
@@ -152,6 +155,7 @@ func (c *codex) reply(text string, afterStop bool) error {
 		return errors.New("the codex fake does not script a reply written after its Stop hook")
 	}
 	err := appendLines(c.transcript,
+		codexEvent("agent_message", text),
 		map[string]any{
 			"timestamp": now(),
 			"type":      "response_item",
@@ -161,7 +165,6 @@ func (c *codex) reply(text string, afterStop bool) error {
 				"content": []map[string]any{{"type": "output_text", "text": text}},
 			},
 		},
-		codexEvent("agent_message", text),
 	)
 	if err != nil {
 		return err

@@ -206,7 +206,6 @@ type Daemon struct {
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
-	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex

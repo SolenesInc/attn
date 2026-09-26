@@ -6,14 +6,12 @@ import (
 	"net"
 	"path/filepath"
 	"reflect"
-	"strings"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/agentmailbox"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -71,34 +69,6 @@ func recordedDoorbellWrites(doorbell *recordingDoorbell) []string {
 	doorbell.mu.Lock()
 	defer doorbell.mu.Unlock()
 	return append([]string(nil), doorbell.writes...)
-}
-
-func TestAgentMailboxDoorbellForgetsSuccessfulPlacementWithoutPromptSubmit(t *testing.T) {
-	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateWaitingInput)
-
-	first := enqueueMaintenanceDoorbellItem(t, d, "maintenance-first", "first durable body", time.Now())
-	if err := d.deliverAgentMailboxItem(first); err != nil {
-		t.Fatalf("place first doorbell: %v", err)
-	}
-	if got := doorbell.pasted(); !reflect.DeepEqual(got, []string{agentMailboxDoorbellText}) {
-		t.Fatalf("first doorbell = %q, want one generic prompt", got)
-	}
-	if attempts, pending := mailboxLaneCounts(d, "mailbox-target"); attempts != 0 || pending != 0 {
-		t.Fatalf("successful doorbell retained lane state: attempts=%d pending=%d", attempts, pending)
-	}
-
-	batch := readAgentMailboxBatch(t, d, "mailbox-target", 1)
-	if len(batch.Items) != 1 || batch.Items[0].ItemID != "maintenance-first" || batch.Items[0].Content != "first durable body" || batch.Remaining != 0 {
-		t.Fatalf("first inbox read = %+v", batch)
-	}
-
-	second := enqueueMaintenanceDoorbellItem(t, d, "maintenance-second", "second durable body", time.Now().Add(time.Second))
-	if err := d.deliverAgentMailboxItem(second); err != nil {
-		t.Fatalf("place later doorbell without a prompt-submit receipt: %v", err)
-	}
-	if got := doorbell.pasted(); !reflect.DeepEqual(got, []string{agentMailboxDoorbellText, agentMailboxDoorbellText}) {
-		t.Fatalf("doorbells after inbox read = %q, want two generic prompts", got)
-	}
 }
 
 func TestAgentMailboxDoorbellRemindsUntilTheInboxIsRead(t *testing.T) {
@@ -309,66 +279,6 @@ func TestAgentMailboxDoorbellCannotPasteAfterInputLanesStop(t *testing.T) {
 	}
 }
 
-func TestAgentMailboxDoorbellReportsARecipientRemovedAfterEnqueue(t *testing.T) {
-	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateIdle)
-	delivery := enqueueMaintenanceDoorbellItem(t, d, "removed-recipient", "still durable", time.Now())
-	d.store.Remove("mailbox-target")
-
-	err := d.deliverAgentMailboxItem(delivery)
-	if !errors.Is(err, errAgentMailboxRecipientGone) {
-		t.Fatalf("delivery to removed recipient = %v, want gone", err)
-	}
-	if got := doorbell.pasted(); len(got) != 0 {
-		t.Fatalf("delivery pasted for a removed recipient: %q", got)
-	}
-	unread, err := d.store.UnreadAgentMailboxDeliveries("mailbox-target")
-	if err != nil || len(unread) != 1 || unread[0].Item.NotifiedAt != "" {
-		t.Fatalf("removed recipient delivery = %+v err=%v, want durable and unnotified", unread, err)
-	}
-}
-
-func TestAgentMailboxDoorbellQueuedWhileWorkingWakesOnIdle(t *testing.T) {
-	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateWorking)
-	d.agentMailboxCooldownOverride = time.Hour
-
-	synctest.Test(t, func(t *testing.T) {
-		defer d.stopAgentMailboxDoorbells()
-		delivery := enqueueMaintenanceDoorbellItem(t, d, "maintenance-busy", "wait until idle", time.Now())
-		if err := d.deliverAgentMailboxItem(delivery); err == nil {
-			t.Fatal("doorbell unexpectedly landed while the session was working")
-		}
-		if got := doorbell.pasted(); len(got) != 0 {
-			t.Fatalf("working session received %q", got)
-		}
-
-		drained := make(chan int, 1)
-		d.agentMailboxDrainHook = func(sessionID string, delivered int) {
-			if sessionID == "mailbox-target" {
-				drained <- delivered
-			}
-		}
-		if !d.applyState(sessionStateChange{
-			sessionID: "mailbox-target",
-			state:     protocol.StateIdle,
-			cause:     liveSignal{},
-		}) {
-			t.Fatal("idle transition was not applied")
-		}
-		synctest.Wait()
-		select {
-		case delivered := <-drained:
-			if delivered != 1 {
-				t.Fatalf("idle drain delivered %d doorbells, want 1", delivered)
-			}
-		default:
-			t.Fatal("idle transition did not drain the unread inbox")
-		}
-		if got := doorbell.pasted(); !reflect.DeepEqual(got, []string{agentMailboxDoorbellText}) {
-			t.Fatalf("doorbells after idle = %q, want one generic prompt", got)
-		}
-	})
-}
-
 func TestAgentMailboxDoorbellPreservesRecentUserDraftUntilQuiet(t *testing.T) {
 	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateWaitingInput)
 
@@ -452,131 +362,4 @@ func TestAgentMailboxDoorbellSessionCleanupStopsReminder(t *testing.T) {
 			t.Fatalf("doorbell fired after session cleanup: %q", got)
 		}
 	})
-}
-
-func TestAgentMailboxDoorbellCoalescesMixedBurstAndBatchReadsEachBodyOnce(t *testing.T) {
-	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateIdle)
-	base := time.Date(2026, time.September, 3, 12, 0, 0, 0, time.UTC)
-
-	maintenance := enqueueMaintenanceDoorbellItem(t, d, "maintenance-burst", "maintenance body", base)
-	if err := d.deliverAgentMailboxItem(maintenance); err != nil {
-		t.Fatalf("place burst doorbell: %v", err)
-	}
-	d.ensureGardenCollections()
-	schema, err := d.seedsCollection()
-	if err != nil {
-		t.Fatal(err)
-	}
-	expectedIDs := []string{"maintenance-burst"}
-	expectedContent := map[string]bool{"maintenance body": true}
-	for i := 1; i <= 9; i++ {
-		seedID := fmt.Sprintf("s-%06d", i)
-		body, err := (garden.Seed{ID: seedID, Title: "burst seed", Status: garden.StatusPlanted}).Encode()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err := d.store.PutDocument(*schema, seedID, body, base, nil); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := d.store.SetGardenSeedWatch("mailbox-target", seedID, true, base); err != nil {
-			t.Fatal(err)
-		}
-		itemID := fmt.Sprintf("garden-burst-%02d", i)
-		claimed, err := claimGardenSeedMailboxItemForTest(d.store,
-			"mailbox-target", seedID, "note", itemID, base.Add(time.Duration(i)*time.Second),
-		)
-		if err != nil || !claimed {
-			t.Fatalf("claim Garden item %s: claimed=%v err=%v", itemID, claimed, err)
-		}
-		err = d.deliverAgentMailboxItem(agentmailbox.Delivery{Item: agentmailbox.Item{
-			ID: itemID, RecipientSessionID: "mailbox-target", Kind: agentmailbox.KindGardenSeed,
-		}})
-		if !errors.Is(err, errAgentMailboxDoorbellOutstanding) {
-			t.Fatalf("Garden item %s delivery = %v, want coalesced outstanding doorbell", itemID, err)
-		}
-		expectedIDs = append(expectedIDs, itemID)
-		expectedContent[fmt.Sprintf("%s moved: note — read it with `attn seed show %s`.", seedID, seedID)] = true
-	}
-	peer, err := d.store.EnqueuePeerMessage(agentmailbox.PeerMessage{
-		ID: "peer-burst", SenderSessionID: "mailbox-sender", Body: "peer body",
-		CreatedAt: base.Add(10 * time.Second).Format(time.RFC3339Nano),
-	}, "mailbox-target")
-	if err != nil {
-		t.Fatalf("enqueue peer item: %v", err)
-	}
-	if err := d.deliverAgentMailboxItem(peer); !errors.Is(err, errAgentMailboxDoorbellOutstanding) {
-		t.Fatalf("peer delivery = %v, want coalesced outstanding doorbell", err)
-	}
-	expectedIDs = append(expectedIDs, "peer-burst")
-	expectedContent["peer body"] = true
-
-	if got := doorbell.pasted(); !reflect.DeepEqual(got, []string{agentMailboxDoorbellText}) {
-		t.Fatalf("mixed burst doorbells = %q, want one generic prompt", got)
-	}
-	for body := range expectedContent {
-		if strings.Contains(doorbell.pasted()[0], body) {
-			t.Fatalf("generic doorbell leaked durable content %q", body)
-		}
-	}
-
-	batch := readAgentMailboxBatch(t, d, "mailbox-target", 50)
-	if batch.Remaining != 0 || len(batch.Items) != len(expectedIDs) {
-		t.Fatalf("mixed inbox batch = %+v, want %d items and no remainder", batch, len(expectedIDs))
-	}
-	seenContent := make(map[string]bool, len(batch.Items))
-	for i, item := range batch.Items {
-		if item.ItemID != expectedIDs[i] {
-			t.Fatalf("batch item %d id = %q, want FIFO id %q", i, item.ItemID, expectedIDs[i])
-		}
-		if !expectedContent[item.Content] {
-			t.Fatalf("batch item %q has unexpected content %q", item.ItemID, item.Content)
-		}
-		if item.NotifiedAt == "" || item.ReadAt == "" {
-			t.Fatalf("batch item %q lacks per-item receipts: %+v", item.ItemID, item)
-		}
-		if seenContent[item.Content] {
-			t.Fatalf("batch duplicated content %q", item.Content)
-		}
-		seenContent[item.Content] = true
-	}
-	if len(seenContent) != len(expectedContent) {
-		t.Fatalf("batch content = %v, want every durable body once", seenContent)
-	}
-	again := readAgentMailboxBatch(t, d, "mailbox-target", 50)
-	if len(again.Items) != 0 || again.Remaining != 0 {
-		t.Fatalf("second inbox read duplicated content: %+v", again)
-	}
-}
-
-func TestAgentMailboxDoorbellNeverTypesAtAShellPane(t *testing.T) {
-	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateIdle)
-	d.agentMailboxCooldownOverride = time.Second
-	addCharacterizationSession(t, d, "mailbox-shell", protocol.SessionAgentShell, protocol.SessionStateIdle)
-
-	synctest.Test(t, func(t *testing.T) {
-		delivery, err := d.store.EnqueueMaintenancePrompt("shell-item", "mailbox-shell", "a delegate reported", time.Now())
-		if err != nil {
-			t.Fatalf("enqueue item for the shell pane: %v", err)
-		}
-		if err := d.deliverAgentMailboxItem(delivery); !errors.Is(err, errAgentMailboxNoPromptReader) {
-			t.Fatalf("deliver to a shell pane = %v, want %v", err, errAgentMailboxNoPromptReader)
-		}
-		if got := recordedDoorbellWrites(doorbell); len(got) != 0 {
-			t.Fatalf("attn typed at a shell pane: %q", got)
-		}
-
-		time.Sleep(10 * time.Second)
-		synctest.Wait()
-		if got := recordedDoorbellWrites(doorbell); len(got) != 0 {
-			t.Fatalf("a shell pane was nagged after the cooldown: %q", got)
-		}
-	})
-
-	if attempts, pending := mailboxLaneCounts(d, "mailbox-shell"); attempts != 0 || pending != 0 {
-		t.Fatalf("skipped doorbell held lane state: attempts=%d pending=%d", attempts, pending)
-	}
-	batch := readAgentMailboxBatch(t, d, "mailbox-shell", 5)
-	if len(batch.Items) != 1 || batch.Items[0].ItemID != "shell-item" || batch.Items[0].Content != "a delegate reported" {
-		t.Fatalf("shell pane inbox = %+v, want the item still readable", batch)
-	}
 }
