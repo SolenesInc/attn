@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
-import type { SessionLedgerEntry, SessionReopen } from '../../types/generated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import type { SessionLedgerEntry, SessionLedgerFacets, SessionReopen } from '../../types/generated';
 import type { SessionLedgerPage, SessionLedgerQuery } from '../../hooks/daemonSessionLedgerEvents';
 import { useSessionLedger } from '../../hooks/useSessionLedger';
-import type { SessionLedgerFilters } from '../../hooks/useSessionLedger';
+import type { SessionLedgerFilters, SessionLedgerView } from '../../hooks/useSessionLedger';
 import {
   SESSION_FILTERS_SETTING_KEY,
   parseSessionFilters,
@@ -22,7 +22,8 @@ import {
 } from '../sessionsLedger';
 import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
-import { formatQuery, matchesDir, matchesWords, parseQuery, removeToken } from './ledgerQuery';
+import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
+import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
@@ -33,7 +34,8 @@ export interface SessionSeedLink {
 
 export interface SessionsTabProps {
   listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
-  workspaceNames: Record<string, string>;
+  profileNames: Record<string, string>;
+  profileMembership: string;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
@@ -59,7 +61,8 @@ const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle
 
 export function SessionsTab({
   listSessions,
-  workspaceNames,
+  profileNames,
+  profileMembership,
   liveSessionIds,
   seedForSession,
   onFocusSession,
@@ -88,41 +91,11 @@ export function SessionsTab({
   });
   const { filters, setFilters, entries, verdicts, recordClose, recordVerdict, reload } = ledger;
 
-  const workspaceLabel = useCallback((id: string) => workspaceNames[id] ?? id, [workspaceNames]);
+  const { text, setText, parsed } = useLedgerQueryText({
+    restoredFilters, profileNames, facets: ledger.facets, repository: filters.repository, setFilters, requestedDir,
+  });
 
-  const [text, setText] = useState(() => formatQuery(restoredFilters, workspaceLabel));
-  const parsed = useMemo(
-    () => parseQuery(text, ledger.facets, workspaceLabel, filters.repository),
-    [text, ledger.facets, workspaceLabel, filters.repository],
-  );
-  const facetsPending = ledger.facets === null;
-  const unresolvedRepository = facetsPending
-    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('repo:'));
-  const unresolvedWorkspace = facetsPending
-    && parsed.unresolved.some((token) => token.toLowerCase().startsWith('ws:'));
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setFilters((current) => {
-        const next = {
-          ...current,
-          ...parsed.filters,
-          repository: unresolvedRepository ? current.repository : parsed.filters.repository,
-          workspaceId: unresolvedWorkspace ? current.workspaceId : parsed.filters.workspaceId,
-        };
-        const same = next.range === current.range && next.customFrom === current.customFrom
-          && next.customTo === current.customTo && next.workspaceId === current.workspaceId
-          && next.repository === current.repository;
-        return same ? current : next;
-      });
-    }, 150);
-    return () => window.clearTimeout(timer);
-  }, [parsed.filters, setFilters, unresolvedRepository, unresolvedWorkspace]);
-
-  useEffect(() => {
-    if (!requestedDir) return;
-    setText(`dir:${requestedDir.path}`);
-  }, [requestedDir]);
+  useReloadWhenChanged(profileMembership, reload);
 
   useEffect(() => {
     if (!closeNotice) return;
@@ -137,10 +110,10 @@ export function SessionsTab({
   const visible = useMemo(() => entries.filter((entry) => {
     if (!matchesDir(entry.directory, parsed.dir)) return false;
     return matchesWords(
-      [entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, workspaceLabel(entry.workspace_id)],
+      [entry.label, entry.id, entry.agent, entry.branch ?? '', entry.directory, entry.profile_name],
       parsed.words,
     );
-  }), [entries, parsed.dir, parsed.words, workspaceLabel]);
+  }), [entries, parsed.dir, parsed.words]);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
@@ -201,12 +174,6 @@ export function SessionsTab({
   const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
-  // Unnamed workspaces carry a generated id; that is noise on a row, so they show nothing.
-  const workspaceShown = useCallback((id: string) => {
-    const shown = workspaceNames[id] ?? id;
-    return /[0-9a-f]{8}-[0-9a-f]{4}-/i.test(shown) ? null : shown;
-  }, [workspaceNames]);
-
   const runVerb = useCallback((key: string, verbId: string) => {
     const entry = visible.find((row) => row.id === key);
     if (!entry) return;
@@ -228,14 +195,13 @@ export function SessionsTab({
       note: notices[entry.id] ?? (awaiting?.sessionId === entry.id ? { kind: 'info', text: 'waiting for the branch check…' } : undefined),
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
-      workspaceLabel: workspaceShown,
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
       canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdicts[entry.id]?.directoryState !== 'missing',
       now: now(),
     }),
-  })), [visible, verdicts, notices, awaiting, isLive, seedForSession, workspaceShown, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, verdicts, notices, awaiting, isLive, seedForSession, sessionLabel, nameText, onReopen, onShowWorktree, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -267,19 +233,9 @@ export function SessionsTab({
         tone: parsed.unresolved.includes(token) ? 'unresolved' as const : undefined,
         onRemove: () => setText(removeToken(text, token)),
       }));
-  }, [text, parsed]);
+  }, [text, parsed, setText]);
 
-  const emptyMessage = ledger.filterError
-    ? ledger.filterError
-    : ledger.error
-      ? ledger.error
-      : ledger.loading && entries.length === 0
-        ? 'Reading the ledger…'
-        : entries.length > 0
-          ? 'Nothing on this page matches the query.'
-          : filters.scope === 'closed'
-            ? 'No closed sessions yet. Closing one records it here.'
-            : filters.scope === 'live' ? 'No live sessions right now.' : 'The ledger is empty.';
+  const emptyMessage = ledgerEmptyMessage(ledger, filters.scope);
 
   return (
     <>
@@ -287,7 +243,7 @@ export function SessionsTab({
         className="ledger-toolbar"
         data-range={filters.range}
         data-repository={filters.repository}
-        data-workspace={filters.workspaceId}
+        data-profile={filters.profileId}
       >
         <Segmented
           value={filters.scope}
@@ -298,7 +254,7 @@ export function SessionsTab({
         <QueryBar
           value={text}
           onChange={setText}
-          placeholder="repo:attn  ws:name  7d  from:2026-09-01  dir:~/x  words"
+          placeholder="repo:attn  profile:name  7d  from:2026-09-01  dir:~/x  words"
           chips={chips}
           inputRef={queryRef}
         />
@@ -322,7 +278,6 @@ export function SessionsTab({
               note={notices[selected.id]}
               live={isLive(selected)}
               seed={seedForSession?.(selected.id) ?? null}
-              workspaceShown={workspaceShown}
               sessionLabel={sessionLabel}
               nameText={nameText}
               now={now()}
@@ -338,6 +293,88 @@ export function SessionsTab({
   );
 }
 
+interface LedgerQueryTextOptions {
+  restoredFilters: SessionLedgerFilters;
+  profileNames: Record<string, string>;
+  facets: SessionLedgerFacets | null;
+  repository: string;
+  setFilters: Dispatch<SetStateAction<SessionLedgerFilters>>;
+  requestedDir?: { path: string; nonce: number } | null;
+}
+
+function unresolvedWhilePending(parsed: ParsedQuery, facets: SessionLedgerFacets | null, prefix: string): boolean {
+  return facets === null && parsed.unresolved.some((token) => token.toLowerCase().startsWith(prefix));
+}
+
+function sameQueryFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boolean {
+  return a.range === b.range && a.customFrom === b.customFrom && a.customTo === b.customTo
+    && a.profileId === b.profileId && a.repository === b.repository;
+}
+
+function useLedgerQueryText({ restoredFilters, profileNames, facets, repository, setFilters, requestedDir }: LedgerQueryTextOptions) {
+  const [text, setText] = useState(() => formatQuery(restoredFilters, profileNames));
+  const [chosenProfile, setChosenProfile] = useState<ProfileChoice | null>(() => (
+    restoredFilters.profileId ? { profile_id: restoredFilters.profileId, name: profileNames[restoredFilters.profileId] ?? '' } : null
+  ));
+  const profiles = useMemo(() => profileChoices(profileNames, facets, chosenProfile), [profileNames, facets, chosenProfile]);
+  const parsed = useMemo(() => parseQuery(text, facets, profiles, repository), [text, facets, profiles, repository]);
+  const namedWith = useRef(profileNames);
+  useEffect(() => {
+    const before = namedWith.current;
+    namedWith.current = profileNames;
+    if (before !== profileNames) setText((current) => renameProfileTokens(current, before, profileNames));
+  }, [profileNames]);
+  const keepRepository = unresolvedWhilePending(parsed, facets, 'repo:');
+  const keepProfile = unresolvedWhilePending(parsed, facets, 'profile:');
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (!keepProfile) {
+        const chosenId = parsed.filters.profileId;
+        setChosenProfile((current) => (
+          current?.profile_id === chosenId ? current : profiles.find((choice) => choice.profile_id === chosenId) ?? null
+        ));
+      }
+      setFilters((current) => {
+        const next = {
+          ...current,
+          ...parsed.filters,
+          repository: keepRepository ? current.repository : parsed.filters.repository,
+          profileId: keepProfile ? current.profileId : parsed.filters.profileId,
+        };
+        return sameQueryFilters(next, current) ? current : next;
+      });
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [parsed.filters, profiles, setFilters, keepRepository, keepProfile]);
+
+  useEffect(() => {
+    if (!requestedDir) return;
+    setText(`dir:${requestedDir.path}`);
+  }, [requestedDir]);
+
+  return { text, setText, parsed };
+}
+
+function useReloadWhenChanged(value: string, reload: () => void) {
+  const loadedWith = useRef(value);
+  useEffect(() => {
+    if (loadedWith.current === value) return;
+    loadedWith.current = value;
+    reload();
+  }, [value, reload]);
+}
+
+function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): string {
+  if (ledger.filterError) return ledger.filterError;
+  if (ledger.error) return ledger.error;
+  if (ledger.loading && ledger.entries.length === 0) return 'Reading the ledger…';
+  if (ledger.entries.length > 0) return 'Nothing on this page matches the query.';
+  if (scope === 'closed') return 'No closed sessions yet. Closing one records it here.';
+  if (scope === 'live') return 'No live sessions right now.';
+  return 'The ledger is empty.';
+}
+
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
 
 function verdictId(verbId: string): string {
@@ -350,7 +387,6 @@ interface RowContext {
   note: RowNote | undefined;
   live: boolean;
   seed: SessionSeedLink | null;
-  workspaceLabel: (id: string) => string | null;
   sessionLabel: (id: string) => string;
   actionsAvailable: boolean;
   canShowWorktree: boolean;
@@ -370,7 +406,7 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
 
   const meta: ReactNode[] = [
     entry.agent,
-    context.workspaceLabel(entry.workspace_id) || null,
+    profileText(entry) || null,
     <span className="is-mono is-path" title={entry.directory} key="dir">{shortPath(entry.directory)}</span>,
     entry.branch ? <span className="is-mono" key="branch">{entry.branch}</span> : null,
   ];
@@ -395,6 +431,11 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     yank: entry.directory,
     attrs: { state: closed ? 'closed' : entry.state, verbs: verbs.map((verb) => verb.label).join('\u001f') },
   };
+}
+
+function profileText(entry: SessionLedgerEntry): string {
+  if (!entry.profile_name) return '';
+  return entry.profile_deleted ? `${entry.profile_name} (deleted)` : entry.profile_name;
 }
 
 function sessionGlyph(entry: SessionLedgerEntry, live: boolean, verdict: ReopenVerdictView | undefined): RowGlyph {
@@ -458,7 +499,6 @@ interface SessionInspectorProps {
   note: RowNote | undefined;
   live: boolean;
   seed: SessionSeedLink | null;
-  workspaceShown: (id: string) => string | null;
   sessionLabel: (id: string) => string;
   nameText: (text: string) => string;
   now: Date;
@@ -520,11 +560,11 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, workspaceShown, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
+  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
 }: SessionInspectorProps) {
   return (
     <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} verdict={verdict} />}>
-      <Field label="Workspace">{workspaceShown(entry.workspace_id) || '—'}</Field>
+      <Field label="Profile">{profileText(entry) || '—'}</Field>
       <DirectoryField entry={entry} verdict={verdict} copied={copied} onCopy={onCopy} />
       <BranchField entry={entry} verdict={verdict} />
       <InstantField entry={entry} now={now} sessionLabel={sessionLabel} nameText={nameText} />

@@ -2,7 +2,7 @@ package protocol
 
 import "time"
 
-const ProtocolVersion = "328"
+const ProtocolVersion = "329"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -292,6 +292,7 @@ const (
 	CmdProfileRename          = "profile_rename"
 	CmdProfileDelete          = "profile_delete"
 	CmdProfileSelect          = "profile_select"
+	CmdSessionMove            = "session_move"
 	CmdDesktopCreate          = "desktop_create"
 	CmdDesktopRename          = "desktop_rename"
 	CmdDesktopSetShortcutSlot = "desktop_set_shortcut_slot"

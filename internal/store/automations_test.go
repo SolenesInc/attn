@@ -402,7 +402,7 @@ func TestContinuityBindingIsNotReclaimedByAnAgentMovedToAnotherProfile(t *testin
 	if err := s.AddChecked(&protocol.Session{ID: "session-1", Label: "nightly", Agent: "codex", Directory: "/tmp", ProfileID: home.ID, State: protocol.SessionStateIdle}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.MoveSessionToProfile("session-1", work.ID); err != nil {
+	if _, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "session-1", ExpectedProfileID: home.ID, DestinationProfileID: work.ID}); err != nil {
 		t.Fatal(err)
 	}
 

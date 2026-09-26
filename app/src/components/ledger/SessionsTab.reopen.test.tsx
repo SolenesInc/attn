@@ -225,21 +225,23 @@ describe('SessionsTab row grammar', () => {
 
   it('the inspector follows the selection and reads the directory, branch and placement', async () => {
     const { list } = listing([page({
-      entries: [closedEntry('s1', { branch: 'feat/x' }), closedEntry('s2', { branch: 'feat/y' })],
+      entries: [closedEntry('s1', { branch: 'feat/x', profile_name: 'Side', profile_deleted: true }), closedEntry('s2', { branch: 'feat/y' })],
       reopen: [{ session_id: 's1', reopen: goneEverywhere }, judged('s2')],
     })]);
-    renderSessionsTab({ listSessions: list, onReopen: vi.fn(), workspaceNames: { 'ws-1': 'attn' } });
+    renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await rows().findByText('run s2');
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
     expect(within(inspector()).getByText('its profile was deleted; reopening lands it in your current profile')).toBeTruthy();
+    expect(within(inspector()).getByText('Side (deleted)')).toBeTruthy();
 
     fireEvent.keyDown(row('run s1'), { key: 'ArrowDown' });
     expect(document.activeElement).toBe(row('run s2'));
     expect(row('run s2').getAttribute('aria-selected')).toBe('true');
     expect(within(inspector()).getByText('directory is there')).toBeTruthy();
     expect(within(inspector()).getByText('lands unplaced in its profile')).toBeTruthy();
+    expect(within(inspector()).getByText('Default')).toBeTruthy();
   });
 
   it('Enter runs the first verb and a digit runs the nth', async () => {
@@ -276,7 +278,7 @@ describe('SessionsTab row grammar', () => {
       entries: [entry({ id: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee', label: 'Fixture run' }), closedEntry('s2', { label: '', close_reason: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee asked' })],
       reopen: [judged('s2', { reopenable: false, actions: [], reason: 'conversation 12345678-1234-1234-1234-123456789abc is no longer in storage' })],
     })]);
-    renderSessionsTab({ listSessions: list, workspaceNames: { 'ws-1': 'workspace-12345678-1234-1234-1234-123456789abc' } });
+    renderSessionsTab({ listSessions: list });
 
     await rows().findByText('untitled session');
     expect(within(row('untitled session')).getByText('closed by you: Fixture run asked')).toBeTruthy();

@@ -17,7 +17,7 @@ export interface SessionLedgerFilters {
   range: SessionRangeId;
   customFrom: string;
   customTo: string;
-  workspaceId: string;
+  profileId: string;
   repository: string;
 }
 
@@ -26,7 +26,7 @@ export const EMPTY_SESSION_FILTERS: SessionLedgerFilters = {
   range: 'any',
   customFrom: '',
   customTo: '',
-  workspaceId: '',
+  profileId: '',
   repository: '',
 };
 
@@ -67,7 +67,7 @@ export function sameFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): b
     && a.range === b.range
     && a.customFrom === b.customFrom
     && a.customTo === b.customTo
-    && a.workspaceId === b.workspaceId
+    && a.profileId === b.profileId
     && a.repository === b.repository;
 }
 
@@ -86,7 +86,7 @@ export function sessionLedgerQuery(
   if (range.since) query.since = range.since;
   if (range.until) query.until = range.until;
 
-  if (filters.workspaceId) query.workspace_id = filters.workspaceId;
+  if (filters.profileId) query.profile_id = filters.profileId;
   if (filters.repository) query.repository = filters.repository;
   return query;
 }
@@ -97,7 +97,7 @@ export function closeBelongsInView(
   now: Date,
 ): boolean {
   if (filters.scope === 'live') return false;
-  if (filters.workspaceId && entry.workspace_id !== filters.workspaceId) return false;
+  if (filters.profileId && entry.profile_id !== filters.profileId) return false;
   if (filters.repository && (entry.repository ?? '') !== filters.repository) return false;
   const range = filters.range === 'custom'
     ? customSessionRange(filters.customFrom, filters.customTo)

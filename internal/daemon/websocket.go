@@ -1003,6 +1003,8 @@ func (d *Daemon) handleClientMessage(client *wsClient, data []byte) {
 		d.handleProfileDelete(client, msg.(*protocol.ProfileDeleteMessage))
 	case protocol.CmdProfileSelect:
 		d.handleProfileSelect(client, msg.(*protocol.ProfileSelectMessage))
+	case protocol.CmdSessionMove:
+		d.handleSessionMove(client, msg.(*protocol.SessionMoveMessage))
 	case protocol.CmdMigrationGet:
 		d.handleMigrationGet(client, msg.(*protocol.MigrationGetMessage))
 	case protocol.CmdMigrationKeep:

@@ -127,8 +127,9 @@
     "id": "sess-1",
     "label": "renamed",
     "last_seen": "<timestamp>",
-    "state": "idle",
-    "workspace_id": ""
+    "profile_id": "profile-<uuid>",
+    "profile_name": "Default",
+    "state": "idle"
   }
 }
 --- 08 profiles_changed

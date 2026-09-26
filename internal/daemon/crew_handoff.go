@@ -53,22 +53,30 @@ func (d *Daemon) transferCrewBinding(memberID, from, to string) error {
 }
 
 func (d *Daemon) crewMemberForSession(sessionID string) (crew.Member, bool) {
+	member, bound, err := d.boundCrewMember(sessionID)
+	if err != nil {
+		d.logf("crew: reading roster for session %s: %v", sessionID, err)
+	}
+	return member, bound
+}
+
+func (d *Daemon) boundCrewMember(sessionID string) (crew.Member, bool, error) {
 	if sessionID == "" || d.store == nil {
-		return crew.Member{}, false
+		return crew.Member{}, false, nil
 	}
 	members, _, err := d.readCrewMembers()
+	if docstore.IsUndeclaredCollection(err) {
+		return crew.Member{}, false, nil
+	}
 	if err != nil {
-		if !docstore.IsUndeclaredCollection(err) {
-			d.logf("crew: reading roster for session %s: %v", sessionID, err)
-		}
-		return crew.Member{}, false
+		return crew.Member{}, false, err
 	}
 	for _, member := range members {
 		if member.BindingSession == sessionID {
-			return member, true
+			return member, true, nil
 		}
 	}
-	return crew.Member{}, false
+	return crew.Member{}, false, nil
 }
 
 func (d *Daemon) crewHandoff(sessionID, note string, retry bool, close protocol.CrewDayClose) (result *protocol.CrewHandoffResult, err error) {

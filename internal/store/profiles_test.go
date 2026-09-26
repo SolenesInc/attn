@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -515,12 +516,13 @@ func TestMovingAnAgentToAnotherProfileRemovesItsPlacementOnly(t *testing.T) {
 	addProfileSession(t, s, "agent-b", work.ID)
 	mustPlace(t, s, workDesktop.ID, "agent-a")
 	before, _ := mustPlace(t, s, workDesktop.ID, "agent-b")
+	request := SessionProfileMoveRequest{SessionID: "agent-b", ExpectedProfileID: work.ID, DestinationProfileID: home.ID}
 
-	move, err := s.MoveSessionToProfile("agent-b", home.ID)
+	move, err := s.MoveSessionToProfile(request)
 	if err != nil {
 		t.Fatalf("MoveSessionToProfile: %v", err)
 	}
-	if move.FromProfileID != work.ID || move.SourceDesktop == nil || move.SourceDesktop.Revision != before.Revision+1 {
+	if !move.Changed() || move.FromProfileID != work.ID || move.SourceDesktop == nil || move.SourceDesktop.Revision != before.Revision+1 {
 		t.Fatalf("move = %+v, want the source desktop rewritten once", move)
 	}
 	if _, found, _ := s.SessionPlacement("agent-b"); found {
@@ -532,9 +534,86 @@ func TestMovingAnAgentToAnotherProfileRemovesItsPlacementOnly(t *testing.T) {
 	if session := s.Get("agent-b"); session == nil {
 		t.Fatal("moving profiles closed the agent")
 	}
-	_, err = s.MoveSessionToProfile("agent-b", home.ID)
-	wantCode(t, err, profiles.CodeDestinationSame)
 	assertStoredDesktopsHoldTheirInvariants(t, s, work.ID)
+
+	retried, err := s.MoveSessionToProfile(request)
+	if err != nil || retried.Changed() || retried.SourceDesktop != nil {
+		t.Fatalf("retrying the move = %+v, %v; want success that changes nothing", retried, err)
+	}
+	if desktop, _ := s.GetDesktop(workDesktop.ID); desktop.Revision != move.SourceDesktop.Revision {
+		t.Fatalf("the retry moved the source desktop to revision %d, want %d", desktop.Revision, move.SourceDesktop.Revision)
+	}
+}
+
+func TestAMoveMadeAgainstAnOldProfileIsRefused(t *testing.T) {
+	s, _ := openProfileStore(t)
+	work, workDesktop := mustCreateProfile(t, s, "Work")
+	home, _ := mustCreateProfile(t, s, "Home")
+	office, _ := mustCreateProfile(t, s, "Office")
+	addProfileSession(t, s, "agent", work.ID)
+	mustPlace(t, s, workDesktop.ID, "agent")
+	if _, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: work.ID, DestinationProfileID: home.ID}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: work.ID, DestinationProfileID: office.ID})
+	refused := wantCode(t, err, profiles.CodeStaleRevision)
+	if !strings.Contains(refused.Message, home.ID) {
+		t.Fatalf("stale refusal %q does not name the agent's current profile %s", refused.Message, home.ID)
+	}
+	if profileID, _ := s.SessionProfileID("agent"); profileID != home.ID {
+		t.Fatalf("a stale move left the agent in %s, want %s", profileID, home.ID)
+	}
+	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", DestinationProfileID: office.ID})
+	wantCode(t, err, profiles.CodeInvalid)
+
+	if _, err := s.DeleteProfile(office.ID, office.Revision, work.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: home.ID, DestinationProfileID: office.ID})
+	wantCode(t, err, profiles.CodeProfileDeleted)
+
+	if _, err := s.CloseSession("agent", SessionClose{}, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "agent", ExpectedProfileID: home.ID, DestinationProfileID: work.ID})
+	wantCode(t, err, profiles.CodeSessionClosed)
+}
+
+func TestMovingAProfilesChiefDemotesItAndLeavesTheDestinationsChief(t *testing.T) {
+	s, _ := openProfileStore(t)
+	home, _ := mustCreateProfile(t, s, "Home")
+	work, _ := mustCreateProfile(t, s, "Work")
+	addProfileSession(t, s, "home-chief", home.ID)
+	addProfileSession(t, s, "work-chief", work.ID)
+	for _, id := range []string{"home-chief", "work-chief"} {
+		if _, _, err := s.SetProfileChief(id); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	move, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "work-chief", ExpectedProfileID: work.ID, DestinationProfileID: home.ID, CrewMemberID: "trellis"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if move.DemotedChiefID != "work-chief" || move.MovedCrewID != "trellis" {
+		t.Fatalf("move = %+v, want work-chief demoted and trellis moved", move)
+	}
+	chiefs, err := s.ProfileChiefs()
+	if err != nil || len(chiefs) != 1 || chiefs[home.ID] != "home-chief" {
+		t.Fatalf("chiefs after the move = %v, %v; want only Home's own chief", chiefs, err)
+	}
+	if member, err := s.CrewProfile("trellis"); err != nil || member != home.ID {
+		t.Fatalf("crew member trellis belongs to %q, %v; want %s with its agent", member, err, home.ID)
+	}
+
+	plain, err := s.MoveSessionToProfile(SessionProfileMoveRequest{SessionID: "work-chief", ExpectedProfileID: home.ID, DestinationProfileID: work.ID})
+	if err != nil || plain.DemotedChiefID != "" || plain.MovedCrewID != "" {
+		t.Fatalf("moving a non-chief back = %+v, %v; want nothing demoted or moved besides the agent", plain, err)
+	}
+	if chiefs, _ := s.ProfileChiefs(); chiefs[home.ID] != "home-chief" {
+		t.Fatalf("moving another agent out of Home demoted its chief: %v", chiefs)
+	}
 }
 
 func TestDeletingADesktopUnplacesItsAgentsAndKeepsSlots(t *testing.T) {

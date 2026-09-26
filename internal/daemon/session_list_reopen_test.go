@@ -220,7 +220,7 @@ func TestAClosingRowReachesTheAppAlreadyJudged(t *testing.T) {
 	addLedgerTestSession(t, d, "closing", directory)
 	entry := protocol.SessionLedgerEntry{
 		ID: "closing", Label: "closing", Agent: string(protocol.SessionAgentClaude),
-		Directory: directory, WorkspaceID: "ws-closing", State: protocol.SessionStateIdle,
+		Directory: directory, ProfileID: "profile-closing", State: protocol.SessionStateIdle,
 		LastSeen: protocol.TimestampNow().String(),
 		ClosedAt: protocol.Ptr(protocol.NewTimestamp(time.Now()).String()),
 		ClosedBy: protocol.Ptr(store.SessionClosedByUser),

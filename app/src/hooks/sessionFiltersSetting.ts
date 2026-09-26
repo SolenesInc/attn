@@ -14,7 +14,7 @@ export function serializeSessionFilters(filters: SessionLedgerFilters): string {
     range: filters.range,
     customFrom: filters.customFrom,
     customTo: filters.customTo,
-    workspaceId: filters.workspaceId,
+    profileId: filters.profileId,
     repository: filters.repository,
   });
 }
@@ -36,10 +36,10 @@ export function parseSessionFilters(raw: string | undefined): SessionLedgerFilte
   const customFrom = day(stored.customFrom);
   const customTo = day(stored.customTo);
   if (customFrom === null || customTo === null) return EMPTY_SESSION_FILTERS;
-  const workspaceId = text(stored.workspaceId);
+  const profileId = text(stored.profileId);
   const repository = text(stored.repository);
-  if (workspaceId === null || repository === null) return EMPTY_SESSION_FILTERS;
-  return { scope, range, customFrom, customTo, workspaceId, repository };
+  if (profileId === null || repository === null) return EMPTY_SESSION_FILTERS;
+  return { scope, range, customFrom, customTo, profileId, repository };
 }
 
 function day(value: unknown): string | null {

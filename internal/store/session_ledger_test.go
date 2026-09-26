@@ -73,7 +73,7 @@ func TestAClosedSessionIsInvisibleToEveryLiveReader(t *testing.T) {
 	if s.HasSessionInDirectory("/tmp/gone") {
 		t.Error("HasSessionInDirectory(/tmp/gone) = true, want the closed session to free its directory")
 	}
-	if ids := s.SessionsInWorkspace(s.SessionLedgerEntry("gone").WorkspaceID); slices.Contains(ids, "gone") {
+	if ids := s.SessionsInWorkspace(""); slices.Contains(ids, "gone") {
 		t.Errorf("SessionsInWorkspace = %v, want a closed session to leave its workspace", ids)
 	}
 }
@@ -264,7 +264,6 @@ func TestALateWriteCannotRewriteAClosedSession(t *testing.T) {
 			}
 			s.Touch("s1")
 			s.UpdateSessionLabel("s1", "renamed after the close")
-			s.AssignSessionWorkspace("s1", "workspace-elsewhere")
 			if s.SettleTurn("s1", time.Now()) {
 				t.Error("SettleTurn after the close reported a row, want the closed row refused")
 			}
@@ -290,9 +289,6 @@ func TestALateWriteCannotRewriteAClosedSession(t *testing.T) {
 			}
 			if after.Label != snapshot.Label {
 				t.Errorf("label = %q after a late rename, want %q", after.Label, snapshot.Label)
-			}
-			if after.WorkspaceID != snapshot.WorkspaceID {
-				t.Errorf("workspace = %q after a late assignment, want %q", after.WorkspaceID, snapshot.WorkspaceID)
 			}
 			if stamps := s.TurnStamps("s1"); stamps != stampsAtClose {
 				t.Errorf("turn stamps = %+v after a late settle and wake, want %+v", stamps, stampsAtClose)
@@ -513,18 +509,27 @@ func TestEverySessionWriterCarriesTheClosedRowPredicate(t *testing.T) {
 	}
 }
 
-func addLedgerSession(t *testing.T, s *Store, id, workspace, repository string, lastSeen time.Time) {
+func addLedgerSession(t *testing.T, s *Store, id, profileID, repository string, lastSeen time.Time) {
 	t.Helper()
 	s.Add(&protocol.Session{
-		ID:          id,
-		Label:       id,
-		Directory:   "/tmp/" + id,
-		WorkspaceID: workspace,
-		Repository:  protocol.Ptr(repository),
-		State:       protocol.SessionStateIdle,
-		StateSince:  protocol.NewTimestamp(lastSeen).String(),
-		LastSeen:    protocol.NewTimestamp(lastSeen).String(),
+		ID:         id,
+		Label:      id,
+		Directory:  "/tmp/" + id,
+		ProfileID:  profileID,
+		Repository: protocol.Ptr(repository),
+		State:      protocol.SessionStateIdle,
+		StateSince: protocol.NewTimestamp(lastSeen).String(),
+		LastSeen:   protocol.NewTimestamp(lastSeen).String(),
 	})
+}
+
+func ledgerProfileID(t *testing.T, s *Store, name string) string {
+	t.Helper()
+	if s.db == nil {
+		return "profile-" + name
+	}
+	profile, _ := mustCreateProfile(t, s, name)
+	return profile.ID
 }
 
 func ledgerBackings() map[string]func(*testing.T) *Store {
@@ -534,14 +539,15 @@ func ledgerBackings() map[string]func(*testing.T) *Store {
 	}
 }
 
-func TestSessionLedgerFiltersByWorkspaceAndRepository(t *testing.T) {
+func TestSessionLedgerFiltersByProfileAndRepository(t *testing.T) {
 	for name, newStore := range ledgerBackings() {
 		t.Run(name, func(t *testing.T) {
 			s := newStore(t)
 			at := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
-			addLedgerSession(t, s, "attn-one", "ws-attn", "/repos/attn", at)
-			addLedgerSession(t, s, "attn-two", "ws-side", "/repos/attn", at.Add(time.Minute))
-			addLedgerSession(t, s, "other", "ws-attn", "/repos/other", at.Add(2*time.Minute))
+			attn, side := ledgerProfileID(t, s, "attn"), ledgerProfileID(t, s, "side")
+			addLedgerSession(t, s, "attn-one", attn, "/repos/attn", at)
+			addLedgerSession(t, s, "attn-two", side, "/repos/attn", at.Add(time.Minute))
+			addLedgerSession(t, s, "other", attn, "/repos/other", at.Add(2*time.Minute))
 
 			byRepo, err := s.SessionLedger(SessionLedgerQuery{Scope: SessionLedgerAll, Repository: "/repos/attn"})
 			if err != nil {
@@ -551,16 +557,16 @@ func TestSessionLedgerFiltersByWorkspaceAndRepository(t *testing.T) {
 				t.Errorf("repository page = %v, want both attn rows", got)
 			}
 
-			byWorkspace, err := s.SessionLedger(SessionLedgerQuery{Scope: SessionLedgerAll, WorkspaceID: "ws-attn"})
+			byProfile, err := s.SessionLedger(SessionLedgerQuery{Scope: SessionLedgerAll, ProfileID: attn})
 			if err != nil {
-				t.Fatalf("workspace page: %v", err)
+				t.Fatalf("profile page: %v", err)
 			}
-			if got := ledgerIDs(byWorkspace); len(got) != 2 || !slices.Contains(got, "attn-one") || !slices.Contains(got, "other") {
-				t.Errorf("workspace page = %v, want both ws-attn rows", got)
+			if got := ledgerIDs(byProfile); len(got) != 2 || !slices.Contains(got, "attn-one") || !slices.Contains(got, "other") {
+				t.Errorf("profile page = %v, want both rows of the attn profile", got)
 			}
 
 			both, err := s.SessionLedger(SessionLedgerQuery{
-				Scope: SessionLedgerAll, WorkspaceID: "ws-attn", Repository: "/repos/attn",
+				Scope: SessionLedgerAll, ProfileID: attn, Repository: "/repos/attn",
 			})
 			if err != nil {
 				t.Fatalf("combined page: %v", err)
@@ -577,10 +583,11 @@ func TestSessionLedgerWindowIsHalfOpenOverTheRowsInstant(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			s := newStore(t)
 			day := time.Date(2026, 9, 5, 0, 0, 0, 0, time.UTC)
-			addLedgerSession(t, s, "before", "ws", "/repos/attn", day.Add(-time.Minute))
-			addLedgerSession(t, s, "inside", "ws", "/repos/attn", day.Add(time.Hour))
-			addLedgerSession(t, s, "at-until", "ws", "/repos/attn", day.Add(24*time.Hour))
-			addLedgerSession(t, s, "closed-inside", "ws", "/repos/attn", day.Add(-48*time.Hour))
+			profile := ledgerProfileID(t, s, "window")
+			addLedgerSession(t, s, "before", profile, "/repos/attn", day.Add(-time.Minute))
+			addLedgerSession(t, s, "inside", profile, "/repos/attn", day.Add(time.Hour))
+			addLedgerSession(t, s, "at-until", profile, "/repos/attn", day.Add(24*time.Hour))
+			addLedgerSession(t, s, "closed-inside", profile, "/repos/attn", day.Add(-48*time.Hour))
 			closeAt(t, s, "closed-inside", SessionClose{By: SessionClosedByUser}, day.Add(2*time.Hour))
 
 			page, err := s.SessionLedger(SessionLedgerQuery{
@@ -602,9 +609,10 @@ func TestSessionLedgerFacetsCountEveryChoiceTheOtherFilterWouldHide(t *testing.T
 		t.Run(name, func(t *testing.T) {
 			s := newStore(t)
 			at := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
-			addLedgerSession(t, s, "attn-one", "ws-attn", "/repos/attn", at)
-			addLedgerSession(t, s, "attn-two", "ws-attn", "/repos/attn", at.Add(time.Minute))
-			addLedgerSession(t, s, "other", "ws-side", "/repos/other", at.Add(2*time.Minute))
+			attn, side := ledgerProfileID(t, s, "attn"), ledgerProfileID(t, s, "side")
+			addLedgerSession(t, s, "attn-one", attn, "/repos/attn", at)
+			addLedgerSession(t, s, "attn-two", attn, "/repos/attn", at.Add(time.Minute))
+			addLedgerSession(t, s, "other", side, "/repos/other", at.Add(2*time.Minute))
 
 			page, err := s.SessionLedger(SessionLedgerQuery{
 				Scope: SessionLedgerAll, Repository: "/repos/attn", Facets: true,
@@ -615,13 +623,68 @@ func TestSessionLedgerFacetsCountEveryChoiceTheOtherFilterWouldHide(t *testing.T
 			if page.Facets == nil {
 				t.Fatal("facets = nil, want them when the query asks")
 			}
-			if got := facetCounts(page.Facets.Workspaces); !maps.Equal(got, map[string]int{"ws-attn": 2, "ws-side": 1}) {
-				t.Errorf("workspace facets = %v, want every workspace in scope", got)
+			if got := profileFacetCounts(page.Facets.Profiles); !maps.Equal(got, map[string]int{attn: 2, side: 1}) {
+				t.Errorf("profile facets = %v, want every profile in scope", got)
 			}
 			if got := facetCounts(page.Facets.Repositories); !maps.Equal(got, map[string]int{"/repos/attn": 2, "/repos/other": 1}) {
 				t.Errorf("repository facets = %v, want every repository in scope", got)
 			}
 		})
+	}
+}
+
+func profileFacetCounts(facets []protocol.SessionLedgerProfileFacet) map[string]int {
+	counts := make(map[string]int, len(facets))
+	for _, facet := range facets {
+		counts[facet.ProfileID] = facet.Count
+	}
+	return counts
+}
+
+func TestTheLedgerNamesEachRowsProfileAndKeepsItAfterTheProfileIsDeleted(t *testing.T) {
+	s, _ := openProfileStore(t)
+	work, _ := mustCreateProfile(t, s, "Work")
+	home, _ := mustCreateProfile(t, s, "Home")
+	at := time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
+	addLedgerSession(t, s, "closed-in-work", work.ID, "/repos/attn", at)
+	addLedgerSession(t, s, "live-in-work", work.ID, "/repos/attn", at.Add(time.Minute))
+	addLedgerSession(t, s, "live-in-home", home.ID, "/repos/attn", at.Add(2*time.Minute))
+	closeAt(t, s, "closed-in-work", SessionClose{By: SessionClosedByUser}, at.Add(3*time.Minute))
+	if _, err := s.DeleteProfile(work.ID, work.Revision, home.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	page, err := s.SessionLedger(SessionLedgerQuery{Scope: SessionLedgerAll, Facets: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows := map[string]protocol.SessionLedgerEntry{}
+	for _, entry := range page.Entries {
+		rows[entry.ID] = entry
+	}
+	if closed := rows["closed-in-work"]; closed.ProfileID != work.ID || closed.ProfileName != "Work" || !protocol.Deref(closed.ProfileDeleted) {
+		t.Errorf("closed row = %s %q deleted=%v, want its deleted profile Work kept as history", closed.ProfileID, closed.ProfileName, closed.ProfileDeleted)
+	}
+	if moved := rows["live-in-work"]; moved.ProfileID != home.ID || moved.ProfileName != "Home" || moved.ProfileDeleted != nil {
+		t.Errorf("live row = %s %q deleted=%v, want it in the destination Home", moved.ProfileID, moved.ProfileName, moved.ProfileDeleted)
+	}
+	want := []protocol.SessionLedgerProfileFacet{
+		{ProfileID: home.ID, Name: "Home", Count: 2},
+		{ProfileID: work.ID, Name: "Work", Deleted: protocol.Ptr(true), Count: 1},
+	}
+	if !reflect.DeepEqual(page.Facets.Profiles, want) {
+		t.Errorf("profile facets = %+v, want %+v", page.Facets.Profiles, want)
+	}
+
+	history, err := s.SessionLedger(SessionLedgerQuery{Scope: SessionLedgerAll, ProfileID: work.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ledgerIDs(history); !slices.Equal(got, []string{"closed-in-work"}) {
+		t.Errorf("filtering by the deleted profile = %v, want its closed history", got)
+	}
+	if shown := s.SessionLedgerEntry("closed-in-work"); shown == nil || shown.ProfileName != "Work" || !protocol.Deref(shown.ProfileDeleted) {
+		t.Errorf("show = %+v, want the deleted profile's name and flag", shown)
 	}
 }
 

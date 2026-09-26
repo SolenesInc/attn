@@ -141,7 +141,6 @@ export function useAppController({
     daemonEndpoints,
     sessions,
     daemonSessions,
-    daemonWorkspaces,
     connect,
   });
   const { enrichedLocalSessions, desktopViews, unmutedEnrichedSessions } = appSessions;

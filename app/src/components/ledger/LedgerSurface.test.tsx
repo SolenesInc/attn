@@ -18,7 +18,7 @@ function surface(tab: LedgerTab = 'sessions', extra: { onClose?: () => void; onF
     onTabChange,
     onClose: extra.onClose ?? vi.fn(),
     now,
-    sessions: { listSessions: list, workspaceNames: {}, onFocusSession: extra.onFocusSession ?? vi.fn(), onReopen: vi.fn() },
+    sessions: { listSessions: list, profileNames: {}, profileMembership: '', onFocusSession: extra.onFocusSession ?? vi.fn(), onReopen: vi.fn() },
     worktrees: {
       listWorktrees: vi.fn().mockResolvedValue({ worktrees: [{ path: '/projects/attn--feat-one', branch: 'feat/one', main_repo: '/projects/attn' }], repositories: [{ main_repo: '/projects/attn' }], omitted: 0 }),
       getSweepLog: vi.fn().mockResolvedValue({ entries: [], omitted: 0 }),

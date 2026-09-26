@@ -908,8 +908,9 @@ model SessionListMessage {
   // The id of the last row of the previous page; this page starts after it.
   before?: string;
   // Filters combine with AND and apply before paging, so a page is the newest
-  // rows that match, not the newest rows filtered.
-  workspace_id?: string;
+  // rows that match, not the newest rows filtered. profile_id matches the
+  // profile a row belongs to, deleted profiles included.
+  profile_id?: string;
   repository?: string;
   // Half-open over the row's instant, the close for a closed row and the last
   // sighting for a live one: since inclusive, until exclusive, RFC3339.
@@ -3286,6 +3287,20 @@ model ProfileDeleteMessage {
   request_id: string;
   profile_id: string;
   expected_revision: safeint;
+  destination_profile_id: string;
+}
+
+// Moves a live agent to another profile. It loses its placement and shows up
+// unplaced in the destination's queue; its runtime and session id stay. A
+// profile's chief moved out stops being its chief, and a crew member's agent
+// takes the member along. expected_profile_id is the profile the client saw
+// the agent in: another one answers stale_revision, and an agent already in
+// the destination answers success without a change, so a retry is safe.
+model SessionMoveMessage {
+  cmd: "session_move";
+  request_id: string;
+  session_id: string;
+  expected_profile_id: string;
   destination_profile_id: string;
 }
 
@@ -7342,7 +7357,11 @@ model SessionLedgerEntry {
   label: string;
   agent: string;
   directory: string;
-  workspace_id: string;
+  // The profile the session belongs to; a closed row keeps the profile it
+  // closed in, even after that profile is deleted.
+  profile_id: string;
+  profile_name: string;
+  profile_deleted?: boolean;
   branch?: string;
   is_worktree?: boolean;
   main_repo?: string;
@@ -7360,15 +7379,22 @@ model SessionLedgerEntry {
 }
 
 // Counted over the scope and date window alone, so choosing a repository never
-// empties the workspace choices, or the other way round.
+// empties the profile choices, or the other way round.
 model SessionLedgerFacet {
   value: string;
   count: int32;
 }
 
+model SessionLedgerProfileFacet {
+  profile_id: string;
+  name: string;
+  deleted?: boolean;
+  count: int32;
+}
+
 model SessionLedgerFacets {
   repositories: SessionLedgerFacet[];
-  workspaces: SessionLedgerFacet[];
+  profiles: SessionLedgerProfileFacet[];
 }
 
 model SessionListResult {

@@ -11,7 +11,6 @@ interface Options {
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
-  daemonWorkspaces: AppContentProps['daemonWorkspaces'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
@@ -19,7 +18,6 @@ export function useAppSessions({
   daemonEndpoints,
   sessions,
   daemonSessions,
-  daemonWorkspaces,
   connect,
 }: Options) {
   const endpointById = useMemo(
@@ -117,12 +115,6 @@ export function useAppSessions({
     [daemonSessions],
   );
 
-  const workspaceNamesById = useMemo(() => {
-    const names: Record<string, string> = {};
-    for (const workspace of daemonWorkspaces) names[workspace.id] = workspace.name || workspace.id;
-    return names;
-  }, [daemonWorkspaces]);
-
   const gardenSessionLabels = useMemo(
     () => new Map(daemonSessions.map((session) => [session.id, session.label])),
     [daemonSessions],
@@ -153,7 +145,6 @@ export function useAppSessions({
     activeEndpoint,
     activeRemoteSession,
     liveGardenSessions,
-    workspaceNamesById,
     gardenSessionLabels,
     worktreePanelSessions,
     enrichedLocalSessions,

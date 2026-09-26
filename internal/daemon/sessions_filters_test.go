@@ -13,7 +13,7 @@ func TestSessionsFiltersSettingRoundTrips(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "filters.sock"))
 	t.Cleanup(d.stopEventBus)
 	client := &wsClient{send: make(chan outboundMessage, 1)}
-	stored := `{"scope":"closed","range":"custom","customFrom":"2026-08-01","customTo":"2026-08-31","workspaceId":"ws-1","repository":"/Users/victor/projects/attn"}`
+	stored := `{"scope":"closed","range":"custom","customFrom":"2026-08-01","customTo":"2026-08-31","profileId":"profile-1","repository":"/Users/victor/projects/attn"}`
 
 	d.handleSetSettingWS(client, &protocol.SetSettingMessage{
 		Cmd:   protocol.CmdSetSetting,
@@ -28,15 +28,16 @@ func TestSessionsFiltersSettingRoundTrips(t *testing.T) {
 
 func TestSessionsFiltersSettingRefusesUnknownShape(t *testing.T) {
 	for name, value := range map[string]string{
-		"unknown scope":    `{"scope":"archived","range":"any","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unknown range":    `{"scope":"all","range":"last-week","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unparsed date":    `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","workspaceId":"","repository":""}`,
-		"unknown field":    `{"scope":"all","range":"any","selectedId":"s1"}`,
-		"not an object":    `["closed"]`,
-		"a second object":  `{"scope":"all","range":"any"} {"scope":"closed","range":"any"}`,
-		"trailing text":    `{"scope":"all","range":"any"} trailing`,
-		"a trailing brace": `{"scope":"all","range":"any"}}`,
-		"not valid JSON":   `{scope: closed}`,
+		"unknown scope":      `{"scope":"archived","range":"any","customFrom":"","customTo":"","profileId":"","repository":""}`,
+		"unknown range":      `{"scope":"all","range":"last-week","customFrom":"","customTo":"","profileId":"","repository":""}`,
+		"unparsed date":      `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","profileId":"","repository":""}`,
+		"unknown field":      `{"scope":"all","range":"any","selectedId":"s1"}`,
+		"a workspace filter": `{"scope":"all","range":"any","customFrom":"","customTo":"","workspaceId":"ws-1","repository":""}`,
+		"not an object":      `["closed"]`,
+		"a second object":    `{"scope":"all","range":"any"} {"scope":"closed","range":"any"}`,
+		"trailing text":      `{"scope":"all","range":"any"} trailing`,
+		"a trailing brace":   `{"scope":"all","range":"any"}}`,
+		"not valid JSON":     `{scope: closed}`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if err := validateSessionsFilters(value); err == nil {
@@ -51,14 +52,14 @@ func TestSessionsFiltersSettingRefusesUnknownShape(t *testing.T) {
 func TestInvalidSessionsFiltersPreserveTheSavedOnes(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "filters.sock"))
 	t.Cleanup(d.stopEventBus)
-	valid := `{"scope":"closed","range":"7d","customFrom":"","customTo":"","workspaceId":"","repository":""}`
+	valid := `{"scope":"closed","range":"7d","customFrom":"","customTo":"","profileId":"","repository":""}`
 	d.store.SetSetting(SettingSessionsFilters, valid)
 	client := &wsClient{send: make(chan outboundMessage, 1)}
 
 	d.handleSetSettingWS(client, &protocol.SetSettingMessage{
 		Cmd:   protocol.CmdSetSetting,
 		Key:   SettingSessionsFilters,
-		Value: `{"scope":"archived","range":"7d","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
+		Value: `{"scope":"archived","range":"7d","customFrom":"","customTo":"","profileId":"","repository":""}`,
 	})
 
 	if got := d.store.GetSetting(SettingSessionsFilters); got != valid {
