@@ -90,7 +90,6 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 func TestReviewActionsResolveTheirItems(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, app)
 	harvested := gardenReviewAbandonedSeed(t, w, cli, "first", "harvest me")
 	kept := gardenReviewAbandonedSeed(t, w, cli, "second", "keep me")
 	changed := gardenReviewAbandonedSeed(t, w, cli, "third", "changed under the review")

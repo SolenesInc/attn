@@ -12,7 +12,6 @@ import (
 func TestAHandoffReachesTheNextTenderAndOnlyTheTender(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, w.App())
 	registerSessions(t, w, cli, "sess-a", "sess-b")
 
 	t.Run("the next tender is handed the handoff its predecessor left", func(t *testing.T) {

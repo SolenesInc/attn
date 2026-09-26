@@ -12,7 +12,6 @@ import (
 func TestSeedArtifactsFollowAttachAndDetachNotes(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, w.App())
 	registerSessions(t, w, cli, "sess-a")
 	seed := plantSeedAs(t, cli, "sess-a", "Ship the thing")
 	plan := gardenArtifactMarkdown("docs/plans/thing.md")
@@ -51,7 +50,6 @@ func TestSeedArtifactsFollowAttachAndDetachNotes(t *testing.T) {
 func TestSeedNotesRefuseArtifactsThatSayNothing(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, w.App())
 	registerSessions(t, w, cli, "sess-a")
 	seed := plantSeedAs(t, cli, "sess-a", "Ship the thing")
 

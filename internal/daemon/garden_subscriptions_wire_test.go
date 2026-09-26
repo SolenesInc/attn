@@ -14,7 +14,6 @@ import (
 func TestADelegatedSessionWatchesItsSeedAndAResumeKeepsItsUnwatch(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, app)
 	registerSessions(t, w, cli, "planner", "planter")
 	crown, child, leaf := gardenNudgePlot(t, cli)
 

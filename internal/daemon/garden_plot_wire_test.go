@@ -95,7 +95,6 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	w := newWorld(t)
 	cli := w.Client()
-	gardenNudgeKeepNotebookOutOfTheWorld(t, w.App())
 	registerSessions(t, w, cli, "sess-a")
 	planted, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
 		Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},

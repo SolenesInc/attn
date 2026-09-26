@@ -50,6 +50,8 @@ func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *Worl
 	w.kit = fakeagent.Install(t, dir, harnesses, wrapper)
 	w.Vars = append([]string{
 		"ATTN_DATA_DIR=" + dir,
+		"ATTN_HARNESS_DATA_DIR=" + dir,
+		"ATTN_HARNESS_NOTEBOOK_ROOT=" + filepath.Join(dir, "notebook"),
 		"ATTN_CLIENT_TOKEN=",
 		"ATTN_HEADLESS_TASKS=off",
 		"SHELL=/bin/sh",

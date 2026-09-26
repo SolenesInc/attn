@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -85,8 +84,7 @@ func TestWatchingAPlotHearsItsWholeTreeUntilUnwatched(t *testing.T) {
 
 func TestUnreadBellsRingByChoiceAndCoalesceUntilTheSeedIsRead(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
-		app, cli := w.App(), w.Client()
-		gardenNudgeKeepNotebookOutOfTheWorld(t, app)
+		cli := w.Client()
 		registerSessions(t, w, cli, "planter", "watcher", "worker")
 		seed := plantSeedAs(t, cli, "planter", "delivery proof")
 		gardenNudgeWatch(t, cli, "watcher", seed, false)
@@ -125,7 +123,6 @@ func TestUnreadBellsRingByChoiceAndCoalesceUntilTheSeedIsRead(t *testing.T) {
 func TestAnUnwatchDropsOnlyWhatNoOtherRoleCovers(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		gardenNudgeKeepNotebookOutOfTheWorld(t, w.App())
 		registerSessions(t, w, cli, "planter", "recipient", "bystander", "worker", "successor")
 
 		tended := plantSeedAs(t, cli, "planter", "tended and watched")
@@ -274,9 +271,4 @@ func gardenNudgeOneBell(t *testing.T, cli *client.Client, session, seedID, event
 	if len(items) != 1 || !strings.Contains(items[0].Content, seedID+" moved: "+event) {
 		t.Errorf("%s's inbox holds %q, want one %s bell for %s", session, inboxContents(items), event, seedID)
 	}
-}
-
-func gardenNudgeKeepNotebookOutOfTheWorld(t *testing.T, app *testworld.Peer) {
-	t.Helper()
-	setSetting(t, app, "notebook.root", filepath.Join(t.TempDir(), "notebook"))
 }
