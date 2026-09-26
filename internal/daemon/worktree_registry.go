@@ -151,18 +151,12 @@ func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo stri
 }
 
 func (d *Daemon) listWorktreeStatesContext(ctx context.Context, repo string) ([]git.WorktreeState, error) {
-	if d.worktreeListStates != nil {
-		return d.worktreeListStates(ctx, repo)
-	}
 	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
 		return client.ListWorktreeStates(runCtx, repo)
 	})
 }
 
 func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now time.Time) (*repositoryFacts, error) {
-	if d.worktreeRepositoryFacts != nil {
-		return d.worktreeRepositoryFacts(ctx, repo, now)
-	}
 	facts := &repositoryFacts{repo: repo}
 
 	if err := d.refreshMergedPullRequestsContext(ctx, repo, now); err != nil {

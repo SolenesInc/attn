@@ -48,7 +48,7 @@ func (d *Daemon) worktreeSweepEnabled() bool {
 	if d.store == nil {
 		return false
 	}
-	return d.store.GetSetting(settingWorktreeSweepEnabled) != "false"
+	return defaultOnBooleanSetting(d.store.GetSetting(settingWorktreeSweepEnabled))
 }
 
 const settingWorktreeSweepEnabled = "worktree_sweep_enabled"
@@ -111,8 +111,8 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				return refreshed, removed, kept, context.Cause(ctx)
 			}
 			for _, wt := range d.store.ListWorktreesByRepo(repo) {
-				d.store.SetWorktreeSweep(wt.Path, store.WorktreeSweepUnknown,
-					"the repository could not be refreshed, so nothing here is decided", now)
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown,
+					"the repository could not be refreshed, so nothing here is decided", now}, now)
 				kept++
 			}
 			continue
@@ -147,12 +147,11 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				return refreshed, removed, kept, context.Cause(ctx)
 			}
 			for _, candidate := range candidates {
-				d.store.RecordWorktreeRefreshError(candidate.state.Path, factsErr.Error())
 				reason := "last refresh failed: " + factsErr.Error()
 				if errors.Is(factsErr, errWorktreeStashCounts) {
 					reason = "the repository could not be refreshed, so nothing here is decided"
 				}
-				d.store.SetWorktreeSweep(candidate.state.Path, store.WorktreeSweepUnknown, reason, time.Time{})
+				d.recordSweepRefreshFailure(candidate.state.Path, factsErr, reason, now)
 				kept++
 			}
 			continue
@@ -161,13 +160,12 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 			if cause := context.Cause(ctx); cause != nil {
 				return refreshed, removed, kept, cause
 			}
-			observation, observeErr := d.observeWorktreeCandidateContext(ctx, facts, candidate.state, now)
+			observation, observeErr := d.observeWorktreeContext(ctx, facts, candidate.state, now)
 			if observeErr != nil {
 				if context.Cause(ctx) != nil {
 					return refreshed, removed, kept, context.Cause(ctx)
 				}
-				d.store.RecordWorktreeRefreshError(candidate.state.Path, observeErr.Error())
-				d.store.SetWorktreeSweep(candidate.state.Path, store.WorktreeSweepUnknown, "last refresh failed: "+observeErr.Error(), time.Time{})
+				d.recordSweepRefreshFailure(candidate.state.Path, observeErr, "last refresh failed: "+observeErr.Error(), now)
 				kept++
 				continue
 			}
@@ -183,8 +181,8 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 				continue
 			}
 			if !d.worktreeSweepEnabled() {
-				d.store.SetWorktreeSweep(wt.Path, store.WorktreeSweepScheduled,
-					"eligible now; the sweep is off (Settings › Files and locations › Worktree sweep)", now)
+				d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepScheduled,
+					"eligible now; the sweep is off (Settings › Files and locations › Worktree sweep)", now}, now)
 				kept++
 				continue
 			}
@@ -220,13 +218,6 @@ func (d *Daemon) worktreeSweepPassWithLease(lease *worktreeSweepLease, now time.
 		d.logf("worktree sweep: reclaimed %d worktree(s), kept %d", removed, kept)
 	}
 	return refreshed, removed, kept, nil
-}
-
-func (d *Daemon) observeWorktreeCandidateContext(ctx context.Context, facts *repositoryFacts, state attngit.WorktreeState, now time.Time) (store.WorktreeObservation, error) {
-	if d.worktreeObserveCandidate != nil {
-		return d.worktreeObserveCandidate(ctx, facts, state, now)
-	}
-	return d.observeWorktreeContext(ctx, facts, state, now)
 }
 
 func cheapWorktreeSweepVerdict(wt *store.Worktree, state attngit.WorktreeState, facts sweepContext, now time.Time, idleFor time.Duration) (sweepVerdict, bool) {
@@ -394,6 +385,13 @@ func (d *Daemon) recordSweepVerdict(wt *store.Worktree, verdict sweepVerdict, no
 	d.store.SetWorktreeSweep(wt.Path, verdict.Status, verdict.Reason, verdict.At)
 	if fresh := d.store.GetWorktree(wt.Path); fresh != nil {
 		d.publishWorktreeState(fresh)
+	}
+}
+
+func (d *Daemon) recordSweepRefreshFailure(path string, err error, reason string, now time.Time) {
+	d.store.RecordWorktreeRefreshError(path, err.Error())
+	if wt := d.store.GetWorktree(path); wt != nil {
+		d.recordSweepVerdict(wt, sweepVerdict{store.WorktreeSweepUnknown, reason, time.Time{}}, now)
 	}
 }
 

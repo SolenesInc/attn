@@ -144,9 +144,6 @@ type Daemon struct {
 	fileDiff                          *fileDiffReader
 	gitExec                           gitExecutor
 	worktreeMaintenance               worktreeMaintenanceCoordinator
-	worktreeListStates                func(context.Context, string) ([]git.WorktreeState, error)
-	worktreeRepositoryFacts           func(context.Context, string, time.Time) (*repositoryFacts, error)
-	worktreeObserveCandidate          func(context.Context, *repositoryFacts, git.WorktreeState, time.Time) (store.WorktreeObservation, error)
 	warnings                          []protocol.DaemonWarning
 	warningsMu                        sync.RWMutex
 	legacyTicketRecoveryFinishOnce    sync.Once
