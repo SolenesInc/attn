@@ -15,6 +15,7 @@ func TestSessionAnnotationDraftsKeepTheNewestGenerationAndStayClearedAfterAClear
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
 	reviewed := w.Spawn(app, fakeagent.Codex, w.Path("api"))
+	neighbour := w.Spawn(app, fakeagent.Codex, w.Path("web"))
 	marks := []protocol.SessionAnnotation{{ID: "a1", MessageKey: "turn-1", Start: 4, End: 10, Quote: "parser", Emoji: protocol.Ptr("❓"), Comment: "why this?"}}
 
 	if got := getSessionAnnotations(app, reviewed); !got.Success || len(got.Annotations) != 0 || got.Generation != 0 || protocol.Deref(got.Note) != "" {
@@ -33,6 +34,9 @@ func TestSessionAnnotationDraftsKeepTheNewestGenerationAndStayClearedAfterAClear
 	got := getSessionAnnotations(app, reviewed)
 	if !reflect.DeepEqual(got.Annotations, marks) || got.Generation != 4 || protocol.Deref(got.Note) != "Split this into two PRs." {
 		t.Fatalf("draft after the save = %+v, want the marks and note at generation 4", got)
+	}
+	if other := getSessionAnnotations(app, neighbour); len(other.Annotations) != 0 || other.Generation != 0 || protocol.Deref(other.Note) != "" {
+		t.Errorf("the other session's draft = %+v, want it untouched by the first session's save", other)
 	}
 
 	if stale := saveSessionAnnotations(app, reviewed, 3, nil, "the older note"); stale.Success || !protocol.Deref(stale.Stale) {
