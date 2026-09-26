@@ -60,10 +60,6 @@ export function resolveBinding(id: ShortcutId): Binding | null {
   return defaultShortcut(id);
 }
 
-export function isUnbound(id: ShortcutId): boolean {
-  return resolveBinding(id) === null;
-}
-
 export function isCustomized(id: ShortcutId): boolean {
   return Object.prototype.hasOwnProperty.call(overrides, id);
 }

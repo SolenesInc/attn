@@ -213,7 +213,6 @@ export function useSidebarDrag({
   const renderReorderSeam = (index: number) => (
     <div
       className={`workspace-reorder-seam ${reorderSeamIndex === index ? 'active' : ''}`.trim()}
-      data-testid={`workspace-reorder-seam-${index}`}
       data-seam-index={index}
       aria-hidden="true"
       onPointerEnter={() => {

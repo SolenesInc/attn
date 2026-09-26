@@ -1,11 +1,11 @@
 import { act, fireEvent, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
-import { daemonSession } from './test/daemonFixtures';
+import { daemonSession, splitWorkspace } from './test/daemonFixtures';
 import { fakeRects, sizeTerminals } from './test/layout';
 import { pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
-import { pane, renderWorkspace, split, splitWorkspace } from './test/workspaces';
+import { laidOutWorkspace, pane, renderWorkspace, split } from './test/workspaces';
 
 const PANES_WIDTH = 1000;
 const PANES_HEIGHT = 600;
@@ -66,7 +66,7 @@ describe('App workspace panes', () => {
     expect(lastResize(daemon, 's1')).toMatchObject({ cols: Math.floor((ratio * PANES_WIDTH) / CELL_WIDTH) });
     expect(lastResize(daemon, 's2')).toMatchObject({ cols: Math.floor(((1 - ratio) * PANES_WIDTH) / CELL_WIDTH) });
 
-    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: splitWorkspace(pane('s1'), ['s1']).layout! });
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: splitWorkspace('ws', ['s1']).layout! });
     await settleLayout(daemon);
 
     expect(lastResize(daemon, 's1')).toMatchObject({ cols: PANES_WIDTH / CELL_WIDTH });
@@ -122,7 +122,7 @@ describe('App workspace panes', () => {
 
     daemon.emit({
       event: 'workspace_layout_updated',
-      workspace_layout: splitWorkspace(
+      workspace_layout: laidOutWorkspace(
         split('split-a', 'vertical', [pane('s1'), split('split-b', 'horizontal', [pane('s2'), pane('s3')])]),
         ['s1', 's2', 's3'],
       ).layout!,
@@ -172,7 +172,7 @@ describe('App workspace panes', () => {
         (layout, id) => split(`split-${id}`, 'vertical', [layout, { type: 'tile', tile_id: id, tile_kind: 'markdown', tile_params: `/tmp/${id}.md` }], 0.68),
         pane('s1'),
       );
-      daemon.emit({ event: 'workspace_layout_updated', workspace_layout: splitWorkspace(root, ['s1']).layout! });
+      daemon.emit({ event: 'workspace_layout_updated', workspace_layout: laidOutWorkspace(root, ['s1']).layout! });
       await settleLayout(daemon);
     };
     await dock('oldest');

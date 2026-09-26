@@ -15,6 +15,11 @@ export function isAccelKeyPressed(e: ModifierBearingEvent): boolean {
   return isMacLikePlatform() ? e.metaKey : e.ctrlKey || e.metaKey;
 }
 
+export function isShellCtrlLetter(e: KeyboardEvent): boolean {
+  if (isMacLikePlatform() || !e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
+  return /^[a-z]$/i.test(e.key) || /^Key[A-Z]$/.test(e.code);
+}
+
 export type ModifierName = 'accel' | 'ctrl' | 'alt' | 'shift';
 
 export type ModifierGlyphs = Record<ModifierName, string>;

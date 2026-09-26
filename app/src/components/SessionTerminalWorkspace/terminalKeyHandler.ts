@@ -1,5 +1,5 @@
 import { triggerShortcut, hasHandler } from '../../shortcuts/useShortcut';
-import { isMacLikePlatform } from '../../shortcuts/platform';
+import { isMacLikePlatform, isShellCtrlLetter } from '../../shortcuts/platform';
 import { matchesShortcut, ShortcutId, isChord } from '../../shortcuts/registry';
 import { resolveBinding } from '../../shortcuts/resolver';
 import { enterLeader, resolvePendingThen } from '../../shortcuts/chordState';
@@ -36,6 +36,7 @@ export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) 
         return true;
       }
     }
+    if (isShellCtrlLetter(event)) return false;
 
     if (
       event.type === 'keydown'

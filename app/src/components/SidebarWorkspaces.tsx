@@ -101,7 +101,6 @@ export function SidebarWorkspaceList() {
                       <button
                         type="button"
                         className="workspace-action-btn rename-workspace-btn"
-                        data-testid={`rename-workspace-${workspace.id}`}
                         onClick={(e) => openRename('workspace', workspace.id, workspace.title, e)}
                         title="Rename workspace"
                         aria-label={`Rename workspace ${workspace.title}`}
@@ -113,7 +112,6 @@ export function SidebarWorkspaceList() {
                       <button
                         type="button"
                         className="workspace-action-btn mute-workspace-btn"
-                        data-testid={`mute-workspace-${workspace.id}`}
                         onClick={(e) => {
                           e.stopPropagation();
                           onMuteWorkspace(workspace.id, workspace.endpointId);

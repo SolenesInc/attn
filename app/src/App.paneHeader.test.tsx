@@ -2,8 +2,8 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { agentPane, agentWorkspace, daemonSeed, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
-import { openSession } from './test/appFixtures';
-import { gesture, pressShortcut, renderApp } from './test/renderApp';
+import { openActionMenu, openSession } from './test/appFixtures';
+import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 type SessionUsage = NonNullable<DaemonSession['usage']>;
@@ -175,18 +175,30 @@ describe('App pane header', () => {
     expect(breakdown()).toBe(panel);
   });
 
-  it('pins the usage breakdown from the Action menu, and Escape closes it', async () => {
-    const { daemon } = await openPane({ usage: usage(0.42) });
+  it('pins the usage breakdown from the Action menu, Escape closes it, and each later request opens the named session’s again', async () => {
+    const { daemon } = await openPane({ usage: usage(0.42, false, 1_111) }, {
+      sessions: [daemonSession('s2', { label: 'docs sweep', state: 'idle', usage: usage(0.42, false, 2_222) })],
+    });
+    const pinUsage = async (label: string) => {
+      const search = await openActionMenu(daemon);
+      fireEvent.change(search, { target: { value: `${label} usage` } });
+      await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    };
+    const dismiss = () => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
 
-    pressShortcut('ui.actionMenu');
-    await act(() => vi.advanceTimersToNextFrame());
-    const search = screen.getByRole('textbox', { name: 'Search actions' });
-    fireEvent.change(search, { target: { value: 'ledger sweep usage' } });
-    await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
+    await pinUsage('ledger sweep');
     expect(breakdown()).toHaveTextContent('esc close');
-
-    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+    expect(breakdown()).toHaveTextContent('1,111 tokens');
+    await dismiss();
     expect(breakdown()).toBeNull();
+
+    await pinUsage('ledger sweep');
+    expect(breakdown()).toHaveTextContent('1,111 tokens');
+    await dismiss();
+
+    await openSession(daemon, 'docs sweep');
+    await pinUsage('docs sweep');
+    expect(breakdown()).toHaveTextContent('2,222 tokens');
   });
 
   it('carries the seed a session reports to and opens it, and carries none for a session that reports to no seed', async () => {
