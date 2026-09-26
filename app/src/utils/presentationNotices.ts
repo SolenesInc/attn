@@ -1,6 +1,6 @@
 import type { Presentation } from '../types/generated';
 
-export function presentationNeedsNotice(presentation: Presentation): boolean {
+function presentationNeedsNotice(presentation: Presentation): boolean {
   return presentation.status === 'open' && !presentation.latest_round_submitted;
 }
 

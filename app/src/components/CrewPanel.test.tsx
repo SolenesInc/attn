@@ -822,3 +822,67 @@ describe('CrewPanel', () => {
     expect(daemon.sentOf('crew_handoff_get')).toHaveLength(4);
   });
 });
+
+describe('CrewPanel seeds', () => {
+  async function showSeeds(members: CrewMember[], seeds: DaemonSeed[], name: RegExp, filter: RegExp) {
+    const view = await renderPanel({ members, seeds, sessions: [daemonSession('day-current')] });
+    fireEvent.click(panel().getByRole('button', { name }));
+    fireEvent.click(panel().getByRole('button', { name: 'Seeds' }));
+    fireEvent.click(panel().getByRole('button', { name: filter }));
+    return view;
+  }
+
+  const pushSeeds = async (daemon: ScriptedDaemon, seeds: DaemonSeed[], total = seeds.length) => {
+    daemon.emit({ event: 'garden_seeds_updated', seeds, total });
+    await daemon.idle();
+  };
+
+  it('lists a member’s planted seeds with their state and plot, and opens one from the keyboard', async () => {
+    const plot = daemonSeed('s-dssvxq', {
+      title: 'Garden follow-up work',
+      plot_progress: { total: 5, done: 2, withered: 0, growing: 1, dormant: 1, ready: 1, blocked: 0 },
+    });
+    const child = daemonSeed('s-g9yxwv', {
+      title: 'Artifact presence comes from the daemon',
+      status: 'planted',
+      planter_member: 'trellis',
+      edges: [{ kind: 'part-of', to: plot.id }],
+    });
+    const { daemon } = await showSeeds([member('trellis', 4)], [child, plot], /Trellis/, /Planted/);
+
+    const row = panel().getByRole('button', { name: /Artifact presence comes from the daemon/ });
+    expect(row).toHaveAttribute('data-seed-state', 'planted');
+    expect(row).toHaveTextContent('Garden follow-up work · 2/5');
+    await gesture(daemon, () => fireEvent.keyDown(row, { key: 'Enter' }));
+
+    expect(openedSeeds(daemon)).toEqual([expect.objectContaining({ seed_id: child.id })]);
+  });
+
+  it('follows what a member tends as Garden broadcasts replace the seeds, its day’s claims and its own alike', async () => {
+    const claimed = daemonSeed('s-live', { title: 'Live claim', tender_session: 'day-current' });
+    const memberClaim = daemonSeed('s-member', { title: 'Member claim', tender_member: 'alder' });
+    const alder = member('alder', 1, { binding_session: 'day-current' });
+    const { daemon } = await showSeeds([alder], [claimed, memberClaim], /Alder/, /Tending/);
+
+    expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: /Member claim/ })).toBeInTheDocument();
+
+    await pushSeeds(daemon, [{ ...claimed, status: 'dormant', tender_session: '' }, { ...memberClaim, status: 'harvested', tender_member: '' }]);
+    expect(panel().getByText("Alder isn't tending a seed.")).toBeInTheDocument();
+
+    fireEvent.click(panel().getByRole('button', { name: /Planted/ }));
+    await pushSeeds(daemon, [{ ...claimed, status: 'planted', planter_member: 'alder' }]);
+    expect(panel().getByRole('button', { name: /Live claim/ })).toBeInTheDocument();
+  });
+
+  it('says plainly when a member planted nothing, and when the list is only the newest part of the Garden', async () => {
+    const { daemon } = await showSeeds([member('keel', 1)], [], /Keel/, /Planted/);
+    expect(panel().getByText('No seeds were explicitly planted by Keel.')).toBeInTheDocument();
+
+    await pushSeeds(daemon, ['a', 'b', 'c', 'd'].map((id) => daemonSeed(`s-${id}`, { planter_member: 'alder' })), 481);
+
+    expect(panel().getByText('Showing matches in the newest 4 of 481 seeds.')).toBeInTheDocument();
+    expect(panel().getByText('No seeds in this Garden snapshot are explicitly planted by Keel.')).toBeInTheDocument();
+    expect(panel().getByRole('button', { name: /Planted/ })).toHaveTextContent('Planted 0+');
+  });
+});

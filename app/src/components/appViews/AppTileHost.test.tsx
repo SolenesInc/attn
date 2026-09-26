@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { AppViewLoadError } from './loadAppView';
 import { openDockedApprovals, reviewerApp, SERVING_HASH } from './testSupport';
 import { gesture } from '../../test/renderApp';
+import { openActionMenu } from '../../test/appFixtures';
+import type { ScriptedDaemon } from '../../test/scriptedDaemon';
 
 const loadAppView = vi.hoisted(() => vi.fn());
 vi.mock('./loadAppView', async () => {
@@ -33,6 +35,57 @@ describe('a view that mounts', () => {
       tileId: 'tile-7',
       params: 't-42',
     });
+  });
+});
+
+describe('docking a view that asks what to show', () => {
+  const askingApp = reviewerApp({
+    views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals', params_label: 'Which ticket?', params_placeholder: 't-1234' }],
+  });
+
+  async function askToDock(daemon: ScriptedDaemon) {
+    const search = await openActionMenu(daemon);
+    fireEvent.change(search, { target: { value: 'Pending approvals' } });
+    fireEvent.keyDown(search, { key: 'Enter' });
+    await act(() => vi.advanceTimersToNextFrame());
+    await daemon.idle();
+    return screen.getByRole('textbox', { name: 'Which ticket?' });
+  }
+
+  const docked = (daemon: ScriptedDaemon) =>
+    daemon.sentOf('workspace_layout_dock_tile').map(({ tile_kind, tile_params }) => ({ tile_kind, tile_params }));
+
+  it('holds the keyboard in its field, even against the terminal taking focus back', async () => {
+    loadAppView.mockResolvedValue(() => <div>approvals body</div>);
+    const daemon = await openDockedApprovals([askingApp]);
+    const field = await askToDock(daemon);
+
+    expect(within(screen.getByRole('dialog', { name: 'reviewer/approvals' })).getByPlaceholderText('t-1234')).toBe(field);
+    expect(field).toHaveFocus();
+    act(() => screen.getByRole('textbox', { name: 'Terminal input' }).focus());
+    expect(field).toHaveFocus();
+  });
+
+  it('docks on Enter with what the user typed, trimmed', async () => {
+    loadAppView.mockResolvedValue(() => <div>approvals body</div>);
+    const daemon = await openDockedApprovals([askingApp]);
+    const field = await askToDock(daemon);
+
+    fireEvent.change(field, { target: { value: '  t-42  ' } });
+    await gesture(daemon, () => fireEvent.keyDown(field, { key: 'Enter' }));
+
+    expect(docked(daemon)).toEqual([{ tile_kind: 'app:reviewer/approvals', tile_params: 't-42' }]);
+    expect(screen.queryByRole('dialog', { name: 'reviewer/approvals' })).toBeNull();
+  });
+
+  it('docks with no answer at all, leaving the view to say what it lacks', async () => {
+    loadAppView.mockResolvedValue(() => <div>approvals body</div>);
+    const daemon = await openDockedApprovals([askingApp]);
+    await askToDock(daemon);
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dock' })));
+
+    expect(docked(daemon)).toEqual([{ tile_kind: 'app:reviewer/approvals', tile_params: undefined }]);
   });
 });
 
@@ -99,6 +152,39 @@ describe('a view that throws while rendering', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ app: 'reviewer', view: 'approvals', version_id: 7, tile_id: 'tile-7' });
     expect(reports[0].error).toContain('cannot read properties of undefined');
+    consoleError.mockRestore();
+  });
+
+  it.each<[string, () => unknown, (report: string) => void]>([
+    ['with a stack of frames only, as WebKit writes it, leading with what was thrown', () => {
+      const error = new Error('the ticket board is not there');
+      error.stack = 'Approvals@http://127.0.0.1:9849/apps/bundle/reviewer/abc/approvals.js:1:199';
+      return error;
+    }, (report) => {
+      expect(report.startsWith('Error: the ticket board is not there')).toBe(true);
+      expect(report).toContain('approvals.js:1:199');
+    }],
+    ['with a stack that already names it, without repeating it', () => {
+      const error = new Error('boom');
+      error.stack = 'Error: boom\n    at Approvals (approvals.js:1:1)';
+      return error;
+    }, (report) => {
+      expect(report.startsWith('Error: boom\n    at Approvals (approvals.js:1:1)')).toBe(true);
+      expect(report.match(/boom/g)).toHaveLength(1);
+    }],
+    ['that is not an Error, as it was thrown', () => 'a string nobody wrapped', (report) => {
+      expect(report.startsWith('a string nobody wrapped')).toBe(true);
+    }],
+  ])('reports what it threw %s', async (_, thrown, check) => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    loadAppView.mockResolvedValue(() => {
+      throw thrown();
+    });
+
+    const daemon = await openDockedApprovals([reviewerApp()]);
+
+    const [report] = daemon.sentOf('app_view_crash');
+    check(report.error);
     consoleError.mockRestore();
   });
 

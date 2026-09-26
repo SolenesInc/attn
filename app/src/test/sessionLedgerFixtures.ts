@@ -2,7 +2,6 @@ import type { SessionLedgerEntry, SessionReopen } from '../types/generated';
 import { SessionReopenAction, SessionState } from '../types/generated';
 
 export const NOW = new Date('2026-09-05T14:30:00Z');
-export const now = () => NOW;
 
 const CLOSED_AT = '2026-09-05T10:00:00Z';
 
