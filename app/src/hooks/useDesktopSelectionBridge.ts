@@ -148,6 +148,12 @@ function nextCommand(intentSessionId: string, intentProfileId: string): Command 
   };
 }
 
+export function useAgentOnScreen(): string | null {
+  const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
+  return tileSelected ? null : activeSessionId;
+}
+
 export function useDesktopSelectionBridge(
   focusSessionPane: (sessionId: string, paneId: string) => void,
   reportFailure: (message: string) => void,

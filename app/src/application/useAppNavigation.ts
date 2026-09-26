@@ -3,6 +3,7 @@ import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
@@ -78,9 +79,10 @@ export function useAppNavigation({
     }
   }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
 
+  const agentOnScreenId = useAgentOnScreen();
   const handleNextRun = useCallback(() => {
     const groups = automationRunGroups(desktopViews, Date.now());
-    const step = nextRunNeedingYou(groups, activeSessionId);
+    const step = nextRunNeedingYou(groups, agentOnScreenId);
     if (!step) {
       const total = runCount(groups);
       const { profiles, selectedProfileId } = useProfilesStore.getState();
@@ -96,7 +98,7 @@ export function useAppNavigation({
     showNotice(
       `${step.group.name} · run ${step.position} of ${step.total} needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
     );
-  }, [desktopViews, activeSessionId, handleSelectSession, showNotice]);
+  }, [desktopViews, agentOnScreenId, handleSelectSession, showNotice]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
