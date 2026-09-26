@@ -57,7 +57,19 @@ export function resolveBinding(id: ShortcutId): Binding | null {
     const ov = overrides[id];
     return ov ?? null;
   }
-  return defaultShortcut(id);
+  const fallback = defaultShortcut(id);
+  if (fallback && userClaimsCombo(fallback, id)) return null;
+  return fallback;
+}
+
+function userClaimsCombo(binding: Binding, forId: ShortcutId): boolean {
+  return (Object.entries(overrides) as Array<[ShortcutId, Binding | null]>).some(
+    ([id, claimed]) =>
+      id !== forId &&
+      claimed !== null &&
+      !(!isChord(binding) && !isChord(claimed) && isAllowedConflict(forId, id)) &&
+      bindingsConflict(binding, claimed),
+  );
 }
 
 export function isUnbound(id: ShortcutId): boolean {
