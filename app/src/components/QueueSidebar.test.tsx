@@ -1,7 +1,8 @@
-import { StrictMode, useState, type ComponentProps } from 'react';
+import { StrictMode, type ComponentProps } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
+import { useAgentList } from './useAgentList';
 import { focusedQueueRow } from './focusedQueueRow';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
@@ -65,13 +66,16 @@ function renderSidebar(
 }
 
 function ListToggling(props: ComponentProps<typeof Sidebar>) {
-  const [open, setOpen] = useState(Boolean(props.agentListOpen));
-  return <Sidebar {...props} agentListOpen={open} onToggleAgentList={() => setOpen((value) => !value)} />;
+  const { agentListOpen, toggleAgentList } = useAgentList();
+  return <Sidebar {...props} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />;
 }
 
 function renderWithList(sessions: TestSession[], overrides: Partial<ComponentProps<typeof Sidebar>> = {}) {
+  const { agentListOpen, ...rest } = overrides;
   const data = sidebarData(sessions);
-  return render(<ListToggling {...baseProps} {...data} {...overrides} queue={buildQueueBands(data.workspaces)} />);
+  const view = render(<ListToggling {...baseProps} {...data} {...rest} queue={buildQueueBands(data.workspaces)} />);
+  if (agentListOpen) fireEvent.click(screen.getByTestId('queue-agents-toggle'));
+  return view;
 }
 
 function queueRowIds(container: HTMLElement) {
@@ -476,6 +480,55 @@ describe('walking the queue sidebar from the keyboard', () => {
     expect(onSelectSession).not.toHaveBeenCalled();
     escape();
     expect(onSelectSession).toHaveBeenCalledWith('newer');
+  });
+
+  it('focuses the filter on opening and hands focus back to where it was on closing', () => {
+    const data = sidebarData(sessions);
+    function WithTerminal() {
+      const { agentListOpen, toggleAgentList } = useAgentList();
+      return (
+        <>
+          <textarea data-testid="terminal" />
+          <button data-testid="shortcut" onClick={toggleAgentList} />
+          <Sidebar {...baseProps} {...data} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
+        </>
+      );
+    }
+    render(<WithTerminal />);
+    const terminal = screen.getByTestId('terminal');
+    terminal.focus();
+
+    fireEvent.click(screen.getByTestId('shortcut'));
+    expect(focusedTestId()).toBe('queue-agent-filter');
+    fireEvent.click(screen.getByTestId('shortcut'));
+    expect(screen.queryByTestId('queue-agent-list')).toBeNull();
+    expect(document.activeElement).toBe(terminal);
+
+    fireEvent.click(screen.getByTestId('shortcut'));
+    fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    expect(document.activeElement).toBe(terminal);
+  });
+
+  it('leaves focus alone when the sidebar comes back with the list still open', () => {
+    const data = sidebarData(sessions);
+    function WithTerminal({ collapsed }: { collapsed: boolean }) {
+      const { agentListOpen, toggleAgentList } = useAgentList();
+      return (
+        <>
+          <textarea data-testid="terminal" />
+          <Sidebar {...baseProps} {...data} collapsed={collapsed} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />
+        </>
+      );
+    }
+    const { rerender } = render(<WithTerminal collapsed={false} />);
+    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
+    const terminal = screen.getByTestId('terminal');
+    terminal.focus();
+
+    rerender(<WithTerminal collapsed />);
+    rerender(<WithTerminal collapsed={false} />);
+    expect(screen.getByTestId('queue-agent-list')).toBeInTheDocument();
+    expect(document.activeElement).toBe(terminal);
   });
 
   it('forgets the filter when the list closes', () => {

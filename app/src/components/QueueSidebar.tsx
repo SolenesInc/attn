@@ -1,4 +1,4 @@
-import { useEffect, useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useRef, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { crewRows, formatTurnAge, type QueueRow } from '../utils/queueBands';
@@ -54,7 +54,6 @@ export function QueueSidebar() {
         setAgentFilter('');
       } else if (agentListOpen) {
         onToggleAgentList?.();
-        root.querySelector<HTMLElement>('[data-testid="queue-agents-toggle"]')?.focus();
       } else if (selectedId) {
         onSelectSession(selectedId);
       } else {
@@ -255,10 +254,6 @@ function WaitingCard() {
   } = useSidebarContext();
   const now = useNow(TURN_AGE_TICK_MS);
   const where = useRowWhere();
-  const filterRef = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (agentListOpen) filterRef.current?.focus();
-  }, [agentListOpen]);
   if (!queue) return null;
 
   const turns = queue.turns;
@@ -346,7 +341,6 @@ function WaitingCard() {
           <label className="queue-agent-filter">
             <span aria-hidden="true">⌕</span>
             <input
-              ref={filterRef}
               data-testid="queue-agent-filter"
               placeholder="filter agents"
               aria-label="Filter agents"

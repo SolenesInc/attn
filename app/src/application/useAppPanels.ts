@@ -2,6 +2,7 @@ import type { PaletteState } from '../components/palette/paletteState';
 import { useCallback, useRef, useState } from 'react';
 import { type DelegationChainHandle } from '../components/DelegationChain';
 import { useDockSlotRect } from '../components/GardenFrame';
+import { useAgentList } from '../components/useAgentList';
 import { type SettingsModalHandle } from '../components/SettingsModal';
 import type { LedgerTab } from '../components/ledger/LedgerSurface';
 import { useDockPanels } from '../hooks/useDockPanels';
@@ -51,8 +52,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
   }, []);
 
-  const [agentListOpen, setAgentListOpen] = useState(false);
-  const toggleAgentList = useCallback(() => setAgentListOpen((open) => !open), []);
+  const { agentListOpen, toggleAgentList } = useAgentList();
 
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
