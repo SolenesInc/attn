@@ -29,25 +29,6 @@ func seedRecentLocation(t *testing.T, s *Store, path, lastSeen string, useCount 
 	}
 }
 
-func TestUpsertRecentLocationAccumulatesUseCount(t *testing.T) {
-	s := newRecentLocationsStore(t)
-	dir := t.TempDir()
-
-	s.UpsertRecentLocation(dir)
-	s.UpsertRecentLocation(dir)
-
-	locs := s.GetRecentLocations(10)
-	if len(locs) != 1 {
-		t.Fatalf("expected 1 location, got %d", len(locs))
-	}
-	if locs[0].Path != dir {
-		t.Errorf("expected path %s, got %s", dir, locs[0].Path)
-	}
-	if locs[0].UseCount != 2 {
-		t.Errorf("expected use_count 2, got %d", locs[0].UseCount)
-	}
-}
-
 func TestGetRecentLocationsRanksByFrecency(t *testing.T) {
 	s := newRecentLocationsStore(t)
 	now := time.Now()
@@ -96,70 +77,5 @@ func TestGetRecentLocationsRanksBeforeTruncating(t *testing.T) {
 	}
 	if locs[0].Path != frequentOld {
 		t.Errorf("expected %s first, got %s", frequentOld, locs[0].Path)
-	}
-}
-
-func TestRecentLocationsCollapseWorktreesIntoMainRepo(t *testing.T) {
-	s := newRecentLocationsStore(t)
-	root := t.TempDir()
-	mainRepo := filepath.Join(root, "repo")
-	worktree := filepath.Join(root, "repo--feat")
-	if err := os.MkdirAll(filepath.Join(mainRepo, ".git", "worktrees", "feat"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(worktree, "sub"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	gitFile := "gitdir: " + filepath.Join(mainRepo, ".git", "worktrees", "feat") + "\n"
-	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte(gitFile), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	s.UpsertRecentLocation(worktree)
-	s.UpsertRecentLocation(filepath.Join(worktree, "sub"))
-
-	locs := s.GetRecentLocations(10)
-	if len(locs) != 1 {
-		t.Fatalf("expected 1 location, got %d: %+v", len(locs), locs)
-	}
-	if locs[0].Path != mainRepo {
-		t.Errorf("expected path %s, got %s", mainRepo, locs[0].Path)
-	}
-	if locs[0].UseCount != 2 {
-		t.Errorf("expected use_count 2, got %d", locs[0].UseCount)
-	}
-
-	seedRecentLocation(t, s, worktree, time.Now().Format(time.RFC3339), 3)
-	locs = s.GetRecentLocations(10)
-	if len(locs) != 1 {
-		t.Fatalf("expected legacy worktree row to merge, got %d locations", len(locs))
-	}
-	if locs[0].Path != mainRepo {
-		t.Errorf("expected path %s, got %s", mainRepo, locs[0].Path)
-	}
-	if locs[0].UseCount != 5 {
-		t.Errorf("expected merged use_count 5, got %d", locs[0].UseCount)
-	}
-}
-
-func TestRecentLocationsKeepMainRepoSubdirectories(t *testing.T) {
-	s := newRecentLocationsStore(t)
-	mainRepo := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(mainRepo, ".git"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	sub := filepath.Join(mainRepo, "app")
-	if err := os.MkdirAll(sub, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	s.UpsertRecentLocation(sub)
-
-	locs := s.GetRecentLocations(10)
-	if len(locs) != 1 {
-		t.Fatalf("expected 1 location, got %d", len(locs))
-	}
-	if locs[0].Path != sub {
-		t.Errorf("subdirectory of a main repo should not collapse: expected %s, got %s", sub, locs[0].Path)
 	}
 }

@@ -189,7 +189,7 @@ func TestRecoveryAdoptRevivesCrashedTicketToWorking(t *testing.T) {
 			},
 		},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	ticket, err = d.store.GetTicket(ticketID)
 	if err != nil || ticket == nil {

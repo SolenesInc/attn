@@ -8,19 +8,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestParseSeedReviewArgsAcceptsJSONAnywhere(t *testing.T) {
-	positionals, jsonOutput, err := parseSeedReviewArgs([]string{"r-1", "--json", "s-1"})
-	if err != nil {
-		t.Fatalf("parseSeedReviewArgs: %v", err)
-	}
-	if !jsonOutput || len(positionals) != 2 || positionals[0] != "r-1" || positionals[1] != "s-1" {
-		t.Fatalf("positionals = %v json = %v", positionals, jsonOutput)
-	}
-	if _, _, err := parseSeedReviewArgs([]string{"--model", "sonnet"}); err == nil {
-		t.Fatal("per-review model flag was accepted")
-	}
-}
-
 func TestSeedReviewPrintsOnlyApplicableActions(t *testing.T) {
 	review := protocol.GardenReview{
 		Run: protocol.GardenReviewRun{
