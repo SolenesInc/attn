@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/enrollment"
-	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -325,17 +324,6 @@ func TestDelegatePreservesNewWorkspaceWorktreeWhenSpawnFails(t *testing.T) {
 			t.Fatalf("delegated workspace still exists after rollback: %+v", workspace)
 		}
 	}
-}
-
-func initDelegationRepo(t *testing.T, root, name string) string {
-	t.Helper()
-	repo := filepath.Join(root, name)
-	if err := os.MkdirAll(repo, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", name, err)
-	}
-	runGitDaemon(t, repo, "init")
-	runGitDaemon(t, repo, "commit", "--allow-empty", "-m", "init")
-	return git.CanonicalizePath(repo)
 }
 
 func TestDelegatePreservesWorktreeWhenTheFinalStepFails(t *testing.T) {
