@@ -95,6 +95,14 @@ func TestDelegationRecoveryWithoutSourceSession(t *testing.T) {
 			backend.sessionIDs = append(backend.sessionIDs, op.SessionID)
 			spawns := len(backend.spawnOpts)
 			backend.mu.Unlock()
+			released := time.Now().Add(10 * time.Second)
+			for !d.beginDelegationRun(op.OperationID) {
+				if time.Now().After(released) {
+					t.Fatal("the completed launch never released its run")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			d.endDelegationRun(op.OperationID)
 			d.store.Remove(sourceID)
 			if err := d.store.UpdateDelegationOperation(op.OperationID, protocol.DelegationOperationStatePreparing, "interrupted after spawn", "", "", "", nil, nil, time.Now()); err != nil {
 				t.Fatal(err)

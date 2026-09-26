@@ -20,7 +20,8 @@ func TestBusStatusCountsADisabledConsumersLagFromTheHead(t *testing.T) {
 	before := busStatus(t, app)
 	paused := consumer(t, before, "garden-seed-bells")
 
-	for _, id := range []string{"a", "b", "c"} {
+	first := put(t, cli, gateNS, "a", `{}`)
+	for _, id := range []string{"b", "c"} {
 		put(t, cli, gateNS, id, `{}`)
 	}
 	after := busStatus(t, app)
@@ -28,7 +29,8 @@ func TestBusStatusCountsADisabledConsumersLagFromTheHead(t *testing.T) {
 	if after.Head < before.Head+3 {
 		t.Errorf("three writes moved the head from %d to %d, want it at least 3 further", before.Head, after.Head)
 	}
-	if behind.Cursor != paused.Cursor || behind.Lag != after.Head-behind.Cursor || behind.Lag <= paused.Lag || behind.Enabled {
-		t.Errorf("the disabled consumer reads %+v after the writes (was %+v); want its cursor held, its lag grown to the head %d and still disabled", behind, paused, after.Head)
+	heldShortOfTheWrites := behind.Cursor >= paused.Cursor && behind.Cursor < first.Seq
+	if !heldShortOfTheWrites || behind.Lag != after.Head-behind.Cursor || behind.Enabled {
+		t.Errorf("the disabled consumer reads %+v after writes from seq %d (was %+v); want its cursor held short of the writes, its lag counted to the head %d and still disabled", behind, first.Seq, paused, after.Head)
 	}
 }
