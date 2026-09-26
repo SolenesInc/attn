@@ -128,7 +128,7 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 	res := ReapResult{ID: entry.ID, PID: entry.PID}
 	leadsGroup := entry.PGID == entry.PID && entry.PID > 0
 
-	if entry.PID <= 0 || !processAlive(entry.PID) {
+	if entry.PID <= 0 || !ProcessAlive(entry.PID) {
 		res.Outcome = ReapAlreadyGone
 		return res
 	}
@@ -180,24 +180,17 @@ func sweepGroup(pgid int) {
 	_ = syscall.Kill(-pgid, syscall.SIGKILL)
 }
 
-func processAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return false
-	}
-	return proc.Signal(syscall.Signal(0)) == nil
+func ProcessAlive(pid int) bool {
+	return pid > 0 && syscall.Kill(pid, 0) == nil && !isZombie(pid)
 }
 
 func waitForGone(pid int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if !processAlive(pid) {
+		if !ProcessAlive(pid) {
 			return true
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	return !processAlive(pid)
+	return !ProcessAlive(pid)
 }

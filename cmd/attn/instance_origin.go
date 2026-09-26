@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/config"
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptyhost"
 	"github.com/victorarias/attn/internal/ptyworker"
 )
@@ -192,13 +193,13 @@ func countLiveWorkers(dataDir string) int {
 		if err != nil {
 			continue
 		}
-		if ptyworker.ProcessAlive(entry.WorkerPID) {
+		if procreap.ProcessAlive(entry.WorkerPID) {
 			live[entry.WorkerPID] = struct{}{}
 		}
 	}
 	for _, path := range ptyhost.HostRegistryPaths(dataDir) {
 		entry, err := ptyhost.ReadHostRegistry(path)
-		if err == nil && ptyworker.ProcessAlive(entry.HostPID) {
+		if err == nil && procreap.ProcessAlive(entry.HostPID) {
 			live[entry.HostPID] = struct{}{}
 		}
 	}
