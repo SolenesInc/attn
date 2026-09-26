@@ -120,7 +120,8 @@ runs a CLI command to completion; `s.Run` takes an `Invocation` for stdin, a
 session, extra env, or another binary. `s.Launch` starts a command that
 must wait on something the test does next, such as a long-running watch or a
 request the test answers as the app; the test awaits its output with
-`AwaitStderr` or its result with `Wait`, and the stack interrupts it at cleanup.
+`AwaitStdout` or `AwaitStderr`, or its result with `Wait`, and the stack
+interrupts it at cleanup.
 
 ### Scenario
 

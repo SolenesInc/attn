@@ -59,8 +59,8 @@ func (s *Stack) Launch(inv Invocation) *Running {
 	s.T.Helper()
 	r := &Running{t: s.T, args: inv.Args, grew: make(chan struct{}), done: make(chan struct{})}
 	cmd := s.command(context.Background(), inv)
-	cmd.Stdout = &r.stdout
-	cmd.Stderr = stderrWriter{r}
+	cmd.Stdout = streamWriter{r, &r.stdout}
+	cmd.Stderr = streamWriter{r, &r.stderr}
 	if err := cmd.Start(); err != nil {
 		s.T.Fatalf("start attn %q: %v", inv.Args, err)
 	}
@@ -144,23 +144,36 @@ func (r *Running) Wait() Result {
 	return Result{Stdout: r.stdout.String(), Stderr: r.stderr.String(), Code: r.code}
 }
 
-type stderrWriter struct{ r *Running }
+type streamWriter struct {
+	r      *Running
+	stream *bytes.Buffer
+}
 
-func (w stderrWriter) Write(p []byte) (int, error) {
+func (w streamWriter) Write(p []byte) (int, error) {
 	w.r.mu.Lock()
 	defer w.r.mu.Unlock()
-	w.r.stderr.Write(p)
+	w.stream.Write(p)
 	close(w.r.grew)
 	w.r.grew = make(chan struct{})
 	return len(p), nil
 }
 
+func (r *Running) AwaitStdout(text string) {
+	r.t.Helper()
+	r.await("stdout", &r.stdout, text)
+}
+
 func (r *Running) AwaitStderr(text string) {
+	r.t.Helper()
+	r.await("stderr", &r.stderr, text)
+}
+
+func (r *Running) await(name string, stream *bytes.Buffer, text string) {
 	r.t.Helper()
 	deadline := time.After(fakeagent.HangGuard)
 	for {
 		r.mu.Lock()
-		seen, grew := r.stderr.String(), r.grew
+		seen, grew := stream.String(), r.grew
 		r.mu.Unlock()
 		if strings.Contains(seen, text) {
 			return
@@ -169,14 +182,14 @@ func (r *Running) AwaitStderr(text string) {
 		case <-grew:
 		case <-r.done:
 			r.mu.Lock()
-			seen = r.stderr.String()
+			seen = stream.String()
 			r.mu.Unlock()
 			if !strings.Contains(seen, text) {
-				r.t.Fatalf("attn %q exited %d without writing %q to stderr:\n%s", r.args, r.code, text, seen)
+				r.t.Fatalf("attn %q exited %d without writing %q to %s:\n%s", r.args, r.code, text, name, seen)
 			}
 			return
 		case <-deadline:
-			r.t.Fatalf("attn %q wrote no %q to stderr within %s:\n%s", r.args, text, fakeagent.HangGuard, seen)
+			r.t.Fatalf("attn %q wrote no %q to %s within %s:\n%s", r.args, text, name, fakeagent.HangGuard, seen)
 		}
 	}
 }
