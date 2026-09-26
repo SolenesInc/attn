@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 	"time"
+
+	"github.com/victorarias/attn/internal/protocol"
 )
 
 type TurnStamps struct {
@@ -12,10 +14,50 @@ type TurnStamps struct {
 	SnoozedUntil time.Time
 }
 
+type TurnOpening struct {
+	Opens      bool
+	EndsSnooze time.Time
+}
+
+func (s *Store) UpdateStateOpeningTurn(id, state string, opening TurnOpening) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	if !s.updateStateLocked(id, state, now) {
+		return false
+	}
+	s.openTurnLocked(id, opening, now)
+	return true
+}
+
+func (s *Store) ApplyAgentDriverStateOpeningTurn(id, runID string, seq uint64, state string, requestStartedAt time.Time, opening TurnOpening) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	now := time.Now()
+	if !s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, now) {
+		return false
+	}
+	s.openTurnLocked(id, opening, now)
+	return true
+}
+
+func (s *Store) openTurnLocked(id string, opening TurnOpening, now time.Time) {
+	if !opening.Opens {
+		return
+	}
+	if !opening.EndsSnooze.IsZero() && !s.wakeTurnAtLocked(id, opening.EndsSnooze) && !s.turnStampsLocked(id).SnoozedUntil.IsZero() {
+		return
+	}
+	s.openTurnIfClosedLocked(id, now)
+}
+
 func (s *Store) OpenTurnIfClosed(id string, now time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.openTurnIfClosedLocked(id, now)
+}
 
+func (s *Store) openTurnIfClosedLocked(id string, now time.Time) bool {
 	stamp := now.UTC().Format(sortableTimeFormat)
 
 	if s.db == nil {
@@ -129,7 +171,10 @@ func (s *Store) WakeTurnAtAndOpenIfClosed(id string, deadline, openedAt time.Tim
 func (s *Store) WakeTurnAt(id string, deadline time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.wakeTurnAtLocked(id, deadline)
+}
 
+func (s *Store) wakeTurnAtLocked(id string, deadline time.Time) bool {
 	if s.db == nil {
 		current, ok := s.turnStamps[id]
 		if !ok || current.SnoozedUntil.IsZero() || !s.sessionIsLiveLocked(id) {
@@ -194,7 +239,10 @@ func (s *Store) SnoozedSessions() map[string]time.Time {
 func (s *Store) TurnStamps(id string) TurnStamps {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	return s.turnStampsLocked(id)
+}
 
+func (s *Store) turnStampsLocked(id string) TurnStamps {
 	if s.db == nil {
 		return s.turnStamps[id]
 	}
@@ -224,3 +272,14 @@ func (s *Store) setTurnStampsLocked(id string, stamps TurnStamps) {
 }
 
 func parseTurnStamp(value string) time.Time { return parseStoreTime(value) }
+
+func applyTurnStamps(session *protocol.Session, stamps TurnStamps) {
+	session.TurnOpenedAt = nil
+	if stamps.OpenedAt.After(stamps.SettledAt) {
+		session.TurnOpenedAt = protocol.Ptr(stamps.OpenedAt.UTC().Format(time.RFC3339Nano))
+	}
+	session.TurnSnoozedUntil = nil
+	if !stamps.SnoozedUntil.IsZero() {
+		session.TurnSnoozedUntil = protocol.Ptr(stamps.SnoozedUntil.UTC().Format(time.RFC3339Nano))
+	}
+}

@@ -134,6 +134,7 @@ func TestAConvertedTicketMovedBackToWorkReturnsToTheBoard(t *testing.T) {
 
 func TestEveryOpenTicketOfASessionThatDiesMidFlightCrashesAndSettledOnesStay(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
+	w.finishStartupWork()
 	app, cli := w.App(), w.Client()
 	worker := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	agent := w.Launched(worker)
@@ -227,7 +228,27 @@ func TestASessionThatJoinsTheCrewKeepsItsTicketThreadsWithoutReplayingThem(t *te
 
 func (w *world) finishStartupWork() {
 	w.T.Helper()
-	w.advance(0)
+	if w.bubbled {
+		w.advance(0)
+		return
+	}
+	watcher := w.App()
+	for !everyTaskSettled(watcher) {
+		testworld.Await[protocol.TasksChangedMessage](watcher, protocol.EventTasksChanged, nil)
+	}
+}
+
+func everyTaskSettled(p *testworld.Peer) bool {
+	p.T.Helper()
+	requestID := uuid.NewString()
+	listed := testworld.Request(p, protocol.TaskListMessage{Cmd: protocol.CmdTaskList, RequestID: protocol.Ptr(requestID)},
+		protocol.EventTaskListResult, func(r protocol.TaskListResultMessage) bool { return r.RequestID == requestID })
+	for _, task := range listed.Tasks {
+		if task.State != "done" && task.State != "dead" {
+			return false
+		}
+	}
+	return true
 }
 
 func createTicket(t *testing.T, cli *client.Client, author, title, id string) {

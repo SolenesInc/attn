@@ -3,9 +3,9 @@ package daemon
 import (
 	"time"
 
-	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/store"
 )
 
 type sessionStateCause interface {
@@ -103,13 +103,14 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		return false
 	}
 
+	opening := d.turnOpeningFor(change.sessionID, protocol.SessionState(change.state))
 	d.autoSettleFireMu.Lock()
 	var inputLane *sessionInputLane
 	if instance.syncNudge {
 		inputLane = d.sessionInputs().lane(change.sessionID)
 		inputLane.mu.Lock()
 	}
-	applied := d.commitSessionState(change)
+	applied := d.commitSessionState(change, opening)
 	if inputLane != nil {
 		inputLane.mu.Unlock()
 	}
@@ -127,9 +128,8 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	d.updateTranscriptWatcherState(change.sessionID, protocol.SessionState(change.state))
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
-	if attention.OpensTurn(protocol.SessionState(change.state)) &&
-		!d.snoozeSuppressesTurn(change.sessionID, protocol.SessionState(change.state)) {
-		d.store.OpenTurnIfClosed(change.sessionID, time.Now())
+	if opening.Opens {
+		d.dropEndedSnoozeWake(change.sessionID, change.state, opening)
 		d.enqueueSessionActivity(change.sessionID)
 	}
 
@@ -150,17 +150,18 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	return true
 }
 
-func (d *Daemon) commitSessionState(change sessionStateChange) bool {
+func (d *Daemon) commitSessionState(change sessionStateChange, opening store.TurnOpening) bool {
 	switch cause := change.cause.(type) {
 	case liveSignal, startupRecovery, resolverObservation, hostExitRecovery, pluginDriverSilent:
-		return d.store.UpdateState(change.sessionID, change.state)
+		return d.store.UpdateStateOpeningTurn(change.sessionID, change.state, opening)
 	case pluginReport:
-		return d.store.ApplyAgentDriverState(
+		return d.store.ApplyAgentDriverStateOpeningTurn(
 			change.sessionID,
 			cause.runID,
 			cause.seq,
 			change.state,
 			change.requestStartedAt,
+			opening,
 		)
 	default:
 		return false

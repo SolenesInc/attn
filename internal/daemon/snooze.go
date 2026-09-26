@@ -10,6 +10,7 @@ import (
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/statetrace"
+	"github.com/victorarias/attn/internal/store"
 )
 
 const snoozeWakeKind = "session_snooze_wake"
@@ -112,33 +113,37 @@ func (d *Daemon) currentStateClaim(sessionID string) string {
 	return string(session.State)
 }
 
-func (d *Daemon) snoozeSuppressesTurn(sessionID string, state protocol.SessionState) bool {
-	if d == nil || d.store == nil {
-		return false
+func (d *Daemon) turnOpeningFor(sessionID string, state protocol.SessionState) store.TurnOpening {
+	if d == nil || d.store == nil || !attention.OpensTurn(state) {
+		return store.TurnOpening{}
+	}
+	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
+	if deadline.IsZero() {
+		return store.TurnOpening{Opens: true}
+	}
+	if deadline.After(time.Now()) && !attention.BreaksSnooze(state, d.stateReasons().get(sessionID)) {
+		return store.TurnOpening{}
+	}
+	return store.TurnOpening{Opens: true, EndsSnooze: deadline}
+}
+
+func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, opening store.TurnOpening) {
+	if opening.EndsSnooze.IsZero() {
+		return
 	}
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
-	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
-	if deadline.IsZero() {
-		return false
-	}
-	reason := d.stateReasons().get(sessionID)
-	expired := !deadline.After(time.Now())
-	if !expired && !attention.BreaksSnooze(state, reason) {
-		return true
-	}
-	if !d.store.WakeTurnAt(sessionID, deadline) {
-		return !d.store.TurnStamps(sessionID).SnoozedUntil.IsZero()
+	if !d.store.TurnStamps(sessionID).SnoozedUntil.IsZero() {
+		return
 	}
 	d.removeSnoozeWake(sessionID)
 	if d.debugLogging {
 		cause := "broken"
-		if expired {
+		if !opening.EndsSnooze.After(time.Now()) {
 			cause = "expired"
 		}
-		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, reason)
+		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReasons().get(sessionID))
 	}
-	return false
 }
 
 func (d *Daemon) registerSnoozeWakeHandler(runner *jobs.Runner) error {
@@ -263,13 +268,10 @@ func (d *Daemon) reconcileSnoozeWakeJobs() {
 }
 
 func (d *Daemon) decorateSessionWithSnooze(session *protocol.Session) {
-	if session == nil || d.store == nil {
+	if session == nil || session.TurnSnoozedUntil == nil {
 		return
 	}
-	session.TurnSnoozedUntil = nil
-	until := d.store.TurnStamps(session.ID).SnoozedUntil
-	if until.IsZero() || !until.After(time.Now()) {
-		return
+	if until, err := time.Parse(time.RFC3339Nano, *session.TurnSnoozedUntil); err != nil || !until.After(time.Now()) {
+		session.TurnSnoozedUntil = nil
 	}
-	session.TurnSnoozedUntil = protocol.Ptr(until.UTC().Format(time.RFC3339Nano))
 }
