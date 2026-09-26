@@ -100,6 +100,15 @@ func (p *piTerminal) reply(text string, afterStop bool) error {
 	return p.relay.call(context.Background(), "report_stop", relayStop{AssistantText: text}, nil)
 }
 
+type relayDenial struct {
+	Denial
+	At string `json:"at"`
+}
+
+func (p *piTerminal) deny(denial Denial) error {
+	return p.relay.call(context.Background(), "report_denial", relayDenial{Denial: denial, At: now()}, nil)
+}
+
 type piPlugin struct {
 	cfg       config
 	relayPath string
@@ -300,6 +309,14 @@ func (p *piPlugin) handleRelay(relay *rpcPeer, method string, params json.RawMes
 			return nil, err
 		}
 		return struct{}{}, p.reportStop(run, stop.AssistantText)
+	case "report_denial":
+		var denial relayDenial
+		if err := json.Unmarshal(params, &denial); err != nil {
+			return nil, err
+		}
+		return struct{}{}, p.report("session.report_automode_denial", run, map[string]any{
+			"tool": denial.Tool, "action": denial.Action, "reason": denial.Reason, "rule": denial.Rule, "at": denial.At,
+		})
 	default:
 		return nil, fmt.Errorf("unknown method %q", method)
 	}
