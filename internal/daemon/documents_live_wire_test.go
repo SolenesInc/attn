@@ -417,13 +417,16 @@ func TestAWriterNeverWaitsOnASubscriberThatStoppedReading(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		defineRequests(t, cli, gateNS)
-		docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS)})
+		stalled := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: requestsWhere(gateNS)})
+		stalled.window(t)
 
-		for _, id := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
-			put(t, cli, gateNS, id, `{"status":"pending"}`)
+		const writes = 16
+		bulky := fmt.Sprintf(`{"status":"pending","note":%q}`, strings.Repeat("x", 48<<10))
+		for i := range writes {
+			put(t, cli, gateNS, fmt.Sprintf("d%02d", i), bulky)
 		}
-		if counted, err := cli.DocCount(requestsWhere(gateNS)); err != nil || counted.Count != 8 {
-			t.Fatalf("count = %+v, %v; want all eight writes landed", counted, err)
+		if counted, err := cli.DocCount(requestsWhere(gateNS)); err != nil || counted.Count != writes {
+			t.Fatalf("count = %+v, %v; want all %d writes landed", counted, err, writes)
 		}
 	})
 }

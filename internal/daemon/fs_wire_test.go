@@ -298,6 +298,17 @@ func TestNotebookImageAssetsAreServedWithinTheMessageCap(t *testing.T) {
 	if message, err := json.Marshal(largest); err != nil || len(message) > messageCap {
 		t.Fatalf("the largest asset took a %d byte message, over the %d byte cap", len(message), messageCap)
 	}
+
+	escapedPastTheEnvelopeAllowance := strings.Repeat(strings.Repeat("&", 250)+"/", 4) + "max.png"
+	fsWriteFile(t, filepath.Join(root, filepath.FromSlash(escapedPastTheEnvelopeAllowance)), bytes.Repeat([]byte{0xFF}, readCap))
+	deep := fsAskAsset(app, escapedPastTheEnvelopeAllowance)
+	if deep.Success {
+		if message, err := json.Marshal(deep); err != nil || len(message) > messageCap {
+			t.Fatalf("the largest asset under a long nested path took a %d byte message, over the %d byte cap", len(message), messageCap)
+		}
+	} else if !strings.Contains(protocol.Deref(deep.Error), "message cap") {
+		t.Fatalf("reading the largest asset under a long nested path was refused with %q, want a refusal naming the message cap", protocol.Deref(deep.Error))
+	}
 }
 
 func TestExplicitFsRootsAreOnlyForTheAuthenticatedAppAndNeverTheDataDir(t *testing.T) {
