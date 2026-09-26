@@ -51,7 +51,7 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'profile.switch': { label: 'Switch profile', category: 'sessions' },
   'session.jumpToWaiting': { label: 'Jump to next waiting session', category: 'sessions' },
   'session.nextRun': { label: 'Next automation run needing you', category: 'sessions' },
-  'session.settle': { label: 'Settle turn, go to next', category: 'sessions' },
+  'session.settle': { label: 'Settle turn', category: 'sessions' },
   'session.snooze': { label: 'Snooze this agent', category: 'sessions' },
   'session.cancelCountdown': { label: 'Stop the countdown, or keep the next turn', category: 'sessions', nativeDelivery: true },
   'session.toggleSidebar': { label: 'Toggle sidebar', category: 'sessions', dockLabel: 'sidebar' },
