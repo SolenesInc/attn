@@ -33,3 +33,20 @@ test('keeps every bar control on screen at 800px with long profile, waiting and 
   expect(await name.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
   await expect(page.locator('.queue-bar-peek-group-count').first()).toBeInViewport();
 });
+
+test('lets the grid cover the bar without moving what sits under it', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/test-harness/?component=QueueBar');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const barBefore = (await page.getByTestId('queue-bar').boundingBox())!;
+
+  await page.goto('/test-harness/?component=QueueBar&grid');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+  const bar = (await page.getByTestId('queue-bar').boundingBox())!;
+  expect(bar).toEqual(barBefore);
+  const hit = await page.evaluate(
+    ({ x, y }) => document.elementFromPoint(x, y)?.closest('[data-testid]')?.getAttribute('data-testid'),
+    { x: bar.x + bar.width / 2, y: bar.y + bar.height / 2 },
+  );
+  expect(hit).toBe('grid-stand-in');
+});

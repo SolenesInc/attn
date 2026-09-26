@@ -85,7 +85,7 @@ export function AppSurface() {
             blocked={blockingOverlayOpen || markdownOpenerOpen}
           >
             <div
-              className={`app${agentFocused ? ' is-agent-focused' : ''}`}
+              className={`app${agentFocused ? ' is-agent-focused' : ''}${view === 'grid' ? ' is-grid' : ''}`}
               ref={appShellRef}
               tabIndex={-1}
               style={{ outline: 'none' }}

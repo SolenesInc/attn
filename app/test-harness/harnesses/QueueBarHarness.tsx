@@ -60,13 +60,15 @@ function desktop(id: string, slot: number): Desktop {
 
 const workspaces = buildDesktopViewModels(desktopIds.map((id, index) => desktop(id, index + 1)), sessions);
 
+const underGrid = new URLSearchParams(window.location.search).has('grid');
+
 export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
   useEffect(() => {
     onReady();
     setTriggerRerender(() => noop);
   }, [onReady, setTriggerRerender]);
   return (
-    <div className="app" style={{ height: '100vh' }}>
+    <div className={`app${underGrid ? ' is-grid' : ''}`} style={{ height: '100vh' }}>
       <div className="app-frame">
         <Sidebar
           collapsed
@@ -90,6 +92,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
           onWalkRuns={noop}
         />
       </div>
+      {underGrid && <div className="view-container visible" data-testid="grid-stand-in" />}
     </div>
   );
 }

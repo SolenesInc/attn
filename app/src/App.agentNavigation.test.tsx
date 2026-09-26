@@ -597,12 +597,13 @@ describe('agent navigation', () => {
   });
 
   it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {
-    render(<App />);
+    const { container } = render(<App />);
     broadcast();
     const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
 
     act(() => { shortcutHandlers<{ onToggleGridMode: () => void }>().onToggleGridMode(); });
     expect(useSessionStore.getState().view).toBe('grid');
+    expect(container.querySelector('.app')).toHaveClass('is-grid');
     act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
 
     expect(listOpen()).toBe(false);
