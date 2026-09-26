@@ -1,8 +1,9 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { onTestFinished, vi } from 'vitest';
 import { daemonSession, workspaceWithTiles, type DaemonSession, type DaemonTile, type DaemonWorkspace } from './daemonFixtures';
+import { fakeRects } from './layout';
 import type { EventMessage } from './protocol';
-import { renderApp } from './renderApp';
+import { pressShortcut, renderApp } from './renderApp';
 import type { ScriptedDaemon } from './scriptedDaemon';
 
 type InitialState = Partial<EventMessage<'initial_state'>>;
@@ -10,6 +11,13 @@ type InitialState = Partial<EventMessage<'initial_state'>>;
 export async function openSession(daemon: ScriptedDaemon, sessionId: string) {
   fireEvent.click(screen.getByRole('button', { name: `Open ${sessionId}` }));
   await daemon.idle();
+}
+
+export async function openActionMenu(daemon: ScriptedDaemon) {
+  pressShortcut('ui.actionMenu');
+  await act(() => vi.advanceTimersToNextFrame());
+  await daemon.idle();
+  return screen.getByRole('textbox', { name: 'Search actions' });
 }
 
 export function stubTextLayout() {
@@ -77,10 +85,7 @@ export interface TerminalOptions {
 }
 
 export async function openAttachedTerminals({ sessions, workspaces, initialState = {}, output = {}, script }: TerminalOptions) {
-  const canvasSize = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
-    return this.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : new DOMRect(0, 0, 0, 0);
-  });
-  onTestFinished(() => canvasSize.mockRestore());
+  fakeRects((element) => (element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null));
   const view = await renderApp({ initialState: { sessions, workspaces, ...initialState } });
   view.daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
   script?.(view.daemon);

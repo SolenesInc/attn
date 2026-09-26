@@ -1,5 +1,4 @@
 import { ChiefOfStaffTransferPrompt } from '../components/ChiefOfStaffTransferPrompt';
-import { CloseSessionPrompt } from '../components/CloseSessionPrompt';
 import { LocationPicker } from '../components/LocationPicker';
 import { SessionContextCapPrompt } from '../components/SessionContextCapPrompt';
 import { SessionCreationProgress } from '../components/SessionCreationProgress';
@@ -12,7 +11,6 @@ import {
   useAppShell,
   useChiefOfStaffContext,
   useSessionLaunchContext,
-  useSessionLifecycleContext,
   useWorkspaceTilesContext,
 } from './AppContexts';
 
@@ -45,8 +43,6 @@ export function AppSessionPrompts() {
     handleConfirmChiefTransfer,
     setChiefTransferTarget,
   } = useChiefOfStaffContext();
-  const { pendingSessionClose, handleConfirmSessionClose, handleCancelSessionClose } =
-    useSessionLifecycleContext();
   const { appViewParamsPrompt, dockAppViewTile, setAppViewParamsPrompt } =
     useWorkspaceTilesContext();
   return (
@@ -77,13 +73,6 @@ export function AppSessionPrompts() {
         phase={sessionCreationJob?.phase || 'starting_session'}
         error={sessionCreationJob?.error}
         onDismiss={() => setSessionCreationJob(null)}
-      />
-      <CloseSessionPrompt
-        isVisible={pendingSessionClose !== null}
-        sessionLabel={pendingSessionClose?.label || ''}
-        splitCount={pendingSessionClose?.splitCount || 0}
-        onConfirm={handleConfirmSessionClose}
-        onCancel={handleCancelSessionClose}
       />
       <ChiefOfStaffTransferPrompt
         isVisible={chiefTransferTarget !== null}
