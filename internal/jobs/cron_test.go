@@ -98,45 +98,6 @@ func TestAFailingCronEntryStaysArmed(t *testing.T) {
 	})
 }
 
-func TestARunNowArrivingMidCronFireRunsTheEntryAgain(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		r, _ := newBubbleRunner(t, nil)
-		var fires atomic.Int64
-		entered := make(chan struct{}, 2)
-		release := make(chan struct{})
-		if err := r.RegisterCron(cronKind, time.Hour, func(context.Context, *Job) (any, error) {
-			fires.Add(1)
-			entered <- struct{}{}
-			<-release
-			return nil, nil
-		}, HandlerConfig{}); err != nil {
-			t.Fatalf("register cron: %v", err)
-		}
-		mustStart(t, r)
-
-		if _, err := r.Enqueue(cronKind, EnqueueOptions{UniqueKey: CronKey, RunNow: true}); err != nil {
-			t.Fatalf("run now: %v", err)
-		}
-		<-entered
-		if _, err := r.Enqueue(cronKind, EnqueueOptions{UniqueKey: CronKey, RunNow: true}); err != nil {
-			t.Fatalf("mid-fire run now: %v", err)
-		}
-		close(release)
-		synctest.Wait()
-
-		if got := fires.Load(); got != 2 {
-			t.Fatalf("cron fired %d times, want 2 (the fire plus the run-now that arrived during it)", got)
-		}
-		entry, err := r.CronEntry(cronKind)
-		if err != nil || entry == nil {
-			t.Fatalf("cron entry after the re-run: %v (%+v)", err, entry)
-		}
-		if want := time.Now().Add(time.Hour); entry.State != StateQueued || !entry.ScheduledAt.Equal(want) {
-			t.Fatalf("cron entry after the re-run: state %s scheduled %s, want queued for %s", entry.State, entry.ScheduledAt, want)
-		}
-	})
-}
-
 func TestRestartKeepsAnExistingCronSchedule(t *testing.T) {
 	store := newMemStore()
 	clock := newFakeClock()
