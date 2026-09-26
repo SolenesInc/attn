@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"testing"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -13,33 +14,68 @@ func TestPtyOutputArrivesInTheFormatEachClientAskedFor(t *testing.T) {
 	w := newWorld(t)
 	session := w.Spawn(w.App(), workspaceShell, w.Path("shop"))
 	framed := transportConnectRaw(t, w, protocol.CapabilityBinaryPtyOutput)
-	framed.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session})
-	framed.next("attach_result", func(f transportFrame) bool { return f.event == protocol.EventAttachResult })
-	plain := transportPeer(w)
+	plain := transportConnectRaw(t, w)
+	for _, p := range []*transportRawPeer{framed, plain} {
+		p.send(protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: session})
+		p.next("attach_result", func(f transportFrame) bool { return f.event == protocol.EventAttachResult })
+	}
 
-	plain.TypeLine(session, `printf 'mark%s\n' er-one`)
+	plain.send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: "printf 'mark%s\\n' er-one\r"})
 
-	jsonSeq := transportAwaitOutput(plain, session, "marker-one").seq
-	var framedOutput []byte
-	var framedSeq uint32
-	framed.next("a binary frame carrying marker-one", func(f transportFrame) bool {
-		if !f.binary {
-			return false
-		}
-		id, seq, data, err := protocol.DecodePtyOutputFrame(f.data)
-		if err != nil {
-			t.Fatalf("a binary frame does not decode as PTY output: %v", err)
-		}
-		if id != session {
-			return false
-		}
-		framedOutput = append(framedOutput, data...)
-		framedSeq = seq
-		return bytes.Contains(framedOutput, []byte("marker-one"))
-	})
-	if uint32(jsonSeq) != framedSeq {
+	framedSeq := transportOutputInOneFormat(t, framed, session, "marker-one", true)
+	jsonSeq := transportOutputInOneFormat(t, plain, session, "marker-one", false)
+	if jsonSeq != framedSeq {
 		t.Errorf("the output carrying marker-one reached the JSON client at seq %d and the binary client at seq %d, want the same", jsonSeq, framedSeq)
 	}
+}
+
+func transportOutputInOneFormat(t *testing.T, p *transportRawPeer, session, text string, binary bool) uint32 {
+	t.Helper()
+	format := map[bool]string{true: "binary frames", false: "JSON pty_output"}
+	var output []byte
+	var seq uint32
+	unrequested := 0
+	outputFrame := func(f transportFrame) (string, uint32, []byte, bool) {
+		switch {
+		case f.binary:
+			id, frameSeq, data, err := protocol.DecodePtyOutputFrame(f.data)
+			if err != nil {
+				t.Fatalf("a binary frame does not decode as PTY output: %v", err)
+			}
+			return id, frameSeq, data, true
+		case f.event == protocol.EventPtyOutput:
+			var e protocol.WebSocketEvent
+			if err := json.Unmarshal(f.data, &e); err != nil {
+				t.Fatalf("pty_output does not decode: %v", err)
+			}
+			return protocol.Deref(e.ID), uint32(protocol.Deref(e.Seq)), transportDecodeOutput(t, e), true
+		}
+		return "", 0, nil, false
+	}
+	p.next(text+" as "+format[binary], func(f transportFrame) bool {
+		id, frameSeq, data, ok := outputFrame(f)
+		if !ok || id != session {
+			return false
+		}
+		if f.binary != binary {
+			unrequested++
+			return false
+		}
+		output = append(output, data...)
+		seq = frameSeq
+		return bytes.Contains(output, []byte(text))
+	})
+	p.send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings})
+	p.next("settings_updated", func(f transportFrame) bool {
+		if _, _, _, ok := outputFrame(f); ok && f.binary != binary {
+			unrequested++
+		}
+		return f.event == protocol.EventSettingsUpdated
+	})
+	if unrequested > 0 {
+		t.Errorf("a client that asked for %s also received %d PTY outputs as %s", format[binary], unrequested, format[!binary])
+	}
+	return seq
 }
 
 type transportOutput struct {
