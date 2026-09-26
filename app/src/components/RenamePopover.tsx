@@ -9,7 +9,6 @@ interface RenamePopoverProps {
   label: string;
   /** Viewport-relative anchor; the popover opens just below it. */
   anchor: { top: number; left: number };
-  /** The name an empty value falls back to. Absent, a name is required. */
   defaultName?: string;
   onSubmit: (value: string) => Promise<void>;
   onClose: () => void;
