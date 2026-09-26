@@ -100,21 +100,20 @@ func TestTheNextTurnSettlesOnItsOwnVerdict(t *testing.T) {
 
 func workUntilTheVerdict(t *testing.T, app *testworld.Peer, session string, run *fakeagent.Run, prompt string, want protocol.SessionState, from int) {
 	t.Helper()
-	var previous protocol.Session
-	var answeredAt time.Time
-	if from > 0 {
-		previous = sessionUpdatesOf(app, session)[from-1]
-		answeredAt = stateSince(t, previous)
-	}
 	if got := run.Prompted(); got != prompt {
 		t.Fatalf("%s took %q, want %q", run.Harness, got, prompt)
 	}
-	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateWorking && stateSince(t, s).After(answeredAt)
-	})
+	isWorking := func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking }
+	var previous, working protocol.Session
+	if from > 0 {
+		previous = sessionUpdatesOf(app, session)[from-1]
+		working = testworld.AwaitStateAfter(app, previous, isWorking)
+	} else {
+		working = testworld.AwaitSession(app, session, isWorking)
+	}
 	run.Reply("Found 14 checkout tests. <!-- attn:state=" + string(want) + " -->")
-	verdict := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return s.State == want && protocol.Deref(s.StateReason) == "classifier_verdict" && stateSince(t, s).After(stateSince(t, working))
+	verdict := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool {
+		return s.State == want && protocol.Deref(s.StateReason) == "classifier_verdict"
 	})
 
 	updates := sessionUpdatesOf(app, session)

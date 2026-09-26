@@ -24,13 +24,9 @@ func TestAReplyWithoutAUsableMarkerSettlesIdle(t *testing.T) {
 	} {
 		app.TypeLine(session, "next")
 		run.Prompted()
-		working := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateWorking && stateSince(t, s).After(stateSince(t, settled))
-		})
+		working := testworld.AwaitStateAfter(app, settled, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 		run.Reply(reply)
-		settled = testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-			return s.State != protocol.SessionStateWorking && stateSince(t, s).After(stateSince(t, working))
-		})
+		settled = testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State != protocol.SessionStateWorking })
 		if settled.State != protocol.SessionStateIdle {
 			t.Fatalf("after %q the session is %s (%s), want idle", reply, settled.State, protocol.Deref(settled.StateReason))
 		}

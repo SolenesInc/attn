@@ -65,8 +65,8 @@ func TestATurnOpensAtAWaitSurvivesTheWorkAndOnlySettleClosesIt(t *testing.T) {
 		if shown := report(protocol.SessionStateWaitingInput, settle); shown.TurnOwed != nil {
 			t.Fatal("settle left the turn owed")
 		}
-		testworld.AwaitSession(watcher, "s1", func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateWaitingInput && s.StateSince != finished.StateSince && s.TurnOwed == nil
+		testworld.AwaitStateAfter(watcher, finished, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateWaitingInput && s.TurnOwed == nil
 		})
 		if protocol.Deref(report(protocol.SessionStateWorking, working).TurnOwed) {
 			t.Fatal("going back to work reopened the settled turn")
