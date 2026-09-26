@@ -115,9 +115,7 @@ func TestAWorkspaceTakesTheBusiestStateOfItsSessionsAndOnlyAnnouncesChanges(t *t
 	}
 	finish := func(id string, working protocol.Session) {
 		runs[id].Reply("All green. <!-- attn:state=idle -->")
-		testworld.AwaitSession(app, id, func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateIdle && stateSince(t, s).After(stateSince(t, working))
-		})
+		testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	}
 	firstWorking := work(first)
 	testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {

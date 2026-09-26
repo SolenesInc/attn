@@ -101,7 +101,10 @@ Codex), `Reply` and `ReplyAfterStop` return once the daemon holds the turn's
 end; every other write returns once written, and the daemon reads the
 transcript on its own. Either way, await the resulting event on a peer
 connected before the call: a new peer's initial state is not an event it can
-await. `w.HoldNextBoot()` keeps the next
+await. `testworld.AwaitSession` accepts any update the peer has not yet
+consumed, including one from before the call, so await a state the session
+enters after one the test already saw with `testworld.AwaitStateAfter`.
+`w.HoldNextBoot()` keeps the next
 agent to launch booting, before it paints its resting title or reads input,
 until the returned function runs. For behavior on a timer, write the test as
 `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under

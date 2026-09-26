@@ -34,9 +34,7 @@ func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T
 			t.Fatalf("the agent read %q from its inbox, want %q", got, body)
 		}
 		agent.Reply("Read it. <!-- attn:state=idle -->")
-		idle = testworld.AwaitSession(app, recipient, func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateIdle && stateSince(t, s).After(stateSince(t, idle))
-		})
+		idle = testworld.AwaitStateAfter(app, idle, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	}
 }
 
@@ -325,8 +323,6 @@ func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagen
 	agent.Prompted()
 	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateIdle && stateSince(w.T, s).After(stateSince(w.T, working))
-	})
+	testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	return session, agent
 }

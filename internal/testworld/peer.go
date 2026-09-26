@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"nhooyr.io/websocket"
 
@@ -267,6 +268,23 @@ func AwaitSession(p *Peer, id string, match func(protocol.Session) bool) protoco
 		return false, nil
 	})
 	return found
+}
+
+func AwaitStateAfter(p *Peer, previous protocol.Session, match func(protocol.Session) bool) protocol.Session {
+	p.T.Helper()
+	after := stateSince(p.T, previous)
+	return AwaitSession(p, previous.ID, func(s protocol.Session) bool {
+		return stateSince(p.T, s).After(after) && match(s)
+	})
+}
+
+func stateSince(t testing.TB, s protocol.Session) time.Time {
+	t.Helper()
+	since, err := time.Parse(time.RFC3339Nano, s.StateSince)
+	if err != nil {
+		t.Fatalf("session %s state_since %q: %v", s.ID, s.StateSince, err)
+	}
+	return since
 }
 
 func (p *Peer) take(awaiting string, accept func(frame) (bool, error)) {

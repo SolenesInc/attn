@@ -71,9 +71,7 @@ func TestPinningTakesOnlyThatSessionOutOfTheQueueWhileItsTurnsKeepOpening(t *tes
 		return s.State == protocol.SessionStateWorking && s.PinnedAt != nil
 	})
 	run.Reply("The unit suite passes. Ship it? <!-- attn:state=waiting_input -->")
-	whilePinned := testworld.AwaitSession(app, pinned, func(s protocol.Session) bool {
-		return s.State == protocol.SessionStateWaitingInput && stateSince(t, s).After(stateSince(t, working))
-	})
+	whilePinned := testworld.AwaitStateAfter(app, working, func(s protocol.Session) bool { return s.State == protocol.SessionStateWaitingInput })
 	if protocol.Deref(whilePinned.TurnOwed) {
 		t.Fatal("a turn that opened while the session was pinned put it back in the queue")
 	}

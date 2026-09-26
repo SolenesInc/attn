@@ -38,9 +38,7 @@ func TestAHaltedTurnSettlesIdleAndAnOldHaltDoesNotSettleTheNextRun(t *testing.T)
 			resumed := respawn(w, app, tc.agent, session, cwd)
 			app.TypeLine(session, "just the outline then")
 			resumed.Prompted()
-			working := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
-				return s.State == protocol.SessionStateWorking && stateSince(t, s).After(stateSince(t, halted))
-			})
+			working := testworld.AwaitStateAfter(app, halted, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 			from := indexOfUpdate(sessionUpdatesOf(app, session), working)
 			resumed.Reply("Outline ready. Want the intro drafted too? <!-- attn:state=waiting_input -->")
 			verdict := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
