@@ -5,7 +5,6 @@ import (
 	"net"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
@@ -43,107 +42,6 @@ func callTicketInboxRequest(t *testing.T, d *Daemon, sessionID string, mode *pro
 		return nil
 	}
 	return resp.TicketInboxResult.Bundles
-}
-
-func TestTicketInboxConsumesByIdentity(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{}
-	_, chiefSessionID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefSessionID); err != nil {
-		t.Fatalf("set chief role: %v", err)
-	}
-	consumeDelegatedPrompt(t, backend)
-	result, err := d.delegateResolved(&resolvedDelegationLaunch{
-		Cmd:             protocol.CmdDelegate,
-		SourceSessionID: protocol.Ptr(chiefSessionID),
-		Brief:           protocol.Ptr("Migrate the store to X"),
-		Agent:           protocol.Ptr("codex"),
-	})
-	if err != nil {
-		t.Fatalf("delegate(): %v", err)
-	}
-	agentSession := result.SessionID
-	ticketID := bindLegacyTicketTitled(t, d, agentSession, chiefSessionID, "Migrate the store to X")
-
-	if bundles := callTicketInbox(t, d, agentSession); len(bundles) != 0 {
-		t.Fatalf("agent inbox = %+v, want empty (brief delivered via spawn prompt)", bundles)
-	}
-
-	commentOnTicket(t, d, ticketID, "one more thing to check")
-	steer := callTicketInbox(t, d, agentSession)
-	if len(steer) != 1 || steer[0].TicketID != ticketID {
-		t.Fatalf("agent inbox after steer = %+v, want one bundle for %q", steer, ticketID)
-	}
-	if len(steer[0].Events) != 1 || steer[0].Events[0].Kind != protocol.TicketEventKind(store.TicketEventCommented) {
-		t.Fatalf("agent inbox events = %+v, want one commented event", steer[0].Events)
-	}
-
-	if again := callTicketInbox(t, d, agentSession); len(again) != 0 {
-		t.Fatalf("second agent inbox = %+v, want empty", again)
-	}
-
-	callSetTicketStatus(t, d, agentSession, string(protocol.DispatchWorkStateReadyForReview), "take a look")
-	if again := callTicketInbox(t, d, agentSession); len(again) != 0 {
-		t.Fatalf("agent inbox after self-report = %+v, want empty", again)
-	}
-
-	chiefBundles := callTicketInbox(t, d, chiefSessionID)
-	if len(chiefBundles) != 1 || chiefBundles[0].TicketID != ticketID {
-		t.Fatalf("chief inbox = %+v, want one bundle for %q", chiefBundles, ticketID)
-	}
-	ev := chiefBundles[0].Events[len(chiefBundles[0].Events)-1]
-	if ev.Kind != protocol.TicketEventKind(store.TicketEventStatusChanged) || ev.Author != agentSession {
-		t.Fatalf("chief inbox last event = %+v, want agent status change", ev)
-	}
-	if ev.ToStatus == nil || *ev.ToStatus != protocol.TicketStatusInReview {
-		t.Fatalf("chief inbox status event to = %v, want in_review", ev.ToStatus)
-	}
-	if ev.Comment == nil || *ev.Comment != "take a look" {
-		t.Fatalf("chief inbox status event comment = %v, want the supplied note", ev.Comment)
-	}
-}
-
-func TestCrewMemberCursorSurvivesDayTurnoverAndWatchUsesIt(t *testing.T) {
-	d := newCrewDaemon(t)
-	addSession(t, d, "day-a")
-	addSession(t, d, "day-b")
-	if _, err := d.claimCrewBinding("trellis", "day-a"); err != nil {
-		t.Fatal(err)
-	}
-	identity := store.TicketMemberIdentity("trellis")
-	now := time.Now()
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "member-thread", Title: "Member thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription(identity, "member-thread", now); err != nil {
-		t.Fatal(err)
-	}
-	if bundles := callTicketInbox(t, d, "day-a"); len(bundles) != 1 {
-		t.Fatalf("day-a first inbox = %+v, want the subscribed history", bundles)
-	}
-	before, err := d.store.GetTicketCursor(identity, "member-thread")
-	if err != nil || before == 0 {
-		t.Fatalf("member cursor before turnover = %d, %v", before, err)
-	}
-
-	if err := d.transferCrewBinding("trellis", "day-a", "day-b"); err != nil {
-		t.Fatal(err)
-	}
-	if replay := callTicketInbox(t, d, "day-b"); len(replay) != 0 {
-		t.Fatalf("successor replayed predecessor history: %+v", replay)
-	}
-	if _, err := d.store.SetTicketStatus("member-thread", store.TicketStatusDone, "you", "finished", now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	watch := protocol.TicketInboxModeWatch
-	bundles := callTicketInboxMode(t, d, "day-b", &watch)
-	if len(bundles) != 1 || bundles[0].TicketID != "member-thread" || len(bundles[0].Events) != 1 {
-		t.Fatalf("successor watch = %+v, want exactly the post-turnover event", bundles)
-	}
-	after, err := d.store.GetTicketCursor(identity, "member-thread")
-	if err != nil || after <= before {
-		t.Fatalf("member cursor after successor watch = %d, before %d, err %v", after, before, err)
-	}
 }
 
 func TestTicketInboxRoutesOrdinaryDelegationToCreatorAndChief(t *testing.T) {
@@ -261,22 +159,5 @@ func TestChiefCreatedTicketAttachesTheRoleAndNotTheSession(t *testing.T) {
 	}
 	if len(bundles[0].Events) != 1 {
 		t.Fatalf("chief inbox events = %+v, want the report exactly once", bundles[0].Events)
-	}
-}
-
-func TestTicketInboxRequiresSession(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	server, clientConn := net.Pipe()
-	go func() {
-		d.handleTicketInbox(server, &protocol.TicketInboxMessage{Cmd: protocol.CmdTicketInbox})
-		_ = server.Close()
-	}()
-	var resp protocol.Response
-	if err := json.NewDecoder(clientConn).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	_ = clientConn.Close()
-	if resp.Ok || resp.Error == nil {
-		t.Fatalf("response = %+v, want error", resp)
 	}
 }

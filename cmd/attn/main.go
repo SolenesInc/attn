@@ -32,7 +32,6 @@ import (
 	"github.com/victorarias/attn/internal/pathutil"
 	"github.com/victorarias/attn/internal/present"
 	"github.com/victorarias/attn/internal/probetui"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptyworker"
 	"github.com/victorarias/attn/internal/workflowresult"
@@ -687,20 +686,7 @@ commands:
 
 func runDelegate() {
 	if len(os.Args) >= 3 && os.Args[2] == "roles" {
-		if len(os.Args) > 4 || (len(os.Args) == 4 && os.Args[3] != "--json") {
-			fmt.Fprintln(os.Stderr, "usage: attn delegate roles [--json]")
-			os.Exit(2)
-		}
-		result, err := client.New("").DelegationRoles()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "delegate roles: %v\n", err)
-			os.Exit(1)
-		}
-		if len(os.Args) == 4 {
-			printJSON(result)
-		} else {
-			fmt.Println(prompts.DelegationRolesText(*result))
-		}
+		runDelegateRoles(os.Args[3:])
 		return
 	}
 	if len(os.Args) == 3 && (os.Args[2] == "-h" || os.Args[2] == "--help") {
@@ -825,6 +811,7 @@ active session requires --allow-worktree-reuse.
 
 discovery:
   attn delegate roles [--json]  complete active roles, choices, and fallback
+  attn delegate roles --help    change the saved roles, with history and rollback
 
 inspection:
   attn delegate status <request-or-operation-id>

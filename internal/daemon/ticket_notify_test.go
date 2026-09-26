@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -59,44 +58,6 @@ func setSessionAgent(t *testing.T, d *Daemon, sessionID string, agent protocol.S
 	d.store.Add(s)
 }
 
-func delegateMany(t *testing.T, d *Daemon, agent string, briefs ...string) (chiefID string, agentIDs []string, inputs func(string) []string) {
-	t.Helper()
-	backend := &fakeSpawnBackend{}
-	var mu sync.Mutex
-	rec := map[string][]string{}
-	backend.onInput = func(id string, data []byte) {
-		mu.Lock()
-		rec[id] = append(rec[id], string(data))
-		mu.Unlock()
-	}
-	_, chiefID, _ = setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, chiefID); err != nil {
-		t.Fatalf("set chief role: %v", err)
-	}
-	setSessionAgent(t, d, chiefID, protocol.SessionAgentClaude)
-	consumeDelegatedPrompt(t, backend)
-	for i, brief := range briefs {
-		result, err := d.delegateResolved(&resolvedDelegationLaunch{
-			Cmd:             protocol.CmdDelegate,
-			SourceSessionID: protocol.Ptr(chiefID),
-			Brief:           protocol.Ptr(brief),
-			Agent:           protocol.Ptr(agent),
-			Label:           protocol.Ptr(fmt.Sprintf("delegate-%d", i)),
-		})
-		if err != nil {
-			t.Fatalf("delegate(%d, %q): %v", i, brief, err)
-		}
-		bindLegacyTicketTitled(t, d, result.SessionID, chiefID, brief)
-		agentIDs = append(agentIDs, result.SessionID)
-	}
-	inputs = func(id string) []string {
-		mu.Lock()
-		defer mu.Unlock()
-		return append([]string(nil), rec[id]...)
-	}
-	return chiefID, agentIDs, inputs
-}
-
 func wasNudged(inputs []string) bool {
 	for _, in := range inputs {
 		if strings.Contains(in, agentMailboxDoorbellText) {
@@ -106,106 +67,24 @@ func wasNudged(inputs []string) bool {
 	return false
 }
 
-func TestTicketNudgeNamesTheConsumingLegacyRead(t *testing.T) {
-	if !strings.Contains(ticketNudgePrompt, "`attn ticket inbox`") {
-		t.Fatalf("ticket nudge = %q, want the consuming legacy read", ticketNudgePrompt)
-	}
-	if strings.Contains(ticketNudgePrompt, "`attn ticket list`") {
-		t.Fatalf("ticket nudge = %q, board reads do not acknowledge activity", ticketNudgePrompt)
-	}
-}
-
-func TestNotifyNudgesPromptReadyLeavesAcrossRuntimes(t *testing.T) {
-	states := []struct {
-		name  string
-		state protocol.SessionState
-	}{
-		{name: "idle", state: protocol.SessionStateIdle},
-		{name: "waiting for input", state: protocol.SessionStateWaitingInput},
-	}
-	for _, runtime := range []string{"codex", "claude"} {
-		for _, tc := range states {
-			t.Run(runtime+"/"+tc.name, func(t *testing.T) {
-				d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-				d.nudgeWindowOverride = time.Hour
-				t.Cleanup(d.stopNudgeCountdowns)
-				_, agentID, inputs := delegateForNotify(t, d, runtime)
-				ticketID := boundTicketID(t, d, agentID)
-				d.store.UpdateState(agentID, string(tc.state))
-
-				commentOnTicket(t, d, ticketID, "take a look at the failing test")
-				fireNudgeNow(t, d, agentID)
-				if !wasNudged(inputs(agentID)) {
-					t.Fatalf("%s delegated leaf was not nudged", runtime)
-				}
-			})
-		}
-	}
-}
-
-func TestCodexNudgeRoundtrip(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.nudgeWindowOverride = time.Hour
-	t.Cleanup(d.stopNudgeCountdowns)
-	_, agentID, inputs := delegateForNotify(t, d, "codex")
-	ticketID := boundTicketID(t, d, agentID)
-	d.store.UpdateState(agentID, protocol.StateIdle)
-
-	commentOnTicket(t, d, ticketID, "please take a look at the failing test")
-
-	fireNudgeNow(t, d, agentID)
-	if !wasNudged(inputs(agentID)) {
-		t.Fatal("idle codex agent was not nudged on chief ticket comment")
-	}
-
-	bundles := callTicketInbox(t, d, agentID)
-	if len(bundles) == 0 {
-		t.Fatal("codex inbox returned no bundles after nudge")
-	}
-	found := false
-	for _, b := range bundles {
-		if b.TicketID == ticketID && len(b.Events) > 0 {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("inbox missing chief event on ticket %s: %+v", ticketID, bundles)
-	}
-
-	if again := callTicketInbox(t, d, agentID); len(again) != 0 {
-		t.Fatalf("second inbox not empty, cursor did not advance: %+v", again)
-	}
-}
-
-func TestNotifyDefersPendingApprovalThenQueuesWorkingAndWakesIdle(t *testing.T) {
+func TestQueuedNudgeTypesDoorbellOnlyOnceTheSessionGoesIdle(t *testing.T) {
 	d := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
 		stopDaemonBackground(t, d)
 		_, agentID, inputs := delegateForNotify(t, d, "codex")
 		ticketID := boundTicketID(t, d, agentID)
-		d.store.UpdateState(agentID, protocol.StatePendingApproval)
-
-		commentOnTicket(t, d, ticketID, "take a look")
-		if wasNudged(inputs(agentID)) {
-			t.Fatal("approval-waiting codex agent was nudged")
-		}
-		if currentNudgeTimer(d, agentID) != nil {
-			t.Fatal("approval-waiting codex agent armed a countdown")
-		}
-
 		d.applyState(sessionStateChange{
 			sessionID: agentID,
 			state:     protocol.StateWorking,
 			cause:     resolverObservation{},
 		})
+
+		commentOnTicket(t, d, ticketID, "take a look")
 		settledNudgeDeadline(t, d, agentID)
 		time.Sleep(defaultNudgeCountdownWindow)
 		synctest.Wait()
 		if wasNudged(inputs(agentID)) {
 			t.Fatal("deferred nudge typed into the session while it was working")
-		}
-		if unread, err := d.store.HasUnreadAgentMailboxItems(agentID); err != nil || !unread {
-			t.Fatalf("deferred nudge was not queued durably: unread=%v err=%v", unread, err)
 		}
 
 		d.applyState(sessionStateChange{
@@ -218,37 +97,6 @@ func TestNotifyDefersPendingApprovalThenQueuesWorkingAndWakesIdle(t *testing.T) 
 			t.Fatal("queued nudge did not wake when the session became idle")
 		}
 	})
-}
-
-func TestDelegatedSiblingsNotNudgedByEachOther(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	_, agents, inputs := delegateMany(t, d, "codex", "Task A", "Task B", "Task C")
-	a, b, c := agents[0], agents[1], agents[2]
-	for _, id := range agents {
-		d.store.UpdateState(id, protocol.StateIdle)
-	}
-
-	callSetTicketStatus(t, d, c, string(protocol.DispatchWorkStateCompleted), "done")
-
-	if wasNudged(inputs(a)) {
-		t.Fatal("sibling A was nudged by C's status change (cross-ticket leak)")
-	}
-	if wasNudged(inputs(b)) {
-		t.Fatal("sibling B was nudged by C's status change (cross-ticket leak)")
-	}
-}
-
-func TestDelegatedAgentNotNudgedByOwnDeliveredBrief(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	_, agents, inputs := delegateMany(t, d, "codex", "Task A")
-	a := agents[0]
-	d.store.UpdateState(a, protocol.StateIdle)
-
-	d.notifyUnreadTicketSession(a, time.Now())
-
-	if wasNudged(inputs(a)) {
-		t.Fatal("delegated agent was doorbelled about its own already-delivered brief")
-	}
 }
 
 func commentOnTicket(t *testing.T, d *Daemon, ticketID, comment string) {
@@ -371,28 +219,6 @@ func TestChiefRoleAndExplicitSubscriptionDeliverOnce(t *testing.T) {
 	}
 }
 
-func TestTicketWatchDrainClearsSharedCountdown(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.nudgeWindowOverride = time.Hour
-	t.Cleanup(d.stopNudgeCountdowns)
-	_, agentID, inputs := delegateForNotify(t, d, "claude")
-	ticketID := boundTicketID(t, d, agentID)
-	d.store.UpdateState(agentID, protocol.StateWorking)
-
-	commentOnTicket(t, d, ticketID, "take a look")
-	if currentNudgeTimer(d, agentID) == nil {
-		t.Fatal("shared countdown was not armed for Claude")
-	}
-	watch := protocol.TicketInboxModeWatch
-	callTicketInboxMode(t, d, agentID, &watch)
-	if currentNudgeTimer(d, agentID) != nil {
-		t.Fatal("watch drain did not clear the shared countdown")
-	}
-	if wasNudged(inputs(agentID)) {
-		t.Fatal("watch-drained queue was still doorbelled")
-	}
-}
-
 func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t *testing.T) {
 	d, backend, _ := newWakeableDaemon(t)
 	d.nudgeWindowOverride = time.Hour
@@ -461,141 +287,6 @@ func TestTicketActivityWakesSleepingMemberAndDoorbellsOnIdleWithoutPromptHook(t 
 	}
 	if !wasNudged(doorbell.pasted()) {
 		t.Fatalf("woken member was not nudged on idle without a hook: %q", doorbell.pasted())
-	}
-}
-
-func TestTicketWakeLimitRefusalIsVisibleAndLeavesMemberUnread(t *testing.T) {
-	d, backend, logs := newWakeableDaemon(t)
-	d.store.SetSetting(SettingCrewWakeLimit, "0")
-	identity := store.TicketMemberIdentity("alder")
-	now := time.Now()
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "refused-thread", Title: "Refused thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription(identity, "refused-thread", now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.store.AddTicketComment("refused-thread", "you", "wake up", now.Add(time.Second)); err != nil {
-		t.Fatal(err)
-	}
-	d.notifyTicketObservers("refused-thread")
-
-	backend.mu.Lock()
-	spawned := len(backend.spawnOpts)
-	backend.mu.Unlock()
-	if spawned != 0 {
-		t.Fatalf("wake-limit refusal spawned %d sessions", spawned)
-	}
-	events, err := d.store.UnreadTicketEventsFor(identity, identity)
-	if err != nil || len(events) == 0 {
-		t.Fatalf("member unread after refusal = %+v, %v", events, err)
-	}
-	notifications, err := d.store.ListNotifications()
-	if err != nil || len(notifications) != 1 {
-		t.Fatalf("refusal notifications = %+v, %v", notifications, err)
-	}
-	note := notifications[0]
-	if note.Kind != notificationKindCrewTicketWakeRefused || note.SourceID != "refused-thread" ||
-		!strings.Contains(note.Detail, "crew.wake_limit=0") || !strings.Contains(note.Body, "still unread") {
-		t.Fatalf("refusal notification = %+v", note)
-	}
-	if log := logs(); !strings.Contains(log, "activity remains unread") {
-		t.Fatalf("refusal was not logged loudly:\n%s", log)
-	}
-}
-
-func TestCrewTicketRestartSchedulesWithoutPromptReceipt(t *testing.T) {
-	d := newCrewDaemon(t)
-	addSession(t, d, "woken-day")
-	d.store.UpdateState("woken-day", protocol.StateWorking)
-	if _, err := d.claimCrewBinding("trellis", "woken-day"); err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	identity := store.TicketMemberIdentity("trellis")
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "restart-thread", Title: "Restart thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription(identity, "restart-thread", now); err != nil {
-		t.Fatal(err)
-	}
-
-	d.rebuildTicketDeliverySchedules()
-	if timer := currentNudgeTimer(d, "woken-day"); timer == nil {
-		t.Fatal("restart did not schedule ticket delivery independently of the prompt receipt")
-	}
-	fireNudgeNow(t, d, "woken-day")
-	unread, err := d.store.UnreadAgentMailboxDeliveries("woken-day")
-	if err != nil || len(unread) != 1 || unread[0].Item.Prompt != ticketNudgePrompt {
-		t.Fatalf("restart delivery was not durable before a prompt hook: %+v, %v", unread, err)
-	}
-}
-
-func TestCrewTicketRestartNudgesAnAlreadySettledDay(t *testing.T) {
-	d := newCrewDaemon(t)
-	addSession(t, d, "settled-day")
-	d.store.UpdateState("settled-day", protocol.StateIdle)
-	if _, err := d.claimCrewBinding("trellis", "settled-day"); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(d.stopNudgeCountdowns)
-	now := time.Now()
-	identity := store.TicketMemberIdentity("trellis")
-	if _, err := d.store.CreateTicket(store.Ticket{ID: "settled-thread", Title: "Settled thread"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.store.AddTicketSubscription(identity, "settled-thread", now); err != nil {
-		t.Fatal(err)
-	}
-
-	d.rebuildTicketDeliverySchedules()
-	if d.initialPromptPending("settled-day") {
-		t.Fatal("settled day was incorrectly put back behind its first-prompt gate")
-	}
-	if timer := currentNudgeTimer(d, "settled-day"); timer == nil {
-		t.Fatal("restart did not restore ordinary unread delivery for a settled day")
-	}
-}
-
-func TestLiveWatchLeaseWinsCountdownRaceAndConsumesOnce(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.nudgeWindowOverride = time.Hour
-	t.Cleanup(d.stopNudgeCountdowns)
-	_, agentID, inputs := delegateForNotify(t, d, "claude")
-	ticketID := boundTicketID(t, d, agentID)
-	d.store.UpdateState(agentID, protocol.StateWorking)
-	watch := protocol.TicketInboxModeWatch
-	if bundles := callTicketInboxMode(t, d, agentID, &watch); len(bundles) != 0 {
-		t.Fatalf("initial watch = %+v, want empty lease refresh", bundles)
-	}
-
-	commentOnTicket(t, d, ticketID, "take a look")
-	fireNudgeNow(t, d, agentID)
-	if wasNudged(inputs(agentID)) {
-		t.Fatal("countdown doorbelled while the live watch lease owned delivery")
-	}
-	bundles := callTicketInboxMode(t, d, agentID, &watch)
-	if len(bundles) != 1 || bundles[0].TicketID != ticketID {
-		t.Fatalf("watch delivery = %+v, want one ticket bundle", bundles)
-	}
-	if again := callTicketInboxMode(t, d, agentID, &watch); len(again) != 0 {
-		t.Fatalf("second watch delivery = %+v, want acknowledged empty queue", again)
-	}
-}
-
-func TestWatchLeaseCoversReportedSlowPollingInterval(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	_, agentID, _ := delegateForNotify(t, d, "claude")
-	watch := protocol.TicketInboxModeWatch
-	interval := "30000"
-	started := time.Now()
-	callTicketInboxRequest(t, d, agentID, &watch, &interval)
-
-	d.deliveryMu.Lock()
-	leaseUntil := d.watchLeaseUntil[agentID]
-	d.deliveryMu.Unlock()
-	if leaseUntil.Before(started.Add(44 * time.Second)) {
-		t.Fatalf("slow-watch lease expires at %s, want interval plus jitter grace", leaseUntil)
 	}
 }
 

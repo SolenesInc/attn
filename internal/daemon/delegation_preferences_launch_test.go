@@ -12,6 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/delegationprefs"
 	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
 )
 
@@ -24,7 +25,8 @@ func configuredBuild(t *testing.T, d *Daemon) delegationprefs.Config {
 	build.Choices[0].Selection = delegationprefs.Selection{Harness: "codex"}
 	build.Instructions = "Check {{literal}} carefully"
 	roles = []protocol.DelegationRole{build}
-	cfg, err := d.store.SaveDelegationPreferences(delegationprefs.Config{Enabled: true, Roles: roles})
+	saved, err := d.store.SaveDelegationPreferences(delegationprefs.Config{Enabled: true, Roles: roles}, store.DelegationPreferencesNote{})
+	cfg := saved.Config
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,7 +44,7 @@ func TestWorkflowSkillUnsupportedHarnessOnlyBlocksMaintainedRoles(t *testing.T) 
 	maintained := prompts.DelegationRoleTemplates()[0]
 	maintained.Choices[0].Selection = delegationprefs.Selection{Harness: "custom-plugin"}
 	cfg.Roles = append(cfg.Roles, maintained)
-	if _, err := d.store.SaveDelegationPreferences(cfg); err != nil {
+	if _, err := d.store.SaveDelegationPreferences(cfg, store.DelegationPreferencesNote{}); err != nil {
 		t.Fatal(err)
 	}
 	for _, request := range []delegationprefs.Request{{Role: "build"}, {Fallback: true}, {Role: maintained.ID}} {
@@ -87,7 +89,7 @@ func TestDelegationDiscoveryAndEffortValidation(t *testing.T) {
 	}
 	cfg := configuredBuild(t, d)
 	cfg.Roles[0].Choices[0].Selection = delegationprefs.Selection{Harness: "claude", Model: "known", Effort: "high"}
-	if _, err := d.store.SaveDelegationPreferences(cfg); err != nil {
+	if _, err := d.store.SaveDelegationPreferences(cfg, store.DelegationPreferencesNote{}); err != nil {
 		t.Fatal(err)
 	}
 	catalog, err := d.discoverDelegationModels(context.Background(), "claude")

@@ -307,18 +307,23 @@ func (s *Store) Get(id string) *protocol.Session {
 	defer s.mu.RUnlock()
 
 	if s.db == nil {
-		return cloneSession(s.sessions[id])
+		session := cloneSession(s.sessions[id])
+		if session != nil {
+			applyTurnStamps(session, s.turnStamps[id])
+		}
+		return session
 	}
 
 	var session protocol.Session
 	var todosJSON string
 	var stateSince, stateUpdatedAt, lastSeen string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 	var isWorktree int
 	var contextWindowCap int
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -341,10 +346,18 @@ func (s *Store) Get(id string) *protocol.Session {
 		&activityAt,
 		&todosJSON,
 		&lastSeen,
+		&turnOpenedAt,
+		&turnSettledAt,
+		&turnSnoozedUntil,
 	)
 	if err != nil {
 		return nil
 	}
+	applyTurnStamps(&session, TurnStamps{
+		OpenedAt:     parseTurnStamp(turnOpenedAt),
+		SettledAt:    parseTurnStamp(turnSettledAt),
+		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+	})
 
 	if pinnedAt.Valid && pinnedAt.String != "" {
 		session.PinnedAt = protocol.Ptr(pinnedAt.String)
@@ -463,7 +476,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			if stateFilter != "" && string(session.State) != stateFilter {
 				continue
 			}
-			result = append(result, cloneSession(session))
+			clone := cloneSession(session)
+			applyTurnStamps(clone, s.turnStamps[clone.ID])
+			result = append(result, clone)
 		}
 		sort.Slice(result, func(i, j int) bool {
 			if result[i].Label == result[j].Label {
@@ -479,11 +494,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -496,6 +511,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var todosJSON string
 		var stateSince, stateUpdatedAt, lastSeen string
+		var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 		var isWorktree int
 		var contextWindowCap int
 		var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
@@ -522,10 +538,18 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&activityAt,
 			&todosJSON,
 			&lastSeen,
+			&turnOpenedAt,
+			&turnSettledAt,
+			&turnSnoozedUntil,
 		)
 		if err != nil {
 			continue
 		}
+		applyTurnStamps(&session, TurnStamps{
+			OpenedAt:     parseTurnStamp(turnOpenedAt),
+			SettledAt:    parseTurnStamp(turnSettledAt),
+			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+		})
 
 		if pinnedAt.Valid && pinnedAt.String != "" {
 			session.PinnedAt = protocol.Ptr(pinnedAt.String)
@@ -601,20 +625,22 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 func (s *Store) UpdateState(id, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.updateStateLocked(id, state, time.Now())
+}
 
+func (s *Store) updateStateLocked(id, state string, at time.Time) bool {
+	now := string(protocol.NewTimestamp(at))
 	if s.db == nil {
 		session := s.sessions[id]
 		if session == nil {
 			return false
 		}
-		now := string(protocol.TimestampNow())
 		session.State = protocol.SessionState(state)
 		session.StateSince = now
 		session.StateUpdatedAt = now
 		return true
 	}
 
-	now := string(protocol.TimestampNow())
 	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ? WHERE id = ? AND closed_at = ''`,
 		state, now, now, id)
 	if err != nil {
@@ -1326,12 +1352,15 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, time.Now())
+}
 
+func (s *Store) applyAgentDriverStateLocked(id, runID string, seq uint64, state string, requestStartedAt, at time.Time) bool {
 	runID = strings.TrimSpace(runID)
 	if runID == "" || seq == 0 {
 		return false
 	}
-	now := string(protocol.TimestampNow())
+	now := string(protocol.NewTimestamp(at))
 	if s.db == nil {
 		session := s.sessions[id]
 		cursor := s.agentDriverRuns[id]

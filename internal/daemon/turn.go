@@ -83,21 +83,15 @@ func (d *Daemon) decorateSessionWithTurn(session *protocol.Session) {
 		return
 	}
 	session.TurnOwed = nil
-	session.TurnOpenedAt = nil
-
-	in := d.attentionInputFor(session)
-	if !attention.Owed(in) {
+	if session.TurnOpenedAt == nil || attention.Excluded(d.attentionInputFor(session)) {
+		session.TurnOpenedAt = nil
 		return
 	}
 	session.TurnOwed = protocol.Ptr(true)
-	session.TurnOpenedAt = protocol.Ptr(in.OpenedAt.UTC().Format(time.RFC3339Nano))
 }
 
 func (d *Daemon) attentionInputFor(session *protocol.Session) attention.Input {
-	stamps := d.store.TurnStamps(session.ID)
 	in := attention.Input{
-		OpenedAt:      stamps.OpenedAt,
-		SettledAt:     stamps.SettledAt,
 		IsShell:       string(session.Agent) == protocol.AgentShellValue,
 		ChiefOfStaff:  protocol.Deref(session.ChiefOfStaff),
 		SessionPinned: strings.TrimSpace(protocol.Deref(session.PinnedAt)) != "",

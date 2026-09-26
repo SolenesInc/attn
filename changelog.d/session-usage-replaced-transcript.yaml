@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: A session whose transcript was replaced under it now flags its usage as incomplete.
+symptom: When an agent's transcript was rewritten, the session kept showing its earlier usage as a complete measurement.

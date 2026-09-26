@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const ProtocolVersion = "319"
+const ProtocolVersion = "320"
 
 const (
 	ErrorCodeConflict             = "conflict"
@@ -49,6 +49,10 @@ const (
 	CmdDelegationPreferencesSave             = "delegation_preferences_save"
 	CmdDelegationModels                      = "delegation_models"
 	CmdDelegationRoles                       = "delegation_roles"
+	CmdDelegationPreferencesShow             = "delegation_preferences_show"
+	CmdDelegationPreferencesCommit           = "delegation_preferences_commit"
+	CmdDelegationPreferencesHistory          = "delegation_preferences_history"
+	CmdDelegationPreferencesRollback         = "delegation_preferences_rollback"
 	CmdDelegateStatus                        = "delegate_status"
 	CmdSetTicketStatus                       = "set_ticket_status"
 	CmdTicketInbox                           = "ticket_inbox"
@@ -653,6 +657,34 @@ func ParseMessage(data []byte) (string, interface{}, error) {
 
 	case CmdDelegationModels:
 		var msg DelegationModelsMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesShow:
+		var msg DelegationPreferencesShowMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesCommit:
+		var msg DelegationPreferencesCommitMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesHistory:
+		var msg DelegationPreferencesHistoryMessage
+		if err := json.Unmarshal(data, &msg); err != nil {
+			return "", nil, err
+		}
+		return peek.Cmd, &msg, nil
+
+	case CmdDelegationPreferencesRollback:
+		var msg DelegationPreferencesRollbackMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			return "", nil, err
 		}
