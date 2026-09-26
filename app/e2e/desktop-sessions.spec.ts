@@ -93,7 +93,7 @@ test.describe('Desktop Sessions', () => {
     await expect(currentDesktop(page).locator(paneOf('drag-stay'))).toBeVisible();
   });
 
-  test('desktop headers reorder by drag and rename back to their default label', async ({ page, daemon }) => {
+  test('desktop headers reorder by drag, cancel on Escape, and rename back to their default label', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
     await page.waitForSelector('.dashboard');
@@ -109,13 +109,23 @@ test.describe('Desktop Sessions', () => {
 
     const headerOf = (label: string) =>
       page.locator('.workspace-group-header', { has: page.locator('.workspace-label', { hasText: label }) });
-    const source = (await headerOf('Desktop 3').boundingBox())!;
-    const top = (await headerOf('Desktop 1').boundingBox())!;
-    await page.mouse.move(source.x + 24, source.y + source.height / 2);
-    await page.mouse.down();
-    await page.mouse.move(source.x + 24, source.y - 12, { steps: 4 });
-    await expect(page.locator('[data-testid="workspace-reorder-seam-0"]')).toBeVisible();
-    await page.mouse.move(top.x + 24, top.y - 4, { steps: 8 });
+    const dragHeaderToTop = async (label: string) => {
+      const source = (await headerOf(label).boundingBox())!;
+      const top = (await headerLabels.first().boundingBox())!;
+      await page.mouse.move(source.x + 24, source.y + source.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(source.x + 24, source.y - 12, { steps: 4 });
+      await expect(page.locator('[data-testid="workspace-reorder-seam-0"]')).toBeVisible();
+      await page.mouse.move(top.x + 24, top.y - 12, { steps: 8 });
+    };
+
+    await dragHeaderToTop('Desktop 2');
+    await page.keyboard.press('Escape');
+    await expect(page.locator('[data-testid="workspace-reorder-seam-0"]')).toHaveCount(0);
+    await page.mouse.up();
+    await expect(headerLabels).toHaveText(['Desktop 1', 'Desktop 2', 'Desktop 3']);
+
+    await dragHeaderToTop('Desktop 3');
     await page.mouse.up();
 
     await expect(headerLabels).toHaveText(['Desktop 3', 'Desktop 1', 'Desktop 2']);
