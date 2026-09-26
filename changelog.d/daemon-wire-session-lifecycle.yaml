@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Daemon wire tests now guard countdown, rename, close guard and close metadata, ledger, reopen, title, filter, snooze and spawn promises, replacing in-package tests that drove daemon internals.

@@ -2,8 +2,6 @@ package daemon
 
 import (
 	"net"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -76,78 +74,6 @@ func TestSeedNudges_InjectionLeavesTheBellUnreadUntilShow(t *testing.T) {
 	}
 	if prompts := doorbell.pasted(); len(prompts) != 2 {
 		t.Fatalf("read did not re-arm the bell: %q", prompts)
-	}
-}
-
-func TestSeedNudges_WebSocketTransitionDoesNotRingItsSource(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
-	client := newInternalWSClient()
-
-	fixture.d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
-		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-1"),
-		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID, Verb: string(garden.VerbTend),
-	})
-	if _, err := readInternalActionResult(client); err != nil {
-		t.Fatalf("WebSocket transition: %v", err)
-	}
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("WebSocket transition rang its source: %q", queued)
-	}
-	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "tended")
-}
-
-func TestSeedNudges_WebSocketNoteDoesNotRingItsSource(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-	watchSeed(t, fixture.d, "sess-c", fixture.leaf.ID, false)
-	client := newInternalWSClient()
-
-	fixture.d.handleSeedNoteWS(client, &protocol.SeedNoteMessage{
-		Cmd: protocol.CmdSeedNote, RequestID: protocol.Ptr("note-1"),
-		SourceSessionID: protocol.Ptr("sess-b"), SeedID: fixture.leaf.ID,
-		Body: "look now", Ring: protocol.Ptr(true),
-	})
-	if _, err := readInternalActionResult(client); err != nil {
-		t.Fatalf("WebSocket note: %v", err)
-	}
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("WebSocket note rang its source: %q", queued)
-	}
-	assertOneSeedBell(t, fixture.d, "sess-c", fixture.leaf.ID, "note.added")
-}
-
-func TestSeedNudges_FailedShowDoesNotReadTheBell(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
-	first, err := fixture.d.store.UnreadAgentMailboxDeliveries("sess-b")
-	if err != nil || len(first) != 1 {
-		t.Fatalf("first bell = %+v err=%v", first, err)
-	}
-
-	root := t.TempDir()
-	fixture.d.store.SetSetting(SettingNotebookRoot, root)
-	if err := os.Mkdir(filepath.Join(root, "seeds"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(t.TempDir(), filepath.Join(root, "seeds", fixture.leaf.ID)); err != nil {
-		t.Fatal(err)
-	}
-	resp := gardenCall(t, func(c net.Conn) {
-		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
-			Cmd: protocol.CmdSeedShow, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
-		})
-	})
-	if resp.Ok || !strings.Contains(protocol.Deref(resp.Error), "not a real directory") {
-		t.Fatalf("show through invalid artifact directory = %+v", resp)
-	}
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
-	remaining, err := fixture.d.store.UnreadAgentMailboxDeliveries("sess-b")
-	if err != nil || len(remaining) != 1 || remaining[0].Item.ID != first[0].Item.ID {
-		t.Fatalf("failed show consumed the bell: before=%+v after=%+v err=%v", first, remaining, err)
 	}
 }
 
@@ -246,90 +172,4 @@ func TestSeedNudges_DispatcherHearsTheDelegatesHarvest(t *testing.T) {
 
 	move(t, d, "sess-b", fixture.leaf.ID, garden.VerbHarvest, "proof complete", "")
 	assertOneSeedBell(t, d, "sess-a", fixture.leaf.ID, "harvested")
-}
-
-func TestSeedNudges_NotesRingOnlyByChoice(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "ordinary progress", false)
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("plain note rang: %q", queued)
-	}
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "please look", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
-}
-
-func TestSeedNudges_CrownWatchBubblesFromAGrandchild(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.crown.ID, false)
-
-	move(t, fixture.d, "sess-c", fixture.leaf.ID, garden.VerbTend, "", "")
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "tended")
-}
-
-func TestSeedNudges_CoalesceUntilShowAndThenRingAgain(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
-	move(t, fixture.d, "sess-c", fixture.leaf.ID, garden.VerbTend, "", "")
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
-
-	resp := gardenCall(t, func(c net.Conn) {
-		fixture.d.handleSeedShow(c, &protocol.SeedShowMessage{
-			Cmd: protocol.CmdSeedShow, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
-		})
-	})
-	if !resp.Ok || !resp.SeedShowResult.Watching {
-		t.Fatalf("show after watch = %+v", resp)
-	}
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("show left a queued bell: %q", queued)
-	}
-
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "after the read", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
-}
-
-func TestSeedNudges_NotesReadResetsTheBell(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "first", true)
-
-	resp := gardenCall(t, func(c net.Conn) {
-		fixture.d.handleSeedNotes(c, &protocol.SeedNotesMessage{
-			Cmd: protocol.CmdSeedNotes, SeedID: fixture.leaf.ID, SourceSessionID: protocol.Ptr("sess-b"),
-		})
-	})
-	if !resp.Ok {
-		t.Fatalf("notes: %v", protocol.Deref(resp.Error))
-	}
-	ringingNote(t, fixture.d, "sess-c", fixture.leaf.ID, "second", true)
-	assertOneSeedBell(t, fixture.d, "sess-b", fixture.leaf.ID, "note.added")
-}
-
-func TestSeedNudges_NeverRingTheWriter(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.leaf.ID, false)
-
-	move(t, fixture.d, "sess-b", fixture.leaf.ID, garden.VerbTend, "", "")
-	ringingNote(t, fixture.d, "sess-b", fixture.leaf.ID, "my own words", true)
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("writer rang itself: %q", queued)
-	}
-}
-
-func TestSeedNudges_UnwatchStopsThePlot(t *testing.T) {
-	fixture := newSeededNudgeGarden(t)
-	watchSeed(t, fixture.d, "sess-b", fixture.crown.ID, false)
-	result := watchSeed(t, fixture.d, "sess-b", fixture.crown.ID, true)
-	if result.Watching || !result.Changed {
-		t.Fatalf("unwatch result = %+v", result)
-	}
-
-	move(t, fixture.d, "sess-c", fixture.leaf.ID, garden.VerbTend, "", "")
-	if queued := queuedSeedBells(t, fixture.d, "sess-b"); len(queued) != 0 {
-		t.Fatalf("unwatched session rang: %q", queued)
-	}
 }

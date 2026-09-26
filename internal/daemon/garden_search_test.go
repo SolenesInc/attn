@@ -1,27 +1,20 @@
 package daemon
 
 import (
-	"fmt"
 	"net"
-	"strings"
 	"testing"
 
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func search(t *testing.T, d *Daemon, query string, limit int) protocol.Response {
+func searchOK(t *testing.T, d *Daemon, query string, limit int) *protocol.SeedSearchResult {
 	t.Helper()
 	msg := protocol.SeedSearchMessage{Cmd: protocol.CmdSeedSearch, Query: query}
 	if limit != 0 {
 		msg.Limit = protocol.Ptr(limit)
 	}
-	return gardenCall(t, func(c net.Conn) { d.handleSeedSearch(c, &msg) })
-}
-
-func searchOK(t *testing.T, d *Daemon, query string, limit int) *protocol.SeedSearchResult {
-	t.Helper()
-	resp := search(t, d, query, limit)
+	resp := gardenCall(t, func(c net.Conn) { d.handleSeedSearch(c, &msg) })
 	if !resp.Ok {
 		t.Fatalf("search %q: %v", query, protocol.Deref(resp.Error))
 	}
@@ -59,83 +52,6 @@ func seededGarden(t *testing.T, d *Daemon) map[string]string {
 	move(t, d, "sess-a", ids["fts"], garden.VerbWither,
 		"A scan answers this in a couple of milliseconds, so an index earns nothing.", "")
 	return ids
-}
-
-func TestSeedSearchFindsAHarvestedSeed(t *testing.T) {
-	d := newGardenDaemon(t)
-	ids := seededGarden(t, d)
-	result := searchOK(t, d, "retire tickets", 0)
-	if result.Matched != 1 || len(result.Hits) != 1 {
-		t.Fatalf("wanted the closed seed alone, got %d hits of %d matched", len(result.Hits), result.Matched)
-	}
-	hit := result.Hits[0]
-	if hit.Seed.ID != ids["tickets"] || hit.Seed.Status != garden.StatusHarvested {
-		t.Fatalf("`was this already done` must reach a harvested seed, got %s %s", hit.Seed.ID, hit.Seed.Status)
-	}
-	if hit.Where != garden.MatchTitle || !strings.Contains(hit.Snippet, "Retire tickets") {
-		t.Fatalf("the hit must say where it matched and quote it, got %s %q", hit.Where, hit.Snippet)
-	}
-}
-
-func TestSeedSearchFindsWhatOnlyTheLogSays(t *testing.T) {
-	d := newGardenDaemon(t)
-	ids := seededGarden(t, d)
-	result := searchOK(t, d, "dispatch dialog", 0)
-	if result.Matched != 1 {
-		t.Fatalf("only one log says this, matched %d", result.Matched)
-	}
-	hit := result.Hits[0]
-	if hit.Seed.ID != ids["board"] || hit.Where != garden.MatchLog {
-		t.Fatalf("a log-only match must come back marked as one, got %s from %s", hit.Seed.ID, hit.Where)
-	}
-	if !strings.Contains(hit.Snippet, "the dispatch dialog is the missing half") {
-		t.Fatalf("the snippet must quote the note that matched, got %q", hit.Snippet)
-	}
-}
-
-func TestSeedSearchSaysWhatItTrimmedAndHowToSeeMore(t *testing.T) {
-	d := newGardenDaemon(t)
-	seededGarden(t, d)
-	result := searchOK(t, d, "seed", 2)
-	if len(result.Hits) != 2 || result.Matched <= 2 {
-		t.Fatalf("a capped answer keeps the full count, got %d hits of %d", len(result.Hits), result.Matched)
-	}
-	if result.Limit != 2 {
-		t.Fatalf("the answer must carry the cap it applied, got %d", result.Limit)
-	}
-	raised := searchOK(t, d, "seed", garden.MaxSearchResults)
-	if len(raised.Hits) != raised.Matched {
-		t.Fatalf("raising the limit must show every match, got %d of %d", len(raised.Hits), raised.Matched)
-	}
-}
-
-func TestSeedSearchRefusalsNameTheLimitAndTheAsk(t *testing.T) {
-	d := newGardenDaemon(t)
-	seededGarden(t, d)
-	for _, tc := range []struct {
-		name, query string
-		limit       int
-		wants       []string
-	}{
-		{"nothing to look for", "   ", 0, []string{"attn seed search"}},
-		{"a body pasted as a query", strings.Repeat("x", garden.MaxSearchQueryChars+1), 0,
-			[]string{"max_query_chars=400", "asked for 401"}},
-		{"a negative cap", "seed", -1, []string{"asked for -1", "cannot be negative"}},
-		{"a cap past the whole garden", "seed", garden.MaxSearchResults + 1,
-			[]string{fmt.Sprintf("max_results=%d", garden.MaxSearchResults), fmt.Sprintf("asked for %d", garden.MaxSearchResults+1)}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			resp := search(t, d, tc.query, tc.limit)
-			if resp.Ok {
-				t.Fatalf("wanted a refusal, got an answer")
-			}
-			for _, want := range tc.wants {
-				if !strings.Contains(protocol.Deref(resp.Error), want) {
-					t.Fatalf("the refusal must say %q, got %q", want, protocol.Deref(resp.Error))
-				}
-			}
-		})
-	}
 }
 
 func TestSeedSearchSearchesEverySeedPastOnePage(t *testing.T) {

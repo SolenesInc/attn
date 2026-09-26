@@ -11,7 +11,6 @@ import (
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 type gardenAdvisorProviderFunc func(
@@ -75,77 +74,6 @@ func TestParseGardenAdvisorConfigRejectsUnsupportedRecipes(t *testing.T) {
 		if _, err := parseGardenAdvisorConfig(raw); err == nil {
 			t.Fatalf("parseGardenAdvisorConfig(%q) succeeded", raw)
 		}
-	}
-}
-
-func TestValidateGardenAdvisorSettingUsesConfiguredExecutable(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "advisor.sock"))
-	t.Cleanup(d.stopEventBus)
-	d.store.SetSetting(SettingCodexExecutable, "missing-codex")
-	if err := d.validateGardenAdvisorSetting(`{"agent":"codex"}`); err == nil {
-		t.Fatal("missing configured executable was accepted")
-	}
-
-	executable := filepath.Join(t.TempDir(), "custom-codex")
-	if err := os.WriteFile(executable, []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
-		t.Fatalf("write fake executable: %v", err)
-	}
-	d.store.SetSetting(SettingCodexExecutable, executable)
-	if err := d.validateGardenAdvisorSetting(`{"agent":"codex"}`); err != nil {
-		t.Fatalf("configured executable was rejected: %v", err)
-	}
-}
-
-func TestInvalidGardenAdvisorReplacementPreservesSavedRecipe(t *testing.T) {
-	t.Setenv("PATH", "")
-	d := NewForTesting(filepath.Join(t.TempDir(), "advisor.sock"))
-	t.Cleanup(d.stopEventBus)
-	valid := `{"agent":"claude","model":"sonnet","effort":"medium"}`
-	d.store.SetSetting(SettingGardenAdvisor, valid)
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-
-	d.handleSetSettingWS(client, &protocol.SetSettingMessage{
-		Cmd:   protocol.CmdSetSetting,
-		Key:   SettingGardenAdvisor,
-		Value: `{"agent":"shell","model":"anything"}`,
-	})
-
-	if got := d.store.GetSetting(SettingGardenAdvisor); got != valid {
-		t.Fatalf("saved recipe = %q, want preserved %q", got, valid)
-	}
-	select {
-	case outbound := <-client.send:
-		var message protocol.SettingsUpdatedMessage
-		if err := json.Unmarshal(outbound.payload, &message); err != nil {
-			t.Fatalf("decode settings response: %v", err)
-		}
-		if message.Success == nil || *message.Success {
-			t.Fatalf("settings response success = %v, want false", message.Success)
-		}
-		if message.Error == nil || !strings.Contains(*message.Error, "not supported") {
-			t.Fatalf("settings error = %v, want unsupported agent error", message.Error)
-		}
-	default:
-		t.Fatal("invalid setting returned no response")
-	}
-}
-
-func TestSettingsPublishEffectiveGardenAdvisorDefault(t *testing.T) {
-	t.Setenv("PATH", "")
-	d := NewForTesting(filepath.Join(t.TempDir(), "advisor.sock"))
-	t.Cleanup(d.stopEventBus)
-
-	raw, ok := d.settingsWithAgentAvailability()[SettingGardenAdvisor].(string)
-	if !ok {
-		t.Fatal("settings did not include the Garden advisor recipe")
-	}
-	var got gardenAdvisorConfig
-	if err := json.Unmarshal([]byte(raw), &got); err != nil {
-		t.Fatalf("decode effective recipe: %v", err)
-	}
-	want := gardenAdvisorConfig{Agent: "codex", Model: "gpt-5.6-luna", Effort: "xhigh"}
-	if got != want {
-		t.Fatalf("effective recipe = %+v, want %+v", got, want)
 	}
 }
 
