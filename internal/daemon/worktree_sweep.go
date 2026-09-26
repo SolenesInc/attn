@@ -72,11 +72,6 @@ func (d *Daemon) worktreeSweepHandler(ctx context.Context, _ *jobs.Job) (any, er
 	return map[string]any{"refreshed": refreshed, "removed": removed, "kept": kept}, err
 }
 
-func (d *Daemon) worktreeSweepPass(now time.Time) (refreshed, removed, kept int) {
-	refreshed, removed, kept, _ = d.runWorktreeSweep(context.Background(), now)
-	return refreshed, removed, kept
-}
-
 type worktreeSweepCandidate struct {
 	repo  string
 	state attngit.WorktreeState
