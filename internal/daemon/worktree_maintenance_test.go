@@ -16,10 +16,6 @@ import (
 
 type gitExecutorFunc func(context.Context, gitTask, func(context.Context, *attngit.Client) error) error
 
-func testForegroundCleanupProtection() foregroundCleanupProtection {
-	return foregroundCleanupProtection{ctx: context.Background()}
-}
-
 func worktreeAutomaticCleanupExcluded(d *Daemon) bool {
 	if d.worktreeMaintenance.gate.TryLock() {
 		d.worktreeMaintenance.gate.Unlock()
