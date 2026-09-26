@@ -16,6 +16,7 @@ import (
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/ptybackend"
+	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
@@ -363,15 +364,23 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 	if err := d.store.DeleteSessionExitScreen(msg.ID); err != nil {
 		d.logf("exit screen of the previous process not cleared: session=%s err=%v", msg.ID, err)
 	}
+	hasInitialPrompt := strings.TrimSpace(req.initialPrompt) != ""
+	priorEvidence, _ := d.evidenceTable().snapshot(msg.ID)
+	d.startEvidence(msg.ID, sessionstate.Evidence{
+		InitialPromptOwed: hasInitialPrompt && reportsPromptsTaken(req.agent),
+		ReviewerInLoop:    plan.spawnOpts.ApprovalRoute.ReviewerInLoop(),
+	})
 	if err := d.spawnSessionRuntime(req, plan.spawnOpts); err != nil {
 		d.forgetSessionTitleInitialPrompt(msg.ID)
 		d.restoreExitScreen(msg.ID, priorExit)
 		if req.existingSession == nil {
 			d.store.Remove(msg.ID)
+			d.forgetSessionTrace(msg.ID)
 		} else if restoreErr := d.store.AddCheckedUnlessTeardown(req.existingSession); restoreErr != nil {
 			err = errors.Join(err, fmt.Errorf("restore prior session after spawn failure: %w", restoreErr))
 		}
 		if req.existingSession != nil {
+			d.startEvidence(msg.ID, priorEvidence)
 			plan.restoreLaunchIntent(d, msg.ID)
 		}
 		if req.hasPluginDriver {
@@ -383,8 +392,7 @@ func (d *Daemon) executeSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome 
 		plan.rollback(d, msg.ID)
 		return &spawnOutcome{err: err}
 	}
-	d.recordReviewerEvidence(msg.ID, plan.spawnOpts.ApprovalRoute.ReviewerInLoop())
-	if strings.TrimSpace(req.initialPrompt) != "" {
+	if hasInitialPrompt {
 		d.maybeGenerateSessionTitleFromPrompt(msg.ID, req.initialPrompt, sessionInputOrigin{})
 	}
 	if plan.spawnOpts.InitialPromptFile != "" {
@@ -457,6 +465,7 @@ func (d *Daemon) commitSpawn(req *spawnRequest, plan *spawnPlan) *spawnOutcome {
 		removeErr := d.removeSessionRuntime(msg.ID)
 		if req.existingSession == nil {
 			d.store.Remove(session.ID)
+			d.forgetSessionTrace(session.ID)
 		} else {
 			plan.restoreLaunchIntent(d, msg.ID)
 		}

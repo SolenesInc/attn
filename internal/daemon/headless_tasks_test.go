@@ -97,7 +97,7 @@ func TestHeadlessSwitchOffStillSettlesASession(t *testing.T) {
 	d.recordPTYEvidence("sess-refused", pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
 
 	d.classifySessionState("sess-refused", transcriptPath)
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	session := d.store.Get("sess-refused")
 	if session == nil {

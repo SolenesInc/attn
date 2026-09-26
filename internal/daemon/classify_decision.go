@@ -98,16 +98,14 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 	}
 
 	d.recordClassifierStarted(sessionID, classificationStartTime)
-	defer d.recordClassifierFinished(sessionID)
-
 	apply := func(decision classifyDecision) {
 		if decision.action != classifyApply {
 			d.logf("classifySessionState: session=%s no state applied reason=%s", sessionID, decision.reason)
 			d.traceStateSkip(sessionID, stateSourceClassifier, decision.reason)
+			d.concludeClassification(sessionID, nil)
 			return
 		}
 		d.logf("classifySessionState: session=%s state=%s reason=%s", sessionID, decision.state, decision.reason)
-		d.recordClassifierEvidence(sessionID, decision.state, classificationStartTime)
 		d.traceStateEvidence(
 			sessionID,
 			stateOrigin{
@@ -117,6 +115,7 @@ func (d *Daemon) classifyStop(sessionID, transcriptPath string, stop stopClassif
 			},
 			decision.state,
 		)
+		d.concludeClassification(sessionID, classifierVerdictMutation(decision.state, classificationStartTime))
 	}
 
 	transcriptEnabled := true

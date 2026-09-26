@@ -355,7 +355,7 @@ func TestHandleSpawnSession_PluginDriverClosesRunThatExitsDuringSpawn(t *testing
 	if run := d.store.GetAgentDriverRun("snipe-early-exit"); run.RunID != "" {
 		t.Fatalf("active run=%+v after early exit, want closed run", run)
 	}
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 	if session := d.store.Get("snipe-early-exit"); session == nil || session.State != protocol.SessionStateIdle {
 		t.Fatalf("stored session=%+v after early exit, want idle session", session)
 	}

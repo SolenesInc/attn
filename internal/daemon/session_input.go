@@ -328,6 +328,7 @@ func (m *sessionInputModule) forget(sessionID string, id sessionInputAttemptID) 
 	lane.mu.Lock()
 	delete(lane.attempts, key)
 	lane.removePending(id)
+	m.recordOwedLocked(lane, sessionID)
 	lane.mu.Unlock()
 }
 
@@ -346,6 +347,7 @@ func (m *sessionInputModule) relinquishComposer(sessionID string, id sessionInpu
 	if state := lane.attempts[key]; state != nil && state.stage == sessionInputPlaced {
 		state.composer = false
 	}
+	m.recordOwedLocked(lane, sessionID)
 	lane.mu.Unlock()
 }
 
@@ -392,6 +394,7 @@ func (m *sessionInputModule) forgetSession(sessionID string) {
 		delete(m.lanes, sessionID)
 	}
 	m.mu.Unlock()
+	m.daemon.recordPlacedInputOwed(sessionID, false)
 }
 
 func (m *sessionInputModule) fenceSession(sessionID string) {
@@ -490,6 +493,7 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	lane := m.lane(delivery.sessionID)
 	lane.mu.Lock()
 	defer lane.mu.Unlock()
+	defer m.recordOwedLocked(lane, delivery.sessionID)
 	if lane.stopped {
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputDeferred, reason: sessionInputReasonGone, err: errSessionInputLaneClosed}
 	}
@@ -531,11 +535,12 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: existing.route, reason: reason, wait: existing.wait, err: err}
 			}
 			m.clearUnstartedUserSubmitLocked(lane, delivery.sessionID)
+			existing.stage = sessionInputPlaced
+			m.recordOwedLocked(lane, delivery.sessionID)
 			if err := m.daemon.ptyBackend.Input(ctx, delivery.sessionID, []byte("\r")); err != nil {
 				existing.stage = sessionInputIndeterminate
 				return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: existing.route, reason: sessionInputReasonTransport, wait: existing.wait, err: err}
 			}
-			existing.stage = sessionInputPlaced
 		}
 		return attemptFromState(delivery.id, existing)
 	}
@@ -608,6 +613,8 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	lane.pending = append(lane.pending, candidate)
 	attempt.route = sessionInputRoutePTY
 	attempt.composer = true
+	attempt.stage = sessionInputPlaced
+	m.recordOwedLocked(lane, delivery.sessionID)
 	input := make([]byte, 0, len(sessionInputPasteStart)+len(delivery.text)+len(sessionInputPasteEnd))
 	input = append(input, sessionInputPasteStart...)
 	input = append(input, delivery.text...)
@@ -621,8 +628,20 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 		attempt.stage = sessionInputIndeterminate
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputIndeterminate, route: sessionInputRoutePTY, reason: sessionInputReasonTransport, wait: attempt.wait, err: err}
 	}
-	attempt.stage = sessionInputPlaced
 	return attemptFromState(delivery.id, attempt)
+}
+
+func (lane *sessionInputLane) owesPrompt() bool {
+	for _, attempt := range lane.attempts {
+		if attempt.composer && attempt.stage == sessionInputPlaced {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *sessionInputModule) recordOwedLocked(lane *sessionInputLane, sessionID string) {
+	m.daemon.recordPlacedInputOwed(sessionID, lane.owesPrompt() && reportsPromptsTaken(string(m.daemon.sessionAgent(sessionID))))
 }
 
 func (lane *sessionInputLane) removePending(id sessionInputAttemptID) {
@@ -704,6 +723,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 				close(attempt.wait)
 			}
 		}
+		m.recordOwedLocked(lane, sessionID)
 		if bytes.ContainsAny(data, "\r\n") {
 			lane.userSubmit = true
 		}
@@ -772,7 +792,9 @@ func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at tim
 	}
 	m.daemon.forgetUserInput(sessionID)
 	lane.userSubmit = false
-	return m.takeLocked(lane, sessionID, candidate, at)
+	effects := m.takeLocked(lane, sessionID, candidate, at)
+	m.recordOwedLocked(lane, sessionID)
+	return effects
 }
 
 func (m *sessionInputModule) observeInputTaken(sessionID, inputID string, at time.Time) sessionInputEffects {

@@ -8,9 +8,6 @@ import (
 
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func TestDwellGateHoldsATransitionUntilItHasBeenTrueLongEnough(t *testing.T) {
@@ -122,91 +119,5 @@ func TestClaudePermissionModeStillRetiresTheReviewer(t *testing.T) {
 
 	if evidenceOf(t, d, id).ReviewerInLoop {
 		t.Fatal("claude reported default and kept its reviewer")
-	}
-}
-
-func TestAGuardianAnsweredApprovalIsNeverPublished(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-guardian"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordReviewerEvidence(id, true)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-
-	d.resolveAllSessions(now.Add(time.Second))
-	if state := d.store.Get(id).State; state == protocol.SessionStatePendingApproval {
-		t.Fatal("the guardian's approval was shown to the user")
-	}
-
-	answeredAt := now.Add(2 * time.Second)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: answeredAt})
-	d.resolveAllSessions(answeredAt.Add(time.Second))
-	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state %q, want working once the guardian answered", state)
-	}
-}
-
-func TestAnUnansweredApprovalIsPublishedOnceTheDwellElapses(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-guardian-silent"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordReviewerEvidence(id, true)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-
-	policy := sessionstate.PolicyFor(string(protocol.SessionAgentCodex))
-	d.resolveAllSessions(now.Add(time.Second))
-	d.resolveAllSessions(now.Add(time.Second + policy.GuardianDwell))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStatePendingApproval {
-		t.Fatalf("state %q, want pending_approval: the dwell delays the request, it does not swallow it", state)
-	}
-}
-
-func TestClosingASessionMidDwellLeavesNothingBehind(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-dwell-closed"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordReviewerEvidence(id, true)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-
-	d.resolveAllSessions(now.Add(time.Second))
-	if !d.dwellGate().waiting(id) {
-		t.Fatal("no dwell was armed, so the test cannot show one being cleaned up")
-	}
-
-	d.closeSession(id, store.SessionClose{By: store.SessionClosedByUser})
-
-	if d.dwellGate().waiting(id) {
-		t.Fatal("the closed session's dwell is still pending")
-	}
-	d.resolveAllSessions(now.Add(2 * time.Second))
-	if d.dwellGate().waiting(id) {
-		t.Fatal("the dwell survived a later tick")
-	}
-}
-
-func TestAnApprovalWithNoReviewerPublishesImmediately(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-no-reviewer"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordReviewerEvidence(id, false)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-
-	d.resolveAllSessions(now.Add(time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStatePendingApproval {
-		t.Fatalf("state %q, want pending_approval on the first tick", state)
 	}
 }

@@ -144,6 +144,9 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
 	d.drainAgentMailboxAfterStateChange(change.sessionID, change.state)
+	if _, resolved := change.cause.(resolverObservation); !resolved {
+		d.resolveSoon(change.sessionID)
+	}
 	return true
 }
 

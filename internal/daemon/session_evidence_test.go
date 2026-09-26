@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"net"
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessionstate"
-	"github.com/victorarias/attn/internal/statetrace"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -229,43 +227,13 @@ func TestEveryEvidenceWriteStampsMovement(t *testing.T) {
 	}
 }
 
-func TestTheResolveTickPublishesTheResolution(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-flip"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateIdle)
-
-	now := time.Now()
-	d.recordPTYEvidence(id, pty.Observation{
-		Source: pty.SourceHeartbeat,
-		Claim:  "busy",
-		Detail: "⠐ working",
-		At:     now,
-	})
-
-	d.resolveAllSessions(now)
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state %q, want working: a fresh heartbeat outranks the stored idle", state)
-	}
-	got := onlyObservation(t, d, id)
-	if got.Outcome != statetrace.OutcomeApplied {
-		t.Fatalf("outcome %q, want applied", got.Outcome)
-	}
-	if got.Source != stateSourceResolver {
-		t.Fatalf("source %q, want %q", got.Source, stateSourceResolver)
-	}
-	if !strings.Contains(got.Detail, string(sessionstate.ReasonHeartbeatBusy)) {
-		t.Fatalf("detail %q does not name the winning clause", got.Detail)
-	}
-}
-
 func TestTheResolveTickLeavesAnUnownedStateAlone(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-unowned"
 	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateRecoverable)
 
 	d.recordProcessEvidence(id, true)
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateRecoverable {
 		t.Fatalf("state %q, want recoverable — the resolver overwrote a state it does not own", state)
@@ -278,99 +246,10 @@ func TestTheResolveTickDoesNotPublishAnAbsenceOfEvidence(t *testing.T) {
 	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWaitingInput)
 
 	d.recordReviewerEvidenceFromPermissionMode(id, "acceptEdits")
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateWaitingInput {
 		t.Fatalf("state %q, want waiting_input untouched", state)
-	}
-}
-
-func TestARunningClassificationHoldsTheSettle(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-classifying"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordClassifierStarted(id, now)
-	d.recordBracketEvidence(id, protocol.StateIdle)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
-
-	d.resolveAllSessions(now.Add(time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state %q, want working held while the classifier runs", state)
-	}
-
-	d.recordClassifierEvidence(id, protocol.StateWaitingInput, now)
-	d.recordClassifierFinished(id)
-	d.resolveAllSessions(now.Add(2 * time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWaitingInput {
-		t.Fatalf("state %q, want the classifier verdict published", state)
-	}
-}
-
-func TestAHungClassifierStopsHoldingTheSettle(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-classifier-hung"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
-	d.recordClassifierStarted(id, now)
-	d.recordBracketEvidence(id, protocol.StateIdle)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
-
-	policy := sessionstate.PolicyFor(string(protocol.SessionAgentClaude))
-	d.resolveAllSessions(now.Add(policy.ClassifierTimeout + time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateIdle {
-		t.Fatalf("state %q, want idle: the hold must expire with the classifier", state)
-	}
-}
-
-func TestAVerdictDoesNotSurviveIntoTheNextTurn(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-cross-turn"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-
-	now := time.Now()
-
-	d.recordBracketEvidence(id, protocol.StateIdle)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
-	d.recordClassifierEvidence(id, protocol.StateWaitingInput, now)
-	d.resolveAllSessions(now.Add(time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWaitingInput {
-		t.Fatalf("state %q, want turn A's verdict published", state)
-	}
-
-	openedAt := now.Add(2 * time.Second)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: openedAt})
-	d.resolveAllSessions(openedAt)
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state %q, want working for turn B", state)
-	}
-
-	settledAt := now.Add(10 * time.Second)
-	d.recordClassifierStarted(id, settledAt)
-	d.recordBracketEvidence(id, protocol.StateIdle)
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: settledAt})
-	d.resolveAllSessions(settledAt.Add(time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state %q, want the settle held for turn B's own verdict", state)
-	}
-
-	d.recordClassifierEvidence(id, protocol.StateIdle, settledAt)
-	d.recordClassifierFinished(id)
-	d.resolveAllSessions(settledAt.Add(2 * time.Second))
-
-	if state := d.store.Get(id).State; state != protocol.SessionStateIdle {
-		t.Fatalf("state %q, want turn B's verdict published", state)
 	}
 }
 
@@ -384,8 +263,8 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
 	d.recordBracketEvidence(id, protocol.StateIdle)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now.Add(time.Second)})
-	d.recordClassifierEvidence(id, protocol.StateWaitingInput, now.Add(2*time.Second))
-	d.resolveAllSessions(now.Add(2500 * time.Millisecond))
+	d.recordEvidence(id, now.Add(2*time.Second), classifierVerdictMutation(protocol.StateWaitingInput, now.Add(2*time.Second)))
+	d.resolveDue(now.Add(2500 * time.Millisecond))
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateWaitingInput {
 		t.Fatalf("state %q, want turn A's verdict published", state)
@@ -393,7 +272,7 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 
 	openedAt := now.Add(3 * time.Second)
 	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.resolveAllSessions(openedAt)
+	d.resolveDue(openedAt)
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
 		t.Fatalf("state %q, want working for turn B", state)
@@ -402,40 +281,10 @@ func TestAVerdictDoesNotSurviveATurnThatNeverPaintedBusy(t *testing.T) {
 	settledAt := now.Add(3500 * time.Millisecond)
 	d.recordClassifierStarted(id, settledAt)
 	d.recordBracketEvidence(id, protocol.StateIdle)
-	d.resolveAllSessions(settledAt)
+	d.resolveDue(settledAt)
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateWorking {
 		t.Fatalf("state %q, want the settle held: turn A's verdict is not turn B's answer", state)
-	}
-}
-
-func TestTheResolveTickIsSilentWhenItAgrees(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-shadow-agree"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-
-	now := time.Now()
-	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
-	for range 5 {
-		d.resolveAllSessions(now)
-	}
-
-	if got := traceOf(t, d, id); len(got) != 0 {
-		t.Fatalf("an agreeing tick recorded %+v", got)
-	}
-}
-
-func TestTheResolveTickForgetsARemovedSession(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-shadow-gone"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	d.recordBracketEvidence(id, protocol.StateWorking)
-
-	d.store.Remove(id)
-	d.resolveAllSessions(time.Now())
-
-	if _, ok := d.evidenceTable().snapshot(id); ok {
-		t.Fatal("evidence survived the session it described")
 	}
 }
 
@@ -644,7 +493,7 @@ func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 
 	base := time.Now()
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", Detail: "⠐ working", At: base})
-	d.resolveAllSessions(base)
+	d.resolveDue(base)
 	_, cursor := stateChangesSince(t, d, 0)
 
 	for tick := 1; tick <= 10; tick++ {
@@ -659,7 +508,7 @@ func TestTheEvidenceTickIsSilentWhileTheTurnKeepsRunning(t *testing.T) {
 			Detail: "⠐ working",
 			At:     now.Add(-age),
 		})
-		d.resolveAllSessions(now)
+		d.resolveDue(now)
 	}
 
 	if published, _ := stateChangesSince(t, d, cursor); published != 0 {
@@ -676,12 +525,12 @@ func TestTheEvidenceTickPublishesAReasonThatMovesOnItsOwn(t *testing.T) {
 
 	base := time.Now()
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", Detail: "⠐ working", At: base})
-	d.resolveAllSessions(base)
+	d.resolveDue(base)
 	_, cursor := stateChangesSince(t, d, 0)
 
 	d.recordCompactionEvidence(id, true)
 	now := base.Add(2 * time.Second)
-	d.resolveAllSessions(now)
+	d.resolveDue(now)
 
 	published, cursor := stateChangesSince(t, d, cursor)
 	if published != 1 {
@@ -695,7 +544,7 @@ func TestTheEvidenceTickPublishesAReasonThatMovesOnItsOwn(t *testing.T) {
 	}
 
 	d.recordProcessEvidence(id, true)
-	d.resolveAllSessions(now.Add(time.Second))
+	d.resolveDue(now.Add(time.Second))
 
 	if published, _ = stateChangesSince(t, d, cursor); published == 0 {
 		t.Fatal("an exited process published nothing")

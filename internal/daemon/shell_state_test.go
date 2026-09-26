@@ -37,13 +37,13 @@ func TestShellForegroundHeartbeatDrivesItsState(t *testing.T) {
 	addCharacterizationSession(t, d, id, protocol.SessionAgentShell, protocol.SessionStateIdle)
 
 	d.handlePTYState(id, heartbeatObs("busy", "foreground command running", time.Now()))
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 	if got := d.store.Get(id).State; got != protocol.SessionStateWorking {
 		t.Fatalf("state=%q, want working while a foreground command runs", got)
 	}
 
 	d.handlePTYState(id, heartbeatObs("not_busy", "shell at prompt", time.Now()))
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 	session := d.store.Get(id)
 	if session.State != protocol.SessionStateIdle {
 		t.Fatalf("state=%q, want idle at the prompt", session.State)
