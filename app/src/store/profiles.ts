@@ -13,7 +13,8 @@ export interface ProfilesState {
   migration: MigrationState | null;
   migrationFromThisConnection: boolean;
   migrationDeparted: string[];
-  connectionReportedMigrationPhase: (phase: MigrationPhase | null) => void;
+  connectionOpened: () => void;
+  migrationPhaseChanged: (phase: MigrationPhase | null) => void;
   migrationArrived: (migration: MigrationState) => void;
   enterScope: (profiles: Profile[] | undefined, selectedProfileId: string | undefined, desktops: Desktop[] | undefined) => void;
   profilesChanged: (profiles: Profile[]) => void;
@@ -69,7 +70,9 @@ export const useProfilesStore = create<ProfilesState>((set) => ({
   migrationFromThisConnection: false,
   migrationDeparted: [],
 
-  connectionReportedMigrationPhase: (migrationPhase) => set({ migrationPhase, migrationFromThisConnection: false }),
+  connectionOpened: () => set({ migrationFromThisConnection: false }),
+
+  migrationPhaseChanged: (migrationPhase) => set({ migrationPhase }),
 
   migrationArrived: (migration) =>
     set((state) => {

@@ -236,7 +236,7 @@ describe('MigrationPicker', () => {
     expect(sourceRow('Daemon lifecycle')).not.toHaveClass('confirmed');
 
     act(() => {
-      useProfilesStore.getState().connectionReportedMigrationPhase(MigrationPhase.PlacementRequired);
+      useProfilesStore.getState().connectionOpened();
       daemon.broadcast({ ...confirm(initial, ['g1']), revision: 2 });
     });
     await waitFor(() => expect(sourceRow('Daemon lifecycle')).toHaveClass('confirmed'));

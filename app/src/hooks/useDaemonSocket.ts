@@ -1260,6 +1260,7 @@ export function useDaemonSocket({
       console.log('[Daemon] WebSocket connected');
       daemonRestartInProgressRef.current = false;
       setConnectionError(null);
+      useProfilesStore.getState().connectionOpened();
       setConnectionGeneration((prev) => prev + 1);
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
@@ -1402,7 +1403,7 @@ export function useDaemonSocket({
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
-            useProfilesStore.getState().connectionReportedMigrationPhase(data.migration_phase ?? null);
+            useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);

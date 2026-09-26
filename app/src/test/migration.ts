@@ -147,6 +147,8 @@ export function resetMigrationStore(phase: MigrationPhase | null = MigrationPhas
   useProfilesStore.setState({
     migrationPhase: phase,
     migration: null,
+    migrationFromThisConnection: false,
+    migrationDeparted: [],
     profiles: [{ id: MIGRATION_PROFILE_ID, name: 'Default', current_desktop_id: 'd1', revision: 1 }],
   });
 }
