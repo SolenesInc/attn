@@ -509,6 +509,7 @@ export const RepoOptions: React.FC<RepoOptionsProps> = ({
       <div
         className={`repo-option-item ${isSelected ? 'selected' : ''}`}
         role="option"
+        tabIndex={-1}
         aria-selected={isSelected}
         data-testid={`repo-option-${itemIndex}`}
         data-option-index={itemIndex}

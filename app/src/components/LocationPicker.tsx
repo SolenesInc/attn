@@ -1174,6 +1174,7 @@ export function LocationPicker({
                       key={loc.path}
                       className={`picker-item ${index === highlightedIndex ? 'selected' : ''}`}
                       role="option"
+                      tabIndex={-1}
                       aria-selected={index === highlightedIndex}
                       data-testid={`location-picker-item-${index}`}
                       data-index={index}
@@ -1202,6 +1203,7 @@ export function LocationPicker({
                         key={item.path}
                         className={`picker-item ${globalIndex === highlightedIndex ? 'selected' : ''}`}
                         role="option"
+                        tabIndex={-1}
                         aria-selected={globalIndex === highlightedIndex}
                         data-testid={`location-picker-item-${globalIndex}`}
                         data-index={globalIndex}
