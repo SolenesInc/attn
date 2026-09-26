@@ -128,18 +128,22 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 	res := ReapResult{ID: entry.ID, PID: entry.PID}
 	leadsGroup := entry.PGID == entry.PID && entry.PID > 0
 
-	if entry.PID <= 0 || !ProcessAlive(entry.PID) {
+	if entry.PID <= 0 || syscall.Kill(entry.PID, 0) != nil {
 		res.Outcome = ReapAlreadyGone
 		return res
 	}
 
-	current, err := processStartTime(entry.PID)
-	if err != nil || entry.ProcessStartTime == "" || current != entry.ProcessStartTime {
-		if err == nil {
-			err = fmt.Errorf("start time %q does not match recorded %q", current, entry.ProcessStartTime)
+	identityErr := confirmIdentity(entry)
+	if !ProcessAlive(entry.PID) {
+		if leadsGroup && identityErr == nil {
+			sweepGroup(entry.PGID)
 		}
+		res.Outcome = ReapAlreadyGone
+		return res
+	}
+	if identityErr != nil {
 		res.Outcome = ReapUnidentified
-		res.Err = err
+		res.Err = identityErr
 		return res
 	}
 
@@ -174,6 +178,17 @@ func reapEntry(entry Entry, grace time.Duration) ReapResult {
 	res.Outcome = ReapSurvived
 	res.Err = fmt.Errorf("pid %d still alive after SIGKILL", entry.PID)
 	return res
+}
+
+func confirmIdentity(entry Entry) error {
+	current, err := processStartTime(entry.PID)
+	if err != nil {
+		return err
+	}
+	if entry.ProcessStartTime == "" || current != entry.ProcessStartTime {
+		return fmt.Errorf("start time %q does not match recorded %q", current, entry.ProcessStartTime)
+	}
+	return nil
 }
 
 func sweepGroup(pgid int) {
