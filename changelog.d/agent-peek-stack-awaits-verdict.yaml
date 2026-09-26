@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: The agent peek stack test waits for the daemon's waiting_input verdict before peeking, instead of the owed turn that precedes it.

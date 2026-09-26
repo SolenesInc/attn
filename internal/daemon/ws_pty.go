@@ -234,6 +234,9 @@ func buildSpawnSessionRecord(msg *protocol.SpawnSessionMessage, agent, cwd, labe
 		if branchInfo.MainRepo != "" {
 			session.MainRepo = protocol.Ptr(branchInfo.MainRepo)
 		}
+		if branchInfo.Repository != "" {
+			session.Repository = protocol.Ptr(branchInfo.Repository)
+		}
 	}
 	return session
 }

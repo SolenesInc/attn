@@ -29,14 +29,7 @@ const (
 	automationErrCodeValidation       = "validation"
 )
 
-const defaultWSAutomationMutationTimeout = 25 * time.Second
-
-func (d *Daemon) wsAutomationMutationTimeoutDuration() time.Duration {
-	if d.wsAutomationMutationTimeout > 0 {
-		return d.wsAutomationMutationTimeout
-	}
-	return defaultWSAutomationMutationTimeout
-}
+const wsAutomationMutationTimeout = 25 * time.Second
 
 func (d *Daemon) validateAutomationSpec(raw string) (automation.DefinitionSpec, []byte, error) {
 	spec, canonical, err := automation.ParseDefinitionYAML([]byte(raw))

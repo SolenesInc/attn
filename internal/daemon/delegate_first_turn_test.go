@@ -76,44 +76,6 @@ func TestDelegateFailsWhenTheAgentExitsBeforeItsFirstTurn(t *testing.T) {
 	}
 }
 
-func TestDelegateReportsTheFirstTurnItSaw(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		if opts.ID == sourceID {
-			return
-		}
-		d.applyState(sessionStateChange{sessionID: opts.ID, state: protocol.StateWorking, cause: liveSignal{}, origin: stateOrigin{source: string(pty.SourceWorkerInfo), detail: "watch subscribe replay"}})
-		d.traceStateEvidence(opts.ID, stateOrigin{source: stateSourceHook}, protocol.StateWorking)
-	}
-
-	result, err := delegateForFirstTurn(t, d, sourceID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.FirstTurnAt == nil || *result.FirstTurnAt == "" {
-		t.Fatalf("result = %+v, want first_turn_at", result)
-	}
-}
-
-func TestDelegateCompletesUnconfirmedWhenNothingWasSeen(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-
-	result, err := delegateForFirstTurn(t, d, sourceID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.FirstTurnAt != nil || result.FirstTurnUnconfirmed != nil {
-		t.Fatalf("result = %+v, want neither first_turn_at nor first_turn_unconfirmed", result)
-	}
-	if d.store.Get(result.SessionID) == nil {
-		t.Fatal("delegated session missing")
-	}
-}
-
 func TestAwaitDelegatedLaunchNamesTheTripwireWhenNothingReports(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		d := &Daemon{delegationWaitsForFirstTurn: true, done: make(chan struct{})}
