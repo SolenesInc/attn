@@ -5,13 +5,11 @@ import remarkGfm from 'remark-gfm';
 import { CodeFrame } from './CodeFrame';
 import { MermaidDiagram } from './MermaidDiagram';
 import { useShikiHighlight } from './shiki';
-import { PENDING_DIAGRAM_LANGUAGE, prepareStreamingMarkdown, splitStreamingMarkdown } from './streaming';
 
 // A context rather than a per-render closure: it keeps CodeRenderer's identity
 // stable, so a fresh callback never remounts an in-flight MermaidDiagram.
 const DiagramLayoutChangeContext = createContext<(() => void) | undefined>(undefined);
 const MarkdownPresentationContext = createContext<'static' | 'reader'>('static');
-const VolatileTextContext = createContext(false);
 
 export function ReaderPresentation({ children }: { children: ReactNode }) {
   return (
@@ -32,7 +30,7 @@ const PreRenderer: Components['pre'] = ({ children, className, ...props }) => {
 function highlightableLanguage(className: string | undefined): string | undefined {
   const found = /language-([\w-]+)/.exec(className ?? '');
   const language = found?.[1];
-  if (!language || language === 'mermaid' || language === PENDING_DIAGRAM_LANGUAGE) return undefined;
+  if (!language || language === 'mermaid') return undefined;
   return language;
 }
 
@@ -41,19 +39,9 @@ function highlightableLanguage(className: string | undefined): string | undefine
 export const CodeRenderer: Components['code'] = ({ className, children, ...props }) => {
   const onDiagramLayoutChange = useContext(DiagramLayoutChangeContext);
   const presentation = useContext(MarkdownPresentationContext);
-  const volatile = useContext(VolatileTextContext);
   const language = highlightableLanguage(className);
   const code = language ? String(children) : '';
-  const highlighted = useShikiHighlight(code, language, !volatile);
-  // prepareStreamingMarkdown renames the language of a fence that has not closed
-  // yet, so half a graph never reaches mermaid and draws its parse error.
-  if (className?.includes(`language-${PENDING_DIAGRAM_LANGUAGE}`)) {
-    return (
-      <pre className="markdown-diagram-pending" data-testid="markdown-diagram-pending">
-        <code>{children}</code>
-      </pre>
-    );
-  }
+  const highlighted = useShikiHighlight(code, language);
   if (className?.includes('language-mermaid')) {
     return (
       <MermaidDiagram
@@ -105,25 +93,15 @@ interface MarkdownProps {
   components?: Components;
   breaks?: boolean;
   onDiagramLayoutChange?: () => void;
-  streaming?: boolean;
 }
 
-export function Markdown({ children, className, components, breaks, onDiagramLayoutChange, streaming }: MarkdownProps) {
+export function Markdown({ children, className, components, breaks, onDiagramLayoutChange }: MarkdownProps) {
   const remarkPlugins = useMemo(() => (breaks ? [remarkGfm, remarkBreaks] : [remarkGfm]), [breaks]);
   const merged = useMemo(() => ({ ...defaultComponents, ...components }), [components]);
-  const { settled, tail } = useMemo(() => {
-    if (!streaming) return { settled: '', tail: children };
-    return splitStreamingMarkdown(prepareStreamingMarkdown(children));
-  }, [children, streaming]);
   return (
     <div className={className}>
       <DiagramLayoutChangeContext.Provider value={onDiagramLayoutChange}>
-        {settled !== '' && (
-          <MarkdownDocument source={settled} remarkPlugins={remarkPlugins} components={merged} />
-        )}
-        <VolatileTextContext.Provider value={Boolean(streaming)}>
-          <MarkdownDocument source={tail} remarkPlugins={remarkPlugins} components={merged} />
-        </VolatileTextContext.Provider>
+        <MarkdownDocument source={children} remarkPlugins={remarkPlugins} components={merged} />
       </DiagramLayoutChangeContext.Provider>
     </div>
   );

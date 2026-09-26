@@ -1,5 +1,4 @@
 import { isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { PENDING_DIAGRAM_LANGUAGE } from './streaming';
 import './Markdown.css';
 
 /** Chrome around a fenced code block. It lives on `pre` because react-markdown renders
@@ -60,9 +59,7 @@ export function CodeFrame({ children, className }: CodeFrameProps) {
     : null;
   const language = fenceLanguage(child?.props.className);
 
-  // A diagram — drawn or still arriving — is not a code block, and the element
-  // CodeRenderer returned for it is already a complete box.
-  if (language === 'mermaid' || language === PENDING_DIAGRAM_LANGUAGE) {
+  if (language === 'mermaid') {
     return <>{children}</>;
   }
 
