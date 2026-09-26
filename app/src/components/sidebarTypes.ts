@@ -52,6 +52,7 @@ export interface SidebarProps {
   workspaces: SidebarWorkspace[];
   visualIndexByWorkspaceId: Map<string, number>;
   selectedId: string | null;
+  selectionRequest?: { sessionId: string } | null;
   selectedWorkspaceId: string | null;
   selectedTile?: SelectedTile | null;
   tileContents?: Record<string, TileContentState>;

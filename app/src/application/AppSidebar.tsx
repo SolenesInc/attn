@@ -49,6 +49,7 @@ export function AppSidebar() {
     [desktops],
   );
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
+  const focusRequest = useSessionStore((state) => state.focusRequest);
   const {
     desktopTileContents,
     sendRenameSession,
@@ -97,6 +98,7 @@ export function AppSidebar() {
       workspaces={desktopViews}
       visualIndexByWorkspaceId={slotIndexByDesktopId}
       selectedId={activeSessionId}
+      selectionRequest={focusRequest}
       selectedWorkspaceId={currentDesktopId}
       selectedTile={selectedTile ? { workspaceId: selectedTile.desktopId, tileId: selectedTile.tileId } : null}
       tileContents={desktopTileContents}
