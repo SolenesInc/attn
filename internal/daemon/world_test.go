@@ -59,7 +59,20 @@ func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
 func (w *world) start() {
 	w.T.Helper()
 	w.listen()
-	started, err := daemon.StartWireDaemon(w.Socket, w.unix, w.ws)
+	w.serve(daemon.StartWireDaemon(w.Socket, w.unix, w.ws))
+}
+
+func (w *world) restartHoldingRecovery() (releaseRecovery func()) {
+	w.T.Helper()
+	w.stop()
+	w.listen()
+	started, releaseRecovery, err := daemon.StartWireDaemonHoldingRecovery(w.Socket, w.unix, w.ws)
+	w.serve(started, err)
+	return releaseRecovery
+}
+
+func (w *world) serve(started *daemon.WireDaemon, err error) {
+	w.T.Helper()
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}
