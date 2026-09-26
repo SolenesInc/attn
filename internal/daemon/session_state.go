@@ -140,10 +140,10 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		d.syncNudgeForState(change.sessionID, change.state)
 	}
 	d.syncAutoSettle(change.sessionID, change.state)
+	d.drainAgentMailboxAfterStateChange(change.sessionID, change.state)
 	if instance.broadcast {
 		d.broadcastSessionStateChanged(change.sessionID)
 	}
-	d.drainAgentMailboxAfterStateChange(change.sessionID, change.state)
 	if _, resolved := change.cause.(resolverObservation); !resolved {
 		d.resolveSoon(change.sessionID)
 	}
