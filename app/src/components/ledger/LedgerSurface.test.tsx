@@ -67,7 +67,7 @@ describe('LedgerSurface', () => {
     const onSelectSession = vi.fn();
     const { retab } = surface('sessions', { onClose, onFocusSession, onSelectSession });
 
-    fireEvent.keyDown(await rows().findByText('run live'), { key: 'Enter' });
+    fireEvent.keyDown((await rows().findByText('run live')).closest('.ledger-row') as HTMLElement, { key: 'Enter' });
     expect(onFocusSession).toHaveBeenCalledWith('live');
     expect(onClose).toHaveBeenCalledTimes(1);
 

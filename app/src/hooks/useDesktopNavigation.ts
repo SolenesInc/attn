@@ -23,6 +23,9 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     sendDesktopSetShortcutSlot,
     sendDesktopCreate,
     sendProfileSelect,
+    sendProfileCreate,
+    sendProfileRename,
+    sendProfileDelete,
   } = useDaemonApi();
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
@@ -162,9 +165,38 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     [report, sendProfileSelect],
   );
 
+  const createProfile = useCallback(
+    async (name: string): Promise<void> => {
+      const created = await sendProfileCreate(name);
+      if (created.profile) await sendProfileSelect(created.profile.id);
+    },
+    [sendProfileCreate, sendProfileSelect],
+  );
+
+  const renameProfile = useCallback(
+    async (profileId: string, name: string): Promise<void> => {
+      const profile = useProfilesStore.getState().profiles.find((entry) => entry.id === profileId);
+      if (!profile) return;
+      await sendProfileRename(profileId, name, profile.revision);
+    },
+    [sendProfileRename],
+  );
+
+  const deleteProfile = useCallback(
+    async (profileId: string, destinationProfileId: string): Promise<void> => {
+      const profile = useProfilesStore.getState().profiles.find((entry) => entry.id === profileId);
+      if (!profile) return;
+      await sendProfileDelete(profileId, profile.revision, destinationProfileId);
+    },
+    [sendProfileDelete],
+  );
+
   return {
     profiles,
     selectedProfile,
+    createProfile,
+    renameProfile,
+    deleteProfile,
     desktops,
     currentDesktop,
     switchToDesktop,

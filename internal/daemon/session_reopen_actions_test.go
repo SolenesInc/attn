@@ -208,6 +208,29 @@ func TestStartingFreshElsewhereNeedsTheDirectoryToStartIn(t *testing.T) {
 	}
 }
 
+func forgetBranchInspections(t *testing.T, d *Daemon, sessionID string) {
+	t.Helper()
+	decidedReopenVerdict(t, d, sessionID)
+	d.branchInspectionsMu.Lock()
+	d.branchInspections = map[string]branchInspection{}
+	d.branchInspectionsMu.Unlock()
+}
+
+func TestAReopenIsJudgedAgainstTheBranchCheckInFlight(t *testing.T) {
+	d, _, _ := closedWorktreeWithDeletedDirectory(t, "mid-check", "feat/mid-check", false)
+	backend := reopenDaemonWithBackend(t, d)
+	forgetBranchInspections(t, d, "mid-check")
+	before := spawnCount(backend)
+
+	_, err := d.reopenSession("mid-check", protocol.SessionReopenActionStartFreshElsewhere, t.TempDir(), profileDestination{})
+	if err == nil || !strings.Contains(err.Error(), string(protocol.SessionReopenActionRecreateWorktreeAndReopen)) {
+		t.Fatalf("start_fresh_elsewhere mid-check = %v, want a refusal offering the worktree back once the branch is known", err)
+	}
+	if spawnCount(backend) != before || !d.store.SessionClosed("mid-check") {
+		t.Fatal("a reopen the settled verdict refuses spawned or lifted the close")
+	}
+}
+
 func TestAFailedReopenPutsTheCloseBackAsItWas(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)

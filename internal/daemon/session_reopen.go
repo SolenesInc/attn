@@ -528,7 +528,7 @@ func (d *Daemon) reopenSessionForeground(
 	if action == "" {
 		action = protocol.SessionReopenActionReopen
 	}
-	if verdict.Checking && !verdict.offers(action) {
+	if verdict.Checking {
 		<-d.inspectBranchInBackground(sessionID, verdict.Execution.RepositoryRoot, verdict.Execution.Branch)
 		verdict, found = d.reopenVerdict(sessionID)
 		if !found {

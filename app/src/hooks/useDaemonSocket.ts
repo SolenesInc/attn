@@ -3128,10 +3128,12 @@ export function useDaemonSocket({
     sessionId: string,
     action?: string,
     directory?: string,
+    profileId?: string,
   ): Promise<SessionReopenResult> => {
     const body: Record<string, unknown> = { session_id: sessionId };
     if (action) body.action = action;
     if (directory) body.directory = directory;
+    if (profileId) body.profile_id = profileId;
     return sendRequest<SessionReopenResult>('session_reopen', body, 'Reopening the session timed out', SESSION_REOPEN_TIMEOUT_MS);
   }, [sendRequest]);
 
@@ -5142,6 +5144,37 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendProfileCreate = useCallback(
+    (name: string) => sendProfileCommand('profile_create', { name }),
+    [sendProfileCommand],
+  );
+
+  const sendProfileRename = useCallback(
+    (profileId: string, name: string, expectedRevision: number) =>
+      sendProfileCommand('profile_rename', { profile_id: profileId, name, expected_revision: expectedRevision }),
+    [sendProfileCommand],
+  );
+
+  const sendProfileDelete = useCallback(
+    (profileId: string, expectedRevision: number, destinationProfileId: string) =>
+      sendProfileCommand('profile_delete', {
+        profile_id: profileId,
+        expected_revision: expectedRevision,
+        destination_profile_id: destinationProfileId,
+      }),
+    [sendProfileCommand],
+  );
+
+  const sendSessionMove = useCallback(
+    (sessionId: string, expectedProfileId: string, destinationProfileId: string) =>
+      sendProfileCommand('session_move', {
+        session_id: sessionId,
+        expected_profile_id: expectedProfileId,
+        destination_profile_id: destinationProfileId,
+      }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopCreate = useCallback(
     (profileId: string) => sendProfileCommand('desktop_create', { profile_id: profileId }),
     [sendProfileCommand],
@@ -5323,6 +5356,10 @@ export function useDaemonSocket({
     connectionError,
     migrationFailure,
     sendProfileSelect,
+    sendProfileCreate,
+    sendProfileRename,
+    sendProfileDelete,
+    sendSessionMove,
     sendDesktopCreate,
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,

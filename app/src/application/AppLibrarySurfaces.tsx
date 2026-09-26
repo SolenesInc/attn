@@ -23,6 +23,7 @@ export function AppLibrarySurfaces() {
   const { seedForSession, handleDeleteWorktreeFromPanel } = useAppShell();
   const { liveGardenSessions, worktreePanelSessions, gardenSessionLabels } = useAppSessionsContext();
   const profiles = useProfilesStore((state) => state.profiles);
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
   const profileNames = useMemo(
     () => Object.fromEntries(profiles.map((profile) => [profile.id, profile.name])),
     [profiles],
@@ -53,6 +54,7 @@ export function AppLibrarySurfaces() {
     refreshWorktrees,
     gitOperations,
     sendSessionList,
+    sendSessionMove,
     getWorktreeSweepLog,
     setWorktreeKeep,
     sendFsList,
@@ -104,12 +106,14 @@ export function AppLibrarySurfaces() {
         sessions={{
           listSessions: sendSessionList,
           profileNames,
+          currentProfileId: selectedProfileId,
           profileMembership,
           liveSessionIds: liveGardenSessions,
           seedForSession,
           onFocusSession: handleSelectSession,
           onOpenSeed: handleOpenSeedTile,
           onReopen: handleReopenSession,
+          onMoveSession: sendSessionMove,
           closeNotice: sessionCloseNotice,
           verdictNotice: sessionVerdictNotice,
         }}
