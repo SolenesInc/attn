@@ -177,6 +177,15 @@ func (c *codex) reply(text string, afterStop bool) error {
 	}))
 }
 
+func (c *codex) halt() error {
+	c.term.title(c.restingTitle())
+	return appendLines(c.transcript, map[string]any{
+		"timestamp": now(),
+		"type":      "event_msg",
+		"payload":   map[string]any{"type": "turn_aborted", "turn_id": c.turnID, "reason": "interrupted"},
+	})
+}
+
 func codexEvent(kind, message string) map[string]any {
 	return map[string]any{
 		"timestamp": now(),

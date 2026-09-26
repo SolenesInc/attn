@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard session state, evidence, recovery, transcript and turn promises with daemon wire tests and remove the in-package tests and test hooks they replace.

@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: "`attn instance cleanup` counts a PTY worker that exits while it is being removed as gone, and a worker acknowledges a remove before it exits."
+symptom: "Cleanup warned that a worker it had just stopped \"could not be confirmed as its worker (EOF)\" and told the user to kill a process that no longer existed, when nothing had yet collected the exited worker."
