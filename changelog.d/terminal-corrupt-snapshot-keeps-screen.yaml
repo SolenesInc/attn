@@ -1,4 +1,4 @@
 kind: fixed
 area: terminal
-change: A terminal keeps what it was showing when a re-attach delivers a snapshot it cannot decode.
+change: A terminal keeps what it was showing, and the output that arrived during the attach, when an attach delivers a snapshot it cannot decode.
 symptom: After a reconnect, a corrupt session snapshot blanked the terminal before new output arrived.

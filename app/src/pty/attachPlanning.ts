@@ -183,8 +183,13 @@ export function planAttachResultEffects({
     ? (typeof attachResult.last_seq === 'number' ? attachResult.last_seq : 0)
     : (typeof previousSeq === 'number' ? previousSeq : 0);
   const queuedOutputsToEmit: PendingAttachOutputChunk[] = [];
+  // The snapshot covers these, but only a pane that fails to decode it has nothing else to show.
+  const restoreFallbackOutputs: PendingAttachOutputChunk[] = [];
   for (const chunk of queuedOutputs || []) {
     if (typeof chunk.seq === 'number' && chunk.seq <= nextSeq) {
+      if (restorePlan.hasSnapshot && (typeof previousSeq !== 'number' || chunk.seq > previousSeq)) {
+        restoreFallbackOutputs.push(chunk);
+      }
       continue;
     }
     if (typeof chunk.seq === 'number') {
@@ -197,6 +202,7 @@ export function planAttachResultEffects({
     restoreAction,
     nextSeq,
     queuedOutputsToEmit,
+    restoreFallbackOutputs,
   };
 }
 

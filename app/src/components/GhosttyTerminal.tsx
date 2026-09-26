@@ -213,6 +213,7 @@ export interface GhosttyTerminalHandle {
     options?: {
       suppressResponses?: boolean;
       deferRender?: boolean;
+      onlyIfRestoreRejected?: boolean;
     },
   ) => Promise<void>;
   resizeLocal: (
@@ -603,6 +604,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
     const lastModelPrintableRef = useRef(0);
     const lastRenderAtRef = useRef(0);
     const lastWriteAtRef = useRef(0);
+    const restoreRejectedRef = useRef(false);
     const readyRef = useRef(false);
     const startupRef = useRef(emptyStartup());
     const onInputRef = useRef(onInput);
@@ -1499,11 +1501,13 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       options?: {
         suppressResponses?: boolean;
         deferRender?: boolean;
+        onlyIfRestoreRejected?: boolean;
       },
     ) => {
       return enqueueOperation('write', async () => {
         const terminal = terminalRef.current;
         if (!terminal) return;
+        if (options?.onlyIfRestoreRejected && !restoreRejectedRef.current) return;
         const searchableOutput = typeof data === 'string' ? data : new TextDecoder().decode(data);
         if (searchableOutput) {
           const parsed = parseOsc52Writes(osc52StateRef.current, searchableOutput);
@@ -1619,7 +1623,9 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         let historyDecoder: SnapshotHistoryDecoder;
         try {
           historyDecoder = terminal.adoptSnapshot(snapshot);
+          restoreRejectedRef.current = false;
         } catch (reason) {
+          restoreRejectedRef.current = true;
           // A payload fault, not a model fault: replacing the model would reattach and be
           // served the same bytes forever.
           recordUiDiag({
@@ -1636,6 +1642,8 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         placementStoreRef.current.clear();
         annotationsRef.current?.reset();
         selectedBlockIdRef.current = null;
+        writeCountRef.current += 1;
+        lastWriteAtRef.current = Date.now();
         // The decoded terminal carries the worker's modes, and the worker never asserted grapheme clustering.
         graphemeResetCarryRef.current = false;
         ensureGraphemeClustering(terminal);

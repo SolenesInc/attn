@@ -143,13 +143,14 @@ describe('App terminal runtime', () => {
   });
 
   it.each([
-    ['a snapshot it cannot decode at all', new Uint8Array([1, 2, 3, 4]), 'live'],
+    ['a snapshot it cannot decode at all', new Uint8Array([1, 2, 3, 4]), 'raced\nlive'],
     ['a snapshot cut off inside its history', NATIVE_SNAPSHOT.slice(0, NATIVE_SNAPSHOT.length - 1000), `${RESTORED_SCREEN} live`],
   ])('keeps what it restored from %s and shows live output, without attaching again', async (_, bytes, shown) => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
     open('s1');
     await daemon.idle();
 
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 9, data: btoa('raced\r\n') });
     daemon.emit(snapshotReply('s1', snapshotOf(bytes)));
     await daemon.idle();
     daemon.emit({ event: 'pty_output', id: 's1', seq: 11, data: btoa('live') });
