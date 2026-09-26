@@ -218,6 +218,7 @@ async function main() {
     await runner.step('native_pointer_drop_merges_beside_a_group', async () => {
       const source = '.mp-source[data-drag-group="mig-ws-11"] .mp-grip';
       const anchor = '[data-migration-desktop] [data-migration-group="mig-ws-4"]';
+      await client.request('dom_scroll_into_view', { selector: '.mp-source[data-drag-group="mig-ws-11"]' });
       const [from, to, windowBounds, viewport] = await Promise.all([
         client.request('dom_bounds', { selector: source }),
         client.request('dom_bounds', { selector: anchor }),
@@ -228,6 +229,9 @@ async function main() {
         windowBounds, viewport.bounds.width, viewport.bounds.height);
       const end = windowRelativePoint(to.bounds.x + to.bounds.width * 0.9, to.bounds.y + to.bounds.height / 2,
         windowBounds, viewport.bounds.width, viewport.bounds.height);
+      const onScreen = (box) => box.x >= 0 && box.y >= 0 && box.x + box.width <= viewport.bounds.width && box.y + box.height <= viewport.bounds.height;
+      runner.assert(onScreen(from.bounds) && onScreen(to.bounds),
+        `The drag needs its source and target on screen: ${JSON.stringify({ from: from.bounds, to: to.bounds, viewport: viewport.bounds })}`);
       await client.request('arm_native_pointer_witness', { selector: '.mp-shell' });
       await driver.dragWindow(start.relativeX, start.relativeY, end.relativeX, end.relativeY, { steps: 24 });
       const receipt = await client.request('wait_native_pointer_witness', {});
