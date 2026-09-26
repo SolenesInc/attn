@@ -97,7 +97,16 @@ func TestAWorkspaceTakesTheBusiestStateOfItsSessionsAndOnlyAnnouncesChanges(t *t
 	for id := range runs {
 		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 	}
-	from := len(app.Received())
+	announcedSinceWorkBegan := func() []protocol.WorkspaceStatus {
+		var statuses []protocol.WorkspaceStatus
+		for _, e := range app.Received() {
+			if e.Event == protocol.EventWorkspaceStateChanged && e.Workspace != nil && e.Workspace.ID == ws &&
+				(len(statuses) > 0 || e.Workspace.Status == protocol.WorkspaceStatusWorking) {
+				statuses = append(statuses, e.Workspace.Status)
+			}
+		}
+		return statuses
+	}
 
 	work := func(id string) protocol.Session {
 		app.TypeLine(id, "run the tests")
@@ -116,15 +125,14 @@ func TestAWorkspaceTakesTheBusiestStateOfItsSessionsAndOnlyAnnouncesChanges(t *t
 	})
 	finish(second, work(second))
 	finish(first, firstWorking)
+	for !slices.Contains(announcedSinceWorkBegan(), protocol.WorkspaceStatusIdle) {
+		testworld.Await(app, protocol.EventWorkspaceStateChanged, func(e protocol.WorkspaceStateChangedMessage) bool {
+			return e.Workspace.ID == ws && e.Workspace.Status == protocol.WorkspaceStatusIdle
+		})
+	}
 	workIn(t, app, w.Path("barrier"))
 
-	var statuses []protocol.WorkspaceStatus
-	for _, e := range app.Received()[from:] {
-		if e.Event == protocol.EventWorkspaceStateChanged && e.Workspace != nil && e.Workspace.ID == ws {
-			statuses = append(statuses, e.Workspace.Status)
-		}
-	}
-	if want := []protocol.WorkspaceStatus{protocol.WorkspaceStatusWorking, protocol.WorkspaceStatusIdle}; !slices.Equal(statuses, want) {
+	if statuses, want := announcedSinceWorkBegan(), []protocol.WorkspaceStatus{protocol.WorkspaceStatusWorking, protocol.WorkspaceStatusIdle}; !slices.Equal(statuses, want) {
 		t.Errorf("while its sessions worked the workspace was announced as %v, want %v", statuses, want)
 	}
 }

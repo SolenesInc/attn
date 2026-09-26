@@ -451,13 +451,15 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 		fallbackAttempted bool
 		usageState        = w.state()
 	)
+	defer func() {
+		if usageTracker != nil {
+			usageTracker.Reconcile()
+		}
+	}()
 
 	for {
 		select {
 		case <-w.stopCh:
-			if usageTracker != nil {
-				usageTracker.Reconcile()
-			}
 			d.logf("transcript watcher: stopped session=%s", w.sessionID)
 			return
 		case <-ticker.C:

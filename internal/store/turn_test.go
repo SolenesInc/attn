@@ -84,3 +84,59 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 		}
 	}
 }
+
+func TestAStateOpensItsTurnOnlyThroughTheSnoozeItFindsWhenItCommits(t *testing.T) {
+	stores := map[string]func(t *testing.T) *Store{
+		"sqlite": newTurnStore,
+		"memory": func(*testing.T) *Store { return New() },
+	}
+	tests := []struct {
+		name         string
+		snoozeFor    time.Duration
+		opening      TurnOpening
+		wantOpen     bool
+		wantSnoozed  bool
+		wantHeld     bool
+		wantEndsWake bool
+	}{
+		{"no snooze", 0, TurnOpening{Opens: true}, true, false, false, false},
+		{"a snooze that is still running", time.Hour, TurnOpening{Opens: true}, false, true, true, false},
+		{"a snooze the state breaks", time.Hour, TurnOpening{Opens: true, BreaksSnooze: true}, true, false, false, true},
+		{"a snooze that already expired", -time.Minute, TurnOpening{Opens: true}, true, false, false, true},
+		{"a state that opens no turn", time.Hour, TurnOpening{}, false, true, false, false},
+	}
+	for backend, open := range stores {
+		for _, tt := range tests {
+			t.Run(backend+"/"+tt.name, func(t *testing.T) {
+				s := open(t)
+				addTurnSession(t, s, "s1", protocol.SessionStateWorking)
+				until := time.Now().Add(tt.snoozeFor).UTC()
+				if tt.snoozeFor != 0 && !s.SnoozeTurn("s1", until, time.Now().Add(-2*time.Hour)) {
+					t.Fatal("snooze the session")
+				}
+
+				applied, outcome := s.UpdateStateOpeningTurn("s1", string(protocol.SessionStateIdle), tt.opening)
+
+				if !applied {
+					t.Fatal("the state was not committed")
+				}
+				if got := s.Get("s1").State; got != protocol.SessionStateIdle {
+					t.Errorf("state = %s, want idle", got)
+				}
+				stamps := s.TurnStamps("s1")
+				if open := stamps.OpenedAt.After(stamps.SettledAt); open != tt.wantOpen {
+					t.Errorf("turn open = %v, want %v (stamps %+v)", open, tt.wantOpen, stamps)
+				}
+				if snoozed := !stamps.SnoozedUntil.IsZero(); snoozed != tt.wantSnoozed {
+					t.Errorf("still snoozed = %v, want %v", snoozed, tt.wantSnoozed)
+				}
+				if outcome.HeldBySnooze != tt.wantHeld {
+					t.Errorf("held by snooze = %v, want %v", outcome.HeldBySnooze, tt.wantHeld)
+				}
+				if ended := !outcome.EndedSnooze.IsZero(); ended != tt.wantEndsWake || ended && !outcome.EndedSnooze.Equal(until) {
+					t.Errorf("ended snooze = %s, want the deadline %s ended: %v", outcome.EndedSnooze, until, tt.wantEndsWake)
+				}
+			})
+		}
+	}
+}
