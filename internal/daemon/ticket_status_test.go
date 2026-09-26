@@ -99,3 +99,15 @@ func callSetTicketStatusByID(t *testing.T, d *Daemon, sessionID, workState, comm
 	_ = clientConn.Close()
 	return resp
 }
+
+func boundTicketID(t *testing.T, d *Daemon, sessionID string) string {
+	t.Helper()
+	ticket, err := d.store.ActiveTicketForSession(sessionID)
+	if err != nil {
+		t.Fatalf("ActiveTicketForSession: %v", err)
+	}
+	if ticket == nil {
+		t.Fatal("session has no bound ticket")
+	}
+	return ticket.ID
+}

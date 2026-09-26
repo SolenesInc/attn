@@ -337,8 +337,6 @@ func (c *wsClient) clearRemoteAttach(sessionID string) {
 
 type BroadcastListener func(event *protocol.WebSocketEvent)
 
-type WireTap func(payload []byte)
-
 type messageKind int
 
 const (
@@ -361,7 +359,6 @@ type wsHub struct {
 	evictionMu        sync.Mutex
 	logf              func(format string, args ...interface{})
 	broadcastListener BroadcastListener
-	wireTap           WireTap
 	evictionListener  func(string, evictionRecord)
 }
 
@@ -507,9 +504,6 @@ func (h *wsHub) SendRawTextToMatchingClients(payload []byte, match func(*wsClien
 	if len(payload) == 0 {
 		return
 	}
-	if h.wireTap != nil {
-		h.wireTap(payload)
-	}
 	cloned := append([]byte(nil), payload...)
 	message := outboundMessage{kind: messageKindText, payload: cloned}
 
@@ -586,9 +580,6 @@ func (h *wsHub) broadcastValue(message interface{}) {
 	if err != nil {
 		h.logf("WebSocket broadcast marshal error: %v", err)
 		return
-	}
-	if h.wireTap != nil {
-		h.wireTap(data)
 	}
 	out := outboundMessage{kind: messageKindText, payload: data}
 	select {

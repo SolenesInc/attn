@@ -171,17 +171,6 @@ func (d *Daemon) bindDelegationSeedProtected(protection foregroundCleanupProtect
 	return seedID, nil
 }
 
-func (d *Daemon) bindDelegatedSeed(sessionID, plannerSessionID, brief, name, crown, cwd, agent string, fromChief bool) (string, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
-	var seedID string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		seedID, err = d.bindDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name, crown, observed, fromChief)
-		return err
-	})
-	return seedID, err
-}
-
 func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name, crown string, observed garden.Dispatch, fromChief bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err

@@ -393,9 +393,6 @@ func (d *Daemon) projectGardenSeeds() {
 			d.logf("garden: %d seeds, pushing the newest %d (limit %d); the panel says so",
 				total, len(seeds), gardenSnapshotLimit)
 		}
-		if d.gardenBroadcastHook != nil {
-			d.gardenBroadcastHook(seeds, total)
-		}
 		if d.wsHub == nil {
 			return
 		}

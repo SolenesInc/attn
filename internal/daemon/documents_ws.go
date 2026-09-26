@@ -51,12 +51,6 @@ func (s *clientDocSubscriptions) closeAll() {
 	}
 }
 
-func (s *clientDocSubscriptions) count() int {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return len(s.subs)
-}
-
 func (d *Daemon) handleDocSubscribeWS(client *wsClient, msg *protocol.DocSubscribeMessage) {
 	id := protocol.Deref(msg.SubscriptionID)
 	if id == "" {

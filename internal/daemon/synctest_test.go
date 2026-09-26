@@ -53,3 +53,8 @@ func settleStopClassification(t *testing.T) {
 	time.Sleep(4 * time.Second)
 	synctest.Wait()
 }
+
+func newTraceDaemon(t *testing.T) *Daemon {
+	t.Helper()
+	return NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
+}

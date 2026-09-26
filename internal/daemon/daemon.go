@@ -330,26 +330,23 @@ type Daemon struct {
 	lastBackupMu sync.Mutex
 	lastBackupAt time.Time
 
-	workflowBroadcastMu       sync.Mutex
-	workflowDirty             map[string]bool
-	workflowEngineMu          sync.Mutex
-	workflowEngineConn        map[string]workflowEngineSink
-	gardenBroadcastHook       func([]protocol.Seed, int)
-	appsBroadcastHook         func([]protocol.AppRegistryEntry)
-	gardenMintID              func() (string, error)
-	gardenMintNoteID          func() (string, error)
-	gardenNow                 func() time.Time
-	gardenDispatchBeforeWrite func(string)
-	gardenDispatchAfterWrite  func(string)
-	gitHubPollingOffLogged    bool
-	gardenWatchMu             sync.Mutex
-	gardenReviewMu            sync.Mutex
-	dispatchSeedsMu           sync.Mutex
-	dispatchSeeds             map[string]string
-	dispatchersBySession      map[string]garden.Tender
-	dispatchFromChief         map[string]bool
-	dispatchProjectionRevs    map[string]int64
-	dispatchSeedsLoaded       bool
+	workflowBroadcastMu    sync.Mutex
+	workflowDirty          map[string]bool
+	workflowEngineMu       sync.Mutex
+	workflowEngineConn     map[string]workflowEngineSink
+	appsBroadcastHook      func([]protocol.AppRegistryEntry)
+	gardenMintID           func() (string, error)
+	gardenMintNoteID       func() (string, error)
+	gardenNow              func() time.Time
+	gitHubPollingOffLogged bool
+	gardenWatchMu          sync.Mutex
+	gardenReviewMu         sync.Mutex
+	dispatchSeedsMu        sync.Mutex
+	dispatchSeeds          map[string]string
+	dispatchersBySession   map[string]garden.Tender
+	dispatchFromChief      map[string]bool
+	dispatchProjectionRevs map[string]int64
+	dispatchSeedsLoaded    bool
 
 	gardenNotePageSize int
 

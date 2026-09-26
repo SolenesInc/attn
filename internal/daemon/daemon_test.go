@@ -103,7 +103,7 @@ func (c *blockingClassifier) CallCount() int {
 
 func TestMain(m *testing.M) {
 	fakeagent.Main()
-	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" || os.Getenv("ATTN_PLUGIN_DRIVER_HELPER") == "1" {
+	if os.Getenv("ATTN_PLUGIN_HELPER") == "1" {
 		os.Exit(m.Run())
 	}
 	sessionInputSubmitDelay = 0

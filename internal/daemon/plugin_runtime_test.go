@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -66,18 +65,6 @@ entrypoint = "src/index.ts"
 	if err := os.WriteFile(filepath.Join(root, pluginManifestName), manifest, 0o644); err != nil {
 		t.Fatalf("write plugin manifest: %v", err)
 	}
-}
-
-func dialPluginHelper(socketPath string, timeout time.Duration) (net.Conn, error) {
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("unix", socketPath, 100*time.Millisecond)
-		if err == nil {
-			return conn, nil
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return nil, os.ErrDeadlineExceeded
 }
 
 func TestReapStrandedPluginRuntimesKillsThemAndRetiresTheirRecords(t *testing.T) {
