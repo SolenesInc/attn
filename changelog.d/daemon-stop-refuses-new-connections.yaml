@@ -1,3 +1,3 @@
 kind: internal
 area: testing
-change: Wire-test daemon restarts stop listening first, so agent wrappers reporting their exit are refused instead of stalling the restart.
+change: An in-process daemon stops listening as soon as it stops accepting, so agent wrappers reporting their exit are refused instead of stalling wire-test restarts, and `attn daemon ensure` starts a replacement only after the old daemon releases its lock.

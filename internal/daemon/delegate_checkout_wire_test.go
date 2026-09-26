@@ -232,11 +232,11 @@ func TestADelegateStillBootingHoldsItsCheckoutAgainstAnother(t *testing.T) {
 	reuseMain := &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: "main"}
 	first := delegateCheckoutAt(repo, reuseMain)
 	first.RequestID, first.Label = "first", protocol.Ptr("first")
+	boot := w.HoldNextBoot()
 	accepted, err := cli.StartDelegation(first)
 	if err != nil {
 		t.Fatal(err)
 	}
-	boot := w.HoldBoot(accepted.SessionID)
 	testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
 		for _, pane := range m.WorkspaceLayout.Panes {
 			if protocol.Deref(pane.SessionID) == accepted.SessionID && pane.Status == protocol.WorkspaceLayoutPaneStatusReady {
