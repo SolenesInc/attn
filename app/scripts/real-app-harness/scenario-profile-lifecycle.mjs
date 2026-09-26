@@ -111,7 +111,7 @@ async function main() {
 
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
-  const driver = createWindowDriver({ client });
+  const driver = createWindowDriver({ appPath: options.appPath, client });
   let sessionId = null;
 
   runner.registerCleanup('stop_daemon', () => execFileAsync(daemonBinary, ['daemon', 'stop'], { env: instanceCliEnv(instance) }));
