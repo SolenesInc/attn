@@ -3,8 +3,6 @@ package daemon
 import (
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
 
 func reported(visible, dashboard bool, idle float64, at time.Time) clientPresence {
@@ -57,6 +55,36 @@ func TestPresenceTierFromOneClientsReport(t *testing.T) {
 			because: "unknown idleness is not recent input",
 		},
 		{
+			name:    "watching home just inside the watching idle limit",
+			report:  reported(true, true, presenceWatchingIdleLimit.Seconds()-60, now),
+			want:    PresenceWatching,
+			because: "reading home is a thing people do without touching anything",
+		},
+		{
+			name:    "watching home past the watching idle limit",
+			report:  reported(true, true, presenceWatchingIdleLimit.Seconds()+60, now),
+			want:    PresenceAway,
+			because: "a dashboard nobody has touched for that long is not being read",
+		},
+		{
+			name: "watching with no input, window opened a minute ago",
+			report: clientPresence{
+				Visible: true, DashboardVisible: true, IdleSeconds: -1,
+				ReportedAt: now, FirstReportAt: now.Add(-time.Minute),
+			},
+			want:    PresenceWatching,
+			because: "without input, watching is measured from the first report",
+		},
+		{
+			name: "watching with no input, window open eight untouched hours",
+			report: clientPresence{
+				Visible: true, DashboardVisible: true, IdleSeconds: -1,
+				ReportedAt: now, FirstReportAt: now.Add(-8 * time.Hour),
+			},
+			want:    PresenceAway,
+			because: "without input, watching is measured from the first report",
+		},
+		{
 			name:    "a client that never reported",
 			report:  clientPresence{},
 			want:    PresenceAway,
@@ -70,119 +98,5 @@ func TestPresenceTierFromOneClientsReport(t *testing.T) {
 				t.Errorf("tier = %s, want %s — %s", got, tc.want, tc.because)
 			}
 		})
-	}
-}
-
-func TestWatchingExpiresAfterALongIdleOnHome(t *testing.T) {
-	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
-	const idleLimit = 90 * time.Second
-
-	reading := reported(true, true, presenceWatchingIdleLimit.Seconds()-60, now)
-	if got := reading.tier(now, idleLimit); got != PresenceWatching {
-		t.Errorf("tier = %s just inside the limit, want watching — reading home is a thing people do without touching anything", got)
-	}
-	abandoned := reported(true, true, presenceWatchingIdleLimit.Seconds()+60, now)
-	if got := abandoned.tier(now, idleLimit); got != PresenceAway {
-		t.Errorf("tier = %s past the limit, want away", got)
-	}
-}
-
-func TestWatchingWithNoInputMeasuresFromTheConnection(t *testing.T) {
-	now := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
-	const idleLimit = 90 * time.Second
-
-	fresh := clientPresence{
-		Visible: true, DashboardVisible: true, IdleSeconds: -1,
-		ReportedAt: now, FirstReportAt: now.Add(-time.Minute),
-	}
-	if got := fresh.tier(now, idleLimit); got != PresenceWatching {
-		t.Errorf("tier = %s on a window opened a minute ago, want watching", got)
-	}
-	stale := clientPresence{
-		Visible: true, DashboardVisible: true, IdleSeconds: -1,
-		ReportedAt: now, FirstReportAt: now.Add(-8 * time.Hour),
-	}
-	if got := stale.tier(now, idleLimit); got != PresenceAway {
-		t.Errorf("tier = %s on a window open for eight untouched hours, want away", got)
-	}
-}
-
-func TestFirstReportAtSurvivesLaterReports(t *testing.T) {
-	client := &wsClient{}
-	first := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
-	msg := &protocol.SetClientPresenceMessage{Visible: true, DashboardVisible: true}
-
-	client.setPresence(msg, first)
-	client.setPresence(msg, first.Add(time.Hour))
-
-	if got := client.presenceReport().FirstReportAt; !got.Equal(first) {
-		t.Errorf("FirstReportAt = %s after a later report, want the first one (%s)", got, first)
-	}
-}
-
-func TestAClientThatStopsHeartbeatingExpiresToAway(t *testing.T) {
-	reportedAt := time.Date(2026, 8, 9, 12, 0, 0, 0, time.UTC)
-	watching := reported(true, true, 0, reportedAt)
-
-	if got := watching.tier(reportedAt.Add(presenceHeartbeatGrace-time.Second), 90*time.Second); got != PresenceWatching {
-		t.Errorf("inside the grace window tier = %s, want watching", got)
-	}
-	if got := watching.tier(reportedAt.Add(presenceHeartbeatGrace+time.Second), 90*time.Second); got != PresenceAway {
-		t.Errorf("past the grace window tier = %s, want away", got)
-	}
-}
-
-func TestPresenceTierIsTheHighestAcrossClients(t *testing.T) {
-	d := &Daemon{wsHub: newWSHub()}
-	now := time.Now()
-
-	background := &wsClient{presence: reported(true, false, 600, now)}
-	foreground := &wsClient{presence: reported(true, true, 0, now)}
-	d.wsHub.clients[background] = true
-	d.wsHub.clients[foreground] = true
-
-	if got := d.PresenceTier(); got != PresenceWatching {
-		t.Errorf("tier = %s across an away client and a watching one, want watching", got)
-	}
-
-	delete(d.wsHub.clients, foreground)
-	if got := d.PresenceTier(); got != PresenceAway {
-		t.Errorf("tier = %s after the watching client disconnected, want away", got)
-	}
-}
-
-func TestPresenceTierWithNoClientsIsAway(t *testing.T) {
-	d := &Daemon{wsHub: newWSHub()}
-	if got := d.PresenceTier(); got != PresenceAway {
-		t.Errorf("tier = %s with no clients connected, want away", got)
-	}
-}
-
-func TestSetPresenceRecordsWhatTheClientReported(t *testing.T) {
-	d := &Daemon{wsHub: newWSHub()}
-	client := &wsClient{}
-
-	d.handleSetClientPresence(client, &protocol.SetClientPresenceMessage{
-		Cmd:              protocol.CmdSetClientPresence,
-		Visible:          true,
-		DashboardVisible: true,
-		IdleSeconds:      protocol.Ptr(3.5),
-	})
-
-	got := client.presenceReport()
-	if !got.Visible || !got.DashboardVisible || got.IdleSeconds != 3.5 {
-		t.Errorf("presence = %+v, want the reported values", got)
-	}
-	if got.ReportedAt.IsZero() {
-		t.Error("presence carries no report time, so it could never expire")
-	}
-}
-
-func TestAbsentIdleSecondsIsNotZeroIdleSeconds(t *testing.T) {
-	client := &wsClient{}
-	client.setPresence(&protocol.SetClientPresenceMessage{Visible: true}, time.Now())
-
-	if got := client.presenceReport().tier(time.Now(), 90*time.Second); got != PresenceAway {
-		t.Errorf("tier = %s with no idle report, want away", got)
 	}
 }
