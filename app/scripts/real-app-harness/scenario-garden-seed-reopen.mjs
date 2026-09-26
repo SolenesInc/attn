@@ -7,13 +7,23 @@ import {
   parseCommonArgs,
   printCommonHelp,
 } from './common.mjs';
-import { runShellCommandInPane as runInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
+import { runShellCommandInPane, waitForFirstWorkspacePane, waitForPaneShellReady } from './scenarioAssertions.mjs';
 import { ensureCodexPromptReadyViaPty } from './scenarioAgents.mjs';
 import { delay } from './platform.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
+
+async function runInPane(client, pane, command, expected) {
+  await client.request('select_session', { sessionId: pane.sessionId });
+  await client.request('dom_wait', {
+    selector: `[data-pane-id="${pane.paneId}"][data-pane-suspended="true"]`,
+    absent: true,
+    timeoutMs: 10_000,
+  });
+  return runShellCommandInPane(client, pane, command, expected);
+}
 
 const BRIEF = 'Reply with exactly GSREOPEN_READY and then wait for the user.';
 const HANDOFF = 'Continue this same seed from the resumed conversation.';
