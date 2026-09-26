@@ -106,7 +106,7 @@ func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 
 func TestAWatchedRootOutlivesAClientThatVanishesWithoutUnwatching(t *testing.T) {
 	w := newFsWorld(t)
-	vanishing, vanish := fsAppThatCanVanish(w)
+	vanishing, vanish := peerThatCanVanish(w, func() *testworld.Peer { return pickerApp(w) })
 	staying := pickerApp(w)
 	shared := fsDir(t, "shared")
 	fsMustWatch(t, vanishing, shared)
@@ -119,7 +119,7 @@ func TestAWatchedRootOutlivesAClientThatVanishesWithoutUnwatching(t *testing.T) 
 	})
 }
 
-func fsAppThatCanVanish(w *world) (*testworld.Peer, func()) {
+func peerThatCanVanish(w *world, connect func() *testworld.Peer) (*testworld.Peer, func()) {
 	w.T.Helper()
 	dial := w.Dial
 	var conn net.Conn
@@ -128,7 +128,7 @@ func fsAppThatCanVanish(w *world) (*testworld.Peer, func()) {
 		conn = dialed
 		return dialed, err
 	}
-	p := pickerApp(w)
+	p := connect()
 	w.Dial = dial
 	return p, func() {
 		w.T.Helper()

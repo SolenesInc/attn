@@ -602,36 +602,31 @@ func TestAnAppThatDisconnectsReleasesEveryLiveQueryItHeld(t *testing.T) {
 	defineRequests(t, w.Client(), gateNS)
 	vars := "http://127.0.0.1:" + os.Getenv("ATTN_PPROF") + "/debug/vars"
 
-	app := w.App()
+	app, vanish := peerThatCanVanish(w, w.App)
 	for range 2 {
 		docNextDelivery(app, subscribeOverTheWire(app, requestsWhere(gateNS)))
 	}
-	awaitDiagDocSubscriptions(t, vars, 2)
-	app.Close()
-	awaitDiagDocSubscriptions(t, vars, 0)
+	if held := diagDocSubscriptions(t, vars); held != 2 {
+		t.Fatalf("with two live queries open the daemon holds %d", held)
+	}
+	vanish()
+	if held := diagDocSubscriptions(t, vars); held != 0 {
+		t.Errorf("after the app vanished the daemon still holds %d live queries", held)
+	}
 }
 
-func awaitDiagDocSubscriptions(t *testing.T, vars string, want int) {
+func diagDocSubscriptions(t *testing.T, vars string) int {
 	t.Helper()
-	deadline := time.Now().Add(fakeagent.HangGuard)
-	held := -1
-	for time.Now().Before(deadline) {
-		resp, err := http.Get(vars)
-		if err != nil {
-			t.Fatalf("read %s: %v", vars, err)
-		}
-		var reported struct {
-			DocSubscriptions int `json:"doc_subscriptions"`
-		}
-		err = json.NewDecoder(resp.Body).Decode(&reported)
-		resp.Body.Close()
-		if err != nil {
-			t.Fatalf("decode %s: %v", vars, err)
-		}
-		if held = reported.DocSubscriptions; held == want {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
+	resp, err := http.Get(vars)
+	if err != nil {
+		t.Fatalf("read %s: %v", vars, err)
 	}
-	t.Fatalf("the daemon holds %d live document queries, want %d", held, want)
+	defer resp.Body.Close()
+	var reported struct {
+		DocSubscriptions int `json:"doc_subscriptions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&reported); err != nil {
+		t.Fatalf("decode %s: %v", vars, err)
+	}
+	return reported.DocSubscriptions
 }
