@@ -956,7 +956,6 @@ func (d *Daemon) Start() error {
 
 	go d.runTicketReconcileSweep()
 
-	go d.runSessionResolver()
 	go d.runModelCaptureLoop()
 
 	if err := d.startJobQueue(); err != nil {
@@ -973,6 +972,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
 		} else {
