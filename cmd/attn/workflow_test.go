@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ type fakeWorkflowClient struct {
 	runs      map[string]*protocol.WorkflowRun
 	callsByID map[string][]protocol.WorkflowAgentCall
 
+	runUpserts  []protocol.WorkflowRun
 	callUpserts []protocol.WorkflowAgentCall
 }
 
@@ -28,8 +30,14 @@ func newFakeWorkflowClient() *fakeWorkflowClient {
 
 var _ workflowClient = (*fakeWorkflowClient)(nil)
 
-func (*fakeWorkflowClient) WorkflowRunUpsert(*protocol.WorkflowRun) (*protocol.WorkflowRun, error) {
-	return nil, nil
+func (f *fakeWorkflowClient) WorkflowRunUpsert(run *protocol.WorkflowRun) (*protocol.WorkflowRun, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	stored := *run
+	f.runUpserts = append(f.runUpserts, stored)
+	saved := stored
+	f.runs[run.RunID] = &saved
+	return f.hydrateLocked(run.RunID), nil
 }
 
 func (f *fakeWorkflowClient) WorkflowCallUpsert(runID string, call *protocol.WorkflowAgentCall) (*protocol.WorkflowRun, error) {
@@ -100,6 +108,15 @@ func (f *fakeWorkflowClient) callUpsertCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return len(f.callUpserts)
+}
+
+func (f *fakeWorkflowClient) lastRunUpsert() (protocol.WorkflowRun, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.runUpserts) == 0 {
+		return protocol.WorkflowRun{}, false
+	}
+	return f.runUpserts[len(f.runUpserts)-1], true
 }
 
 func TestWorkflowIPCJournalProxiesAndMirrors(t *testing.T) {
@@ -239,5 +256,54 @@ func TestCountWorkflowCallsRunning(t *testing.T) {
 	total, done, running := countWorkflowCalls(calls)
 	if total != 5 || done != 3 || running != 2 {
 		t.Fatalf("counts = (%d,%d,%d), want (5,3,2)", total, done, running)
+	}
+}
+
+type fixedStub struct {
+	result json.RawMessage
+}
+
+func (s fixedStub) Run(_ context.Context, _ workflow.AgentCall) (json.RawMessage, error) {
+	return s.result, nil
+}
+
+func TestWorkflowExecuteRunCompletes(t *testing.T) {
+	fake := newFakeWorkflowClient()
+
+	const script = `export const meta={name:'t',description:'d'};
+const a = await agent('hi', {schema:{type:'object'}});
+return a;`
+
+	runID := "wf-e2e"
+	parsed := workflowRunArgs{
+		script:  "inline.js",
+		harness: "codex",
+		session: "sess-1",
+		wait:    true,
+	}
+
+	if _, err := fake.WorkflowRunUpsert(buildInitialWorkflowRun(parsed, runID, sha256Hex([]byte(script)), parsed.argsJSON)); err != nil {
+		t.Fatalf("initial upsert: %v", err)
+	}
+	stub := fixedStub{result: json.RawMessage(`{"ok":true}`)}
+	exit := runWorkflowEngine(fake, parsed, runID, script, parsed.argsJSON, stub)
+
+	if exit != 0 {
+		t.Fatalf("exit = %d, want 0", exit)
+	}
+
+	if fake.callUpsertCount() < 1 {
+		t.Fatalf("expected at least one call upsert, got %d", fake.callUpsertCount())
+	}
+
+	last, ok := fake.lastRunUpsert()
+	if !ok {
+		t.Fatal("expected a final run upsert")
+	}
+	if last.Status != protocol.WorkflowRunStatusCompleted {
+		t.Fatalf("final status = %q, want completed", last.Status)
+	}
+	if last.ResultJson == nil || *last.ResultJson != `{"ok":true}` {
+		t.Fatalf("final result_json = %v", last.ResultJson)
 	}
 }
