@@ -68,6 +68,9 @@ func TestAppApplyRefusesAVersionItCannotVerifyAndRecordsNothing(t *testing.T) {
 			if got := appNames(t, cli); got != "" {
 				t.Errorf("apps after the refusal = %q, want none", got)
 			}
+			if _, err := cli.AppStatus("approval-gate"); err == nil || strings.Contains(err.Error(), "version(s)") {
+				t.Errorf("status after the refusal = %v, want no version of approval-gate recorded", err)
+			}
 		})
 	}
 }

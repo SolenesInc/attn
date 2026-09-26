@@ -18,10 +18,15 @@ func TestTheAppRegistryShowsTheServingVersionsViews(t *testing.T) {
 	approvals := appTileView("approvals", "Pending approvals")
 	approvals.Params = &appbuild.ViewParams{Label: "Ticket id", Placeholder: "t-1234"}
 	older := applyAppWithViews(t, cli, "reviewer", "reviews approvals", approvals)
-	newer := applyAppWithViews(t, cli, "reviewer", "reviews approvals", approvals, appTileView("history", "History"))
-
 	app := w.App()
-	entry := appRegistryEntryOf(t, app.Initial.Apps, "reviewer")
+	if initial := appRegistryEntryOf(t, app.Initial.Apps, "reviewer"); protocol.Deref(initial.VersionID) != older.VersionID {
+		t.Fatalf("the initial registry serves version %v, want %d", initial.VersionID, older.VersionID)
+	}
+
+	newer := applyAppWithViews(t, cli, "reviewer", "reviews approvals", approvals, appTileView("history", "History"))
+	entry := awaitAppRegistryEntry(app, "reviewer", func(e protocol.AppRegistryEntry) bool {
+		return protocol.Deref(e.VersionID) == newer.VersionID
+	})
 	if !entry.Enabled || protocol.Deref(entry.VersionID) != newer.VersionID || protocol.Deref(entry.ContentHash) != newer.ContentHash {
 		t.Fatalf("registry entry = %+v, want enabled at version %d with hash %s", entry, newer.VersionID, newer.ContentHash)
 	}

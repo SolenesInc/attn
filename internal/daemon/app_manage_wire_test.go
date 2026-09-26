@@ -7,6 +7,7 @@ import (
 	"github.com/victorarias/attn/internal/appbuild"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAppListShowsTheServingVersionAndWhetherItsConsumerRuns(t *testing.T) {
@@ -67,6 +68,14 @@ func TestAppRemoveKeepsHistoryAndDocuments(t *testing.T) {
 	if removed.Name != "reviewer" || !removed.ConsumerRemoved || removed.VersionsKept != 1 || removed.InvocationsKept != 1 || removed.NamespaceKept != "app/reviewer" {
 		t.Errorf("remove answered %+v, want the consumer gone and one version, one invocation and app/reviewer kept", removed)
 	}
+	testworld.Await(app, protocol.EventAppsUpdated, func(m protocol.AppsUpdatedMessage) bool {
+		for _, e := range m.Apps {
+			if e.Name == "reviewer" {
+				return false
+			}
+		}
+		return true
+	})
 	if got := appNames(t, cli); got != "" {
 		t.Errorf("apps after the removal = %q", got)
 	}
