@@ -234,9 +234,6 @@ func (d *Daemon) crewWake(name, agent string) (*protocol.CrewWakeResult, error) 
 }
 
 func (d *Daemon) crewWakeWithDelivery(name, agent string, autonomous bool, delivery *crewWakeDelivery) (*protocol.CrewWakeResult, error) {
-	if d.crewWakeStartHook != nil {
-		d.crewWakeStartHook(strings.TrimSpace(strings.ToLower(name)))
-	}
 	d.crewWakeMu.Lock()
 	defer d.crewWakeMu.Unlock()
 	return d.crewWakeWithDeliveryLocked(name, agent, autonomous, delivery)
@@ -289,9 +286,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	sessionID := uuid.NewString()
 	if _, err := d.claimCrewBinding(member.ID, sessionID); err != nil {
 		return nil, err
-	}
-	if d.crewWakeAfterClaimHook != nil {
-		d.crewWakeAfterClaimHook(member.ID, sessionID)
 	}
 
 	workspaceID := crewWorkspaceID(member.ID)

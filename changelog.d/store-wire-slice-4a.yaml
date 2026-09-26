@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard pin, presentation, recent location, session annotation, session usage and delegation role promises with daemon wire tests instead of store internals tests.

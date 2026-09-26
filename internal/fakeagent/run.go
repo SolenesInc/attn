@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -12,6 +13,9 @@ type Run struct {
 	ConversationID string
 	Resumed        bool
 	Argv           []string
+	Env            []string
+	AutoMode       json.RawMessage
+	Yolo           bool
 	t              testing.TB
 	fake           *fake
 }
@@ -32,6 +36,21 @@ func (r *Run) Reply(text string) {
 func (r *Run) ReplyAfterStop(text string) {
 	r.t.Helper()
 	r.call(methodReplyLate, textParams{Text: text}, nil)
+}
+
+func (r *Run) Stream(text string) {
+	r.t.Helper()
+	r.call(methodStream, textParams{Text: text}, nil)
+}
+
+func (r *Run) Subagent(text string) {
+	r.t.Helper()
+	r.call(methodSubagent, textParams{Text: text}, nil)
+}
+
+func (r *Run) DeleteSubagentTranscripts() {
+	r.t.Helper()
+	r.call(methodDropSubs, textParams{}, nil)
 }
 
 func (r *Run) Exit(code int) {

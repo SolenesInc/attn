@@ -31,7 +31,7 @@ func TestRecoveredReviewerKeepsBriefApprovalInsideGuardianDwell(t *testing.T) {
 			"guarded": {Recorded: true, ApprovalRoute: launchcontract.ApprovalRouteReviewer},
 		},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if !evidenceOf(t, d, "guarded").ReviewerInLoop {
 		t.Fatal("recovery did not reconstruct the reviewer before resolver activity")
@@ -62,7 +62,7 @@ func TestRecoveryUsesWorkerApprovalRouteAndRepairsStoredIntent(t *testing.T) {
 			"route-mismatch": {Recorded: true, ApprovalRoute: launchcontract.ApprovalRouteReviewer},
 		},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if !evidenceOf(t, d, "route-mismatch").ReviewerInLoop {
 		t.Fatal("stored route won over the surviving worker")
@@ -119,7 +119,7 @@ func TestReconcileKeepsPersistedStateOfLiveSessions(t *testing.T) {
 				info:    map[string]ptybackend.SessionInfo{"live": runningInfo(nil)},
 			}
 
-			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 			if report.StateUpdated != 0 {
 				t.Fatalf("state_updated = %d, want 0", report.StateUpdated)
@@ -141,7 +141,7 @@ func TestReconcileMarksExitedWorkerIdle(t *testing.T) {
 		info:    map[string]ptybackend.SessionInfo{"dead": info},
 	}
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if got := d.store.Get("dead").State; got != protocol.SessionStateIdle {
 		t.Fatalf("recovered state = %q, want idle", got)
@@ -158,7 +158,7 @@ func TestReconcileSeedsHeartbeatEvidenceFromWorker(t *testing.T) {
 		info:    map[string]ptybackend.SessionInfo{"live": runningInfo(&signal)},
 	}
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	evidence, ok := d.evidenceTable().snapshot("live")
 	if !ok {
@@ -183,7 +183,7 @@ func TestRecoveredSessionResolvesOffStaleWorking(t *testing.T) {
 		liveIDs: []string{"live"},
 		info:    map[string]ptybackend.SessionInfo{"live": runningInfo(&signal)},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	d.resolveDue(time.Now())
 
@@ -208,7 +208,7 @@ func TestRecoveredApprovalSurvivesTheResolver(t *testing.T) {
 				liveIDs: []string{"blocked"},
 				info:    map[string]ptybackend.SessionInfo{"blocked": runningInfo(&signal)},
 			}
-			d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+			d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 			d.resolveDue(time.Now())
 
@@ -228,7 +228,7 @@ func TestRecoveredApprovalDropsWhenTheAgentMovedOn(t *testing.T) {
 		liveIDs: []string{"answered"},
 		info:    map[string]ptybackend.SessionInfo{"answered": runningInfo(&signal)},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	evidence, ok := d.evidenceTable().snapshot("answered")
 	if !ok {
@@ -256,7 +256,7 @@ func TestSnoozeWakeSurvivesDaemonRecovery(t *testing.T) {
 		liveIDs: []string{"snoozed"},
 		info:    map[string]ptybackend.SessionInfo{"snoozed": runningInfo(nil)},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if !attention.OpensTurn(d.store.Get("snoozed").State) {
 		t.Fatalf("recovered state %q opens no turn, so the wake has nothing to deliver",

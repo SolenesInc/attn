@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -19,18 +18,6 @@ type doorbellRecorder struct {
 	mu       sync.Mutex
 	writes   []string
 	autoTake bool
-}
-
-func TestCrewSleepPrompt_ForcesThePromisedSleep(t *testing.T) {
-	for _, want := range []string{
-		"`attn handoff --sleep",
-		"nobody wakes behind it",
-		"not be woken again until the user asks",
-	} {
-		if !strings.Contains(crewSleepPrompt, want) {
-			t.Errorf("sleep prompt does not carry %q", want)
-		}
-	}
 }
 
 func (r *doorbellRecorder) prompts() []string {
@@ -199,31 +186,6 @@ func TestCrewLifecycleTick_UntakenHeartbeatLeavesClockAndReleasesTheLane(t *test
 	}
 }
 
-func TestCrewLifecycleTick_MissingHeartbeatReceiptsKeepOneLateCandidate(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	recorder.setAutoTake(false)
-	base := time.Now()
-	member := crewMemberRecord(t, d, "trellis")
-
-	for generation := 0; generation < 5; generation++ {
-		requestAt := base.Add(time.Duration(generation) * time.Hour)
-		setSessionActivity(t, d, sessionID, protocol.SessionStateWaitingInput, requestAt)
-		d.actOnCrewMember(member, sessionID, crew.ActionHeartbeat, crew.CacheState{}, requestAt.Add(time.Minute))
-
-		lane := d.sessionInputs().lane(sessionID)
-		lane.mu.Lock()
-		attempts := len(lane.attempts)
-		pending := len(lane.pending)
-		lane.mu.Unlock()
-		if attempts != 1 || pending != 1 {
-			t.Fatalf("generation %d retained attempts=%d pending=%d, want one late heartbeat", generation, attempts, pending)
-		}
-	}
-	if got := recorder.prompts(); len(got) != 5 {
-		t.Fatalf("heartbeat generations pasted %d prompts, want 5", len(got))
-	}
-}
-
 func TestCrewLifecycleTick_AsksForTheHandoffWhenTheUserIsGone(t *testing.T) {
 	d, sessionID, recorder := newLifecycleDaemon(t)
 	now := time.Now()
@@ -331,20 +293,6 @@ func TestCrewLifecycleTick_HonoursItsSwitches(t *testing.T) {
 	}
 }
 
-func TestCrewCacheState_TreatsAWorkingSessionAsMidRequest(t *testing.T) {
-	d, sessionID, _ := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateWorking, now.Add(-2*time.Hour))
-
-	state := d.crewCacheState(d.store.Get(sessionID), now)
-	if state.Age != 0 {
-		t.Fatalf("a working session's cache reads %s old, want 0", state.Age)
-	}
-	if state.TTL != crewCacheTTLClaude*time.Second {
-		t.Fatalf("cache TTL = %s, want claude's assumed %ds", state.TTL, crewCacheTTLClaude)
-	}
-}
-
 func TestCrewCacheTTL_TakesThePerAgentAssumptionAndItsOverride(t *testing.T) {
 	d := newCrewDaemon(t)
 	if got := d.crewCacheTTL("codex"); got != crewCacheTTLCodex*time.Second {
@@ -360,35 +308,6 @@ func TestCrewCacheTTL_TakesThePerAgentAssumptionAndItsOverride(t *testing.T) {
 	d.store.SetSetting(SettingCrewCacheTTLPrefix+"codex", "not-a-number")
 	if got := d.crewCacheTTL("codex"); got != crewCacheTTLCodex*time.Second {
 		t.Fatalf("a bad override gave %s, want the %ds assumption back", got, crewCacheTTLCodex)
-	}
-}
-
-func TestChargeAutonomousWake_BooksWakesAndRefusesPastTheLimit(t *testing.T) {
-	d := newCrewDaemon(t)
-	d.store.SetSetting(SettingCrewWakeLimit, "2")
-	now := time.Now()
-
-	for i := 0; i < 2; i++ {
-		if err := d.chargeAutonomousWake("trellis", now.Add(time.Duration(i)*time.Minute)); err != nil {
-			t.Fatalf("wake %d was refused: %v", i+1, err)
-		}
-	}
-	member := crewMemberRecord(t, d, "trellis")
-	if got := len(member.AutonomousWakes); got != 2 {
-		t.Fatalf("the roster records %d autonomous wakes, want 2", got)
-	}
-
-	err := d.chargeAutonomousWake("trellis", now.Add(2*time.Minute))
-	if err == nil {
-		t.Fatal("a third wake was allowed past a limit of 2")
-	}
-	for _, want := range []string{"Trellis", "crew.wake_limit=2", "nothing was woken"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("the refusal %q does not name %q", err, want)
-		}
-	}
-	if got := len(crewMemberRecord(t, d, "trellis").AutonomousWakes); got != 2 {
-		t.Fatalf("a refused wake was charged anyway: %d stamps", got)
 	}
 }
 
@@ -499,89 +418,6 @@ func TestCrewHandoff_NapOverridesTheAbsence(t *testing.T) {
 	}
 	if got := len(crewMemberRecord(t, d, "trellis").AutonomousWakes); got != 1 {
 		t.Fatalf("an unattended turnover booked %d wakes, want 1", got)
-	}
-}
-
-func TestCrewHandoff_SleepIsExplicitEvenWithTheUserHere(t *testing.T) {
-	d, _, _ := newWakeableDaemon(t)
-	woken, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-
-	msg := protocol.CrewHandoffMessage{
-		Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID,
-		Note: "signing off for the night\n", Close: protocol.Ptr(protocol.CrewDayCloseSleep),
-	}
-	resp := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
-	if !resp.Ok {
-		t.Fatalf("handoff: %v", protocol.Deref(resp.Error))
-	}
-	if got := protocol.Deref(resp.CrewHandoffResult.Outcome); got != protocol.CrewDayCloseSleep {
-		t.Fatalf("outcome = %q, want sleep", got)
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != "" {
-		t.Fatalf("the member is still bound to %q after being told to sleep", got)
-	}
-}
-
-func TestCrewHandoff_TeardownPreparationFailureKeepsTheDayRunning(t *testing.T) {
-	d, backend, _ := newWakeableDaemon(t)
-	woken, err := d.crewWake("trellis", "")
-	if err != nil {
-		t.Fatalf("wake: %v", err)
-	}
-	d.prepareSessionTeardownHook = func(string) error { return errors.New("tombstone write failed") }
-	msg := protocol.CrewHandoffMessage{
-		Cmd: protocol.CmdCrewHandoff, SessionID: woken.SessionID,
-		Note: "cannot close yet\n", Close: protocol.Ptr(protocol.CrewDayCloseSleep),
-	}
-	resp := gardenCall(t, func(c net.Conn) { d.handleCrewHandoff(c, &msg) })
-	if resp.Ok {
-		t.Fatal("handoff reported success after teardown preparation failed")
-	}
-	if d.store.Get(woken.SessionID) == nil {
-		t.Fatal("failed handoff removed the running day")
-	}
-	if got := protocol.Deref(memberByID(t, crewList(t, d), "trellis").BindingSession); got != woken.SessionID {
-		t.Fatalf("binding = %q, want original day %q", got, woken.SessionID)
-	}
-	if got := spawnedSessions(t, backend); len(got) != 1 {
-		t.Fatalf("spawned sessions = %v, want no successor", got)
-	}
-}
-
-func TestCrewLifecycleMemo_ForgetsAClosedSession(t *testing.T) {
-	memo := newCrewLifecycleMemo()
-	now := time.Now()
-	if !memo.heartbeatDue("a", now, time.Hour) {
-		t.Fatal("the first heartbeat was refused")
-	}
-	if !memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
-		t.Fatal("an unconfirmed heartbeat was charged against the grace")
-	}
-	memo.recordHeartbeat("a", now)
-	if memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
-		t.Fatal("a second heartbeat slipped through the grace")
-	}
-	if !memo.mayPromptSleep("a", now, time.Hour) {
-		t.Fatal("a heartbeat's grace blocked the sleep prompt; they are separate acts")
-	}
-	memo.forget("a")
-	if !memo.heartbeatDue("a", now.Add(time.Minute), time.Hour) {
-		t.Fatal("a forgotten session is still holding its grace")
-	}
-}
-
-func TestCrewLifecycleTick_LeavesAWorkingMemberAlone(t *testing.T) {
-	d, sessionID, recorder := newLifecycleDaemon(t)
-	now := time.Now()
-	setSessionActivity(t, d, sessionID, protocol.SessionStateWorking, now.Add(-3*time.Hour))
-
-	d.crewLifecycleTick(now)
-
-	if got := recorder.prompts(); len(got) != 0 {
-		t.Fatalf("a working member was sent %q", got)
 	}
 }
 

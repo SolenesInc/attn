@@ -42,6 +42,9 @@ const (
 	methodPrompted   = "prompted"
 	methodReply      = "reply"
 	methodReplyLate  = "reply_after_stop"
+	methodStream     = "stream"
+	methodSubagent   = "subagent"
+	methodDropSubs   = "delete_subagent_transcripts"
 	methodExit       = "exit"
 	signalExitBase   = 128
 )
@@ -55,14 +58,17 @@ type config struct {
 }
 
 type launch struct {
-	Role           string   `json:"role"`
-	Harness        Harness  `json:"harness"`
-	Pid            int      `json:"pid"`
-	Argv           []string `json:"argv"`
-	AttnSessionID  string   `json:"attn_session_id,omitempty"`
-	ConversationID string   `json:"conversation_id,omitempty"`
-	Resumed        bool     `json:"resumed,omitempty"`
-	Error          string   `json:"error,omitempty"`
+	Role           string          `json:"role"`
+	Harness        Harness         `json:"harness"`
+	Pid            int             `json:"pid"`
+	Argv           []string        `json:"argv"`
+	Env            []string        `json:"env"`
+	AttnSessionID  string          `json:"attn_session_id,omitempty"`
+	ConversationID string          `json:"conversation_id,omitempty"`
+	Resumed        bool            `json:"resumed,omitempty"`
+	AutoMode       json.RawMessage `json:"auto_mode,omitempty"`
+	Yolo           bool            `json:"yolo,omitempty"`
+	Error          string          `json:"error,omitempty"`
 }
 
 type bootingParams struct {
@@ -167,6 +173,12 @@ type conversation interface {
 	reply(text string, afterStop bool) error
 }
 
+type transcriptAuthor interface {
+	stream(text string) error
+	subagent(text string) error
+	deleteSubagentTranscripts() error
+}
+
 type promptSubmission struct {
 	text         string
 	conversation string
@@ -201,6 +213,7 @@ func serve(cfg config, style composer, conv conversation) int {
 	report.Role = roleAgent
 	report.Pid = os.Getpid()
 	report.Argv = os.Args
+	report.Env = os.Environ()
 	report.AttnSessionID = os.Getenv("ATTN_SESSION_ID")
 	if report.AttnSessionID == "" {
 		began = errors.Join(began, errors.New("ATTN_SESSION_ID is not set"))
@@ -242,6 +255,25 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, a.conv.reply(p.Text, method == methodReplyLate)
+	case methodStream, methodSubagent, methodDropSubs:
+		var p textParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		author, ok := a.conv.(transcriptAuthor)
+		if !ok {
+			return nil, fmt.Errorf("%T does not script %s", a.conv, method)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		switch method {
+		case methodStream:
+			return struct{}{}, author.stream(p.Text)
+		case methodSubagent:
+			return struct{}{}, author.subagent(p.Text)
+		default:
+			return struct{}{}, author.deleteSubagentTranscripts()
+		}
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {

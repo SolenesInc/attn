@@ -135,7 +135,7 @@ func TestRecoveryKeepsAnyResumableSessionWhateverItWasDoing(t *testing.T) {
 				giveRestorationEvidence(t, d, id, resumeID)
 				d.ptyBackend = deadWorkerBackend()
 
-				report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+				report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 				if report.MarkedRecoverable != 1 {
 					t.Fatalf("marked_recoverable = %d, want 1", report.MarkedRecoverable)
@@ -190,7 +190,7 @@ func TestRecoveryReapsWhatItCannotBringBack(t *testing.T) {
 			tc.setup(t, d, home, id)
 			d.ptyBackend = deadWorkerBackend()
 
-			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 			if report.Reaped != 1 {
 				t.Fatalf("reaped = %d, want 1", report.Reaped)
@@ -212,7 +212,7 @@ func TestRecoveryRedecidesSessionsAlreadyParkedAsRecoverable(t *testing.T) {
 	giveRestorationEvidence(t, d, "target-pruned", "native-target-pruned")
 	d.ptyBackend = deadWorkerBackend()
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if session := d.store.Get("still-there"); session == nil || session.State != protocol.SessionStateRecoverable {
 		t.Fatalf("still-there = %+v, want left recoverable", session)
@@ -234,7 +234,7 @@ func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
 	d.store.MarkSessionIntentionalClose("closed-on-purpose", time.Now())
 	d.ptyBackend = deadWorkerBackend()
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if session := d.store.Get("closed-on-purpose"); session != nil {
 		t.Fatalf("session = %+v, want gone: the user already dismissed it", session)
@@ -248,7 +248,7 @@ func TestRecoveryKeepsShellPanes(t *testing.T) {
 	giveLaunchIntent(t, d, "utility-shell")
 	d.ptyBackend = deadWorkerBackend()
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	session := d.store.Get("utility-shell")
 	if session == nil || session.State != protocol.SessionStateRecoverable {
@@ -284,7 +284,7 @@ func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 	}
 
 	d.ptyBackend = deadWorkerBackend()
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if session := d.store.Get("plugin-with-handle"); session == nil || session.State != protocol.SessionStateRecoverable {
 		t.Fatalf("plugin-with-handle = %+v, want recoverable", session)
@@ -313,7 +313,7 @@ func TestRecoveryKeepsThePaneOfARecoverableSession(t *testing.T) {
 	}
 
 	d.ptyBackend = deadWorkerBackend()
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	layout := d.store.GetWorkspaceLayout(workspaceID)
 	if layout == nil {

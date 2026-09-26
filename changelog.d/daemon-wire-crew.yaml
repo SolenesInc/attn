@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard crew wake, sleep, restart, handoff, document and settings promises with daemon wire tests instead of in-package daemon tests.

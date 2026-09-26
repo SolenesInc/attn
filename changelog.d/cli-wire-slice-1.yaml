@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard daemon startup, prompt rendering, preflight, version and hook-state promises through stack tests of the built attn binary, delete the in-process tests they replace, and remove the unused legacy build-info overrides.
