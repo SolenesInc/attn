@@ -106,7 +106,6 @@ type Daemon struct {
 	clientToken                       string
 	store                             *store.Store
 	automationMu                      sync.Mutex
-	wsAutomationMutationTimeout       time.Duration
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
 	automationRepoMu                  sync.Mutex
@@ -343,7 +342,6 @@ type Daemon struct {
 	workflowDirty             map[string]bool
 	workflowEngineMu          sync.Mutex
 	workflowEngineConn        map[string]workflowEngineSink
-	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
 	gardenBroadcastHook       func([]protocol.Seed, int)
 	appsBroadcastHook         func([]protocol.AppRegistryEntry)
 	gardenMintID              func() (string, error)
