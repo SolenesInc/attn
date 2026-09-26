@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard bus retention and status, conversation resume, delegation, delegation preferences and document store promises with daemon wire and CLI stack tests instead of store internals tests; the fake Claude now starts a new conversation on `/clear`.

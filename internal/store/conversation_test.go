@@ -106,19 +106,6 @@ func TestTransitionSessionConversationRejectsPathlessObservation(t *testing.T) {
 	}
 }
 
-func TestSetResumeSessionIDClearsPathWhenIdentityChanges(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "session-1", protocol.SessionStateWorking)
-	if changed, err := s.TransitionSessionConversation("session-1", "codex-current", "/transcripts/current.jsonl"); err != nil || !changed {
-		t.Fatalf("seed conversation: changed=%v err=%v", changed, err)
-	}
-
-	s.SetResumeSessionID("session-1", "codex-next")
-	if got := s.GetSessionConversation("session-1"); got != (SessionConversation{NativeID: "codex-next"}) {
-		t.Fatalf("binding after identity-only update = %+v, want path cleared", got)
-	}
-}
-
 func TestTransitionSessionResumeIDKeepsTrustedLaunchWithoutAPath(t *testing.T) {
 	s := newTurnStore(t)
 	addTurnSession(t, s, "session-1", protocol.SessionStateWorking)
