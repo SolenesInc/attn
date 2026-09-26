@@ -503,6 +503,28 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('s5');
   });
 
+  it('moves the context agent to another agent on the desktop when it leaves while a tile is focused', async () => {
+    const tileFocused = (desktop: Desktop) => ({ ...withNotesTile(desktop), active_pane_id: 'tile-notes' });
+    arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? tileFocused(desktop) : desktop)), 'd1');
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    act(() => useSessionStore.setState({ activeSessionId: 's3' }));
+
+    act(() => {
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...tileFocused(agentDesktop('d1', 1, ['s2'])), revision: 2 } : desktop,
+        ),
+        'd1',
+      );
+    });
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
+    expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
+  });
+
   it('lets a broadcast that contradicts a pending selection win', async () => {
     desktopCommands.sendDesktopPlaceSession.mockImplementation(() => new Promise(() => {}));
     render(<App />);
