@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from '../../src/components/DelegationChain';
-import { UnifiedPalette } from '../../src/components/palette/UnifiedPalette';
+import { openPalette, switchPalette, UnifiedPalette, type PaletteState } from '../../src/components/palette/UnifiedPalette';
 import FocusTrap from 'focus-trap-react';
 import type { AgentPaletteInput, PaletteSession } from '../../src/components/palette/agentPaletteRows';
 import { useEscapeStack } from '../../src/hooks/useEscapeStack';
@@ -28,8 +28,8 @@ const NO_AGENTS: AgentPaletteInput<PaletteSession> = {
 
 export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [current, setCurrent] = useState('builder');
-  const [paletteQuery, setPaletteQuery] = useState<string | null>(null);
-  const menu = paletteQuery !== null;
+  const [palette, setPalette] = useState<PaletteState | null>(null);
+  const menu = palette !== null;
   const [settings, setSettings] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [rowGeneration, setRowGeneration] = useState(0);
@@ -37,7 +37,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   const terminal = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { terminal.current?.focus(); }, [current]);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
-  useShortcut('ui.commandPalette', () => { chain.current?.prepareCommand(); setPaletteQuery((query) => (query === null ? '>' : null)); }, true);
+  useShortcut('ui.commandPalette', () => { chain.current?.prepareCommand(); setPalette((open) => (open === null ? openPalette('commands') : switchPalette(open, 'commands'))); }, true);
   useShortcut('session.historyBack', () => setCurrent('root'));
   useShortcut('ui.openSettings', () => setSettings((open) => !open));
   useShortcut('session.toggleSidebar', () => { chain.current?.dismiss('sidebar-collapse'); setCollapsed((value) => !value); });
@@ -60,11 +60,11 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
           <button data-testid="replace-sidebar-rows" onClick={() => setRowGeneration((value) => value + 1)}>Replace sidebar rows</button>
         </main>
       </div>
-      {paletteQuery !== null && (
+      {palette !== null && (
         <UnifiedPalette
-          query={paletteQuery}
-          onQueryChange={setPaletteQuery}
-          onClose={() => setPaletteQuery(null)}
+          state={palette}
+          onStateChange={setPalette}
+          onClose={() => setPalette(null)}
           agents={NO_AGENTS}
           desktops={[]}
           commands={[{
