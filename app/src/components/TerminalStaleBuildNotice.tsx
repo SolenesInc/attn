@@ -49,7 +49,6 @@ export function TerminalStaleBuildNotice({ onDismiss }: TerminalStaleBuildNotice
         type="button"
         className="terminal-stale-build-notice-dismiss"
         onClick={onDismiss}
-        data-testid="terminal-stale-build-notice-dismiss"
         aria-label="Dismiss older-terminal notice"
       >
         ×
