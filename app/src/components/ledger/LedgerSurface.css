@@ -598,3 +598,9 @@
   .ledger-split { grid-template-columns: minmax(0, 1fr); }
   .ledger-inspector { display: none; }
 }
+
+.ledger-menu-title {
+  padding: 4px 8px 2px;
+  color: var(--ledger-fg-2);
+  font-size: 11px;
+}

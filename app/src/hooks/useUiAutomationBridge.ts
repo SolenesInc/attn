@@ -209,12 +209,13 @@ function serializeSession(session: Session, getActivePaneIdForSession: (session:
 }
 
 function serializeArrangement() {
-  const { selectedProfileId, currentDesktopId, previousDesktopId, desktops } = useProfilesStore.getState();
+  const { profiles, selectedProfileId, currentDesktopId, previousDesktopId, desktops } = useProfilesStore.getState();
   const surfaceOf = (desktopId: string) =>
     typeof document === 'undefined'
       ? null
       : document.querySelector(`[data-session-terminal-workspace="${CSS.escape(desktopId)}"]`);
   return {
+    profiles: profiles.map((profile) => ({ id: profile.id, name: profile.name, revision: profile.revision })),
     selectedProfileId,
     currentDesktopId,
     previousDesktopId,
@@ -1433,9 +1434,16 @@ async function runLedgerRowVerb(row: HTMLElement, label: string) {
   if (!(more instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
   clickElement(more);
   await settleUi(1);
-  const item = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'))
-    .find((entry) => (entry.textContent || '').replace(/^\d/, '').trim() === label);
-  if (!(item instanceof HTMLElement)) throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}`);
+  clickLedgerMenuItem(row, label);
+}
+
+function clickLedgerMenuItem(row: HTMLElement, label: string) {
+  const items = Array.from(row.querySelectorAll('.ledger-menu [role="menuitem"]'));
+  const labelOf = (entry: Element) => (entry.textContent || '').replace(/^\d/, '').trim();
+  const item = items.find((entry) => labelOf(entry) === label);
+  if (!(item instanceof HTMLElement)) {
+    throw new Error(`row ${row.getAttribute('data-row-key')} offers no ${label}; its menu holds ${items.map(labelOf).join(', ') || 'nothing'}`);
+  }
   clickElement(item);
 }
 
@@ -1616,6 +1624,9 @@ function collectSessionsPanelUiState() {
       label: row.querySelector('.ledger-row-title')?.textContent?.trim() || '',
       agent: row.querySelector('.ledger-meta-seg')?.textContent?.trim() || '',
       state,
+      profile: row.getAttribute('data-profile') || '',
+      profileLabel: row.getAttribute('data-profile-label') || '',
+      note: row.querySelector('.ledger-row-note')?.textContent?.trim() || '',
       where: row.querySelector('.ledger-row-meta .is-path')?.getAttribute('title') || '',
       branch: row.querySelector('.ledger-row-meta .is-mono:not(.is-path)')?.textContent?.trim() || '',
       seed: verbs.find((verb) => verb.startsWith('Seed ·'))?.slice(7) || '',
@@ -2574,10 +2585,14 @@ export function useUiAutomationBridge({
         return collectSessionsPanelUiState();
       }
       case 'sessions_row_action': {
-        const { sessionId, action } = payload as { sessionId: string; action: string };
+        const { sessionId, action, choice } = payload as { sessionId: string; action: string; choice?: string };
         const row = sessionsPanelRoot().querySelector(`.ledger-row[data-row-key="${CSS.escape(sessionId)}"]`);
         if (!(row instanceof HTMLElement)) throw new Error(`no row for session ${sessionId}`);
         await runLedgerRowVerb(row, action);
+        if (choice !== undefined) {
+          await settleUi(1);
+          clickLedgerMenuItem(row, choice);
+        }
         await settleUi(3);
         return collectSessionsPanelUiState();
       }

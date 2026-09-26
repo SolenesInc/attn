@@ -74,6 +74,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-session-reopen'],
   },
   {
+    id: 'profile-lifecycle',
+    runnerId: 'PROFILE-LIFECYCLE',
+    label: 'Profiles are created, renamed and deleted from the switcher, and the ledger moves and reopens agents between them',
+    command: ['pnpm', 'run', 'real-app:scenario-profile-lifecycle'],
+  },
+  {
     id: 'sessions-surface',
     runnerId: 'SESSIONS-SURFACE',
     label: 'The Sessions surface lists, filters, remembers its filters, and updates live and closed sessions',
