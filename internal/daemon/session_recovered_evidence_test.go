@@ -39,13 +39,13 @@ func TestRecoveredReviewerKeepsBriefApprovalInsideGuardianDwell(t *testing.T) {
 	now := time.Now()
 	d.recordBracketEvidence("guarded", protocol.StateWorking)
 	d.recordPTYEvidence("guarded", pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-	d.resolveAllSessions(now.Add(time.Second))
+	d.resolveDue(now.Add(time.Second))
 	if got := d.store.Get("guarded").State; got == protocol.SessionStatePendingApproval {
 		t.Fatal("brief guardian-reviewed approval published after daemon recovery")
 	}
 
 	d.recordPTYEvidence("guarded", pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now.Add(2 * time.Second)})
-	d.resolveAllSessions(now.Add(3 * time.Second))
+	d.resolveDue(now.Add(3 * time.Second))
 	if got := d.store.Get("guarded").State; got != protocol.SessionStateWorking {
 		t.Fatalf("state = %q, want working after guardian answered", got)
 	}
@@ -185,7 +185,7 @@ func TestRecoveredSessionResolvesOffStaleWorking(t *testing.T) {
 	}
 	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
 
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if got := d.store.Get("live").State; got != protocol.SessionStateIdle {
 		t.Fatalf("resolved state = %q, want idle", got)
@@ -210,7 +210,7 @@ func TestRecoveredApprovalSurvivesTheResolver(t *testing.T) {
 			}
 			d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
 
-			d.resolveAllSessions(time.Now())
+			d.resolveDue(time.Now())
 
 			if got := d.store.Get("blocked").State; got != tc.state {
 				t.Fatalf("resolved state = %q, want %q", got, tc.state)
@@ -238,7 +238,7 @@ func TestRecoveredApprovalDropsWhenTheAgentMovedOn(t *testing.T) {
 		t.Fatalf("harness edge restored for an agent that moved on: %+v", evidence.LastHarnessEvent)
 	}
 
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if got := d.store.Get("answered").State; got != protocol.SessionStateIdle {
 		t.Fatalf("resolved state = %q, want idle", got)

@@ -15,7 +15,7 @@ type dwellGate struct {
 
 type dwellPending struct {
 	state protocol.SessionState
-	since time.Time
+	until time.Time
 }
 
 func newDwellGate() *dwellGate {
@@ -34,24 +34,23 @@ func (g *dwellGate) ready(sessionID string, state protocol.SessionState, dwell t
 	}
 	pending, ok := g.pending[sessionID]
 	if !ok || pending.state != state {
-		g.pending[sessionID] = dwellPending{state: state, since: now}
+		g.pending[sessionID] = dwellPending{state: state, until: now.Add(dwell)}
 		return false
 	}
-	if now.Sub(pending.since) < dwell {
+	if now.Before(pending.until) {
 		return false
 	}
 	delete(g.pending, sessionID)
 	return true
 }
 
-func (g *dwellGate) waiting(sessionID string) bool {
+func (g *dwellGate) deadline(sessionID string) time.Time {
 	if g == nil {
-		return false
+		return time.Time{}
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	_, ok := g.pending[sessionID]
-	return ok
+	return g.pending[sessionID].until
 }
 
 func (g *dwellGate) clear(sessionID string) {

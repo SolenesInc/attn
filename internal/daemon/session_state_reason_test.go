@@ -10,27 +10,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func TestASessionWhoseEvidenceStoppedMovingIsReportedStuck(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-stuck"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-
-	d.recordBracketEvidence(id, protocol.StateWorking)
-	d.recordBracketEvidence(id, protocol.StateIdle)
-	now := time.Now()
-
-	policy := sessionstate.PolicyFor(string(protocol.SessionAgentCodex))
-	d.resolveAllSessions(now.Add(policy.StuckAfter + time.Second))
-
-	session := d.store.Get(id)
-	if session.State != protocol.SessionStateUnknown {
-		t.Fatalf("state %q, want unknown after total evidence silence", session.State)
-	}
-	if got := protocol.Deref(d.sessionForBroadcast(session).StateReason); got != string(sessionstate.ReasonStuck) {
-		t.Fatalf("state_reason %q, want stuck: an unknown badge with no reason is the dead end it replaces", got)
-	}
-}
-
 func TestAnIdleSessionStillReportingIsNotStuck(t *testing.T) {
 	d := newTraceDaemon(t)
 	id := "sess-idle-quiet"
@@ -45,7 +24,7 @@ func TestAnIdleSessionStillReportingIsNotStuck(t *testing.T) {
 	for i := 1; i <= 3; i++ {
 		at := now.Add(time.Duration(i) * policy.StuckAfter)
 		d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: at})
-		d.resolveAllSessions(at.Add(time.Second))
+		d.resolveDue(at.Add(time.Second))
 	}
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateIdle {
@@ -61,7 +40,7 @@ func TestTheReasonIsOmittedForStatesTheResolverDoesNotOwn(t *testing.T) {
 	now := time.Now()
 	d.recordBracketEvidence(id, protocol.StateWorking)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
-	d.resolveAllSessions(now.Add(time.Second))
+	d.resolveDue(now.Add(time.Second))
 
 	if got := protocol.Deref(d.sessionForBroadcast(d.store.Get(id)).StateReason); got == "" {
 		t.Fatal("no reason recorded for a resolver-owned state, so the omission below proves nothing")
@@ -99,7 +78,7 @@ func TestAReasonChangeReachesClientsWithoutAStateChange(t *testing.T) {
 	d.recordBracketEvidence(id, protocol.StateIdle)
 	policy := sessionstate.PolicyFor(string(protocol.SessionAgentCodex))
 	at := now.Add(policy.StuckAfter + time.Second)
-	d.resolveAllSessions(at)
+	d.resolveDue(at)
 
 	if state := d.store.Get(id).State; state != protocol.SessionStateUnknown {
 		t.Fatalf("state %q, want unknown still: this test is about the reason, not the state", state)
@@ -115,8 +94,10 @@ func TestAReasonChangeReachesClientsWithoutAStateChange(t *testing.T) {
 	}
 
 	quiet := captureBroadcasts(d)
-	d.resolveAllSessions(at.Add(time.Second))
-	d.resolveAllSessions(at.Add(2 * time.Second))
+	for _, later := range []time.Time{at.Add(time.Second), at.Add(2 * time.Second)} {
+		d.recordReviewerEvidence(id, false)
+		d.resolveDue(later)
+	}
 	for _, event := range quiet.snapshot() {
 		if event.Session != nil && event.Session.ID == id {
 			t.Fatal("an unchanged reason broadcast anyway")
@@ -132,7 +113,7 @@ func TestTheReasonIsForgottenWithTheSession(t *testing.T) {
 	now := time.Now()
 	d.recordBracketEvidence(id, protocol.StateWorking)
 	d.recordPTYEvidence(id, pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now})
-	d.resolveAllSessions(now.Add(time.Second))
+	d.resolveDue(now.Add(time.Second))
 	if d.stateReasons().get(id) == "" {
 		t.Fatal("no reason was recorded, so the cleanup below proves nothing")
 	}

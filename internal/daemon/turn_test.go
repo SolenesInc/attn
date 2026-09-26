@@ -238,7 +238,7 @@ func TestASettleSurvivesAnAgentRepaintingSlowerThanTheHeartbeatTTL(t *testing.T)
 			Detail: "⠐ compacting",
 			At:     base.Add((at.Sub(base) / repaint) * repaint),
 		})
-		d.resolveAllSessions(at)
+		d.resolveDue(at)
 
 		if owed(t, d, "s1") {
 			t.Fatalf("tick %d (%s in): the settled turn re-opened while the agent was still working",

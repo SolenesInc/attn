@@ -252,7 +252,7 @@ func TestDaemon_YieldedStop_ParkedVerdictHoldsWorkingPastPromptIdle(t *testing.T
 		}
 
 		d.recordNotificationEvidence("yielded", notifyIdlePrompt, "Claude is waiting for your input")
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 
 		sess := d.store.Get("yielded")
 		if sess == nil {
@@ -273,13 +273,13 @@ func TestDaemon_YieldedStop_ParkedVerdictExpiresIntoPromptIdle(t *testing.T) {
 
 		policy := sessionstate.PolicyFor(string(protocol.SessionAgentClaude))
 		time.Sleep(policy.ParkedAfter - time.Minute)
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 		if got := d.store.Get("yielded").State; got != protocol.StateWorking {
 			t.Fatalf("state before the tripwire = %s, want %s", got, protocol.StateWorking)
 		}
 
 		time.Sleep(2 * time.Minute)
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 		sess := d.store.Get("yielded")
 		if sess.State != protocol.StateIdle {
 			t.Fatalf("state past the tripwire = %s, want %s", sess.State, protocol.StateIdle)
@@ -296,7 +296,7 @@ func TestDaemon_YieldedStop_DoneVerdictSettles(t *testing.T) {
 		stopDaemonBackground(t, base)
 		d, _ := yieldedStopDaemon(t, base, protocol.StateIdle)
 
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 
 		sess := d.store.Get("yielded")
 		if sess == nil {

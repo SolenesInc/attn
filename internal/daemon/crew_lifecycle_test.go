@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/sessionstate"
 )
 
 type doorbellRecorder struct {
@@ -82,9 +83,7 @@ func newLifecycleDaemon(t *testing.T) (*Daemon, string, *doorbellRecorder) {
 		t.Fatalf("wake: %v", err)
 	}
 	sessionID = woken.SessionID
-	d.agentMailboxMu.Lock()
-	delete(d.postInitialPrompt, woken.SessionID)
-	d.agentMailboxMu.Unlock()
+	d.evidenceTable().updateIf(woken.SessionID, nil, nil, func(e *sessionstate.Evidence) { e.InitialPromptOwed = false })
 	return d, woken.SessionID, recorder
 }
 

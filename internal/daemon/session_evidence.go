@@ -5,14 +5,13 @@ import (
 	"sync"
 	"time"
 
+	agentdriver "github.com/victorarias/attn/internal/agent"
 	"github.com/victorarias/attn/internal/classifier"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessionstate"
 	"github.com/victorarias/attn/internal/statetrace"
 )
-
-const evidenceTickInterval = time.Second
 
 type sessionEvidenceTable struct {
 	mu       sync.Mutex
@@ -25,7 +24,6 @@ func newSessionEvidenceTable() *sessionEvidenceTable {
 
 func (t *sessionEvidenceTable) updateIf(
 	sessionID string,
-	at time.Time,
 	admit func() bool,
 	unchanged func(*sessionstate.Evidence) bool,
 	mutate func(*sessionstate.Evidence),
@@ -36,8 +34,14 @@ func (t *sessionEvidenceTable) updateIf(
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	evidence := t.sessions[sessionID]
-	if evidence != nil && unchanged != nil && unchanged(evidence) {
-		return false
+	if unchanged != nil {
+		current := evidence
+		if current == nil {
+			current = &sessionstate.Evidence{}
+		}
+		if unchanged(current) {
+			return false
+		}
 	}
 	if admit != nil && !admit() {
 		return false
@@ -47,7 +51,6 @@ func (t *sessionEvidenceTable) updateIf(
 		t.sessions[sessionID] = evidence
 	}
 	mutate(evidence)
-	evidence.LastMovement = at
 	return true
 }
 
@@ -64,19 +67,6 @@ func (t *sessionEvidenceTable) snapshot(sessionID string) (sessionstate.Evidence
 	return *evidence, true
 }
 
-func (t *sessionEvidenceTable) sessionIDs() []string {
-	if t == nil {
-		return nil
-	}
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	ids := make([]string, 0, len(t.sessions))
-	for id := range t.sessions {
-		ids = append(ids, id)
-	}
-	return ids
-}
-
 func (t *sessionEvidenceTable) forget(sessionID string) {
 	if t == nil {
 		return
@@ -89,22 +79,32 @@ func (t *sessionEvidenceTable) forget(sessionID string) {
 var evidenceRecordGateHook func(sessionID string)
 
 func (d *Daemon) recordEvidence(sessionID string, at time.Time, mutate func(*sessionstate.Evidence)) bool {
-	return d.updateEvidence(sessionID, at, nil, mutate)
+	return d.updateEvidence(sessionID, nil, movedAt(at, mutate))
+}
+
+func movedAt(at time.Time, mutate func(*sessionstate.Evidence)) func(*sessionstate.Evidence) {
+	return func(e *sessionstate.Evidence) {
+		mutate(e)
+		e.LastMovement = at
+	}
 }
 
 func (d *Daemon) updateEvidence(
 	sessionID string,
-	at time.Time,
 	unchanged func(*sessionstate.Evidence) bool,
 	mutate func(*sessionstate.Evidence),
 ) bool {
-	return d.evidenceTable().updateIf(sessionID, at, func() bool {
+	changed := d.evidenceTable().updateIf(sessionID, func() bool {
 		live := d.store != nil && d.store.Get(sessionID) != nil
 		if hook := evidenceRecordGateHook; hook != nil {
 			hook(sessionID)
 		}
 		return live
 	}, unchanged, mutate)
+	if changed {
+		d.resolveSoon(sessionID)
+	}
+	return changed
 }
 
 func (d *Daemon) evidenceTable() *sessionEvidenceTable {
@@ -126,52 +126,90 @@ func (d *Daemon) recordPTYEvidence(sessionID string, obs pty.Observation) bool {
 	if at.IsZero() {
 		at = time.Now()
 	}
-	switch obs.Source {
-	case pty.SourceHeartbeat:
-		if obs.Claim == "approval" {
-			return d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
-				e.LastHarnessEvent = &sessionstate.Observation{
-					Source:     sessionstate.SourceHarnessEvent,
-					Claim:      sessionstate.ClaimApprovalPending,
-					Detail:     obs.Detail,
-					ObservedAt: at,
-				}
-				e.Heartbeat = &sessionstate.Observation{
-					Source:     sessionstate.SourceHeartbeat,
-					Claim:      sessionstate.ClaimSettled,
-					Detail:     obs.Detail,
-					ObservedAt: at,
-				}
-			})
-		}
-		if obs.Claim == "unclassified" {
-			return d.recordEvidence(sessionID, at, func(*sessionstate.Evidence) {})
-		}
-		claim := sessionstate.ClaimSettled
-		if obs.Claim == "busy" {
-			claim = sessionstate.ClaimBusy
-		}
-		var unchanged func(*sessionstate.Evidence) bool
-		if claim == sessionstate.ClaimSettled {
-			unchanged = func(e *sessionstate.Evidence) bool {
-				return e.Heartbeat != nil &&
-					e.Heartbeat.Claim == claim &&
-					e.Heartbeat.Detail == obs.Detail
-			}
-		}
-		return d.updateEvidence(sessionID, at, unchanged, func(e *sessionstate.Evidence) {
-			e.Heartbeat = &sessionstate.Observation{
-				Source:     sessionstate.SourceHeartbeat,
-				Claim:      claim,
+	mutate, ok := heartbeatEvidence(obs, at)
+	if !ok {
+		return false
+	}
+	return d.updateEvidence(sessionID, func(e *sessionstate.Evidence) bool {
+		return holdsSettledHeartbeat(e, obs)
+	}, movedAt(at, mutate))
+}
+
+func holdsSettledHeartbeat(e *sessionstate.Evidence, obs pty.Observation) bool {
+	switch obs.Claim {
+	case "approval", "unclassified", "busy":
+		return false
+	}
+	return e.Heartbeat != nil &&
+		e.Heartbeat.Claim == sessionstate.ClaimSettled &&
+		e.Heartbeat.Detail == obs.Detail
+}
+
+func (d *Daemon) evidenceHoldsSettledHeartbeat(sessionID string, obs pty.Observation) bool {
+	evidence, ok := d.evidenceTable().snapshot(sessionID)
+	return ok && holdsSettledHeartbeat(&evidence, obs)
+}
+
+func heartbeatEvidence(obs pty.Observation, at time.Time) (func(*sessionstate.Evidence), bool) {
+	if obs.Source != pty.SourceHeartbeat {
+		return nil, false
+	}
+	switch obs.Claim {
+	case "approval":
+		return func(e *sessionstate.Evidence) {
+			e.LastHarnessEvent = &sessionstate.Observation{
+				Source:     sessionstate.SourceHarnessEvent,
+				Claim:      sessionstate.ClaimApprovalPending,
 				Detail:     obs.Detail,
 				ObservedAt: at,
 			}
-			if claim == sessionstate.ClaimBusy {
-				e.LastBusyAt = at
+			e.Heartbeat = &sessionstate.Observation{
+				Source:     sessionstate.SourceHeartbeat,
+				Claim:      sessionstate.ClaimSettled,
+				Detail:     obs.Detail,
+				ObservedAt: at,
 			}
-		})
+		}, true
+	case "unclassified":
+		return func(*sessionstate.Evidence) {}, true
 	}
-	return false
+	claim := sessionstate.ClaimSettled
+	if obs.Claim == "busy" {
+		claim = sessionstate.ClaimBusy
+	}
+	return func(e *sessionstate.Evidence) {
+		e.Heartbeat = &sessionstate.Observation{
+			Source:     sessionstate.SourceHeartbeat,
+			Claim:      claim,
+			Detail:     obs.Detail,
+			ObservedAt: at,
+		}
+		if claim == sessionstate.ClaimBusy {
+			e.LastBusyAt = at
+		}
+	}, true
+}
+
+func (d *Daemon) startEvidence(sessionID string, fresh sessionstate.Evidence) {
+	d.dwellGate().clear(sessionID)
+	d.updateEvidence(sessionID, nil, func(e *sessionstate.Evidence) { *e = fresh })
+}
+
+func (d *Daemon) recordPlacedInputOwed(sessionID string, owed bool) {
+	d.updateEvidence(sessionID, func(e *sessionstate.Evidence) bool {
+		return e.PlacedInputOwed == owed || (owed && sessionstate.TookATurn(*e))
+	}, func(e *sessionstate.Evidence) {
+		e.PlacedInputOwed = owed
+	})
+}
+
+func reportsPromptsTaken(agent string) bool {
+	return agentdriver.EffectiveCapabilities(agentdriver.Get(agent)).HasHooks
+}
+
+func (d *Daemon) initialPromptPending(sessionID string) bool {
+	evidence, _ := d.evidenceTable().snapshot(sessionID)
+	return evidence.InitialPromptOwed
 }
 
 func (d *Daemon) recordBracketEvidence(sessionID, state string) {
@@ -181,6 +219,7 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 		case protocol.StateWorking:
 			e.TurnOpen = true
 			e.TurnEverOpened = true
+			e.InitialPromptOwed = false
 			e.LastClassifier = nil
 			if e.LastHarnessEvent != nil {
 				switch e.LastHarnessEvent.Claim {
@@ -216,12 +255,12 @@ func (d *Daemon) recordBracketEvidence(sessionID, state string) {
 }
 
 func (d *Daemon) recordTranscriptEvidence(sessionID, state, detail string, at time.Time) {
-	d.recordBracketEvidence(sessionID, state)
 	d.traceStateEvidence(
 		sessionID,
 		stateOrigin{source: stateSourceTranscript, detail: detail, observedAt: at},
 		state,
 	)
+	d.recordBracketEvidence(sessionID, state)
 }
 
 func (d *Daemon) recordTurnAbortedEvidence(sessionID, detail string, abortedAt, observedAt time.Time) {
@@ -254,21 +293,29 @@ func (d *Daemon) recordTurnBracketClosedEvidence(sessionID string, at time.Time)
 	})
 }
 
-func (d *Daemon) recordClassifierEvidence(sessionID, state string, observedAt time.Time) {
-	if observedAt.IsZero() {
-		observedAt = time.Now()
-	}
+func (d *Daemon) recordTurnEndedEvidence(sessionID string, classifies bool) {
+	at := time.Now()
+	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
+		e.TurnOpen = false
+		e.ToolOpen = false
+		if classifies {
+			e.ClassifyingSince = at
+		}
+	})
+}
+
+func classifierVerdictMutation(state string, observedAt time.Time) func(*sessionstate.Evidence) {
 	claim := classifierClaim(state)
 	if claim == "" {
-		return
+		return nil
 	}
-	d.recordEvidence(sessionID, observedAt, func(e *sessionstate.Evidence) {
+	return func(e *sessionstate.Evidence) {
 		e.LastClassifier = &sessionstate.Observation{
 			Source:     sessionstate.SourceClassifier,
 			Claim:      claim,
 			ObservedAt: observedAt,
 		}
-	})
+	}
 }
 
 func (d *Daemon) recordStopFacts(sessionID string, backgroundWork, pendingCron bool) {
@@ -367,6 +414,7 @@ func (d *Daemon) recordProcessEvidence(sessionID string, exited bool) {
 			Claim:      sessionstate.ClaimExited,
 			ObservedAt: at,
 		}
+		e.PlacedInputOwed = false
 	})
 }
 
@@ -377,44 +425,16 @@ func (d *Daemon) recordClassifierStarted(sessionID string, at time.Time) {
 	d.cancelAutoSettle(sessionID, "classification started")
 }
 
-func (d *Daemon) recordClassifierFinished(sessionID string) {
-	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
-		e.ClassifyingSince = time.Time{}
-	})
+func (d *Daemon) concludeClassification(sessionID string, verdict func(*sessionstate.Evidence)) {
 	if session := d.store.Get(sessionID); session != nil {
 		d.syncAutoSettle(sessionID, string(session.State))
 	}
-}
-
-func (d *Daemon) runEvidenceResolveLoop() {
-	ticker := time.NewTicker(evidenceTickInterval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-d.done:
-			return
-		case <-ticker.C:
-			d.resolveAllSessions(time.Now())
+	d.recordEvidence(sessionID, time.Now(), func(e *sessionstate.Evidence) {
+		if verdict != nil {
+			verdict(e)
 		}
-	}
-}
-
-func (d *Daemon) resolveAllSessions(now time.Time) {
-	for _, sessionID := range d.evidenceTable().sessionIDs() {
-		session := d.store.Get(sessionID)
-		if session == nil {
-			d.evidenceTable().forget(sessionID)
-			d.dwellGate().clear(sessionID)
-			continue
-		}
-		evidence, ok := d.evidenceTable().snapshot(sessionID)
-		if !ok {
-			continue
-		}
-		policy := sessionstate.PolicyFor(string(session.Agent))
-		resolution := sessionstate.Resolve(evidence, policy, now)
-		d.publishResolution(sessionID, session.State, resolution, sessionstate.DwellFor(resolution.State, evidence, policy), now)
-	}
+		e.ClassifyingSince = time.Time{}
+	})
 }
 
 var resolverOwnedStates = map[protocol.SessionState]bool{
@@ -427,30 +447,30 @@ var resolverOwnedStates = map[protocol.SessionState]bool{
 	protocol.SessionStateUnknown:         true,
 }
 
-func (d *Daemon) publishResolution(sessionID string, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) {
+func (d *Daemon) publishResolution(sessionID string, current protocol.SessionState, resolution sessionstate.Resolution, dwell time.Duration, now time.Time) (resolverOwnsState bool) {
+	pluginOwnsState := d.pluginDriverOwnsState(sessionID)
+	resolverOwnsState = resolverOwnedStates[current] && !pluginOwnsState
 	if resolution.Hold {
 		d.traceResolutionSkip(sessionID, resolution, string(resolution.Reason))
-		return
+		return resolverOwnsState
 	}
 	if resolution.Reason == sessionstate.ReasonNoEvidence {
-		return
+		return resolverOwnsState
 	}
-	if run := d.store.GetAgentDriverRun(sessionID); run.RunID != "" {
-		if session := d.store.Get(sessionID); session != nil && d.pluginDriverReportsState(session.Agent) {
-			d.traceResolutionSkip(sessionID, resolution, "plugin_driver_owns_state")
-			return
-		}
+	if pluginOwnsState {
+		d.traceResolutionSkip(sessionID, resolution, "plugin_driver_owns_state")
+		return false
 	}
 	if !resolverOwnedStates[current] || resolution.State == current {
 		d.dwellGate().clear(sessionID)
 		if d.recordStateReason(sessionID, resolution) && resolverOwnedStates[current] {
 			d.broadcastSessionStateChanged(sessionID)
 		}
-		return
+		return resolverOwnsState
 	}
 	if !d.dwellGate().ready(sessionID, resolution.State, dwell, now) {
 		d.traceResolutionSkip(sessionID, resolution, "dwell")
-		return
+		return true
 	}
 	d.recordStateReason(sessionID, resolution)
 	d.applyState(sessionStateChange{
@@ -462,6 +482,15 @@ func (d *Daemon) publishResolution(sessionID string, current protocol.SessionSta
 			detail: resolutionDetail(resolution),
 		},
 	})
+	return true
+}
+
+func (d *Daemon) pluginDriverOwnsState(sessionID string) bool {
+	if run := d.store.GetAgentDriverRun(sessionID); run.RunID == "" {
+		return false
+	}
+	session := d.store.Get(sessionID)
+	return session != nil && d.pluginDriverReportsState(session.Agent)
 }
 
 func resolutionDetail(resolution sessionstate.Resolution) string {

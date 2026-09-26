@@ -12,28 +12,50 @@ func (d *Daemon) seedRecoveredEvidence(sessionID string, existing *protocol.Sess
 	if d == nil || existing == nil {
 		return
 	}
+	var seeds []func(*sessionstate.Evidence)
+	var at time.Time
 	if route, ok := d.recoveredApprovalRoute(sessionID); ok {
-		d.recordReviewerEvidence(sessionID, route.ReviewerInLoop())
+		inLoop := route.ReviewerInLoop()
+		seeds = append(seeds, func(e *sessionstate.Evidence) { e.ReviewerInLoop = inLoop })
+		at = time.Now()
 	}
 	if info.HasLastSignal {
-		d.recordPTYEvidence(sessionID, info.LastSignal)
+		signalAt := info.LastSignal.At
+		if signalAt.IsZero() {
+			signalAt = time.Now()
+		}
+		if heartbeat, ok := heartbeatEvidence(info.LastSignal, signalAt); ok && !d.evidenceHoldsSettledHeartbeat(sessionID, info.LastSignal) {
+			seeds = append(seeds, heartbeat)
+			at = signalAt
+		}
 	}
-	d.seedRecoveredHarnessEdge(sessionID, existing, info)
+	if edge, concludedAt, ok := recoveredHarnessEdge(existing, info); ok {
+		seeds = append(seeds, edge)
+		at = concludedAt
+	}
+	if len(seeds) == 0 {
+		return
+	}
+	d.recordEvidence(sessionID, at, func(e *sessionstate.Evidence) {
+		for _, seed := range seeds {
+			seed(e)
+		}
+	})
 }
 
-func (d *Daemon) seedRecoveredHarnessEdge(sessionID string, existing *protocol.Session, info ptybackend.SessionInfo) {
+func recoveredHarnessEdge(existing *protocol.Session, info ptybackend.SessionInfo) (func(*sessionstate.Evidence), time.Time, bool) {
 	claim, ok := recoveredHarnessClaim(existing.State)
 	if !ok {
-		return
+		return nil, time.Time{}, false
 	}
 	concludedAt, ok := parseSessionStateSince(existing)
 	if !ok {
-		return
+		return nil, time.Time{}, false
 	}
 	if info.HasLastSignal && info.LastSignal.At.After(concludedAt) {
-		return
+		return nil, time.Time{}, false
 	}
-	d.recordEvidence(sessionID, concludedAt, func(e *sessionstate.Evidence) {
+	return func(e *sessionstate.Evidence) {
 		e.LastHarnessEvent = &sessionstate.Observation{
 			Source:     sessionstate.SourceHarnessEvent,
 			Claim:      claim,
@@ -41,7 +63,7 @@ func (d *Daemon) seedRecoveredHarnessEdge(sessionID string, existing *protocol.S
 			ObservedAt: concludedAt,
 		}
 		e.TurnEverOpened = true
-	})
+	}, concludedAt, true
 }
 
 func recoveredHarnessClaim(state protocol.SessionState) (sessionstate.Claim, bool) {

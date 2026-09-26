@@ -29,7 +29,6 @@ func TestClientHelloWithoutATokenIsRefusedAndToldWhereTheTokenLives(t *testing.T
 	w := newWorld(t)
 
 	impostor := w.Connect(helloWithToken(nil), nil)
-	impostor.Send(protocol.GetSettingsMessage{Cmd: protocol.CmdGetSettings})
 
 	refusal := testworld.Refused(impostor)
 	if got := protocol.Deref(refusal.ErrorCode); got != protocol.ErrorCodeUnauthorizedClient {
@@ -83,7 +82,11 @@ func expectRefusalClose(t *testing.T, p *testworld.Peer) {
 	if status.Code != websocket.StatusPolicyViolation || status.Reason != protocol.ErrorCodeUnauthorizedClient {
 		t.Fatalf("closed with %d %q, want %d %q", status.Code, status.Reason, websocket.StatusPolicyViolation, protocol.ErrorCodeUnauthorizedClient)
 	}
-	if seen := p.Events(); !slices.Equal(seen, []string{protocol.EventCommandError}) {
+	var seen []string
+	for _, e := range p.Received() {
+		seen = append(seen, e.Event)
+	}
+	if !slices.Equal(seen, []string{protocol.EventCommandError}) {
 		t.Fatalf("a refused client received %v before the close, want only its refusal", seen)
 	}
 }

@@ -458,7 +458,7 @@ func TestAutoSettle_ClassificationSuspendsAndThenReevaluates(t *testing.T) {
 		t.Fatal("classification start settled the turn")
 	}
 
-	d.recordClassifierFinished(id)
+	d.concludeClassification(id, nil)
 	entry, ok := autoSettlePending(d, id)
 	if !ok || entry.phase != autoSettleArming {
 		t.Fatalf("after classification: pending=%v entry=%+v, want a fresh arm", ok, entry)

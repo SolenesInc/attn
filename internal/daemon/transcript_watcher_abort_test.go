@@ -124,7 +124,7 @@ func TestTheWatcherSettlesATurnTheUserHalted(t *testing.T) {
 					t.Fatalf("the halted turn left a bracket open: %+v", evidence)
 				}
 
-				d.resolveAllSessions(time.Now())
+				d.resolveDue(time.Now())
 				if state := d.store.Get(id).State; state != protocol.SessionStateIdle {
 					t.Fatalf("state %q, want idle: a halted turn is over the moment it is halted", state)
 				}

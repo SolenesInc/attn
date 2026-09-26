@@ -208,7 +208,6 @@ type Daemon struct {
 	agentMailboxMu                    sync.Mutex
 	agentMailboxDoorbells             map[string]*agentMailboxDoorbellState
 	agentMailboxCooldownOverride      time.Duration
-	postInitialPrompt                 map[string]struct{}
 	agentMailboxDrainScheduledHook    func(sessionID string)
 	agentMailboxDrainHook             func(sessionID string, delivered int)
 	crewWakeMu                        sync.Mutex
@@ -222,6 +221,8 @@ type Daemon struct {
 	sessionEvidence                   *sessionEvidenceTable
 	sessionDwellOnce                  sync.Once
 	sessionDwell                      *dwellGate
+	sessionResolverOnce               sync.Once
+	sessionResolverState              *sessionResolver
 	pluginDriverSilenceOnce           sync.Once
 	pluginDriverSilenceWatch          *pluginDriverSilenceWatch
 	pluginDriverSilenceGraceOverride  time.Duration
@@ -955,7 +956,6 @@ func (d *Daemon) Start() error {
 
 	go d.runTicketReconcileSweep()
 
-	go d.runEvidenceResolveLoop()
 	go d.runModelCaptureLoop()
 
 	if err := d.startJobQueue(); err != nil {
@@ -972,6 +972,7 @@ func (d *Daemon) Start() error {
 
 	go func() {
 		d.performStartupPTYRecovery(recoveryStartedAt)
+		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
 		} else {
@@ -1373,7 +1374,6 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 					existing.State == protocol.SessionStatePendingApproval) {
 				continue
 			}
-			d.seedRecoveredEvidence(sessionID, existing, info)
 			nextState, ok := sessionStateFromRecoveredInfo(info)
 			if !ok && !resolverOwnedStates[existing.State] {
 				nextState, ok = protocol.SessionStateLaunching, true
@@ -1387,6 +1387,7 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 				report.StateUpdated++
 				report.markChanged(sessionID)
 			}
+			d.seedRecoveredEvidence(sessionID, existing, info)
 			continue
 		}
 	}
@@ -1678,6 +1679,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 			return false
 		}
 	}
+	sessionAtExit := d.store.Get(info.ID)
 	d.sessionInputs().forgetSession(info.ID)
 	d.stopTranscriptWatcher(info.ID)
 	d.closePluginDriverSession(info.ID, "exited", &info.ExitCode, info.Signal)
@@ -1690,9 +1692,8 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		}
 	}
 
-	d.recordProcessEvidence(info.ID, true)
-	if session := d.store.Get(info.ID); session != nil {
-		d.reconcileTicketsOnSessionEnd(info.ID, string(session.State))
+	if sessionAtExit != nil {
+		d.reconcileTicketsOnSessionEnd(info.ID, string(sessionAtExit.State))
 	}
 	d.releaseExitedCrewBinding(info.ID)
 
@@ -1700,6 +1701,7 @@ func (d *Daemon) handlePTYExit(info ptybackend.ExitInfo) bool {
 		ExitCode: info.ExitCode,
 		Signal:   info.Signal,
 	})
+	d.recordProcessEvidence(info.ID, true)
 	return true
 }
 
@@ -2018,7 +2020,6 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 		d.reconcileTicketsOnSessionEnd(sessionID, string(session.State))
 	}
 	d.clearNudgeState(sessionID)
-	d.forgetPostInitialPrompt(sessionID)
 	d.forgetAgentMailboxDoorbell(sessionID)
 	d.forgetSessionTitleInitialPrompt(sessionID)
 	d.clearAutoSettleState(sessionID)
@@ -2030,6 +2031,7 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
+	d.sessionResolver().forget(sessionID)
 	d.stateReasons().forget(sessionID)
 	d.dwellGate().clear(sessionID)
 }
@@ -2815,6 +2817,7 @@ func (d *Daemon) handleRegisterProtected(protection foregroundCleanupProtection,
 		d.sendError(conn, persistErr.Error())
 		return
 	}
+	d.resolveSoon(session.ID)
 	existingWS := d.store.GetWorkspace(workspaceID)
 	workspaceTitle := session.Label
 	if existingWS != nil && strings.TrimSpace(existingWS.Title) != "" {
@@ -2899,6 +2902,10 @@ func (d *Daemon) handleUnregister(conn net.Conn, msg *protocol.UnregisterMessage
 
 func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 	d.logf("hook evidence: id=%s state=%s", msg.ID, msg.State)
+	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
+	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
+	d.traceStateEvidence(msg.ID, stateOrigin{source: stateSourceHook}, msg.State)
+	d.recordBracketEvidence(msg.ID, msg.State)
 	if strings.EqualFold(strings.TrimSpace(protocol.Deref(msg.HookEvent)), "user_prompt_submit") &&
 		strings.TrimSpace(protocol.Deref(msg.Prompt)) != "" {
 		effects := d.observePromptTaken(msg.ID, protocol.Deref(msg.Prompt), time.Now())
@@ -2908,12 +2915,7 @@ func (d *Daemon) handleState(conn net.Conn, msg *protocol.StateMessage) {
 		}
 		go d.maybeGenerateSessionTitleFromPrompt(msg.ID, protocol.Deref(msg.Prompt), origin)
 	}
-	d.runPostInitialPrompt(msg.ID, msg.State)
-	d.tracePermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.recordReviewerEvidenceFromPermissionMode(msg.ID, protocol.Deref(msg.PermissionMode))
-	d.recordBracketEvidence(msg.ID, msg.State)
 	d.store.Touch(msg.ID)
-	d.traceStateEvidence(msg.ID, stateOrigin{source: stateSourceHook}, msg.State)
 	d.sendOK(conn)
 }
 
@@ -2961,7 +2963,8 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 		return
 	}
 
-	d.recordBracketEvidence(msg.ID, protocol.StateIdle)
+	classifies := !d.consumeForcedStopClassification(msg.ID)
+	d.recordTurnEndedEvidence(msg.ID, classifies)
 
 	if session := d.store.Get(msg.ID); session != nil {
 		driver := agentdriver.Get(string(session.Agent))
@@ -2979,7 +2982,7 @@ func (d *Daemon) handleStop(conn net.Conn, msg *protocol.StopMessage) {
 	d.store.Touch(msg.ID)
 	d.sendOK(conn)
 
-	if d.consumeForcedStopClassification(msg.ID) {
+	if !classifies {
 		d.logf("handleStop: skipping classification for daemon-terminated session=%s", msg.ID)
 		return
 	}

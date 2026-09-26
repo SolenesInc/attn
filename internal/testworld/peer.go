@@ -135,14 +135,19 @@ func (p *Peer) Closed() websocket.CloseError {
 	return status
 }
 
-func (p *Peer) Events() []string {
+func (p *Peer) Received() []protocol.WebSocketEvent {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	names := make([]string, 0, len(p.frames))
+	events := make([]protocol.WebSocketEvent, 0, len(p.frames))
 	for _, f := range p.frames {
-		names = append(names, f.event)
+		var e protocol.WebSocketEvent
+		if err := json.Unmarshal(f.raw, &e); err != nil {
+			p.T.Errorf("event %s does not decode: %v", f.event, err)
+			continue
+		}
+		events = append(events, e)
 	}
-	return names
+	return events
 }
 
 func (p *Peer) Close() {
