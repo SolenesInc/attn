@@ -1,0 +1,4 @@
+kind: fixed
+area: terminal
+change: On Linux, a plain Ctrl+letter typed in a terminal reaches the shell even when a shortcut has been rebound to it.
+symptom: Rebinding Close session to Ctrl+W made Ctrl+W in a terminal close the session instead of deleting a word.

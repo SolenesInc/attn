@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import { listenPtyEvents, type PtyEventPayload } from '../../pty/bridge';
 
-export interface PaneRuntimeEventBinding {
+interface PaneRuntimeEventBinding {
   sessionId?: string;
   paneId: string;
   runtimeId: string;

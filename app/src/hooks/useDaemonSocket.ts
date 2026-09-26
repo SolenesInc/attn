@@ -2126,13 +2126,6 @@ export function useDaemonSocket({
                     source: 'attach_restore',
                   });
                 }
-                if (attachEffects.shouldReset && attachEffects.resetReason) {
-                  emitPtyEvent({
-                    event: 'reset',
-                    id: data.id,
-                    reason: attachEffects.resetReason,
-                  });
-                }
                 ptyTransportRef.current.setLastSeq(data.id, attachEffects.nextSeq);
                 const restoreWasEmitted = attachEffects.restoreAction.kind === 'ghostty_snapshot';
                 if (attachEffects.restoreAction.kind === 'ghostty_snapshot') {

@@ -103,7 +103,6 @@ export function TileSidebarRow({
           {tile.tileKind === 'browser' && (
             <button
               className="session-action-btn reload-session-btn"
-              data-testid={`reload-tile-${workspaceId}-${tile.tileId}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onReload();
@@ -116,7 +115,6 @@ export function TileSidebarRow({
           )}
           <button
             className="session-action-btn close-session-btn"
-            data-testid={`close-tile-${workspaceId}-${tile.tileId}`}
             onClick={(event) => {
               event.stopPropagation();
               onClose();

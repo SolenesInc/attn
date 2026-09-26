@@ -1632,6 +1632,10 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
           return;
         }
+        blockStoreRef.current.clear();
+        placementStoreRef.current.clear();
+        annotationsRef.current?.reset();
+        selectedBlockIdRef.current = null;
         // The decoded terminal carries the worker's modes, and the worker never asserted grapheme clustering.
         graphemeResetCarryRef.current = false;
         ensureGraphemeClustering(terminal);

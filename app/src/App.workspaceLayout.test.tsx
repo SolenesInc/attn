@@ -305,4 +305,103 @@ describe('App workspace layout', () => {
     expect(tileBody()).toHaveTextContent('Loading…');
     expect(daemon.sentOf('workspace_tile_content_get').length).toBeGreaterThan(requests);
   });
+
+  it('shows the tiles and preferred ratios the daemon lays out', async () => {
+    await renderWorkspace(
+      splitWorkspace({
+        type: 'split',
+        split_id: 'split-a',
+        direction: 'vertical',
+        ratio: 0.73,
+        ratio_mode: 'preferred',
+        children: [pane('s1'), { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }],
+      }, ['s1']),
+      ['s1'],
+    );
+
+    expect(document.querySelector('[data-pane-id="pane-s1"]')).not.toBeNull();
+    expect(document.querySelector('[data-pane-id="tile-md"]')).not.toBeNull();
+    expect(splitRatio('split-a')).toBe('0.730');
+  });
+
+  describe('active pane', () => {
+    const activePane = () => document.querySelector('.workspace-pane.active')?.closest('[data-pane-id]')?.getAttribute('data-pane-id') ?? null;
+    const choose = async (daemon: ScriptedDaemon, sessionId: string) => {
+      fireEvent.mouseDown(document.querySelector(`[data-pane-id="pane-${sessionId}"] .terminal-container`)!);
+      await daemon.idle();
+    };
+    const twoPanes = (ratio = 0.5, children = [pane('s1'), pane('s2')]) => splitWorkspace(
+      { type: 'split', split_id: 'split-a', direction: 'vertical', ratio, children },
+      ['s1', 's2'],
+    );
+
+    it('belongs to the workspace, whichever of its sessions is selected', async () => {
+      const { daemon } = await renderWorkspace(twoPanes(), ['s1', 's2']);
+
+      await choose(daemon, 's2');
+      expect(activePane()).toBe('pane-s2');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
+      await daemon.idle();
+      fireEvent.click(screen.getByRole('button', { name: 'Open s2' }));
+      await daemon.idle();
+      expect(activePane()).toBe('pane-s2');
+    });
+
+    it('survives a split resize, and follows the daemon when the panes change', async () => {
+      const { daemon } = await renderWorkspace(twoPanes(), ['s1', 's2']);
+      await choose(daemon, 's2');
+
+      daemon.emit({ event: 'workspace_state_changed', workspace: twoPanes(0.3) });
+      await daemon.idle();
+      expect(activePane()).toBe('pane-s2');
+
+      const reordered = twoPanes(0.3, [pane('s2'), pane('s1')]);
+      daemon.emit({ event: 'workspace_state_changed', workspace: { ...reordered, layout: { ...reordered.layout!, active_pane_id: 'pane-s1' } } });
+      await daemon.idle();
+      expect(activePane()).toBe('pane-s1');
+    });
+
+    it.each([
+      ['the pane the user used before it', ['s1', 's3', 's2'], 's3', 's1'],
+      ['the left pane when the user used no other', ['s2'], 's1', 's3'],
+    ])('passes to %s when the active pane closes', async (_, used, expected, daemonActive) => {
+      const ids = ['s1', 's2', 's3'];
+      const three = splitWorkspace({
+        type: 'split',
+        split_id: 'split-a',
+        direction: 'vertical',
+        ratio: 0.5,
+        children: [pane('s1'), { type: 'split', split_id: 'split-b', direction: 'vertical', ratio: 0.5, children: [pane('s2'), pane('s3')] }],
+      }, ids);
+      const { daemon } = await renderWorkspace(three, ids);
+      for (const id of used) await choose(daemon, id);
+      const closing = used[used.length - 1];
+      daemon.on('workspace_layout_close_pane', ({ workspace_id, pane_id }) => {
+        const remaining = ids.filter((id) => `pane-${id}` !== pane_id);
+        return [
+          { event: 'workspace_layout_action_result', action: 'workspace_layout_close_pane', workspace_id, pane_id, success: true },
+          {
+            event: 'workspace_layout_updated',
+            workspace_layout: {
+              ...splitWorkspace({
+                type: 'split',
+                split_id: 'split-a',
+                direction: 'vertical',
+                ratio: 0.5,
+                children: remaining.map(pane),
+              }, remaining).layout!,
+              active_pane_id: `pane-${daemonActive}`,
+            },
+          },
+        ];
+      });
+
+      pressShortcut('terminal.close', document.querySelector(`[data-pane-id="pane-${closing}"] .terminal-container`)!);
+      await daemon.idle();
+
+      expect(daemon.sentOf('workspace_layout_close_pane').map(({ pane_id }) => pane_id)).toEqual([`pane-${closing}`]);
+      expect(activePane()).toBe(`pane-${expected}`);
+    });
+  });
 });

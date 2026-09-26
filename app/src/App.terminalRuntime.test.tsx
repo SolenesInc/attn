@@ -4,12 +4,16 @@ import { act, fireEvent, screen } from '@testing-library/react';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { LOCAL_SNAPSHOT_FORMAT } from './pty/attachPlanning';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { openAttachedTerminals } from './test/appFixtures';
+import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspace, type DaemonSession } from './test/daemonFixtures';
 import { pressShortcut, renderApp } from './test/renderApp';
-import { initialState } from './test/scriptedDaemon';
+import type { CommandMessage } from './test/protocol';
+import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
+import { WORKSPACE_RESIZE_COALESCE_MS } from './utils/ghosttyResize';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
 
 const NATIVE_SNAPSHOT: Uint8Array = readFileSync('src/ghostty/testdata/native-snapshot.bin');
+const NATIVE_SNAPSHOT_B64 = btoa(Array.from(NATIVE_SNAPSHOT, (byte) => String.fromCharCode(byte)).join(''));
 
 function renderSessions(...sessions: DaemonSession[]) {
   return renderApp({
@@ -22,20 +26,106 @@ function open(label: string) {
 }
 
 function layOutTerminals(width: number, height: number) {
-  const measured = (axis: 'clientWidth' | 'clientHeight', size: number) => {
+  const size = { width, height };
+  const refits = new Set<() => void>();
+  const browserResizeObserver = globalThis.ResizeObserver;
+  globalThis.ResizeObserver = class {
+    constructor(private readonly callback: ResizeObserverCallback) {}
+    observe(target: Element) {
+      if (target.classList.contains('terminal-container')) refits.add(() => this.callback([], this));
+    }
+    unobserve() {}
+    disconnect() {}
+  };
+  const measured = (axis: 'clientWidth' | 'clientHeight') => {
     const native = Object.getOwnPropertyDescriptor(HTMLElement.prototype, axis)!;
     Object.defineProperty(HTMLElement.prototype, axis, {
       configurable: true,
       get(this: HTMLElement) {
-        return this.classList.contains('terminal-container') ? size : native.get!.call(this);
+        if (!this.classList.contains('terminal-container')) return native.get!.call(this);
+        return axis === 'clientWidth' ? size.width : size.height;
       },
     });
     onTestFinished(() => {
       Object.defineProperty(HTMLElement.prototype, axis, native);
     });
   };
-  measured('clientWidth', width);
-  measured('clientHeight', height);
+  measured('clientWidth');
+  measured('clientHeight');
+  onTestFinished(() => {
+    globalThis.ResizeObserver = browserResizeObserver;
+  });
+  return async (nextWidth: number, nextHeight: number) => {
+    size.width = nextWidth;
+    size.height = nextHeight;
+    act(() => refits.forEach((refit) => refit()));
+    await act(() => vi.advanceTimersByTimeAsync(WORKSPACE_RESIZE_COALESCE_MS));
+  };
+}
+
+function snapshotReply(id: string, snapshot: { b64?: string; format?: string } = {}) {
+  return {
+    event: 'attach_result' as const,
+    id,
+    success: true,
+    cols: 40,
+    rows: 6,
+    last_seq: 10,
+    running: true,
+    snapshot: {
+      cols: 40,
+      rows: 6,
+      snapshot_b64: snapshot.b64 ?? NATIVE_SNAPSHOT_B64,
+      ...('format' in snapshot ? (snapshot.format ? { format: snapshot.format } : {}) : { format: LOCAL_SNAPSHOT_FORMAT }),
+      scrollback_truncated: false,
+    },
+  };
+}
+
+function visibleText(sessionId: string) {
+  return window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.(sessionId).trim();
+}
+
+function resizesAfterAttach(daemon: ScriptedDaemon, attachIndex = 0) {
+  const attaches = daemon.sent.flatMap((command, index) => (command.cmd === 'attach_session' ? [index] : []));
+  return daemon.sent.slice(attaches[attachIndex]).filter((command) => command.cmd === 'pty_resize') as CommandMessage<'pty_resize'>[];
+}
+
+function attachesAndDetaches(daemon: ScriptedDaemon) {
+  return daemon.sent.filter((command) => command.cmd === 'attach_session' || command.cmd === 'detach_session');
+}
+
+const SNAPSHOT_SCREEN = [
+  'row-1199 tail',
+  'row-1200 tail',
+  'STYLED',
+  'wrapwrapwrapwrapwrapwrapwrapwrapwrapwrap',
+  'wrapwrapwrapwrapwrap',
+  'prompt$',
+].join('\n');
+
+async function openSplit(script: (daemon: ScriptedDaemon) => void = () => {}) {
+  const view = await renderApp({
+    initialState: {
+      sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws' })],
+      workspaces: [splitWorkspace('ws', ['s1', 's2'])],
+    },
+  });
+  script(view.daemon);
+  open('s1');
+  await view.daemon.idle();
+  return view;
+}
+
+async function reattachAfterReconnect(output: string) {
+  const view = await openAttachedTerminals({
+    sessions: [daemonSession('s1', { state: 'idle' })],
+    workspaces: [agentWorkspace('s1')],
+    output: { s1: output },
+  });
+  view.daemon.on('attach_session', () => undefined);
+  const connection = await view.daemon.reconnect();
+  return { ...view, connection };
 }
 
 describe('App terminal runtime', () => {
@@ -56,7 +146,7 @@ describe('App terminal runtime', () => {
       snapshot: {
         cols: 40,
         rows: 6,
-        snapshot_b64: btoa(Array.from(NATIVE_SNAPSHOT, (byte) => String.fromCharCode(byte)).join('')),
+        snapshot_b64: NATIVE_SNAPSHOT_B64,
         format: LOCAL_SNAPSHOT_FORMAT,
         scrollback_truncated: false,
       },
@@ -260,5 +350,273 @@ describe('App terminal runtime', () => {
       selector: '#query',
       text: 'browser text',
     });
+  });
+
+  it('answers terminal queries the daemon leaves to the app, and not the ones the daemon answers', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+    });
+
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('\x1b[6n\x1b[5n') });
+    await daemon.idle();
+
+    expect(daemon.sentOf('pty_input')).toEqual([{ cmd: 'pty_input', id: 's1', data: '\x1b[0n', source: 'response' }]);
+  });
+
+  it('holds layout resizes until the attach lands, then sends only the latest size', async () => {
+    const resize = layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+
+    await resize(1000, 600);
+    await resize(1200, 600);
+    await daemon.idle();
+    expect(daemon.sentOf('pty_resize')).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 28, xpixel: 800, ypixel: 588 }]);
+
+    daemon.emit({ event: 'attach_result', id: 's1', success: true, cols: 100, rows: 28, running: true });
+    await daemon.idle();
+    expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 150, rows: 28, xpixel: 1200, ypixel: 588 }]);
+  });
+
+  it('follows a pane to the PTY however short it gets, but not a pane laid out to nothing', async () => {
+    const resize = layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 100, rows: 28, running: true }));
+    open('s1');
+    await daemon.idle();
+
+    await resize(800, 100);
+    await resize(0, 0);
+    await daemon.idle();
+
+    expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 4, xpixel: 800, ypixel: 84 }]);
+  });
+
+  it('restores a snapshot at its own grid, then fits the PTY to the shown pane', async () => {
+    layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => snapshotReply(id));
+
+    open('s1');
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe(SNAPSHOT_SCREEN);
+    expect(new Set(resizesAfterAttach(daemon).map(({ cols, rows }) => `${cols}x${rows}`))).toEqual(new Set(['100x28']));
+  });
+
+  it('only reconciles, without refitting, a snapshot restored after the user moved to another session', async () => {
+    layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+    open('s2');
+    await daemon.idle();
+
+    daemon.emit(snapshotReply('s1'));
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe(SNAPSHOT_SCREEN);
+    expect(resizesAfterAttach(daemon).filter(({ id }) => id === 's1')).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 28 }]);
+  });
+
+  it('keeps the daemon geometry on a same-size attach of a measured pane', async () => {
+    layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, running: true, cols: 100, rows: 28 }));
+
+    open('s1');
+    await daemon.idle();
+
+    expect(resizesAfterAttach(daemon)).toEqual([]);
+  });
+
+  it('attaches a pane that was never measured without resizing the PTY', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, running: true, cols: 45, rows: 35 }));
+
+    open('s1');
+    await daemon.idle();
+
+    expect(daemon.sentOf('attach_session')).toHaveLength(1);
+    expect(daemon.sentOf('pty_resize')).toEqual([]);
+  });
+
+  it('keeps the daemon geometry when it restores a respawned runtime', async () => {
+    layOutTerminals(800, 600);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 100, rows: 28, running: true }));
+    open('s1');
+    await daemon.idle();
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 37, rows: 46, running: true }));
+
+    daemon.emit({ event: 'runtime_respawned', id: 's1' });
+    await daemon.idle();
+
+    expect(daemon.sentOf('attach_session')[1]).toEqual({ cmd: 'attach_session', id: 's1', attach_policy: 'relaunch_restore' });
+    expect(resizesAfterAttach(daemon, 1)).toEqual([]);
+  });
+
+  it('restores a snapshot without writing to the PTY, keeps its scrollback, and encodes keys in the modes set after it', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => snapshotReply(id));
+    open('s1');
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input')).toEqual([]);
+
+    const terminal = screen.getByRole('textbox', { name: 'Terminal input' });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    fireEvent.wheel(terminal, { deltaY: -100000 });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(visibleText('s1')?.split('\n')[0]).toBe('row-0001 tail');
+
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 11, data: btoa('m\x1b[?1h') });
+    await daemon.idle();
+    fireEvent.keyDown(terminal, { key: 'ArrowUp', code: 'ArrowUp' });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input').map(({ data }) => data)).toEqual(['\x1bOA']);
+  });
+
+  it.each([
+    ['an empty snapshot', { b64: '' }],
+    ['a snapshot from another build', { format: 'deadbeef1234' }],
+    ['a snapshot that names no format', { format: undefined }],
+    ['no snapshot', null],
+  ])('keeps its own screen and the output queued behind a re-attach answered with %s', async (_, snapshot) => {
+    const { daemon, connection } = await reattachAfterReconnect('before\r\n');
+
+    connection.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('queued\r\n') });
+    connection.emit(snapshot
+      ? { ...snapshotReply('s1', snapshot), cols: 80, rows: 24, last_seq: 2 }
+      : { event: 'attach_result', id: 's1', success: true, cols: 80, rows: 24, last_seq: 2, running: true });
+    connection.emit({ event: 'pty_output', id: 's1', seq: 3, data: btoa('after') });
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe('before\nqueued\nafter');
+  });
+
+  it('keeps rendering output after a snapshot it cannot decode', async () => {
+    const { daemon, connection } = await reattachAfterReconnect('before\r\n');
+
+    connection.emit({ ...snapshotReply('s1', { b64: btoa('\x00\x01\x02\x03\x04\x05\x06\x07') }), cols: 80, rows: 24, last_seq: 2 });
+    connection.emit({ event: 'pty_output', id: 's1', seq: 3, data: btoa('after') });
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe('before\nafter');
+  });
+
+  it('paints replayed output once', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+      output: { s1: 'one\r\n' },
+    });
+
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('one-replayed\r\n') });
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('two') });
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe('one\ntwo');
+  });
+
+  it('keeps the newest output when more arrives than it buffers while an attach is pending', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    open('s1');
+    await daemon.idle();
+
+    for (let seq = 1; seq <= 520; seq += 1) {
+      daemon.emit({ event: 'pty_output', id: 's1', seq, data: btoa(`chunk-${seq}\r\n`) });
+    }
+    daemon.emit({ event: 'attach_result', id: 's1', success: true, cols: 80, rows: 24, last_seq: 0, running: true });
+    await daemon.idle();
+
+    const lines = window.__TEST_GET_SESSION_PANE_TEXT?.('s1').split('\n').filter(Boolean);
+    expect([lines?.[0], lines?.[lines.length - 1], lines?.length]).toEqual(['chunk-9', 'chunk-520', 512]);
+  });
+
+  it('re-attaches a pane whose terminal remounts when the maximized pane is restored', async () => {
+    const { daemon } = await openSplit((script) => {
+      script.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+    });
+
+    pressShortcut('terminal.toggleMaximize');
+    await daemon.idle();
+    pressShortcut('terminal.toggleMaximize');
+    await daemon.idle();
+
+    expect(attachesAndDetaches(daemon)).toEqual([
+      { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
+      { cmd: 'attach_session', id: 's2', attach_policy: 'same_app_remount' },
+      { cmd: 'attach_session', id: 's2', attach_policy: 'same_app_remount' },
+    ]);
+  });
+
+  it('keeps streaming to a remounted pane whose re-attach failed', async () => {
+    let s2Attaches = 0;
+    const { daemon } = await openSplit((script) => {
+      script.on('attach_session', ({ id }) => (
+        id === 's2' && ++s2Attaches === 2
+          ? { event: 'attach_result', id, success: false, error: 'daemon busy' }
+          : { event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }
+      ));
+    });
+    pressShortcut('terminal.toggleMaximize');
+    await daemon.idle();
+    pressShortcut('terminal.toggleMaximize');
+    await daemon.idle();
+
+    daemon.emit({ event: 'pty_output', id: 's2', seq: 1, data: btoa('still streaming') });
+    await daemon.idle();
+
+    expect(visibleText('s2')).toBe('[Failed to attach PTY: Error: daemon busy]\nstill streaming');
+    expect(daemon.sentOf('detach_session')).toEqual([]);
+  });
+
+  it('shows a failed revive in the terminal and leaves retrying to the user', async () => {
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'recoverable' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: false, error: 'session not found: s1' }));
+
+    open('s1');
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    await daemon.idle();
+
+    expect(visibleText('s1')).toBe('[Failed to attach PTY: Error: session not found: s1]');
+    expect(attachesAndDetaches(daemon)).toEqual([
+      { cmd: 'attach_session', id: 's1', attach_policy: 'revive', cols: 80, rows: 24 },
+      { cmd: 'detach_session', id: 's1' },
+    ]);
+  });
+
+  it('keeps a session attached while another workspace still shows it, and detaches once the last view goes', async () => {
+    const own = splitWorkspace('ws-a', ['s1']);
+    const shared = splitWorkspace('ws-b', ['s2', 's1']);
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws-a' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws-b' })],
+        workspaces: [own, shared],
+      },
+    });
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
+    open('s1');
+    await daemon.idle();
+    open('s2');
+    await daemon.idle();
+    expect(document.querySelectorAll('[data-pane-id="pane-s1"]')).toHaveLength(2);
+
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('\x1b[5n') });
+    await daemon.idle();
+    expect(daemon.sentOf('pty_input').filter(({ id }) => id === 's1')).toEqual([{ cmd: 'pty_input', id: 's1', data: '\x1b[0n', source: 'response' }]);
+
+    daemon.emit({ event: 'workspace_unregistered', workspace: shared });
+    daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('still here') });
+    await daemon.idle();
+    expect(daemon.sentOf('detach_session').filter(({ id }) => id === 's1')).toEqual([]);
+    expect(visibleText('s1')).toBe('still here');
+
+    daemon.emit({ event: 'workspace_unregistered', workspace: own });
+    await daemon.idle();
+    expect(daemon.sentOf('detach_session').filter(({ id }) => id === 's1')).toEqual([{ cmd: 'detach_session', id: 's1' }]);
   });
 });

@@ -168,10 +168,6 @@ export function planAttachResultEffects({
   previousSeq?: number;
   queuedOutputs?: PendingAttachOutputChunk[];
 }) {
-  // Reset is only safe when a snapshot replaces the whole grid: without one the
-  // client's model is the ONLY rendered terminal, and resetting leaves it blank.
-  const shouldReset = restorePlan.hasSnapshot;
-  const resetReason = shouldReset ? 'snapshot_restore' : null;
   const restoreAction = restorePlan.hasSnapshot && attachResult.snapshot?.snapshot_b64
     ? {
         kind: 'ghostty_snapshot' as const,
@@ -198,8 +194,6 @@ export function planAttachResultEffects({
   }
 
   return {
-    shouldReset,
-    resetReason,
     restoreAction,
     nextSeq,
     queuedOutputsToEmit,

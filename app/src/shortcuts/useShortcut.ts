@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { SHORTCUTS, ShortcutId, matchesShortcut, isChord } from './registry';
 import { resolvedShortcutEntries } from './resolver';
-import { isMacLikePlatform } from './platform';
+import { isShellCtrlLetter } from './platform';
 import { enterLeader, resolvePendingThen } from './chordState';
 import { matchChordLeader } from './chordDispatch';
 
@@ -44,7 +44,7 @@ function installGlobalListener() {
     if (captureSuspended) return;
 
     const terminalTarget = isTerminalTarget(e.target);
-    if (!isMacLikePlatform() && terminalTarget && isPlainCtrlLetter(e)) {
+    if (terminalTarget && isShellCtrlLetter(e)) {
       return;
     }
 
@@ -108,11 +108,6 @@ function installGlobalListener() {
       triggerShortcut(shortcutId as ShortcutId);
     }
   });
-}
-
-function isPlainCtrlLetter(e: KeyboardEvent): boolean {
-  if (!e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return false;
-  return /^[a-z]$/i.test(e.key) || /^Key[A-Z]$/.test(e.code);
 }
 
 function isTerminalTarget(target: EventTarget | null): boolean {

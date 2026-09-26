@@ -1,5 +1,5 @@
 import { triggerShortcut, hasHandler } from '../../shortcuts/useShortcut';
-import { isMacLikePlatform } from '../../shortcuts/platform';
+import { isMacLikePlatform, isShellCtrlLetter } from '../../shortcuts/platform';
 import { matchesShortcut, ShortcutId, isChord } from '../../shortcuts/registry';
 import { resolveBinding } from '../../shortcuts/resolver';
 import { enterLeader, resolvePendingThen } from '../../shortcuts/chordState';
@@ -27,6 +27,7 @@ function matchesBinding(event: KeyboardEvent, id: ShortcutId): boolean {
 
 export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) {
   return (event: KeyboardEvent) => {
+    if (isShellCtrlLetter(event)) return false;
     // A pending leader owns the next keystroke; resolve it before any PTY
     // control-sequence handling so the follow key is never emitted as input.
     if (event.type === 'keydown') {
