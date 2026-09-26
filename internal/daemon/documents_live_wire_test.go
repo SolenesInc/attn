@@ -373,6 +373,23 @@ func TestAfterCursorsPageQueriesButNotLiveQueries(t *testing.T) {
 		t.Fatalf("paging by the after cursor walked %q, want a b c", got)
 	}
 
+	put(t, cli, gateNS, "d", `{}`)
+	descending := requestsWhere(gateNS)
+	descending.Sort = &protocol.DocumentSort{Field: "status", Desc: protocol.Ptr(true)}
+	descending.Limit = protocol.Ptr(1)
+	walked = nil
+	for range 4 {
+		docs := query(t, cli, descending)
+		if len(docs) != 1 {
+			t.Fatalf("the descending page after %q holds %q, want one document", protocol.Deref(descending.After), docIDs(docs))
+		}
+		walked = append(walked, docs[0].ID)
+		descending.After = protocol.Ptr(docs[0].ID)
+	}
+	if got := strings.Join(walked, " "); got != "c b a d" {
+		t.Fatalf("paging a descending sort walked %q, want ties by id descending and the document without a status last", got)
+	}
+
 	walking := requestsWhere(gateNS)
 	walking.After = protocol.Ptr("a")
 	refused := docSocketSubscribe(t, w, protocol.DocSubscribeMessage{Query: walking}).next(t)

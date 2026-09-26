@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -21,6 +22,7 @@ func TestTheAppIsWarnedWhenGHIsMissingOrTooOldToMonitorPRs(t *testing.T) {
 		{name: "missing", code: "gh_not_installed", names: []string{"not installed", attngithub.InstallHint()}},
 		{name: "too old", ghVersion: "gh version 2.45.0 (2024-01-01)", code: "gh_version_too_old", names: []string{"2.45.0", "2.81.0", attngithub.UpgradeHint()}},
 		{name: "unparsable", ghVersion: "gh: something unexpected", code: "gh_version_too_old", names: []string{"2.81.0", attngithub.UpgradeHint()}},
+		{name: "current", ghVersion: "gh version 2.98.0 (2026-08-20)"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("ATTN_MOCK_GH_URL", "")
@@ -29,6 +31,12 @@ func TestTheAppIsWarnedWhenGHIsMissingOrTooOldToMonitorPRs(t *testing.T) {
 			inBubble(t, func(t *testing.T, w *world) {
 				w.advance(0)
 				warnings := w.App().Initial.Warnings
+				if tc.code == "" {
+					if slices.ContainsFunc(warnings, func(warning protocol.DaemonWarning) bool { return strings.HasPrefix(warning.Code, "gh_") }) {
+						t.Fatalf("the app's warnings are %+v, want none about gh", warnings)
+					}
+					return
+				}
 				i := slices.IndexFunc(warnings, func(warning protocol.DaemonWarning) bool { return warning.Code == tc.code })
 				if i < 0 {
 					t.Fatalf("the app's warnings are %+v, want one coded %s", warnings, tc.code)
@@ -37,6 +45,9 @@ func TestTheAppIsWarnedWhenGHIsMissingOrTooOldToMonitorPRs(t *testing.T) {
 					if !strings.Contains(warnings[i].Message, want) {
 						t.Errorf("the %s warning %q does not name %q", tc.code, warnings[i].Message, want)
 					}
+				}
+				if runtime.GOOS != "darwin" && strings.Contains(warnings[i].Message, "brew") {
+					t.Errorf("the %s warning %q names brew on %s", tc.code, warnings[i].Message, runtime.GOOS)
 				}
 			})
 		})

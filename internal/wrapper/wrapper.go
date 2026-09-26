@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/google/uuid"
-	"github.com/victorarias/attn/internal/hooks"
 )
 
 func GenerateSessionID() string {
@@ -30,11 +29,6 @@ func WriteSettingsConfig(tmpDir, sessionID, content string) (string, error) {
 		return "", err
 	}
 	return configPath, nil
-}
-
-func WriteHooksConfig(tmpDir, sessionID, socketPath, wrapperPath string) (string, error) {
-	content := hooks.Generate(sessionID, socketPath, wrapperPath, nil)
-	return WriteSettingsConfig(tmpDir, sessionID, content)
 }
 
 func CleanupHooksConfig(configPath string) {

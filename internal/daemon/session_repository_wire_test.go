@@ -16,6 +16,9 @@ func TestASpawnedSessionIsListedUnderItsRepositoryEvenWhenClosedAtOnce(t *testin
 	shop := newRepo(t, "shop")
 	id := w.Spawn(app, fakeagent.Claude, shop)
 	w.Launched(id)
+	testworld.AwaitSession(app, id, func(s protocol.Session) bool {
+		return protocol.Deref(s.Branch) == "main" && !protocol.Deref(s.IsWorktree)
+	})
 	if closed := testworld.Request(app, protocol.UnregisterMessage{Cmd: protocol.CmdUnregister, ID: id},
 		protocol.EventSessionCloseResult, func(r protocol.SessionCloseResultMessage) bool { return r.SessionID == id }); !closed.Accepted {
 		t.Fatalf("closing %s was refused: %s", id, protocol.Deref(closed.Error))
@@ -32,4 +35,12 @@ func TestASpawnedSessionIsListedUnderItsRepositoryEvenWhenClosedAtOnce(t *testin
 	if !slices.Equal(ids, []string{id}) {
 		t.Errorf("the ledger under repository %s lists %q, want the session spawned there", shop, ids)
 	}
+
+	feature := shop + "--feature"
+	runGit(t, shop, "worktree", "add", "-q", "-b", "feature", feature)
+	inWorktree := w.Spawn(app, fakeagent.Claude, feature)
+	w.Launched(inWorktree)
+	testworld.AwaitSession(app, inWorktree, func(s protocol.Session) bool {
+		return protocol.Deref(s.Branch) == "feature" && protocol.Deref(s.IsWorktree) && protocol.Deref(s.MainRepo) == shop
+	})
 }

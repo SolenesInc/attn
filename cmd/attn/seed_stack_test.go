@@ -131,6 +131,12 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		requireLines(t, "handoff", seedAs(t, s, "", "note", carried.ID, "-m", "first line\nsecond line\n", "--handoff", "--member", "keel"),
 			"handoff left on "+carried.ID+" — whoever tends it next reads this first")
 
+		exported := seedAs(t, s, "", "export", carried.ID, "--out", "-")
+		if !strings.HasPrefix(exported, "# Carry this\n") || !strings.Contains(exported, "\nthe plan\n") {
+			t.Errorf("export does not carry the title and body:\n%s", exported)
+		}
+		requireLines(t, "export", exported, "edit the crown, not this file", "`"+carried.ID+"`")
+
 		shown := seedAs(t, s, "", "show", carried.ID)
 		if !strings.HasPrefix(shown, "handoff — Keel, ") || !strings.Contains(shown, "\n  first line\n  second line\n\n"+carried.ID+" ") {
 			t.Errorf("show does not open with the indented handoff:\n%s", shown)

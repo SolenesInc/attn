@@ -167,20 +167,3 @@ func TestDefaultNoteBodyRendersTheReference(t *testing.T) {
 		}
 	}
 }
-
-func TestParseNoteKindAcceptsTheArtifactKinds(t *testing.T) {
-	for _, kind := range []string{NoteKindAttach, NoteKindDetach} {
-		got, err := ParseNoteKind(kind)
-		if err != nil || got != kind {
-			t.Fatalf("ParseNoteKind(%q) = %q, %v", kind, got, err)
-		}
-		if !CarriesArtifact(kind) {
-			t.Fatalf("%q must carry an artifact", kind)
-		}
-	}
-	for _, kind := range []string{NoteKindNote, NoteKindHandoff} {
-		if CarriesArtifact(kind) {
-			t.Fatalf("%q must not carry an artifact", kind)
-		}
-	}
-}

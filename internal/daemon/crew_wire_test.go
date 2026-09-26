@@ -409,6 +409,19 @@ func TestAWakeLaunchesTheMembersHarnessAndEffort(t *testing.T) {
 	wake("a member's effort reaches the launch", "trellis", "",
 		launch{harness: fakeagent.Claude, model: "claude-opus-4-1", effort: "high", roster: "claude-opus-4-1"})
 
+	setCrew(t, cli, "alder", protocol.CrewSetMessage{Effort: protocol.Ptr("high")})
+	codexDay := wakeCrew(t, cli, "alder", "")
+	if run := w.Launched(codexDay.SessionID); !slices.Contains(run.Argv, `model_reasoning_effort="high"`) {
+		t.Errorf("a codex member's effort did not reach its launch: argv %q", run.Argv)
+	}
+	if err := cli.Unregister(codexDay.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	plain := w.Spawn(app, fakeagent.Claude, w.Path("plain"))
+	if run := w.Launched(plain); strings.Contains(crewLaunchFlag(run.Argv, "--append-system-prompt"), "crew member of this attn home") || slices.Contains(run.Argv, "--add-dir") {
+		t.Errorf("a session nobody woke as a member was primed or widened anyway: argv %q", run.Argv)
+	}
+
 	cleared := setCrew(t, cli, "trellis", protocol.CrewSetMessage{Effort: protocol.Ptr("")})
 	if cleared.Effort != nil || protocol.Deref(cleared.ResolvedEffort) != "medium" {
 		t.Fatalf("cleared effort = %v resolving to %q, want unset resolving to the harness default medium", cleared.Effort, protocol.Deref(cleared.ResolvedEffort))
@@ -472,10 +485,14 @@ func TestARestartReimportsCrewHomesWithoutRewritingTheRoster(t *testing.T) {
 	}
 
 	writeCrewCharter(t, w, "sable")
+	writeCrewHomeFile(t, w, "scratch", "note.md", "not a member\n")
+	writeCrewHomeFile(t, w, "Not A Member", crew.CharterFileName, "# nope\n")
+	writeCrewHomeFile(t, w, crew.DaemonID, crew.CharterFileName, "# attn\n")
+	writeCrewHomeFile(t, w, strings.Repeat("a", crew.MaxIDChars+1), crew.CharterFileName, "# long\n")
 	w.restart()
 	cli = w.Client()
 	if got := len(crewRoster(t, cli)); got != 4 {
-		t.Fatalf("roster = %d members after a home was added by hand, want 4", got)
+		t.Fatalf("roster = %d members after a home and some non-homes were added by hand, want 4", got)
 	}
 	crewRosterMember(t, cli, "sable")
 }
@@ -616,7 +633,13 @@ func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	}
 	setCrew(t, cli, "keel", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir), AwarenessDirs: []string{notes}})
 	keel := wakeCrew(t, cli, "keel", "")
-	w.Launched(keel.SessionID)
+	keelRun := w.Launched(keel.SessionID)
+	if instructions := crewLaunchFlag(keelRun.Argv, "--append-system-prompt"); !strings.Contains(instructions, "You are **Keel**") {
+		t.Errorf("keel launched without its priming in the system prompt:\n%s", instructions)
+	}
+	if got := crewLaunchFlag(keelRun.Argv, "--add-dir"); got != notes {
+		t.Errorf("keel launched with --add-dir %q, want its awareness dir %s (argv %q)", got, notes, keelRun.Argv)
+	}
 	for _, dir := range []string{workDir, notes} {
 		if err := os.RemoveAll(dir); err != nil {
 			t.Fatal(err)

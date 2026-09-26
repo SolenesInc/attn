@@ -79,6 +79,7 @@ func TestAReviewRoundRefusesBadCommentsAndFeedbackReportsItsOutcome(t *testing.T
 		t.Fatalf("approving round 1: %s", protocol.Deref(approved.Error))
 	}
 	expectPresentationFeedback(t, w, checkout.PresentationID, true, "approved", "approved")
+	presentationFeedbackSays(t, w, checkout.PresentationID, "**Approved.**", "### a.txt:1 (new)", "nit")
 
 	pricing := openPresentation(t, cli, repo, "Pricing", "")
 	if closed := closePresentation(app, pricing.PresentationID); !closed.Success || closed.PresentationID != pricing.PresentationID {
@@ -88,9 +89,79 @@ func TestAReviewRoundRefusesBadCommentsAndFeedbackReportsItsOutcome(t *testing.T
 		t.Errorf("the closed presentation's round = %+v, want it never submitted", got.Round)
 	}
 	expectPresentationFeedback(t, w, pricing.PresentationID, false, "", "closed")
+	presentationFeedbackSays(t, w, pricing.PresentationID, "Round not submitted yet.", "Presentation closed without review.")
 	if unnamed := closePresentation(app, ""); unnamed.Success {
 		t.Errorf("closing without a presentation id = %+v, want it refused", unnamed)
 	}
+}
+
+func TestPresentationFeedbackQuotesEachCommentFromItsSideGroupedByFile(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	repo := newRepo(t, "shop")
+	commitFile(t, repo, "a.txt", "line one\nline two\n")
+	commitFile(t, repo, "b.txt", "b1\nb2\n")
+	commitFile(t, repo, "a.txt", "line ONE\nline two\nline three\n")
+	opened, err := cli.PresentOpen("presenter", presentationManifest("Checkout", repo, "HEAD~1", "HEAD", ""), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if clean := submitRound(app, opened.RoundID, "feedback"); !clean.Success {
+		t.Fatalf("submitting an empty round: %s", protocol.Deref(clean.Error))
+	}
+	presentationFeedbackSays(t, w, opened.PresentationID, "No comments — round handed back clean.", "Submitted: ")
+
+	again, err := cli.PresentOpen("presenter", presentationManifest("Checkout", repo, "HEAD~1", "HEAD", ""), opened.PresentationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	submitted := submitRound(app, again.RoundID, "feedback",
+		protocol.PresentCommentInput{Filepath: "b.txt", LineStart: 1, LineEnd: 1, Side: "new", Content: "first, on b"},
+		protocol.PresentCommentInput{Filepath: "a.txt", LineStart: 1, LineEnd: 1, Side: "old", Content: "was this intentional?"},
+		protocol.PresentCommentInput{Filepath: "b.txt", LineStart: 2, LineEnd: 2, Side: "new", Content: "second, on b"},
+		protocol.PresentCommentInput{Filepath: "a.txt", LineStart: 3, LineEnd: 3, Side: "new", Content: "nice addition"},
+		protocol.PresentCommentInput{Filepath: "a.txt", LineStart: 50, LineEnd: 52, Side: "new", Content: "past the end"},
+	)
+	if !submitted.Success {
+		t.Fatalf("submitting feedback: %s", protocol.Deref(submitted.Error))
+	}
+	markdown := presentationFeedbackSays(t, w, opened.PresentationID,
+		"### a.txt:1 (old)", "line one", "### a.txt:3 (new)", "line three", "was this intentional?", "nice addition", "past the end")
+	if strings.Contains(markdown, "**Approved.**") || strings.Contains(markdown, "line ONE") {
+		t.Errorf("feedback quotes the wrong side or claims approval:\n%s", markdown)
+	}
+	if strings.Count(markdown, "## b.txt\n") != 1 || !inOrder(markdown, "## b.txt", "b1", "first, on b", "b2", "second, on b") {
+		t.Errorf("feedback does not group b.txt's comments under one heading, each after its quote:\n%s", markdown)
+	}
+	if quotes := strings.Count(markdown, "```") / 2; quotes != 4 {
+		t.Errorf("feedback fences %d quotes, want one per comment inside its file and none past the end:\n%s", quotes, markdown)
+	}
+}
+
+func presentationFeedbackSays(t *testing.T, w *world, presentationID string, wants ...string) string {
+	t.Helper()
+	got, err := w.Client().PresentFeedback(presentationID, 0)
+	if err != nil {
+		t.Fatalf("present feedback for %s: %v", presentationID, err)
+	}
+	for _, want := range wants {
+		if !strings.Contains(got.Markdown, want) {
+			t.Errorf("feedback for %s does not say %q:\n%s", presentationID, want, got.Markdown)
+		}
+	}
+	return got.Markdown
+}
+
+func inOrder(text string, parts ...string) bool {
+	at := 0
+	for _, part := range parts {
+		index := strings.Index(text[at:], part)
+		if index < 0 {
+			return false
+		}
+		at += index + len(part)
+	}
+	return true
 }
 
 func TestPresentationAnchorsResolveToLinesWarnWhenAmbiguousAndRefuseWhenMissing(t *testing.T) {
@@ -112,6 +183,25 @@ func TestPresentationAnchorsResolveToLinesWarnWhenAmbiguousAndRefuseWhenMissing(
 	}
 	if len(ambiguous.Warnings) != 1 || !strings.Contains(ambiguous.Warnings[0], "a.txt[0]") {
 		t.Errorf("warnings for an ambiguous anchor = %q, want one naming a.txt[0]", ambiguous.Warnings)
+	}
+
+	for _, refused := range []struct{ name, files, names string }{
+		{"a line past the end", "  - path: a.txt\n    annotations:\n      - line: 10\n        note: n\n", "a.txt[0]"},
+		{"a range past the end", "  - path: a.txt\n    annotations:\n      - start: 1\n        end: 10\n        note: n\n", "a.txt[0]"},
+		{"an annotation overlapping an earlier one", "  - path: a.txt\n    annotations:\n      - start: 1\n        end: 3\n        note: n\n      - anchor: \"func Foo\"\n        note: m\n", "a.txt[1]"},
+		{"a file missing from the head", "  - path: gone.txt\n    annotations:\n      - line: 1\n        note: n\n", "gone.txt"},
+	} {
+		if _, err := cli.PresentOpen("presenter", presentationManifest("Annotated", repo, "HEAD", "HEAD", "files:\n"+refused.files), ""); err == nil || !strings.Contains(err.Error(), refused.names) {
+			t.Errorf("presenting %s = %v, want it refused naming %s", refused.name, err, refused.names)
+		}
+	}
+	threaded, err := cli.PresentOpen("presenter", presentationManifest("Annotated", repo, "HEAD", "HEAD",
+		"files:\n  - path: a.txt\n    annotations:\n      - start: 1\n        end: 3\n        thread: [first, second]\n"), "")
+	if err != nil {
+		t.Fatalf("presenting a threaded range: %v", err)
+	}
+	if notes := presentedFile(t, presentationRound(app, threaded.PresentationID, 1), "a.txt").Annotations; len(notes) != 1 || notes[0].LineStart != 1 || notes[0].LineEnd != 3 || !slices.Equal(notes[0].Comments, []string{"first", "second"}) {
+		t.Errorf("a.txt annotations = %+v, want lines 1-3 carrying the thread", notes)
 	}
 
 	resolved, err := cli.PresentOpen("presenter", annotated("func Foo", "entry point"), "")

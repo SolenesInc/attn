@@ -38,39 +38,6 @@ func ExpandPath(path string) string {
 	return path
 }
 
-func (c *Client) ListBranches(ctx context.Context, repoDir string) ([]string, error) {
-	out, err := c.Output(ctx, OpMetadata, repoDir, "branch", "--format=%(refname:short)")
-	if err != nil {
-		return nil, fmt.Errorf("git branch failed: %w", err)
-	}
-
-	allBranches := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if len(allBranches) == 1 && allBranches[0] == "" {
-		return nil, nil
-	}
-
-	worktrees, err := c.ObserveLiveWorktrees(ctx, repoDir)
-	if err != nil {
-		return nil, fmt.Errorf("listing worktrees: %w", err)
-	}
-
-	checkedOut := make(map[string]bool)
-	for _, wt := range worktrees {
-		if wt.Branch != "" {
-			checkedOut[wt.Branch] = true
-		}
-	}
-
-	var available []string
-	for _, branch := range allBranches {
-		if !checkedOut[branch] {
-			available = append(available, branch)
-		}
-	}
-
-	return available, nil
-}
-
 func (c *Client) ListBranchesWithCommits(ctx context.Context, repoDir string) ([]BranchWithCommit, error) {
 	currentBranch, _ := c.GetCurrentBranch(ctx, repoDir)
 
@@ -288,17 +255,6 @@ func (c *Client) ListRemoteBranches(ctx context.Context, repoDir string) ([]stri
 	}
 
 	return available, nil
-}
-
-func (c *Client) CheckoutBranch(ctx context.Context, repoDir, branch string) error {
-	if _, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", branch); err == nil {
-		return nil
-	}
-
-	if out, err := c.Combined(ctx, OpWorktree, repoDir, "checkout", "-b", branch, "origin/"+branch); err != nil {
-		return fmt.Errorf("git checkout failed: %s", out)
-	}
-	return nil
 }
 
 func (c *Client) GetHeadCommitInfo(ctx context.Context, repoDir string) (hash string, time string) {

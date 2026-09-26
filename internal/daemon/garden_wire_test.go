@@ -3,6 +3,7 @@ package daemon_test
 import (
 	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -263,6 +264,14 @@ func TestSeedRefusalsNameWhatIsWrongAndChangeNothing(t *testing.T) {
 			_, err := cli.SeedPlant("", "   ", "", "", "", "")
 			return err
 		}, []string{"attn seed plant"}},
+		{"an over-long title", func() error {
+			_, err := cli.SeedPlant("", strings.Repeat("x", garden.MaxTitleChars+1), "", "", "", "")
+			return err
+		}, []string{"401", "400"}},
+		{"a note past the limit", func() error {
+			_, err := cli.SeedNote("", seed, strings.Repeat("x", garden.MaxNoteBytes+1), "", "", false, nil)
+			return err
+		}, []string{strconv.Itoa(garden.MaxNoteBytes + 1)}},
 		{"a malformed id", func() error {
 			_, err := cli.SeedShow("", "nope")
 			return err
