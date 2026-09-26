@@ -1,66 +1,140 @@
 # Real-app harness
 
-Packaged-app scenarios. Set up an instance per [instances](../../../docs/instances.md)
-and run commands from the repository root.
+Read [profiles.md](../../../docs/profiles.md) before installation or verification.
+Run commands from the repository root.
 
-## Running
+## Running scenarios
 
-- Scenarios share one display and run serially:
-  `pnpm --dir app run real-app:serial-matrix`. A second run waits for the lock.
-- The instance comes from `ATTN_HARNESS_INSTANCE`, then `ATTN_INSTANCE`, then `dev`.
-  Production needs an empty `ATTN_HARNESS_INSTANCE=`, `--run-against-prod`, and
-  explicit approval.
-- Install the current checkout first; a stale build fails its fingerprint check.
-- Hunt CI flakes with
-  `gh workflow run acceptance-soak.yml --ref next -f scenarios=<ids>`.
-  `scripts/ci-flake-report.sh` ranks failing tests across CI history.
-- Linux VM: `pnpm --dir app real-app:linux provision` ([linux-runner](../../../docs/linux-runner.md)).
-  Remote scenarios need `ATTN_HARNESS_REMOTE_SSH_TARGET`.
-- Platform skips go in the catalog entry as `skipOn` with a reason. A product
-  failure on Linux is a finding, not a skip.
+- Scenarios share one display; run serially. Batch with
+  `pnpm --dir app run real-app:serial-matrix`.
+- A second run waits for the active one's lock, naming the holder. It waits as
+  long as the holder is alive and heartbeating (a matrix can hold for hours) and
+  gives up on a wedged holder (5 min without a heartbeat);
+  `ATTN_REAL_APP_SCENARIO_LOCK_WAIT_MS` caps the total wait (0 fails fast).
+- Profile: `ATTN_HARNESS_PROFILE` overrides `ATTN_PROFILE`, which defaults to `dev`.
+  Production needs `ATTN_HARNESS_PROFILE=`, `--run-against-prod`, and explicit approval.
+- Install the current checkout; source fingerprint mismatches fail.
+- Remote target: `attn-remote@orb`; provision with
+  `pnpm --dir app run real-app:provision-remote`.
+  Provisioning installs the mock-agent command and four tripwire shims; it does
+  not need provider credentials.
 
 ## Writing scenarios
 
-- New scenario files get a `scenarioCatalog.mjs` entry. After a shape change,
-  update its weight in `scenario-durations.json` from a green run.
-- Drive the app like a user, through `createWindowDriver({ appPath, client })`.
-  On macOS it sends input without taking focus or moving the pointer, except
-  `menu` and scrolling; on Linux, `xdotool` focuses the window and moves the
-  pointer. A scenario that needs real focus calls `driver.activateApp()` and
-  says why.
-- Scenarios built on `createScenarioRunner` launch the mock agent for `claude`
-  and `codex`. Script its turns with `writeMockAgentFixture` in the session cwd
-  before launch; no fixture means a silent agent. Real providers need
-  `allowRealAgents` and a reason.
-- In those scenarios the agent tripwire fails any real agent or headless model
-  task. `allowRealAgents: ['pi']` exempts only the named agents; `true` exempts
-  every agent and turns headless tasks back on.
-- Those scenarios talk to the mock GitHub (`scripts/mock-github.mjs`) on
-  non-production instances; production keeps the real github.com. Seed custom
-  PRs through `/__control/seed`.
-- Hand-run scripts outside `createScenarioRunner` have none of these guards and
-  may launch real providers; read one before running it.
-- Build child environments with `instanceCliEnv`, never `{ ...process.env }`.
-- Read the daemon DB through `queryDaemonDb`. Resolve pane ids from app state.
-- Signal only PIDs from the automation manifest or spawned processes. Keep
-  OS-specific behavior in `platform.mjs`.
+- Exercise actual app actions/order; update scenarios when product flows change.
+- The mock agent is the default agent. An armed scenario launches `mockAgent.mjs`
+  for `claude` and `codex`: the tripwire pins both `ATTN_<AGENT>_EXECUTABLE` at it
+  and `launchFreshAppAndConnect` writes the matching `<agent>_executable` setting,
+  restoring what it found. Sessions need both halves — the env reaches the daemon,
+  the setting reaches each spawn.
+- A scenario needing a real provider says so with `allowRealAgents` and states why.
+  That list shrinks; adding to it needs a reason in the catalog entry.
+- Give the mock a turn with `writeMockAgentFixture` in the session cwd before the
+  session starts. No fixture is a silent agent, not a broken one: the pane paints
+  the splash and every prompt closes its turn with no reply.
+- A brief delivered on argv (`-- <prompt>`, how every delegation, crew wake and
+  automation launch starts an agent) is the mock's first turn, matched against the
+  same fixture. Its resume flags land in the transcript's `session_meta`.
+- A fixture marked `resumable` places the transcript where the daemon's finders
+  walk — codex at launch under the codex sessions tree, claude on its first turn
+  under the tool home's project folder — so a resume launch finds it, replays the
+  earlier turns into the pane and appends to that same file. Codex `/new` binds a
+  successor rollout.
+- Actions beyond `reply`/`delay`/`touch`/`wait_for_file`/`attn`: `capture` lifts a
+  value out of the prompt (`pattern`, `name`) for `{{name}}` in a later `attn` or
+  `exec` argument, and `exec` runs a command into the pane and the transcript,
+  failing the turn on a non-zero exit unless `allowFailure`.
+- The mock ends every turn with the real Stop hook and a `<!-- attn:state=… -->`
+  marker; an action's `state` sets it (default: `waiting_input` after a reply,
+  `idle` when the turn was silent). Arming turns headless tasks off, which is what
+  makes the daemon read that marker instead of a model.
+- Crew fixtures use synthetic names and `claude-haiku-4-5` unless stronger reasoning is required.
+- Resolve pane ids from app/daemon state. Assert empty workspaces are removed.
+  Shortcuts use registry ids.
+- Keep OS-specific install paths, launch, observation, and quit behavior in
+  `platform.mjs`. Use automation-manifest or spawned PIDs; verify manifest PIDs
+  still run the installed executable before signalling them.
+
+## Agent tripwire
+
+`agentTripwire.mjs` shims `claude`, `codex`, `copilot` and `pi` so a scenario
+that must call no model fails when a real agent binary is exec'd. A shim appends
+`<scenario>\t<argv>` to `<run-dir>/agent-tripwire.ledger` and exits 97; the runner
+fails the scenario on a non-empty ledger and prints the lines.
+
+- The shims reach the app, the daemon it spawns, and the harness's own `attn`
+  calls two ways: the shim dir first on `PATH`, and `ATTN_<AGENT>_EXECUTABLE`
+  pins. Sessions need the pins — the login shell rebuilds `PATH` (see
+  `internal/pty/manager.go`), so only the pins survive that hop.
+- `claude` and `codex` pin at the mock agent rather than at their shim, so an
+  armed scenario gets a working agent instead of a dead session. Their shims stay
+  on `PATH`, so a name-resolved exec still lands in the ledger. `copilot` and `pi`
+  have no mock and pin at their shims.
+- A command a scenario types by hand into a shell pane resolves on the login
+  `PATH`, where a real agent binary can sit ahead of the shim dir. The tripwire
+  covers every agent attn itself launches, not that.
+- The daemon outlives a scenario, so the shim dir is stable and a `current-run`
+  pointer file attributes execs to the scenario running now.
+  `ensureDaemonCarriesTripwire` stops a daemon that predates the tripwire
+  (never on a production target) so the app relaunch brings up an armed one.
+- Every `createScenarioRunner` caller declares what it may run: a
+  `scenarioCatalog.mjs` entry carrying its `runnerId`, or `allowRealAgents` in
+  the runner options, which wins over the catalog. `false` arms everything,
+  `true` allows all four, an array names the ones the scenario needs. A runner
+  id neither covers fails at construction rather than defaulting to permissive.
+  Every arming logs what it allowed. The pi scenarios carry `['pi']` — they exec
+  the real `pi` binary against a stub provider or a recording, and keep
+  claude/codex/copilot armed.
+- Arming also sets `ATTN_HEADLESS_TASKS=off`, so the daemon refuses narration,
+  classification, titling and every other headless LLM task (`internal/headless`)
+  instead of enqueueing one. Without it the ledger check races the daemon:
+  `narrate_workspace` debounces two minutes and retries, so its `claude --print`
+  lands after `summary.json`, and the single `current-run` pointer stamps it with
+  whichever scenario is armed by then. A scenario that allows real agents keeps
+  headless tasks on.
+- `summary.json` carries `headlessTasks`, read from the environment of the
+  daemon the scenario ran against, so a green run states the switch was in force
+  rather than leaving it assumed. Counting `headless task refused` lines instead
+  does not work: the daemon logs them as a scenario tears its sessions down, in
+  the same second `summary.json` is written.
+- An armed scenario fails closed on both ends. At arm time, a running daemon
+  whose environment cannot be read, or one this harness may not stop (a
+  production target is never restarted), fails the scenario before it starts,
+  naming the pid, what was read and what was expected. At the end, `ok: true`
+  requires the daemon's environment to carry both this run's
+  `ATTN_AGENT_TRIPWIRE` marker and `ATTN_HEADLESS_TASKS=off`; a switch reading
+  `on`, `no daemon` or `unreadable`, or a marker from another run, fails the
+  scenario with the value in the digest. A scenario allowing real agents keeps
+  the old warn-and-continue: it has nothing to prove.
+- Remote probe scenarios arm a second tripwire on the fixture VM. Their launch
+  environment puts the provisioned shim directory first, pins all four agent
+  executables, and sets `ATTN_HEADLESS_TASKS=off`. Each scenario saves the
+  remote daemon's environment receipt and copies the remote ledger into its
+  local artifacts before it can pass. TR-502 and TR-504 launch the provisioned
+  mock through the same command name on macOS and Linux.
 
 ## Reading results
 
-- The verdict is the last `ATTN_VERDICT ` stdout line (hand-run scripts may not
-  print one); `summary.json` has the rest.
-- Check pane text and native screenshots before diagnosing. WebGL terminals need
-  native window captures.
-- Linux needs `xvfb-run`, `xdotool`, `xclip`, `sqlite3`, `fish`, `bash`, `zsh`,
-  and `pi`, plus `attn plugin install-bundled attn-pi`.
+- Read the last `ATTN_VERDICT ` stdout line; hand-rolled `main()` scenarios omit it.
+- Inspect captured pane text and native screenshots before diagnosing failures.
+- Dark/locked screens block input. Check `pmset -g log | rg "Display is turned"`.
+- Linux input needs `DISPLAY` and `xdotool`; run scenarios through `xvfb-run` in CI.
+- Use `capture_screenshot_data` for DOM pixels. WebGL terminal evidence needs a
+  native window capture (`import -window` on Linux).
 
 ## Recordings
 
-Record a non-production instance and check clips for private data before publishing:
+Record the installed verification profile; watch for private data before publishing
+to the public evidence repository:
 
 ```bash
-./scripts/pr-evidence.sh record --instance <name> --seconds 20 --out clip.mp4
+./scripts/pr-evidence.sh record --profile <name> --seconds 20 --out clip.mp4
 ./scripts/pr-evidence.sh publish clip.mp4
 ```
 
-`ATTN_HARNESS_RECORD=1` records scenario segments. Recording is macOS-only.
+`publish` uploads MP4/GIF and prints PR Markdown. Re-record private content;
+keep clips around 20 seconds and heed the 10MB GIF warning.
+`ATTN_HARNESS_RECORD=1` writes `recording-NN.mp4` segments to scenario artifacts.
+Install/update the recorder with `make install-window-recorder`; its stable
+bundle preserves macOS Screen Recording permission.
+Recording is unsupported on Linux; the harness names that and continues.

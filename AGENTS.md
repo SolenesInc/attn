@@ -1,23 +1,41 @@
 # attn
 
-attn (Attention) wraps Claude Code, Codex, Copilot, and Pi with durable sessions,
-terminals, and a keyboard-driven queue for agents waiting for the user. Harnesses
-keep their native experience and remain usable as bare CLIs; plugins add more.
-The Garden tracks work, visible delegations let users steer agents, crew members
-have permanent charters, and automations start sessions on schedules or events.
-Users can annotate terminal text and rendered markdown and send comments to a session.
-Queue mode separates busy agents from those waiting for the user and advances
-after each prompt. State classification and turn accounting serve that flow.
+attn stands for Attention: an interface friendly to both human and agent
+brains, built as a harness augmenter. What it does today, and what each part
+asks of you as a maintainer:
 
-Sessions and terminals must survive app, daemon, and machine restarts. The Tauri
-app runs on macOS and Linux; the daemon also serves remote hosts over SSH.
-`cmd/attn` and `internal/**` must build and run on Linux. The daemon owns
-application state; the app owns rendering.
-Linux CI exercises the packaged application under Xvfb.
+- Durability. App, daemon, and machine restarts bring every session and
+  terminal back.
+- Bring your own harness. attn wraps Claude Code, Codex, Copilot, and Pi as
+  they are; the user gets each harness's native experience and can use the
+  bare CLI at any time. Users can add new harnesses with plugins.
+- The queue mode sorts agents into "waiting for you" or "busy" and moves the
+  user to the next one after every prompt. State classification and turn
+  accounting exist to serve this.
+- Remote hosts. Everything the daemon does also works over SSH on a Linux
+  box, which is why `cmd/attn` and `internal/**` build on Linux.
+- The Garden is the work tracker: seeds planted, tended, harvested. It is
+  the unit agents hand off, work upon, and help them stay organized.
+- Visible orchestration. Delegations are full sessions the user can open and
+  steer, from any harness to any harness, and agents can message each other.
+- Crew members are permanent agents with charters; the Chief is one.
+- Automations start a steerable agent on a schedule or an event.
+- Annotations. The user selects text in a live terminal or in a natively
+  rendered markdown file, comments on it, and sends the batch to a session as
+  one message.
 
-attn is Victor's most loved and most used piece of software. Its small user base
-is intentional. Frictionless interaction, keyboard access, and performance matter
-throughout: it runs all day, so idle CPU use and creeping memory are defects.
+The app (the Tauri UI) is mac only for now; Linux support is being worked upon.
+The daemon runs on Linux, so daemon code stays portable.
+
+## What makes attn special?
+
+attn is Victor's most loved and most used piece of software. It is not widely
+used, by design (Victor doesn't want to carry a large user base) but the few
+people who run it matter to him. Maintain and iterate on it like something loved.
+
+The things we can never compromise on: frictionless experience, keyboard
+friendliness, and performance. They go hand in hand. And attn runs all day,
+every day: memory that creeps or CPU burned while idle is a defect.
 
 ## Note from Victor
 
@@ -30,128 +48,145 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 - Never kill by name, pattern, or worktree path. Kill only a PID captured at
   spawn, or a port/socket owner confirmed by working directory.
-- Production ~/.attn is read-only. Copy data out; never run a test daemon
+- Production `~/.attn` is read-only. Copy data out; never run a test daemon
   against it, open it read-write, or clean it.
-- Using attn CLI to interact with ~/.attn is allowed.
 - Non-production builds, installs, launches, and restarts are pre-authorized.
   Production `make`, `make install`, and `make install-daemon` need Victor's
-  explicit approval.
-- Never redirect `HOME` or resolve test config paths to production `~/.attn`.
-  Use the [test isolation rules](docs/maintainer-contracts.md#test-safety)
-  when adding or changing tests that reach config paths.
+  explicit approval. Check the `[attn profile=…]` banner first.
+- Never restart the daemon hosting this session.
 
 ## Working rules
 
-Before introducing a wrapper, interface, configuration option, fallback, cache,
-or coordination layer, name the current requirement it serves. Search existing
-code and platform capabilities first. If the justification is hypothetical future
-flexibility, leave it out. An abstraction earns its place by removing complexity
-from today's code; moving complexity behind a new name does not count. Preserve
-the full requested behavior.
-
-During design and review, ask: what could we remove from this design and still
-satisfy the full requirement?
-
-- Make protocol bumps and DB migrations as needed by the changes.
+- The daemon owns application state; the app owns rendering.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
-- Do not commit spikes.
-- Do not add explanatory code comments. Express intent through function and
-  variable names and code structure. Rewrite code that needs a comment to be understood.
-- Align with the user before adding a bus event or changing an existing event's name, subject, payload, semantics, or compatibility behavior.
-- Remote outposts are temporarily incomplete: Garden and crew remain home-only
-  until the generic uplink exists, and other cross-daemon flows may be
-  unsupported. Do not absorb that remote debt into unrelated work; preserve
-  existing fences and fail loudly when an operation depends on an unsupported
-  remote path.
+- Prefer fast integration tests. Do not copy production code into tests or
+  test compile-time guarantees.
+- Avoid continuous repainting. Check idle CPU and memory.
+- New actions need reversal and inspection: snooze/unsnooze, create/clean.
+- Check affected CLI, daemon, app, protocol, and Linux paths before finishing.
+  `cmd/attn` and `internal/**` must cross-compile and run on Linux.
+- Plant a Garden plot for non-trivial work; put the plan in its body, pieces
+  in children, and ordering in `blocks` edges. Offer parallel delegations
+  for independent pieces. Small changes can go straight to a PR.
+- Do not commit spikes; Victor decides what follows.
+- Protocol bumps and DB migrations are routine. Make and verify them.
+- Comments explain directives, measured limits, or hidden traps. Maximum two
+  lines per block, enforced by `make lint`. Delete unclear compressed comments.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
-## PR posture
+## Commands
 
-### Reviewer
+| Task | Command |
+| --- | --- |
+| Go tests | `make test` |
+| Frontend tests | `make test-frontend` |
+| Browser tests | `make test-e2e` |
+| Go + frontend | `make test-all` |
+| Go + frontend + browser | `make test-harness` |
+| Frontend dev server | `pnpm --dir app run dev` |
+| Lint | `make lint` |
 
-- Review for unnecessary machinery as well as correctness. For each new layer,
-  option, fallback, or duplicated state, check what current requirement it serves.
-  When proposing simplification, name what can be removed, what replaces it, and
-  why the full behavior is preserved. Fewer lines alone are not evidence of a
-  better design.
+## Test safety
 
-### Author
+- Never resolve test config paths to production `~/.attn`; never redirect `HOME`.
+- Packages reaching config paths need `TestMain`: create a temp dir and call
+  `config.ScopeTestEnvironment(dir)` before `m.Run()`. It sets `ATTN_DATA_DIR`
+  and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv`
+  is insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
+- Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
+- Use `synctest.Test` for elapsed-time or never-happens assertions; no sleeps/polls.
+- Use `pgregory.net/rapid` for invariants over large inputs; commit failure seeds.
+- Use `newToxiProxy(t, upstream)` for network failures a fake cannot express.
 
-- Codex reviews every PR as `chatgpt-codex-connector[bot]`. It reviews each push on
-  its own. A 👍 reaction on the PR means it was approved with no feedback.
-  👀 reaction means Codex is reviewing.
-- Read reviews, inline comments, review threads with `isResolved`, and PR reactions
-  through the API (GraphQL for threads). `gh pr view` misses reactions and thread state.
-- Reply on the thread with what changed, and resolve it. When no change is needed,
-  reply with the reason.
-- Use `attn pr watch <url> --mode codex` after pushing a PR to wait for CI/review. Do not loop for updates.
-- When addressing comments, avoid patchwork fixes. Understand the root cause of the issue captured
-  by the reviewer, and address it holistically, if necessary by refactoring the system.
+## Ownership
 
-## Commands and verification
+- Production PTYs run in `internal/ptyworker`, using `internal/pty`.
+- `internal/store` owns SQLite/cache; `internal/attention` owns turn predicates.
+  Derive `turn_owed` from persisted opened/settled timestamps.
+- `internal/jobs` owns background duties and periodic ticks;
+  `internal/supervise` owns long-lived daemon children.
+- Garden/crew handlers call `Daemon.requireHome` (`internal/enrollment`).
+  Outposts own sessions; Garden/crew belong to their home.
+- Crew files are authoritative; the registry records paths. One active session
+  binding per member (`internal/daemon/crew.go`).
+- `internal/docstore` compiles SQL; `internal/store/documents.go` executes it.
+  SQL identifiers come from integers or validated field names, never caller text.
+- App consumer/namespace names derive from `internal/apps`; enabled state is
+  the consumer's enabled bit.
+- Auto-mode pattern/model writes go only through `PromoteAutoModeProposal`
+  in `internal/store/automode.go`. Agents propose; only the user promotes.
 
-- `make test`: Go tests (`make test-v` verbose, `make test-watch` on file changes)
-- `make test-frontend` (`pnpm --dir app test:ui` for the Vitest UI)
-- `make test-e2e`: Browser tests (`pnpm --dir app e2e:headed` to watch them)
-- `make test-scripts`: Shell script tests
-- `pnpm --dir app run dev`: Runs the frontend/app dev server
-- `make lint`: Overall linter
+## Protocol
 
-`make test` skips the Go suite when only `docs/`, root Markdown and `app/src` changed since `origin/next`; `FORCE=1` runs it and `DIFF_BASE=<ref>` compares against another branch.
+For command/event/message-shape changes:
 
-## Writing tests
+1. Edit `internal/protocol/schema/main.tsp`; run `make generate-types`.
+2. Increment `ProtocolVersion` in `internal/protocol/constants.go` and
+   `PROTOCOL_VERSION` in `app/src/hooks/useDaemonSocket.ts`.
 
-- Only write high value unit tests, and for critical parts of the codebase. Low value unit tests are not necessary. Do not write tests for script helpers or test helpers.
-- Prefer fast integration tests.
-- Do not copy production code into tests or test compile-time guarantees.
-- Use the [test contracts](docs/maintainer-contracts.md#test-safety)
-when choosing time, property, or network-failure test helpers.
+Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`.
 
-Choose checks for affected CLI, daemon, app, protocol, and Linux paths using
-[verification requirements](docs/instances.md#verification-requirements).
-Rendering changes must avoid continuous repainting.
+## The app SDK
 
-## Documentation
+After editing `sdk/attn-app/src`, run `make generate-sdk` and commit
+`internal/appbuild/sdkdist/`; `make check-sdk` checks freshness.
+Keep `appbuild.ReactTypesVersion` aligned with the frontend lockfile.
+Views import React through `@victorarias/attn-app` to share attn's instance.
 
-Docs define product vocabulary, explain intended behavior and tell people how
-to use, run and test attn. Keep the glossary to short definitions.
+## Event bus
 
-Do not write implementation notes anywhere. The code must explain how it works.
-If it needs a prose explanation of its wiring or control flow, make the code
-clearer.
-
-## Task-specific guidance
-
-Read the relevant entry when the task touches its subject. When changing or working on:
-
-- Command, event, or message shapes => docs/maintainer-contracts.md#protocol
-- `sdk/attn-app/src` or SDK consumers => docs/maintainer-contracts.md#the-app-sdk
-- Event publishing, projections, consumers, or retention => docs/maintainer-contracts.md#event-bus
-- Native VT builds, ABI, or pin updates => docs/maintainer-contracts.md#native-vt-library
-- Agent-facing content in `internal/prompts/content/**`, its Go definitions, or CLI help => docs/prompt-authoring.md
-- Product vocabulary => [Glossary](docs/glossary.md)
-- Branches, PRs, merges, or waiting on reviews => docs/working-with-next.md
-- Changelog fragments, releases, hotfixes, or syncing `main` into `next` => docs/making-a-release.md
-- Installing, launching, or verifying instances => docs/instances.md
-- Frontend code or shortcuts => app/AGENTS.md
-- Packaged-app scenarios or recording/publishing evidence => app/scripts/real-app-harness/AGENTS.md
-- Pi driver or auto-mode permissions  => plugins/attn-pi/AGENTS.md
-- CPU, memory, or benchmarks => docs/perf-testing.md
-- Terminal input that stops working => docs/diagnosing-terminal-input.md
-- Shared Rust PTY host => docs/pty-host-verification.md
+- Publish entity ids as fact subjects; omit byte streams.
+- Projections only write to the wire. State changes or nested publishes can deadlock.
+- Bulk changes publish one fact per entity inside `coalesceSnapshots`.
+- Durable handlers must be idempotent; unregister consumers on uninstall.
+- Enabled durable consumers and all installed apps pin retention. Disabled
+  ordinary consumers release it. Pin alarms never discard unread facts.
+- Inspect with `attn bus status`; control delivery with `attn bus disable|enable`.
+  Tests can shorten `ATTN_BUS_RETENTION` and `ATTN_BUS_PIN_ALARM_AGE`.
 
 ## Diagnostics
 
-- Daemon: `<data-dir>/daemon.log`, or `attn debug daemon-log --since 10m --grep PATTERN`.
-- Dedicated PTY worker: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
-- Shared PTY host: `<data-dir>/pty-hosts/<daemon-instance>/log/host.log`.
-- `attn debug incidents|diagnostics|input`: frontend terminal logs; `attn debug ls` lists them.
-- `attn state explain <session>`: why a session has its state, claim by claim.
-- `attn bus status`: event-log consumers, lag, and retention.
-- `go run ./scripts/wsctl`: drives a non-production daemon over WebSocket (sessions, input, screen).
-- `attn db restore`: restores the database from a rotating backup while the daemon is stopped.
+- Daemon: `<data-dir>/daemon.log`.
+- PTY: `<data-dir>/workers/<daemon-instance>/log/<session>.log`.
 - Daemon code uses `d.logf(...)` or injected `LogFunc`; background stderr is lost.
 - To debug an isolated daemon, quit its app, then `DEBUG=debug attn daemon ensure`.
-- Restarting the app or daemon has no impact on the underlying agents, unless
-  Settings → Terminal reports the embedded backend: then a daemon restart stops them.
+
+## Native VT library
+
+- Keep `internal/ghosttyvt` build tags, cgo tuples, `scripts/lib/libghostty-vt.sh`,
+  and Makefile platforms aligned: darwin/arm64, linux/amd64+arm64.
+- `ghostty-vt.pin` must match upstream's rolling `tip` build (the wasm source).
+  Run `make publish-ghostty-vt-wasm`, then `make publish-native-vt`; commit both locks.
+- On a pin bump, verify `abi.layout.test.ts`, rerun
+  `go test ./internal/pty -run TestKittyWireRewriteCorpus -update`, and check
+  measured limits in `internal/pty/wirefeed.go`.
+
+## Verification
+
+Choose each PR's verification and any exemption from
+[profiles.md](docs/profiles.md#verification-requirements). App-observable changes
+need the running app; visible changes need a recording. If required verification
+is unavailable, ask before merging.
+
+### Experience testing
+
+Test feel with Victor early in spikes and at the end of substantial PR arcs.
+Prepare a running profile from the branch, realistic data, and a short list
+covering changed behavior, latency, and keyboard flow.
+
+## Guidance
+
+- Read [glossary.md](docs/glossary.md) before naming domain concepts; update
+  definitions and implementation together.
+- Read [working-with-next.md](docs/working-with-next.md) before creating
+  branches, opening or merging PRs, or waiting on reviews.
+- Read [making-a-release.md](docs/making-a-release.md) before adding changelog
+  fragments, preparing releases or hotfixes, or syncing `main` into `next`.
+- Read [profiles.md](docs/profiles.md) before installing, launching, or
+  verifying a profile, and when choosing a PR's verification requirements.
+- Read [app/AGENTS.md](app/AGENTS.md) before changing frontend code or shortcuts.
+- Read [harness guidance](app/scripts/real-app-harness/AGENTS.md) before
+  writing/running packaged-app scenarios or recording/publishing evidence.
+- Read [pi guidance](plugins/attn-pi/AGENTS.md) before changing pi/nisse drivers
+  or auto-mode permissions.
