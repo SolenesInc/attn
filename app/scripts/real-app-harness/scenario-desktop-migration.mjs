@@ -43,6 +43,7 @@ function legacyWorkspacesSql(fixtureDir) {
     'DELETE FROM workspace_layouts;',
     'DELETE FROM workspaces;',
     "UPDATE sessions SET profile_id = '';",
+    `DELETE FROM sessions WHERE id IN (${LEGACY_WORKSPACES.flatMap((_, offset) => agentsOf(offset + 1)).map(sql).join(', ')});`,
   ];
   LEGACY_WORKSPACES.forEach((title, offset) => {
     const index = offset + 1;
