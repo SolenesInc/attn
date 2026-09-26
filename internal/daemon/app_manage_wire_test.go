@@ -45,13 +45,14 @@ func TestAppListShowsTheServingVersionAndWhetherItsConsumerRuns(t *testing.T) {
 		}
 		parked := listedApp(t, cli, "approval-gate").Consumer
 		defineRequests(t, cli, gateNS)
-		put(t, cli, gateNS, "first", `{}`)
+		first := put(t, cli, gateNS, "first", `{}`)
 		put(t, cli, gateNS, "second", `{}`)
 		before := busStatus(t, w.App()).Head
 		behind := listedApp(t, cli, "approval-gate").Consumer
 		after := busStatus(t, w.App()).Head
-		if behind.Cursor != parked.Cursor || behind.Lag < before-parked.Cursor || behind.Lag > after-parked.Cursor {
-			t.Errorf("after two writes, listed between log heads %d and %d, the disabled consumer lists %+v, want cursor %d and lag between %d and %d", before, after, behind, parked.Cursor, before-parked.Cursor, after-parked.Cursor)
+		heldShortOfTheWrites := behind.Cursor >= parked.Cursor && behind.Cursor < first.Seq
+		if !heldShortOfTheWrites || behind.Lag < before-behind.Cursor || behind.Lag > after-behind.Cursor {
+			t.Errorf("after writes from seq %d, listed between log heads %d and %d, the disabled consumer lists %+v, want its cursor between %d and the writes and its lag counted to the head", first.Seq, before, after, behind, parked.Cursor)
 		}
 	}
 }
