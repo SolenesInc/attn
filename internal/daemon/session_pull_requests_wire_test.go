@@ -10,39 +10,37 @@ import (
 	"strconv"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestASessionsPullRequestsComeBackNewestFirstAndOncePerSession(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		cli := w.Client()
-		registerSessions(t, w, cli, "s1", "s2")
-		recordPullRequest(t, cli, "s1", shopPull(1))
-		w.advance(time.Second)
-		recordPullRequest(t, cli, "s1", shopPull(2))
-		recordPullRequest(t, cli, "s2", shopPull(1))
-		w.advance(time.Second)
-		recordPullRequest(t, cli, "s1", shopPull(1))
-		if got := pullNumbers(queriedSession(t, cli, "s1")); !slices.Equal(got, []int{2, 1}) {
-			t.Errorf("s1 pull requests after recording #1 again = %v, want [2 1]", got)
-		}
-		if got := pullNumbers(queriedSession(t, cli, "s2")); !slices.Equal(got, []int{1}) {
-			t.Errorf("s2 pull requests = %v, want [1]", got)
-		}
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	cli := w.Client()
+	s1 := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	s2 := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	recordPullRequest(t, cli, s1, shopPull(1))
+	recordPullRequest(t, cli, s1, shopPull(2))
+	recordPullRequest(t, cli, s2, shopPull(1))
+	recordPullRequest(t, cli, s1, shopPull(1))
+	if got := pullNumbers(queriedSession(t, cli, s1)); !slices.Equal(got, []int{2, 1}) {
+		t.Errorf("first session's pull requests after recording #1 again = %v, want [2 1]", got)
+	}
+	if got := pullNumbers(queriedSession(t, cli, s2)); !slices.Equal(got, []int{1}) {
+		t.Errorf("second session's pull requests = %v, want [1]", got)
+	}
 
-		if err := cli.ForgetSessionPullRequest("s1", shopPull(1)); err != nil {
-			t.Fatalf("forget: %v", err)
-		}
-		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return slices.Equal(pullNumbers(s), []int{2}) })
-		if got := pullNumbers(queriedSession(t, cli, "s2")); !slices.Equal(got, []int{1}) {
-			t.Errorf("s2 pull requests after s1 forgot #1 = %v, want its own kept", got)
-		}
-	})
+	if err := cli.ForgetSessionPullRequest(s1, shopPull(1)); err != nil {
+		t.Fatalf("forget: %v", err)
+	}
+	testworld.AwaitSession(app, s1, func(s protocol.Session) bool { return slices.Equal(pullNumbers(s), []int{2}) })
+	if got := pullNumbers(queriedSession(t, cli, s2)); !slices.Equal(got, []int{1}) {
+		t.Errorf("second session's pull requests after the first forgot #1 = %v, want its own kept", got)
+	}
 }
 
 func TestAMergeHarvestsTheSeedArmedOnItEvenAfterItsSessionsClosed(t *testing.T) {

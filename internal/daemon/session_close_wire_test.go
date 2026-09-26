@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/fakeagent"
@@ -12,65 +11,67 @@ import (
 )
 
 func TestAClosedSessionLeavesEveryLiveViewAndKeepsItsFirstClose(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
 	cli := w.Client()
-	registerSessions(t, w, cli, "live", "gone")
+	live := w.Spawn(app, fakeagent.Claude, w.Path("live"))
+	gone := w.Spawn(app, fakeagent.Claude, w.Path("gone"))
+	w.Launched(live)
+	w.Launched(gone)
 
-	closeSession(t, cli, "gone", "work finished")
-	closed := awaitClosed(app, "gone")
-	if protocol.Deref(closed.ClosedBy) != "gone" || protocol.Deref(closed.CloseReason) != "work finished" {
-		t.Errorf("closed row = %+v, want gone closing itself because the work finished", closed)
+	closeSession(t, cli, gone, "work finished")
+	closed := awaitClosed(app, gone)
+	if protocol.Deref(closed.ClosedBy) != gone || protocol.Deref(closed.CloseReason) != "work finished" {
+		t.Errorf("closed row = %+v, want %s closing itself because the work finished", closed, gone)
 	}
-	if err := cli.Unregister("gone"); err != nil {
+	if err := cli.Unregister(gone); err != nil {
 		t.Fatalf("a second close: %v", err)
 	}
-	if again := showSession(t, cli, "gone"); protocol.Deref(again.ClosedBy) != "gone" || protocol.Deref(again.CloseReason) != "work finished" ||
+	if again := showSession(t, cli, gone); protocol.Deref(again.ClosedBy) != gone || protocol.Deref(again.CloseReason) != "work finished" ||
 		protocol.Deref(again.ClosedAt) != protocol.Deref(closed.ClosedAt) {
 		t.Errorf("after a second close the row = %+v, want the first close kept", again)
 	}
-	if err := cli.Register("gone", "gone", w.Path("gone")); err == nil {
+	if err := cli.Register(gone, "gone", w.Path("gone")); err == nil {
 		t.Error("registering over the closed session was accepted")
 	}
-	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{"live"}) {
-		t.Errorf("query = %v, want only the live session", ids)
+	if ids := queriedIDs(t, cli, ""); !slices.Equal(ids, []string{live}) {
+		t.Errorf("query = %v, want only the live session %s", ids, live)
 	}
 
 	w.restart()
-	if got := ledgerIDs(ledger(t, w.Client(), client.SessionListOptions{Closed: true})); !slices.Equal(got, []string{"gone"}) {
+	if got := ledgerIDs(ledger(t, w.Client(), client.SessionListOptions{Closed: true})); !slices.Equal(got, []string{gone}) {
 		t.Errorf("closed ledger after a restart = %v, want the closed row", got)
 	}
 }
 
 func TestALateReportCannotRewriteAClosedSession(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "s1")
-		if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
-			t.Fatalf("report working: %v", err)
-		}
-		closeSession(t, cli, "s1", "brief delivered")
-		atClose := showSession(t, cli, "s1")
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	cli := w.Client()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("brief"))
+	run := w.Launched(session)
+	app.TypeLine(session, "write the brief")
+	run.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	closeSession(t, cli, session, "brief delivered")
+	atClose := showSession(t, cli, session)
 
-		w.advance(time.Minute)
-		_ = cli.UpdateState("s1", protocol.StateWaitingInput)
-		_ = cli.UpdateStateFromHookEvidence("s1", protocol.StateWaitingInput, "", "Stop", "")
-		_ = cli.UpdateTodos("s1", []string{"late todo"})
-		_ = cli.RenameSession("s1", "renamed after the close")
-		if err := cli.Register("s1", "s1", w.Path("elsewhere")); err == nil {
-			t.Error("a late register recreated the closed session")
-		}
-		w.advance(time.Minute)
+	_ = cli.UpdateState(session, protocol.StateWaitingInput)
+	_ = cli.UpdateStateFromHookEvidence(session, protocol.StateWaitingInput, "", "Stop", "")
+	_ = cli.UpdateTodos(session, []string{"late todo"})
+	_ = cli.RenameSession(session, "renamed after the close")
+	if err := cli.Register(session, "brief", w.Path("elsewhere")); err == nil {
+		t.Error("a late register recreated the closed session")
+	}
 
-		after := showSession(t, cli, "s1")
-		if after.State != atClose.State || after.LastSeen != atClose.LastSeen || after.Label != atClose.Label ||
-			after.WorkspaceID != atClose.WorkspaceID || after.Directory != atClose.Directory {
-			t.Errorf("closed row after late reports:\n got=%+v\nwant=%+v", after, atClose)
-		}
-		if ids := queriedIDs(t, cli, ""); len(ids) != 0 {
-			t.Errorf("query = %v, want no live session after the close", ids)
-		}
-	})
+	after := showSession(t, cli, session)
+	if after.State != atClose.State || after.LastSeen != atClose.LastSeen || after.Label != atClose.Label ||
+		after.WorkspaceID != atClose.WorkspaceID || after.Directory != atClose.Directory {
+		t.Errorf("closed row after late reports:\n got=%+v\nwant=%+v", after, atClose)
+	}
+	if ids := queriedIDs(t, cli, ""); len(ids) != 0 {
+		t.Errorf("query = %v, want no live session after the close", ids)
+	}
 }
 
 func TestAReopenedSessionComesBackWithItsDraftPullRequestsCostTurnAndLaunch(t *testing.T) {

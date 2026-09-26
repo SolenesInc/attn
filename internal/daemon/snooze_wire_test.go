@@ -80,19 +80,17 @@ func TestAReplacedSnoozeWakesOnlyAtItsOwnDeadline(t *testing.T) {
 }
 
 func TestSnoozingABusySessionKeepsTheDeadline(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		app := w.App()
-		cli := w.Client()
-		registerSessions(t, w, cli, "s1")
-		if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {
-			t.Fatalf("report working: %v", err)
-		}
-		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
+	w := newWorld(t, fakeagent.Claude)
+	app := w.App()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
+	run := w.Launched(session)
+	app.TypeLine(session, "run the migration")
+	run.Prompted()
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
-		until := time.Now().Add(time.Hour)
-		snoozeUntil(app, "s1", until)
-		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return snoozedUntil(s).Equal(until) })
-	})
+	until := time.Now().Add(time.Hour)
+	snoozeUntil(app, session, until)
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return snoozedUntil(s).Equal(until) })
 }
 
 func TestAPendingSnoozeOutlivesARestart(t *testing.T) {
