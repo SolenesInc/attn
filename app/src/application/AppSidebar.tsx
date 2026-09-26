@@ -15,6 +15,7 @@ import {
   useAttentionQueueContext,
   useChiefOfStaffContext,
   useCrewPanelContext,
+  useDesktopNavigationContext,
   useDesktopResidencyContext,
   useLeafDragContext,
   useNavigationContext,
@@ -84,6 +85,7 @@ export function AppSidebar() {
   const { handleNewSession } = useSessionLaunchContext();
   const { handleRequestCloseSession, handleReloadSession } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
+  const { desktopNavigation } = useDesktopNavigationContext();
   return (
     <Sidebar
       workspaces={desktopViews}
@@ -103,6 +105,14 @@ export function AppSidebar() {
       dockCollapsed={keybindings.dock.collapsed}
       onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
       onRenameSession={sendRenameSession}
+      onRenameWorkspace={desktopNavigation.renameDesktop}
+      onWorkspaceReorder={({ workspaceId, prevWorkspaceId, nextWorkspaceId }) =>
+        desktopNavigation.reorderDesktop({
+          desktopId: workspaceId,
+          previousDesktopId: prevWorkspaceId,
+          nextDesktopId: nextWorkspaceId,
+        })
+      }
       onChangeChiefOfStaff={handleChangeChiefOfStaff}
       showSessionless
       crew={crew}

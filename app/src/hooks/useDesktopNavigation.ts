@@ -22,6 +22,8 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,
     sendDesktopCreate,
+    sendDesktopRename,
+    sendDesktopReorder,
     sendProfileSelect,
     sendProfileCreate,
     sendProfileRename,
@@ -157,6 +159,24 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     );
   }, [report, sendDesktopCreate, sendDesktopSetCurrent]);
 
+  const renameDesktop = useCallback(
+    (desktopId: string, name: string) =>
+      withFreshDesktopRevisions([desktopId], (revisionOf) =>
+        sendDesktopRename(desktopId, name, revisionOf(desktopId)),
+      ).then(() => undefined),
+    [sendDesktopRename],
+  );
+
+  const reorderDesktop = useCallback(
+    (move: { desktopId: string; previousDesktopId?: string; nextDesktopId?: string }) =>
+      report(
+        withFreshDesktopRevisions([move.desktopId], (revisionOf) =>
+          sendDesktopReorder({ ...move, expectedRevision: revisionOf(move.desktopId) }),
+        ),
+      ),
+    [report, sendDesktopReorder],
+  );
+
   const selectProfile = useCallback(
     (profileId: string) => {
       if (profileId === useProfilesStore.getState().selectedProfileId) return;
@@ -206,6 +226,8 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
     deleteDesktop,
     giveShortcutSlot,
     createDesktop,
+    renameDesktop,
+    reorderDesktop,
     selectProfile,
   };
 }
