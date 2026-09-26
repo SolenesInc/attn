@@ -41,4 +41,5 @@ go tool pprof -top http://127.0.0.1:6060/debug/pprof/heap
 ```
 
 `/debug/vars` lists `worker_pids`; per-session memory lives in those workers,
-not the daemon heap.
+not the daemon heap. Its `doc_subscriptions` counts the live document queries
+connected apps hold, and falls back when an app disconnects.

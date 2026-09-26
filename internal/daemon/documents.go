@@ -157,6 +157,12 @@ func (d *Daemon) removeDocSubscription(id string) {
 	d.docSubsMu.Unlock()
 }
 
+func (d *Daemon) documentSubscriptionCount() int {
+	d.docSubsMu.Lock()
+	defer d.docSubsMu.Unlock()
+	return len(d.docSubs)
+}
+
 func (d *Daemon) runDocQuery(q docstore.Query) (store.QueryRead, time.Duration, error) {
 	if d.store == nil {
 		return store.QueryRead{}, 0, fmt.Errorf("no database")

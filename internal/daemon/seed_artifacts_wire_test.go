@@ -2,15 +2,20 @@ package daemon_test
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/notebook"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -327,4 +332,75 @@ func seedArtifactsNotebook(t *testing.T, w *world) string {
 		t.Fatal(err)
 	}
 	return root
+}
+
+func TestAMoveInterruptedAfterStagingFinishesWhenRetried(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
+	seed := plantSeedAs(t, cli, "", "Durable files")
+	source := seedArtifactsWrite(t, t.TempDir(), "recover.bin", []byte("payload"))
+	stage := seedArtifactsWrite(t, notebook.SeedArtifactsDir(root, seed), ".seed-transfer-interrupted", []byte("payload"))
+	destination := seedArtifactsInterruptedMove(t, root, seed, source, "staged", stage)
+
+	if retried := seedArtifactsTransfer(t, cli, seed, "move", source, "", ""); !retried.Recovered {
+		t.Errorf("retrying the interrupted move = %+v, want it recovered", retried)
+	}
+	if got, err := os.ReadFile(destination); err != nil || string(got) != "payload" {
+		t.Errorf("the seed's copy holds %q (%v), want the staged payload", got, err)
+	}
+	for _, gone := range []string{source, stage} {
+		if _, err := os.Lstat(gone); !os.IsNotExist(err) {
+			t.Errorf("%s survived the recovered move: %v", gone, err)
+		}
+	}
+}
+
+func TestAMoveInterruptedAfterInstallingKeepsASourceReplacedBeforeTheRetry(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
+	seed := plantSeedAs(t, cli, "", "Durable files")
+	source := seedArtifactsWrite(t, t.TempDir(), "recover.bin", []byte("old"))
+	destination := seedArtifactsInterruptedMove(t, root, seed, source, "installed", "")
+	seedArtifactsWrite(t, notebook.SeedArtifactsDir(root, seed), "recover.bin", []byte("old"))
+	seedArtifactsWrite(t, filepath.Dir(source), "recover.bin", []byte("newer"))
+
+	_, err := cli.SeedArtifactTransfer("", seed, "move", source, "", "", nil)
+	if err == nil || !strings.Contains(err.Error(), "newer source was not removed") {
+		t.Errorf("retrying the move after its source was replaced = %v, want a refusal naming the newer source", err)
+	}
+	for path, body := range map[string]string{source: "newer", destination: "old"} {
+		if got, err := os.ReadFile(path); err != nil || string(got) != body {
+			t.Errorf("%s holds %q (%v), want %q", path, got, err, body)
+		}
+	}
+}
+
+func seedArtifactsInterruptedMove(t *testing.T, root, seed, source, state, stage string) string {
+	t.Helper()
+	destination := filepath.Join(notebook.SeedArtifactsDir(root, seed), filepath.Base(source))
+	content, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Lstat(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := info.Sys().(*syscall.Stat_t)
+	hash := sha256.Sum256(content)
+	id := sha256.Sum256([]byte(strings.Join([]string{seed, "move", source, destination}, "\x00")))
+	receipt := map[string]any{
+		"version": 1, "id": hex.EncodeToString(id[:]), "seed_id": seed, "operation": "move",
+		"source": source, "destination": destination, "filename": filepath.Base(source),
+		"hash": hex.EncodeToString(hash[:]), "size": info.Size(), "mod_time_ns": info.ModTime().UnixNano(),
+		"device": uint64(identity.Dev), "inode": identity.Ino, "stage": stage, "state": state,
+	}
+	encoded, err := json.Marshal(receipt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedArtifactsWrite(t, notebook.SeedArtifactTransfersDir(root), hex.EncodeToString(id[:])+".json", encoded)
+	return destination
 }

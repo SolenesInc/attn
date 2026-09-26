@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math/rand/v2"
 	"net"
+	"net/http"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -592,4 +594,44 @@ func TestDocumentsOverTheCLIClientDeliverResumeAndEnd(t *testing.T) {
 	if code, isEnd := client.DocSubscriptionCode(<-ended); !isEnd || code != protocol.ErrorCodeCollectionUndefined {
 		t.Fatalf("undefining the collection ended the subscription with code %q (a subscription ending: %v), want %q", code, isEnd, protocol.ErrorCodeCollectionUndefined)
 	}
+}
+
+func TestAnAppThatDisconnectsReleasesEveryLiveQueryItHeld(t *testing.T) {
+	t.Setenv("ATTN_PPROF", reserveDiagPort(t))
+	w := newWorld(t)
+	defineRequests(t, w.Client(), gateNS)
+	vars := "http://127.0.0.1:" + os.Getenv("ATTN_PPROF") + "/debug/vars"
+
+	app := w.App()
+	for range 2 {
+		docNextDelivery(app, subscribeOverTheWire(app, requestsWhere(gateNS)))
+	}
+	awaitDiagDocSubscriptions(t, vars, 2)
+	app.Close()
+	awaitDiagDocSubscriptions(t, vars, 0)
+}
+
+func awaitDiagDocSubscriptions(t *testing.T, vars string, want int) {
+	t.Helper()
+	deadline := time.Now().Add(fakeagent.HangGuard)
+	held := -1
+	for time.Now().Before(deadline) {
+		resp, err := http.Get(vars)
+		if err != nil {
+			t.Fatalf("read %s: %v", vars, err)
+		}
+		var reported struct {
+			DocSubscriptions int `json:"doc_subscriptions"`
+		}
+		err = json.NewDecoder(resp.Body).Decode(&reported)
+		resp.Body.Close()
+		if err != nil {
+			t.Fatalf("decode %s: %v", vars, err)
+		}
+		if held = reported.DocSubscriptions; held == want {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("the daemon holds %d live document queries, want %d", held, want)
 }
