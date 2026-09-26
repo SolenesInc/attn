@@ -2,13 +2,10 @@ package main_test
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/appbuild"
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -78,19 +75,7 @@ func trimBus(t *testing.T, s *testworld.Stack) string {
 
 func installSubscribedApp(t *testing.T, s *testworld.Stack, cli *client.Client, name string) {
 	t.Helper()
-	declaration := fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["document.changed"]}]}`, name)
-	bundle := []byte("export default {}")
-	hash := appbuild.VersionHash(declaration, bundle, nil)
-	path := appbuild.ArtifactPath(filepath.Join(s.Dir, "apps"), name, hash)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, bundle, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := cli.AppApply(name, hash, declaration, ""); err != nil {
-		t.Fatalf("apply %s: %v", name, err)
-	}
+	applyAppDeclaration(t, s, cli, name, fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["document.changed"]}]}`, name), "export default {}")
 }
 
 func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
