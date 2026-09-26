@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/github/githubschema"
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -18,6 +19,7 @@ import (
 const fakeGHScript = `#!/bin/sh
 echo "$*" | tr '\n' ' ' >> %[1]q/calls
 echo >> %[1]q/calls
+for arg; do case "$arg" in query=*) printf '%%s\0' "${arg#query=}" >> %[1]q/queries ;; esac; done
 case "$*" in
 *PullRequestReadiness*) kind=readiness ;;
 *PullRequestFeedback*) kind=feedback ;;
@@ -45,6 +47,19 @@ func installFakeGitHub(t *testing.T) fakeGitHub {
 	if err := os.WriteFile(filepath.Join(dir, "bin", "gh"), []byte(fmt.Sprintf(fakeGHScript, dir)), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() {
+		raw, _ := os.ReadFile(filepath.Join(dir, "queries"))
+		queries := strings.Split(strings.TrimSuffix(string(raw), "\x00"), "\x00")
+		slices.Sort(queries)
+		for _, query := range slices.Compact(queries) {
+			if query == "" {
+				continue
+			}
+			if err := githubschema.Validate(query); err != nil {
+				t.Errorf("GitHub would reject this query: %v\n%s", err, query)
+			}
+		}
+	})
 	return fakeGitHub{t: t, dir: dir}
 }
 
