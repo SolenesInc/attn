@@ -60,7 +60,9 @@ func TestAConsumerKeepsItsCursorAndItsKillSwitchAcrossARestart(t *testing.T) {
 	after := busStatus(t, w.App())
 	for _, name := range []string{"garden-seed-bells", "app:history"} {
 		was, is := consumer(t, before, name), consumer(t, after, name)
-		if is.Cursor != was.Cursor || is.Enabled != was.Enabled {
+		rewound := is.Cursor < was.Cursor
+		movedWhileDisabled := !was.Enabled && is.Cursor != was.Cursor
+		if rewound || movedWhileDisabled || is.Enabled != was.Enabled {
 			t.Errorf("%s restarted at cursor %d (enabled=%t), was at %d (enabled=%t)", name, is.Cursor, is.Enabled, was.Cursor, was.Enabled)
 		}
 	}

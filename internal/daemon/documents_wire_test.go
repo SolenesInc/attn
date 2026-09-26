@@ -338,7 +338,7 @@ func TestReadModifyWriteLoopsLoseNoUpdate(t *testing.T) {
 }
 
 func increment(cli *client.Client) error {
-	for {
+	for range maxIncrementAttempts {
 		read, err := cli.DocGet(gateNS, requests, "counter")
 		if err != nil {
 			return err
@@ -359,7 +359,10 @@ func increment(cli *client.Client) error {
 		}
 		return nil
 	}
+	return fmt.Errorf("an increment was refused as a conflict %d times in a row", maxIncrementAttempts)
 }
+
+const maxIncrementAttempts = 1000
 
 func isConflictOn(err error, found bool) bool {
 	var refused *client.DaemonError
