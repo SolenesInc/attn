@@ -35,92 +35,6 @@ func addTurnSession(t *testing.T, s *Store, id string, state protocol.SessionSta
 	}
 }
 
-func TestTurnStampsStartEmpty(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
-
-	stamps := s.TurnStamps("s1")
-	if !stamps.OpenedAt.IsZero() || !stamps.SettledAt.IsZero() {
-		t.Fatalf("stamps = %+v, want both zero", stamps)
-	}
-}
-
-func TestOpenTurnIfClosedDoesNotMoveAnOpenTurn(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
-
-	first := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	if !s.OpenTurnIfClosed("s1", first) {
-		t.Fatal("first open reported no change")
-	}
-	if s.OpenTurnIfClosed("s1", first.Add(time.Hour)) {
-		t.Error("second open reported a change; the turn was already open")
-	}
-	if got := s.TurnStamps("s1").OpenedAt; !got.Equal(first) {
-		t.Errorf("opened_at = %v, want %v", got, first)
-	}
-}
-
-func TestSettleThenOpenStartsANewTurn(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWaitingInput)
-
-	opened := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	settled := opened.Add(time.Minute)
-	reopened := opened.Add(time.Hour)
-
-	s.OpenTurnIfClosed("s1", opened)
-	if !s.SettleTurn("s1", settled) {
-		t.Fatal("settle reported no change")
-	}
-	stamps := s.TurnStamps("s1")
-	if stamps.OpenedAt.After(stamps.SettledAt) {
-		t.Fatalf("still owed after settling: %+v", stamps)
-	}
-
-	if !s.OpenTurnIfClosed("s1", reopened) {
-		t.Fatal("re-open after settling reported no change")
-	}
-	stamps = s.TurnStamps("s1")
-	if !stamps.OpenedAt.Equal(reopened) {
-		t.Errorf("opened_at = %v, want %v", stamps.OpenedAt, reopened)
-	}
-	if !stamps.OpenedAt.After(stamps.SettledAt) {
-		t.Error("session does not owe a turn after re-opening")
-	}
-}
-
-func TestSettleWithoutAnOpenTurnIsRecorded(t *testing.T) {
-	s := newTurnStore(t)
-	addTurnSession(t, s, "s1", protocol.SessionStateWorking)
-
-	settled := time.Date(2026, 7, 26, 10, 0, 0, 0, time.UTC)
-	if !s.SettleTurn("s1", settled) {
-		t.Fatal("settle reported no change")
-	}
-	if got := s.TurnStamps("s1").SettledAt; !got.Equal(settled) {
-		t.Errorf("settled_at = %v, want %v", got, settled)
-	}
-	if s.OpenTurnIfClosed("s1", settled.Add(-time.Hour)) {
-		if stamps := s.TurnStamps("s1"); stamps.OpenedAt.After(stamps.SettledAt) {
-			t.Error("a turn opened before the settle stamp still owes")
-		}
-	}
-}
-
-func TestTurnStampsForUnknownSession(t *testing.T) {
-	s := newTurnStore(t)
-	if s.OpenTurnIfClosed("nope", time.Now()) {
-		t.Error("opened a turn on a session that does not exist")
-	}
-	if s.SettleTurn("nope", time.Now()) {
-		t.Error("settled a turn on a session that does not exist")
-	}
-	if stamps := s.TurnStamps("nope"); !stamps.OpenedAt.IsZero() {
-		t.Errorf("stamps = %+v, want zero", stamps)
-	}
-}
-
 func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "migration-81.db")
 	db, err := openSeededDB(dbPath)
@@ -167,6 +81,62 @@ func TestMigration81BackfillsOpenTurnsFromStateSince(t *testing.T) {
 	for _, id := range []string{"working", "idle"} {
 		if !migrated.TurnStamps(id).OpenedAt.IsZero() {
 			t.Errorf("%s: backfill opened a turn for a state that does not open one", id)
+		}
+	}
+}
+
+func TestAStateOpensItsTurnOnlyThroughTheSnoozeItFindsWhenItCommits(t *testing.T) {
+	stores := map[string]func(t *testing.T) *Store{
+		"sqlite": newTurnStore,
+		"memory": func(*testing.T) *Store { return New() },
+	}
+	tests := []struct {
+		name         string
+		snoozeFor    time.Duration
+		opening      TurnOpening
+		wantOpen     bool
+		wantSnoozed  bool
+		wantHeld     bool
+		wantEndsWake bool
+	}{
+		{"no snooze", 0, TurnOpening{Opens: true}, true, false, false, false},
+		{"a snooze that is still running", time.Hour, TurnOpening{Opens: true}, false, true, true, false},
+		{"a snooze the state breaks", time.Hour, TurnOpening{Opens: true, BreaksSnooze: true}, true, false, false, true},
+		{"a snooze that already expired", -time.Minute, TurnOpening{Opens: true}, true, false, false, true},
+		{"a state that opens no turn", time.Hour, TurnOpening{}, false, true, false, false},
+	}
+	for backend, open := range stores {
+		for _, tt := range tests {
+			t.Run(backend+"/"+tt.name, func(t *testing.T) {
+				s := open(t)
+				addTurnSession(t, s, "s1", protocol.SessionStateWorking)
+				until := time.Now().Add(tt.snoozeFor).UTC()
+				if tt.snoozeFor != 0 && !s.SnoozeTurn("s1", until, time.Now().Add(-2*time.Hour)) {
+					t.Fatal("snooze the session")
+				}
+
+				applied, outcome := s.UpdateStateOpeningTurn("s1", string(protocol.SessionStateIdle), tt.opening)
+
+				if !applied {
+					t.Fatal("the state was not committed")
+				}
+				if got := s.Get("s1").State; got != protocol.SessionStateIdle {
+					t.Errorf("state = %s, want idle", got)
+				}
+				stamps := s.TurnStamps("s1")
+				if open := stamps.OpenedAt.After(stamps.SettledAt); open != tt.wantOpen {
+					t.Errorf("turn open = %v, want %v (stamps %+v)", open, tt.wantOpen, stamps)
+				}
+				if snoozed := !stamps.SnoozedUntil.IsZero(); snoozed != tt.wantSnoozed {
+					t.Errorf("still snoozed = %v, want %v", snoozed, tt.wantSnoozed)
+				}
+				if outcome.HeldBySnooze != tt.wantHeld {
+					t.Errorf("held by snooze = %v, want %v", outcome.HeldBySnooze, tt.wantHeld)
+				}
+				if ended := !outcome.EndedSnooze.IsZero(); ended != tt.wantEndsWake || ended && !outcome.EndedSnooze.Equal(until) {
+					t.Errorf("ended snooze = %s, want the deadline %s ended: %v", outcome.EndedSnooze, until, tt.wantEndsWake)
+				}
+			})
 		}
 	}
 }

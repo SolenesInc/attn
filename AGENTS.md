@@ -59,8 +59,6 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 
 - The daemon owns application state; the app owns rendering.
 - Diagnose before fixing. If the cause is unknown, propose instrumentation.
-- Prefer fast integration tests. Do not copy production code into tests or
-  test compile-time guarantees.
 - Avoid continuous repainting. Check idle CPU and memory.
 - New actions need reversal and inspection: snooze/unsnooze, create/clean.
 - Check affected CLI, daemon, app, protocol, and Linux paths before finishing.
@@ -75,6 +73,16 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 - Product prompts address the user, never "Victor". Distinguish the agent
   changing attn from the agents it runs.
 
+## Review
+
+- Ask for rigor only where a current requirement or a promise in
+  [Testing](docs/testing.md) needs it, and name which. Do not request tests
+  that guard no promise, unit tests for behavior a wire test covers, or
+  validation, fallbacks, and edge-case handling for hypothetical inputs.
+- Apply a rule for its purpose. When a change leaves untouched what a rule
+  protects, do not ask for the rule's ceremony, such as a protocol bump for a
+  schema edit that leaves the wire unchanged.
+
 ## Commands
 
 | Task | Command |
@@ -86,6 +94,24 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
 | Go + frontend + browser | `make test-harness` |
 | Frontend dev server | `pnpm --dir app run dev` |
 | Lint | `make lint` |
+
+## Writing tests
+
+Follow [Testing](docs/testing.md). In short:
+
+- Commit tests that guard a promise attn makes: behavior that users, the
+  agents attn runs, clients, app authors, or later versions rely on. Check
+  your own work by running it; keep scratch tests out of commits.
+- Could everything behind the test's boundary be rewritten, behavior
+  preserved, without editing the test? If not, do not commit it.
+- Default to wire tests: a real daemon driven as a protocol client, or the real
+  app driven as the daemon. Go to stack or scenario tests only for behavior
+  across processes or on screen. Kernel tests only for specified logic with
+  large input spaces, as tables, corpora, or properties.
+- When a behavior-preserving change breaks a test, delete or replace the test;
+  do not repair it.
+- Do not test script helpers or test helpers, copy production code into tests,
+  or test compile-time guarantees.
 
 ## Test safety
 
@@ -177,6 +203,7 @@ covering changed behavior, latency, and keyboard flow.
 
 ## Guidance
 
+- Read [testing.md](docs/testing.md) before writing, changing, or deleting tests.
 - Read [glossary.md](docs/glossary.md) before naming domain concepts; update
   definitions and implementation together.
 - Read [working-with-next.md](docs/working-with-next.md) before creating

@@ -7,10 +7,11 @@
   `config.ScopeTestEnvironment(dir)` before `m.Run()`. It sets `ATTN_DATA_DIR`
   and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv`
   is insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
+  `testworld.Main(m)` does this for packages that run wire or stack worlds.
 - Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Use `synctest.Test` for elapsed-time or never-happens assertions; no sleeps/polls.
 - Use `pgregory.net/rapid` for invariants over large inputs; commit failure seeds.
-- Use `newToxiProxy(t, upstream)` for network failures a fake cannot express.
+- Express network failures by wrapping the client's `net.Conn` inside a `synctest` bubble.
 
 ## Protocol
 
@@ -33,6 +34,8 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 
 - Publish entity ids as fact subjects; omit byte streams.
 - Projections only write to the wire. State changes or nested publishes can deadlock.
+- Send wire traffic only from projections. The exceptions are the remote relay (already published on the
+  remote bus), per-watcher filesystem change bursts, and tile content sent to its subscribers.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
 - Durable handlers must be idempotent; unregister consumers on uninstall.
 - Inspect with `attn bus status`; control delivery with `attn bus disable|enable`.

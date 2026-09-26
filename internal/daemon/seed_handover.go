@@ -213,9 +213,6 @@ func (d *Daemon) bindSeedHandoverProtected(
 		if noteCommit != nil {
 			commits = append(commits, *noteCommit)
 		}
-		if d.seedHandoverBeforeCommit != nil {
-			d.seedHandoverBeforeCommit()
-		}
 		d.gardenWatchMu.Lock()
 		var eventSeqs []int64
 		written, eventSeqs, err = d.store.CommitGardenDispatchWritesWithEvents(

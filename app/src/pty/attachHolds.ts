@@ -7,7 +7,7 @@ export interface AttachHolds {
   holderCount(runtimeId: string): number;
 }
 
-export function createAttachHolds(): AttachHolds {
+function createAttachHolds(): AttachHolds {
   const holdersByRuntime = new Map<string, Set<AttachHolder>>();
   const holderCount = (runtimeId: string) => holdersByRuntime.get(runtimeId)?.size ?? 0;
   return {

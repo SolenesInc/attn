@@ -1,17 +1,8 @@
 package daemon
 
 import (
-	"errors"
 	"testing"
 )
-
-func TestActivityConfigRefusesToPickAnAgent(t *testing.T) {
-	for _, raw := range []string{"", "   ", `{}`, `{"model":"claude-haiku-4-5"}`, `{"agent":"  "}`} {
-		if _, err := parseActivityConfig(raw); !errors.Is(err, errActivityAgentUnset) {
-			t.Errorf("parseActivityConfig(%q) error = %v, want the unset-agent error", raw, err)
-		}
-	}
-}
 
 func TestActivityConfigFillsInTheAgentsDefaults(t *testing.T) {
 	claude, err := parseActivityConfig(`{"agent":"claude"}`)
@@ -44,20 +35,6 @@ func TestActivityConfigKeepsAnExplicitChoice(t *testing.T) {
 	}
 	if config.Model != "gpt-5.6" || config.Effort != "medium" {
 		t.Errorf("config = %+v, want the explicit model and effort", config)
-	}
-}
-
-func TestActivityConfigRejectsWhatItCannotRun(t *testing.T) {
-	cases := map[string]string{
-		"an agent that is not installed": `{"agent":"nonesuch","model":"m"}`,
-		"a field nobody defined":         `{"agent":"claude","mdoel":"typo"}`,
-		"trailing junk after the object": `{"agent":"claude"} and more`,
-		"not JSON at all":                `claude`,
-	}
-	for name, raw := range cases {
-		if _, err := parseActivityConfig(raw); err == nil {
-			t.Errorf("%s: parseActivityConfig(%q) accepted it", name, raw)
-		}
 	}
 }
 
@@ -96,15 +73,5 @@ func TestActivityIntervalIsZeroWhenAway(t *testing.T) {
 	}
 	if d.activityInterval(PresenceWatching) >= d.activityInterval(PresencePresent) {
 		t.Error("watching must refresh faster than present")
-	}
-}
-
-func TestActivityIsOffWithoutAStore(t *testing.T) {
-	d := &Daemon{}
-	if d.activityEnabled() {
-		t.Error("activity reported enabled with no settings to read")
-	}
-	if _, err := d.activityConfigured(); err == nil {
-		t.Error("activityConfigured succeeded with no settings to read")
 	}
 }

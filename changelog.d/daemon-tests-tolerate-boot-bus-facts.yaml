@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Stop daemon wire tests from racing boot-time bus facts and in-flight consumer passes when they check delegation recovery and disabled-consumer lag.

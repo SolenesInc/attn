@@ -1,0 +1,3 @@
+kind: internal
+area: ci
+change: Frontend E2E installs Playwright browsers and OS packages in separate bounded steps with apt retries, so a stalled install fails the named step instead of hanging the shard.

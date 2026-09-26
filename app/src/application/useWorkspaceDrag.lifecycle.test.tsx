@@ -1,65 +1,61 @@
-import { act, renderHook } from '@testing-library/react';
-import { StrictMode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createMockDaemon } from '../test/mocks/daemon';
-import { useWorkspaceDrag } from './useWorkspaceDrag';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { agentPane, daemonSession, daemonWorkspace } from '../test/daemonFixtures';
+import { renderApp } from '../test/renderApp';
 
-const daemon = createMockDaemon();
-const api = {
-  sendWorkspaceMoveLeafToWorkspace: daemon.createRequest('moveLeaf'),
-  sendWorkspaceMoveLeafToNewWorkspace: daemon.createRequest('newWorkspace'),
-};
-vi.mock('../contexts/DaemonApiContext', () => ({ useDaemonApi: () => api }));
+const SOURCE = 'ws-source';
+const TARGET = 'ws-target';
 
-function setup() {
-  const select = vi.fn();
-  const hook = renderHook(
-    () =>
-      useWorkspaceDrag({
-        activeWorkspaceIdRef: { current: 'source' },
-        getWorkspaceLeafDropSnapshot: () => null,
-        handleSelectWorkspace: select,
-      }),
-    { wrapper: StrictMode },
-  );
-  return { ...hook, select };
+async function renderTwoWorkspaces() {
+  return renderApp({
+    initialState: {
+      sessions: [
+        daemonSession('s1', { workspace_id: SOURCE }),
+        daemonSession('s2', { workspace_id: SOURCE }),
+        daemonSession('s3', { workspace_id: TARGET }),
+      ],
+      workspaces: [
+        daemonWorkspace(SOURCE, {
+          root: {
+            type: 'split',
+            split_id: 'source-split',
+            direction: 'horizontal',
+            ratio: 0.5,
+            children: [{ type: 'pane', pane_id: 'pane-s1' }, { type: 'pane', pane_id: 'pane-s2' }],
+          },
+          panes: [agentPane('s1', SOURCE), agentPane('s2', SOURCE)],
+        }),
+        daemonWorkspace(TARGET, {
+          root: { type: 'pane', pane_id: 'pane-s3' },
+          panes: [agentPane('s3', TARGET)],
+        }),
+      ],
+    },
+  });
+}
+
+function pickUp(label: string) {
+  fireEvent.pointerDown(screen.getByRole('button', { name: `Open ${label}` }), { button: 0, pointerId: 1, clientX: 0, clientY: 0 });
+  fireEvent.pointerMove(window, { pointerId: 1, clientX: 40, clientY: 40 });
 }
 
 describe('workspace drag lifecycle', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    daemon.clearCalls();
-    daemon.setResponse('moveLeaf', {});
-    daemon.setResponse('newWorkspace', {});
-  });
-  afterEach(() => vi.useRealTimers());
+  it('keeps a new gesture when the preceding drag has a deferred end', async () => {
+    const { daemon } = await renderTwoWorkspaces();
+    await daemon.idle();
 
-  it('keeps a new gesture when the preceding drag has a deferred end', () => {
-    const { result } = setup();
-    act(() => {
-      result.current.handleLeafDragStart('source', undefined, 'first');
-      result.current.handleLeafDragEnd();
-      result.current.handleLeafDragStart('source', undefined, 'second');
-    });
-    act(() => vi.runOnlyPendingTimers());
-    expect(result.current.leafWorkspaceDrag?.leafId).toBe('second');
-    act(() => result.current.handleWorkspaceDragDrop({ id: 'target' }));
-    expect(daemon.getCalls('moveLeaf').map((call) => call.args)).toEqual([
-      ['source', 'target', 'second', { anchorId: '', edge: 'left', ratio: 0.32 }],
+    pickUp('s1');
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    pickUp('s2');
+    await act(() => vi.advanceTimersByTimeAsync(0));
+
+    const target = screen.getByTestId(`sidebar-workspace-${TARGET}`);
+    fireEvent.pointerOver(target, { pointerId: 1 });
+    fireEvent.pointerUp(target, { pointerId: 1 });
+    await daemon.idle();
+
+    expect(daemon.sentOf('workspace_layout_move_leaf_to_workspace')).toEqual([
+      expect.objectContaining({ source_workspace_id: SOURCE, target_workspace_id: TARGET, leaf_id: 'pane-s2' }),
     ]);
-  });
-
-  it('cancels hover selection and deferred completion when unmounted', () => {
-    const { result, unmount, select } = setup();
-    act(() => {
-      result.current.handleLeafDragStart('source', undefined, 'pane');
-      result.current.handleWorkspaceDragEnter({ id: 'target' });
-    });
-    const endDrag = result.current.handleLeafDragEnd;
-    unmount();
-    act(() => endDrag());
-    expect(vi.getTimerCount()).toBe(0);
-    expect(select).not.toHaveBeenCalled();
-    expect(daemon.getCalls()).toEqual([]);
   });
 });

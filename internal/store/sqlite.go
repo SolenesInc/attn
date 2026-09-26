@@ -1250,6 +1250,8 @@ CREATE TABLE IF NOT EXISTS app_reconcile_progress (
 	{151, "rename install profiles to instances", ``},
 	{152, "file long-context session cost observations under their tier", ``},
 	{153, "keep every delegation preferences revision", ``},
+	{154, "record when a session's agent process launched", ""},
+	{155, "session last-seen stamps move to UTC so the ledger window compares instants", ""},
 }
 
 const migration99SQL = `
@@ -1844,6 +1846,16 @@ func migrateDB(db *sql.DB, dbPath string) error {
 			}
 		} else if m.version == 151 {
 			if err := applyMigration151(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 154 {
+			if err := applyMigration154(tx); err != nil {
+				tx.Rollback()
+				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
+			}
+		} else if m.version == 155 {
+			if err := applyMigration155(tx); err != nil {
 				tx.Rollback()
 				return fmt.Errorf("migration %d (%s): %w", m.version, m.desc, err)
 			}
@@ -3772,6 +3784,50 @@ func foldModelLists(lists ...string) ([]string, error) {
 		}
 	}
 	return folded, nil
+}
+
+func applyMigration154(tx *sql.Tx) error {
+	has, err := columnExists(tx, "sessions", "launched_at")
+	if err != nil || has {
+		return err
+	}
+	if _, err := tx.Exec("ALTER TABLE sessions ADD COLUMN launched_at TEXT NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE sessions SET launched_at = state_since WHERE state = 'launching' AND closed_at = ''")
+	return err
+}
+
+func applyMigration155(tx *sql.Tx) error {
+	rows, err := tx.Query("SELECT id, last_seen FROM sessions WHERE last_seen <> ''")
+	if err != nil {
+		return err
+	}
+	inUTC := map[string]string{}
+	for rows.Next() {
+		var id, lastSeen string
+		if err := rows.Scan(&id, &lastSeen); err != nil {
+			rows.Close()
+			return err
+		}
+		at, err := time.Parse(time.RFC3339Nano, lastSeen)
+		if err != nil {
+			continue
+		}
+		if stamp := at.UTC().Format(time.RFC3339Nano); stamp != lastSeen {
+			inUTC[id] = stamp
+		}
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for id, stamp := range inUTC {
+		if _, err := tx.Exec("UPDATE sessions SET last_seen = ? WHERE id = ?", stamp, id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func applyMigration106(tx *sql.Tx) error {

@@ -49,6 +49,8 @@ Run commands from the repository root.
   `idle` when the turn was silent). Arming turns headless tasks off, which is what
   makes the daemon read that marker instead of a model.
 - Crew fixtures use synthetic names and `claude-haiku-4-5` unless stronger reasoning is required.
+- Take verdicts from the screen, the protocol, or the CLI, not the daemon DB;
+  see [Testing](../../../docs/testing.md#scenario).
 - Resolve pane ids from app/daemon state. Assert empty workspaces are removed.
   Shortcuts use registry ids.
 - Keep OS-specific install paths, launch, observation, and quit behavior in

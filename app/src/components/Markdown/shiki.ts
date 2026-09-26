@@ -16,17 +16,14 @@ export interface Highlighted {
   html: string;
 }
 
-// `enabled` is how a streaming surface opts out: highlighting text that is still
-// arriving runs shiki once per delta and throws away every result but the last.
 export function useShikiHighlight(
   code: string,
   language: string | undefined,
-  enabled = true,
 ): Highlighted | null {
   const [highlighted, setHighlighted] = useState<Highlighted | null>(null);
 
   useEffect(() => {
-    if (!language || !enabled) {
+    if (!language) {
       setHighlighted(null);
       return;
     }
@@ -51,7 +48,7 @@ export function useShikiHighlight(
     return () => {
       cancelled = true;
     };
-  }, [code, language, enabled]);
+  }, [code, language]);
 
   return highlighted && highlighted.code === code && highlighted.language === language
     ? highlighted

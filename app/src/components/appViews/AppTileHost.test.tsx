@@ -1,11 +1,8 @@
-import { createMockDaemonApi } from '../../test/mocks/daemon';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { AppTileHost } from './AppTileHost';
+import { act, fireEvent, screen } from '@testing-library/react';
 import { AppViewLoadError } from './loadAppView';
-import { DaemonApiProvider } from '../../contexts/DaemonApiContext';
-import { useDaemonStore } from '../../store/daemonSessions';
-import type { AppRegistryEntry } from '../../hooks/useDaemonSocket';
+import { openDockedApprovals, reviewerApp, SERVING_HASH } from './testSupport';
+import { gesture } from '../../test/renderApp';
 
 const loadAppView = vi.hoisted(() => vi.fn());
 vi.mock('./loadAppView', async () => {
@@ -13,45 +10,10 @@ vi.mock('./loadAppView', async () => {
   return { ...actual, loadAppView };
 });
 
-const HASH_A = 'a'.repeat(64);
 const HASH_B = 'b'.repeat(64);
-
-function entry(overrides: Partial<AppRegistryEntry> = {}): AppRegistryEntry {
-  return {
-    name: 'reviewer',
-    enabled: true,
-    version_id: 7,
-    content_hash: HASH_A,
-    views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals' }],
-    ...overrides,
-  } as AppRegistryEntry;
-}
-
-function renderHost(apps: AppRegistryEntry[], sendAppViewCrash = vi.fn()) {
-  act(() => {
-    useDaemonStore.getState().setApps(apps);
-  });
-  const api = createMockDaemonApi({ sendAppViewCrash });
-  render(
-    <DaemonApiProvider api={api}>
-      <AppTileHost
-        app="reviewer"
-        view="approvals"
-        workspaceId="ws-1"
-        sessionId="sess-1"
-        tileId="tile-7"
-        params="t-42"
-      />
-    </DaemonApiProvider>,
-  );
-  return sendAppViewCrash;
-}
 
 beforeEach(() => {
   loadAppView.mockReset();
-  act(() => {
-    useDaemonStore.getState().setApps([]);
-  });
 });
 
 describe('a view that mounts', () => {
@@ -62,9 +24,9 @@ describe('a view that mounts', () => {
       return <div>approvals body</div>;
     });
 
-    renderHost([entry()]);
+    await openDockedApprovals([reviewerApp()]);
 
-    await screen.findByText('approvals body');
+    expect(screen.getByText('approvals body')).toBeInTheDocument();
     expect(seen[0]).toEqual({
       workspaceId: 'ws-1',
       sessionId: 'sess-1',
@@ -76,40 +38,38 @@ describe('a view that mounts', () => {
 
 describe('a view that cannot mount', () => {
   it('says an uninstalled app is gone and leaves the tile where it is', async () => {
-    renderHost([]);
-    const message = await screen.findByText(/is not installed/);
-    expect(message.textContent).toContain('reviewer');
-    expect(screen.getByText(/stays where you put it/)).toBeTruthy();
+    await openDockedApprovals([]);
+    expect(screen.getByText(/is not installed/).textContent).toContain('reviewer');
+    expect(screen.getByText(/stays where you put it/)).toBeInTheDocument();
     expect(loadAppView).not.toHaveBeenCalled();
   });
 
   it('names the command that turns a disabled app back on', async () => {
-    renderHost([entry({ enabled: false })]);
-    await screen.findByText(/reviewer is disabled/);
-    expect(screen.getByText(/attn app enable reviewer/)).toBeTruthy();
+    await openDockedApprovals([reviewerApp({ enabled: false })]);
+    expect(screen.getByText(/reviewer is disabled/)).toBeInTheDocument();
+    expect(screen.getByText(/attn app enable reviewer/)).toBeInTheDocument();
     expect(loadAppView).not.toHaveBeenCalled();
   });
 
   it('lists what the serving version does offer when the view is gone', async () => {
-    renderHost([entry({ views: [{ name: 'history', kind: 'tile', title: 'History' }] } as Partial<AppRegistryEntry>)]);
-    await screen.findByText(/no longer has a view called/);
-    expect(screen.getByText(/offers: history/)).toBeTruthy();
+    await openDockedApprovals([reviewerApp({ views: [{ name: 'history', kind: 'tile', title: 'History' }] })]);
+    expect(screen.getByText(/no longer has a view called/)).toBeInTheDocument();
+    expect(screen.getByText(/offers: history/)).toBeInTheDocument();
   });
 
   it('offers Retry when the bundle will not load, and retries on click', async () => {
     loadAppView.mockRejectedValue(new AppViewLoadError('This view could not be loaded.', 'Importing failed: boom'));
-    renderHost([entry()]);
+    const daemon = await openDockedApprovals([reviewerApp()]);
 
-    await screen.findByText('This view could not be loaded.');
-    expect(screen.getByText(/Importing failed: boom/)).toBeTruthy();
+    expect(screen.getByText('This view could not be loaded.')).toBeInTheDocument();
+    expect(screen.getByText(/Importing failed: boom/)).toBeInTheDocument();
     expect(loadAppView).toHaveBeenCalledTimes(1);
 
     loadAppView.mockResolvedValue(() => <div>approvals body</div>);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    await screen.findByText('approvals body');
-    // A distinct URL, or the browser's module map would answer from cache and Retry could never recover.
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Retry' })));
+    expect(screen.getByText('approvals body')).toBeInTheDocument();
     expect(loadAppView.mock.calls[1][0]).not.toBe(loadAppView.mock.calls[0][0]);
-    expect(loadAppView.mock.calls[1][0]).toContain(HASH_A);
+    expect(loadAppView.mock.calls[1][0]).toContain(SERVING_HASH);
   });
 
   it('names the binding when the module exports no component', async () => {
@@ -117,31 +77,28 @@ describe('a view that cannot mount', () => {
       'This view exports no component.',
       'It must export a React component as its default export. It exports: Approvals.',
     ));
-    renderHost([entry()]);
-    await screen.findByText('This view exports no component.');
-    expect(screen.getByText(/It exports: Approvals/)).toBeTruthy();
+    await openDockedApprovals([reviewerApp()]);
+    expect(screen.getByText('This view exports no component.')).toBeInTheDocument();
+    expect(screen.getByText(/It exports: Approvals/)).toBeInTheDocument();
   });
 });
 
 describe('a view that throws while rendering', () => {
   it('costs its own tile and is reported against the serving version', async () => {
-    // React logs a caught render error; the noise is not the assertion.
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     loadAppView.mockResolvedValue(() => {
       throw new Error('cannot read properties of undefined');
     });
 
-    const sendAppViewCrash = renderHost([entry()]);
+    const daemon = await openDockedApprovals([reviewerApp()]);
 
-    await screen.findByText(/crashed while rendering/);
-    expect(screen.getByText(/attn app logs reviewer/)).toBeTruthy();
-    await waitFor(() => expect(sendAppViewCrash).toHaveBeenCalledTimes(1));
-    const report = sendAppViewCrash.mock.calls[0][0];
-    expect(report.app).toBe('reviewer');
-    expect(report.view).toBe('approvals');
-    expect(report.versionId).toBe(7);
-    expect(report.tileId).toBe('tile-7');
-    expect(report.error).toContain('cannot read properties of undefined');
+    expect(screen.getByText(/crashed while rendering/)).toBeInTheDocument();
+    expect(screen.getByText(/attn app logs reviewer/)).toBeInTheDocument();
+    expect(document.querySelector('[data-pane-id="pane-sess-1"]')).toBeInTheDocument();
+    const reports = daemon.sentOf('app_view_crash');
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ app: 'reviewer', view: 'approvals', version_id: 7, tile_id: 'tile-7' });
+    expect(reports[0].error).toContain('cannot read properties of undefined');
     consoleError.mockRestore();
   });
 
@@ -151,23 +108,20 @@ describe('a view that throws while rendering', () => {
       throw new Error('cannot read properties of undefined');
     });
 
-    const sendAppViewCrash = renderHost([entry()]);
-    await screen.findByText(/crashed while rendering/);
-    await waitFor(() => expect(sendAppViewCrash).toHaveBeenCalledTimes(1));
+    const daemon = await openDockedApprovals([reviewerApp()]);
+    expect(screen.getByText(/crashed while rendering/)).toBeInTheDocument();
+    expect(daemon.sentOf('app_view_crash')).toHaveLength(1);
 
-    // Held open so the assertion lands after the boundary's reset key changed, before the fresh module resolved.
     let resolveSecond: (component: unknown) => void = () => {};
     loadAppView.mockReturnValue(new Promise((resolve) => { resolveSecond = resolve; }));
-    fireEvent.click(screen.getByRole('button', { name: 'Reload' }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reload' })));
 
-    await screen.findByText(/Loading reviewer\/approvals/);
-    expect(sendAppViewCrash).toHaveBeenCalledTimes(1);
+    expect(screen.getByText(/Loading reviewer\/approvals/)).toBeInTheDocument();
+    expect(daemon.sentOf('app_view_crash')).toHaveLength(1);
 
-    await act(async () => {
-      resolveSecond(() => <div>approvals body</div>);
-    });
-    await screen.findByText('approvals body');
-    expect(sendAppViewCrash).toHaveBeenCalledTimes(1);
+    await gesture(daemon, () => resolveSecond(() => <div>approvals body</div>));
+    expect(screen.getByText('approvals body')).toBeInTheDocument();
+    expect(daemon.sentOf('app_view_crash')).toHaveLength(1);
     consoleError.mockRestore();
   });
 });
@@ -175,33 +129,28 @@ describe('a view that throws while rendering', () => {
 describe('a version that moves under a docked tile', () => {
   it('remounts against the new bundle when the tile does not hold focus', async () => {
     loadAppView.mockResolvedValue(() => <div>approvals body</div>);
-    renderHost([entry()]);
-    await screen.findByText('approvals body');
+    const daemon = await openDockedApprovals([reviewerApp()]);
+    expect(screen.getByText('approvals body')).toBeInTheDocument();
     expect(loadAppView).toHaveBeenCalledTimes(1);
 
-    act(() => {
-      useDaemonStore.getState().setApps([entry({ version_id: 8, content_hash: HASH_B })]);
-    });
+    await gesture(daemon, () => daemon.emit({ event: 'apps_updated', apps: [reviewerApp({ version_id: 8, content_hash: HASH_B })] }));
 
-    await waitFor(() => expect(loadAppView).toHaveBeenCalledTimes(2));
+    expect(loadAppView).toHaveBeenCalledTimes(2);
     expect(loadAppView.mock.calls[1][0]).toContain(HASH_B);
   });
 
   it('waits for the user to leave rather than pulling the view out mid-keystroke', async () => {
     loadAppView.mockResolvedValue(() => <input aria-label="app input" />);
-    renderHost([entry()]);
-    const input = await screen.findByLabelText('app input');
+    const daemon = await openDockedApprovals([reviewerApp()]);
 
-    fireEvent.focus(input);
-    act(() => {
-      useDaemonStore.getState().setApps([entry({ version_id: 8, content_hash: HASH_B })]);
-    });
+    await gesture(daemon, () => act(() => screen.getByLabelText('app input').focus()));
+    await gesture(daemon, () => daemon.emit({ event: 'apps_updated', apps: [reviewerApp({ version_id: 8, content_hash: HASH_B })] }));
 
-    await screen.findByText(/reloading when you leave this tile/);
+    expect(screen.getByText(/reloading when you leave this tile/)).toBeInTheDocument();
     expect(loadAppView).toHaveBeenCalledTimes(1);
 
-    fireEvent.blur(input, { relatedTarget: document.body });
-    await waitFor(() => expect(loadAppView).toHaveBeenCalledTimes(2));
+    await gesture(daemon, () => act(() => screen.getByRole('button', { name: 'Open reviewing' }).focus()));
+    expect(loadAppView).toHaveBeenCalledTimes(2);
     expect(loadAppView.mock.calls[1][0]).toContain(HASH_B);
   });
 });

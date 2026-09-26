@@ -1,8 +1,7 @@
-import { createMockDaemonApi } from '../../src/test/mocks/daemon';
 import { useEffect, useState } from 'react';
 import { PaneSeedChip } from '../../src/components/PaneSeedChip';
 import { derivePaneSeedDisplay } from '../../src/components/paneSeedDisplay';
-import { DaemonApiProvider } from '../../src/contexts/DaemonApiContext';
+import { DaemonApiProvider, type DaemonApi } from '../../src/contexts/DaemonApiContext';
 import type { Seed } from '../../src/hooks/useDaemonSocket';
 import type { HarnessProps } from '../types';
 import '../../src/App.css';
@@ -16,13 +15,13 @@ const base: Seed = {
   edges: [], ready: false, template: false, gate: false, vars: [], rev: 1, created_at: now, updated_at: now,
 };
 const plot = { ...base, id: 's-plot', title: 'Polish the Garden', plot_progress: { done: 3, total: 7, ready: 0, growing: 2, blocked: 0, dormant: 1, withered: 1 } };
-const api = createMockDaemonApi({
+const seedDocuments: Partial<DaemonApi> = {
   sendSeedDocumentGet: async (id: string) => ({
     seed: { ...base, id, status: id.startsWith('s-') && states.includes(id.slice(2)) ? id.slice(2) : 'growing' },
     children: [], artifacts: [], references: [], notes_total: 1, tender_holds: false,
     notes: [{ id: 'n-1', seed_id: id, kind: 'note', body: 'The silhouettes work at 24px. Next, check the hover at the edge of a narrow pane.', created_at: now, author_session: '', author_member: '' }],
   }),
-});
+};
 
 export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [status, setStatus] = useState('growing');
@@ -31,7 +30,7 @@ export function SeedHeaderHarness({ onReady, setTriggerRerender }: HarnessProps)
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
   const seed = { ...base, id: `s-${status}`, status, tender_session: status === 'growing' ? 'garden-agent' : '' };
   return (
-    <DaemonApiProvider api={api}>
+    <DaemonApiProvider api={seedDocuments as DaemonApi}>
       <div style={{ padding: 28, color: 'var(--color-text-primary)', background: 'var(--color-bg-app)', minHeight: '100vh' }}>
         <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
           {states.map((state) => <button key={state} onClick={() => setStatus(state)}>{state}</button>)}

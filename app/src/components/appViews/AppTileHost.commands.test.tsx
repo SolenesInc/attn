@@ -1,12 +1,10 @@
-import { createMockDaemonApi } from '../../test/mocks/daemon';
+import { useState } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { Button, useCommand } from '@victorarias/attn-app';
-import { AppTileHost } from './AppTileHost';
-import { DaemonApiProvider, type DaemonApi } from '../../contexts/DaemonApiContext';
-import { useDaemonStore } from '../../store/daemonSessions';
-import type { AppRegistryEntry } from '../../hooks/useDaemonSocket';
-
+import { openDockedApprovals, reviewerApp } from './testSupport';
+import { gesture } from '../../test/renderApp';
+import type { Reply } from '../../test/scriptedDaemon';
 
 const loadAppView = vi.hoisted(() => vi.fn());
 vi.mock('./loadAppView', async () => {
@@ -16,71 +14,65 @@ vi.mock('./loadAppView', async () => {
 
 function ActingView() {
   const approve = useCommand('approve');
+  const refresh = useCommand('refresh');
+  const [answer, setAnswer] = useState('none yet');
+  const show = (outcome: Awaited<ReturnType<typeof approve>>) => {
+    if (outcome.ok) setAnswer(JSON.stringify(outcome.value) ?? 'nothing');
+  };
   return (
     <>
-      <Button onClick={() => approve({ id: 'tk-1' })}>Approve</Button>
+      <Button onClick={() => approve({ id: 'tk-1' }).then(show)}>Approve</Button>
+      <Button onClick={() => refresh().then(show)}>Refresh</Button>
+      <div data-testid="command-answer">{answer}</div>
       {approve.error && <div data-testid="command-error">{approve.error}</div>}
     </>
   );
 }
 
-function renderHost(sendAppCommand: DaemonApi['sendAppCommand']) {
+async function openActingView(answer: Reply) {
   loadAppView.mockResolvedValue(ActingView);
-  act(() => {
-    useDaemonStore.getState().setApps([{
-      name: 'reviewer',
-      enabled: true,
-      version_id: 7,
-      content_hash: 'a'.repeat(64),
-      views: [{ name: 'approvals', kind: 'tile', title: 'Pending approvals' }],
-    } as AppRegistryEntry]);
-  });
-  const api = createMockDaemonApi({ sendAppCommand, sendAppViewCrash: vi.fn() });
-  render(
-    <DaemonApiProvider api={api}>
-      <AppTileHost
-        app="reviewer"
-        view="approvals"
-        workspaceId="ws-1"
-        sessionId={null}
-        tileId="tile-7"
-        params=""
-      />
-    </DaemonApiProvider>,
-  );
+  const daemon = await openDockedApprovals([reviewerApp()]);
+  daemon.on('app_command', () => answer);
+  return daemon;
 }
 
 beforeEach(() => {
   loadAppView.mockReset();
-  act(() => {
-    useDaemonStore.getState().setApps([]);
-  });
 });
 
 describe('a view invoking a command', () => {
   it('is addressed to the app the host mounted, not to one the view named', async () => {
-    const sendAppCommand = vi.fn().mockResolvedValue({ approved: true });
-    renderHost(sendAppCommand);
-    const button = await screen.findByRole('button', { name: 'Approve' });
+    const daemon = await openActingView({ event: 'app_command_result', success: true, payload: JSON.stringify({ approved: true }) });
 
-    // The runner settles its own pending state after the answer, so asserting
-    // before the await is asserting mid-update.
-    await act(async () => {
-      fireEvent.click(button);
-    });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
-    expect(sendAppCommand).toHaveBeenCalledWith('reviewer', 'approve', { id: 'tk-1' });
+    expect(daemon.sentOf('app_command')).toEqual([
+      expect.objectContaining({ app: 'reviewer', command: 'approve', payload: JSON.stringify({ id: 'tk-1' }) }),
+    ]);
+    expect(screen.getByTestId('command-answer')).toHaveTextContent('{"approved":true}');
+    expect(screen.queryByTestId('command-error')).not.toBeInTheDocument();
+  });
+
+  it('carries no payload for a command that takes none, and answers nothing when the handler returns nothing', async () => {
+    const daemon = await openActingView({ event: 'app_command_result', success: true });
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Refresh' })));
+
+    const [sent] = daemon.sentOf('app_command');
+    expect(sent).toMatchObject({ app: 'reviewer', command: 'refresh' });
+    expect(sent.payload).toBeUndefined();
+    expect(screen.getByTestId('command-answer')).toHaveTextContent('nothing');
   });
 
   it('shows the daemon’s own refusal instead of throwing it away', async () => {
-    const sendAppCommand = vi.fn().mockRejectedValue(
-      new Error('reviewer is disabled, so it runs nothing; `attn app enable reviewer` turns it back on'),
-    );
-    renderHost(sendAppCommand);
+    const daemon = await openActingView({
+      event: 'app_command_result',
+      success: false,
+      error: 'reviewer is disabled, so it runs nothing; `attn app enable reviewer` turns it back on',
+    });
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Approve' }));
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Approve' })));
 
-    const shown = await screen.findByTestId('command-error');
-    expect(shown.textContent).toContain('attn app enable reviewer');
+    expect(screen.getByTestId('command-error').textContent).toContain('attn app enable reviewer');
   });
 });

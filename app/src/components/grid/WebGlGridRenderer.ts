@@ -56,7 +56,7 @@ const STATE_COLORS: Record<UISessionState, Rgb> = {
 const FOCUS_BORDER_ALPHA = 0.95;
 const ATTENTION_EMPHASIS = 0.725;
 
-export function staticStateEmphasis(state: UISessionState): number {
+function staticStateEmphasis(state: UISessionState): number {
   if (state === 'waiting_input') return 1;
   if (state === 'scheduled') return 0.5;
   return 0;

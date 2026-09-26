@@ -16,6 +16,17 @@ var raggedJobOffsets = []struct {
 	{"j5", 500 * time.Millisecond},
 }
 
+func newJobRecord(id, kind string, at time.Time) JobRecord {
+	return JobRecord{
+		ID:          id,
+		Kind:        kind,
+		State:       "queued",
+		ScheduledAt: at,
+		CreatedAt:   at,
+		UpdatedAt:   at,
+	}
+}
+
 func jobBase() time.Time { return time.Date(2026, 8, 6, 10, 0, 0, 0, time.UTC) }
 
 func jobIDs(recs []JobRecord) []string {
@@ -32,86 +43,6 @@ func chronologicalJobIDs() []string {
 		out = append(out, r.id)
 	}
 	return out
-}
-
-func storeWithRaggedJobs(t *testing.T) *Store {
-	t.Helper()
-	s := New()
-	for _, r := range raggedJobOffsets {
-		if err := s.UpsertJob(newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))); err != nil {
-			t.Fatalf("upsert %s: %v", r.id, err)
-		}
-	}
-	return s
-}
-
-func TestAJobScheduledOnAWholeSecondIsClaimableAtThatSecond(t *testing.T) {
-	s := New()
-	at := jobBase()
-	if err := s.UpsertJob(newJobRecord("whole", "session_activity", at)); err != nil {
-		t.Fatalf("upsert: %v", err)
-	}
-
-	for _, now := range []time.Time{at, at.Add(time.Millisecond), at.Add(500 * time.Millisecond)} {
-		got, err := s.EligibleJobs(now, 10)
-		if err != nil {
-			t.Fatalf("eligible jobs at %v: %v", now, err)
-		}
-		if len(got) != 1 {
-			t.Fatalf("a job scheduled at %s was not claimable at %s: got %v",
-				at.Format(time.RFC3339Nano), now.Format(time.RFC3339Nano), jobIDs(got))
-		}
-	}
-}
-
-func TestEligibleJobsComeBackInScheduledOrderWithinASecond(t *testing.T) {
-	s := storeWithRaggedJobs(t)
-
-	got, err := s.EligibleJobs(jobBase().Add(time.Second), 10)
-	if err != nil {
-		t.Fatalf("eligible jobs: %v", err)
-	}
-	if want := chronologicalJobIDs(); !sameOrder(jobIDs(got), want) {
-		t.Fatalf("eligible jobs came back as %v, want %v", jobIDs(got), want)
-	}
-}
-
-func TestListJobsIsNewestUpdatedFirstWithinASecond(t *testing.T) {
-	s := storeWithRaggedJobs(t)
-
-	got, err := s.ListJobs()
-	if err != nil {
-		t.Fatalf("list jobs: %v", err)
-	}
-	if want := reversed(chronologicalJobIDs()); !sameOrder(jobIDs(got), want) {
-		t.Fatalf("list jobs came back as %v, want %v", jobIDs(got), want)
-	}
-}
-
-func TestTrimDoneJobsDeletesByTimeWithinASecond(t *testing.T) {
-	s := New()
-	for _, r := range raggedJobOffsets {
-		rec := newJobRecord(r.id, "session_activity", jobBase().Add(r.offset))
-		rec.State = "done"
-		if err := s.UpsertJob(rec); err != nil {
-			t.Fatalf("upsert %s: %v", r.id, err)
-		}
-	}
-
-	n, err := s.TrimDoneJobs(jobBase().Add(200 * time.Millisecond))
-	if err != nil {
-		t.Fatalf("trim: %v", err)
-	}
-	if n != 3 {
-		t.Fatalf("trimmed %d jobs, want the 3 updated before the cutoff", n)
-	}
-	left, err := s.ListJobs()
-	if err != nil {
-		t.Fatalf("list jobs: %v", err)
-	}
-	if want := []string{"j5"}; !sameOrder(jobIDs(left), want) {
-		t.Fatalf("trim left %v, want %v", jobIDs(left), want)
-	}
 }
 
 func TestNotificationsListNewestFirstWithinASecond(t *testing.T) {

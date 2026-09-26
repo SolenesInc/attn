@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 // @ts-expect-error -- see above
 import { fileURLToPath } from 'node:url';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { CellFlags, Ghostty, type GhosttyTerminal } from './index';
+import { CellFlags, Ghostty, type GhosttyCell, type GhosttyTerminal } from './index';
 
 const wasmPath = fileURLToPath(new URL('../../vendor/ghostty-vt/ghostty-vt.wasm', import.meta.url));
 
@@ -24,8 +24,12 @@ beforeAll(async () => {
   ghostty = new Ghostty(instance);
 });
 
-function terminal(cols = 20, rows = 5, config = {}): GhosttyTerminal {
-  return ghostty.createTerminal(cols, rows, config);
+type Step = string | { resize: [number, number] };
+
+interface Screen {
+  cols?: number;
+  rows?: number;
+  config?: Parameters<Ghostty['createTerminal']>[2];
 }
 
 function rowText(t: GhosttyTerminal, y: number): string {
@@ -38,279 +42,68 @@ function rowText(t: GhosttyTerminal, y: number): string {
   return text.trimEnd();
 }
 
-describe('GhosttyTerminal', () => {
-  it('writes text and reads it back through the viewport', () => {
-    const t = terminal();
-    t.write('hello\r\nworld');
-    t.update();
-    expect(rowText(t, 0)).toBe('hello');
-    expect(rowText(t, 1)).toBe('world');
-    t.free();
-  });
+function hex(r: number, g: number, b: number): string {
+  return `#${[r, g, b].map((channel) => channel.toString(16).padStart(2, '0')).join('')}`;
+}
 
-  it('decodes every SGR attribute into cell flags', () => {
-    const t = terminal();
-    t.write('\x1b[1mB\x1b[0m\x1b[3mI\x1b[0m\x1b[4mU\x1b[0m\x1b[9mS\x1b[0m'
-      + '\x1b[7mV\x1b[0m\x1b[8mH\x1b[0m\x1b[5mK\x1b[0m\x1b[2mF\x1b[0m');
-    t.update();
-    const cells = t.getViewport();
-    const flagAt = (x: number) => cells[x].flags;
-    expect(flagAt(0)).toBe(CellFlags.BOLD);
-    expect(flagAt(1)).toBe(CellFlags.ITALIC);
-    expect(flagAt(2)).toBe(CellFlags.UNDERLINE);
-    expect(flagAt(3)).toBe(CellFlags.STRIKETHROUGH);
-    expect(flagAt(4)).toBe(CellFlags.INVERSE);
-    expect(flagAt(5)).toBe(CellFlags.INVISIBLE);
-    expect(flagAt(6)).toBe(CellFlags.BLINK);
-    expect(flagAt(7)).toBe(CellFlags.FAINT);
-    t.free();
-  });
+function colors(cell: GhosttyCell): string {
+  return `${hex(cell.fg_r, cell.fg_g, cell.fg_b)} on ${hex(cell.bg_r, cell.bg_g, cell.bg_b)}`;
+}
 
-  it('resolves cell colors, falling back to the configured defaults', () => {
-    const t = terminal(20, 5, { fgColor: 0x445566, bgColor: 0x112233 });
-    t.write('a\x1b[38;2;10;20;30m\x1b[48;2;40;50;60mb');
-    t.update();
-    const cells = t.getViewport();
-    expect(cells[0]).toMatchObject({ fg_r: 0x44, fg_g: 0x55, fg_b: 0x66, bg_r: 0x11, bg_g: 0x22, bg_b: 0x33 });
-    expect(cells[1]).toMatchObject({ fg_r: 10, fg_g: 20, fg_b: 30, bg_r: 40, bg_g: 50, bg_b: 60 });
-    t.free();
-  });
+const THEMED = { fgColor: 0x445566, bgColor: 0x112233 };
+const THEME = '#445566 on #112233';
+const lines = (count: number, prefix: string) => Array.from({ length: count }, (_, i) => `${prefix}${i}\r\n`);
+const paletteWith = (entries: Record<number, number>) => Array.from({ length: 16 }, (_, index) => entries[index] ?? 0);
 
-  it('preserves the extended indexed palette when applying an ANSI theme', () => {
-    const palette = Array.from({ length: 16 }, (_, index) => index === 3 ? 0x123456 : 0);
-    const t = terminal(20, 5, { fgColor: 0x445566, bgColor: 0x112233, palette });
-    t.write('\x1b[33mA\x1b[38;5;46mG\x1b[38;5;196mR\x1b[38;5;231mW\x1b[48;5;21mB');
-
-    const cells = t.getViewport();
-    expect(cells[0]).toMatchObject({ fg_r: 0x12, fg_g: 0x34, fg_b: 0x56 });
-    expect(cells[1]).toMatchObject({ fg_r: 0x00, fg_g: 0xff, fg_b: 0x00 });
-    expect(cells[2]).toMatchObject({ fg_r: 0xff, fg_g: 0x00, fg_b: 0x00 });
-    expect(cells[3]).toMatchObject({ fg_r: 0xff, fg_g: 0xff, fg_b: 0xff });
-    expect(cells[4]).toMatchObject({ bg_r: 0x00, bg_g: 0x00, bg_b: 0xff });
-    t.free();
-  });
-
-  it('resolves scrollback cell colors from the style slots', () => {
-    const palette = Array.from({ length: 16 }, (_, index) => (
-      index === 1 ? 0xff0102 : index === 9 ? 0x0a0b0c : index === 3 ? 0x030303 : index === 2 ? 0x020202 : 0
-    ));
-    const t = terminal(20, 2, { fgColor: 0x445566, bgColor: 0x112233, palette });
-    t.write('filler-one\r\n');
-    t.write('filler-two\r\n');
-    t.write('\x1b[31mred\x1b[0m\r\n');
-    t.write('\x1b[38;2;10;20;30mtcolor\x1b[0m\r\n');
-    t.write('\x1b[91mbright\x1b[0m\r\n');
-    t.write('\x1b[42mbgonly\x1b[0m\r\n');
-    t.write('\x1b[1;33mboldyl\x1b[0m\r\n');
-    t.write('end\r\n');
-    t.update();
-
-    expect(t.getScrollbackLength()).toBe(7);
-    const first = (row: number) => t.getScrollbackLine(row)![0];
-    expect(first(0)).toMatchObject({ codepoint: 'f'.codePointAt(0), fg_r: 0x44, fg_g: 0x55, fg_b: 0x66, bg_r: 0x11, bg_g: 0x22, bg_b: 0x33 });
-    expect(first(2)).toMatchObject({ codepoint: 'r'.codePointAt(0), fg_r: 0xff, fg_g: 0x01, fg_b: 0x02, bg_r: 0x11, bg_g: 0x22, bg_b: 0x33 });
-    expect(first(3)).toMatchObject({ codepoint: 't'.codePointAt(0), fg_r: 10, fg_g: 20, fg_b: 30 });
-    expect(first(4)).toMatchObject({ codepoint: 'b'.codePointAt(0), fg_r: 0x0a, fg_g: 0x0b, fg_b: 0x0c });
-    expect(first(5)).toMatchObject({ codepoint: 'b'.codePointAt(0), fg_r: 0x44, fg_g: 0x55, fg_b: 0x66, bg_r: 0x02, bg_g: 0x02, bg_b: 0x02 });
-    expect(first(6)).toMatchObject({ codepoint: 'b'.codePointAt(0), flags: CellFlags.BOLD, fg_r: 0x03, fg_g: 0x03, fg_b: 0x03 });
-    t.free();
-  });
-
-  it('reports wide cells and their spacer', () => {
-    const t = terminal();
-    t.write('漢x');
-    t.update();
-    const cells = t.getViewport();
-    expect(cells[0].width).toBe(2);
-    expect(cells[1].width).toBe(0);
-    expect(cells[2].codepoint).toBe('x'.codePointAt(0));
-    t.free();
-  });
-
-  it('exposes a combining cluster as one grapheme string', () => {
-    const t = terminal();
-    t.write('\x1b[?2027h');
-    t.write('é');
-    t.update();
-    const cells = t.getViewport();
-    expect(cells[0].grapheme_len).toBe(1);
-    expect(t.getGraphemeString(0, 0)).toBe('é');
-    t.free();
-  });
-
-  it('tracks the cursor and the render-state colors', () => {
-    const t = terminal(20, 5, { fgColor: 0x445566, bgColor: 0x112233 });
-    t.write('abc');
-    t.update();
-    expect(t.getCursor()).toMatchObject({ x: 3, y: 0, visible: true, style: 'block' });
-    expect(t.getColors()).toMatchObject({
-      foreground: { r: 0x44, g: 0x55, b: 0x66 },
-      background: { r: 0x11, g: 0x22, b: 0x33 },
-      cursor: null,
-    });
-    t.free();
-  });
-
-  // A read without syncing answers as of the previous frame.
-  it('reads back a write without an explicit update', () => {
-    const t = terminal(20, 5);
-    t.write('abc');
-    expect(t.getCursor()).toMatchObject({ x: 3, y: 0 });
-    t.write('\r\nsecond');
-    expect(t.getCursor()).toMatchObject({ x: 6, y: 1 });
-    expect(rowText(t, 1).trimEnd()).toBe('second');
-    t.free();
-  });
-
-  // ghostty hands the dirty set over once and clears it, so a read between frames must accumulate.
-  it('keeps dirty rows through a read that syncs the render state', () => {
-    const t = terminal(20, 5);
-    t.update();
-    t.markClean();
-    t.write('one');
-    t.getCursor();
-    t.getViewport();
-    expect(t.update()).not.toBe(0);
-    expect(t.isRowDirty(0)).toBe(true);
-    t.markClean();
-    expect(t.isRowDirty(0)).toBe(false);
-    t.free();
-  });
-
-  it('reports dirty rows and clears them on markClean', () => {
-    const t = terminal();
-    t.write('one\r\ntwo');
-    expect(t.update()).not.toBe(0);
-    expect(t.isRowDirty(0)).toBe(true);
-    t.markClean();
-    expect(t.isRowDirty(0)).toBe(false);
-    expect(t.update()).toBe(0);
-    t.write('\r\nthree');
-    t.update();
-    expect(t.isRowDirty(2)).toBe(true);
-    t.free();
-  });
-
-  it('answers DSR through the write_pty callback', () => {
-    const t = terminal();
-    t.write('\x1b[6n');
-    expect(t.hasResponse()).toBe(true);
-    expect(t.readResponse()).toBe('\x1b[1;1R');
-    expect(t.hasResponse()).toBe(false);
-    expect(t.readResponse()).toBeNull();
-    t.free();
-  });
-
-  it('reads DEC modes, including the ones the app gates behavior on', () => {
-    const t = terminal();
-    expect(t.getMode(7)).toBe(true);
-    expect(t.hasBracketedPaste()).toBe(false);
-    t.write('\x1b[?2004h\x1b[?1006h\x1b[?7l');
-    expect(t.hasBracketedPaste()).toBe(true);
-    expect(t.getMode(1006)).toBe(true);
-    expect(t.getMode(7)).toBe(false);
-    t.free();
-  });
-
-  it('follows the alternate screen and mouse tracking', () => {
-    const t = terminal();
-    expect(t.isAlternateScreen()).toBe(false);
-    expect(t.hasMouseTracking()).toBe(false);
-    t.write('\x1b[?1049h\x1b[?1002h');
-    expect(t.isAlternateScreen()).toBe(true);
-    expect(t.hasMouseTracking()).toBe(true);
-    t.write('\x1b[?1049l\x1b[?1002l');
-    expect(t.isAlternateScreen()).toBe(false);
-    expect(t.hasMouseTracking()).toBe(false);
-    t.free();
-  });
-
-  // Every scalar getter shares one wasm scratch buffer, so each must read exactly the ABI width.
-  it('answers scalar reads truthfully after a wide write left a handle in the scratch buffer', () => {
-    const t = terminal(20, 5, { scrollbackLimit: 1 << 20 });
-    for (let i = 0; i < 40; i += 1) t.write(`line${i}\r\n`);
-    t.write('\x1b[?7h');
-    t.update();
-
-    expect(t.rowWrapsIntoNext(1)).toBe(false);
-    expect(t.hasMouseTracking()).toBe(false);
-    expect(t.isAlternateScreen()).toBe(false);
-    expect(t.getMode(7)).toBe(true);
-    expect(t.getScrollbackLength()).toBe(36);
-
-    t.write('\x1b[?1002h');
-    t.update();
-    t.rowWrapsIntoNext(1);
-    expect(t.hasMouseTracking()).toBe(true);
-    t.free();
-  });
-
-  it('reads scrollback rows by history offset', () => {
-    const t = terminal(20, 3, { scrollbackLimit: 1 << 20 });
-    for (let i = 0; i < 10; i += 1) t.write(`row${i}\r\n`);
-    t.update();
-    expect(t.getScrollbackLength()).toBe(8);
-    const line = t.getScrollbackLine(0);
-    expect(line).not.toBeNull();
-    expect(line!.slice(0, 4).map((c) => String.fromCodePoint(c.codepoint)).join('')).toBe('row0');
-    expect(t.getScrollbackGraphemeString(0, 0)).toBe('r');
-    expect(t.getScrollbackLine(8)).toBeNull();
-    t.free();
-  });
-
-  it('reads one active row without decoding the rest of the viewport', () => {
-    const t = terminal(20, 4);
-    t.write('alpha\r\nbravo\r\ncharlie');
-    t.update();
-    const viewport = t.getViewport();
-    for (let row = 0; row < 4; row += 1) {
-      const line = t.getActiveLine(row);
-      expect(line).not.toBeNull();
-      expect(line!.map((c) => c.codepoint)).toEqual(
-        viewport.slice(row * 20, (row + 1) * 20).map((c) => c.codepoint),
-      );
+describe('GhosttyTerminal reads what libghostty-vt holds', () => {
+  it.each<[string, Screen, Step[], (t: GhosttyTerminal) => unknown, unknown]>([
+    ['text by viewport row', {}, ['hello\r\nworld'], (t) => [rowText(t, 0), rowText(t, 1)], ['hello', 'world']],
+    ['every SGR attribute as a cell flag', {}, ['\x1b[1mB\x1b[0m\x1b[3mI\x1b[0m\x1b[4mU\x1b[0m\x1b[9mS\x1b[0m\x1b[7mV\x1b[0m\x1b[8mH\x1b[0m\x1b[5mK\x1b[0m\x1b[2mF\x1b[0m'],
+      (t) => t.getViewport().slice(0, 8).map((cell) => cell.flags),
+      [CellFlags.BOLD, CellFlags.ITALIC, CellFlags.UNDERLINE, CellFlags.STRIKETHROUGH, CellFlags.INVERSE, CellFlags.INVISIBLE, CellFlags.BLINK, CellFlags.FAINT]],
+    ['theme defaults and true colors', { config: THEMED }, ['a\x1b[38;2;10;20;30m\x1b[48;2;40;50;60mb'],
+      (t) => t.getViewport().slice(0, 2).map(colors), [THEME, '#0a141e on #28323c']],
+    ['a themed ANSI color beside the extended palette', { config: { ...THEMED, palette: paletteWith({ 3: 0x123456 }) } }, ['\x1b[33mA\x1b[38;5;46mG\x1b[38;5;196mR\x1b[38;5;231mW\x1b[48;5;21mB'],
+      (t) => t.getViewport().slice(0, 5).map(colors),
+      ['#123456 on #112233', '#00ff00 on #112233', '#ff0000 on #112233', '#ffffff on #112233', '#ffffff on #0000ff']],
+    ['scrollback colors from the style slots', { rows: 2, config: { ...THEMED, palette: paletteWith({ 1: 0xff0102, 9: 0x0a0b0c, 3: 0x030303, 2: 0x020202 }) } },
+      ['filler-one\r\n', 'filler-two\r\n', '\x1b[31mred\x1b[0m\r\n', '\x1b[38;2;10;20;30mtcolor\x1b[0m\r\n', '\x1b[91mbright\x1b[0m\r\n', '\x1b[42mbgonly\x1b[0m\r\n', '\x1b[1;33mboldyl\x1b[0m\r\n', 'end\r\n'],
+      (t) => [t.getScrollbackLength(), ...[0, 2, 3, 4, 5, 6].map((row) => {
+        const cell = t.getScrollbackLine(row)![0];
+        return `${String.fromCodePoint(cell.codepoint)} ${colors(cell)} ${cell.flags}`;
+      })],
+      [7, `f ${THEME} 0`, 'r #ff0102 on #112233 0', 't #0a141e on #112233 0', 'b #0a0b0c on #112233 0', 'b #445566 on #020202 0', `b #030303 on #112233 ${CellFlags.BOLD}`]],
+    ['a wide cell and its spacer', {}, ['漢x'], (t) => t.getViewport().slice(0, 3).map((cell) => [cell.width, cell.codepoint]), [[2, '漢'.codePointAt(0)], [0, 0], [1, 'x'.codePointAt(0)]]],
+    ['a combining cluster as one grapheme', {}, ['\x1b[?2027h', 'e\u0301'], (t) => [t.getViewport()[0].grapheme_len, t.getGraphemeString(0, 0)], [1, 'e\u0301']],
+    ['the cursor and the theme colors', { config: THEMED }, ['abc'], (t) => [t.getCursor(), t.getColors()], [
+      expect.objectContaining({ x: 3, y: 0, visible: true, style: 'block' }),
+      expect.objectContaining({ foreground: { r: 0x44, g: 0x55, b: 0x66 }, background: { r: 0x11, g: 0x22, b: 0x33 }, cursor: null }),
+    ]],
+    ['a DSR reply, once', {}, ['\x1b[6n'], (t) => [t.hasResponse(), t.readResponse(), t.hasResponse(), t.readResponse()], [true, '\x1b[1;1R', false, null]],
+    ['default DEC modes', {}, [], (t) => [t.getMode(7), t.hasBracketedPaste(), t.isAlternateScreen(), t.hasMouseTracking()], [true, false, false, false]],
+    ['DEC modes the app gates behavior on', {}, ['\x1b[?2004h\x1b[?1006h\x1b[?7l'], (t) => [t.hasBracketedPaste(), t.getMode(1006), t.getMode(7)], [true, true, false]],
+    ['the alternate screen and mouse tracking', {}, ['\x1b[?1049h\x1b[?1002h'], (t) => [t.isAlternateScreen(), t.hasMouseTracking()], [true, true]],
+    ['leaving the alternate screen and mouse tracking', {}, ['\x1b[?1049h\x1b[?1002h', '\x1b[?1049l\x1b[?1002l'], (t) => [t.isAlternateScreen(), t.hasMouseTracking()], [false, false]],
+    ['scalar state after a wide read', { config: { scrollbackLimit: 1 << 20 } }, [...lines(40, 'line'), '\x1b[?7h'],
+      (t) => [t.rowWrapsIntoNext(1), t.hasMouseTracking(), t.isAlternateScreen(), t.getMode(7), t.getScrollbackLength()], [false, false, false, true, 36]],
+    ['mouse tracking read right after a wrap query', { config: { scrollbackLimit: 1 << 20 } }, [...lines(40, 'line'), '\x1b[?1002h'],
+      (t) => [t.rowWrapsIntoNext(1), t.hasMouseTracking()], [false, true]],
+    ['scrollback rows by history offset', { rows: 3, config: { scrollbackLimit: 1 << 20 } }, lines(10, 'row'),
+      (t) => [t.getScrollbackLength(), t.getScrollbackLine(0)!.slice(0, 4).map((cell) => String.fromCodePoint(cell.codepoint)).join(''), t.getScrollbackGraphemeString(0, 0), t.getScrollbackLine(8)],
+      [8, 'row0', 'r', null]],
+    ['a soft wrap on the row it starts from', { cols: 10 }, ['0123456789abc'], (t) => [t.rowWrapsIntoNext(0), t.rowWrapsIntoNext(1)], [true, false]],
+    ['an OSC 8 hyperlink by position', {}, ['\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\ x'],
+      (t) => [t.getViewport()[0].hyperlink_id, t.getHyperlinkUri(0, 0), t.getViewport()[6].hyperlink_id, t.getHyperlinkUri(0, 6)], [1, 'https://example.com', 0, null]],
+    ['text reflowed by a wider resize', { cols: 10 }, ['0123456789abcde', { resize: [20, 5] }], (t) => [t.cols, rowText(t, 0)], [20, '0123456789abcde']],
+  ])('%s', (_name, screen, steps, read, expected) => {
+    const t = ghostty.createTerminal(screen.cols ?? 20, screen.rows ?? 5, screen.config ?? {});
+    for (const step of steps) {
+      if (typeof step === 'string') t.write(step);
+      else t.resize(...step.resize);
     }
-    expect(t.getActiveLine(-1)).toBeNull();
-    expect(t.getActiveLine(4)).toBeNull();
-    t.free();
-  });
-
-  // The flag marks the row the text wraps OUT of; the wrong direction silently drops a soft-wrapped link.
-  it('marks the row a soft wrap starts on, not the one it continues onto', () => {
-    const t = terminal(10, 5);
-    t.write('0123456789abc');
     t.update();
-    expect(t.rowWrapsIntoNext(0)).toBe(true);
-    expect(t.rowWrapsIntoNext(1)).toBe(false);
-    t.free();
-  });
 
-  it('returns OSC 8 hyperlink URIs by position', () => {
-    const t = terminal();
-    t.write('\x1b]8;;https://example.com\x1b\\link\x1b]8;;\x1b\\ x');
-    t.update();
-    const cells = t.getViewport();
-    expect(cells[0].hyperlink_id).toBe(1);
-    expect(t.getHyperlinkUri(0, 0)).toBe('https://example.com');
-    expect(cells[6].hyperlink_id).toBe(0);
-    expect(t.getHyperlinkUri(0, 6)).toBeNull();
+    expect(read(t)).toEqual(expected);
     t.free();
-  });
-
-  it('reflows on resize and keeps the pool sized to the viewport', () => {
-    const t = terminal(10, 5);
-    t.write('0123456789abcde');
-    t.resize(20, 5);
-    t.update();
-    expect(t.cols).toBe(20);
-    expect(t.getViewport()).toHaveLength(100);
-    expect(rowText(t, 0)).toBe('0123456789abcde');
-    t.free();
-  });
-
-  it('is safe to free twice', () => {
-    const t = terminal();
-    t.free();
-    expect(() => t.free()).not.toThrow();
   });
 });

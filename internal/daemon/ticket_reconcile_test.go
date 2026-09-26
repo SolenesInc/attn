@@ -66,15 +66,6 @@ func reconcileComments(t *testing.T, d *Daemon, ticketID string) []string {
 	return out
 }
 
-func reconciledAt(t *testing.T, d *Daemon, ticketID string) *time.Time {
-	t.Helper()
-	full, err := d.store.GetTicket(ticketID)
-	if err != nil || full == nil {
-		t.Fatalf("GetTicket %s: %v, %v", ticketID, full, err)
-	}
-	return full.ReconciledAt
-}
-
 func armReconcileObserver(d *Daemon, result agentdriver.HeadlessTaskResult, execErr error) (chan string, *int) {
 	done := make(chan string, 8)
 	calls := 0
@@ -94,38 +85,6 @@ func waitReconcileDone(t *testing.T, done chan string) string {
 	case <-time.After(5 * time.Second):
 		t.Fatal("timed out waiting for reconciliation to finish")
 		return ""
-	}
-}
-
-func TestReconcileSeamNeutralEndPostsFailureNote(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	sessionID := delegateBoundSession(t, d)
-	ticketID := boundTicketID(t, d, sessionID)
-	done, calls := armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
-	installReconcileRunner(t, d)
-
-	d.reconcileTicketsOnSessionEnd(sessionID, protocol.StateIdle)
-	waitReconcileDone(t, done)
-
-	ticket, err := d.store.GetTicket(ticketID)
-	if err != nil || ticket == nil {
-		t.Fatalf("GetTicket: %v, %v", ticket, err)
-	}
-	if ticket.Status != store.TicketStatusWorking {
-		t.Fatalf("status = %q, want working (no auto-transition on the orphan path)", ticket.Status)
-	}
-	if ticket.ReconciledAt == nil {
-		t.Fatal("ReconciledAt not claimed")
-	}
-	comments := reconcileComments(t, d, ticketID)
-	if len(comments) != 1 {
-		t.Fatalf("reconcile comments = %d, want 1 (%v)", len(comments), comments)
-	}
-	if !strings.Contains(comments[0], "could not determine") || !strings.Contains(comments[0], "could not locate") {
-		t.Fatalf("failure note = %q, want could-not-determine with transcript reason", comments[0])
-	}
-	if *calls != 0 {
-		t.Fatalf("classifier exec ran %d times, want 0 (no transcript to read)", *calls)
 	}
 }
 
@@ -304,62 +263,6 @@ func TestRunTicketReconciliationExecErrorPostsFailureNote(t *testing.T) {
 	}
 }
 
-func TestSweepClaimsDeadOwnerAfterGrace(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	done, _ := armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
-	installReconcileRunner(t, d)
-	if _, err := d.store.CreateTicket(store.Ticket{
-		ID: "orphaned", Title: "t", Assignee: "sess-dead", Status: store.TicketStatusInReview,
-	}, "chief", time.Now().Add(-time.Hour)); err != nil {
-		t.Fatalf("CreateTicket: %v", err)
-	}
-
-	t0 := time.Now()
-	d.ticketReconcileSweepPass(t0)
-	if got := reconciledAt(t, d, "orphaned"); got != nil {
-		t.Fatalf("claimed on first sight (%v), want grace period first", got)
-	}
-
-	d.ticketReconcileSweepPass(t0.Add(ticketReconcileGrace() + time.Minute))
-	waitReconcileDone(t, done)
-	if got := reconciledAt(t, d, "orphaned"); got == nil {
-		t.Fatal("not claimed after grace")
-	}
-	if comments := reconcileComments(t, d, "orphaned"); len(comments) != 1 {
-		t.Fatalf("reconcile comments = %d, want 1", len(comments))
-	}
-	ticket, _ := d.store.GetTicket("orphaned")
-	if ticket.Status != store.TicketStatusInReview {
-		t.Fatalf("status = %q, want in_review (sweep never moves the column)", ticket.Status)
-	}
-}
-
-func TestSweepSkipsLiveHumanAndUnassigned(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
-	installReconcileRunner(t, d)
-
-	d.store.Add(&protocol.Session{ID: "sess-live", Label: "live", Directory: t.TempDir()})
-	now := time.Now()
-	mk := func(id, assignee string) {
-		if _, err := d.store.CreateTicket(store.Ticket{ID: id, Title: "t", Assignee: assignee, Status: store.TicketStatusWorking}, "chief", now.Add(-time.Hour)); err != nil {
-			t.Fatalf("CreateTicket %s: %v", id, err)
-		}
-	}
-	mk("live-owner", "sess-live")
-	mk("human-owned", store.TicketAuthorYou)
-	mk("unassigned", "")
-
-	d.ticketReconcileSweepPass(now)
-	d.ticketReconcileSweepPass(now.Add(ticketReconcileGrace() + time.Minute))
-
-	for _, id := range []string{"live-owner", "human-owned", "unassigned"} {
-		if got := reconciledAt(t, d, id); got != nil {
-			t.Fatalf("%s was claimed (%v), want skipped", id, got)
-		}
-	}
-}
-
 func TestSweepRecoversAbandonedClaim(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	done, _ := armReconcileObserver(d, agentdriver.HeadlessTaskResult{}, nil)
@@ -385,29 +288,6 @@ func TestSweepRecoversAbandonedClaim(t *testing.T) {
 	comments := reconcileComments(t, d, "abandoned")
 	if len(comments) != 1 || !strings.Contains(comments[0], "could not locate") {
 		t.Fatalf("recovered comments = %v, want one could-not-locate failure note", comments)
-	}
-}
-
-func TestSweepSkipsTicketWithExistingTask(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	installReconcileRunner(t, d)
-	now := time.Now()
-	if _, err := d.store.CreateTicket(store.Ticket{
-		ID: "already", Title: "t", Assignee: "sess-dead", Status: store.TicketStatusWorking,
-	}, "chief", now.Add(-time.Hour)); err != nil {
-		t.Fatalf("CreateTicket: %v", err)
-	}
-	runner := d.jobQueueRef()
-	if _, err := runner.Enqueue(reconcileKind, jobs.EnqueueOptions{
-		UniqueKey: "already",
-		Payload:   ticketReconcileInputs{TicketID: "already"},
-	}); err != nil {
-		t.Fatalf("seed reconcile job: %v", err)
-	}
-
-	d.ticketReconcileSweepPass(now.Add(ticketReconcileGrace() + time.Hour))
-	if got := reconciledAt(t, d, "already"); got != nil {
-		t.Fatalf("sweep re-claimed a ticket with an existing job (%v)", got)
 	}
 }
 

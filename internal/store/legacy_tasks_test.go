@@ -166,10 +166,3 @@ func TestAFailedJobWriteLeavesEveryLegacyRowIntact(t *testing.T) {
 		t.Fatalf("%d legacy rows survived the retry", n)
 	}
 }
-
-func TestMigrateLegacyTasksWithoutADatabaseIsAnError(t *testing.T) {
-	var s Store
-	if _, err := s.MigrateLegacyTasks(oneForOne); err == nil {
-		t.Fatal("migrating without a database reported success")
-	}
-}

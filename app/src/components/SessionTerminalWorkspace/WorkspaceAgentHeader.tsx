@@ -37,7 +37,6 @@ export function WorkspaceAgentHeader({ agentPane, paneSession, paneTitle }: Work
         <button
           type="button"
           className="workspace-pane-rename-btn"
-          data-testid={`rename-pane-${agentPane.id}`}
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();

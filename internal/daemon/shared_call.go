@@ -15,10 +15,9 @@ type sharedCall[V any] struct {
 }
 
 type sharedCalls[K comparable, V any] struct {
-	mu           sync.Mutex
-	root         context.Context
-	active       map[K]*sharedCall[V]
-	joinObserver func(K, int)
+	mu     sync.Mutex
+	root   context.Context
+	active map[K]*sharedCall[V]
 }
 
 func newSharedCalls[K comparable, V any](root context.Context) *sharedCalls[K, V] {
@@ -33,17 +32,11 @@ func (s *sharedCalls[K, V]) Do(ctx context.Context, key K, run func(context.Cont
 	call, ok := s.active[key]
 	if ok {
 		call.waiters++
-		if s.joinObserver != nil {
-			s.joinObserver(key, call.waiters)
-		}
 		s.mu.Unlock()
 	} else {
 		callCtx, cancel := context.WithCancel(s.root)
 		call = &sharedCall[V]{ctx: callCtx, cancel: cancel, done: make(chan struct{}), waiters: 1}
 		s.active[key] = call
-		if s.joinObserver != nil {
-			s.joinObserver(key, call.waiters)
-		}
 		s.mu.Unlock()
 		go s.run(key, call, run)
 	}

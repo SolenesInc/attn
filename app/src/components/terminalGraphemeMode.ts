@@ -8,9 +8,9 @@ const ENABLE_SEQUENCE = ENCODER.encode('\x1b[?2027h');
 const ESC = 0x1b;
 const RIS_FINAL = 0x63; // 'c'; ESC c is RIS (full reset).
 
-export const GRAPHEME_CLUSTERING_MODE = 2027;
+const GRAPHEME_CLUSTERING_MODE = 2027;
 
-export interface GraphemeModeTerminal {
+interface GraphemeModeTerminal {
   getMode(mode: number, isAnsi?: boolean): boolean;
   write(data: Uint8Array): void;
 }

@@ -10,17 +10,27 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/victorarias/attn/internal/procreap"
+)
+
+type helloAnswer int
+
+const (
+	acceptHello helloAnswer = iota
+	rejectHello
+	exitOnRemove
 )
 
 type fakeWorker struct {
-	listener   net.Listener
-	gotHello   chan HelloParams
-	gotRemove  chan struct{}
-	rejectAuth bool
-	proc       *exec.Cmd
+	listener  net.Listener
+	gotHello  chan HelloParams
+	gotRemove chan struct{}
+	answer    helloAnswer
+	proc      *exec.Cmd
 }
 
-func startFakeWorker(t *testing.T, dir string, rejectAuth bool) *fakeWorker {
+func startFakeWorker(t *testing.T, dir string, answer helloAnswer) *fakeWorker {
 	t.Helper()
 	sockDir, err := os.MkdirTemp("", "reap")
 	if err != nil {
@@ -33,11 +43,11 @@ func startFakeWorker(t *testing.T, dir string, rejectAuth bool) *fakeWorker {
 		t.Fatalf("listen: %v", err)
 	}
 	w := &fakeWorker{
-		listener:   ln,
-		gotHello:   make(chan HelloParams, 1),
-		gotRemove:  make(chan struct{}, 1),
-		rejectAuth: rejectAuth,
-		proc:       spawnSleeper(t, "fake-worker-"+filepath.Base(sockDir)),
+		listener:  ln,
+		gotHello:  make(chan HelloParams, 1),
+		gotRemove: make(chan struct{}, 1),
+		answer:    answer,
+		proc:      spawnSleeper(t, "fake-worker-"+filepath.Base(sockDir)),
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	go w.serve()
@@ -69,7 +79,7 @@ func (w *fakeWorker) serve() {
 					case w.gotHello <- hp:
 					default:
 					}
-					if w.rejectAuth {
+					if w.answer == rejectHello {
 						_ = enc.Encode(ResponseEnvelope{
 							Type: "res", ID: req.ID, OK: false,
 							Error: &RPCError{Code: ErrUnauthorized, Message: "bad token"},
@@ -81,6 +91,10 @@ func (w *fakeWorker) serve() {
 					select {
 					case w.gotRemove <- struct{}{}:
 					default:
+					}
+					if w.answer == exitOnRemove {
+						_ = w.proc.Process.Kill()
+						return
 					}
 					_ = enc.Encode(ResponseEnvelope{Type: "res", ID: req.ID, OK: true})
 					_ = w.proc.Process.Signal(syscall.SIGTERM)
@@ -114,7 +128,6 @@ func spawnSleeper(t *testing.T, marker string) *exec.Cmd {
 		_ = cmd.Process.Kill()
 		_, _ = cmd.Process.Wait()
 	})
-	go func() { _, _ = cmd.Process.Wait() }()
 
 	if err := stdout.SetReadDeadline(time.Now().Add(30 * time.Second)); err != nil {
 		t.Fatalf("sleeper readiness deadline: %v", err)
@@ -136,7 +149,7 @@ func writeEntry(t *testing.T, dataDir, sessionID string, entry RegistryEntry) st
 
 func TestReapDataDirRemovesViaControlSocket(t *testing.T) {
 	dataDir := t.TempDir()
-	worker := startFakeWorker(t, dataDir, false)
+	worker := startFakeWorker(t, dataDir, acceptHello)
 
 	writeEntry(t, dataDir, "sess-1", RegistryEntry{
 		Version:          1,
@@ -154,7 +167,7 @@ func TestReapDataDirRemovesViaControlSocket(t *testing.T) {
 	if results[0].Outcome != ReapRemoved {
 		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapRemoved)
 	}
-	if ProcessAlive(worker.proc.Process.Pid) {
+	if procreap.ProcessAlive(worker.proc.Process.Pid) {
 		t.Error("worker still alive after accepting remove")
 	}
 
@@ -239,7 +252,7 @@ func TestReapDataDirSignalsIdentifiedWorkerWhenSocketUnreachable(t *testing.T) {
 	if results[0].Outcome != ReapSignalled {
 		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapSignalled)
 	}
-	if ProcessAlive(cmd.Process.Pid) {
+	if procreap.ProcessAlive(cmd.Process.Pid) {
 		t.Fatal("worker still alive after reap")
 	}
 }
@@ -262,14 +275,33 @@ func TestReapDataDirRefusesToSignalUnidentifiedProcess(t *testing.T) {
 	if results[0].Outcome != ReapUnidentified {
 		t.Fatalf("outcome = %s, want %s", results[0].Outcome, ReapUnidentified)
 	}
-	if !ProcessAlive(cmd.Process.Pid) {
+	if !procreap.ProcessAlive(cmd.Process.Pid) {
 		t.Fatal("reap signalled a process it could not identify")
+	}
+}
+
+func TestReapDataDirCountsAWorkerThatExitsDuringTheRemoveAsGone(t *testing.T) {
+	dataDir := t.TempDir()
+	worker := startFakeWorker(t, dataDir, exitOnRemove)
+	writeEntry(t, dataDir, "sess-exiting", RegistryEntry{
+		Version:    1,
+		SessionID:  "sess-exiting",
+		WorkerPID:  worker.proc.Process.Pid,
+		SocketPath: worker.addr(),
+	})
+
+	results := ReapDataDir(dataDir)
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Outcome != ReapAlreadyGone || results[0].Err != nil {
+		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapAlreadyGone)
 	}
 }
 
 func TestReapDataDirDoesNotSignalOnAuthFailure(t *testing.T) {
 	dataDir := t.TempDir()
-	worker := startFakeWorker(t, dataDir, true)
+	worker := startFakeWorker(t, dataDir, rejectHello)
 	cmd := worker.proc
 
 	writeEntry(t, dataDir, "sess-auth", RegistryEntry{
@@ -288,7 +320,7 @@ func TestReapDataDirDoesNotSignalOnAuthFailure(t *testing.T) {
 	if results[0].Err == nil {
 		t.Error("expected the auth rejection to be reported as the reason")
 	}
-	if !ProcessAlive(cmd.Process.Pid) {
+	if !procreap.ProcessAlive(cmd.Process.Pid) {
 		t.Fatal("reap signalled a worker that merely rejected auth")
 	}
 }
@@ -309,22 +341,6 @@ func TestReapDataDirVisitsEveryInstance(t *testing.T) {
 func TestReapDataDirOnMissingDirIsEmpty(t *testing.T) {
 	if got := ReapDataDir(filepath.Join(t.TempDir(), "absent")); len(got) != 0 {
 		t.Fatalf("results = %d, want 0", len(got))
-	}
-}
-
-func TestProcessAliveRejectsDeadPID(t *testing.T) {
-	cmd := exec.Command("true")
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("run true: %v", err)
-	}
-	if ProcessAlive(cmd.Process.Pid) {
-		t.Error("ProcessAlive() = true for a reaped child")
-	}
-	if !ProcessAlive(os.Getpid()) {
-		t.Error("ProcessAlive() = false for self")
-	}
-	if ProcessAlive(0) || ProcessAlive(-1) {
-		t.Error("ProcessAlive() accepted a non-positive pid")
 	}
 }
 

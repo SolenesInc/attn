@@ -9,7 +9,9 @@ import (
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {
-	out := map[string]string{"guide": seedGuideText}
+	var help bytes.Buffer
+	writeSeedHelp(&help)
+	out := map[string]string{"guide": seedGuideText, "help": help.String()}
 	for count := 0; count < 3; count++ {
 		for scope := 0; scope < 3; scope++ {
 			for author := 0; author < 2; author++ {

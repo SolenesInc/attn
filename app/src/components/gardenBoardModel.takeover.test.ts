@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Seed } from '../hooks/useDaemonSocket';
-import { heldByOther, legalVerbs } from './gardenBoardModel';
+import { heldByOther, legalVerbs, type ColumnKey, type Verb } from './gardenBoardModel';
 
 function seed(status: string, tender: { session?: string; member?: string } = {}): Seed {
   return {
@@ -26,42 +26,33 @@ function seed(status: string, tender: { session?: string; member?: string } = {}
   } as Seed;
 }
 
-describe('a seed goes back to the pool from anywhere but the pool', () => {
-  it('hands back a seed being grown, without closing it', () => {
-    expect(legalVerbs(seed('growing', { session: 'sess-a' }), 'ready')).toEqual(['replant']);
-  });
+const MOVES: Record<string, Record<ColumnKey, Verb[]>> = {
+  planted: { ready: [], growing: [], parked: ['park'], closed: ['harvest', 'wither'] },
+  growing: { ready: ['replant'], growing: [], parked: ['park'], closed: ['harvest', 'wither'] },
+  dormant: { ready: ['replant'], growing: [], parked: [], closed: ['harvest', 'wither'] },
+  harvested: { ready: ['replant'], growing: [], parked: [], closed: [] },
+  withered: { ready: ['replant'], growing: [], parked: [], closed: [] },
+};
 
-  it('un-parks a dormant seed', () => {
-    expect(legalVerbs(seed('dormant'), 'ready')).toEqual(['replant']);
-  });
-
-  it('still reopens a closed one', () => {
-    expect(legalVerbs(seed('harvested'), 'ready')).toEqual(['replant']);
-    expect(legalVerbs(seed('withered'), 'ready')).toEqual(['replant']);
-  });
-
-  it('grows no zone for a seed already in the pool', () => {
-    expect(legalVerbs(seed('planted'), 'ready')).toEqual([]);
+describe('the moves a drag onto a Garden column offers', () => {
+  it.each(Object.entries(MOVES).flatMap(([status, columns]) => (
+    Object.entries(columns).map(([column, verbs]) => [status, column as ColumnKey, verbs] as const)
+  )))('a %s seed dropped on %s offers %j', (status, column, verbs) => {
+    expect(legalVerbs(seed(status, { session: 'sess-a' }), column)).toEqual(verbs);
   });
 });
 
-// heldByOther is garden.Tender.Holds read from the board's side.
-describe('who still holds a card', () => {
+describe('who still holds a seed', () => {
   const live = new Set(['sess-a']);
 
-  it('names a tender whose session is still alive', () => {
-    expect(heldByOther(seed('growing', { session: 'sess-a', member: 'alder' }), live)).toBe('Alder');
-  });
-
-  it('names nobody once that session has ended', () => {
-    expect(heldByOther(seed('growing', { session: 'sess-gone', member: 'alder' }), live)).toBe('');
-  });
-
-  it('names a member with no session, because attn cannot see a person leave', () => {
-    expect(heldByOther(seed('growing', { member: 'alder' }), live)).toBe('Alder');
-  });
-
-  it('names nobody when nothing holds the seed', () => {
-    expect(heldByOther(seed('planted'), live)).toBe('');
+  it.each([
+    ['a member whose session is alive', { session: 'sess-a', member: 'alder' }, 'Alder'],
+    ['a session that is alive', { session: 'sess-a' }, 'sess-a'],
+    ['a member whose session has ended', { session: 'sess-gone', member: 'alder' }, ''],
+    ['a session that has ended', { session: 'sess-gone' }, ''],
+    ['a member with no session, since attn cannot see a person leave', { member: 'alder' }, 'Alder'],
+    ['nobody', {}, ''],
+  ])('tended by %s: %j', (_name, tender, holder) => {
+    expect(heldByOther(seed('growing', tender), live)).toBe(holder);
   });
 });

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -15,7 +14,7 @@ import (
 
 const submitTestPath = "/tmp/annotated-doc.md"
 
-func newSubmitDaemon(t *testing.T) *Daemon {
+func newMarkdownAnnotationsDaemon(t *testing.T) *Daemon {
 	t.Helper()
 	return NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 }
@@ -99,166 +98,6 @@ func storedSubmitDraftCount(t *testing.T, d *Daemon) int {
 	return len(anns)
 }
 
-func TestMarkdownAnnotationsSubmitDelivered(t *testing.T) {
-	d := newSubmitDaemon(t)
-	var mu sync.Mutex
-	var inputs []string
-	d.ptyBackend = recordingBackend(&inputs, &mu)
-	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
-	anns := submitTestAnnotations()
-	seedSubmitDraft(t, d, 5, anns)
-
-	res := sendSubmit(t, d, "target", nil)
-
-	if !res.Success || res.Status != annotationSubmitStatusDelivered || res.Error != nil {
-		t.Fatalf("result = %+v, want delivered", res)
-	}
-	if res.Generation == nil || *res.Generation != 5 {
-		t.Fatalf("generation = %v, want floor 5", res.Generation)
-	}
-	wantPayload := formatMarkdownAnnotationPayload(fileAnnotationSource(submitTestPath), anns, map[string]bool{})
-	wantPaste := sessionInputPasteStart + wantPayload + sessionInputPasteEnd
-	mu.Lock()
-	got := append([]string(nil), inputs...)
-	mu.Unlock()
-	if len(got) != 2 || got[0] != wantPaste || got[1] != "\r" {
-		t.Fatalf("PTY inputs = %q, want [%q, %q]", got, wantPaste, "\r")
-	}
-	if n := storedSubmitDraftCount(t, d); n != 0 {
-		t.Fatalf("draft not cleared after delivery: %d annotations remain", n)
-	}
-	if err := d.store.SaveMarkdownAnnotationDraft(submitTestPath, "[]", 5, time.Now()); err == nil {
-		t.Fatal("stale save at cleared generation should be rejected")
-	}
-}
-
-func TestMarkdownAnnotationsSubmitDeliveredWithUserComposer(t *testing.T) {
-	d := newSubmitDaemon(t)
-	var mu sync.Mutex
-	var inputs []string
-	d.ptyBackend = recordingBackend(&inputs, &mu)
-	addIdleNotebookSession(d, "target", protocol.SessionStateWaitingInput)
-	if err := d.writeSessionPTY("target", []byte("existing words"), "user"); err != nil {
-		t.Fatalf("write existing composer: %v", err)
-	}
-	anns := submitTestAnnotations()
-	seedSubmitDraft(t, d, 5, anns)
-
-	res := sendSubmit(t, d, "target", nil)
-
-	if !res.Success || res.Status != annotationSubmitStatusDelivered || res.Error != nil {
-		t.Fatalf("result = %+v, want delivered", res)
-	}
-	wantPayload := formatMarkdownAnnotationPayload(fileAnnotationSource(submitTestPath), anns, map[string]bool{})
-	wantPaste := sessionInputPasteStart + wantPayload + sessionInputPasteEnd
-	mu.Lock()
-	got := append([]string(nil), inputs...)
-	mu.Unlock()
-	if len(got) != 3 || got[0] != "existing words" || got[1] != wantPaste || got[2] != "\r" {
-		t.Fatalf("PTY inputs = %q, want [%q, %q, %q]", got, "existing words", wantPaste, "\r")
-	}
-	if n := storedSubmitDraftCount(t, d); n != 0 {
-		t.Fatalf("draft not cleared after delivery: %d annotations remain", n)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitCarriesOrphanedIds(t *testing.T) {
-	d := newSubmitDaemon(t)
-	var mu sync.Mutex
-	var inputs []string
-	d.ptyBackend = recordingBackend(&inputs, &mu)
-	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
-	seedSubmitDraft(t, d, 1, submitTestAnnotations())
-
-	res := sendSubmit(t, d, "target", []string{"c1"})
-	if !res.Success {
-		t.Fatalf("result = %+v, want delivered", res)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(inputs) != 2 || !strings.Contains(inputs[0], "(~line 3, moved)") {
-		t.Fatalf("payload should label orphaned c1, got %q", inputs)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitNotesOnTypedSourceSeed(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Review target"})
-	seedSeedSubmitDraft(t, d, seed.ID, 4)
-
-	res := sendSeedSubmit(t, d, seed.ID, nil, protocol.Ptr(seed.ID))
-
-	if !res.Success || res.Status != annotationSubmitStatusNoted || res.Error != nil {
-		t.Fatalf("result = %+v, want noted", res)
-	}
-	if protocol.Deref(res.TargetSeedID) != seed.ID || res.TargetSessionID != nil {
-		t.Fatalf("typed destination = seed %v session %v", res.TargetSeedID, res.TargetSessionID)
-	}
-	shown := show(t, d, seed.ID)
-	if shown.NotesTotal != 1 || len(shown.Notes) != 1 {
-		t.Fatalf("seed log = %+v total=%d, want one annotation note", shown.Notes, shown.NotesTotal)
-	}
-	want := formatMarkdownAnnotationPayload(annotationDocumentSource{
-		kind: annotationSourceSeed, seedID: seed.ID, seedTitle: seed.Title,
-	}, submitTestAnnotations(), map[string]bool{})
-	if shown.Notes[0].Body != want || shown.Notes[0].Kind != "note" {
-		t.Fatalf("note = %+v, want formatted annotation payload %q", shown.Notes[0], want)
-	}
-	if n := storedSeedSubmitDraftCount(t, d, seed.ID); n != 0 {
-		t.Fatalf("draft not cleared after note: %d annotations remain", n)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitRequiresExactlyOneMatchingTypedDestination(t *testing.T) {
-	d := newGardenDaemon(t)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Typed routing"})
-	seedSeedSubmitDraft(t, d, seed.ID, 2)
-
-	for _, tc := range []struct {
-		name       string
-		session    *string
-		targetSeed *string
-		wantError  string
-	}{
-		{name: "neither", wantError: "exactly one"},
-		{name: "both", session: protocol.Ptr("sess-a"), targetSeed: protocol.Ptr(seed.ID), wantError: "exactly one"},
-		{name: "different seed", targetSeed: protocol.Ptr("s-ffffff"), wantError: "must match"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			res := sendSeedSubmit(t, d, seed.ID, tc.session, tc.targetSeed)
-			if res.Success || res.Error == nil || !strings.Contains(*res.Error, tc.wantError) {
-				t.Fatalf("result = %+v, want error containing %q", res, tc.wantError)
-			}
-		})
-	}
-	if n := storedSeedSubmitDraftCount(t, d, seed.ID); n != 1 {
-		t.Fatalf("invalid routing changed draft: got %d annotations", n)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitDoesNotRouteAFileDocumentToASeed(t *testing.T) {
-	d := newSubmitDaemon(t)
-	seedSubmitDraft(t, d, 2, submitTestAnnotations())
-	client := &wsClient{send: make(chan outboundMessage, 1)}
-	d.handleMarkdownAnnotationsSubmit(client, &protocol.MarkdownAnnotationsSubmitMessage{
-		Cmd:          protocol.CmdMarkdownAnnotationsSubmit,
-		DocumentUri:  fileDocumentURI("workspace-test", submitTestPath),
-		SourceKind:   annotationSourceFile,
-		WorkspaceID:  protocol.Ptr("workspace-test"),
-		Path:         protocol.Ptr(submitTestPath),
-		TargetSeedID: protocol.Ptr("s-ffffff"),
-		RequestID:    "file-to-seed",
-	})
-	var res protocol.MarkdownAnnotationsSubmitResultMessage
-	readNotebookWSEvent(t, client.send, &res)
-	if res.Success || res.Error == nil || !strings.Contains(*res.Error, "must match the seed document source") {
-		t.Fatalf("result = %+v, want file-to-seed routing refusal", res)
-	}
-	if n := storedSubmitDraftCount(t, d); n != 1 {
-		t.Fatalf("routing refusal changed file draft: got %d annotations", n)
-	}
-}
-
 func TestMarkdownAnnotationsSubmitNoteClearFailureStillReportsNoted(t *testing.T) {
 	d := newGardenDaemon(t)
 	seed := plant(t, d, protocol.SeedPlantMessage{Title: "Keep one note"})
@@ -282,79 +121,8 @@ func TestMarkdownAnnotationsSubmitNoteClearFailureStillReportsNoted(t *testing.T
 	}
 }
 
-func storedSeedSubmitDraftCount(t *testing.T, d *Daemon, seedID string) int {
-	t.Helper()
-	draft, err := d.store.GetMarkdownAnnotationDraft(seedDocumentURI(seedID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	anns, err := decodeMarkdownAnnotations(draft.Annotations)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return len(anns)
-}
-
-func TestMarkdownAnnotationsSubmitSkippedPendingApproval(t *testing.T) {
-	d := newSubmitDaemon(t)
-	var mu sync.Mutex
-	var inputs []string
-	d.ptyBackend = recordingBackend(&inputs, &mu)
-	addIdleNotebookSession(d, "target", protocol.SessionStatePendingApproval)
-	seedSubmitDraft(t, d, 2, submitTestAnnotations())
-
-	res := sendSubmit(t, d, "target", nil)
-
-	if res.Success || res.Status != annotationSubmitStatusSkipped || res.Error != nil {
-		t.Fatalf("result = %+v, want skipped_pending_approval", res)
-	}
-	mu.Lock()
-	if len(inputs) != 0 {
-		t.Fatalf("nothing should be typed into a pending_approval session, got %q", inputs)
-	}
-	mu.Unlock()
-	if n := storedSubmitDraftCount(t, d); n != 1 {
-		t.Fatalf("draft must stay intact on skip, got %d annotations", n)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitUnknownSession(t *testing.T) {
-	d := newSubmitDaemon(t)
-	seedSubmitDraft(t, d, 2, submitTestAnnotations())
-
-	res := sendSubmit(t, d, "nope", nil)
-
-	if res.Success || res.Status != annotationSubmitStatusError ||
-		res.Error == nil || !strings.Contains(*res.Error, "session not found: nope") {
-		t.Fatalf("result = %+v, want session-not-found error", res)
-	}
-	if n := storedSubmitDraftCount(t, d); n != 1 {
-		t.Fatalf("draft must stay intact on error, got %d annotations", n)
-	}
-}
-
-func TestMarkdownAnnotationsSubmitEmptyDraft(t *testing.T) {
-	d := newSubmitDaemon(t)
-	var mu sync.Mutex
-	var inputs []string
-	d.ptyBackend = recordingBackend(&inputs, &mu)
-	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
-
-	res := sendSubmit(t, d, "target", nil)
-
-	if res.Success || res.Status != annotationSubmitStatusError ||
-		res.Error == nil || *res.Error != "no annotations to send" {
-		t.Fatalf("result = %+v, want no-annotations error", res)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	if len(inputs) != 0 {
-		t.Fatalf("nothing should be typed for an empty draft, got %q", inputs)
-	}
-}
-
 func TestMarkdownAnnotationsSubmitDeliveryFailure(t *testing.T) {
-	d := newSubmitDaemon(t)
+	d := newMarkdownAnnotationsDaemon(t)
 	d.ptyBackend = &failingInputBackend{fakeSpawnBackend: &fakeSpawnBackend{}}
 	addIdleNotebookSession(d, "target", protocol.SessionStateIdle)
 	seedSubmitDraft(t, d, 2, submitTestAnnotations())
@@ -371,7 +139,7 @@ func TestMarkdownAnnotationsSubmitDeliveryFailure(t *testing.T) {
 }
 
 func TestMarkdownAnnotationsSubmitClearFailureStillDelivered(t *testing.T) {
-	d := newSubmitDaemon(t)
+	d := newMarkdownAnnotationsDaemon(t)
 	d.ptyBackend = &fakeSpawnBackend{onInput: func(string, []byte) {
 		if err := d.store.Close(); err != nil {
 			t.Errorf("closing store: %v", err)

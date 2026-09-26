@@ -2865,10 +2865,11 @@ export enum CollapseRepoMessageCmd {
 }
 
 export interface CommandErrorMessage {
-    cmd?:    string;
-    error:   string;
-    event:   CommandErrorMessageEvent;
-    success: boolean;
+    cmd?:        string;
+    error:       string;
+    error_code?: string;
+    event:       CommandErrorMessageEvent;
+    success:     boolean;
     [property: string]: any;
 }
 
@@ -18508,6 +18509,7 @@ const typeMap: any = {
     "CommandErrorMessage": o([
         { json: "cmd", js: "cmd", typ: u(undefined, "") },
         { json: "error", js: "error", typ: "" },
+        { json: "error_code", js: "error_code", typ: u(undefined, "") },
         { json: "event", js: "event", typ: r("CommandErrorMessageEvent") },
         { json: "success", js: "success", typ: true },
     ], "any"),

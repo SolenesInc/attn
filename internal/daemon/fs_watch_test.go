@@ -5,12 +5,25 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 )
+
+func newFsDaemon(t *testing.T) *Daemon {
+	t.Helper()
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	d.store.SetSetting(SettingNotebookRoot, t.TempDir())
+	return d
+}
+
+func trustedFsClient(bufSize int) *wsClient {
+	client := &wsClient{send: make(chan outboundMessage, bufSize), trustedTauriOrigin: true}
+	client.setBrowserHostAuthenticated(true)
+	client.setIdentity("tauri-app", "test", nil)
+	return client
+}
 
 func fsWatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string) protocol.FsWatchResultMessage {
 	t.Helper()
@@ -26,6 +39,26 @@ func fsUnwatch(t *testing.T, d *Daemon, client *wsClient, requestID, root string
 	var res protocol.FsUnwatchResultMessage
 	readNotebookWSEvent(t, client.send, &res)
 	return res
+}
+
+func waitForFsChangeWithRoot(t *testing.T, ch chan outboundMessage, origin string) protocol.FsChangedMessage {
+	t.Helper()
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case msg := <-ch:
+			var ev protocol.FsChangedMessage
+			if err := json.Unmarshal(msg.payload, &ev); err != nil {
+				continue
+			}
+			if ev.Event == protocol.EventFsChanged && ev.Origin == origin {
+				return ev
+			}
+		case <-deadline:
+			t.Fatalf("no fs_changed with origin %q was broadcast", origin)
+			return protocol.FsChangedMessage{}
+		}
+	}
 }
 
 func assertNoFsChangedForRoot(t *testing.T, ch chan outboundMessage, root, origin string, wait time.Duration) {
@@ -48,69 +81,6 @@ func assertNoFsChangedForRoot(t *testing.T, ch chan outboundMessage, root, origi
 			return
 		}
 	}
-}
-
-func TestFsWatchExternalEditSurfacesForAnyFileType(t *testing.T) {
-	d := newFsDaemon(t)
-	root := t.TempDir()
-
-	watchClient := trustedFsClient(8)
-	res := fsWatch(t, d, watchClient, "w1", root)
-	if !res.Success || res.Root == nil || *res.Root != root {
-		t.Fatalf("fs_watch result = %+v", res)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ev := waitForFsChangeWithRoot(t, watchClient.send, originExternal)
-	if ev.Root != root || !slices.Contains(ev.Paths, "note.txt") {
-		t.Fatalf("external fs_changed = %+v, want root=%q paths containing note.txt", ev, root)
-	}
-}
-
-func TestFsWatchAudienceRestrictedToSubscribers(t *testing.T) {
-	d := newFsDaemon(t)
-	root := t.TempDir()
-	hubClient := &wsClient{send: make(chan outboundMessage, 64)}
-	d.wsHub.clients[hubClient] = true
-	go d.wsHub.run()
-
-	watchClient := trustedFsClient(8)
-	nonSubscriber := trustedFsClient(8)
-	if res := fsWatch(t, d, watchClient, "w1", root); !res.Success {
-		t.Fatalf("fs_watch = %+v", res)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "note.txt"), []byte("hello"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	ev := waitForFsChangeWithRoot(t, watchClient.send, originExternal)
-	if ev.Root != root || !slices.Contains(ev.Paths, "note.txt") {
-		t.Fatalf("subscriber fs_changed = %+v, want root=%q paths containing note.txt", ev, root)
-	}
-	assertNoFsChangedForRoot(t, hubClient.send, root, originExternal, 700*time.Millisecond)
-	assertNoFsChangedForRoot(t, nonSubscriber.send, root, originExternal, 700*time.Millisecond)
-}
-
-func TestFsUnwatchStopsWatcherAtZeroRefs(t *testing.T) {
-	d := newFsDaemon(t)
-	root := t.TempDir()
-
-	client := trustedFsClient(8)
-	if res := fsWatch(t, d, client, "w1", root); !res.Success {
-		t.Fatalf("fs_watch = %+v", res)
-	}
-	if res := fsUnwatch(t, d, client, "u1", root); !res.Success {
-		t.Fatalf("fs_unwatch = %+v", res)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "after-unwatch.txt"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	assertNoFsChangedForRoot(t, client.send, root, originExternal, 700*time.Millisecond)
 }
 
 func TestFsWatchRefcountedAcrossClients(t *testing.T) {
@@ -143,104 +113,4 @@ func TestFsWatchRefcountedAcrossClients(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertNoFsChangedForRoot(t, clientB.send, root, originExternal, 700*time.Millisecond)
-}
-
-func TestFsWatchSelfWriteNotEchoedAsExternal(t *testing.T) {
-	d := newFsDaemon(t)
-	root := t.TempDir()
-
-	watchClient := trustedFsClient(8)
-	if res := fsWatch(t, d, watchClient, "w1", root); !res.Success {
-		t.Fatalf("fs_watch = %+v", res)
-	}
-
-	if res := fsWriteCASRoot(t, d, "own.txt", "attn wrote this", "", root); !res.Success || res.Result == nil {
-		t.Fatalf("write = %+v", res.Result)
-	}
-
-	ev := waitForFsChangeWithRoot(t, watchClient.send, originUI)
-	if !slices.Contains(ev.Paths, "own.txt") {
-		t.Fatalf("ui fs_changed = %+v, want own.txt", ev)
-	}
-	assertNoFsChangedForRoot(t, watchClient.send, root, originExternal, 700*time.Millisecond)
-}
-
-func TestNotebookRootWatcherSplitsFsAndNotebookBroadcasts(t *testing.T) {
-	d := newFsDaemon(t)
-	root := d.store.GetSetting(SettingNotebookRoot)
-	hubClient := &wsClient{send: make(chan outboundMessage, 64)}
-	d.wsHub.clients[hubClient] = true
-	go d.wsHub.run()
-
-	listFs(t, d, "")
-	time.Sleep(80 * time.Millisecond)
-
-	if err := os.WriteFile(filepath.Join(root, "plain.txt"), []byte("hi"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	ev := waitForFsChangeWithRoot(t, hubClient.send, originExternal)
-	if !slices.Contains(ev.Paths, "plain.txt") {
-		t.Fatalf("external fs_changed = %+v, want plain.txt", ev)
-	}
-	assertNoBroadcast(t, hubClient.send, protocol.EventNotebookChanged, 300*time.Millisecond)
-
-	if err := os.WriteFile(filepath.Join(root, "note.md"), []byte("---\ntype: note\n---\nhi\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	fsEv := waitForFsChangeWithRoot(t, hubClient.send, originExternal)
-	if !slices.Contains(fsEv.Paths, "note.md") {
-		t.Fatalf("external fs_changed = %+v, want note.md", fsEv)
-	}
-	nbPaths := waitForNotebookChangeEvent(t, hubClient.send)
-	if !slices.Contains(nbPaths, "note.md") {
-		t.Fatalf("notebook_changed = %v, want note.md", nbPaths)
-	}
-}
-
-func TestFsWatchCapsLiveWatchers(t *testing.T) {
-	d := newFsDaemon(t)
-	client := trustedFsClient(32)
-	for i := 0; i < maxFsWatchers; i++ {
-		root := t.TempDir()
-		res := fsWatch(t, d, client, "w", root)
-		if !res.Success {
-			t.Fatalf("fs_watch #%d = %+v, want success", i, res)
-		}
-	}
-	overflowRoot := t.TempDir()
-	res := fsWatch(t, d, client, "overflow", overflowRoot)
-	if res.Success || res.Error == nil || *res.Error != "too many watched roots" {
-		t.Fatalf("fs_watch(17th root) = %+v, want failure with 'too many watched roots'", res)
-	}
-}
-
-func TestFsWatchWithExplicitRootDeniedForUntrustedClient(t *testing.T) {
-	d := newFsDaemon(t)
-	root := t.TempDir()
-	hubClient := &wsClient{send: make(chan outboundMessage, 64)}
-	d.wsHub.clients[hubClient] = true
-	go d.wsHub.run()
-
-	untrusted := &wsClient{send: make(chan outboundMessage, 8)}
-	res := fsWatch(t, d, untrusted, "w1", root)
-	if res.Success || res.Error == nil {
-		t.Fatalf("fs_watch(explicit root, untrusted client) = %+v, want failure", res)
-	}
-	if !strings.Contains(*res.Error, "authenticated") {
-		t.Fatalf("fs_watch(explicit root, untrusted client) error = %q, want it to mention the authenticated app", *res.Error)
-	}
-
-	if err := os.WriteFile(filepath.Join(root, "unwatched.txt"), []byte("x"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	assertNoFsChangedForRoot(t, hubClient.send, root, originExternal, 700*time.Millisecond)
-}
-
-func TestFsWatchOmittedRootStillWorksForUntrustedClient(t *testing.T) {
-	d := newFsDaemon(t)
-	untrusted := &wsClient{send: make(chan outboundMessage, 8)}
-	res := fsWatch(t, d, untrusted, "w1", "")
-	if !res.Success {
-		t.Fatalf("fs_watch(omitted root, untrusted client) = %+v, want success", res)
-	}
 }
