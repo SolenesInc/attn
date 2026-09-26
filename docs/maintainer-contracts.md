@@ -34,6 +34,8 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 
 - Publish entity ids as fact subjects; omit byte streams.
 - Projections only write to the wire. State changes or nested publishes can deadlock.
+- Send wire traffic only from projections. The exceptions are the remote relay (already published on the
+  remote bus), per-watcher filesystem change bursts, and tile content sent to its subscribers.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
 - Durable handlers must be idempotent; unregister consumers on uninstall.
 - Inspect with `attn bus status`; control delivery with `attn bus disable|enable`.
