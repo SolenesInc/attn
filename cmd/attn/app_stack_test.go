@@ -7,24 +7,27 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/appbuild"
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
-func applyAppDeclaration(t *testing.T, s *testworld.Stack, cli *client.Client, name, declaration, bundle string) {
+func applyApp(t *testing.T, s *testworld.Stack, name, manifest, source string) {
 	t.Helper()
-	hash := appbuild.VersionHash(declaration, []byte(bundle), nil)
-	path := appbuild.ArtifactPath(filepath.Join(s.Dir, "apps"), name, hash)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+	dir := s.Path(name)
+	if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, []byte(bundle), 0o644); err != nil {
-		t.Fatal(err)
+	for file, content := range map[string]string{"attn-app.toml": manifest, "src/index.ts": source} {
+		if err := os.WriteFile(filepath.Join(dir, file), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if _, err := cli.AppApply(name, hash, declaration, ""); err != nil {
-		t.Fatalf("apply %s: %v", name, err)
+	if applied := s.Attn("app", "apply", dir); applied.Code != 0 {
+		t.Fatalf("attn app apply %s exited %d: %s", name, applied.Code, applied.Stderr)
 	}
+}
+
+func subscribedApp(name, events string, reconcile bool) string {
+	return fmt.Sprintf("name = %q\nattn_app_api = 1\nentrypoint = \"src/index.ts\"\nreconcile = %t\n\n[[subscribe]]\nevents = [%q]\n", name, reconcile, events)
 }
 
 func statusRow(t *testing.T, status testworld.Result, label string) string {
@@ -48,15 +51,10 @@ func TestAppStatusSaysWhatTheRuntimeAndReconcileOwe(t *testing.T) {
 		`"greeter" looks like one`, "one shared runtime", "`attn app disable greeter`")
 
 	s.Start()
-	cli := s.Client()
-	const subscribed = `{"name":"ledger","attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["ticket.*"]}]}`
-	applyAppDeclaration(t, s, cli, "ledger", subscribed, "export default {}")
-	const reconciling = `{"name":"digest","attn_app_api":1,"entrypoint":"src/index.ts","reconcile":true,"subscribe":[{"events":["ticket.*"]}]}`
-	applyAppDeclaration(t, s, cli, "digest", reconciling, "export default {} // first")
-	if _, err := cli.AppSetEnabled("digest", false); err != nil {
-		t.Fatal(err)
-	}
-	applyAppDeclaration(t, s, cli, "digest", reconciling, "export default {} // second")
+	applyApp(t, s, "ledger", subscribedApp("ledger", "ticket.*", false), "export default {}\n")
+	applyApp(t, s, "digest", subscribedApp("digest", "ticket.*", true), "export default { edition: 1 }\n")
+	requireStdout(t, s.Attn("app", "disable", "digest"), "app digest disabled")
+	applyApp(t, s, "digest", subscribedApp("digest", "ticket.*", true), "export default { edition: 2 }\n")
 
 	ledger := s.Attn("app", "status", "ledger")
 	requireLines(t, "ledger's runtime row", statusRow(t, ledger, "runtime:"), "not started", "`attn app runtime status`")

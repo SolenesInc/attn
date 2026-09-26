@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -73,9 +72,9 @@ func trimBus(t *testing.T, s *testworld.Stack) string {
 	return strings.TrimSpace(trimmed.Stdout)
 }
 
-func installSubscribedApp(t *testing.T, s *testworld.Stack, cli *client.Client, name string) {
+func installSubscribedApp(t *testing.T, s *testworld.Stack, name string) {
 	t.Helper()
-	applyAppDeclaration(t, s, cli, name, fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["document.changed"]}]}`, name), "export default {}")
+	applyApp(t, s, name, subscribedApp(name, "document.changed", false), "export default {}\n")
 }
 
 func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
@@ -96,10 +95,10 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	installSubscribedApp(t, s, cli, "ghost")
-	installSubscribedApp(t, s, cli, "history")
+	installSubscribedApp(t, s, "ghost")
+	installSubscribedApp(t, s, "history")
 	putRequest("a")
-	installSubscribedApp(t, s, cli, "archive")
+	installSubscribedApp(t, s, "archive")
 	if _, err := cli.AppSetEnabled("archive", false); err != nil {
 		t.Fatal(err)
 	}

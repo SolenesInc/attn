@@ -1,12 +1,11 @@
 package main_test
 
 import (
-	"encoding/json"
-	"os"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/automode"
+	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -25,23 +24,15 @@ type autoModeDenials struct {
 		Signature string `json:"signature"`
 		Reason    string `json:"reason"`
 	} `json:"denials"`
-	LedgerNote string `json:"ledger_note"`
 }
 
-func writeAutoModeDenialLedger(t *testing.T, s *testworld.Stack, records ...any) {
-	t.Helper()
-	var ledger strings.Builder
-	for _, record := range records {
-		line, err := json.Marshal(record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		ledger.Write(line)
-		ledger.WriteByte('\n')
+func awaitAgentAvailable(app *testworld.Peer, agent fakeagent.Harness) {
+	app.T.Helper()
+	key := string(agent) + "_available"
+	if app.Initial.Settings[key] == "true" {
+		return
 	}
-	if err := os.WriteFile(automode.DenialLedgerPath(s.Dir), []byte(ledger.String()), 0o600); err != nil {
-		t.Fatal(err)
-	}
+	testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return m.Settings[key] == "true" })
 }
 
 func requireInOrder(t *testing.T, what, line string, fields ...string) {
@@ -59,7 +50,7 @@ func requireInOrder(t *testing.T, what, line string, fields ...string) {
 
 func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T) {
 	t.Parallel()
-	s := testworld.NewStack(t)
+	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Pi))
 	for _, tc := range []struct {
 		args []string
 		want string
@@ -103,24 +94,23 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 		"allow, bypass sandbox: git push origin", "allow, bypass sandbox: git fetch origin",
 		"prompt, inherit sandbox: git rebase", "allow, inherit sandbox: cargo test", "allow, inherit sandbox: go vet")
 
-	denial := func(session, action, reason, at string) map[string]string {
-		return map[string]string{"session_id": session, "tool": "bash", "action": action, "reason": reason, "rule": "classifier-2a", "at": at}
-	}
-	writeAutoModeDenialLedger(t, s,
-		map[string]any{"type": "rotated", "dropped": 3, "at": "2026-08-18T09:00:00.000Z"},
-		denial("pi-1", "bash: curl https://example.com", "the user never asked to reach that host", "2026-08-18T10:00:00.000Z"),
-		denial("pi-2", "bash: git push --force", "force pushes rewrite shared history", "2026-08-18T11:00:00.000Z"),
-	)
+	app := s.App()
+	awaitAgentAvailable(app, fakeagent.Pi)
+	fetcher := s.Spawn(app, fakeagent.Pi, s.Path("shop"))
+	pusher := s.Spawn(app, fakeagent.Pi, s.Path("blog"))
+	s.Launched(fetcher).Deny(fakeagent.Denial{Tool: "bash", Action: "bash: curl https://example.com", Reason: "the user never asked to reach that host", Rule: "classifier-2a"})
+	s.Launched(pusher).Deny(fakeagent.Denial{Tool: "bash", Action: "bash: git push --force", Reason: "force pushes rewrite shared history", Rule: "classifier-2a"})
+
 	var listed autoModeDenials
 	s.Attn("automode", "denials", "--json").JSON(t, &listed)
-	if len(listed.Denials) != 2 || listed.Denials[0].SessionID != "pi-2" || listed.Denials[1].SessionID != "pi-1" {
+	if len(listed.Denials) != 2 || listed.Denials[0].SessionID != pusher || listed.Denials[1].SessionID != fetcher {
 		t.Fatalf("automode denials --json = %+v, want both denials newest first", listed.Denials)
 	}
 	table := s.Attn("automode", "denials")
-	requireStdout(t, table, "note: 3 older denials were dropped when the local ledger rotated\n")
+	requireStdout(t, table)
 	rows := strings.Split(strings.TrimSuffix(table.Stdout, "\n"), "\n")
-	if len(rows) != 3 {
-		t.Fatalf("automode denials printed %d lines, want a row per denial and the note:\n%s", len(rows), table.Stdout)
+	if len(rows) != 2 {
+		t.Fatalf("automode denials printed %d lines, want a row per denial:\n%s", len(rows), table.Stdout)
 	}
 	for i, d := range listed.Denials {
 		requireInOrder(t, "denial row", rows[i], d.CreatedAt, d.SessionID, d.Rule, d.Signature, d.Reason)
@@ -128,8 +118,8 @@ func TestAutoModeRecordsRuleProposalsFromTheirTokensAndListsDenials(t *testing.T
 
 	spaced := s.Attn("automode", "denials", "--limit", "1")
 	joined := s.Attn("automode", "denials", "--limit=1")
-	requireStdout(t, spaced, "pi-2", "note: 3 older denials")
-	if strings.Contains(spaced.Stdout, "pi-1") || joined.Code != 0 || joined.Stdout != spaced.Stdout {
+	requireStdout(t, spaced, pusher)
+	if strings.Contains(spaced.Stdout, fetcher) || joined.Code != 0 || joined.Stdout != spaced.Stdout {
 		t.Errorf("--limit 1 printed:\n%s\n--limit=1 exited %d and printed:\n%s\nwant the newest denial alone from both", spaced.Stdout, joined.Code, joined.Stdout)
 	}
 }
