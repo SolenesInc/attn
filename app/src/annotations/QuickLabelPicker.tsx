@@ -13,7 +13,7 @@ import { useEscapeStack } from '../hooks/useEscapeStack';
 import { LABEL_COLOR_MAP, type QuickLabel } from './quickLabels';
 import './QuickLabelPicker.css';
 
-export interface FloatingQuickLabelPickerProps {
+interface FloatingQuickLabelPickerProps {
   mode?: 'floating';
   className: string;
   groups: readonly (readonly QuickLabel[])[];
@@ -34,7 +34,7 @@ interface ChipQuickLabelPickerProps {
   children?: ReactNode;
 }
 
-export type QuickLabelPickerProps = FloatingQuickLabelPickerProps | ChipQuickLabelPickerProps;
+type QuickLabelPickerProps = FloatingQuickLabelPickerProps | ChipQuickLabelPickerProps;
 
 const PICKER_WIDTH = 192;
 const GAP = 6;
@@ -50,24 +50,24 @@ function addDeferredPointerDownListener(listener: (event: PointerEvent) => void)
   };
 }
 
-function computePosition(
-  anchorEl: HTMLElement,
-  cursorHint: { x: number; y: number } | null | undefined,
+export function placeQuickLabelPicker(
+  anchor: Pick<DOMRect, 'top' | 'bottom' | 'right'>,
+  cursorHint: { x: number } | null | undefined,
   height: number,
+  viewport: { width: number; height: number },
 ): { top: number; left: number } {
-  const rect = anchorEl.getBoundingClientRect();
-  const below = rect.bottom + GAP;
-  const above = rect.top - GAP - height;
-  const lowestTop = window.innerHeight - VIEWPORT_PADDING - height;
+  const below = anchor.bottom + GAP;
+  const above = anchor.top - GAP - height;
+  const lowestTop = viewport.height - VIEWPORT_PADDING - height;
   let top = below;
   if (height > 0 && below > lowestTop) {
     top = above >= VIEWPORT_PADDING ? above : Math.max(VIEWPORT_PADDING, lowestTop);
   }
 
-  let left = cursorHint ? cursorHint.x - 28 : rect.right - PICKER_WIDTH / 2;
+  let left = cursorHint ? cursorHint.x - 28 : anchor.right - PICKER_WIDTH / 2;
   left = Math.max(
     VIEWPORT_PADDING,
-    Math.min(left, window.innerWidth - PICKER_WIDTH - VIEWPORT_PADDING),
+    Math.min(left, viewport.width - PICKER_WIDTH - VIEWPORT_PADDING),
   );
   return { top, left };
 }
@@ -96,7 +96,12 @@ function FloatingQuickLabelPicker({
   }, [groups]);
 
   useEffect(() => {
-    const update = () => setPosition(computePosition(anchorEl, cursorHint, height));
+    const update = () => setPosition(placeQuickLabelPicker(
+      anchorEl.getBoundingClientRect(),
+      cursorHint,
+      height,
+      { width: window.innerWidth, height: window.innerHeight },
+    ));
     update();
     window.addEventListener('scroll', update, true);
     window.addEventListener('resize', update);
@@ -215,6 +220,7 @@ function ChipQuickLabelPicker({
               className={`anno-popup-label${isSelected(label) ? ' anno-popup-label--on' : ''}`}
               title={label.text}
               aria-label={label.text}
+              aria-pressed={isSelected(label)}
               onClick={() => onSelect(label)}
               onMouseEnter={() => onHint(label.text)}
               onMouseLeave={() => onHint(null)}

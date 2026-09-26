@@ -76,6 +76,15 @@ export function dockTiles(root: unknown, tiles: DaemonTile[]): unknown {
   }), root);
 }
 
+export function workspaceWithTiles(tiles: DaemonTile[], overrides: Partial<DaemonWorkspace> = {}): DaemonWorkspace {
+  const id = overrides.id ?? 'ws';
+  return daemonWorkspace(
+    id,
+    { root: dockTiles({ type: 'pane', pane_id: 'pane-s1' }, tiles), panes: [agentPane('s1', id)] },
+    { title: id, ...overrides },
+  );
+}
+
 export function agentWorkspace(sessionId: string): DaemonWorkspace {
   const id = `workspace-${sessionId}`;
   return daemonWorkspace(
