@@ -8,8 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/google/uuid"
-
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/fakeagent"
 	attngit "github.com/victorarias/attn/internal/git"
@@ -70,10 +68,10 @@ func TestPiReceivesTheEffectiveAutoModeConfigAtSpawn(t *testing.T) {
 	broken := w.Path("broken")
 	autoModeGitRepo(t, broken, "")
 	writeAutoModeRepositoryRules(t, broken, `{"rules":[{"pattern":[]}]}`)
-	refused := requestAutoModeSpawn(app, broken, fakeagent.Pi, func(*protocol.SpawnSessionMessage) {})
+	refused := refuseSpawnLikeTheApp(w, app, fakeagent.Pi, broken)
 	rulesPath := filepath.Join(attngit.CanonicalizePath(broken), automode.RepositoryRulesFile)
-	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), rulesPath) || !strings.Contains(protocol.Deref(refused.Error), "rule 1") {
-		t.Errorf("spawning over invalid repository rules = %+v, want a refusal naming %s and rule 1", refused, rulesPath)
+	if !strings.Contains(protocol.Deref(refused.Error), rulesPath) || !strings.Contains(protocol.Deref(refused.Error), "rule 1") {
+		t.Errorf("spawning over invalid repository rules = %+v, want it to name %s and rule 1", refused, rulesPath)
 	}
 
 	if _, err := cli.AutoModeEnvSlot("trusted_repo", []string{"github.com/acme/only-this"}); err != nil {
@@ -162,7 +160,7 @@ func TestASpawnWithAPolicyPairTheAgentCannotHonourIsRefused(t *testing.T) {
 			want: []string{`agent "codex" does not support a per-session approval policy or sandbox mode`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			refused := requestAutoModeSpawn(app, w.Path(tc.name), tc.agent, func(m *protocol.SpawnSessionMessage) {
+			refused := refuseSpawnLikeTheApp(w, app, tc.agent, w.Path(tc.name), func(m *protocol.SpawnSessionMessage) {
 				if tc.policy != "" {
 					m.ApprovalPolicy = protocol.Ptr(tc.policy)
 				}
@@ -170,18 +168,12 @@ func TestASpawnWithAPolicyPairTheAgentCannotHonourIsRefused(t *testing.T) {
 					m.SandboxMode = protocol.Ptr(tc.sandbox)
 				}
 			})
-			if refused.Success {
-				t.Fatal("the spawn was accepted")
-			}
 			for _, want := range tc.want {
 				if !strings.Contains(protocol.Deref(refused.Error), want) {
 					t.Errorf("refusal %q does not name %q", protocol.Deref(refused.Error), want)
 				}
 			}
 		})
-	}
-	if sessions := w.App().Initial.Sessions; len(sessions) != 0 {
-		t.Errorf("refused spawns left sessions behind: %+v", sessions)
 	}
 }
 
@@ -205,21 +197,36 @@ func autoModeRuleLines(rules []automode.Rule) []string {
 	return out
 }
 
-func requestAutoModeSpawn(app *testworld.Peer, cwd string, agent fakeagent.Harness, edit func(*protocol.SpawnSessionMessage)) protocol.SpawnResultMessage {
+func refuseSpawnLikeTheApp(w *world, app *testworld.Peer, agent fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) protocol.SpawnResultMessage {
 	app.T.Helper()
-	if err := os.MkdirAll(cwd, 0o755); err != nil {
-		app.T.Fatal(err)
+	refused, workspaceID, paneID := w.RequestSpawn(app, agent, cwd, opts...)
+	if refused.Success {
+		app.T.Fatalf("spawning %s in %s was accepted", agent, cwd)
 	}
-	workspace := "workspace-" + uuid.NewString()
-	testworld.Request(app, protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspace, Title: filepath.Base(cwd), Directory: cwd,
-	}, protocol.EventWorkspaceRegistered, func(protocol.WebSocketEvent) bool { return true })
-	msg := protocol.SpawnSessionMessage{
-		Cmd: protocol.CmdSpawnSession, ID: uuid.NewString(), Agent: string(agent),
-		Cwd: cwd, WorkspaceID: workspace, Cols: 100, Rows: 30,
+	closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
+		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: workspaceID, PaneID: paneID,
+	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
+		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == paneID
+	})
+	if !closed.Success {
+		app.T.Fatalf("closing the pane of the refused spawn: %s", protocol.Deref(closed.Error))
 	}
-	edit(&msg)
-	return testworld.Request(app, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
+	testworld.Await(app, protocol.EventWorkspaceUnregistered, func(e protocol.WorkspaceUnregisteredMessage) bool {
+		return e.Workspace.ID == workspaceID
+	})
+	view := w.App().Initial
+	if slices.ContainsFunc(view.Sessions, func(s protocol.Session) bool { return s.ID == refused.ID }) {
+		app.T.Errorf("the refused spawn %s left a session behind", refused.ID)
+	}
+	for _, workspace := range view.Workspaces {
+		if workspace.Layout == nil {
+			continue
+		}
+		if slices.ContainsFunc(workspace.Layout.Panes, func(p protocol.WorkspaceLayoutPane) bool { return protocol.Deref(p.SessionID) == refused.ID }) {
+			app.T.Errorf("the refused spawn %s left a pane in workspace %s", refused.ID, workspace.ID)
+		}
+	}
+	return refused
 }
 
 func autoModeGitRepo(t *testing.T, dir, origin string) {
