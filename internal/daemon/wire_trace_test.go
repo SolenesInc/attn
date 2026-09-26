@@ -53,9 +53,3 @@ func (t *WireTrace) Count() int {
 	defer t.mu.Unlock()
 	return len(t.payloads)
 }
-
-func wireRecorder(d *Daemon) *WireTrace {
-	trace := &WireTrace{}
-	d.wsHub.wireTap = trace.record
-	return trace
-}
