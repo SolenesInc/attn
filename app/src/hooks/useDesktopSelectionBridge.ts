@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { selectedTile, useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
@@ -148,10 +148,26 @@ function nextCommand(intentSessionId: string, intentProfileId: string): Command 
   };
 }
 
-export function useAgentOnScreen(): string | null {
+export type Surface =
+  | { kind: 'dashboard' }
+  | { kind: 'grid' }
+  | { kind: 'tile' }
+  | { kind: 'agent'; sessionId: string | null };
+
+export function useSurface(): Surface {
+  const view = useSessionStore((state) => state.view);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
-  return tileSelected ? null : activeSessionId;
+  return useMemo<Surface>(() => {
+    if (view !== 'session') return { kind: view };
+    if (tileSelected) return { kind: 'tile' };
+    return { kind: 'agent', sessionId: activeSessionId };
+  }, [view, tileSelected, activeSessionId]);
+}
+
+export function useAgentOnScreen(): string | null {
+  const surface = useSurface();
+  return surface.kind === 'agent' ? surface.sessionId : null;
 }
 
 export function useDesktopSelectionBridge(
