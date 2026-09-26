@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NotebookEntry } from './useDaemonSocket';
 
-export const FILE_INDEX_REFETCH_DEBOUNCE_MS = 300;
+const FILE_INDEX_REFETCH_DEBOUNCE_MS = 300;
 
-export interface NotebookFileIndex {
+interface NotebookFileIndex {
   files: NotebookEntry[];
   loading: boolean;
-  error: string | null;
 }
 
 export function useNotebookFileIndex(
@@ -16,7 +15,6 @@ export function useNotebookFileIndex(
 ): NotebookFileIndex {
   const [files, setFiles] = useState<NotebookEntry[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const seqRef = useRef(0);
   const didInitialRef = useRef(false);
 
@@ -25,7 +23,6 @@ export function useNotebookFileIndex(
       seqRef.current += 1;
       didInitialRef.current = false;
       setFiles([]);
-      setError(null);
       setLoading(false);
       return;
     }
@@ -38,17 +35,15 @@ export function useNotebookFileIndex(
         .then((result) => {
           if (seqRef.current !== seq) return;
           setFiles(result);
-          setError(null);
           setLoading(false);
         })
-        .catch((err) => {
+        .catch(() => {
           if (seqRef.current !== seq) return;
-          setError(err instanceof Error ? err.message : 'Could not list notebook files');
           setLoading(false);
         });
     }, delay);
     return () => window.clearTimeout(timer);
   }, [enabled, listFiles, changeSignal]);
 
-  return { files, loading, error };
+  return { files, loading };
 }

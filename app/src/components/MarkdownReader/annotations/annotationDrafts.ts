@@ -11,7 +11,3 @@ export function writeAnnotationDraft(draftKey: string, text: string): void {
 export function clearAnnotationDraft(draftKey: string): void {
   annotationDrafts.delete(draftKey);
 }
-
-export function peekAnnotationDraft(draftKey: string): string | undefined {
-  return annotationDrafts.get(draftKey);
-}

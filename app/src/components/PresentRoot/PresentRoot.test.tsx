@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PresentRoot } from './index';
 import type { Presentation, PresentationComment, PresentationRound } from '../../types/generated';
@@ -58,9 +58,12 @@ async function loadRound(options: LoadOptions = {}): Promise<ScriptedDaemon> {
   return daemon;
 }
 
+const TEN_LINES = Array.from({ length: 10 }, (_, index) => `line ${index + 1}`).join('\n') + '\n';
+
 const DIFFS: Record<string, [string, string]> = {
   'src/foo.ts': ['old content\nold 2\nold 3\nold 4\nold 5\n', 'new content\nnew 2\nnew 3\nnew 4\nnew 5\n'],
   'src/foo.test.ts': ['test old\n', 'test new\n'],
+  'src/tail.ts': [TEN_LINES, TEN_LINES.replace('line 10', 'LINE 10')],
 };
 
 const serveDiffs: DiffReply = (command) => ({
@@ -559,15 +562,19 @@ describe('PresentRoot', () => {
     expect(within(tourFile('src/foo.ts')).getByText('looks off')).toBeInTheDocument();
   });
 
-  it('keeps submitted comments read-only while leaving drafts editable', async () => {
+  it('keeps submitted comments and annotations read-only while leaving drafts editable', async () => {
     const daemon = await loadRoundWithDiff({
-      comments: [comment({ id: 'submitted-1', content: 'from a prior round', filepath: 'src/foo.ts', line_start: 2, line_end: 2 })],
+      round: roundWithAnnotations,
+      comments: [comment({ id: 'submitted-1', content: 'from a prior round', filepath: 'src/foo.ts', line_start: 3, line_end: 3 })],
     });
 
-    await writeComment(daemon, 'src/foo.ts', 'line 3', 'looks off');
+    await writeComment(daemon, 'src/foo.ts', 'line 1', 'looks off');
 
-    expect(within(threadWith('from a prior round')).queryByRole('button', { name: 'Edit' })).toBeNull();
-    expect(within(threadWith('looks off')).getByRole('button', { name: 'Edit' })).toBeInTheDocument();
+    const actions = (text: string) => within(threadWith(text)).queryAllByRole('button').map((button) => button.textContent)
+      .filter((label) => ['Edit', 'Resolve', 'Delete'].includes(label ?? ''));
+    expect(actions('from a prior round')).toEqual([]);
+    expect(actions('why this line?')).toEqual([]);
+    expect(actions('looks off')).toEqual(['Edit', 'Resolve', 'Delete']);
   });
 
   it('sends the correct wire shape when submitting new-side and old-side drafts', async () => {
@@ -815,6 +822,118 @@ describe('PresentRoot', () => {
 
       const raw = window.localStorage.getItem('attn.present.reviewed.pres-1.round-1');
       expect(JSON.parse(raw!)).toEqual(['src/foo.ts']);
+    });
+  });
+
+  describe('reviewed marks across rounds', () => {
+    async function reopen(daemon: ScriptedDaemon, search: string, reply: PresentationRound) {
+      cleanup();
+      setSearch(search);
+      daemon.on('get_presentation_round', ({ presentation_id }) => ({
+        ...roundResult({ round: reply }),
+        presentation: { ...presentation, id: presentation_id },
+      }));
+      render(<PresentRoot />);
+      await daemon.idle();
+    }
+
+    async function reviewEveryFile(daemon: ScriptedDaemon) {
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'r' });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'r' });
+      await daemon.idle();
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('2/2');
+    }
+
+    it('keeps the marks when the same round is opened again, and starts fresh for another round or presentation', async () => {
+      const daemon = await loadRound();
+      await reviewEveryFile(daemon);
+
+      await reopen(daemon, 'window=present&presentation=pres-1', round);
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('2/2');
+
+      await reopen(daemon, 'window=present&presentation=pres-1', { ...round, id: 'round-2', seq: 2 });
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('0/2');
+
+      await reopen(daemon, 'window=present&presentation=pres-2', round);
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('0/2');
+    });
+
+    it('stops counting files that left the round’s manifest', async () => {
+      const daemon = await loadRound();
+      await reviewEveryFile(daemon);
+
+      await reopen(daemon, 'window=present&presentation=pres-1', { ...round, manifest: { ...round.manifest, files: [{ path: 'src/foo.ts' }] } });
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('1/1');
+
+      await reopen(daemon, 'window=present&presentation=pres-1', round);
+      expect(screen.getByTestId('present-root-rail-count').textContent).toBe('1/2');
+    });
+  });
+
+  describe('annotations beyond the visible diff', () => {
+    const tailRound = (file: PresentationRound['manifest']['files'][number]): PresentationRound => ({
+      ...round,
+      manifest: { ...round.manifest, files: [file] },
+    });
+
+    async function loadTail(file: PresentationRound['manifest']['files'][number], comments: PresentationComment[] = []) {
+      const daemon = await loadRound({ round: tailRound(file), comments, diff: serveDiffs });
+      await settle(daemon);
+      return daemon;
+    }
+
+    it('shows an annotation outside the visible diff at the nearest visible line, but not a reviewer comment there', async () => {
+      await loadTail(
+        { path: 'src/tail.ts', annotations: [{ line_start: 1, line_end: 1, comments: ['off in the weeds'] }] },
+        [comment({ id: 'stray', content: 'stray reply', filepath: 'src/tail.ts', line_start: 1, line_end: 1 })],
+      );
+
+      expect(threadWith('off in the weeds')).toHaveTextContent('refers to line 1, outside the visible diff');
+      expect(screen.queryByText('stray reply')).toBeNull();
+    });
+
+    it('shows a file note once, as its file’s first annotation, and n/p hop past it', async () => {
+      const centered = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(() => {});
+      const daemon = await loadTail({ path: 'src/tail.ts', note: 'a note about this file', annotations: [{ line_start: 8, line_end: 8, comments: ['why line 8?'] }] });
+
+      expect(screen.getAllByText('a note about this file')).toHaveLength(1);
+      const note = within(tourFile('src/tail.ts')).getByText('a note about this file');
+      const firstLine = screen.getByRole('button', { name: 'Comment on src/tail.ts line 1' });
+      expect(firstLine.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(note.compareDocumentPosition(threadWith('why line 8?')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      for (const key of ['n', 'n', 'p']) {
+        fireEvent.keyDown(window, { key });
+        await settle(daemon);
+        expect((centered.mock.contexts[centered.mock.contexts.length - 1] as HTMLElement).textContent).toContain('why line 8?');
+      }
+    });
+
+    it('shows a file note in the file’s header when its diff could not be loaded', async () => {
+      const daemon = await loadRound({
+        round: tailRound({ path: 'src/tail.ts', note: 'note on a broken file' }),
+        diff: (command) => ({ event: 'file_diff_result', success: false, directory: command.directory, path: command.path, original: '', modified: '', error: 'git show failed' }),
+      });
+      await settle(daemon);
+
+      expect(within(tourFile('src/tail.ts')).getByText('note on a broken file')).toBeInTheDocument();
+      expect(within(tourFile('src/tail.ts')).queryByTestId('diff-comment-thread')).toBeNull();
+    });
+
+    it('submits a reply to an annotation on the annotation’s lines', async () => {
+      const daemon = await loadTail({ path: 'src/tail.ts', annotations: [{ line_start: 8, line_end: 8, comments: ['why line 8?'] }] });
+
+      fireEvent.click(within(threadWith('why line 8?')).getByRole('button', { name: 'Reply' }));
+      const form = screen.getByTestId('diff-comment-form');
+      fireEvent.change(within(form).getByPlaceholderText('Add a comment...'), { target: { value: 'because of CRLF' } });
+      fireEvent.click(within(form).getByRole('button', { name: 'Save' }));
+      await settle(daemon);
+      submitFrom('Submit feedback');
+
+      const request = await daemon.received('present_submit_round');
+      expect(request.comments).toEqual([expect.objectContaining({ filepath: 'src/tail.ts', line_start: 8, line_end: 8, content: 'because of CRLF' })]);
     });
   });
 
