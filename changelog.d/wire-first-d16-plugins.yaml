@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Plugin driver, RPC, runtime, supervisor and worktree provider promises are guarded by daemon wire tests instead of in-package tests.

@@ -2,14 +2,10 @@ package daemon_test
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/appbuild"
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -50,8 +46,9 @@ func TestNamedRollbackSwitchesServingAndKeepsHistory(t *testing.T) {
 	newer := applyApp(t, cli, "approval-gate", "newer")
 	other := applyApp(t, cli, "standup-digest", "only")
 
-	if _, err := cli.AppRollback("approval-gate", older.VersionID); err != nil {
-		t.Fatalf("roll back onto the older version: %v", err)
+	named, err := cli.AppRollback("approval-gate", older.VersionID)
+	if err != nil || named.VersionID != older.VersionID || protocol.Deref(named.PreviousVersionID) != newer.VersionID {
+		t.Fatalf("roll back onto the older version = %+v, %v; want version %d over %d", named, err, older.VersionID, newer.VersionID)
 	}
 	status := appStatus(t, cli, "approval-gate")
 	if servingVersion(status) != older.VersionID || status.Versions != 2 {
@@ -63,10 +60,7 @@ func TestNamedRollbackSwitchesServingAndKeepsHistory(t *testing.T) {
 	if _, err := cli.AppRollback("approval-gate", newer.VersionID+9999); err == nil {
 		t.Error("a rollback onto a version that does not exist was accepted")
 	}
-	back, err := cli.AppRollback("approval-gate", 0)
-	if err != nil || back.VersionID != newer.VersionID {
-		t.Errorf("a bare rollback after the named one = %+v, %v; want the version served before it", back, err)
-	}
+	bareRollback(t, cli, older.VersionID, newer.VersionID)
 }
 
 func TestBareRollbackWalksDownTheServingHistory(t *testing.T) {
@@ -79,8 +73,8 @@ func TestBareRollbackWalksDownTheServingHistory(t *testing.T) {
 	if got := versionIDs(appStatus(t, cli, "approval-gate").ServingHistory); got != fmt.Sprint([]int{v3.VersionID, v2.VersionID, v1.VersionID}) {
 		t.Fatalf("serving history = %s, want v3 v2 v1", got)
 	}
-	bareRollback(t, cli, v2.VersionID)
-	bareRollback(t, cli, v1.VersionID)
+	bareRollback(t, cli, v3.VersionID, v2.VersionID)
+	bareRollback(t, cli, v2.VersionID, v1.VersionID)
 	if _, err := cli.AppRollback("approval-gate", 0); err == nil {
 		t.Fatal("a bare rollback past the oldest served version was accepted")
 	}
@@ -89,7 +83,7 @@ func TestBareRollbackWalksDownTheServingHistory(t *testing.T) {
 	}
 
 	fix := applyApp(t, cli, "approval-gate", "v4")
-	bareRollback(t, cli, v1.VersionID)
+	bareRollback(t, cli, fix.VersionID, v1.VersionID)
 	if status := appStatus(t, cli, "approval-gate"); status.Versions != 4 {
 		t.Errorf("the walk changed the versions to %d", status.Versions)
 	}
@@ -114,6 +108,12 @@ func TestAppServingHistoryIsCappedButCountsEveryStep(t *testing.T) {
 	}
 	if steps := protocol.Deref(status.ServingHistorySteps); steps != 12 {
 		t.Errorf("serving history counts %d steps, want all 12", steps)
+	}
+	if len(status.RecentVersions) != 10 || status.RecentVersions[0].ID != applied[11] || status.RecentVersions[9].ID != applied[2] || status.Versions != 12 {
+		t.Fatalf("recent versions = %s of %d, want the newest ten of all 12", versionIDs(status.RecentVersions), status.Versions)
+	}
+	if newest := status.RecentVersions[0]; newest.ContentHash == "" || newest.CreatedAt == "" {
+		t.Errorf("the newest version = %+v, want a hash and a stamp to tell builds apart", newest)
 	}
 }
 
@@ -148,20 +148,7 @@ func applyApp(t *testing.T, cli *client.Client, name, note string) *protocol.App
 
 func applyDeclaration(t *testing.T, cli *client.Client, name, declaration, note string) *protocol.AppApplyResult {
 	t.Helper()
-	bundle := []byte("export default {} // " + note)
-	hash := appbuild.VersionHash(declaration, bundle, nil)
-	path := appbuild.ArtifactPath(config.AppsDir(), name, hash)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, bundle, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	result, err := cli.AppApply(name, hash, declaration, "")
-	if err != nil {
-		t.Fatalf("apply %s (%s): %v", name, note, err)
-	}
-	return result
+	return applyAppVersion(t, cli, name, declaration, "export default {} // "+note)
 }
 
 func appStatus(t *testing.T, cli *client.Client, name string) *protocol.AppStatusResult {
@@ -173,11 +160,11 @@ func appStatus(t *testing.T, cli *client.Client, name string) *protocol.AppStatu
 	return status
 }
 
-func bareRollback(t *testing.T, cli *client.Client, want int) {
+func bareRollback(t *testing.T, cli *client.Client, from, want int) {
 	t.Helper()
 	rolled, err := cli.AppRollback("approval-gate", 0)
-	if err != nil || rolled.VersionID != want {
-		t.Fatalf("bare rollback = %+v, %v; want version %d", rolled, err, want)
+	if err != nil || rolled.VersionID != want || protocol.Deref(rolled.PreviousVersionID) != from {
+		t.Fatalf("bare rollback = %+v, %v; want version %d over %d", rolled, err, want, from)
 	}
 }
 
