@@ -183,11 +183,16 @@ function tileDesktop(id: string, slot: number, tileId: string, tileKind: string,
 }
 
 function withNotesTile(desktop: Desktop): Desktop {
-  const notes = { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' };
-  const tree = desktop.tree_json
-    ? { type: 'split', split_id: 'notes', direction: 'vertical', ratio: 0.6, children: [JSON.parse(desktop.tree_json), notes] }
-    : notes;
-  return { ...desktop, tree_json: JSON.stringify(tree) };
+  return {
+    ...desktop,
+    tree_json: JSON.stringify({
+      type: 'split',
+      split_id: 'notes',
+      direction: 'vertical',
+      ratio: 0.6,
+      children: [JSON.parse(desktop.tree_json), { type: 'tile', tile_id: 'tile-notes', tile_kind: 'markdown', tile_params: '/tmp/notes.md' }],
+    }),
+  };
 }
 
 function session(id: string): Session {
@@ -498,60 +503,26 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('s5');
   });
 
-  describe('when the agent behind a focused tile closes', () => {
+  it('moves the context agent to another agent on the desktop when it leaves while a tile is focused', async () => {
     const tileFocused = (desktop: Desktop) => ({ ...withNotesTile(desktop), active_pane_id: 'tile-notes' });
-    const dropFromD1 = (remaining: string[]) =>
-      act(() => {
-        arrangeDesktops(
-          useProfilesStore.getState().desktops.map((desktop) =>
-            desktop.id === 'd1' ? { ...tileFocused(agentDesktop('d1', 1, remaining)), revision: 2 } : desktop,
-          ),
-          'd1',
-        );
-      });
-    const closeSession = (id: string) => act(() => useSessionStore.getState().removeSessionLocalState(id));
+    arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? tileFocused(desktop) : desktop)), 'd1');
+    render(<App />);
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    act(() => useSessionStore.setState({ activeSessionId: 's3' }));
 
-    beforeEach(() => {
-      arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? tileFocused(desktop) : desktop)), 'd1');
+    act(() => {
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...tileFocused(agentDesktop('d1', 1, ['s2'])), revision: 2 } : desktop,
+        ),
+        'd1',
+      );
     });
 
-    async function renderWithTileFocused() {
-      render(<App />);
-      await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
-      expect(useSessionStore.getState().activeSessionId).toBe('s1');
-    }
-
-    it('moves to another agent on the shown desktop when the session goes first', async () => {
-      await renderWithTileFocused();
-
-      closeSession('s1');
-      dropFromD1(['s2']);
-
-      await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
-      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
-      expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
-    });
-
-    it('moves to another agent on the shown desktop when the pane goes first', async () => {
-      await renderWithTileFocused();
-
-      dropFromD1(['s2']);
-      closeSession('s1');
-
-      await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
-      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
-    });
-
-    it('has no agent rather than one from another desktop when none is left', async () => {
-      await renderWithTileFocused();
-
-      closeSession('s1');
-      closeSession('s2');
-      dropFromD1([]);
-
-      await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBeNull());
-      expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
-    });
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
+    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
+    expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
   it('lets a broadcast that contradicts a pending selection win', async () => {

@@ -26,6 +26,7 @@ export interface TileSelection {
 }
 export interface SessionNavigationState {
   activeSessionId: string | null;
+  recentSessionIds: string[];
   agentHistory: AgentHistoryState;
   view: AppView;
   followNextTurn: boolean;
@@ -38,6 +39,7 @@ export interface SessionNavigationState {
 export function initialSessionNavigation(): SessionNavigationState {
   return {
     activeSessionId: null,
+    recentSessionIds: [],
     agentHistory: createAgentHistory(),
     view: 'dashboard',
     followNextTurn: false,
@@ -52,6 +54,13 @@ export function activateSession(
   state: SessionNavigationState,
   id: string | null,
 ): SessionNavigationState {
+  const recent =
+    state.activeSessionId && state.activeSessionId !== id
+      ? [
+          state.activeSessionId,
+          ...state.recentSessionIds.filter((entry) => entry !== state.activeSessionId),
+        ]
+      : state.recentSessionIds;
   return {
     ...state,
     activeSessionId: id,
@@ -60,6 +69,7 @@ export function activateSession(
     view: id ? 'session' : state.view,
     followNextTurn: id ? false : state.followNextTurn,
     selectedTile: id ? null : state.selectedTile,
+    recentSessionIds: recent.filter((entry) => entry !== id),
     agentHistory:
       id && id !== state.activeSessionId
         ? recordAgentVisit(state.agentHistory, id)
