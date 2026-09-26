@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
+import { setShortcutOverrides } from '../../shortcuts/resolver';
 import { buildQueueBands } from '../../utils/queueBands';
 import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
 import type { PaletteSession } from './agentPaletteRows';
@@ -78,6 +79,8 @@ function renderPalette({
 }
 
 describe('UnifiedPalette keyboard flow', () => {
+  afterEach(() => setShortcutOverrides({}));
+
   it('walks agents and runs while stepping over the divider and definition headers', () => {
     const palette = renderPalette();
     expect(palette.highlighted()).toContain('chief');
@@ -147,5 +150,16 @@ describe('UnifiedPalette keyboard flow', () => {
     fireEvent.keyDown(palette.input(), { key: 'Enter' });
     expect(palette.onClose).toHaveBeenCalled();
     expect(run).toHaveBeenCalled();
+  });
+
+  it('names a chord-bound settle as unusable in the palette instead of ignoring it silently', () => {
+    setShortcutOverrides({ 'session.settle': { leader: { key: 'g', meta: true }, then: { key: 'e' } } });
+    const palette = renderPalette();
+
+    expect(screen.getByTestId('palette-settle-hint')).toHaveTextContent('settle needs a single-key shortcut');
+    expect(screen.getByTestId('palette-snooze-hint')).not.toHaveTextContent('single-key');
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 'e', metaKey: true, shiftKey: true });
+    expect(palette.onSettle).not.toHaveBeenCalled();
   });
 });
