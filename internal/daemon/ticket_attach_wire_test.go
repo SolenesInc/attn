@@ -11,11 +11,10 @@ import (
 )
 
 func TestAttachingFilesToATicketCopiesThemIntoTheNotebook(t *testing.T) {
-	notebook := t.TempDir()
 	inBubble(t, func(t *testing.T, w *world) {
 		w.finishStartupWork()
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "notebook.root", notebook)
+		cli := w.Client()
+		notebook := filepath.Join(w.Dir, "notebook")
 		createTicket(t, cli, "planner", "Storage choice", "storage")
 		if _, err := cli.TakeTicket("owner", "storage", false); err != nil {
 			t.Fatal(err)

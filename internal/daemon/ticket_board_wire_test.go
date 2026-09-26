@@ -69,11 +69,10 @@ func TestCreatingATicketMintsAnUnassignedTodoUnderItsTitleSlug(t *testing.T) {
 }
 
 func TestTicketShowReturnsTheWholeRecordAndRefusesAnUnknownID(t *testing.T) {
-	notebook := t.TempDir()
 	inBubble(t, func(t *testing.T, w *world) {
 		w.finishStartupWork()
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "notebook.root", notebook)
+		cli := w.Client()
+		notebook := filepath.Join(w.Dir, "notebook")
 		if _, err := cli.CreateTicket("planner", "Migrate the store", "Move to X", "store-migration"); err != nil {
 			t.Fatal(err)
 		}
@@ -138,11 +137,10 @@ func TestTicketListIsTheWholeBoardWithBriefsFilteredByStatus(t *testing.T) {
 }
 
 func TestTicketArtifactsAreTheNotebookFolderAsItIsNow(t *testing.T) {
-	notebook := t.TempDir()
 	inBubble(t, func(t *testing.T, w *world) {
 		w.finishStartupWork()
-		app, cli := w.App(), w.Client()
-		setSetting(t, app, "notebook.root", notebook)
+		cli := w.Client()
+		notebook := filepath.Join(w.Dir, "notebook")
 		createTicket(t, cli, "planner", "Filesystem", "filesystem")
 		for name, body := range map[string]string{
 			"b.md": "b", "a.md": "a", ".hidden.md": "hidden", "notes.txt": "text", "prototype.html": "<h1>prototype</h1>", "nested/nested.md": "nested",
