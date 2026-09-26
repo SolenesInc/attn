@@ -1,6 +1,6 @@
 # Real-app harness
 
-Read [profiles.md](../../../docs/profiles.md) before installation or verification.
+Read [instances.md](../../../docs/instances.md) before installation or verification.
 Run commands from the repository root.
 
 ## Running scenarios

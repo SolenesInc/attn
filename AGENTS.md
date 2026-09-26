@@ -79,21 +79,19 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
   [Testing](docs/testing.md) needs it, and name which. Do not request tests
   that guard no promise, unit tests for behavior a wire test covers, or
   validation, fallbacks, and edge-case handling for hypothetical inputs.
-- Apply a rule for its purpose. When a change leaves untouched what a rule
-  protects, do not ask for the rule's ceremony, such as a protocol bump for a
-  schema edit that leaves the wire unchanged.
+- Apply a rule for its purpose. If a change does not touch what a rule
+  protects, skip the rule's steps, such as a protocol bump for a schema edit
+  that leaves the wire unchanged.
 
 ## Commands
 
-| Task | Command |
-| --- | --- |
-| Go tests | `make test` |
-| Frontend tests | `make test-frontend` |
-| Browser tests | `make test-e2e` |
-| Go + frontend | `make test-all` |
-| Go + frontend + browser | `make test-harness` |
-| Frontend dev server | `pnpm --dir app run dev` |
-| Lint | `make lint` |
+- Go tests: `make test`
+- Frontend tests: `make test-frontend`
+- Browser tests: `make test-e2e`
+- Go + frontend: `make test-all`
+- Go + frontend + browser: `make test-harness`
+- Frontend dev server: `pnpm --dir app run dev`
+- Lint: `make lint`
 
 ## Writing tests
 
@@ -102,12 +100,17 @@ Follow [Testing](docs/testing.md). In short:
 - Commit tests that guard a promise attn makes: behavior that users, the
   agents attn runs, clients, app authors, or later versions rely on. Check
   your own work by running it; keep scratch tests out of commits.
-- Could everything behind the test's boundary be rewritten, behavior
-  preserved, without editing the test? If not, do not commit it.
-- Default to wire tests: a real daemon driven as a protocol client, or the real
-  app driven as the daemon. Go to stack or scenario tests only for behavior
-  across processes or on screen. Kernel tests only for specified logic with
-  large input spaces, as tables, corpora, or properties.
+- A committed test depends only on promises, never on internals. When a
+  promise cannot be reached that way, extend the harness.
+- Kinds of test, by where they enter:
+  - Wire: one side of the protocol. A real daemon driven as a protocol
+    client, or the real app driven as the daemon. The default.
+  - Stack: real processes together, entered through the CLI, the protocol,
+    or a browser page. For restarts, reconnects, signals, and Linux paths.
+  - Scenario: the packaged app driven by native input, judged by the screen.
+    For pixels, focus, and keyboard or pointer behavior.
+  - Kernel: one function with a written specification. Only for specified
+    logic with large input spaces, as tables, corpora, or properties.
 - When a behavior-preserving change breaks a test, delete or replace the test;
   do not repair it.
 - Do not test script helpers or test helpers, copy production code into tests,
@@ -120,10 +123,11 @@ Follow [Testing](docs/testing.md). In short:
   `config.ScopeTestEnvironment(dir)` before `m.Run()`. It sets `ATTN_DATA_DIR`
   and clears inherited DB/socket/config/plugin overrides. Raw `os.Setenv`
   is insufficient. Missing `ATTN_DATA_DIR` intentionally panics under `go test`.
+  `testworld.Main(m)` does this for packages that run wire or stack worlds.
 - Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Use `synctest.Test` for elapsed-time or never-happens assertions; no sleeps/polls.
 - Use `pgregory.net/rapid` for invariants over large inputs; commit failure seeds.
-- Use `newToxiProxy(t, upstream)` for network failures a fake cannot express.
+- Simulate network failures by wrapping the client's `net.Conn` inside a `synctest` bubble.
 
 ## Ownership
 
@@ -156,14 +160,18 @@ Never hand-edit `internal/protocol/generated.go` or `app/src/types/generated.ts`
 ## The app SDK
 
 After editing `sdk/attn-app/src`, run `make generate-sdk` and commit
-`internal/appbuild/sdkdist/`; `make check-sdk` checks freshness.
+`internal/appbuild/sdkdist/`. CI checks freshness, as does `make check-sdk`.
 Keep `appbuild.ReactTypesVersion` aligned with the frontend lockfile.
 Views import React through `@victorarias/attn-app` to share attn's instance.
 
 ## Event bus
 
 - Publish entity ids as fact subjects; omit byte streams.
-- Projections only write to the wire. State changes or nested publishes can deadlock.
+- Only projections send wire traffic. The exceptions are the remote relay
+  (already published on the remote bus), per-watcher filesystem change bursts,
+  and tile content sent to its subscribers.
+- Projections only write to the wire. A state change or nested publish inside
+  one can deadlock.
 - Bulk changes publish one fact per entity inside `coalesceSnapshots`.
 - Durable handlers must be idempotent; unregister consumers on uninstall.
 - Enabled durable consumers and all installed apps pin retention. Disabled
@@ -191,7 +199,7 @@ Views import React through `@victorarias/attn-app` to share attn's instance.
 ## Verification
 
 Choose each PR's verification and any exemption from
-[profiles.md](docs/profiles.md#verification-requirements). App-observable changes
+[instances.md](docs/instances.md#verification-requirements). App-observable changes
 need the running app; visible changes need a recording. If required verification
 is unavailable, ask before merging.
 
@@ -210,7 +218,7 @@ covering changed behavior, latency, and keyboard flow.
   branches, opening or merging PRs, or waiting on reviews.
 - Read [making-a-release.md](docs/making-a-release.md) before adding changelog
   fragments, preparing releases or hotfixes, or syncing `main` into `next`.
-- Read [profiles.md](docs/profiles.md) before installing, launching, or
+- Read [instances.md](docs/instances.md) before installing, launching, or
   verifying a profile, and when choosing a PR's verification requirements.
 - Read [app/AGENTS.md](app/AGENTS.md) before changing frontend code or shortcuts.
 - Read [harness guidance](app/scripts/real-app-harness/AGENTS.md) before
