@@ -10,21 +10,22 @@ import (
 )
 
 const tailscaleFakeScript = `#!/bin/sh
-state="$(dirname "$0")/state"
-if [ -f "$state/failure" ]; then cat "$state/failure" >&2; exit 1; fi
+state="${0%/*}/state"
+if [ -f "$state/failure" ]; then read -r failure < "$state/failure"; echo "$failure" >&2; exit 1; fi
 case "$*" in
 "status --json")
 	echo '{"BackendState":"Running","Self":{"DNSName":"macbook.tail1bfe77.ts.net."}}' ;;
 "serve status --json")
 	if [ -s "$state/root" ]; then
-		printf '{"Web":{"macbook.tail1bfe77.ts.net:443":{"Handlers":{"/":{"Proxy":"%s"}}}}}\n' "$(cat "$state/root")"
+		read -r root < "$state/root"
+		printf '{"Web":{"macbook.tail1bfe77.ts.net:443":{"Handlers":{"/":{"Proxy":"%s"}}}}}\n' "$root"
 	else
 		echo '{}'
 	fi ;;
 "serve --bg --https=443 --set-path=/ "*)
 	echo "http://$5" > "$state/root" ;;
 "serve --https=443 --set-path=/ off")
-	rm -f "$state/root" ;;
+	: > "$state/root" ;;
 *)
 	echo "unexpected tailscale $*" >&2; exit 2 ;;
 esac
