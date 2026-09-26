@@ -13,28 +13,27 @@ interface ToastProps {
 }
 
 export function Toast({ toast, onDone }: ToastProps) {
-  const [visible, setVisible] = useState(false);
+  const [phase, setPhase] = useState<'shown' | 'fading' | null>(null);
 
   useEffect(() => {
     if (!toast) return;
-    setVisible(true);
-    let doneTimer: ReturnType<typeof setTimeout> | undefined;
-    const hideTimer = setTimeout(() => {
-      setVisible(false);
-      doneTimer = setTimeout(onDone, 200);
-    }, toast.durationMs);
-    return () => {
-      clearTimeout(hideTimer);
-      clearTimeout(doneTimer);
-    };
-  }, [toast, onDone]);
+    setPhase('shown');
+    const hideTimer = setTimeout(() => setPhase('fading'), toast.durationMs);
+    return () => clearTimeout(hideTimer);
+  }, [toast]);
+
+  useEffect(() => {
+    if (phase !== 'fading') return;
+    const doneTimer = setTimeout(onDone, 200);
+    return () => clearTimeout(doneTimer);
+  }, [phase, onDone]);
 
   if (!toast) return null;
 
   const error = toast.tone === 'error';
   return (
     <div
-      className={`toast toast--${toast.tone} ${visible ? 'visible' : ''}`}
+      className={`toast toast--${toast.tone} ${phase === 'shown' ? 'visible' : ''}`}
       role={error ? 'alert' : 'status'}
       aria-live={error ? 'assertive' : 'polite'}
     >

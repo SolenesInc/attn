@@ -27,7 +27,12 @@ describe('Toast', () => {
     });
     expect(onDone).not.toHaveBeenCalled();
     act(() => {
-      vi.advanceTimersByTime(201);
+      vi.advanceTimersByTime(1);
+    });
+    expect(screen.getByRole('alert')).not.toHaveClass('visible');
+    expect(onDone).not.toHaveBeenCalled();
+    act(() => {
+      vi.advanceTimersByTime(200);
     });
     expect(onDone).toHaveBeenCalledTimes(1);
   });

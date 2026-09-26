@@ -870,6 +870,25 @@ describe('desktop surface', () => {
       await waitFor(() => expect(selectedTileAttr()).toBe('d1:tile-notes'));
     }
 
+    it('settles nothing and starts the run walk at the first run while the tile holds the surface', async () => {
+      const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+      const owedRun = (id: string, openedAt: string) => ({
+        id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+        automation: docs, turn_owed: true, turn_opened_at: openedAt,
+      });
+      mockUseDaemonStore.mockReturnValue({
+        ...mockUseDaemonStore(),
+        daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+      });
+      await renderOnTile();
+      expect(useSessionStore.getState().activeSessionId).toBe('s1');
+      const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+
+      expect(shortcuts().onSettleTurn).toBeUndefined();
+      act(() => shortcuts().onNextRun());
+      expect(mockShowNotice).toHaveBeenLastCalledWith(expect.stringContaining('run 1 of 2 needing you'));
+    });
+
     it('moves focus to the tile\'s own context agent when the user selects it', async () => {
       await renderOnTile();
       expect(useSessionStore.getState().activeSessionId).toBe('s1');
