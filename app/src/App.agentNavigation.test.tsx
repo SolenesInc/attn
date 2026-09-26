@@ -49,9 +49,9 @@ vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }))
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
 vi.mock('./components/SessionTerminalWorkspace', () => ({ SessionTerminalWorkspace: () => null }));
-vi.mock('./components/ErrorToast', () => ({
-  ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
+vi.mock('./components/Toast', () => ({
+  Toast: () => null,
+  useToast: () => ({ toast: null, showError: vi.fn(), showNotice: vi.fn(), clearToast: vi.fn() }),
 }));
 vi.mock('./hooks/useKeyboardShortcuts', () => ({
   useKeyboardShortcuts: (args: unknown) => mockUseKeyboardShortcuts(args),

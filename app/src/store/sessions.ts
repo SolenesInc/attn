@@ -67,6 +67,7 @@ export interface DaemonSessionSnapshot {
   profile_id?: string;
   endpoint_id?: string;
   state: string;
+  state_since?: string;
   branch?: string;
   is_worktree?: boolean;
   automation?: AutomationProvenance;
