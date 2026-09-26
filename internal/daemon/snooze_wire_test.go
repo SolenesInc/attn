@@ -21,7 +21,7 @@ func TestWakeOpensTheTurnAtTheWakeInstant(t *testing.T) {
 		owed := testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
 
 		until := time.Now().Add(time.Minute)
-		app.Send(protocol.SnoozeTurnMessage{Cmd: protocol.CmdSnoozeTurn, SessionID: "s1", Until: until.Format(time.RFC3339Nano)})
+		snoozeUntil(app, "s1", until)
 		testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return protocol.Deref(s.TurnSnoozedUntil) != "" })
 		if err := cli.UpdateState("s1", protocol.StateIdle); err != nil {
 			t.Fatalf("report idle: %v", err)

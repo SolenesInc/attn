@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard ticket, turn, workflow run and worktree log promises with daemon wire tests instead of store internals tests, and drop the store methods only those tests called.

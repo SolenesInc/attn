@@ -160,14 +160,6 @@ func (s *Store) HasWorkspaceLayout(workspaceID string) bool {
 	return exists == 1
 }
 
-func (s *Store) ListWorkspaceLayoutPanes(workspaceID string) []workspacelayout.Pane {
-	snapshot := s.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil || len(snapshot.Panes) == 0 {
-		return nil
-	}
-	return append([]workspacelayout.Pane(nil), snapshot.Panes...)
-}
-
 func (s *Store) FindWorkspaceLayoutPaneBySessionID(sessionID string) (workspaceID string, paneID string, ok bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
