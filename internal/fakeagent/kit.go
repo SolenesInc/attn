@@ -32,7 +32,7 @@ type Kit struct {
 	control  net.Listener
 	mu       sync.Mutex
 	launches map[string]chan *Run
-	boots    map[string]chan struct{}
+	nextBoot chan struct{}
 	fakes    []*fake
 	failures []string
 }
@@ -79,7 +79,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}, boots: map[string]chan struct{}{}}
+	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}}
 	go k.accept()
 	t.Cleanup(k.verify)
 	return k
@@ -128,18 +128,18 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
-func (k *Kit) HoldBoot(sessionID string) (boot func()) {
+func (k *Kit) HoldNextBoot() (boot func()) {
 	cue := make(chan struct{})
 	k.mu.Lock()
 	defer k.mu.Unlock()
-	k.boots[sessionID] = cue
+	k.nextBoot = cue
 	return sync.OnceFunc(func() { close(cue) })
 }
 
 func (k *Kit) awaitBoot(sessionID string) {
 	k.mu.Lock()
-	cue := k.boots[sessionID]
-	delete(k.boots, sessionID)
+	cue := k.nextBoot
+	k.nextBoot = nil
 	k.mu.Unlock()
 	if cue == nil {
 		return

@@ -55,9 +55,8 @@ func TestASessionRespawnedWithAPromptOpensItsTurnOnlyAtTheVerdict(t *testing.T) 
 func TestInputPlacedWhileTheAgentBootsOpensItsTurnOnlyAtTheVerdict(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	session := uuid.NewString()
-	boot := w.HoldBoot(session)
-	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ID = session })
+	boot := w.HoldNextBoot()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	app.AwaitScreen(session, "? for shortcuts")
 	annotate(app, session, "the cart total is off by one")
 
@@ -69,9 +68,8 @@ func TestInputPlacedWhileTheAgentBootsOpensItsTurnOnlyAtTheVerdict(t *testing.T)
 func TestInputTheUserTypesOverNoLongerHoldsABootingSessionOutOfIdle(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app := w.App()
-	session := uuid.NewString()
-	boot := w.HoldBoot(session)
-	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) { m.ID = session })
+	boot := w.HoldNextBoot()
+	session := w.Spawn(app, fakeagent.Claude, w.Path("shop"))
 	app.AwaitScreen(session, "? for shortcuts")
 	annotate(app, session, "the cart total is off by one")
 	testworld.Request(app, protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: session, Data: "actually", ProbeID: protocol.Ptr("takeover")},
