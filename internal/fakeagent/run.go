@@ -18,8 +18,9 @@ type Run struct {
 
 func (r *Run) Prompted() string {
 	r.t.Helper()
-	var prompted textParams
+	var prompted promptedResult
 	r.call(methodPrompted, struct{}{}, &prompted)
+	r.ConversationID = prompted.ConversationID
 	return prompted.Text
 }
 
