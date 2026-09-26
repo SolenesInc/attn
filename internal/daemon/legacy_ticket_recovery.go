@@ -1014,11 +1014,6 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 		if automation {
 			continue
 		}
-		if ticket, err = d.store.GetTicket(ticket.ID); err != nil {
-			return err
-		} else if ticket == nil {
-			continue
-		}
 		title := strings.TrimSpace(ticket.Title)
 		body := strings.TrimSpace(ticket.Description)
 		if err := garden.ValidatePlant(title, body); err != nil {
@@ -1109,44 +1104,71 @@ func (d *Daemon) legacyTicketSeedNotes(ticket *store.Ticket, seedID string) ([]s
 	}
 	note := garden.Note{
 		ID: noteID, Seed: seedID, Kind: garden.NoteKindNote,
-		Body: fmt.Sprintf("Recovered from legacy ticket `%s` in state `%s`. The legacy ticket remains readable with `attn ticket show %s`.", ticket.ID, ticket.Status, ticket.ID),
+		Body: fmt.Sprintf("%s in state `%s`. The legacy ticket remains readable with `attn ticket show %s`.", legacyTicketSeedNoteLead(ticket.ID), ticket.Status, ticket.ID),
 	}
 	body, err := note.Encode()
 	if err != nil {
 		return nil, err
 	}
-	notes := []store.TicketSeedNote{{
+	return []store.TicketSeedNote{{
 		ID: noteID, Body: body,
 		Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, noteID, false),
-	}}
+	}}, nil
+}
+
+func legacyTicketSeedNoteLead(ticketID string) string {
+	return fmt.Sprintf("Recovered from legacy ticket `%s`", ticketID)
+}
+
+func (d *Daemon) attachRecoveredConversationsToSeeds() {
+	if d.store == nil || d.requireHome(garden.Surface) != nil {
+		return
+	}
+	attachments, err := d.store.TicketSeedAttachments()
+	if err != nil {
+		d.logf("legacy ticket recovery: reading the attachments of recovered seeds: %v", err)
+		return
+	}
 	conversationRoot := filepath.Clean(filepath.Join(d.dataRoot, "legacy-ticket-recovery", "conversations")) + string(os.PathSeparator)
-	for _, attachment := range ticket.Attachments {
+	for _, attachment := range attachments {
 		path := filepath.Clean(attachment.Path)
 		if !strings.HasPrefix(path, conversationRoot) || filepath.Ext(path) != ".md" {
 			continue
 		}
-		artifact, err := garden.ValidateArtifact(garden.ArtifactReference{Kind: garden.ArtifactMarkdownFile, Path: path})
-		if err != nil {
-			return nil, err
+		if err := d.attachRecoveredConversation(attachment.TicketID, attachment.SeedID, path); err != nil {
+			d.logf("legacy ticket recovery: attaching conversation %s to seed %s: %v", path, attachment.SeedID, err)
 		}
-		id, err := d.mintNoteID()
-		if err != nil {
-			return nil, err
-		}
-		attached := garden.Note{
-			ID: id, Seed: seedID, Kind: garden.NoteKindAttach,
-			Body: "Attached recovered conversation " + filepath.Base(path), Artifact: &artifact,
-		}
-		encoded, err := attached.Encode()
-		if err != nil {
-			return nil, err
-		}
-		notes = append(notes, store.TicketSeedNote{
-			ID: id, Body: encoded,
-			Fact: documentChangedFact(garden.Namespace, garden.CollectionNotes, id, false),
-		})
 	}
-	return notes, nil
+}
+
+func (d *Daemon) attachRecoveredConversation(ticketID, seedID, path string) error {
+	artifact, err := garden.ValidateArtifact(garden.ArtifactReference{Kind: garden.ArtifactMarkdownFile, Path: path})
+	if err != nil {
+		return err
+	}
+	notes, err := d.readNotesDomain(seedID)
+	if err != nil {
+		return err
+	}
+	plantedByRecovery := false
+	for _, note := range notes {
+		if note.Artifact != nil && note.Artifact.Identity() == artifact.Identity() {
+			return nil
+		}
+		plantedByRecovery = plantedByRecovery || strings.HasPrefix(note.Body, legacyTicketSeedNoteLead(ticketID))
+	}
+	if !plantedByRecovery {
+		return nil
+	}
+	schema, err := d.notesCollection()
+	if err != nil {
+		return err
+	}
+	_, _, err = d.mintAndWriteNote(*schema, garden.Note{
+		Seed: seedID, Kind: garden.NoteKindAttach,
+		Body: "Attached recovered conversation " + filepath.Base(path), Artifact: &artifact,
+	}, false, "")
+	return err
 }
 
 func legacyTicketSeedFingerprint(ticket *store.Ticket, sourceKind string) string {
@@ -1285,6 +1307,7 @@ func (d *Daemon) finishLegacyTicketRecoveryUpgrade() {
 	d.legacyTicketRecoveryFinishOnce.Do(func() {
 		d.convertBacklogTicketsToSeeds()
 		d.replantStrandedTickets()
+		d.attachRecoveredConversationsToSeeds()
 		d.pruneEligibleDatabaseBackups()
 	})
 }

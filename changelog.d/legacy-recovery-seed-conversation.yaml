@@ -1,4 +1,4 @@
 kind: fixed
 area: garden
-change: A seed recovered from a legacy ticket that survived only in an agent transcript now links the recovered conversation.
+change: A seed recovered from a legacy ticket that survived only in an agent transcript now links the recovered conversation, including seeds an earlier upgrade already recovered, which gain the link on the next daemon start.
 symptom: The recovered conversation was written to disk, but the seed's log never attached it, so nothing pointed to it.

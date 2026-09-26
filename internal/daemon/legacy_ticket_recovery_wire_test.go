@@ -13,6 +13,7 @@ import (
 	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAnUpgradeRecoversClosedTicketsAsSeeds(t *testing.T) {
@@ -110,10 +111,49 @@ func TestANamedInstanceNeverRecoversLegacyTickets(t *testing.T) {
 	})
 }
 
+func TestASeedRecoveredWithoutItsConversationLinksItOnALaterStart(t *testing.T) {
+	t.Setenv("ATTN_INSTANCE", "")
+	prepared := prepareWorld(t)
+	legacyRecoveryOlderData(t, prepared.Dir)
+	legacyRecoveryStart(t, prepared, func(t *testing.T, w *world) {
+		seed := legacyRecoverySeedsByTicket(t, w.Client())["recover-me"]
+		if attached := legacyRecoveryConversationNotes(t, w.Client(), seed.ID); len(attached) != 0 {
+			t.Fatalf("the seed recovered from a backup has conversation notes %+v before its ticket carries one", attached)
+		}
+	})
+	conversation := legacyRecoveryConversationOnTicket(t, prepared.Dir, "recover-me")
+
+	legacyRecoveryStart(t, prepared, func(t *testing.T, w *world) {
+		cli := w.Client()
+		seed := legacyRecoverySeedsByTicket(t, cli)["recover-me"]
+		if linked := legacyRecoveryConversation(t, cli, seed.ID); linked != conversation {
+			t.Fatalf("the seed links %s, want its ticket's recovered conversation %s", linked, conversation)
+		}
+		w.advance(time.Second)
+		if _, err := cli.SeedNote("", seed.ID, "", "", "detach", false, &protocol.SeedArtifactReference{
+			Kind: "markdown_file", Path: protocol.Ptr(conversation),
+		}); err != nil {
+			t.Fatal(err)
+		}
+
+		w.restart()
+		w.finishStartupWork()
+		notes := legacyRecoveryConversationNotes(t, w.Client(), seed.ID)
+		if len(notes) != 2 || notes[0].Kind != "detach" || notes[1].Kind != "attach" {
+			t.Errorf("after the user detached the conversation and attn restarted, the seed's conversation notes are %+v, want one attach then the detach", notes)
+		}
+	})
+}
+
 func legacyRecoveryUpgrade(t *testing.T, before func(dir string), script func(t *testing.T, w *world)) {
 	t.Helper()
 	prepared := prepareWorld(t)
 	before(prepared.Dir)
+	legacyRecoveryStart(t, prepared, script)
+}
+
+func legacyRecoveryStart(t *testing.T, prepared *testworld.World, script func(t *testing.T, w *world)) {
+	t.Helper()
 	synctest.Test(t, func(t *testing.T) {
 		bubbled := *prepared
 		bubbled.T = t
@@ -261,6 +301,37 @@ func legacyRecoveryConversation(t *testing.T, cli *client.Client, seedID string)
 		t.Fatalf("seed %s has notes %+v, want one attaching the recovered conversation", seedID, notes.Notes)
 	}
 	return *notes.Notes[index].Artifact.Path
+}
+
+func legacyRecoveryConversationOnTicket(t *testing.T, dataDir, ticketID string) string {
+	t.Helper()
+	path := filepath.Join(dataDir, "legacy-ticket-recovery", "conversations", "codex", ticketID+".md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("# Recovered conversation\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	database, err := store.NewWithDB(os.Getenv("ATTN_DB_PATH"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer database.Close()
+	if _, err := database.AddTicketAttachment(store.TicketAttachment{
+		TicketID: ticketID, Filename: filepath.Base(path), Path: path, Note: "Recovered human and assistant conversation",
+	}, "attn", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func legacyRecoveryConversationNotes(t *testing.T, cli *client.Client, seedID string) []protocol.SeedNote {
+	t.Helper()
+	notes, err := cli.SeedNotes("", seedID, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return slices.DeleteFunc(notes.Notes, func(n protocol.SeedNote) bool { return n.Artifact == nil })
 }
 
 func legacyRecoveryBackupBodies(t *testing.T, paths []string) map[string]string {
