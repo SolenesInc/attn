@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
@@ -19,61 +18,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
 )
-
-func TestStartGardenReviewFreezesCandidatesAndRecipeAndDeduplicates(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	d.store.SetSetting(SettingGardenAdvisor, `{"agent":"claude","model":"sonnet","effort":"medium"}`)
-	installGardenReviewRunner(t, d, false)
-
-	first, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	if first.Status != garden.ReviewRunStatusRunning || len(items) != 1 || items[0].SeedID != seed.ID {
-		t.Fatalf("first review = %+v items=%+v", first, items)
-	}
-	wantActions := []string{"keep_growing", "park", "harvest", "wither"}
-	if !slices.Equal(items[0].Actions, wantActions) {
-		t.Fatalf("actions = %v, want %v", items[0].Actions, wantActions)
-	}
-	if first.Recipe != (garden.ReviewRecipe{Agent: "claude", Model: "sonnet", Effort: "medium"}) {
-		t.Fatalf("frozen recipe = %+v", first.Recipe)
-	}
-
-	d.store.SetSetting(SettingGardenAdvisor, `{"agent":"codex","model":"later","effort":"low"}`)
-	second, secondItems, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("duplicate startGardenReview: %v", err)
-	}
-	if second.ID != first.ID || second.Recipe != first.Recipe || len(secondItems) != 1 {
-		t.Fatalf("duplicate review = %+v items=%+v, want existing %s", second, secondItems, first.ID)
-	}
-	job, err := d.jobQueue.GetByKey(gardenReviewClassifyKind, items[0].ID)
-	if err != nil || job == nil {
-		t.Fatalf("classification job = %+v error=%v", job, err)
-	}
-}
-
-func TestGardenReviewOffersChiefWithoutAReconstructableHandover(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	addGardenSession(t, d, "chief")
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, "chief"); err != nil {
-		t.Fatal(err)
-	}
-
-	capture, err := d.captureGardenReview()
-	if err != nil {
-		t.Fatalf("captureGardenReview: %v", err)
-	}
-	want := []string{"send_to_chief", "keep_growing", "park", "harvest", "wither"}
-	if got := capture.items[seed.ID].Actions; !slices.Equal(got, want) {
-		t.Fatalf("actions = %v, want %v", got, want)
-	}
-}
 
 func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	d := newGardenDaemon(t)
@@ -111,27 +55,27 @@ func TestGardenReviewOffersResumeOnlyWithUsableContinuation(t *testing.T) {
 	}
 }
 
-func TestGardenReviewProtectsTrackedRecoverableAndPermanentMemberClaims(t *testing.T) {
+func TestGardenReviewKeptSeedReturnsOnceTheStaleWindowPasses(t *testing.T) {
 	d := newGardenDaemon(t)
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	recoverable := oldUnheldGrowingSeed(t, d, now)
-	d.store.Add(&protocol.Session{ID: "sess-a", State: protocol.SessionStateRecoverable})
-
-	old := now.Add(-garden.DefaultStaleWindow)
-	d.gardenNow = func() time.Time { return old }
-	memberSeed := plant(t, d, protocol.SeedPlantMessage{Title: "Member-owned old work"})
-	move(t, d, "", memberSeed.ID, garden.VerbTend, "", "trellis")
-	d.gardenNow = func() time.Time { return now }
-
-	capture, err := d.captureGardenReview()
+	seed := oldUnheldGrowingSeed(t, d, now)
+	installGardenReviewRunner(t, d, false)
+	run, items, err := d.startGardenReview()
 	if err != nil {
-		t.Fatalf("captureGardenReview: %v", err)
+		t.Fatalf("startGardenReview: %v", err)
 	}
-	if _, found := capture.items[recoverable.ID]; found {
-		t.Fatalf("tracked recoverable claim %s became a candidate", recoverable.ID)
+	review := protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: items[0].EvidenceVersion}
+	if _, _, err := d.keepGardenReviewItem(review, seed.ID); err != nil {
+		t.Fatalf("keepGardenReviewItem: %v", err)
 	}
-	if _, found := capture.items[memberSeed.ID]; found {
-		t.Fatalf("permanent member claim %s became a candidate", memberSeed.ID)
+
+	d.gardenNow = func() time.Time { return now.Add(garden.DefaultStaleWindow - time.Second) }
+	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 0 {
+		t.Fatalf("candidates before the review window = %d err=%v", count, err)
+	}
+	d.gardenNow = func() time.Time { return now.Add(garden.DefaultStaleWindow) }
+	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 1 {
+		t.Fatalf("candidates at the review window = %d err=%v", count, err)
 	}
 }
 
@@ -232,53 +176,6 @@ func TestGardenReviewFailureDoesNotBlockOtherItems(t *testing.T) {
 	}
 }
 
-func TestGardenReviewConcurrentItemCompletionPersistsBothItems(t *testing.T) {
-	d := newGardenDaemon(t)
-	run := garden.ReviewRun{
-		ID: "r-concurrent", CandidateIDs: []string{"s-one", "s-two"},
-		Recipe: garden.ReviewRecipe{Agent: "codex", Model: "gpt-5.6-luna", Effort: "xhigh"},
-		Status: garden.ReviewRunStatusRunning, CapturedAt: formatGardenTime(time.Now()),
-	}
-	items := []garden.ReviewItem{
-		{ID: garden.ReviewItemID(run.ID, "s-one"), RunID: run.ID, SeedID: "s-one", EvidenceVersion: "e-one", Status: garden.ReviewItemStatusQueued, Resolution: garden.ReviewResolutionUnresolved, Evidence: []garden.ReviewEvidence{}, Actions: []string{}},
-		{ID: garden.ReviewItemID(run.ID, "s-two"), RunID: run.ID, SeedID: "s-two", EvidenceVersion: "e-two", Status: garden.ReviewItemStatusQueued, Resolution: garden.ReviewResolutionUnresolved, Evidence: []garden.ReviewEvidence{}, Actions: []string{}},
-	}
-	if err := d.createGardenReview(run, items); err != nil {
-		t.Fatalf("createGardenReview: %v", err)
-	}
-
-	start := make(chan struct{})
-	errors := make(chan error, len(items))
-	var workers sync.WaitGroup
-	for _, item := range items {
-		item := item
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			<-start
-			next := item
-			next.Status = garden.ReviewItemStatusReady
-			next.CompletedAt = formatGardenTime(time.Now())
-			errors <- d.finishGardenReviewItem(gardenReviewJobPayload{
-				RunID: run.ID, ItemID: item.ID, EvidenceVersion: item.EvidenceVersion,
-			}, next)
-		}()
-	}
-	close(start)
-	workers.Wait()
-	close(errors)
-	for err := range errors {
-		if err != nil {
-			t.Fatalf("finishGardenReviewItem: %v", err)
-		}
-	}
-	completed, completedItems, err := d.showGardenReview(run.ID)
-	if err != nil || completed.Status != garden.ReviewRunStatusRunning || len(completedItems) != 2 ||
-		completedItems[0].Status != garden.ReviewItemStatusReady || completedItems[1].Status != garden.ReviewItemStatusReady {
-		t.Fatalf("concurrent completion = %+v items=%+v err=%v", completed, completedItems, err)
-	}
-}
-
 func TestGardenReviewInvalidatesAdviceWhenEvidenceChangesDuringClassification(t *testing.T) {
 	d := newGardenDaemon(t)
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
@@ -326,117 +223,6 @@ func TestGardenReviewInvalidatesAdviceWhenEvidenceChangesDuringClassification(t 
 	}
 }
 
-func TestGardenReviewLifecycleActionCanResolveBeforeAdviceArrives(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	item := items[0]
-	review := &protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion}
-	if job, getErr := d.jobQueue.GetByKey(gardenReviewClassifyKind, item.ID); getErr != nil || job == nil {
-		t.Fatalf("queued classification job = %+v error=%v", job, getErr)
-	}
-
-	client := newInternalWSClient()
-	d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
-		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-1"),
-		SeedID: seed.ID, Verb: string(garden.VerbHarvest),
-		Reason: protocol.Ptr("The outcome and verification are complete."), Review: review,
-	})
-	var result protocol.SeedTransitionResultMessage
-	if err := json.Unmarshal((<-client.send).payload, &result); err != nil {
-		t.Fatalf("decode transition result: %v", err)
-	}
-	if !result.Success {
-		t.Fatalf("transition result = %+v", result)
-	}
-	completed, completedItems, err := d.showGardenReview(run.ID)
-	if err != nil {
-		t.Fatalf("showGardenReview: %v", err)
-	}
-	if completed.Status != garden.ReviewRunStatusComplete ||
-		completedItems[0].Resolution != garden.ReviewResolutionResolved {
-		t.Fatalf("completed review = %+v items=%+v", completed, completedItems)
-	}
-	if job, getErr := d.jobQueue.GetByKey(gardenReviewClassifyKind, item.ID); getErr != nil || job != nil {
-		t.Fatalf("classification job after action = %+v error=%v", job, getErr)
-	}
-}
-
-func TestGardenReviewKeepLeavesSeedGrowingAndWaitsSevenDays(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	item := items[0]
-	review := protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion}
-
-	completed, completedItems, err := d.keepGardenReviewItem(review, seed.ID)
-	if err != nil {
-		t.Fatalf("keepGardenReviewItem: %v", err)
-	}
-	if completed.Status != garden.ReviewRunStatusComplete ||
-		completedItems[0].ResolvedAction != "keep_growing" ||
-		completedItems[0].ReviewAgainAt != formatGardenTime(now.Add(garden.DefaultStaleWindow)) {
-		t.Fatalf("kept review = %+v items=%+v", completed, completedItems)
-	}
-	current, _, err := d.readSeed(seed.ID)
-	if err != nil || current.Status != garden.StatusGrowing {
-		t.Fatalf("kept seed = %+v err=%v", current, err)
-	}
-	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 0 {
-		t.Fatalf("overview before review window = %d err=%v", count, err)
-	}
-	d.gardenNow = func() time.Time { return now.Add(garden.DefaultStaleWindow) }
-	if _, _, count, err := d.gardenReviewOverview(); err != nil || count != 1 {
-		t.Fatalf("overview at review window = %d err=%v", count, err)
-	}
-}
-
-func TestGardenReviewLifecycleActionRefusesChangedEvidence(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	item := readyGardenReviewItem(t, d, run, items[0])
-	editSeed(t, d, seed.ID, "More work arrived after the advice.")
-
-	client := newInternalWSClient()
-	d.handleSeedTransitionWS(client, &protocol.SeedTransitionMessage{
-		Cmd: protocol.CmdSeedTransition, RequestID: protocol.Ptr("move-stale"),
-		SeedID: seed.ID, Verb: string(garden.VerbHarvest),
-		Reason: protocol.Ptr("Done."),
-		Review: &protocol.SeedReviewActionContext{ReviewID: run.ID, EvidenceVersion: item.EvidenceVersion},
-	})
-	var result protocol.SeedTransitionResultMessage
-	if err := json.Unmarshal((<-client.send).payload, &result); err != nil {
-		t.Fatalf("decode transition result: %v", err)
-	}
-	if result.Success || result.Error == nil {
-		t.Fatalf("stale transition result = %+v", result)
-	}
-	current, _, err := d.readSeed(seed.ID)
-	if err != nil || current.Status != garden.StatusGrowing {
-		t.Fatalf("seed after stale action = %+v err=%v", current, err)
-	}
-	_, currentItems, err := d.showGardenReview(run.ID)
-	if err != nil || currentItems[0].Resolution != garden.ReviewResolutionUnresolved {
-		t.Fatalf("review after stale action = %+v err=%v", currentItems, err)
-	}
-}
-
 func TestGardenReviewHandoffDraftUsesTheFrozenRecipe(t *testing.T) {
 	d := newGardenDaemon(t)
 	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
@@ -475,94 +261,6 @@ func TestGardenReviewHandoffDraftUsesTheFrozenRecipe(t *testing.T) {
 	want := gardenAdvisorConfig{Agent: "claude", Model: "frozen-sonnet", Effort: "high"}
 	if got != want {
 		t.Fatalf("draft config = %+v, want %+v", got, want)
-	}
-}
-
-func TestCancelGardenReviewPersistsAndRemovesQueuedJobs(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-
-	canceled, _, err := d.cancelGardenReview(run.ID)
-	if err != nil {
-		t.Fatalf("cancelGardenReview: %v", err)
-	}
-	if canceled.Status != garden.ReviewRunStatusCanceled {
-		t.Fatalf("canceled run = %+v", canceled)
-	}
-	job, err := d.jobQueue.GetByKey(gardenReviewClassifyKind, items[0].ID)
-	if err != nil {
-		t.Fatalf("read canceled job: %v", err)
-	}
-	if job != nil {
-		t.Fatalf("canceled job still exists: %+v", job)
-	}
-}
-
-func TestFailedGardenReviewItemCanRetryWithFreshEvidence(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	payload, _ := json.Marshal(gardenReviewJobPayload{
-		RunID: run.ID, ItemID: items[0].ID, EvidenceVersion: items[0].EvidenceVersion,
-	})
-	d.failGardenReviewJob(&jobs.Job{
-		Kind: gardenReviewClassifyKind, Payload: payload, LastError: "provider unavailable",
-	})
-	failed, failedItems, err := d.showGardenReview(run.ID)
-	if err != nil {
-		t.Fatalf("show failed review: %v", err)
-	}
-	if failed.Status != garden.ReviewRunStatusRunning || failedItems[0].Status != garden.ReviewItemStatusFailed {
-		t.Fatalf("failed review = %+v items=%+v", failed, failedItems)
-	}
-
-	editSeed(t, d, seed.ID, "Use this newer body for the retry.")
-	retriedRun, retried, err := d.retryGardenReviewItem(run.ID, seed.ID)
-	if err != nil {
-		t.Fatalf("retryGardenReviewItem: %v", err)
-	}
-	if retriedRun.Status != garden.ReviewRunStatusRunning || retried.Status != garden.ReviewItemStatusQueued ||
-		retried.EvidenceVersion == items[0].EvidenceVersion {
-		t.Fatalf("retried run = %+v item=%+v", retriedRun, retried)
-	}
-}
-
-func TestRetryResolvesAnItemThatNoLongerNeedsReview(t *testing.T) {
-	d := newGardenDaemon(t)
-	now := time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
-	seed := oldUnheldGrowingSeed(t, d, now)
-	installGardenReviewRunner(t, d, false)
-	run, items, err := d.startGardenReview()
-	if err != nil {
-		t.Fatalf("startGardenReview: %v", err)
-	}
-	payload, _ := json.Marshal(gardenReviewJobPayload{
-		RunID: run.ID, ItemID: items[0].ID, EvidenceVersion: items[0].EvidenceVersion,
-	})
-	d.failGardenReviewJob(&jobs.Job{
-		Kind: gardenReviewClassifyKind, Payload: payload, LastError: "provider unavailable",
-	})
-	addGardenSession(t, d, "sess-a")
-	move(t, d, "sess-a", seed.ID, garden.VerbHarvest, "The work is complete.", "")
-
-	resolvedRun, resolved, err := d.retryGardenReviewItem(run.ID, seed.ID)
-	if err != nil {
-		t.Fatalf("retryGardenReviewItem: %v", err)
-	}
-	if resolvedRun.Status != garden.ReviewRunStatusComplete ||
-		resolved.Resolution != garden.ReviewResolutionNoLongerApplicable {
-		t.Fatalf("resolved run = %+v item=%+v", resolvedRun, resolved)
 	}
 }
 

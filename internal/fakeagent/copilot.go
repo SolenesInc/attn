@@ -106,6 +106,11 @@ func (c *copilot) reply(text string, afterStop bool) error {
 	return c.record("assistant.turn_end", map[string]any{"turnId": turn})
 }
 
+func (c *copilot) halt() error {
+	c.turns++
+	return c.record("abort", map[string]any{"reason": "user_initiated"})
+}
+
 func (c *copilot) record(kind string, data map[string]any) error {
 	id := uuid.NewString()
 	if err := appendLines(c.events, map[string]any{

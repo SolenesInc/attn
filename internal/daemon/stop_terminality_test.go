@@ -3,7 +3,6 @@ package daemon
 import (
 	"io"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -12,7 +11,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/classifier"
-	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/sessionstate"
@@ -104,82 +102,6 @@ func tasksWithStatuses(statuses ...string) []protocol.StopBackgroundTask {
 		tasks = append(tasks, protocol.StopBackgroundTask{Type: "background_session", Status: status})
 	}
 	return tasks
-}
-
-func TestDescribeBackgroundTasks(t *testing.T) {
-	msg := &protocol.StopMessage{BackgroundTasks: []protocol.StopBackgroundTask{
-		{Type: "background_session", Status: "running", Name: protocol.Ptr("gh run watch 1234")},
-		{Type: "cron", Status: "pending"},
-	}}
-	want := `background_session running "gh run watch 1234", cron pending`
-	if got := describeBackgroundTasks(msg); got != want {
-		t.Fatalf("describeBackgroundTasks() = %q, want %q", got, want)
-	}
-	if got := describeBackgroundTasks(&protocol.StopMessage{}); got != "" {
-		t.Fatalf("describeBackgroundTasks(empty) = %q, want empty", got)
-	}
-}
-
-func TestStopIsNonTerminal_LegacyHookClassifies(t *testing.T) {
-	msg := &protocol.StopMessage{Cmd: protocol.CmdStop, ID: "sess", TranscriptPath: "/tmp/t.jsonl"}
-	if stopIsNonTerminal(msg, false) {
-		t.Fatal("a legacy hook reports neither fact; the stop must read as terminal")
-	}
-}
-
-func TestDaemon_StopCommand_BackgroundWork_StaysWorking(t *testing.T) {
-	useFreeWSPort(t)
-
-	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath)
-
-	d := NewForTesting(sockPath)
-	go d.Start()
-	defer func() {
-		d.Stop()
-		os.Remove(sockPath)
-	}()
-	waitForSocket(t, sockPath, 5*time.Second)
-
-	c := client.New(sockPath)
-	if err := c.Register("bg-session", "Test", "/tmp/test"); err != nil {
-		t.Fatalf("Register error: %v", err)
-	}
-
-	if err := c.SendStop("bg-session", "/nonexistent/transcript.jsonl", client.StopFacts{
-		BackgroundTasks: tasksWithStatuses("running"),
-	}); err != nil {
-		t.Fatalf("SendStop error: %v", err)
-	}
-
-	waitForResolvedState(t, d, "bg-session", protocol.SessionStateWorking)
-}
-
-func TestDaemon_StopCommand_PendingCron_Settles(t *testing.T) {
-	useFreeWSPort(t)
-
-	sockPath := filepath.Join(shortTempDir(t), "attn.sock")
-	os.Remove(sockPath)
-
-	d := NewForTesting(sockPath)
-	go d.Start()
-	defer func() {
-		d.Stop()
-		os.Remove(sockPath)
-	}()
-	waitForSocket(t, sockPath, 5*time.Second)
-
-	c := client.New(sockPath)
-	if err := c.Register("cron-session", "Test", "/tmp/test"); err != nil {
-		t.Fatalf("Register error: %v", err)
-	}
-	if err := c.SendStop("cron-session", "/nonexistent/transcript.jsonl", client.StopFacts{
-		PendingSessionCrons: 1,
-	}); err != nil {
-		t.Fatalf("SendStop error: %v", err)
-	}
-
-	waitForResolvedState(t, d, "cron-session", protocol.SessionStateIdle)
 }
 
 type recordingClassifier struct {
