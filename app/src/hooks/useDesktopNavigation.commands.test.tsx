@@ -46,6 +46,8 @@ function renderNavigation() {
     sendDesktopDelete: vi.fn().mockResolvedValue(ok),
     sendDesktopSetShortcutSlot: vi.fn().mockResolvedValue(ok),
     sendDesktopCreate: vi.fn().mockResolvedValue(ok),
+    sendDesktopRename: vi.fn().mockResolvedValue(ok),
+    sendDesktopReorder: vi.fn().mockResolvedValue(ok),
     sendProfileSelect: vi.fn().mockResolvedValue(ok),
   };
   const showNotice = vi.fn();
@@ -251,6 +253,31 @@ describe('useDesktopNavigation', () => {
 
     expect(showNotice).toHaveBeenCalledWith('Desktop 2 still has panes; only an empty desktop can be deleted.');
     expect(api.sendDesktopDelete.mock.calls).toEqual([['d3', 2]]);
+  });
+
+  it('renames a desktop at its current revision and hands a refusal back to the rename form', async () => {
+    seedStore([desktop('d1', { shortcut_slot: 1, revision: 6 })]);
+    const { api, showNotice, result } = renderNavigation();
+
+    await act(() => result.current.renameDesktop('d1', 'Reviews'));
+    api.sendDesktopRename.mockRejectedValueOnce(new Error('desktop d1 not found'));
+    const refused = act(() => result.current.renameDesktop('d1', ''));
+
+    await expect(refused).rejects.toThrow('desktop d1 not found');
+    expect(api.sendDesktopRename.mock.calls).toEqual([['d1', 'Reviews', 6], ['d1', '', 6]]);
+    expect(showNotice).not.toHaveBeenCalled();
+  });
+
+  it('reorders a desktop between its new neighbours and shows a refusal', async () => {
+    seedStore([desktop('d1', { shortcut_slot: 1 }), desktop('d2', { revision: 3 }), desktop('d3')]);
+    const { api, showNotice, result } = renderNavigation();
+    api.sendDesktopReorder.mockRejectedValueOnce(new Error('desktop d3 belongs to another profile'));
+
+    act(() => result.current.reorderDesktop({ desktopId: 'd2', nextDesktopId: 'd1' }));
+    await settle();
+
+    expect(api.sendDesktopReorder.mock.calls).toEqual([[{ desktopId: 'd2', nextDesktopId: 'd1', expectedRevision: 3 }]]);
+    expect(showNotice).toHaveBeenCalledWith('desktop d3 belongs to another profile');
   });
 
   it('shows a refused command to the user', async () => {

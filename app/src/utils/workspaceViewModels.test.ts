@@ -7,13 +7,14 @@ function desktop(
   slot: number | null,
   tree: unknown,
   panes: Array<{ pane_id: string; session_id: string; status?: LayoutPaneStatus }>,
+  arrangement: { orderKey?: string; name?: string } = {},
 ): Desktop {
   return {
     id,
     profile_id: 'profile',
-    name: '',
+    name: arrangement.name ?? '',
     ...(slot ? { shortcut_slot: slot } : {}),
-    order_key: id,
+    order_key: arrangement.orderKey ?? id,
     tree_json: tree ? JSON.stringify(tree) : '',
     active_pane_id: panes[0]?.pane_id ?? '',
     revision: 1,
@@ -30,23 +31,32 @@ function desktop(
 const session = (id: string) => ({ id, label: id });
 
 describe('buildDesktopViewModels', () => {
-  it('groups agents by the desktop holding their pane, slotted desktops first, then extras, then Unplaced', () => {
+  it('groups agents by the desktop holding their pane, in the arrangement order, then those not on a desktop', () => {
     const desktops = [
-      desktop('extra', null, { type: 'pane', pane_id: 'p-c' }, [{ pane_id: 'p-c', session_id: 'c' }]),
-      desktop('two', 2, { type: 'pane', pane_id: 'p-b' }, [{ pane_id: 'p-b', session_id: 'b' }]),
-      desktop('one', 1, { type: 'pane', pane_id: 'p-a' }, [{ pane_id: 'p-a', session_id: 'a' }]),
-      desktop('empty', 3, null, []),
+      desktop('extra', null, { type: 'pane', pane_id: 'p-c' }, [{ pane_id: 'p-c', session_id: 'c' }], { orderKey: 'b' }),
+      desktop('two', 2, { type: 'pane', pane_id: 'p-b' }, [{ pane_id: 'p-b', session_id: 'b' }], { orderKey: 'c' }),
+      desktop('one', 1, { type: 'pane', pane_id: 'p-a' }, [{ pane_id: 'p-a', session_id: 'a' }], { orderKey: 'a' }),
+      desktop('empty', 3, null, [], { orderKey: 'd', name: 'Reviews' }),
     ];
 
     const groups = buildDesktopViewModels(desktops, ['a', 'b', 'c', 'd'].map(session));
 
     expect(groups.map((group) => [group.id, group.title, group.sessions.map((entry) => entry.id)])).toEqual([
       ['one', 'Desktop 1', ['a']],
-      ['two', 'Desktop 2', ['b']],
-      ['empty', 'Desktop 3', []],
       ['extra', 'Desktop 10', ['c']],
-      [UNPLACED_GROUP_ID, 'Unplaced', ['d']],
+      ['two', 'Desktop 2', ['b']],
+      ['empty', 'Reviews', []],
+      [UNPLACED_GROUP_ID, 'Not on a desktop', ['d']],
     ]);
+  });
+
+  it('leaves out the group of agents not on a desktop when every agent has a pane', () => {
+    const groups = buildDesktopViewModels(
+      [desktop('one', 1, { type: 'pane', pane_id: 'p-a' }, [{ pane_id: 'p-a', session_id: 'a' }])],
+      [session('a')],
+    );
+
+    expect(groups.map((group) => group.id)).toEqual(['one']);
   });
 
   it('orders a desktop\'s children by its layout, tiles included', () => {

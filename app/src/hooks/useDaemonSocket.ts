@@ -5186,6 +5186,23 @@ export function useDaemonSocket({
     [sendProfileCommand],
   );
 
+  const sendDesktopRename = useCallback(
+    (desktopId: string, name: string, expectedRevision: number) =>
+      sendProfileCommand('desktop_rename', { desktop_id: desktopId, name, expected_revision: expectedRevision }),
+    [sendProfileCommand],
+  );
+
+  const sendDesktopReorder = useCallback(
+    (reorder: { desktopId: string; previousDesktopId?: string; nextDesktopId?: string; expectedRevision: number }) =>
+      sendProfileCommand('desktop_reorder', {
+        desktop_id: reorder.desktopId,
+        ...(reorder.previousDesktopId ? { previous_desktop_id: reorder.previousDesktopId } : {}),
+        ...(reorder.nextDesktopId ? { next_desktop_id: reorder.nextDesktopId } : {}),
+        expected_revision: reorder.expectedRevision,
+      }),
+    [sendProfileCommand],
+  );
+
   const sendDesktopSetShortcutSlot = useCallback(
     (desktopId: string, shortcutSlot: number | null, expectedRevision: number) =>
       sendProfileCommand('desktop_set_shortcut_slot', {
@@ -5362,6 +5379,8 @@ export function useDaemonSocket({
     sendSessionMove,
     sendDesktopCreate,
     sendDesktopDelete,
+    sendDesktopRename,
+    sendDesktopReorder,
     sendDesktopSetShortcutSlot,
     sendDesktopSetCurrent,
     sendDesktopSetActivePane,

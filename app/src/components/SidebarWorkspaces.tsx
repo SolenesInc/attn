@@ -14,7 +14,7 @@ export function SidebarWorkspaceList() {
     onRenameWorkspace,
     onSessionDragStart,
     onSelectWorkspace,
-    openRename,
+    openDesktopRename,
     visibleWorkspaces,
     visualIndexOfWorkspace,
     reorderDrag,
@@ -34,6 +34,7 @@ export function SidebarWorkspaceList() {
         const workspaceIndex = visualIndexOfWorkspace(workspace.id);
         const seamIndex = reorderSeamIndexByWorkspaceId?.get(workspace.id);
         const isReorderSource = reorderDrag?.workspaceId === workspace.id;
+        const desktop = workspace.desktop;
         return (
           <div className="workspace-row" key={`${workspace.endpointId || 'local'}:${workspace.id}`}>
             {seamIndex !== undefined && renderReorderSeam(seamIndex)}
@@ -42,8 +43,8 @@ export function SidebarWorkspaceList() {
                 <button
                   type="button"
                   className="sidebar-row-select"
-                  aria-label={`Open workspace ${workspace.title}`}
-                  onPointerDown={(event) => handleHeaderPointerDown(workspace, event)}
+                  aria-label={`Open ${workspace.title}`}
+                  onPointerDown={desktop ? (event) => handleHeaderPointerDown(workspace, event) : undefined}
                   onClickCapture={handleHeaderClickCapture}
                   onClick={() => onSelectWorkspace(workspace.id)}
                 />
@@ -75,15 +76,15 @@ export function SidebarWorkspaceList() {
                 {workspaceShortcut(workspaceIndex) && (
                   <span className="session-shortcut">{workspaceShortcut(workspaceIndex)}</span>
                 )}
-                {onRenameWorkspace && (
+                {onRenameWorkspace && desktop && (
                   <span className="workspace-actions">
                     <button
                       type="button"
                       className="workspace-action-btn rename-workspace-btn"
                       data-testid={`rename-workspace-${workspace.id}`}
-                      onClick={(e) => openRename('workspace', workspace.id, workspace.title, e)}
-                      title="Rename workspace"
-                      aria-label={`Rename workspace ${workspace.title}`}
+                      onClick={(e) => openDesktopRename(workspace.id, desktop, e)}
+                      title="Rename desktop"
+                      aria-label={`Rename ${workspace.title}`}
                     >
                       ✎
                     </button>

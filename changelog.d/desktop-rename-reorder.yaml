@@ -1,0 +1,3 @@
+kind: added
+area: app
+change: Rename a desktop from its sidebar header (an empty name goes back to Desktop N), and drag headers to reorder desktops (Escape cancels a drag). The sidebar, the overview (⌘G) and desktop stepping follow that order while ⌘1–⌘9 keep their slots. Agents without a pane sit under "Not on a desktop", shown only when there are some.

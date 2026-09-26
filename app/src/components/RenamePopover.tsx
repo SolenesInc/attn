@@ -9,13 +9,14 @@ interface RenamePopoverProps {
   label: string;
   /** Viewport-relative anchor; the popover opens just below it. */
   anchor: { top: number; left: number };
+  defaultName?: string;
   onSubmit: (value: string) => Promise<void>;
   onClose: () => void;
 }
 
 const VIEWPORT_MARGIN = 8;
 
-export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }: RenamePopoverProps) {
+export function RenamePopover({ initialValue, label, anchor, defaultName, onSubmit, onClose }: RenamePopoverProps) {
   const [value, setValue] = useState(initialValue);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -63,7 +64,7 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
 
   const handleSubmit = async () => {
     const trimmed = value.trim();
-    if (!trimmed) {
+    if (!trimmed && defaultName === undefined) {
       setError('Name cannot be empty');
       return;
     }
@@ -108,6 +109,7 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
           if (error) setError(null);
         }}
         disabled={isSaving}
+        placeholder={defaultName}
         spellCheck={false}
         aria-label={label}
       />
@@ -125,7 +127,7 @@ export function RenamePopover({ initialValue, label, anchor, onSubmit, onClose }
           type="button"
           className="rename-popover-btn save"
           onClick={handleSubmit}
-          disabled={isSaving || !value.trim()}
+          disabled={isSaving || (!value.trim() && defaultName === undefined)}
         >
           {isSaving ? 'Saving…' : 'Save'}
         </button>

@@ -4,7 +4,7 @@ import {
   parseLayoutJSON,
   type TileLeaf,
 } from '../types/workspace';
-import { desktopLabel, orderedDesktops } from './desktops';
+import { defaultDesktopLabel, desktopLabel, orderedDesktops } from './desktops';
 
 export interface WorkspaceViewSession {
   id: string;
@@ -52,6 +52,7 @@ export type WorkspaceChild<TSession extends WorkspaceViewSession = WorkspaceView
 export interface WorkspaceWithSessions<TSession extends WorkspaceViewSession = WorkspaceViewSession> {
   id: string;
   title: string;
+  desktop?: { name: string; defaultLabel: string };
   directory: string;
   status?: string;
   endpointId?: string;
@@ -169,8 +170,8 @@ export function buildDesktopViewModels<TSession extends WorkspaceViewSession>(
   const desktopIdBySessionId = new Map(
     desktops.flatMap((desktop) => desktop.panes.map((pane) => [pane.session_id, desktop.id] as const)),
   );
-  const onDesktop = orderedDesktops(desktops).map((desktop) =>
-    toWorkspaceViewModel(
+  const onDesktop = orderedDesktops(desktops).map((desktop) => ({
+    ...toWorkspaceViewModel(
       {
         id: desktop.id,
         title: desktopLabel(desktop, desktops),
@@ -181,10 +182,13 @@ export function buildDesktopViewModels<TSession extends WorkspaceViewSession>(
       liveSessionIds,
       {},
     ),
-  );
+    desktop: { name: desktop.name.trim(), defaultLabel: defaultDesktopLabel(desktop, desktops) },
+  }));
+  const unplacedSessions = sessions.filter((session) => !desktopIdBySessionId.has(session.id));
+  if (unplacedSessions.length === 0) return onDesktop;
   const unplaced = toWorkspaceViewModel(
-    { id: UNPLACED_GROUP_ID, title: 'Unplaced', directory: '' },
-    sessions.filter((session) => !desktopIdBySessionId.has(session.id)),
+    { id: UNPLACED_GROUP_ID, title: 'Not on a desktop', directory: '' },
+    unplacedSessions,
     liveSessionIds,
     {},
   );
