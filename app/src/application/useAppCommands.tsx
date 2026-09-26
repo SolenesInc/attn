@@ -65,12 +65,10 @@ export function useAppCommands(): PaletteCommand[] {
     handleToggleQueueMode,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
-    queueModeEnabled,
     handleSnoozeActiveSession,
+    handleWakeActiveSession,
   } = useAttentionQueueContext();
-  const { sendSetSetting, sendWakeTurn } =
-    useDaemonApi();
+  const { sendSetSetting } = useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const desktops = useProfilesStore((state) => state.desktops);
@@ -574,29 +572,22 @@ export function useAppCommands(): PaletteCommand[] {
     appViewMenuItems,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
     seeds,
   ]);
 
-  const activeSessionSnoozedUntil = activeSessionQueueEligible
-    ? activeSessionForCommands?.turnSnoozedUntil
-    : undefined;
   const actionMenuItemsWithQueueActions = useMemo<PaletteCommand[]>(() => {
-    if (!queueModeEnabled || !activeSessionId || !activeSessionQueueEligible) {
-      return actionMenuItemsWithWorkspaceActions;
-    }
-    const items = [...actionMenuItemsWithWorkspaceActions];
-    if (activeSessionSnoozedUntil) {
-      items.push({
+    if (handleWakeActiveSession) {
+      return [...actionMenuItemsWithWorkspaceActions, {
         id: 'wake-active-session',
         title: 'Wake this agent now',
         description: 'End the snooze and let it back into the queue',
         keywords: ['wake', 'snooze', 'defer', 'queue', 'turn'],
         icon: <AttentionActionIcon />,
-        run: () => sendWakeTurn(activeSessionId),
-      });
-    } else if (handleSnoozeActiveSession) {
-      items.push({
+        run: handleWakeActiveSession,
+      }];
+    }
+    if (handleSnoozeActiveSession) {
+      return [...actionMenuItemsWithWorkspaceActions, {
         id: 'snooze-active-session',
         title: 'Snooze this agent…',
         description: 'Take it off your plate until a time you choose',
@@ -604,18 +595,10 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <AttentionActionIcon />,
         shortcut: [shortcutTokens('session.snooze')],
         run: handleSnoozeActiveSession,
-      });
+      }];
     }
-    return items;
-  }, [
-    actionMenuItemsWithWorkspaceActions,
-    queueModeEnabled,
-    activeSessionId,
-    activeSessionQueueEligible,
-    activeSessionSnoozedUntil,
-    handleSnoozeActiveSession,
-    sendWakeTurn,
-  ]);
+    return actionMenuItemsWithWorkspaceActions;
+  }, [actionMenuItemsWithWorkspaceActions, handleWakeActiveSession, handleSnoozeActiveSession]);
 
   return useMemo(
     () => [...navigationCommands, ...actionMenuItemsWithQueueActions],

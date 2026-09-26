@@ -408,6 +408,25 @@ describe('agent navigation', () => {
       expect(mockSendSettleTurn.mock.calls).toEqual([['s2']]);
     });
 
+    it('acts on no agent while a tile holds the surface and no row holds focus', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      act(() => {
+        const { desktops, currentDesktopId } = useProfilesStore.getState();
+        arrangeDesktops(
+          desktops.map((desktop) => (desktop.id === currentDesktopId ? { ...desktop, active_pane_id: 'tile-notes' } : desktop)),
+          currentDesktopId!,
+        );
+      });
+      expect(useSessionStore.getState().activeSessionId).toBe('s2');
+
+      const shortcuts = shortcutHandlers<{ onSettleTurn?: () => void; onSnoozeTurn?: () => void }>();
+      act(() => { shortcuts.onSettleTurn?.(); });
+      act(() => { shortcuts.onSnoozeTurn?.(); });
+      expect(mockSendSettleTurn).not.toHaveBeenCalled();
+      expect(screen.queryByRole('menu', { name: /^Snooze/ })).toBeNull();
+    });
+
     it('snoozes the focused row rather than the active agent', () => {
       activeOnS2();
       const unfocus = focusQueueRow('s1');

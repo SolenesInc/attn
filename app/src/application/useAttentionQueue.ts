@@ -33,7 +33,7 @@ export function useAttentionQueue({
   enrichedLocalSessions,
   activeSessionId,
 }: Options) {
-  const { sendSetSetting, sendSettleTurn } = useDaemonApi();
+  const { sendSetSetting, sendSettleTurn, sendWakeTurn } = useDaemonApi();
   const handleToggleQueueMode = useCallback(() => {
     sendSetSetting(QUEUE_MODE_SETTING, isQueueModeEnabled(settings) ? 'false' : 'true');
   }, [sendSetSetting, settings]);
@@ -63,10 +63,6 @@ export function useAttentionQueue({
       null,
     [activeGroupForCommands, activeSessionId],
   );
-  const activeSessionQueueEligible = Boolean(
-    activeSessionForCommands &&
-      sessionParticipatesInQueue(activeSessionForCommands, crewQueueEnabled),
-  );
 
   const wantsAttention = useCallback(
     (session: {
@@ -82,18 +78,6 @@ export function useAttentionQueue({
   );
 
   const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
-
-  const agentOnScreenId = useAgentOnScreen();
-  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
-  const settleable = Boolean(
-    agentOnScreen &&
-      ((queueModeEnabled && sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)) ||
-        (agentOnScreen.automation && agentOnScreen.turnOwed)),
-  );
-  const handleSettleActiveTurn = useMemo(
-    () => (settleable && agentOnScreenId ? () => sendSettleTurn(agentOnScreenId) : undefined),
-    [settleable, agentOnScreenId, sendSettleTurn],
-  );
 
   const [snoozeMenu, setSnoozeMenu] = useState<{
     session: { id: string; label: string };
@@ -123,18 +107,39 @@ export function useAttentionQueue({
     [queueModeEnabled, crewQueueEnabled],
   );
 
-  const handleSnoozeActiveSession = useMemo(() => {
-    const active = activeSessionForCommands;
-    return active && actionsFor(active).snooze ? () => openSnoozeForSession(active) : undefined;
-  }, [activeSessionForCommands, actionsFor, openSnoozeForSession]);
+  const agentOnScreenId = useAgentOnScreen();
+  const agentOnScreen = enrichedLocalSessions.find((session) => session.id === agentOnScreenId) ?? null;
+  const agentOnScreenActions = agentOnScreen ? actionsFor(agentOnScreen) : null;
+
+  const handleSettleActiveTurn = useMemo(
+    () =>
+      agentOnScreen && agentOnScreenActions?.settle ? () => sendSettleTurn(agentOnScreen.id) : undefined,
+    [agentOnScreen, agentOnScreenActions?.settle, sendSettleTurn],
+  );
+
+  const handleSnoozeActiveSession = useMemo(
+    () =>
+      agentOnScreen && agentOnScreenActions?.snooze ? () => openSnoozeForSession(agentOnScreen) : undefined,
+    [agentOnScreen, agentOnScreenActions?.snooze, openSnoozeForSession],
+  );
+
+  const handleWakeActiveSession = useMemo(
+    () =>
+      queueModeEnabled &&
+      agentOnScreen?.turnSnoozedUntil &&
+      sessionParticipatesInQueue(agentOnScreen, crewQueueEnabled)
+        ? () => sendWakeTurn(agentOnScreen.id)
+        : undefined,
+    [queueModeEnabled, crewQueueEnabled, agentOnScreen, sendWakeTurn],
+  );
 
   const shortcutTarget = useCallback(() => {
     const focused = focusedQueueRow();
     if (focused.kind === 'other') return null;
-    const id = focused.kind === 'session' ? focused.sessionId : activeSessionId;
+    const id = focused.kind === 'session' ? focused.sessionId : agentOnScreenId;
     const session = enrichedLocalSessions.find((entry) => entry.id === id);
     return session ? { session, actions: actionsFor(session) } : null;
-  }, [activeSessionId, enrichedLocalSessions, actionsFor]);
+  }, [agentOnScreenId, enrichedLocalSessions, actionsFor]);
 
   const handleSettleShortcut = useMemo(
     () =>
@@ -164,7 +169,7 @@ export function useAttentionQueue({
     queueBands,
     activeGroupForCommands,
     activeSessionForCommands,
-    activeSessionQueueEligible,
+    handleWakeActiveSession,
     wantsAttention,
     waitingLocalSessions,
     handleSettleActiveTurn,
