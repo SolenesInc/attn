@@ -91,6 +91,16 @@ func TestSnoozingABusySessionKeepsTheDeadline(t *testing.T) {
 	until := time.Now().Add(time.Hour)
 	snoozeUntil(app, session, until)
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return snoozedUntil(s).Equal(until) })
+
+	replied := time.Now()
+	run.Reply("Migrated. <!-- attn:state=idle -->")
+	finished := testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && stateSince(t, s).After(replied)
+	})
+	if protocol.Deref(finished.TurnOwed) || !snoozedUntil(finished).Equal(until) {
+		t.Errorf("the finished run owes %v, snoozed until %q; want no turn and the snooze kept until %s",
+			protocol.Deref(finished.TurnOwed), protocol.Deref(finished.TurnSnoozedUntil), until)
+	}
 }
 
 func TestAPendingSnoozeOutlivesARestart(t *testing.T) {

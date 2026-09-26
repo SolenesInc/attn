@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"strings"
 	"syscall"
 	"testing"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 func newWorkspaceProtocolTestClient() *wsClient {
@@ -88,50 +86,6 @@ func expectSpawnResult(t *testing.T, client *wsClient, sessionID string, success
 			t.Fatalf("timed out waiting for spawn_result for %s", sessionID)
 		}
 	}
-}
-
-func expectCommandError(t *testing.T, client *wsClient, cmd, errorContains string) {
-	t.Helper()
-	deadline := time.After(1 * time.Second)
-	for {
-		select {
-		case outbound := <-client.send:
-			var event protocol.WebSocketEvent
-			if err := json.Unmarshal(outbound.payload, &event); err != nil || event.Event != protocol.EventCommandError {
-				continue
-			}
-			if protocol.Deref(event.Cmd) != cmd {
-				continue
-			}
-			if !strings.Contains(protocol.Deref(event.Error), errorContains) {
-				t.Fatalf("command_error error = %q, want containing %q; payload=%s", protocol.Deref(event.Error), errorContains, string(outbound.payload))
-			}
-			return
-		case <-deadline:
-			t.Fatalf("timed out waiting for command_error for %s", cmd)
-		}
-	}
-}
-
-func expectPaneStatus(t *testing.T, d *Daemon, workspaceID, paneID string, status workspacelayout.PaneStatus, errorContains string) {
-	t.Helper()
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil {
-		t.Fatalf("workspace layout %s not found", workspaceID)
-	}
-	for _, pane := range snapshot.Panes {
-		if pane.PaneID != paneID {
-			continue
-		}
-		if pane.Status != status {
-			t.Fatalf("pane %s status = %q, want %q", paneID, pane.Status, status)
-		}
-		if errorContains != "" && !strings.Contains(pane.Error, errorContains) {
-			t.Fatalf("pane %s error = %q, want containing %q", paneID, pane.Error, errorContains)
-		}
-		return
-	}
-	t.Fatalf("pane %s not found in workspace %s", paneID, workspaceID)
 }
 
 type failingSpawnBackend struct {
