@@ -181,41 +181,6 @@ func (d *Daemon) armAgentMailboxDoorbellLocked(sessionID string, state *agentMai
 	state.retry = timer
 }
 
-func (d *Daemon) notePostInitialPrompt(sessionID string) {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	if d.postInitialPrompt == nil {
-		d.postInitialPrompt = make(map[string]struct{})
-	}
-	d.postInitialPrompt[sessionID] = struct{}{}
-}
-
-func (d *Daemon) forgetPostInitialPrompt(sessionID string) {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	delete(d.postInitialPrompt, sessionID)
-}
-
-func (d *Daemon) initialPromptPending(sessionID string) bool {
-	d.agentMailboxMu.Lock()
-	defer d.agentMailboxMu.Unlock()
-	_, pending := d.postInitialPrompt[sessionID]
-	return pending
-}
-
-func (d *Daemon) runPostInitialPrompt(sessionID, state string) {
-	if state != protocol.StateWorking {
-		return
-	}
-	d.agentMailboxMu.Lock()
-	_, pending := d.postInitialPrompt[sessionID]
-	delete(d.postInitialPrompt, sessionID)
-	d.agentMailboxMu.Unlock()
-	if pending {
-		d.drainAgentMailboxAfterStateChange(sessionID, state)
-	}
-}
-
 func (d *Daemon) rollbackQueuedPeerMessage(sessionID, messageID string) {
 	if err := d.store.DeleteQueuedPeerMessage(messageID); err != nil {
 		d.logf("agent msg rollback: session=%s id=%s err=%v", sessionID, messageID, err)

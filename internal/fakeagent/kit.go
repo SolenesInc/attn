@@ -32,6 +32,7 @@ type Kit struct {
 	control  net.Listener
 	mu       sync.Mutex
 	launches map[string]chan *Run
+	boots    map[string]chan struct{}
 	fakes    []*fake
 	failures []string
 }
@@ -78,7 +79,7 @@ func Install(t testing.TB, dir string, harnesses []Harness, wrapper string) *Kit
 	if err != nil {
 		t.Fatal(err)
 	}
-	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}}
+	k := &Kit{t: t, cfg: cfg, control: listener, launches: map[string]chan *Run{}, boots: map[string]chan struct{}{}}
 	go k.accept()
 	t.Cleanup(k.verify)
 	return k
@@ -127,6 +128,29 @@ func (k *Kit) Launched(sessionID string) *Run {
 	}
 }
 
+func (k *Kit) HoldBoot(sessionID string) (boot func()) {
+	cue := make(chan struct{})
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.boots[sessionID] = cue
+	return sync.OnceFunc(func() { close(cue) })
+}
+
+func (k *Kit) awaitBoot(sessionID string) {
+	k.mu.Lock()
+	cue := k.boots[sessionID]
+	delete(k.boots, sessionID)
+	k.mu.Unlock()
+	if cue == nil {
+		return
+	}
+	select {
+	case <-cue:
+	case <-time.After(HangGuard):
+		k.fail(fmt.Sprintf("the boot of session %q was held and never released", sessionID))
+	}
+}
+
 func (k *Kit) launchesFor(sessionID string) chan *Run {
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -154,6 +178,12 @@ func (k *Kit) accept() {
 
 func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 	switch method {
+	case methodBooting:
+		var booting bootingParams
+		if err := json.Unmarshal(params, &booting); err != nil {
+			return err
+		}
+		k.awaitBoot(booting.AttnSessionID)
 	case methodLaunched:
 		if err := json.Unmarshal(params, &f.launch); err != nil {
 			return err

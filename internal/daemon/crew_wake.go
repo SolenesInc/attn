@@ -321,7 +321,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	}
 
 	initialPrompt := crewWakePrompt
-	d.notePostInitialPrompt(sessionID)
 	if delivery != nil {
 		if delivery.Message != nil {
 			if _, err := d.store.EnqueuePeerMessage(*delivery.Message, sessionID); err != nil {
@@ -351,7 +350,6 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		if delivery != nil && delivery.Message != nil {
 			d.rollbackQueuedPeerMessage(sessionID, delivery.Message.ID)
 		}
-		d.forgetPostInitialPrompt(sessionID)
 		d.removeWorkspaceLayoutPaneForSession(sessionID)
 		d.releaseCrewBindingIfSession(sessionID)
 		return nil, fmt.Errorf("wake %s: %w", crew.DisplayName(member.ID), err)

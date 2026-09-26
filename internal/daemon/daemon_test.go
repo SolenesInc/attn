@@ -4998,7 +4998,7 @@ func TestClassifySessionState_ClassifierErrorAddsNoVerdict(t *testing.T) {
 	d.recordPTYEvidence("sess-unknown", pty.Observation{Source: pty.SourceHeartbeat, Claim: "not_busy", At: now})
 
 	d.classifySessionState("sess-unknown", transcriptPath)
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	sess := d.store.Get("sess-unknown")
 	if sess == nil {
@@ -5030,7 +5030,7 @@ func TestClassifySessionState_ClassifierCapabilityDisabled_SetsIdle(t *testing.T
 	})
 
 	d.classifySessionState("sess-no-classifier", filepath.Join(t.TempDir(), "missing.jsonl"))
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	sess := d.store.Get("sess-no-classifier")
 	if sess == nil {
@@ -5066,7 +5066,7 @@ func TestClassifySessionState_TranscriptDisabledWithPendingTodos_SetsWaitingInpu
 	})
 
 	d.classifySessionState("sess-no-transcript", filepath.Join(t.TempDir(), "missing.jsonl"))
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	sess := d.store.Get("sess-no-transcript")
 	if sess == nil {
@@ -5208,7 +5208,7 @@ func TestClassifySessionState_PublishesImmediatelyAfterALongRun(t *testing.T) {
 	d.recordBracketEvidence("sess-long", protocol.StateIdle)
 
 	d.classifySessionState("sess-long", transcriptPath)
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if got := mockClassifier.CallCount(); got != 1 {
 		t.Fatalf("classifier calls=%d, want 1", got)

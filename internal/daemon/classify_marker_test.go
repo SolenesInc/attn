@@ -61,7 +61,7 @@ func classifyWithMarker(t *testing.T, agent protocol.SessionAgent, line string) 
 	id := "sess-marker"
 	seedStoppingSession(t, d, id, agent)
 	d.classifySessionState(id, writeTranscript(t, line))
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if calls := fake.CallCount(); calls != 0 {
 		t.Fatalf("a model-backed classifier ran %d times with headless tasks off", calls)

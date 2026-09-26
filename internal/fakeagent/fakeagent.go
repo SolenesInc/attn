@@ -35,6 +35,7 @@ const (
 	tripwireExitCode = 97
 	roleAgent        = "agent"
 	rolePlugin       = "plugin"
+	methodBooting    = "booting"
 	methodLaunched   = "launched"
 	methodUnexpected = "unexpected"
 	methodExiting    = "exiting"
@@ -62,6 +63,10 @@ type launch struct {
 	ConversationID string   `json:"conversation_id,omitempty"`
 	Resumed        bool     `json:"resumed,omitempty"`
 	Error          string   `json:"error,omitempty"`
+}
+
+type bootingParams struct {
+	AttnSessionID string `json:"attn_session_id"`
 }
 
 type unexpectedLaunch struct {
@@ -183,12 +188,15 @@ func serve(cfg config, style composer, conv conversation) int {
 		return 1
 	}
 	a := &agent{term: term, conv: conv, prompts: make(chan promptSubmission, 16)}
-	began := conv.begin(term)
 	if a.control, err = dialControl(cfg, a.handle); err != nil {
 		fmt.Fprintf(os.Stderr, "fake agent: %v\n", err)
 		return 1
 	}
 	a.control.start()
+	if err := a.control.call(context.Background(), methodBooting, bootingParams{AttnSessionID: os.Getenv("ATTN_SESSION_ID")}, nil); err != nil {
+		return 1
+	}
+	began := conv.begin(term)
 	report := conv.launch()
 	report.Role = roleAgent
 	report.Pid = os.Getpid()

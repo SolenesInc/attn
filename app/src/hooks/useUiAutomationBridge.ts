@@ -430,11 +430,11 @@ async function captureDomScreenshotData(selector?: string) {
   };
 }
 
-export function isScreenshotNode(node: HTMLElement): boolean {
+function isScreenshotNode(node: HTMLElement): boolean {
   return !(node instanceof HTMLImageElement && !node.getAttribute('src'));
 }
 
-export async function describeScreenshotFailure(
+async function describeScreenshotFailure(
   target: HTMLElement,
   label: string,
   options: Parameters<typeof import('html-to-image').toSvg>[1],
@@ -604,7 +604,7 @@ function collectVisualSnapshot(
 
 // SessionProvenance renders the definition name and the PR target as separate
 // spans; only its title carries the whole description at every density.
-export function readProvenance(scope: Element | null | undefined): string {
+function readProvenance(scope: Element | null | undefined): string {
   const node = scope?.querySelector('.session-provenance');
   if (!node) return '';
   return (

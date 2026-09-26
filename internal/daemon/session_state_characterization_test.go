@@ -94,34 +94,6 @@ func TestSessionStateCharacterization_TheWorkerPollIsTheLastLiveSignal(t *testin
 	assertCharacterizationLiveEffects(t, d, capture, sessionID)
 }
 
-func TestSessionStateCharacterization_AHookOnlyFilesEvidence(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	sessionID := "session-hook"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	capture := captureBroadcasts(d)
-
-	d.handleState(&syncConn{}, &protocol.StateMessage{ID: sessionID, State: protocol.StateWorking})
-
-	session := d.store.Get(sessionID)
-	if session == nil {
-		t.Fatal("session missing")
-	}
-	if session.State != protocol.SessionStateIdle {
-		t.Fatalf("state=%q: the hook applied a state instead of filing it", session.State)
-	}
-	if session.LastSeen == characterizationOldTimestamp {
-		t.Fatal("a hook firing did not Touch the session")
-	}
-	if events := capture.snapshot(); characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID) != 0 {
-		t.Fatalf("filing evidence broadcast a state change: %+v", events)
-	}
-
-	d.resolveAllSessions(time.Now())
-	if state := d.store.Get(sessionID).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state=%q after the tick, want working", state)
-	}
-}
-
 func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
 	synctest.Test(t, func(t *testing.T) {
@@ -153,7 +125,7 @@ func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *
 		}
 
 		d.handleState(&syncConn{}, &protocol.StateMessage{ID: sessionID, State: protocol.StatePendingApproval})
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 		fresh := d.store.Get(sessionID)
 		if fresh.State != protocol.SessionStatePendingApproval {
 			t.Fatalf("state=%q before the verdict lands; the rest proves nothing", fresh.State)
@@ -162,7 +134,7 @@ func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *
 		close(classifier.release)
 		requireDone(t, classified, "classifier did not finish")
 
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 
 		after := d.store.Get(sessionID)
 		if after == nil || after.State != protocol.SessionStatePendingApproval {
@@ -228,7 +200,7 @@ func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
 	capture := captureBroadcasts(d)
 
 	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 0})
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	session := d.store.Get(sessionID)
 	if session == nil || session.State != protocol.SessionStateIdle {
