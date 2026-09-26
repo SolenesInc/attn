@@ -51,6 +51,8 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 		{args: []string{"query", "app/test", "requests", "--resume"}, want: "--resume is only for watch"},
 		{args: []string{"query", "app/test", "requests", "--desc"}, want: "--desc needs --sort <field>"},
 		{args: []string{"count", "app/test", "requests", "--where", "status"}, want: "needs one of = < <= > >="},
+		{args: []string{"count", "app/test", "requests", "--where", "=pending"}, want: "has no field name"},
+		{args: []string{"count", "app/test", "requests", "--where", ">=5"}, want: "has no field name"},
 	} {
 		if refused := s.Attn(append([]string{"doc"}, tc.args...)...); refused.Code == 0 || !strings.Contains(refused.Stderr, tc.want) {
 			t.Errorf("doc %q exited %d with %q, want a refusal saying %q", tc.args, refused.Code, refused.Stderr, tc.want)
@@ -65,7 +67,7 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 		id, status string
 		attempts   int
 	}{
-		{"a", "pending", 1}, {"b", "pending", 5}, {"c", "done", 3}, {"d", "pending", 4},
+		{"a", "pending", 1}, {"b", "pending", 5}, {"c", "done", 3}, {"d", "pending", 4}, {"g", "5", 0},
 	} {
 		if put := putRequest(t, s, doc.id, fmt.Sprintf(`{"status":%q,"attempts":%d}`, doc.status, doc.attempts)); put.Code != 0 {
 			t.Fatalf("doc put %s exited %d: %s", doc.id, put.Code, put.Stderr)
@@ -77,9 +79,13 @@ func TestDocQueryPutAndWatchHonourTheirFlags(t *testing.T) {
 		want []string
 	}{
 		{args: []string{"--where", "status=pending", "--sort", "attempts", "--desc", "--limit", "2"}, want: []string{"b", "d"}},
-		{args: []string{"--desc", "--sort", "attempts"}, want: []string{"b", "d", "c", "a"}},
+		{args: []string{"--desc", "--sort", "attempts"}, want: []string{"b", "d", "c", "a", "g"}},
 		{args: []string{"--where", "status=pending", "--where", "attempts>=4", "--sort", "attempts"}, want: []string{"d", "b"}},
 		{args: []string{"--sort", "attempts", "--after", "c"}, want: []string{"d", "b"}},
+		{args: []string{"--where", "attempts>3", "--sort", "attempts"}, want: []string{"d", "b"}},
+		{args: []string{"--where", "attempts<=3", "--sort", "attempts"}, want: []string{"g", "a", "c"}},
+		{args: []string{"--where", "attempts<3", "--sort", "attempts"}, want: []string{"g", "a"}},
+		{args: []string{"--where", `status="5"`}, want: []string{"g"}},
 	} {
 		if got := queriedIDs(t, s, tc.args...); !slices.Equal(got, tc.want) {
 			t.Errorf("doc query %q = %q, want %q", tc.args, got, tc.want)
