@@ -19,10 +19,11 @@ func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
-	registerSessions(t, w, cli, "sender")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
+	idleSince := queriedSession(t, cli, recipient).StateSince
 
 	for _, body := range []string{"the migration landed", "the rollback is ready"} {
-		sent := sendAgentMessage(t, cli, "sender", recipient, body)
+		sent := sendAgentMessage(t, cli, sender, recipient, body)
 		if sent.Status != protocol.AgentMsgStatusNotified {
 			t.Fatalf("%q to an idle agent = %+v, want notified", body, sent)
 		}
@@ -33,7 +34,9 @@ func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T
 			t.Fatalf("the agent read %q from its inbox, want %q", got, body)
 		}
 		agent.Reply("Read it. <!-- attn:state=idle -->")
-		testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+		idleSince = testworld.AwaitSession(app, recipient, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle && s.StateSince != idleSince
+		}).StateSince
 	}
 }
 
@@ -41,24 +44,25 @@ func TestMailForAnAgentMidTurnStaysSealedUntilItsTurnEndsThenRings(t *testing.T)
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
-	registerSessions(t, w, cli, "sender", "bystander")
+	panes := spawnPanes(w, app, w.Path("sender"), w.Path("bystander"))
+	sender, bystander := panes[0].session, panes[1].session
 	app.TypeLine(recipient, "rebase onto main")
 	agent.Prompted()
 	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 
-	sent := sendAgentMessage(t, cli, "sender", recipient, "when you surface, rebase again")
+	sent := sendAgentMessage(t, cli, sender, recipient, "when you surface, rebase again")
 	if sent.Status != protocol.AgentMsgStatusQueued {
 		t.Fatalf("a message mid-turn = %+v, want queued", sent)
 	}
-	for _, reader := range []string{recipient, "bystander"} {
+	for _, reader := range []string{recipient, bystander} {
 		if read, err := cli.AgentInbox(sent.MessageID, reader); err == nil {
 			t.Errorf("%s read the queued message by its ID: %+v", reader, read)
 		}
 	}
-	if _, err := cli.AgentMsgStatus(sent.MessageID, "bystander"); client.ErrorCode(err) != "message_not_found" {
+	if _, err := cli.AgentMsgStatus(sent.MessageID, bystander); client.ErrorCode(err) != "message_not_found" {
 		t.Errorf("a bystander asking for the message's status = %v, want message_not_found", err)
 	}
-	if status, err := cli.AgentMsgStatus(sent.MessageID, "sender"); err != nil || status.State != protocol.AgentMessageStateQueued {
+	if status, err := cli.AgentMsgStatus(sent.MessageID, sender); err != nil || status.State != protocol.AgentMessageStateQueued {
 		t.Errorf("the sender asking for the message's status = %+v, %v; want queued", status, err)
 	}
 
@@ -76,15 +80,16 @@ func TestABurstOfMailRingsOnceAndKeepsItsBodiesOutOfThePrompt(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
-	registerSessions(t, w, cli, "sender", "reviewer")
+	panes := spawnPanes(w, app, w.Path("sender"), w.Path("reviewer"))
+	sender, reviewer := panes[0].session, panes[1].session
 
 	bodies := []string{"the build is green", "the flaky test is quarantined", "the release notes need a line"}
-	sendAgentMessage(t, cli, "sender", recipient, bodies[0])
+	sendAgentMessage(t, cli, sender, recipient, bodies[0])
 	if got := agent.Prompted(); !strings.Contains(got, inboxDoorbell) {
 		t.Fatalf("the first message prompted %q, want the inbox doorbell", got)
 	}
-	sendAgentMessage(t, cli, "reviewer", recipient, bodies[1])
-	sendAgentMessage(t, cli, "sender", recipient, bodies[2])
+	sendAgentMessage(t, cli, reviewer, recipient, bodies[1])
+	sendAgentMessage(t, cli, sender, recipient, bodies[2])
 	agent.Reply("On it. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
@@ -144,12 +149,12 @@ func TestOneInboxReadReturnsGardenAndPeerMailOldestFirstExactlyOnce(t *testing.T
 }
 
 func TestAMessageToAShellPaneWaitsInItsInbox(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	shell := w.Spawn(app, fakeagent.Harness(protocol.AgentShellValue), w.Path("shell"))
-	registerSessions(t, w, cli, "sender")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 
-	sent := sendAgentMessage(t, cli, "sender", shell, "a delegate reported")
+	sent := sendAgentMessage(t, cli, sender, shell, "a delegate reported")
 	if sent.Status != protocol.AgentMsgStatusQueued || !strings.Contains(sent.Detail, "shell pane") {
 		t.Fatalf("a message to a shell pane = %+v, want queued naming the shell pane", sent)
 	}
@@ -216,15 +221,16 @@ func TestAgentMessageRefusalsNameTheirReason(t *testing.T) {
 }
 
 func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "sender", "target")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	panes := spawnPanes(w, app, w.Path("sender"), w.Path("target"))
+	sender, target := panes[0].session, panes[1].session
 
-	refused, err := cli.AgentMsg("target", "sender", strings.Repeat("x", 32769))
+	refused, err := cli.AgentMsg(target, sender, strings.Repeat("x", 32769))
 	if err != nil || refused.Status != protocol.AgentMsgStatusRefused || !strings.Contains(refused.Detail, "32769") || !strings.Contains(refused.Detail, "32768") {
 		t.Errorf("a message one character over the cap = %+v, %v; want a refusal naming 32769 and 32768", refused, err)
 	}
-	if got := readInbox(t, cli, "target", 0).Items; len(got) != 0 {
+	if got := readInbox(t, cli, target, 0).Items; len(got) != 0 {
 		t.Errorf("the refused message reached the inbox: %q", inboxContents(got))
 	}
 
@@ -246,14 +252,14 @@ func TestTheSocketAnswersOversizeMessagesWithTheirLimits(t *testing.T) {
 func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "sender")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 
 	keel := wakeCrew(t, cli, "keel", "")
 	keelDay := w.Launched(keel.SessionID)
 	keelDay.Prompted()
 	keelDay.Reply("Morning. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, keel.SessionID, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	toKeel := sendAgentMessage(t, cli, "sender", "Keel", "the garden is ready")
+	toKeel := sendAgentMessage(t, cli, sender, "Keel", "the garden is ready")
 	if toKeel.Status != protocol.AgentMsgStatusNotified || toKeel.TargetSessionID != keel.SessionID || toKeel.Detail != "notified Keel" {
 		t.Fatalf("a message to the awake Keel = %+v, want notified on its day %s", toKeel, keel.SessionID)
 	}
@@ -264,12 +270,12 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 		t.Fatalf("messaging an awake member left %d sessions, want the sender and its one day", got)
 	}
 
-	first := sendAgentMessage(t, cli, "sender", "trellis", "please inspect the broken build")
+	first := sendAgentMessage(t, cli, sender, "trellis", "please inspect the broken build")
 	if first.Status != protocol.AgentMsgStatusQueued || !strings.Contains(first.Detail, "woke Trellis") || first.TargetSessionID == "" {
 		t.Fatalf("a message to the sleeping Trellis = %+v, want it queued on a day it woke", first)
 	}
 	trellisDay := w.Launched(first.TargetSessionID)
-	second := sendAgentMessage(t, cli, "sender", "trellis", "and the flaky test")
+	second := sendAgentMessage(t, cli, sender, "trellis", "and the flaky test")
 	if second.Status != protocol.AgentMsgStatusQueued || second.TargetSessionID != first.TargetSessionID {
 		t.Fatalf("a message while Trellis wakes = %+v, want it queued behind the same day", second)
 	}
@@ -296,12 +302,12 @@ func TestMessagingACrewMemberReachesItsDayWakingItIfNeeded(t *testing.T) {
 }
 
 func TestAMessageThatWouldWakePastTheLimitDeliversNothing(t *testing.T) {
-	w := newCrewWorld(t)
+	w := newCrewWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "sender")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 	setSetting(t, app, "crew.wake_limit", "0")
 
-	_, err := cli.AgentMsg("alder", "sender", "wake up")
+	_, err := cli.AgentMsg("alder", sender, "wake up")
 	crewErrorContains(t, err, "crew.wake_limit=0", "Alder", "sidebar", "nothing was delivered")
 	if got := crewSessionCount(t, cli); got != 1 {
 		t.Errorf("sessions = %d, want only the sender", got)

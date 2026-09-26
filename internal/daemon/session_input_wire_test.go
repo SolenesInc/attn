@@ -12,7 +12,7 @@ func TestAHalfTypedDraftSurvivesTheTurnEndingAndAttnsMail(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
-	registerSessions(t, w, cli, "sender")
+	sender := spawnPanes(w, app, w.Path("sender"))[0].session
 	app.TypeLine(recipient, "keep going")
 	agent.Prompted()
 
@@ -21,7 +21,7 @@ func TestAHalfTypedDraftSurvivesTheTurnEndingAndAttnsMail(t *testing.T) {
 	agent.Reply("Done for now. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, recipient, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
-	held := sendAgentMessage(t, cli, "sender", recipient, "the build is green")
+	held := sendAgentMessage(t, cli, sender, recipient, "the build is green")
 	if held.Status != protocol.AgentMsgStatusQueued {
 		t.Errorf("mail for an agent under a fresh draft = %+v, want it held back", held)
 	}

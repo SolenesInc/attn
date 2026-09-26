@@ -46,12 +46,18 @@ func TestAgentPeekShowsStateTodosWorkspaceLatestReplyAndScreen(t *testing.T) {
 }
 
 func TestAgentPeekResolvesItsAddress(t *testing.T) {
-	w := newCrewWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "aaa-first", "aab-second", "keel-prefix-session")
-	if err := cli.RegisterAsMember("keels-first-day", "Keel", w.Path("keel"), "", "keel"); err != nil {
-		t.Fatal(err)
+	w := newCrewWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	first := w.Spawn(app, fakeagent.Claude, w.Path("first"), withIDPrefix("aaa-"))
+	for _, session := range []string{
+		first,
+		w.Spawn(app, fakeagent.Claude, w.Path("second"), withIDPrefix("aab-")),
+		w.Spawn(app, fakeagent.Claude, w.Path("keel-prefix"), withIDPrefix("keel-")),
+	} {
+		w.Launched(session)
 	}
+	firstDay := wakeCrew(t, cli, "keel", "")
+	firstDayAgent := w.Launched(firstDay.SessionID)
 	peekResolves := func(address, want string) {
 		t.Helper()
 		peek, err := cli.AgentPeek(address)
@@ -66,19 +72,17 @@ func TestAgentPeekResolvesItsAddress(t *testing.T) {
 		}
 	}
 
-	peekResolves("aaa", "aaa-first")
+	peekResolves("aaa", first)
 	peekRefuses("aa", "ambiguous_session")
 	peekRefuses("zzz", "session_not_found")
-	peekResolves("Keel", "keels-first-day")
+	peekResolves("Keel", firstDay.SessionID)
 
-	if err := cli.Unregister("keels-first-day"); err != nil {
-		t.Fatal(err)
-	}
-	if err := cli.RegisterAsMember("keels-next-day", "Keel", w.Path("keel"), "", "keel"); err != nil {
-		t.Fatal(err)
-	}
-	peekResolves("keel", "keels-next-day")
-	registerSessions(t, w, cli, "keel")
+	firstDayAgent.Exit(1)
+	testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == firstDay.SessionID })
+	nextDay := wakeCrew(t, cli, "keel", "")
+	w.Launched(nextDay.SessionID)
+	peekResolves("keel", nextDay.SessionID)
+	w.Launched(w.Spawn(app, fakeagent.Claude, w.Path("keel-session"), func(m *protocol.SpawnSessionMessage) { m.ID = "keel" }))
 	peekResolves("keel", "keel")
 
 	sessions := crewSessionCount(t, cli)
@@ -144,4 +148,8 @@ func TestAnOversizedExitScreenKeepsItsTailAndSaysSo(t *testing.T) {
 	if strings.Contains(text, "0010"+strings.Repeat("x", 990)) {
 		t.Errorf("the kept screen still holds a row from the head the cap drops")
 	}
+}
+
+func withIDPrefix(prefix string) func(*protocol.SpawnSessionMessage) {
+	return func(m *protocol.SpawnSessionMessage) { m.ID = prefix + m.ID }
 }

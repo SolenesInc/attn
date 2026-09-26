@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -72,14 +73,14 @@ func TestAWatchedPullRequestIsReadyForEachWatcherInItsOwnMode(t *testing.T) {
 		opinions: []map[string]any{{"id": "review-1", "state": "APPROVED", "bodyText": "Ship it", "submittedAt": "2026-09-21T10:00:00Z",
 			"author": map[string]any{"__typename": "User", "id": "u-1", "login": "victor"}}},
 	})
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "s1", "s2")
-	app := w.App()
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	panes := spawnPanes(w, app, w.Path("s1"), w.Path("s2"))
+	s1, s2 := panes[0].session, panes[1].session
 
-	watchPullRequestAs(t, cli, "s1", protocol.PullRequestWatchModeGreen, "")
-	watchPullRequestAs(t, cli, "s2", protocol.PullRequestWatchModeFormalReview, "victor")
-	for session, mode := range map[string]protocol.PullRequestWatchMode{"s1": protocol.PullRequestWatchModeGreen, "s2": protocol.PullRequestWatchModeFormalReview} {
+	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeGreen, "")
+	watchPullRequestAs(t, cli, s2, protocol.PullRequestWatchModeFormalReview, "victor")
+	for session, mode := range map[string]protocol.PullRequestWatchMode{s1: protocol.PullRequestWatchModeGreen, s2: protocol.PullRequestWatchModeFormalReview} {
 		watched := awaitWatchedPullRequest(app, session, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
 		if !protocol.Deref(watched.Watching) || protocol.Deref(watched.WatchMode) != mode || protocol.Deref(watched.ReadinessState) != "ready" {
 			t.Errorf("%s's pull request = %+v, want it watched in %s mode and ready", session, watched, mode)
@@ -95,13 +96,12 @@ func TestAWatchedPullRequestIsReadyForEachWatcherInItsOwnMode(t *testing.T) {
 
 func TestAWatchedPullRequestStaysReadyWhenItsFeedbackCannotBeRead(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "OPEN", feedbackFails: true})
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "s1")
-	app := w.App()
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	s1 := spawnPanes(w, app, w.Path("s1"))[0].session
 
-	watchPullRequestAs(t, cli, "s1", protocol.PullRequestWatchModeGreen, "")
-	watched := awaitWatchedPullRequest(app, "s1", func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
+	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeGreen, "")
+	watched := awaitWatchedPullRequest(app, s1, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
 	if protocol.Deref(watched.ReadinessState) != "ready" || protocol.Deref(watched.WatchHealth) != "delayed" || !strings.Contains(protocol.Deref(watched.WatchError), "feedback") {
 		t.Errorf("the pull request = %+v, want it ready with its watch delayed on feedback", watched)
 	}
@@ -109,17 +109,16 @@ func TestAWatchedPullRequestStaysReadyWhenItsFeedbackCannotBeRead(t *testing.T) 
 
 func TestAMergedWatchedPullRequestTellsItsAgentOnceAndEndsTheWatch(t *testing.T) {
 	serveWatchedPullRequest(t, watchedPullRequestGitHub{state: "MERGED", merged: true})
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "s1")
-	app := w.App()
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	s1 := spawnPanes(w, app, w.Path("s1"))[0].session
 
-	watchPullRequestAs(t, cli, "s1", protocol.PullRequestWatchModeGreen, "")
-	merged := awaitWatchedPullRequest(app, "s1", func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
+	watchPullRequestAs(t, cli, s1, protocol.PullRequestWatchModeGreen, "")
+	merged := awaitWatchedPullRequest(app, s1, func(pr protocol.SessionPullRequest) bool { return protocol.Deref(pr.ReadinessState) != "" })
 	if merged.State != "merged" || protocol.Deref(merged.ReadinessState) != "merged" || protocol.Deref(merged.Watching) {
 		t.Errorf("the merged pull request = %+v, want it merged and no longer watched", merged)
 	}
-	items := readInbox(t, cli, "s1", 0).Items
+	items := readInbox(t, cli, s1, 0).Items
 	if len(items) != 1 || !strings.Contains(items[0].Content, "merged") {
 		t.Errorf("the agent's inbox = %q, want one note that it merged", inboxContents(items))
 	}
