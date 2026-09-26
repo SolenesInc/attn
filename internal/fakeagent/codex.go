@@ -184,6 +184,10 @@ func (c *codex) hookInput(event string, extra map[string]any) map[string]any {
 }
 
 func (c *codex) submit(prompt string) error {
+	if strings.TrimSpace(prompt) == "/new" {
+		c.resumed = false
+		return c.startRollout()
+	}
 	c.turnID = uuid.NewString()
 	c.term.title(codexBusyGlyph + c.restingTitle())
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
