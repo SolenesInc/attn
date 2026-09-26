@@ -67,7 +67,7 @@ func (c *claude) begin(term *terminal) error {
 	}
 	c.permission = claudePermissionMode(args)
 	c.prompt = strings.Join(args.afterDashes, " ")
-	c.transcript = filepath.Join(c.cfg.ToolHome, ".claude", "projects", claudeProjectName(c.cwd), c.conversation+".jsonl")
+	c.transcript = c.transcriptPath()
 	if c.hooks, err = claudeHooks(args.value("--settings"), c.cwd); err != nil {
 		return err
 	}
@@ -77,6 +77,10 @@ func (c *claude) begin(term *terminal) error {
 	}
 	term.title(claudeRestingTitle)
 	return c.hooks.run("SessionStart", source, c.hookInput("SessionStart", map[string]any{"source": source}))
+}
+
+func (c *claude) transcriptPath() string {
+	return filepath.Join(c.cfg.ToolHome, ".claude", "projects", claudeProjectName(c.cwd), c.conversation+".jsonl")
 }
 
 func claudePermissionMode(args parsedArgs) string {
@@ -121,11 +125,23 @@ func (c *claude) hookInput(event string, extra map[string]any) map[string]any {
 }
 
 func (c *claude) submit(prompt string) error {
+	if strings.TrimSpace(prompt) == "/clear" {
+		return c.clear()
+	}
 	c.term.title(claudeBusyTitle)
 	if err := c.hooks.run("UserPromptSubmit", "", c.hookInput("UserPromptSubmit", map[string]any{"prompt": prompt})); err != nil {
 		return err
 	}
 	return c.record("user", map[string]any{"role": "user", "content": prompt}, map[string]any{"permissionMode": c.permission})
+}
+
+func (c *claude) clear() error {
+	if err := c.hooks.run("SessionEnd", "clear", c.hookInput("SessionEnd", map[string]any{"reason": "clear"})); err != nil {
+		return err
+	}
+	c.conversation, c.resumed = uuid.NewString(), false
+	c.transcript = c.transcriptPath()
+	return c.hooks.run("SessionStart", "clear", c.hookInput("SessionStart", map[string]any{"source": "clear"}))
 }
 
 func (c *claude) reply(text string, afterStop bool) error {

@@ -143,7 +143,11 @@ func TestAppListIsByNameAndRemovalDropsTheApp(t *testing.T) {
 
 func applyApp(t *testing.T, cli *client.Client, name, note string) *protocol.AppApplyResult {
 	t.Helper()
-	declaration := fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts"}`, name)
+	return applyDeclaration(t, cli, name, fmt.Sprintf(`{"name":%q,"attn_app_api":1,"entrypoint":"src/index.ts"}`, name), note)
+}
+
+func applyDeclaration(t *testing.T, cli *client.Client, name, declaration, note string) *protocol.AppApplyResult {
+	t.Helper()
 	bundle := []byte("export default {} // " + note)
 	hash := appbuild.VersionHash(declaration, bundle, nil)
 	path := appbuild.ArtifactPath(config.AppsDir(), name, hash)
