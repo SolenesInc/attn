@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/victorarias/attn/internal/crew"
 	"github.com/victorarias/attn/internal/garden"
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/protocol"
@@ -89,6 +90,18 @@ func armWhenMerged(t *testing.T, d *Daemon, session, seedID, url string) protoco
 	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
 }
 
+func disarm(t *testing.T, d *Daemon, session, seedID string) protocol.Response {
+	t.Helper()
+	msg := protocol.SeedTransitionMessage{
+		Cmd: protocol.CmdSeedTransition, SeedID: seedID, Verb: string(garden.VerbHarvest),
+		ClearHarvestWhen: protocol.Ptr(true),
+	}
+	if session != "" {
+		msg.SourceSessionID = protocol.Ptr(session)
+	}
+	return gardenCall(t, func(c net.Conn) { d.handleSeedTransition(c, &msg) })
+}
+
 func recordPullRequest(t *testing.T, d *Daemon, session, url string) store.SessionPullRequestRecord {
 	t.Helper()
 	rec, err := d.sessionPullRequestIdentity(session, url)
@@ -156,6 +169,38 @@ func TestAClosureDuringArmingDoesNotRingItsInitiator(t *testing.T) {
 	}
 	if queued := queuedSeedBells(t, d, "sess-a"); len(queued) != 0 {
 		t.Fatalf("immediate clear rang its initiating session: %q", queued)
+	}
+}
+
+func TestSettlementIsBoundToTheConditionItObserved(t *testing.T) {
+	d := newGardenDaemon(t)
+	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "cleared under the sweep"})
+	rec := recordPullRequest(t, d, "sess-a", "https://github.com/victorarias/attn/pull/71")
+	if resp := armWhenMerged(t, d, "sess-a", seed.ID, rec.URL); !resp.Ok {
+		t.Fatalf("arm: %v", protocol.Deref(resp.Error))
+	}
+	observed, err := d.armedSeeds()
+	if err != nil || len(observed) != 1 {
+		t.Fatalf("armed seeds = %+v, %v", observed, err)
+	}
+	if resp := disarm(t, d, "sess-a", seed.ID); !resp.Ok {
+		t.Fatalf("clear: %v", protocol.Deref(resp.Error))
+	}
+	settlePullRequest(t, d, rec.PRID, sessionPullRequestMerged, "merged after the clear")
+	merged, _ := d.store.SessionPullRequestByID(rec.PRID)
+
+	if _, _, err := d.fulfilHarvestWhen(observed[0], merged, observed[0].HarvestWhen); err == nil {
+		t.Fatalf("a harvest pinned to a cleared condition went through")
+	}
+	if _, _, err := d.clearHarvestWhen(seed.ID, observed[0].HarvestWhen, "stale", garden.Tender{Member: crew.DaemonID}); err == nil {
+		t.Fatalf("a clear pinned to a cleared condition went through")
+	}
+	stored, _, err := d.readSeed(seed.ID)
+	if err != nil {
+		t.Fatalf("read %s: %v", seed.ID, err)
+	}
+	if stored.Status != garden.StatusPlanted {
+		t.Fatalf("the cleared seed was moved to %q by a stale settlement", stored.Status)
 	}
 }
 
