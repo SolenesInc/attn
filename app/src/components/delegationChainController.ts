@@ -1,4 +1,4 @@
-export type ChainDismissal = 'dismiss' | 'hover-leave' | 'outside-scroll' | 'outside-pointer' | 'handoff' | 'selection' | 'context' | 'anchor-removed' | 'sidebar-collapse';
+type ChainDismissal = 'dismiss' | 'hover-leave' | 'outside-scroll' | 'outside-pointer' | 'handoff' | 'selection' | 'context' | 'anchor-removed' | 'sidebar-collapse';
 
 interface FocusReturn {
   target: HTMLElement | null;

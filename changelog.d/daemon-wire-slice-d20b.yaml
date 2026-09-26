@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard journal, settings acknowledgement, shell state, support snapshot, session transcript, Tailscale, slow client and pull request visit promises with daemon wire tests instead of in-package tests of internals.

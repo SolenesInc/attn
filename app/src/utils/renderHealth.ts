@@ -149,7 +149,7 @@ function addWarning(
   warnings.push({ code, severity, message });
 }
 
-export function buildPaneRenderHealth(input: PaneRenderHealthInput): PaneRenderHealth {
+function buildPaneRenderHealth(input: PaneRenderHealthInput): PaneRenderHealth {
   const warnings: PaneRenderHealthWarning[] = [];
 
   const paneWidth = input.paneBounds?.width ?? null;

@@ -2,12 +2,7 @@ package daemon
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -15,146 +10,7 @@ import (
 
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
-
-func fileDiffTestRepo(t *testing.T, path, v1, v2 string) (dir, shaEmpty, shaV1, shaV2 string) {
-	t.Helper()
-	dir = t.TempDir()
-	run := func(args ...string) string {
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		cmd.Env = append(os.Environ(),
-			"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@test.com",
-			"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@test.com",
-		)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %v failed: %v\n%s", args, err, out)
-		}
-		return strings.TrimSpace(string(out))
-	}
-	run("init")
-	run("commit", "--allow-empty", "-m", "init")
-	shaEmpty = run("rev-parse", "HEAD")
-
-	fullPath := filepath.Join(dir, path)
-	if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(fullPath, []byte(v1), 0o644); err != nil {
-		t.Fatalf("write v1: %v", err)
-	}
-	run("add", path)
-	run("commit", "-m", "add "+path)
-	shaV1 = run("rev-parse", "HEAD")
-
-	if err := os.WriteFile(fullPath, []byte(v2), 0o644); err != nil {
-		t.Fatalf("write v2: %v", err)
-	}
-	run("add", path)
-	run("commit", "-m", "update "+path)
-	shaV2 = run("rev-parse", "HEAD")
-
-	return dir, shaEmpty, shaV1, shaV2
-}
-
-func TestReadFileDiff_PinnedHeadRefIgnoresWorkingTree(t *testing.T) {
-	dir, _, shaV1, shaV2 := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
-
-	if err := os.WriteFile(filepath.Join(dir, "src/file.ts"), []byte("dirty"), 0o644); err != nil {
-		t.Fatalf("dirty working tree: %v", err)
-	}
-
-	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaV1, headRef: shaV2})
-	if err != nil {
-		t.Fatalf("readFileDiffCoordinated: %v", err)
-	}
-	if content.original != "v1" {
-		t.Errorf("original = %q, want %q", content.original, "v1")
-	}
-	if content.modified != "v2" {
-		t.Errorf("modified = %q, want %q (working tree should be ignored)", content.modified, "v2")
-	}
-}
-
-func TestReadFileDiff_HeadRefFileDoesNotExist(t *testing.T) {
-	dir, shaEmpty, _, _ := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
-
-	content, err := readFileDiffCoordinated(context.Background(), testGitExecutor(t, testGitConfig()), fileDiffCacheKey{directory: dir, path: "src/file.ts", baseRef: shaEmpty, headRef: shaEmpty})
-	if err != nil {
-		t.Fatalf("readFileDiffCoordinated: %v", err)
-	}
-	if content.original != "" {
-		t.Errorf("original = %q, want empty (file absent at base_ref)", content.original)
-	}
-	if content.modified != "" {
-		t.Errorf("modified = %q, want empty (file absent at head_ref)", content.modified)
-	}
-}
-
-func TestHandleGetFileDiff_EchoesRequestID(t *testing.T) {
-	dir, _, shaV1, shaV2 := fileDiffTestRepo(t, "src/file.ts", "v1", "v2")
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client := &wsClient{
-		send:            make(chan outboundMessage, 2),
-		attachedStreams: make(map[string]ptybackend.Stream),
-	}
-
-	msg := &protocol.GetFileDiffMessage{
-		Cmd:       "get_file_diff",
-		Directory: dir,
-		Path:      "src/file.ts",
-		BaseRef:   protocol.Ptr(shaV1),
-		HeadRef:   protocol.Ptr(shaV2),
-		RequestID: protocol.Ptr("req-123"),
-	}
-
-	d.handleGetFileDiff(client, msg)
-
-	select {
-	case outbound := <-client.send:
-		var result protocol.FileDiffResultMessage
-		if err := json.Unmarshal(outbound.payload, &result); err != nil {
-			t.Fatalf("decode file_diff_result: %v", err)
-		}
-		if !result.Success {
-			t.Fatalf("file_diff_result success=false error=%q", protocol.Deref(result.Error))
-		}
-		if protocol.Deref(result.RequestID) != "req-123" {
-			t.Errorf("request_id = %q, want %q", protocol.Deref(result.RequestID), "req-123")
-		}
-	case <-time.After(1 * time.Second):
-		t.Fatal("timed out waiting for file_diff_result")
-	}
-}
-
-func TestParseGitStatusPorcelain(t *testing.T) {
-	input := " M src/App.tsx\x00A  src/new.ts\x00?? untracked.txt\x00"
-
-	staged, unstaged, untracked := parseGitStatusPorcelain(input, "")
-
-	if len(unstaged) != 1 || unstaged[0].Path != "src/App.tsx" {
-		t.Errorf("Expected 1 unstaged file, got %v", unstaged)
-	}
-	if len(staged) != 1 || staged[0].Path != "src/new.ts" {
-		t.Errorf("Expected 1 staged file, got %v", staged)
-	}
-	if len(untracked) != 1 || untracked[0].Path != "untracked.txt" {
-		t.Errorf("Expected 1 untracked file, got %v", untracked)
-	}
-}
-
-func TestParseGitDiffNumstat(t *testing.T) {
-	input := "42\t12\tsrc/App.tsx\n8\t3\tsrc/hook.ts\n"
-
-	stats := parseGitDiffNumstat(input)
-
-	if stats["src/App.tsx"].Additions != 42 || stats["src/App.tsx"].Deletions != 12 {
-		t.Errorf("Expected 42/12 for App.tsx, got %v", stats["src/App.tsx"])
-	}
-}
 
 func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
@@ -209,44 +65,6 @@ func TestGitStatusSchedulerCoalescesDirtyRefreshes(t *testing.T) {
 		}
 		if overlapped.Load() {
 			t.Fatal("git status refreshes overlapped")
-		}
-	})
-}
-
-func TestGitOperationMarksMatchingStatusSubscriptionDirty(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var calls atomic.Int32
-		previousGetGitStatus := getGitStatusForDaemon
-		getGitStatusForDaemon = func(_ context.Context, _ gitExecutor, dir string, _ gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
-			call := calls.Add(1)
-			return testGitStatus(dir, fmt.Sprintf("file-%d.txt", call)), nil
-		}
-		defer func() {
-			getGitStatusForDaemon = previousGetGitStatus
-		}()
-
-		hub := newWSHub()
-		d := &Daemon{wsHub: hub}
-		client := &wsClient{send: make(chan outboundMessage, 10)}
-		hub.clients[client] = true
-
-		d.handleSubscribeGitStatus(client, &protocol.SubscribeGitStatusMessage{
-			Cmd:       protocol.CmdSubscribeGitStatus,
-			Directory: "/repo",
-		})
-		t.Cleanup(client.stopGitStatusPoll)
-		synctest.Wait()
-		if got := calls.Load(); got != 1 {
-			t.Fatalf("git status calls after subscribing = %d, want 1", got)
-		}
-
-		finish := d.beginGitOperation(protocol.GitOperationKindDeleteWorktree, "/repo/worktree", nil)
-		finish(nil)
-
-		time.Sleep(gitStatusRefreshDebounce)
-		synctest.Wait()
-		if got := calls.Load(); got != 2 {
-			t.Fatalf("git status calls after the git operation = %d, want 2", got)
 		}
 	})
 }
@@ -453,28 +271,6 @@ func TestGetGitStatusWithOptionsFallsBackToTrackedOnlyAfterFullTimeout(t *testin
 	}
 	if len(status.Untracked) != 0 {
 		t.Fatalf("untracked = %v, want none in tracked-only fallback", status.Untracked)
-	}
-}
-
-func TestSameOrNestedPath(t *testing.T) {
-	tests := []struct {
-		name string
-		path string
-		dir  string
-		want bool
-	}{
-		{name: "same", path: "/repo", dir: "/repo", want: true},
-		{name: "nested", path: "/repo/worktree", dir: "/repo", want: true},
-		{name: "sibling prefix", path: "/repo-two", dir: "/repo", want: false},
-		{name: "parent", path: "/repo", dir: "/repo/worktree", want: false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := sameOrNestedPath(tt.path, tt.dir); got != tt.want {
-				t.Fatalf("sameOrNestedPath(%q, %q) = %v, want %v", tt.path, tt.dir, got, tt.want)
-			}
-		})
 	}
 }
 

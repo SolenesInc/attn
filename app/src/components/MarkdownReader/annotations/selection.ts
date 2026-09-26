@@ -3,7 +3,7 @@ import { createAnchor, domPointToOffset } from '../anchoring';
 import type { AnchorRecord, BlockText } from '../anchoring';
 
 /** Attn chrome a selection may not start or end in. */
-export const ANNOTATION_EXCEPT_SELECTORS = [
+const ANNOTATION_EXCEPT_SELECTORS = [
   '.workspace-dock-tile-header',
   '.md-annotations-sidebar',
   '.md-selection-toolbar',
@@ -16,16 +16,6 @@ export const ANNOTATION_EXCEPT_SELECTORS = [
 ];
 
 const EXCEPT_SELECTOR = ANNOTATION_EXCEPT_SELECTORS.join(', ');
-
-/** The subset of Selection the evaluator reads — mockable in jsdom tests. */
-export interface SelectionLike {
-  isCollapsed: boolean;
-  rangeCount: number;
-  anchorNode: Node | null;
-  focusNode: Node | null;
-  toString(): string;
-  getRangeAt(index: number): Range;
-}
 
 export interface PendingSelection {
   anchor: AnchorRecord;
@@ -54,7 +44,7 @@ function owningBlockElement(node: Node): Element | null {
 
 export function evaluateSelection(
   root: HTMLElement,
-  selection: SelectionLike | null,
+  selection: Selection | null,
   content: string,
   blocks: BlockText[],
 ): PendingSelection | null {

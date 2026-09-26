@@ -169,14 +169,6 @@ func (d *Daemon) browserWorkspaceTarget(sessionID string) (browserWorkspaceTarge
 	return d.browserWorkspaceTarget(sessionID)
 }
 
-func (d *Daemon) browserWorkspaceForSession(sessionID string) (workspaceID, paneID string, err error) {
-	target, err := d.browserWorkspaceTarget(sessionID)
-	if err != nil {
-		return "", "", err
-	}
-	return target.workspaceID, target.anchorLeafID, nil
-}
-
 func (d *Daemon) forwardRemoteBrowserOpen(target browserWorkspaceTarget, targetURL string) error {
 	if d.hubManager == nil || target.remoteEndpointID == "" {
 		return fmt.Errorf("remote endpoint manager unavailable")

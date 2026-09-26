@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '../test/utils';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { SessionContextCapPrompt } from './SessionContextCapPrompt';
 
 describe('SessionContextCapPrompt', () => {

@@ -21,54 +21,32 @@ func readDoorbellScreen(t *testing.T, name string) string {
 }
 
 func TestScreenShowsSelector(t *testing.T) {
-	for _, name := range []string{"claude-question-selector", "claude-resume-selector"} {
-		line, blocked := screenShowsSelector(readDoorbellScreen(t, name))
-		if !blocked {
-			t.Errorf("%s: the guard did not see a selector", name)
+	selectorFooter := "Enter to select · Esc to cancel\n"
+	for _, tc := range []struct {
+		name    string
+		screen  string
+		blocked bool
+	}{
+		{name: "claude question selector", screen: readDoorbellScreen(t, "claude-question-selector"), blocked: true},
+		{name: "claude resume selector", screen: readDoorbellScreen(t, "claude-resume-selector"), blocked: true},
+		{name: "a selector footer under blank padding", screen: selectorFooter + strings.Repeat("\n", 9), blocked: true},
+		{name: "claude composer while working", screen: readDoorbellScreen(t, "claude-composer-working")},
+		{name: "claude composer at rest", screen: readDoorbellScreen(t, "claude-composer-idle")},
+		{name: "a selector scrolled out of the footer", screen: selectorFooter + strings.Repeat("a line of ordinary output\n", doorbellScreenTailLines)},
+		{name: "thinking that mentions a choice", screen: "∴ Let me check the AGENTS.md rules to confirm this is a docs-only PR, then start"},
+		{name: "prose about picking", screen: "  I will pick the branch to rebase onto and then open the PR."},
+		{name: "prose about choosing", screen: "  Waiting for you to choose which one to keep."},
+		{name: "an empty screen", screen: ""},
+	} {
+		line, blocked := screenShowsSelector(tc.screen)
+		if blocked != tc.blocked {
+			t.Errorf("%s: blocked = %v on %q, want %v", tc.name, blocked, line, tc.blocked)
 			continue
 		}
-		if !strings.Contains(strings.ToLower(line), "to select") &&
-			!strings.Contains(strings.ToLower(line), "esc to cancel") {
-			t.Errorf("%s: named %q as the selector line, which says neither", name, line)
+		lower := strings.ToLower(line)
+		if blocked && !strings.Contains(lower, "to select") && !strings.Contains(lower, "esc to cancel") {
+			t.Errorf("%s: named %q as the selector line, which says neither", tc.name, line)
 		}
-	}
-
-	for _, name := range []string{"claude-composer-working", "claude-composer-idle"} {
-		if line, blocked := screenShowsSelector(readDoorbellScreen(t, name)); blocked {
-			t.Errorf("%s: a composer was held off as a selector, on %q", name, line)
-		}
-	}
-}
-
-func TestScreenShowsSelectorReadsOnlyTheFooter(t *testing.T) {
-	scrolled := "Enter to select · Esc to cancel\n" +
-		strings.Repeat("a line of ordinary output\n", doorbellScreenTailLines)
-	if line, blocked := screenShowsSelector(scrolled); blocked {
-		t.Fatalf("a selector that scrolled out of the footer still blocked, on %q", line)
-	}
-
-	padded := "Enter to select · Esc to cancel\n\n\n\n\n\n\n\n\n\n"
-	if _, blocked := screenShowsSelector(padded); !blocked {
-		t.Fatal("blank padding hid a selector footer from the guard")
-	}
-}
-
-func TestScreenShowsSelectorLeavesProseAlone(t *testing.T) {
-	prose := []string{
-		"∴ Let me check the AGENTS.md rules to confirm this is a docs-only PR, then start",
-		"  I will pick the branch to rebase onto and then open the PR.",
-		"  Waiting for you to choose which one to keep.",
-	}
-	for _, line := range prose {
-		if _, blocked := screenShowsSelector(line); blocked {
-			t.Errorf("assistant prose was read as a selector: %q", line)
-		}
-	}
-}
-
-func TestScreenShowsSelectorOnAnEmptyScreen(t *testing.T) {
-	if _, blocked := screenShowsSelector(""); blocked {
-		t.Fatal("an empty viewport was read as a selector")
 	}
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 import './Palette.css';
 
 export interface PaletteProps<T> {
@@ -13,7 +14,6 @@ export interface PaletteProps<T> {
   emptyLabel: string;
   onPick: (item: T) => void;
   onClose: () => void;
-  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => boolean;
 }
 
 export function Palette<T>({
@@ -28,7 +28,6 @@ export function Palette<T>({
   emptyLabel,
   onPick,
   onClose,
-  onKeyDown,
 }: PaletteProps<T>) {
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -49,19 +48,14 @@ export function Palette<T>({
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex]);
 
+  useEscapeStack(onClose, true);
+
   const pick = (item: T | undefined) => {
     if (item !== undefined) onPick(item);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (onKeyDown?.(event)) return;
     switch (event.key) {
-      case 'Escape':
-        // Closing the palette must not also bubble to a workspace-level Escape handler.
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-        break;
       case 'ArrowDown':
         event.preventDefault();
         setSelected((i) => Math.min(i + 1, items.length - 1));

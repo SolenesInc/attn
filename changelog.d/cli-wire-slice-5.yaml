@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard the doc, pr, vision check, session ledger and session reopen commands through stack tests of the built attn binary, and delete the in-process parser and printer tests they replace.

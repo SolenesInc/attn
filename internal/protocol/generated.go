@@ -2365,6 +2365,9 @@ type CommandErrorMessage struct {
 	// Error corresponds to the JSON schema field "error".
 	Error string `json:"error"`
 
+	// ErrorCode corresponds to the JSON schema field "error_code".
+	ErrorCode *string `json:"error_code,omitempty,omitzero"`
+
 	// Event corresponds to the JSON schema field "event".
 	Event string `json:"event"`
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -18,6 +19,9 @@ type Copilot struct{}
 var _ Driver = (*Copilot)(nil)
 var _ InstructionsFileProvider = (*Copilot)(nil)
 var _ TranscriptFinder = (*Copilot)(nil)
+var _ LaunchTranscriptFinder = (*Copilot)(nil)
+var _ ResumePolicyProvider = (*Copilot)(nil)
+var _ ResumeAvailabilityProvider = (*Copilot)(nil)
 var _ TranscriptWatcherBehaviorProvider = (*Copilot)(nil)
 var _ ClassifierProvider = (*Copilot)(nil)
 var _ RecoveredStatePolicyProvider = (*Copilot)(nil)
@@ -103,8 +107,32 @@ func (c *Copilot) FindTranscript(sessionID, cwd string, startedAt time.Time) str
 	return transcript.FindCopilotTranscript(cwd, startedAt)
 }
 
+func (c *Copilot) FindLaunchTranscript(cwd string, launchedAt time.Time, claimed func(nativeID string) bool) string {
+	return transcript.FindCopilotLaunchTranscript(cwd, launchedAt, claimed)
+}
+
 func (c *Copilot) FindTranscriptForResume(resumeID string) string {
 	return transcript.FindCopilotTranscriptForResume(resumeID)
+}
+
+func (c *Copilot) ResumeAvailable(resumeID string) bool {
+	return transcript.FindCopilotTranscriptForResume(resumeID) != ""
+}
+
+func (c *Copilot) ResolveSpawnResumeSessionID(existingSessionID, requestedResumeID, storedResumeID string) string {
+	return preferStoredResumeSessionID(existingSessionID, requestedResumeID, storedResumeID)
+}
+
+func (c *Copilot) SpawnResumeSessionID(sessionID, resolvedResumeID string, resumePicker bool) string {
+	return strings.TrimSpace(resolvedResumeID)
+}
+
+func (c *Copilot) ResumeSessionIDFromTranscriptPath(transcriptPath string) string {
+	clean := filepath.Clean(strings.TrimSpace(transcriptPath))
+	if filepath.Base(clean) != "events.jsonl" {
+		return ""
+	}
+	return filepath.Base(filepath.Dir(clean))
 }
 
 func (c *Copilot) BootstrapBytes() int64 { return 512 * 1024 }

@@ -1,7 +1,6 @@
 package store
 
 import (
-	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -31,91 +30,6 @@ func pagedByAttempts(after string) docstore.Query {
 		Collection: "requests",
 		Sort:       &docstore.Sort{Field: "attempts"},
 		After:      after,
-	}
-}
-
-func TestPagingAfterADeletedAnchorSaysSoRatherThanEmptyingThePage(t *testing.T) {
-	s, _ := storeWithRequests(t, map[string]string{
-		"a": `{"attempts":1}`,
-		"b": `{"attempts":2}`,
-		"c": `{"attempts":3}`,
-	})
-	if _, err := s.DeleteDocument(requestsDecl(t, s), "a", nil); err != nil {
-		t.Fatalf("delete: %v", err)
-	}
-
-	got, err := readIDs(t, s, pagedByAttempts("a"))
-	if err == nil {
-		t.Fatalf("paging after a deleted anchor returned %v and no error; it must say the anchor is gone", got)
-	}
-	if !strings.Contains(err.Error(), "no longer exists") {
-		t.Fatalf("error does not name the missing anchor: %v", err)
-	}
-}
-
-func TestAPageNeverContainsItsOwnAnchor(t *testing.T) {
-	s, base := storeWithRequests(t, map[string]string{
-		"a": `{}`,
-		"b": `{"attempts":3}`,
-		"c": `{"attempts":7}`,
-	})
-
-	got, err := readIDs(t, s, pagedByAttempts("a"))
-	if err != nil {
-		t.Fatalf("page after a null-valued anchor: %v", err)
-	}
-	if want := []string{"b", "c"}; !sameIDs(got, want) {
-		t.Fatalf("page after a null-valued anchor is %v, want %v", got, want)
-	}
-
-	if _, err := s.PutDocument(requestsDecl(t, s), "a", []byte(`{"attempts":5}`), base.Add(time.Hour), nil); err != nil {
-		t.Fatalf("put: %v", err)
-	}
-	got, err = readIDs(t, s, pagedByAttempts("a"))
-	if err != nil {
-		t.Fatalf("page after a valued anchor: %v", err)
-	}
-	if want := []string{"c"}; !sameIDs(got, want) {
-		t.Fatalf("page after a valued anchor is %v, want %v", got, want)
-	}
-}
-
-func TestAFilterIsBoundUnderTheDeclarationItRunsAgainst(t *testing.T) {
-	s, base := storeWithRequests(t, map[string]string{
-		"a": `{"attempts":1}`,
-		"b": `{"attempts":2}`,
-		"c": `{"attempts":3}`,
-	})
-	numeric := docstore.Query{
-		Namespace:  "app/approval-gate",
-		Collection: "requests",
-		Filters:    []docstore.Filter{{Field: "attempts", Op: docstore.OpEq, Value: float64(2)}},
-	}
-
-	got, err := readIDs(t, s, numeric)
-	if err != nil {
-		t.Fatalf("numeric filter under a number declaration: %v", err)
-	}
-	if want := []string{"b"}; !sameIDs(got, want) {
-		t.Fatalf("numeric filter matched %v, want %v", got, want)
-	}
-
-	next := requestsDeclaration()
-	for i := range next.Fields {
-		if next.Fields[i].Name == "attempts" {
-			next.Fields[i].Type = docstore.FieldString
-		}
-	}
-	if _, err := s.DefineDocumentCollection(next, base.Add(time.Hour)); err != nil {
-		t.Fatalf("redeclare: %v", err)
-	}
-
-	got, err = readIDs(t, s, numeric)
-	if err == nil {
-		t.Fatalf("a numeric filter on a string field returned %v and no error", got)
-	}
-	if !strings.Contains(err.Error(), "needs a string value") {
-		t.Fatalf("error does not name the type mismatch: %v", err)
 	}
 }
 

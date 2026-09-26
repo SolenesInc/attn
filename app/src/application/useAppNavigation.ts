@@ -316,7 +316,7 @@ export function useAppNavigation({
     const session = daemonSessions.find((entry) => entry.id === activeSessionId);
     if (!session) return;
     const dispatcher = dispatcherOf(session, daemonSessions);
-    if (dispatcher?.session) handleSelectSession(dispatcher.session.id);
+    if (dispatcher) handleSelectSession(dispatcher.id);
   }, [activeSessionId, daemonSessions, handleSelectSession]);
 
   return {

@@ -1,73 +1,92 @@
-import { useState } from 'react';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, expect, it } from 'vitest';
-import { GuardianSettings } from './GuardianSettings';
-import { createMockDaemon } from '../test/mocks/daemon';
-import { clearDelegationModelCatalogs } from '../hooks/useDelegationModelCatalog';
-import { ModelCapabilitySupport, type GuardianSelection } from '../types/generated';
-import type { DelegationModelCatalog } from '../hooks/daemonDelegationEvents';
-import type { AutoModePolicyEdit } from '../hooks/daemonAutoModeEvents';
+import { fireEvent, screen } from '@testing-library/react';
+import { expect, it } from 'vitest';
+import { renderApp } from '../test/renderApp';
+import type { EventMessage } from '../test/protocol';
+import type { ScriptedDaemon } from '../test/scriptedDaemon';
 
-const model = { harness: 'pi', provider: 'fixture', id: 'review', name: 'Reviewer', description: '', detail: '', access: ModelCapabilitySupport.Supported, effort_support: ModelCapabilitySupport.Supported, effort_levels: ['off', 'low', 'high'] };
-afterEach(() => { cleanup(); clearDelegationModelCatalogs(); });
+type AutoModeConfig = EventMessage<'automode_state_result'>['config'];
+type Guardian = NonNullable<AutoModeConfig['guardian']>;
 
-function setup(initial: GuardianSelection = {}) {
-  const daemon = createMockDaemon();
-  daemon.setResponse('models', { models: [model, { ...model, id: 'plain', name: 'Plain', effort_support: ModelCapabilitySupport.Unsupported, effort_levels: [] }], detail: '' });
-  daemon.setResponse('save', ([edit]: unknown[]) => (edit as AutoModePolicyEdit).guardian);
-  const loadModels = daemon.createRequest<DelegationModelCatalog>('models');
-  const write = daemon.createRequest<GuardianSelection>('save');
-  function Harness() {
-    const [value, setValue] = useState(initial);
-    const [busy, setBusy] = useState(false);
-    return <GuardianSettings value={value} loadModels={loadModels} policy={{ editing: busy ? 'policy' : null, setPolicy: async edit => {
-      setBusy(true);
-      try { setValue(await write(edit)); } finally { setBusy(false); }
-    } }} />;
-  }
-  render(<Harness />);
+type Model = EventMessage<'delegation_models_result'>['models'][number];
+
+const model: Model = { harness: 'pi', provider: 'fixture', id: 'review', name: 'Reviewer', description: '', detail: '', access: 'supported', effort_support: 'supported', effort_levels: ['off', 'low', 'high'] };
+const plain: Model = { ...model, id: 'plain', name: 'Plain', effort_support: 'unsupported', effort_levels: [] };
+
+function autoModeConfig(guardian: Guardian): AutoModeConfig {
+  return {
+    guardian,
+    enabled_default: false,
+    approval_policy: 'on-request',
+    sandbox_mode: 'workspace-write',
+    environment: { slots: [], notes: [] },
+    rules: [],
+    shipped_rules: [],
+    network: { enabled: false, allowed_domains: [], denied_domains: [], allow_local_binding: false },
+    shipped_denied_domains: [],
+    legacy_patterns: [],
+    presets: [],
+  };
+}
+
+async function openGuardian(guardian: Guardian = {}, refusal = '') {
+  const { daemon } = await renderApp();
+  let config = autoModeConfig(guardian);
+  daemon.on('automode_get', () => ({ event: 'automode_state_result', success: true, config, proposals: [], denials: [], environment_slots: [] }));
+  daemon.on('delegation_models', () => ({ event: 'delegation_models_result', success: true, models: [model, plain], detail: '' }));
+  daemon.on('automode_policy_set', ({ guardian: next }) => {
+    if (refusal) return { event: 'automode_config_result', success: false, error: refusal };
+    config = { ...config, guardian: next ?? {} };
+    return { event: 'automode_config_result', success: true, config };
+  });
+  fireEvent.keyDown(window, { key: ',', metaKey: true });
+  fireEvent.click(screen.getByTestId('settings-nav-autoMode'));
+  await daemon.idle();
   return daemon;
 }
 
+async function choose(daemon: ScriptedDaemon, label: string, value: string) {
+  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  await daemon.idle();
+}
+
+
 it('saves independent model and reasoning selections and restores the default', async () => {
-  const daemon = setup();
-  await screen.findByRole('option', { name: 'Reviewer' });
-  fireEvent.change(screen.getByLabelText('Guardian model'), { target: { value: JSON.stringify(['fixture', 'review']) } });
-  await waitFor(() => expect(screen.getByLabelText('Guardian model')).toHaveValue(JSON.stringify(['fixture', 'review'])));
-  fireEvent.change(screen.getByLabelText('Guardian reasoning'), { target: { value: 'high' } });
-  await waitFor(() => expect(screen.getByLabelText('Guardian reasoning')).toHaveValue('high'));
+  const daemon = await openGuardian();
+  await choose(daemon, 'Guardian model', JSON.stringify(['fixture', 'review']));
+  expect(screen.getByLabelText('Guardian model')).toHaveValue(JSON.stringify(['fixture', 'review']));
+  await choose(daemon, 'Guardian reasoning', 'high');
+  expect(screen.getByLabelText('Guardian reasoning')).toHaveValue('high');
   fireEvent.click(screen.getByRole('button', { name: 'Reset guardian default' }));
-  await waitFor(() => expect(screen.getByLabelText('Guardian model')).toHaveValue(''));
-  expect(daemon.getCalls('save').map(call => call.args)).toEqual([
-    [{ guardian: { provider: 'fixture', model: 'review', effort: undefined } }],
-    [{ guardian: { provider: 'fixture', model: 'review', effort: 'high' } }],
-    [{ guardian: {} }],
+  await daemon.idle();
+  expect(screen.getByLabelText('Guardian model')).toHaveValue('');
+  expect(daemon.sentOf('automode_policy_set').map((command) => command.guardian)).toEqual([
+    { provider: 'fixture', model: 'review' },
+    { provider: 'fixture', model: 'review', effort: 'high' },
+    {},
   ]);
-  expect(daemon.getCalls('models').map(call => call.args)).toEqual([['pi']]);
+  expect(daemon.sentOf('delegation_models').map((command) => command.harness)).toEqual(['pi']);
 });
 
 it('clears incompatible reasoning when selecting a non-reasoning model', async () => {
-  setup({ provider: 'fixture', model: 'review', effort: 'high' });
-  await screen.findByRole('option', { name: 'Plain' });
-  fireEvent.change(screen.getByLabelText('Guardian model'), { target: { value: JSON.stringify(['fixture', 'plain']) } });
-  await waitFor(() => expect(screen.getByLabelText('Guardian reasoning')).toHaveValue(''));
+  const daemon = await openGuardian({ provider: 'fixture', model: 'review', effort: 'high' });
+  await choose(daemon, 'Guardian model', JSON.stringify(['fixture', 'plain']));
+  expect(screen.getByLabelText('Guardian reasoning')).toHaveValue('');
   expect(screen.queryByRole('option', { name: 'high' })).not.toBeInTheDocument();
   expect(screen.getByRole('option', { name: 'off' })).toBeInTheDocument();
 });
 
 it('keeps an unavailable saved model visible and offers reset', async () => {
-  setup({ provider: 'removed', model: 'missing', effort: 'high' });
-  await screen.findByText('The saved guardian model is unavailable. Choose another model or restore Follow session model.');
+  const daemon = await openGuardian({ provider: 'removed', model: 'missing', effort: 'high' });
+  expect(screen.getByText('The saved guardian model is unavailable. Choose another model or restore Follow session model.')).toBeInTheDocument();
   expect(screen.getByLabelText('Guardian model')).toHaveValue(JSON.stringify(['removed', 'missing']));
   fireEvent.click(screen.getByRole('button', { name: 'Reset guardian default' }));
-  await waitFor(() => expect(screen.getByLabelText('Guardian model')).toHaveValue(''));
+  await daemon.idle();
+  expect(screen.getByLabelText('Guardian model')).toHaveValue('');
 });
 
 it('shows save failures without claiming the selection changed', async () => {
-  const daemon = setup();
-  daemon.setResponse('save', () => { throw new Error('The daemon refused the change'); });
-  await screen.findByRole('option', { name: 'Reviewer' });
-  fireEvent.change(screen.getByLabelText('Guardian model'), { target: { value: JSON.stringify(['fixture', 'review']) } });
-  expect(await screen.findByRole('alert')).toHaveTextContent('The daemon refused the change');
+  const daemon = await openGuardian({}, 'The daemon refused the change');
+  await choose(daemon, 'Guardian model', JSON.stringify(['fixture', 'review']));
+  expect(screen.getByRole('alert')).toHaveTextContent('The daemon refused the change');
   expect(screen.getByLabelText('Guardian model')).toHaveValue('');
 });

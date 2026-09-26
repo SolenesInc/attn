@@ -145,7 +145,7 @@ while true; do sleep 0.05; done
 	if elapsed := time.Since(start); elapsed >= testGrace {
 		t.Fatalf("cooperative reap waited out the %s grace (%s); SIGTERM is not reaching the child", testGrace, elapsed)
 	}
-	if processAlive(entry.PID) {
+	if ProcessAlive(entry.PID) {
 		t.Fatalf("pid %d still alive after reap", entry.PID)
 	}
 }
@@ -162,7 +162,7 @@ while true; do sleep 0.05; done
 	if len(results) != 1 || results[0].Outcome != ReapKilled {
 		t.Fatalf("expected %s, got %+v", ReapKilled, results)
 	}
-	if processAlive(entry.PID) {
+	if ProcessAlive(entry.PID) {
 		t.Fatalf("pid %d still alive after reap", entry.PID)
 	}
 }
@@ -182,7 +182,7 @@ while true; do sleep 0.05; done
 	if len(results) != 1 || results[0].Outcome != ReapUnidentified {
 		t.Fatalf("expected %s, got %+v", ReapUnidentified, results)
 	}
-	if !processAlive(entry.PID) {
+	if !ProcessAlive(entry.PID) {
 		t.Fatalf("reap signalled a pid it could not identify")
 	}
 }
@@ -202,7 +202,7 @@ while true; do sleep 0.05; done
 	if len(results) != 1 || results[0].Outcome != ReapUnidentified {
 		t.Fatalf("expected %s, got %+v", ReapUnidentified, results)
 	}
-	if !processAlive(entry.PID) {
+	if !ProcessAlive(entry.PID) {
 		t.Fatalf("reap signalled a pid it could not identify")
 	}
 }
@@ -331,7 +331,7 @@ while true; do sleep 0.05; done
 	if len(results) != 1 || results[0].Outcome != ReapKilled {
 		t.Fatalf("expected %s, got %+v", ReapKilled, results)
 	}
-	if processAlive(pid) {
+	if ProcessAlive(pid) {
 		t.Fatalf("pid %d still alive after reap", pid)
 	}
 }

@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"errors"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,66 +14,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func appLogs(t *testing.T, d *Daemon, name string, lines int) protocol.Response {
-	t.Helper()
-	msg := &protocol.AppLogsMessage{Cmd: protocol.CmdAppLogs, Name: name}
-	if lines > 0 {
-		msg.Lines = protocol.Ptr(lines)
-	}
-	return docCall(t, func(c net.Conn) { d.handleAppLogs(c, msg) })
-}
-
-func writeRuntimeLog(t *testing.T, d *Daemon, lines ...string) {
-	t.Helper()
-	path := AppRuntimeLogPath(d.socketPath)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatalf("mkdir log dir: %v", err)
-	}
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatalf("write runtime log: %v", err)
-	}
-}
-
-func TestAppLogsFiltersByTagAndRuntimeShowsEverything(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	writeRuntimeLog(t, d,
-		appRuntimeSelfTag+"starting, api version 1",
-		appRuntimeAppTag("greeter")+"hello from greeter",
-		appRuntimeAppTag("auditor")+"hello from auditor",
-		appRuntimeAppTag("greeter")+"and again",
-	)
-
-	resp := appLogs(t, d, "greeter", 0)
-	if !resp.Ok {
-		t.Fatalf("app logs greeter: %v", protocol.Deref(resp.Error))
-	}
-	got := resp.AppLogsResult.Lines
-	want := []string{"hello from greeter", "and again"}
-	if len(got) != len(want) {
-		t.Fatalf("lines = %q, want %q", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("line %d = %q, want %q", i, got[i], want[i])
-		}
-	}
-	if resp.AppLogsResult.Path != AppRuntimeLogPath(d.socketPath) {
-		t.Fatalf("path = %q, want the runtime log", resp.AppLogsResult.Path)
-	}
-
-	whole := appLogs(t, d, appRuntimeChildName, 0)
-	if !whole.Ok {
-		t.Fatalf("app logs runtime: %v", protocol.Deref(whole.Error))
-	}
-	if len(whole.AppLogsResult.Lines) != 4 {
-		t.Fatalf("runtime log lines = %q, want all four", whole.AppLogsResult.Lines)
-	}
-	if !strings.Contains(whole.AppLogsResult.Lines[0], "api version 1") {
-		t.Fatalf("the runtime's own lines are missing: %q", whole.AppLogsResult.Lines)
-	}
-}
-
 func TestAppLogTagMatchesTheHost(t *testing.T) {
 	source, err := os.ReadFile(filepath.Join("..", "..", "apphost", "src", "index.ts"))
 	if err != nil {
@@ -85,59 +24,6 @@ func TestAppLogTagMatchesTheHost(t *testing.T) {
 	}
 	if !strings.Contains(string(source), appRuntimeSelfTag) {
 		t.Fatalf("the host does not write the runtime tag %q", appRuntimeSelfTag)
-	}
-}
-
-func TestAppLogsBeforeTheRuntimeEverRanIsEmptyNotAnError(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-
-	resp := appLogs(t, d, "greeter", 0)
-	if !resp.Ok {
-		t.Fatalf("app logs before any runtime ran: %v", protocol.Deref(resp.Error))
-	}
-	if len(resp.AppLogsResult.Lines) != 0 {
-		t.Fatalf("lines = %q, want none", resp.AppLogsResult.Lines)
-	}
-	if resp.AppLogsResult.Path == "" {
-		t.Fatal("an empty answer did not say where the log would be")
-	}
-}
-
-func TestAppLogsRefusesAnAskPastItsCeilingByName(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-
-	resp := appLogs(t, d, "greeter", appLogMaxLines+1)
-	if resp.Ok {
-		t.Fatal("an ask past the ceiling was served")
-	}
-	msg := protocol.Deref(resp.Error)
-	for _, want := range []string{"10001", "10000", AppRuntimeLogPath(d.socketPath)} {
-		if !strings.Contains(msg, want) {
-			t.Fatalf("the refusal does not name %q: %s", want, msg)
-		}
-	}
-}
-
-func TestAppLogsSaysWhenItDroppedOlderLines(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	lines := make([]string, 0, 5)
-	for _, text := range []string{"one", "two", "three", "four", "five"} {
-		lines = append(lines, appRuntimeAppTag("greeter")+text)
-	}
-	writeRuntimeLog(t, d, lines...)
-
-	resp := appLogs(t, d, "greeter", 2)
-	if !resp.Ok {
-		t.Fatalf("app logs: %v", protocol.Deref(resp.Error))
-	}
-	if !resp.AppLogsResult.Truncated {
-		t.Fatal("older lines were dropped without saying so")
-	}
-	if got := resp.AppLogsResult.Lines; len(got) != 2 || got[0] != "four" || got[1] != "five" {
-		t.Fatalf("lines = %q, want the last two", got)
 	}
 }
 
@@ -305,27 +191,5 @@ func TestAppStatusCarriesTheStallClockAndWhenItFires(t *testing.T) {
 	d.clearAppStall("greeter")
 	if again := appStatus(t, d, "greeter"); again.AppStatusResult.Stall != nil {
 		t.Fatalf("a recovered app still reports a stall: %+v", again.AppStatusResult.Stall)
-	}
-}
-
-func TestApplyRefusesAReservedAppName(t *testing.T) {
-	d := newAppDaemon(t)
-	for _, name := range apps.ReservedNames() {
-		resp := docCall(t, func(c net.Conn) {
-			d.handleAppApply(c, &protocol.AppApplyMessage{
-				Cmd: protocol.CmdAppApply, Name: name,
-				ContentHash: "sha256:whatever",
-				Declaration: `{"name":"` + name + `","subscribe":[{"events":["ticket.*"]}]}`,
-			})
-		})
-		if resp.Ok {
-			t.Fatalf("apply installed an app called %q", name)
-		}
-		if !strings.Contains(protocol.Deref(resp.Error), "reserved") {
-			t.Fatalf("apply of %q did not say the name is reserved: %s", name, protocol.Deref(resp.Error))
-		}
-	}
-	if rows, err := d.store.ListApps(); err != nil || len(rows) != 0 {
-		t.Fatalf("apps = %+v (err %v), want none installed", rows, err)
 	}
 }

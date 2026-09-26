@@ -13,9 +13,7 @@ import { GardenReviewPanel } from './GardenReviewPanel';
 import type { SeedDocument } from './SeedDocumentView';
 import './GardenFrame.css';
 
-export type { GardenMode } from '../hooks/useGardenPresentation';
-
-export interface FrameRect {
+interface FrameRect {
   top: number;
   left: number;
   width: number;

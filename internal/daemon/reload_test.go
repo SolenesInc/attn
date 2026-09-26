@@ -4,80 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
 	"syscall"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	agentdriver "github.com/victorarias/attn/internal/agent"
-	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/toolhome"
 )
-
-func writeClaudeTranscriptFixture(t *testing.T, sessionID string) {
-	t.Helper()
-	home := t.TempDir()
-	t.Setenv(toolhome.EnvVar, home)
-	projDir := filepath.Join(home, ".claude", "projects", "proj")
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatalf("mkdir transcript dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(projDir, sessionID+".jsonl"), []byte("{}\n"), 0o644); err != nil {
-		t.Fatalf("write transcript fixture: %v", err)
-	}
-}
-
-func TestSessionLifecycleLocksStayBounded(t *testing.T) {
-	d := newDaemonForTest(t)
-	first, second := d.sessionLifecycleLockFor("session-stable"), d.sessionLifecycleLockFor("session-stable")
-	if first.entry != second.entry {
-		t.Fatal("same session mapped to different lifecycle locks")
-	}
-	first.Lock()
-	if first.entry == nil {
-		t.Fatal("acquired lifecycle lock has no entry")
-	}
-	first.Unlock()
-	second.Lock()
-	if second.entry == nil {
-		t.Fatal("acquired lifecycle lock has no entry")
-	}
-	second.Unlock()
-	left, right := d.sessionLifecycleLockFor("session-left"), d.sessionLifecycleLockFor("session-right")
-	if left.entry == right.entry {
-		t.Fatal("different sessions shared a lifecycle lock")
-	}
-	left.Lock()
-	if left.entry == nil {
-		t.Fatal("acquired lifecycle lock has no entry")
-	}
-	left.Unlock()
-	right.Lock()
-	if right.entry == nil {
-		t.Fatal("acquired lifecycle lock has no entry")
-	}
-	right.Unlock()
-
-	for i := 0; i < 640; i++ {
-		lease := d.sessionLifecycleLockFor(fmt.Sprintf("session-%d", i))
-		lease.Lock()
-		if lease.entry == nil {
-			t.Fatal("acquired lifecycle lock has no entry")
-		}
-		lease.Unlock()
-	}
-	if len(d.sessionLifecycleLocks) != 0 {
-		t.Fatalf("lifecycle lock count = %d, want 0 after all leases released", len(d.sessionLifecycleLocks))
-	}
-}
 
 type fakeReloadBackend struct {
 	mu        sync.Mutex
@@ -213,32 +153,10 @@ func (b *fakeReloadBackend) spawnCount() int {
 	defer b.mu.Unlock()
 	return len(b.spawnOpts)
 }
-func (b *fakeReloadBackend) spawnCountFor(id string) int {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	n := 0
-	for _, opts := range b.spawnOpts {
-		if opts.ID == id {
-			n++
-		}
-	}
-	return n
-}
-
 func newReloadTestDaemon(t *testing.T, backend *fakeReloadBackend) *Daemon {
-	t.Helper()
-	return newReloadTestDaemonOn(t, newReloadTestBase(t), backend)
-}
-
-func newReloadTestBase(t *testing.T) *Daemon {
 	t.Helper()
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	t.Cleanup(func() { _ = d.store.Close() })
-	return d
-}
-
-func newReloadTestDaemonOn(t *testing.T, d *Daemon, backend *fakeReloadBackend) *Daemon {
-	t.Helper()
 	d.ptyBackend = backend
 	return d
 }
@@ -253,90 +171,6 @@ func addReloadSessionAt(d *Daemon, id string, agent protocol.SessionAgent, state
 		ID: id, Label: id, Agent: agent, Directory: directory,
 		WorkspaceID: "ws-" + id, State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-}
-
-func TestReloadSessionAgentRespawnsWithResumeAndPreservedLaunchParams(t *testing.T) {
-	backend := &fakeReloadBackend{
-		liveIDs: []string{"chief"},
-		info:    ptybackend.SessionInfo{Cols: 120, Rows: 40},
-		params:  ptybackend.SessionLaunchParams{Recorded: true, YoloMode: true, Executable: "/custom/claude"},
-	}
-	d := newReloadTestDaemon(t, backend)
-	addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	d.persistResumeSessionID("chief", "resume-xyz")
-	writeClaudeTranscriptFixture(t, "resume-xyz")
-
-	var respawned, exited bool
-	d.wsHub.broadcastListener = func(e *protocol.WebSocketEvent) {
-		if e == nil {
-			return
-		}
-		switch e.Event {
-		case protocol.EventRuntimeRespawned:
-			if protocol.Deref(e.ID) == "chief" {
-				respawned = true
-			}
-		case protocol.EventSessionExited:
-			if protocol.Deref(e.ID) == "chief" {
-				exited = true
-			}
-		}
-	}
-
-	d.reloadSessionAgent("chief")
-
-	if order := backend.callOrder(); !reflect.DeepEqual(order, []string{"kill:chief", "remove:chief", "spawn:chief"}) {
-		t.Fatalf("orchestration order = %v, want [kill remove spawn]", order)
-	}
-	opts, ok := backend.lastSpawn()
-	if !ok {
-		t.Fatal("no respawn recorded")
-	}
-	if opts.ResumeSessionID != "resume-xyz" {
-		t.Fatalf("ResumeSessionID = %q, want resume-xyz (transcript preserved)", opts.ResumeSessionID)
-	}
-	if !opts.YoloMode {
-		t.Fatal("YoloMode must be preserved across reload")
-	}
-	if opts.Executable != "/custom/claude" {
-		t.Fatalf("Executable = %q, want /custom/claude", opts.Executable)
-	}
-	if opts.Cols != 120 || opts.Rows != 40 {
-		t.Fatalf("geometry = %dx%d, want 120x40 (live SessionInfo)", opts.Cols, opts.Rows)
-	}
-	if !respawned {
-		t.Fatal("expected a runtime_respawned broadcast")
-	}
-
-	d.handlePTYExit(ptybackend.ExitInfo{ID: "chief"})
-	if exited {
-		t.Fatal("session_exited must be suppressed for a reloading session")
-	}
-	if d.consumeReloading("chief") {
-		t.Fatal("the suppressed exit should have consumed the reloading flag")
-	}
-}
-
-func TestReloadSessionAgentFreshSpawnsWhenNotResumable(t *testing.T) {
-	backend := &fakeReloadBackend{
-		liveIDs: []string{"chief"},
-		info:    ptybackend.SessionInfo{Cols: 80, Rows: 24},
-		params:  ptybackend.SessionLaunchParams{Recorded: true},
-	}
-	d := newReloadTestDaemon(t, backend)
-	addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	d.persistResumeSessionID("chief", "chief")
-	t.Setenv(toolhome.EnvVar, t.TempDir())
-
-	d.reloadSessionAgent("chief")
-
-	opts, ok := backend.lastSpawn()
-	if !ok {
-		t.Fatal("no respawn recorded")
-	}
-	if opts.ResumeSessionID != "" {
-		t.Fatalf("ResumeSessionID = %q, want empty (fresh spawn — nothing to resume)", opts.ResumeSessionID)
-	}
 }
 
 func TestReloadSessionAgentAbortsWhenLaunchParamsNotRecorded(t *testing.T) {
@@ -441,85 +275,6 @@ func TestBuildReloadSpawnOptionsCarriesContextWindowCap(t *testing.T) {
 			t.Fatalf("ContextWindowCap = %d, want the 300000 pin (a reload is how the pin takes effect)", opts.ContextWindowCap)
 		}
 	})
-}
-
-func TestBuildReloadSpawnOptionsPreservesUnattendedContractAsUnit(t *testing.T) {
-	spec := launchcontract.UnattendedLaunchSpec{
-		Agent: "codex", Model: "gpt-test", Effort: "high", Executable: "/opt/codex",
-		ApprovalProductMode: launchcontract.ApprovalAuto, ApprovalDriverMode: launchcontract.ApprovalAutoReview,
-		DirectoryTrust: launchcontract.TrustConfiguredDirectory, Recovery: launchcontract.RecoveryAdoptOrRestartFresh,
-	}
-	backend := &fakeReloadBackend{params: ptybackend.SessionLaunchParams{
-		Recorded: true, YoloMode: true, Model: "stale-model", Effort: "low", UnattendedLaunch: spec,
-	}}
-	d := newReloadTestDaemon(t, backend)
-	addReloadSession(d, "automation", protocol.SessionAgentCodex, protocol.SessionStateWorking)
-	d.store.SetSetting(SettingAutoApproveEnabled, "false")
-
-	opts, err := d.buildReloadSpawnOptions(d.store.Get("automation"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(opts.UnattendedLaunch, spec) {
-		t.Fatalf("reloaded contract = %#v, want %#v", opts.UnattendedLaunch, spec)
-	}
-	if opts.YoloMode || opts.AutoApprove || opts.Model != "" || opts.Effort != "" || opts.Executable != "" {
-		t.Fatalf("parallel launch fields survived reload: %#v", opts)
-	}
-}
-
-func TestBuildReloadSpawnOptionsUsesRecordedApprovalRoute(t *testing.T) {
-	for _, tc := range []struct {
-		name          string
-		setting       string
-		route         launchcontract.ApprovalRoute
-		wantAuto      bool
-		wantYolo      bool
-		wantPersisted launchcontract.ApprovalRoute
-	}{
-		{name: "reviewer survives disabled global setting", setting: "false", route: launchcontract.ApprovalRouteReviewer, wantAuto: true, wantPersisted: launchcontract.ApprovalRouteReviewer},
-		{name: "user survives enabled global setting", setting: "true", route: launchcontract.ApprovalRouteUser, wantPersisted: launchcontract.ApprovalRouteUser},
-		{name: "legacy missing route is conservative", setting: "true", route: "", wantPersisted: launchcontract.ApprovalRouteUser},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			backend := &fakeReloadBackend{params: ptybackend.SessionLaunchParams{Recorded: true, ApprovalRoute: tc.route}}
-			d := newReloadTestDaemon(t, backend)
-			addReloadSession(d, "route", protocol.SessionAgentCodex, protocol.SessionStateWorking)
-			d.store.SetSetting(SettingAutoApproveEnabled, tc.setting)
-
-			opts, err := d.buildReloadSpawnOptions(d.store.Get("route"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if opts.AutoApprove != tc.wantAuto || opts.YoloMode != tc.wantYolo || opts.ApprovalRoute != tc.wantPersisted {
-				t.Fatalf("approval launch = auto:%v yolo:%v route:%q", opts.AutoApprove, opts.YoloMode, opts.ApprovalRoute)
-			}
-		})
-	}
-}
-
-func TestReloadSessionAgentSkipsWhenNoLiveWorker(t *testing.T) {
-	backend := &fakeReloadBackend{liveIDs: nil, params: ptybackend.SessionLaunchParams{Recorded: true}}
-	d := newReloadTestDaemon(t, backend)
-	addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-
-	d.reloadSessionAgent("chief")
-
-	if order := backend.callOrder(); len(order) != 0 {
-		t.Fatalf("expected no-op for a session with no live worker, got %v", order)
-	}
-}
-
-func TestReloadSessionAgentSkipsUnsupportedAgent(t *testing.T) {
-	backend := &fakeReloadBackend{liveIDs: []string{"chief"}, params: ptybackend.SessionLaunchParams{Recorded: true}}
-	d := newReloadTestDaemon(t, backend)
-	addReloadSession(d, "chief", protocol.SessionAgent(protocol.AgentShellValue), protocol.SessionStateIdle)
-
-	d.reloadSessionAgent("chief")
-
-	if order := backend.callOrder(); len(order) != 0 {
-		t.Fatalf("expected no reload for an agent without a chief-guidance launch path, got %v", order)
-	}
 }
 
 func TestReloadSessionAgentRecomposesPluginChiefInstructionsBeforeKill(t *testing.T) {
@@ -762,31 +517,6 @@ func TestReloadSessionAgentRespawnFailureBroadcastsSessionExited(t *testing.T) {
 	}
 }
 
-func TestSetChiefOfStaffReloadsOnAssignAndDemote(t *testing.T) {
-	base := newReloadTestBase(t)
-	synctest.Test(t, func(t *testing.T) {
-		backend := &fakeReloadBackend{
-			liveIDs: []string{"chief"},
-			info:    ptybackend.SessionInfo{Cols: 80, Rows: 24},
-			params:  ptybackend.SessionLaunchParams{Recorded: true},
-		}
-		d := newReloadTestDaemonOn(t, base, backend)
-		stopDaemonBackground(t, d)
-		addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-		client := newRenameTestClient()
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true,
-		})
-		requireSpawnCount(t, backend, 1, "assign")
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: false,
-		})
-		requireSpawnCount(t, backend, 2, "demote")
-	})
-}
-
 func TestReloadSessionAgentSerializesConcurrentReloads(t *testing.T) {
 	backend := &fakeReloadBackend{
 		liveIDs:   []string{"chief"},
@@ -828,86 +558,6 @@ func TestReloadSessionAgentSerializesConcurrentReloads(t *testing.T) {
 	}
 	if backend.spawnCount() != 2 {
 		t.Fatalf("spawn count = %d, want 2 (both reloads respawned, serialized)", backend.spawnCount())
-	}
-}
-
-func TestSetChiefOfStaffRoleTransferReloadsBothChiefs(t *testing.T) {
-	base := newReloadTestBase(t)
-	synctest.Test(t, func(t *testing.T) {
-		backend := &fakeReloadBackend{
-			liveIDs: []string{"alice", "bob"},
-			info:    ptybackend.SessionInfo{Cols: 80, Rows: 24},
-			params:  ptybackend.SessionLaunchParams{Recorded: true},
-		}
-		d := newReloadTestDaemonOn(t, base, backend)
-		stopDaemonBackground(t, d)
-		addReloadSession(d, "alice", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-		addReloadSession(d, "bob", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-		client := newRenameTestClient()
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "alice", ChiefOfStaff: true,
-		})
-		requireSpawnCount(t, backend, 1, "assign alice")
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "bob", ChiefOfStaff: true,
-		})
-		requireSpawnCount(t, backend, 3, "transfer to bob")
-
-		if got := backend.spawnCountFor("bob"); got != 1 {
-			t.Fatalf("bob (new chief) respawns = %d, want 1", got)
-		}
-		if got := backend.spawnCountFor("alice"); got != 2 {
-			t.Fatalf("alice respawns = %d, want 2 (1 assign + 1 displaced-on-transfer)", got)
-		}
-	})
-}
-
-func TestSetChiefOfStaffNoReloadOnNoOpToggle(t *testing.T) {
-	base := newReloadTestBase(t)
-	synctest.Test(t, func(t *testing.T) {
-		backend := &fakeReloadBackend{
-			liveIDs: []string{"chief", "other"},
-			info:    ptybackend.SessionInfo{Cols: 80, Rows: 24},
-			params:  ptybackend.SessionLaunchParams{Recorded: true},
-		}
-		d := newReloadTestDaemonOn(t, base, backend)
-		stopDaemonBackground(t, d)
-		addReloadSession(d, "chief", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-		addReloadSession(d, "other", protocol.SessionAgentClaude, protocol.SessionStateIdle)
-		client := newRenameTestClient()
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "other", ChiefOfStaff: false,
-		})
-		assertSpawnCountStaysBelow(t, backend, 1, "no-op demote of a non-chief")
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true,
-		})
-		requireSpawnCount(t, backend, 1, "assign chief")
-
-		d.handleSetChiefOfStaff(client, &protocol.SetChiefOfStaffMessage{
-			Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true,
-		})
-		assertSpawnCountStaysBelow(t, backend, 2, "redundant re-assign of the current chief")
-	})
-}
-
-func assertSpawnCountStaysBelow(t *testing.T, backend *fakeReloadBackend, want int, label string) {
-	t.Helper()
-	synctest.Wait()
-	if got := backend.spawnCount(); got >= want {
-		t.Fatalf("%s: spawn count = %d, want < %d (no-op toggle must not reload)", label, got, want)
-	}
-}
-
-func requireSpawnCount(t *testing.T, backend *fakeReloadBackend, want int, label string) {
-	t.Helper()
-	synctest.Wait()
-	if got := backend.spawnCount(); got < want {
-		t.Fatalf("%s: respawn count = %d, want >= %d", label, got, want)
 	}
 }
 

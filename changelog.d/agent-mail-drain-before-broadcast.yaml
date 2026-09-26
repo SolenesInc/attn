@@ -1,0 +1,3 @@
+kind: fixed
+area: agents
+change: A message sent to an agent the moment it goes idle now reports "notified" instead of saying its doorbell was already being placed or queued in the same batch.

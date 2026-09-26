@@ -919,13 +919,19 @@ func (d *Daemon) unregisterWorkspaceIfEmpty(workspaceID string) bool {
 	if d.workspaces == nil {
 		return false
 	}
-	if workspace, ok := d.workspaces.snapshot(workspaceID); ok && workspace.Pinned {
-		d.recomputeAndBroadcastWorkspace(workspaceID)
-		return false
+	if d.unregisterUnoccupiedWorkspace(workspaceID) {
+		return true
 	}
-	if len(d.workspaces.sessionIDs(workspaceID)) > 0 ||
+	d.recomputeAndBroadcastWorkspace(workspaceID)
+	return false
+}
+
+func (d *Daemon) unregisterUnoccupiedWorkspace(workspaceID string) bool {
+	d.workspaceOccupancyMu.Lock()
+	defer d.workspaceOccupancyMu.Unlock()
+	if workspace, ok := d.workspaces.snapshot(workspaceID); !ok || workspace.Pinned ||
+		len(d.workspaces.sessionIDs(workspaceID)) > 0 ||
 		d.workspaceHasSessionlessContent(workspaceID) {
-		d.recomputeAndBroadcastWorkspace(workspaceID)
 		return false
 	}
 	snapshot, removed := d.workspaces.unregister(workspaceID)
@@ -954,9 +960,9 @@ func (d *Daemon) handleWorkspaceLayoutAddSessionPane(client *wsClient, msg *prot
 }
 
 func (d *Daemon) addWorkspaceSessionPane(msg *protocol.WorkspaceLayoutAddSessionPaneMessage) (*string, bool, error) {
-	d.sessionPaneAddMu.Lock()
+	d.workspaceOccupancyMu.Lock()
 	paneID, created, err := d.addWorkspaceSessionPaneLocked(msg)
-	d.sessionPaneAddMu.Unlock()
+	d.workspaceOccupancyMu.Unlock()
 	if created && err == nil {
 		d.broadcastWorkspaceLayoutUpdated(msg.WorkspaceID)
 	}

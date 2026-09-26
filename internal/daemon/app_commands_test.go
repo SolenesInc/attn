@@ -18,6 +18,10 @@ func commandManifest(commands ...appbuild.Command) appbuild.Manifest {
 	}
 }
 
+func tileView(name, title string) appbuild.View {
+	return appbuild.View{Name: name, Kind: appbuild.ViewKindTile, Title: title, Entrypoint: "src/views/" + name + ".tsx"}
+}
+
 type appCommandCaller struct {
 	client *wsClient
 }
@@ -131,49 +135,6 @@ func TestAppCommandWithNoPayloadAndNoAnswerSucceeds(t *testing.T) {
 	}
 }
 
-func TestAppCommandIsRefusedByTheServingVersionsDeclaration(t *testing.T) {
-	d := newAppDaemon(t)
-	first := installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	installApp(t, d, "reviewer", commandManifest(
-		appbuild.Command{Name: "approve"}, appbuild.Command{Name: "reject"}))
-	startFakeAppRuntime(t, d, nil)
-	caller := newAppCommandCaller()
-
-	if result := caller.invoke(t, d, "reviewer", "reject", ""); !result.Success {
-		t.Fatalf("the newly declared command failed: %s", protocol.Deref(result.Error))
-	}
-	if err := d.store.SetAppCurrentVersion("reviewer", first.ID, first.CreatedAt); err != nil {
-		t.Fatalf("roll back: %v", err)
-	}
-
-	mustFail(t, caller.invoke(t, d, "reviewer", "reject", ""), "reject", "approve", "reviewer")
-}
-
-func TestAppCommandRefusesAnAppThatIsDisabledOrMissing(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	startFakeAppRuntime(t, d, nil)
-	caller := newAppCommandCaller()
-
-	mustFail(t, caller.invoke(t, d, "ghost", "approve", ""), "ghost", "attn app apply")
-
-	if resp := appSetEnabled(t, d, "reviewer", false); !resp.Ok {
-		t.Fatalf("disable reviewer: %v", protocol.Deref(resp.Error))
-	}
-	mustFail(t, caller.invoke(t, d, "reviewer", "approve", ""), "disabled", "attn app enable reviewer")
-}
-
-func TestAppCommandRefusesAPayloadOverTheLimit(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	startFakeAppRuntime(t, d, nil)
-
-	huge := `{"note":"` + strings.Repeat("x", appCommandPayloadLimit) + `"}`
-	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", huge)
-
-	mustFail(t, result, "approve", "reviewer", "262144", "document")
-}
-
 func TestAppCommandRefusesAnAnswerOverTheLimit(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
@@ -193,14 +154,6 @@ func TestAppCommandRefusesAnAnswerOverTheLimit(t *testing.T) {
 	if len(rows) != 1 || rows[0].Status != appInvocationStatusError {
 		t.Fatalf("invocations = %+v, want one recorded failure", rows)
 	}
-}
-
-func TestAppCommandRefusesAPayloadThatIsNotJSON(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	startFakeAppRuntime(t, d, nil)
-
-	mustFail(t, newAppCommandCaller().invoke(t, d, "reviewer", "approve", "{not json"), "JSON")
 }
 
 func TestAppCommandCarriesAThrownHandlerBackToTheCaller(t *testing.T) {
@@ -253,52 +206,6 @@ func TestAppCommandQueuedBehindABusyAppRefusesInsideItsOwnBudget(t *testing.T) {
 	result := newAppCommandCaller().invoke(t, d, "reviewer", "approve", "")
 
 	mustFail(t, result, "approve", "reviewer", "300ms", "never got a turn", "attn app logs reviewer")
-}
-
-func TestAppCommandWithoutARequestIDIsRefusedOnTheSpot(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "reviewer", commandManifest(appbuild.Command{Name: "approve"}))
-	caller := newAppCommandCaller()
-
-	d.handleAppCommand(caller.client, &protocol.AppCommandMessage{
-		Cmd: protocol.CmdAppCommand, App: "reviewer", Command: "approve",
-	})
-
-	select {
-	case msg := <-caller.client.send:
-		var out map[string]any
-		if err := json.Unmarshal(msg.payload, &out); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		if out["event"] != protocol.EventCommandError {
-			t.Fatalf("answered with %v, want an error event", out)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("a command with no request id was answered with silence")
-	}
-}
-
-func TestAppStatusCarriesTheServingVersionsCommands(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "reviewer", commandManifest(
-		appbuild.Command{Name: "approve", Description: "Approve the request."},
-		appbuild.Command{Name: "reject"},
-	))
-
-	resp := appStatus(t, d, "reviewer")
-	if !resp.Ok {
-		t.Fatalf("app status: %v", protocol.Deref(resp.Error))
-	}
-	commands := resp.AppStatusResult.App.Commands
-	if len(commands) != 2 {
-		t.Fatalf("commands = %+v, want both", commands)
-	}
-	if commands[0].Name != "approve" || protocol.Deref(commands[0].Description) != "Approve the request." {
-		t.Errorf("first command = %+v", commands[0])
-	}
-	if commands[1].Description != nil {
-		t.Errorf("a command with no description carried one: %+v", commands[1])
-	}
 }
 
 type errTest string

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { waitFor } from '../test/utils';
+import { waitFor } from '@testing-library/react';
 import { installVerbatimTextEntryGuard } from './verbatimTextEntry';
 
 describe('installVerbatimTextEntryGuard', () => {

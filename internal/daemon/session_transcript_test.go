@@ -75,14 +75,3 @@ func TestHandleSessionTranscriptResolvesNativeIDAndReturnsRedactedEvents(t *test
 		t.Fatalf("resumed response = %+v", resumed)
 	}
 }
-
-func TestHandleSessionTranscriptReturnsStableErrors(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	response := callSessionTranscript(t, d, &protocol.SessionTranscriptMessage{Cmd: protocol.CmdSessionTranscript, TargetSessionID: "missing"})
-	if response.Ok || protocol.Deref(response.Error) != "session_not_found" {
-		t.Fatalf("response = %+v", response)
-	}
-	if got := SessionTranscriptErrorMessage("cursor_mismatch"); got != "The transcript cursor belongs to a different transcript" {
-		t.Fatalf("message = %q", got)
-	}
-}

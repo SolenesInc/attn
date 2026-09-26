@@ -15,6 +15,7 @@ import (
 	"github.com/victorarias/attn/internal/hooks"
 	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 	"nhooyr.io/websocket"
 )
 
@@ -39,7 +40,7 @@ func TestPluginDriverEndToEnd_InstalledProcessLaunchReportAndResumeThroughWorker
 	}
 
 	tmpDir := shortTempDir(t)
-	attnBin := attnBinaryForE2ETest(t, tmpDir)
+	attnBin := testworld.AttnBinary(t)
 
 	port, err := freeTCPPort()
 	if err != nil {
@@ -618,4 +619,16 @@ func assertPluginFixtureInstructionsSkipSelfReport(t *testing.T, record pluginDr
 	if strings.Contains(content, hooks.PullRequestSelfReportGuidance) {
 		t.Fatalf("%s told a reporting driver to record its own pull requests", record.Method)
 	}
+}
+
+func waitForCondition(t *testing.T, timeout time.Duration, ok func() bool, description string) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if ok() {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", description)
 }

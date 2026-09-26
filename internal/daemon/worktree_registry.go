@@ -81,38 +81,6 @@ func (d *Daemon) trackedRepositoriesContext(ctx context.Context) ([]string, erro
 	return repos, nil
 }
 
-func (d *Daemon) refreshRepositoryWorktrees(repo string, now time.Time) bool {
-	return d.refreshRepositoryWorktreesContext(context.Background(), repo, now)
-}
-
-func (d *Daemon) refreshRepositoryWorktreesContext(ctx context.Context, repo string, now time.Time) bool {
-	if d.store == nil {
-		return false
-	}
-
-	states, err := d.reconcileWorktreeRegistryContext(ctx, repo, now)
-	if err != nil {
-		d.logf("worktree refresh: %s: listing worktrees: %v", repo, err)
-		return false
-	}
-
-	facts, err := d.repositoryFactsContext(ctx, repo, now)
-	if err != nil {
-		d.logf("worktree refresh: %s: %v", repo, err)
-		for _, state := range states {
-			d.store.RecordWorktreeRefreshError(state.Path, err.Error())
-		}
-		return false
-	}
-
-	d.coalesceSnapshots(func() {
-		for _, state := range states {
-			d.refreshWorktreeRowContext(ctx, facts, state, now)
-		}
-	})
-	return true
-}
-
 func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo string, now time.Time) ([]git.WorktreeState, error) {
 	finish := d.beginGitOperation(protocol.GitOperationKindRefreshRepository, repo, nil)
 	states, err := d.listWorktreeStatesContext(ctx, repo)
@@ -151,18 +119,12 @@ func (d *Daemon) reconcileWorktreeRegistryContext(ctx context.Context, repo stri
 }
 
 func (d *Daemon) listWorktreeStatesContext(ctx context.Context, repo string) ([]git.WorktreeState, error) {
-	if d.worktreeListStates != nil {
-		return d.worktreeListStates(ctx, repo)
-	}
 	return gitValue(ctx, d.gitExecution(), gitTask{Kind: gitTaskWorktreeObserve, Lane: gitDeferred}, func(runCtx context.Context, client *git.Client) ([]git.WorktreeState, error) {
 		return client.ListWorktreeStates(runCtx, repo)
 	})
 }
 
 func (d *Daemon) repositoryFactsContext(ctx context.Context, repo string, now time.Time) (*repositoryFacts, error) {
-	if d.worktreeRepositoryFacts != nil {
-		return d.worktreeRepositoryFacts(ctx, repo, now)
-	}
 	facts := &repositoryFacts{repo: repo}
 
 	if err := d.refreshMergedPullRequestsContext(ctx, repo, now); err != nil {
@@ -350,44 +312,6 @@ func (d *Daemon) resolveIntegrationRefContext(ctx context.Context, repo, branch 
 		return "origin/" + branch, nil
 	}
 	return branch, nil
-}
-
-func (d *Daemon) refreshWorktreeRowContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) {
-	before := d.store.GetWorktree(state.Path)
-	if before == nil {
-		return
-	}
-
-	finish := d.beginGitOperation(protocol.GitOperationKindRefreshWorktree, state.Path, nil)
-	observation, err := d.observeWorktreeContext(ctx, facts, state, now)
-	finish(err)
-
-	if err != nil {
-		if context.Cause(ctx) == nil {
-			d.store.RecordWorktreeRefreshError(state.Path, err.Error())
-		}
-		return
-	}
-	d.store.RecordWorktreeObservation(state.Path, observation, now)
-	after := d.store.GetWorktree(state.Path)
-	if after == nil || sameObservation(before, after) {
-		return
-	}
-	d.publishWorktreeState(after)
-}
-
-func sameObservation(before, after *store.Worktree) bool {
-	return before.Branch == after.Branch &&
-		before.HeadSHA == after.HeadSHA &&
-		before.Detached == after.Detached &&
-		before.Dirty == after.Dirty &&
-		before.DirtyFiles == after.DirtyFiles &&
-		before.Stashes == after.Stashes &&
-		before.Unpushed == after.Unpushed &&
-		before.MergedSignal == after.MergedSignal &&
-		before.Prunable == after.Prunable &&
-		before.LastActivityAt == after.LastActivityAt &&
-		before.RefreshError == after.RefreshError
 }
 
 func (d *Daemon) observeWorktreeContext(ctx context.Context, facts *repositoryFacts, state git.WorktreeState, now time.Time) (store.WorktreeObservation, error) {

@@ -137,6 +137,7 @@ export function AnnotationSidebar({
                 ]
                   .filter(Boolean)
                   .join(' ')}
+                aria-current={selectedId === annotation.id ? 'true' : undefined}
                 onClick={() => onCardClick(annotation.id)}
               >
                 <div className="md-card-top">

@@ -43,8 +43,3 @@ func TestAutomationTicketRetentionSweepPassHonoursEnvOverrideTTL(t *testing.T) {
 		t.Fatal("open backlog ticket was swept")
 	}
 }
-
-func TestAutomationTicketRetentionSweepPassGuardsNilStore(t *testing.T) {
-	d := &Daemon{}
-	d.automationTicketRetentionSweepPass(time.Now())
-}

@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard the agent, crew, enrollment and session transcript commands through the built attn binary against a real daemon, replacing parser and printer unit tests.

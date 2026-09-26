@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 const characterizationOldTimestamp = "2000-01-01T00:00:00Z"
@@ -53,75 +51,6 @@ func characterizationEventCount(events []protocol.WebSocketEvent, eventName, ses
 	return count
 }
 
-func assertCharacterizationLiveEffects(t *testing.T, d *Daemon, capture *broadcastCapture, sessionID string) {
-	t.Helper()
-	session := d.store.Get(sessionID)
-	if session == nil {
-		t.Fatal("session missing after state transition")
-	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("state=%q, want working", session.State)
-	}
-	if session.StateUpdatedAt == characterizationOldTimestamp || session.StateSince == characterizationOldTimestamp {
-		t.Fatalf("state timestamps were not refreshed: since=%q updated=%q", session.StateSince, session.StateUpdatedAt)
-	}
-	if session.LastSeen == characterizationOldTimestamp {
-		t.Fatal("live state signal did not Touch the session")
-	}
-
-	events := capture.snapshot()
-	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
-		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-}
-
-func TestSessionStateCharacterization_TheWorkerPollIsTheLastLiveSignal(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	sessionID := "session-worker-poll"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentClaude, protocol.SessionStateLaunching)
-	capture := captureBroadcasts(d)
-
-	d.handlePTYState(sessionID, pty.Observation{
-		Source: pty.SourceWorkerInfo,
-		Claim:  protocol.StateWorking,
-		Detail: "test",
-		At:     time.Now(),
-	})
-
-	assertCharacterizationLiveEffects(t, d, capture, sessionID)
-}
-
-func TestSessionStateCharacterization_AHookOnlyFilesEvidence(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	sessionID := "session-hook"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentCodex, protocol.SessionStateIdle)
-	capture := captureBroadcasts(d)
-
-	d.handleState(&syncConn{}, &protocol.StateMessage{ID: sessionID, State: protocol.StateWorking})
-
-	session := d.store.Get(sessionID)
-	if session == nil {
-		t.Fatal("session missing")
-	}
-	if session.State != protocol.SessionStateIdle {
-		t.Fatalf("state=%q: the hook applied a state instead of filing it", session.State)
-	}
-	if session.LastSeen == characterizationOldTimestamp {
-		t.Fatal("a hook firing did not Touch the session")
-	}
-	if events := capture.snapshot(); characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID) != 0 {
-		t.Fatalf("filing evidence broadcast a state change: %+v", events)
-	}
-
-	d.resolveAllSessions(time.Now())
-	if state := d.store.Get(sessionID).State; state != protocol.SessionStateWorking {
-		t.Fatalf("state=%q after the tick, want working", state)
-	}
-}
-
 func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
 	synctest.Test(t, func(t *testing.T) {
@@ -153,7 +82,7 @@ func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *
 		}
 
 		d.handleState(&syncConn{}, &protocol.StateMessage{ID: sessionID, State: protocol.StatePendingApproval})
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 		fresh := d.store.Get(sessionID)
 		if fresh.State != protocol.SessionStatePendingApproval {
 			t.Fatalf("state=%q before the verdict lands; the rest proves nothing", fresh.State)
@@ -162,7 +91,7 @@ func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *
 		close(classifier.release)
 		requireDone(t, classified, "classifier did not finish")
 
-		d.resolveAllSessions(time.Now())
+		d.resolveDue(time.Now())
 
 		after := d.store.Get(sessionID)
 		if after == nil || after.State != protocol.SessionStatePendingApproval {
@@ -217,31 +146,5 @@ func TestSessionStateCharacterization_PluginCASGatesEffects(t *testing.T) {
 	}
 	if got := characterizationEventCount(capture.snapshot(), protocol.EventSessionStateChanged, sessionID); got != stateEventsAfterAccepted {
 		t.Fatalf("stale plugin report emitted state event: before=%d after=%d", stateEventsAfterAccepted, got)
-	}
-}
-
-func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	sessionID := "process-exit"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	capture := captureBroadcasts(d)
-
-	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 0})
-	d.resolveAllSessions(time.Now())
-
-	session := d.store.Get(sessionID)
-	if session == nil || session.State != protocol.SessionStateIdle {
-		t.Fatalf("session=%+v, want idle after exit", session)
-	}
-	events := capture.snapshot()
-	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
-		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventSessionExited, ""); got != 1 {
-		t.Fatalf("session_exited events=%d, want 1; events=%+v", got, events)
 	}
 }

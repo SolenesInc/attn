@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 
@@ -168,77 +167,4 @@ func (p *pluginFixturePeer) read() (jsonRPCMessage, error) {
 
 func (p *pluginFixturePeer) write(message jsonRPCMessage) error {
 	return json.NewEncoder(p.conn).Encode(message)
-}
-
-func TestPluginFixturePeerAnswersRequestArrivingBeforeItsResponse(t *testing.T) {
-	closeLog := filepath.Join(t.TempDir(), "driver-close.jsonl")
-	t.Setenv("ATTN_DRIVER_FIXTURE_CLOSE_LOG", closeLog)
-
-	client, server := net.Pipe()
-	defer client.Close()
-	defer server.Close()
-
-	scripted := make(chan error, 1)
-	go func() { scripted <- scriptCloseBeforeReportResponse(server) }()
-
-	peer := newPluginFixturePeer(t, client)
-	peer.callOK("session.report_stop", pluginReportStopParams{
-		SessionID: "session-1",
-		RunID:     "run-1",
-		Seq:       3,
-		Verdict:   protocol.StateWaitingInput,
-	})
-	if err := <-scripted; err != nil {
-		t.Fatalf("scripted daemon: %v", err)
-	}
-
-	records, ok := readPluginFixtureCloseRecords(closeLog, 1)
-	if !ok {
-		t.Fatal("peer recorded no close notification, want the one that arrived mid-request")
-	}
-	if records[0].Params.RunID != "run-1" || records[0].Params.Reason != "exited" {
-		t.Fatalf("close record=%+v, want exited notification for run-1", records[0].Params)
-	}
-}
-
-func scriptCloseBeforeReportResponse(conn net.Conn) error {
-	decoder := json.NewDecoder(conn)
-	encoder := json.NewEncoder(conn)
-
-	var report jsonRPCMessage
-	if err := decoder.Decode(&report); err != nil {
-		return fmt.Errorf("read plugin report: %w", err)
-	}
-	if report.Method != "session.report_stop" {
-		return fmt.Errorf("first plugin message method=%q, want session.report_stop", report.Method)
-	}
-
-	params, err := json.Marshal(pluginDriverSessionClosedParams{
-		SessionID: "session-1",
-		RunID:     "run-1",
-		Reason:    "exited",
-	})
-	if err != nil {
-		return fmt.Errorf("marshal close params: %w", err)
-	}
-	if err := encoder.Encode(jsonRPCMessage{
-		JSONRPC: "2.0",
-		ID:      json.RawMessage("900"),
-		Method:  "driver.session_closed",
-		Params:  params,
-	}); err != nil {
-		return fmt.Errorf("send close notification: %w", err)
-	}
-
-	var ack jsonRPCMessage
-	if err := decoder.Decode(&ack); err != nil {
-		return fmt.Errorf("read close acknowledgement: %w", err)
-	}
-	if jsonRPCIDKey(ack.ID) != "900" || ack.Method != "" {
-		return fmt.Errorf("close acknowledgement=%+v, want a response to id 900", ack)
-	}
-	if err := encoder.Encode(jsonRPCResult(report.ID, struct{}{})); err != nil {
-		return fmt.Errorf("answer plugin report: %w", err)
-	}
-	return nil
 }

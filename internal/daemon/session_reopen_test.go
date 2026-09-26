@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -128,47 +127,6 @@ func wantReopenVerdict(
 	}
 }
 
-func TestReopenVerdictSendsALiveSessionBackToItsPane(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addLedgerTestSession(t, d, "running", t.TempDir())
-
-	verdict := decidedReopenVerdict(t, d, "running")
-	if !verdict.Live {
-		t.Fatal("a registered session reads as closed")
-	}
-	wantReopenVerdict(t, verdict, false, nil)
-	if !strings.Contains(verdict.Reason, "focus it") {
-		t.Errorf("reason = %q, want it to send the caller to the running session", verdict.Reason)
-	}
-}
-
-func TestReopeningALiveSessionChangesNothing(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	addLedgerTestSession(t, d, "running", t.TempDir())
-
-	outcome, err := d.reopenSession("running", "", "")
-	if err != nil {
-		t.Fatalf("reopenSession(live) error = %v", err)
-	}
-	if !outcome.AlreadyRunning {
-		t.Error("reopening a live session did not report it as already running")
-	}
-}
-
-func TestReopeningASessionWithNoLedgerRowSaysWhereToLookInstead(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-
-	_, err := d.reopenSession("never-ran", "", "")
-	if err == nil {
-		t.Fatal("reopening an unknown session id succeeded")
-	}
-	for _, want := range []string{"never-ran", "ledger", "seed"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Errorf("error %q is missing %q", err, want)
-		}
-	}
-}
-
 func TestReopenVerdictOffersOnlyFreshStartWithoutItsLaunchContract(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	backend := reopenDaemonWithBackend(t, d)
@@ -187,38 +145,6 @@ func TestReopenVerdictOffersOnlyFreshStartWithoutItsLaunchContract(t *testing.T)
 	spawn, ok := backend.LastSpawn()
 	if !ok || spawn.ResumeSessionID != "" {
 		t.Fatalf("fresh spawn = %+v, %v; want a new conversation", spawn, ok)
-	}
-}
-
-func TestReopenReplaysTheLedgerLaunchContract(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	backend := reopenDaemonWithBackend(t, d)
-	autoMode := false
-	intent := store.LaunchIntent{
-		AutoMode:      &autoMode,
-		ApprovalRoute: launchcontract.ApprovalRouteUser,
-		Executable:    "/opt/codex",
-		Model:         "gpt-ledger",
-		Effort:        "high",
-	}
-	writeCodexRolloutFixture(t, "codex-ledger-conversation")
-	closeReopenSession(t, d, reopenSession{
-		ID: "ledger-contract", Directory: t.TempDir(), Agent: "codex",
-		Resume: "codex-ledger-conversation", Intent: &intent,
-	})
-
-	if _, err := d.reopenSession("ledger-contract", protocol.SessionReopenActionReopen, ""); err != nil {
-		t.Fatal(err)
-	}
-	spawn, ok := backend.LastSpawn()
-	if !ok {
-		t.Fatal("backend Spawn not called")
-	}
-	if spawn.ResumeSessionID != "codex-ledger-conversation" || spawn.Executable != "/opt/codex" || spawn.Model != "gpt-ledger" || spawn.Effort != "high" {
-		t.Fatalf("spawn = %+v, want the saved transcript, executable, model and effort", spawn)
-	}
-	if got, ok := d.store.LaunchIntent("ledger-contract"); !ok || !reflect.DeepEqual(got, intent) {
-		t.Fatalf("launch intent after reopen = %+v, %v; want %+v", got, ok, intent)
 	}
 }
 
@@ -257,45 +183,6 @@ func TestReopenVerdictSendsARemoteSessionToItsOwnDaemon(t *testing.T) {
 	}
 }
 
-func TestALocalSessionIsDecidedHere(t *testing.T) {
-	verdict := &sessionReopenVerdict{SessionID: "local", Execution: garden.Dispatch{HostKind: garden.HostLocal}}
-	if !decideReopenHost(verdict, nil) {
-		t.Fatalf("a local session stopped at the host check: %q", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictOffersAFreshStartWhenTheConversationIsGone(t *testing.T) {
-	cases := map[string]struct {
-		resume  string
-		fixture bool
-		want    string
-	}{
-		"resume id unknown":  {resume: "", fixture: false, want: "nothing to resume"},
-		"transcript missing": {resume: "conv-vanished", fixture: false, want: "no longer in codex's storage"},
-	}
-	for name, tc := range cases {
-		t.Run(name, func(t *testing.T) {
-			d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-			if tc.fixture {
-				writeCodexRolloutFixture(t, tc.resume)
-			} else {
-				writeCodexRolloutFixture(t, "some-other-conversation")
-			}
-			directory := t.TempDir()
-			closeReopenSession(t, d, reopenSession{
-				ID: "no-conversation", Directory: directory, Agent: "codex", Resume: tc.resume,
-			})
-
-			verdict := decidedReopenVerdict(t, d, "no-conversation")
-			wantReopenVerdict(t, verdict, false,
-				[]protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace})
-			if !strings.Contains(verdict.Reason, tc.want) {
-				t.Errorf("reason = %q, want it to contain %q", verdict.Reason, tc.want)
-			}
-		})
-	}
-}
-
 func TestReopenVerdictNamesAnAgentThatIsNotInstalled(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
 	closeReopenSession(t, d, reopenSession{
@@ -307,144 +194,6 @@ func TestReopenVerdictNamesAnAgentThatIsNotInstalled(t *testing.T) {
 		[]protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshSamePlace})
 	if !strings.Contains(verdict.Reason, "a-harness-nobody-installed") {
 		t.Errorf("reason = %q, want the missing agent named", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictReopensAPresentDirectory(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-present")
-	repo, _, root := newReopenRepo(t)
-	worktree := filepath.Join(root, "wt-present")
-	runGitDaemon(t, repo, "worktree", "add", "-b", "feat/present", worktree)
-
-	closeReopenSession(t, d, reopenSession{
-		ID: "present", Directory: worktree, Branch: "feat/present", Repo: repo,
-		Agent: "codex", Resume: "conv-present",
-	})
-
-	verdict := decidedReopenVerdict(t, d, "present")
-	wantReopenVerdict(t, verdict, true, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen})
-	if verdict.Warning != "" {
-		t.Errorf("warning = %q, want none while the directory is on its own branch", verdict.Warning)
-	}
-}
-
-func TestReopenVerdictWarnsWhenTheDirectorySwitchedBranch(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-switched")
-	repo, _, root := newReopenRepo(t)
-	worktree := filepath.Join(root, "wt-switched")
-	runGitDaemon(t, repo, "worktree", "add", "-b", "feat/switched", worktree)
-
-	closeReopenSession(t, d, reopenSession{
-		ID: "switched", Directory: worktree, Branch: "feat/switched", Repo: repo,
-		Agent: "codex", Resume: "conv-switched",
-	})
-	runGitDaemon(t, worktree, "switch", "-c", "feat/somewhere-else")
-
-	verdict := decidedReopenVerdict(t, d, "switched")
-	wantReopenVerdict(t, verdict, true, []protocol.SessionReopenAction{protocol.SessionReopenActionReopen})
-	if !strings.Contains(verdict.Warning, "feat/somewhere-else") {
-		t.Errorf("warning = %q, want the branch the directory is on now", verdict.Warning)
-	}
-}
-
-func TestReopenVerdictShowsADirectoryItCannotOpen(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-unreadable")
-	notADirectory := filepath.Join(t.TempDir(), "checkout")
-	if err := os.WriteFile(notADirectory, []byte("this is a file"), 0o644); err != nil {
-		t.Fatalf("write the stand-in for an unreadable directory: %v", err)
-	}
-
-	closeReopenSession(t, d, reopenSession{
-		ID: "unreadable", Directory: notADirectory, Agent: "codex", Resume: "conv-unreadable",
-	})
-
-	verdict := decidedReopenVerdict(t, d, "unreadable")
-	wantReopenVerdict(t, verdict, false, nil)
-	if !strings.Contains(verdict.Reason, "cannot be opened") {
-		t.Errorf("reason = %q, want it to say the directory cannot be opened", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictOffersAnotherPlaceWhenThePlainDirectoryIsGone(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-plain")
-	gone := filepath.Join(t.TempDir(), "deleted")
-
-	closeReopenSession(t, d, reopenSession{
-		ID: "plain-gone", Directory: gone, Agent: "codex", Resume: "conv-plain",
-	})
-
-	verdict := decidedReopenVerdict(t, d, "plain-gone")
-	wantReopenVerdict(t, verdict, false,
-		[]protocol.SessionReopenAction{protocol.SessionReopenActionStartFreshElsewhere})
-	if !strings.Contains(verdict.Reason, "not a worktree attn can put back") {
-		t.Errorf("reason = %q, want it to say the directory was not a worktree", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictRefusesWhenTheWorktreesRepositoryIsGoneToo(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-norepo")
-	root := t.TempDir()
-
-	closeReopenSession(t, d, reopenSession{
-		ID: "no-repo", Directory: filepath.Join(root, "wt"), Branch: "feat/x",
-		Repo: filepath.Join(root, "repo-that-never-existed"), Agent: "codex", Resume: "conv-norepo",
-	})
-
-	verdict := decidedReopenVerdict(t, d, "no-repo")
-	wantReopenVerdict(t, verdict, false, nil)
-	if !strings.Contains(verdict.Reason, "repository") {
-		t.Errorf("reason = %q, want the missing repository named", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictOffersToPutABranchStillHereBackInPlace(t *testing.T) {
-	d, repo, worktree := closedWorktreeWithDeletedDirectory(t, "local-branch", "feat/local", false)
-	_ = repo
-
-	verdict := decidedReopenVerdict(t, d, "local-branch")
-	wantReopenVerdict(t, verdict, false,
-		[]protocol.SessionReopenAction{protocol.SessionReopenActionRecreateWorktreeAndReopen})
-	if verdict.BranchState != branchStateLocal {
-		t.Errorf("branch state = %q, want %q", verdict.BranchState, branchStateLocal)
-	}
-	if verdict.RecreatePath != attngit.CanonicalizePath(worktree) {
-		t.Errorf("recreate path = %q, want the saved worktree %q", verdict.RecreatePath, worktree)
-	}
-}
-
-func TestReopenVerdictOffersToFetchABranchOnlyOnTheRemote(t *testing.T) {
-	d, repo, _ := closedWorktreeWithDeletedDirectory(t, "remote-branch", "feat/remote", true)
-	runGitDaemon(t, repo, "worktree", "prune")
-	runGitDaemon(t, repo, "branch", "-D", "feat/remote")
-
-	verdict := decidedReopenVerdict(t, d, "remote-branch")
-	wantReopenVerdict(t, verdict, false,
-		[]protocol.SessionReopenAction{protocol.SessionReopenActionFetchRecreateAndReopen})
-	if verdict.BranchState != branchStateRemoteOnly {
-		t.Errorf("branch state = %q, want %q", verdict.BranchState, branchStateRemoteOnly)
-	}
-	if !strings.Contains(verdict.Reason, "origin") {
-		t.Errorf("reason = %q, want the remote carrying the branch named", verdict.Reason)
-	}
-}
-
-func TestReopenVerdictOffersTheDefaultBranchWhenNothingCarriesTheBranch(t *testing.T) {
-	d, repo, _ := closedWorktreeWithDeletedDirectory(t, "gone-branch", "feat/gone", false)
-	runGitDaemon(t, repo, "worktree", "prune")
-	runGitDaemon(t, repo, "branch", "-D", "feat/gone")
-
-	verdict := decidedReopenVerdict(t, d, "gone-branch")
-	wantReopenVerdict(t, verdict, false, []protocol.SessionReopenAction{
-		protocol.SessionReopenActionStartFreshDefaultBranch,
-		protocol.SessionReopenActionStartFreshElsewhere,
-	})
-	if verdict.BranchState != branchStateGone {
-		t.Errorf("branch state = %q, want %q", verdict.BranchState, branchStateGone)
 	}
 }
 
@@ -500,57 +249,6 @@ func closedWorktreeWithDeletedDirectory(
 		t.Fatalf("delete the worktree directory: %v", err)
 	}
 	return d, repo, worktree
-}
-
-func TestReopenVerdictLandsInTheOriginalWorkspaceWhenItIsStillThere(t *testing.T) {
-	d := newEnrolledDaemon(t, "")
-	t.Cleanup(d.stopEventBus)
-	writeCodexRolloutFixture(t, "conv-ws")
-	directory := t.TempDir()
-	client := newWorkspaceProtocolTestClient()
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: "workspace-kept", Title: "Kept", Directory: directory,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutAddSessionPane, WorkspaceID: "workspace-kept",
-		PaneID: protocol.Ptr("pane-in-workspace"), SessionID: "in-workspace", Title: protocol.Ptr("Kept"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane,
-		"workspace-kept", "pane-in-workspace", true)
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID: "in-workspace", Label: "kept", Agent: protocol.SessionAgentCodex,
-		Directory: directory, WorkspaceID: "workspace-kept", State: protocol.SessionStateIdle,
-		StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-	d.persistResumeSessionID("in-workspace", "conv-ws")
-	d.closeSession("in-workspace", store.SessionClose{By: store.SessionClosedByUser})
-
-	verdict := decidedReopenVerdict(t, d, "in-workspace")
-	if verdict.WorkspaceID != "workspace-kept" || verdict.WorkspacePlan != reopenPlaceReuse {
-		t.Errorf("workspace = %s (%s), want workspace-kept reused", verdict.WorkspaceID, verdict.WorkspacePlan)
-	}
-	if verdict.PanePlan != reopenPlaceReuse {
-		t.Errorf("pane plan = %s, want the surviving pane reused", verdict.PanePlan)
-	}
-}
-
-func TestReopenVerdictMakesAWorkspaceNamedAfterTheSessionWhenItsOwnIsGone(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "attn.sock"))
-	writeCodexRolloutFixture(t, "conv-nows")
-	closeReopenSession(t, d, reopenSession{
-		ID: "no-workspace", Directory: t.TempDir(), Agent: "codex", Resume: "conv-nows",
-	})
-
-	verdict := decidedReopenVerdict(t, d, "no-workspace")
-	if verdict.WorkspaceID != "workspace-no-workspace" || verdict.WorkspacePlan != reopenPlaceCreate {
-		t.Errorf("workspace = %s (%s), want one created and named after the session",
-			verdict.WorkspaceID, verdict.WorkspacePlan)
-	}
-	if verdict.PanePlan != reopenPlaceAdd {
-		t.Errorf("pane plan = %s, want a pane added", verdict.PanePlan)
-	}
 }
 
 func TestReopenVerdictReopensAPluginConversationByCapability(t *testing.T) {

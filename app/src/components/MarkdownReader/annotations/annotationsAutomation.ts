@@ -30,7 +30,7 @@ export interface MarkdownAnnotationsAutomationState {
   }>;
 }
 
-export interface MarkdownAnnotationsAutomationHandle {
+interface MarkdownAnnotationsAutomationHandle {
   getState(): MarkdownAnnotationsAutomationState;
 }
 

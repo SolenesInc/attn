@@ -228,9 +228,6 @@ func (d *Daemon) autoSettleFire(sessionID string, self *time.Timer) {
 	if d.debugLogging {
 		d.logf("auto-settle fire: session=%s phase=%d outcome=%s", sessionID, phase, action)
 	}
-	if d.autoSettleFireHook != nil {
-		d.autoSettleFireHook(sessionID, action)
-	}
 	if action == "held" && phase != autoSettleCounting {
 		return
 	}
@@ -297,10 +294,6 @@ func (d *Daemon) runAutoSettleFor(sessionID string, phase, resume autoSettlePhas
 		d.startAutoSettleLocked(sessionID, autoSettleCounting, cfg.countdown)
 		d.autoSettleMu.Unlock()
 		return "counting"
-	}
-
-	if d.autoSettlePreSettleHook != nil {
-		d.autoSettlePreSettleHook()
 	}
 
 	quiet, settled := d.settleIfAutoSettleQuiet(sessionID, autoSettleHoldQuietWindow)

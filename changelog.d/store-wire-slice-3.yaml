@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard endpoint, recent files, Garden bell, job, markdown annotation and notification promises with daemon wire tests and the jobs runner suite instead of store internals tests.

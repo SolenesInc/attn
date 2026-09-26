@@ -125,6 +125,7 @@ func (d *Daemon) clearAllSessions() {
 		d.store.ClearSessions()
 		d.clearChiefOfStaffIfSession(d.chiefOfStaffSessionID())
 		for sessionID := range sessionIDs {
+			d.forgetSessionTrace(sessionID)
 			d.publishFact(FactSessionTerminated, sessionID, nil)
 		}
 	})

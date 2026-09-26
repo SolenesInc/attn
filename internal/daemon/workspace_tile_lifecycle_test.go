@@ -1,60 +1,11 @@
 package daemon
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/workspacelayout"
 )
-
-func setupSessionWorkspaceWithTile(t *testing.T) (d *Daemon, client *wsClient, workspaceID, sessionID, paneID string) {
-	t.Helper()
-	d = NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client = newWorkspaceProtocolTestClient()
-	workspaceID = "workspace-tile-lifecycle"
-	sessionID = "session-tile-lifecycle"
-	paneID = "pane-tile-lifecycle"
-	cwd := t.TempDir()
-
-	d.handleRegisterWorkspace(client, &protocol.RegisterWorkspaceMessage{
-		Cmd:       protocol.CmdRegisterWorkspace,
-		ID:        workspaceID,
-		Title:     "Tile Lifecycle",
-		Directory: cwd,
-	})
-	d.handleWorkspaceLayoutAddSessionPane(client, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr(paneID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr("shell"),
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutAddSessionPane, workspaceID, paneID, true)
-	d.handleSpawnSession(client, &protocol.SpawnSessionMessage{
-		Cmd:         protocol.CmdSpawnSession,
-		ID:          sessionID,
-		Label:       protocol.Ptr("shell"),
-		Cwd:         cwd,
-		Agent:       protocol.AgentShellValue,
-		WorkspaceID: workspaceID,
-		Cols:        80,
-		Rows:        24,
-	})
-	expectSpawnResult(t, client, sessionID, true)
-
-	file := filepath.Join(cwd, "notes.md")
-	if err := os.WriteFile(file, []byte("# Notes\n"), 0o644); err != nil {
-		t.Fatalf("write tile file: %v", err)
-	}
-	if err := d.dockTile(workspaceID, paneID, markdownTileIDForPath(file), string(workspacelayout.TileKindMarkdown), file, "", protocol.WorkspaceLayoutDockEdgeRight, nil); err != nil {
-		t.Fatalf("dock tile: %v", err)
-	}
-	return d, client, workspaceID, sessionID, paneID
-}
 
 func assertTileOnlyWorkspaceAlive(t *testing.T, d *Daemon, workspaceID, sessionID string) {
 	t.Helper()
@@ -79,82 +30,5 @@ func assertTileOnlyWorkspaceAlive(t *testing.T, d *Daemon, workspaceID, sessionI
 	}
 	if ids := d.workspaces.sessionIDs(workspaceID); len(ids) != 0 {
 		t.Fatalf("workspace still tracks sessions %v after its last session left", ids)
-	}
-}
-
-func TestClosingLastPaneKeepsTileOnlyWorkspaceAlive(t *testing.T) {
-	d, client, workspaceID, sessionID, paneID := setupSessionWorkspaceWithTile(t)
-
-	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutClosePane,
-		WorkspaceID: workspaceID,
-		PaneID:      paneID,
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
-
-	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
-}
-
-func TestUndockingLastTileTearsDownSessionlessWorkspace(t *testing.T) {
-	d, client, workspaceID, sessionID, paneID := setupSessionWorkspaceWithTile(t)
-	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutClosePane,
-		WorkspaceID: workspaceID,
-		PaneID:      paneID,
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
-	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
-
-	tileID := workspacelayout.TileIDs(d.store.GetWorkspaceLayout(workspaceID).Layout)[0]
-	cap := captureBroadcasts(d)
-	d.handleWorkspaceLayoutUndockTile(client, &protocol.WorkspaceLayoutUndockTileMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutUndockTile,
-		WorkspaceID: workspaceID,
-		TileID:      tileID,
-	})
-	expectWorkspaceLayoutActionResultIDs(t, client, protocol.CmdWorkspaceLayoutUndockTile, workspaceID, "", "", tileID, true)
-
-	if ws := d.store.GetWorkspace(workspaceID); ws != nil {
-		t.Fatalf("workspace survived undocking its last tile: %+v", ws)
-	}
-	if _, registered := d.workspaces.snapshot(workspaceID); registered {
-		t.Fatal("workspace still in the in-memory registry after its last tile was undocked")
-	}
-	if snapshot := d.store.GetWorkspaceLayout(workspaceID); snapshot != nil {
-		t.Fatalf("leafless layout left behind: %+v", snapshot)
-	}
-	unregistered := false
-	for _, event := range cap.snapshot() {
-		if event.Event == protocol.EventWorkspaceUnregistered && event.Workspace != nil && event.Workspace.ID == workspaceID {
-			unregistered = true
-		}
-	}
-	if !unregistered {
-		t.Fatalf("no workspace_unregistered broadcast; clients keep showing the workspace: %+v", cap.snapshot())
-	}
-}
-
-func TestTileOnlyWorkspaceSurvivesStartupReap(t *testing.T) {
-	d, client, workspaceID, sessionID, paneID := setupSessionWorkspaceWithTile(t)
-	d.handleWorkspaceLayoutClosePane(client, &protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutClosePane,
-		WorkspaceID: workspaceID,
-		PaneID:      paneID,
-	})
-	expectWorkspaceLayoutActionResult(t, client, protocol.CmdWorkspaceLayoutClosePane, workspaceID, paneID, true)
-	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
-
-	d.workspaces = newWorkspaceRegistry()
-	d.loadWorkspacesFromStore()
-
-	if ws := d.store.GetWorkspace(workspaceID); ws == nil {
-		t.Fatal("tile-only workspace was reaped on startup")
-	}
-	if _, registered := d.workspaces.snapshot(workspaceID); !registered {
-		t.Fatal("tile-only workspace was not re-registered after restart")
-	}
-	snapshot := d.store.GetWorkspaceLayout(workspaceID)
-	if snapshot == nil || len(workspacelayout.TileIDs(snapshot.Layout)) != 1 {
-		t.Fatalf("tile-only layout lost across restart: %+v", snapshot)
 	}
 }

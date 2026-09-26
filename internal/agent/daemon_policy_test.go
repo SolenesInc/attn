@@ -79,9 +79,9 @@ func TestResumePolicy_Claude(t *testing.T) {
 	if persisted != "sess-1" {
 		t.Fatalf("SpawnResumeSessionID() = %q, want sess-1", persisted)
 	}
-	pathResume := ResumeSessionIDFromStopTranscriptPath(claude, "/tmp/abc-123.jsonl")
+	pathResume := ResumeSessionIDFromTranscriptPath(claude, "/tmp/abc-123.jsonl")
 	if pathResume != "abc-123" {
-		t.Fatalf("ResumeSessionIDFromStopTranscriptPath() = %q, want abc-123", pathResume)
+		t.Fatalf("ResumeSessionIDFromTranscriptPath() = %q, want abc-123", pathResume)
 	}
 }
 

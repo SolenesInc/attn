@@ -47,55 +47,6 @@ func protocolCommands(t *testing.T) map[string]string {
 	return commands
 }
 
-var commandsPredatingTheScopeGuard = map[string]bool{
-	"automation_apply": true, "automation_cleanup": true, "automation_definition_get": true, "automation_definitions_get": true,
-	"automation_delete": true, "automation_run": true, "automation_runs_get": true, "automation_set_enabled": true,
-	"automation_validate": true, "bootstrap_endpoint": true, "client_hello": true, "delegate": true,
-	"delegate_status": true, "fs_delete": true, "fs_exists": true, "fs_index": true, "fs_list": true,
-	"fs_read": true, "fs_read_asset": true, "fs_rename": true, "fs_unwatch": true, "fs_watch": true,
-	"fs_write": true, "get_screen_snapshot": true, "journal_append": true, "notebook_backlinks": true,
-	"notebook_guide": true, "notebook_list": true, "notebook_read": true, "notebook_send_to_chief": true,
-	"notebook_write": true, "notification_list": true, "notification_mark_read": true, "open_browser": true,
-	"pin_workspace": true, "present_close": true, "present_feedback": true, "present_open": true,
-	"recent_files": true, "register_workspace": true, "set_endpoint_remote_web": true, "task_list": true,
-	"task_retry": true, "ticket_comment": true, "ticket_list": true, "ticket_show": true, "ticket_subscribe": true,
-	"ticket_take": true, "ticket_unsubscribe": true, "unregister_workspace": true, "workflow_call_upsert": true,
-	"workflow_run_cancel": true, "workflow_run_get": true, "workflow_run_list": true, "workflow_run_upsert": true,
-}
-
-func TestEveryProtocolCommandIsClassified(t *testing.T) {
-	missing := []string{}
-	for wire, name := range protocolCommands(t) {
-		if _, ok := CommandMeta[wire]; ok {
-			continue
-		}
-		if commandsPredatingTheScopeGuard[wire] {
-			continue
-		}
-		missing = append(missing, wire+" (protocol."+name+")")
-	}
-	sort.Strings(missing)
-	if len(missing) > 0 {
-		t.Fatalf("%d command(s) have no CommandMeta entry, so they silently take the defaults "+
-			"(logged, does not block during recovery, and no declared scope — which hides them from "+
-			"the session-routing guard). Add each to CommandMeta in command_meta.go:\n  %v",
-			len(missing), missing)
-	}
-}
-
-func TestUnclassifiedCommandListOnlyShrinks(t *testing.T) {
-	commands := protocolCommands(t)
-	for wire := range commandsPredatingTheScopeGuard {
-		if _, ok := commands[wire]; !ok {
-			t.Errorf("%s is listed as unclassified but is not a protocol command any more; drop the line", wire)
-			continue
-		}
-		if _, ok := CommandMeta[wire]; ok {
-			t.Errorf("%s has a CommandMeta entry now; drop it from commandsPredatingTheScopeGuard", wire)
-		}
-	}
-}
-
 const sessionLedgerIsPerDaemon = "the ledger records the sessions this daemon ran; another daemon's rows are read there"
 
 var sessionCommandsAnsweredWhereTheyLand = map[string]string{

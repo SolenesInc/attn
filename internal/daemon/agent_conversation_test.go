@@ -118,39 +118,6 @@ func TestObserveAgentConversationTransitionsOnceAndRebindsRuntime(t *testing.T) 
 	}
 }
 
-func TestTranscriptWatcherPrefersPersistedNativeConversationAfterRestart(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cwd := "/repo/project"
-	now := time.Now()
-	want := writeCodexInteractiveRollout(t, codexHome, "codex-current", cwd, now.Add(-time.Minute))
-	_ = writeCodexInteractiveRollout(t, codexHome, "codex-neighbor", cwd, now)
-
-	d.store.Add(&protocol.Session{ID: "session-1", Agent: protocol.SessionAgentCodex, Directory: cwd})
-	if changed, err := d.store.TransitionSessionConversation("session-1", "codex-current", want); err != nil || !changed {
-		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
-	}
-	lookups := 0
-	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
-		lookups++
-		return ""
-	}
-	watcher := &transcriptWatcher{
-		sessionID: "session-1",
-		agent:     protocol.SessionAgentCodex,
-		cwd:       cwd,
-		startedAt: now,
-	}
-	if got := d.resolveExactTranscriptPathForWatcher(watcher); got != want {
-		t.Fatalf("restart transcript = %q, want persisted conversation %q", got, want)
-	}
-	if lookups != 0 {
-		t.Fatalf("restart performed %d fallback lookups despite its persisted exact path", lookups)
-	}
-}
-
 func TestRepeatedPathBearingObservationRestartsAnEndedWatcher(t *testing.T) {
 	d := newTraceDaemon(t)
 	synctest.Test(t, func(t *testing.T) {

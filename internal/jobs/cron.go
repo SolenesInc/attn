@@ -135,10 +135,14 @@ func (r *Runner) cronArmError(kind string) error {
 
 func (r *Runner) rearmCronLocked(j *Job, interval time.Duration, runErr error) {
 	now := r.now()
+	next := now.Add(interval)
+	if j.Requeued && j.ScheduledAt.Before(next) {
+		next = j.ScheduledAt
+	}
 	j.State = StateQueued
 	j.Attempts = 0
 	j.Requeued = false
-	j.ScheduledAt = now.Add(interval)
+	j.ScheduledAt = next
 	j.UpdatedAt = now
 	if runErr != nil {
 		j.LastError = runErr.Error()

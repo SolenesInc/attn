@@ -5,7 +5,7 @@ import { computeDockTarget, computeContainerSides, type DockTarget } from './doc
 // perimeter band — computes a drop target at the press position and splits the container.
 const DRAG_ACTIVATION_PX = 4;
 
-export interface LeafDragHandlers {
+interface LeafDragHandlers {
   onActivate: () => void;
   onPreview: (target: DockTarget | null) => void;
   onGhostMove: (clientX: number, clientY: number) => void;

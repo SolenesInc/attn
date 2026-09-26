@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { act, render, screen, waitFor, userEvent } from '../../test/utils';
+import { act, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { AutomationForm } from './AutomationForm';
 import { AutomationDefinitionSummary } from '../../types/generated';
 import { AUTOMATION_API_VERSION, AutomationFormValues, formValuesToSpec, specJSONString } from './automationFormModel';

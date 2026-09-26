@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/victorarias/attn/internal/attention"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
@@ -31,7 +30,7 @@ func TestRecoveredReviewerKeepsBriefApprovalInsideGuardianDwell(t *testing.T) {
 			"guarded": {Recorded: true, ApprovalRoute: launchcontract.ApprovalRouteReviewer},
 		},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if !evidenceOf(t, d, "guarded").ReviewerInLoop {
 		t.Fatal("recovery did not reconstruct the reviewer before resolver activity")
@@ -39,13 +38,13 @@ func TestRecoveredReviewerKeepsBriefApprovalInsideGuardianDwell(t *testing.T) {
 	now := time.Now()
 	d.recordBracketEvidence("guarded", protocol.StateWorking)
 	d.recordPTYEvidence("guarded", pty.Observation{Source: pty.SourceHeartbeat, Claim: "approval", At: now, Detail: "Action Required"})
-	d.resolveAllSessions(now.Add(time.Second))
+	d.resolveDue(now.Add(time.Second))
 	if got := d.store.Get("guarded").State; got == protocol.SessionStatePendingApproval {
 		t.Fatal("brief guardian-reviewed approval published after daemon recovery")
 	}
 
 	d.recordPTYEvidence("guarded", pty.Observation{Source: pty.SourceHeartbeat, Claim: "busy", At: now.Add(2 * time.Second)})
-	d.resolveAllSessions(now.Add(3 * time.Second))
+	d.resolveDue(now.Add(3 * time.Second))
 	if got := d.store.Get("guarded").State; got != protocol.SessionStateWorking {
 		t.Fatalf("state = %q, want working after guardian answered", got)
 	}
@@ -62,7 +61,7 @@ func TestRecoveryUsesWorkerApprovalRouteAndRepairsStoredIntent(t *testing.T) {
 			"route-mismatch": {Recorded: true, ApprovalRoute: launchcontract.ApprovalRouteReviewer},
 		},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if !evidenceOf(t, d, "route-mismatch").ReviewerInLoop {
 		t.Fatal("stored route won over the surviving worker")
@@ -102,35 +101,6 @@ func runningInfo(signal *pty.Observation) ptybackend.SessionInfo {
 	return info
 }
 
-func TestReconcileKeepsPersistedStateOfLiveSessions(t *testing.T) {
-	states := []protocol.SessionState{
-		protocol.SessionStateIdle,
-		protocol.SessionStateWorking,
-		protocol.SessionStateWaitingInput,
-		protocol.SessionStatePendingApproval,
-		protocol.SessionStateUnknown,
-	}
-	for _, state := range states {
-		t.Run(string(state), func(t *testing.T) {
-			d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-			addRecoveredSession(t, d, "live", state, time.Now().Add(-time.Hour))
-			d.ptyBackend = &fakeWorkerReconcileBackend{
-				liveIDs: []string{"live"},
-				info:    map[string]ptybackend.SessionInfo{"live": runningInfo(nil)},
-			}
-
-			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-			if report.StateUpdated != 0 {
-				t.Fatalf("state_updated = %d, want 0", report.StateUpdated)
-			}
-			if got := d.store.Get("live").State; got != state {
-				t.Fatalf("recovered state = %q, want %q", got, state)
-			}
-		})
-	}
-}
-
 func TestReconcileMarksExitedWorkerIdle(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addRecoveredSession(t, d, "dead", protocol.SessionStateWorking, time.Now().Add(-time.Hour))
@@ -141,7 +111,7 @@ func TestReconcileMarksExitedWorkerIdle(t *testing.T) {
 		info:    map[string]ptybackend.SessionInfo{"dead": info},
 	}
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if got := d.store.Get("dead").State; got != protocol.SessionStateIdle {
 		t.Fatalf("recovered state = %q, want idle", got)
@@ -158,7 +128,7 @@ func TestReconcileSeedsHeartbeatEvidenceFromWorker(t *testing.T) {
 		info:    map[string]ptybackend.SessionInfo{"live": runningInfo(&signal)},
 	}
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	evidence, ok := d.evidenceTable().snapshot("live")
 	if !ok {
@@ -183,39 +153,12 @@ func TestRecoveredSessionResolvesOffStaleWorking(t *testing.T) {
 		liveIDs: []string{"live"},
 		info:    map[string]ptybackend.SessionInfo{"live": runningInfo(&signal)},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if got := d.store.Get("live").State; got != protocol.SessionStateIdle {
 		t.Fatalf("resolved state = %q, want idle", got)
-	}
-}
-
-func TestRecoveredApprovalSurvivesTheResolver(t *testing.T) {
-	for _, tc := range []struct {
-		state protocol.SessionState
-	}{
-		{protocol.SessionStatePendingApproval},
-		{protocol.SessionStateWaitingInput},
-	} {
-		t.Run(string(tc.state), func(t *testing.T) {
-			d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-			concludedAt := time.Now().Add(-10 * time.Minute)
-			addRecoveredSession(t, d, "blocked", tc.state, concludedAt)
-			signal := heartbeat("not_busy", concludedAt.Add(-time.Second))
-			d.ptyBackend = &fakeWorkerReconcileBackend{
-				liveIDs: []string{"blocked"},
-				info:    map[string]ptybackend.SessionInfo{"blocked": runningInfo(&signal)},
-			}
-			d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-			d.resolveAllSessions(time.Now())
-
-			if got := d.store.Get("blocked").State; got != tc.state {
-				t.Fatalf("resolved state = %q, want %q", got, tc.state)
-			}
-		})
 	}
 }
 
@@ -228,7 +171,7 @@ func TestRecoveredApprovalDropsWhenTheAgentMovedOn(t *testing.T) {
 		liveIDs: []string{"answered"},
 		info:    map[string]ptybackend.SessionInfo{"answered": runningInfo(&signal)},
 	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	evidence, ok := d.evidenceTable().snapshot("answered")
 	if !ok {
@@ -238,67 +181,9 @@ func TestRecoveredApprovalDropsWhenTheAgentMovedOn(t *testing.T) {
 		t.Fatalf("harness edge restored for an agent that moved on: %+v", evidence.LastHarnessEvent)
 	}
 
-	d.resolveAllSessions(time.Now())
+	d.resolveDue(time.Now())
 
 	if got := d.store.Get("answered").State; got != protocol.SessionStateIdle {
 		t.Fatalf("resolved state = %q, want idle", got)
-	}
-}
-
-func TestSnoozeWakeSurvivesDaemonRecovery(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addRecoveredSession(t, d, "snoozed", protocol.SessionStateIdle, time.Now().Add(-time.Hour))
-	deadline := time.Now().Add(time.Hour)
-	if !d.store.SnoozeTurn("snoozed", deadline, time.Now()) {
-		t.Fatal("failed to snooze the session")
-	}
-	d.ptyBackend = &fakeWorkerReconcileBackend{
-		liveIDs: []string{"snoozed"},
-		info:    map[string]ptybackend.SessionInfo{"snoozed": runningInfo(nil)},
-	}
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-	if !attention.OpensTurn(d.store.Get("snoozed").State) {
-		t.Fatalf("recovered state %q opens no turn, so the wake has nothing to deliver",
-			d.store.Get("snoozed").State)
-	}
-
-	d.wakeSnooze("snoozed", deadline, "deadline")
-
-	stamps := d.store.TurnStamps("snoozed")
-	if !stamps.SnoozedUntil.IsZero() {
-		t.Fatalf("snooze still armed after the wake: %s", stamps.SnoozedUntil)
-	}
-	if !stamps.OpenedAt.After(stamps.SettledAt) {
-		t.Fatalf("wake opened no turn: opened=%s settled=%s", stamps.OpenedAt, stamps.SettledAt)
-	}
-}
-
-func TestWorkerInfoClaimOnlyEndsLaunching(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		initial protocol.SessionState
-		want    protocol.SessionState
-	}{
-		{"ends launching", protocol.SessionStateLaunching, protocol.SessionStateWorking},
-		{"leaves idle alone", protocol.SessionStateIdle, protocol.SessionStateIdle},
-		{"leaves pending approval alone", protocol.SessionStatePendingApproval, protocol.SessionStatePendingApproval},
-		{"leaves unknown alone", protocol.SessionStateUnknown, protocol.SessionStateUnknown},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-			addRecoveredSession(t, d, "s", tc.initial, time.Now().Add(-time.Hour))
-
-			d.handlePTYState("s", pty.Observation{
-				Source: pty.SourceWorkerInfo,
-				Claim:  protocol.StateWorking,
-				Detail: "watch subscribe replay",
-				At:     time.Now(),
-			})
-
-			if got := d.store.Get("s").State; got != tc.want {
-				t.Fatalf("state = %q, want %q", got, tc.want)
-			}
-		})
 	}
 }

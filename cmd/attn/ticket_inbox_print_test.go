@@ -1,44 +1,9 @@
 package main
 
 import (
-	"bytes"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/protocol"
 )
-
-func TestFprintTicketInboxUserPresence(t *testing.T) {
-	t.Run("present", func(t *testing.T) {
-		lastActive := time.Now().Add(-90 * time.Second).UTC().Format(time.RFC3339)
-		result := &protocol.TicketInboxResult{
-			Bundles:            []protocol.TicketEventBundle{{TicketID: "tkt-1"}},
-			LastUserActivityAt: &lastActive,
-		}
-		var buf bytes.Buffer
-		fprintTicketInbox(&buf, result)
-		out := buf.String()
-		if !strings.HasPrefix(out, "user: active 1m ago\n") {
-			t.Fatalf("output = %q, want presence header first, got prefix %q", out, out[:min(len(out), 40)])
-		}
-		if !strings.Contains(out, "tkt-1") {
-			t.Fatalf("output = %q, want bundle still printed", out)
-		}
-	})
-
-	t.Run("absent", func(t *testing.T) {
-		result := &protocol.TicketInboxResult{
-			Bundles: []protocol.TicketEventBundle{{TicketID: "tkt-1"}},
-		}
-		var buf bytes.Buffer
-		fprintTicketInbox(&buf, result)
-		out := buf.String()
-		if strings.Contains(out, "user: active") {
-			t.Fatalf("output = %q, want no presence header when last_user_activity_at is nil", out)
-		}
-	})
-}
 
 func TestHumanizeDuration(t *testing.T) {
 	cases := []struct {

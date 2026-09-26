@@ -1,7 +1,6 @@
 package daemon
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -12,7 +11,6 @@ import (
 	seedEvents "github.com/victorarias/attn/internal/garden/events"
 	"github.com/victorarias/attn/internal/hub"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 type gardenCursorAttempt struct {
@@ -114,57 +112,6 @@ func TestGardenSeedConsumerReplayAfterCursorFailureDoesNotRecreateAReadBell(t *t
 	}
 }
 
-func TestGardenSeedEventFirstHandlingUsesTheCurrentTender(t *testing.T) {
-	d := newGardenDaemon(t)
-	addGardenSession(t, d, "sess-b")
-	addGardenSession(t, d, "sess-c")
-	seed := plant(t, d, protocol.SeedPlantMessage{SourceSessionID: protocol.Ptr("sess-a"), Title: "dispatch current tender"})
-	move(t, d, "sess-a", seed.ID, garden.VerbTend, "", "")
-
-	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: "sess-b"}, Force: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	occurrence, err := seedEvents.Occur(
-		gardenSeedEventModel, gardenSeedEventVocabulary.Tended, seed.ID,
-		seedEvents.LifecyclePayload{
-			AttentionRequested: true, CausedBySessionID: "sess-a", DirectlyNotifiedSessionID: "sess-b",
-		},
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-	encoded, err := gardenSeedEventModel.Encode(occurrence)
-	if err != nil {
-		t.Fatal(err)
-	}
-	seq, err := d.store.AppendBusEvent(store.BusEvent{
-		Name: encoded.Name, Subject: encoded.Subject, Payload: string(encoded.Payload), Source: "test",
-	}, time.Now())
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if _, _, err := d.applySeedTransition(seed.ID, garden.VerbTend, garden.Ask{
-		Actor: garden.Tender{Session: "sess-c"}, Force: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.handleGardenSeedEvent(context.Background(), bus.Event{
-		Seq: seq, Name: encoded.Name, Subject: encoded.Subject, Payload: encoded.Payload, Source: "test",
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, previousTender := range []string{"sess-a", "sess-b"} {
-		if queued := queuedSeedBells(t, d, previousTender); len(queued) != 0 {
-			t.Fatalf("previous tender %s received the delayed event: %q", previousTender, queued)
-		}
-	}
-	assertOneSeedBell(t, d, "sess-c", seed.ID, "tended")
-}
-
 func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T) {
 	d := newGardenDaemon(t)
 	d.hubManager = hub.NewManager(d.store, nil, nil, nil, nil, nil)
@@ -214,25 +161,6 @@ func TestGardenSeedEventForARemoteTenderDoesNotBlockLaterLocalBell(t *testing.T)
 		t.Fatalf("home queued a bell for the remote tender: %q", queued)
 	}
 	assertOneSeedBell(t, d, "local-watcher", local.ID, "note.added")
-}
-
-func TestQuietGardenSeedEventReceiptDoesNotDependOnLiveRoleState(t *testing.T) {
-	d := newGardenDaemon(t)
-	if err := d.handleSeedEventForTest(
-		seedEvents.NameBodyEdited, "s-7k3f9m", seedEvents.CausePayload{CausedBySessionID: "sess-a"},
-	); err != nil {
-		t.Fatalf("quiet event for an absent seed: %v", err)
-	}
-	events, err := d.store.BusEventsSince(0, 100)
-	if err != nil || len(events) == 0 {
-		t.Fatalf("read quiet event: len=%d err=%v", len(events), err)
-	}
-	created, handled, err := d.store.HandleGardenSeedEvent(
-		events[len(events)-1].Seq, "s-7k3f9m", "body.edited", "", nil, time.Now(),
-	)
-	if err != nil || handled || len(created) != 0 {
-		t.Fatalf("quiet receipt replay = created=%v handled=%t err=%v", created, handled, err)
-	}
 }
 
 func TestGardenSeedMailboxReconciliationDiscardsAMissingSeedWithoutStrandingOtherMail(t *testing.T) {

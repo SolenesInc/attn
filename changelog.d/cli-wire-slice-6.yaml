@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard app status and runtime, automode, skill, plugin, present wait and delegation preference promises through stack tests of the built attn binary, and delete the in-process tests they replace.
