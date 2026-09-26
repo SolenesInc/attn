@@ -102,6 +102,9 @@ func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	assertBusTable(t, busTable(s), []string{"log: seq ", "no registered consumers"}, []string{"producers", "ERROR", "WARN"})
 
 	s.Start()
+	if r := s.Attn("bus", "disable", "garden-seed-bells"); r.Code != 0 {
+		t.Fatalf("attn bus disable garden-seed-bells exited %d: %s", r.Code, r.Stderr)
+	}
 	cli := s.Client()
 	if _, err := cli.DocDefine(protocol.DocumentCollectionSchema{Namespace: "app/history", Collection: "requests"}); err != nil {
 		t.Fatal(err)
