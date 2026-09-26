@@ -6,39 +6,40 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestClosingASeedReportsExactlyTheSeedsItUnblocked(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "closer")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	closer := spawnPanes(w, app, w.Path("closer"))[0].session
 
 	t.Run("the one dependent", func(t *testing.T) {
 		blocker, dependent := rippleChain(t, cli, "lay the pipe", "run water through it")
-		lifeMove(t, cli, "closer", blocker, "tend", "", "")
-		rippleUnblocks(t, cli, blocker, "harvest", dependent)
+		lifeMove(t, cli, closer, blocker, "tend", "", "")
+		rippleUnblocks(t, cli, closer, blocker, "harvest", dependent)
 	})
 	t.Run("every dependent", func(t *testing.T) {
 		blocker, dependent := rippleChain(t, cli, "lay the pipe", "run water through it")
 		second := plantSeedAs(t, cli, "", "paint the wall")
 		edgeLink(t, cli, blocker, "blocks", second)
-		rippleUnblocks(t, cli, blocker, "harvest", dependent, second)
+		rippleUnblocks(t, cli, closer, blocker, "harvest", dependent, second)
 	})
 	t.Run("only when the last blocker closes", func(t *testing.T) {
 		blocker, dependent := rippleChain(t, cli, "lay the pipe", "run water through it")
 		other := plantSeedAs(t, cli, "", "pour the slab")
 		edgeLink(t, cli, other, "blocks", dependent)
-		rippleUnblocks(t, cli, blocker, "harvest")
-		rippleUnblocks(t, cli, other, "harvest", dependent)
+		rippleUnblocks(t, cli, closer, blocker, "harvest")
+		rippleUnblocks(t, cli, closer, other, "harvest", dependent)
 	})
 	t.Run("nothing when the seed blocked nobody", func(t *testing.T) {
 		_, dependent := rippleChain(t, cli, "lay the pipe", "run water through it")
-		rippleUnblocks(t, cli, dependent, "wither")
+		rippleUnblocks(t, cli, closer, dependent, "wither")
 	})
 	t.Run("the same when withered", func(t *testing.T) {
 		blocker, dependent := rippleChain(t, cli, "lay the pipe", "run water through it")
-		rippleUnblocks(t, cli, blocker, "wither", dependent)
+		rippleUnblocks(t, cli, closer, blocker, "wither", dependent)
 	})
 }
 
@@ -135,9 +136,9 @@ func rippleChain(t *testing.T, cli *client.Client, blockerTitle, dependentTitle 
 	return blocker, dependent
 }
 
-func rippleUnblocks(t *testing.T, cli *client.Client, seed, verb string, want ...string) {
+func rippleUnblocks(t *testing.T, cli *client.Client, closer, seed, verb string, want ...string) {
 	t.Helper()
-	moved, err := cli.SeedTransition("closer", seed, verb, "closed", "", true, client.SeedTransitionOptions{})
+	moved, err := cli.SeedTransition(closer, seed, verb, "closed", "", true, client.SeedTransitionOptions{})
 	if err != nil {
 		t.Fatalf("%s %s: %v", verb, seed, err)
 	}

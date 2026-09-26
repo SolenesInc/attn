@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
@@ -124,34 +125,33 @@ func TestArmingWithoutAURLWaitsOnTheSessionsOnlyOpenPullRequest(t *testing.T) {
 
 func TestArmingRefusalsNameTheirReason(t *testing.T) {
 	github := newHarvestGitHub(t)
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "shipper")
-		url := github.open(71, "Ship it")
-		seed := plantSeedAs(t, cli, "shipper", "never armed")
-		harvested := plantSeedAs(t, cli, "shipper", "over already")
-		lifeMove(t, cli, "shipper", harvested, "harvest", "shipped it", "")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	shipper := spawnPanes(w, app, w.Path("shipper"))[0].session
+	url := github.open(71, "Ship it")
+	seed := plantSeedAs(t, cli, shipper, "never armed")
+	harvested := plantSeedAs(t, cli, shipper, "over already")
+	lifeMove(t, cli, shipper, harvested, "harvest", "shipped it", "")
 
-		for _, refusal := range []struct {
-			name    string
-			session string
-			seed    string
-			reason  string
-			opts    client.SeedTransitionOptions
-			want    string
-		}{
-			{"arming without a session", "", seed, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "needs a session to track the pull request"},
-			{"arming a harvested seed", "shipper", harvested, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "waits on nothing"},
-			{"arming with a reason", "shipper", seed, "done enough", client.SeedTransitionOptions{WhenMerged: true}, "the merge writes the reason"},
-			{"clearing a seed that waits on nothing", "shipper", seed, "", client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true}, "has no harvest condition"},
-		} {
-			_, err := cli.SeedTransition(refusal.session, refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
-			lifeRefusal(t, refusal.name, err, refusal.want)
-		}
-		if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || shown.HarvestWhen != nil {
-			t.Errorf("after the refusals the seed is %s waiting on %+v, want it planted and unarmed", shown.Status, shown.HarvestWhen)
-		}
-	})
+	for _, refusal := range []struct {
+		name    string
+		session string
+		seed    string
+		reason  string
+		opts    client.SeedTransitionOptions
+		want    string
+	}{
+		{"arming without a session", "", seed, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "needs a session to track the pull request"},
+		{"arming a harvested seed", shipper, harvested, "", client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}, "waits on nothing"},
+		{"arming with a reason", shipper, seed, "done enough", client.SeedTransitionOptions{WhenMerged: true}, "the merge writes the reason"},
+		{"clearing a seed that waits on nothing", shipper, seed, "", client.SeedTransitionOptions{WhenMerged: true, ClearHarvestWhen: true}, "has no harvest condition"},
+	} {
+		_, err := cli.SeedTransition(refusal.session, refusal.seed, "harvest", refusal.reason, "", false, refusal.opts)
+		lifeRefusal(t, refusal.name, err, refusal.want)
+	}
+	if shown := lifeShow(t, cli, seed).Seed; shown.Status != "planted" || shown.HarvestWhen != nil {
+		t.Errorf("after the refusals the seed is %s waiting on %+v, want it planted and unarmed", shown.Status, shown.HarvestWhen)
+	}
 }
 
 func TestAMergedPullRequestHarvestsTheSeedArmedOnIt(t *testing.T) {
@@ -282,27 +282,27 @@ func TestAClearedOrEditedHarvestConditionMeetsTheMergeAsItStandsNow(t *testing.T
 
 func TestArmingASeedSomebodyElseHoldsTakesForce(t *testing.T) {
 	github := newHarvestGitHub(t)
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "shipper", "holder")
-		url := github.open(71, "Ship it")
-		seed := plantSeedAs(t, cli, "shipper", "held elsewhere")
-		lifeMove(t, cli, "holder", seed, "tend", "", "")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	panes := spawnPanes(w, app, w.Path("shipper"), w.Path("holder"))
+	shipper, holder := panes[0].session, panes[1].session
+	url := github.open(71, "Ship it")
+	seed := plantSeedAs(t, cli, shipper, "held elsewhere")
+	lifeMove(t, cli, holder, seed, "tend", "", "")
 
-		options := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
-		_, err := cli.SeedTransition("shipper", seed, "harvest", "", "trellis", false, options)
-		lifeRefusal(t, "arming a seed another session tends", err, "is being tended by")
-		forced, err := cli.SeedTransition("shipper", seed, "harvest", "", "trellis", true, options)
-		if err != nil {
-			t.Fatalf("forced arm: %v", err)
-		}
-		if forced.Seed.Status != "dormant" {
-			t.Errorf("a forced arm left the seed %s, want it dormant", forced.Seed.Status)
-		}
-		if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "Trellis forced `attn seed park "+seed+"`; holder held the seed.") {
-			t.Errorf("the log = %q, want the takeover recorded", notes)
-		}
-	})
+	options := client.SeedTransitionOptions{WhenMerged: true, PullRequestURL: url}
+	_, err := cli.SeedTransition(shipper, seed, "harvest", "", "trellis", false, options)
+	lifeRefusal(t, "arming a seed another session tends", err, "is being tended by")
+	forced, err := cli.SeedTransition(shipper, seed, "harvest", "", "trellis", true, options)
+	if err != nil {
+		t.Fatalf("forced arm: %v", err)
+	}
+	if forced.Seed.Status != "dormant" {
+		t.Errorf("a forced arm left the seed %s, want it dormant", forced.Seed.Status)
+	}
+	if notes := lifeNoteBodies(t, cli, seed); !slices.Contains(notes, "Trellis forced `attn seed park "+seed+"`; "+holder+" held the seed.") {
+		t.Errorf("the log = %q, want the takeover recorded", notes)
+	}
 }
 
 func harvestArm(t *testing.T, cli *client.Client, session, seedID, url string) *protocol.SeedTransitionResult {

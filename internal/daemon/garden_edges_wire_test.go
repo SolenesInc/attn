@@ -12,13 +12,13 @@ import (
 )
 
 func TestBlockingEdgesGateReadiness(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "worker")
-	first := plantSeedAs(t, cli, "worker", "waited longest")
-	second := plantSeedAs(t, cli, "worker", "just planted")
+	worker := spawnPanes(w, app, w.Path("worker"))[0].session
+	first := plantSeedAs(t, cli, worker, "waited longest")
+	second := plantSeedAs(t, cli, worker, "just planted")
 
-	undispatched := edgeReady(t, cli, "worker", "", false)
+	undispatched := edgeReady(t, cli, worker, "", false)
 	if got := lifeSeedIDs(undispatched.Seeds); !slices.Equal(got, []string{first, second}) {
 		t.Fatalf("ready = %v, want both seeds oldest first", got)
 	}
@@ -35,7 +35,7 @@ func TestBlockingEdgesGateReadiness(t *testing.T) {
 			t.Errorf("the garden push after linking carries %s ready=%t, want only the blocker ready", seed.ID, seed.Ready)
 		}
 	}
-	if got := lifeSeedIDs(edgeReady(t, cli, "worker", "", false).Seeds); !slices.Equal(got, []string{first}) {
+	if got := lifeSeedIDs(edgeReady(t, cli, worker, "", false).Seeds); !slices.Equal(got, []string{first}) {
 		t.Fatalf("ready after linking = %v, want only the blocker %s", got, first)
 	}
 	if again := edgeLink(t, cli, first, "blocks", second); again.Changed {
@@ -49,16 +49,16 @@ func TestBlockingEdgesGateReadiness(t *testing.T) {
 	if len(unlinked.Seed.Edges) != 0 {
 		t.Errorf("unlinking left %+v", unlinked.Seed.Edges)
 	}
-	if got := lifeSeedIDs(edgeReady(t, cli, "worker", "", false).Seeds); !slices.Equal(got, []string{first, second}) {
+	if got := lifeSeedIDs(edgeReady(t, cli, worker, "", false).Seeds); !slices.Equal(got, []string{first, second}) {
 		t.Fatalf("ready after unlinking = %v, want both seeds back", got)
 	}
 
-	plot := plantSeedAs(t, cli, "worker", "the plot")
+	plot := plantSeedAs(t, cli, worker, "the plot")
 	edgeLink(t, cli, first, "blocks", second)
 	edgeLink(t, cli, second, "part-of", plot)
-	lifeMove(t, cli, "worker", first, "tend", "", "trellis")
-	lifeMove(t, cli, "worker", first, "harvest", "done", "trellis")
-	if got := lifeSeedIDs(edgeReady(t, cli, "worker", "", false).Seeds); !slices.Equal(got, []string{second}) {
+	lifeMove(t, cli, worker, first, "tend", "", "trellis")
+	lifeMove(t, cli, worker, first, "harvest", "done", "trellis")
+	if got := lifeSeedIDs(edgeReady(t, cli, worker, "", false).Seeds); !slices.Equal(got, []string{second}) {
 		t.Errorf("after harvesting the blocker, ready = %v, want the dependent %s", got, second)
 	}
 }
@@ -135,18 +135,18 @@ func TestSeedLinkRefusalsNameTheSeedsAndTheWayOut(t *testing.T) {
 func TestADispatchedSessionIsReadyForItsPlot(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "planner")
-	plot, err := cli.SeedPlant("planner", "the plot", "Work through the plot.", "", "", "")
+	planner := spawnPanes(w, app, w.Path("planner"))[0].session
+	plot, err := cli.SeedPlant(planner, "the plot", "Work through the plot.", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	crown := plot.Seed.ID
-	inside, err := cli.SeedPlant("planner", "inside", "", crown, "", "")
+	inside, err := cli.SeedPlant(planner, "inside", "", crown, "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	outside := plantSeedAs(t, cli, "planner", "outside")
-	if got := lifeSeedIDs(edgeReady(t, cli, "planner", "", false).Seeds); !slices.Equal(got, []string{inside.Seed.ID, outside}) {
+	outside := plantSeedAs(t, cli, planner, "outside")
+	if got := lifeSeedIDs(edgeReady(t, cli, planner, "", false).Seeds); !slices.Equal(got, []string{inside.Seed.ID, outside}) {
 		t.Fatalf("an undispatched session's ready = %v, want both leaves", got)
 	}
 
@@ -211,19 +211,18 @@ func TestReadyScopesToAPlotAndListsPlotsBeforeLooseSeeds(t *testing.T) {
 }
 
 func TestASeedHeldByASessionThatEndedIsReadyAgain(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "planner", "holder")
-	seed := plantSeedAs(t, cli, "planner", "held")
-	lifeMove(t, cli, "holder", seed, "tend", "", "")
-	if got := lifeSeedIDs(edgeReady(t, cli, "planner", "", false).Seeds); len(got) != 0 {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	panes := spawnPanes(w, app, w.Path("planner"), w.Path("holder"))
+	planner, holder := panes[0].session, panes[1]
+	seed := plantSeedAs(t, cli, planner, "held")
+	lifeMove(t, cli, holder.session, seed, "tend", "", "")
+	if got := lifeSeedIDs(edgeReady(t, cli, planner, "", false).Seeds); len(got) != 0 {
 		t.Fatalf("ready = %v while a live session holds the seed, want nothing", got)
 	}
 
-	if err := cli.Unregister("holder"); err != nil {
-		t.Fatal(err)
-	}
-	if got := lifeSeedIDs(edgeReady(t, cli, "planner", "", false).Seeds); !slices.Equal(got, []string{seed}) {
+	closePane(app, holder)
+	if got := lifeSeedIDs(edgeReady(t, cli, planner, "", false).Seeds); !slices.Equal(got, []string{seed}) {
 		t.Errorf("ready = %v after the holder ended, want the seed back", got)
 	}
 }
