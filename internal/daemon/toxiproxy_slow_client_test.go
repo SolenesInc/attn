@@ -67,8 +67,6 @@ const (
 	floodInterval        = 5 * time.Millisecond
 )
 
-const evictionDeathBudget = 5 * time.Second
-
 func TestWebSocketSlowClientIsEvictedOverADegradedLink(t *testing.T) {
 	wsPort := useFreeWSPort(t)
 
@@ -276,14 +274,6 @@ func floodBroadcasts(d *Daemon, payloadBytes int, every time.Duration) func() {
 	return func() {
 		close(stop)
 		<-stopped
-	}
-}
-
-func readUntilClosed(ctx context.Context, conn *websocket.Conn) error {
-	for {
-		if _, _, err := conn.Read(ctx); err != nil {
-			return err
-		}
 	}
 }
 
