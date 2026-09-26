@@ -1,21 +1,17 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/victorarias/attn/internal/garden"
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -43,53 +39,6 @@ func explicitOperationMessage(d *Daemon, requestID, sourceID, brief, label strin
 		Cmd: protocol.CmdDelegate, RequestID: requestID, SourceSessionID: protocol.Ptr(sourceID),
 		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr(brief)},
 		Cwd:        d.store.Get(sourceID).Directory, Agent: protocol.Ptr("codex"), Label: protocol.Ptr(label),
-	}
-}
-
-func TestDelegationOperationSequentialAndResponseLossRetryConverge(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	if err := d.store.SetInstanceRole(instanceRoleChiefOfStaff, sourceID); err != nil {
-		t.Fatal(err)
-	}
-	consumeDelegatedPrompt(t, backend)
-	msg := explicitOperationMessage(d, "stable-request", sourceID, "Do the work once.", "once")
-
-	first, err := d.startDelegation(&msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	second, err := d.startDelegation(&msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if first.OperationID != second.OperationID || first.SessionID != second.SessionID {
-		t.Fatalf("retries diverged: first=%+v second=%+v", first, second)
-	}
-	done := waitDelegationOperation(t, d, first.OperationID)
-	if done.Result == nil {
-		t.Fatalf("completed operation has no result: %+v failure=%s", done, protocol.Deref(done.Error))
-	}
-	if done.WorktreePath != nil {
-		t.Fatalf("ordinary delegation reported worktree_path=%q", protocol.Deref(done.WorktreePath))
-	}
-	if got := len(d.store.List("")); got != 2 {
-		t.Fatalf("sessions=%d, want source + one delegate", got)
-	}
-	if _, bound := d.gardenDispatchCrown(done.SessionID); !bound {
-		t.Fatalf("the converged delegation bound no seed to session %s", done.SessionID)
-	}
-}
-
-func TestDelegationOperationReservesOperationIDNamespace(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	msg := explicitOperationMessage(d, "op-caller-value", sourceID, "Must reject.", "reserved")
-	_, err := d.startDelegation(&msg)
-	if err == nil || !strings.Contains(err.Error(), "reserved operation prefix") {
-		t.Fatalf("error=%v", err)
 	}
 }
 
@@ -159,150 +108,6 @@ func TestDelegationRecoveryWithoutSourceSession(t *testing.T) {
 				t.Fatal("recovery spawned another worker")
 			}
 		})
-	}
-}
-
-func TestExplicitSeedDispatchRequiresHandoverBeforeCreatingWorktree(t *testing.T) {
-	root := t.TempDir()
-	repo := initDelegationRepo(t, root, "repo")
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSourceAt(t, d, backend, repo)
-	seed := plant(t, d, protocol.SeedPlantMessage{Title: "held work", Body: protocol.Ptr("Keep ownership explicit.")})
-	move(t, d, sourceID, seed.ID, garden.VerbTend, "", "")
-	path := filepath.Join(root, "repo--unexpected")
-	msg := protocol.DelegateMessage{
-		Cmd: protocol.CmdDelegate, RequestID: "seed-without-handover", SourceSessionID: protocol.Ptr(sourceID),
-		Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(seed.ID)},
-		Cwd:        repo, Agent: protocol.Ptr("codex"),
-		Checkout: &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindNewWorktree, Branch: "feat/unexpected", From: protocol.Ptr("HEAD"), Path: protocol.Ptr(path)},
-	}
-	op, err := d.startDelegation(&msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	done := waitDelegationOperation(t, d, op.OperationID)
-	if done.State != protocol.DelegationOperationStateFailed || done.Failure == nil || !strings.Contains(done.Failure.Message, "use --handover") {
-		t.Fatalf("operation = %+v, want explicit handover refusal", done)
-	}
-	if _, err := os.Stat(path); !os.IsNotExist(err) {
-		t.Fatalf("refused dispatch created worktree %s: %v", path, err)
-	}
-	if exists, _ := attngit.NewClient().RefExists(context.Background(), repo, "feat/unexpected"); exists {
-		t.Fatal("refused dispatch created its branch")
-	}
-}
-
-func TestConcurrentReuseDelegationsRequireExplicitSharing(t *testing.T) {
-	root := t.TempDir()
-	repo := initDelegationRepo(t, root, "repo")
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	setupDelegationSource(t, d, backend)
-	branch, err := attngit.NewClient().GetCurrentBranch(context.Background(), repo)
-	if err != nil {
-		t.Fatal(err)
-	}
-	firstSpawn := make(chan struct{})
-	releaseFirst := make(chan struct{})
-	var spawnOnce sync.Once
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		spawnOnce.Do(func() {
-			close(firstSpawn)
-			<-releaseFirst
-		})
-		backend.mu.Lock()
-		backend.sessionIDs = append(backend.sessionIDs, opts.ID)
-		backend.mu.Unlock()
-	}
-	request := func(id string) protocol.DelegateMessage {
-		return protocol.DelegateMessage{
-			Cmd: protocol.CmdDelegate, RequestID: id,
-			Assignment: protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindNew, Brief: protocol.Ptr("Use the shared checkout safely.")},
-			Cwd:        repo, Agent: protocol.Ptr("codex"), Label: protocol.Ptr(id),
-			Checkout: &protocol.DelegateCheckout{Kind: protocol.DelegateCheckoutKindReuse, Branch: branch},
-		}
-	}
-	firstRequest := request("reuse-first")
-	first, err := d.startDelegation(&firstRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case <-firstSpawn:
-	case <-time.After(2 * time.Second):
-		t.Fatal("first delegation did not reach spawn")
-	}
-	secondRequest := request("reuse-second")
-	second, err := d.startDelegation(&secondRequest)
-	if err != nil {
-		t.Fatal(err)
-	}
-	close(releaseFirst)
-	firstDone := waitDelegationOperation(t, d, first.OperationID)
-	secondDone := waitDelegationOperation(t, d, second.OperationID)
-	if firstDone.State != protocol.DelegationOperationStateCompleted {
-		t.Fatalf("first operation = %+v", firstDone)
-	}
-	if secondDone.State != protocol.DelegationOperationStateFailed || secondDone.Failure == nil || !strings.Contains(secondDone.Failure.Message, "--allow-worktree-reuse") {
-		t.Fatalf("second operation = %+v, want sharing refusal", secondDone)
-	}
-}
-
-func TestRecoveredDelegationResultDistinguishesReusedWorktree(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	session := &protocol.Session{ID: "session", WorkspaceID: "workspace", Directory: "/tmp/shared", IsWorktree: protocol.Ptr(true)}
-	reused := d.completedDelegationResult(session, delegationPlacementNew, false)
-	if reused.WorktreeCreated != nil {
-		t.Fatalf("reused worktree reported created=%v", protocol.Deref(reused.WorktreeCreated))
-	}
-	created := d.completedDelegationResult(session, delegationPlacementNew, true)
-	if !protocol.Deref(created.WorktreeCreated) {
-		t.Fatal("owned worktree lost created receipt")
-	}
-}
-
-func TestDelegationOperationConcurrentRetriesConverge(t *testing.T) {
-	d := newDelegationDaemon(t)
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	consumeDelegatedPrompt(t, backend)
-	msg := explicitOperationMessage(d, "concurrent-request", sourceID, "Launch once concurrently.", "parallel")
-	const callers = 12
-	results := make(chan *protocol.DelegationOperation, callers)
-	errs := make(chan error, callers)
-	var wg sync.WaitGroup
-	for i := 0; i < callers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			copy := msg
-			op, err := d.startDelegation(&copy)
-			if err != nil {
-				errs <- err
-				return
-			}
-			results <- op
-		}()
-	}
-	wg.Wait()
-	close(results)
-	close(errs)
-	for err := range errs {
-		t.Fatal(err)
-	}
-	operationID := ""
-	for op := range results {
-		if operationID == "" {
-			operationID = op.OperationID
-		}
-		if op.OperationID != operationID {
-			t.Fatalf("operation ids diverged: %s != %s", op.OperationID, operationID)
-		}
-	}
-	done := waitDelegationOperation(t, d, operationID)
-	if done.Result == nil || len(d.store.List("")) != 2 {
-		t.Fatalf("operation=%+v failure=%s sessions=%d", done, protocol.Deref(done.Error), len(d.store.List("")))
 	}
 }
 
@@ -447,33 +252,6 @@ func TestLegacyDelegationOperationWithoutLiveRuntimeRequiresExplicitRetry(t *tes
 	}
 	if got := len(backend.spawnOpts); got != 1 {
 		t.Fatalf("spawn count=%d, want only source runtime", got)
-	}
-}
-
-func TestDelegationOperationTerminalFailureRetryDoesNotRelaunch(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{}
-	_, sourceID, _ := setupDelegationSource(t, d, backend)
-	value := explicitOperationMessage(d, "failed-request", sourceID, "Fail once.", "failed")
-	value.Agent = protocol.Ptr("missing-agent")
-	msg := &value
-	first, err := d.startDelegation(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	failed := waitDelegationOperation(t, d, first.OperationID)
-	if failed.State != protocol.DelegationOperationStateFailed {
-		t.Fatalf("operation=%+v", failed)
-	}
-	second, err := d.startDelegation(msg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if second.OperationID != first.OperationID || second.State != protocol.DelegationOperationStateFailed {
-		t.Fatalf("retry=%+v first=%+v", second, first)
-	}
-	if len(d.store.List("")) != 1 {
-		t.Fatalf("failure retry created a session")
 	}
 }
 

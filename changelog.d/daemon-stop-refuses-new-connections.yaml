@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Wire-test daemon restarts stop listening first, so agent wrappers reporting their exit are refused instead of stalling the restart.

@@ -1602,6 +1602,11 @@ func (d *Daemon) Stop() {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	if d.listener != nil {
+		d.listener.Close()
+		d.listener = nil
+		os.Remove(d.socketPath)
+	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
@@ -1634,11 +1639,6 @@ func (d *Daemon) stop() {
 	}
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
-	}
-	if d.listener != nil {
-		d.listener.Close()
-		d.listener = nil
-		os.Remove(d.socketPath)
 	}
 	d.releasePIDLock()
 	if d.logger != nil {
