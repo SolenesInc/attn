@@ -241,11 +241,9 @@ type Daemon struct {
 	lastAutoSettleActivityAt          map[string]time.Time
 	autoSettleFireMu                  sync.Mutex
 
-	autoSettleMu            sync.Mutex
-	autoSettleTimers        map[string]*autoSettleTimer
-	autoSettleDismissals    map[string]bool
-	autoSettleFireHook      func(sessionID, outcome string)
-	autoSettlePreSettleHook func()
+	autoSettleMu         sync.Mutex
+	autoSettleTimers     map[string]*autoSettleTimer
+	autoSettleDismissals map[string]bool
 
 	snoozeMu sync.Mutex
 
