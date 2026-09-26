@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { annotationSurfaceOwnsFocus } from './annotationFocus';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
@@ -88,7 +88,7 @@ function paneOnlyWorkspace(): TerminalWorkspaceState {
 function renderSplit(overrides: {
   onClosePane?: () => void;
   onUndockTile?: (tileId: string) => void;
-  onFocusPane?: (paneId: string) => void;
+  onFocusPane?: (paneId: string) => void | Promise<unknown>;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
   activePaneId?: string;
 } = {}) {
@@ -180,6 +180,17 @@ describe('SessionTerminalWorkspace leaf focus', () => {
       ?.getAttribute('data-active-leaf-id')).toBe('tile-notes');
     const tileBody = tile.querySelector('.workspace-dock-tile-body') as HTMLElement;
     expect(document.activeElement).toBe(tileBody);
+  });
+
+  it('puts focus back on the daemon\'s active pane when the daemon refuses a tile focus', async () => {
+    const { container } = renderSplit({ onFocusPane: () => Promise.reject(new Error('socket closed')) });
+    const surface = () => container.querySelector('.session-terminal-workspace');
+
+    fireEvent.mouseDown(tileEl(container));
+    expect(surface()?.getAttribute('data-active-leaf-id')).toBe('tile-notes');
+
+    await waitFor(() => expect(surface()?.getAttribute('data-active-leaf-id')).toBe('pane-term'));
+    expect(tileEl(container).className).not.toContain('active');
   });
 
   it('focuses the tile the daemon names as the active leaf', () => {

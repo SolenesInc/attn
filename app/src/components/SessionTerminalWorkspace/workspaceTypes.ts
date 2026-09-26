@@ -96,7 +96,7 @@ export interface SessionTerminalWorkspaceProps {
   eventRouter: PaneRuntimeEventRouter;
   onSplitPane: (targetPaneId: string, direction: TerminalSplitDirection) => void;
   onClosePane: (paneId: string) => void;
-  onFocusPane: (paneId: string) => void;
+  onFocusPane: (paneId: string) => void | Promise<unknown>;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onSelectSession?: (sessionId: string) => void;
   onTriggerNudge?: (sessionId: string) => void;

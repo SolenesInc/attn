@@ -183,9 +183,10 @@ export function AppDesktops() {
           }
           onFocusPane={(paneId) => {
             const tileSelectedHere = useSessionStore.getState().selectedTile?.desktopId === desktop.id;
-            if (paneId === desktop.active_pane_id && !tileSelectedHere) return;
-            void sendDesktopSetActivePane(desktop.id, paneId).catch((error) => {
+            if (paneId === desktop.active_pane_id && !tileSelectedHere) return undefined;
+            return sendDesktopSetActivePane(desktop.id, paneId).catch((error) => {
               showError(`Could not focus that pane: ${failureMessage(error)}`);
+              throw error;
             });
           }}
           zoomActive={Boolean(zoomModeBySessionId[desktop.id])}

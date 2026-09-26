@@ -698,9 +698,14 @@ export function useWorkspaceController(
           [...pinnedLeafIdsRef.current].filter((id) => id !== leafId),
         );
       }
-      pendingLeafFocusRef.current = { leafId, fromActiveLeafId: activePaneId };
+      const pending = { leafId, fromActiveLeafId: activePaneId };
+      pendingLeafFocusRef.current = pending;
       setAttentionRevision((current) => current + 1);
-      onFocusPane(leafId);
+      void Promise.resolve(onFocusPane(leafId)).catch(() => {
+        if (pendingLeafFocusRef.current !== pending) return;
+        pendingLeafFocusRef.current = null;
+        setAttentionRevision((current) => current + 1);
+      });
       if (tileLeafById.has(leafId)) {
         focusTile(leafId);
         return;
