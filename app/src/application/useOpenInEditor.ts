@@ -5,7 +5,7 @@ import { useAppErrorsContext, useAppInputs, useAppSessionsContext } from './AppC
 
 export function useOpenInEditor() {
   const { settings } = useAppInputs();
-  const { activeEndpoint, activeRemoteSession } = useAppSessionsContext();
+  const { activeEndpoint } = useAppSessionsContext();
   const { showError } = useAppErrorsContext();
   const sessions = useSessionStore((state) => state.sessions);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -35,37 +35,36 @@ export function useOpenInEditor() {
     [settings.editor_executable, showError],
   );
 
-  const openActiveSessionInEditor = useCallback(() => {
-    const activeSession = sessions.find((s) => s.id === activeSessionId);
-    if (!activeSession?.cwd) {
-      showError('No active session directory');
-      return;
-    }
-    if (activeSession.endpointId) {
-      if (!activeEndpoint) {
-        showError('Remote endpoint not available.');
-        return;
-      }
-      if (!isZedEditorConfigured) {
-        showError('Remote open-in-editor currently requires Zed.');
-        return;
-      }
-      handleOpenEditor(activeSession.cwd, undefined, activeEndpoint.ssh_target);
-      return;
-    }
-    handleOpenEditor(activeSession.cwd);
-  }, [
-    sessions,
-    activeSessionId,
-    activeEndpoint,
-    handleOpenEditor,
-    isZedEditorConfigured,
-    showError,
-  ]);
-
-  const remoteEditorAvailable = Boolean(
-    activeRemoteSession && activeEndpoint && isZedEditorConfigured,
+  const activeSession = sessions.find((s) => s.id === activeSessionId);
+  const activeSessionIsRemote = Boolean(activeSession?.endpointId);
+  const editorTarget = useMemo(
+    () => resolveEditorTarget(activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured),
+    [activeSession, activeEndpoint?.ssh_target, isZedEditorConfigured],
   );
 
-  return { openActiveSessionInEditor, remoteEditorAvailable };
+  const openActiveSessionInEditor = useCallback(() => {
+    if ('unavailable' in editorTarget) {
+      showError(editorTarget.unavailable);
+      return;
+    }
+    handleOpenEditor(editorTarget.cwd, undefined, editorTarget.remoteTarget);
+  }, [editorTarget, handleOpenEditor, showError]);
+
+  const editorUnavailableReason = 'unavailable' in editorTarget ? editorTarget.unavailable : null;
+  return { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason };
+}
+
+type EditorTarget = { cwd: string; remoteTarget?: string } | { unavailable: string };
+
+function resolveEditorTarget(
+  session: { cwd?: string; endpointId?: string } | undefined,
+  endpointSshTarget: string | undefined,
+  zedConfigured: boolean,
+): EditorTarget {
+  if (!session) return { unavailable: 'No active session' };
+  if (!session.cwd) return { unavailable: 'No session folder' };
+  if (!session.endpointId) return { cwd: session.cwd };
+  if (!endpointSshTarget) return { unavailable: 'Remote endpoint not available' };
+  if (!zedConfigured) return { unavailable: 'Remote requires Zed' };
+  return { cwd: session.cwd, remoteTarget: endpointSshTarget };
 }

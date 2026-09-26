@@ -15,7 +15,6 @@ import {
   useAppAppearanceContext,
   useAppInputs,
   useAppPanelsContext,
-  useAppSessionsContext,
   useAppShell,
   useNavigationContext,
 } from './AppContexts';
@@ -30,7 +29,6 @@ import { useOpenInEditor } from './useOpenInEditor';
 export function useAppSidebarActions() {
   const { notificationsUnread } = useAppInputs();
   const { attentionCount, hasCriticalNotification, zoomModeBySessionId } = useAppShell();
-  const { activeRemoteSession } = useAppSessionsContext();
   const {
     workflowRunPanelOpen,
     toggleDockPanel,
@@ -50,21 +48,19 @@ export function useAppSidebarActions() {
   const { keybindings } = useAppAppearanceContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const { currentDesktopId } = useNavigationContext();
-  const { openActiveSessionInEditor, remoteEditorAvailable } = useOpenInEditor();
+  const { openActiveSessionInEditor, activeSessionIsRemote, editorUnavailableReason } = useOpenInEditor();
 
   const sidebarHeaderActions = useMemo<SidebarHeaderAction[]>(
     () => [
       {
         id: 'editor',
-        title: !activeSessionId
-          ? 'Open in Editor (No active session)'
-          : activeRemoteSession
-            ? remoteEditorAvailable
-              ? 'Open in Zed Remote'
-              : 'Open in Editor (Remote requires Zed)'
+        title: editorUnavailableReason
+          ? `Open in Editor (${editorUnavailableReason})`
+          : activeSessionIsRemote
+            ? 'Open in Zed Remote'
             : 'Open in Editor',
         icon: <EditorIcon />,
-        disabled: !activeSessionId || (activeRemoteSession && !remoteEditorAvailable),
+        disabled: editorUnavailableReason !== null,
         onClick: openActiveSessionInEditor,
       },
       {
@@ -130,8 +126,8 @@ export function useAppSidebarActions() {
     ],
     [
       activeSessionId,
-      activeRemoteSession,
-      remoteEditorAvailable,
+      activeSessionIsRemote,
+      editorUnavailableReason,
       attentionCount,
       attentionPanelOpen,
       openActiveSessionInEditor,

@@ -56,7 +56,9 @@ vi.mock('./components/Sidebar', () => ({
     onSelectWorkspace,
     onSelectTile,
     onSelectGridLayout,
+    headerActions,
   }: {
+    headerActions: Array<{ id: string; disabled?: boolean }>;
     workspaces: Array<{ id: string; title: string; sessions: Array<{ id: string }> }>;
     crew?: Array<{ id: string }>;
     selectedWorkspaceId: string | null;
@@ -67,6 +69,7 @@ vi.mock('./components/Sidebar', () => ({
   }) => (
     <div
       data-testid="sidebar"
+      data-editor-enabled={String(headerActions.some((action) => action.id === 'editor' && !action.disabled))}
       data-selected-desktop={selectedWorkspaceId ?? ''}
       data-crew={(crew ?? []).map((member) => member.id).join(',')}
       data-selected-tile={selectedTile ? `${selectedTile.workspaceId}:${selectedTile.tileId}` : ''}
@@ -362,6 +365,30 @@ describe('desktop surface', () => {
     const atHome = await commandTitles();
     expect(atHome.some((text) => text.includes('workflow runs'))).toBe(false);
     expect(atHome.some((text) => text.includes('Open in editor'))).toBe(false);
+  });
+
+  it('offers Open in editor exactly when the sidebar enables it', async () => {
+    render(<App />);
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    const offersEditor = async () => {
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      const palette = await screen.findByRole('dialog');
+      const offered = within(palette).getAllByRole('option').some((option) => option.textContent?.includes('Open in editor'));
+      act(() => vi.mocked(useKeyboardShortcuts).mock.lastCall![0].onOpenPalette('commands'));
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      return offered;
+    };
+
+    expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('true');
+    expect(await offersEditor()).toBe(true);
+
+    act(() => {
+      useSessionStore.setState((state) => ({
+        sessions: state.sessions.map((entry) => (entry.id === 's1' ? { ...entry, endpointId: 'remote-box' } : entry)),
+      }));
+    });
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-editor-enabled')).toBe('false'));
+    expect(await offersEditor()).toBe(false);
   });
 
   it('mounts only the current desktop until the user leaves it', async () => {

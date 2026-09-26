@@ -280,13 +280,7 @@ export function UnifiedPalette<S extends PaletteSession>({
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>, highlighted: Item<S> | undefined) => {
-    if (snoozing) {
-      if (event.key !== 'Escape') return false;
-      event.preventDefault();
-      event.stopPropagation();
-      leaveSnooze(snoozing.session);
-      return true;
-    }
+    if (snoozing) return false;
     const agent = highlighted?.mode === 'agents' && highlighted.row.kind === 'agent' ? highlighted.row.session : null;
     if (pressed(event, 'session.settle')) {
       event.preventDefault();
@@ -336,6 +330,7 @@ export function UnifiedPalette<S extends PaletteSession>({
           emptyLabel={mode === 'commands' ? 'No matching commands' : 'No match'}
           onPick={pick}
           onClose={onClose}
+          onEscape={snoozing ? () => leaveSnooze(snoozing.session) : onClose}
           onKeyDown={handleKeyDown}
           inputPrefix={
             <kbd className="unified-palette-mode">

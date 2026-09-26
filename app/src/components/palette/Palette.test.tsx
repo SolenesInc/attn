@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { useState } from 'react';
 import { render, screen, fireEvent } from '../../test/utils';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { Palette } from './Palette';
 
 interface Row { path: string }
@@ -96,6 +97,26 @@ describe('Palette', () => {
     fireEvent.keyDown(input(), { key: 'Escape' });
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(outerEscape).not.toHaveBeenCalled();
+  });
+
+  it('takes Escape ahead of a surface it opened over, leaving that surface open', () => {
+    const onClose = vi.fn();
+    const surfaceEscape = vi.fn();
+    function SurfaceBeneath() {
+      useEscapeStack(surfaceEscape, true);
+      return null;
+    }
+    const { rerender } = render(<SurfaceBeneath />);
+    rerender(
+      <>
+        <SurfaceBeneath />
+        <Harness rows={['a.md']} onClose={onClose} />
+      </>,
+    );
+
+    fireEvent.keyDown(input(), { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(surfaceEscape).not.toHaveBeenCalled();
   });
 
   it('closes on a backdrop click but not on a click inside the box', () => {

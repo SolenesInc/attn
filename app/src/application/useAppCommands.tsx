@@ -84,7 +84,7 @@ export function useAppCommands(): PaletteCommand[] {
     toggleNotificationsPanel,
     openNotebookBrowser,
   } = useAppPanelsContext();
-  const { openActiveSessionInEditor } = useOpenInEditor();
+  const { openActiveSessionInEditor, editorUnavailableReason } = useOpenInEditor();
   const navigationCommands = useMemo<PaletteCommand[]>(() => {
     const keys = (id: ShortcutId) => [shortcutTokens(id)];
     const commands: PaletteCommand[] = [
@@ -174,16 +174,18 @@ export function useAppCommands(): PaletteCommand[] {
         shortcut: keys('session.toggleSidebar'),
         run: toggleSidebarCollapse,
       },
+      ...(editorUnavailableReason === null
+        ? [{
+            id: 'open-in-editor',
+            title: 'Open in editor',
+            description: 'The active agent\u2019s folder in your editor',
+            keywords: ['editor', 'zed', 'code', 'folder'],
+            icon: <EditorIcon />,
+            run: openActiveSessionInEditor,
+          }]
+        : []),
       ...(activeSessionId
         ? [
-            {
-              id: 'open-in-editor',
-              title: 'Open in editor',
-              description: 'The active agent\u2019s folder in your editor',
-              keywords: ['editor', 'zed', 'code', 'folder'],
-              icon: <EditorIcon />,
-              run: openActiveSessionInEditor,
-            },
             {
               id: 'workflow-runs',
               title: workflowRunPanelOpen ? 'Hide workflow runs' : 'Show workflow runs',
@@ -238,6 +240,7 @@ export function useAppCommands(): PaletteCommand[] {
     automationsPanelOpen,
     desktopNavigation,
     desktops,
+    editorUnavailableReason,
     goToDashboard,
     handleJumpToWaiting,
     handleNewSession,

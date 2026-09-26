@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEscapeStack } from '../../hooks/useEscapeStack';
 import './Palette.css';
 
 export interface PaletteProps<T> {
@@ -15,6 +16,7 @@ export interface PaletteProps<T> {
   emptyLabel: string;
   onPick: (item: T) => void;
   onClose: () => void;
+  onEscape?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>, highlighted: T | undefined) => boolean;
   inputPrefix?: ReactNode;
   inputSuffix?: ReactNode;
@@ -44,6 +46,7 @@ export function Palette<T>({
   emptyLabel,
   onPick,
   onClose,
+  onEscape = onClose,
   onKeyDown,
   inputPrefix,
   inputSuffix,
@@ -52,6 +55,7 @@ export function Palette<T>({
   const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  useEscapeStack(onEscape, true);
 
   const selectedIndex = selectedKey === null ? -1 : items.findIndex((item) => itemKey(item) === selectedKey);
   const activeIndex = selectedIndex >= 0 && isSelectable(items[selectedIndex])
@@ -76,12 +80,6 @@ export function Palette<T>({
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (onKeyDown?.(event, highlighted)) return;
     switch (event.key) {
-      case 'Escape':
-        // Closing the palette must not also bubble to a workspace-level Escape handler.
-        event.preventDefault();
-        event.stopPropagation();
-        onClose();
-        break;
       case 'ArrowDown':
         event.preventDefault();
         selectIndex(selectableStep(items, activeIndex, 1, isSelectable));
