@@ -1,0 +1,198 @@
+.unified-palette {
+  position: fixed;
+  z-index: 420;
+  padding-top: min(12vh, 110px);
+  background: rgba(3, 3, 5, 0.6);
+}
+
+.unified-palette-box {
+  width: min(760px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 140px));
+}
+
+.unified-palette-input-row {
+  padding-left: 12px;
+}
+
+.unified-palette-input {
+  padding-left: 0;
+}
+
+.unified-palette-mode,
+.unified-palette-slot,
+.unified-palette-tag kbd {
+  padding: 1px 5px;
+  color: var(--color-text-tertiary);
+  background: var(--color-bg-app);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font: 10px/1.4 ui-monospace, 'SFMono-Regular', monospace;
+  white-space: nowrap;
+}
+
+.unified-palette-count {
+  color: var(--color-text-tertiary);
+  font: 11px/1 ui-monospace, 'SFMono-Regular', monospace;
+  white-space: nowrap;
+}
+
+.unified-palette-list {
+  padding: 4px 6px;
+}
+
+.unified-palette-option {
+  padding: 5px 10px;
+}
+
+.unified-palette-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 22px;
+  font-size: 13px;
+}
+
+.unified-palette-dot {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #555;
+}
+
+.unified-palette-dot.is-waiting,
+.unified-palette-dot.is-approval {
+  background: var(--color-warning);
+}
+
+.unified-palette-dot.is-working,
+.unified-palette-dot.is-chief {
+  background: var(--color-success);
+}
+
+.unified-palette-dot.is-snoozed {
+  background: transparent;
+  border: 1px dashed var(--color-text-tertiary);
+}
+
+.unified-palette-dot.is-asleep {
+  background: transparent;
+  border: 1px solid var(--color-text-tertiary);
+}
+
+.unified-palette-dot.is-tile {
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.unified-palette-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.unified-palette-option.is-selected .unified-palette-name {
+  color: var(--color-text-primary);
+}
+
+.unified-palette-muted,
+.unified-palette-description {
+  color: var(--color-text-tertiary);
+}
+
+.unified-palette-description {
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.unified-palette-pill {
+  flex: 0 0 64px;
+  padding: 1px 0;
+  border-radius: 4px;
+  color: var(--color-text-tertiary);
+  background: color-mix(in srgb, var(--color-text-tertiary) 12%, transparent);
+  font-size: 10px;
+  text-align: center;
+}
+
+.unified-palette-pill.is-waiting {
+  color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 14%, transparent);
+}
+
+.unified-palette-pill.is-approval {
+  color: var(--color-error);
+  background: color-mix(in srgb, var(--color-error) 14%, transparent);
+}
+
+.unified-palette-pill.is-working {
+  color: var(--color-success);
+  background: color-mix(in srgb, var(--color-success) 14%, transparent);
+}
+
+.unified-palette-pill.is-chief {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.unified-palette-age {
+  flex: 0 0 auto;
+  min-width: 36px;
+  color: var(--color-text-tertiary);
+  font: 11px/1 ui-monospace, 'SFMono-Regular', monospace;
+  text-align: right;
+}
+
+.unified-palette-tag {
+  flex: 0 0 34px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.unified-palette-icon {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  color: var(--color-text-tertiary);
+}
+
+.unified-palette-icon svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.unified-palette-divider {
+  margin: 4px 4px;
+  border-top: 1px solid var(--color-border-subtle);
+}
+
+.unified-palette-runs {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 10px 4px;
+  font-size: 11px;
+}
+
+.unified-palette-runs .unified-palette-name {
+  flex: 0 1 auto;
+  color: var(--color-text-tertiary);
+  font-weight: 600;
+}
+
+.unified-palette-runs-count {
+  color: var(--color-text-muted);
+}
+
+.unified-palette-footer b {
+  color: var(--color-text-secondary);
+  font-weight: 600;
+}

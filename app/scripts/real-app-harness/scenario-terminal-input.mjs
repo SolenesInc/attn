@@ -451,15 +451,15 @@ async function main() {
         }
         if (!found) throw new Error('CLI input dump did not capture the suppressed key');
 
-        await pressShortcut('ui.actionMenu');
+        await pressShortcut('ui.commandPalette');
         await client.request('dom_type', {
-          selector: '.action-menu input', text: 'diagnostic report',
+          selector: '.unified-palette-input', text: '>diagnostic report',
         });
-        const menu = await client.request('dom_text', { selector: '.action-menu' });
+        const menu = await client.request('dom_text', { selector: '.unified-palette' });
         runner.assert(menu.text.includes('Create diagnostic report'), 'Diagnostic report action is searchable');
         const reportsBefore = diagnosticReports(downloadsDir);
         fs.mkdirSync(downloadsDir, { recursive: true });
-        await pressKey(KEY.ENTER, {}, '.action-menu input');
+        await pressKey(KEY.ENTER, {}, '.unified-palette-input');
         const prompt = await client.request('dom_text', { selector: '.diagnostic-report-sheet' });
         runner.assert(prompt.text.includes('Included automatically'), 'Report explains its automatic metadata');
         runner.assert(prompt.text.includes('Optional. Output may contain private text or secrets.'), 'Report warns before including pane output');

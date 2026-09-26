@@ -95,6 +95,7 @@ export const MAC_SHORTCUTS = {
   'dock.attention': { key: 'p', meta: true, shift: true },
 
   'ui.actionMenu': { key: 'k', meta: true },
+  'ui.commandPalette': { key: 'k', meta: true, shift: true },
 
   'ui.openSettings': { key: ',', meta: true },
 
@@ -183,6 +184,7 @@ export const LINUX_SHORTCUTS = {
 
   'dock.attention': { key: 'p', meta: true, alt: true },
   'ui.actionMenu': { key: 'k', meta: true, shift: true },
+  'ui.commandPalette': { key: 'k', meta: true, alt: true },
   'ui.openSettings': { key: ',', code: 'Comma', meta: true, shift: true },
   'ui.showShortcuts': { key: '/', code: 'Slash', meta: true, shift: true },
   'ui.increaseFontSize': { key: '=', code: 'Equal', meta: true, shift: true },

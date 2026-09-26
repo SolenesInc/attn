@@ -176,7 +176,7 @@ describe('ShortcutEditorModal', () => {
 
   it('persists a chord whose leader equals the row’s own default combo', () => {
     const { setSetting } = renderEditor();
-    recordChord('Action menu', { key: 'k', metaKey: true }, { key: 'd' });
+    recordChord('Agent palette', { key: 'k', metaKey: true }, { key: 'd' });
     expect(lastConfig(setSetting).overrides['ui.actionMenu']).toEqual({
       leader: { key: 'k', meta: true },
       then: { key: 'd' },
@@ -194,13 +194,13 @@ describe('ShortcutEditorModal', () => {
     );
     const { rerender } = render(tree(true));
 
-    fireEvent.click(within(row('Action menu')).getByLabelText('Record a chord'));
+    fireEvent.click(within(row('Agent palette')).getByLabelText('Record a chord'));
     fireEvent.keyDown(window, { key: 'k', metaKey: true });
-    expect(within(row('Action menu')).queryByLabelText('Record a chord')).toBeNull();
+    expect(within(row('Agent palette')).queryByLabelText('Record a chord')).toBeNull();
 
     rerender(tree(false));
     rerender(tree(true));
-    expect(within(row('Action menu')).getByLabelText('Record a chord')).toBeInTheDocument();
+    expect(within(row('Agent palette')).getByLabelText('Record a chord')).toBeInTheDocument();
   });
 
   const filterInput = () => screen.getByLabelText('Filter shortcuts') as HTMLInputElement;

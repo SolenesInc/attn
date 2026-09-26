@@ -261,7 +261,7 @@ export const scenarioCatalog = [
   {
     id: 'session-usage',
     runnerId: 'SESSION-USAGE',
-    label: 'Session usage combines native subagents, keeps partial costs, and opens from the Action menu',
+    label: 'Session usage combines native subagents, keeps partial costs, and opens from the command palette',
     command: ['pnpm', 'run', 'real-app:scenario-session-usage'],
   },
   {

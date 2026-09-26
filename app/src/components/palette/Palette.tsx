@@ -9,12 +9,25 @@ export interface PaletteProps<T> {
   onQueryChange: (query: string) => void;
   items: T[];
   itemKey: (item: T) => string;
-  renderItem: (item: T) => ReactNode;
+  renderItem: (item: T, highlighted: boolean) => ReactNode;
+  isSelectable?: (item: T) => boolean;
   emptyLabel: string;
   onPick: (item: T) => void;
   onClose: () => void;
-  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => boolean;
+  onKeyDown?: (event: KeyboardEvent<HTMLInputElement>, highlighted: T | undefined) => boolean;
+  inputPrefix?: ReactNode;
+  inputSuffix?: ReactNode;
+  footer?: ReactNode;
 }
+
+function selectableStep<T>(items: T[], from: number, direction: 1 | -1, isSelectable: (item: T) => boolean): number {
+  for (let index = from + direction; index >= 0 && index < items.length; index += direction) {
+    if (isSelectable(items[index])) return index;
+  }
+  return from;
+}
+
+const everyItem = () => true;
 
 export function Palette<T>({
   variant,
@@ -25,23 +38,32 @@ export function Palette<T>({
   items,
   itemKey,
   renderItem,
+  isSelectable = everyItem,
   emptyLabel,
   onPick,
   onClose,
   onKeyDown,
+  inputPrefix,
+  inputSuffix,
+  footer,
 }: PaletteProps<T>) {
-  const [selected, setSelected] = useState(0);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 
-  const activeIndex = items.length === 0 ? -1 : Math.min(selected, items.length - 1);
+  const selectedIndex = selectedKey === null ? -1 : items.findIndex((item) => itemKey(item) === selectedKey);
+  const activeIndex = selectedIndex >= 0 && isSelectable(items[selectedIndex])
+    ? selectedIndex
+    : items.findIndex(isSelectable);
+  const highlighted = activeIndex >= 0 ? items[activeIndex] : undefined;
+  const selectIndex = (index: number) => setSelectedKey(index >= 0 ? itemKey(items[index]) : null);
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
 
   useEffect(() => {
-    setSelected(0);
+    setSelectedKey(null);
   }, [query]);
 
   useEffect(() => {
@@ -50,11 +72,11 @@ export function Palette<T>({
   }, [activeIndex]);
 
   const pick = (item: T | undefined) => {
-    if (item !== undefined) onPick(item);
+    if (item !== undefined && isSelectable(item)) onPick(item);
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (onKeyDown?.(event)) return;
+    if (onKeyDown?.(event, highlighted)) return;
     switch (event.key) {
       case 'Escape':
         // Closing the palette must not also bubble to a workspace-level Escape handler.
@@ -64,15 +86,15 @@ export function Palette<T>({
         break;
       case 'ArrowDown':
         event.preventDefault();
-        setSelected((i) => Math.min(i + 1, items.length - 1));
+        selectIndex(selectableStep(items, activeIndex, 1, isSelectable));
         break;
       case 'ArrowUp':
         event.preventDefault();
-        setSelected((i) => Math.max(i - 1, 0));
+        selectIndex(selectableStep(items, activeIndex, -1, isSelectable));
         break;
       case 'Enter':
         event.preventDefault();
-        pick(items[activeIndex]);
+        pick(highlighted);
         break;
       default:
         break;
@@ -89,41 +111,58 @@ export function Palette<T>({
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}
     >
       <div className={`palette-box ${variant}-box`}>
-        <input
-          ref={inputRef}
-          className={`palette-input ${variant}-input`}
-          type="text"
-          placeholder={placeholder}
-          value={query}
-          onChange={(event) => onQueryChange(event.target.value)}
-          onKeyDown={handleKeyDown}
-          role="combobox"
-          aria-expanded
-          aria-controls={listId}
-          aria-activedescendant={activeIndex >= 0 ? `${variant}-opt-${activeIndex}` : undefined}
-          spellCheck={false}
-          autoComplete="off"
-        />
+        <div className={`palette-input-row ${variant}-input-row`}>
+          {inputPrefix}
+          <input
+            ref={inputRef}
+            className={`palette-input ${variant}-input`}
+            type="text"
+            placeholder={placeholder}
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            onKeyDown={handleKeyDown}
+            role="combobox"
+            aria-label={ariaLabel}
+            aria-expanded
+            aria-controls={listId}
+            aria-activedescendant={activeIndex >= 0 ? `${variant}-opt-${activeIndex}` : undefined}
+            spellCheck={false}
+            autoComplete="off"
+          />
+          {inputSuffix}
+        </div>
         <ul id={listId} ref={listRef} className={`palette-list ${variant}-list`} role="listbox">
           {items.length === 0 ? (
             <li className={`palette-empty ${variant}-empty`}>{emptyLabel}</li>
           ) : (
-            items.map((item, index) => (
-              <li
-                key={itemKey(item)}
-                id={`${variant}-opt-${index}`}
-                role="option"
-                aria-selected={index === activeIndex}
-                className={`palette-option ${variant}-option${index === activeIndex ? ' is-selected' : ''}`}
-                onMouseEnter={() => setSelected(index)}
-                // mousedown + preventDefault: pick without yanking focus out of the input.
-                onMouseDown={(event) => { event.preventDefault(); pick(item); }}
-              >
-                {renderItem(item)}
-              </li>
-            ))
+            items.map((item, index) =>
+              isSelectable(item) ? (
+                <li
+                  key={itemKey(item)}
+                  id={`${variant}-opt-${index}`}
+                  role="option"
+                  aria-selected={index === activeIndex}
+                  className={`palette-option ${variant}-option${index === activeIndex ? ' is-selected' : ''}`}
+                  onMouseEnter={() => selectIndex(index)}
+                  // mousedown + preventDefault: pick without yanking focus out of the input.
+                  onMouseDown={(event) => { event.preventDefault(); pick(item); }}
+                >
+                  {renderItem(item, index === activeIndex)}
+                </li>
+              ) : (
+                <li
+                  key={itemKey(item)}
+                  role="presentation"
+                  className={`palette-heading ${variant}-heading`}
+                  onMouseDown={(event) => event.preventDefault()}
+                >
+                  {renderItem(item, false)}
+                </li>
+              ),
+            )
           )}
         </ul>
+        {footer && <div className={`palette-footer ${variant}-footer`}>{footer}</div>}
       </div>
     </div>
   );

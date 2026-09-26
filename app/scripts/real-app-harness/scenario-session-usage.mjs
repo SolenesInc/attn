@@ -85,7 +85,7 @@ async function main() {
     scenarioId: 'SESSION-USAGE',
     tier: 'tier1-local-agent',
     prefix: 'session-usage',
-    metadata: { focus: 'native subagent accounting, partial pricing, hover preview, and Action menu pinning' },
+    metadata: { focus: 'native subagent accounting, partial pricing, hover preview, and command palette pinning' },
   });
   const client = new UiAutomationClient({ appPath: options.appPath });
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
@@ -197,17 +197,17 @@ async function main() {
       }, 'the hover preview to close');
     });
 
-    await runner.step('pin_from_the_action_menu', async () => {
-      await pressShortcut(client, 'ui.actionMenu');
-      await client.request('dom_type', { selector: '.action-menu input', text: 'tokens cost' });
-      const menu = await client.request('dom_text', { selector: '.action-menu' });
-      runner.assert(menu.text.includes("Show Usage receipt's usage"), 'the Action menu exposes the active session receipt', menu);
-      await client.request('dom_click', { selector: '.action-menu-item' });
+    await runner.step('pin_from_the_command_palette', async () => {
+      await pressShortcut(client, 'ui.commandPalette');
+      await client.request('dom_type', { selector: '.unified-palette-input', text: '>tokens cost' });
+      const menu = await client.request('dom_text', { selector: '.unified-palette' });
+      runner.assert(menu.text.includes("Show Usage receipt's usage"), 'the command palette exposes the active session receipt', menu);
+      await client.request('dom_click', { selector: '.unified-palette-option' });
       const pinned = await poll(async () => {
         const result = await client.request('dom_text', { selector: '.session-usage-popover' }).catch(() => null);
         return result?.text?.includes('esc close') ? result : null;
       }, 'the pinned usage panel');
-      runner.assert(pinned.text.includes('714,095 tokens'), 'the Action menu opens the same receipt', pinned);
+      runner.assert(pinned.text.includes('714,095 tokens'), 'the command palette opens the same receipt', pinned);
       if (PACE_MS) await delay(PACE_MS);
       await client.request('dom_key', { selector: '.session-usage-popover', key: 'Escape' });
     });

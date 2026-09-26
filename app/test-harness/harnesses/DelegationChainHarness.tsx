@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from '../../src/components/DelegationChain';
-import { ActionMenu } from '../../src/components/ActionMenu';
+import { UnifiedPalette } from '../../src/components/palette/UnifiedPalette';
 import FocusTrap from 'focus-trap-react';
+import type { AgentPaletteInput, PaletteSession } from '../../src/components/palette/agentPaletteRows';
 import { useEscapeStack } from '../../src/hooks/useEscapeStack';
 import { SessionLabel } from '../../src/components/SessionLabel';
 import { BuiltinDelegationRole } from '../../src/types/generated';
@@ -17,9 +18,18 @@ const agents: ChainSession[] = [
   { id: 'reviewer', label: 'Review role identity', agent: 'claude', state: 'idle', dispatcher_session_id: 'root', delegation_role: { name: 'Reviewer', builtin: BuiltinDelegationRole.Reviewer } },
 ];
 
+const NO_AGENTS: AgentPaletteInput<PaletteSession> = {
+  bands: { chief: null, turns: [], settled: [], crew: [], snoozed: [] },
+  crewRoster: [],
+  workspaces: [],
+  tileTitle: () => '',
+  now: 0,
+};
+
 export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessProps) {
   const [current, setCurrent] = useState('builder');
-  const [menu, setMenu] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState<string | null>(null);
+  const menu = paletteQuery !== null;
   const [settings, setSettings] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [rowGeneration, setRowGeneration] = useState(0);
@@ -27,7 +37,7 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
   const terminal = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { terminal.current?.focus(); }, [current]);
   useEffect(() => { onReady(); setTriggerRerender(() => () => {}); }, [onReady, setTriggerRerender]);
-  useShortcut('ui.actionMenu', () => { chain.current?.prepareCommand(); setMenu((open) => !open); }, true);
+  useShortcut('ui.commandPalette', () => { chain.current?.prepareCommand(); setPaletteQuery((query) => (query === null ? '>' : null)); }, true);
   useShortcut('session.historyBack', () => setCurrent('root'));
   useShortcut('ui.openSettings', () => setSettings((open) => !open));
   useShortcut('session.toggleSidebar', () => { chain.current?.dismiss('sidebar-collapse'); setCollapsed((value) => !value); });
@@ -50,10 +60,24 @@ export function DelegationChainHarness({ onReady, setTriggerRerender }: HarnessP
           <button data-testid="replace-sidebar-rows" onClick={() => setRowGeneration((value) => value + 1)}>Replace sidebar rows</button>
         </main>
       </div>
-      <ActionMenu isOpen={menu} onClose={() => setMenu(false)} actions={[{
-        id: 'show-delegation-chain', title: 'Show delegation chain', description: 'Navigate this agent’s dispatcher, peers, and delegates', icon: '↳',
-        run: () => chain.current?.open(current),
-      }]} />
+      {paletteQuery !== null && (
+        <UnifiedPalette
+          query={paletteQuery}
+          onQueryChange={setPaletteQuery}
+          onClose={() => setPaletteQuery(null)}
+          agents={NO_AGENTS}
+          desktops={[]}
+          commands={[{
+            id: 'show-delegation-chain', title: 'Show delegation chain', description: 'Navigate this agent’s dispatcher, peers, and delegates', icon: '↳',
+            run: () => chain.current?.open(current),
+          }]}
+          onOpenAgent={() => {}}
+          onWakeMember={() => {}}
+          onOpenTile={() => {}}
+          onSettle={() => {}}
+          onSnooze={() => {}}
+        />
+      )}
       {settings && <FocusTrap focusTrapOptions={{ escapeDeactivates: false }}>
         <div role="dialog" aria-label="Settings"><input aria-label="Settings search" /></div>
       </FocusTrap>}

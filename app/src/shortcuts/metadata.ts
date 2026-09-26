@@ -92,7 +92,8 @@ export const SHORTCUT_META: Record<ShortcutId, ShortcutMeta> = {
   'dock.attention': { label: 'PRs drawer', category: 'review', dockLabel: 'PRs' },
   'session.refreshPRs': { label: 'Refresh PRs', category: 'review' },
 
-  'ui.actionMenu': { label: 'Action menu', category: 'app' },
+  'ui.actionMenu': { label: 'Agent palette', category: 'app' },
+  'ui.commandPalette': { label: 'Command palette', category: 'app' },
   'ui.openSettings': { label: 'Settings', category: 'app', protected: true },
   'ui.showShortcuts': { label: 'Keyboard shortcuts', category: 'app', protected: true },
   'ui.increaseFontSize': { label: 'Increase font size', category: 'app' },

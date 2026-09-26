@@ -275,7 +275,7 @@ describe('SessionTerminalWorkspace pane header', () => {
     expect(screen.getByLabelText('Session usage $0.73')).toBeInTheDocument();
   });
 
-  it('pins the active session usage when the Action menu requests it', async () => {
+  it('pins the active session usage when the command palette requests it', async () => {
     const session = {
       id: 'sess-1',
       label: GENERATED_NAME,

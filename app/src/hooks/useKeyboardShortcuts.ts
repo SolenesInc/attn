@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import type { PaletteMode } from '../components/palette/UnifiedPalette';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 
@@ -6,7 +7,7 @@ interface KeyboardShortcutsConfig {
   onNewSession: () => void;
   onNewSessionHorizontal?: () => void;
   onCloseSession: () => void;
-  onToggleActionMenu: () => void;
+  onOpenPalette: (mode: PaletteMode) => void;
   onGoToDashboard: () => void;
   onToggleGridMode?: () => void;
   onJumpToWaiting: () => void;
@@ -46,7 +47,7 @@ export function useKeyboardShortcuts({
   onNewSession,
   onNewSessionHorizontal,
   onCloseSession,
-  onToggleActionMenu,
+  onOpenPalette,
   onGoToDashboard,
   onToggleGridMode,
   onJumpToWaiting,
@@ -121,7 +122,8 @@ export function useKeyboardShortcuts({
   useShortcut('desktop.send9', () => onSendToDesktopSlot(9), enabled);
   useShortcut('dock.attention', onToggleAttentionPanel ?? (() => {}), enabled && !!onToggleAttentionPanel);
 
-  useShortcut('ui.actionMenu', onToggleActionMenu, true);
+  useShortcut('ui.actionMenu', () => onOpenPalette('agents'), true);
+  useShortcut('ui.commandPalette', () => onOpenPalette('commands'), true);
 
   useShortcut('ui.openSettings', onOpenSettings ?? (() => {}), !!onOpenSettings);
 

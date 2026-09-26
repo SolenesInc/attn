@@ -150,10 +150,14 @@ async function main() {
       await driver.pressKeyCode(53);
     });
 
-    await runner.step('ctrl_shift_k_opens_action_menu', async () => {
+    await runner.step('ctrl_shift_k_opens_agents_and_ctrl_alt_k_commands', async () => {
       await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
       await driver.pressKey('k', { control: true, shift: true });
-      await waitForSelector(client, '.action-menu');
+      await waitForSelector(client, '.unified-palette[aria-label="Agents"]');
+      await driver.pressKeyCode(53);
+      await client.request('focus_pane', { sessionId, paneId: primaryPane.paneId });
+      await driver.pressKey('k', { control: true, alt: true });
+      await waitForSelector(client, '.unified-palette[aria-label="Commands"]');
       await driver.pressKeyCode(53);
     });
 
