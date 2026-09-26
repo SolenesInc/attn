@@ -45,6 +45,7 @@ const (
 	methodStream     = "stream"
 	methodSubagent   = "subagent"
 	methodDropSubs   = "delete_subagent_transcripts"
+	methodDeny       = "deny"
 	methodExit       = "exit"
 	signalExitBase   = 128
 )
@@ -173,6 +174,10 @@ type conversation interface {
 	reply(text string, afterStop bool) error
 }
 
+type autoModeGuard interface {
+	deny(denial Denial) error
+}
+
 type transcriptAuthor interface {
 	stream(text string) error
 	subagent(text string) error
@@ -274,6 +279,18 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		default:
 			return struct{}{}, author.deleteSubagentTranscripts()
 		}
+	case methodDeny:
+		var denial Denial
+		if err := json.Unmarshal(params, &denial); err != nil {
+			return nil, err
+		}
+		guard, ok := a.conv.(autoModeGuard)
+		if !ok {
+			return nil, fmt.Errorf("%T has no auto mode to deny a tool call", a.conv)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		return struct{}{}, guard.deny(denial)
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {

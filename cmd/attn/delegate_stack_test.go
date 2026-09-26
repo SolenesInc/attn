@@ -1,12 +1,15 @@
 package main_test
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -32,6 +35,23 @@ func gitRepo(t *testing.T, dir string) {
 			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
 		}
 	}
+}
+
+func saveDelegationPreferences(t *testing.T, app *testworld.Peer, preferences protocol.DelegationPreferences) {
+	t.Helper()
+	id := uuid.NewString()
+	saved := testworld.Request(app, protocol.DelegationPreferencesSaveMessage{Cmd: protocol.CmdDelegationPreferencesSave, RequestID: id, Preferences: preferences},
+		protocol.EventDelegationPreferencesResult, func(m protocol.DelegationPreferencesResultMessage) bool { return m.RequestID == id })
+	if !saved.Success {
+		t.Fatalf("saving delegation preferences: %s", protocol.Deref(saved.Error))
+	}
+}
+
+func pinned(argv []string, flag string) string {
+	if i := slices.Index(argv, flag); i >= 0 && i+1 < len(argv) {
+		return argv[i+1]
+	}
+	return ""
 }
 
 type delegated struct {
@@ -103,6 +123,48 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 			got := s.Run(testworld.Invocation{Session: source, Args: args})
 			if got.Code != 2 || !strings.Contains(got.Stderr, tc.want) || got.Stdout != "" {
 				t.Errorf("exited %d with stderr %q, want 2 and %q", got.Code, got.Stderr, tc.want)
+			}
+		})
+	}
+
+	notes := s.Path("notes")
+	if err := os.MkdirAll(notes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	saveDelegationPreferences(t, app, protocol.DelegationPreferences{
+		Enabled: true,
+		Roles: []protocol.DelegationRole{{
+			ID: "builder", Name: "Builder", Enabled: true, Description: "Implement changes", DefaultChoiceID: "everyday",
+			Choices: []protocol.DelegationChoice{
+				{ID: "everyday", Name: "Everyday", Selection: protocol.DelegationSelection{Harness: "claude", Effort: "low"}},
+				{ID: "hard", Name: "Hard", When: "the change spans packages", Selection: protocol.DelegationSelection{Harness: "claude", Model: "sonnet", Effort: "medium"}},
+			},
+		}},
+		Fallback: protocol.DelegationFallback{Selection: protocol.DelegationSelection{Harness: "claude", Effort: "high"}},
+	})
+	for i, tc := range []struct {
+		name   string
+		args   []string
+		effort string
+	}{
+		{name: "the hard choice moved to the agent's default model", args: []string{"--role", "builder", "--choice", "hard", "--model", "default"}},
+		{name: "the default choice at a pinned effort", args: []string{"--role", "builder", "--effort", "high"}, effort: "high"},
+		{name: "the fallback at the agent's default effort", args: []string{"--fallback", "--effort", "default"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"delegate", "--brief", "Build the discount field", "--cwd", notes, "--name", fmt.Sprintf("delegate-%d", i)}, tc.args...)
+			started := s.Run(testworld.Invocation{Session: source, Args: args})
+			if started.Code != 0 {
+				t.Fatalf("attn delegate exited %d: %s", started.Code, started.Stderr)
+			}
+			var result delegated
+			started.JSON(t, &result)
+			if result.Agent != "claude" || result.Model != "" || result.Effort != tc.effort {
+				t.Errorf("delegate printed %+v, want claude on its default model at effort %q", result, tc.effort)
+			}
+			argv := s.Launched(result.SessionID).Argv
+			if slices.Contains(argv, "--model") || pinned(argv, "--effort") != tc.effort || slices.Contains(argv, "--effort") != (tc.effort != "") {
+				t.Errorf("the delegated claude ran %q, want no model pin and effort %q", argv, tc.effort)
 			}
 		})
 	}
