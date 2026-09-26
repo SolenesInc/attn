@@ -295,14 +295,16 @@ export function advanceAfterTurnClosed<TSession extends QueueBandSession>(
 
 export function crewRows<TSession extends QueueBandSession>(
   crew: readonly { id: string }[] | undefined,
-  awake: QueueRow<TSession>[],
+  bands: Pick<QueueBands<TSession>, 'chief' | 'crew'>,
 ): { member: string; row?: QueueRow<TSession> }[] {
   const byMember = new Map<string, QueueRow<TSession>>();
-  for (const row of awake) {
+  for (const row of bands.crew) {
     const member = row.session.crewMember;
     if (member && !byMember.has(member)) byMember.set(member, row);
   }
   const members = new Set<string>([...(crew ?? []).map((entry) => entry.id), ...byMember.keys()]);
+  const chiefMember = bands.chief?.session.crewMember;
+  if (chiefMember) members.delete(chiefMember);
   return [...members]
     .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
     .map((member) => ({ member, row: byMember.get(member) }));

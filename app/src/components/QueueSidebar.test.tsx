@@ -578,6 +578,20 @@ describe('the crew in the sidebar', () => {
     expect(screen.getByTestId('queue-crew-alder').className).toContain('queue-row--crew');
   });
 
+  it('shows a chief on the roster once, as the chief, and never counts it asleep', () => {
+    const chiefOnRoster = sessions.map((entry) => (entry.id === 'chief' ? { ...entry, crewMember: 'alder' } : entry));
+    const allAgents = () => screen.getByTestId('queue-agents-toggle').querySelector('b')!.textContent;
+
+    const { unmount } = renderSidebar(chiefOnRoster, true, { crew: [{ id: 'keel' }] });
+    const withoutChiefOnRoster = allAgents();
+    unmount();
+
+    renderSidebar(chiefOnRoster, true, { crew: [{ id: 'alder' }, { id: 'keel' }] });
+    expect(screen.queryByTestId('queue-crew-alder')).toBeNull();
+    expect(screen.getByTestId('queue-chief-chief')).toBeInTheDocument();
+    expect(allAgents()).toBe(withoutChiefOnRoster);
+  });
+
   it('names each focused row by what it holds: an agent, or nothing for a sleeping member', () => {
     renderCrew([
       { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },

@@ -200,7 +200,7 @@ function CrewBlock() {
   } = useSidebarContext();
   const where = useRowWhere();
   if (!queue) return null;
-  const members = crewRows(crew, queue.crew);
+  const members = crewRows(crew, queue);
   if (!queue.chief && members.length === 0) return null;
   const chief = queue.chief;
   return (
@@ -267,7 +267,7 @@ function WaitingCard() {
   const hidden = turns.length - lead.length;
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
-  const counts = agentCounts(queue, crewRows(crew, queue.crew).length, workspaces);
+  const counts = agentCounts(queue, crewRows(crew, queue), workspaces);
 
   const turnRow = (row: QueueRow<QueueBandSessionView>) => (
     <QueueRowView
@@ -406,14 +406,14 @@ function WaitingCard() {
 
 function agentCounts(
   queue: NonNullable<ReturnType<typeof useSidebarContext>['queue']>,
-  crewMembers: number,
+  crewMembers: ReturnType<typeof crewRows>,
   workspaces: SidebarWorkspace[],
 ) {
   const agents = new Set<string>();
   for (const row of [queue.chief, ...queue.crew, ...queue.turns, ...queue.settled, ...queue.snoozed]) {
     if (row) agents.add(row.session.id);
   }
-  const asleep = Math.max(0, crewMembers - queue.crew.length);
+  const asleep = crewMembers.filter((member) => !member.row).length;
   const unplaced =
     workspaces
       .find((workspace) => workspace.id === UNPLACED_GROUP_ID)
