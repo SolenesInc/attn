@@ -98,12 +98,17 @@ function commandApplied(state: Pick<ProfilesState, 'desktops' | 'currentDesktopI
   }
 }
 
-function confirmsOnlySupersededCommands(
-  confirmed: SentCommand[],
-  state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>,
-): boolean {
-  const intent = intentSessionOf(useSessionStore.getState(), selectedTile(state) !== null);
-  return confirmed.length > 0 && confirmed.every((sent) => sent.sessionId !== intent);
+function commandShown(shown: Shown, command: Command): boolean {
+  switch (command.kind) {
+    case 'active':
+      return shown.desktopId === command.desktopId && shown.paneId === command.paneId;
+    case 'current':
+      return shown.desktopId === command.desktopId;
+    case 'place':
+      return shown.sessionId === command.sessionId;
+    case 'profile':
+      return true;
+  }
 }
 
 function nextCommand(intentSessionId: string, intentProfileId: string): Command | null {
@@ -236,9 +241,10 @@ export function useDesktopSelectionBridge(
   useEffect(
     () =>
       useProfilesStore.subscribe((state, previous) => {
-        const confirmed = inFlight.current.filter((sent) => commandApplied(state, sent.command));
-        inFlight.current = inFlight.current.filter((sent) => !confirmed.includes(sent));
-        const superseded = confirmsOnlySupersededCommands(confirmed, state);
+        const confirmed: SentCommand[] = [];
+        const waiting: SentCommand[] = [];
+        for (const sent of inFlight.current) (commandApplied(state, sent.command) ? confirmed : waiting).push(sent);
+        inFlight.current = waiting;
         const shown = shownOf(state);
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) {
@@ -246,8 +252,14 @@ export function useDesktopSelectionBridge(
           return;
         }
         const sessions = useSessionStore.getState();
-        if (superseded || arrivedInPendingProfile(state, previous, sessions)) return;
-        if (confirmed.length === 0) inFlight.current = [];
+        const shownByOwnCommand = confirmed.filter((sent) => commandShown(shown, sent.command));
+        if (shownByOwnCommand.length === 0) {
+          inFlight.current = [];
+        } else {
+          const intent = intentSessionOf(sessions, shown.tileId !== null);
+          if (shownByOwnCommand.every((sent) => sent.sessionId !== intent)) return;
+        }
+        if (arrivedInPendingProfile(state, previous, sessions)) return;
         if (sessions.view === 'session') {
           const sessionId = agentToShow(state, shown, sessions.activeSessionId);
           const overridesRequest = shown.tileId !== null && sessions.focusRequest !== null;
