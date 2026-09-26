@@ -569,6 +569,32 @@ describe('Sidebar', () => {
     expect(onSessionDragEnd).toHaveBeenCalledTimes(armed ? 1 : 0);
   });
 
+  it('ends a session drag on Escape without dropping it', () => {
+    const workspace = workspaceWithBrowserTile();
+    const onSessionDragEnd = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={[workspace]}
+        visualIndexByWorkspaceId={new Map([[workspace.id, 0]])}
+        onSessionDragStart={vi.fn()}
+        onSessionDragEnd={onSessionDragEnd}
+      />,
+    );
+    const row = screen
+      .getByTestId('sidebar-session-s1')
+      .querySelector('.sidebar-row-select') as HTMLButtonElement;
+
+    fireEvent.pointerDown(row, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 40 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(onSessionDragEnd).toHaveBeenCalledTimes(1);
+    expect(screen.queryByTestId('session-drag-ghost')).not.toBeInTheDocument();
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 40 });
+    expect(onSessionDragEnd).toHaveBeenCalledTimes(1);
+  });
+
   it('treats a sub-threshold press on a session row as a plain selection click', () => {
     const workspace = workspaceWithBrowserTile();
     const onSessionDragStart = vi.fn();
@@ -658,6 +684,28 @@ describe('Sidebar', () => {
     expect(header.releasePointerCapture).toHaveBeenCalledWith(1);
     fireEvent.pointerUp(window, { pointerId: 1 });
     expect(onWorkspaceReorder).not.toHaveBeenCalled();
+  });
+
+  it('drops nothing when Escape cancels a header drag', () => {
+    const sidebarData = buildSidebarData([
+      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
+      { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
+      { id: 'c1', label: 'C1', state: 'idle', cwd: '/repo/c' },
+    ]);
+    const onWorkspaceReorder = vi.fn();
+    render(<Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />);
+    const header = screen
+      .getByTestId('sidebar-workspace-workspace-/repo/a')
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+
+    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-3'));
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 120 });
+
+    expect(onWorkspaceReorder).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
   });
 
   it('cancels the preceding pointer gesture when another header is pressed', () => {
