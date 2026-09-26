@@ -197,7 +197,18 @@ func TestLegacyNotebookRecoveryAttachesProvenFilesAndDumpsUnboundFragments(t *te
 	}
 	notebookRoot := t.TempDir()
 	target.SetSetting(SettingNotebookRoot, notebookRoot)
-	for ticketID, filename := range map[string]string{"proven-ticket": "proof.md", "orphan-ticket": "orphan.txt"} {
+	if _, err := target.CreateTicket(store.Ticket{
+		ID: "contested-ticket", Title: "Contested", Description: "original", Status: store.TicketStatusDone,
+	}, "you", now); err != nil {
+		t.Fatal(err)
+	}
+	contestedPath := filepath.Join(notebookRoot, "tickets", "contested-ticket", "proof.md")
+	if _, err := target.AddTicketAttachment(store.TicketAttachment{
+		TicketID: "contested-ticket", Filename: "proof.md", Path: contestedPath, Note: "attached by hand",
+	}, "you", now); err != nil {
+		t.Fatal(err)
+	}
+	for ticketID, filename := range map[string]string{"proven-ticket": "proof.md", "orphan-ticket": "orphan.txt", "contested-ticket": "proof.md"} {
 		dir := filepath.Join(notebookRoot, "tickets", ticketID)
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			t.Fatal(err)
@@ -222,9 +233,28 @@ func TestLegacyNotebookRecoveryAttachesProvenFilesAndDumpsUnboundFragments(t *te
 		t.Fatal(err)
 	}
 
-	result := runLegacyRecoveryOnce(t, d)
-	if result.Counts.NotebookAttachments != 1 || result.Counts.FragmentsSalvaged != 3 {
+	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
+		t.Fatalf("prepare wait=%v err=%v", wait, err)
+	}
+	run, err := target.GetLegacyTicketRecoveryRun(store.LegacyTicketRecoveryVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	crashed := &jobs.Job{Attempts: 1, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}}
+	if err := d.recoverLegacyTicketNotebook(context.Background(), crashed, run, &legacyTicketRecoveryResult{}); err != nil {
+		t.Fatal(err)
+	}
+	value, err := d.legacyTicketRecoveryHandler(context.Background(), &jobs.Job{Attempts: 2, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := value.(legacyTicketRecoveryResult)
+	if result.Counts.NotebookAttachments != 1 || result.Counts.FragmentsSalvaged != 4 {
 		t.Fatalf("result = %#v", result)
+	}
+	contested, err := target.GetTicket("contested-ticket")
+	if err != nil || len(contested.Attachments) != 1 || contested.Attachments[0].Note != "attached by hand" {
+		t.Fatalf("the existing attachment lost to Notebook metadata: %#v, %v", contested, err)
 	}
 	after, err := target.GetTicket("proven-ticket")
 	if err != nil {
@@ -247,7 +277,8 @@ func TestLegacyNotebookRecoveryAttachesProvenFilesAndDumpsUnboundFragments(t *te
 	if err != nil || !strings.Contains(string(content), `"kind": "notebook_unbound"`) ||
 		!strings.Contains(string(content), "orphan.txt") ||
 		!strings.Contains(string(content), "nested directory ignored") ||
-		!strings.Contains(string(content), "symlink ignored") {
+		!strings.Contains(string(content), "symlink ignored") ||
+		!strings.Contains(string(content), `"kind": "notebook_attachment_conflict"`) {
 		t.Fatalf("fragments = %s, %v", content, err)
 	}
 	fileInfo, err := os.Stat(fragmentPath)

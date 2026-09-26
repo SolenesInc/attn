@@ -16,18 +16,6 @@ func newAgentMailboxStore(t *testing.T) *Store {
 	return s
 }
 
-func enqueuePeer(t *testing.T, s *Store, id, sender, recipient, body string, createdAt time.Time) agentmailbox.Delivery {
-	t.Helper()
-	delivery, err := s.EnqueuePeerMessage(agentmailbox.PeerMessage{
-		ID: id, SenderSessionID: sender, Body: body,
-		CreatedAt: createdAt.UTC().Format(sortableTimeFormat),
-	}, recipient)
-	if err != nil {
-		t.Fatalf("EnqueuePeerMessage(%s): %v", id, err)
-	}
-	return delivery
-}
-
 func TestReadAgentMailboxCapsABatchAtTheMaximum(t *testing.T) {
 	s := newAgentMailboxStore(t)
 	base := time.Date(2026, 9, 3, 11, 0, 0, 0, time.UTC)
