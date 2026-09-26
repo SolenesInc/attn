@@ -3868,7 +3868,7 @@ export function useDaemonSocket({
     return () => {
       setPtyBackend(null);
     };
-  }, [attachExistingRuntime, sendAttachSessionWithRetry, sendDetachSession, sendPtyInput, sendPtyResize, sendReloadSession, sendSpawnSession]);
+  }, [attachExistingRuntime, sendDetachSession, sendPtyInput, sendPtyResize, sendReloadSession, sendSpawnSession]);
 
   const sendPRAction = useCallback((
     action: 'approve' | 'merge',
