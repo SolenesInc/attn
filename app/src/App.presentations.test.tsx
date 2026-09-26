@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { agentPane, daemonSession, daemonWorkspace } from './test/daemonFixtures';
 import type { EventMessage } from './test/protocol';
 import { renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 type Presentation = EventMessage<'get_presentations_result'>['presentations'][number];
 
@@ -36,7 +37,6 @@ async function openSplit() {
       workspaces: [workspace],
     },
   });
-  view.daemon.on('get_presentations', () => ({ event: 'get_presentations_result', success: true, presentations: [] }));
   fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
   await view.daemon.idle();
   return view;
@@ -68,5 +68,65 @@ describe('App presentations', () => {
 
     expect(invoke).toHaveBeenCalledWith('open_presentation_window', { presentationId: 'pres-7' });
     expect(daemon.sent.slice(sent)).toEqual([]);
+  });
+
+  describe('which review chip a session shows', () => {
+    const chips = () => screen.queryAllByRole('button', { name: '▶ review' });
+
+    async function present(daemon: ScriptedDaemon, event: 'presentation_added' | 'presentation_updated', presentation: Presentation) {
+      daemon.emit({ event, presentation });
+      await daemon.idle();
+    }
+
+    it('keeps only the presentations still awaiting review from the list the daemon gives at connect', async () => {
+      const { daemon } = await openSplit();
+      expect(daemon.sentOf('get_presentations')).toHaveLength(1);
+
+      daemon.emit({
+        event: 'get_presentations_result',
+        success: true,
+        presentations: [
+          REVIEW,
+          { ...REVIEW, id: 'submitted', session_id: 's1', latest_round_submitted: true },
+          { ...REVIEW, id: 'closed', session_id: 's1', status: 'closed' },
+        ],
+      });
+      await daemon.idle();
+
+      expect(chips().map((chip) => chip.getAttribute('data-presentation-id'))).toEqual(['pres-7']);
+    });
+
+    it.each([
+      ['its latest round is submitted', { latest_round_submitted: true }],
+      ['it closes', { status: 'closed' }],
+    ])('drops the chip once %s', async (_, change) => {
+      const { daemon } = await openSplit();
+      await present(daemon, 'presentation_added', REVIEW);
+
+      await present(daemon, 'presentation_updated', { ...REVIEW, ...change });
+
+      expect(chips()).toEqual([]);
+    });
+
+    it('updates a chip in place rather than adding another', async () => {
+      const { daemon } = await openSplit();
+      await present(daemon, 'presentation_added', REVIEW);
+
+      await present(daemon, 'presentation_updated', { ...REVIEW, title: 'Parser fix, round 2' });
+
+      expect(chips().map((chip) => chip.getAttribute('title'))).toEqual(['Parser fix, round 2']);
+    });
+
+    it.each([
+      ['newest last', ['pres-old', 'pres-new']],
+      ['newest first', ['pres-new', 'pres-old']],
+    ])('shows the newest of a session’s presentations, whichever arrives %s', async (_, order) => {
+      const { daemon } = await openSplit();
+      const created = { 'pres-old': '2026-07-01T00:00:00Z', 'pres-new': '2026-07-02T00:00:00Z' } as Record<string, string>;
+
+      for (const id of order) await present(daemon, 'presentation_added', { ...REVIEW, id, created_at: created[id] });
+
+      expect(chips().map((chip) => chip.getAttribute('data-presentation-id'))).toEqual(['pres-new']);
+    });
   });
 });

@@ -2,13 +2,13 @@ import { useCallback, useEffect, useRef } from 'react';
 
 // The daemon believes a report for 90s, so three heartbeats fit inside that window: a
 // single dropped frame or a blocked event loop never expires a window genuinely watched.
-export const PRESENCE_HEARTBEAT_MS = 30_000;
+const PRESENCE_HEARTBEAT_MS = 30_000;
 
 const PRESENCE_INPUT_REPORT_FLOOR_MS = 10_000;
 
 const INPUT_EVENTS = ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const;
 
-export interface ClientPresenceReport {
+interface ClientPresenceReport {
   visible: boolean;
   dashboardVisible: boolean;
   idleSeconds?: number;
