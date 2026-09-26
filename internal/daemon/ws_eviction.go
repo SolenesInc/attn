@@ -66,6 +66,19 @@ func (h *wsHub) takeEviction(clientID string) (evictionRecord, bool) {
 	return record, ok
 }
 
+func (h *wsHub) deliverEviction(clientID string, send func(evictionRecord) bool) {
+	if clientID == "" {
+		return
+	}
+	h.evictionMu.Lock()
+	defer h.evictionMu.Unlock()
+	h.pruneEvictionsLocked(time.Now())
+	record, ok := h.evictions[clientID]
+	if ok && send(record) {
+		delete(h.evictions, clientID)
+	}
+}
+
 func (h *wsHub) pruneEvictionsLocked(now time.Time) {
 	for id, rec := range h.evictions {
 		if now.Sub(rec.at) > evictionMemoryTTL {
