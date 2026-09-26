@@ -4,6 +4,7 @@ import { useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { desktopPaneOfAgent } from '../utils/desktops';
+import { isStaleRevision } from './desktopRevisions';
 
 interface Shown {
   desktopId: string | null;
@@ -66,6 +67,24 @@ function mirrorShownTile(shown: Shown) {
   });
 }
 
+function abandonSelection(sessionId: string) {
+  const sessions = useSessionStore.getState();
+  if (sessions.pendingSelection?.sessionId === sessionId) {
+    sessions.cancelPendingSelection();
+    return;
+  }
+  if (sessions.activeSessionId !== sessionId) return;
+  const state = useProfilesStore.getState();
+  const shown = shownOf(state);
+  const shownAgent = agentToShow(state, shown, null);
+  if (shown.tileId) {
+    useSessionStore.setState({ activeSessionId: shownAgent });
+    mirrorShownTile(shown);
+    return;
+  }
+  sessions.setActiveSession(shownAgent);
+}
+
 type Command =
   | { key: string; kind: 'active'; desktopId: string; paneId: string }
   | { key: string; kind: 'current'; profileId: string; desktopId: string }
@@ -109,7 +128,10 @@ function nextCommand(intentSessionId: string, intentProfileId: string): Command 
   };
 }
 
-export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, paneId: string) => void) {
+export function useDesktopSelectionBridge(
+  focusSessionPane: (sessionId: string, paneId: string) => void,
+  reportFailure: (message: string) => void,
+) {
   const { sendDesktopSetActivePane, sendDesktopSetCurrent, sendDesktopPlaceSession, sendProfileSelect } =
     useDaemonApi();
   const view = useSessionStore((state) => state.view);
@@ -123,6 +145,10 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const sentKey = useRef<string | null>(null);
+  const reportFailureRef = useRef(reportFailure);
+  useEffect(() => {
+    reportFailureRef.current = reportFailure;
+  }, [reportFailure]);
 
   useEffect(() => {
     mirrorShownTile(shownOf(useProfilesStore.getState()));
@@ -141,8 +167,11 @@ export function useDesktopSelectionBridge(focusSessionPane: (sessionId: string, 
     }
     if (command.key === sentKey.current) return;
     sentKey.current = command.key;
-    const release = () => {
+    const release = (error: unknown) => {
       if (sentKey.current === command.key) sentKey.current = null;
+      if (isStaleRevision(error)) return;
+      abandonSelection(intentSessionId);
+      reportFailureRef.current(`Could not show that agent: ${error instanceof Error ? error.message : String(error)}`);
     };
     switch (command.kind) {
       case 'active':

@@ -134,7 +134,7 @@ export function useAppController({
     injectSessionPaneBase64,
     drainSessionPaneTerminal,
   } = desktopRuntime;
-  useDesktopSelectionBridge(desktopRuntime.focusSessionPane);
+  useDesktopSelectionBridge(desktopRuntime.focusSessionPane, showError);
 
   const appSessions = useAppSessions({
     activeSessionId,

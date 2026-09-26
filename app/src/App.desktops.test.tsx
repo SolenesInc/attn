@@ -554,6 +554,48 @@ describe('desktop surface', () => {
     });
   });
 
+  it('drops a selection the daemon refuses so selecting the agent again retries', async () => {
+    desktopCommands.sendDesktopPlaceSession.mockRejectedValueOnce(new Error('desktop is gone'));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s4');
+    });
+    await waitFor(() => expect(useSessionStore.getState().pendingSelection).toBeNull());
+    expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(1);
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s4');
+    });
+
+    await waitFor(() => expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s4'));
+  });
+
+  it('keeps a selection whose command lost a revision race, for the newer arrangement to retry', async () => {
+    desktopCommands.sendDesktopPlaceSession.mockRejectedValueOnce(new ProfileCommandError({
+      event: 'profile_action_result',
+      request_id: 'test',
+      action: 'desktop_place_session',
+      success: false,
+      error: 'stale',
+      error_code: 'stale_revision',
+    } as never));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s4');
+    });
+    await waitFor(() => expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(1));
+    expect(useSessionStore.getState().pendingSelection?.sessionId).toBe('s4');
+
+    act(() => arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => ({ ...desktop, revision: desktop.revision + 1 })), 'd1'));
+
+    await waitFor(() => expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(2));
+  });
+
   it('lets a broadcast that contradicts a pending selection win', async () => {
     desktopCommands.sendDesktopPlaceSession.mockImplementation(() => new Promise(() => {}));
     render(<App />);
