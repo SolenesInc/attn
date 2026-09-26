@@ -42,6 +42,12 @@ function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktop
   if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
 }
 
+function intentSessionOf(sessions: ReturnType<typeof useSessionStore.getState>, tileSelected: boolean): string | null {
+  if (sessions.pendingSelection) return sessions.pendingSelection.sessionId;
+  if (sessions.view !== 'session') return null;
+  return tileSelected ? (sessions.focusRequest?.sessionId ?? null) : sessions.activeSessionId;
+}
+
 function arrivedInPendingProfile(
   state: Pick<ProfilesState, 'selectedProfileId'>,
   previous: Pick<ProfilesState, 'selectedProfileId'>,
@@ -73,6 +79,37 @@ type Command =
   | { key: string; kind: 'current'; profileId: string; desktopId: string }
   | { key: string; kind: 'place'; desktop: Desktop; sessionId: string }
   | { key: string; kind: 'profile'; profileId: string };
+
+interface SentCommand {
+  command: Command;
+  sessionId: string;
+}
+
+function commandApplied(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId' | 'selectedProfileId'>, command: Command): boolean {
+  switch (command.kind) {
+    case 'active':
+      return state.desktops.some((desktop) => desktop.id === command.desktopId && desktop.active_pane_id === command.paneId);
+    case 'current':
+      return state.currentDesktopId === command.desktopId;
+    case 'place':
+      return desktopPaneOfAgent(state.desktops, command.sessionId)?.desktop_id === command.desktop.id;
+    case 'profile':
+      return state.selectedProfileId === command.profileId;
+  }
+}
+
+function commandShown(shown: Shown, command: Command): boolean {
+  switch (command.kind) {
+    case 'active':
+      return shown.desktopId === command.desktopId && shown.paneId === command.paneId;
+    case 'current':
+      return shown.desktopId === command.desktopId;
+    case 'place':
+      return shown.sessionId === command.sessionId;
+    case 'profile':
+      return true;
+  }
+}
 
 function nextCommand(intentSessionId: string, intentProfileId: string): Command | null {
   const { desktops, currentDesktopId, selectedProfileId } = useProfilesStore.getState();
@@ -120,16 +157,15 @@ export function useDesktopSelectionBridge(
   const view = useSessionStore((state) => state.view);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const pendingSessionId = useSessionStore((state) => state.pendingSelection?.sessionId ?? null);
-  const requestedSessionId = useSessionStore((state) => state.focusRequest?.sessionId ?? null);
   const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
-  const shownIntent = tileSelected ? requestedSessionId : activeSessionId;
-  const intentSessionId = pendingSessionId ?? (view === 'session' ? shownIntent : null);
+  const intentSessionId = useSessionStore((state) => intentSessionOf(state, tileSelected));
   const intentProfileId = useSessionStore(
     (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? null,
   );
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const sentKey = useRef<string | null>(null);
+  const inFlight = useRef<SentCommand[]>([]);
   const reportFailureRef = useRef(reportFailure);
   useEffect(() => {
     reportFailureRef.current = reportFailure;
@@ -147,8 +183,11 @@ export function useDesktopSelectionBridge(
     }
     if (command.key === sentKey.current) return;
     sentKey.current = command.key;
+    const sent = { command, sessionId: intentSessionId };
+    inFlight.current = [...inFlight.current, sent];
     const release = (error: unknown) => {
       if (sentKey.current === command.key) sentKey.current = null;
+      inFlight.current = inFlight.current.filter((entry) => entry !== sent);
       if (isStaleRevision(error)) return;
       abandonSelection(intentSessionId);
       reportFailureRef.current(`Could not show that agent: ${error instanceof Error ? error.message : String(error)}`);
@@ -202,6 +241,10 @@ export function useDesktopSelectionBridge(
   useEffect(
     () =>
       useProfilesStore.subscribe((state, previous) => {
+        const confirmed: SentCommand[] = [];
+        const waiting: SentCommand[] = [];
+        for (const sent of inFlight.current) (commandApplied(state, sent.command) ? confirmed : waiting).push(sent);
+        inFlight.current = waiting;
         const shown = shownOf(state);
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) {
@@ -209,6 +252,13 @@ export function useDesktopSelectionBridge(
           return;
         }
         const sessions = useSessionStore.getState();
+        const shownByOwnCommand = confirmed.filter((sent) => commandShown(shown, sent.command));
+        if (shownByOwnCommand.length === 0) {
+          inFlight.current = [];
+        } else {
+          const intent = intentSessionOf(sessions, shown.tileId !== null);
+          if (shownByOwnCommand.every((sent) => sent.sessionId !== intent)) return;
+        }
         if (arrivedInPendingProfile(state, previous, sessions)) return;
         if (sessions.view === 'session') {
           const sessionId = agentToShow(state, shown, sessions.activeSessionId);

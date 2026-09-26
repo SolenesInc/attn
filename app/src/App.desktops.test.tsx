@@ -876,6 +876,152 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().view).toBe('session');
   });
 
+  it('keeps the agent the user selects while the daemon still applies an earlier selection', async () => {
+    let applyFocus = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      (desktopId: string, paneId: string) =>
+        new Promise((resolve) => {
+          applyFocus = () => {
+            resolve({ event: 'profile_action_result', request_id: 'test', action: 'desktop_set_active_pane', success: true });
+            arrangeDesktops(
+              useProfilesStore.getState().desktops.map((desktop) =>
+                desktop.id === desktopId ? { ...desktop, active_pane_id: paneId, revision: desktop.revision + 1 } : desktop,
+              ),
+              'd1',
+            );
+          };
+        }),
+    );
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s2');
+    });
+    act(() => {
+      useSessionStore.getState().selectAgent('s1');
+    });
+    await act(async () => applyFocus());
+
+    await waitFor(() => expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([
+      ['d1', 'pane-s2'],
+      ['d1', 'pane-s1'],
+    ]));
+    const d1 = () => useProfilesStore.getState().desktops.find((desktop) => desktop.id === 'd1');
+    await waitFor(() => expect(d1()?.active_pane_id).toBe('pane-s1'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+  });
+
+  it('keeps the last of two selections that both reach the daemon before either confirms', async () => {
+    const confirmations: Array<() => void> = [];
+    const ok = (action: string) => ({ event: 'profile_action_result', request_id: 'test', action, success: true });
+    desktopCommands.sendDesktopSetCurrent.mockImplementationOnce(
+      (_profileId: string, desktopId: string) =>
+        new Promise((resolve) => {
+          confirmations.push(() => {
+            resolve(ok('desktop_set_current'));
+            arrangeDesktops(useProfilesStore.getState().desktops, desktopId);
+          });
+        }),
+    );
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      (desktopId: string, paneId: string) =>
+        new Promise((resolve) => {
+          confirmations.push(() => {
+            resolve(ok('desktop_set_active_pane'));
+            const state = useProfilesStore.getState();
+            arrangeDesktops(
+              state.desktops.map((desktop) =>
+                desktop.id === desktopId ? { ...desktop, active_pane_id: paneId, revision: desktop.revision + 1 } : desktop,
+              ),
+              state.currentDesktopId ?? '',
+            );
+          });
+        }),
+    );
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s3');
+    });
+    act(() => {
+      useSessionStore.getState().selectAgent('s2');
+    });
+    expect(confirmations).toHaveLength(2);
+    for (const confirm of confirmations) await act(async () => confirm());
+
+    await waitFor(() => expect(useProfilesStore.getState().currentDesktopId).toBe('d1'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(useProfilesStore.getState().desktops.find((desktop) => desktop.id === 'd1')?.active_pane_id).toBe('pane-s2');
+  });
+
+  it('lets another window move to another desktop in the same update that confirms a superseded selection', async () => {
+    let confirmWithMove = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      (desktopId: string, paneId: string) =>
+        new Promise((resolve) => {
+          confirmWithMove = () => {
+            resolve({ event: 'profile_action_result', request_id: 'test', action: 'desktop_set_active_pane', success: true });
+            arrangeDesktops(
+              useProfilesStore.getState().desktops.map((desktop) =>
+                desktop.id === desktopId ? { ...desktop, active_pane_id: paneId, revision: desktop.revision + 1 } : desktop,
+              ),
+              'd3',
+            );
+          };
+        }),
+    );
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s2');
+    });
+    act(() => {
+      useSessionStore.getState().selectAgent('s1');
+    });
+    await act(async () => confirmWithMove());
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s3'));
+    expect(useProfilesStore.getState().currentDesktopId).toBe('d3');
+    expect(desktopCommands.sendDesktopSetCurrent).not.toHaveBeenCalled();
+    expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'pane-s2']]);
+  });
+
+  it('lets another window show the agent this window asked for before it moved elsewhere', async () => {
+    let answer = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          answer = () =>
+            resolve({ event: 'profile_action_result', request_id: 'test', action: 'desktop_set_active_pane', success: true });
+        }),
+    );
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s2');
+    });
+    act(() => arrangeDesktops(useProfilesStore.getState().desktops, 'd3'));
+    await act(async () => answer());
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s3'));
+
+    act(() =>
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...desktop, active_pane_id: 'pane-s2', revision: desktop.revision + 1 } : desktop,
+        ),
+        'd1',
+      ),
+    );
+
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s2'));
+    expect(desktopCommands.sendDesktopSetCurrent).not.toHaveBeenCalled();
+    expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'pane-s2']]);
+  });
+
   it('offers the focused agent\'s directory as the workspace root only when it runs on this machine', async () => {
     render(<App />);
     await waitFor(() =>
