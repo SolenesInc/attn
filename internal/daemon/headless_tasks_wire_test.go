@@ -68,7 +68,7 @@ func TestTheHeadlessTasksSettingIsReportedApartFromItsEnvOverride(t *testing.T) 
 	for _, value := range []string{"false", "true"} {
 		setSetting(t, app, effective, value)
 		settings := testworld.Await(app, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool {
-			return m.RequestID == nil && m.Settings[stored] == value
+			return m.RequestID == nil && protocol.Deref(m.ChangedKey) == effective && m.Settings[stored] == value
 		}).Settings
 		if settings[effective] != value || settings[stored] != value {
 			t.Errorf("after storing %s the settings say effective %q, stored %q", value, settings[effective], settings[stored])
