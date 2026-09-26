@@ -632,14 +632,14 @@ func (s *Store) UpdateState(id, state string) bool {
 		if session == nil {
 			return false
 		}
-		now := time.Now().Format(time.RFC3339Nano)
+		now := string(protocol.TimestampNow())
 		session.State = protocol.SessionState(state)
 		session.StateSince = now
 		session.StateUpdatedAt = now
 		return true
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ? WHERE id = ? AND closed_at = ''`,
 		state, now, now, id)
 	if err != nil {
@@ -763,12 +763,12 @@ func (s *Store) Touch(id string) {
 
 	if s.db == nil {
 		if session := s.sessions[id]; session != nil {
-			session.LastSeen = time.Now().Format(time.RFC3339Nano)
+			session.LastSeen = string(protocol.TimestampNow())
 		}
 		return
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", now, id)
 	if err != nil {
 		log.Printf("[store] Touch: failed for session %s: %v", id, err)
@@ -1356,7 +1356,7 @@ func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string
 	if runID == "" || seq == 0 {
 		return false
 	}
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	if s.db == nil {
 		session := s.sessions[id]
 		cursor := s.agentDriverRuns[id]
