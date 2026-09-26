@@ -59,6 +59,7 @@ type launch struct {
 	Harness        Harness  `json:"harness"`
 	Pid            int      `json:"pid"`
 	Argv           []string `json:"argv"`
+	Env            []string `json:"env"`
 	AttnSessionID  string   `json:"attn_session_id,omitempty"`
 	ConversationID string   `json:"conversation_id,omitempty"`
 	Resumed        bool     `json:"resumed,omitempty"`
@@ -201,6 +202,7 @@ func serve(cfg config, style composer, conv conversation) int {
 	report.Role = roleAgent
 	report.Pid = os.Getpid()
 	report.Argv = os.Args
+	report.Env = os.Environ()
 	report.AttnSessionID = os.Getenv("ATTN_SESSION_ID")
 	if report.AttnSessionID == "" {
 		began = errors.Join(began, errors.New("ATTN_SESSION_ID is not set"))

@@ -201,6 +201,7 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				ConversationID: f.ConversationID,
 				Resumed:        f.Resumed,
 				Argv:           f.Argv,
+				Env:            f.Env,
 				t:              k.t,
 				fake:           f,
 			}
