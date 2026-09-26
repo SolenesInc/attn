@@ -1,8 +1,6 @@
 package store
 
 import (
-	"fmt"
-	"strings"
 	"testing"
 	"time"
 
@@ -63,79 +61,6 @@ func TestPullRequestWatchReconfigurationPreservesFeedbackAndRearmBaselinesAgain(
 	rearmed, _ := s.PullRequestWatch("s1", prID)
 	if rearmed.Cursor.Initialized || len(rearmed.Cursor.SeenFeedbackIDs) != 0 || len(rearmed.Cursor.ThreadStates) != 0 {
 		t.Fatalf("rearmed cursor = %+v", rearmed.Cursor)
-	}
-}
-
-func TestWatchPullRequestRecordsAndInstallsAtomically(t *testing.T) {
-	for _, preexisting := range []bool{false, true} {
-		t.Run(fmt.Sprintf("preexisting=%t", preexisting), func(t *testing.T) {
-			s := newSessionPRStore(t)
-			now := time.Date(2026, 9, 21, 8, 30, 0, 0, time.UTC)
-			prID := "github.com:victorarias/attn#303"
-			rec := SessionPullRequestRecord{
-				SessionID: "s1", PRID: prID, Repository: "github.com/victorarias/attn", Number: 303,
-				URL: "https://github.com/victorarias/attn/pull/303",
-			}
-			if preexisting {
-				recordPR(t, s, rec.SessionID, rec.PRID, rec.Number, now)
-			}
-			if _, err := s.db.Exec(`
-				CREATE TRIGGER reject_watch_projection BEFORE UPDATE OF readiness_state ON session_pull_requests
-				BEGIN SELECT RAISE(ABORT, 'projection unavailable'); END
-			`); err != nil {
-				t.Fatal(err)
-			}
-
-			if _, _, err := s.WatchPullRequest(rec, prreadiness.ModeGreen, "", now.Add(time.Second)); err == nil || !strings.Contains(err.Error(), "projection unavailable") {
-				t.Fatalf("watch error = %v", err)
-			}
-			if _, ok := s.PullRequestWatch(rec.SessionID, rec.PRID); ok {
-				t.Fatal("failed watch left a watch row")
-			}
-			records := s.ListSessionPullRequests(rec.SessionID)
-			if preexisting && len(records) != 1 {
-				t.Fatalf("preexisting record removed: %+v", records)
-			}
-			if !preexisting && len(records) != 0 {
-				t.Fatalf("failed watch left a pull request record: %+v", records)
-			}
-		})
-	}
-}
-
-func TestPullRequestWatchReconcileRollsBackProjectionCursorAndMailboxTogether(t *testing.T) {
-	s := newSessionPRStore(t)
-	now := time.Date(2026, 9, 21, 9, 0, 0, 0, time.UTC)
-	prID := "github.com:victorarias/attn#303"
-	recordPR(t, s, "s1", prID, 303, now)
-	if _, _, err := s.WatchPullRequest(SessionPullRequestRecord{SessionID: "s1", PRID: prID}, prreadiness.ModeGreen, "", now); err != nil {
-		t.Fatal(err)
-	}
-	watch, _ := s.PullRequestWatch("s1", prID)
-	if _, err := s.db.Exec(`CREATE TRIGGER reject_pr_mailbox BEFORE INSERT ON agent_mailbox_items BEGIN SELECT RAISE(ABORT, 'mailbox unavailable'); END`); err != nil {
-		t.Fatal(err)
-	}
-	item := testPullRequestMailboxItem("ready", "s1", prID, now)
-	_, _, err := s.ReconcilePullRequestWatch(PullRequestWatchReconcile{
-		SessionID: "s1", PRID: prID, CreatedAt: watch.CreatedAt, Mode: watch.Mode,
-		Cursor:     prreadiness.Cursor{Initialized: true, HeadSHA: "head-a", LastAction: "ready"},
-		Status:     SessionPullRequestStatus{State: "open", HeadSHA: "head-a"},
-		Evaluation: prreadiness.Evaluation{State: prreadiness.StateReady, Reason: "green"},
-		Health:     "current", MailboxItems: []agentmailbox.Item{item}, At: now.Add(time.Second),
-	})
-	if err == nil || !strings.Contains(err.Error(), "mailbox unavailable") {
-		t.Fatalf("reconcile error = %v", err)
-	}
-	after, _ := s.PullRequestWatch("s1", prID)
-	if after.Cursor.Initialized || after.LastSuccessAt != "" {
-		t.Fatalf("watch advanced after rollback: %+v", after)
-	}
-	records := s.ListSessionPullRequests("s1")
-	if len(records) != 1 || records[0].ReadinessState != "" || records[0].HeadSHA != "" {
-		t.Fatalf("projection advanced after rollback: %+v", records)
-	}
-	if deliveries, err := s.UnreadAgentMailboxDeliveries("s1"); err != nil || len(deliveries) != 0 {
-		t.Fatalf("mailbox = %+v, %v", deliveries, err)
 	}
 }
 

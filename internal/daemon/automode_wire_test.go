@@ -3,7 +3,6 @@ package daemon_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/victorarias/attn/internal/testworld"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,7 +14,9 @@ import (
 
 	"github.com/victorarias/attn/internal/automode"
 	"github.com/victorarias/attn/internal/client"
+	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
+	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestAutoModeStartsOnWithCodexDefaultsAndOnlyTheShippedEntries(t *testing.T) {
@@ -44,7 +45,7 @@ func TestAutoModeStartsOnWithCodexDefaultsAndOnlyTheShippedEntries(t *testing.T)
 
 func TestAutoModeEnvironmentSlotsAreTrimmedDeduplicatedAndSchemaBound(t *testing.T) {
 	w := newWorld(t)
-	cli := w.Client()
+	app, cli := w.App(), w.Client()
 
 	set, err := cli.AutoModeEnvSlot("domains", []string{"grafana.acme.corp", "  ", "grafana.acme.corp"})
 	if err != nil {
@@ -53,19 +54,46 @@ func TestAutoModeEnvironmentSlotsAreTrimmedDeduplicatedAndSchemaBound(t *testing
 	if got := slotValues(set.Environment, "domains"); !slices.Equal(got, []string{"grafana.acme.corp"}) {
 		t.Fatalf("domains = %v, want the one entry, trimmed and deduplicated", got)
 	}
-	if _, err := cli.AutoModeEnvNotes([]string{"the CI box shares this checkout"}); err != nil {
+	notes, err := cli.AutoModeEnvNotes([]string{"this laptop is mine   ", "", "nothing here serves traffic", "", "  "})
+	if err != nil {
 		t.Fatalf("set notes: %v", err)
 	}
-	if _, err := cli.AutoModeEnvSlot("not_a_slot", []string{"x"}); err == nil {
-		t.Error("an unknown slot was accepted")
+	if want := []string{"this laptop is mine", "", "nothing here serves traffic"}; !slices.Equal(notes.Environment.Notes, want) {
+		t.Errorf("notes = %q, want %q: each line trimmed, the paragraph break kept and the trailing blanks dropped", notes.Environment.Notes, want)
+	}
+	_, err = cli.AutoModeEnvSlot("intranet", []string{"acme.corp"})
+	if err == nil || !strings.Contains(err.Error(), "intranet") || !strings.Contains(err.Error(), "domains") {
+		t.Errorf("an unknown slot = %v, want a refusal naming the ask and the slots there are", err)
+	}
+
+	requestID := uuid.NewString()
+	fromApp := testworld.Request(app, protocol.AutoModeEnvSlotMessage{
+		Cmd: protocol.CmdAutoModeEnvSlot, Slot: "registry", Values: []string{"registry.acme.corp"}, RequestID: protocol.Ptr(requestID),
+	}, protocol.EventAutoModeEnvSetResult, func(r protocol.AutoModeEnvSetResultMessage) bool { return r.RequestID == requestID })
+	if !fromApp.Success || fromApp.Config == nil || !slices.Equal(slotValues(fromApp.Config.Environment, "registry"), []string{"registry.acme.corp"}) {
+		t.Fatalf("the app's slot write answered %+v, want the stored config", fromApp)
 	}
 
 	cfg := autoModeConfig(t, cli)
 	if got := slotValues(cfg.Environment, "domains"); !slices.Equal(got, []string{"grafana.acme.corp"}) {
 		t.Errorf("domains read back as %v", got)
 	}
-	if !slices.Equal(cfg.Environment.Notes, []string{"the CI box shares this checkout"}) {
+	if got := slotValues(cfg.Environment, "registry"); !slices.Equal(got, []string{"registry.acme.corp"}) {
+		t.Errorf("registry read back as %v", got)
+	}
+	if !slices.Equal(cfg.Environment.Notes, notes.Environment.Notes) {
 		t.Errorf("notes read back as %v", cfg.Environment.Notes)
+	}
+
+	cleared, err := cli.AutoModeEnvSlot("domains", []string{})
+	if err != nil {
+		t.Fatalf("clear the domains slot: %v", err)
+	}
+	if got := slotValues(cleared.Environment, "domains"); len(got) != 0 {
+		t.Errorf("domains = %v after clearing it", got)
+	}
+	if got := slotValues(autoModeConfig(t, cli).Environment, "domains"); len(got) != 0 {
+		t.Errorf("domains read back as %v after clearing it", got)
 	}
 }
 
@@ -267,8 +295,8 @@ func TestAutoModeShippedEntriesStayAheadOfUserRulesAndCannotBeTakenAway(t *testi
 	ruleRemovalID := uuid.NewString()
 	if removal := editAutoModeConfig(app, ruleRemovalID, protocol.AutoModeRuleRemoveMessage{
 		Cmd: protocol.CmdAutoModeRuleRemove, Pattern: ruleInfoPattern(shipped), RequestID: protocol.Ptr(ruleRemovalID),
-	}); removal.Success {
-		t.Error("a shipped rule was removed")
+	}); removal.Success || !strings.Contains(protocol.Deref(removal.Error), "built-in") {
+		t.Errorf("removing a shipped rule = %+v, want a refusal saying it is built in", removal)
 	}
 	overrideID := uuid.NewString()
 	override := editAutoModeConfig(app, overrideID, protocol.AutoModeRuleAddMessage{
@@ -414,6 +442,9 @@ func TestAutoModePolicyFieldsAndTheGuardianAreSetIndependently(t *testing.T) {
 	if refused := set(protocol.AutoModePolicySetMessage{Guardian: &protocol.GuardianSelection{Provider: protocol.Ptr("broken")}}); refused.Success {
 		t.Error("a guardian without a model was accepted")
 	}
+	if cfg := set(protocol.AutoModePolicySetMessage{AllowLocalBinding: protocol.Ptr(true)}).Config; !cfg.Network.AllowLocalBinding || cfg.ApprovalPolicy != automode.PolicyNever {
+		t.Errorf("local binding %t with policy %q, want local binding on and the policy it was not told about held", cfg.Network.AllowLocalBinding, cfg.ApprovalPolicy)
+	}
 
 	cfg := autoModeConfig(t, cli)
 	if cfg.ApprovalPolicy != automode.PolicyNever || cfg.SandboxMode != automode.SandboxReadOnly {
@@ -433,13 +464,13 @@ func TestAutoModeDenialLogListsNewestFirstOncePerDenialWithinItsCap(t *testing.T
 	w := newWorld(t)
 	cli := w.Client()
 	base := time.Date(2026, 8, 18, 10, 0, 0, 123_000_000, time.UTC)
-	denial := func(session, action string, at time.Time) map[string]string {
-		return map[string]string{
+	denial := func(session, action string, at time.Time) string {
+		return denialLedgerLine(t, map[string]string{
 			"session_id": session, "tool": "bash", "action": action,
 			"reason": "outside the envelope", "rule": "guardian", "at": at.Format(time.RFC3339Nano),
-		}
+		})
 	}
-	ledger := []map[string]string{
+	ledger := []string{
 		denial("pi-1", "bash curl evil.example", base),
 		denial("pi-1", "bash curl evil.example", base),
 		denial("pi-2", "bash curl evil.example", base),
@@ -447,7 +478,7 @@ func TestAutoModeDenialLogListsNewestFirstOncePerDenialWithinItsCap(t *testing.T
 		denial("pi-1", "bash curl evil.example", base.Add(time.Millisecond)),
 		denial("pi-1", "bash git push --force", base.Add(time.Second)),
 	}
-	writeDenialLedger(t, w, ledger)
+	writeDenialLedger(t, w, ledger...)
 
 	denials, err := cli.AutoModeDenials(10)
 	if err != nil {
@@ -456,18 +487,18 @@ func TestAutoModeDenialLogListsNewestFirstOncePerDenialWithinItsCap(t *testing.T
 	if len(denials.Denials) != 5 {
 		t.Fatalf("denials = %+v, want the duplicate delivery once and each distinct denial on its own", denials.Denials)
 	}
-	if newest := denials.Denials[0]; newest.Signature != "bash git push --force" || newest.Rule != "guardian" {
-		t.Errorf("newest denial = %+v, want the last one with who decided", newest)
+	if newest := denials.Denials[0]; newest.Signature != "bash git push --force" || newest.Rule != "guardian" || newest.SessionID != "pi-1" || newest.CreatedAt == "" {
+		t.Errorf("newest denial = %+v, want the last one with its session, its time and who decided", newest)
 	}
 	if limited, err := cli.AutoModeDenials(2); err != nil || len(limited.Denials) != 2 {
 		t.Errorf("a limit of 2 returned %+v, %v", limited, err)
 	}
 
-	var overflow []map[string]string
+	var overflow []string
 	for i := range 503 {
 		overflow = append(overflow, denial("pi-1", fmt.Sprintf("bash echo %d", i), base.Add(time.Hour+time.Duration(i)*time.Second)))
 	}
-	writeDenialLedger(t, w, append(ledger, overflow...))
+	writeDenialLedger(t, w, append(ledger, overflow...)...)
 	capped, err := cli.AutoModeDenials(1000)
 	if err != nil {
 		t.Fatalf("list denials: %v", err)
@@ -477,6 +508,264 @@ func TestAutoModeDenialLogListsNewestFirstOncePerDenialWithinItsCap(t *testing.T
 	}
 	if newest, oldest := capped.Denials[0].Signature, capped.Denials[499].Signature; newest != "bash echo 502" || oldest != "bash echo 3" {
 		t.Errorf("kept %q through %q, want the newest 500", oldest, newest)
+	}
+}
+
+func TestAutoModeDenialLogNamesWhatTheLedgerLost(t *testing.T) {
+	w := newWorld(t)
+	cli := w.Client()
+
+	silent, err := cli.AutoModeDenials(10)
+	if err != nil {
+		t.Fatalf("list denials: %v", err)
+	}
+	if len(silent.Denials) != 0 || protocol.Deref(silent.LedgerNote) != "" {
+		t.Fatalf("a machine without a ledger listed %+v with note %q", silent.Denials, protocol.Deref(silent.LedgerNote))
+	}
+
+	writeDenialLedger(t, w,
+		denialLedgerLine(t, map[string]any{"type": "rotated", "dropped": 3, "at": "2026-08-18T09:00:00.000Z"}),
+		"{ not json",
+		denialLedgerLine(t, map[string]string{
+			"session_id": "pi-1", "tool": "bash", "action": "bash curl https://one.example",
+			"reason": "outside the envelope", "rule": "guardian", "at": "2026-08-18T10:00:00.000Z",
+		}),
+	)
+
+	lossy, err := cli.AutoModeDenials(10)
+	if err != nil {
+		t.Fatalf("list denials: %v", err)
+	}
+	note := protocol.Deref(lossy.LedgerNote)
+	for _, want := range []string{"3 older denials", "1 ledger line could not be read"} {
+		if !strings.Contains(note, want) {
+			t.Errorf("ledger note %q does not say %q", note, want)
+		}
+	}
+	if len(lossy.Denials) != 1 || lossy.Denials[0].Signature != "bash curl https://one.example" {
+		t.Errorf("denials = %+v, want the readable record kept", lossy.Denials)
+	}
+}
+
+func TestAutoModeShowMergesTheRepositoryRulesOfItsDirectory(t *testing.T) {
+	w := newWorld(t)
+	repo := w.Path("widgets")
+	autoModeGitRepo(t, repo, "")
+	writeAutoModeRepositoryRules(t, repo, `{"rules":[{"pattern":["go","test"],"decision":"allow","sandbox":"bypass"}]}`)
+
+	shown, err := w.Client().AutoModeShow(repo)
+	if err != nil {
+		t.Fatalf("automode show %s: %v", repo, err)
+	}
+	if want := filepath.Join(attngit.CanonicalizePath(repo), automode.RepositoryRulesFile); protocol.Deref(shown.RepositoryRulesPath) != want {
+		t.Errorf("repository rules path = %q, want %q", protocol.Deref(shown.RepositoryRulesPath), want)
+	}
+	if len(shown.RepositoryRules) != 1 || shown.RepositoryRules[0].Decision != automode.DecisionAllow || shown.RepositoryRules[0].Sandbox != automode.RuleSandboxBypass {
+		t.Errorf("repository rules = %+v, want the one allow with its sandbox bypass", shown.RepositoryRules)
+	}
+	if len(shown.Config.Rules) != len(shown.GlobalRules)+1 {
+		t.Errorf("effective rules = %d, want the %d global ones and the repository's", len(shown.Config.Rules), len(shown.GlobalRules))
+	}
+	if global := autoModeShow(t, w.Client()); global.RepositoryRulesPath != nil || len(global.RepositoryRules) != 0 {
+		t.Errorf("a show without a directory reported repository rules %v at %q", global.RepositoryRules, protocol.Deref(global.RepositoryRulesPath))
+	}
+}
+
+func TestAutoModeAsksFromASessionOnlyProposeAndReadAsTheReviewerSeesThem(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	seedID := uuid.NewString()
+	if seeded := editAutoModeConfig(app, seedID, protocol.AutoModeRuleAddMessage{
+		Cmd: protocol.CmdAutoModeRuleAdd, Pattern: []string{"git", "status"}, Decision: protocol.Ptr(automode.DecisionAllow), RequestID: seedID,
+	}); !seeded.Success {
+		t.Fatalf("adding a rule from the app: %s", protocol.Deref(seeded.Error))
+	}
+	before := autoModeConfig(t, cli)
+
+	for _, tc := range []struct{ kind, value, summary string }{
+		{automode.KindRule, `{"pattern":["git","push"],"decision":"allow"}`, "allow, bypass sandbox: git push"},
+		{automode.KindRuleRemove, `{"pattern":["git","status"]}`, "remove rule git status"},
+		{automode.KindHostRemove, `{"host":"crates.io","decision":"allow"}`, "remove allow crates.io"},
+		{automode.KindPolicy, `{"approval_policy":"never"}`, "approval never"},
+	} {
+		proposal := proposeAmendment(t, cli, tc.kind, tc.value, "session-a")
+		if proposal.State != automode.StatePending || proposal.Summary != tc.summary {
+			t.Errorf("%s proposal = %q (%s), want pending %q", tc.kind, proposal.Summary, proposal.State, tc.summary)
+		}
+	}
+
+	after := autoModeShow(t, cli)
+	if len(after.Proposals) != 4 {
+		t.Errorf("pending = %+v, want the four asks", after.Proposals)
+	}
+	if !slices.Equal(userRuleLines(t, after.Config), userRuleLines(t, before)) || after.Config.ApprovalPolicy != before.ApprovalPolicy {
+		t.Errorf("the asks moved the config to rules %v, policy %q", userRuleLines(t, after.Config), after.Config.ApprovalPolicy)
+	}
+}
+
+func TestAutoModeRefusesWhatItCouldNeverApplyNamingTheAsk(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+
+	for _, tc := range []struct{ kind, value, want string }{
+		{automode.KindRule, `{"pattern":["git push"],"decision":"allow"}`, "one command token per entry"},
+		{automode.KindHost, `{"host":"github.com","decision":"prompt"}`, `unknown host decision "prompt"`},
+	} {
+		if _, err := cli.AutoModePropose(tc.kind, "", tc.value, "session-a"); err == nil || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("proposing %s %s = %v, want a refusal naming %q", tc.kind, tc.value, err, tc.want)
+		}
+	}
+	if pending := autoModeShow(t, cli).Proposals; len(pending) != 0 {
+		t.Errorf("refused asks reached the review list: %+v", pending)
+	}
+
+	if unknown := promoteProposal(app, 404); unknown.Success || !strings.Contains(protocol.Deref(unknown.Error), "404") {
+		t.Errorf("promoting proposal 404 = %+v, want a refusal naming it", unknown)
+	}
+	dismissID := uuid.NewString()
+	dismissed := editAutoModeConfig(app, dismissID, protocol.AutoModeLegacyDismissMessage{
+		Cmd: protocol.CmdAutoModeLegacyDismiss, Pattern: "*curl*", RequestID: protocol.Ptr(dismissID),
+	})
+	if dismissed.Success || !strings.Contains(protocol.Deref(dismissed.Error), "*curl*") {
+		t.Errorf("dismissing a pattern that is not listed = %+v, want a refusal naming it", dismissed)
+	}
+}
+
+func TestAutoModeStateOffersTheSlotSchemaAndWhatShipped(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	requestID := uuid.NewString()
+	var state protocol.AutoModeStateResultMessage
+	raw := testworld.Request(app, protocol.AutoModeGetMessage{Cmd: protocol.CmdAutoModeGet, RequestID: requestID},
+		protocol.EventAutoModeStateResult, func(r json.RawMessage) bool { return json.Unmarshal(r, &state) == nil && state.RequestID == requestID })
+	if !state.Success {
+		t.Fatalf("automode_get: %s", protocol.Deref(state.Error))
+	}
+
+	var slots, schema []string
+	for _, slot := range state.EnvironmentSlots {
+		slots = append(slots, slot.ID)
+		if slot.Label == "" || slot.Detail == "" || slot.Unset == "" || len(slot.ReadBy) == 0 {
+			t.Errorf("slot %+v is missing something the panel renders", slot)
+		}
+	}
+	for _, slot := range automode.Slots() {
+		schema = append(schema, slot.ID)
+	}
+	if !slices.Equal(slots, schema) {
+		t.Errorf("slots = %v, want the schema's %v in order", slots, schema)
+	}
+
+	cfg := state.Config
+	if len(cfg.ShippedRules) != len(automode.ShippedRules()) || len(cfg.ShippedDeniedDomains) == 0 {
+		t.Errorf("shipped rules %+v and denied hosts %v, want the built-in sets", cfg.ShippedRules, cfg.ShippedDeniedDomains)
+	}
+
+	autoModeListsAreArrays(t, raw, "config.rules", "config.shipped_rules", "config.shipped_denied_domains", "config.legacy_patterns",
+		"config.network.allowed_domains", "config.network.denied_domains", "config.environment.slots", "config.environment.notes")
+	var shown struct {
+		Result json.RawMessage `json:"automode_show_result"`
+	}
+	if err := json.Unmarshal(autoModeUnixRaw(t, w, `{"cmd":"automode_show"}`), &shown); err != nil {
+		t.Fatalf("decode automode_show: %v", err)
+	}
+	autoModeListsAreArrays(t, shown.Result, "global_rules", "repository_rules")
+}
+
+func TestNoAutoModeWriteIsReachableOverTheCLISocket(t *testing.T) {
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	seedID := uuid.NewString()
+	if seeded := editAutoModeConfig(app, seedID, protocol.AutoModeRuleAddMessage{
+		Cmd: protocol.CmdAutoModeRuleAdd, Pattern: []string{"git", "status"}, Decision: protocol.Ptr(automode.DecisionAllow), RequestID: seedID,
+	}); !seeded.Success {
+		t.Fatalf("adding a rule from the app: %s", protocol.Deref(seeded.Error))
+	}
+	proposal := proposeAmendment(t, cli, automode.KindHost, hostValue(t, "crates.io", automode.HostAllow), "session-a")
+	before := autoModeShow(t, cli)
+
+	for _, payload := range []string{
+		fmt.Sprintf(`{"cmd":"automode_promote","id":%d,"request_id":"r1"}`, proposal.ID),
+		fmt.Sprintf(`{"cmd":"automode_discard","id":%d,"request_id":"r1"}`, proposal.ID),
+		`{"cmd":"automode_rule_add","pattern":["git","push"],"request_id":"r1"}`,
+		`{"cmd":"automode_rule_remove","pattern":[["git"],["status"]],"request_id":"r1"}`,
+		`{"cmd":"automode_host_add","host":"crates.io","decision":"allow","request_id":"r1"}`,
+		`{"cmd":"automode_host_remove","host":"crates.io","decision":"allow","request_id":"r1"}`,
+		`{"cmd":"automode_policy_set","approval_policy":"never","request_id":"r1"}`,
+		`{"cmd":"automode_legacy_dismiss","pattern":"*curl*","request_id":"r1"}`,
+		`{"cmd":"automode_model_set","models":["a/one"],"request_id":"r1"}`,
+	} {
+		if answer := autoModeUnixCall(t, w, payload); answer.Ok || !strings.Contains(protocol.Deref(answer.Error), "unknown command") {
+			t.Errorf("%s over the CLI socket answered %+v, want unknown command", payload, answer)
+		}
+	}
+
+	after := autoModeShow(t, cli)
+	if !slices.Equal(userRuleLines(t, after.Config), userRuleLines(t, before.Config)) || after.Config.ApprovalPolicy != before.Config.ApprovalPolicy ||
+		!slices.Equal(after.Config.Network.AllowedDomains, before.Config.Network.AllowedDomains) || len(after.Proposals) != 1 {
+		t.Errorf("the socket writes moved the config to %+v with proposals %+v", after.Config, after.Proposals)
+	}
+}
+
+func TestTheAppsSettingsCarryTheAutoModeDefaultItCannotWrite(t *testing.T) {
+	w := newWorld(t)
+	app := w.App()
+	if got := app.Initial.Settings["automode_enabled_default"]; got != "true" {
+		t.Fatalf("automode_enabled_default = %q on a fresh daemon, want true", got)
+	}
+	requestID := uuid.NewString()
+	refused := testworld.Request(app, protocol.SetSettingMessage{
+		Cmd: protocol.CmdSetSetting, Key: "automode_enabled_default", Value: "false", RequestID: protocol.Ptr(requestID),
+	}, protocol.EventSettingsUpdated, func(m protocol.SettingsUpdatedMessage) bool { return protocol.Deref(m.RequestID) == requestID })
+	if protocol.Deref(refused.Success) || refused.Settings["automode_enabled_default"] != "true" {
+		t.Errorf("writing the computed default answered success=%t with %q, want a refusal leaving it true",
+			protocol.Deref(refused.Success), refused.Settings["automode_enabled_default"])
+	}
+	if !autoModeConfig(t, w.Client()).EnabledDefault {
+		t.Error("the refused write turned auto mode off")
+	}
+}
+
+func autoModeUnixCall(t *testing.T, w *world, payload string) protocol.Response {
+	t.Helper()
+	var answer protocol.Response
+	if err := json.Unmarshal(autoModeUnixRaw(t, w, payload), &answer); err != nil {
+		t.Fatalf("decode the answer to %s: %v", payload, err)
+	}
+	return answer
+}
+
+func autoModeUnixRaw(t *testing.T, w *world, payload string) json.RawMessage {
+	t.Helper()
+	conn, err := w.DialUnix()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+	if _, err := conn.Write([]byte(payload + "\n")); err != nil {
+		t.Fatalf("write %s: %v", payload, err)
+	}
+	var answer json.RawMessage
+	if err := json.NewDecoder(conn).Decode(&answer); err != nil {
+		t.Fatalf("read the answer to %s: %v", payload, err)
+	}
+	return answer
+}
+
+func autoModeListsAreArrays(t *testing.T, raw json.RawMessage, paths ...string) {
+	t.Helper()
+	for _, path := range paths {
+		value := raw
+		for _, key := range strings.Split(path, ".") {
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(value, &fields); err != nil {
+				t.Fatalf("%s: %v in %s", path, err, raw)
+			}
+			value = fields[key]
+		}
+		if !strings.HasPrefix(string(value), "[") {
+			t.Errorf("%s = %s, want a JSON array", path, value)
+		}
 	}
 }
 
@@ -597,17 +886,19 @@ func ruleInfoPattern(rule automode.Rule) [][]string {
 	return out
 }
 
-func writeDenialLedger(t *testing.T, w *world, records []map[string]string) {
+func writeDenialLedger(t *testing.T, w *world, lines ...string) {
 	t.Helper()
-	var lines []byte
-	for _, record := range records {
-		line, err := json.Marshal(record)
-		if err != nil {
-			t.Fatal(err)
-		}
-		lines = append(append(lines, line...), '\n')
-	}
-	if err := os.WriteFile(filepath.Join(w.Dir, automode.DenialLedgerFileName), lines, 0o600); err != nil {
+	ledger := strings.Join(lines, "\n") + "\n"
+	if err := os.WriteFile(filepath.Join(w.Dir, automode.DenialLedgerFileName), []byte(ledger), 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func denialLedgerLine(t *testing.T, record any) string {
+	t.Helper()
+	line, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(line)
 }

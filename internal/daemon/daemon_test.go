@@ -448,7 +448,7 @@ func TestDaemon_ReseedWorkspaceStatusesAfterRecovery(t *testing.T) {
 		t.Fatalf("precondition: seeded rollup = %q, want working", ws.Status)
 	}
 
-	d.pruneSessionsWithoutPTY(time.Time{})
+	d.pruneSessionsWithoutPTY(d.storedSessionIDs(), time.Time{})
 	if got := d.store.Get(sessionID); got == nil || got.State != protocol.SessionStateRecoverable {
 		t.Fatalf("prune should keep session and mark it recoverable, got %+v", got)
 	}
@@ -855,7 +855,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend(t *testing.T) {
 		},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 	if report.Created != 2 {
 		t.Fatalf("created = %d, want 2", report.Created)
 	}
@@ -984,7 +984,7 @@ func TestDaemon_ReconcileResumesTeardownWithoutRecreatingRemovedSession(t *testi
 		pluginClosed <- params
 	}()
 
-	report := second.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := second.reconcileSessionsWithWorkerBackend(context.Background(), true, second.storedSessionIDs(), time.Time{})
 	<-killEntered
 	if report.Created != 0 || reopened.Get("closing-session") != nil {
 		t.Fatalf("reconcile recreated an intentionally closed session: report=%+v session=%+v", report, reopened.Get("closing-session"))
@@ -1006,7 +1006,7 @@ func TestDaemon_ReconcileResumesTeardownWithoutRecreatingRemovedSession(t *testi
 	backend.sessionIDs = nil
 	backend.onKill = nil
 	backend.mu.Unlock()
-	second.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	second.reconcileSessionsWithWorkerBackend(context.Background(), true, second.storedSessionIDs(), time.Time{})
 	if reopened.SessionCloseIntentional("closing-session") {
 		t.Fatal("teardown marker survived complete recovery proving the worker absent")
 	}
@@ -1044,7 +1044,7 @@ func TestDaemon_ReconcileDoesNotCreateSessionWhenTombstoneReadFails(t *testing.T
 		t.Fatalf("close store: %v", err)
 	}
 	d.ptyBackend = &fakeSpawnBackend{sessionIDs: []string{"unknown-close-state"}}
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 	if report.Created != 0 || report.LivenessUnknown != 1 {
 		t.Fatalf("report = %+v, want no creation and one unknown close state", report)
 	}
@@ -1056,11 +1056,11 @@ func TestDaemon_IncompleteRecoveryDoesNotClearAbsentTombstone(t *testing.T) {
 		t.Fatalf("mark close: %v", err)
 	}
 	d.ptyBackend = &fakeSpawnBackend{}
-	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, false, time.Time{})
+	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, false, d.storedSessionIDs(), time.Time{})
 	if !d.store.SessionCloseIntentional("possibly-live") {
 		t.Fatal("incomplete recovery cleared an absent teardown tombstone")
 	}
-	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, true, time.Time{})
+	d.reconcileSessionsWithWorkerBackendState(context.Background(), true, true, d.storedSessionIDs(), time.Time{})
 	if d.store.SessionCloseIntentional("possibly-live") {
 		t.Fatal("complete recovery did not clear an absent teardown tombstone")
 	}
@@ -1121,7 +1121,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesScheduled(t *testing
 		},
 	}
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	got := d.store.Get("live-scheduled")
 	if got == nil {
@@ -1148,7 +1148,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_ReapRemovesEmptyWorkspace(t *
 		info:    map[string]ptybackend.SessionInfo{},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if report.Reaped != 1 {
 		t.Fatalf("reaped = %d, want 1", report.Reaped)
@@ -1193,86 +1193,13 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLivePluginReportedSt
 		},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 	if report.StateUpdated != 0 {
 		t.Fatalf("state_updated = %d, want 0 for plugin-owned state", report.StateUpdated)
 	}
 	session := d.store.Get("plugin-live")
 	if session == nil || session.State != protocol.SessionStateWaitingInput {
 		t.Fatalf("plugin-live session = %+v, want waiting_input retained from plugin report", session)
-	}
-}
-
-func TestDaemon_PruneSessionsWithoutPTY_SkipsSessionsRegisteredAfterCutoff(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	t.Cleanup(func() { d.store.Remove("just-registered") })
-	cutoff := time.Now()
-	now := string(protocol.NewTimestamp(cutoff.Add(time.Second)))
-	d.store.Add(&protocol.Session{
-		ID:             "just-registered",
-		Label:          "just-registered",
-		Agent:          protocol.SessionAgentClaude,
-		Directory:      "/tmp/just-registered",
-		State:          protocol.SessionStateLaunching,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-
-	if removed := d.pruneSessionsWithoutPTY(cutoff); removed != 0 {
-		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 0", removed)
-	}
-	session := d.store.Get("just-registered")
-	if session == nil {
-		t.Fatal("session was reaped; a registration newer than the cutoff is this run's")
-	}
-	if session.State != protocol.SessionStateLaunching {
-		t.Fatalf("state = %s, want %s untouched", session.State, protocol.SessionStateLaunching)
-	}
-
-	newRecoveryHome(t).resumableClaude(t, "just-registered")
-	giveRestorationEvidence(t, d, "just-registered", "just-registered")
-	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 0 {
-		t.Fatalf("pruneSessionsWithoutPTY(zero) removed = %d, want 0", removed)
-	}
-	if session := d.store.Get("just-registered"); session == nil || session.State != protocol.SessionStateRecoverable {
-		t.Fatalf("session = %+v, want recoverable once the cutoff no longer protects it", session)
-	}
-}
-
-func TestDaemon_InjectTestSession_SurvivesRecoveryStartedBeforeIt(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cutoff := time.Now()
-	stamp := time.Now().Format(time.RFC3339)
-	resp := socketRoundTrip(t, d, map[string]any{
-		"cmd": "inject_test_session",
-		"session": map[string]any{
-			"id":          "injected-during-recovery",
-			"label":       "Injected During Recovery",
-			"agent":       "claude",
-			"directory":   "/tmp/injected-during-recovery",
-			"state":       protocol.StateWorking,
-			"state_since": stamp,
-			"last_seen":   stamp,
-		},
-	})
-	if err := protocol.Deref(resp.Error); err != "" {
-		t.Fatalf("inject_test_session error: %s", err)
-	}
-
-	session := d.store.Get("injected-during-recovery")
-	if session == nil {
-		t.Fatal("session was not stored")
-	}
-	if session.StateUpdatedAt == "" {
-		t.Fatal("state_updated_at is empty; startup recovery cannot date this session")
-	}
-
-	if removed := d.pruneSessionsWithoutPTY(cutoff); removed != 0 {
-		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 0", removed)
-	}
-	if d.store.Get("injected-during-recovery") == nil {
-		t.Fatal("session was reaped; recovery started before the injection, not before a previous run")
 	}
 }
 
@@ -1297,7 +1224,7 @@ func TestDaemon_PruneSessionsWithoutPTY_PreservesPluginMetadataForResume(t *test
 	}
 	giveLaunchIntent(t, d, "plugin-resume")
 
-	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 0 {
+	if removed := d.pruneSessionsWithoutPTY(d.storedSessionIDs(), time.Time{}); removed != 0 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 0", removed)
 	}
 	session := d.store.Get("plugin-resume")
@@ -1343,7 +1270,7 @@ func TestDaemon_PruneSessionsWithoutPTY_RemovesReapedWorkspaceLayout(t *testing.
 		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
 	}
 
-	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 1 {
+	if removed := d.pruneSessionsWithoutPTY(d.storedSessionIDs(), time.Time{}); removed != 1 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 1", removed)
 	}
 	if got := d.store.Get(sessionID); got != nil {
@@ -1403,7 +1330,7 @@ func TestDaemon_PruneSessionsWithoutPTY_KeepsTileOnlyWorkspace(t *testing.T) {
 		t.Fatalf("SaveWorkspaceLayout() error = %v", err)
 	}
 
-	if removed := d.pruneSessionsWithoutPTY(time.Time{}); removed != 1 {
+	if removed := d.pruneSessionsWithoutPTY(d.storedSessionIDs(), time.Time{}); removed != 1 {
 		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want 1", removed)
 	}
 	assertTileOnlyWorkspaceAlive(t, d, workspaceID, sessionID)
@@ -1432,7 +1359,7 @@ func TestDaemon_RunDeferredWorkerReconciliationForcesIdleDemotion(t *testing.T) 
 		},
 	}
 
-	d.runDeferredWorkerReconciliation(1, 0, time.Now())
+	d.runDeferredWorkerReconciliation(1, 0, d.storedSessionIDs(), time.Time{})
 
 	session := d.store.Get("stale-running")
 	if session != nil {
@@ -1482,7 +1409,7 @@ func TestDaemon_RunDeferredWorkerReconciliation_BroadcastsSessionsUpdatedOnChang
 		}
 	}
 
-	d.runDeferredWorkerReconciliation(1, 0, time.Now())
+	d.runDeferredWorkerReconciliation(1, 0, d.storedSessionIDs(), time.Time{})
 
 	if broadcasts == 0 {
 		t.Fatal("expected deferred reconciliation to broadcast sessions_updated after state changes")
@@ -1512,7 +1439,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_PreservesLikelyAliveSessions(
 		},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 	if report.MarkedIdle != 0 {
 		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
 	}
@@ -1551,7 +1478,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnLivenessPr
 		},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 	if report.MarkedIdle != 0 {
 		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
 	}
@@ -1586,7 +1513,7 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnIncomplete
 		info:    map[string]ptybackend.SessionInfo{},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), false, time.Time{})
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), false, d.storedSessionIDs(), time.Time{})
 	if report.MarkedIdle != 0 {
 		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
 	}
@@ -1602,42 +1529,62 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnIncomplete
 	}
 }
 
-func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsRecentlyUpdatedSessions(t *testing.T) {
+func TestDaemon_ReconcileSessionsWithWorkerBackend_LeavesSessionsTouchedByThisRunAlone(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cutoff := time.Now().Add(-time.Minute).Truncate(time.Second)
-	updatedAt := cutoff.Add(10 * time.Second)
-	timestamp := protocol.NewTimestamp(updatedAt).String()
-
-	d.store.Add(&protocol.Session{
-		ID:             "recent-running",
-		Label:          "recent",
-		Agent:          protocol.SessionAgentCodex,
-		Directory:      "/tmp/recent",
-		State:          protocol.SessionStateWorking,
-		StateSince:     timestamp,
-		StateUpdatedAt: timestamp,
-		LastSeen:       timestamp,
-	})
+	recoveryStartedAt := time.Now().Add(-time.Minute).Truncate(time.Second)
+	addWorkingSession(d, "revived-from-previous-run", recoveryStartedAt.Add(10*time.Second))
+	previousRun := d.storedSessionIDs()
+	addWorkingSession(d, "registered-this-run", recoveryStartedAt)
 
 	d.ptyBackend = &fakeWorkerReconcileBackend{
 		liveIDs: nil,
 		info:    map[string]ptybackend.SessionInfo{},
 	}
 
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, cutoff)
-	if report.MarkedIdle != 0 {
-		t.Fatalf("marked_idle = %d, want 0", report.MarkedIdle)
+	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, previousRun, recoveryStartedAt)
+	if report.Changed {
+		t.Fatalf("report = %+v, want no change to sessions this run touched", report)
 	}
 	if report.SkippedRecent != 1 {
-		t.Fatalf("skipped_recent = %d, want 1", report.SkippedRecent)
+		t.Fatalf("skipped_recent = %d, want 1 for the previous-run session updated after recovery began", report.SkippedRecent)
 	}
-	session := d.store.Get("recent-running")
-	if session == nil {
-		t.Fatal("recent-running session missing after reconcile")
+	for _, id := range []string{"revived-from-previous-run", "registered-this-run"} {
+		if session := d.store.Get(id); session == nil || session.State != protocol.SessionStateWorking {
+			t.Fatalf("%s session = %+v, want working", id, session)
+		}
 	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("recent-running state = %s, want working", session.State)
+}
+
+func TestDaemon_PruneSessionsWithoutPTY_LeavesSessionsRegisteredThisRunAlone(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	recoveryStartedAt := time.Now().Truncate(time.Second)
+	addWorkingSession(d, "stale-from-previous-run", recoveryStartedAt.Add(-time.Minute))
+	previousRun := d.storedSessionIDs()
+	addWorkingSession(d, "registered-this-run", recoveryStartedAt)
+
+	if removed := d.pruneSessionsWithoutPTY(previousRun, recoveryStartedAt); removed != 1 {
+		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want only the stale previous-run session", removed)
 	}
+	if d.store.Get("stale-from-previous-run") != nil {
+		t.Fatal("stale previous-run session survived prune")
+	}
+	if session := d.store.Get("registered-this-run"); session == nil || session.State != protocol.SessionStateWorking {
+		t.Fatalf("registered-this-run session = %+v, want working", session)
+	}
+}
+
+func addWorkingSession(d *Daemon, id string, updatedAt time.Time) {
+	stamp := protocol.NewTimestamp(updatedAt).String()
+	d.store.Add(&protocol.Session{
+		ID:             id,
+		Label:          id,
+		Agent:          protocol.SessionAgentCodex,
+		Directory:      "/tmp/" + id,
+		State:          protocol.SessionStateWorking,
+		StateSince:     stamp,
+		StateUpdatedAt: stamp,
+		LastSeen:       stamp,
+	})
 }
 
 func TestSessionStateFromRecoveredInfo(t *testing.T) {

@@ -20,6 +20,8 @@ const (
 	piPluginAPIVersion = 6
 	piRelaySocketEnv   = "ATTN_PI_SUITE_SOCKET"
 	piRelayTokenEnv    = "ATTN_PI_TOKEN"
+	piAutoModeEnv      = "ATTN_PI_AUTOMODE_CONFIG"
+	piYoloEnv          = "ATTN_PI_YOLO"
 )
 
 var piComposer = composer{prompt: "> "}
@@ -33,6 +35,8 @@ type piTerminal struct {
 	relay        *rpcPeer
 	conversation string
 	prompt       string
+	autoMode     json.RawMessage
+	yolo         bool
 }
 
 type relayHello struct {
@@ -59,6 +63,10 @@ func (p *piTerminal) begin(term *terminal) error {
 		return errors.New("pi launched without --session-id")
 	}
 	p.prompt = strings.Join(args.positionals, " ")
+	if config := os.Getenv(piAutoModeEnv); config != "" {
+		p.autoMode = json.RawMessage(config)
+	}
+	p.yolo = os.Getenv(piYoloEnv) == "true"
 	socket, token := os.Getenv(piRelaySocketEnv), os.Getenv(piRelayTokenEnv)
 	if socket == "" || token == "" {
 		return fmt.Errorf("pi launched without %s and %s from driver.spawn", piRelaySocketEnv, piRelayTokenEnv)
@@ -75,7 +83,7 @@ func (p *piTerminal) begin(term *terminal) error {
 }
 
 func (p *piTerminal) launch() launch {
-	return launch{Harness: Pi, ConversationID: p.conversation}
+	return launch{Harness: Pi, ConversationID: p.conversation, AutoMode: p.autoMode, Yolo: p.yolo}
 }
 
 func (p *piTerminal) initialPrompt() string { return p.prompt }
@@ -109,10 +117,12 @@ type piRun struct {
 }
 
 type piSpawn struct {
-	SessionID     string `json:"session_id"`
-	RunID         string `json:"run_id"`
-	CWD           string `json:"cwd"`
-	InitialPrompt string `json:"initial_prompt"`
+	SessionID     string          `json:"session_id"`
+	RunID         string          `json:"run_id"`
+	CWD           string          `json:"cwd"`
+	InitialPrompt string          `json:"initial_prompt"`
+	AutoMode      json.RawMessage `json:"auto_mode"`
+	Yolo          bool            `json:"yolo"`
 }
 
 type piMetadata struct {
@@ -188,6 +198,7 @@ func (p *piPlugin) connect() error {
 			"initial_prompt":   true,
 			"state_reporting":  true,
 			"message_delivery": false,
+			"auto_mode":        true,
 		},
 	}, &registered)
 	if err != nil || !registered.OK {
@@ -250,10 +261,17 @@ func (p *piPlugin) launchRun(raw json.RawMessage) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	env := map[string]string{piRelaySocketEnv: p.relayPath, piRelayTokenEnv: run.runID}
+	if len(spawn.AutoMode) > 0 && string(spawn.AutoMode) != "null" {
+		env[piAutoModeEnv] = string(spawn.AutoMode)
+	}
+	if spawn.Yolo {
+		env[piYoloEnv] = "true"
+	}
 	return map[string]any{
 		"argv": argv,
 		"cwd":  spawn.CWD,
-		"env":  map[string]string{piRelaySocketEnv: p.relayPath, piRelayTokenEnv: run.runID},
+		"env":  env,
 	}, nil
 }
 

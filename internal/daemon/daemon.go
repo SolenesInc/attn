@@ -125,7 +125,6 @@ type Daemon struct {
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
 	crewCharterMu                     sync.Mutex
-	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
 	stopOnce                          sync.Once
 	logger                            *logging.Logger
@@ -212,8 +211,6 @@ type Daemon struct {
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
-	crewWakeStartHook                 func(memberID string)
-	crewWakeAfterClaimHook            func(memberID, sessionID string)
 	stateTraceOnce                    sync.Once
 	stateTrace                        *statetrace.Recorder
 	sessionEvidenceOnce               sync.Once
@@ -900,6 +897,7 @@ func (d *Daemon) Start() error {
 		}
 	}()
 
+	previousRunSessions := d.storedSessionIDs()
 	if d.listener == nil {
 		unixListener, err := listenUnixAtomically(d.socketPath)
 		if err != nil {
@@ -969,7 +967,7 @@ func (d *Daemon) Start() error {
 	d.startPermanentMaintenance()
 
 	go func() {
-		d.performStartupPTYRecovery(recoveryStartedAt)
+		d.performStartupPTYRecovery(previousRunSessions, recoveryStartedAt)
 		go d.runSessionResolver()
 		if _, routed := d.ptyBackend.(*ptybackend.MigratingBackend); routed {
 			go d.validateSharedPTYHostAfterRecovery()
@@ -1020,7 +1018,15 @@ func (d *Daemon) Start() error {
 	}
 }
 
-func (d *Daemon) pruneSessionsWithoutPTY(cutoff time.Time) int {
+func (d *Daemon) storedSessionIDs() map[string]struct{} {
+	ids := make(map[string]struct{})
+	for _, session := range d.store.List("") {
+		ids[session.ID] = struct{}{}
+	}
+	return ids
+}
+
+func (d *Daemon) pruneSessionsWithoutPTY(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) int {
 	if d.store == nil {
 		return 0
 	}
@@ -1034,10 +1040,13 @@ func (d *Daemon) pruneSessionsWithoutPTY(cutoff time.Time) int {
 	removed := 0
 	recoverable := 0
 	for _, session := range sessions {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+			continue
+		}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
-		if sessionUpdatedAfter(session, cutoff) {
+		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			continue
 		}
 		d.releaseExitedCrewBinding(session.ID)
@@ -1104,7 +1113,7 @@ func (d *Daemon) pluginDriverReportsState(agent protocol.SessionAgent) bool {
 	return ok && driver.Capabilities["state_reporting"]
 }
 
-func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
+func (d *Daemon) performStartupPTYRecovery(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	defer d.rebuildTicketDeliverySchedules()
 	recoveryReport, recoverErr := d.recoverPTYBackend(10 * time.Second)
 	if recoverErr != nil {
@@ -1127,14 +1136,14 @@ func (d *Daemon) performStartupPTYRecovery(recoveryStartedAt time.Time) {
 	}
 
 	if _, ok := d.ptyBackend.(ptybackend.RecoverableRuntime); ok {
-		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, recoveryStartedAt)
+		d.reconcileStartupWorkerSessions(recoveryReport, recoverErr, previousRunSessions, recoveryStartedAt)
 		d.restoreTranscriptWatchers()
 		d.reconcileWorkspaceLayoutsWithPTYBackend(context.Background())
 		d.reseedWorkspaceStatuses()
 		return
 	}
 
-	removedSessions := d.pruneSessionsWithoutPTY(recoveryStartedAt)
+	removedSessions := d.pruneSessionsWithoutPTY(previousRunSessions, recoveryStartedAt)
 	if removedSessions > 0 {
 		d.logf("pruned %d stale sessions without live PTY on startup", removedSessions)
 		d.addWarning(
@@ -1165,7 +1174,7 @@ func (d *Daemon) recoverPTYBackend(timeout time.Duration) (ptybackend.RecoveryRe
 	return d.ptyBackend.Recover(recoveryCtx)
 }
 
-func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, recoveryStartedAt time.Time) {
+func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.RecoveryReport, recoverErr error, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	allowIdleDemotion := recoverErr == nil && recoveryReport.Missing == 0 && recoveryReport.Failed == 0
 	if !allowIdleDemotion {
 		for attempt := 1; attempt <= startupRecoveryRetryMax; attempt++ {
@@ -1191,7 +1200,7 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 		}
 	}
 
-	reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), allowIdleDemotion, recoveryStartedAt)
+	reconcile := d.reconcileSessionsWithWorkerBackend(context.Background(), allowIdleDemotion, previousRunSessions, recoveryStartedAt)
 	if reconcile.Created > 0 || reconcile.StateUpdated > 0 || reconcile.MarkedIdle > 0 || reconcile.MarkedRecoverable > 0 || reconcile.Reaped > 0 || reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.SkippedShell > 0 || reconcile.LikelyAlive > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
 		d.logf(
 			"worker session reconciliation summary: created=%d state_updated=%d marked_idle=%d marked_recoverable=%d reaped=%d skipped_idle=%d skipped_recent=%d skipped_shell=%d likely_alive=%d liveness_unknown=%d missing_metadata=%d",
@@ -1257,15 +1266,15 @@ func (d *Daemon) reconcileStartupWorkerSessions(recoveryReport ptybackend.Recove
 		)
 	}
 	if reconcile.SkippedIdle > 0 || reconcile.SkippedRecent > 0 || reconcile.LivenessUnknown > 0 || reconcile.MissingMetadata > 0 {
-		d.scheduleDeferredWorkerReconciliation(recoveryStartedAt)
+		d.scheduleDeferredWorkerReconciliation(previousRunSessions, recoveryStartedAt)
 	}
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, demotionCutoff time.Time) workerReconcileReport {
-	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, demotionCutoff)
+func (d *Daemon) reconcileSessionsWithWorkerBackend(ctx context.Context, allowIdleDemotion bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
+	return d.reconcileSessionsWithWorkerBackendState(ctx, allowIdleDemotion, allowIdleDemotion, previousRunSessions, recoveryStartedAt)
 }
 
-func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, demotionCutoff time.Time) workerReconcileReport {
+func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, allowIdleDemotion, allowTombstoneCleanup bool, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) workerReconcileReport {
 	report := workerReconcileReport{}
 	if d.store == nil || d.ptyBackend == nil {
 		return report
@@ -1413,10 +1422,13 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	}
 
 	for _, session := range d.store.List("") {
+		if _, fromPreviousRun := previousRunSessions[session.ID]; !fromPreviousRun {
+			continue
+		}
 		if _, ok := liveIDs[session.ID]; ok {
 			continue
 		}
-		if sessionUpdatedAfter(session, demotionCutoff) {
+		if sessionUpdatedAfter(session, recoveryStartedAt) {
 			report.SkippedRecent++
 			continue
 		}
@@ -1459,11 +1471,11 @@ func (d *Daemon) reconcileSessionsWithWorkerBackendState(ctx context.Context, al
 	return report
 }
 
-func (d *Daemon) scheduleDeferredWorkerReconciliation(recoveryStartedAt time.Time) {
-	go d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, recoveryStartedAt)
+func (d *Daemon) scheduleDeferredWorkerReconciliation(previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
+	go d.runDeferredWorkerReconciliation(deferredRecoveryMaxAttempts, deferredRecoveryRetryInterval, previousRunSessions, recoveryStartedAt)
 }
 
-func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, recoveryStartedAt time.Time) {
+func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval time.Duration, previousRunSessions map[string]struct{}, recoveryStartedAt time.Time) {
 	if d.ptyBackend == nil || maxAttempts <= 0 {
 		return
 	}
@@ -1496,7 +1508,7 @@ func (d *Daemon) runDeferredWorkerReconciliation(maxAttempts int, retryInterval 
 			continue
 		}
 
-		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, recoveryStartedAt)
+		reconcile := d.reconcileSessionsWithWorkerBackendState(context.Background(), true, fullyRecovered, previousRunSessions, recoveryStartedAt)
 		d.publishSessionsReconciled(reconcile)
 		if reconcile.MarkedRecoverable > 0 {
 			d.addWarning(

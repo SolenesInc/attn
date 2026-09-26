@@ -225,11 +225,15 @@ func (d *Daemon) migrateCrewTicketIdentity(memberID string, sessionIDs ...string
 }
 
 func (d *Daemon) migrateCrewTicketIdentities() error {
-	members, _, err := d.readCrewMembers()
+	members, _, err := d.readCrewMembersRaw()
 	if err != nil {
 		return err
 	}
 	for _, member := range members {
+		if err := d.validateCrewMemberPaths(member); err != nil {
+			d.logf("crew: ticket identity migration skipped stored member %s: %v", crew.DisplayName(member.ID), err)
+			continue
+		}
 		if err := d.migrateCrewTicketIdentity(member.ID, member.BindingSession, member.LetterSession); err != nil {
 			return err
 		}

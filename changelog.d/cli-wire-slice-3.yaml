@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard the db restore, workflow, bus, debug log and state explain promises through the built attn binary in CLI stack tests, replacing unit tests that exercised the commands' internals.

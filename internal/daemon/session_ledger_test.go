@@ -114,7 +114,7 @@ func TestARestartNeitherResurrectsNorReapsAClosedSession(t *testing.T) {
 	_ = second.store.Close()
 	second.store = reopened
 
-	second.pruneSessionsWithoutPTY(time.Now().Add(time.Hour))
+	second.pruneSessionsWithoutPTY(second.storedSessionIDs(), time.Time{})
 
 	if got := reopened.Get("closed-before-restart"); got != nil {
 		t.Errorf("Get after restart = %+v, want the close to survive the sweep", got)
@@ -138,7 +138,7 @@ func TestARuntimeOutlivingItsCloseIsStoppedRatherThanRebuilt(t *testing.T) {
 	backend := &fakeSpawnBackend{sessionIDs: []string{"stubborn"}}
 	d.ptyBackend = backend
 
-	d.reconcileSessionsWithWorkerBackendState(t.Context(), false, false, time.Now())
+	d.reconcileSessionsWithWorkerBackendState(t.Context(), false, false, d.storedSessionIDs(), time.Time{})
 
 	if got := d.store.Get("stubborn"); got != nil {
 		t.Errorf("Get = %+v, want the reconcile to leave the session closed", got)

@@ -14,7 +14,7 @@ import (
 )
 
 func TestMain(m *testing.M) {
-	if os.Getenv("ATTN_DAEMON_PREFLIGHT_HELPER") != "" || os.Getenv("ATTN_APP_STOP_HELPER_READY") != "" {
+	if os.Getenv("ATTN_APP_STOP_HELPER_READY") != "" {
 		fakeagent.Main()
 		config.ScopeTestEnvironment(os.Getenv("ATTN_DATA_DIR"))
 		os.Exit(m.Run())
