@@ -126,7 +126,6 @@ type Daemon struct {
 	crewLifecycleState                *crewLifecycleMemo
 	crewMemoOnce                      sync.Once
 	crewCharterMu                     sync.Mutex
-	crewCharterBeforeWriteHook        func()
 	done                              chan struct{}
 	stopOnce                          sync.Once
 	logger                            *logging.Logger
@@ -213,8 +212,6 @@ type Daemon struct {
 	crewWakeMu                        sync.Mutex
 	crewExitedMu                      sync.Mutex
 	crewExitedSessions                map[string]string
-	crewWakeStartHook                 func(memberID string)
-	crewWakeAfterClaimHook            func(memberID, sessionID string)
 	stateTraceOnce                    sync.Once
 	stateTrace                        *statetrace.Recorder
 	sessionEvidenceOnce               sync.Once

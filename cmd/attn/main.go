@@ -40,13 +40,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var (
-	version           = ""
-	buildTime         = ""
-	sourceFingerprint = ""
-	gitCommit         = ""
-)
-
 type hookInput struct {
 	SessionID        string           `json:"session_id"`
 	TranscriptPath   string           `json:"transcript_path"`
@@ -84,33 +77,6 @@ type todoWriteInput struct {
 		Content string `json:"content"`
 		Status  string `json:"status"`
 	} `json:"todos"`
-}
-
-func init() {
-	applyLegacyBuildInfoOverrides()
-}
-
-func applyLegacyBuildInfoOverrides() {
-	if buildinfo.Version == "dev" {
-		if legacyVersion := strings.TrimSpace(version); legacyVersion != "" {
-			buildinfo.Version = legacyVersion
-		}
-	}
-	if buildinfo.BuildTime == "unknown" {
-		if legacyBuildTime := strings.TrimSpace(buildTime); legacyBuildTime != "" {
-			buildinfo.BuildTime = legacyBuildTime
-		}
-	}
-	if buildinfo.SourceFingerprint == "unknown" {
-		if legacySourceFingerprint := strings.TrimSpace(sourceFingerprint); legacySourceFingerprint != "" {
-			buildinfo.SourceFingerprint = legacySourceFingerprint
-		}
-	}
-	if buildinfo.GitCommit == "unknown" {
-		if legacyGitCommit := strings.TrimSpace(gitCommit); legacyGitCommit != "" {
-			buildinfo.GitCommit = legacyGitCommit
-		}
-	}
 }
 
 func main() {
@@ -376,7 +342,6 @@ func isBuildInfoJSONCommand(args []string) bool {
 }
 
 func runVersion() {
-	applyLegacyBuildInfoOverrides()
 	fmt.Println(buildinfo.Version)
 }
 
@@ -385,7 +350,6 @@ func runProtocolVersion() {
 }
 
 func runBuildInfoJSON() {
-	applyLegacyBuildInfoOverrides()
 	printJSON(map[string]string{
 		"version":           buildinfo.Version,
 		"buildTime":         buildinfo.BuildTime,

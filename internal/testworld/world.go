@@ -115,6 +115,15 @@ func (w *World) ClosePeers() {
 
 func (w *World) Spawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) string {
 	w.T.Helper()
+	result, _, _ := w.RequestSpawn(p, h, cwd, opts...)
+	if !result.Success {
+		w.T.Fatalf("spawn %s in %s failed: %s", h, cwd, protocol.Deref(result.Error))
+	}
+	return result.ID
+}
+
+func (w *World) RequestSpawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*protocol.SpawnSessionMessage)) (result protocol.SpawnResultMessage, workspaceID, paneID string) {
+	w.T.Helper()
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		w.T.Fatal(err)
 	}
@@ -130,17 +139,15 @@ func (w *World) Spawn(p *Peer, h fakeagent.Harness, cwd string, opts ...func(*pr
 	for _, opt := range opts {
 		opt(&msg)
 	}
+	paneID = "pane-" + msg.ID
 	Request(p, protocol.WorkspaceLayoutAddSessionPaneMessage{
 		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
 		WorkspaceID: msg.WorkspaceID,
 		SessionID:   msg.ID,
-		PaneID:      protocol.Ptr("pane-" + msg.ID),
+		PaneID:      protocol.Ptr(paneID),
 	}, protocol.EventWorkspaceLayoutActionResult, func(protocol.WorkspaceLayoutActionResultMessage) bool { return true })
-	result := Request(p, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
-	if !result.Success {
-		w.T.Fatalf("spawn %s in %s failed: %s", h, cwd, protocol.Deref(result.Error))
-	}
-	return msg.ID
+	result = Request(p, msg, protocol.EventSpawnResult, func(r protocol.SpawnResultMessage) bool { return r.ID == msg.ID })
+	return result, msg.WorkspaceID, paneID
 }
 
 func (w *World) workspace(p *Peer, dir string) string {

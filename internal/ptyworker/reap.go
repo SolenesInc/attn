@@ -53,6 +53,8 @@ func ReapDataDir(dataDir string) []ReapResult {
 	return results
 }
 
+const workerExitGrace = 500 * time.Millisecond
+
 func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 	res := ReapResult{SessionID: entry.SessionID, WorkerPID: entry.WorkerPID}
 
@@ -71,6 +73,11 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Err = err
 	}
 
+	if waitForExit(entry.WorkerPID, workerExitGrace) {
+		res.Outcome = ReapAlreadyGone
+		res.Err = nil
+		return res
+	}
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
 		return res

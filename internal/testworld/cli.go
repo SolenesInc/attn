@@ -130,6 +130,21 @@ type Running struct {
 	code    int
 }
 
+func (r *Running) Wait() Result {
+	r.t.Helper()
+	select {
+	case <-r.done:
+	case <-time.After(fakeagent.HangGuard):
+		r.mu.Lock()
+		stderr := r.stderr.String()
+		r.mu.Unlock()
+		r.t.Fatalf("attn %q still running after %s\nstderr:\n%s", r.args, fakeagent.HangGuard, stderr)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return Result{Stdout: r.stdout.String(), Stderr: r.stderr.String(), Code: r.code}
+}
+
 type runningStream struct {
 	r   *Running
 	buf *bytes.Buffer
