@@ -18,6 +18,7 @@ import (
 	"github.com/rs/zerolog"
 	"nhooyr.io/websocket"
 
+	"github.com/victorarias/attn/internal/client"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
@@ -34,17 +35,32 @@ func TestASlowAppIsDroppedWhileHealthyAppsKeepUp(t *testing.T) {
 
 	slow := link.connect(t, w, "slow-app")
 	slow.await(t, protocol.EventInitialState)
+	slow.send(t, protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, DashboardVisible: true})
 	slow.send(t, protocol.AttachSessionMessage{Cmd: protocol.CmdAttachSession, ID: noisy})
 	slow.await(t, protocol.EventAttachResult)
+	if tier := presenceTier(t, cli); tier != "watching" {
+		t.Fatalf("with the slow app watching the dashboard the presence tier is %q, want watching", tier)
+	}
 	link.throttle()
 	healthy.Send(protocol.PtyInputMessage{Cmd: protocol.CmdPtyInput, ID: noisy, Data: "head -c 24000000 /dev/zero | tr '\\0' x; exit\r"})
 	testworld.Await(healthy, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == noisy })
-	for i := range 10 {
-		if err := cli.UpdateTodos(agent, []string{fmt.Sprint(i)}); err != nil {
+
+	todo := strings.Repeat("x", 48<<10)
+	deadline := time.After(fakeagent.HangGuard)
+	reports := 0
+	for presenceTier(t, cli) == "watching" {
+		select {
+		case <-deadline:
+			t.Fatalf("the slow app is still connected after %d reports on its throttled link", reports)
+		default:
+		}
+		reports++
+		label := fmt.Sprint(reports)
+		if err := cli.UpdateTodos(agent, []string{label, todo}); err != nil {
 			t.Fatalf("report todos: %v", err)
 		}
+		testworld.AwaitSession(healthy, agent, func(s protocol.Session) bool { return len(s.Todos) > 0 && s.Todos[0] == label })
 	}
-	testworld.AwaitSession(healthy, agent, func(s protocol.Session) bool { return slices.Equal(s.Todos, []string{"9"}) })
 
 	link.heal()
 	select {
@@ -67,6 +83,15 @@ func TestASlowAppIsDroppedWhileHealthyAppsKeepUp(t *testing.T) {
 		t.Fatalf("report todos: %v", err)
 	}
 	testworld.AwaitSession(healthy, agent, func(s protocol.Session) bool { return slices.Equal(s.Todos, []string{"after the slow app left"}) })
+}
+
+func presenceTier(t *testing.T, cli *client.Client) string {
+	t.Helper()
+	status, err := cli.ActivityStatus()
+	if err != nil {
+		t.Fatalf("activity status: %v", err)
+	}
+	return status.PresenceTier
 }
 
 type slowClientLink struct {
