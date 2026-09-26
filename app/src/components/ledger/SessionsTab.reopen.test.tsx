@@ -12,7 +12,6 @@ const goneEverywhere = verdict({
   reason: 'the directory is gone; branch feat/x is gone from this repository and its remotes',
   directory_state: 'missing',
   branch_state: 'gone',
-  profile_deleted: true,
   actions: [SessionReopenAction.StartFreshDefaultBranch, SessionReopenAction.StartFreshElsewhere],
 });
 
@@ -53,24 +52,23 @@ describe('SessionsTab verdicts', () => {
     expect(within(inspector()).getByText('its branch is still here')).toBeTruthy();
   });
 
-  it('holds an action taken mid-check and runs it against the verdict that lands', async () => {
-    const onReopen = vi.fn();
+  it('runs an action taken mid-check straight away and leaves the settled judgement to the daemon', async () => {
+    const onReopen = vi.fn(() => new Promise<boolean>(() => undefined));
     const { list } = listing([
       page({ entries: [closedEntry('s1')], reopen: [judged('s1', { checking: true, reason: 'checking' })] }),
-      page({ entries: [closedEntry('s1')], reopen: [judged('s1', { reason: 'it is there' })] }),
     ]);
     renderSessionsTab({ listSessions: list, onReopen });
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
-    expect(onReopen).not.toHaveBeenCalled();
-    expect(rows().getByText('waiting for the branch check…')).toBeTruthy();
 
-    nextPage();
-    await waitFor(() => expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]));
+    expect(onReopen.mock.calls).toEqual([['s1', 'reopen', undefined]]);
+    expect(rows().getByText('reopening…')).toBeTruthy();
   });
 
-  it('refuses an action the fresh verdict no longer offers, and says why', async () => {
-    const onReopen = vi.fn();
+  it('shows what the daemon offers instead when the settled check refuses the action', async () => {
+    const onReopen = vi.fn(async () => {
+      throw new Error('0b7c1e7e-5b1a-4a53-9a0e-6d3c2f8b9a10 cannot be reopened with reopen: the worktree is gone. Offered instead: recreate_worktree_and_reopen');
+    });
     const { list } = listing([
       page({ entries: [closedEntry('s1')], reopen: [judged('s1', { checking: true, reason: 'checking' })] }),
       page({ entries: [closedEntry('s1')], reopen: [judged('s1', { reopenable: false, reason: 'the worktree is gone', actions: [SessionReopenAction.RecreateWorktreeAndReopen] })] }),
@@ -78,11 +76,9 @@ describe('SessionsTab verdicts', () => {
     renderSessionsTab({ listSessions: list, onReopen });
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
-    nextPage();
 
-    await screen.findAllByText('The check finished and that is no longer possible: the worktree is gone');
-    expect(onReopen).not.toHaveBeenCalled();
-    expect(within(row('run s1')).getByRole('button', { name: 'Recreate the worktree' })).toBeTruthy();
+    await screen.findAllByText('reopen was refused; it offers Recreate the worktree instead');
+    await waitFor(() => expect(within(row('run s1')).getByRole('button', { name: 'Recreate the worktree' })).toBeTruthy());
   });
 
   it('runs a settled action straight away and offers none without a hand to run it', async () => {
@@ -91,7 +87,7 @@ describe('SessionsTab verdicts', () => {
     const view = renderSessionsTab({ listSessions: list, onReopen });
 
     fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
-    expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]);
+    expect(onReopen.mock.calls).toEqual([['s1', 'reopen', undefined]]);
 
     view.unmount();
     renderSessionsTab({ listSessions: list });
@@ -125,20 +121,19 @@ describe('SessionsTab settles rows in place', () => {
     expect(list).toHaveBeenCalledTimes(1);
   });
 
-  it('swaps the verdict when the branch check lands, and fires a held click against it', async () => {
-    const onReopen = vi.fn(async () => true);
+  it('swaps the verdict when the branch check lands', async () => {
     const { list } = listing([page({
       entries: [closedEntry('s1')],
       reopen: [judged('s1', { checking: true, reason: 'checking its branch', actions: [SessionReopenAction.Reopen] })],
     })]);
-    const { rerender } = renderSessionsTab({ listSessions: list, onReopen });
+    const { rerender } = renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
-    fireEvent.click(await within(await screen.findByRole('option')).findByRole('button', { name: 'Reopen' }));
-    expect(onReopen).not.toHaveBeenCalled();
+    await rows().findByText('run s1');
+    expect(within(inspector()).getByText(/checking the branch/)).toBeTruthy();
     rerender({ verdictNotice: { verdicts: { s1: verdict({ reason: 'it is there' }) }, nonce: 1 } });
 
-    await waitFor(() => expect(onReopen.mock.calls).toEqual([['s1', 'reopen']]));
-    expect(within(inspector()).getByText('it is there')).toBeTruthy();
+    await waitFor(() => expect(within(inspector()).getByText('it is there')).toBeTruthy());
+    expect(within(inspector()).queryByText(/checking the branch/)).toBeNull();
     expect(list).toHaveBeenCalledTimes(1);
   });
 
@@ -219,21 +214,21 @@ describe('SessionsTab row grammar', () => {
 
     fireEvent.click(within(first).getByRole('button', { name: /More for/ }));
     fireEvent.click(screen.getByRole('menuitem', { name: /Start fresh elsewhere/ }));
-    expect(onReopen.mock.calls).toEqual([['s1', 'start_fresh_elsewhere']]);
+    expect(onReopen.mock.calls).toEqual([['s1', 'start_fresh_elsewhere', undefined]]);
     expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('the inspector follows the selection and reads the directory, branch and placement', async () => {
     const { list } = listing([page({
       entries: [closedEntry('s1', { branch: 'feat/x', profile_name: 'Side', profile_deleted: true }), closedEntry('s2', { branch: 'feat/y' })],
-      reopen: [{ session_id: 's1', reopen: goneEverywhere }, judged('s2')],
+      reopen: [{ session_id: 's1', reopen: { ...goneEverywhere, profile_deleted: true } }, judged('s2')],
     })]);
     renderSessionsTab({ listSessions: list, onReopen: vi.fn() });
 
     await rows().findByText('run s2');
     expect(within(inspector()).getByText('directory is gone')).toBeTruthy();
     expect(within(inspector()).getByText('branch is gone everywhere')).toBeTruthy();
-    expect(within(inspector()).getByText('its profile was deleted; reopening lands it in your current profile')).toBeTruthy();
+    expect(within(inspector()).getByText('its profile was deleted; reopening asks which profile to land it in')).toBeTruthy();
     expect(within(inspector()).getByText('Side (deleted)')).toBeTruthy();
 
     fireEvent.keyDown(row('run s1'), { key: 'ArrowDown' });
@@ -255,7 +250,7 @@ describe('SessionsTab row grammar', () => {
     fireEvent.keyDown(first, { key: '2' });
     await waitFor(() => expect(rows().queryByText('reopening…')).toBeNull());
     fireEvent.keyDown(first, { key: '3' });
-    expect(onReopen.mock.calls).toEqual([['s1', 'start_fresh_default_branch'], ['s1', 'start_fresh_elsewhere']]);
+    expect(onReopen.mock.calls).toEqual([['s1', 'start_fresh_default_branch', undefined], ['s1', 'start_fresh_elsewhere', undefined]]);
   });
 
   it('names the session that closed another, falls back to its id, and says you for the user', async () => {

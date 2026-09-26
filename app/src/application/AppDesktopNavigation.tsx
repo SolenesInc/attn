@@ -17,6 +17,9 @@ export function AppDesktopNavigation() {
     giveShortcutSlot,
     createDesktop,
     selectProfile,
+    createProfile,
+    renameProfile,
+    deleteProfile,
   } = desktopNavigation;
   return (
     <>
@@ -45,6 +48,12 @@ export function AppDesktopNavigation() {
             setView('session');
             selectProfile(profileId);
           }}
+          onCreate={async (name) => {
+            await createProfile(name);
+            setView('session');
+          }}
+          onRename={renameProfile}
+          onDelete={deleteProfile}
           onClose={() => setProfileSwitcherOpen(false)}
         />
       )}

@@ -25,7 +25,7 @@ import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledge
 import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
 import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
-import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
+import type { Chip, LedgerMenu, ListItem, RowChoice, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
 export interface SessionSeedLink {
   id: string;
@@ -35,12 +35,14 @@ export interface SessionSeedLink {
 export interface SessionsTabProps {
   listSessions: (query: SessionLedgerQuery) => Promise<SessionLedgerPage>;
   profileNames: Record<string, string>;
+  currentProfileId?: string | null;
   profileMembership: string;
   liveSessionIds?: Set<string>;
   seedForSession?: (sessionId: string) => SessionSeedLink | null;
   onFocusSession?: (sessionId: string) => void;
   onOpenSeed?: (seedId: string) => void;
-  onReopen?: (sessionId: string, actionId: string) => Promise<boolean | void> | boolean | void;
+  onReopen?: (sessionId: string, actionId: string, profileId?: string) => Promise<boolean | void> | boolean | void;
+  onMoveSession?: (sessionId: string, expectedProfileId: string, destinationProfileId: string) => Promise<unknown>;
   onShowWorktree?: (path: string) => void;
   closeNotice?: { entry: SessionLedgerEntry; reopen?: SessionReopen; nonce: number };
   verdictNotice?: { verdicts: Record<string, SessionReopen>; nonce: number };
@@ -62,12 +64,14 @@ const WAITING_STATES = new Set(['waiting', 'attention', 'needs_attention', 'idle
 export function SessionsTab({
   listSessions,
   profileNames,
+  currentProfileId,
   profileMembership,
   liveSessionIds,
   seedForSession,
   onFocusSession,
   onOpenSeed,
   onReopen,
+  onMoveSession,
   onShowWorktree,
   closeNotice,
   verdictNotice,
@@ -117,9 +121,9 @@ export function SessionsTab({
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
-  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [menu, setMenu] = useState<LedgerMenu | null>(null);
   const [notices, setNotices] = useState<Record<string, RowNote>>({});
-  const [awaiting, setAwaiting] = useState<{ sessionId: string; actionId: string } | null>(null);
+  const profileOptions = useMemo(() => liveProfileOptions(profileNames, currentProfileId), [profileNames, currentProfileId]);
   const [copied, copy] = useCopied();
 
   const setNotice = useCallback((sessionId: string, note: RowNote | null) => {
@@ -134,37 +138,23 @@ export function SessionsTab({
     });
   }, []);
 
-  const fire = useCallback((sessionId: string, actionId: string) => {
+  const fire = useCallback((sessionId: string, actionId: string, profileId?: string) => {
     if (!onReopen) return;
-    setMenuKey(null);
+    setMenu(null);
     const refuse = (failure: unknown) => {
-      const message = failure instanceof Error ? failure.message : String(failure);
-      setNotice(sessionId, { kind: 'refused', text: compactRefusalText(message) });
+      setNotice(sessionId, { kind: 'refused', text: compactRefusalText(failureText(failure)) });
       reload();
     };
     setNotice(sessionId, { kind: 'busy', text: 'reopening…' });
     let outcome: ReturnType<typeof onReopen>;
     try {
-      outcome = onReopen(sessionId, actionId);
+      outcome = onReopen(sessionId, actionId, profileId);
     } catch (failure) {
       refuse(failure);
       return;
     }
     Promise.resolve(outcome).then(() => setNotice(sessionId, null)).catch(refuse);
   }, [onReopen, setNotice, reload]);
-
-  // Fires against the verdict that lands, never the stale one that was on screen.
-  useEffect(() => {
-    if (!awaiting) return;
-    const verdict = verdicts[awaiting.sessionId];
-    if (!verdict || verdict.refreshing) return;
-    if (verdict.actions.some((action) => action.id === awaiting.actionId)) {
-      fire(awaiting.sessionId, awaiting.actionId);
-    } else {
-      setNotice(awaiting.sessionId, { kind: 'refused', text: `The check finished and that is no longer possible: ${verdict.summary}` });
-    }
-    setAwaiting(null);
-  }, [awaiting, verdicts, fire, setNotice]);
 
   const isLive = useCallback(
     (entry: SessionLedgerEntry) => !isClosed(entry) && (liveSessionIds?.has(entry.id) ?? true),
@@ -174,34 +164,45 @@ export function SessionsTab({
   const labelsBySession = useMemo(() => new Map(entries.map((entry) => [entry.id, entry.label])), [entries]);
   const sessionLabel = useCallback((id: string) => labelsBySession.get(id) || id, [labelsBySession]);
   const nameText = useCallback((text: string) => nameIds(text, (id) => labelsBySession.get(id) || undefined), [labelsBySession]);
-  const runVerb = useCallback((key: string, verbId: string) => {
+  const moveSession = useCallback((entry: SessionLedgerEntry, destinationProfileId: string) => {
+    if (!onMoveSession) return;
+    setNotice(entry.id, { kind: 'busy', text: 'moving…' });
+    onMoveSession(entry.id, entry.profile_id, destinationProfileId)
+      .then(() => setNotice(entry.id, null))
+      .catch((failure) => setNotice(entry.id, { kind: 'refused', text: compactRefusalText(failureText(failure)) }));
+  }, [onMoveSession, setNotice]);
+
+  const runVerb = useCallback((key: string, verbId: string, choiceId?: string) => {
     const entry = visible.find((row) => row.id === key);
     if (!entry) return;
     setSelectedId(entry.id);
-    setMenuKey(null);
+    const verdict = verdicts[entry.id];
+    const needsDestination = verbId === 'move' || (verbId.startsWith('act:') && !!verdict?.profileDeleted);
+    if (needsDestination && !choiceId) { setMenu({ key: entry.id, choosing: verbId }); return; }
+    setMenu(null);
     if (verbId === 'focus') { onFocusSession?.(entry.id); return; }
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
-    setNotice(entry.id, null);
-    const verdict = verdicts[entry.id];
-    if (verdict && !verdict.refreshing) { fire(entry.id, verdictId(verbId)); return; }
-    setAwaiting({ sessionId: entry.id, actionId: verdictId(verbId) });
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, setNotice, verdicts, fire]);
+    if (verbId === 'move' && choiceId) { moveSession(entry, choiceId); return; }
+    fire(entry.id, verdictId(verbId), choiceId);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, verdicts, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
       verdict: isClosed(entry) ? verdicts[entry.id] : undefined,
-      note: notices[entry.id] ?? (awaiting?.sessionId === entry.id ? { kind: 'info', text: 'waiting for the branch check…' } : undefined),
+      note: notices[entry.id],
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
       sessionLabel,
       nameText,
       actionsAvailable: !!onReopen,
       canShowWorktree: !!onShowWorktree && !!entry.is_worktree && verdicts[entry.id]?.directoryState !== 'missing',
+      moveTargets: onMoveSession ? profileOptions.filter((option) => option.id !== entry.profile_id) : [],
+      reopenTargets: profileOptions,
       now: now(),
     }),
-  })), [visible, verdicts, notices, awaiting, isLive, seedForSession, sessionLabel, nameText, onReopen, onShowWorktree, now]);
+  })), [visible, verdicts, notices, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;
@@ -265,8 +266,8 @@ export function SessionsTab({
           selectedKey={selected?.id ?? null}
           onSelect={setSelectedId}
           onVerb={runVerb}
-          menuKey={menuKey}
-          onMenu={setMenuKey}
+          menu={menu}
+          onMenu={setMenu}
           onYank={copy}
           empty={<p className={`ledger-empty${ledger.error || ledger.filterError ? ' is-error' : ''}`}>{emptyMessage}</p>}
         />
@@ -285,6 +286,7 @@ export function SessionsTab({
               onCopy={copy}
               onVerb={(verbId) => runVerb(selected.id, verbId)}
               actionsAvailable={!!onReopen}
+              canMove={!!onMoveSession && profileOptions.some((option) => option.id !== selected.profile_id)}
             />
           )
           : <Inspector title="Nothing selected"><p className="ledger-muted">Pick a row to read it here.</p></Inspector>}
@@ -377,6 +379,16 @@ function ledgerEmptyMessage(ledger: SessionLedgerView, scope: SessionScope): str
 
 const RANGE_LOOKUP: Record<string, true> = { today: true, yesterday: true, '7d': true, '30d': true, week: true, month: true };
 
+function failureText(failure: unknown): string {
+  return failure instanceof Error ? failure.message : String(failure);
+}
+
+function liveProfileOptions(profileNames: Record<string, string>, currentProfileId: string | null | undefined): RowChoice[] {
+  return Object.entries(profileNames)
+    .map(([id, name]) => ({ id, label: name }))
+    .sort((a, b) => Number(b.id === currentProfileId) - Number(a.id === currentProfileId) || a.label.localeCompare(b.label));
+}
+
 function verdictId(verbId: string): string {
   return verbId.startsWith('act:') ? verbId.slice(4) : verbId;
 }
@@ -390,6 +402,8 @@ interface RowContext {
   sessionLabel: (id: string) => string;
   actionsAvailable: boolean;
   canShowWorktree: boolean;
+  moveTargets: RowChoice[];
+  reopenTargets: RowChoice[];
   now: Date;
 }
 
@@ -398,8 +412,17 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
   const { verdict } = context;
   const verbs: RowVerb[] = [];
   if (context.live) verbs.push({ id: 'focus', label: 'Focus' });
+  if (context.live && context.moveTargets.length > 0) {
+    verbs.push({ id: 'move', label: 'Move to…', choices: { title: 'Move to', options: context.moveTargets } });
+  }
   if (closed && context.actionsAvailable && verdict) {
-    for (const action of verdict.actions) verbs.push({ id: `act:${action.id}`, label: action.label });
+    for (const action of verdict.actions) {
+      verbs.push({
+        id: `act:${action.id}`,
+        label: action.label,
+        choices: verdict.profileDeleted ? { title: `${action.label} into`, options: context.reopenTargets } : undefined,
+      });
+    }
   }
   if (context.seed) verbs.push({ id: 'seed', label: `Seed · ${context.seed.title}` });
   if (context.canShowWorktree) verbs.push({ id: 'worktree', label: 'Show worktree' });
@@ -429,7 +452,12 @@ function sessionRow(entry: SessionLedgerEntry, context: RowContext): RowModel {
     verbs,
     dim: closed,
     yank: entry.directory,
-    attrs: { state: closed ? 'closed' : entry.state, verbs: verbs.map((verb) => verb.label).join('\u001f') },
+    attrs: {
+      state: closed ? 'closed' : entry.state,
+      verbs: verbs.map((verb) => verb.label).join('\u001f'),
+      profile: entry.profile_id,
+      'profile-label': profileText(entry),
+    },
   };
 }
 
@@ -506,6 +534,7 @@ interface SessionInspectorProps {
   onCopy: (text: string) => void;
   onVerb: (verbId: string) => void;
   actionsAvailable: boolean;
+  canMove: boolean;
 }
 
 function SessionKicker({ entry, live, verdict }: { entry: SessionLedgerEntry; live: boolean; verdict: ReopenVerdictView | undefined }) {
@@ -560,7 +589,7 @@ function InstantField({ entry, now, sessionLabel, nameText }: {
 }
 
 function SessionInspector({
-  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable,
+  entry, verdict, note, live, seed, sessionLabel, nameText, now, copied, onCopy, onVerb, actionsAvailable, canMove,
 }: SessionInspectorProps) {
   return (
     <Inspector title={entry.label || 'untitled session'} kicker={<SessionKicker entry={entry} live={live} verdict={verdict} />}>
@@ -581,6 +610,11 @@ function SessionInspector({
           <button type="button" className="ledger-verb is-primary" onClick={() => onVerb('focus')}>
             <kbd>⏎</kbd>Focus
           </button>
+          {canMove && (
+            <button type="button" className="ledger-verb" disabled={note?.kind === 'busy'} onClick={() => onVerb('move')}>
+              Move to…
+            </button>
+          )}
         </div>
       )}
     </Inspector>

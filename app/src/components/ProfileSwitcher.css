@@ -54,3 +54,78 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-sm);
 }
+
+.profile-switcher-actions {
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  padding-top: 4px;
+}
+
+.profile-switcher-actions button {
+  align-items: center;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  font-size: var(--font-size-sm);
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.profile-switcher-actions button:hover:not(:disabled) {
+  background: var(--color-bg-selected);
+  color: var(--color-text-primary);
+}
+
+.profile-switcher-actions button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.profile-switcher-actions button.is-danger {
+  color: var(--color-error);
+}
+
+.profile-switcher-actions kbd {
+  font-family: inherit;
+  font-size: var(--font-size-xs);
+  opacity: 0.8;
+}
+
+.profile-switcher-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+.profile-switcher-label {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  max-width: 280px;
+  padding: 4px 8px;
+}
+
+.profile-switcher-form .profile-switcher-label {
+  padding: 0;
+}
+
+.profile-switcher-input {
+  background: var(--color-bg-input);
+  border: 1px solid var(--color-border-hover);
+  border-radius: 5px;
+  color: var(--color-text-primary);
+  font-size: var(--font-size-md);
+  padding: 5px 8px;
+}
+
+.profile-switcher-error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  max-width: 280px;
+  padding: 4px 8px;
+}

@@ -12,7 +12,7 @@ import { useWorktreeStore } from '../../store/worktrees';
 import { fullStamp, nameIds, relativeStamp, tildePath, untilStamp } from './ledgerTime';
 import { baseName, matchesWords } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
-import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
+import type { Chip, LedgerMenu, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
 export interface WorktreeSessionRef {
   id: string;
@@ -76,7 +76,7 @@ export function WorktreesTab({
   const [notices, setNotices] = useState<Record<string, RowNote>>({});
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-  const [menuKey, setMenuKey] = useState<string | null>(null);
+  const [menu, setMenu] = useState<LedgerMenu | null>(null);
   const [refreshedAt, setRefreshedAt] = useState<Date | null>(null);
   const [copied, copy] = useCopied();
 
@@ -214,7 +214,7 @@ export function WorktreesTab({
 
   const runVerb = useCallback((key: string, verbId: string) => {
     setSelectedKey(key);
-    setMenuKey(null);
+    setMenu(null);
     const worktree = worktrees.find((row) => row.path === key);
     if (verbId === 'sessions') { onShowSessions(key); return; }
     if (verbId.startsWith('session:')) { onSelectSession(verbId.slice(8)); return; }
@@ -293,8 +293,8 @@ export function WorktreesTab({
           selectedKey={selected}
           onSelect={setSelectedKey}
           onVerb={runVerb}
-          menuKey={menuKey}
-          onMenu={setMenuKey}
+          menu={menu}
+          onMenu={setMenu}
           onYank={copy}
           empty={<p className="ledger-empty">{empty}</p>}
         />
