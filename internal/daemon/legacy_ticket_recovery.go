@@ -1014,6 +1014,11 @@ func (d *Daemon) recoverLegacyTicketSeeds(ctx context.Context, job *jobs.Job, ru
 		if automation {
 			continue
 		}
+		if ticket, err = d.store.GetTicket(ticket.ID); err != nil {
+			return err
+		} else if ticket == nil {
+			continue
+		}
 		title := strings.TrimSpace(ticket.Title)
 		body := strings.TrimSpace(ticket.Description)
 		if err := garden.ValidatePlant(title, body); err != nil {

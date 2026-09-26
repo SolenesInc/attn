@@ -176,7 +176,6 @@ type Daemon struct {
 	ticketReconcileExec               func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error)
 	ticketReconcileDone               func(ticketID string)
 	ticketOrphanFirstSeen             map[string]time.Time
-	ticketReconcilePRFetch            prStateFetcher
 	sessionTitleMu                    sync.Mutex
 	sessionTitleExec                  func(ctx context.Context, session *protocol.Session, conversation string) (string, error)
 	sessionTitleAttempted             map[string]struct{}
@@ -235,7 +234,6 @@ type Daemon struct {
 	nudgeWindowOverride               time.Duration
 	ticketBundleWindowOverride        time.Duration
 	nudgeFireHook                     func(sessionID, action string)
-	ticketRebuildBeforeArmHook        func(sessionID string, deadline time.Time)
 	lastInputMu                       sync.Mutex
 	lastUserInputAt                   map[string]time.Time
 	lastAutoSettleActivityAt          map[string]time.Time
