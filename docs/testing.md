@@ -72,8 +72,8 @@ stubbed; everything attn itself ships in the frontend runs for real.
 
 Fake agent binaries follow the real harness's observable contract: its hooks,
 transcript files, and terminal output. Time is controlled, never waited on:
-`synctest` in Go, Vitest fake timers in the app. Network failures use
-`newToxiProxy`. No test sleeps or polls.
+`synctest` in Go, Vitest fake timers in the app. Network failures wrap the
+client's `net.Conn` inside the bubble. No test sleeps or polls.
 
 #### Writing a daemon wire test
 
