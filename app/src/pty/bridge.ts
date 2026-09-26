@@ -53,7 +53,7 @@ export type PtyEventPayload =
   | { event: 'local_resize'; id: string; cols: number; rows: number; source?: PtyResizeSource }
   | { event: 'restore_complete'; id: string }
   | { event: 'restore_snapshot'; id: string; data: string }
-  | { event: 'restore_fallback'; id: string; data: string | Uint8Array }
+  | { event: 'restore_fallback'; id: string; data: string | Uint8Array; suppressResponses?: boolean }
   | { event: 'seed_blocks'; id: string; blocks: SeededBlock[] }
   // Routed through this chain rather than straight to the pane so it lands behind
   // the bytes of the same `seq`.
