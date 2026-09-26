@@ -114,6 +114,13 @@
         "recordedAt": "2026-09-11",
         "seconds": 24.0,
         "runnerClass": "github-hosted 4vcpu/16GB"
+      },
+      "desktop-migration": {
+        "run": "https://github.com/SolenesInc/attn/actions/runs/36256347056",
+        "job": "App acceptance shard 4/4",
+        "recordedAt": "2026-09-26",
+        "seconds": 20.7,
+        "runnerClass": "github-hosted 4vcpu/16GB"
       }
     }
   },
@@ -162,6 +169,7 @@
     "desktop-switching": 27.0,
     "workspace-switching": 45.7,
     "worktree-surface": 34.3,
-    "crew-management": 57.6
+    "crew-management": 57.6,
+    "desktop-migration": 20.7
   }
 }

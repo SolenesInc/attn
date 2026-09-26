@@ -1,5 +1,6 @@
 import type {
   MigrationChangedMessage,
+  MigrationResultMessage,
   ProfileActionResultMessage,
   ProfileArrangementChangedMessage,
   ProfileErrorCode,
@@ -9,12 +10,15 @@ import { useProfilesStore } from '../store/profiles';
 import { pendingRequestKey, type PendingRequests } from './daemonPendingRequests';
 
 export type ProfileActionResult = ProfileActionResultMessage;
+export type MigrationResult = MigrationResultMessage;
+
+type CommandResult = Pick<ProfileActionResult, 'action' | 'request_id' | 'success' | 'error' | 'error_code'>;
 
 export class ProfileCommandError extends Error {
   readonly code: ProfileErrorCode | undefined;
   readonly action: string;
 
-  constructor(result: ProfileActionResult) {
+  constructor(result: CommandResult) {
     super(result.error || `${result.action} failed`);
     this.name = 'ProfileCommandError';
     this.code = result.error_code;
@@ -27,9 +31,10 @@ type ProfileEvent =
   | ({ event: 'profiles_changed' } & ProfilesChangedMessage)
   | ({ event: 'profile_arrangement_changed' } & ProfileArrangementChangedMessage)
   | ({ event: 'migration_changed' } & MigrationChangedMessage)
+  | ({ event: 'migration_result' } & MigrationResult)
   | { event?: string };
 
-function settleProfileAction(pending: PendingRequests, result: ProfileActionResult): void {
+function settleCommand(pending: PendingRequests, result: CommandResult): void {
   const key = pendingRequestKey(result.action, result.request_id);
   const waiter = pending.get(key);
   if (!waiter) return;
@@ -44,7 +49,7 @@ function settleProfileAction(pending: PendingRequests, result: ProfileActionResu
 export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingRequests): boolean {
   switch (data.event) {
     case 'profile_action_result':
-      settleProfileAction(pending, data as ProfileActionResult);
+      settleCommand(pending, data as ProfileActionResult);
       return true;
     case 'profiles_changed':
       useProfilesStore.getState().profilesChanged((data as ProfilesChangedMessage).profiles ?? []);
@@ -55,8 +60,14 @@ export function handleProfileDaemonEvent(data: ProfileEvent, pending: PendingReq
       return true;
     }
     case 'migration_changed':
-      useProfilesStore.getState().migrationPhaseChanged((data as MigrationChangedMessage).state.phase ?? null);
+      useProfilesStore.getState().migrationArrived((data as MigrationChangedMessage).state);
       return true;
+    case 'migration_result': {
+      const result = data as MigrationResult;
+      if (result.state) useProfilesStore.getState().migrationArrived(result.state);
+      settleCommand(pending, result);
+      return true;
+    }
     default:
       return false;
   }

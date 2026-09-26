@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
-import type { Desktop, MigrationPhase, Profile } from '../types/generated';
+import type { Desktop, MigrationPhase, MigrationState, Profile } from '../types/generated';
 import { persistSelectedProfileId } from '../utils/selectedProfile';
 
 export interface ProfilesState {
@@ -10,7 +10,12 @@ export interface ProfilesState {
   desktops: Desktop[];
   previousDesktopId: string | null;
   migrationPhase: MigrationPhase | null;
+  migration: MigrationState | null;
+  migrationFromThisConnection: boolean;
+  migrationDeparted: string[];
+  connectionOpened: () => void;
   migrationPhaseChanged: (phase: MigrationPhase | null) => void;
+  migrationArrived: (migration: MigrationState) => void;
   enterScope: (profiles: Profile[] | undefined, selectedProfileId: string | undefined, desktops: Desktop[] | undefined) => void;
   profilesChanged: (profiles: Profile[]) => void;
   arrangementArrived: (profile: Profile, desktops: Desktop[]) => void;
@@ -51,12 +56,35 @@ function arrangementOf(state: Arrangement, profile: Profile, desktops: Desktop[]
   };
 }
 
+function departedGroupTitles(previous: MigrationState, next: MigrationState): string[] {
+  if (next.phase !== previous.phase) return [];
+  const remaining = new Set(next.groups.map((group) => group.group_id));
+  return previous.groups.filter((group) => !remaining.has(group.group_id)).map((group) => group.title);
+}
+
 export const useProfilesStore = create<ProfilesState>((set) => ({
   profiles: [],
   ...NO_ARRANGEMENT,
   migrationPhase: null,
+  migration: null,
+  migrationFromThisConnection: false,
+  migrationDeparted: [],
+
+  connectionOpened: () => set({ migrationFromThisConnection: false }),
 
   migrationPhaseChanged: (migrationPhase) => set({ migrationPhase }),
+
+  migrationArrived: (migration) =>
+    set((state) => {
+      const previous = state.migrationFromThisConnection ? state.migration : null;
+      if (previous && migration.revision < previous.revision) return state;
+      return {
+        migration,
+        migrationPhase: migration.phase,
+        migrationFromThisConnection: true,
+        migrationDeparted: previous ? departedGroupTitles(previous, migration) : [],
+      };
+    }),
 
   enterScope: (profiles, selectedProfileId, desktops) =>
     set(() => {

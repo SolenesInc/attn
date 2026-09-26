@@ -6,7 +6,7 @@ import { useProfilesStore } from './store/profiles';
 import { useSessionStore, type Session } from './store/sessions';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 import { ProfileCommandError } from './hooks/daemonProfileEvents';
-import type { Desktop } from './types/generated';
+import { MigrationPhase, type Desktop } from './types/generated';
 import type { TerminalLayoutNode } from './types/workspace';
 import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 
@@ -282,6 +282,18 @@ describe('desktop surface', () => {
       clearWarnings: fn,
       sendSetTerminalTheme: fn,
     });
+  });
+
+  it('mounts no sidebar or agent desktop until the migration completes and the user continues', async () => {
+    useProfilesStore.setState({ migrationPhase: MigrationPhase.PlacementRequired });
+    render(<App />);
+
+    expect(await screen.findByText('Loading your desktops…')).toBeInTheDocument();
+    expect(screen.queryByTestId('sidebar')).not.toBeInTheDocument();
+
+    act(() => useProfilesStore.setState({ migrationPhase: MigrationPhase.Complete }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Continue →' }));
+    expect(await screen.findByTestId('sidebar')).toBeInTheDocument();
   });
 
   it('groups the sidebar by desktop in slot order, then Unplaced', async () => {

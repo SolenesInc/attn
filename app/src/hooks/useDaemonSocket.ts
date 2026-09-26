@@ -96,7 +96,7 @@ import { decodeBinaryFrame } from '../pty/binaryPtyFrame';
 import { kittyImageBlobFromResult, kittyImageCache } from '../utils/kittyImageCache';
 import { resolveDaemonWebSocketURL, type DaemonEndpointInstance } from '../utils/daemonEndpoint';
 import { handleAppDaemonEvent, type AppCommandResult } from './daemonAppEvents';
-import { handleProfileDaemonEvent, type ProfileActionResult } from './daemonProfileEvents';
+import { handleProfileDaemonEvent, type MigrationResult, type ProfileActionResult } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
 import { handleBusDaemonEvent, type BusStatus } from './daemonBusEvents';
@@ -1260,6 +1260,7 @@ export function useDaemonSocket({
       console.log('[Daemon] WebSocket connected');
       daemonRestartInProgressRef.current = false;
       setConnectionError(null);
+      useProfilesStore.getState().connectionOpened();
       setConnectionGeneration((prev) => prev + 1);
       reconnectDelayRef.current = 1000;
       reconnectAttemptsRef.current = 0;
@@ -5257,6 +5258,55 @@ export function useDaemonSocket({
       }),
     [sendProfileCommand],
   );
+  const sendMigrationCommand = useCallback(
+    (cmd: string, body: Record<string, unknown> = {}) =>
+      sendRequest<MigrationResult>(cmd, body, `The daemon did not answer ${cmd}`),
+    [sendRequest],
+  );
+
+  const sendMigrationGet = useCallback(() => sendMigrationCommand('migration_get'), [sendMigrationCommand]);
+
+  const sendMigrationKeep = useCallback(
+    (groupIds: string[], expectedRevision: number) =>
+      sendMigrationCommand('migration_keep', { group_ids: groupIds, expected_revision: expectedRevision }),
+    [sendMigrationCommand],
+  );
+
+  const sendMigrationMove = useCallback(
+    (move: {
+      groupId: string;
+      targetKey: string;
+      anchorGroupId?: string;
+      edge: 'left' | 'right' | 'top' | 'bottom';
+      share?: number;
+      expectedRevision: number;
+    }) =>
+      sendMigrationCommand('migration_move', {
+        group_id: move.groupId,
+        target_key: move.targetKey,
+        ...(move.anchorGroupId ? { anchor_group_id: move.anchorGroupId } : {}),
+        edge: move.edge,
+        ...(move.share ? { share: move.share } : {}),
+        expected_revision: move.expectedRevision,
+      }),
+    [sendMigrationCommand],
+  );
+
+  const sendMigrationSuggest = useCallback(
+    (expectedRevision: number) => sendMigrationCommand('migration_suggest', { expected_revision: expectedRevision }),
+    [sendMigrationCommand],
+  );
+
+  const sendMigrationUndo = useCallback(
+    (expectedRevision: number) => sendMigrationCommand('migration_undo', { expected_revision: expectedRevision }),
+    [sendMigrationCommand],
+  );
+
+  const sendMigrationFinish = useCallback(
+    (expectedRevision: number) => sendMigrationCommand('migration_finish', { expected_revision: expectedRevision }),
+    [sendMigrationCommand],
+  );
+
   const sendDesktopRemoveLeaf = useCallback(
     (desktopId: string, leafId: string, expectedRevision: number) =>
       sendProfileCommand('desktop_remove_leaf', { desktop_id: desktopId, leaf_id: leafId, expected_revision: expectedRevision }),
@@ -5284,6 +5334,12 @@ export function useDaemonSocket({
     sendDesktopUpdateTile,
     sendDesktopRemoveLeaf,
     sendDesktopSetSplitRatio,
+    sendMigrationGet,
+    sendMigrationKeep,
+    sendMigrationMove,
+    sendMigrationSuggest,
+    sendMigrationUndo,
+    sendMigrationFinish,
     disconnectExplanation,
     clearDisconnectExplanation,
     connectionGeneration,

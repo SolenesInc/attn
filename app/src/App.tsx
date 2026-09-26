@@ -4,6 +4,7 @@ import './App.css';
 import { AppContent } from './application/AppContent';
 import { setMarkdownAnnotationsTransport } from './components/MarkdownReader/annotations/transport';
 import { MigrationFailureScreen } from './components/MigrationFailureScreen';
+import { MigrationGate } from './components/MigrationPicker/MigrationGate';
 import { DaemonApiProvider } from './contexts/DaemonApiContext';
 import { KeybindingsProvider } from './contexts/KeybindingsContext';
 import { SettingsProvider } from './contexts/SettingsContext';
@@ -237,31 +238,33 @@ function App() {
     <SettingsProvider settings={settings} setSetting={sendSetSetting}>
       <KeybindingsProvider>
         <DaemonApiProvider api={daemon}>
-          <AppContent
-            daemonSessions={daemonSessions}
-            daemonWorkspaces={daemonWorkspaces}
-            prs={prs}
-            daemonEndpoints={daemonEndpoints}
-            daemonPlugins={daemonPlugins}
-            daemonPluginIssues={daemonPluginIssues}
-            daemonGitHubHosts={daemonGitHubHosts}
-            githubPollingOffReason={githubPollingOffReason}
-            settings={settings}
-            updateAvailableVersion={updateAvailableVersion}
-            onOpenLatestRelease={handleOpenLatestRelease}
-            onDismissLatestRelease={handleDismissLatestRelease}
-            presentationNotices={presentationNotices}
-            settingError={settingError}
-            clearSettingError={() => setSettingError(null)}
-            notificationsUnread={notificationsUnread}
-            criticalNotifications={criticalNotifications}
-            notificationsChangeSignal={notificationsChangeSignal}
-            fsChangeSignals={fsChangeSignals}
-            notebookTaskChangeSignal={notebookTaskChangeSignal}
-            sessionCloseNotice={sessionCloseNotice}
-            sessionVerdictNotice={sessionVerdictNotice}
-            registerSessionExitHandler={registerSessionExitHandler}
-          />
+          <MigrationGate>
+            <AppContent
+              daemonSessions={daemonSessions}
+              daemonWorkspaces={daemonWorkspaces}
+              prs={prs}
+              daemonEndpoints={daemonEndpoints}
+              daemonPlugins={daemonPlugins}
+              daemonPluginIssues={daemonPluginIssues}
+              daemonGitHubHosts={daemonGitHubHosts}
+              githubPollingOffReason={githubPollingOffReason}
+              settings={settings}
+              updateAvailableVersion={updateAvailableVersion}
+              onOpenLatestRelease={handleOpenLatestRelease}
+              onDismissLatestRelease={handleDismissLatestRelease}
+              presentationNotices={presentationNotices}
+              settingError={settingError}
+              clearSettingError={() => setSettingError(null)}
+              notificationsUnread={notificationsUnread}
+              criticalNotifications={criticalNotifications}
+              notificationsChangeSignal={notificationsChangeSignal}
+              fsChangeSignals={fsChangeSignals}
+              notebookTaskChangeSignal={notebookTaskChangeSignal}
+              sessionCloseNotice={sessionCloseNotice}
+              sessionVerdictNotice={sessionVerdictNotice}
+              registerSessionExitHandler={registerSessionExitHandler}
+            />
+          </MigrationGate>
         </DaemonApiProvider>
       </KeybindingsProvider>
     </SettingsProvider>

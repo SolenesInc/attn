@@ -5,7 +5,8 @@ import { PROTOCOL_VERSION, useDaemonSocket } from './useDaemonSocket';
 import { ProfileCommandError } from './daemonProfileEvents';
 import { useProfilesStore } from '../store/profiles';
 import { SELECTED_PROFILE_STORAGE_KEY } from '../utils/selectedProfile';
-import type { Desktop, Profile } from '../types/generated';
+import { MigrationPhase, type Desktop, type Profile } from '../types/generated';
+import { migrationState, resetMigrationStore } from '../test/migration';
 import { tileContentKey } from '../types/workspace';
 
 class FakeWebSocket {
@@ -79,6 +80,7 @@ describe('useDaemonSocket profiles', () => {
     vi.mocked(isTauri).mockReturnValue(false);
     window.localStorage.clear();
     useProfilesStore.setState({ profiles: [], selectedProfileId: null, currentDesktopId: null, desktops: [], previousDesktopId: null });
+    resetMigrationStore(null);
   });
 
   afterEach(() => {
@@ -231,6 +233,27 @@ describe('useDaemonSocket profiles', () => {
     expect(useProfilesStore.getState()).toMatchObject({ selectedProfileId: 'set-work', currentDesktopId: 'w1', previousDesktopId: null });
     expect(useProfilesStore.getState().desktops.map((entry) => entry.id)).toEqual(['w1']);
     expect(window.localStorage.getItem(SELECTED_PROFILE_STORAGE_KEY)).toBe('set-work');
+  });
+
+  it('takes a reconnected daemon’s draft even when it answers before initial_state with a lower revision', async () => {
+    const { ws } = await connect();
+    act(() => ws.emit({ event: 'migration_changed', state: migrationState({ revision: 9 }) }));
+    expect(useProfilesStore.getState().migration?.revision).toBe(9);
+
+    vi.useFakeTimers();
+    try {
+      act(() => ws.close());
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+    } finally {
+      vi.useRealTimers();
+    }
+    const reconnected = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    expect(reconnected).not.toBe(ws);
+    await waitFor(() => expect(reconnected.readyState).toBe(FakeWebSocket.OPEN));
+
+    act(() => reconnected.emit({ event: 'migration_changed', state: migrationState({ revision: 2 }) }));
+    expect(useProfilesStore.getState().migration?.revision).toBe(2);
+    expect(useProfilesStore.getState().migrationPhase).toBe(MigrationPhase.PlacementRequired);
   });
 
   it('rejects a refused command with its error code', async () => {
