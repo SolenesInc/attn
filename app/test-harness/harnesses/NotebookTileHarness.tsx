@@ -72,7 +72,6 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
     backlinksNotebook,
     sendToChief,
     listFiles,
-    changeSignal: 0,
   }), [listDir, readFile, writeFile, existsFile, readAsset, backlinksNotebook, sendToChief, listFiles]);
 
   const sendFsWatch = useCallback(async (root?: string): Promise<FsWatchResult> => ({ root: root ?? '' }), []);
@@ -80,6 +79,7 @@ export function NotebookTileHarness({ onReady, setTriggerRerender }: HarnessProp
 
   const surfaceValue = useMemo<NotebookSurfaceContextValue>(() => ({
     makeDaemon: () => daemon,
+    changeSignalFor: () => 0,
     effectiveNotebookRoot: '',
     sendFsWatch,
     sendFsUnwatch,

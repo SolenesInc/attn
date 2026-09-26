@@ -8,6 +8,7 @@ import { FrontmatterCardHarness } from './FrontmatterCardHarness';
 import { GridLayoutControlHarness } from './GridLayoutControlHarness';
 import { GridViewHarness } from './GridViewHarness';
 import { LiveMarkdownEditorHarness } from './LiveMarkdownEditorHarness';
+import { MarkdownAnnotationTilesHarness } from './MarkdownAnnotationTilesHarness';
 import { MermaidDiagramHarness } from './MermaidDiagramHarness';
 import { NotebookBrowserHarness } from './NotebookBrowserHarness';
 import { NotebookTileHarness } from './NotebookTileHarness';
@@ -30,6 +31,7 @@ export const harnesses: Record<string, React.ComponentType<HarnessProps>> = {
   GridLayoutControl: GridLayoutControlHarness,
   GridView: GridViewHarness,
   LiveMarkdownEditor: LiveMarkdownEditorHarness,
+  MarkdownAnnotationTiles: MarkdownAnnotationTilesHarness,
   MermaidDiagram: MermaidDiagramHarness,
   NotebookBrowser: NotebookBrowserHarness,
   NotebookTile: NotebookTileHarness,

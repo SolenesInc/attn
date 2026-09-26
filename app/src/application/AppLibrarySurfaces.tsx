@@ -27,9 +27,7 @@ export function AppLibrarySurfaces() {
     setLedgerTab,
     setSessionsOpen,
     notebookOpen,
-    notebookRequestedPath,
     setNotebookOpen,
-    setNotebookRequestedPath,
     gardenMode,
     gardenDockRect,
     toggleGardenFrame,
@@ -116,11 +114,7 @@ export function AppLibrarySurfaces() {
       />
       <NotebookBrowser
         isOpen={notebookOpen}
-        initialPath={notebookRequestedPath}
-        onClose={() => {
-          setNotebookOpen(false);
-          setNotebookRequestedPath(null);
-        }}
+        onClose={() => setNotebookOpen(false)}
         listDir={sendFsList}
         readFile={sendFsRead}
         writeFile={sendFsWrite}
