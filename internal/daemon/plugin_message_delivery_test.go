@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/jobs"
 	"github.com/victorarias/attn/internal/protocol"
@@ -401,4 +402,20 @@ func TestSessionInput_UserTurnViaPluginTitlesTheSession(t *testing.T) {
 	if got := d.store.Get("pi-titled"); got == nil || got.Label != "Retry queue investigation" {
 		t.Fatalf("session label = %+v, want %q", got, "Retry queue investigation")
 	}
+}
+
+func installSessionTitleRunner(t *testing.T, d *Daemon) *jobs.Runner {
+	t.Helper()
+	runner := jobs.New(jobs.Options{
+		Store:        newTestJobStore(t, d),
+		Log:          func(string, ...interface{}) {},
+		PollInterval: 2 * time.Millisecond,
+		BackoffBase:  time.Millisecond,
+	})
+	if err := runner.RegisterWith(sessionTitleKind, d.sessionTitleHandler,
+		jobs.HandlerConfig{Timeout: sessionTitleTimeout}); err != nil {
+		t.Fatalf("register session_title: %v", err)
+	}
+	d.jobQueue = runner
+	return runner
 }

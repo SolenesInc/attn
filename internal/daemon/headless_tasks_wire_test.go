@@ -32,20 +32,22 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 	if settled.Label != "shop" {
 		t.Errorf("the settled session is labelled %q, want its launch label kept", settled.Label)
 	}
-	askWhatItRan := func() {
-		t.Helper()
-		if _, err := cli.SessionInstructions(session, "What did it run?"); err == nil || !strings.Contains(err.Error(), "model_unavailable") {
-			t.Errorf("session instructions = %v, want model_unavailable", err)
-		}
+	askWhatItRan := func() <-chan error {
+		asked := make(chan error, 1)
+		go func() {
+			_, err := cli.SessionInstructions(session, "What did it run?")
+			asked <- err
+		}()
+		return asked
 	}
-	askWhatItRan()
-	if got := w.HeadlessTasks(); got != 0 {
-		t.Fatalf("with headless tasks off the model ran %d times before the session ended", got)
+	if err := <-askWhatItRan(); err == nil || !strings.Contains(err.Error(), "model_unavailable") {
+		t.Errorf("with headless tasks off, session instructions = %v, want model_unavailable", err)
 	}
 	t.Setenv("ATTN_HEADLESS_TASKS", "on")
-	askWhatItRan()
-	if got := w.HeadlessTasks(); got != 1 {
-		t.Fatalf("with headless tasks on, session instructions ran the model %d times, want 1", got)
+	asked := askWhatItRan()
+	w.HeadlessTask().Fail("the model is overloaded")
+	if err := <-asked; err == nil || !strings.Contains(err.Error(), "model_unavailable") {
+		t.Errorf("with a failing model, session instructions = %v, want model_unavailable", err)
 	}
 	t.Setenv("ATTN_HEADLESS_TASKS", "off")
 
@@ -53,9 +55,6 @@ func TestWithHeadlessTasksOffNoModelRunsAndSessionsStillSettle(t *testing.T) {
 	testworld.Await(watcher, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == session })
 	if got := showTicket(t, cli, "checkout-tests").Status; got != taken {
 		t.Errorf("the ticket of the ended session is %q, want it left %q with no reconcile model", got, taken)
-	}
-	if got := w.HeadlessTasks(); got != 1 {
-		t.Errorf("with headless tasks off the model ran %d more times", got-1)
 	}
 }
 

@@ -131,6 +131,10 @@ Playing the model, on a `fakeagent.Run`:
 - Claude only: `Stream` writes part of a reply that the next `Reply` revises
   under the same message. `Subagent` writes a subagent's transcript, and
   `DeleteSubagentTranscripts` removes those transcripts.
+- Headless tasks, the one-shot model calls such as titles and turn verdicts,
+  are off unless the test sets `ATTN_HEADLESS_TASKS=on`. Then `w.HeadlessTask()`
+  returns the next task's `Harness` and `Prompt` to `Answer` or `Fail`, and a
+  task the test never takes fails it.
 
 Waiting for results:
 
