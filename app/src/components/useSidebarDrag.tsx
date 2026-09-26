@@ -337,12 +337,20 @@ function listenForPointerGesture(
   onUp: (event: PointerEvent) => void,
   onCancel: () => void,
 ) {
+  const cancelOnEscape = (event: KeyboardEvent) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    onCancel();
+  };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onCancel);
+  window.addEventListener('keydown', cancelOnEscape, true);
   return () => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
+    window.removeEventListener('keydown', cancelOnEscape, true);
   };
 }

@@ -177,7 +177,8 @@ export function SidebarPopovers() {
         <RenamePopover
           key={`${renameTarget.kind}:${renameTarget.id}`}
           initialValue={renameTarget.name}
-          label={renameTarget.kind === 'workspace' ? 'Rename workspace' : 'Rename session'}
+          defaultName={renameTarget.defaultName}
+          label={renameTarget.kind === 'workspace' ? 'Rename desktop' : 'Rename session'}
           anchor={renameTarget.anchor}
           onSubmit={async (value) => {
             if (renameTarget.kind === 'workspace') {

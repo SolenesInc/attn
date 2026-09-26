@@ -3,7 +3,6 @@ import { useProfilesStore } from '../store/profiles';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop, type Profile } from '../types/generated';
 import {
   buildDesktopViewModels,
-  UNPLACED_GROUP_ID,
   type WorkspaceViewSession,
   type WorkspaceWithSessions,
 } from '../utils/workspaceViewModels';
@@ -33,7 +32,7 @@ export function agentDesktop(id: string, slot: number | null, sessionIds: string
     profile_id: TEST_PROFILE_ID,
     name: '',
     ...(slot ? { shortcut_slot: slot } : {}),
-    order_key: id,
+    order_key: slot ? `slot-${slot}` : `extra-${id}`,
     tree_json: tree ? JSON.stringify(tree) : '',
     active_pane_id: activeSessionId ? paneIdOf(activeSessionId) : '',
     revision: 1,
@@ -115,9 +114,7 @@ export function desktopGroups<TSession extends WorkspaceViewSession>(
     return group.tree ? { ...desktop, tree_json: JSON.stringify(group.tree) } : desktop;
   });
   const titleById = new Map(groups.map((group) => [group.id, group.title]));
-  return buildDesktopViewModels(desktops, sessions)
-    .filter((view) => view.id !== UNPLACED_GROUP_ID || view.sessions.length > 0)
-    .map((view) => ({ ...view, title: titleById.get(view.id) ?? view.title }));
+  return buildDesktopViewModels(desktops, sessions).map((view) => ({ ...view, title: titleById.get(view.id) ?? view.title }));
 }
 
 export function groupIndexes(groups: Array<{ id: string }>): Map<string, number> {

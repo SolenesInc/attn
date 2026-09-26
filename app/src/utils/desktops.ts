@@ -9,18 +9,12 @@ function byOrderKey(a: Desktop, b: Desktop): number {
   return a.order_key < b.order_key ? -1 : a.order_key > b.order_key ? 1 : 0;
 }
 
-export function slottedDesktops(desktops: Desktop[]): Desktop[] {
-  return desktops
-    .filter((desktop) => desktop.shortcut_slot)
-    .sort((a, b) => (a.shortcut_slot ?? 0) - (b.shortcut_slot ?? 0));
-}
-
-export function extraDesktops(desktops: Desktop[]): Desktop[] {
+function extraDesktops(desktops: Desktop[]): Desktop[] {
   return desktops.filter((desktop) => !desktop.shortcut_slot).sort(byOrderKey);
 }
 
 export function orderedDesktops(desktops: Desktop[]): Desktop[] {
-  return [...slottedDesktops(desktops), ...extraDesktops(desktops)];
+  return [...desktops].sort(byOrderKey);
 }
 
 export function desktopNumber(desktop: Desktop, desktops: Desktop[]): number {
@@ -28,8 +22,12 @@ export function desktopNumber(desktop: Desktop, desktops: Desktop[]): number {
   return SHORTCUT_SLOTS.length + extraDesktops(desktops).findIndex((entry) => entry.id === desktop.id) + 1;
 }
 
-export function desktopLabel(desktop: Desktop, desktops: Desktop[]): string {
+export function defaultDesktopLabel(desktop: Desktop, desktops: Desktop[]): string {
   return `Desktop ${desktopNumber(desktop, desktops)}`;
+}
+
+export function desktopLabel(desktop: Desktop, desktops: Desktop[]): string {
+  return desktop.name.trim() || defaultDesktopLabel(desktop, desktops);
 }
 
 export function desktopInSlot(desktops: Desktop[], slot: number): Desktop | undefined {
