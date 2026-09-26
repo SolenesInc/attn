@@ -43,11 +43,6 @@ function installGlobalListener() {
   window.addEventListener('keydown', (e: KeyboardEvent) => {
     if (captureSuspended) return;
 
-    const terminalTarget = isTerminalTarget(e.target);
-    if (terminalTarget && isShellCtrlLetter(e)) {
-      return;
-    }
-
     // A pending leader owns the next keystroke entirely: always consume, so it can't fall through
     // to a single combo or leak into the terminal PTY.
     const pendingThen = resolvePendingThen(e);
@@ -55,6 +50,11 @@ function installGlobalListener() {
       e.preventDefault();
       e.stopPropagation();
       if (pendingThen.kind === 'fired') triggerShortcut(pendingThen.id);
+      return;
+    }
+
+    const terminalTarget = isTerminalTarget(e.target);
+    if (terminalTarget && isShellCtrlLetter(e)) {
       return;
     }
 

@@ -178,6 +178,20 @@ describe('App keyboard shortcuts', () => {
       expect(ptyInput(daemon)).toEqual([]);
     });
 
+    it('takes a Linux Ctrl+letter as the follow key, so it never reaches the shell', async () => {
+      const { daemon, terminal, press } = await openWorkspace({
+        platform: LINUX,
+        settings: keybindings({ 'terminal.toggleZoom': { leader: { key: 'y', alt: true }, then: { key: 'z' } } }),
+      });
+
+      await press(terminal(), { key: 'y', code: 'KeyY', altKey: true });
+      expect(chordHud()).not.toBeNull();
+      await press(terminal(), { key: 'c', code: 'KeyC', ctrlKey: true });
+
+      expect(chordHud()).toBeNull();
+      expect(ptyInput(daemon)).toEqual([]);
+    });
+
     it.each([
       ['a lone modifier', [{ key: 'Shift', shiftKey: true }]],
       ['the leader again', [{ key: 'y', metaKey: true }]],

@@ -27,7 +27,6 @@ function matchesBinding(event: KeyboardEvent, id: ShortcutId): boolean {
 
 export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) {
   return (event: KeyboardEvent) => {
-    if (isShellCtrlLetter(event)) return false;
     // A pending leader owns the next keystroke; resolve it before any PTY
     // control-sequence handling so the follow key is never emitted as input.
     if (event.type === 'keydown') {
@@ -37,6 +36,7 @@ export function createTerminalKeyInterceptor(sendToPty: (data: string) => void) 
         return true;
       }
     }
+    if (isShellCtrlLetter(event)) return false;
 
     if (
       event.type === 'keydown'
