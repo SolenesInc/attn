@@ -1337,6 +1337,7 @@ describe('SessionTerminalWorkspace', () => {
       rerender(
         <SessionTerminalWorkspace
           {...commonProps}
+          activePaneId={documentIds[index]}
           workspace={createWorkspaceWithDocuments(documentIds.slice(0, index + 1))}
         />,
       );
@@ -1359,6 +1360,7 @@ describe('SessionTerminalWorkspace', () => {
     rerender(
       <SessionTerminalWorkspace
         {...commonProps}
+        activePaneId="latest"
         workspace={createWorkspaceWithDocuments(documentIds)}
       />,
     );

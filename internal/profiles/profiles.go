@@ -151,15 +151,15 @@ func checkPaneRows(desktop Desktop, inTree map[string]struct{}) (map[string]stru
 	return rows, nil
 }
 
-func checkActivePane(desktop Desktop, inTree map[string]struct{}) error {
-	if len(inTree) == 0 {
+func checkActiveLeaf(desktop Desktop) error {
+	if layouttree.LayoutEmpty(desktop.Tree) {
 		if desktop.ActivePaneID != "" {
-			return Errorf(CodeInvalid, "desktop %s: active pane %s is set but the desktop has no panes", desktop.ID, desktop.ActivePaneID)
+			return Errorf(CodeInvalid, "desktop %s: active leaf %s is set but the desktop has no leaves", desktop.ID, desktop.ActivePaneID)
 		}
 		return nil
 	}
-	if _, ok := inTree[desktop.ActivePaneID]; !ok {
-		return Errorf(CodeInvalid, "desktop %s: active pane %q does not belong to the desktop", desktop.ID, desktop.ActivePaneID)
+	if !layouttree.HasLeaf(desktop.Tree, desktop.ActivePaneID) {
+		return Errorf(CodeInvalid, "desktop %s: active leaf %q does not belong to the desktop", desktop.ID, desktop.ActivePaneID)
 	}
 	return nil
 }
@@ -185,24 +185,17 @@ func CheckDesktop(desktop Desktop) error {
 			return Errorf(CodeInvalid, "desktop %s: leaf %s is in the tree but has no pane row", desktop.ID, id)
 		}
 	}
-	return checkActivePane(desktop, inTree)
+	return checkActiveLeaf(desktop)
 }
 
 func Settle(desktop Desktop) Desktop {
 	desktop.Tree = layouttree.Rebalance(desktop.Tree)
-	treePanes := layouttree.PaneIDs(desktop.Tree)
-	stillThere := false
-	for _, id := range treePanes {
-		if id == desktop.ActivePaneID {
-			stillThere = true
-			break
-		}
+	if layouttree.HasLeaf(desktop.Tree, desktop.ActivePaneID) {
+		return desktop
 	}
-	if !stillThere {
-		desktop.ActivePaneID = ""
-		if len(treePanes) > 0 {
-			desktop.ActivePaneID = treePanes[0]
-		}
+	desktop.ActivePaneID = ""
+	if leaves := append(layouttree.PaneIDs(desktop.Tree), layouttree.TileIDs(desktop.Tree)...); len(leaves) > 0 {
+		desktop.ActivePaneID = leaves[0]
 	}
 	return desktop
 }

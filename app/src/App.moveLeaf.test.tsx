@@ -55,49 +55,23 @@ vi.mock('./pty/bridge', async () => {
   return { ...actual, ptySpawn: vi.fn(async () => {}) };
 });
 
-const SOURCE = 'ws-source';
-const TARGET = 'ws-target';
+const PROFILE = { id: 'profile-main', name: 'Main', current_desktop_id: 'desktop-source', revision: 1 };
+const SOURCE = 'desktop-source';
+const TARGET = 'desktop-target';
 
-function session(id: string, label: string, workspaceId: string) {
+type PaneRef = { paneId: string; sessionId: string };
+
+function session(id: string, label: string) {
   return {
     id,
     label,
     agent: 'claude',
     directory: '/tmp/repo',
-    workspace_id: workspaceId,
+    workspace_id: '',
+    profile_id: PROFILE.id,
     state: 'idle',
   };
 }
-
-function pane(paneId: string, sessionId: string, workspaceId: string, title: string) {
-  return {
-    pane_id: paneId,
-    session_id: sessionId,
-    runtime_id: sessionId,
-    workspace_id: workspaceId,
-    kind: 'agent',
-    status: 'ready',
-    title,
-  };
-}
-
-function lonePaneWorkspace(id: string, title: string, paneId: string, sessionId: string) {
-  return {
-    id,
-    title,
-    directory: '/tmp/repo',
-    status: 'idle',
-    muted: false,
-    layout: {
-      workspace_id: id,
-      active_pane_id: paneId,
-      layout_json: JSON.stringify({ type: 'pane', pane_id: paneId }),
-      panes: [pane(paneId, sessionId, id, title)],
-    },
-  };
-}
-
-type PaneRef = { paneId: string; sessionId: string };
 
 function nestedSplits(id: string, panes: PaneRef[]): unknown {
   if (panes.length === 1) {
@@ -112,19 +86,24 @@ function nestedSplits(id: string, panes: PaneRef[]): unknown {
   };
 }
 
-function workspaceWithPanes(id: string, title: string, panes: PaneRef[]) {
+function desktop(id: string, slot: number, panes: PaneRef[], revision = 1) {
   return {
     id,
-    title,
-    directory: '/tmp/repo',
-    status: 'idle',
-    muted: false,
-    layout: {
-      workspace_id: id,
-      active_pane_id: panes[0].paneId,
-      layout_json: JSON.stringify(nestedSplits(id, panes)),
-      panes: panes.map((entry) => pane(entry.paneId, entry.sessionId, id, entry.sessionId)),
-    },
+    profile_id: PROFILE.id,
+    name: '',
+    shortcut_slot: slot,
+    order_key: id,
+    tree_json: panes.length > 0 ? JSON.stringify(nestedSplits(id, panes)) : '',
+    active_pane_id: panes[0]?.paneId ?? '',
+    revision,
+    panes: panes.map((entry) => ({
+      pane_id: entry.paneId,
+      desktop_id: id,
+      session_id: entry.sessionId,
+      kind: 'agent',
+      status: 'ready',
+      title: entry.sessionId,
+    })),
   };
 }
 
@@ -134,24 +113,47 @@ function paneSessionIds(root: ParentNode): string[] {
     .sort();
 }
 
-function renderedPanes(workspaceId: string): string[] {
-  const workspace = document.querySelector(
-    `.session-terminal-workspace[data-workspace-id="${workspaceId}"]`,
+function renderedPanes(desktopId: string): string[] {
+  const surface = document.querySelector(
+    `.session-terminal-workspace[data-workspace-id="${desktopId}"]`,
   );
-  return workspace ? paneSessionIds(workspace) : [];
+  return surface ? paneSessionIds(surface) : [];
 }
 
-function renderedWorkspaceIds(): string[] {
+function renderedDesktopIds(): string[] {
   return Array.from(document.querySelectorAll('.session-terminal-workspace'))
     .map((node) => node.getAttribute('data-workspace-id') || '')
     .sort();
 }
 
-describe('a pane moved to another workspace', () => {
+async function connect(sessions: ReturnType<typeof session>[], desktops: ReturnType<typeof desktop>[]) {
+  await waitFor(() => {
+    expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+  });
+  const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+  await waitFor(() => {
+    expect(ws.readyState).toBe(FakeWebSocket.OPEN);
+  });
+  act(() => {
+    ws.emit({
+      event: 'initial_state',
+      protocol_version: PROTOCOL_VERSION,
+      sessions,
+      workspaces: [],
+      profiles: [PROFILE],
+      selected_profile_id: PROFILE.id,
+      desktops,
+      prs: [],
+      repos: [],
+      authors: [],
+      settings: {},
+    });
+  });
+  return ws;
+}
 
-
+describe('a pane moved to another desktop', () => {
   beforeEach(() => {
-
     FakeWebSocket.instances = [];
     vi.stubGlobal('WebSocket', FakeWebSocket);
   });
@@ -161,152 +163,63 @@ describe('a pane moved to another workspace', () => {
     vi.clearAllMocks();
   });
 
-  it('renders in the target workspace once the layout and its session ownership arrive', async () => {
+  const stay = { paneId: 'pane-stay', sessionId: 's-stay' };
+  const moved = { paneId: 'pane-moved', sessionId: 's-moved' };
+  const target = { paneId: 'pane-target', sessionId: 's-target' };
+
+  it('renders on the target desktop once the arrangement moves it and follows there', async () => {
     const { unmount } = render(<App />);
+    const ws = await connect(
+      [session(stay.sessionId, 'staying'), session(moved.sessionId, 'moved'), session(target.sessionId, 'target')],
+      [desktop(SOURCE, 1, [stay, moved]), desktop(TARGET, 2, [target])],
+    );
 
     await waitFor(() => {
-      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+      expect(renderedPanes(SOURCE)).toEqual(['s-moved', 's-stay']);
     });
-    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-    await waitFor(() => {
-      expect(ws.readyState).toBe(FakeWebSocket.OPEN);
-    });
+    expect(renderedDesktopIds()).toEqual([SOURCE]);
 
     act(() => {
       ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [
-          session('s-source', 'source agent', SOURCE),
-          session('s-target', 'target agent', TARGET),
-        ],
-        workspaces: [
-          lonePaneWorkspace(SOURCE, 'Source', 'pane-source', 's-source'),
-          lonePaneWorkspace(TARGET, 'Target', 'pane-target', 's-target'),
-        ],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
+        event: 'profile_arrangement_changed',
+        profile: { ...PROFILE, current_desktop_id: TARGET, revision: 2 },
+        desktops: [desktop(SOURCE, 1, [stay], 2), desktop(TARGET, 2, [target, moved], 2)],
       });
     });
 
     await waitFor(() => {
-      expect(renderedWorkspaceIds()).toEqual([SOURCE, TARGET]);
+      expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
     });
-    expect(renderedPanes(SOURCE)).toEqual(['s-source']);
-    expect(renderedPanes(TARGET)).toEqual(['s-target']);
-
-    // The daemon broadcasts the target layout before the session's new owner; the
-    // reverse order hides the moved session, which filters through layouts.
-    act(() => {
-      ws.emit({
-        event: 'workspace_layout_updated',
-        workspace_layout: {
-          workspace_id: TARGET,
-          active_pane_id: 'pane-source',
-          layout_json: JSON.stringify({
-            type: 'split',
-            split_id: 'split-1',
-            direction: 'horizontal',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', pane_id: 'pane-target' },
-              { type: 'pane', pane_id: 'pane-source' },
-            ],
-          }),
-          panes: [
-            pane('pane-target', 's-target', TARGET, 'target agent'),
-            pane('pane-source', 's-source', TARGET, 'source agent'),
-          ],
-        },
-      });
-      ws.emit({
-        event: 'session_state_changed',
-        session: session('s-source', 'source agent', TARGET),
-      });
-    });
-
-    await waitFor(() => {
-      expect(renderedPanes(TARGET)).toEqual(['s-source', 's-target']);
-    });
-    // The checkpoint above rendered the source workspace holding this pane, so its
-    // absence here is the move landing rather than a workspace that never mounted.
-    expect(renderedWorkspaceIds()).toEqual([TARGET]);
-    expect(paneSessionIds(document)).toEqual(['s-source', 's-target']);
+    expect(renderedPanes(SOURCE)).toEqual(['s-stay']);
+    expect(renderedDesktopIds()).toEqual([SOURCE, TARGET]);
+    expect(paneSessionIds(document)).toEqual(['s-moved', 's-stay', 's-target']);
 
     unmount();
   });
 
-  it('gives a moved session the target layout when its new owner arrives after the layouts', async () => {
-    const stay = { paneId: 'pane-stay', sessionId: 's-stay' };
-    const stayToo = { paneId: 'pane-stay-too', sessionId: 's-stay-too' };
-    const moved = { paneId: 'pane-moved', sessionId: 's-moved' };
-    const target = { paneId: 'pane-target', sessionId: 's-target' };
+  it('keeps a moved agent on its new desktop when a stale session broadcast arrives', async () => {
     const { unmount } = render(<App />);
-
+    const ws = await connect(
+      [session(stay.sessionId, 'staying'), session(moved.sessionId, 'moved'), session(target.sessionId, 'target')],
+      [desktop(SOURCE, 1, [stay, moved]), desktop(TARGET, 2, [target])],
+    );
     await waitFor(() => {
-      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
-    });
-    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
-    await waitFor(() => {
-      expect(ws.readyState).toBe(FakeWebSocket.OPEN);
+      expect(renderedPanes(SOURCE)).toEqual(['s-moved', 's-stay']);
     });
 
     act(() => {
       ws.emit({
-        event: 'initial_state',
-        protocol_version: PROTOCOL_VERSION,
-        sessions: [
-          session(stay.sessionId, 'staying agent', SOURCE),
-          session(stayToo.sessionId, 'other staying agent', SOURCE),
-          session(moved.sessionId, 'moved agent', SOURCE),
-          session(target.sessionId, 'target agent', TARGET),
-        ],
-        workspaces: [
-          workspaceWithPanes(SOURCE, 'Source', [stay, stayToo, moved]),
-          workspaceWithPanes(TARGET, 'Target', [target]),
-        ],
-        prs: [],
-        repos: [],
-        authors: [],
-        settings: {},
+        event: 'profile_arrangement_changed',
+        profile: { ...PROFILE, current_desktop_id: TARGET, revision: 2 },
+        desktops: [desktop(SOURCE, 1, [stay], 2), desktop(TARGET, 2, [target, moved], 2)],
       });
+      ws.emit({ event: 'session_state_changed', session: session(moved.sessionId, 'moved') });
     });
 
     await waitFor(() => {
-      expect(renderedPanes(SOURCE)).toEqual(['s-moved', 's-stay', 's-stay-too']);
+      expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
     });
-    expect(renderedPanes(TARGET)).toEqual(['s-target']);
-
-    act(() => {
-      ws.emit({
-        event: 'workspace_layout_updated',
-        workspace_layout: workspaceWithPanes(SOURCE, 'Source', [stay, stayToo]).layout,
-      });
-      ws.emit({
-        event: 'workspace_layout_updated',
-        workspace_layout: workspaceWithPanes(TARGET, 'Target', [target, moved]).layout,
-      });
-    });
-
-    await waitFor(() => {
-      expect(renderedPanes(SOURCE)).toEqual(['s-stay', 's-stay-too']);
-    });
-    expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
-
-    act(() => {
-      ws.emit({
-        event: 'session_state_changed',
-        session: session(moved.sessionId, 'moved agent', TARGET),
-      });
-    });
-
-    await waitFor(() => {
-      expect(paneSessionIds(document)).toEqual(['s-moved', 's-stay', 's-stay-too', 's-target']);
-    });
-    expect(renderedPanes(SOURCE)).toEqual(['s-stay', 's-stay-too']);
-    expect(renderedPanes(TARGET)).toEqual(['s-moved', 's-target']);
+    expect(renderedPanes(SOURCE)).toEqual(['s-stay']);
 
     unmount();
   });

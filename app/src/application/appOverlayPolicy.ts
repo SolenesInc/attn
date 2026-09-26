@@ -17,6 +17,8 @@ interface Overlays {
   prLauncherOpen: boolean;
   diagnosticCaptureOpen: boolean;
   markdownOpenerOpen: boolean;
+  desktopOverviewOpen: boolean;
+  profileSwitcherOpen: boolean;
 }
 
 export function appOverlayPolicy(overlays: Overlays) {
@@ -35,6 +37,8 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.whatsNewOpen,
     overlays.shortcutEditorOpen,
     overlays.actionMenuOpen,
+    overlays.desktopOverviewOpen,
+    overlays.profileSwitcherOpen,
     libraryOpen,
   ].some(Boolean);
   const actionMenuBlocked = [

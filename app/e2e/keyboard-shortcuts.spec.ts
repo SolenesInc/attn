@@ -76,7 +76,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('[data-testid="session-s-new"]')).toBeVisible();
 
       await page.locator('[data-testid="session-s-new"]').click();
-      await expect(page.locator('[data-session-terminal-workspace="workspace-s-new"]')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-workspace]')).toBeVisible();
 
       await page.keyboard.press('Meta+n');
 
@@ -87,111 +87,22 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(1);
     });
 
-    test('⌘D creates a session-backed shell split in the current workspace', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's-shell', label: 'Root', state: 'working', cwd: '/tmp/test/shell-session' });
-      await expect(page.locator('[data-testid="session-s-shell"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s-shell"]').click();
-      await expect(page.locator('[data-session-terminal-workspace="workspace-s-shell"]')).toBeVisible();
-      await page.locator('.terminal-wrapper.active .terminal-container').click();
-
-      await page.keyboard.press('Meta+d');
-
-      const selectedWorkspaceSessions = page.locator('.workspace-group.selected .session-item');
-      await expect(selectedWorkspaceSessions).toHaveCount(2);
-      await expect(page.locator('.workspace-group.selected')).toContainText('shell');
-      await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(2);
-    });
-
-    test('⌘⇧D creates a session-backed horizontal shell split in the current workspace', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/horizontal-session' });
-      await expect(page.locator('[data-testid="session-s-horizontal"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s-horizontal"]').click();
-      await expect(page.locator('[data-session-terminal-workspace="workspace-s-horizontal"]')).toBeVisible();
-      await page.locator('.terminal-wrapper.active .terminal-container').click();
-
-      await page.keyboard.press('Meta+Shift+d');
-
-      const selectedWorkspaceSessions = page.locator('.workspace-group.selected .session-item');
-      await expect(selectedWorkspaceSessions).toHaveCount(2);
-      await expect(page.locator('.workspace-group.selected')).toContainText('shell');
-      await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(2);
-      await expect(page.locator('.terminal-wrapper.active [data-split-direction="horizontal"]')).toHaveCount(1);
-    });
-
-    test('⌘⇧N creates a picked session on a horizontal split in the current workspace', async ({ page, daemon }) => {
-      await daemon.start();
-      await page.goto('/');
-      await page.waitForSelector('.dashboard');
-
-      await createSession(page, daemon, { id: 's-picked-horizontal', label: 'Root', state: 'working', cwd: '/tmp/test/picked-horizontal-session' });
-      await expect(page.locator('[data-testid="session-s-picked-horizontal"]')).toBeVisible();
-
-      await page.locator('[data-testid="session-s-picked-horizontal"]').click();
-      await expect(page.locator('[data-session-terminal-workspace="workspace-s-picked-horizontal"]')).toBeVisible();
-
-      await page.keyboard.press('Meta+Shift+n');
-      await expect(page.locator('.location-picker-overlay')).toBeVisible();
-      await expect(page.locator('.picker-title')).toHaveText('New Session Location');
-      await expect(page.locator('.workspace-group.selected .session-item')).toHaveCount(1);
-
-      const enabledAgent = page.locator('.agent-option:not(:disabled)').first();
-      await expect(enabledAgent).toBeVisible();
-      await enabledAgent.click();
-      await page.locator('[data-testid="location-picker-path-input"]').fill('/tmp');
-      await page.keyboard.press('Enter');
-
-      const selectedWorkspaceSessions = page.locator('.workspace-group.selected .session-item');
-      await expect(selectedWorkspaceSessions).toHaveCount(2);
-      await expect(page.locator('.workspace-group.selected')).toContainText('tmp');
-      await expect(page.locator('.terminal-wrapper.active [data-pane-kind="agent"]')).toHaveCount(2);
-      await expect(page.locator('.terminal-wrapper.active [data-split-direction="horizontal"]')).toHaveCount(1);
-    });
-
     test('⌘⇧Z zooms toward the active pane without hiding the others', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
       await createSession(page, daemon, { id: 's-zoom', label: 'Zoom', state: 'working', cwd: '/tmp/test/zoom' });
-      await expect(page.locator('[data-testid="session-s-zoom"]')).toBeVisible();
-
+      await createSession(page, daemon, { id: 's-peer', label: 'Peer', state: 'working', cwd: '/tmp/test/zoom' });
       await page.locator('[data-testid="session-s-zoom"]').click();
-      await expect(page.locator('.terminal-wrapper.active')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-pane-session-id="s-zoom"]')).toBeVisible();
+      await page.locator('[data-testid="sidebar-session-s-peer"]').getByRole('button', { name: 'Open Peer' }).click();
+      await expect(page.locator('.terminal-wrapper.active [data-pane-session-id="s-peer"]')).toBeVisible();
 
-      await page.evaluate(() => {
-        window.__TEST_SET_SESSION_WORKSPACE?.('s-zoom', {
-          agents: [
-            { id: 'pane-session', runtimeId: 's-zoom', sessionId: 's-zoom', title: 'Zoom' },
-            { id: 'pane-shell-1', runtimeId: 'runtime-shell-1', sessionId: 's-zoom', title: 'Shell 1' },
-          ],
-          layoutTree: {
-            type: 'split',
-            splitId: 'root',
-            direction: 'vertical',
-            ratio: 0.5,
-            children: [
-              { type: 'pane', paneId: 'pane-session' },
-              { type: 'pane', paneId: 'pane-shell-1' },
-            ],
-          },
-        }, 'pane-shell-1');
-      });
-      await expect(page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-shell-1"]')).toBeVisible();
-
-      const workspace = page.locator('[data-session-terminal-workspace="workspace-s-zoom"]');
-      const mainPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-session"]');
-      const utilityPane = page.locator('[data-pane-session-id="s-zoom"][data-pane-id="pane-shell-1"]').first();
-      const rootSplit = page.locator('[data-split-id="root"]');
+      const workspace = page.locator('.terminal-wrapper.active [data-session-terminal-workspace]');
+      const mainPane = workspace.locator('[data-pane-kind="agent"][data-pane-session-id="s-zoom"]');
+      const utilityPane = workspace.locator('[data-pane-kind="agent"][data-pane-session-id="s-peer"]');
+      const rootSplit = workspace.locator('[data-split-id]').first();
       // Dock chips render their key tokens in a styled child span, so match the chip by its label.
       const zoomHint = page.locator('.shortcut-hint', { hasText: 'zoom' });
 
@@ -204,7 +115,7 @@ test.describe('Keyboard Shortcuts', () => {
 
       await utilityPane.click();
       await page.keyboard.press('Meta+Shift+z');
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', 'pane-shell-1');
+      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', (await utilityPane.getAttribute('data-pane-id'))!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.240');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 
@@ -223,7 +134,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(utilityPane).toBeVisible();
 
       await mainPane.click();
-      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', 'pane-session');
+      await expect(workspace).toHaveAttribute('data-zoomed-pane-id', (await mainPane.getAttribute('data-pane-id'))!);
       await expect(rootSplit).toHaveAttribute('data-split-ratio', '0.760');
       await expect(zoomHint).toHaveAttribute('data-active', 'true');
 
@@ -366,7 +277,7 @@ test.describe('Keyboard Shortcuts', () => {
       await firstTerminal.focus();
 
       await page.keyboard.press('Meta+2');
-      await expect(page.locator('[data-session-terminal-workspace="workspace-s2"]')).toBeVisible();
+      await expect(page.locator('.terminal-wrapper.active [data-session-terminal-workspace]')).toBeVisible();
       expect(await page.evaluate(() => (
         window.__TEST_GET_SESSION_INPUT_EVENTS?.('s1') ?? []
       ).filter((event) => event.event === 'send_to_pty').length)).toBe(0);

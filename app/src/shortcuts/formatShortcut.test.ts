@@ -7,7 +7,6 @@ describe('formatShortcut', () => {
   it('renders modifiers as Mac glyphs in ⌘ ⌥ ⇧ order', () => {
     expect(formatShortcut('session.new')).toBe('⌘N');
     expect(formatShortcut('session.newHorizontal')).toBe('⌘⇧N');
-    expect(formatShortcut('session.newWorkspace')).toBe('⌘T');
     expect(formatShortcut('terminal.focusLeft')).toBe('⌘⌥←');
   });
 

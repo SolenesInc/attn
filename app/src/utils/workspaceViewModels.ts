@@ -1,8 +1,10 @@
+import type { Desktop } from '../types/generated';
 import {
   collectLayoutLeaves,
   parseLayoutJSON,
   type TileLeaf,
 } from '../types/workspace';
+import { desktopLabel, orderedDesktops } from './desktops';
 
 export interface WorkspaceViewSession {
   id: string;
@@ -21,9 +23,6 @@ export interface WorkspaceViewWorkspace {
   title: string;
   directory: string;
   status?: string;
-  muted?: boolean;
-  pinned?: boolean;
-  rank?: string;
   endpointId?: string;
   endpoint_id?: string;
   layout?: {
@@ -55,9 +54,6 @@ export interface WorkspaceWithSessions<TSession extends WorkspaceViewSession = W
   title: string;
   directory: string;
   status?: string;
-  muted?: boolean;
-  pinned?: boolean;
-  rank?: string;
   endpointId?: string;
   sessions: TSession[];
   children: WorkspaceChild<TSession>[];
@@ -70,24 +66,7 @@ interface WorkspaceViewModelOptions {
   focusedSessionIdByWorkspace?: Record<string, string | null | undefined>;
 }
 
-function sessionWorkspaceId(
-  session: WorkspaceViewSession,
-  workspaceIdBySessionId?: Map<string, string>,
-): string | undefined {
-  return session.workspaceId || session.workspace_id || workspaceIdBySessionId?.get(session.id);
-}
 
-function workspaceIdsBySessionId(workspaces: WorkspaceViewWorkspace[]): Map<string, string> {
-  const workspaceIdBySessionId = new Map<string, string>();
-  for (const workspace of workspaces) {
-    for (const pane of workspace.layout?.panes || []) {
-      if (pane.session_id) {
-        workspaceIdBySessionId.set(pane.session_id, workspace.id);
-      }
-    }
-  }
-  return workspaceIdBySessionId;
-}
 
 function sessionEndpointId(session: WorkspaceViewSession): string | undefined {
   return session.endpointId || session.endpoint_id;
@@ -97,86 +76,9 @@ function workspaceEndpointId(workspace: WorkspaceViewWorkspace): string | undefi
   return workspace.endpointId || workspace.endpoint_id;
 }
 
-function workspaceKey(workspaceId: string, endpointId?: string): string {
-  return `${endpointId || 'local'}::${workspaceId}`;
-}
 
-export function buildWorkspaceViewModels<TSession extends WorkspaceViewSession>(
-  workspaces: WorkspaceViewWorkspace[],
-  sessions: TSession[],
-  options: WorkspaceViewModelOptions = {},
-): WorkspaceWithSessions<TSession>[] {
-  const sessionsByWorkspace = new Map<string, TSession[]>();
-  const sessionKeysByWorkspaceId = new Map<string, string[]>();
-  const workspaceIdBySessionId = workspaceIdsBySessionId(workspaces);
-  const liveSessionIds = new Set(sessions.map((session) => session.id));
 
-  for (const session of sessions) {
-    const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
-    if (!workspaceId) {
-      console.warn(`[WorkspaceViewModels] Ignoring session ${session.id} without workspace ownership`);
-      continue;
-    }
-    const key = workspaceKey(workspaceId, sessionEndpointId(session));
-    const current = sessionsByWorkspace.get(key) || [];
-    current.push(session);
-    sessionsByWorkspace.set(key, current);
-    if (!sessionKeysByWorkspaceId.has(workspaceId)) {
-      sessionKeysByWorkspaceId.set(workspaceId, []);
-    }
-    const keys = sessionKeysByWorkspaceId.get(workspaceId)!;
-    if (!keys.includes(key)) {
-      keys.push(key);
-    }
-  }
 
-  const result: WorkspaceWithSessions<TSession>[] = [];
-  const consumed = new Set<string>();
-
-  for (const workspace of sortWorkspacesByRank(workspaces)) {
-    const key = resolveWorkspaceSessionKey(workspace, sessionKeysByWorkspaceId, consumed);
-    const workspaceSessions = sessionsByWorkspace.get(key) || [];
-    consumed.add(key);
-    result.push(toWorkspaceViewModel(workspace, workspaceSessions, liveSessionIds, options));
-  }
-
-  return result;
-}
-
-// The lexicographic rank key is the sole authority; id only breaks ties for equal or
-// missing ranks (an old daemon snapshot from before the rank migration).
-function sortWorkspacesByRank<TWorkspace extends WorkspaceViewWorkspace>(
-  workspaces: TWorkspace[],
-): TWorkspace[] {
-  return workspaces
-    .map((workspace, index) => ({ workspace, index }))
-    .sort((a, b) => {
-      const rankA = a.workspace.rank ?? '';
-      const rankB = b.workspace.rank ?? '';
-      if (rankA !== rankB) {
-        return rankA < rankB ? -1 : 1;
-      }
-      if (a.workspace.id !== b.workspace.id) {
-        return a.workspace.id < b.workspace.id ? -1 : 1;
-      }
-      return a.index - b.index;
-    })
-    .map((entry) => entry.workspace);
-}
-
-function resolveWorkspaceSessionKey(
-  workspace: WorkspaceViewWorkspace,
-  sessionKeysByWorkspaceId: Map<string, string[]>,
-  consumed: Set<string>,
-): string {
-  const endpointId = workspaceEndpointId(workspace);
-  if (endpointId) {
-    return workspaceKey(workspace.id, endpointId);
-  }
-  const unconsumedSessionKey = (sessionKeysByWorkspaceId.get(workspace.id) || [])
-    .find((key) => !consumed.has(key));
-  return unconsumedSessionKey || workspaceKey(workspace.id);
-}
 
 function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
   workspace: WorkspaceViewWorkspace,
@@ -207,9 +109,6 @@ function toWorkspaceViewModel<TSession extends WorkspaceViewSession>(
     title: workspace.title,
     directory: workspace.directory,
     status: workspace.status,
-    muted: workspace.muted ?? false,
-    pinned: workspace.pinned ?? false,
-    rank: workspace.rank,
     endpointId: workspaceEndpointId(workspace) || (sessions[0] ? sessionEndpointId(sessions[0]) : undefined),
     sessions,
     children,
@@ -259,42 +158,35 @@ export function firstSessionIdForWorkspace<TSession extends WorkspaceViewSession
   return workspace?.firstSessionId ?? null;
 }
 
-export function filterSessionsRepresentedInWorkspaceLayouts<TSession extends WorkspaceViewSession>(
-  workspaces: WorkspaceViewWorkspace[],
+
+export const UNPLACED_GROUP_ID = 'unplaced';
+
+export function buildDesktopViewModels<TSession extends WorkspaceViewSession>(
+  desktops: Desktop[],
   sessions: TSession[],
-): TSession[] {
-  const workspaceIdBySessionId = workspaceIdsBySessionId(workspaces);
-  const workspaceIdsWithLayout = new Set(
-    workspaces
-      .filter((workspace) => Boolean(workspace.layout))
-      .map((workspace) => workspace.id),
+): WorkspaceWithSessions<TSession>[] {
+  const liveSessionIds = new Set(sessions.map((session) => session.id));
+  const desktopIdBySessionId = new Map(
+    desktops.flatMap((desktop) => desktop.panes.map((pane) => [pane.session_id, desktop.id] as const)),
   );
-  if (workspaceIdsWithLayout.size === 0) {
-    return sessions;
-  }
-
-  const sessionIdsByWorkspaceId = new Map<string, Set<string>>();
-  for (const workspace of workspaces) {
-    if (!workspace.layout) {
-      continue;
-    }
-    const sessionIds = sessionIdsByWorkspaceId.get(workspace.id) || new Set<string>();
-    for (const pane of workspace.layout.panes || []) {
-      if (pane.session_id) {
-        sessionIds.add(pane.session_id);
-      }
-    }
-    sessionIdsByWorkspaceId.set(workspace.id, sessionIds);
-  }
-
-  return sessions.filter((session) => {
-    const workspaceId = sessionWorkspaceId(session, workspaceIdBySessionId);
-    if (!workspaceId) {
-      return false;
-    }
-    if (!workspaceIdsWithLayout.has(workspaceId)) {
-      return true;
-    }
-    return sessionIdsByWorkspaceId.get(workspaceId)?.has(session.id) ?? false;
-  });
+  const onDesktop = orderedDesktops(desktops).map((desktop) =>
+    toWorkspaceViewModel(
+      {
+        id: desktop.id,
+        title: desktopLabel(desktop, desktops),
+        directory: '',
+        layout: { layout_json: desktop.tree_json, panes: desktop.panes },
+      },
+      sessions.filter((session) => desktopIdBySessionId.get(session.id) === desktop.id),
+      liveSessionIds,
+      {},
+    ),
+  );
+  const unplaced = toWorkspaceViewModel(
+    { id: UNPLACED_GROUP_ID, title: 'Unplaced', directory: '' },
+    sessions.filter((session) => !desktopIdBySessionId.has(session.id)),
+    liveSessionIds,
+    {},
+  );
+  return [...onDesktop, unplaced];
 }

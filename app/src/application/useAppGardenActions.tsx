@@ -21,6 +21,8 @@ interface Options {
   sendSeedToChief: ReturnType<typeof useDaemonApi>['sendSeedToChief'];
   sendCrewWake: ReturnType<typeof useDaemonApi>['sendCrewWake'];
   sendCrewSleep: ReturnType<typeof useDaemonApi>['sendCrewSleep'];
+  handleSelectDesktop: (desktopId: string) => void;
+  setCrewSeedTile: (tile: { desktopId: string; tileId: string } | null) => void;
   closeCrewPanel: () => void;
 }
 export function useAppGardenActions({
@@ -37,22 +39,26 @@ export function useAppGardenActions({
   sendSeedToChief,
   sendCrewWake,
   sendCrewSleep,
+  handleSelectDesktop,
+  setCrewSeedTile,
   closeCrewPanel,
 }: Options) {
   const openSeedTile = useCallback(
     async (
       seedId: string,
       placement: SeedPlacement,
-      afterOpen?: () => void,
+      beforeFocus?: (opened: { desktopId: string; tileId: string }) => void,
     ) => {
       const opened = await sendOpenSeed(seedId, placement);
       if (!opened.desktopId || !opened.tileId) {
         throw new Error(`The daemon opened ${seedId} without a desktop tile`);
       }
-      afterOpen?.();
+      const { desktopId, tileId } = opened;
+      beforeFocus?.({ desktopId, tileId });
+      handleSelectDesktop(desktopId);
       return opened;
     },
-    [sendOpenSeed],
+    [sendOpenSeed, handleSelectDesktop],
   );
 
   const handleOpenSeedTile = useCallback(
@@ -69,12 +75,15 @@ export function useAppGardenActions({
       void openSeedTile(
         seedId,
         placementSessionId ? { sessionId: placementSessionId } : 'standalone',
-        closeCrewPanel,
+        (opened) => {
+          setCrewSeedTile(opened);
+          closeCrewPanel();
+        },
       ).catch((error) => {
         showError(error instanceof Error ? error.message : 'Could not open the seed');
       });
     },
-    [closeCrewPanel, openSeedTile, showError],
+    [closeCrewPanel, openSeedTile, setCrewSeedTile, showError],
   );
 
   const handleRevealSeedInGarden = useCallback(
@@ -103,11 +112,15 @@ export function useAppGardenActions({
 
   const handleOpenMarkdownArtifact = useCallback(
     (path: string) => {
-      void sendOpenMarkdown(path, '').catch((error) => {
-        showError(error instanceof Error ? error.message : 'Could not open the document');
-      });
+      void sendOpenMarkdown(path, '')
+        .then(({ desktopId, tileId }) => {
+          if (desktopId && tileId) handleSelectDesktop(desktopId);
+        })
+        .catch((error) => {
+          showError(error instanceof Error ? error.message : 'Could not open the document');
+        });
     },
-    [sendOpenMarkdown, showError],
+    [handleSelectDesktop, sendOpenMarkdown, showError],
   );
 
   const handleResumeSeed = useCallback(

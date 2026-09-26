@@ -73,7 +73,7 @@ interface PathSelectableItem {
 
 interface LocationPickerProps {
   isOpen: boolean;
-  purpose?: 'workspace' | 'session' | 'reopen';
+  purpose?: 'session' | 'reopen';
   onClose: () => void;
   onSelect: (
     path: string,
@@ -88,7 +88,7 @@ interface LocationPickerProps {
   onInspectPath?: (path: string, endpointId?: string) => Promise<InspectPathResult>;
   onGetRepoInfo?: (mainRepo: string, endpointId?: string) => Promise<{ success: boolean; info?: BackendRepoInfo; error?: string }>;
   onCreateWorktree?: (mainRepo: string, branch: string, path?: string, startingFrom?: string, endpointId?: string) => Promise<{ success: boolean; path?: string; error?: string }>;
-  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean) => void;
+  onCreateWorktreeSession?: (mainRepo: string, branch: string, startingFrom: string, endpointId: string | undefined, agent: SessionAgent, yoloMode: boolean, autoMode?: boolean, chiefOfStaff?: boolean) => void;
   onDeleteWorktree?: (path: string, endpointId?: string, options?: { force?: boolean }) => Promise<{ success: boolean; error?: string }>;
   onError?: (message: string) => void;
   projectsDirectory?: string;
@@ -242,13 +242,7 @@ export function LocationPicker({
   const localAgentAvailability = agentAvailability || DEFAULT_AGENT_AVAILABILITY;
   const noAgentsMessage = 'No supported agent CLI found in PATH.';
   const pathOnly = purpose === 'reopen';
-  const copy = purpose === 'workspace'
-    ? {
-        agentAria: 'Initial workspace session agent',
-        targetAria: 'Workspace target',
-        title: 'New Workspace Location',
-      }
-    : pathOnly
+  const copy = pathOnly
     ? {
         agentAria: 'Session agent',
         targetAria: 'Session target',
@@ -412,7 +406,7 @@ export function LocationPicker({
   const autoModeSupported = Boolean(agentCapabilities[agent]?.[AUTOMODE_CAPABILITY]);
   const autoModeDefault = parseBooleanSetting(settings[AUTOMODE_DEFAULT_KEY]) ?? true;
   // The agent gate matches the daemon's agentSupportsChiefReload.
-  const chiefToggleEligible = !chiefExists && purpose === 'workspace' && (agent === 'claude' || agent === 'codex');
+  const chiefToggleEligible = !chiefExists && !pathOnly && (agent === 'claude' || agent === 'codex');
 
   const invalidateRequestGeneration = useCallback(() => {
     requestGenerationRef.current += 1;
@@ -837,6 +831,7 @@ export function LocationPicker({
         selectedAgent,
         yoloMode && yoloSupported,
         autoModeSupported ? autoMode : undefined,
+        chiefOfStaff && chiefToggleEligible,
       );
       onClose();
       return;
@@ -876,6 +871,8 @@ export function LocationPicker({
     agent,
     autoMode,
     autoModeSupported,
+    chiefOfStaff,
+    chiefToggleEligible,
     effectiveAgentAvailability,
     selectedEndpointId,
     setSelectedPathFromPhysical,

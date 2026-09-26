@@ -13,7 +13,7 @@ export function WorkspaceSurface() {
   const {
     workspaceId,
     workspaceSelectionStyle,
-    activePaneId,
+    activeAgentPaneId,
     panesContainerRef,
     agentPaneById,
     activeLeafId,
@@ -50,7 +50,7 @@ export function WorkspaceSurface() {
         .replace(/\s+/g, ' ')}
       data-session-terminal-workspace={workspaceId}
       data-workspace-id={workspaceId}
-      data-active-pane-id={activePaneId}
+      data-active-pane-id={activeAgentPaneId}
       data-active-leaf-id={activeLeafId}
       data-maximized-pane-id={effectivePaneId || ''}
       data-session-visible={sessionVisible ? '1' : '0'}

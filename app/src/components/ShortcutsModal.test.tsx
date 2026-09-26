@@ -13,25 +13,24 @@ describe('ShortcutsModal', () => {
     render(<ShortcutsModal isOpen onClose={() => {}} />);
 
     expect(screen.getByRole('dialog', { name: 'Keyboard Shortcuts' })).toBeInTheDocument();
-    expect(screen.getByText('Workspaces & Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Desktops & Sessions')).toBeInTheDocument();
     expect(screen.getByText('Panes & Terminals')).toBeInTheDocument();
 
-    // The "New workspace" row renders ⌘ and T keycaps from the registry.
-    const newWorkspaceRow = screen.getByText('New workspace').closest('.shortcuts-row');
-    expect(newWorkspaceRow).not.toBeNull();
-    expect(newWorkspaceRow!.querySelectorAll('.keycap')).toHaveLength(2);
-    expect(newWorkspaceRow!.textContent).toContain('⌘');
-    expect(newWorkspaceRow!.textContent).toContain('T');
+    const overviewRow = screen.getByText('Desktop overview').closest('.shortcuts-row');
+    expect(overviewRow).not.toBeNull();
+    expect(overviewRow!.querySelectorAll('.keycap')).toHaveLength(2);
+    expect(overviewRow!.textContent).toContain('⌘');
+    expect(overviewRow!.textContent).toContain('G');
   });
 
   it('labels the accelerator Ctrl off-mac', () => {
     withNavigatorPlatform('Linux aarch64', () => {
       render(<ShortcutsModal isOpen onClose={() => {}} />);
     });
-    const newWorkspaceRow = screen.getByText('New workspace').closest('.shortcuts-row');
-    const caps = [...newWorkspaceRow!.querySelectorAll('.keycap')].map((c) => c.textContent);
-    expect(caps).toEqual(['Ctrl', 'Shift', 'T']);
-    expect(newWorkspaceRow!.textContent).not.toContain('⌘');
+    const overviewRow = screen.getByText('Desktop overview').closest('.shortcuts-row');
+    const caps = [...overviewRow!.querySelectorAll('.keycap')].map((c) => c.textContent);
+    expect(caps).toEqual(['Ctrl', 'Shift', 'G']);
+    expect(overviewRow!.textContent).not.toContain('⌘');
   });
 
   it('closes via the close button', () => {

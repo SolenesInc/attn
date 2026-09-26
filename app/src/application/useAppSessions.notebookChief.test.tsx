@@ -12,10 +12,12 @@ function localSession(id: string, state: Session['state']): Session {
     label: id,
     state,
     cwd: '/repo',
-    workspaceId: 'ws-a',
+    workspaceId: '',
+    profileId: '',
+    desktopId: '',
     agent: 'claude',
     transcriptMatched: true,
-    workspace: createDefaultWorkspaceState(),
+    desktop: createDefaultWorkspaceState(),
     daemonActivePaneId: '',
   };
 }

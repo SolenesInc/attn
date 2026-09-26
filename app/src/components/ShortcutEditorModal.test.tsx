@@ -36,15 +36,15 @@ describe('ShortcutEditorModal', () => {
   it('renders categories and current bindings', () => {
     renderEditor();
     expect(screen.getByRole('dialog', { name: 'Customize Shortcuts' })).toBeInTheDocument();
-    expect(screen.getByText('Workspaces & Sessions')).toBeInTheDocument();
+    expect(screen.getByText('Desktops & Sessions')).toBeInTheDocument();
     expect(screen.getByText('Panes & Terminals')).toBeInTheDocument();
 
-    const newSession = row('New session in this workspace');
+    const newSession = row('New session on this desktop');
     expect(newSession.textContent).toContain('⌘');
     expect(newSession.textContent).toContain('N');
 
-    expect(row('Previous workspace')).toBeInTheDocument();
-    expect(row('Next workspace')).toBeInTheDocument();
+    expect(row('Previous desktop')).toBeInTheDocument();
+    expect(row('Next desktop')).toBeInTheDocument();
     expect(row('Back through agent history')).toBeInTheDocument();
     expect(row('Forward through agent history')).toBeInTheDocument();
     expect(within(row('Back through agent history')).getByTitle('Unbind')).toBeInTheDocument();
@@ -59,7 +59,7 @@ describe('ShortcutEditorModal', () => {
           overrides: { 'session.new': { key: 'm', meta: true, shift: true } },
         }),
       });
-      const newSession = row('New session in this workspace');
+      const newSession = row('New session on this desktop');
       expect(newSession.textContent).toContain('CtrlShiftM');
       fireEvent.click(within(newSession).getByTitle('Reset to Ctrl+Shift+N'));
       expect(lastConfig(setSetting).overrides).not.toHaveProperty('session.new');
@@ -72,22 +72,22 @@ describe('ShortcutEditorModal', () => {
     expect(within(settings).getByText('Required')).toBeInTheDocument();
     expect(within(settings).queryByTitle('Unbind')).toBeNull();
 
-    const newSession = row('New session in this workspace');
+    const newSession = row('New session on this desktop');
     expect(within(newSession).getByTitle('Unbind')).toBeInTheDocument();
   });
 
   it('unbinds a shortcut and persists the override', () => {
     const { setSetting } = renderEditor();
-    fireEvent.click(within(row('New session in this workspace')).getByTitle('Unbind'));
+    fireEvent.click(within(row('New session on this desktop')).getByTitle('Unbind'));
 
     expect(lastConfig(setSetting).overrides['session.new']).toBeNull();
-    expect(row('New session in this workspace').textContent).toContain('Unassigned');
+    expect(row('New session on this desktop').textContent).toContain('Unassigned');
   });
 
   it('reassigns a conflicting combo, unbinding the previous holder', () => {
     const { setSetting } = renderEditor();
 
-    const newSession = row('New session in this workspace');
+    const newSession = row('New session on this desktop');
     fireEvent.click(newSession.querySelector('.key-capture-button')!);
     fireEvent.keyDown(window, { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
 
@@ -111,10 +111,10 @@ describe('ShortcutEditorModal', () => {
       }),
     });
 
-    fireEvent.click(within(row('New session in this workspace')).getByTitle('Reset to ⌘N'));
+    fireEvent.click(within(row('New session on this desktop')).getByTitle('Reset to ⌘N'));
 
     const reassignBtn = screen.getByText('Reassign');
-    expect(within(row('New session in this workspace')).getByText(/Split pane sideways/)).toBeInTheDocument();
+    expect(within(row('New session on this desktop')).getByText(/Split pane sideways/)).toBeInTheDocument();
     fireEvent.click(reassignBtn);
 
     const cfg = lastConfig(setSetting);
@@ -124,7 +124,7 @@ describe('ShortcutEditorModal', () => {
 
   it('pins a shortcut to the dock from its row star', () => {
     const { setSetting } = renderEditor();
-    const newSession = row('New session in this workspace');
+    const newSession = row('New session on this desktop');
     fireEvent.click(within(newSession).getByLabelText('Add to dock'));
 
     expect(lastConfig(setSetting).dock.items).toContain('session.new');
@@ -167,7 +167,7 @@ describe('ShortcutEditorModal', () => {
 
   it('records a chord on a row and persists it as the override', () => {
     const { setSetting } = renderEditor();
-    recordChord('New session in this workspace', { key: 'y', metaKey: true }, { key: 'd' });
+    recordChord('New session on this desktop', { key: 'y', metaKey: true }, { key: 'd' });
     expect(lastConfig(setSetting).overrides['session.new']).toEqual({
       leader: { key: 'y', meta: true },
       then: { key: 'd' },
@@ -210,9 +210,9 @@ describe('ShortcutEditorModal', () => {
     fireEvent.change(filterInput(), { target: { value: 'focus active' } });
 
     expect(screen.getByText('Focus active pane')).toBeInTheDocument();
-    expect(screen.queryByText('New session in this workspace')).toBeNull();
+    expect(screen.queryByText('New session on this desktop')).toBeNull();
     expect(screen.queryByText('Dock')).toBeNull();
-    expect(screen.queryByText('Workspaces & Sessions')).toBeNull();
+    expect(screen.queryByText('Desktops & Sessions')).toBeNull();
     expect(screen.getByText('Panes & Terminals')).toBeInTheDocument();
   });
 
@@ -220,7 +220,7 @@ describe('ShortcutEditorModal', () => {
     renderEditor();
     fireEvent.change(filterInput(), { target: { value: '⌘⇧n' } });
     expect(screen.getByText('New session, split sideways')).toBeInTheDocument();
-    expect(screen.queryByText('New session in this workspace')).toBeNull();
+    expect(screen.queryByText('New session on this desktop')).toBeNull();
   });
 
   it('shows an announced, trimmed no-matches message when nothing matches', () => {
@@ -232,12 +232,12 @@ describe('ShortcutEditorModal', () => {
 
   it('clears a stranded reassign prompt when the user starts filtering', () => {
     renderEditor();
-    fireEvent.click(row('New session in this workspace').querySelector('.key-capture-button')!);
+    fireEvent.click(row('New session on this desktop').querySelector('.key-capture-button')!);
     fireEvent.keyDown(window, { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
     expect(screen.getByText('Reassign')).toBeInTheDocument();
 
     fireEvent.change(filterInput(), { target: { value: 'new session' } });
-    expect(within(row('New session in this workspace')).queryByText('Reassign')).toBeNull();
+    expect(within(row('New session on this desktop')).queryByText('Reassign')).toBeNull();
   });
 
   it('clears recording when the filter is focused, so the first keystroke is not captured as a binding', () => {
@@ -282,14 +282,14 @@ describe('ShortcutEditorModal', () => {
       }),
     });
     expect(
-      within(row('New session in this workspace')).getByTitle('Reset to ⌘N'),
+      within(row('New session on this desktop')).getByTitle('Reset to ⌘N'),
     ).toBeInTheDocument();
   });
 
   it('badges only the shortcuts gated behind an open terminal', () => {
     renderEditor();
     expect(within(row('Focus active pane')).getByText('Needs terminal')).toBeInTheDocument();
-    expect(within(row('New session in this workspace')).queryByText('Needs terminal')).toBeNull();
+    expect(within(row('New session on this desktop')).queryByText('Needs terminal')).toBeNull();
     expect(within(row('Collapse utility terminal')).queryByText('Needs terminal')).toBeNull();
   });
 
@@ -312,7 +312,7 @@ describe('ShortcutEditorModal', () => {
         overrides: { 'session.new': { key: 'm', meta: true } },
       }),
     });
-    expect(within(row('New session in this workspace')).getByText('Customized')).toBeInTheDocument();
+    expect(within(row('New session on this desktop')).getByText('Customized')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('Restore Defaults'));
     expect(lastConfig(setSetting).overrides).toEqual({});

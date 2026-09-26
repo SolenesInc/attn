@@ -3,19 +3,14 @@ import type { SidebarWorkspace } from './sidebarTypes';
 import type { TileLeaf } from '../types/workspace';
 import { type UISessionState } from '../types/sessionState';
 import { tileContentKey } from '../types/workspace';
-import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
-import { DelegatedFromChiefBadge } from './DelegatedFromChiefBadge';
-import { DelegationChainTrigger } from './DelegationChain';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
 import { isSessionless, workspaceShortcut } from './sidebarModel';
-import { SidebarSessionIdentity, SidebarSessionRow, TileSidebarRow } from './SidebarRows';
+import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 import { StateIndicator } from './StateIndicator';
 
 export function SidebarWorkspaceList() {
   const {
-    onMuteWorkspace,
-    onPinWorkspace,
     onRenameWorkspace,
     onSessionDragStart,
     onSelectWorkspace,
@@ -80,50 +75,18 @@ export function SidebarWorkspaceList() {
                 {workspaceShortcut(workspaceIndex) && (
                   <span className="session-shortcut">{workspaceShortcut(workspaceIndex)}</span>
                 )}
-                {(onRenameWorkspace || onMuteWorkspace || onPinWorkspace) && (
+                {onRenameWorkspace && (
                   <span className="workspace-actions">
-                    {onPinWorkspace && (
-                      <button
-                        type="button"
-                        className={`workspace-action-btn pin-workspace-btn${workspace.pinned ? ' pinned' : ''}`}
-                        data-testid={`pin-workspace-${workspace.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onPinWorkspace(workspace.id, !workspace.pinned);
-                        }}
-                        title={workspace.pinned ? 'Unpin workspace' : 'Pin workspace'}
-                        aria-label={`${workspace.pinned ? 'Unpin' : 'Pin'} workspace ${workspace.title}`}
-                      >
-                        {workspace.pinned ? '\u{1F4CC}' : '\u{1F4CD}'}
-                      </button>
-                    )}
-                    {onRenameWorkspace && (
-                      <button
-                        type="button"
-                        className="workspace-action-btn rename-workspace-btn"
-                        data-testid={`rename-workspace-${workspace.id}`}
-                        onClick={(e) => openRename('workspace', workspace.id, workspace.title, e)}
-                        title="Rename workspace"
-                        aria-label={`Rename workspace ${workspace.title}`}
-                      >
-                        ✎
-                      </button>
-                    )}
-                    {onMuteWorkspace && (
-                      <button
-                        type="button"
-                        className="workspace-action-btn mute-workspace-btn"
-                        data-testid={`mute-workspace-${workspace.id}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onMuteWorkspace(workspace.id, workspace.endpointId);
-                        }}
-                        title="Mute workspace"
-                        aria-label={`Mute workspace ${workspace.title}`}
-                      >
-                        ⊘
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="workspace-action-btn rename-workspace-btn"
+                      data-testid={`rename-workspace-${workspace.id}`}
+                      onClick={(e) => openRename('workspace', workspace.id, workspace.title, e)}
+                      title="Rename workspace"
+                      aria-label={`Rename workspace ${workspace.title}`}
+                    >
+                      ✎
+                    </button>
                   </span>
                 )}
               </div>
@@ -208,140 +171,12 @@ export function SidebarAutomationGroups() {
   );
 }
 
-export function SidebarMutedWorkspaces() {
-  const {
-    selectedId,
-    onMuteWorkspace,
-    onSelectSession,
-    onSelectWorkspace,
-    mutedExpanded,
-    setMutedExpanded,
-    delegates,
-    visibleMutedWorkspaces,
-  } = useSidebarContext();
-  return (
-    <>
-      {visibleMutedWorkspaces.length > 0 && (
-        <div className="muted-sessions-section">
-          <button
-            className="muted-sessions-header"
-            onClick={() => setMutedExpanded(!mutedExpanded)}
-            aria-expanded={mutedExpanded}
-          >
-            <span className={`muted-sessions-chevron ${mutedExpanded ? 'expanded' : ''}`}>▸</span>
-            Muted Workspaces ({visibleMutedWorkspaces.length})
-          </button>
-          {mutedExpanded && (
-            <div className="muted-sessions-list">
-              {visibleMutedWorkspaces.map((workspace) => {
-                return (
-                  <WorkspaceDropGroup
-                    workspace={workspace}
-                    muted
-                    key={`${workspace.endpointId || 'local'}:${workspace.id}`}
-                  >
-                    <div className="workspace-group-header">
-                      <button
-                        type="button"
-                        className="sidebar-row-select"
-                        aria-label={`Open workspace ${workspace.title}`}
-                        onClick={() => onSelectWorkspace(workspace.id)}
-                      />
-                      <StateIndicator
-                        state={(workspace.status as UISessionState | undefined) || 'idle'}
-                        size="md"
-                        seed={workspace.id}
-                      />
-                      <span className="workspace-label">{workspace.title}</span>
-                      {onMuteWorkspace && (
-                        <span className="workspace-actions">
-                          <button
-                            type="button"
-                            className="workspace-action-btn unmute-workspace-btn"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onMuteWorkspace(workspace.id, workspace.endpointId);
-                            }}
-                            title="Unmute workspace"
-                            aria-label={`Unmute workspace ${workspace.title}`}
-                          >
-                            ⊙
-                          </button>
-                        </span>
-                      )}
-                    </div>
-                    <div className="muted-workspace-sessions">
-                      {workspace.children.map((child) => {
-                        if (child.kind === 'tile') {
-                          return (
-                            <WorkspaceTileRow
-                              key={child.id}
-                              workspaceId={workspace.id}
-                              tile={child.tile}
-                              muted
-                            />
-                          );
-                        }
-                        const session = child.session;
-                        return (
-                          <div
-                            key={session.id}
-                            className={`session-item grouped muted-session ${selectedId === session.id ? 'selected' : ''}`.trim()}
-                            data-testid={`sidebar-session-${session.id}`}
-                            data-state={session.state}
-                          >
-                            <button
-                              type="button"
-                              className="sidebar-row-select"
-                              aria-label={`Open ${session.label}`}
-                              onClick={() => onSelectSession(session.id)}
-                            />
-                            <StateIndicator
-                              state={session.state}
-                              size="md"
-                              seed={session.id}
-                              reason={session.state_reason}
-                            />
-                            <SidebarSessionIdentity
-                              session={session}
-                              hasDelegates={(delegates.get(session.id)?.length ?? 0) > 0}
-                            />
-                            <DelegationChainTrigger
-                              session={session}
-                              hasDelegates={(delegates.get(session.id)?.length ?? 0) > 0}
-                            />
-                            {session.chiefOfStaff && <ChiefOfStaffBadge />}
-                            {session.delegatedFromChief && <DelegatedFromChiefBadge />}
-                            {session.endpointName && (
-                              <span
-                                className={`session-endpoint-badge status-${session.endpointStatus || 'connected'}`}
-                              >
-                                {session.endpointName}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </WorkspaceDropGroup>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
 function WorkspaceDropGroup({
   workspace,
-  muted = false,
   reorderSource = false,
   children,
 }: {
   workspace: SidebarWorkspace;
-  muted?: boolean;
   reorderSource?: boolean;
   children: ReactNode;
 }) {
@@ -355,8 +190,8 @@ function WorkspaceDropGroup({
   } = useSidebarContext();
   return (
     <div
-      className={`workspace-group ${muted ? 'muted-workspace ' : ''}${selectedWorkspaceId === workspace.id ? 'selected' : ''}${reorderSource ? ' workspace-group--reorder-source' : ''}${workspaceDragClass(workspace)}`}
-      data-testid={`sidebar-${muted ? 'muted-' : ''}workspace-${workspace.id}`}
+      className={`workspace-group ${selectedWorkspaceId === workspace.id ? 'selected' : ''}${reorderSource ? ' workspace-group--reorder-source' : ''}${workspaceDragClass(workspace)}`}
+      data-testid={`sidebar-workspace-${workspace.id}`}
       onPointerEnter={() => {
         if (canAcceptLeafDrag(workspace)) onWorkspaceDragEnter?.(workspace);
       }}
@@ -375,11 +210,9 @@ function WorkspaceDropGroup({
 function WorkspaceTileRow({
   workspaceId,
   tile,
-  muted = false,
 }: {
   workspaceId: string;
   tile: TileLeaf;
-  muted?: boolean;
 }) {
   const { tileContents, selectedTile, onSelectTile, onCloseTile, onReloadTile } =
     useSidebarContext();
@@ -389,7 +222,6 @@ function WorkspaceTileRow({
       tile={tile}
       content={tileContents[tileContentKey(workspaceId, tile.tileId)]}
       selected={selectedTile?.workspaceId === workspaceId && selectedTile.tileId === tile.tileId}
-      muted={muted}
       onSelect={() => onSelectTile?.(workspaceId, tile.tileId)}
       onClose={() => onCloseTile?.(workspaceId, tile.tileId)}
       onReload={() => onReloadTile?.(workspaceId, tile.tileId)}

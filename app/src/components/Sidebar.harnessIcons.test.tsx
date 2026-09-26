@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
-import { buildWorkspaceViewModels } from '../utils/workspaceViewModels';
+import { desktopGroups } from '../test/desktops';
 import { buildQueueBands } from '../utils/queueBands';
 
 const baseProps = {
@@ -28,37 +28,23 @@ const sessions = [
   { id: 'missing', agent: undefined, label: 'Older session' },
 ].map((session) => ({ ...session, state: 'idle' as const, workspaceId: 'workspace' }));
 
-function sidebarData(muted = false, members = false) {
-  const workspaces = buildWorkspaceViewModels(
-    [{ id: 'workspace', title: 'attn', directory: '/repo/attn', muted }],
+function sidebarData(members = false) {
+  const workspaces = desktopGroups(
+    [{ id: 'workspace', title: 'attn' }],
     sessions.map((session) => ({
       ...session,
       chiefOfStaff: members && session.id === 'claude',
       crewMember: members && session.id === 'pi' ? 'fern' : undefined,
     })),
   );
-  return {
-    workspaces,
-    visualOrder: workspaces,
-    visualIndexByWorkspaceId: new Map([['workspace', 0]]),
-  };
+  return { workspaces, visualIndexByWorkspaceId: new Map([['workspace', 0]]) };
 }
 
 describe('sidebar harness identity', () => {
-  it.each([false, true])('shows harnesses and fallbacks in workspace rows (muted=%s)', (muted) => {
-    const data = sidebarData(muted);
+  it('shows harnesses and fallbacks in desktop rows', () => {
+    const data = sidebarData();
     const onSelectSession = vi.fn();
-    render(
-      <Sidebar
-        {...baseProps}
-        {...data}
-        workspaces={muted ? [] : data.workspaces}
-        visualOrder={muted ? [] : data.visualOrder}
-        onSelectSession={onSelectSession}
-        mutedWorkspaces={muted ? data.workspaces : []}
-        mutedExpanded
-      />,
-    );
+    render(<Sidebar {...baseProps} {...data} onSelectSession={onSelectSession} />);
     for (const [id, name] of [
       ['claude', 'Claude'], ['codex', 'Codex'], ['pi', 'Pi'], ['copilot', 'Copilot'],
       ['shell', 'Shell'], ['plugin', 'Custom Driver'], ['missing', 'Unknown harness'],
@@ -73,7 +59,7 @@ describe('sidebar harness identity', () => {
   });
 
   it('keeps harness identity when switching between workspace and queue arrangements', () => {
-    const data = sidebarData(false, true);
+    const data = sidebarData(true);
     const props = { ...baseProps, ...data, crew: [{ id: 'fern' }, { id: 'sleeping' }] };
     const { rerender } = render(<Sidebar {...props} queue={buildQueueBands(data.workspaces)} />);
     expect(within(screen.getByTestId('queue-crew-fern')).getByRole('img', { name: 'Pi' })).toBeInTheDocument();
@@ -87,7 +73,7 @@ describe('sidebar harness identity', () => {
   });
 
   it.each([false, true])('keeps crew management reachable when queue mode is %s', (queueMode) => {
-    const data = sidebarData(false, true);
+    const data = sidebarData(true);
     const onManageCrew = vi.fn();
     render(
       <Sidebar
@@ -106,7 +92,7 @@ describe('sidebar harness identity', () => {
   });
 
   it('hides every harness logo while preserving queue row hover text', () => {
-    const data = sidebarData(false, true);
+    const data = sidebarData(true);
     render(
       <Sidebar
         {...baseProps}

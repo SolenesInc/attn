@@ -1,0 +1,4 @@
+kind: changed
+area: app
+change: The app shows the current desktop of the selected profile. The sidebar groups agents by desktop, with an Unplaced group for agents that have no desktop yet; opening an unplaced agent places it beside the focused pane. ⌘1–⌘9 switch desktops (the current desktop's digit goes back to the previous one), ⌥⌘1–⌥⌘9 send the focused pane to a desktop, ⌘G opens the desktop overview and ⇧⌘U switches profile. Every window on a profile follows the same current desktop and focused pane or tile, and a newly opened document takes focus in all of them.
+notes: New workspace (⌘T), workspace pinning and muting, and the warm-workspace limit are gone. The new-session picker (⌘N) can start the chief of staff.

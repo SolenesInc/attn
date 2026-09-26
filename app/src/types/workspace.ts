@@ -1,4 +1,3 @@
-import type { WorkspaceLayout as DaemonWorkspaceSnapshot } from './generated';
 
 export type TerminalSplitDirection = 'vertical' | 'horizontal';
 export type TerminalNavigationDirection = 'left' | 'right' | 'up' | 'down';
@@ -484,54 +483,8 @@ export function resolveEditorTileRoot(
 
 // The active-workspace selection carries no endpoint identity, so when one id names both
 // a local and a remote twin this fails closed rather than adopting the local one.
-export function soleWorkspaceForId<T extends { id: string }>(
-  workspaces: ReadonlyArray<T>,
-  workspaceId: string,
-): T | undefined {
-  const matches = workspaces.filter((w) => w.id === workspaceId);
-  return matches.length === 1 ? matches[0] : undefined;
-}
 
 // Defaults to locked until locality is proven: no sendFs* call is endpoint-aware, so a
 // remote directory handed to one reads or writes the wrong machine's files.
-export function localWorkspaceDirectory(
-  workspace: { directory?: string | null; endpoint_id?: string | null } | undefined,
-): string | undefined {
-  if (!workspace || workspace.endpoint_id) {
-    return undefined;
-  }
-  return workspace.directory ?? undefined;
-}
 
-function agentTerminalsFromPanes(panes: DaemonWorkspaceSnapshot['panes']): AgentTerminal[] {
-  return panes
-    .filter((pane) => pane.kind === 'agent' && typeof pane.runtime_id === 'string' && typeof pane.session_id === 'string')
-    .map((pane) => {
-      const status = pane.status && pane.status !== 'ready' ? pane.status : undefined;
-      return {
-        id: pane.pane_id,
-        runtimeId: pane.runtime_id as string,
-        sessionId: pane.session_id as string,
-        title: pane.title || pane.pane_id,
-        ...(status ? { status } : {}),
-        ...(pane.error ? { error: pane.error } : {}),
-      };
-    });
-}
 
-export function workspaceSnapshotFromDaemonWorkspace(workspace: DaemonWorkspaceSnapshot): TerminalWorkspaceSnapshot {
-  const agents = agentTerminalsFromPanes(workspace.panes || []);
-  const firstAgentPaneId = agents[0]?.id || '';
-  const nextWorkspace: TerminalWorkspaceState = {
-    agents,
-    layoutTree: parseLayoutJSON(workspace.layout_json || ''),
-  };
-  const daemonActivePaneId = workspace.active_pane_id || firstAgentPaneId;
-
-  return {
-    workspace: nextWorkspace,
-    daemonActivePaneId: nextWorkspace.layoutTree && hasPane(nextWorkspace.layoutTree, daemonActivePaneId)
-      ? daemonActivePaneId
-      : firstAgentPaneId,
-  };
-}

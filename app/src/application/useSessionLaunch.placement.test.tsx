@@ -34,8 +34,8 @@ function currentDesktop(panes: Array<[string, string]>, activePaneId: string): D
   };
 }
 
-function renderLaunch(activeSessionId: string | null = null) {
-  const api = createMockDaemonApi({});
+function renderLaunch(activeSessionId: string | null = null, methods: Parameters<typeof createMockDaemonApi>[0] = {}) {
+  const api = createMockDaemonApi(methods);
   const wrapper = ({ children }: { children: ReactNode }) => <DaemonApiProvider api={api}>{children}</DaemonApiProvider>;
   return renderHook(
     () =>
@@ -95,6 +95,60 @@ describe('useSessionLaunch placement', () => {
     expect(vi.mocked(ptySpawn)).not.toHaveBeenCalled();
     expect(result.current.locationPickerOpen).toBe(true);
     expect(result.current.locationPickerPurpose).toBe('session');
+  });
+});
+
+describe('useSessionLaunch from the new-session picker', () => {
+  beforeEach(() => {
+    vi.mocked(ptySpawn).mockClear();
+    useSessionStore.setState({ sessions: [], activeSessionId: null });
+    useProfilesStore.setState({
+      selectedProfileId: 'profile-1',
+      currentDesktopId: 'desktop-1',
+      desktops: [currentDesktop([], '')],
+    });
+  });
+
+  it('starts an ordinary pick on the current desktop', async () => {
+    const { result } = renderLaunch();
+
+    await act(async () => {
+      await result.current.handleLocationSelect('/repo/picked', 'shell');
+    });
+
+    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
+    expect(args).toMatchObject({ cwd: '/repo/picked', placement: { desktop_id: 'desktop-1' } });
+    expect(args.chief_of_staff).toBeFalsy();
+  });
+
+  it('launches a chief of staff into a new worktree when the picker asks for one', async () => {
+    const { result } = renderLaunch(null, {
+      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/repo/exsin--chief' })),
+      sendRegisterWorkspace: vi.fn(async () => undefined),
+      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
+    });
+
+    await act(async () => {
+      result.current.handleCreateWorktreeSession('/repo/exsin', 'chief', 'main', undefined, 'shell', false, undefined, true);
+      await vi.waitFor(() => expect(vi.mocked(ptySpawn)).toHaveBeenCalled());
+    });
+
+    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
+    expect(args).toMatchObject({ cwd: '/repo/exsin--chief', chief_of_staff: true });
+  });
+
+  it('launches a chief of staff when the picker asks for one', async () => {
+    const { result } = renderLaunch(null, {
+      sendRegisterWorkspace: vi.fn(async () => undefined),
+      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
+    });
+
+    await act(async () => {
+      await result.current.handleLocationSelect('/repo/chief', 'shell', undefined, false, true);
+    });
+
+    const { args } = vi.mocked(ptySpawn).mock.calls[0][0];
+    expect(args).toMatchObject({ cwd: '/repo/chief', chief_of_staff: true });
   });
 });
 

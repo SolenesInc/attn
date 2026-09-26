@@ -140,7 +140,7 @@ async function main() {
 
     const { workspaceId, tileId, pane } = await runner.step('dock_markdown_tile', async () => {
       const workspace = await client.request('get_workspace', { sessionId });
-      const id = workspace.workspaceId;
+      const id = workspace.desktopId;
       if (!id) {
         throw new Error(`Could not resolve workspace id for session ${sessionId}: ${JSON.stringify(workspace)}`);
       }
@@ -178,7 +178,7 @@ async function main() {
     });
 
     const afterSelect = await runner.step('select_tile_only_workspace', async () => {
-      await client.request('select_workspace', { workspaceId });
+      await client.request('select_desktop', { desktopId: workspaceId });
       const state = await waitForWorkspaceUi(
         client,
         workspaceId,
@@ -225,7 +225,7 @@ async function main() {
         focused?.workspace?.view,
       );
 
-      await client.request('select_workspace', { workspaceId });
+      await client.request('select_desktop', { desktopId: workspaceId });
       await waitForWorkspaceUi(client, workspaceId, (s) => s?.active === true, 'tile-only workspace active again');
       await client.request('select_session', { sessionId: agentSessionId });
       const returnedSnapshot = await client.request('capture_structured_snapshot', { includePaneText: false });

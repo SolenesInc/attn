@@ -21,21 +21,17 @@ describe('WhatsNewModal', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('leads with the ⌘N-in-workspace change as a flagged callout', () => {
+  it('leads with desktops as the flagged callout', () => {
     renderModal();
-    expect(screen.getByRole('dialog', { name: /workspaces/i })).toBeInTheDocument();
-    expect(screen.getByText('The sidebar lists workspaces')).toBeInTheDocument();
-    expect(screen.getByText('Shells live here too')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /desktops/i })).toBeInTheDocument();
+    expect(screen.getByText('See every desktop at once')).toBeInTheDocument();
+    expect(screen.getByText('Profiles group everything')).toBeInTheDocument();
 
-    // The headline change is rendered as the flagged callout and contrasts
-    // ⌘N (add to this workspace) with ⌘T (new workspace), separated by "/".
-    const hero = screen.getByText(/opens a session inside this workspace/).closest('.whats-new-item');
+    const hero = screen.getByText('Agents live on desktops').closest('.whats-new-item');
     expect(hero).not.toBeNull();
     expect(hero!.classList.contains('whats-new-item--key')).toBe(true);
     expect(hero!.querySelector('.whats-new-tag')?.textContent).toBe('Changed');
-    expect(hero!.textContent).toContain('N');
-    expect(hero!.textContent).toContain('T');
-    expect(hero!.querySelector('.key-combos-sep')?.textContent).toBe('/');
+    expect(hero!.textContent).toContain('1–9');
   });
 
   it('dismisses and hands off to the full shortcuts list', () => {

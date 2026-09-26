@@ -35,7 +35,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const [notebookRequestedPath, setNotebookRequestedPath] = useState<string | null>(null);
   const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
   const whatsNew = useWhatsNew();
-  const [sidebarMutedExpanded, setSidebarMutedExpanded] = useState(false);
 
   const { dockState, toggleDockPanel, openDockPanel, closeDockPanel } = useDockPanels();
 
@@ -114,8 +113,6 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     openNotificationsPanel,
     closeNotificationsPanel,
     whatsNew,
-    sidebarMutedExpanded,
-    setSidebarMutedExpanded,
     toggleDockPanel,
     openDockPanel,
     closeDockPanel,

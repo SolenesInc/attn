@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render } from '@testing-library/react';
+import { fireEvent, render, waitFor } from '@testing-library/react';
 import { SessionTerminalWorkspace } from './index';
 import { annotationSurfaceOwnsFocus } from './annotationFocus';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
@@ -88,8 +88,9 @@ function paneOnlyWorkspace(): TerminalWorkspaceState {
 function renderSplit(overrides: {
   onClosePane?: () => void;
   onUndockTile?: (tileId: string) => void;
-  onFocusPane?: (paneId: string) => void;
+  onFocusPane?: (paneId: string) => void | Promise<unknown>;
   workspaceSelectionStyle?: WorkspaceSelectionStyle;
+  activePaneId?: string;
 } = {}) {
   const onClosePane = overrides.onClosePane ?? vi.fn();
   const onUndockTile = overrides.onUndockTile ?? vi.fn();
@@ -103,7 +104,7 @@ function renderSplit(overrides: {
         workspaceSessions={[{ id: 'sess-1', label: 'shell', agent: 'shell', cwd: '/tmp/project' }]}
         workspace={workspace}
         workspaceSelectionStyle={overrides.workspaceSelectionStyle}
-        activePaneId="pane-term"
+        activePaneId={overrides.activePaneId ?? 'pane-term'}
         fontSize={13}
         enabled
         isActiveSession
@@ -163,8 +164,8 @@ describe('SessionTerminalWorkspace leaf focus', () => {
     popup.remove();
   });
 
-  it('makes a clicked tile the active leaf and gives its body DOM focus', () => {
-    const { container } = renderSplit();
+  it('sends a clicked tile to the daemon as the active leaf and gives its body DOM focus', () => {
+    const { container, onFocusPane } = renderSplit();
 
     const tile = tileEl(container);
     expect(tile.getAttribute('data-pane-id')).toBe('tile-notes');
@@ -172,12 +173,32 @@ describe('SessionTerminalWorkspace leaf focus', () => {
 
     fireEvent.mouseDown(tile);
 
+    expect(onFocusPane).toHaveBeenCalledWith('tile-notes');
     expect(tile.className).toContain('active');
     expect(paneEl(container).className).not.toContain('active');
     expect(container.querySelector('.session-terminal-workspace')
       ?.getAttribute('data-active-leaf-id')).toBe('tile-notes');
     const tileBody = tile.querySelector('.workspace-dock-tile-body') as HTMLElement;
     expect(document.activeElement).toBe(tileBody);
+  });
+
+  it('puts focus back on the daemon\'s active pane when the daemon refuses a tile focus', async () => {
+    const { container } = renderSplit({ onFocusPane: () => Promise.reject(new Error('socket closed')) });
+    const surface = () => container.querySelector('.session-terminal-workspace');
+
+    fireEvent.mouseDown(tileEl(container));
+    expect(surface()?.getAttribute('data-active-leaf-id')).toBe('tile-notes');
+
+    await waitFor(() => expect(surface()?.getAttribute('data-active-leaf-id')).toBe('pane-term'));
+    expect(tileEl(container).className).not.toContain('active');
+  });
+
+  it('focuses the tile the daemon names as the active leaf', () => {
+    const { container, onFocusPane } = renderSplit({ activePaneId: 'tile-notes' });
+
+    expect(tileEl(container).className).toContain('active');
+    expect(document.activeElement).toBe(tileEl(container).querySelector('.workspace-dock-tile-body'));
+    expect(onFocusPane).not.toHaveBeenCalled();
   });
 
   it('zooms and maximizes the focused tile', () => {

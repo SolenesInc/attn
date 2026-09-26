@@ -20,7 +20,7 @@ import {
   useAppShell,
   useNavigationContext,
   usePRLauncherContext,
-  useWorkspaceTilesContext,
+  useDesktopTilesContext,
 } from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
@@ -31,7 +31,8 @@ import { AppNavigationMenus } from './AppNavigationMenus';
 import { AppPreferences } from './AppPreferences';
 import { AppSessionPrompts } from './AppSessionPrompts';
 import { AppSidebar } from './AppSidebar';
-import { AppWorkspaces } from './AppWorkspaces';
+import { AppDesktopNavigation } from './AppDesktopNavigation';
+import { AppDesktops } from './AppDesktops';
 import { handleAppPointerDownCapture } from './appSupport';
 export function AppSurface() {
   const {
@@ -57,7 +58,7 @@ export function AppSurface() {
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
   const { delegationSessions } = useAppSessionsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const { markdownOpenerOpen } = useWorkspaceTilesContext();
+  const { markdownOpenerOpen } = useDesktopTilesContext();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
     diagnosticReportSaved,
@@ -119,7 +120,7 @@ export function AppSurface() {
                   {/* Always rendered, to keep terminals alive. */}
                   <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
                     <div className="terminal-pane">
-                      <AppWorkspaces />
+                      <AppDesktops />
                     </div>
                     <AppDock />
                   </div>
@@ -139,6 +140,7 @@ export function AppSurface() {
               <ChordLeaderHud />
               <AppLibrarySurfaces />
               <AppNavigationMenus />
+              <AppDesktopNavigation />
               {diagnosticCapture && (
                 <DiagnosticReportPrompt
                   capture={diagnosticCapture.capture}

@@ -1,7 +1,9 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
+import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
+import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 
@@ -76,7 +78,6 @@ vi.mock('./pty/bridge', async () => {
 
 type SocketArgs = {
   onSessionsUpdate?: (sessions: unknown[]) => void;
-  onWorkspacesUpdate?: (workspaces: unknown[]) => void;
   onSettingsUpdate?: (settings: Record<string, string>) => void;
 };
 
@@ -95,31 +96,16 @@ function selectSession(): (id: string) => void {
   return mockUseUiAutomationBridge.mock.lastCall![0].selectSession;
 }
 
-function workspacePayload() {
-  return sessionIds.map((id) => ({
-    id: `workspace-${id}`,
-    title: id,
-    directory: `/tmp/${id}`,
-    status: 'active',
-    layout: {
-      active_pane_id: `pane-${id}`,
-      layout_json: JSON.stringify({ type: 'pane', pane_id: `pane-${id}` }),
-      panes: [{
-        workspace_id: `workspace-${id}`,
-        pane_id: `pane-${id}`,
-        kind: 'agent',
-        runtime_id: id,
-        session_id: id,
-        title: id,
-      }],
-    },
-  }));
+function desktopsPayload() {
+  return sessionIds.map((id, index) => agentDesktop(`desktop-${id}`, index + 1, [id]));
 }
 
 function broadcast() {
   act(() => {
     socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
-    socketArgs().onWorkspacesUpdate?.(workspacePayload());
+    const desktops = desktopsPayload();
+    const current = useProfilesStore.getState().currentDesktopId;
+    arrangeDesktops(desktops, desktops.some((desktop) => desktop.id === current) ? current! : desktops[0].id);
     socketArgs().onSessionsUpdate?.(mockUseDaemonStore().daemonSessions);
   });
 }
@@ -146,6 +132,7 @@ describe('agent navigation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSessionStore.setState(useSessionStore.getInitialState(), true);
+    useProfilesStore.setState(useProfilesStore.getInitialState(), true);
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     turnOwed = { s1: true, s2: false };
@@ -159,11 +146,13 @@ describe('agent navigation', () => {
         label: id,
         state: 'working',
         cwd: `/tmp/${id}`,
-        workspaceId: `workspace-${id}`,
+        workspaceId: '',
+        profileId: TEST_PROFILE_ID,
+        desktopId: `desktop-${id}`,
         agent: 'claude',
         transcriptMatched: true,
         daemonActivePaneId: `pane-${id}`,
-        workspace: {
+        desktop: {
           agents: [{ id: `pane-${id}`, runtimeId: id, sessionId: id, title: id }],
           layoutTree: { type: 'pane', paneId: `pane-${id}` },
         },
@@ -183,7 +172,8 @@ describe('agent navigation', () => {
         id,
         label: id,
         directory: `/tmp/${id}`,
-        workspace_id: `workspace-${id}`,
+        workspace_id: '',
+        profile_id: TEST_PROFILE_ID,
         agent: 'claude',
         state: 'working',
         turn_owed: turnOwed[id],
@@ -215,10 +205,10 @@ describe('agent navigation', () => {
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
+      ...fakeDesktopCommands(),
       sendSessionList: vi.fn(async () => ({ entries: [], omitted: 0 })),
       sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),

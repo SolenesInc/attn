@@ -81,7 +81,7 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
 
   await terminal.click({ position: { x: 80, y: 8 } });
-  await page.keyboard.press('Meta+d');
+  await splitWithPeer(page, daemon, agentId);
 
   await expect
     .poll(async () => {
@@ -135,6 +135,19 @@ async function setupAgent(
   await expect(terminal).toBeVisible();
   await waitForPaneReady(page, agentId);
   return terminal;
+}
+
+async function splitWithPeer(
+  page: import('@playwright/test').Page,
+  daemon: { injectSession: (s: { id: string; label: string; state: string; directory?: string }) => Promise<void> },
+  agentId: string,
+) {
+  const peerId = `${agentId}-peer`;
+  await page.evaluate((id) => {
+    window.__TEST_INJECT_SESSION?.({ id, label: 'Split Peer', state: 'working', cwd: '/tmp/test/agent-split', workspaceId: '' });
+  }, peerId);
+  await daemon.injectSession({ id: peerId, label: 'Split Peer', state: 'working', directory: '/tmp/test/agent-split' });
+  await page.locator(`[data-testid="sidebar-session-${peerId}"]`).getByRole('button', { name: 'Open Split Peer' }).click();
 }
 
 // A single `__TEST_EMIT_PTY_DATA` can be lost while the pane is not fully wired.
@@ -210,7 +223,7 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   // The redraw is deliberately not awaited against the split settling: that race
   // is the behaviour under test.
   await terminal.click({ position: { x: 80, y: 8 } });
-  await page.keyboard.press('Meta+d');
+  await splitWithPeer(page, daemon, agentId);
   const redraw = fullFrame('NEW', 44, 75);
   for (const chunk of chunks(redraw, 180)) {
     await emit(page, agentId, chunk);
@@ -250,7 +263,7 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   await page.evaluate(() => { (window as Window & { __ATTN_RENDER_TRACE?: unknown[] }).__ATTN_RENDER_TRACE = []; });
   await emit(page, agentId, `${BSU}${ESC}[?25l${ESC}[H${ESC}[21C${ESC}[40B`);
 
-  await page.keyboard.press('Meta+d');
+  await splitWithPeer(page, daemon, agentId);
   await page.waitForTimeout(300);
   await emit(page, agentId, fullFrame('NEW', 44, 75));
   await page.waitForTimeout(1000);
@@ -278,7 +291,7 @@ test('hidden split workspace defers paints until return after a window resize', 
 
   const sizeBeforeSplit = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
   await terminal.click({ position: { x: 80, y: 8 } });
-  await page.keyboard.press('Meta+d');
+  await splitWithPeer(page, daemon, agentId);
   await expect
     .poll(async () => {
       const size = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);

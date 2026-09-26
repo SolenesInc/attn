@@ -158,18 +158,27 @@ function defaultDock(): DockConfig {
   return { collapsed: false, items: [...DEFAULT_DOCK_ITEMS] };
 }
 
+const RENAMED_SHORTCUT_IDS: Readonly<Record<string, ShortcutId>> = Object.fromEntries(
+  [1, 2, 3, 4, 5, 6, 7, 8, 9].map((slot) => [`workspace.select${slot}`, `desktop.select${slot}` as ShortcutId]),
+);
+
+function currentShortcutId(id: string): ShortcutId | null {
+  const renamed = RENAMED_SHORTCUT_IDS[id] ?? id;
+  return Object.prototype.hasOwnProperty.call(SHORTCUTS, renamed) ? (renamed as ShortcutId) : null;
+}
+
 function sanitizeDock(value: unknown): DockConfig {
   if (!value || typeof value !== 'object') return defaultDock();
   const v = value as Record<string, unknown>;
   if (!Array.isArray(v.items)) return defaultDock();
   const seen = new Set<string>();
   const items: ShortcutId[] = [];
-  for (const id of v.items) {
-    if (typeof id !== 'string') continue;
-    if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue;
-    if (seen.has(id)) continue;
+  for (const item of v.items) {
+    if (typeof item !== 'string') continue;
+    const id = currentShortcutId(item);
+    if (!id || seen.has(id)) continue;
     seen.add(id);
-    items.push(id as ShortcutId);
+    items.push(id);
   }
   return { collapsed: v.collapsed === true, items };
 }
@@ -187,14 +196,16 @@ export function parseKeybindingsConfig(raw: string | undefined | null): Keybindi
   const rawOverrides = (parsed as Record<string, unknown>).overrides;
   const overridesOut: Partial<Record<ShortcutId, Binding | null>> = {};
   if (rawOverrides && typeof rawOverrides === 'object') {
-    for (const [id, value] of Object.entries(rawOverrides as Record<string, unknown>)) {
-      if (!Object.prototype.hasOwnProperty.call(SHORTCUTS, id)) continue;
+    for (const [storedId, value] of Object.entries(rawOverrides as Record<string, unknown>)) {
+      const id = currentShortcutId(storedId);
+      if (!id) continue;
+      if (id !== storedId && Object.prototype.hasOwnProperty.call(rawOverrides, id)) continue;
       if (value === null) {
-        overridesOut[id as ShortcutId] = null;
+        overridesOut[id] = null;
         continue;
       }
       const binding = sanitizeBinding(value);
-      if (binding) overridesOut[id as ShortcutId] = binding;
+      if (binding) overridesOut[id] = binding;
     }
   }
 

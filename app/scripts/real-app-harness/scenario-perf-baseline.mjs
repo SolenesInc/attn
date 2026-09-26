@@ -4,17 +4,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import http from 'node:http';
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { createRunContext, createSessionAndWaitForInitialPane, emitVerdict, parseCommonArgs, printCommonHelp } from './common.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
-import { currentHarnessInstance, instanceCliEnv, instanceForAppPath, socketPathForInstance } from './harnessInstance.mjs';
+import { instanceForAppPath } from './harnessInstance.mjs';
 import { getMachineFingerprint, loadBaseline, recordOrCompareBaseline } from './machineRegistry.mjs';
 import { buildBaselineVerdict, evaluateRssBaseline } from './rssBaselineVerdict.mjs';
 import { captureFrontWindowScreenshot, getFrontWindowBounds, setFrontWindowBounds } from './nativeWindowCapture.mjs';
 import { delay, captureWebKitPids, snapshot, classRssMb, sampleWindow, readLiveDaemonPid, assertDaemonRestartDoesNotHostSession, stopDaemon, paneIdForSession, closeSessions, fillAllPanes, readRegionFootprint, readGraphicsRegions, readAppFootprint } from './perfMeasure.mjs';
-import { appDaemonInTree } from './platform.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -40,7 +39,6 @@ function parseArgs(argv) {
     realCmd: null,
     realWindowMs: 25000,
     window: null,
-    warm: null,
     fillCmd: null,
     fillSettleMs: 3000,
     reclaimHoldMs: 0,
@@ -64,7 +62,6 @@ function parseArgs(argv) {
     else if (arg === '--real-cmd') extras.realCmd = filtered[++index];
     else if (arg === '--real-window-ms') extras.realWindowMs = Number(filtered[++index]);
     else if (arg === '--no-restart-daemon') extras.restartDaemon = false;
-    else if (arg === '--warm') extras.warm = filtered[++index];
     else if (arg === '--window') extras.window = filtered[++index];
     else if (arg === '--fill-cmd') extras.fillCmd = filtered[++index];
     else if (arg === '--fill-settle-ms') extras.fillSettleMs = Number(filtered[++index]);
@@ -156,53 +153,6 @@ async function streamBurst(client, sessionId, paneId, options) {
   }, { timeoutMs: 120_000 });
 }
 
-function parseWarmLevels(raw) {
-  if (raw == null) return null;
-  const levels = String(raw)
-    .split(',')
-    .map((part) => Number(part.trim()))
-    .filter((value) => Number.isInteger(value));
-  return levels.length > 0 ? levels : null;
-}
-
-function warmLiveCount(limit, sessions) {
-  return limit < 0 ? sessions : Math.min(sessions, limit + 1);
-}
-
-// stdin is /dev/null so the binary's optional hook-input JSON read hits EOF
-// immediately instead of blocking.
-function reportSessionState(bin, socketPath, sessionId, state) {
-  return new Promise((resolve) => {
-    const child = spawn(bin, ['_hook-state', sessionId, state], {
-      env: instanceCliEnv(currentHarnessInstance(), { ATTN_SOCKET_PATH: socketPath }),
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
-    child.on('close', () => resolve());
-    child.on('error', () => resolve());
-  });
-}
-
-async function markSessionsIdle(client, options, sessionIds) {
-  const instance = instanceForAppPath(options.appPath);
-  const bin = appDaemonInTree(options.appPath);
-  const socketPath = socketPathForInstance(instance);
-  for (const sessionId of sessionIds) {
-    await reportSessionState(bin, socketPath, sessionId, 'idle');
-  }
-  const target = new Set(sessionIds);
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    const state = await client.request('get_state', {}, { timeoutMs: 10_000 }).catch(() => null);
-    const ours = (state?.sessions ?? []).filter((session) => target.has(session.id));
-    if (ours.length === sessionIds.length && ours.every((session) => session.state === 'idle')) {
-      console.log(`[perf] marked ${sessionIds.length} sessions idle (warm-set can now reclaim cold panes)`);
-      return;
-    }
-    await delay(300);
-  }
-  console.warn('[perf] WARNING: not all sessions reached idle within 15s; warm-set virtualization may not engage');
-}
-
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   if (options.help) {
@@ -221,21 +171,14 @@ async function main() {
     console.log('  --window <WxH>      Resize the app window before measuring (e.g. 1728x1080). A');
     console.log('                      pane\'s GPU surface is sized in device pixels, so the default');
     console.log('                      1200x800 launch window understates per-pane graphics memory.');
-    console.log('  --warm <list>       Warm-workspace A/B (terminal virtualization). Drives every');
-    console.log('                      session to idle (the real `attn _hook-state idle` path), then');
-    console.log('                      sweeps each comma-separated limit, snapshotting retained RSS at');
-    console.log('                      each. active + limit recent panes stay live, the rest tear down.');
-    console.log('                      -1 keeps all live (ceiling). e.g. --warm -1,3,2,1,0');
-    console.log('  --fill-cmd <cmd>    Before the warm sweep, run this command in every pane (one at a');
+    console.log('  --fill-cmd <cmd>    Run this command in every pane (one at a');
     console.log('                      time) to grow each Ghostty WASM heap / atlas, simulating idle');
     console.log('                      panes that have rendered real output. e.g. "seq 1 60000"');
     console.log('  --fill-settle-ms <n>  Per-pane settle after the fill command (default: 3000)');
-    console.log('  --reclaim-hold-ms <n> After the warm sweep, hold the torn-down state and sample RSS');
-    console.log('                      over this window (no pressure) to capture the reclaim decay');
-    console.log('                      curve -- distinguishes soft-but-delayed from hard. Pair with');
-    console.log('                      --fill-cmd + --warm <low>.');
+    console.log('  --reclaim-hold-ms <n> Hold the measured state and sample RSS over this window (no');
+    console.log('                      pressure) to capture the reclaim decay curve. Pair with --fill-cmd.');
     console.log('  --reclaim-hold-interval-ms <n>  Sample interval during the hold (default: 15000)');
-    console.log('  --pressure          After the warm sweep, fire WebKit\'s low-memory notification and');
+    console.log('  --pressure          Fire WebKit\'s low-memory notification and');
     console.log('                      re-measure. Separates surfaces a live layer owns (survive) from');
     console.log('                      surfaces WebKit is caching for reuse (dropped).');
     console.log('  --churn <rounds>    Open --sessions sessions, close them all, repeat <rounds> times,');
@@ -264,7 +207,6 @@ async function main() {
   const observer = new DaemonObserver({ wsUrl: options.wsUrl });
   const isPerfBaselineLabel = (session) => typeof session.label === 'string' && session.label.startsWith('perf-baseline-');
   const sessionIds = [];
-  let initialWarmLimit = null;
   let rssEvaluation = null;
 
   const summary = {
@@ -272,8 +214,6 @@ async function main() {
     runId,
     runDir,
     sessions: options.sessions,
-    warm: options.warm,
-    warmSweep: null,
     reclaimHold: null,
     requestedStream: options.stream,
     chunkBytes: options.chunkBytes,
@@ -407,86 +347,9 @@ async function main() {
 
     await delay(options.settleMs);
 
-    // Force all panes LIVE before filling: the warm limit persists in
-    // localStorage across runs, so a fresh app can launch already-virtualized.
-    const warmLevels = parseWarmLevels(options.warm);
-    if (options.fillCmd || warmLevels) {
-      initialWarmLimit = await client
-        .request('get_warm_workspace_limit', {}, { timeoutMs: 15_000 })
-        .then((result) => (typeof result?.limit === 'number' ? result.limit : null))
-        .catch((error) => {
-          console.warn(`[perf] get_warm_workspace_limit failed: ${error.message}`);
-          return null;
-        });
-    }
-
     if (options.fillCmd) {
-      await client.request('set_warm_workspace_limit', { limit: -1 }, { timeoutMs: 15_000 })
-        .catch((error) => console.warn(`[perf] pre-fill all-live failed: ${error.message}`));
-      await delay(options.settleMs);
       await fillAllPanes(client, sessionIds, options.fillCmd, options.fillSettleMs);
       await delay(options.settleMs);
-    }
-
-    // The warm set only reclaims IDLE workspaces, and the sweep must go
-    // most-live-first: a rehydrate makes the retained-RSS deltas incomparable.
-    if (warmLevels) {
-      await markSessionsIdle(client, options, sessionIds);
-      summary.warmSweep = [];
-      const ordered = [...warmLevels].sort(
-        (a, b) => warmLiveCount(b, options.sessions) - warmLiveCount(a, options.sessions),
-      );
-      for (const limit of ordered) {
-        let warmState = null;
-        try {
-          warmState = await client.request('set_warm_workspace_limit', { limit }, { timeoutMs: 15_000 });
-        } catch (error) {
-          console.warn(`[perf] set_warm_workspace_limit(${limit}) failed: ${error.message}`);
-        }
-        await delay(options.settleMs);
-        const snap = await snapshot(appPid, daemonPid, webkitBaseline);
-        const pid = webContentPid(snap);
-        const regions = await readRegionFootprint(pid);
-        const surfaces = await readGraphicsRegions(pid);
-        const appFootprint = await readAppFootprint(snap);
-        const expectedVirtualized = limit < 0 ? 0 : Math.max(0, options.sessions - (limit + 1));
-        const entry = {
-          warm: limit,
-          livePanes: options.sessions - expectedVirtualized,
-          virtualizedPanes: warmState?.virtualizedPanes ?? null,
-          expectedVirtualized,
-          totalRssMb: snap.totalRssMb,
-          webContentRssMb: classRssMb(snap, 'webkit_webcontent'),
-          gpuRssMb: classRssMb(snap, 'webkit_gpu'),
-          appRssMb: classRssMb(snap, 'app'),
-          webContentDirtyMb: regions?.slices ?? null,
-          graphicsSurfaces: surfaces ?? null,
-          appFootprintMb: appFootprint.totalMb,
-          appFootprintByPid: appFootprint.byPid,
-        };
-        summary.warmSweep.push(entry);
-        console.log(
-          `[perf] warm=${limit}: live=${entry.livePanes}/${options.sessions} `
-          + `virtualized=${entry.virtualizedPanes} (expected ${expectedVirtualized}) | `
-          + `APP FOOTPRINT ${entry.appFootprintMb}MB | `
-          + `total=${entry.totalRssMb}MB webContent=${entry.webContentRssMb}MB gpu=${entry.gpuRssMb}MB`
-          + (regions
-            ? ` | dirty: graphics=${regions.slices.graphics}MB `
-              + `webkitMalloc=${regions.slices.webkitMalloc}MB jsHeap=${regions.slices.jsHeap}MB`
-            : ' | dirty: unavailable')
-          + (surfaces
-            ? ` | paneSizedSurfaces=${surfaces.largeCount} (${surfaces.largeDirtyMb}MB dirty) `
-              + JSON.stringify(surfaces.histogram)
-            : ''),
-        );
-        if (entry.virtualizedPanes !== expectedVirtualized) {
-          throw new Error(
-            `[perf] warm=${limit}: virtualized ${entry.virtualizedPanes} != expected `
-            + `${expectedVirtualized} — warm-set did not reach the intended live/virtual `
-            + 'split; retained-RSS deltas would be invalid',
-          );
-        }
-      }
     }
 
     if (options.pressure) {
@@ -751,29 +614,6 @@ async function main() {
         retainedMb: post ? Number((post.totalRssMb - idle.totalRssMb).toFixed(1)) : null,
       };
     }
-    if (summary.warmSweep && summary.warmSweep.length > 0) {
-      const sweep = summary.warmSweep;
-      const most = sweep[0];
-      const least = sweep[sweep.length - 1];
-      const paneSpan = most.livePanes - least.livePanes;
-      summary.headline.warmSweep = {
-        levels: sweep.map((entry) => ({
-          warm: entry.warm,
-          livePanes: entry.livePanes,
-          virtualizedPanes: entry.virtualizedPanes,
-          totalRssMb: entry.totalRssMb,
-          webContentRssMb: entry.webContentRssMb,
-          gpuRssMb: entry.gpuRssMb,
-          webContentDirtyMb: entry.webContentDirtyMb,
-        })),
-        perLivePaneTotalMb: paneSpan > 0 ? Number(((most.totalRssMb - least.totalRssMb) / paneSpan).toFixed(1)) : null,
-        perLivePaneWebContentMb: paneSpan > 0 ? Number(((most.webContentRssMb - least.webContentRssMb) / paneSpan).toFixed(1)) : null,
-        perLivePaneGraphicsMb: paneSpan > 0 && most.webContentDirtyMb && least.webContentDirtyMb
-          ? Number(((most.webContentDirtyMb.graphics - least.webContentDirtyMb.graphics) / paneSpan).toFixed(1))
-          : null,
-      };
-    }
-
     const fingerprint = getMachineFingerprint();
     const baseline = loadBaseline(fingerprint.key);
     rssEvaluation = evaluateRssBaseline({
@@ -788,45 +628,10 @@ async function main() {
     summary.baselineComparison = rssEvaluation.comparison;
   } finally {
     await closeSessions(client, sessionIds);
-    if (initialWarmLimit !== null) {
-      await client
-        .request('set_warm_workspace_limit', { limit: initialWarmLimit }, { timeoutMs: 15_000 })
-        .catch((error) => console.warn(`[perf] restore warm limit failed: ${error.message}`));
-    }
     fs.writeFileSync(path.join(runDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`, 'utf8');
     await observer.close();
   }
 
-  if (summary.headline?.warmSweep) {
-    const { levels, perLivePaneTotalMb, perLivePaneWebContentMb } = summary.headline.warmSweep;
-    console.log(`\n[perf] WARM-SET A/B (${options.sessions} idle sessions)`);
-    console.log('  warm  live  virt  total(MB)  webContent(MB)  gpu(MB)  gfxDirty(MB)  mallocDirty(MB)');
-    for (const lvl of levels) {
-      const warmCol = String(lvl.warm).padStart(4);
-      const liveCol = String(lvl.livePanes).padStart(4);
-      const virtCol = String(lvl.virtualizedPanes).padStart(4);
-      const totalCol = String(lvl.totalRssMb).padStart(9);
-      const wcCol = String(lvl.webContentRssMb).padStart(14);
-      const gpuCol = String(lvl.gpuRssMb).padStart(7);
-      const gfxCol = String(lvl.webContentDirtyMb?.graphics ?? 'n/a').padStart(12);
-      const mallocCol = String(lvl.webContentDirtyMb?.webkitMalloc ?? 'n/a').padStart(15);
-      console.log(`  ${warmCol}  ${liveCol}  ${virtCol}  ${totalCol}  ${wcCol}  ${gpuCol}  ${gfxCol}  ${mallocCol}`);
-    }
-    console.log(`  per-live-pane: total ${perLivePaneTotalMb ?? 'n/a'} MB, webContent ${perLivePaneWebContentMb ?? 'n/a'} MB`);
-    const withGfx = levels.filter((lvl) => lvl.webContentDirtyMb?.graphics != null);
-    if (withGfx.length >= 2) {
-      const first = withGfx[0];
-      const last = withGfx[withGfx.length - 1];
-      const paneDelta = first.livePanes - last.livePanes;
-      const gfxDelta = first.webContentDirtyMb.graphics - last.webContentDirtyMb.graphics;
-      console.log(
-        `  graphics dirty: ${first.webContentDirtyMb.graphics} MB @ ${first.livePanes} live `
-        + `-> ${last.webContentDirtyMb.graphics} MB @ ${last.livePanes} live `
-        + `(${gfxDelta >= 0 ? '-' : '+'}${Math.abs(gfxDelta).toFixed(1)} MB`
-        + (paneDelta > 0 ? `, ${(gfxDelta / paneDelta).toFixed(1)} MB per pane` : '') + ')',
-      );
-    }
-  }
 
   console.log(JSON.stringify({ headline: summary.headline, reclaimHold: summary.reclaimHold, idleByClass: summary.snapshots.idle?.byClass, profiles: summary.profiles, runDir }, null, 2));
 

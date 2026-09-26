@@ -7,15 +7,33 @@ import {
   sessionParticipatesInQueue,
   type QueueBandSession,
 } from './queueBands';
-import { buildWorkspaceViewModels } from './workspaceViewModels';
+import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
+import { buildDesktopViewModels } from './workspaceViewModels';
 
-const workspaces = [
-  { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a' },
-  { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b' },
-];
+function desktop(id: string, slot: number, sessions: QueueBandSession[]): Desktop {
+  const holds = sessions.filter((session) => session.workspaceId === id);
+  return {
+    id,
+    profile_id: 'profile',
+    name: '',
+    shortcut_slot: slot,
+    order_key: id,
+    tree_json: '',
+    active_pane_id: '',
+    revision: 1,
+    panes: holds.map((session) => ({
+      pane_id: `pane-${session.id}`,
+      desktop_id: id,
+      session_id: session.id,
+      kind: LayoutPaneKind.Agent,
+      title: session.label,
+      status: LayoutPaneStatus.Ready,
+    })),
+  };
+}
 
 function views(sessions: QueueBandSession[]) {
-  return buildWorkspaceViewModels(workspaces, sessions);
+  return buildDesktopViewModels([desktop('ws-a', 1, sessions), desktop('ws-b', 2, sessions)], sessions);
 }
 
 describe('sessionParticipatesInQueue', () => {
@@ -58,7 +76,7 @@ describe('buildQueueBands', () => {
     ]));
 
     expect(bands.turns.map((row) => row.session.id)).toEqual(['oldest', 'middle', 'newest']);
-    expect(bands.turns.map((row) => row.workspaceTitle)).toEqual(['B', 'A', 'A']);
+    expect(bands.turns.map((row) => row.workspaceTitle)).toEqual(['Desktop 2', 'Desktop 1', 'Desktop 1']);
   });
 
   it('reads turn_owed rather than deriving it from state', () => {
@@ -173,31 +191,6 @@ describe('buildQueueBands', () => {
     expect(after.settled.map((row) => row.session.id)).toEqual(['a']);
   });
 
-  it('keeps pinned and muted workspaces out of both bands — they stay in the tree', () => {
-    const pinnedAndMuted = [
-      { id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true },
-      { id: 'ws-b', title: 'B', directory: '/repo/b', rank: 'b', muted: true },
-    ];
-    const bands = buildQueueBands(buildWorkspaceViewModels(pinnedAndMuted, [
-      { id: 'pinned-owed', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
-      { id: 'muted-quiet', label: 'b', workspaceId: 'ws-b' },
-    ]));
-
-    expect(bands.turns).toEqual([]);
-    expect(bands.settled).toEqual([]);
-  });
-
-  it('anchors the chief even when its workspace is pinned or muted', () => {
-    for (const flag of [{ pinned: true }, { muted: true }]) {
-      const bands = buildQueueBands(buildWorkspaceViewModels(
-        [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', ...flag }],
-        [{ id: 'chief', label: 'chief', workspaceId: 'ws-a', chiefOfStaff: true }],
-      ));
-
-      expect(bands.chief?.session.id).toBe('chief');
-    }
-  });
-
   it('leaves the workspace tree untouched — it is not an output of the queue', () => {
     const sessions: QueueBandSession[] = [
       { id: 'a', label: 'a', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T09:00:00Z' },
@@ -206,7 +199,7 @@ describe('buildQueueBands', () => {
     const tree = views(sessions);
     buildQueueBands(tree);
 
-    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b']]);
+    expect(tree.map((workspace) => workspace.sessions.map((session) => session.id))).toEqual([['a'], ['b'], []]);
   });
 
   describe('snoozed', () => {
@@ -254,15 +247,6 @@ describe('buildQueueBands', () => {
       expect(bands.turns).toEqual([]);
       expect(bands.snoozed.map((row) => row.session.id)).toEqual(['both']);
     });
-
-    it('leaves a pinned workspace out of the snoozed list too', () => {
-      const pinnedViews = buildWorkspaceViewModels(
-        [{ id: 'ws-p', title: 'P', directory: '/repo/p', rank: 'a', pinned: true }],
-        [{ id: 'pinned', label: 'pinned', workspaceId: 'ws-p', turnSnoozedUntil: laterToday }],
-      );
-
-      expect(buildQueueBands(pinnedViews, now).snoozed).toEqual([]);
-    });
   });
 
 });
@@ -309,7 +293,7 @@ describe('advanceAfterTurnClosed', () => {
 
     const advance = advanceAfterTurnClosed(before.turns, after, 'watched');
 
-    expect(advance).toEqual({ to: 'session', row: expect.objectContaining({ workspaceTitle: 'A' }) });
+    expect(advance).toEqual({ to: 'session', row: expect.objectContaining({ workspaceTitle: 'Desktop 1' }) });
     expect(advance?.to === 'session' && advance.row.session.id).toBe('next');
   });
 
@@ -391,19 +375,6 @@ describe('advanceAfterTurnClosed', () => {
     const before = buildQueueBands(views(queue));
     const after = buildQueueBands(views([{ ...queue[0], turnOwed: false }, { id: 'watched', label: 'watched', workspaceId: 'ws-a' }]));
 
-    expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
-  });
-
-  it('stays put when the row left the queue by being pinned rather than settled', () => {
-    const watched = owed('watched', 0);
-    const before = buildQueueBands(views([watched, owed('next', 1, 'ws-b')]));
-    const after = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-a', title: 'A', directory: '/repo/a', rank: 'a', pinned: true }, workspaces[1]],
-      [{ ...watched, turnOwed: false }, owed('next', 1, 'ws-b')],
-    ));
-
-    expect(after.turns.map((row) => row.session.id)).toEqual(['next']);
-    expect(after.settled).toEqual([]);
     expect(advanceAfterTurnClosed(before.turns, after, 'watched')).toBeNull();
   });
 
@@ -526,15 +497,6 @@ describe('the crew band', () => {
     expect(bands.turns.map((row) => row.session.id)).toEqual(['owed']);
     expect(bands.settled.map((row) => row.session.id)).toEqual(['settled']);
     expect(bands.crew.map((row) => row.session.id)).toEqual(['settled', 'owed']);
-  });
-
-  it('keeps a member visible from a pinned or muted workspace', () => {
-    const bands = buildQueueBands(buildWorkspaceViewModels(
-      [{ id: 'ws-hidden', title: 'Hidden', directory: '/repo/hidden', rank: 'a', pinned: true }],
-      [{ id: 'sess-alder', label: 'alder', workspaceId: 'ws-hidden', crewMember: 'alder' }],
-    ));
-
-    expect(bands.crew.map((row) => row.session.id)).toEqual(['sess-alder']);
   });
 
   it('leaves the chief the chief', () => {

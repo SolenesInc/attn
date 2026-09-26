@@ -721,14 +721,6 @@
   color: var(--color-text-primary);
 }
 
-/* Keep the pin button visible and accented when the workspace is pinned,
-   even when the header row is not hovered. */
-.pin-workspace-btn.pinned {
-  opacity: 1;
-  pointer-events: auto;
-  color: var(--color-text-primary);
-}
-
 .session-item:hover .session-actions,
 .session-item:focus-within .session-actions {
   opacity: 1;
@@ -1241,7 +1233,6 @@
   50% { opacity: 0.3; }
 }
 
-/* Muted workspaces section */
 .muted-sessions-section {
   border-top: 1px solid var(--color-border);
   padding: 4px 0;
@@ -1281,31 +1272,6 @@
 
 .muted-sessions-list {
   padding: 0;
-}
-
-.muted-session {
-  opacity: 0.55;
-}
-
-.muted-workspace {
-  opacity: 0.68;
-}
-
-.muted-workspace:hover,
-.muted-workspace.selected {
-  opacity: 0.9;
-}
-
-.muted-workspace-sessions {
-  padding-bottom: 4px;
-}
-
-.muted-session:hover {
-  opacity: 0.75;
-}
-
-.muted-session[data-state="waiting_input"]::before {
-  display: none;
 }
 
 /* The home row. Above the queue bands and the tree, so it reads as the fixed

@@ -1,5 +1,4 @@
 import { describe, expect, it } from 'vitest';
-import { LayoutPaneKind, LayoutPaneStatus } from './generated';
 import {
   applyRatioOverrides,
   collectPreferredSplitIds,
@@ -11,13 +10,10 @@ import {
   getSplitDividers,
   hasLeaf,
   hasPane,
-  localWorkspaceDirectory,
   parseLayoutJSON,
-  soleWorkspaceForId,
   parseNotebookTileParams,
   resolveEditorTileRoot,
   serializeNotebookTileParams,
-  workspaceSnapshotFromDaemonWorkspace,
   type TerminalLayoutNode,
 } from './workspace';
 const SESSION_PANE_ID = 'pane-session';
@@ -239,27 +235,19 @@ describe('docked tiles', () => {
   });
 
   it('parses tile leaves out of the daemon layout_json', () => {
-    const snapshot = workspaceSnapshotFromDaemonWorkspace({
-      workspace_id: 'ws',
-      active_pane_id: 'pane-a',
-      layout_json: JSON.stringify({
-        type: 'split',
-        split_id: 'root',
-        direction: 'vertical',
-        ratio: 0.68,
-        ratio_locked: true,
-        children: [
-          { type: 'pane', pane_id: 'pane-a' },
-          { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown' },
-        ],
-      }),
-      panes: [
-        { pane_id: 'pane-a', workspace_id: 'ws', kind: LayoutPaneKind.Agent, title: 'A', status: LayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
+    const layout = parseLayoutJSON(JSON.stringify({
+      type: 'split',
+      split_id: 'root',
+      direction: 'vertical',
+      ratio: 0.68,
+      ratio_locked: true,
+      children: [
+        { type: 'pane', pane_id: 'pane-a' },
+        { type: 'tile', tile_id: 'tile-md', tile_kind: 'markdown' },
       ],
-    });
-    expect(findTileByKind(snapshot.workspace.layoutTree, 'markdown')?.tileId).toBe('tile-md');
-    expect(snapshot.workspace.layoutTree).toMatchObject({ ratioMode: 'automatic' });
-    expect(snapshot.workspace.agents.map((agent) => agent.id)).toEqual(['pane-a']);
+    }));
+    expect(findTileByKind(layout, 'markdown')?.tileId).toBe('tile-md');
+    expect(layout && hasPane(layout, 'pane-a')).toBe(true);
   });
 
   it('parses a preferred split ratio from daemon layout_json', () => {
@@ -279,24 +267,17 @@ describe('docked tiles', () => {
   });
 
   it('drops malformed tile leaves (missing kind)', () => {
-    const snapshot = workspaceSnapshotFromDaemonWorkspace({
-      workspace_id: 'ws',
-      active_pane_id: 'pane-a',
-      layout_json: JSON.stringify({
-        type: 'split',
-        split_id: 'root',
-        direction: 'vertical',
-        ratio: 0.5,
-        children: [
-          { type: 'pane', pane_id: 'pane-a' },
-          { type: 'tile', tile_id: 'tile-md' },
-        ],
-      }),
-      panes: [
-        { pane_id: 'pane-a', workspace_id: 'ws', kind: LayoutPaneKind.Agent, title: 'A', status: LayoutPaneStatus.Ready, runtime_id: 'r', session_id: 's' },
+    const layout = parseLayoutJSON(JSON.stringify({
+      type: 'split',
+      split_id: 'root',
+      direction: 'vertical',
+      ratio: 0.5,
+      children: [
+        { type: 'pane', pane_id: 'pane-a' },
+        { type: 'tile', tile_id: 'tile-md' },
       ],
-    });
-    expect(snapshot.workspace.layoutTree).toBeNull();
+    }));
+    expect(layout).toBeNull();
   });
 });
 
@@ -359,58 +340,5 @@ describe('resolveEditorTileRoot', () => {
   it('returns the trimmed workspace directory when it differs from the notebook root', () => {
     expect(resolveEditorTileRoot('/Users/victor/code/attn', '/Users/victor/notebook')).toBe('/Users/victor/code/attn');
     expect(resolveEditorTileRoot('  /Users/victor/code/attn  ', '/Users/victor/notebook')).toBe('/Users/victor/code/attn');
-  });
-});
-
-describe('localWorkspaceDirectory', () => {
-  it('returns undefined for a remote workspace (endpoint_id set)', () => {
-    const workspace = { directory: '/Users/victor/code/attn', endpoint_id: 'remote-mac' };
-    expect(localWorkspaceDirectory(workspace)).toBeUndefined();
-  });
-
-  it('returns the directory for a local workspace with an empty-string endpoint_id', () => {
-    const workspace = { directory: '/Users/victor/code/attn', endpoint_id: '' };
-    expect(localWorkspaceDirectory(workspace)).toBe('/Users/victor/code/attn');
-  });
-
-  it('returns the directory for a local workspace with an absent endpoint_id', () => {
-    const workspace = { directory: '/Users/victor/code/attn' };
-    expect(localWorkspaceDirectory(workspace)).toBe('/Users/victor/code/attn');
-  });
-
-  it('returns undefined for an undefined workspace', () => {
-    expect(localWorkspaceDirectory(undefined)).toBeUndefined();
-  });
-
-});
-
-describe('soleWorkspaceForId + localWorkspaceDirectory (active-id locality)', () => {
-  it('does not adopt the local twin\'s directory when a remote twin shares the active id', () => {
-    const workspaces = [
-      { id: 'ws-1', directory: '/local/dir' },
-      { id: 'ws-1', directory: '/remote/dir', endpoint_id: 'remote-mac' },
-    ];
-    const resolved = soleWorkspaceForId(workspaces, 'ws-1');
-    expect(resolved).toBeUndefined();
-    expect(localWorkspaceDirectory(resolved)).toBeUndefined();
-  });
-
-  it('returns the directory for a sole local record', () => {
-    const workspaces = [{ id: 'ws-1', directory: '/Users/victor/code/attn' }];
-    const resolved = soleWorkspaceForId(workspaces, 'ws-1');
-    expect(localWorkspaceDirectory(resolved)).toBe('/Users/victor/code/attn');
-  });
-
-  it('returns undefined for a sole remote record', () => {
-    const workspaces = [{ id: 'ws-1', directory: '/remote/dir', endpoint_id: 'remote-mac' }];
-    const resolved = soleWorkspaceForId(workspaces, 'ws-1');
-    expect(localWorkspaceDirectory(resolved)).toBeUndefined();
-  });
-
-  it('returns undefined when the id is absent from the list', () => {
-    const workspaces = [{ id: 'ws-2', directory: '/Users/victor/code/attn' }];
-    const resolved = soleWorkspaceForId(workspaces, 'ws-1');
-    expect(resolved).toBeUndefined();
-    expect(localWorkspaceDirectory(resolved)).toBeUndefined();
   });
 });

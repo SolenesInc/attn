@@ -16,14 +16,14 @@ declare global {
 interface UseWorkspaceDebugHarnessArgs {
   sessions: Session[];
   activeSessionId: string | null;
-  workspaceRefs: RefObject<Map<string, SessionTerminalWorkspaceHandle>>;
+  desktopRefs: RefObject<Map<string, SessionTerminalWorkspaceHandle>>;
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
 }
 
 export function useWorkspaceDebugHarness({
   sessions,
   activeSessionId,
-  workspaceRefs,
+  desktopRefs,
   getActivePaneIdForSession,
 }: UseWorkspaceDebugHarnessArgs) {
   useEffect(() => {
@@ -36,8 +36,8 @@ export function useWorkspaceDebugHarness({
       if (!session) {
         return '';
       }
-      const paneId = session?.workspace.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
-      return workspaceRefs.current.get(session.workspaceId)?.getPaneText(paneId) || '';
+      const paneId = session?.desktop.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
+      return desktopRefs.current.get(session.desktopId)?.getPaneText(paneId) || '';
     };
 
     window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT = (sessionId: string) => {
@@ -45,8 +45,8 @@ export function useWorkspaceDebugHarness({
       if (!session) {
         return '';
       }
-      const paneId = session?.workspace.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
-      const visible = workspaceRefs.current.get(session.workspaceId)?.getPaneVisibleContent(paneId);
+      const paneId = session?.desktop.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
+      const visible = desktopRefs.current.get(session.desktopId)?.getPaneVisibleContent(paneId);
       return visible ? visible.lines.join('\n') : '';
     };
 
@@ -55,8 +55,8 @@ export function useWorkspaceDebugHarness({
       if (!session) {
         return null;
       }
-      const paneId = session?.workspace.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
-      return workspaceRefs.current.get(session.workspaceId)?.getPaneSize(paneId) || null;
+      const paneId = session?.desktop.agents.find((entry) => entry.sessionId === sessionId)?.id || '';
+      return desktopRefs.current.get(session.desktopId)?.getPaneSize(paneId) || null;
     };
 
     window.__TEST_GET_ACTIVE_SESSION_PANE_TEXT = () => {
@@ -68,7 +68,7 @@ export function useWorkspaceDebugHarness({
       if (!session || !activePaneId) {
         return '';
       }
-      return workspaceRefs.current.get(session.workspaceId)?.getPaneText(activePaneId) || '';
+      return desktopRefs.current.get(session.desktopId)?.getPaneText(activePaneId) || '';
     };
 
     window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME = (sessionId: string) => {
@@ -77,7 +77,7 @@ export function useWorkspaceDebugHarness({
       if (!session || !activePaneId) {
         return null;
       }
-      return session.workspace.agents.find((entry) => entry.id === activePaneId)?.runtimeId ?? null;
+      return session.desktop.agents.find((entry) => entry.id === activePaneId)?.runtimeId ?? null;
     };
 
     return () => {
@@ -87,5 +87,5 @@ export function useWorkspaceDebugHarness({
       delete window.__TEST_GET_ACTIVE_SESSION_PANE_TEXT;
       delete window.__TEST_GET_ACTIVE_SESSION_PANE_RUNTIME;
     };
-  }, [activeSessionId, getActivePaneIdForSession, sessions, workspaceRefs]);
+  }, [activeSessionId, getActivePaneIdForSession, sessions, desktopRefs]);
 }

@@ -50,7 +50,6 @@ export interface SelectedTile {
 
 export interface SidebarProps {
   workspaces: SidebarWorkspace[];
-  visualOrder: SidebarWorkspace[];
   visualIndexByWorkspaceId: Map<string, number>;
   selectedId: string | null;
   selectedWorkspaceId: string | null;
@@ -78,11 +77,6 @@ export interface SidebarProps {
   /** The auto-settle countdown lives on the tile, so the sidebar draws it only
       for sessions NOT in here, or it would run twice. */
   onScreenSessionIds?: ReadonlySet<string>;
-  mutedWorkspaces?: SidebarWorkspace[];
-  mutedExpanded?: boolean;
-  onMutedExpandedChange?: (expanded: boolean) => void;
-  onMuteWorkspace?: (workspaceId: string, endpointId?: string) => void;
-  onPinWorkspace?: (workspaceId: string, pinned: boolean) => void;
   onRenameSession?: (sessionId: string, label: string) => Promise<void>;
   onRenameWorkspace?: (workspaceId: string, title: string) => Promise<void>;
   onChangeChiefOfStaff?: (sessionId: string, enabled: boolean) => void;

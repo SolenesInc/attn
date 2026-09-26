@@ -6,10 +6,13 @@ import { enterLeader, resolvePendingThen } from '../../shortcuts/chordState';
 import { matchChordLeader } from '../../shortcuts/chordDispatch';
 
 const TERMINAL_INTERCEPTS: ShortcutId[] = [
-  'workspace.select1', 'workspace.select2', 'workspace.select3',
-  'workspace.select4', 'workspace.select5', 'workspace.select6',
-  'workspace.select7', 'workspace.select8', 'workspace.select9',
-  'session.newWorkspace',
+  'desktop.select1', 'desktop.select2', 'desktop.select3',
+  'desktop.select4', 'desktop.select5', 'desktop.select6',
+  'desktop.select7', 'desktop.select8', 'desktop.select9',
+  'desktop.send1', 'desktop.send2', 'desktop.send3',
+  'desktop.send4', 'desktop.send5', 'desktop.send6',
+  'desktop.send7', 'desktop.send8', 'desktop.send9',
+  'profile.switch',
   'app.quit',
   'ui.showShortcuts',
   'session.newHorizontal',

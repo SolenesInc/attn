@@ -128,7 +128,7 @@ export interface QueueBands<TSession extends QueueBandSession> {
 }
 
 /** Derive the sidebar's standing order. Every queue participant lands in one
- * band; automation sessions and pinned or muted workspaces land in none. */
+ * band; automation sessions land in none. */
 export function buildQueueBands<TSession extends QueueBandSession>(
   workspaces: WorkspaceWithSessions<TSession>[],
   optionsOrNow: QueueBandOptions | number = {},
@@ -158,15 +158,11 @@ export function buildQueueBands<TSession extends QueueBandSession>(
       if (session.automation) {
         continue;
       }
-      // Before the workspace's own pin or mute: a member's row is permanent and does not depend on where its day happens to be living.
       if (session.crewMember) {
         crew.push(row);
         if (!options.crewInQueue) {
           continue;
         }
-      }
-      if (workspace.pinned || workspace.muted) {
-        continue;
       }
       if (isAttachedSatellite(session, workspace.id, attachedParents)) {
         continue;

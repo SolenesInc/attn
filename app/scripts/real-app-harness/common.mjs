@@ -314,7 +314,39 @@ export async function launchFreshAppAndConnect(client, observer, {
   await pinMockAgentExecutables(client, observer, agentExecutables);
   if (sweepStaleSessions) {
     await sweepStaleHarnessSessions(observer);
+    await sweepEmptyHarnessDesktops(observer);
   }
+}
+
+const HARNESS_DESKTOP_PREFIX = 'harness-';
+
+export async function sweepEmptyHarnessDesktops(observer, { log = (m) => console.log(`[harness] ${m}`) } = {}) {
+  const empty = observer.desktops.filter((desktop) =>
+    desktop.name.startsWith(HARNESS_DESKTOP_PREFIX)
+    && desktop.panes.length === 0
+    && desktop.id !== observer.currentDesktopId());
+  for (const desktop of empty) {
+    await observer.deleteDesktop(desktop.id).catch((error) => log(`could not delete desktop ${desktop.id}: ${error}`));
+  }
+  return { swept: empty.length };
+}
+
+export async function waitForAppCurrentDesktop(client, desktopId, timeoutMs = 15_000) {
+  const startedAt = Date.now();
+  let last = null;
+  while (Date.now() - startedAt < timeoutMs) {
+    last = await client.request('get_state');
+    if (last.arrangement?.currentDesktopId === desktopId) return last;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for the app to show desktop ${desktopId}. Last arrangement:\n${JSON.stringify(last?.arrangement, null, 2)}`);
+}
+
+export async function openHarnessDesktop(client, observer, label) {
+  const desktop = await observer.createDesktop(`${HARNESS_DESKTOP_PREFIX}${label}`);
+  await observer.setCurrentDesktop(desktop.id);
+  await waitForAppCurrentDesktop(client, desktop.id);
+  return desktop;
 }
 
 export async function relaunchAppAndConnect(client, observer, { agentExecutables = {} } = {}) {
@@ -336,8 +368,12 @@ export async function createSessionAndWaitForInitialPane({
   promptReadyTimeoutMs = 45_000,
   waitForInitialPaneVisible,
   initialPaneWaitMs,
+  ownDesktop = true,
 }) {
   const shouldWaitForInitialPane = waitForInitialPaneVisible ?? true;
+  if (ownDesktop) {
+    await openHarnessDesktop(client, observer, label);
+  }
   const paneWaitMs = initialPaneWaitMs ?? 20_000;
   const result = await client.request('create_session', {
     cwd,

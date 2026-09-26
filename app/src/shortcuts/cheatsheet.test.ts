@@ -28,7 +28,7 @@ describe('buildCheatsheet', () => {
   it('renders its hand-written combos in the platform vocabulary', () => {
     const jumpRow = (rows: ReturnType<typeof buildCheatsheet>) => rows
       .flatMap((c) => c.rows)
-      .find((r) => r.label === 'Jump to workspace 1–9');
+      .find((r) => r.label === 'Switch to desktop 1–9');
     expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['⌘', '1–9']);
     withNavigatorPlatform('Linux aarch64', () => {
       expect(jumpRow(buildCheatsheet())?.combos[0]).toEqual(['Ctrl', 'Shift', '1–9']);
@@ -45,24 +45,23 @@ describe('buildCheatsheet', () => {
     });
   });
 
-  it('reflects the current workspace bindings (⌘T new workspace, ⌘N new session)', () => {
+  it('lists desktop bindings next to the session bindings', () => {
     const rows = buildCheatsheet().flatMap((c) => c.rows);
-    const newWorkspace = rows.find((r) => r.label === 'New workspace');
-    const newSession = rows.find((r) => r.label === 'New session in this workspace');
-    expect(newWorkspace?.combos[0]).toEqual(['⌘', 'T']);
-    expect(newSession?.combos[0]).toEqual(['⌘', 'N']);
+    expect(rows.find((r) => r.label === 'New session on this desktop')?.combos[0]).toEqual(['⌘', 'N']);
+    expect(rows.find((r) => r.label === 'Desktop overview')?.combos[0]).toEqual(['⌘', 'G']);
+    expect(rows.some((r) => r.label === 'New workspace')).toBe(false);
   });
 
-  it('includes history bindings and corrected workspace labels', () => {
+  it('includes history bindings and desktop step labels', () => {
     const rows = buildCheatsheet().flatMap((category) => category.rows);
-    expect(rows.find((row) => row.label === 'Previous / next workspace')?.combos).toEqual([
+    expect(rows.find((row) => row.label === 'Previous / next desktop')?.combos).toEqual([
       ['⌘', '↑'], ['⌘', '↓'],
     ]);
     expect(rows.find((row) => row.label === 'Back / forward through agent history')?.combos).toEqual([
       ['⌘', '['], ['⌘', ']'],
     ]);
-    expect(SHORTCUT_META['session.prev'].label).toBe('Previous workspace');
-    expect(SHORTCUT_META['session.next'].label).toBe('Next workspace');
+    expect(SHORTCUT_META['session.prev'].label).toBe('Previous desktop');
+    expect(SHORTCUT_META['session.next'].label).toBe('Next desktop');
     expect(SHORTCUT_META['session.historyBack'].label).toBe('Back through agent history');
     expect(SHORTCUT_META['session.historyForward'].label).toBe('Forward through agent history');
   });

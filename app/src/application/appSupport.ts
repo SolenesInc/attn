@@ -12,10 +12,9 @@ import {
   SessionExitInfo,
 } from '../hooks/useDaemonSocket';
 import { type OpenPRProgress } from '../hooks/useOpenPR';
-import { type Session, type TerminalWorkspaceState } from '../store/sessions';
+import { type TerminalWorkspaceState } from '../store/sessions';
 import type { Presentation, SessionLedgerEntry, SessionReopen } from '../types/generated';
 import { type SessionAgent } from '../types/sessionAgent';
-import { hasPane } from '../types/workspace';
 import { crewDisplayName } from '../utils/crewName';
 export const RELEASES_LATEST_API = 'https://api.github.com/repos/victorarias/attn/releases/latest';
 
@@ -43,7 +42,7 @@ export function sessionCloseProtectionHint(sessions: DaemonSession[], id: string
 
 export const TERMINAL_AGENT: SessionAgent = 'shell';
 
-export type LocationPickerPurpose = 'workspace' | 'session' | 'reopen';
+export type LocationPickerPurpose = 'session' | 'reopen';
 
 export function handleAppPointerDownCapture(event: { target: EventTarget | null }): void {
   if (!isBrowserHostOwnedTarget(event.target)) {
@@ -71,35 +70,19 @@ export interface GitHubReleaseResponse {
   draft?: boolean;
 }
 
-export interface LeafWorkspaceDragState {
-  sourceWorkspaceId: string;
-  sourceEndpointId?: string;
-  leafId: string;
-}
-
 export interface LeafDragPreviewState {
   draggingLeafId: string | null;
   dockTarget: DockTarget | null;
   ghostPos: { x: number; y: number } | null;
 }
 
-export const SIDEBAR_LEAF_DROP_PLACEMENT = { anchorId: '', edge: 'left' as const, ratio: 0.32 };
-
-export function terminalStateForWorkspaceSessions(
-  sessions: Session[],
-): TerminalWorkspaceState | null {
-  let selected: TerminalWorkspaceState | null = null;
-  for (const session of sessions) {
-    const candidate = session.workspace;
-    if (!candidate.layoutTree && candidate.agents.length === 0) {
-      continue;
-    }
-    if (!selected || candidate.agents.length > selected.agents.length) {
-      selected = candidate;
-    }
-  }
-  return selected;
+export interface LeafDesktopDragState {
+  sourceDesktopId: string;
+  leafId: string;
 }
+
+export const SIDEBAR_LEAF_DROP_PLACEMENT = { edge: 'left' as const, leafShare: 0.32 };
+
 
 export function activePaneIdForWorkspace(
   workspace: TerminalWorkspaceState,
@@ -114,21 +97,6 @@ export function activePaneIdForWorkspace(
   return workspace.agents[0]?.id || '';
 }
 
-export function activePaneIdForFocusedSession(
-  workspace: TerminalWorkspaceState,
-  session: Session | null,
-  getActivePaneIdForSession: (session: Session | undefined | null) => string,
-): string {
-  const sessionActivePaneId = getActivePaneIdForSession(session);
-  if (
-    sessionActivePaneId &&
-    workspace.layoutTree &&
-    hasPane(workspace.layoutTree, sessionActivePaneId)
-  ) {
-    return sessionActivePaneId;
-  }
-  return activePaneIdForWorkspace(workspace, session?.id ?? null);
-}
 
 export function diagnosticFocusKind(element: Element | null): string {
   if (!element) return 'none';
@@ -178,23 +146,6 @@ export function persistDismissedUpdateVersion(version: string): void {
   }
 }
 
-export const SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY = 'attn.sidebar.showSessionless';
-
-export function readShowSessionlessWorkspaces(): boolean {
-  try {
-    return window.localStorage.getItem(SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
-export function persistShowSessionlessWorkspaces(value: boolean): void {
-  try {
-    window.localStorage.setItem(SHOW_SESSIONLESS_WORKSPACES_STORAGE_KEY, value ? '1' : '0');
-  } catch (err) {
-    console.warn('[App] Failed to persist show-sessionless preference:', err);
-  }
-}
 
 export function toneForDockPanel(
   status?: string,

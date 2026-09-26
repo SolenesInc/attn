@@ -221,7 +221,6 @@ describe('shortcut registry', () => {
     it('has expected session shortcuts defined', () => {
       expect(SHORTCUTS['session.new']).toEqual({ key: 'n', meta: true });
       expect(SHORTCUTS['session.newHorizontal']).toEqual({ key: 'n', meta: true, shift: true });
-      expect(SHORTCUTS['session.newWorkspace']).toEqual({ key: 't', meta: true });
       expect(SHORTCUTS['session.close']).toEqual({ key: 'w', meta: true });
       expect(MAC_SHORTCUTS['session.historyBack']).toEqual({
         key: '[', code: 'BracketLeft', meta: true,
@@ -232,7 +231,12 @@ describe('shortcut registry', () => {
       expect(SHORTCUTS['session.goToDashboard']).toEqual({ key: 'h', meta: true, shift: true });
       expect(MAC_SHORTCUTS['session.orchestrator']).toEqual({ key: 'ArrowUp', meta: true, shift: true });
       expect(LINUX_SHORTCUTS['session.orchestrator']).toEqual({ key: 'o', code: 'KeyO', meta: true, alt: true });
-      expect(SHORTCUTS['view.toggleGrid']).toEqual({ key: 'g', meta: true });
+      expect(MAC_SHORTCUTS['desktop.overview']).toEqual({ key: 'g', meta: true });
+      expect(LINUX_SHORTCUTS['desktop.overview']).toEqual({ key: 'g', meta: true, shift: true });
+      expect(MAC_SHORTCUTS['profile.switch']).toEqual({ key: 'u', meta: true, shift: true });
+      expect(LINUX_SHORTCUTS['profile.switch']).toEqual({ key: 'u', meta: true, alt: true });
+      expect(MAC_SHORTCUTS['desktop.send4']).toEqual({ key: '4', code: 'Digit4', meta: true, alt: true });
+      expect(LINUX_SHORTCUTS['desktop.send4']).toEqual({ key: '4', code: 'Digit4', meta: true, alt: true });
     });
 
     it('uses shifted physical bracket bindings for Linux history navigation', () => {
@@ -245,8 +249,8 @@ describe('shortcut registry', () => {
     });
 
     it('has expected workspace shortcuts defined', () => {
-      expect(SHORTCUTS['workspace.select1']).toEqual({ key: '1', code: 'Digit1', meta: true });
-      expect(SHORTCUTS['workspace.select9']).toEqual({ key: '9', code: 'Digit9', meta: true });
+      expect(SHORTCUTS['desktop.select1']).toEqual({ key: '1', code: 'Digit1', meta: true });
+      expect(SHORTCUTS['desktop.select9']).toEqual({ key: '9', code: 'Digit9', meta: true });
     });
   });
 

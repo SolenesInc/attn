@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { type TerminalLayoutNode, type TileLeaf } from '../../types/workspace';
 import { delegatesByDispatcher } from '../../utils/delegationLinks';
 import type { SessionTerminalWorkspaceProps } from './workspaceTypes';
-type Options = Pick<SessionTerminalWorkspaceProps, 'workspace' | 'activePaneId'> & {
+type Options = Pick<SessionTerminalWorkspaceProps, 'workspace'> & {
   workspaceSessions: NonNullable<SessionTerminalWorkspaceProps['workspaceSessions']>;
   delegationSessions: NonNullable<SessionTerminalWorkspaceProps['delegationSessions']>;
 };
@@ -10,7 +10,6 @@ export function useWorkspacePanes({
   workspace,
   workspaceSessions,
   delegationSessions,
-  activePaneId,
 }: Options) {
   const paneIds = useMemo(() => {
     const ids: string[] = [];
@@ -71,11 +70,6 @@ export function useWorkspacePanes({
     return options;
   }, [agentPanes, sessionById]);
 
-  const activePaneSessionId = useMemo(
-    () => agentPaneById.get(activePaneId)?.sessionId ?? null,
-    [agentPaneById, activePaneId],
-  );
-
   const tileLeafById = useMemo(() => {
     const map = new Map<string, TileLeaf>();
     const walk = (node: TerminalLayoutNode | null) => {
@@ -104,6 +98,5 @@ export function useWorkspacePanes({
     delegationSessionById,
     delegatesByDispatcherId,
     tileSessionOptions,
-    activePaneSessionId,
   };
 }

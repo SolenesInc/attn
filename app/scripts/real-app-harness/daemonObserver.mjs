@@ -42,6 +42,11 @@ export class DaemonObserver {
     this.settings = new Map();
     this.connected = false;
     this.initialStateReceived = false;
+    this.profileId = null;
+    this.profile = null;
+    this.desktops = [];
+    this.nextProfileRequest = 0;
+    this.pendingProfileActions = new Map();
   }
 
   getSetting(key) {
@@ -147,6 +152,62 @@ export class DaemonObserver {
       throw new Error('Daemon websocket is not connected');
     }
     this.ws.send(JSON.stringify(message));
+  }
+
+  profileCommand(cmd, fields) {
+    const requestId = `harness-${cmd}-${(this.nextProfileRequest += 1)}`;
+    const settled = new Promise((resolve, reject) => {
+      this.pendingProfileActions.set(requestId, { resolve, reject });
+    });
+    this.send({ cmd, request_id: requestId, ...fields });
+    return settled;
+  }
+
+  desktop(desktopId) {
+    return this.desktops.find((entry) => entry.id === desktopId) ?? null;
+  }
+
+  desktopOf(sessionId) {
+    return this.desktops.find((desktop) => desktop.panes.some((pane) => pane.session_id === sessionId)) ?? null;
+  }
+
+  currentDesktopId() {
+    return this.profile?.current_desktop_id ?? null;
+  }
+
+  async createDesktop(name) {
+    const result = await this.profileCommand('desktop_create', { profile_id: this.profileId, name });
+    const created = result.desktops?.[0];
+    if (!created) throw new Error(`desktop_create returned no desktop: ${JSON.stringify(result)}`);
+    return this.waitFor(() => this.desktop(created.id), `arrangement with desktop ${created.id}`);
+  }
+
+  async deleteDesktop(desktopId) {
+    const desktop = this.desktop(desktopId);
+    if (!desktop) return;
+    await this.profileCommand('desktop_delete', { desktop_id: desktopId, expected_revision: desktop.revision });
+  }
+
+  setCurrentDesktop(desktopId) {
+    return this.profileCommand('desktop_set_current', { profile_id: this.profileId, desktop_id: desktopId });
+  }
+
+  describeArrangement() {
+    return JSON.stringify(
+      {
+        profileId: this.profileId,
+        currentDesktopId: this.currentDesktopId(),
+        desktops: this.desktops.map((desktop) => ({
+          id: desktop.id,
+          name: desktop.name,
+          slot: desktop.shortcut_slot ?? null,
+          activePaneId: desktop.active_pane_id,
+          panes: desktop.panes.map((pane) => `${pane.pane_id}:${pane.session_id}`),
+        })),
+      },
+      null,
+      2,
+    );
   }
 
   addEndpoint(name, sshTarget) {
@@ -415,7 +476,25 @@ export class DaemonObserver {
           this.endpointsById.set(endpoint.id, endpoint);
         }
         this.#applySettings(data.settings);
+        this.profileId = data.selected_profile_id ?? null;
+        this.profile = (data.profiles || []).find((profile) => profile.id === this.profileId) ?? null;
+        this.desktops = data.desktops || [];
         break;
+      case 'profile_arrangement_changed':
+        if (data.profile?.id === this.profileId) {
+          this.profile = data.profile;
+          this.desktops = data.desktops || [];
+        }
+        break;
+      case 'profile_action_result': {
+        const waiter = this.pendingProfileActions.get(data.request_id);
+        if (waiter) {
+          this.pendingProfileActions.delete(data.request_id);
+          if (data.success) waiter.resolve(data);
+          else waiter.reject(new Error(`${data.action} failed: ${data.error_code ?? ''} ${data.error ?? ''}`));
+        }
+        break;
+      }
       case 'settings_updated':
         this.#applySettings(data.settings);
         break;

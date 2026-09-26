@@ -351,9 +351,19 @@ try {
     await pressEscapeAndWaitFor('crew-seed-back');
     await click(`.workspace-dock-tile:has(.seed-document[data-seed-id="${crewChild}"]) [aria-label="Close tile"]`);
     await waitForDom(`.seed-document[data-seed-id="${crewChild}"]`, { absent: true });
-    await waitForDom(`[data-pane-session-id="${firstSession}"] .terminal-container`, { focused: true });
     const closed = await client.request('seed_document_get_state', { seedId: crewChild });
-    runner.assert(!closed.present, 'closing the Crew seed tile restores the terminal workspace', closed);
+    runner.assert(!closed.present, 'closing the Crew seed tile closes its reader', closed);
+    const shown = await observer.waitFor(() => {
+      const desktop = observer.desktop(observer.currentDesktopId());
+      return desktop && !desktop.tree_json.includes(crewPlot) && !desktop.tree_json.includes(crewChild) ? desktop : null;
+    }, 'the current desktop without the closed Crew seed tile');
+    if (shown.active_pane_id) {
+      const agentPane = shown.panes.some((pane) => pane.pane_id === shown.active_pane_id);
+      await waitForDom(
+        `[data-pane-id="${shown.active_pane_id}"] ${agentPane ? '.terminal-container' : '.workspace-dock-tile-body'}`,
+        { focused: true },
+      );
+    }
   });
 
   await runner.step('manage_entry_retains_the_sidebar_and_returns_keyboard_focus', async () => {

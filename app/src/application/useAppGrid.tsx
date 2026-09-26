@@ -34,7 +34,7 @@ export function useAppGrid({
   const gridSessionTiles = useMemo<GridSessionTile[]>(() => {
     const result: GridSessionTile[] = [];
     for (const s of unmutedEnrichedSessions) {
-      const pane = s.workspace.agents.find((agent) => agent.sessionId === s.id);
+      const pane = s.desktop.agents.find((agent) => agent.sessionId === s.id);
       if (!pane) continue;
       const state = s.state;
       result.push({

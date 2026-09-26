@@ -13,15 +13,14 @@ import {
 } from './AppContexts';
 
 export function AppDashboard() {
-  const { unmutedEnrichedSessions, mutedWorkspaceViews } = useAppSessionsContext();
-  const { view, followNextTurn, setFollowNextTurn, handleSelectSession, setView } =
-    useNavigationContext();
+  const { unmutedEnrichedSessions } = useAppSessionsContext();
+  const { view, followNextTurn, setFollowNextTurn, handleSelectSession } = useNavigationContext();
   const { prs, daemonEndpoints, settings } = useAppInputs();
   const { hasReceivedInitialState, rateLimit, sendWakeTurn } = useDaemonApi();
 
   const { isRefreshingPRs, refreshError, handleRefreshPRs } = usePRLauncherContext();
   const { handleRebootstrapEndpoint } = useAppErrorsContext();
-  const { setSettingsOpen, setSidebarCollapsed, setSidebarMutedExpanded } = useAppPanelsContext();
+  const { setSettingsOpen } = useAppPanelsContext();
   const { queueModeEnabled, crewQueueEnabled } = useAttentionQueueContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleOpenPR } = usePRLauncherContext();
@@ -30,7 +29,6 @@ export function AppDashboard() {
       <div className={`view-container ${view === 'dashboard' ? 'visible' : 'hidden'}`}>
         <Dashboard
           sessions={unmutedEnrichedSessions}
-          mutedWorkspaces={mutedWorkspaceViews}
           prs={prs}
           isLoading={!hasReceivedInitialState}
           isRefreshing={isRefreshingPRs}
@@ -49,11 +47,6 @@ export function AppDashboard() {
           onRefreshPRs={handleRefreshPRs}
           onOpenPR={handleOpenPR}
           onOpenSettings={() => setSettingsOpen(true)}
-          onMutedGroupClick={() => {
-            setSidebarCollapsed(false);
-            setSidebarMutedExpanded(true);
-            setView('session');
-          }}
         />
       </div>
     </>

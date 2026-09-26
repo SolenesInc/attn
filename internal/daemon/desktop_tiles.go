@@ -20,7 +20,7 @@ func tileLeafByID(tree layouttree.Node, tileID string) (layouttree.TileLeaf, boo
 
 func dockAnchor(desktop profiles.Desktop, requested, tileID string) string {
 	for _, candidate := range []string{strings.TrimSpace(requested), desktop.ActivePaneID} {
-		if candidate != "" && candidate != tileID && (layouttree.HasPane(desktop.Tree, candidate) || layouttree.HasTile(desktop.Tree, candidate)) {
+		if candidate != "" && candidate != tileID && layouttree.HasLeaf(desktop.Tree, candidate) {
 			return candidate
 		}
 	}
@@ -47,6 +47,7 @@ func dockTileOnDesktop(desktop profiles.Desktop, dock desktopTileDock) (profiles
 		return desktop, profiles.Errorf(profiles.CodeInvalid, "%s is a pane of desktop %s, not a tile", dock.tileID, desktop.ID)
 	}
 	anchor := dockAnchor(desktop, dock.anchorID, dock.tileID)
+	desktop.ActivePaneID = dock.tileID
 	if anchor == "" {
 		desktop.Tree = layouttree.Node{Type: "tile", TileID: dock.tileID, TileKind: dock.tileKind, TileParams: dock.params, TileSessionID: dock.sessionID}
 		return desktop, nil
@@ -154,9 +155,18 @@ func (d *Daemon) validatedNewTileParams(kind, params string) (string, error) {
 		return params, nil
 	case layouttree.TileKindBrowser, layouttree.TileKindSeed, layouttree.TileKindNotebook:
 		return d.validatedTileParams(kind, params)
-	default:
-		return "", profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed or notebook", kind)
 	}
+	if isAppViewTileKind(kind) {
+		return params, nil
+	}
+	return "", profiles.Errorf(profiles.CodeInvalid, "tile kind %q is not one of markdown, browser, seed, notebook or an app view (%s<app>/<view>)", kind, appViewTileKindPrefix)
+}
+
+const appViewTileKindPrefix = "app:"
+
+func isAppViewTileKind(kind string) bool {
+	app, view, ok := strings.Cut(strings.TrimPrefix(kind, appViewTileKindPrefix), "/")
+	return strings.HasPrefix(kind, appViewTileKindPrefix) && ok && app != "" && view != ""
 }
 
 func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
@@ -185,11 +195,12 @@ func (d *Daemon) validatedTileParams(kind, params string) (string, error) {
 type desktopTileUpdate struct {
 	tileID    string
 	params    string
+	hasParams bool
 	sessionID string
 }
 
 func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUpdate) (desktopTileUpdate, error) {
-	if update.tileID == "" || (update.params == "" && update.sessionID == "") {
+	if update.tileID == "" || (!update.hasParams && update.sessionID == "") {
 		return update, profiles.Errorf(profiles.CodeInvalid, "updating a tile needs tile_id and tile_params or tile_session_id")
 	}
 	desktop, err := d.store.GetDesktop(desktopID)
@@ -203,13 +214,22 @@ func (d *Daemon) checkedDesktopTileUpdate(desktopID string, update desktopTileUp
 	if err := d.checkedTileSession(desktop, update.sessionID); err != nil {
 		return update, err
 	}
+	if !update.hasParams {
+		return update, nil
+	}
+	if update.params == "" {
+		if tile.TileKind != string(layouttree.TileKindNotebook) {
+			return update, profiles.Errorf(profiles.CodeInvalid, "a %s tile cannot drop its tile_params; only a notebook tile falls back to the default root", tile.TileKind)
+		}
+		return update, nil
+	}
 	update.params, err = d.effectiveTileParams(tile, update.params)
 	return update, err
 }
 
 func applyDesktopTileUpdate(desktop profiles.Desktop, update desktopTileUpdate) (profiles.Desktop, error) {
 	next, found := desktop.Tree, true
-	if update.params != "" {
+	if update.hasParams {
 		next, found = layouttree.UpdateTileParams(next, update.tileID, update.params)
 	}
 	if found && update.sessionID != "" {
@@ -227,6 +247,7 @@ func (d *Daemon) handleDesktopUpdateTile(client *wsClient, msg *protocol.Desktop
 		update, err := d.checkedDesktopTileUpdate(msg.DesktopID, desktopTileUpdate{
 			tileID:    strings.TrimSpace(msg.TileID),
 			params:    strings.TrimSpace(protocol.Deref(msg.TileParams)),
+			hasParams: msg.TileParams != nil,
 			sessionID: strings.TrimSpace(protocol.Deref(msg.TileSessionID)),
 		})
 		if err != nil {

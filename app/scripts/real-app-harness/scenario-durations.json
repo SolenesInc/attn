@@ -6,6 +6,14 @@
     "matrixSeconds": 826.7,
     "note": "Seconds each scenario took in a green Linux serial matrix. Remeasure from matrix-digest.txt when a scenario changes shape; the shard planner balances on these.",
     "updates": {
+      "desktop-switching": {
+        "run": "desktop-switching-2026-09-23T23-14-11-901Z",
+        "job": "Local scenario run, pr2desk instance",
+        "recordedAt": "2026-09-23",
+        "seconds": 27.0,
+        "runnerClass": "local macOS",
+        "note": "First green run: switch, send, bounce, overview and a second client. Remeasure on Linux CI."
+      },
       "crew-management": {
         "run": "crew-management-2026-09-19T20-31-21-890Z",
         "job": "Local scenario run, traincrew instance",
@@ -150,7 +158,8 @@
     "tr301-local-claude": 6.9,
     "tr401-local-claude": 14.2,
     "workspace-close-one-session-keeps-selection": 27.4,
-    "workspace-creation-shortcuts": 22.6,
+    "session-creation-shortcuts": 22.6,
+    "desktop-switching": 27.0,
     "workspace-switching": 45.7,
     "worktree-surface": 34.3,
     "crew-management": 57.6

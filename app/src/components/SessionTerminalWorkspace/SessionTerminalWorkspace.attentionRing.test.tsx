@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { createRef, startTransition, Suspense, useState, type ReactNode } from 'react';
-import { SessionTerminalWorkspace, type SessionTerminalWorkspaceHandle } from './index';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode } from 'react';
+import { SessionTerminalWorkspace } from './index';
 import { createPaneRuntimeEventRouterController } from './paneRuntimeEventRouter';
 import {
   tileContentKey,
@@ -139,87 +139,6 @@ afterEach(() => {
 });
 
 describe('SessionTerminalWorkspace attention ring', () => {
-  it('keeps imperative focus bound to the last committed workspace', async () => {
-    const committedWorkspace = workspaceWithOpenedDocuments(['document']);
-    const discardedWorkspace: TerminalWorkspaceState = {
-      agents: [
-        {
-          id: 'document',
-          runtimeId: 'runtime-document',
-          sessionId: 'session-document',
-          title: 'Document pane',
-        },
-      ],
-      layoutTree: { type: 'pane', paneId: 'document' },
-    };
-    const workspaceRef = createRef<SessionTerminalWorkspaceHandle>();
-    const onFocusPane = vi.fn();
-    const discardedRenderReached = vi.fn();
-    const neverCommits = new Promise<void>(() => {});
-    let beginDiscardedRender = () => {};
-
-    function SuspendDiscardedRender({ active }: { active: boolean }) {
-      if (active) {
-        discardedRenderReached();
-        throw neverCommits;
-      }
-      return null;
-    }
-
-    function Host() {
-      const [showDiscardedWorkspace, setShowDiscardedWorkspace] = useState(false);
-      beginDiscardedRender = () => {
-        startTransition(() => setShowDiscardedWorkspace(true));
-      };
-      return (
-        <Suspense fallback={null}>
-          <SessionTerminalWorkspace
-            ref={workspaceRef}
-            workspaceId="workspace-committed-focus"
-            workspaceSessions={[
-              { id: 'session-a', label: 'Alpha', agent: 'shell', cwd: '/tmp' },
-              { id: 'session-document', label: 'Document pane', agent: 'shell', cwd: '/tmp' },
-            ]}
-            workspace={showDiscardedWorkspace ? discardedWorkspace : committedWorkspace}
-            activePaneId={showDiscardedWorkspace ? 'document' : 'agent-a'}
-            fontSize={13}
-            enabled
-            isActiveSession
-            eventRouter={createPaneRuntimeEventRouterController()}
-            onSplitPane={vi.fn()}
-            onClosePane={vi.fn()}
-            onFocusPane={onFocusPane}
-            onNavigateOutOfSession={vi.fn()}
-            onUndockTile={vi.fn()}
-            onRequestTileContent={vi.fn()}
-            tileContents={{
-              [tileContentKey('workspace-committed-focus', 'document')]: {
-                path: '/tmp/document.md',
-                content: '# Document',
-              },
-            }}
-          />
-          <SuspendDiscardedRender active={showDiscardedWorkspace} />
-        </Suspense>
-      );
-    }
-
-    const { container } = render(<Host />, { wrapper: Wrapper });
-    await waitFor(() => expect(workspaceRef.current).not.toBeNull());
-    onFocusPane.mockClear();
-
-    await act(async () => {
-      beginDiscardedRender();
-      await Promise.resolve();
-    });
-    expect(discardedRenderReached).toHaveBeenCalled();
-    expect(container.querySelector('[data-pane-id="document"]')).toHaveAttribute('data-pane-kind', 'tile');
-
-    act(() => workspaceRef.current?.focusLeaf('document'));
-
-    expect(onFocusPane).not.toHaveBeenCalled();
-  });
-
   it('suspends the oldest rightmost documents before newer work', async () => {
     observedWidth = 1816;
     const commonProps = {
@@ -257,6 +176,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
       rerender(
         <SessionTerminalWorkspace
           {...commonProps}
+          activePaneId={documentId}
           workspace={workspaceWithOpenedDocuments(openedDocuments.slice(0, index + 1))}
           tileContents={tileContents}
         />,
@@ -290,7 +210,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     expect(screen.queryByRole('button', { name: 'Expand newest.md' })).toBeNull();
   });
 
-  it('brings a newly opened document into the attention ring', async () => {
+  it('brings a document the daemon focused into the attention ring', async () => {
     observedWidth = 560;
     const initialWorkspace: TerminalWorkspaceState = {
       agents: [
@@ -323,6 +243,7 @@ describe('SessionTerminalWorkspace attention ring', () => {
     rerender(
       <SessionTerminalWorkspace
         {...commonProps}
+        activePaneId="document"
         workspace={{
           ...initialWorkspace,
           layoutTree: {
@@ -357,6 +278,38 @@ describe('SessionTerminalWorkspace attention ring', () => {
       );
     });
     expect(container.querySelector('[data-pane-id="document"]')).not.toHaveAttribute('data-pane-suspended');
+  });
+
+  it('measures the surface once leaves arrive on a desktop that mounted empty', async () => {
+    const props = {
+      workspaceId: 'workspace-attention',
+      workspaceSessions: [
+        { id: 'session-a', label: 'Alpha', agent: 'shell' as const, cwd: '/tmp' },
+        { id: 'session-b', label: 'Beta', agent: 'shell' as const, cwd: '/tmp' },
+      ],
+      activePaneId: 'agent-a',
+      fontSize: 13,
+      enabled: true,
+      isActiveSession: true,
+      eventRouter: createPaneRuntimeEventRouterController(),
+      onSplitPane: vi.fn(),
+      onClosePane: vi.fn(),
+      onFocusPane: vi.fn(),
+      onNavigateOutOfSession: vi.fn(),
+      onUndockTile: vi.fn(),
+      tileContents: {
+        [tileContentKey('workspace-attention', 'document')]: { path: '/tmp/review.md', content: '# Review me' },
+      },
+      onRequestTileContent: vi.fn(),
+    };
+    const { rerender } = render(
+      <SessionTerminalWorkspace {...props} activePaneId="" workspace={{ agents: [], layoutTree: null }} />,
+      { wrapper: Wrapper },
+    );
+
+    rerender(<SessionTerminalWorkspace {...props} workspace={crowdedWorkspace()} />);
+
+    expect(await screen.findByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
   });
 
   it('expands a clicked sliver and folds the least-recently-focused leaf, not the previous one', async () => {

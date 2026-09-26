@@ -85,9 +85,9 @@ describe('findConflict', () => {
 
   it('detects code-equivalent collisions even when the printed key differs', () => {
     // A localized layout where ⌘+the-1-key reports key '&' but code 'Digit1'.
-    // matchesShortcut would fire workspace.select1, so findConflict must catch it.
+    // matchesShortcut would fire desktop.select1, so findConflict must catch it.
     expect(findConflict({ key: '&', code: 'Digit1', meta: true }, 'session.new'))
-      .toBe('workspace.select1');
+      .toBe('desktop.select1');
   });
 });
 
@@ -138,6 +138,34 @@ describe('isRiskyBinding', () => {
   });
 });
 
+describe('saved bindings from before desktops', () => {
+  it('carries workspace.select overrides and dock entries over to desktop.select', () => {
+    const raw = JSON.stringify({
+      version: 1,
+      overrides: { 'workspace.select2': { key: '2', code: 'Digit2', ctrl: true }, 'workspace.select3': null },
+      dock: { collapsed: false, items: ['workspace.select1', 'dock.attention'] },
+    });
+
+    const parsed = parseKeybindingsConfig(raw);
+
+    expect(parsed.overrides['desktop.select2']).toEqual({ key: '2', code: 'Digit2', ctrl: true });
+    expect(parsed.overrides['desktop.select3']).toBeNull();
+    expect(parsed.dock.items).toEqual(['desktop.select1', 'dock.attention']);
+    expect(Object.keys(parsed.overrides).some((id) => id.startsWith('workspace.'))).toBe(false);
+  });
+
+  it('keeps a desktop.select override over the legacy one it replaces', () => {
+    const raw = JSON.stringify({
+      overrides: {
+        'desktop.select4': { key: '4', code: 'Digit4', alt: true },
+        'workspace.select4': { key: '4', code: 'Digit4', ctrl: true },
+      },
+    });
+
+    expect(parseKeybindingsConfig(raw).overrides['desktop.select4']).toEqual({ key: '4', code: 'Digit4', alt: true });
+  });
+});
+
 describe('chord overrides', () => {
   it('resolves a chord override and round-trips it through parse/serialize', () => {
     const chord = { leader: { key: 'k', meta: true }, then: { key: 'd' } };
@@ -159,7 +187,7 @@ describe('chord overrides', () => {
 
   it('finds a conflict for a chord whose leader equals an existing combo', () => {
     expect(findConflict({ leader: { key: 'g', meta: true }, then: { key: 'x' } }, 'dock.attention'))
-      .toBe('view.toggleGrid');
+      .toBe('desktop.overview');
   });
 
   it('lets a chord leader coexist with a different existing combo', () => {

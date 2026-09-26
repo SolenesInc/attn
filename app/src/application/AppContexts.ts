@@ -13,23 +13,28 @@ export function useAppInputs() {
   return useRequiredContext(AppInputsContext);
 }
 
-export const WorkspacesContext = createContext<
-  ReturnType<typeof useAppController>['workspaces'] | null
+export const DesktopsContext = createContext<
+  ReturnType<typeof useAppController>['desktops'] | null
 >(null);
-export function useWorkspaceRuntimeContext() {
-  return useRequiredContext(WorkspacesContext).workspaceRuntime;
+export function useDesktopRuntimeContext() {
+  return useRequiredContext(DesktopsContext).desktopRuntime;
 }
 export function useNavigationContext() {
-  return useRequiredContext(WorkspacesContext).navigation;
+  return useRequiredContext(DesktopsContext).navigation;
 }
-export function useWorkspaceTilesContext() {
-  return useRequiredContext(WorkspacesContext).workspaceTiles;
+export function useDesktopNavigationContext() {
+  const { desktopNavigation, desktopOverviewOpen, setDesktopOverviewOpen, profileSwitcherOpen, setProfileSwitcherOpen } =
+    useRequiredContext(DesktopsContext);
+  return { desktopNavigation, desktopOverviewOpen, setDesktopOverviewOpen, profileSwitcherOpen, setProfileSwitcherOpen };
 }
-export function useWorkspaceResidencyContext() {
-  return useRequiredContext(WorkspacesContext).workspaceResidency;
+export function useDesktopTilesContext() {
+  return useRequiredContext(DesktopsContext).desktopTiles;
 }
-export function useWorkspaceDragContext() {
-  return useRequiredContext(WorkspacesContext).workspaceDrag;
+export function useDesktopResidencyContext() {
+  return useRequiredContext(DesktopsContext).desktopResidency;
+}
+export function useLeafDragContext() {
+  return useRequiredContext(DesktopsContext).leafDrag;
 }
 
 export const SessionsContext = createContext<

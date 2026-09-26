@@ -21,7 +21,7 @@ import { getSettingsAutomationHandle, INACTIVE_SETTINGS_STATE } from '../compone
 import { getAutoModeAutomationHandle, INACTIVE_AUTOMODE_STATE } from '../components/autoModeAutomation';
 import { repositoryQueryToken } from '../components/ledger/ledgerQuery';
 import { getTerminalPerfSnapshot } from '../utils/terminalPerf';
-import { readWarmWorkspaceLimit } from '../utils/terminalVirtualization';
+import { useProfilesStore } from '../store/profiles';
 import { dumpTerminalGeometry } from '../utils/terminalDiagnosticsLog';
 import { clearPtyPerfSnapshot, getPtyPerfSnapshot, recordPtyDecode, recordWsJsonParse } from '../utils/ptyPerf';
 import { buildSessionRenderHealth } from '../utils/renderHealth';
@@ -83,20 +83,23 @@ interface UseUiAutomationBridgeArgs {
   getActivePaneIdForSession: (session: Session | undefined | null) => string;
   createSession: (label: string, cwd: string, id?: string, agent?: SessionAgent, endpointId?: string, yoloMode?: boolean, options?: { chiefOfStaff?: boolean }) => Promise<string>;
   selectSession: (sessionId: string) => void;
-  selectWorkspace: (workspaceId: string) => void;
-  moveWorkspaceLeafToWorkspace: (
-    sourceWorkspaceId: string,
-    targetWorkspaceId: string,
-    leafId: string,
-    options?: { anchorId?: string; edge?: 'left' | 'right' | 'top' | 'bottom'; ratio?: number },
-  ) => Promise<unknown>;
+  selectDesktop: (desktopId: string) => void;
+  moveDesktopLeaf: (move: {
+    sourceDesktopId: string;
+    targetDesktopId: string;
+    leafId: string;
+    anchorId?: string;
+    edge: 'left' | 'right' | 'top' | 'bottom';
+    expectedSourceRevision: number;
+    expectedTargetRevision: number;
+  }) => Promise<unknown>;
   closeSession: (sessionId: string) => Promise<void>;
   reloadSession?: (sessionId: string, size?: { cols: number; rows: number }) => Promise<void>;
   setSetting?: (key: string, value: string) => void;
   openDockPanel?: (panelId: string) => void;
   openShortcutEditor?: () => void;
   splitPane: (sessionId: string, targetPaneId: string, direction: TerminalSplitDirection) => Promise<unknown>;
-  closePane: (sessionId: string, paneId: string) => Promise<unknown>;
+  closePaneSession: (sessionId: string) => Promise<unknown>;
   focusPane: (sessionId: string, paneId: string) => void;
   typeInSessionPaneViaUI: (sessionId: string, paneId: string, text: string) => boolean;
   isSessionPaneInputFocused: (sessionId: string, paneId: string) => boolean;
@@ -172,7 +175,7 @@ function resolvePaneId(
 }
 
 function resolveRuntimeId(session: Session, paneId: string): string {
-  const agent = session.workspace.agents.find((entry) => entry.id === paneId);
+  const agent = session.desktop.agents.find((entry) => entry.id === paneId);
   if (agent?.runtimeId) {
     return agent.runtimeId;
   }
@@ -180,19 +183,19 @@ function resolveRuntimeId(session: Session, paneId: string): string {
 }
 
 function resolvePaneOwnerSessionId(session: Session, paneId: string): string {
-  return session.workspace.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
+  return session.desktop.agents.find((entry) => entry.id === paneId)?.sessionId || session.id;
 }
 
 function resolveWorkspaceViewSessionId(session: Session, sessions: Session[], activeSessionId: string | null): string {
   const activeSession = activeSessionId ? sessions.find((entry) => entry.id === activeSessionId) : null;
-  if (activeSession?.workspaceId && activeSession.workspaceId === session.workspaceId) {
+  if (activeSession?.desktopId && activeSession.desktopId === session.desktopId) {
     return activeSession.id;
   }
   return session.id;
 }
 
 function paneEntries(session: Session) {
-  return session.workspace.agents.map((agent) => ({
+  return session.desktop.agents.map((agent) => ({
       paneId: agent.id,
       runtimeId: agent.runtimeId,
       sessionId: agent.sessionId,
@@ -209,9 +212,9 @@ function serializeWorkspaceModel(
     activePaneId: getActivePaneIdForSession(session),
     daemonActivePaneId: session.daemonActivePaneId,
     panes: paneEntries(session),
-    layoutTree: session.workspace.layoutTree,
-    layout: collectWorkspaceLayoutDiagnostics(session.workspace.layoutTree),
-    sessionPaneCount: session.workspace.agents.length,
+    layoutTree: session.desktop.layoutTree,
+    layout: collectWorkspaceLayoutDiagnostics(session.desktop.layoutTree),
+    sessionPaneCount: session.desktop.agents.length,
   };
 }
 
@@ -222,12 +225,37 @@ function serializeSession(session: Session, getActivePaneIdForSession: (session:
     label: session.label,
     state: session.state,
     cwd: session.cwd,
-    workspaceId: session.workspaceId,
+    desktopId: session.desktopId,
     agent: session.agent,
     activePaneId: workspace.activePaneId,
     daemonActivePaneId: workspace.daemonActivePaneId,
     panes: workspace.panes,
     workspace,
+  };
+}
+
+function serializeArrangement() {
+  const { selectedProfileId, currentDesktopId, previousDesktopId, desktops } = useProfilesStore.getState();
+  const surfaceOf = (desktopId: string) =>
+    typeof document === 'undefined'
+      ? null
+      : document.querySelector(`[data-session-terminal-workspace="${CSS.escape(desktopId)}"]`);
+  return {
+    selectedProfileId,
+    currentDesktopId,
+    previousDesktopId,
+    desktops: desktops.map((desktop) => {
+      const surface = surfaceOf(desktop.id);
+      return {
+        id: desktop.id,
+        slot: desktop.shortcut_slot ?? null,
+        revision: desktop.revision,
+        activePaneId: desktop.active_pane_id,
+        panes: desktop.panes.map((pane) => ({ paneId: pane.pane_id, sessionId: pane.session_id, kind: pane.kind })),
+        mounted: surface != null,
+        visible: surface?.getAttribute('data-session-visible') === '1',
+      };
+    }),
   };
 }
 
@@ -243,7 +271,7 @@ function summarizeSession(
     agent: session.agent,
     activePaneId: getActivePaneIdForSession(session),
     daemonActivePaneId: session.daemonActivePaneId,
-    sessionPaneCount: session.workspace.agents.length,
+    sessionPaneCount: session.desktop.agents.length,
   };
 }
 
@@ -535,7 +563,7 @@ function collectVisualSnapshot(
       const runtimeIdByPaneId = new Map(
         workspaceModel.panes.map((pane) => [pane.paneId, pane.runtimeId] as const),
       );
-      const workspaceId = session.workspaceId;
+      const workspaceId = session.desktopId;
       const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
       const workspaceView = collectWorkspaceViewState(workspaceId);
       const rootBounds = workspaceDom.workspaceRoot?.bounds;
@@ -640,13 +668,13 @@ function collectSessionUiState(
   const sidebarItem = document.querySelector(
     `[data-testid="sidebar-session-${session.id}"]`
   );
-  const firstAgentPaneId = session.workspace.agents[0]?.id || '';
+  const firstAgentPaneId = session.desktop.agents[0]?.id || '';
   const firstAgentPane = firstAgentPaneId
     ? document.querySelector(`[data-pane-session-id="${session.id}"][data-pane-id="${firstAgentPaneId}"]`)
     : null;
   const settlingChip = firstAgentPane?.querySelector('[data-testid="settling-indicator"]') ?? null;
   const settlingFill = firstAgentPane?.querySelector('.settling-header-track-fill') ?? null;
-  const workspaceId = session.workspaceId;
+  const workspaceId = session.desktopId;
   const workspaceDom = collectWorkspaceShellMetrics(workspaceId);
   const workspaceView = collectWorkspaceViewState(workspaceId);
   const workspaceModel = serializeWorkspaceModel(session, getActivePaneIdForSession);
@@ -775,7 +803,7 @@ function collectRenderHealthSnapshot(
 function collectSessionRuntimeIds(sessions: Session[]) {
   const runtimeIds = new Set<string>();
   for (const session of sessions) {
-    for (const agent of session.workspace.agents) {
+    for (const agent of session.desktop.agents) {
       if (agent.runtimeId) {
         runtimeIds.add(agent.runtimeId);
       }
@@ -2048,7 +2076,7 @@ async function capturePerfSnapshot(
       }
     : await getBrowserMemorySnapshot();
   const totalPaneCount = scopedSessions.reduce(
-    (sum, session) => sum + session.workspace.agents.length,
+    (sum, session) => sum + session.desktop.agents.length,
     0,
   );
   return {
@@ -2076,7 +2104,7 @@ async function capturePerfSnapshot(
         label: session.label,
         state: session.state,
         activePaneId: getActivePaneIdForSession(session),
-        sessionPaneCount: session.workspace.agents.length,
+        sessionPaneCount: session.desktop.agents.length,
       })),
     },
     browserMemory,
@@ -2150,15 +2178,15 @@ export function useUiAutomationBridge({
   getActivePaneIdForSession,
   createSession,
   selectSession,
-  selectWorkspace,
-  moveWorkspaceLeafToWorkspace,
+  selectDesktop,
+  moveDesktopLeaf,
   closeSession,
   reloadSession,
   setSetting,
   openDockPanel,
   openShortcutEditor,
   splitPane,
-  closePane,
+  closePaneSession,
   focusPane,
   typeInSessionPaneViaUI,
   isSessionPaneInputFocused,
@@ -2194,6 +2222,7 @@ export function useUiAutomationBridge({
           appBuild: APP_BUILD_IDENTITY,
           gridActive: typeof document !== 'undefined' && document.querySelector('.grid-view') != null,
           sessions: sessions.map((session) => serializeSession(session, getActivePaneIdForSession)),
+          arrangement: serializeArrangement(),
         };
       case 'dismiss_whats_new': {
         // A fresh instance's one-time What's New modal sits above the workspace and swallows native
@@ -2800,25 +2829,6 @@ export function useUiAutomationBridge({
         await settleUi();
         return { key, value };
       }
-      case 'set_warm_workspace_limit': {
-        const setter = (window as Window & { attnSetWarmWorkspaces?: (n: number) => number }).attnSetWarmWorkspaces;
-        if (!setter) {
-          throw new Error('attnSetWarmWorkspaces is not available');
-        }
-        const requested = payload.limit;
-        if (typeof requested !== 'number' || !Number.isFinite(requested)) {
-          throw new Error('set_warm_workspace_limit requires a numeric limit');
-        }
-        const limit = setter(requested);
-        await settleUi();
-        const virtualizedPanes = document.querySelectorAll('[data-testid^="pane-virtualized-"]').length;
-        return { limit, virtualizedPanes };
-      }
-      case 'get_warm_workspace_limit': {
-        const limit = readWarmWorkspaceLimit();
-        const virtualizedPanes = document.querySelectorAll('[data-testid^="pane-virtualized-"]').length;
-        return { limit, virtualizedPanes };
-      }
       case 'dump_terminal_geometry': {
         const snapshots = dumpTerminalGeometry();
         return { snapshots };
@@ -2844,7 +2854,7 @@ export function useUiAutomationBridge({
           throw new Error('reload_session requires sessionId');
         }
         const session = sessions.find((entry) => entry.id === sessionId);
-        const paneId = session?.workspace.agents.find((agent) => agent.sessionId === sessionId)?.id;
+        const paneId = session?.desktop.agents.find((agent) => agent.sessionId === sessionId)?.id;
         const size = paneId ? getPaneSize(sessionId, paneId) || undefined : undefined;
         await reloadSession(sessionId, size);
         await settleUi();
@@ -2910,14 +2920,14 @@ export function useUiAutomationBridge({
           unread: Boolean(chip.querySelector(`[data-testid="seed-chip-unread-${sessionId}"]`)),
         };
       }
-      case 'select_workspace': {
-        const workspaceId = typeof payload.workspaceId === 'string' ? payload.workspaceId : '';
-        if (!workspaceId) {
-          throw new Error('select_workspace requires workspaceId');
+      case 'select_desktop': {
+        const desktopId = typeof payload.desktopId === 'string' ? payload.desktopId : '';
+        if (!desktopId) {
+          throw new Error('select_desktop requires desktopId');
         }
-        selectWorkspace(workspaceId);
+        selectDesktop(desktopId);
         await settleUi();
-        return { workspaceId };
+        return { desktopId };
       }
       case 'app_view_get_state': {
         const scope = typeof payload.workspaceId === 'string' && payload.workspaceId
@@ -3194,7 +3204,13 @@ export function useUiAutomationBridge({
         if (!sessionId || !paneId) {
           throw new Error('close_pane requires sessionId and paneId');
         }
-        await closePane(sessionId, paneId);
+        const owner = sessions
+          .find((entry) => entry.id === sessionId)
+          ?.desktop.agents.find((pane) => pane.id === paneId)?.sessionId;
+        if (!owner) {
+          throw new Error(`Pane not found: ${paneId} is not on the desktop of session ${sessionId}`);
+        }
+        await closePaneSession(owner);
         return { sessionId, paneId };
       }
       case 'focus_pane': {
@@ -3410,22 +3426,35 @@ export function useUiAutomationBridge({
         const viewSessionId = resolveWorkspaceViewSessionId(session, sessions, activeSessionId);
         selectSession(sessionId);
         await settleUi(2);
-        const result = await dragSplitDivider(session.workspaceId, splitId, deltaPx, steps);
-        return { sessionId, viewSessionId, workspaceId: session.workspaceId, ...result };
+        const result = await dragSplitDivider(session.desktopId, splitId, deltaPx, steps);
+        return { sessionId, viewSessionId, desktopId: session.desktopId, ...result };
       }
-      case 'move_workspace_leaf': {
-        const sourceWorkspaceId = typeof payload.sourceWorkspaceId === 'string' ? payload.sourceWorkspaceId : '';
-        const targetWorkspaceId = typeof payload.targetWorkspaceId === 'string' ? payload.targetWorkspaceId : '';
+      case 'move_desktop_leaf': {
+        const sourceDesktopId = typeof payload.sourceDesktopId === 'string' ? payload.sourceDesktopId : '';
+        const targetDesktopId = typeof payload.targetDesktopId === 'string' ? payload.targetDesktopId : '';
         const leafId = typeof payload.leafId === 'string' ? payload.leafId : '';
-        if (!sourceWorkspaceId || !targetWorkspaceId || !leafId) {
-          throw new Error('move_workspace_leaf requires sourceWorkspaceId, targetWorkspaceId, and leafId');
+        if (!sourceDesktopId || !targetDesktopId || !leafId) {
+          throw new Error('move_desktop_leaf requires sourceDesktopId, targetDesktopId, and leafId');
         }
+        const desktops = useProfilesStore.getState().desktops;
+        const revisionOf = (desktopId: string) => {
+          const desktop = desktops.find((entry) => entry.id === desktopId);
+          if (!desktop) throw new Error(`move_desktop_leaf: desktop ${desktopId} is not in the selected profile`);
+          return desktop.revision;
+        };
         const edge = payload.edge === 'right' || payload.edge === 'top' || payload.edge === 'bottom'
           ? payload.edge
           : 'left';
-        const anchorId = typeof payload.anchorId === 'string' ? payload.anchorId : '';
-        const ratio = typeof payload.ratio === 'number' ? payload.ratio : undefined;
-        const result = await moveWorkspaceLeafToWorkspace(sourceWorkspaceId, targetWorkspaceId, leafId, { anchorId, edge, ratio });
+        const anchorId = typeof payload.anchorId === 'string' && payload.anchorId ? payload.anchorId : undefined;
+        const result = await moveDesktopLeaf({
+          sourceDesktopId,
+          targetDesktopId,
+          leafId,
+          anchorId,
+          edge,
+          expectedSourceRevision: revisionOf(sourceDesktopId),
+          expectedTargetRevision: revisionOf(targetDesktopId),
+        });
         await settleUi(4);
         return result;
       }
@@ -3991,7 +4020,7 @@ export function useUiAutomationBridge({
           ? Math.max(0, payload.interChunkDelayMs)
           : 0;
         const runtimeId =
-          session.workspace.agents.find((entry) => entry.id === paneId)?.runtimeId ||
+          session.desktop.agents.find((entry) => entry.id === paneId)?.runtimeId ||
           `bench:${paneId}`;
         const bytes = buildBenchmarkBytes(chunkBytes, benchmarkPayload);
         const base64Payload = encodeBytesToBase64(bytes);
@@ -4203,7 +4232,7 @@ export function useUiAutomationBridge({
     }
   }, [
     activeSessionId,
-    closePane,
+    closePaneSession,
     connectionError,
     createSession,
     closeSession,
@@ -4222,7 +4251,7 @@ export function useUiAutomationBridge({
     getPanePlacementState,
     getPaneVisibleContent,
     getPaneVisibleStyleSummary,
-    moveWorkspaceLeafToWorkspace,
+    moveDesktopLeaf,
     openAutomationsPanel,
     openDockPanel,
     openShortcutEditor,
@@ -4233,7 +4262,7 @@ export function useUiAutomationBridge({
     drainSessionPaneTerminal,
     scrollSessionPaneToTop,
     selectSession,
-    selectWorkspace,
+    selectDesktop,
     sendRuntimeInput,
     sessions,
     setSetting,

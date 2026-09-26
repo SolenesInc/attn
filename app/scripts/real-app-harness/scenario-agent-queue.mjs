@@ -508,6 +508,12 @@ async function main() {
 
     await runner.step('a_shell_pane_never_queues', async () => {
       const before = turnIds(await queueState(client));
+      await client.request('select_session', { sessionId: alpha.sessionId });
+      await pollFor(async () => {
+        const state = await client.request('get_state');
+        const shown = state.arrangement.desktops.find((desktop) => desktop.id === state.arrangement.currentDesktopId);
+        return shown?.panes.some((pane) => pane.sessionId === alpha.sessionId) ? shown : null;
+      }, 'alpha on the shown desktop before splitting it', 15_000);
       const workspace = await client.request('get_workspace', { sessionId: alpha.sessionId });
       const targetPaneId = workspace.activePaneId || workspace.panes?.[0]?.paneId;
       await client.request('split_pane', { sessionId: alpha.sessionId, targetPaneId, direction: 'vertical' });

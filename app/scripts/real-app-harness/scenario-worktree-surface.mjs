@@ -301,8 +301,9 @@ async function main() {
       delegateSession = null;
 
       fs.rmSync(path.join(target, '.attn-mock-agent'), { recursive: true, force: true });
-      runner.assert(gitOut(target, ['status', '--porcelain']).trim() === '',
-        'the clean-delete fixture has no changes after removing mock-agent evidence', { target });
+      const porcelain = gitOut(target, ['status', '--porcelain', '--untracked-files=all']).trim();
+      runner.assert(porcelain === '',
+        'the clean-delete fixture has no changes after removing mock-agent evidence', { target, porcelain });
 
       await client.request('worktrees_delete', { path: target });
       await poll(async () => {

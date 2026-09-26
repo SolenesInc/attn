@@ -55,17 +55,18 @@ describe('createTerminalKeyInterceptor', () => {
     expect(sendToPty).toHaveBeenCalledWith('\x1b[Z');
   });
 
-  it('routes Cmd+T to new-workspace shortcut when terminal owns the key event', () => {
+  it('routes a desktop digit to the desktop shortcut when terminal owns the key event', () => {
     vi.mocked(triggerShortcut).mockReturnValue(true);
     const sendToPty = vi.fn();
     const handler = createTerminalKeyInterceptor(sendToPty);
     const event = new KeyboardEvent('keydown', {
-      key: 't',
+      key: '2',
+      code: 'Digit2',
       metaKey: true,
     });
 
     expect(handler(event)).toBe(true);
-    expect(triggerShortcut).toHaveBeenCalledWith('session.newWorkspace');
+    expect(triggerShortcut).toHaveBeenCalledWith('desktop.select2');
     expect(sendToPty).not.toHaveBeenCalled();
   });
 
@@ -123,7 +124,7 @@ describe('createTerminalKeyInterceptor', () => {
     });
 
     expect(handler(event)).toBe(true);
-    expect(triggerShortcut).toHaveBeenCalledWith('workspace.select2');
+    expect(triggerShortcut).toHaveBeenCalledWith('desktop.select2');
     expect(sendToPty).not.toHaveBeenCalled();
   });
 
@@ -137,7 +138,7 @@ describe('createTerminalKeyInterceptor', () => {
     });
 
     expect(handler(event)).toBe(true);
-    expect(triggerShortcut).toHaveBeenCalledWith('workspace.select3');
+    expect(triggerShortcut).toHaveBeenCalledWith('desktop.select3');
     expect(sendToPty).not.toHaveBeenCalled();
   });
 

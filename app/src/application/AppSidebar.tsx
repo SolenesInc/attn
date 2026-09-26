@@ -1,66 +1,60 @@
+import { useMemo } from 'react';
 import { Sidebar } from '../components/Sidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { BUILD_INSTANCE } from '../utils/buildInstance';
 import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
   useAppAppearanceContext,
   useAppGardenActionsContext,
-  useCrewPanelContext,
   useAppGridContext,
   useAppInputs,
-  useAppSessionsContext,
   useAppPanelsContext,
   useAttentionQueueContext,
   useChiefOfStaffContext,
+  useCrewPanelContext,
+  useDesktopResidencyContext,
+  useLeafDragContext,
   useNavigationContext,
   useSessionLaunchContext,
   useSessionLifecycleContext,
-  useWorkspaceDragContext,
-  useWorkspaceResidencyContext,
 } from './AppContexts';
 import { useAppSidebarActions } from './useAppSidebarActions';
 
 export function AppSidebar() {
-  const { mutedWorkspaceViews } = useAppSessionsContext();
   const {
-    sidebarWorkspaceViews,
-    visualWorkspaces,
-    visualIndexByWorkspaceId,
-    activeWorkspaceId,
+    desktopViews,
+    currentDesktopId,
     selectedTile,
-    showSessionlessWorkspaces,
-    handleToggleShowSessionlessWorkspaces,
     workspaceSelectionStyle,
     handleWorkspaceSelectionStyleChange,
-    handleWorkspaceReorder,
     handleSelectSession,
-    handleSelectWorkspace,
+    handleSelectDesktop,
     handleSelectTile,
     handleCloseTile,
     handleReloadTile,
     goToDashboard,
     view,
   } = useNavigationContext();
+  const desktops = useProfilesStore((state) => state.desktops);
+  const slotIndexByDesktopId = useMemo(
+    () =>
+      new Map(
+        desktops.map((desktop) => [desktop.id, desktop.shortcut_slot ? desktop.shortcut_slot - 1 : -1]),
+      ),
+    [desktops],
+  );
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const {
-    tileContents,
-    sendMuteWorkspace,
-    sendPinWorkspace,
+    desktopTileContents,
     sendRenameSession,
-    sendRenameWorkspace,
     sendSettleTurn,
     sendWakeTurn,
     sendTriggerNudge,
   } = useDaemonApi();
-  const {
-    sidebarCollapsed,
-    openNotificationsPanel,
-    sidebarMutedExpanded,
-    setSidebarMutedExpanded,
-    toggleSidebarCollapse,
-  } = useAppPanelsContext();
+  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse } = useAppPanelsContext();
   const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
   const { criticalNotifications, settings } = useAppInputs();
   const { gridLayout, handleSelectGridLayout } = useAppGridContext();
@@ -76,97 +70,79 @@ export function AppSidebar() {
     queueBands,
     openSnoozeMenu,
   } = useAttentionQueueContext();
+  const { onScreenSessionIds } = useDesktopResidencyContext();
   const {
-    leafWorkspaceDrag,
-    dragHoverWorkspaceId,
-    handleWorkspaceDragEnter,
-    handleWorkspaceDragLeave,
-    handleWorkspaceDragDrop,
-    handleNewWorkspaceDrop,
-    handleLeafDragStart,
+    leafDesktopDrag,
+    dragHoverDesktopId,
+    handleDesktopDragEnter,
+    handleDesktopDragLeave,
+    handleDesktopDragDrop,
+    handleNewDesktopDrop,
+    handleSessionDragStart,
     handleLeafDragEnd,
-  } = useWorkspaceDragContext();
-  const { onScreenSessionIds } = useWorkspaceResidencyContext();
+  } = useLeafDragContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleRequestCloseSession, handleReloadSession } = useSessionLifecycleContext();
   const { sidebarHeaderActions, dockItems } = useAppSidebarActions();
   return (
-    <>
-      <Sidebar
-        workspaces={sidebarWorkspaceViews}
-        visualOrder={visualWorkspaces}
-        visualIndexByWorkspaceId={visualIndexByWorkspaceId}
-        selectedId={activeSessionId}
-        selectedWorkspaceId={activeWorkspaceId}
-        selectedTile={selectedTile}
-        tileContents={tileContents}
-        collapsed={sidebarCollapsed}
-        instance={BUILD_INSTANCE}
-        headerActions={sidebarHeaderActions}
-        criticalNotifications={criticalNotifications}
-        onOpenNotifications={openNotificationsPanel}
-        gridLayout={gridLayout}
-        onSelectGridLayout={handleSelectGridLayout}
-        dockItems={dockItems}
-        dockCollapsed={keybindings.dock.collapsed}
-        onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
-        mutedWorkspaces={mutedWorkspaceViews}
-        mutedExpanded={sidebarMutedExpanded}
-        onMutedExpandedChange={setSidebarMutedExpanded}
-        onMuteWorkspace={sendMuteWorkspace}
-        onPinWorkspace={sendPinWorkspace}
-        onRenameSession={sendRenameSession}
-        onRenameWorkspace={sendRenameWorkspace}
-        onChangeChiefOfStaff={handleChangeChiefOfStaff}
-        showSessionless={showSessionlessWorkspaces}
-        onToggleShowSessionless={handleToggleShowSessionlessWorkspaces}
-        crew={crew}
-        onWakeCrewMember={handleWakeCrewMember}
-        onSleepCrewMember={handleSleepCrewMember}
-        onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
-        onOpenCrewMemberDetails={handleOpenCrew}
-        queueModeEnabled={queueModeEnabled}
-        onToggleQueueMode={handleToggleQueueMode}
-        crewQueueEnabled={crewQueueEnabled}
-        onToggleCrewQueue={handleToggleCrewQueue}
-        harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
-        onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
-        workspaceSelectionStyle={workspaceSelectionStyle}
-        onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
-        leafDrag={
-          leafWorkspaceDrag
-            ? {
-                sourceWorkspaceId: leafWorkspaceDrag.sourceWorkspaceId,
-                endpointId: leafWorkspaceDrag.sourceEndpointId,
-              }
-            : null
-        }
-        dragHoverWorkspaceId={dragHoverWorkspaceId}
-        onWorkspaceDragEnter={handleWorkspaceDragEnter}
-        onWorkspaceDragLeave={handleWorkspaceDragLeave}
-        onWorkspaceDragDrop={handleWorkspaceDragDrop}
-        onNewWorkspaceDrop={handleNewWorkspaceDrop}
-        onSessionDragStart={handleLeafDragStart}
-        onSessionDragEnd={handleLeafDragEnd}
-        onWorkspaceReorder={handleWorkspaceReorder}
-        queue={queueBands}
-        onSettleTurn={sendSettleTurn}
-        onOpenSnooze={openSnoozeMenu}
-        onWakeTurn={sendWakeTurn}
-        onScreenSessionIds={onScreenSessionIds}
-        onSelectSession={handleSelectSession}
-        onTriggerNudge={sendTriggerNudge}
-        onSelectWorkspace={handleSelectWorkspace}
-        onSelectTile={handleSelectTile}
-        onCloseTile={handleCloseTile}
-        onReloadTile={handleReloadTile}
-        onNewSession={() => handleNewSession('vertical')}
-        onCloseSession={handleRequestCloseSession}
-        onReloadSession={handleReloadSession}
-        onGoToDashboard={goToDashboard}
-        homeActive={view === 'dashboard'}
-        onToggleCollapse={toggleSidebarCollapse}
-      />
-    </>
+    <Sidebar
+      workspaces={desktopViews}
+      visualIndexByWorkspaceId={slotIndexByDesktopId}
+      selectedId={activeSessionId}
+      selectedWorkspaceId={currentDesktopId}
+      selectedTile={selectedTile ? { workspaceId: selectedTile.desktopId, tileId: selectedTile.tileId } : null}
+      tileContents={desktopTileContents}
+      collapsed={sidebarCollapsed}
+      instance={BUILD_INSTANCE}
+      headerActions={sidebarHeaderActions}
+      criticalNotifications={criticalNotifications}
+      onOpenNotifications={openNotificationsPanel}
+      gridLayout={gridLayout}
+      onSelectGridLayout={handleSelectGridLayout}
+      dockItems={dockItems}
+      dockCollapsed={keybindings.dock.collapsed}
+      onToggleDockCollapsed={() => keybindings.setDockCollapsed(!keybindings.dock.collapsed)}
+      onRenameSession={sendRenameSession}
+      onChangeChiefOfStaff={handleChangeChiefOfStaff}
+      showSessionless
+      crew={crew}
+      onWakeCrewMember={handleWakeCrewMember}
+      onSleepCrewMember={handleSleepCrewMember}
+      onManageCrew={(event) => handleOpenCrew(undefined, event.currentTarget)}
+      onOpenCrewMemberDetails={handleOpenCrew}
+      queueModeEnabled={queueModeEnabled}
+      onToggleQueueMode={handleToggleQueueMode}
+      crewQueueEnabled={crewQueueEnabled}
+      onToggleCrewQueue={handleToggleCrewQueue}
+      harnessLogosEnabled={areSidebarHarnessLogosEnabled(settings)}
+      onToggleHarnessLogos={handleToggleSidebarHarnessLogos}
+      workspaceSelectionStyle={workspaceSelectionStyle}
+      onWorkspaceSelectionStyleChange={handleWorkspaceSelectionStyleChange}
+      leafDrag={leafDesktopDrag ? { sourceWorkspaceId: leafDesktopDrag.sourceDesktopId } : null}
+      dragHoverWorkspaceId={dragHoverDesktopId}
+      onWorkspaceDragEnter={handleDesktopDragEnter}
+      onWorkspaceDragLeave={handleDesktopDragLeave}
+      onWorkspaceDragDrop={handleDesktopDragDrop}
+      onNewWorkspaceDrop={handleNewDesktopDrop}
+      onSessionDragStart={handleSessionDragStart}
+      onSessionDragEnd={handleLeafDragEnd}
+      queue={queueBands}
+      onSettleTurn={sendSettleTurn}
+      onOpenSnooze={openSnoozeMenu}
+      onWakeTurn={sendWakeTurn}
+      onScreenSessionIds={onScreenSessionIds}
+      onSelectSession={handleSelectSession}
+      onTriggerNudge={sendTriggerNudge}
+      onSelectWorkspace={handleSelectDesktop}
+      onSelectTile={handleSelectTile}
+      onCloseTile={handleCloseTile}
+      onReloadTile={handleReloadTile}
+      onNewSession={() => handleNewSession('vertical')}
+      onCloseSession={handleRequestCloseSession}
+      onReloadSession={handleReloadSession}
+      onGoToDashboard={goToDashboard}
+      homeActive={view === 'dashboard'}
+      onToggleCollapse={toggleSidebarCollapse}
+    />
   );
 }

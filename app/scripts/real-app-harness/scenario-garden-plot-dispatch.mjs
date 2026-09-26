@@ -375,8 +375,15 @@ async function main() {
       runner.assert(Boolean(messageID), 'the steer returned its mailbox id', { sent });
       await waitForMessageNotification(client, pane, messageID);
 
-      const delegatePane = await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
-      const tender = { sessionId: delegated, paneId: delegatePane.paneId };
+      await waitForFirstWorkspacePane(client, delegated, 'the delegate’s pane', 20_000);
+      const [delegateDesktop, state] = await Promise.all([
+        client.request('get_workspace', { sessionId: delegated }),
+        client.request('get_state'),
+      ]);
+      const agentOf = new Map((state.sessions || []).map((session) => [session.id, session.agent]));
+      const shellPane = (delegateDesktop.panes || []).find((entry) => agentOf.get(entry.sessionId) === 'shell');
+      runner.assert(Boolean(shellPane), 'a shell shares the delegate’s desktop', { panes: delegateDesktop.panes });
+      const tender = { sessionId: delegated, paneId: shellPane.paneId };
       const read = await runInRevealedPane(client, tender,
         `attn agent inbox ${messageID} --session ${delegated}`, STEER);
       runner.assert(saw(read, STEER),

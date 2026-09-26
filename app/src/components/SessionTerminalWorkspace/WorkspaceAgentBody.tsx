@@ -10,7 +10,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
     gardenSeeds,
     onOpenSeed,
     annotationApi,
-    activePaneId,
+    activeAgentPaneId,
     fontSize,
     resolvedTheme,
     isActiveSession,
@@ -64,7 +64,7 @@ export function WorkspaceAgentBody({ agentPane, paneSession, paneTitle }: Worksp
             paneId: agentPane.id,
             runtimeId: agentPane.runtimeId,
             paneKind: 'agent',
-            isActivePane: activePaneId === agentPane.id,
+            isActivePane: activeAgentPaneId === agentPane.id,
             isActiveSession,
             paneCount: paneIds.length,
           }}

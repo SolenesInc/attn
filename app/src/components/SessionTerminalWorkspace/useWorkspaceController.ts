@@ -35,7 +35,7 @@ import {
   resolveWorkspaceLayout,
   type AttentionViewport,
 } from './attentionLayout';
-import { newestOpenedTile, selectedPaneId, selectedTileId } from './leafSelection';
+import { focusedLeafId, type PendingLeafFocus } from './leafSelection';
 import { useFocusedLeaf } from './useFocusedLeaf';
 import { useGhosttyPaneRuntime } from './useGhosttyPaneRuntime';
 import { useSessionPopoverRequest } from './useSessionPopoverRequest';
@@ -124,10 +124,6 @@ export function useWorkspaceController(
   }: SessionTerminalWorkspaceProps,
   ref: ForwardedRef<SessionTerminalWorkspaceHandle>,
 ) {
-  const [activeTile, setActiveTile] = useState<{
-    tileId: string;
-    whileActivePaneId: string;
-  } | null>(null);
   const [paneReadyFocusRequest, setPaneReadyFocusRequest] = useState(0);
   const [renamePane, setRenamePane] = useState<{
     sessionId: string;
@@ -154,18 +150,13 @@ export function useWorkspaceController(
   const [attentionRevision, setAttentionRevision] = useState(0);
   const attentionFocusOrderRef = useRef<string[]>([]);
   const suspendedLeafIdsRef = useRef<ReadonlySet<string>>(EMPTY_SUSPENDED_LEAF_IDS);
-  const previousAnnotatedTileIdsRef = useRef<ReadonlySet<string> | null>(null);
-  const automaticTileFocusRef = useRef<{ tileId: string; whileActivePaneId: string } | null>(null);
-  const pendingPaneFocusRef = useRef<{
-    leafId: string;
-    fromActivePaneId: string;
-  } | null>(null);
-  const focusLeafRequestRef = useRef<(leafId: string) => void>(() => {});
+  const pendingLeafFocusRef = useRef<PendingLeafFocus | null>(null);
+  const lastAgentPaneIdRef = useRef('');
   const tileBodyRefs = useRef(new Map<string, HTMLDivElement>());
   const tileBodyRefCallbacks = useRef(new Map<string, (node: HTMLDivElement | null) => void>());
   const panesContainerRef = useRef<HTMLDivElement | null>(null);
   const draggingSplitRef = useRef<string | null>(null);
-  const activePaneIdRef = useRef(activePaneId);
+  const activeAgentPaneIdRef = useRef('');
   const layoutTreeRef = useRef<TerminalLayoutNode | null>(null);
   const activeLeafIdRef = useRef('');
   const pinnedLeafIdsRef = useRef<ReadonlySet<string>>(new Set());
@@ -173,10 +164,9 @@ export function useWorkspaceController(
   const sessionViewVisibleRef = useRef(isSessionViewVisible);
 
   useLayoutEffect(() => {
-    activePaneIdRef.current = activePaneId;
     isActiveSessionRef.current = isActiveSession;
     sessionViewVisibleRef.current = isSessionViewVisible;
-  }, [activePaneId, isActiveSession, isSessionViewVisible]);
+  }, [isActiveSession, isSessionViewVisible]);
 
   const {
     tileLeafById,
@@ -187,67 +177,35 @@ export function useWorkspaceController(
     delegationSessionById,
     delegatesByDispatcherId,
     tileSessionOptions,
-    activePaneSessionId,
-  } = useWorkspacePanes({ workspace, workspaceSessions, delegationSessions, activePaneId });
+  } = useWorkspacePanes({ workspace, workspaceSessions, delegationSessions });
 
-  const annotatedTileIds = useMemo(() => {
-    const ids: string[] = [];
-    for (const tile of tileLeafById.values()) {
-      if (tile.tileKind === 'markdown' || tile.tileKind === 'seed') {
-        ids.push(tile.tileId);
-      }
-    }
-    return ids;
-  }, [tileLeafById]);
-  const annotatedTileIdSet = useMemo(() => new Set(annotatedTileIds), [annotatedTileIds]);
-  const openedAnnotatedTileId = newestOpenedTile(
-    annotatedTileIds,
-    previousAnnotatedTileIdsRef.current,
-  );
-  const automaticTileFocus = openedAnnotatedTileId
-    ? { tileId: openedAnnotatedTileId, whileActivePaneId: activePaneId }
-    : automaticTileFocusRef.current;
-
-  useLayoutEffect(() => {
-    previousAnnotatedTileIdsRef.current = annotatedTileIdSet;
-    if (openedAnnotatedTileId) {
-      automaticTileFocusRef.current = {
-        tileId: openedAnnotatedTileId,
-        whileActivePaneId: activePaneId,
-      };
-    } else if (
-      automaticTileFocusRef.current &&
-      !annotatedTileIdSet.has(automaticTileFocusRef.current.tileId)
-    ) {
-      automaticTileFocusRef.current = null;
-    }
-  }, [activePaneId, annotatedTileIdSet, openedAnnotatedTileId]);
-
-  const firstTileId = useMemo(
-    () => (tileLeafById.size > 0 ? (tileLeafById.keys().next().value ?? null) : null),
-    [tileLeafById],
-  );
-
-  const focusedTileId = selectedTileId(activePaneId, tileLeafById, automaticTileFocus, activeTile);
-  const focusedPaneId = selectedPaneId(activePaneId, agentPaneById, pendingPaneFocusRef.current);
-  const activeLeafId = focusedTileId || focusedPaneId || firstTileId || '';
+  const leafIds = useMemo(() => [...paneIds, ...tileLeafById.keys()], [paneIds, tileLeafById]);
+  const activeLeafId = focusedLeafId(activePaneId, leafIds, pendingLeafFocusRef.current);
   const activeLeafIsTile = tileLeafById.has(activeLeafId);
+  const activeAgentPaneId = agentPaneById.has(activeLeafId)
+    ? activeLeafId
+    : agentPaneById.has(lastAgentPaneIdRef.current)
+      ? lastAgentPaneIdRef.current
+      : (paneIds[0] ?? '');
+  const activePaneSessionId = agentPaneById.get(activeAgentPaneId)?.sessionId ?? null;
   useLayoutEffect(() => {
     layoutTreeRef.current = workspace.layoutTree ?? null;
     activeLeafIdRef.current = activeLeafId;
-  }, [workspace.layoutTree, activeLeafId]);
+    activeAgentPaneIdRef.current = activeAgentPaneId;
+    lastAgentPaneIdRef.current = activeAgentPaneId;
+  }, [workspace.layoutTree, activeLeafId, activeAgentPaneId]);
 
   useLayoutEffect(() => {
-    const pending = pendingPaneFocusRef.current;
+    const pending = pendingLeafFocusRef.current;
     if (
       pending &&
       (activePaneId === pending.leafId ||
-        activePaneId !== pending.fromActivePaneId ||
-        !agentPaneById.has(pending.leafId))
+        activePaneId !== pending.fromActiveLeafId ||
+        !leafIds.includes(pending.leafId))
     ) {
-      pendingPaneFocusRef.current = null;
+      pendingLeafFocusRef.current = null;
     }
-  }, [activePaneId, agentPaneById]);
+  }, [activePaneId, leafIds]);
 
   const runtimePanes = useMemo(() => {
     const panes = [];
@@ -270,7 +228,7 @@ export function useWorkspaceController(
 
   const runtime = useGhosttyPaneRuntime(
     runtimePanes,
-    activePaneId,
+    activeAgentPaneId,
     eventRouter,
     isActiveSessionRef,
     terminalsLive,
@@ -304,7 +262,6 @@ export function useWorkspaceController(
   const paneOverflowsContainer = runtime.paneOverflowsContainer;
   const splitLayoutActive = workspace.layoutTree?.type === 'split';
   const showPaneHeader = paneIds.length + tileLeafById.size > 1;
-  const leafIds = useMemo(() => [...paneIds, ...tileLeafById.keys()], [paneIds, tileLeafById]);
   const leafIdSet = useMemo(() => new Set(leafIds), [leafIds]);
   const attentionActiveLeafId = activeLeafId;
   const attentionFocusOrder = useMemo(() => {
@@ -328,6 +285,7 @@ export function useWorkspaceController(
   );
   const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
 
+  const hasLayout = workspace.layoutTree != null;
   const layoutPlan = useMemo(() => {
     if (!workspace.layoutTree) {
       return null;
@@ -392,7 +350,7 @@ export function useWorkspaceController(
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [workspaceId, effectivePaneId]);
+  }, [workspaceId, effectivePaneId, hasLayout]);
 
   const clearRatioOverride = useCallback((splitId: string, expectedRatio?: number) => {
     setPendingRatioOverrides((prev) => {
@@ -480,9 +438,8 @@ export function useWorkspaceController(
     () => ({
       fitPane: runtime.fitPane,
       fitActivePane: runtime.fitActivePane,
-      focusLeaf: (leafId) => focusLeafRequestRef.current(leafId),
       focusPane: runtime.focusPane,
-      focusActivePane: runtime.focusPane.bind(null, activePaneId),
+      focusActivePane: runtime.focusPane.bind(null, activeAgentPaneId),
       typePaneTextViaUI: runtime.typeTextViaPaneInput,
       isPaneInputFocused: runtime.isPaneInputFocused,
       scrollPaneToTop: runtime.scrollPaneToTop,
@@ -501,26 +458,12 @@ export function useWorkspaceController(
           ? { container: panesContainerRef.current, paneBounds: renderedPaneBounds }
           : null,
     }),
-    [activePaneId, renderedPaneBounds, runtime],
+    [activeAgentPaneId, renderedPaneBounds, runtime],
   );
 
-  // activePaneId does not change here, so without releasing the focused tile it
-  // stays the active leaf and Cmd+W undocks it while you type in the terminal.
   const focusActivePaneSurface = useCallback(() => {
-    runtime.focusPane(activePaneId, 0);
-  }, [activePaneId, runtime]);
-
-  const focusActivePane = useCallback(() => {
-    const focusOverrideActive =
-      automaticTileFocusRef.current !== null || pendingPaneFocusRef.current !== null;
-    automaticTileFocusRef.current = null;
-    pendingPaneFocusRef.current = null;
-    if (focusOverrideActive) {
-      setAttentionRevision((current) => current + 1);
-    }
-    setActiveTile(null);
-    focusActivePaneSurface();
-  }, [focusActivePaneSurface]);
+    runtime.focusPane(activeAgentPaneId, 0);
+  }, [activeAgentPaneId, runtime]);
 
   // The scrollable body is what satisfies the shortcut dispatcher's
   // terminal-target check, so ⌘W reaches the workspace, not session.close.
@@ -550,14 +493,14 @@ export function useWorkspaceController(
       focusTile(activeLeafId);
       return;
     }
-    if (activePaneId) {
+    if (activeAgentPaneId) {
       if (annotationSurfaceOwnsFocus(workspaceId)) return;
       focusActivePaneSurface();
     }
   }, [
     activeLeafId,
     activeLeafIsTile,
-    activePaneId,
+    activeAgentPaneId,
     focusActivePaneSurface,
     focusTile,
     focusRequestToken,
@@ -739,17 +682,6 @@ export function useWorkspaceController(
     setMaximizedLeafId((current) => (current ? null : activeLeafId));
   }, [activeLeafId, onSetZoomActive, setMaximizedLeafId]);
 
-  const focusDocument = useCallback(
-    (tileId: string) => {
-      automaticTileFocusRef.current = null;
-      pendingPaneFocusRef.current = null;
-      onSetZoomActive?.(false);
-      setActiveTile({ tileId, whileActivePaneId: activePaneId });
-      setMaximizedLeafId(tileId);
-      window.requestAnimationFrame(() => focusTile(tileId));
-    },
-    [activePaneId, focusTile, onSetZoomActive, setMaximizedLeafId],
-  );
 
   useEscapeStack(() => setMaximizedLeafId(null), effectivePaneId !== null);
 
@@ -766,25 +698,39 @@ export function useWorkspaceController(
           [...pinnedLeafIdsRef.current].filter((id) => id !== leafId),
         );
       }
-      automaticTileFocusRef.current = null;
-      if (tileLeafById.has(leafId)) {
-        pendingPaneFocusRef.current = null;
+      const pending = { leafId, fromActiveLeafId: activePaneId };
+      pendingLeafFocusRef.current = pending;
+      setAttentionRevision((current) => current + 1);
+      void Promise.resolve(onFocusPane(leafId)).catch(() => {
+        if (pendingLeafFocusRef.current !== pending) return;
+        pendingLeafFocusRef.current = null;
         setAttentionRevision((current) => current + 1);
-        setActiveTile({ tileId: leafId, whileActivePaneId: activePaneId });
+      });
+      if (tileLeafById.has(leafId)) {
         focusTile(leafId);
         return;
       }
-      pendingPaneFocusRef.current = { leafId, fromActivePaneId: activePaneId };
-      setAttentionRevision((current) => current + 1);
-      setActiveTile(null);
-      onFocusPane(leafId);
       runtime.focusPane(leafId);
     },
     [activePaneId, focusTile, onFocusPane, runtime, tileLeafById],
   );
-  useLayoutEffect(() => {
-    focusLeafRequestRef.current = focusLeaf;
-  }, [focusLeaf]);
+
+  const focusActivePane = useCallback(() => {
+    if (activeLeafIsTile && activeAgentPaneId) {
+      focusLeaf(activeAgentPaneId);
+      return;
+    }
+    focusActivePaneSurface();
+  }, [activeAgentPaneId, activeLeafIsTile, focusActivePaneSurface, focusLeaf]);
+
+  const focusDocument = useCallback(
+    (tileId: string) => {
+      onSetZoomActive?.(false);
+      focusLeaf(tileId);
+      setMaximizedLeafId(tileId);
+    },
+    [focusLeaf, onSetZoomActive, setMaximizedLeafId],
+  );
 
   const handleMovePane = useCallback(
     (direction: TerminalNavigationDirection) => {
@@ -807,7 +753,7 @@ export function useWorkspaceController(
     if (
       !isActiveSessionRef.current ||
       !sessionViewVisibleRef.current ||
-      activePaneIdRef.current !== paneId
+      activeAgentPaneIdRef.current !== paneId
     ) {
       return;
     }
@@ -1107,7 +1053,7 @@ export function useWorkspaceController(
   return {
     workspaceId,
     workspaceSelectionStyle,
-    activePaneId,
+    activeAgentPaneId,
     onRenameSession,
     renamePane,
     setRenamePane,

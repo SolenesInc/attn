@@ -86,7 +86,7 @@ async function main() {
         const text = instructions(captured.text, agent);
         runner.writeText(`${name}-launch.jsonl`, captured.text);
         runner.assert(text.includes('Track work in seeds'), 'launch carries Garden instructions', { name });
-        runner.assert(text.includes('You are the chief of staff.') === chief, 'chief branch matches session role', { name });
+        runner.assert(text.includes('You are the chief of staff of your profile.') === chief, 'chief branch matches session role', { name });
         launches.push({ id: result.sessionId, cwd });
       });
     }
@@ -109,6 +109,7 @@ async function main() {
       const first = JSON.parse(cli(['crew', 'wake', crewName, '--json']));
       sessions.push(first.session_id);
       await observer.waitForSession({ id: first.session_id });
+      await client.request('select_session', { sessionId: first.session_id });
       await waitForFirstWorkspacePane(client, first.session_id, 'crew member', 20_000);
       const captured = await waitFor(() => transcripts(crewHome).find(file => file.text.includes('CREW_READY')), 'crew wake prompt');
       runner.assert(instructions(captured.text, 'codex').includes(`You are **${crewLabel}**`), 'crew identity reaches developer instructions');

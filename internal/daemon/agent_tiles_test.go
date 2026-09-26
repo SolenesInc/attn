@@ -3,6 +3,7 @@ package daemon
 import (
 	"encoding/json"
 	"net"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -80,5 +81,39 @@ func requireBrowserControlRequest(t *testing.T, host *wsClient) protocol.Browser
 		if request.Event == protocol.EventBrowserControlRequest {
 			return request
 		}
+	}
+}
+
+func TestAFocusedTileLeavesNoCurrentAgentAndOpensDockBesideIt(t *testing.T) {
+	d, desktop := setupAgentDesktop(t)
+	notebookDock, err := d.resolvedDesktopTileDock(desktop.ID, desktopTileDock{tileID: "tile-notebook", tileKind: "notebook", edge: protocol.LayoutDockEdgeBottom})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		return dockTileOnDesktop(desktop, notebookDock)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.refreshCurrentAgent()
+	if current := d.currentAgentSession(); current != "" {
+		t.Fatalf("current agent with a tile focused is %q, want none", current)
+	}
+	file := filepath.Join(t.TempDir(), "beside.md")
+	if err := os.WriteFile(file, []byte("# Beside"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := d.openMarkdownTile(file, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	tree := desktopTree(t, d, desktop.ID)
+	beside := tree.Children[1]
+	if beside.Type != "split" || beside.Children[0].TileID != "tile-notebook" || beside.Children[1].TileID != markdownTileIDForPath(file) {
+		t.Fatalf("opening while the notebook is focused produced %+v, want the markdown tile beside the notebook", tree)
+	}
+	if tile := desktopTile(t, d, desktop.ID, markdownTileIDForPath(file)); tile.TileSessionID != "" {
+		t.Fatalf("a tile opened with no current agent is bound to %q", tile.TileSessionID)
 	}
 }

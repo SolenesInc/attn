@@ -2,38 +2,10 @@ import { useCallback, useMemo } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import type { Desktop } from '../types/generated';
-import { ProfileCommandError } from './daemonProfileEvents';
+import { withFreshDesktopRevisions } from './desktopRevisions';
 import { desktopInSlot, desktopLabel, firstFreeSlot, isEmptyDesktop, slotShortcut } from '../utils/desktops';
 
 type ShowNotice = (message: string) => void;
-
-export const FRESH_ARRANGEMENT_TRIPWIRE_MS = 5_000;
-
-function revisionOf(desktopId: string): number | null {
-  return useProfilesStore.getState().desktops.find((desktop) => desktop.id === desktopId)?.revision ?? null;
-}
-
-function arrangementAdvanced(seen: Map<string, number>): boolean {
-  return [...seen].some(([desktopId, revision]) => revisionOf(desktopId) !== revision);
-}
-
-function waitForArrangementAfter(seen: Map<string, number>): Promise<void> {
-  if (arrangementAdvanced(seen)) return Promise.resolve();
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => {
-      unsubscribe();
-      reject(new Error(
-        `Another window changed this desktop and its new layout did not arrive within ${FRESH_ARRANGEMENT_TRIPWIRE_MS / 1000}s. Try again.`,
-      ));
-    }, FRESH_ARRANGEMENT_TRIPWIRE_MS);
-    const unsubscribe = useProfilesStore.subscribe(() => {
-      if (!arrangementAdvanced(seen)) return;
-      window.clearTimeout(timer);
-      unsubscribe();
-      resolve();
-    });
-  });
-}
 
 function currentDesktopOf(state: ReturnType<typeof useProfilesStore.getState>): Desktop | undefined {
   return state.desktops.find((desktop) => desktop.id === state.currentDesktopId);
@@ -46,7 +18,6 @@ function failureMessage(err: unknown): string {
 export function useDesktopNavigation(showNotice: ShowNotice) {
   const {
     sendDesktopSetCurrent,
-    sendDesktopSetActivePane,
     sendDesktopMoveLeaf,
     sendDesktopDelete,
     sendDesktopSetShortcutSlot,
@@ -100,40 +71,33 @@ export function useDesktopNavigation(showNotice: ShowNotice) {
   );
 
   const moveActivePane = useCallback(
-    async (targetDesktopId: string, retryOnStale: boolean): Promise<void> => {
+    async (targetDesktopId: string): Promise<void> => {
       const state = useProfilesStore.getState();
       const source = currentDesktopOf(state);
       const target = state.desktops.find((desktop) => desktop.id === targetDesktopId);
       if (!source || !target || source.id === target.id) return;
-      const paneId = source.active_pane_id;
-      if (!paneId) {
+      const leafId = source.active_pane_id;
+      if (!leafId) {
         showNotice('No focused pane to send.');
         return;
       }
-      try {
-        await sendDesktopMoveLeaf({
+      await withFreshDesktopRevisions([source.id, target.id], (revisionOf) =>
+        sendDesktopMoveLeaf({
           sourceDesktopId: source.id,
           targetDesktopId: target.id,
-          leafId: paneId,
+          leafId,
           anchorId: target.active_pane_id || undefined,
           edge: 'right',
-          expectedSourceRevision: source.revision,
-          expectedTargetRevision: target.revision,
-        });
-      } catch (err) {
-        if (retryOnStale && err instanceof ProfileCommandError && err.code === 'stale_revision') {
-          await waitForArrangementAfter(new Map([[source.id, source.revision], [target.id, target.revision]]));
-          return moveActivePane(targetDesktopId, false);
-        }
-        throw err;
-      }
-      await sendDesktopSetActivePane(target.id, paneId);
+          expectedSourceRevision: revisionOf(source.id),
+          expectedTargetRevision: revisionOf(target.id),
+        }),
+      );
     },
-    [sendDesktopMoveLeaf, sendDesktopSetActivePane, showNotice],
+    [sendDesktopMoveLeaf, showNotice],
   );
 
   const sendActivePaneToDesktop = useCallback(
-    (desktopId: string) => report(moveActivePane(desktopId, true)),
+    (desktopId: string) => report(moveActivePane(desktopId)),
     [moveActivePane, report],
   );
 

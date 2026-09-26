@@ -2,7 +2,9 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
+import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
+import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 
@@ -10,9 +12,8 @@ const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
 
-const { mockShowError, mockSendWorkspaceClosePane, mockSendUnregisterSession } = vi.hoisted(() => ({
+const { mockShowError, mockSendUnregisterSession } = vi.hoisted(() => ({
   mockShowError: vi.fn(),
-  mockSendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
   mockSendUnregisterSession: vi.fn(async () => {}),
 }));
 
@@ -65,36 +66,9 @@ vi.mock('./store/daemonSessions', async () => {
   const { selectorStoreMock } = await import('./test/mocks/selectorStore');
   return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
 });
-vi.mock('./hooks/useDaemonSocket', async () => {
-  const React = await import('react');
-  return {
-    useDaemonSocket: (args: { onWorkspacesUpdate?: (workspaces: unknown[]) => void }) => {
-      React.useEffect(() => {
-        args.onWorkspacesUpdate?.([
-          {
-            id: 'workspace-s1',
-            title: 'orchestrator',
-            directory: '/tmp/repo',
-            status: 'active',
-            layout: {
-              active_pane_id: 'pane-s1',
-              layout_json: JSON.stringify({ type: 'pane', pane_id: 'pane-s1' }),
-              panes: [{
-                workspace_id: 'workspace-s1',
-                pane_id: 'pane-s1',
-                kind: 'agent',
-                runtime_id: 's1',
-                session_id: 's1',
-                title: 'orchestrator',
-              }],
-            },
-          },
-        ]);
-      }, []);
-      return mockUseDaemonSocket(args);
-    },
-  };
-});
+vi.mock('./hooks/useDaemonSocket', () => ({
+  useDaemonSocket: (args: unknown) => mockUseDaemonSocket(args),
+}));
 vi.mock('./pty/bridge', async () => {
   const actual = await vi.importActual<typeof import('./pty/bridge')>('./pty/bridge');
   return { ...actual, ptySpawn: vi.fn(async () => {}) };
@@ -112,6 +86,8 @@ describe('chief and crew sessions are protected from close', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSessionStore.setState(useSessionStore.getInitialState(), true);
+    useProfilesStore.setState(useProfilesStore.getInitialState(), true);
+    arrangeDesktops([agentDesktop('desktop-s1', 1, ['s1'])]);
     localStorage.clear();
     localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
     chiefOfStaff = false;
@@ -123,11 +99,13 @@ describe('chief and crew sessions are protected from close', () => {
         label: 'orchestrator',
         state: 'working',
         cwd: '/tmp/repo',
-        workspaceId: 'workspace-s1',
+        workspaceId: '',
+        profileId: TEST_PROFILE_ID,
+        desktopId: 'desktop-s1',
         agent: 'claude',
         transcriptMatched: true,
         daemonActivePaneId: 'pane-s1',
-        workspace: {
+        desktop: {
           agents: [{ id: 'pane-s1', runtimeId: 's1', sessionId: 's1', title: 'orchestrator' }],
           layoutTree: { type: 'pane', paneId: 'pane-s1' },
         },
@@ -178,9 +156,8 @@ describe('chief and crew sessions are protected from close', () => {
       sendFetchPRDetails: vi.fn(async () => ({ success: true })),
       sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
       sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendWorkspaceClosePane: mockSendWorkspaceClosePane,
+      ...fakeDesktopCommands(),
       sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
       sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
       getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
       listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
@@ -202,7 +179,6 @@ describe('chief and crew sessions are protected from close', () => {
 
     await userEvent.click(screen.getByTestId('close-session'));
 
-    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
     expect(mockSendUnregisterSession).not.toHaveBeenCalled();
     expect(mockShowError).toHaveBeenCalledWith(expect.stringContaining('Chief of staff is protected'));
   });
@@ -213,7 +189,6 @@ describe('chief and crew sessions are protected from close', () => {
 
     triggerCmdW();
 
-    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
     expect(mockSendUnregisterSession).not.toHaveBeenCalled();
     expect(mockShowError).toHaveBeenCalledWith(expect.stringContaining('Chief of staff is protected'));
   });
@@ -224,7 +199,6 @@ describe('chief and crew sessions are protected from close', () => {
 
     await userEvent.click(screen.getByTestId('close-session'));
 
-    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
     expect(mockSendUnregisterSession).not.toHaveBeenCalled();
     expect(mockShowError).toHaveBeenCalledWith('Coda is protected — put Coda to sleep to close the day.');
   });
@@ -235,7 +209,6 @@ describe('chief and crew sessions are protected from close', () => {
 
     triggerCmdW();
 
-    expect(mockSendWorkspaceClosePane).not.toHaveBeenCalled();
     expect(mockSendUnregisterSession).not.toHaveBeenCalled();
     expect(mockShowError).toHaveBeenCalledWith('Coda is protected — put Coda to sleep to close the day.');
   });
@@ -246,7 +219,7 @@ describe('chief and crew sessions are protected from close', () => {
 
     await userEvent.click(screen.getByTestId('close-session'));
 
-    expect(mockSendWorkspaceClosePane).toHaveBeenCalledTimes(1);
+    expect(mockSendUnregisterSession).toHaveBeenCalledExactlyOnceWith('s1');
     expect(mockShowError).not.toHaveBeenCalled();
   });
 });

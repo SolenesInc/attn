@@ -16,7 +16,7 @@ import {
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
-  useWorkspaceTilesContext,
+  useDesktopTilesContext,
 } from './AppContexts';
 import {
   AttentionActionIcon,
@@ -29,7 +29,7 @@ export function useAppActionItems() {
   const apps = useDaemonStore((state) => state.apps);
   const seeds = useDaemonStore((state) => state.seeds);
   const { setAppViewParamsPrompt, dockAppViewTile, setMarkdownOpenerOpen, handleOpenNotebookTile } =
-    useWorkspaceTilesContext();
+    useDesktopTilesContext();
   const { setContextCapPromptSession } = useAppShell();
   const {
     openLedger,
@@ -44,13 +44,13 @@ export function useAppActionItems() {
   const { settings } = useAppInputs();
   const {
     handleToggleQueueMode,
-    activeWorkspaceForCommands,
+    activeGroupForCommands,
     activeSessionForCommands,
     activeSessionQueueEligible,
     queueModeEnabled,
     handleSnoozeActiveSession,
   } = useAttentionQueueContext();
-  const { sendSetSetting, sendPinWorkspace, sendMuteWorkspace, sendWakeTurn } =
+  const { sendSetSetting, sendWakeTurn } =
     useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
@@ -209,7 +209,7 @@ export function useAppActionItems() {
   );
 
   const actionMenuItemsWithWorkspaceActions = useMemo<ActionMenuItem[]>(() => {
-    const workspace = activeWorkspaceForCommands;
+    const workspace = activeGroupForCommands;
     if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
     const activeSession = activeSessionForCommands;
     const delegationItems: ActionMenuItem[] = activeSession
@@ -300,26 +300,6 @@ export function useAppActionItems() {
       ...sessionSeedItems,
       ...sessionUsageItems,
       ...sessionCapItems,
-      {
-        id: 'pin-active-workspace',
-        title: workspace.pinned ? `Unpin ${workspace.title}` : `Pin ${workspace.title}`,
-        description: workspace.pinned
-          ? 'Put this workspace back in the queue'
-          : 'Take this workspace out of the queue and keep it in view',
-        keywords: ['pin', 'unpin', 'workspace', 'queue'],
-        icon: <AttentionActionIcon />,
-        run: () => sendPinWorkspace(workspace.id, !workspace.pinned),
-      },
-      {
-        id: 'mute-active-workspace',
-        title: workspace.muted ? `Unmute ${workspace.title}` : `Mute ${workspace.title}`,
-        description: workspace.muted
-          ? 'Let this workspace ask for you again'
-          : 'Nothing from this workspace reaches you',
-        keywords: ['mute', 'unmute', 'workspace', 'silence'],
-        icon: <AttentionActionIcon />,
-        run: () => sendMuteWorkspace(workspace.id, workspace.endpointId),
-      },
     ];
   }, [
     delegationChainRef,
@@ -328,12 +308,10 @@ export function useAppActionItems() {
     setContextCapPromptSession,
     actionMenuItems,
     appViewMenuItems,
-    activeWorkspaceForCommands,
+    activeGroupForCommands,
     activeSessionForCommands,
     activeSessionQueueEligible,
     seeds,
-    sendPinWorkspace,
-    sendMuteWorkspace,
   ]);
 
   const activeSessionSnoozedUntil = activeSessionQueueEligible

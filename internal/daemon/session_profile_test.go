@@ -398,3 +398,37 @@ func setTestChief(d *Daemon, sessionID string) error {
 	_, _, err = d.store.SetProfileChief(sessionID)
 	return err
 }
+
+func TestSpawnBesideAFocusedTileDocksTheAgentBesideIt(t *testing.T) {
+	d, _, client, cwd := newSpawnCharacterizationDaemon(t)
+	profile, err := d.store.MostRecentlyUsedProfile()
+	if err != nil {
+		t.Fatal(err)
+	}
+	desktop, err := d.store.GetDesktop(profile.CurrentDesktopID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	notebook, err := d.resolvedDesktopTileDock(desktop.ID, desktopTileDock{tileID: "tile-notebook", tileKind: "notebook", edge: protocol.LayoutDockEdgeRight})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.store.UpdateDesktopArrangement(desktop.ID, desktop.Revision, func(desktop profiles.Desktop) (profiles.Desktop, error) {
+		return dockTileOnDesktop(desktop, notebook)
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	spawn := spawnCharacterizationMessage("beside-tile", profile.ID, cwd)
+	spawn.Placement = &protocol.SessionPlacement{AnchorPaneID: protocol.Ptr("tile-notebook")}
+	d.handleSpawnSession(client, spawn)
+
+	result := expectSpawnResult(t, client, spawn.ID, true)
+	if result.PlacementError != nil || result.PaneID == nil {
+		t.Fatalf("spawn_result = %+v, want the agent placed beside the tile", result)
+	}
+	tree := desktopTree(t, d, desktop.ID)
+	if tree.Type != "split" || tree.Children[0].TileID != "tile-notebook" || tree.Children[1].PaneID != protocol.Deref(result.PaneID) {
+		t.Fatalf("desktop tree %+v, want the notebook then the new agent's pane", tree)
+	}
+}
