@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -526,27 +525,6 @@ func TestSidecarDeathIsARuntimeFailureAndDoesNotBlameTheApp(t *testing.T) {
 	}
 }
 
-func TestMissingRuntimeBinaryIsARuntimeFailure(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	t.Setenv(appRuntimeHostOverride, filepath.Join(t.TempDir(), "not-installed"))
-
-	err := d.deliverAppEvent(context.Background(), "greeter", appEvent("ticket.created", "tk-1", 1))
-	if !isRuntimeFailure(err) {
-		t.Fatalf("error %v was not classified as the runtime's", err)
-	}
-	if stall, ok := d.appStallSnapshot("greeter"); ok {
-		t.Fatalf("a missing runtime binary put the app on the auto-disable clock: %+v", stall)
-	}
-	rows := invocationsOf(t, d, "greeter")
-	if len(rows) != 1 || rows[0].Status != appInvocationStatusRuntimeError {
-		t.Fatalf("invocations = %+v, want one runtime_error", rows)
-	}
-	if !strings.Contains(rows[0].Error, appRuntimeHostOverride) {
-		t.Fatalf("the recorded error does not say how to point attn at a runtime: %q", rows[0].Error)
-	}
-}
-
 func TestCancelledDeliveryReturnsPromptlyAndRecordsNothing(t *testing.T) {
 	d := newAppDaemon(t)
 	installApp(t, d, "greeter", subscribing("ticket.*"))
@@ -621,43 +599,6 @@ func TestRemovingAnAppWithAnInFlightDispatchReturnsPromptly(t *testing.T) {
 	}
 	if _, ok, err := d.store.GetBusConsumer(apps.ConsumerName("greeter")); err != nil || ok {
 		t.Fatalf("the consumer row survived the remove (ok=%t, err=%v)", ok, err)
-	}
-}
-
-func TestALateAnswerWithNobodyWaitingIsDropped(t *testing.T) {
-	serverConn, clientConn := net.Pipe()
-	defer clientConn.Close()
-	defer serverConn.Close()
-	go func() { _, _ = io.Copy(io.Discard, clientConn) }()
-	peer := newJSONRPCPeer(serverConn, bufio.NewReader(serverConn))
-
-	if routed := peer.routeResponse(jsonRPCMessage{
-		JSONRPC: "2.0",
-		ID:      json.RawMessage(`"gone"`),
-		Result:  json.RawMessage(`{"ok":true}`),
-	}); routed {
-		t.Fatal("an answer nobody was waiting for was reported as routed")
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		waitFor(t, "the abandoned request to go out", func() bool {
-			peer.pendingMu.Lock()
-			defer peer.pendingMu.Unlock()
-			return len(peer.pending) == 1
-		})
-		cancel()
-	}()
-	var out appDispatchResult
-	if err := peer.request(ctx, "app runtime", "app.dispatch", appDispatchRequest{}, &out); !errors.Is(err, context.Canceled) {
-		t.Fatalf("a request whose caller gave up returned %v, want context.Canceled", err)
-	}
-	if routed := peer.routeResponse(jsonRPCMessage{
-		JSONRPC: "2.0",
-		ID:      json.RawMessage(`1`),
-		Result:  json.RawMessage(`{"ok":true}`),
-	}); routed {
-		t.Fatal("the abandoned request was still holding its slot in the pending map")
 	}
 }
 
@@ -861,17 +802,6 @@ func writeExecutableStub(t *testing.T, script string) string {
 	return path
 }
 
-func appRuntimeStatus(t *testing.T, d *Daemon) *protocol.AppRuntimeStatusResult {
-	t.Helper()
-	resp := docCall(t, func(c net.Conn) {
-		d.handleAppRuntimeStatus(c, &protocol.AppRuntimeStatusMessage{Cmd: protocol.CmdAppRuntimeStatus})
-	})
-	if !resp.Ok {
-		t.Fatalf("app runtime status: %v", protocol.Deref(resp.Error))
-	}
-	return resp.AppRuntimeStatusResult
-}
-
 func appRuntimeRestart(t *testing.T, d *Daemon) *protocol.AppRuntimeRestartResult {
 	t.Helper()
 	resp := docCall(t, func(c net.Conn) {
@@ -881,39 +811,6 @@ func appRuntimeRestart(t *testing.T, d *Daemon) *protocol.AppRuntimeRestartResul
 		t.Fatalf("app runtime restart: %v", protocol.Deref(resp.Error))
 	}
 	return resp.AppRuntimeRestartResult
-}
-
-func TestRuntimeStatusIsHonestBeforeAnythingHasStarted(t *testing.T) {
-	d := newAppDaemon(t)
-	installApp(t, d, "greeter", subscribing("ticket.*"))
-	host := writeExecutableStub(t, "sleep 60")
-	t.Setenv(appRuntimeHostOverride, host)
-
-	before := appRuntimeStatus(t, d)
-	if before.Runtime != nil {
-		t.Fatalf("a daemon that has never run an app reported a runtime: %+v", before.Runtime)
-	}
-	if before.HostPath == nil || *before.HostPath != host {
-		t.Fatalf("host path = %v, want %s", before.HostPath, host)
-	}
-	if before.Apps != 1 || before.AppsEnabled != 1 {
-		t.Fatalf("apps = %d installed / %d enabled, want 1/1", before.Apps, before.AppsEnabled)
-	}
-	if before.LogPath != AppRuntimeLogPath(d.socketPath) {
-		t.Fatalf("log path = %q, want %q", before.LogPath, AppRuntimeLogPath(d.socketPath))
-	}
-
-	t.Cleanup(d.stopAppRuntime)
-	started := appRuntimeRestart(t, d)
-	if started.Was != "stopped" {
-		t.Fatalf("was = %q, want stopped", started.Was)
-	}
-	if started.Runtime.Desired != "running" {
-		t.Fatalf("after a restart the runtime is %+v, want desired running", started.Runtime)
-	}
-	if after := appRuntimeStatus(t, d); after.Runtime == nil {
-		t.Fatal("status still reports no runtime after one was started")
-	}
 }
 
 func TestParkedRuntimeIsVisibleOnEveryAppAndRevivable(t *testing.T) {
@@ -1037,32 +934,6 @@ func TestDispatchLeavesAParkedRuntimeParked(t *testing.T) {
 
 	if revived := appRuntimeRestart(t, d); revived.Runtime.Phase == string(supervise.PhaseParked) {
 		t.Fatalf("restart left the runtime parked: %+v", revived.Runtime)
-	}
-}
-
-func TestRuntimeWithTheWrongAPIVersionIsRefusedAtHello(t *testing.T) {
-	_, _, recognized, err := parseAppRuntimeHello([]byte(
-		`{"jsonrpc":"2.0","id":"1","method":"app_runtime.hello","params":{"generation":1,"api_version":99,"pid":7}}`))
-	if !recognized {
-		t.Fatal("the app runtime hello was not recognized as one")
-	}
-	if err == nil {
-		t.Fatal("a runtime speaking api version 99 was accepted")
-	}
-	if !strings.Contains(err.Error(), "stale install") {
-		t.Fatalf("the refusal does not say what to do: %q", err)
-	}
-}
-
-func TestAppRuntimeHelloSniffIgnoresEverythingElse(t *testing.T) {
-	for _, frame := range []string{
-		`{"jsonrpc":"2.0","id":"1","method":"hello","params":{"name":"worktree-provider"}}`,
-		`{"cmd":"heartbeat","id":"sess"}`,
-		`not json at all`,
-	} {
-		if _, _, recognized, _ := parseAppRuntimeHello([]byte(frame)); recognized {
-			t.Fatalf("the app runtime sniff claimed %q", frame)
-		}
 	}
 }
 

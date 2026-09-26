@@ -741,7 +741,7 @@ func (m *sessionInputModule) observePromptTaken(sessionID, prompt string, at tim
 	var candidate *sessionInputCandidate
 	matchIndexes := make([]int, 0, 1)
 	for i := range lane.pending {
-		if lane.pending[i].text == prompt {
+		if strings.HasSuffix(prompt, lane.pending[i].text) {
 			matchIndexes = append(matchIndexes, i)
 		}
 	}

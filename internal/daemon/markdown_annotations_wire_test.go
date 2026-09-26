@@ -24,8 +24,8 @@ func TestClearingMarkdownAnnotationsNeverLowersTheFloorAndStaysWithItsFile(t *te
 	if cleared := clearAnnotations(app, plan, 2); !cleared.Success || cleared.Generation != 7 {
 		t.Fatalf("a late clear at generation 2 = %+v, want success with the floor kept at 7", cleared)
 	}
-	if ghost := saveAnnotations(app, plan, 7, "ghost"); ghost.Success || !protocol.Deref(ghost.Stale) {
-		t.Errorf("a save at generation 7 after the clear = %+v, want it refused as stale", ghost)
+	if ghost := saveAnnotations(app, plan, 7, "ghost"); ghost.Success || !protocol.Deref(ghost.Stale) || ghost.Error != nil {
+		t.Errorf("a save at generation 7 after the clear = %+v, want it refused as stale without an error", ghost)
 	}
 	if cleared := clearAnnotations(app, plan, 1); !cleared.Success || cleared.Generation != 7 {
 		t.Errorf("an older clear = %+v, want success with the floor kept at 7", cleared)

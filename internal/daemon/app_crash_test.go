@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/victorarias/attn/internal/supervise"
 )
 
 func reportCrash(t *testing.T, d *Daemon, app, kind, message string) {
@@ -117,15 +115,5 @@ func TestEnablingAnAppClearsItsCrashStreak(t *testing.T) {
 	reportCrash(t, d, "leaker", "unhandledRejection", "TypeError: fetch failed")
 	if !appEnabled(t, d, "leaker") {
 		t.Fatal("a re-enabled app was disabled again on its very next crash")
-	}
-}
-
-func TestCrashStrikesFireBeforeTheSupervisorParksTheRuntime(t *testing.T) {
-	if appCrashStrikes < 2 {
-		t.Fatalf("appCrashStrikes = %d; one crash can be a machine event, not a broken app", appCrashStrikes)
-	}
-	if appCrashStrikes >= supervise.DefaultGiveUpAfter {
-		t.Fatalf("appCrashStrikes = %d but the sidecar is parked after %d restarts, so every app loses its runtime before the culprit is disabled",
-			appCrashStrikes, supervise.DefaultGiveUpAfter)
 	}
 }

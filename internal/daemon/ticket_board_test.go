@@ -13,18 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func readTicketResult(t *testing.T, ch chan outboundMessage, target any) {
-	t.Helper()
-	select {
-	case message := <-ch:
-		if err := json.Unmarshal(message.payload, target); err != nil {
-			t.Fatalf("decode ws event: %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("no websocket result event was sent")
-	}
-}
-
 func TestTicketArtifactsFollowFilesystemAtReadTime(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	root := t.TempDir()

@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { recordUiDiag } from '../utils/uiDiagnosticsLog';
 
-export const MAX_BROWSER_CONTROL_RESULT_BYTES = 24 * 1024 * 1024;
+const MAX_BROWSER_CONTROL_RESULT_BYTES = 24 * 1024 * 1024;
 
 export interface BrowserHostRect {
   x: number;
@@ -32,13 +32,12 @@ export function serializeBrowserControlResultMessage(
     data?: string;
     error?: string;
   },
-  maxBytes = MAX_BROWSER_CONTROL_RESULT_BYTES,
 ): string {
   const serialized = JSON.stringify(message);
   const bytes = new TextEncoder().encode(serialized).byteLength;
-  if (bytes > maxBytes) {
+  if (bytes > MAX_BROWSER_CONTROL_RESULT_BYTES) {
     throw new Error(
-      `serialized browser control result is ${bytes} bytes; the maximum supported result is ${maxBytes} bytes`,
+      `serialized browser control result is ${bytes} bytes; the maximum supported result is ${MAX_BROWSER_CONTROL_RESULT_BYTES} bytes`,
     );
   }
   return serialized;

@@ -198,16 +198,42 @@ describe('App shortcut editor', () => {
     expect(keybindingWrites(daemon)).toEqual([]);
   });
 
-  it('warns about keys without an accelerator, for shortcuts and chord leaders alike', async () => {
+  it('rebinds a shortcut to the combo pressed while recording, and the new combo runs it', async () => {
+    const { daemon } = await renderEditor();
+
+    await record(daemon, 'Action menu', { key: 'm', code: 'KeyM', metaKey: true });
+    expect(within(row('Action menu')).getByTitle('Click to rebind')).toHaveTextContent('⌘M');
+    expect(saved(daemon).overrides['ui.actionMenu']).toEqual({ key: 'm', meta: true });
+    await closeEditor(daemon);
+
+    await gesture(daemon, () => fireEvent.keyDown(window, { key: 'm', code: 'KeyM', metaKey: true }));
+    expect(screen.getByRole('dialog', { name: 'Action menu' })).toBeInTheDocument();
+  });
+
+  it('stops recording on Escape and keeps the previous binding', async () => {
+    const { daemon } = await renderEditor();
+
+    await record(daemon, 'Action menu', { key: 'Escape', code: 'Escape' });
+
+    expect(within(row('Action menu')).getByTitle('Click to rebind')).toHaveTextContent('⌘K');
+    expect(keybindingWrites(daemon)).toEqual([]);
+  });
+
+  it('warns about a shortcut without an accelerator', async () => {
     const { daemon } = await renderEditor();
 
     await record(daemon, 'Focus active pane', { key: 'q', code: 'KeyQ' });
-    expect(row('Focus active pane').querySelector('.key-capture-button')).toHaveAttribute('title', 'No ⌘/⌥ modifier — this may collide with typing in the terminal');
 
-    fireEvent.click(within(row('Zoom active pane')).getByLabelText('Record a chord'));
-    fireEvent.keyDown(window, { key: 'y', code: 'KeyY' });
-    await daemon.idle();
+    expect(row('Focus active pane').querySelector('.key-capture-button')).toHaveAttribute('title', 'No ⌘/⌥ modifier — this may collide with typing in the terminal');
+  });
+
+  it('refuses a chord leader without a modifier and leaves the binding alone', async () => {
+    const { daemon } = await renderEditor();
+
+    await recordChord(daemon, 'Zoom active pane', { key: 'y', code: 'KeyY' }, { key: 'g', code: 'KeyG' });
+
     expect(row('Zoom active pane')).toHaveTextContent('A chord leader needs a ⌘ or ⌥ modifier.');
+    expect(keybindingWrites(daemon)).toEqual([]);
   });
 
   it('saves a recorded chord, which fires once the daemon echoes the setting back', async () => {

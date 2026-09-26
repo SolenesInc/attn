@@ -42,10 +42,13 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 		t.Fatalf("warnings = %+v, want stale_sessions_pruned", initial.Warnings)
 	}
 
+	boot := w.HoldNextBoot()
 	w.Spawn(app, fakeagent.Claude, w.Path("shop"), func(m *protocol.SpawnSessionMessage) {
 		m.ID = talked
 		m.ResumeSessionID = protocol.Ptr(talked)
 	})
+	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateLaunching })
+	boot()
 	resumed := w.Launched(talked)
 	if !resumed.Resumed || resumed.ConversationID != first.ConversationID {
 		t.Fatalf("respawn ran claude %q, want -r %s", resumed.Argv, first.ConversationID)
