@@ -23,7 +23,7 @@ import {
 import type { ReopenVerdictView, SessionScope } from '../sessionsLedger';
 import { fullStamp, nameIds, relativeStamp, shortPath, tildePath } from './ledgerTime';
 import { formatQuery, matchesDir, matchesWords, parseQuery, profileChoices, removeToken, renameProfileTokens } from './ledgerQuery';
-import type { ParsedQuery } from './ledgerQuery';
+import type { ParsedQuery, ProfileChoice } from './ledgerQuery';
 import { Field, Inspector, LedgerList, QueryBar, Segmented, useCopied } from './LedgerPrimitives';
 import type { Chip, ListItem, RowGlyph, RowModel, RowNote, RowVerb } from './LedgerPrimitives';
 
@@ -313,7 +313,10 @@ function sameQueryFilters(a: SessionLedgerFilters, b: SessionLedgerFilters): boo
 
 function useLedgerQueryText({ restoredFilters, profileNames, facets, repository, setFilters, requestedDir }: LedgerQueryTextOptions) {
   const [text, setText] = useState(() => formatQuery(restoredFilters, profileNames));
-  const profiles = useMemo(() => profileChoices(profileNames, facets), [profileNames, facets]);
+  const [chosenProfile, setChosenProfile] = useState<ProfileChoice | null>(() => (
+    restoredFilters.profileId ? { profile_id: restoredFilters.profileId, name: profileNames[restoredFilters.profileId] ?? '' } : null
+  ));
+  const profiles = useMemo(() => profileChoices(profileNames, facets, chosenProfile), [profileNames, facets, chosenProfile]);
   const parsed = useMemo(() => parseQuery(text, facets, profiles, repository), [text, facets, profiles, repository]);
   const namedWith = useRef(profileNames);
   useEffect(() => {
@@ -326,6 +329,12 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      if (!keepProfile) {
+        const chosenId = parsed.filters.profileId;
+        setChosenProfile((current) => (
+          current?.profile_id === chosenId ? current : profiles.find((choice) => choice.profile_id === chosenId) ?? null
+        ));
+      }
       setFilters((current) => {
         const next = {
           ...current,
@@ -337,7 +346,7 @@ function useLedgerQueryText({ restoredFilters, profileNames, facets, repository,
       });
     }, 150);
     return () => window.clearTimeout(timer);
-  }, [parsed.filters, setFilters, keepRepository, keepProfile]);
+  }, [parsed.filters, profiles, setFilters, keepRepository, keepProfile]);
 
   useEffect(() => {
     if (!requestedDir) return;

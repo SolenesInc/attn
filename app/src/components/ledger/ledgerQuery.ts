@@ -17,10 +17,15 @@ export interface ProfileChoice {
   deleted?: boolean;
 }
 
-export function profileChoices(profileNames: Record<string, string>, facets: SessionLedgerFacets | null): ProfileChoice[] {
-  const live = Object.entries(profileNames).map(([profile_id, name]) => ({ profile_id, name }));
+export function profileChoices(
+  profileNames: Record<string, string>,
+  facets: SessionLedgerFacets | null,
+  chosen: ProfileChoice | null = null,
+): ProfileChoice[] {
+  const live: ProfileChoice[] = Object.entries(profileNames).map(([profile_id, name]) => ({ profile_id, name }));
   const historical = (facets?.profiles ?? []).filter((facet) => !(facet.profile_id in profileNames));
-  return [...live, ...historical];
+  const known = [...live, ...historical];
+  return chosen && !known.some((choice) => choice.profile_id === chosen.profile_id) ? [...known, chosen] : known;
 }
 
 const RANGE_WORDS: Record<string, SessionRangeId> = {

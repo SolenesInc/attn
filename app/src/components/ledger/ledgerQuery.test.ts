@@ -59,6 +59,13 @@ describe('parseQuery', () => {
     expect(parseQuery('profile:attn-work', null, profileChoices(names, null)).filters.profileId).toBe('profile-1');
   });
 
+  it('keeps the chosen profile among the choices even when the facets leave it out', () => {
+    const chosen = { profile_id: 'profile-old', name: 'Old Side', deleted: true };
+    const empty = { ...facets, profiles: [] };
+    expect(parseQuery('profile:old-side', empty, profileChoices({}, empty, chosen)).filters.profileId).toBe('profile-old');
+    expect(profileChoices({}, facets, chosen).filter((choice) => choice.profile_id === 'profile-old')).toHaveLength(1);
+  });
+
   it('follows a renamed profile in the typed query and leaves every other token alone', () => {
     const before = { 'profile-1': 'attn work', 'profile-2': 'side' };
     const after = { 'profile-1': 'Office', 'profile-2': 'side' };

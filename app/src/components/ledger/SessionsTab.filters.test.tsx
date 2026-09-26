@@ -138,6 +138,33 @@ describe('SessionsTab query', () => {
     expect(calls.every((call, index) => index === 0 || call.profile_id === 'profile-1')).toBe(true);
   });
 
+  it('keeps a chosen profile when a later page\'s facets leave it out', async () => {
+    const deleted = { profile_id: 'profile-old', name: 'Old Side', deleted: true, count: 2 };
+    const { list, calls } = listing([
+      page({ facets: { profiles: [deleted], repositories: [] } }),
+      page({ facets: { profiles: [deleted], repositories: [] } }),
+      page({ facets: { profiles: [], repositories: [] } }),
+      page({ facets: { profiles: [], repositories: [] } }),
+    ]);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      renderSessionsTab({ listSessions: list });
+      await waitFor(() => expect(calls).toHaveLength(1));
+
+      type('profile:old-side');
+      await waitFor(() => expect(calls).toHaveLength(2));
+      expect(calls[1].profile_id).toBe('profile-old');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Live' }));
+      await waitFor(() => expect(calls).toHaveLength(3));
+      await act(async () => { vi.runOnlyPendingTimers(); });
+      expect(calls.slice(1).every((call) => call.profile_id === 'profile-old')).toBe(true);
+      expect(query().value).toBe('profile:old-side');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('narrows the page by words and dir: without asking the daemon', async () => {
     const { list, calls } = listing([page({ entries: [
       entry({ id: 's1', label: 'ledger work', directory: '/Users/victor/projects/attn--wt' }),
