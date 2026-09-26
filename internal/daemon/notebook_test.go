@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -66,4 +67,58 @@ func TestNotebookRootFollowsTheSettingAndFallsBackToTheDefault(t *testing.T) {
 			t.Errorf("notebook.root %q resolves to %q (%v), want %q", tc.setting, got, err, tc.want)
 		}
 	}
+}
+
+func TestNotebookWatcherFollowsRootChange(t *testing.T) {
+	d := newNotebookDaemon(t)
+	t.Cleanup(d.stopNotebookWatcher)
+	rootA := d.store.GetSetting(SettingNotebookRoot)
+	rootB := t.TempDir()
+	client := &wsClient{send: make(chan outboundMessage, 64)}
+	d.wsHub.clients[client] = true
+	hubStopped := make(chan struct{})
+	t.Cleanup(func() { close(hubStopped) })
+	go d.wsHub.runUntil(hubStopped)
+
+	listNotebook(t, d)
+	d.store.SetSetting(SettingNotebookRoot, rootB)
+	if listed := listNotebook(t, d); len(listed) != 0 {
+		t.Fatalf("listing after the root moved to an empty directory returned %v", listed)
+	}
+
+	for _, edit := range []string{filepath.Join(rootA, "a.md"), filepath.Join(rootB, "b.md")} {
+		if err := os.WriteFile(edit, []byte("# edit\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deadline := time.After(3 * time.Second)
+	for {
+		select {
+		case message := <-client.send:
+			var changed protocol.NotebookChangedMessage
+			if json.Unmarshal(message.payload, &changed) != nil || changed.Event != protocol.EventNotebookChanged || changed.Origin != originExternal {
+				continue
+			}
+			if slices.Contains(changed.Paths, "a.md") {
+				t.Fatalf("an edit under the old root was still reported: %v", changed.Paths)
+			}
+			if slices.Contains(changed.Paths, "b.md") {
+				return
+			}
+		case <-deadline:
+			t.Fatal("the edit under the new root was not reported")
+		}
+	}
+}
+
+func listNotebook(t *testing.T, d *Daemon) []protocol.NotebookEntry {
+	t.Helper()
+	client := &wsClient{send: make(chan outboundMessage, 1)}
+	d.sendNotebookListWSResult(client, "list", "")
+	var listed protocol.NotebookListResultMessage
+	readNotebookWSEvent(t, client.send, &listed)
+	if !listed.Success {
+		t.Fatalf("listing the notebook failed: %s", protocol.Deref(listed.Error))
+	}
+	return listed.Entries
 }

@@ -34,31 +34,50 @@ func fsMustWatch(t *testing.T, p *testworld.Peer, root string) {
 	}
 }
 
+func fsAwaitLaterChange(t *testing.T, subscriber *testworld.Peer, root string) {
+	t.Helper()
+	fsWriteFile(t, filepath.Join(root, "later.txt"), []byte("later"))
+	fsAwaitChanged(subscriber, func(m protocol.FsChangedMessage) bool {
+		return m.Root == root && slices.Contains(m.Paths, "later.txt")
+	})
+}
+
+func fsChangesHeardByNow(p *testworld.Peer) int {
+	p.T.Helper()
+	fsAskList(p, "", "")
+	heard := 0
+	for _, e := range p.Received() {
+		if e.Event == protocol.EventFsChanged {
+			heard++
+		}
+	}
+	return heard
+}
+
 func TestFsWatchReportsExternalEditsOnlyToItsSubscribers(t *testing.T) {
 	w := newFsWorld(t)
 	watching, other := pickerApp(w), pickerApp(w)
-	watched, sentinel := fsDir(t, "watched"), fsDir(t, "other")
+	watched := fsDir(t, "watched")
 	fsMustWatch(t, watching, watched)
-	fsMustWatch(t, other, sentinel)
+	fsMustWatch(t, other, fsDir(t, "quiet"))
 
 	fsWriteFile(t, filepath.Join(watched, "note.txt"), []byte("hello"))
 	if edit := fsAwaitChanged(watching, func(m protocol.FsChangedMessage) bool { return m.Root == watched }); edit.Origin != "external" || !slices.Contains(edit.Paths, "note.txt") {
 		t.Fatalf("the subscriber heard %+v, want note.txt as an external edit", edit)
 	}
 
-	fsWriteFile(t, filepath.Join(sentinel, "sentinel.txt"), []byte("later"))
-	if first := fsAwaitChanged(other, func(m protocol.FsChangedMessage) bool { return m.Root == watched || m.Root == sentinel }); first.Root != sentinel {
-		t.Fatalf("a client that never watched %s heard %+v", watched, first)
+	fsAwaitLaterChange(t, watching, watched)
+	if heard := fsChangesHeardByNow(other); heard != 0 {
+		t.Fatalf("a client that never watched %s heard %d changes", watched, heard)
 	}
 }
 
 func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 	w := newFsWorld(t)
 	leaving, staying := pickerApp(w), pickerApp(w)
-	shared, sentinel := fsDir(t, "shared"), fsDir(t, "sentinel")
+	shared := fsDir(t, "shared")
 	fsMustWatch(t, leaving, shared)
 	fsMustWatch(t, staying, shared)
-	fsMustWatch(t, staying, sentinel)
 
 	if unwatched := fsAskUnwatch(leaving, shared); !unwatched.Success || protocol.Deref(unwatched.Root) != shared {
 		t.Fatalf("the first client unwatching %s = %+v", shared, unwatched)
@@ -72,11 +91,11 @@ func TestAWatchedRootStaysWatchedUntilItsLastClientUnwatches(t *testing.T) {
 		t.Fatalf("unwatching %s = %+v", shared, unwatched)
 	}
 	fsWriteFile(t, filepath.Join(shared, "no-longer-watched.txt"), []byte("x"))
-	fsWriteFile(t, filepath.Join(sentinel, "sentinel.txt"), []byte("x"))
-	first := fsAwaitChanged(staying, func(m protocol.FsChangedMessage) bool {
-		return m.Root == sentinel || (m.Root == shared && slices.Contains(m.Paths, "no-longer-watched.txt"))
-	})
-	if first.Root != sentinel {
+	fsMustWatch(t, staying, shared)
+	fsWriteFile(t, filepath.Join(shared, "watched-again.txt"), []byte("x"))
+	if first := fsAwaitChanged(staying, func(m protocol.FsChangedMessage) bool {
+		return m.Root == shared && (slices.Contains(m.Paths, "no-longer-watched.txt") || slices.Contains(m.Paths, "watched-again.txt"))
+	}); slices.Contains(first.Paths, "no-longer-watched.txt") {
 		t.Fatalf("after its last client unwatched it, %s still reported %+v", shared, first)
 	}
 }
@@ -132,6 +151,7 @@ func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 		t.Fatalf("unwatching %s = %+v", watched[0], unwatched)
 	}
 	fsMustWatch(t, app, oneTooMany)
+	fsAskUnwatch(app, oneTooMany)
 
 	remote := fsRemotePeer(w)
 	refusedRoot := fsDir(t, "refused")
@@ -142,12 +162,10 @@ func TestFsWatchRefusesPastItsCapAndGuardsExplicitRoots(t *testing.T) {
 		t.Fatalf("an unauthenticated client could not watch the notebook root: %+v (%s)", omitted, protocol.Deref(omitted.Error))
 	}
 
-	fsAskList(remote, "", "")
 	fsWriteFile(t, filepath.Join(refusedRoot, "unwatched.txt"), []byte("x"))
-	fsWriteFile(t, filepath.Join(notebookRoot, "sentinel.txt"), []byte("x"))
-	if first := fsAwaitChanged(remote, func(m protocol.FsChangedMessage) bool {
-		return m.Root == refusedRoot || (m.Root == notebookRoot && slices.Contains(m.Paths, "sentinel.txt"))
-	}); first.Root != notebookRoot {
-		t.Fatalf("the refused root was watched after all: %+v", first)
+	fsMustWatch(t, app, refusedRoot)
+	fsAwaitLaterChange(t, app, refusedRoot)
+	if heard := fsChangesHeardByNow(remote); heard != 0 {
+		t.Fatalf("the refused root was watched after all: the unauthenticated client heard %d changes", heard)
 	}
 }
