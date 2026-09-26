@@ -42,6 +42,9 @@ const (
 	methodPrompted   = "prompted"
 	methodReply      = "reply"
 	methodReplyLate  = "reply_after_stop"
+	methodStream     = "stream"
+	methodSubagent   = "subagent"
+	methodDropSubs   = "delete_subagent_transcripts"
 	methodExit       = "exit"
 	signalExitBase   = 128
 )
@@ -167,6 +170,12 @@ type conversation interface {
 	reply(text string, afterStop bool) error
 }
 
+type transcriptAuthor interface {
+	stream(text string) error
+	subagent(text string) error
+	deleteSubagentTranscripts() error
+}
+
 type promptSubmission struct {
 	text         string
 	conversation string
@@ -242,6 +251,25 @@ func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, 
 		a.turn.Lock()
 		defer a.turn.Unlock()
 		return struct{}{}, a.conv.reply(p.Text, method == methodReplyLate)
+	case methodStream, methodSubagent, methodDropSubs:
+		var p textParams
+		if err := json.Unmarshal(params, &p); err != nil {
+			return nil, err
+		}
+		author, ok := a.conv.(transcriptAuthor)
+		if !ok {
+			return nil, fmt.Errorf("%T does not script %s", a.conv, method)
+		}
+		a.turn.Lock()
+		defer a.turn.Unlock()
+		switch method {
+		case methodStream:
+			return struct{}{}, author.stream(p.Text)
+		case methodSubagent:
+			return struct{}{}, author.subagent(p.Text)
+		default:
+			return struct{}{}, author.deleteSubagentTranscripts()
+		}
 	case methodExit:
 		var p exitParams
 		if err := json.Unmarshal(params, &p); err != nil {

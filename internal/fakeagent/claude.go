@@ -38,6 +38,7 @@ type claude struct {
 	model        string
 	permission   string
 	prompt       string
+	streaming    string
 }
 
 func runClaude(cfg config) int {
@@ -158,23 +159,55 @@ func (c *claude) reply(text string, afterStop bool) error {
 }
 
 func (c *claude) answer(text string) error {
-	message := map[string]any{
-		"id":      "msg_" + strings.ReplaceAll(uuid.NewString(), "-", ""),
-		"role":    "assistant",
-		"model":   c.model,
-		"content": []map[string]any{{"type": "text", "text": text}},
-		"usage": map[string]any{
-			"input_tokens":                len(text),
-			"output_tokens":               len(text),
-			"cache_creation_input_tokens": 0,
-			"cache_read_input_tokens":     0,
-		},
+	if err := c.stream(text); err != nil {
+		return err
 	}
-	if err := c.record("assistant", message, nil); err != nil {
+	c.streaming = ""
+	return nil
+}
+
+func (c *claude) stream(text string) error {
+	if c.streaming == "" {
+		c.streaming = claudeMessageID()
+	}
+	if err := appendLines(c.transcript, c.assistantLine(c.streaming, map[string]any{"type": "text", "text": text}, len(text), len(text))); err != nil {
 		return err
 	}
 	c.term.print(text)
 	return nil
+}
+
+func (c *claude) subagent(text string) error {
+	line := c.assistantLine(claudeMessageID(), map[string]any{"type": "text", "text": text}, len(text), len(text))
+	line["isSidechain"] = true
+	return appendLines(filepath.Join(c.subagentDir(), "agent-"+claudeMessageID()+".jsonl"), line)
+}
+
+func (c *claude) deleteSubagentTranscripts() error {
+	return os.RemoveAll(c.subagentDir())
+}
+
+func (c *claude) subagentDir() string {
+	return filepath.Join(strings.TrimSuffix(c.transcript, ".jsonl"), "subagents")
+}
+
+func (c *claude) assistantLine(id string, content map[string]any, inputTokens, outputTokens int) map[string]any {
+	return c.line("assistant", map[string]any{
+		"id":      id,
+		"role":    "assistant",
+		"model":   c.model,
+		"content": []map[string]any{content},
+		"usage": map[string]any{
+			"input_tokens":                inputTokens,
+			"output_tokens":               outputTokens,
+			"cache_creation_input_tokens": 0,
+			"cache_read_input_tokens":     0,
+		},
+	})
+}
+
+func claudeMessageID() string {
+	return "msg_" + strings.ReplaceAll(uuid.NewString(), "-", "")
 }
 
 func (c *claude) stop() error {
@@ -183,7 +216,15 @@ func (c *claude) stop() error {
 }
 
 func (c *claude) record(kind string, message map[string]any, extra map[string]any) error {
-	line := map[string]any{
+	line := c.line(kind, message)
+	for key, value := range extra {
+		line[key] = value
+	}
+	return appendLines(c.transcript, line)
+}
+
+func (c *claude) line(kind string, message map[string]any) map[string]any {
+	return map[string]any{
 		"type":      kind,
 		"uuid":      uuid.NewString(),
 		"timestamp": now(),
@@ -191,8 +232,4 @@ func (c *claude) record(kind string, message map[string]any, extra map[string]an
 		"cwd":       c.cwd,
 		"message":   message,
 	}
-	for key, value := range extra {
-		line[key] = value
-	}
-	return appendLines(c.transcript, line)
 }
