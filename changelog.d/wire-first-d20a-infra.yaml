@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Activity, backup, event bus, diagnostics, dispatcher, GitHub CLI warning and health promises are now guarded by daemon wire and CLI stack tests instead of in-package tests of daemon internals.

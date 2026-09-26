@@ -122,7 +122,6 @@ type coordinatedGitExecutor struct {
 	deferredActive           int
 	interactiveSinceDeferred int
 	closedErr                error
-	enqueueObserver          func(gitTask)
 }
 
 var productionGitExecutorConfig = gitExecutorConfig{
@@ -238,9 +237,6 @@ func (e *coordinatedGitExecutor) enqueue(item *queuedGitTask) error {
 			return &ErrGitQueueSaturated{Lane: gitInteractive, Limit: e.config.MaxQueuedInteractive}
 		}
 		e.interactive = append(e.interactive, item)
-	}
-	if e.enqueueObserver != nil {
-		e.enqueueObserver(item.task)
 	}
 	e.dispatchLocked()
 	return nil
