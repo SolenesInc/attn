@@ -110,7 +110,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 		inputLane = d.sessionInputs().lane(change.sessionID)
 		inputLane.mu.Lock()
 	}
-	applied := d.commitSessionState(change, opening)
+	applied, turn := d.commitSessionState(change, opening)
 	if inputLane != nil {
 		inputLane.mu.Unlock()
 	}
@@ -128,8 +128,8 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	d.updateTranscriptWatcherState(change.sessionID, protocol.SessionState(change.state))
 	d.traceStateChange(change, statetrace.OutcomeApplied, "")
 
-	if opening.Opens {
-		d.dropEndedSnoozeWake(change.sessionID, change.state, opening)
+	if opening.Opens && !turn.HeldBySnooze {
+		d.dropEndedSnoozeWake(change.sessionID, change.state, turn.EndedSnooze)
 		d.enqueueSessionActivity(change.sessionID)
 	}
 
@@ -150,7 +150,7 @@ func (d *Daemon) applyState(change sessionStateChange) bool {
 	return true
 }
 
-func (d *Daemon) commitSessionState(change sessionStateChange, opening store.TurnOpening) bool {
+func (d *Daemon) commitSessionState(change sessionStateChange, opening store.TurnOpening) (bool, store.TurnOpeningOutcome) {
 	switch cause := change.cause.(type) {
 	case liveSignal, startupRecovery, resolverObservation, hostExitRecovery, pluginDriverSilent:
 		return d.store.UpdateStateOpeningTurn(change.sessionID, change.state, opening)
@@ -164,6 +164,6 @@ func (d *Daemon) commitSessionState(change sessionStateChange, opening store.Tur
 			opening,
 		)
 	default:
-		return false
+		return false, store.TurnOpeningOutcome{}
 	}
 }

@@ -15,40 +15,49 @@ type TurnStamps struct {
 }
 
 type TurnOpening struct {
-	Opens      bool
-	EndsSnooze time.Time
+	Opens        bool
+	BreaksSnooze bool
 }
 
-func (s *Store) UpdateStateOpeningTurn(id, state string, opening TurnOpening) bool {
+type TurnOpeningOutcome struct {
+	HeldBySnooze bool
+	EndedSnooze  time.Time
+}
+
+func (s *Store) UpdateStateOpeningTurn(id, state string, opening TurnOpening) (bool, TurnOpeningOutcome) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	if !s.updateStateLocked(id, state, now) {
-		return false
+		return false, TurnOpeningOutcome{}
 	}
-	s.openTurnLocked(id, opening, now)
-	return true
+	return true, s.openTurnLocked(id, opening, now)
 }
 
-func (s *Store) ApplyAgentDriverStateOpeningTurn(id, runID string, seq uint64, state string, requestStartedAt time.Time, opening TurnOpening) bool {
+func (s *Store) ApplyAgentDriverStateOpeningTurn(id, runID string, seq uint64, state string, requestStartedAt time.Time, opening TurnOpening) (bool, TurnOpeningOutcome) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	now := time.Now()
 	if !s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, now) {
-		return false
+		return false, TurnOpeningOutcome{}
 	}
-	s.openTurnLocked(id, opening, now)
-	return true
+	return true, s.openTurnLocked(id, opening, now)
 }
 
-func (s *Store) openTurnLocked(id string, opening TurnOpening, now time.Time) {
+func (s *Store) openTurnLocked(id string, opening TurnOpening, now time.Time) TurnOpeningOutcome {
 	if !opening.Opens {
-		return
+		return TurnOpeningOutcome{}
 	}
-	if !opening.EndsSnooze.IsZero() && !s.wakeTurnAtLocked(id, opening.EndsSnooze) && !s.turnStampsLocked(id).SnoozedUntil.IsZero() {
-		return
+	var outcome TurnOpeningOutcome
+	if snoozed := s.turnStampsLocked(id).SnoozedUntil; !snoozed.IsZero() {
+		stillSnoozed := snoozed.After(now) && !opening.BreaksSnooze
+		if stillSnoozed || !s.wakeTurnAtLocked(id, snoozed) {
+			return TurnOpeningOutcome{HeldBySnooze: true}
+		}
+		outcome.EndedSnooze = snoozed
 	}
 	s.openTurnIfClosedLocked(id, now)
+	return outcome
 }
 
 func (s *Store) OpenTurnIfClosed(id string, now time.Time) bool {

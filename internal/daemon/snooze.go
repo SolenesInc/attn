@@ -114,32 +114,22 @@ func (d *Daemon) currentStateClaim(sessionID string) string {
 }
 
 func (d *Daemon) turnOpeningFor(sessionID string, state protocol.SessionState) store.TurnOpening {
-	if d == nil || d.store == nil || !attention.OpensTurn(state) {
+	if !attention.OpensTurn(state) {
 		return store.TurnOpening{}
 	}
-	deadline := d.store.TurnStamps(sessionID).SnoozedUntil
-	if deadline.IsZero() {
-		return store.TurnOpening{Opens: true}
-	}
-	if deadline.After(time.Now()) && !attention.BreaksSnooze(state, d.stateReasons().get(sessionID)) {
-		return store.TurnOpening{}
-	}
-	return store.TurnOpening{Opens: true, EndsSnooze: deadline}
+	return store.TurnOpening{Opens: true, BreaksSnooze: attention.BreaksSnooze(state, d.stateReasons().get(sessionID))}
 }
 
-func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, opening store.TurnOpening) {
-	if opening.EndsSnooze.IsZero() {
+func (d *Daemon) dropEndedSnoozeWake(sessionID, state string, ended time.Time) {
+	if ended.IsZero() {
 		return
 	}
 	d.snoozeMu.Lock()
 	defer d.snoozeMu.Unlock()
-	if !d.store.TurnStamps(sessionID).SnoozedUntil.IsZero() {
-		return
-	}
-	d.removeSnoozeWake(sessionID)
+	d.removeSnoozeWakeFor(sessionID, ended)
 	if d.debugLogging {
 		cause := "broken"
-		if !opening.EndsSnooze.After(time.Now()) {
+		if !ended.After(time.Now()) {
 			cause = "expired"
 		}
 		d.logf("snooze %s: session=%s state=%s reason=%s", cause, sessionID, state, d.stateReasons().get(sessionID))
@@ -230,6 +220,21 @@ func (d *Daemon) removeSnoozeWake(sessionID string) {
 		return
 	}
 	runner.RemoveByKey(snoozeWakeKind, sessionID)
+}
+
+func (d *Daemon) removeSnoozeWakeFor(sessionID string, deadline time.Time) {
+	runner := d.jobQueueRef()
+	if runner == nil || runner.Disabled() {
+		return
+	}
+	job, err := runner.GetByKey(snoozeWakeKind, sessionID)
+	if err != nil || job == nil {
+		return
+	}
+	var payload snoozeWakePayload
+	if job.DecodePayload(&payload) == nil && payload.Deadline.Equal(deadline) {
+		runner.Remove(job.ID)
+	}
 }
 
 func (d *Daemon) clearSnoozeState(sessionID string) {
