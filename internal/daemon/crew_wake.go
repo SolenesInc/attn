@@ -289,29 +289,13 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 	}
 
 	workspaceID := crewWorkspaceID(member.ID)
-	if d.store.GetWorkspace(workspaceID) == nil {
-		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-			Cmd:       protocol.CmdRegisterWorkspace,
-			ID:        workspaceID,
-			Title:     crew.DisplayName(member.ID),
-			Directory: directory,
-		})
-		if d.store.GetWorkspace(workspaceID) == nil {
-			d.releaseCrewBindingIfSession(sessionID)
-			return nil, fmt.Errorf("create %s's workspace", crew.DisplayName(member.ID))
-		}
-	}
-	paneClient := newInternalWSClient()
-	d.handleWorkspaceLayoutAddSessionPane(paneClient, &protocol.WorkspaceLayoutAddSessionPaneMessage{
-		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
-		WorkspaceID: workspaceID,
-		PaneID:      protocol.Ptr("pane-" + sessionID),
-		SessionID:   sessionID,
-		Title:       protocol.Ptr(crew.DisplayName(member.ID)),
-	})
-	if _, err := readInternalActionResult(paneClient); err != nil {
+	paneCreated, err := d.addCrewDayPane(member.ID, workspaceID, directory, sessionID)
+	if err != nil {
 		d.releaseCrewBindingIfSession(sessionID)
-		return nil, fmt.Errorf("create %s's pane: %w", crew.DisplayName(member.ID), err)
+		return nil, err
+	}
+	if paneCreated {
+		d.broadcastWorkspaceLayoutUpdated(workspaceID)
 	}
 
 	initialPrompt := crewWakePrompt
@@ -358,6 +342,34 @@ func (d *Daemon) crewWakeWithDeliveryLocked(name, agent string, autonomous bool,
 		result.ReleasedSessionID = protocol.Ptr(releasedSessionID)
 	}
 	return result, nil
+}
+
+func (d *Daemon) addCrewDayPane(memberID, workspaceID, directory, sessionID string) (bool, error) {
+	d.workspaceOccupancyMu.Lock()
+	defer d.workspaceOccupancyMu.Unlock()
+	name := crew.DisplayName(memberID)
+	if d.store.GetWorkspace(workspaceID) == nil {
+		d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
+			Cmd:       protocol.CmdRegisterWorkspace,
+			ID:        workspaceID,
+			Title:     name,
+			Directory: directory,
+		})
+		if d.store.GetWorkspace(workspaceID) == nil {
+			return false, fmt.Errorf("create %s's workspace", name)
+		}
+	}
+	_, created, err := d.addWorkspaceSessionPaneLocked(&protocol.WorkspaceLayoutAddSessionPaneMessage{
+		Cmd:         protocol.CmdWorkspaceLayoutAddSessionPane,
+		WorkspaceID: workspaceID,
+		PaneID:      protocol.Ptr("pane-" + sessionID),
+		SessionID:   sessionID,
+		Title:       protocol.Ptr(name),
+	})
+	if err != nil {
+		return false, fmt.Errorf("create %s's pane: %w", name, err)
+	}
+	return created, nil
 }
 
 func (d *Daemon) crewSessionActuallyLive(sessionID string) (bool, error) {

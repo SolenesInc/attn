@@ -35,8 +35,8 @@ func register(t *testing.T, s *testworld.Stack, id, label string) {
 
 func requireFailure(t *testing.T, got testworld.Result, prefix string, want ...string) {
 	t.Helper()
-	if got.Code != 1 || !strings.HasPrefix(got.Stderr, prefix) {
-		t.Errorf("exited %d with stderr %q, want exit 1 and %q", got.Code, got.Stderr, prefix)
+	if got.Code != 1 || got.Stdout != "" || !strings.HasPrefix(got.Stderr, prefix) {
+		t.Errorf("exited %d with stdout %q and stderr %q, want exit 1, no stdout and %q", got.Code, got.Stdout, got.Stderr, prefix)
 	}
 	requireLines(t, prefix, got.Stderr, want...)
 }
@@ -70,7 +70,9 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	claude.Reply("working on it\nsecond line <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, builder, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
+	testworld.AwaitSession(app, builder, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+	})
 
 	peek := s.Attn("agent", "peek", builder[:8])
 	requireLines(t, "peek", peek.Stdout,

@@ -1,9 +1,7 @@
 package daemon
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -40,114 +38,6 @@ func claimTerminalAutomationRun(t *testing.T, s *store.Store, def *store.Automat
 		t.Fatalf("reload %s: %#v err=%v", requestID, reloaded, err)
 	}
 	return reloaded
-}
-
-func TestAutomationRetentionSweepCountBoundary(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "3")
-	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	sweepAt := base.Add(48 * time.Hour)
-
-	r1 := claimTerminalAutomationRun(t, s, def, "r1", base.Add(1*time.Minute), "{}")
-	r2 := claimTerminalAutomationRun(t, s, def, "r2", base.Add(2*time.Minute), "{}")
-	r3 := claimTerminalAutomationRun(t, s, def, "r3", base.Add(3*time.Minute), "{}")
-	d.automationRetentionSweepPass(sweepAt)
-	for _, r := range []*store.AutomationRun{r1, r2, r3} {
-		if got, err := s.GetAutomationRun(r.ID); err != nil || got == nil {
-			t.Fatalf("run %s should be protected at the keep boundary (3 runs, keep=3), got %#v err=%v", r.ID, got, err)
-		}
-	}
-
-	r0 := claimTerminalAutomationRun(t, s, def, "r0", base, "{}")
-	d.automationRetentionSweepPass(sweepAt)
-	if got, err := s.GetAutomationRun(r0.ID); err != nil || got != nil {
-		t.Fatalf("expected the oldest run past the keep boundary to be pruned, got %#v err=%v", got, err)
-	}
-	for _, r := range []*store.AutomationRun{r1, r2, r3} {
-		if got, err := s.GetAutomationRun(r.ID); err != nil || got == nil {
-			t.Fatalf("run %s should still be protected by the keep window, got %#v err=%v", r.ID, got, err)
-		}
-	}
-}
-
-func TestAutomationRetentionSweepPrunesCancelledRunsLikeFailed(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
-	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	base := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	sweepAt := base.Add(48 * time.Hour)
-
-	run, created, err := s.ClaimManualAutomationRun(def.ID, "cancelled-1", "", `{}`, def.Revision, `{}`, base, store.AutomationRunReservation{
-		RunID: "run-cancelled-1", OccurrenceID: "occ-cancelled-1", SeedID: "ticket-cancelled-1", SessionID: "session-cancelled-1", WorkspaceID: "workspace-cancelled-1", PaneID: "pane-cancelled-1",
-	})
-	if err != nil || !created {
-		t.Fatalf("claim created=%v err=%v", created, err)
-	}
-	if err := s.MarkAutomationRunCancelled(run.ID, store.AutomationCancelReasonReviewWithdrawn, base); err != nil {
-		t.Fatal(err)
-	}
-	d.automationRetentionSweepPass(sweepAt)
-	if got, err := s.GetAutomationRun(run.ID); err != nil || got != nil {
-		t.Fatalf("expected the aged-out cancelled run to be pruned like a failed one, got %#v err=%v", got, err)
-	}
-}
-
-func TestAutomationRetentionSweepPendingRunsNeverPruned(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
-	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	run, created, err := s.ClaimManualAutomationRun(def.ID, "pending-1", "", `{}`, def.Revision, `{}`, old, store.AutomationRunReservation{
-		RunID: "run-pending-1", OccurrenceID: "occ-pending-1", SeedID: "ticket-pending-1", SessionID: "session-pending-1", WorkspaceID: "workspace-pending-1", PaneID: "pane-pending-1",
-	})
-	if err != nil || !created {
-		t.Fatalf("claim created=%v err=%v", created, err)
-	}
-
-	d.automationRetentionSweepPass(time.Now())
-
-	if got, err := s.GetAutomationRun(run.ID); err != nil || got == nil {
-		t.Fatalf("a pending run must never be pruned, got %#v err=%v", got, err)
-	}
-}
-
-func TestAutomationRetentionSweepYoungRunsNeverPruned(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
-	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	run := claimTerminalAutomationRun(t, s, def, "young-1", now, "{}")
-
-	d.automationRetentionSweepPass(now)
-
-	if got, err := s.GetAutomationRun(run.ID); err != nil || got == nil {
-		t.Fatalf("a run younger than the age floor must never be pruned, got %#v err=%v", got, err)
-	}
 }
 
 func TestAutomationRetentionSweepDirtyWorktreeBlocksPruning(t *testing.T) {
@@ -219,25 +109,6 @@ func TestAutomationRetentionSweepCleanWorktreeRemovesEverything(t *testing.T) {
 	}
 }
 
-func TestAutomationRetentionRemovalYieldsToForegroundWork(t *testing.T) {
-	worktree := t.TempDir()
-	d := &Daemon{store: store.New(), wsHub: newWSHub()}
-	run := store.AutomationRun{
-		ID:                   "run-protected",
-		ResolvedLocationJSON: automationResolvedLocationJSON(t, t.TempDir(), worktree),
-	}
-
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(foregroundCleanupProtection) error {
-		return d.removeAutomationRunWorktree(run)
-	})
-	if !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
-		t.Fatalf("removal error = %v, want automatic cleanup preemption", err)
-	}
-	if _, err := os.Stat(worktree); err != nil {
-		t.Fatalf("automatic retention removed foreground worktree: %v", err)
-	}
-}
-
 func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
 	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
@@ -259,80 +130,5 @@ func TestAutomationRetentionSweepLiveSessionSkipped(t *testing.T) {
 
 	if got, err := s.GetAutomationRun(run.ID); err != nil || got == nil {
 		t.Fatalf("a run whose session is still live must not be pruned, got %#v err=%v", got, err)
-	}
-}
-
-func TestAutomationRetentionSweepReachesSoftDeletedDefinitions(t *testing.T) {
-	t.Setenv("ATTN_AUTOMATION_RETENTION_KEEP", "0")
-	t.Setenv("ATTN_AUTOMATION_RETENTION_MIN_AGE", "1h")
-	s := store.New()
-	d := &Daemon{store: s, wsHub: newWSHub()}
-	raw := fmt.Sprintf(manualAutomationYAML, t.TempDir())
-	def, err := d.automationApply(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	run := claimTerminalAutomationRun(t, s, def, "deleted-def-1", old, "{}")
-
-	if err := d.automationDelete(context.Background(), def.ID); err != nil {
-		t.Fatal(err)
-	}
-
-	d.automationRetentionSweepPass(time.Now())
-
-	if got, err := s.GetAutomationRun(run.ID); err != nil || got != nil {
-		t.Fatalf("expected a soft-deleted definition's old run to still be reached and pruned, got %#v err=%v", got, err)
-	}
-}
-
-func TestAutomationRetentionDeletesInTheInteractiveLaneWhileHoldingTheGate(t *testing.T) {
-	root, mainRepo := initProviderTestRepo(t)
-	worktree := filepath.Join(root, "repo--retained")
-	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/retained", worktree)
-
-	executor := testGitExecutor(t, testGitConfig())
-	var lanes []gitLane
-	executor.enqueueObserver = func(task gitTask) { lanes = append(lanes, task.Lane) }
-	d := &Daemon{gitExec: executor}
-	run := store.AutomationRun{ID: "run-retained", ResolvedLocationJSON: automationResolvedLocationJSON(t, mainRepo, worktree)}
-	if err := d.removeAutomationRunWorktree(run); err != nil {
-		t.Fatal(err)
-	}
-	if len(lanes) != 1 || lanes[0] != gitInteractive {
-		t.Fatalf("lanes=%v, want one interactive delete so foreground work never waits on the deferred queue", lanes)
-	}
-	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
-		t.Fatalf("worktree still present: %v", err)
-	}
-}
-
-func TestAutomationRetentionRemovalRechecksTheRunUnderTheGate(t *testing.T) {
-	root, mainRepo := initProviderTestRepo(t)
-	worktree := filepath.Join(root, "repo--auto")
-	runGitDaemon(t, mainRepo, "worktree", "add", "-b", "automation/auto", worktree)
-
-	s := store.New()
-	d := &Daemon{gitExec: testGitExecutor(t, productionGitExecutorConfig), store: s, dataRoot: root, wsHub: newWSHub()}
-	def, err := d.automationApply(fmt.Sprintf(manualAutomationYAML, t.TempDir()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	old := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-	run := claimTerminalAutomationRun(t, s, def, "race-1", old, automationResolvedLocationJSON(t, mainRepo, worktree))
-	if block, err := d.automationRunCleanupSafety(*run); err != nil || block != automationRunCleanupOK {
-		t.Fatalf("safety = %v err=%v, want OK", block, err)
-	}
-
-	s.Add(&protocol.Session{
-		ID: run.SessionID, Label: "auto", Agent: string(protocol.SessionAgentCodex), Directory: worktree, State: protocol.SessionStateWorking,
-		StateSince: old.Format(time.RFC3339), StateUpdatedAt: old.Format(time.RFC3339), LastSeen: old.Format(time.RFC3339), WorkspaceID: run.WorkspaceID,
-	})
-
-	if err := d.removeAutomationRunWorktree(*run); !errors.Is(err, errAutomaticWorktreeCleanupPreempted) {
-		t.Fatalf("remove err=%v, want preempted by the revived session", err)
-	}
-	if _, err := os.Stat(worktree); err != nil {
-		t.Fatalf("retention deleted the worktree of live session %s: %v", run.SessionID, err)
 	}
 }

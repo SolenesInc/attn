@@ -58,6 +58,18 @@ func (r *Run) Halt() {
 	r.call(methodHalt, struct{}{}, nil)
 }
 
+type Denial struct {
+	Tool   string `json:"tool"`
+	Action string `json:"action"`
+	Reason string `json:"reason"`
+	Rule   string `json:"rule"`
+}
+
+func (r *Run) Deny(denial Denial) {
+	r.t.Helper()
+	r.call(methodDeny, denial, nil)
+}
+
 func (r *Run) Exit(code int) {
 	r.t.Helper()
 	if err := r.fake.peer.notify(methodExit, exitParams{Code: code}); err != nil {

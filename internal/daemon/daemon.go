@@ -106,7 +106,6 @@ type Daemon struct {
 	clientToken                       string
 	store                             *store.Store
 	automationMu                      sync.Mutex
-	wsAutomationMutationTimeout       time.Duration
 	automationObservationMu           sync.Mutex
 	automationObservationLocks        map[string]*sync.Mutex
 	automationRepoMu                  sync.Mutex
@@ -139,7 +138,7 @@ type Daemon struct {
 	reopenGitMu                       sync.Mutex
 	reopenBranches                    *sharedCalls[reopenBranchKey, branchInspection]
 	reopenInspect                     func(context.Context, *git.Client, string, string) (branchInspection, error)
-	sessionPaneAddMu                  sync.Mutex
+	workspaceOccupancyMu              sync.Mutex
 	gitReaderMu                       sync.Mutex
 	gitStatus                         *gitStatusReader
 	fileDiff                          *fileDiffReader
@@ -341,7 +340,6 @@ type Daemon struct {
 	workflowDirty             map[string]bool
 	workflowEngineMu          sync.Mutex
 	workflowEngineConn        map[string]workflowEngineSink
-	workflowBroadcastHook     func(*protocol.WorkflowRunUpdatedMessage)
 	gardenBroadcastHook       func([]protocol.Seed, int)
 	appsBroadcastHook         func([]protocol.AppRegistryEntry)
 	gardenMintID              func() (string, error)
@@ -1612,6 +1610,11 @@ func (d *Daemon) Stop() {
 func (d *Daemon) stop() {
 	d.log("daemon stopping")
 	close(d.done)
+	if d.listener != nil {
+		d.listener.Close()
+		d.listener = nil
+		os.Remove(d.socketPath)
+	}
 	d.closeGitExecution(ErrGitExecutorClosed)
 	d.wsHub.closeAll()
 	d.sessionInputs().stopRetries()
@@ -1644,11 +1647,6 @@ func (d *Daemon) stop() {
 	}
 	if d.diagServer != nil {
 		_ = d.diagServer.Close()
-	}
-	if d.listener != nil {
-		d.listener.Close()
-		d.listener = nil
-		os.Remove(d.socketPath)
 	}
 	d.releasePIDLock()
 	if d.logger != nil {

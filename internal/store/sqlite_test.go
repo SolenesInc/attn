@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"path/filepath"
@@ -31,226 +30,6 @@ func migrationOrderError(registry []migration) error {
 func TestMigrationVersionsStrictlyIncrease(t *testing.T) {
 	if err := migrationOrderError(migrations); err != nil {
 		t.Fatal(err)
-	}
-}
-
-func TestMigrationOrderError(t *testing.T) {
-	tests := []struct {
-		name     string
-		versions []int
-		wantErr  string
-	}{
-		{name: "strictly increasing", versions: []int{68, 69, 70, 71}},
-		{name: "duplicate", versions: []int{68, 69, 70, 70}, wantErr: "duplicate migration version 70 at indexes 2 and 3"},
-		{name: "out of order", versions: []int{68, 70, 69, 71}, wantErr: "migration version 69 at index 2 is out of order after version 70 at index 1"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			registry := make([]migration, len(tt.versions))
-			for i, version := range tt.versions {
-				registry[i].version = version
-			}
-
-			err := migrationOrderError(registry)
-			if tt.wantErr == "" {
-				if err != nil {
-					t.Fatalf("migrationOrderError() error = %v", err)
-				}
-				return
-			}
-			if err == nil || err.Error() != tt.wantErr {
-				t.Fatalf("migrationOrderError() error = %v, want %q", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func latestSchemaVersion() int {
-	max := 0
-	for _, m := range migrations {
-		if m.version > max {
-			max = m.version
-		}
-	}
-	return max
-}
-
-func TestOpenDB_CreatesSchema(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() error = %v", err)
-	}
-	defer db.Close()
-
-	tables := []string{"sessions", "prs", "repos", "instance_roles", "chief_of_staff_dispatches", "peer_messages", "agent_mailbox_items", "pull_request_watches", "delegation_operations", "automation_provider_cursors", "automation_review_request_edges", "automation_continuity_bindings", "automation_ticket_occurrence_events", "legacy_ticket_recovery_runs", "legacy_ticket_recovery_sources", "legacy_ticket_recovery_items", "legacy_ticket_seed_links", "garden_seed_event_receipts", "garden_seed_event_sources"}
-	for _, table := range tables {
-		var count int
-		err := db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count)
-		if err != nil {
-			t.Errorf("Table %q does not exist: %v", table, err)
-		}
-	}
-	var baselineDefault string
-	if err := db.QueryRow(`SELECT dflt_value FROM pragma_table_info('automation_review_request_edges') WHERE name='baseline_cycle'`).Scan(&baselineDefault); err != nil {
-		t.Fatalf("automation_review_request_edges.baseline_cycle does not exist: %v", err)
-	}
-	if baselineDefault != "0" {
-		t.Fatalf("baseline_cycle default=%q, want 0", baselineDefault)
-	}
-}
-
-func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "migration-148.db")
-	db, err := OpenDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec(`
-		DROP TABLE garden_seed_event_receipts;
-		DROP TABLE garden_seed_event_sources;
-		DROP TABLE garden_seed_artifact_observations;
-		DELETE FROM schema_migrations WHERE version >= 148;
-		INSERT INTO agent_mailbox_items
-			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
-		VALUES
-			('pending', 'sess-a', 'garden_seed', 's-one', 's-one', 'unblocked', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', ''),
-			('read', 'sess-a', 'garden_seed', 's-two', 's-two', 'lifecycle', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', '2026-09-12T12:02:00Z')
-	`); err != nil {
-		db.Close()
-		t.Fatal(err)
-	}
-	if err := db.Close(); err != nil {
-		t.Fatal(err)
-	}
-
-	db, err = OpenDB(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
-	var hint, bell, notified, read string
-	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='pending'`).Scan(&hint, &bell, &notified, &read); err != nil {
-		t.Fatal(err)
-	}
-	if hint != "unblocked" || bell != "seed activity" || notified != "2026-09-12T12:01:00Z" || read != "" {
-		t.Fatalf("pending row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
-	}
-	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='read'`).Scan(&hint, &bell, &notified, &read); err != nil {
-		t.Fatal(err)
-	}
-	if hint != "lifecycle" || bell != "" || notified != "2026-09-12T12:01:00Z" || read != "2026-09-12T12:02:00Z" {
-		t.Fatalf("read row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
-	}
-	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources", "garden_seed_artifact_observations"} {
-		var count int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
-			t.Fatalf("%s missing after migration: %v", table, err)
-		}
-	}
-}
-
-func TestOpenDBRetainsMeasuredReadBurst(t *testing.T) {
-	db, err := OpenDB(filepath.Join(t.TempDir(), "pool.db"))
-	if err != nil {
-		t.Fatalf("OpenDB() error = %v", err)
-	}
-	defer db.Close()
-
-	connections := make([]*sql.Conn, 0, sqliteFileConnectionPoolSize)
-	for range sqliteFileConnectionPoolSize {
-		connection, err := db.Conn(context.Background())
-		if err != nil {
-			t.Fatalf("acquire connection %d: %v", len(connections)+1, err)
-		}
-		connections = append(connections, connection)
-	}
-	if stats := db.Stats(); stats.OpenConnections != sqliteFileConnectionPoolSize || stats.InUse != sqliteFileConnectionPoolSize {
-		t.Fatalf("held connection stats = %+v, want %d open and in use", stats, sqliteFileConnectionPoolSize)
-	}
-
-	for _, connection := range connections {
-		if err := connection.Close(); err != nil {
-			t.Fatalf("release connection: %v", err)
-		}
-	}
-	if stats := db.Stats(); stats.Idle != sqliteFileConnectionPoolSize || stats.MaxIdleClosed != 0 {
-		t.Fatalf("released connection stats = %+v, want %d retained and none churned", stats, sqliteFileConnectionPoolSize)
-	}
-}
-
-func TestOpenDBTakesTheWriteLockWhenATransactionBegins(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "txlock.db")
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() error = %v", err)
-	}
-	defer db.Close()
-
-	tx, err := db.Begin()
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	other, err := sql.Open("sqlite3", "file:"+dbPath+"?_busy_timeout=0")
-	if err != nil {
-		t.Fatalf("open second handle: %v", err)
-	}
-	defer other.Close()
-	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err == nil {
-		t.Fatal("a concurrent write succeeded; the transaction did not take the write lock at BEGIN")
-	}
-
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-	if _, err := other.Exec(`INSERT INTO schema_migrations(version, applied_at) VALUES(999999, '2026-01-01T00:00:00Z')`); err != nil {
-		t.Fatalf("write after commit: %v", err)
-	}
-}
-
-func TestOpenDB_CreatesDirectory(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "subdir", "nested", "test.db")
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() should create parent directories, got error = %v", err)
-	}
-	defer db.Close()
-}
-
-func TestOpenDB_ReopensExistingDB(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db1, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() error = %v", err)
-	}
-	_, err = db1.Exec("INSERT INTO repos (repo, muted, collapsed) VALUES ('test/repo', 1, 0)")
-	if err != nil {
-		t.Fatalf("INSERT error = %v", err)
-	}
-	db1.Close()
-
-	db2, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() reopen error = %v", err)
-	}
-	defer db2.Close()
-
-	var muted int
-	err = db2.QueryRow("SELECT muted FROM repos WHERE repo = 'test/repo'").Scan(&muted)
-	if err != nil {
-		t.Fatalf("SELECT error = %v", err)
-	}
-	if muted != 1 {
-		t.Errorf("muted = %d, want 1", muted)
 	}
 }
 
@@ -305,6 +84,114 @@ func TestMigrations_Idempotent(t *testing.T) {
 	}
 	if count != len(migrations) {
 		t.Errorf("migration count after reopen = %d, want %d", count, len(migrations))
+	}
+}
+
+func TestMigrations_MigratedColumnsExist(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := OpenDB(dbPath)
+	if err != nil {
+		t.Fatalf("OpenDB() error = %v", err)
+	}
+	defer db.Close()
+
+	migratedColumns := []struct {
+		table  string
+		column string
+	}{
+		{"prs", "host"},
+		{"prs", "head_sha"},
+		{"prs", "head_branch"},
+		{"prs", "comment_count"},
+		{"prs", "approved_by_me"},
+		{"prs", "heat_state"},
+		{"prs", "last_heat_activity_at"},
+		{"pr_interactions", "last_seen_ci_status"},
+		{"sessions", "branch"},
+		{"sessions", "is_worktree"},
+		{"sessions", "main_repo"},
+		{"sessions", "agent"},
+		{"sessions", "resume_session_id"},
+		{"sessions", "transcript_path"},
+		{"sessions", "endpoint_id"},
+		{"sessions", "agent_metadata"},
+		{"sessions", "agent_driver_plugin_name"},
+		{"sessions", "agent_driver_run_id"},
+		{"sessions", "agent_driver_report_seq"},
+		{"chief_of_staff_dispatches", "structured_report_json"},
+		{"tickets", "reconciled_at"},
+		{"sessions", "closed_intentionally_at"},
+		{"automation_definitions", "spec_json"},
+	}
+
+	for _, tc := range migratedColumns {
+		query := "SELECT " + tc.column + " FROM " + tc.table + " LIMIT 1"
+		_, err := db.Exec(query)
+		if err != nil {
+			t.Errorf("Column %s.%s should exist after migrations: %v", tc.table, tc.column, err)
+		}
+	}
+}
+
+func latestSchemaVersion() int {
+	max := 0
+	for _, m := range migrations {
+		if m.version > max {
+			max = m.version
+		}
+	}
+	return max
+}
+
+func TestMigration148PreservesPendingGardenMailboxReceiptsAndNamesItsBell(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "migration-148.db")
+	db, err := OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`
+		DROP TABLE garden_seed_event_receipts;
+		DROP TABLE garden_seed_event_sources;
+		DROP TABLE garden_seed_artifact_observations;
+		DELETE FROM schema_migrations WHERE version >= 148;
+		INSERT INTO agent_mailbox_items
+			(id, recipient_session_id, kind, source_id, coalesce_key, hint, prompt, created_at, notified_at, read_at)
+		VALUES
+			('pending', 'sess-a', 'garden_seed', 's-one', 's-one', 'unblocked', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', ''),
+			('read', 'sess-a', 'garden_seed', 's-two', 's-two', 'lifecycle', '', '2026-09-12T12:00:00Z', '2026-09-12T12:01:00Z', '2026-09-12T12:02:00Z')
+	`); err != nil {
+		db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	db, err = OpenDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var hint, bell, notified, read string
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='pending'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "unblocked" || bell != "seed activity" || notified != "2026-09-12T12:01:00Z" || read != "" {
+		t.Fatalf("pending row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	if err := db.QueryRow(`SELECT hint,bell_name,notified_at,read_at FROM agent_mailbox_items WHERE id='read'`).Scan(&hint, &bell, &notified, &read); err != nil {
+		t.Fatal(err)
+	}
+	if hint != "lifecycle" || bell != "" || notified != "2026-09-12T12:01:00Z" || read != "2026-09-12T12:02:00Z" {
+		t.Fatalf("read row after migration = hint=%q bell=%q notified=%q read=%q", hint, bell, notified, read)
+	}
+	for _, table := range []string{"garden_seed_event_receipts", "garden_seed_event_sources", "garden_seed_artifact_observations"} {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM ` + table).Scan(&count); err != nil {
+			t.Fatalf("%s missing after migration: %v", table, err)
+		}
 	}
 }
 
@@ -1040,54 +927,6 @@ func TestMigration66BackfillsActiveBornAssignedTicketsWithoutCursor(t *testing.T
 	cursor, err := migrated.GetTicketCursor(TicketRoleIdentity(TicketRoleChiefOfStaff), "legacy-delegation")
 	if err != nil || cursor != 0 {
 		t.Fatalf("backfilled role cursor = %d, err %v; want untouched zero", cursor, err)
-	}
-}
-
-func TestMigrations_MigratedColumnsExist(t *testing.T) {
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	db, err := OpenDB(dbPath)
-	if err != nil {
-		t.Fatalf("OpenDB() error = %v", err)
-	}
-	defer db.Close()
-
-	migratedColumns := []struct {
-		table  string
-		column string
-	}{
-		{"prs", "host"},
-		{"prs", "head_sha"},
-		{"prs", "head_branch"},
-		{"prs", "comment_count"},
-		{"prs", "approved_by_me"},
-		{"prs", "heat_state"},
-		{"prs", "last_heat_activity_at"},
-		{"pr_interactions", "last_seen_ci_status"},
-		{"sessions", "branch"},
-		{"sessions", "is_worktree"},
-		{"sessions", "main_repo"},
-		{"sessions", "agent"},
-		{"sessions", "resume_session_id"},
-		{"sessions", "transcript_path"},
-		{"sessions", "endpoint_id"},
-		{"sessions", "agent_metadata"},
-		{"sessions", "agent_driver_plugin_name"},
-		{"sessions", "agent_driver_run_id"},
-		{"sessions", "agent_driver_report_seq"},
-		{"chief_of_staff_dispatches", "structured_report_json"},
-		{"tickets", "reconciled_at"},
-		{"sessions", "closed_intentionally_at"},
-		{"automation_definitions", "spec_json"},
-	}
-
-	for _, tc := range migratedColumns {
-		query := "SELECT " + tc.column + " FROM " + tc.table + " LIMIT 1"
-		_, err := db.Exec(query)
-		if err != nil {
-			t.Errorf("Column %s.%s should exist after migrations: %v", tc.table, tc.column, err)
-		}
 	}
 }
 

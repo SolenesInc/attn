@@ -598,31 +598,6 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	return count > 0
 }
 
-func (s *Store) RemoveSessionsInDirectory(directory string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		for id, session := range s.sessions {
-			if session.Directory == directory {
-				delete(s.sessions, id)
-			}
-		}
-		return
-	}
-
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM "+table+
-			" WHERE session_id IN (SELECT id FROM sessions WHERE directory = ?)", directory); err != nil {
-			log.Printf("[store] RemoveSessionsInDirectory: failed to drop %s for directory %s: %v", table, directory, err)
-		}
-	}
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE directory = ?`, directory)
-	if err != nil {
-		log.Printf("[store] RemoveSessionsInDirectory: failed for directory %s: %v", directory, err)
-	}
-}
-
 func (s *Store) UpdateState(id, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -632,14 +607,14 @@ func (s *Store) UpdateState(id, state string) bool {
 		if session == nil {
 			return false
 		}
-		now := time.Now().Format(time.RFC3339Nano)
+		now := string(protocol.TimestampNow())
 		session.State = protocol.SessionState(state)
 		session.StateSince = now
 		session.StateUpdatedAt = now
 		return true
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ? WHERE id = ? AND closed_at = ''`,
 		state, now, now, id)
 	if err != nil {
@@ -763,12 +738,12 @@ func (s *Store) Touch(id string) {
 
 	if s.db == nil {
 		if session := s.sessions[id]; session != nil {
-			session.LastSeen = time.Now().Format(time.RFC3339Nano)
+			session.LastSeen = string(protocol.TimestampNow())
 		}
 		return
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", now, id)
 	if err != nil {
 		log.Printf("[store] Touch: failed for session %s: %v", id, err)
@@ -1356,7 +1331,7 @@ func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string
 	if runID == "" || seq == 0 {
 		return false
 	}
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	if s.db == nil {
 		session := s.sessions[id]
 		cursor := s.agentDriverRuns[id]

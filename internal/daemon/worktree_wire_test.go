@@ -9,10 +9,11 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"sync"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
@@ -65,23 +66,24 @@ func TestAMergedPullRequestKeepsItsWorktreeMergedAfterGitHubStopsListingIt(t *te
 	pulls.list(mergedPullRequest{Number: 7, MergedAt: "2026-08-06T10:00:00Z", Head: ref{Ref: "feat-login", SHA: head}, Base: ref{Ref: "main"}})
 
 	refreshWorktrees(t, cli)
+	firstPass := pulls.awaitSweepAsking(t)
+	refreshWorktrees(t, cli)
+	close(firstPass)
 	testworld.Await(app, protocol.EventWorktreeStateChanged, func(e protocol.WebSocketEvent) bool {
 		return len(e.Worktrees) == 1 && e.Worktrees[0].Path == path && protocol.Deref(e.Worktrees[0].MergedSignal) == "pull_request"
 	})
 
+	secondPass := pulls.awaitSweepAsking(t)
 	pulls.list()
 	if err := os.Remove(scratch); err != nil {
 		t.Fatal(err)
 	}
-	refreshWorktrees(t, cli)
+	close(secondPass)
 	swept := testworld.Await(app, protocol.EventWorktreeSwept, func(e protocol.WebSocketEvent) bool {
 		return e.SweepEntry != nil && e.SweepEntry.Path == path
 	}).SweepEntry
 	if swept.Action != "removed" || !strings.Contains(protocol.Deref(swept.Reason), "pull_request") {
 		t.Errorf("the sweep recorded %s (%s), want it removed as merged by its pull request", swept.Action, protocol.Deref(swept.Reason))
-	}
-	if pulls.servedEmpty() == 0 {
-		t.Error("the second refresh never asked GitHub, so it proves nothing about a PR that stopped being listed")
 	}
 }
 
@@ -98,15 +100,14 @@ type mergedPullRequest struct {
 }
 
 type mergedPullRequests struct {
-	mu     sync.Mutex
 	pulls  []mergedPullRequest
-	empty  int
+	asking chan chan struct{}
 	server *httptest.Server
 }
 
 func newMergedPullRequests(t *testing.T) *mergedPullRequests {
 	t.Helper()
-	m := &mergedPullRequests{}
+	m := &mergedPullRequests{asking: make(chan chan struct{})}
 	m.server = httptest.NewServer(http.HandlerFunc(func(rw http.ResponseWriter, r *http.Request) {
 		rw.Header().Set("Content-Type", "application/json")
 		if r.URL.Path != "/repos/acme/shop/pulls" {
@@ -114,13 +115,18 @@ func newMergedPullRequests(t *testing.T) *mergedPullRequests {
 			_, _ = rw.Write([]byte(`{"message":"Not Found"}`))
 			return
 		}
-		m.mu.Lock()
-		pulls := m.pulls
-		if len(pulls) == 0 {
-			m.empty++
+		answer := make(chan struct{})
+		select {
+		case m.asking <- answer:
+		case <-r.Context().Done():
+			return
 		}
-		m.mu.Unlock()
-		_ = json.NewEncoder(rw).Encode(append([]mergedPullRequest{}, pulls...))
+		select {
+		case <-answer:
+		case <-r.Context().Done():
+			return
+		}
+		_ = json.NewEncoder(rw).Encode(append([]mergedPullRequest{}, m.pulls...))
 	}))
 	t.Cleanup(m.server.Close)
 	t.Setenv("ATTN_MOCK_GH_URL", m.server.URL)
@@ -129,16 +135,19 @@ func newMergedPullRequests(t *testing.T) *mergedPullRequests {
 	return m
 }
 
-func (m *mergedPullRequests) list(pulls ...mergedPullRequest) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.pulls = pulls
+func (m *mergedPullRequests) awaitSweepAsking(t *testing.T) chan<- struct{} {
+	t.Helper()
+	select {
+	case answer := <-m.asking:
+		return answer
+	case <-time.After(fakeagent.HangGuard):
+		t.Fatalf("no sweep pass asked GitHub for merged pull requests within %s", fakeagent.HangGuard)
+		return nil
+	}
 }
 
-func (m *mergedPullRequests) servedEmpty() int {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.empty
+func (m *mergedPullRequests) list(pulls ...mergedPullRequest) {
+	m.pulls = pulls
 }
 
 func refreshWorktrees(t *testing.T, cli *client.Client) {
