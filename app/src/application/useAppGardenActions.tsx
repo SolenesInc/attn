@@ -1,5 +1,5 @@
 import { useCallback } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { type SeedPlacement, type SeedReviewActionContext } from '../hooks/useDaemonSocket';
 import { useDockPanels } from '../hooks/useDockPanels';
@@ -10,7 +10,7 @@ import { crewDisplayName } from '../utils/crewName';
 interface Options {
   sendOpenSeed: ReturnType<typeof useDaemonApi>['sendOpenSeed'];
   activeSessionId: ReturnType<typeof useSessionStore.getState>['activeSessionId'];
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  showError: ReturnType<typeof useToast>['showError'];
   seeds: ReturnType<typeof useDaemonStore.getState>['seeds'];
   openDockPanel: ReturnType<typeof useDockPanels>['openDockPanel'];
   sendFsExists: ReturnType<typeof useDaemonApi>['sendFsExists'];

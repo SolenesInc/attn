@@ -36,6 +36,8 @@ interface TestSession {
   dispatcher_member?: string;
   delegation_role?: SessionDelegationRole;
   automation?: import('../types/generated').AutomationProvenance;
+  turnOwed?: boolean;
+  turnOpenedAt?: string;
   pullRequests?: import('../types/generated').SessionPullRequest[];
 }
 
@@ -318,7 +320,9 @@ describe('Sidebar', () => {
     const header = screen.getByTestId('sidebar-automation-header-review-sol');
     expect(header).toHaveAttribute('aria-expanded', 'false');
     expect(header).toHaveTextContent('Requested PR review - GPT Sol medium');
-    expect(header).toHaveTextContent('2 agents');
+    expect(group).toHaveAttribute('data-runs', '2');
+    expect(screen.getByTestId('sidebar-automation-runs')).toHaveTextContent('Automations2 runs');
+    expect(screen.queryByTestId('sidebar-runs-needing-you')).toBeNull();
     expect(screen.getByTestId('sidebar-session-manual')).toBeInTheDocument();
     expect(screen.queryByTestId('sidebar-session-run-a')).toBeNull();
     expect(screen.queryByTestId('sidebar-workspace-workspace-/repo/a')).toBeNull();
@@ -329,16 +333,63 @@ describe('Sidebar', () => {
     fireEvent.click(header);
 
     expect(header).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByTestId('sidebar-session-run-a')).toBeInTheDocument();
-    expect(screen.getByTestId('sidebar-session-run-b')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-session-run-b').compareDocumentPosition(
+      screen.getByTestId('sidebar-session-run-a'),
+    )).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
-  it('uses singular agent count for an automation with one session', () => {
+  it('flags runs that stopped with a question, and settles or walks them from the sidebar', () => {
+    const automation = {
+      run_id: 'run-1',
+      definition_id: 'review-sol',
+      definition_name: 'Requested PR review - GPT Sol medium',
+      trigger_type: 'github_review_requested',
+    };
     const sessions: TestSession[] = [
+      { id: 'run-a', label: 'review A', state: 'working', cwd: '/repo/a', automation },
+      {
+        id: 'run-b',
+        label: 'review B',
+        state: 'waiting_input',
+        cwd: '/repo/b',
+        turnOwed: true,
+        turnOpenedAt: '2026-09-26T09:00:00Z',
+        automation: { ...automation, run_id: 'run-2' },
+      },
+    ];
+    const onSettleTurn = vi.fn();
+    const onWalkRuns = vi.fn();
+
+    render(
+      <Sidebar
+        {...baseProps}
+        {...buildSidebarData(sessions)}
+        onSettleTurn={onSettleTurn}
+        onWalkRuns={onWalkRuns}
+      />,
+    );
+
+    expect(screen.getByTestId('sidebar-automation-review-sol')).toHaveAttribute('data-needing', '1');
+    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveTextContent(/GPT Sol medium12$/);
+    const batch = screen.getByTestId('sidebar-runs-needing-you');
+    expect(batch).toHaveTextContent(`1 run needs you${formatShortcut('session.nextRun')}`);
+    fireEvent.click(batch);
+    expect(onWalkRuns).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('sidebar-automation-header-review-sol'));
+    expect(screen.queryByTestId('session-settle-run-a')).toBeNull();
+    fireEvent.click(screen.getByTestId('session-settle-run-b'));
+    expect(onSettleTurn).toHaveBeenCalledWith('run-b');
+  });
+
+  it('opens the group of a run when that run is selected', () => {
+    const sessions: TestSession[] = [
+      { id: 'manual', label: 'manual', state: 'working', cwd: '/repo/manual' },
       {
         id: 'run-a',
         label: 'review A',
         state: 'idle',
+        cwd: '/repo/a',
         automation: {
           run_id: 'run-1',
           definition_id: 'review-sol',
@@ -347,10 +398,16 @@ describe('Sidebar', () => {
         },
       },
     ];
+    const data = buildSidebarData(sessions);
+    const { rerender } = render(<Sidebar {...baseProps} {...data} selectedId="manual" />);
+    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveAttribute('aria-expanded', 'false');
 
-    render(<Sidebar {...baseProps} {...buildSidebarData(sessions)} />);
+    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
+    const header = screen.getByTestId('sidebar-automation-header-review-sol');
+    expect(header).toHaveAttribute('aria-expanded', 'true');
 
-    expect(screen.getByTestId('sidebar-automation-header-review-sol')).toHaveTextContent('1 agent');
+    fireEvent.click(header);
+    expect(header).toHaveAttribute('aria-expanded', 'false');
   });
 
   it('shows waiting badge in collapsed sidebar', () => {

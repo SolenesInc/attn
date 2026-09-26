@@ -1,19 +1,22 @@
 import { act, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ErrorToast } from './ErrorToast';
+import { Toast } from './Toast';
 
 afterEach(() => {
   vi.useRealTimers();
 });
 
-describe('ErrorToast', () => {
+describe('Toast', () => {
   it('keeps an explicitly extended recovery notice visible for its requested duration', () => {
     vi.useFakeTimers();
     const onDone = vi.fn();
     render(
-      <ErrorToast
-        message="Terminal issue recovered. Diagnostics were saved for Victor."
-        durationMs={12_000}
+      <Toast
+        toast={{
+          message: 'Terminal issue recovered. Diagnostics were saved for Victor.',
+          tone: 'error',
+          durationMs: 12_000,
+        }}
         onDone={onDone}
       />,
     );

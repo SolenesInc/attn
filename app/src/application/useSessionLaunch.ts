@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { ptySpawn } from '../pty/bridge';
 import { useProfilesStore } from '../store/profiles';
@@ -29,7 +29,7 @@ interface Options {
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   activeSessionId: string | null;
   selectCreatedSession: (id: string) => boolean;
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  showError: ReturnType<typeof useToast>['showError'];
 }
 export function useSessionLaunch({
   settings,

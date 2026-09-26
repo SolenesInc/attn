@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { SessionExitInfo } from '../hooks/useDaemonSocket';
 import type { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
@@ -17,7 +17,7 @@ interface Options {
   registerSessionExitHandler: AppContentProps['registerSessionExitHandler'];
   getPaneSize: ReturnType<typeof useDesktopRuntimeController>['getPaneSize'];
   handleSelectSession: (id: string) => boolean;
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  showError: ReturnType<typeof useToast>['showError'];
   chooseReopenDirectory: () => Promise<string | undefined>;
   onReopened: () => void;
 }

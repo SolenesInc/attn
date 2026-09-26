@@ -114,7 +114,7 @@ export function useAppController({
   const { connect, sessions, activeSessionId, reloadSession } = useSessionStore();
 
   const appErrors = useAppErrors({ settingError, clearSettingError });
-  const { showError } = appErrors;
+  const { showError, showNotice } = appErrors;
 
   const desktopRuntime = useDesktopRuntimeController(sessions, activeSessionId);
   const {
@@ -167,6 +167,7 @@ export function useAppController({
     unmutedEnrichedSessions,
     attentionQueue,
     showError,
+    showNotice,
   });
   const {
     view,
@@ -181,6 +182,7 @@ export function useAppController({
     goToDashboard,
     toggleGridMode,
     handleJumpToWaiting,
+    handleNextRun,
     currentDesktopIdRef,
     handleSelectDesktop,
     handleCloseTile,
@@ -561,6 +563,7 @@ export function useAppController({
     onGoToDashboard: goToDashboard,
     onToggleGridMode: toggleGridMode,
     onJumpToWaiting: handleJumpToWaiting,
+    onNextRun: handleNextRun,
     onSettleTurn: handleSettleActiveTurn,
     onSnoozeTurn: handleSnoozeActiveSession,
     onCancelCountdown: handleCancelCountdown,
