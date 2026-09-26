@@ -156,13 +156,15 @@ export type Surface =
 
 export function useSurface(): Surface {
   const view = useSessionStore((state) => state.view);
-  const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
+  const shownSessionId = useProfilesStore((state) => shownOf(state).sessionId);
+  const settledOnShown = useSessionStore((state) => shownSessionId !== null && state.activeSessionId === shownSessionId);
+  const shownAgentId = settledOnShown ? shownSessionId : null;
   return useMemo<Surface>(() => {
     if (view !== 'session') return { kind: view };
     if (tileSelected) return { kind: 'tile' };
-    return { kind: 'agent', sessionId: activeSessionId };
-  }, [view, tileSelected, activeSessionId]);
+    return { kind: 'agent', sessionId: shownAgentId };
+  }, [view, tileSelected, shownAgentId]);
 }
 
 export function useAgentOnScreen(): string | null {
