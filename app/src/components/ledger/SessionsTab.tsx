@@ -123,7 +123,6 @@ export function SessionsTab({
   const selected = visible.find((entry) => entry.id === selectedId) ?? visible[0] ?? null;
   const [menu, setMenu] = useState<LedgerMenu | null>(null);
   const [notices, setNotices] = useState<Record<string, RowNote>>({});
-  const [awaiting, setAwaiting] = useState<{ sessionId: string; actionId: string; profileId?: string } | null>(null);
   const profileOptions = useMemo(() => liveProfileOptions(profileNames, currentProfileId), [profileNames, currentProfileId]);
   const [copied, copy] = useCopied();
 
@@ -157,19 +156,6 @@ export function SessionsTab({
     Promise.resolve(outcome).then(() => setNotice(sessionId, null)).catch(refuse);
   }, [onReopen, setNotice, reload]);
 
-  // Fires against the verdict that lands, never the stale one that was on screen.
-  useEffect(() => {
-    if (!awaiting) return;
-    const verdict = verdicts[awaiting.sessionId];
-    if (!verdict || verdict.refreshing) return;
-    if (verdict.actions.some((action) => action.id === awaiting.actionId)) {
-      fire(awaiting.sessionId, awaiting.actionId, awaiting.profileId);
-    } else {
-      setNotice(awaiting.sessionId, { kind: 'refused', text: `The check finished and that is no longer possible: ${verdict.summary}` });
-    }
-    setAwaiting(null);
-  }, [awaiting, verdicts, fire, setNotice]);
-
   const isLive = useCallback(
     (entry: SessionLedgerEntry) => !isClosed(entry) && (liveSessionIds?.has(entry.id) ?? true),
     [liveSessionIds],
@@ -198,16 +184,14 @@ export function SessionsTab({
     if (verbId === 'seed') { const seed = seedForSession?.(entry.id); if (seed) onOpenSeed?.(seed.id); return; }
     if (verbId === 'worktree') { onShowWorktree?.(entry.directory); return; }
     if (verbId === 'move' && choiceId) { moveSession(entry, choiceId); return; }
-    setNotice(entry.id, null);
-    if (verdict && !verdict.refreshing) { fire(entry.id, verdictId(verbId), choiceId); return; }
-    setAwaiting({ sessionId: entry.id, actionId: verdictId(verbId), profileId: choiceId });
-  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, setNotice, verdicts, fire]);
+    fire(entry.id, verdictId(verbId), choiceId);
+  }, [visible, onFocusSession, seedForSession, onOpenSeed, onShowWorktree, moveSession, verdicts, fire]);
 
   const items = useMemo<ListItem[]>(() => visible.map((entry) => ({
     kind: 'row',
     row: sessionRow(entry, {
       verdict: isClosed(entry) ? verdicts[entry.id] : undefined,
-      note: notices[entry.id] ?? (awaiting?.sessionId === entry.id ? { kind: 'info', text: 'waiting for the branch check…' } : undefined),
+      note: notices[entry.id],
       live: isLive(entry),
       seed: seedForSession?.(entry.id) ?? null,
       sessionLabel,
@@ -218,7 +202,7 @@ export function SessionsTab({
       reopenTargets: profileOptions,
       now: now(),
     }),
-  })), [visible, verdicts, notices, awaiting, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now]);
+  })), [visible, verdicts, notices, isLive, seedForSession, sessionLabel, nameText, onReopen, onMoveSession, onShowWorktree, profileOptions, now]);
 
   // Counts, not arrays, drive the status line: a parent that rerenders on status must not loop it.
   const shown = visible.length;

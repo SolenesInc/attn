@@ -1,3 +1,3 @@
 kind: added
 area: profiles
-change: The profile switcher creates (N), renames (R) and deletes (⌫) profiles; deleting asks which profile receives its agents, crew and automations, and the last profile stays. In the Sessions ledger, a live agent's menu has Move to… for sending it to another profile, and reopening a session whose profile was deleted asks which profile to reopen it in.
+change: The profile switcher creates (N), renames (R) and deletes (⌫) profiles; deleting asks which profile receives its agents, crew and automations, and the last profile stays. In the Sessions ledger, a live agent's menu has Move to… for sending it to another profile, and reopening a session whose profile was deleted asks which profile to reopen it in. A reopen asked for while its branch is still being checked, from the ledger or `attn session reopen`, now waits for the check and is judged against what it finds.

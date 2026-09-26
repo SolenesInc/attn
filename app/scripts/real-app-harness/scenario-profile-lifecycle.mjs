@@ -64,11 +64,10 @@ async function sweepHarnessProfiles(client, observer) {
   const state = await arrangement(client);
   const keeper = state.profiles.find((profile) => !profile.name.startsWith(HARNESS_PROFILE_PREFIX));
   if (!keeper) throw new Error(`every profile is a harness leftover: ${JSON.stringify(state.profiles)}`);
-  for (const profile of state.profiles.filter((entry) => entry.name.startsWith(HARNESS_PROFILE_PREFIX))) {
-    await observer.profileCommand('profile_delete', {
-      profile_id: profile.id, expected_revision: profile.revision, destination_profile_id: keeper.id,
-    });
-  }
+  const leftovers = state.profiles.filter((entry) => entry.name.startsWith(HARNESS_PROFILE_PREFIX));
+  await Promise.all(leftovers.map((profile) => observer.profileCommand('profile_delete', {
+    profile_id: profile.id, expected_revision: profile.revision, destination_profile_id: keeper.id,
+  })));
   return waitForArrangement(client,
     (s) => s.profiles.every((profile) => !profile.name.startsWith(HARNESS_PROFILE_PREFIX))
       && s.profiles.some((profile) => profile.id === s.selectedProfileId),

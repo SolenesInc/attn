@@ -24,6 +24,24 @@ describe('SessionsTab profiles', () => {
     await waitFor(() => expect(within(row('run s1')).queryByRole('menu')).toBeNull());
   });
 
+  it('leaves Enter on a Tab-focused choice to that choice', async () => {
+    const onMoveSession = vi.fn(async () => undefined);
+    const onFocusSession = vi.fn();
+    const { list } = listing([page({ entries: [liveEntry('s1')] })]);
+    renderSessionsTab({ listSessions: list, profileNames, currentProfileId: 'profile-1', onMoveSession, onFocusSession });
+
+    await rows().findByText('run s1');
+    fireEvent.keyDown(row('run s1'), { key: '.' });
+    fireEvent.keyDown(row('run s1'), { key: '2' });
+    const work = within(row('run s1')).getByRole('menuitem', { name: /Work/ });
+
+    const notCancelled = fireEvent.keyDown(work, { key: 'Enter' });
+    expect(notCancelled).toBe(true);
+    expect(onFocusSession).not.toHaveBeenCalled();
+    fireEvent.click(work);
+    expect(onMoveSession).toHaveBeenCalledWith('s1', 'profile-1', 'profile-2');
+  });
+
   it('keeps a refused move on the row', async () => {
     const onMoveSession = vi.fn(async () => { throw new Error('session s1 is in profile-2, not profile-1'); });
     const { list } = listing([page({ entries: [liveEntry('s1')] })]);

@@ -107,6 +107,7 @@ export function LedgerList({
     if (event.key === 'Home') { event.preventDefault(); move(-rows.length); return; }
     if (event.key === 'End') { event.preventDefault(); move(rows.length); return; }
     if (event.key === 'Enter') {
+      if (event.target !== event.currentTarget) return;
       event.preventDefault();
       if (onEnter) onEnter(row.key);
       else if (!busy && row.verbs[0]) pick(row, row.verbs[0]);
