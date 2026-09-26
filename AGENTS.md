@@ -52,7 +52,7 @@ software. Nothing wrong with IKEA; it just doesn't spark passion in me.
   against it, open it read-write, or clean it.
 - Non-production builds, installs, launches, and restarts are pre-authorized.
   Production `make`, `make install`, and `make install-daemon` need Victor's
-  explicit approval. Check the `[attn profile=…]` banner first.
+  explicit approval. Check the `[attn instance=…]` banner first.
 - Never restart the daemon hosting this session.
 
 ## Working rules
@@ -206,7 +206,7 @@ is unavailable, ask before merging.
 ### Experience testing
 
 Test feel with Victor early in spikes and at the end of substantial PR arcs.
-Prepare a running profile from the branch, realistic data, and a short list
+Prepare a running instance from the branch, realistic data, and a short list
 covering changed behavior, latency, and keyboard flow.
 
 ## Guidance
@@ -219,7 +219,7 @@ covering changed behavior, latency, and keyboard flow.
 - Read [making-a-release.md](docs/making-a-release.md) before adding changelog
   fragments, preparing releases or hotfixes, or syncing `main` into `next`.
 - Read [instances.md](docs/instances.md) before installing, launching, or
-  verifying a profile, and when choosing a PR's verification requirements.
+  verifying an instance, and when choosing a PR's verification requirements.
 - Read [app/AGENTS.md](app/AGENTS.md) before changing frontend code or shortcuts.
 - Read [harness guidance](app/scripts/real-app-harness/AGENTS.md) before
   writing/running packaged-app scenarios or recording/publishing evidence.
