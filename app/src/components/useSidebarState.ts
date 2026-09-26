@@ -228,7 +228,7 @@ export function useSidebarState({
     return ' workspace-group--drag-target';
   };
   const visibleVisualOrder = workspaces.filter(isWorkspaceVisible);
-  const arrangeableDesktops = visibleVisualOrder.filter((workspace) => workspace.desktop);
+  const reorderParticipants = visibleWorkspaces.filter((workspace) => workspace.desktop);
   const visualIndexOfWorkspace = (id: string) => visualIndexByWorkspaceId.get(id) ?? -1;
 
   const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
@@ -245,7 +245,7 @@ export function useSidebarState({
     handleSessionPointerDown,
     handleSessionClickCapture,
   } = useSidebarDrag({
-    visibleVisualOrder: arrangeableDesktops,
+    reorderParticipants,
     onWorkspaceReorder,
     onSessionDragStart,
     onSessionDragEnd,

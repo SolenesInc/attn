@@ -1,6 +1,7 @@
 import type { SidebarProps, SidebarWorkspace } from './sidebarTypes';
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEscapeStack } from '../hooks/useEscapeStack';
 
 function reachedDragThreshold(
   origin: { startX: number; startY: number },
@@ -11,12 +12,12 @@ function reachedDragThreshold(
 }
 
 export function useSidebarDrag({
-  visibleVisualOrder,
+  reorderParticipants,
   onWorkspaceReorder,
   onSessionDragStart,
   onSessionDragEnd,
 }: Pick<SidebarProps, 'onWorkspaceReorder' | 'onSessionDragStart' | 'onSessionDragEnd'> & {
-  visibleVisualOrder: SidebarWorkspace[];
+  reorderParticipants: SidebarWorkspace[];
 }) {
   const activeGestureCleanup = useRef<(() => void) | null>(null);
   const cancelActiveGesture = useCallback(() => {
@@ -92,7 +93,7 @@ export function useSidebarDrag({
       if (seamIndex == null || !onWorkspaceReorder) {
         return;
       }
-      const fromIndex = visibleVisualOrder.findIndex((workspace) => workspace.id === workspaceId);
+      const fromIndex = reorderParticipants.findIndex((workspace) => workspace.id === workspaceId);
       if (fromIndex < 0) {
         return;
       }
@@ -101,13 +102,13 @@ export function useSidebarDrag({
       if (seamIndex === fromIndex || seamIndex === fromIndex + 1) {
         return;
       }
-      const remaining = visibleVisualOrder.filter((workspace) => workspace.id !== workspaceId);
+      const remaining = reorderParticipants.filter((workspace) => workspace.id !== workspaceId);
       const insertAt = seamIndex > fromIndex ? seamIndex - 1 : seamIndex;
       const prevWorkspaceId = insertAt > 0 ? remaining[insertAt - 1]?.id : undefined;
       const nextWorkspaceId = insertAt < remaining.length ? remaining[insertAt]?.id : undefined;
       onWorkspaceReorder({ workspaceId, prevWorkspaceId, nextWorkspaceId });
     },
-    [onWorkspaceReorder, visibleVisualOrder],
+    [onWorkspaceReorder, reorderParticipants],
   );
 
   const handleHeaderPointerDown = useCallback(
@@ -193,10 +194,10 @@ export function useSidebarDrag({
   );
 
   const reorderSeamIndexByWorkspaceId = reorderDrag
-    ? new Map(visibleVisualOrder.map((workspace, index) => [workspace.id, index]))
+    ? new Map(reorderParticipants.map((workspace, index) => [workspace.id, index]))
     : null;
-  const reorderTrailingSeamIndex = visibleVisualOrder.length;
-  const lastReorderParticipantId = visibleVisualOrder[visibleVisualOrder.length - 1]?.id;
+  const reorderTrailingSeamIndex = reorderParticipants.length;
+  const lastReorderParticipantId = reorderParticipants[reorderParticipants.length - 1]?.id;
 
   const renderReorderSeam = (index: number) => (
     <div
@@ -297,6 +298,8 @@ export function useSidebarDrag({
     [onSessionDragStart, onSessionDragEnd, cancelActiveGesture],
   );
 
+  useEscapeStack(cancelActiveGesture, Boolean(reorderDrag || draggingSessionId));
+
   const handleSessionClickCapture = useCallback((event: ReactMouseEvent) => {
     if (suppressNextSessionClickRef.current) {
       suppressNextSessionClickRef.current = false;
@@ -325,20 +328,12 @@ function listenForPointerGesture(
   onUp: (event: PointerEvent) => void,
   onCancel: () => void,
 ) {
-  const cancelOnEscape = (event: KeyboardEvent) => {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    event.stopPropagation();
-    onCancel();
-  };
   window.addEventListener('pointermove', onMove);
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onCancel);
-  window.addEventListener('keydown', cancelOnEscape, true);
   return () => {
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', onUp);
     window.removeEventListener('pointercancel', onCancel);
-    window.removeEventListener('keydown', cancelOnEscape, true);
   };
 }

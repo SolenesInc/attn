@@ -5,6 +5,8 @@ import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/gene
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { type WorkspaceWithSessions } from '../utils/workspaceViewModels';
 import { desktopGroups, groupIndexes } from '../test/desktops';
+import { useEscapeStack } from '../hooks/useEscapeStack';
+import { buildQueueBands } from '../utils/queueBands';
 
 function sessionlessWorkspace(): WorkspaceWithSessions<TestSession> {
   return {
@@ -690,6 +692,46 @@ describe('Sidebar', () => {
     });
   });
 
+  it('reorders among the desktop headers queue mode renders, skipping the occupied ones it hides', () => {
+    const workspaces = desktopGroups(
+      [
+        { id: 'busy', title: 'busy' },
+        { id: 'empty-1', title: 'empty 1' },
+        { id: 'empty-2', title: 'empty 2' },
+      ],
+      [{ id: 'a1', label: 'A1', state: 'idle' as const, workspaceId: 'busy' }],
+    );
+    const onWorkspaceReorder = vi.fn();
+    render(
+      <Sidebar
+        {...baseProps}
+        workspaces={workspaces}
+        visualIndexByWorkspaceId={groupIndexes(workspaces)}
+        queue={buildQueueBands(workspaces)}
+        showSessionless
+        onWorkspaceReorder={onWorkspaceReorder}
+      />,
+    );
+    expect(screen.queryByTestId('sidebar-workspace-busy')).not.toBeInTheDocument();
+
+    const header = screen
+      .getByTestId('sidebar-workspace-empty-2')
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    expect(screen.queryByTestId('workspace-reorder-seam-2')).toBeInTheDocument();
+    expect(screen.queryByTestId('workspace-reorder-seam-3')).not.toBeInTheDocument();
+
+    fireEvent.pointerEnter(screen.getByTestId('workspace-reorder-seam-0'));
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 10, clientY: 10 });
+
+    expect(onWorkspaceReorder).toHaveBeenCalledWith({
+      workspaceId: 'empty-2',
+      prevWorkspaceId: undefined,
+      nextWorkspaceId: 'empty-1',
+    });
+  });
+
   it('releases an armed workspace reorder on unmount without dropping', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
@@ -733,6 +775,39 @@ describe('Sidebar', () => {
 
     expect(onWorkspaceReorder).not.toHaveBeenCalled();
     expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+  });
+
+  it('takes Escape as the top of the escape stack, leaving the surface beneath it alone', () => {
+    const sidebarData = buildSidebarData([
+      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
+      { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
+    ]);
+    const underneath = vi.fn();
+    function EscapeOwner() {
+      useEscapeStack(underneath, true);
+      return null;
+    }
+    const onWorkspaceReorder = vi.fn();
+    render(
+      <>
+        <EscapeOwner />
+        <Sidebar {...baseProps} {...sidebarData} onWorkspaceReorder={onWorkspaceReorder} />
+      </>,
+    );
+    const header = screen
+      .getByTestId('sidebar-workspace-workspace-/repo/a')
+      .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+
+    fireEvent.pointerDown(header, { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(underneath).not.toHaveBeenCalled();
+    expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
+
+    fireEvent.pointerUp(window, { pointerId: 1 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    expect(underneath).toHaveBeenCalledOnce();
+    expect(onWorkspaceReorder).not.toHaveBeenCalled();
   });
 
   it('answers the next header click after Escape cancels a header drag released elsewhere', () => {
