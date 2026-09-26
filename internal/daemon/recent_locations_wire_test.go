@@ -23,12 +23,12 @@ func TestRecentLocationsRankByFrecencyBeforeApplyingTheLimit(t *testing.T) {
 		for range 3 {
 			workIn(t, app, frequentOld)
 		}
-		w.advance(time.Hour)
+		w.advance(time.Second)
 		workIn(t, app, recentOnce)
 
 		locations := recentLocations(app, 0)
 		if got := locationPaths(locations); !slices.Equal(got, []string{frequentOld, recentOnce, staleOnce}) {
-			t.Fatalf("recent locations = %v, want three uses an hour ago above one use now above one use an hour ago", got)
+			t.Fatalf("recent locations = %v, want three earlier uses above one use now above one earlier use", got)
 		}
 		if locations[0].UseCount != 3 {
 			t.Errorf("%s = %+v, want every use counted", frequentOld, locations[0])

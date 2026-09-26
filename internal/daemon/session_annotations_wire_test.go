@@ -6,49 +6,50 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
 func TestSessionAnnotationDraftsKeepTheNewestGenerationAndStayClearedAfterAClear(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
+	reviewed := w.Spawn(app, fakeagent.Codex, w.Path("api"))
 	marks := []protocol.SessionAnnotation{{ID: "a1", MessageKey: "turn-1", Start: 4, End: 10, Quote: "parser", Emoji: protocol.Ptr("❓"), Comment: "why this?"}}
 
-	if got := getSessionAnnotations(app, "reviewed"); !got.Success || len(got.Annotations) != 0 || got.Generation != 0 || protocol.Deref(got.Note) != "" {
+	if got := getSessionAnnotations(app, reviewed); !got.Success || len(got.Annotations) != 0 || got.Generation != 0 || protocol.Deref(got.Note) != "" {
 		t.Fatalf("a never-annotated session = %+v, want an empty draft at generation 0", got)
 	}
+	if cleared := clearSessionAnnotations(app, reviewed, 3); !cleared.Success {
+		t.Fatalf("clearing a never-annotated session = %+v", cleared)
+	}
+	if late := saveSessionAnnotations(app, reviewed, 3, marks, ""); late.Success || !protocol.Deref(late.Stale) {
+		t.Errorf("a save at the generation a never-annotated session was cleared at = %+v, want it refused", late)
+	}
 
-	if saved := saveSessionAnnotations(app, "reviewed", 4, marks, "Split this into two PRs."); !saved.Success || saved.Generation != 4 {
+	if saved := saveSessionAnnotations(app, reviewed, 4, marks, "Split this into two PRs."); !saved.Success || saved.Generation != 4 {
 		t.Fatalf("save at generation 4 = %+v", saved)
 	}
-	got := getSessionAnnotations(app, "reviewed")
+	got := getSessionAnnotations(app, reviewed)
 	if !reflect.DeepEqual(got.Annotations, marks) || got.Generation != 4 || protocol.Deref(got.Note) != "Split this into two PRs." {
 		t.Fatalf("draft after the save = %+v, want the marks and note at generation 4", got)
 	}
 
-	if stale := saveSessionAnnotations(app, "reviewed", 3, nil, "the older note"); stale.Success || !protocol.Deref(stale.Stale) {
+	if stale := saveSessionAnnotations(app, reviewed, 3, nil, "the older note"); stale.Success || !protocol.Deref(stale.Stale) {
 		t.Errorf("a save at generation 3 after 4 = %+v, want it refused as stale", stale)
 	}
-	if got := getSessionAnnotations(app, "reviewed"); !reflect.DeepEqual(got.Annotations, marks) || protocol.Deref(got.Note) != "Split this into two PRs." {
+	if got := getSessionAnnotations(app, reviewed); !reflect.DeepEqual(got.Annotations, marks) || protocol.Deref(got.Note) != "Split this into two PRs." {
 		t.Errorf("draft after the stale save = %+v, want the newer marks and note untouched", got)
 	}
 
-	if cleared := clearSessionAnnotations(app, "reviewed", 5); !cleared.Success || cleared.Generation != 5 {
+	if cleared := clearSessionAnnotations(app, reviewed, 5); !cleared.Success || cleared.Generation != 5 {
 		t.Fatalf("clear at generation 5 = %+v", cleared)
 	}
-	if inFlight := saveSessionAnnotations(app, "reviewed", 5, marks, "ghost"); inFlight.Success || !protocol.Deref(inFlight.Stale) {
+	if inFlight := saveSessionAnnotations(app, reviewed, 5, marks, "ghost"); inFlight.Success || !protocol.Deref(inFlight.Stale) {
 		t.Errorf("a save at the cleared generation = %+v, want it refused so the cleared marks stay gone", inFlight)
 	}
-	if got := getSessionAnnotations(app, "reviewed"); len(got.Annotations) != 0 || protocol.Deref(got.Note) != "" || got.Generation != 5 {
+	if got := getSessionAnnotations(app, reviewed); len(got.Annotations) != 0 || protocol.Deref(got.Note) != "" || got.Generation != 5 {
 		t.Errorf("draft after the clear = %+v, want no marks and no note at generation 5", got)
-	}
-
-	if cleared := clearSessionAnnotations(app, "fresh", 3); !cleared.Success {
-		t.Fatalf("clearing a never-annotated session = %+v", cleared)
-	}
-	if late := saveSessionAnnotations(app, "fresh", 3, marks, ""); late.Success || !protocol.Deref(late.Stale) {
-		t.Errorf("a save at the generation a never-annotated session was cleared at = %+v, want it refused", late)
 	}
 }
 
