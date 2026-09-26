@@ -240,6 +240,11 @@ export function UnifiedPalette<S extends PaletteSession>({
   onSnooze,
 }: UnifiedPaletteProps<S>) {
   const [snoozing, setSnoozing] = useState<Snoozing<S> | null>(null);
+  const [agentKeyAfterSnooze, setAgentKeyAfterSnooze] = useState<string | null>(null);
+  const leaveSnooze = (session: S) => {
+    setAgentKeyAfterSnooze(`agent:${session.id}`);
+    setSnoozing(null);
+  };
   const { mode, items, count } = usePaletteItems(query, agents, commands, snoozing);
 
   const desktopOfSession = useMemo(() => {
@@ -258,8 +263,9 @@ export function UnifiedPalette<S extends PaletteSession>({
 
   const pick = (item: Item<S>) => {
     if (item.mode === 'snooze') {
-      if (snoozing) onSnooze(snoozing.session, snoozeInstant(item.choice.id, snoozing.openedAt));
-      setSnoozing(null);
+      if (!snoozing) return;
+      onSnooze(snoozing.session, snoozeInstant(item.choice.id, snoozing.openedAt));
+      leaveSnooze(snoozing.session);
       return;
     }
     onClose();
@@ -278,7 +284,7 @@ export function UnifiedPalette<S extends PaletteSession>({
       if (event.key !== 'Escape') return false;
       event.preventDefault();
       event.stopPropagation();
-      setSnoozing(null);
+      leaveSnooze(snoozing.session);
       return true;
     }
     const agent = highlighted?.mode === 'agents' && highlighted.row.kind === 'agent' ? highlighted.row.session : null;
@@ -316,6 +322,8 @@ export function UnifiedPalette<S extends PaletteSession>({
     }}>
       <div className="unified-palette-root">
         <Palette<Item<S>>
+          key={snoozing ? 'snooze' : 'list'}
+          initialSelectedKey={snoozing ? null : agentKeyAfterSnooze}
           variant="unified-palette"
           ariaLabel={snoozing ? `Snooze ${snoozing.session.label}` : mode === 'commands' ? 'Commands' : 'Agents'}
           placeholder={snoozing ? `Snooze ${snoozing.session.label}` : 'Jump to an agent or tile · type > for commands'}

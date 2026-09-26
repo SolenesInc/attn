@@ -8,6 +8,7 @@ export interface PaletteProps<T> {
   query: string;
   onQueryChange: (query: string) => void;
   items: T[];
+  initialSelectedKey?: string | null;
   itemKey: (item: T) => string;
   renderItem: (item: T, highlighted: boolean) => ReactNode;
   isSelectable?: (item: T) => boolean;
@@ -36,6 +37,7 @@ export function Palette<T>({
   query,
   onQueryChange,
   items,
+  initialSelectedKey = null,
   itemKey,
   renderItem,
   isSelectable = everyItem,
@@ -47,7 +49,7 @@ export function Palette<T>({
   inputSuffix,
   footer,
 }: PaletteProps<T>) {
-  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [selectedKey, setSelectedKey] = useState<string | null>(initialSelectedKey);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
 

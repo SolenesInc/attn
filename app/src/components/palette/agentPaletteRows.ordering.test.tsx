@@ -125,6 +125,21 @@ describe('agentPaletteRows', () => {
     expect(rows(fixture, 'triage-1').map(describeRow)).toEqual(['[Triage: 0 need you, 1 runs]', 'triage-1']);
   });
 
+  it('keeps the runs of an automation whose name matches when their labels do not', () => {
+    const reviews = [
+      desktop('d3', [
+        session('review-a', { label: 'review A', automation: automation('review', 'Requested PR review') }),
+        session('review-b', { label: 'review B', automation: automation('review', 'Requested PR review') }),
+      ]),
+    ];
+    expect(rows(reviews, 'requested').map(describeRow)).toEqual([
+      '[Requested PR review: 0 need you, 2 runs]',
+      'review-a',
+      'review-b',
+    ]);
+    expect(rows(reviews, 'review b').map(describeRow)).toEqual(['[Requested PR review: 0 need you, 2 runs]', 'review-b']);
+  });
+
   it('counts only selectable rows', () => {
     const all = rows(fixture, '', { crewRoster: ['gardener'] });
     expect(selectableCount(all)).toBe(all.length - 3);

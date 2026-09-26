@@ -65,14 +65,16 @@ export function agentPaletteRows<S extends PaletteSession>(
   const terms = queryTerms(query);
   const headId = terms.length === 0 ? headOfQueue(bands)?.session.id : undefined;
   const seen = new Set<string>();
-  const agentRow = (session: S, anchored: boolean): AgentPaletteRow<S>[] => {
+  const agentRow = (session: S, anchored: boolean, matched: boolean): AgentPaletteRow<S>[] => {
     if (seen.has(session.id)) return [];
     seen.add(session.id);
-    if (!matches(terms, session.label, session.crewMember)) return [];
+    if (!matched) return [];
     return [{ kind: 'agent', key: `agent:${session.id}`, session, anchored, queueHead: session.id === headId }];
   };
+  const bandRow = (session: S, anchored: boolean) =>
+    agentRow(session, anchored, matches(terms, session.label, session.crewMember));
 
-  const anchored: AgentPaletteRow<S>[] = bands.chief ? agentRow(bands.chief.session, true) : [];
+  const anchored: AgentPaletteRow<S>[] = bands.chief ? bandRow(bands.chief.session, true) : [];
   const awakeByMember = new Map<string, typeof bands.crew>();
   for (const row of bands.crew) {
     const member = row.session.crewMember ?? '';
@@ -82,13 +84,13 @@ export function agentPaletteRows<S extends PaletteSession>(
   for (const member of members) {
     const awake = awakeByMember.get(member);
     if (awake) {
-      for (const row of awake) anchored.push(...agentRow(row.session, true));
+      for (const row of awake) anchored.push(...bandRow(row.session, true));
     } else if (matches(terms, member, crewDisplayName(member))) {
       anchored.push({ kind: 'member', key: `member:${member}`, member });
     }
   }
 
-  const rest = [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) => agentRow(row.session, false));
+  const rest = [...bands.turns, ...bands.settled, ...bands.snoozed].flatMap((row) => bandRow(row.session, false));
 
   const tiles: AgentPaletteRow<S>[] = [];
   for (const workspace of workspaces) {
@@ -103,7 +105,7 @@ export function agentPaletteRows<S extends PaletteSession>(
   const runs: AgentPaletteRow<S>[] = [];
   for (const group of groupAutomationSessions(workspaces)) {
     const byName = matches(terms, group.name);
-    const shown = byName ? group.sessions : group.sessions.filter((session) => matches(terms, session.label));
+    const shown = group.sessions.flatMap((session) => agentRow(session, false, byName || matches(terms, session.label)));
     if (shown.length === 0) continue;
     runs.push({
       kind: 'runs',
@@ -112,7 +114,7 @@ export function agentPaletteRows<S extends PaletteSession>(
       runs: group.sessions.length,
       needYou: group.sessions.filter((session) => runNeedsYou(session, now)).length,
     });
-    for (const session of shown) runs.push(...agentRow(session, false));
+    runs.push(...shown);
   }
 
   const following = [...rest, ...tiles, ...runs];

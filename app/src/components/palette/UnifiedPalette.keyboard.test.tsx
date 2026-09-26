@@ -116,6 +116,24 @@ describe('UnifiedPalette keyboard flow', () => {
     expect(palette.onClose).not.toHaveBeenCalled();
   });
 
+  it('returns the highlight to the snoozed agent after moving through the snooze choices', () => {
+    const palette = renderPalette();
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    expect(palette.highlighted()).toContain('quiet');
+
+    fireEvent.keyDown(palette.input(), { key: 's', metaKey: true, shiftKey: true });
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 'Escape' });
+    expect(palette.highlighted()).toContain('quiet');
+
+    fireEvent.keyDown(palette.input(), { key: 's', metaKey: true, shiftKey: true });
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 'Enter' });
+    expect(palette.onSnooze).toHaveBeenCalledWith(expect.objectContaining({ id: 'quiet' }), expect.any(Date));
+    expect(palette.highlighted()).toContain('quiet');
+  });
+
   it('does not settle an agent that owes no turn', () => {
     const palette = renderPalette();
     fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
