@@ -52,7 +52,7 @@ export function AppSurface() {
     onDismissLatestRelease,
   } = useAppInputs();
   const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
-  const { blockingOverlayOpen, appShellRef } = useAppShell();
+  const { blockingOverlayOpen, appShellRef, agentFocused } = useAppShell();
   const { toast, clearToast } = useAppErrorsContext();
   const { delegationChainRef } = useAppPanelsContext();
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
@@ -85,7 +85,7 @@ export function AppSurface() {
             blocked={blockingOverlayOpen || markdownOpenerOpen}
           >
             <div
-              className="app"
+              className={`app${agentFocused ? ' is-agent-focused' : ''}`}
               ref={appShellRef}
               tabIndex={-1}
               style={{ outline: 'none' }}

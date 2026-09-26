@@ -92,9 +92,9 @@ export function useAttentionQueue({
     [],
   );
 
-  const openSnoozeForSession = useCallback((session: { id: string; label: string }) => {
-    const row = document.querySelector<HTMLElement>(`.queue-row[data-session-id="${session.id}"]`);
-    const rect = row?.getBoundingClientRect();
+  const openSnoozeForSession = useCallback((session: { id: string; label: string }, row?: HTMLElement) => {
+    const anchorRow = row ?? document.querySelector<HTMLElement>(`.queue-row[data-session-id="${session.id}"]`);
+    const rect = anchorRow?.getBoundingClientRect();
     setSnoozeMenu({
       session: { id: session.id, label: session.label },
       anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
@@ -138,7 +138,8 @@ export function useAttentionQueue({
     if (focused.kind === 'other') return null;
     const id = focused.kind === 'session' ? focused.sessionId : agentOnScreenId;
     const session = enrichedLocalSessions.find((entry) => entry.id === id);
-    return session ? { session, actions: actionsFor(session) } : null;
+    if (!session) return null;
+    return { session, actions: actionsFor(session), row: focused.kind === 'session' ? focused.row : undefined };
   }, [agentOnScreenId, enrichedLocalSessions, actionsFor]);
 
   const handleSettleShortcut = useMemo(
@@ -157,7 +158,7 @@ export function useAttentionQueue({
       queueModeEnabled
         ? () => {
             const target = shortcutTarget();
-            if (target?.actions.snooze) openSnoozeForSession(target.session);
+            if (target?.actions.snooze) openSnoozeForSession(target.session, target.row);
           }
         : undefined,
     [queueModeEnabled, shortcutTarget, openSnoozeForSession],

@@ -279,6 +279,7 @@ export function useWorkspaceController(
   const selectedWorkspaceSessionId =
     workspaceSessions.find((session) => session.isActive)?.id ?? null;
   const [effectivePaneId, setMaximizedLeafId] = useFocusedLeaf(
+    workspaceId,
     leafIdSet,
     agentPaneById,
     selectedSessionId === undefined ? selectedWorkspaceSessionId : selectedSessionId,

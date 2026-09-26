@@ -150,13 +150,14 @@ describe('the queue sidebar', () => {
     expect(screen.getByTestId('queue-waiting-head')).toBeDisabled();
   });
 
-  it('counts every agent in the profile on the list toggle', () => {
+  it('counts every agent in the profile on the list toggle, and no attached shell', () => {
     const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', workspaceId: 'nowhere' };
+    const shell: TestSession = { id: 'loose-shell', label: 'shell', state: 'idle', workspaceId: 'nowhere', parentSessionId: 'loose' };
     const later: TestSession = {
       id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a',
       turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
     };
-    renderSidebar([...sessions, unplaced, later], true, { crew: [{ id: 'alder' }] });
+    renderSidebar([...sessions, unplaced, shell, later], true, { crew: [{ id: 'alder' }] });
 
     expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('All agents 7');
     expect(screen.getByTestId('queue-agents-toggle')).toHaveAttribute('aria-expanded', 'false');
@@ -449,7 +450,7 @@ describe('walking the queue sidebar from the keyboard', () => {
     expect(focusedTestId()).toBe('queue-select-chief');
     walk('ArrowUp');
     expect(focusedTestId()).toBe('queue-select-settled');
-    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'settled' });
+    expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'settled' });
   });
 
   it('types into the filter from any row while the list is open', () => {
@@ -490,7 +491,7 @@ describe('walking the queue sidebar from the keyboard', () => {
     screen.getByTestId('queue-select-older').focus();
     fireEvent.keyDown(document.activeElement!, { key: 'e', metaKey: true, shiftKey: true });
     expect(screen.getByTestId('queue-agent-filter')).toHaveValue('');
-    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'older' });
+    expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'older' });
   });
 
   it('names no row when focus is elsewhere', () => {
@@ -600,9 +601,9 @@ describe('the crew in the sidebar', () => {
     screen.getByTestId('queue-crew-select-alder').focus();
     expect(focusedQueueRow()).toEqual({ kind: 'other' });
     within(screen.getByTestId('queue-crew-keel')).getAllByRole('button')[0].focus();
-    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'sess-keel' });
+    expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'sess-keel' });
     within(screen.getByTestId('queue-chief-chief')).getAllByRole('button')[0].focus();
-    expect(focusedQueueRow()).toEqual({ kind: 'session', sessionId: 'chief' });
+    expect(focusedQueueRow()).toMatchObject({ kind: 'session', sessionId: 'chief' });
   });
 
   it('opens member details anchored on the row action for awake and asleep members', () => {

@@ -239,7 +239,6 @@ function WaitingCard() {
   const {
     queue,
     crew,
-    workspaces,
     selectedId,
     onSelectSession,
     onSettleTurn,
@@ -267,7 +266,7 @@ function WaitingCard() {
   const hidden = turns.length - lead.length;
   const matches = (row: QueueRow<QueueBandSessionView>) =>
     !agentFilter || row.session.label.toLowerCase().includes(agentFilter.toLowerCase());
-  const counts = agentCounts(queue, crewRows(crew, queue), workspaces);
+  const counts = agentCounts(queue, crewRows(crew, queue));
 
   const turnRow = (row: QueueRow<QueueBandSessionView>) => (
     <QueueRowView
@@ -407,19 +406,15 @@ function WaitingCard() {
 function agentCounts(
   queue: NonNullable<ReturnType<typeof useSidebarContext>['queue']>,
   crewMembers: ReturnType<typeof crewRows>,
-  workspaces: SidebarWorkspace[],
 ) {
-  const agents = new Set<string>();
+  const agentRows = new Map<string, { workspaceId: string }>();
   for (const row of [queue.chief, ...queue.crew, ...queue.turns, ...queue.settled, ...queue.snoozed]) {
-    if (row) agents.add(row.session.id);
+    if (row) agentRows.set(row.session.id, row);
   }
   const asleep = crewMembers.filter((member) => !member.row).length;
-  const unplaced =
-    workspaces
-      .find((workspace) => workspace.id === UNPLACED_GROUP_ID)
-      ?.sessions.filter((session) => !session.automation).length ?? 0;
+  const unplaced = [...agentRows.values()].filter((row) => row.workspaceId === UNPLACED_GROUP_ID).length;
   return {
-    all: agents.size + asleep,
+    all: agentRows.size + asleep,
     working: queue.settled.length,
     snoozed: queue.snoozed.length,
     unplaced,

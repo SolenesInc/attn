@@ -11,7 +11,7 @@ const agentPanes = new Map([
 function renderFocusedLeaf(selectedSessionId: string | null) {
   return renderHook(
     ({ selected, leaves }: { selected: string | null; leaves: ReadonlySet<string> }) =>
-      useFocusedLeaf(leaves, agentPanes, selected),
+      useFocusedLeaf('desktop-1', leaves, agentPanes, selected),
     { initialProps: { selected: selectedSessionId, leaves: leafIds } },
   );
 }

@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen } from '@testing-library/react';
 import App from './App';
 import { useProfilesStore } from './store/profiles';
 import { useSessionStore } from './store/sessions';
-import { agentDesktop, arrangeDesktops, fakeDesktopCommands, TEST_PROFILE_ID } from './test/desktops';
+import { agentDesktop, arrangeDesktops, fakeDesktopCommands, paneIdOf, TEST_PROFILE_ID } from './test/desktops';
+import { useDesktopFocus } from './store/desktopFocus';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
 
 
@@ -438,6 +439,27 @@ describe('agent navigation', () => {
       }
     });
 
+    it('opens the snooze menu beside the focused copy of an agent listed twice', () => {
+      activeOnS2();
+      const sidebar = document.createElement('div');
+      sidebar.className = 'queue-sidebar-body';
+      sidebar.innerHTML = [0, 1]
+        .map(() => '<div class="session-item queue-row" data-session-id="s1"><button class="queue-row-select"></button></div>')
+        .join('');
+      document.body.append(sidebar);
+      const waitingCopy = sidebar.querySelectorAll<HTMLElement>('.queue-row')[1];
+      waitingCopy.getBoundingClientRect = () => DOMRect.fromRect({ x: 40, y: 280, width: 180, height: 20 });
+      waitingCopy.querySelector('button')!.focus();
+      try {
+        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+        const menu = screen.getByRole('menu', { name: 'Snooze s1' });
+        expect(menu.style.top).toBe('304px');
+        expect(menu.style.left).toBe('40px');
+      } finally {
+        sidebar.remove();
+      }
+    });
+
     it('acts on no agent from a focused row that holds none, like a sleeping crew member', () => {
       turnOwed.s2 = true;
       activeOnS2();
@@ -488,6 +510,23 @@ describe('agent navigation', () => {
     showAgentList();
     expect(listOpen()).toBe(false);
     expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+  });
+
+  it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    const app = () => container.querySelector('.app')!;
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
+    expect(app()).toHaveClass('is-agent-focused');
+    act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+    expect(listOpen()).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
+    expect(app()).not.toHaveClass('is-agent-focused');
   });
 
   it('opens the palette on agents in grid view, where the grid covers the queue sidebar', () => {

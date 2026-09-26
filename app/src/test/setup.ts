@@ -1,5 +1,6 @@
 import '@testing-library/jest-dom/vitest';
 import { beforeEach, vi } from 'vitest';
+import { useDesktopFocus } from '../store/desktopFocus';
 import { gardenScrollMemory, useGardenWalk } from '../store/gardenWalk';
 import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from '../hooks/useWhatsNew';
 
@@ -80,5 +81,6 @@ if (typeof window !== 'undefined') {
 // its depth to the next one.
 beforeEach(() => {
   useGardenWalk.setState({ trail: [] });
+  useDesktopFocus.setState({ focusedLeafByDesktop: {} });
   gardenScrollMemory.clear();
 });

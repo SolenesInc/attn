@@ -7,9 +7,11 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 import { usePRsNeedingAttention } from '../hooks/usePRsNeedingAttention';
 import { useDesktopNavigation } from '../hooks/useDesktopNavigation';
 import { useDesktopRuntimeController } from '../hooks/useDesktopRuntimeController';
-import { useDesktopSelectionBridge } from '../hooks/useDesktopSelectionBridge';
+import { useDesktopSelectionBridge, useSurface } from '../hooks/useDesktopSelectionBridge';
 import { useUiAutomationBridge } from '../hooks/useUiAutomationBridge';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useDesktopFocus } from '../store/desktopFocus';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { getAgentAvailability } from '../utils/agentAvailability';
 import { latestPresentationBySessionId } from '../utils/presentationNotices';
@@ -375,7 +377,16 @@ export function useAppController({
     [sendDeleteWorktree],
   );
 
-  const queueSidebarShown = queueModeEnabled && !sidebarCollapsed && view !== 'grid';
+  const surface = useSurface();
+  const focusedLeafByDesktop = useDesktopFocus((state) => state.focusedLeafByDesktop);
+  const currentDesktopAgentFocused = useProfilesStore((state) => {
+    const leafId = state.currentDesktopId ? focusedLeafByDesktop[state.currentDesktopId] : undefined;
+    const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
+    return Boolean(leafId && desktop?.panes.some((pane) => pane.pane_id === leafId && pane.session_id));
+  });
+  const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
+  const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
+  const queueSidebarShown = queueModeEnabled && sidebarVisible;
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {
@@ -683,6 +694,7 @@ export function useAppController({
         blockingOverlayOpen,
         zoomModeBySessionId,
         setZoomModeBySessionId,
+        agentFocused,
         agentAvailability,
         contextCapPromptSession,
         setContextCapPromptSession,
