@@ -13,6 +13,7 @@ type Run struct {
 	ConversationID string
 	Resumed        bool
 	Argv           []string
+	Env            []string
 	AutoMode       json.RawMessage
 	Yolo           bool
 	t              testing.TB

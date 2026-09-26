@@ -12,15 +12,23 @@ import (
 	"time"
 )
 
+type helloAnswer int
+
+const (
+	acceptHello helloAnswer = iota
+	rejectHello
+	exitOnHello
+)
+
 type fakeWorker struct {
-	listener   net.Listener
-	gotHello   chan HelloParams
-	gotRemove  chan struct{}
-	rejectAuth bool
-	proc       *exec.Cmd
+	listener  net.Listener
+	gotHello  chan HelloParams
+	gotRemove chan struct{}
+	answer    helloAnswer
+	proc      *exec.Cmd
 }
 
-func startFakeWorker(t *testing.T, dir string, rejectAuth bool) *fakeWorker {
+func startFakeWorker(t *testing.T, dir string, answer helloAnswer) *fakeWorker {
 	t.Helper()
 	sockDir, err := os.MkdirTemp("", "reap")
 	if err != nil {
@@ -33,11 +41,11 @@ func startFakeWorker(t *testing.T, dir string, rejectAuth bool) *fakeWorker {
 		t.Fatalf("listen: %v", err)
 	}
 	w := &fakeWorker{
-		listener:   ln,
-		gotHello:   make(chan HelloParams, 1),
-		gotRemove:  make(chan struct{}, 1),
-		rejectAuth: rejectAuth,
-		proc:       spawnSleeper(t, "fake-worker-"+filepath.Base(sockDir)),
+		listener:  ln,
+		gotHello:  make(chan HelloParams, 1),
+		gotRemove: make(chan struct{}, 1),
+		answer:    answer,
+		proc:      spawnSleeper(t, "fake-worker-"+filepath.Base(sockDir)),
 	}
 	t.Cleanup(func() { _ = ln.Close() })
 	go w.serve()
@@ -69,7 +77,11 @@ func (w *fakeWorker) serve() {
 					case w.gotHello <- hp:
 					default:
 					}
-					if w.rejectAuth {
+					if w.answer == exitOnHello {
+						_ = w.proc.Process.Kill()
+						return
+					}
+					if w.answer == rejectHello {
 						_ = enc.Encode(ResponseEnvelope{
 							Type: "res", ID: req.ID, OK: false,
 							Error: &RPCError{Code: ErrUnauthorized, Message: "bad token"},
@@ -136,7 +148,7 @@ func writeEntry(t *testing.T, dataDir, sessionID string, entry RegistryEntry) st
 
 func TestReapDataDirRemovesViaControlSocket(t *testing.T) {
 	dataDir := t.TempDir()
-	worker := startFakeWorker(t, dataDir, false)
+	worker := startFakeWorker(t, dataDir, acceptHello)
 
 	writeEntry(t, dataDir, "sess-1", RegistryEntry{
 		Version:          1,
@@ -267,9 +279,28 @@ func TestReapDataDirRefusesToSignalUnidentifiedProcess(t *testing.T) {
 	}
 }
 
+func TestReapDataDirCountsAWorkerThatExitsDuringTheRemoveAsGone(t *testing.T) {
+	dataDir := t.TempDir()
+	worker := startFakeWorker(t, dataDir, exitOnHello)
+	writeEntry(t, dataDir, "sess-exiting", RegistryEntry{
+		Version:    1,
+		SessionID:  "sess-exiting",
+		WorkerPID:  worker.proc.Process.Pid,
+		SocketPath: worker.addr(),
+	})
+
+	results := ReapDataDir(dataDir)
+	if len(results) != 1 {
+		t.Fatalf("results = %d, want 1", len(results))
+	}
+	if results[0].Outcome != ReapAlreadyGone || results[0].Err != nil {
+		t.Fatalf("outcome = %s (err=%v), want %s", results[0].Outcome, results[0].Err, ReapAlreadyGone)
+	}
+}
+
 func TestReapDataDirDoesNotSignalOnAuthFailure(t *testing.T) {
 	dataDir := t.TempDir()
-	worker := startFakeWorker(t, dataDir, true)
+	worker := startFakeWorker(t, dataDir, rejectHello)
 	cmd := worker.proc
 
 	writeEntry(t, dataDir, "sess-auth", RegistryEntry{
