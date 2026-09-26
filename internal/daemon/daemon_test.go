@@ -1532,22 +1532,9 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_SkipsIdleDemotionOnIncomplete
 func TestDaemon_ReconcileSessionsWithWorkerBackend_LeavesSessionsTouchedByThisRunAlone(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	recoveryStartedAt := time.Now().Add(-time.Minute).Truncate(time.Second)
-	updatedAfterRecoveryBegan := protocol.NewTimestamp(recoveryStartedAt.Add(10 * time.Second)).String()
-	addWorkingSession := func(id string) {
-		d.store.Add(&protocol.Session{
-			ID:             id,
-			Label:          id,
-			Agent:          protocol.SessionAgentCodex,
-			Directory:      "/tmp/" + id,
-			State:          protocol.SessionStateWorking,
-			StateSince:     updatedAfterRecoveryBegan,
-			StateUpdatedAt: updatedAfterRecoveryBegan,
-			LastSeen:       updatedAfterRecoveryBegan,
-		})
-	}
-	addWorkingSession("revived-from-previous-run")
+	addWorkingSession(d, "revived-from-previous-run", recoveryStartedAt.Add(10*time.Second))
 	previousRun := d.storedSessionIDs()
-	addWorkingSession("registered-this-run")
+	addWorkingSession(d, "registered-this-run", recoveryStartedAt)
 
 	d.ptyBackend = &fakeWorkerReconcileBackend{
 		liveIDs: nil,
@@ -1566,6 +1553,38 @@ func TestDaemon_ReconcileSessionsWithWorkerBackend_LeavesSessionsTouchedByThisRu
 			t.Fatalf("%s session = %+v, want working", id, session)
 		}
 	}
+}
+
+func TestDaemon_PruneSessionsWithoutPTY_LeavesSessionsRegisteredThisRunAlone(t *testing.T) {
+	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
+	recoveryStartedAt := time.Now().Truncate(time.Second)
+	addWorkingSession(d, "stale-from-previous-run", recoveryStartedAt.Add(-time.Minute))
+	previousRun := d.storedSessionIDs()
+	addWorkingSession(d, "registered-this-run", recoveryStartedAt)
+
+	if removed := d.pruneSessionsWithoutPTY(previousRun, recoveryStartedAt); removed != 1 {
+		t.Fatalf("pruneSessionsWithoutPTY removed = %d, want only the stale previous-run session", removed)
+	}
+	if d.store.Get("stale-from-previous-run") != nil {
+		t.Fatal("stale previous-run session survived prune")
+	}
+	if session := d.store.Get("registered-this-run"); session == nil || session.State != protocol.SessionStateWorking {
+		t.Fatalf("registered-this-run session = %+v, want working", session)
+	}
+}
+
+func addWorkingSession(d *Daemon, id string, updatedAt time.Time) {
+	stamp := protocol.NewTimestamp(updatedAt).String()
+	d.store.Add(&protocol.Session{
+		ID:             id,
+		Label:          id,
+		Agent:          protocol.SessionAgentCodex,
+		Directory:      "/tmp/" + id,
+		State:          protocol.SessionStateWorking,
+		StateSince:     stamp,
+		StateUpdatedAt: stamp,
+		LastSeen:       stamp,
+	})
 }
 
 func TestSessionStateFromRecoveredInfo(t *testing.T) {

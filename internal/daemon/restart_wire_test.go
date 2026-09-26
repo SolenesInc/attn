@@ -57,21 +57,3 @@ func TestRestartKeepsConversationsThatCanResumeAndPrunesTheRest(t *testing.T) {
 	resumed.Reply("Applied after tax. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, talked, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 }
-
-func TestRestartKeepsSessionsRegisteredWhileRecoveryRuns(t *testing.T) {
-	inBubble(t, func(t *testing.T, w *world) {
-		registerSessions(t, w, w.Client(), "before-restart")
-
-		releaseRecovery := w.restartHoldingRecovery()
-		registerSessions(t, w, w.Client(), "during-recovery")
-		releaseRecovery()
-
-		sessions := w.App().Initial.Sessions
-		if !slices.ContainsFunc(sessions, func(s protocol.Session) bool { return s.ID == "during-recovery" }) {
-			t.Fatalf("sessions after recovery = %+v, want the one registered while the daemon recovered", sessions)
-		}
-		if slices.ContainsFunc(sessions, func(s protocol.Session) bool { return s.ID == "before-restart" }) {
-			t.Fatal("a session from the previous run with no PTY and no conversation survived recovery")
-		}
-	})
-}
