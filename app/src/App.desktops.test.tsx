@@ -853,6 +853,36 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
+  it('acts on no run until the daemon shows the one the user picked, and on the shown one after a rejection', async () => {
+    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const owedRun = (id: string, openedAt: string) => ({
+      id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+      automation: docs, turn_owed: true, turn_opened_at: openedAt,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+    });
+    let rejectSelection: (error: Error) => void = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementation(
+      () => new Promise((_resolve, reject) => { rejectSelection = reject; }),
+    );
+    render(<App />);
+    const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+    expect(shortcuts().onSettleTurn).toBeDefined();
+
+    act(() => shortcuts().onNextRun());
+    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s2');
+    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(shortcuts().onSettleTurn).toBeUndefined();
+
+    await act(async () => { rejectSelection(new Error('desktop moved')); });
+    await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s1'));
+    act(() => shortcuts().onSettleTurn!());
+    expect(mockUseDaemonSocket().sendSettleTurn).toHaveBeenCalledWith('s1');
+    expect(mockUseDaemonSocket().sendSettleTurn).not.toHaveBeenCalledWith('s2');
+  });
+
   it('settles nothing and starts the run walk at the first run while the grid holds the surface', async () => {
     const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
     const owedRun = (id: string, openedAt: string) => ({
