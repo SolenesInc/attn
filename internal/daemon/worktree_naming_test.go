@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -322,15 +321,4 @@ func canonicalPathDaemon(path string) string {
 		return filepath.Clean(resolved)
 	}
 	return filepath.Clean(path)
-}
-
-func gitRevParseDaemon(t *testing.T, dir, rev string) string {
-	t.Helper()
-	cmd := exec.Command("git", "rev-parse", rev)
-	cmd.Dir = dir
-	out, err := cmd.Output()
-	if err != nil {
-		t.Fatalf("git rev-parse %s in %s failed: %v", rev, dir, err)
-	}
-	return strings.TrimSpace(string(out))
 }

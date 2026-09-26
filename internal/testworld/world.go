@@ -174,8 +174,8 @@ func (w *World) Launched(sessionID string) *fakeagent.Run {
 	return w.kit.Launched(sessionID)
 }
 
-func (w *World) HoldBoot(sessionID string) (boot func()) {
-	return w.kit.HoldBoot(sessionID)
+func (w *World) HoldNextBoot() (boot func()) {
+	return w.kit.HoldNextBoot()
 }
 
 func (w *World) LogDaemonTail() {

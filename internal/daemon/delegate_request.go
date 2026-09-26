@@ -33,9 +33,7 @@ type resolvedDelegationLaunch struct {
 	Review             *protocol.SeedReviewActionContext
 
 	Brief                 *string
-	TicketID              *string
 	Placement             *string
-	WorkspaceID           *string
 	Worktree              *protocol.DelegateWorktreeRequest
 	Plot                  *string
 	Handover              *protocol.SeedHandoverRequest
@@ -124,10 +122,6 @@ func validateDelegateRequestShape(msg *protocol.DelegateMessage) error {
 	return nil
 }
 
-func (d *Daemon) resolveDelegateRuntime(msg *protocol.DelegateMessage, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath string, worktreeOwned bool) (*resolvedDelegationLaunch, error) {
-	return d.resolveDelegateRuntimeWithHandoverSnapshot(msg, reservedSeedID, reservedBaseCommit, reservedNoteID, sessionID, ownedWorktreePath, worktreeOwned, 0, "", "", "", "")
-}
-
 func (d *Daemon) resolveAcceptedDelegationBase(msg *protocol.DelegateMessage) (string, error) {
 	if msg.Checkout == nil || msg.Checkout.Kind != protocol.DelegateCheckoutKindNewWorktree {
 		return "", nil
@@ -166,7 +160,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 	runtime.Plot = nil
 	runtime.Handover = nil
 	runtime.Worktree = nil
-	runtime.WorkspaceID = nil
 	runtime.ParentSeedID = strings.TrimSpace(parentSeedID)
 
 	if msg.Assignment.Kind == protocol.DelegateAssignmentKindNew {
