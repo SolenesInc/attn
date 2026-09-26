@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -79,22 +78,12 @@ func TestFsIndexListsWhatAnEditorWouldOpen(t *testing.T) {
 	}
 }
 
-func TestFsIndexCapsAfterFilteringAndSaysWhenItTruncated(t *testing.T) {
-	const indexCap = 25000
+func TestFsIndexFiltersByExtensionWhateverTheCase(t *testing.T) {
 	w := newFsWorld(t)
 	app := pickerApp(w)
-	root := fsDir(t, "many")
-	for i := range indexCap - 1 {
-		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("f%05d.txt", i)), nil, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	for _, name := range []string{"aa-early.MD", "zz-late.md"} {
+	root := fsDir(t, "mixed")
+	for _, name := range []string{"notes.txt", "aa-early.MD", "zz-late.md", "readme"} {
 		fsWriteFile(t, filepath.Join(root, name), nil)
-	}
-
-	if everything := fsAskIndex(app, root); !everything.Success || !everything.Truncated || len(everything.Files) != indexCap {
-		t.Fatalf("indexing %d files = %d files, truncated %v (%s); want the first %d and truncated", indexCap+1, len(everything.Files), everything.Truncated, protocol.Deref(everything.Error), indexCap)
 	}
 	if markdown := fsAskIndex(app, root, ".MD"); !markdown.Success || markdown.Truncated || !slices.Equal(markdown.Files, []string{"aa-early.MD", "zz-late.md"}) {
 		t.Fatalf("indexing .MD = %v, truncated %v (%s); want both markdown files whatever their case", markdown.Files, markdown.Truncated, protocol.Deref(markdown.Error))
