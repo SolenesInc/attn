@@ -6,14 +6,15 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/client"
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
 func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "gardener")
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	gardener := spawnPanes(w, app, w.Path("gardener"))[0].session
 	ids := map[string]string{}
 	for _, seed := range []struct{ key, title, body string }{
 		{"ripples", "harvest-ripples: closing a seed says what it unblocked", "Harvest and wither print the seeds they made ready."},
@@ -23,22 +24,22 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 		{"fts", "Full-text index for the docstore", "Give every docstore collection a SQLite FTS mirror."},
 		{"panel", "Garden panel renders a seed body as markdown", "The panel shows raw markdown today."},
 	} {
-		planted, err := cli.SeedPlant("gardener", seed.title, seed.body, "", "", "")
+		planted, err := cli.SeedPlant(gardener, seed.title, seed.body, "", "", "")
 		if err != nil {
 			t.Fatalf("plant %q: %v", seed.title, err)
 		}
 		ids[seed.key] = planted.Seed.ID
 	}
-	gardenSearchNote(t, cli, ids["board"], "Prototyped the drop target in the panel and it felt right; the dispatch dialog is the missing half.")
-	if _, err := cli.SeedTransition("gardener", ids["tickets"], "harvest", "Tickets are gone; every seed lives in the garden.", "", false, client.SeedTransitionOptions{}); err != nil {
+	gardenSearchNote(t, cli, gardener, ids["board"], "Prototyped the drop target in the panel and it felt right; the dispatch dialog is the missing half.")
+	if _, err := cli.SeedTransition(gardener, ids["tickets"], "harvest", "Tickets are gone; every seed lives in the garden.", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("harvest the tickets seed: %v", err)
 	}
-	if _, err := cli.SeedTransition("gardener", ids["fts"], "wither", "A scan answers this in a couple of milliseconds, so an index earns nothing.", "", false, client.SeedTransitionOptions{}); err != nil {
+	if _, err := cli.SeedTransition(gardener, ids["fts"], "wither", "A scan answers this in a couple of milliseconds, so an index earns nothing.", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("wither the index seed: %v", err)
 	}
 
 	t.Run("a harvested seed is found by its title", func(t *testing.T) {
-		result := gardenSearch(t, cli, "retire tickets", 0)
+		result := gardenSearch(t, cli, gardener, "retire tickets", 0)
 		if result.Matched != 1 || len(result.Hits) != 1 {
 			t.Fatalf("got %d hits of %d matched, want the closed seed alone", len(result.Hits), result.Matched)
 		}
@@ -52,7 +53,7 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 	})
 
 	t.Run("text only the log says is a log match quoting the note", func(t *testing.T) {
-		result := gardenSearch(t, cli, "dispatch dialog", 0)
+		result := gardenSearch(t, cli, gardener, "dispatch dialog", 0)
 		if result.Matched != 1 || len(result.Hits) != 1 {
 			t.Fatalf("got %d hits of %d matched, want the board seed alone", len(result.Hits), result.Matched)
 		}
@@ -69,11 +70,11 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 	})
 
 	t.Run("a capped answer keeps the full count and raising the cap shows every match", func(t *testing.T) {
-		capped := gardenSearch(t, cli, "seed", 2)
+		capped := gardenSearch(t, cli, gardener, "seed", 2)
 		if len(capped.Hits) != 2 || capped.Matched <= 2 || capped.Limit != 2 {
 			t.Fatalf("got %d hits of %d matched under limit %d, want 2 hits, the full count and the cap", len(capped.Hits), capped.Matched, capped.Limit)
 		}
-		raised := gardenSearch(t, cli, "seed", garden.MaxSearchResults)
+		raised := gardenSearch(t, cli, gardener, "seed", garden.MaxSearchResults)
 		if len(raised.Hits) != raised.Matched || raised.Matched != capped.Matched {
 			t.Errorf("the raised cap shows %d of %d, want all %d", len(raised.Hits), raised.Matched, capped.Matched)
 		}
@@ -92,7 +93,7 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 		}},
 	} {
 		t.Run("refuses "+tc.name, func(t *testing.T) {
-			_, err := cli.SeedSearch("gardener", tc.query, tc.limit)
+			_, err := cli.SeedSearch(gardener, tc.query, tc.limit)
 			if err == nil {
 				t.Fatal("answered; want a refusal")
 			}
@@ -105,16 +106,16 @@ func TestSeedSearchReachesEverySeedAndSaysWhereItMatched(t *testing.T) {
 	}
 }
 
-func gardenSearchNote(t *testing.T, cli *client.Client, seedID, body string) {
+func gardenSearchNote(t *testing.T, cli *client.Client, session, seedID, body string) {
 	t.Helper()
-	if _, err := cli.SeedNote("gardener", seedID, body, "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(session, seedID, body, "", "", false, nil); err != nil {
 		t.Fatalf("note %q on %s: %v", body, seedID, err)
 	}
 }
 
-func gardenSearch(t *testing.T, cli *client.Client, query string, limit int) *protocol.SeedSearchResult {
+func gardenSearch(t *testing.T, cli *client.Client, session, query string, limit int) *protocol.SeedSearchResult {
 	t.Helper()
-	result, err := cli.SeedSearch("gardener", query, limit)
+	result, err := cli.SeedSearch(session, query, limit)
 	if err != nil {
 		t.Fatalf("search %q: %v", query, err)
 	}

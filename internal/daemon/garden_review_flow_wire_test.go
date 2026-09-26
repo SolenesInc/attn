@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"reflect"
 	"slices"
 	"strings"
@@ -25,15 +26,13 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	if state := queriedSession(t, cli, tender).State; state != protocol.SessionStateRecoverable {
 		t.Fatalf("the tender came back %q, want recoverable", state)
 	}
-	abandoned := gardenReviewAbandonedSeed(t, w, cli, "gardener", "old work")
-	registerSessions(t, w, cli, "keeper")
-	claimed := plantSeedAs(t, cli, "keeper", "member-owned work")
+	abandoned := gardenReviewAbandonedSeed(t, w, app, cli, "gardener", "old work")
+	keeper := spawnPanes(w, app, w.Path("keeper"))[0]
+	claimed := plantSeedAs(t, cli, keeper.session, "member-owned work")
 	if _, err := cli.SeedTransition("", claimed, "tend", "", "trellis", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("trellis tends: %v", err)
 	}
-	if err := cli.Unregister("keeper"); err != nil {
-		t.Fatal(err)
-	}
+	closePane(app, keeper)
 
 	if shown := gardenReviewShow(t, cli, ""); shown.CandidateCount != 1 || shown.Review != nil {
 		t.Fatalf("show before any review = %d candidates and review %+v, want only the abandoned seed counted and nothing started", shown.CandidateCount, shown.Review)
@@ -53,7 +52,7 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 	}
 
 	setSetting(t, app, "garden.advisor", `{"agent":"codex","model":"later","effort":"low"}`)
-	late := gardenReviewAbandonedSeed(t, w, cli, "latecomer", "late work")
+	late := gardenReviewAbandonedSeed(t, w, app, cli, "latecomer", "late work")
 	second := gardenReviewStart(t, cli)
 	if second.Run.ID != first.Run.ID || !reflect.DeepEqual(second.Run.Recipe, frozen) || !slices.Equal(second.Run.CandidateIds, []string{abandoned}) {
 		t.Fatalf("starting again = %+v, want the running review unchanged", second.Run)
@@ -68,9 +67,9 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 		t.Fatalf("after a restart the canceled review is %+v", after.Review)
 	}
 
-	registerSessions(t, w, cli, "chief")
-	if made := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: "chief", ChiefOfStaff: true},
-		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return m.SessionID == "chief" }); !made.Success {
+	chief := spawnPanes(w, app, w.Path("chief"))[0].session
+	if made := testworld.Request(app, protocol.SetChiefOfStaffMessage{Cmd: protocol.CmdSetChiefOfStaff, SessionID: chief, ChiefOfStaff: true},
+		protocol.EventChiefOfStaffResult, func(m protocol.ChiefOfStaffResultMessage) bool { return m.SessionID == chief }); !made.Success {
 		t.Fatalf("make chief the chief of staff: %s", protocol.Deref(made.Error))
 	}
 	withChief := gardenReviewStart(t, cli)
@@ -88,16 +87,16 @@ func TestAGardenReviewFreezesItsCandidatesAndRecipe(t *testing.T) {
 }
 
 func TestReviewActionsResolveTheirItems(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	harvested := gardenReviewAbandonedSeed(t, w, cli, "first", "harvest me")
-	kept := gardenReviewAbandonedSeed(t, w, cli, "second", "keep me")
-	changed := gardenReviewAbandonedSeed(t, w, cli, "third", "changed under the review")
-	registerSessions(t, w, cli, "reviewer")
+	harvested := gardenReviewAbandonedSeed(t, w, app, cli, "first", "harvest me")
+	kept := gardenReviewAbandonedSeed(t, w, app, cli, "second", "keep me")
+	changed := gardenReviewAbandonedSeed(t, w, app, cli, "third", "changed under the review")
+	reviewer := spawnPanes(w, app, w.Path("reviewer"))[0].session
 
 	stale := gardenReviewStart(t, cli)
 	gardenReviewAwaitFailedFirstAdvice(app, stale.Run.ID)
-	if _, err := cli.SeedNote("reviewer", changed, "new evidence", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(reviewer, changed, "new evidence", "", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if refused := gardenReviewMoveFromApp(app, changed, "park", gardenReviewReceipts(stale)[changed]); refused.Success || !strings.Contains(protocol.Deref(refused.Error), "changed since this review item was loaded; refresh the garden") {
@@ -149,9 +148,9 @@ func TestReviewActionsResolveTheirItems(t *testing.T) {
 }
 
 func TestTheCLIAndTheAppShowTheSameReviewWithItsAdvisorProgress(t *testing.T) {
-	w := newWorld(t)
+	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	seed := gardenReviewAbandonedSeed(t, w, cli, "gardener", "old work")
+	seed := gardenReviewAbandonedSeed(t, w, app, cli, "gardener", "old work")
 	review := gardenReviewStart(t, cli)
 
 	retrying := testworld.Await(app, protocol.EventGardenReviewUpdated, func(m protocol.GardenReviewUpdatedMessage) bool {
@@ -174,18 +173,36 @@ func TestTheCLIAndTheAppShowTheSameReviewWithItsAdvisorProgress(t *testing.T) {
 	}
 }
 
-func gardenReviewAbandonedSeed(t *testing.T, w *world, cli *client.Client, session, title string) string {
+func gardenReviewAbandonedSeed(t *testing.T, w *world, app *testworld.Peer, cli *client.Client, name, title string) string {
+	t.Helper()
+	cwd := w.Path(name)
+	pane := spawnPanes(w, app, cwd)[0]
+	seed := gardenReviewPlantTended(t, cli, pane.session, title)
+	closePane(app, pane)
+	if err := os.RemoveAll(cwd); err != nil {
+		t.Fatal(err)
+	}
+	return seed
+}
+
+func gardenReviewRegisteredAbandonedSeed(t *testing.T, w *world, cli *client.Client, session, title string) string {
 	t.Helper()
 	registerSessions(t, w, cli, session)
+	seed := gardenReviewPlantTended(t, cli, session, title)
+	if err := cli.Unregister(session); err != nil {
+		t.Fatal(err)
+	}
+	return seed
+}
+
+func gardenReviewPlantTended(t *testing.T, cli *client.Client, session, title string) string {
+	t.Helper()
 	planted, err := cli.SeedPlant(session, title, "Carry "+title+" to the end.", "", "", "")
 	if err != nil {
 		t.Fatalf("plant %q: %v", title, err)
 	}
 	if _, err := cli.SeedTransition(session, planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
 		t.Fatalf("tend %q: %v", title, err)
-	}
-	if err := cli.Unregister(session); err != nil {
-		t.Fatal(err)
 	}
 	return planted.Seed.ID
 }
@@ -200,13 +217,7 @@ func gardenReviewConversationTending(t *testing.T, w *world, app *testworld.Peer
 	}
 	run.Reply("On it. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
-	planted, err := cli.SeedPlant(session, title, "Carry "+title+" to the end.", "", "", "")
-	if err != nil {
-		t.Fatalf("plant %q: %v", title, err)
-	}
-	if _, err := cli.SeedTransition(session, planted.Seed.ID, "tend", "", "", false, client.SeedTransitionOptions{}); err != nil {
-		t.Fatalf("tend %q: %v", title, err)
-	}
+	gardenReviewPlantTended(t, cli, session, title)
 	return session
 }
 
@@ -285,8 +296,8 @@ func gardenReviewAwaitFailedFirstAdvice(app *testworld.Peer, reviewID string) {
 func TestAFailedReviewItemRetriesWithFreshEvidenceOrSettles(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
-		edited := gardenReviewAbandonedSeed(t, w, cli, "first", "retry me")
-		harvested := gardenReviewAbandonedSeed(t, w, cli, "second", "finished elsewhere")
+		edited := gardenReviewRegisteredAbandonedSeed(t, w, cli, "first", "retry me")
+		harvested := gardenReviewRegisteredAbandonedSeed(t, w, cli, "second", "finished elsewhere")
 		review := gardenReviewStart(t, cli)
 		w.advance(0)
 		w.advance(time.Minute)

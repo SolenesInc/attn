@@ -14,10 +14,11 @@ import (
 func TestADelegatedSessionWatchesItsSeedAndAResumeKeepsItsUnwatch(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "planner", "planter")
-	crown, child, leaf := gardenNudgePlot(t, cli)
+	panes := spawnPanes(w, app, w.Path("planner"), w.Path("planter"))
+	planner, planter := panes[0].session, panes[1].session
+	crown, child, leaf := gardenNudgePlot(t, cli, planter)
 
-	atChild := gardenSubscriptionDelegate(t, w, app, "child", child)
+	atChild := gardenSubscriptionDelegate(t, w, app, planner, "child", child)
 	gardenNudgeWatch(t, cli, atChild, crown, false)
 	gardenNudgeWatch(t, cli, atChild, crown, true)
 	inherited := gardenNudgeWatch(t, cli, atChild, leaf, true)
@@ -28,7 +29,7 @@ func TestADelegatedSessionWatchesItsSeedAndAResumeKeepsItsUnwatch(t *testing.T) 
 		t.Errorf("show of the leaf = %+v (%v), want watching via %s", shown, err, child)
 	}
 
-	atCrown := gardenSubscriptionDelegate(t, w, app, "crown", crown)
+	atCrown := gardenSubscriptionDelegate(t, w, app, planner, "crown", crown)
 	if !gardenSubscriptionWatching(t, cli, atCrown, crown) {
 		t.Fatal("the delegate does not watch the crown its delegation bound")
 	}
@@ -41,13 +42,13 @@ func TestADelegatedSessionWatchesItsSeedAndAResumeKeepsItsUnwatch(t *testing.T) 
 	}
 }
 
-func gardenSubscriptionDelegate(t *testing.T, w *world, app *testworld.Peer, label, seedID string) string {
+func gardenSubscriptionDelegate(t *testing.T, w *world, app *testworld.Peer, source, label, seedID string) string {
 	t.Helper()
 	cwd := w.Path(label)
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	delegated := gardenPlotDelegate(app, fakeagent.Claude, label, seedID, cwd)
+	delegated := gardenPlotDelegate(app, fakeagent.Claude, source, label, seedID, cwd)
 	if !delegated.Success {
 		t.Fatalf("delegating %s: %s", seedID, protocol.Deref(delegated.Error))
 	}

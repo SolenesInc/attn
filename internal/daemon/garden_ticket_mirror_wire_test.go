@@ -13,13 +13,14 @@ import (
 func TestADispatchedSessionsSeedMovesMirrorOntoItsTicket(t *testing.T) {
 	w := newWorld(t, fakeagent.Claude)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "planner", "peer")
-	planted, err := cli.SeedPlant("planner", "Migrate the store to X", "the brief", "", "", "")
+	panes := spawnPanes(w, app, w.Path("planner"), w.Path("peer"))
+	planner, peer := panes[0].session, panes[1].session
+	planted, err := cli.SeedPlant(planner, "Migrate the store to X", "the brief", "", "", "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	seed := planted.Seed.ID
-	delegate := gardenSubscriptionDelegate(t, w, app, "migrate", seed)
+	delegate := gardenSubscriptionDelegate(t, w, app, planner, "migrate", seed)
 
 	board := gardenMirrorBoard(t, cli)
 	gardenMirrorMove(t, cli, delegate, seed, "park", "")
@@ -28,7 +29,7 @@ func TestADispatchedSessionsSeedMovesMirrorOntoItsTicket(t *testing.T) {
 		t.Errorf("moves by a dispatched session without a ticket changed the board to %+v", after)
 	}
 
-	createTicket(t, cli, "planner", "Migrate the store to X", "migrate")
+	createTicket(t, cli, planner, "Migrate the store to X", "migrate")
 	if _, err := cli.TakeTicket(delegate, "migrate", false); err != nil {
 		t.Fatalf("the delegate takes the ticket: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestADispatchedSessionsSeedMovesMirrorOntoItsTicket(t *testing.T) {
 	if !gardenMirrorMentions(noted, "the parser landed and tests pass") {
 		t.Errorf("the delegate's note is missing from the ticket thread %q", activityLines(noted))
 	}
-	if _, err := cli.SeedNote("peer", seed, "a peer chiming in", "", "", false, nil); err != nil {
+	if _, err := cli.SeedNote(peer, seed, "a peer chiming in", "", "", false, nil); err != nil {
 		t.Fatal(err)
 	}
 	if after := showTicket(t, cli, "migrate"); !reflect.DeepEqual(after.Activity, noted.Activity) {
@@ -65,7 +66,7 @@ func TestADispatchedSessionsSeedMovesMirrorOntoItsTicket(t *testing.T) {
 		if move.verb == "wither" {
 			gardenMirrorMove(t, cli, delegate, seed, "replant", "")
 			gardenMirrorMove(t, cli, delegate, seed, "tend", "")
-			createTicket(t, cli, "planner", "Migrate the store to X again", ticketID)
+			createTicket(t, cli, planner, "Migrate the store to X again", ticketID)
 			if _, err := cli.TakeTicket(delegate, ticketID, false); err != nil {
 				t.Fatalf("the delegate takes %s: %v", ticketID, err)
 			}

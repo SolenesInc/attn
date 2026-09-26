@@ -51,7 +51,7 @@ func TestWatchingAPlotHearsItsWholeTreeUntilUnwatched(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "planter", "watcher", "bystander", "worker")
-		crown, _, leaf := gardenNudgePlot(t, cli)
+		crown, _, leaf := gardenNudgePlot(t, cli, "planter")
 		gardenNudgeWatch(t, cli, "watcher", crown, false)
 		gardenNudgeWatch(t, cli, "bystander", crown, false)
 
@@ -70,7 +70,7 @@ func TestWatchingAPlotHearsItsWholeTreeUntilUnwatched(t *testing.T) {
 
 		gardenNudgeNote(t, cli, "worker", leaf, "after unwatch", true)
 		gardenNudgeMove(t, cli, "worker", leaf, "park")
-		future := gardenNudgePlant(t, cli, "future child", crown)
+		future := gardenNudgePlant(t, cli, "planter", "future child", crown)
 		gardenNudgeMove(t, cli, "worker", future, "tend")
 		w.advance(0)
 		gardenNudgeInboxIsEmpty(t, cli, "watcher", "after it unwatched the plot")
@@ -169,7 +169,7 @@ func TestAnUnwatchDropsOnlyWhatNoOtherRoleCovers(t *testing.T) {
 		w.advance(0)
 		gardenNudgeInboxIsEmpty(t, cli, "recipient", "after someone else took over the unblocked seed")
 
-		crown, child, leaf := gardenNudgePlot(t, cli)
+		crown, child, leaf := gardenNudgePlot(t, cli, "planter")
 		gardenNudgeWatch(t, cli, "recipient", crown, false)
 		gardenNudgeWatch(t, cli, "recipient", child, false)
 		gardenNudgeWatch(t, cli, "bystander", crown, false)
@@ -198,7 +198,7 @@ func TestBellsFromATreeASeedLeftAreDiscarded(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "planter", "watcher", "direct", "worker")
-		crown, child, leaf := gardenNudgePlot(t, cli)
+		crown, child, leaf := gardenNudgePlot(t, cli, "planter")
 		gardenNudgeWatch(t, cli, "watcher", crown, false)
 		gardenNudgeWatch(t, cli, "direct", leaf, false)
 		gardenNudgeNote(t, cli, "worker", leaf, "rang through the old tree", true)
@@ -212,17 +212,17 @@ func TestBellsFromATreeASeedLeftAreDiscarded(t *testing.T) {
 	})
 }
 
-func gardenNudgePlot(t *testing.T, cli *client.Client) (crown, child, leaf string) {
+func gardenNudgePlot(t *testing.T, cli *client.Client, planter string) (crown, child, leaf string) {
 	t.Helper()
-	crown = gardenNudgePlant(t, cli, "ship seed nudges", "")
-	child = gardenNudgePlant(t, cli, "daemon mechanics", crown)
-	leaf = gardenNudgePlant(t, cli, "delivery proof", child)
+	crown = gardenNudgePlant(t, cli, planter, "ship seed nudges", "")
+	child = gardenNudgePlant(t, cli, planter, "daemon mechanics", crown)
+	leaf = gardenNudgePlant(t, cli, planter, "delivery proof", child)
 	return crown, child, leaf
 }
 
-func gardenNudgePlant(t *testing.T, cli *client.Client, title, partOf string) string {
+func gardenNudgePlant(t *testing.T, cli *client.Client, planter, title, partOf string) string {
 	t.Helper()
-	planted, err := cli.SeedPlant("planter", title, "Work through "+title+".", partOf, "", "")
+	planted, err := cli.SeedPlant(planter, title, "Work through "+title+".", partOf, "", "")
 	if err != nil {
 		t.Fatalf("plant %q under %s: %v", title, partOf, err)
 	}

@@ -93,10 +93,10 @@ func TestAPlotPlantsItsCrownAndChildrenInOneStep(t *testing.T) {
 }
 
 func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
-	w := newWorld(t)
-	cli := w.Client()
-	registerSessions(t, w, cli, "sess-a")
-	planted, err := cli.SeedPlot("sess-a", "", protocol.SeedPlotMessage{
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	planter := spawnPanes(w, app, w.Path("planter"))[0].session
+	planted, err := cli.SeedPlot(planter, "", protocol.SeedPlotMessage{
 		Title: "ship it", Children: []protocol.SeedPlotChild{{Title: "a"}, {Title: "b", Blocks: []string{"a"}}},
 	})
 	if err != nil {
@@ -104,13 +104,13 @@ func TestTheCrownCarriesItsPlotProgress(t *testing.T) {
 	}
 	unblocked := planted.Children[1].ID
 	for _, move := range []struct{ verb, reason string }{{"tend", ""}, {"harvest", "done"}} {
-		if _, err := cli.SeedTransition("sess-a", unblocked, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
+		if _, err := cli.SeedTransition(planter, unblocked, move.verb, move.reason, "", false, client.SeedTransitionOptions{}); err != nil {
 			t.Fatalf("%s b: %v", move.verb, err)
 		}
 	}
 
 	want := protocol.SeedPlotProgress{Total: 2, Done: 1, Ready: 1}
-	shown, err := cli.SeedShow("sess-a", planted.Crown.ID)
+	shown, err := cli.SeedShow(planter, planted.Crown.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,14 +160,14 @@ func TestStaleListsOnlyTheQuietOpenSeeds(t *testing.T) {
 }
 
 func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
+	w := newWorld(t, fakeagent.Claude, fakeagent.Codex)
 	app, cli := w.App(), w.Client()
-	registerSessions(t, w, cli, "planner")
+	planner := spawnPanes(w, app, w.Path("planner"))[0].session
 	cwd := w.Path("shop")
 	if err := os.MkdirAll(cwd, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	planted, err := cli.SeedPlot("planner", "", protocol.SeedPlotMessage{
+	planted, err := cli.SeedPlot(planner, "", protocol.SeedPlotMessage{
 		Title: "ship the thing", Body: protocol.Ptr("# the plan"),
 		Children: []protocol.SeedPlotChild{
 			{Title: "first step", Blocks: []string{"third-step"}},
@@ -179,14 +179,14 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 		t.Fatalf("plot: %v", err)
 	}
 	first, second := planted.Children[0].ID, planted.Children[1].ID
-	outside := plantSeedAs(t, cli, "planner", "somewhere else")
+	outside := plantSeedAs(t, cli, planner, "somewhere else")
 	for _, body := range []string{"old direction", "the fixture is seeded"} {
-		if _, err := cli.SeedNote("planner", first, body, "trellis", garden.NoteKindHandoff, false, nil); err != nil {
+		if _, err := cli.SeedNote(planner, first, body, "trellis", garden.NoteKindHandoff, false, nil); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	refused := gardenPlotDelegate(app, fakeagent.Codex, "nowhere", "s-zzzzzz", cwd)
+	refused := gardenPlotDelegate(app, fakeagent.Codex, planner, "nowhere", "s-zzzzzz", cwd)
 	if refused.Success || !strings.Contains(protocol.Deref(refused.Error), "s-zzzzzz") {
 		t.Fatalf("delegating at a crown that is not here = %+v, want a refusal naming it", refused)
 	}
@@ -194,7 +194,7 @@ func TestADelegationAtACrownIsScopedToItsPlot(t *testing.T) {
 		t.Fatalf("after the refusal the sessions are %+v (%v), want only the planner", sessions, err)
 	}
 
-	delegated := gardenPlotDelegate(app, fakeagent.Codex, "plot", planted.Crown.ID, cwd)
+	delegated := gardenPlotDelegate(app, fakeagent.Codex, planner, "plot", planted.Crown.ID, cwd)
 	if !delegated.Success {
 		t.Fatalf("delegating at the crown: %s", protocol.Deref(delegated.Error))
 	}
@@ -255,10 +255,10 @@ func gardenPlotSeedIDs(seeds []protocol.Seed) []string {
 	return ids
 }
 
-func gardenPlotDelegate(app *testworld.Peer, agent fakeagent.Harness, requestID, crown, cwd string) protocol.DelegateResultMessage {
+func gardenPlotDelegate(app *testworld.Peer, agent fakeagent.Harness, source, requestID, crown, cwd string) protocol.DelegateResultMessage {
 	return testworld.Request(app, protocol.DelegateMessage{
 		Cmd: protocol.CmdDelegate, RequestID: requestID, Cwd: cwd, Agent: protocol.Ptr(string(agent)),
-		SourceSessionID: protocol.Ptr("planner"),
+		SourceSessionID: protocol.Ptr(source),
 		Assignment:      protocol.DelegateAssignment{Kind: protocol.DelegateAssignmentKindSeed, SeedID: protocol.Ptr(crown)},
 	}, protocol.EventDelegateResult, func(m protocol.DelegateResultMessage) bool { return protocol.Deref(m.RequestID) == requestID })
 }
