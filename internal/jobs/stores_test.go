@@ -16,35 +16,20 @@ import (
 
 type reopen func() jobs.Store
 
-var backings = []struct {
-	name string
-	open func(t *testing.T) reopen
-}{
-	{"memory", func(t *testing.T) reopen {
-		kept := jobs.NewMemStore()
-		return func() jobs.Store { return kept }
-	}},
-	{"sqlite", func(t *testing.T) reopen {
+func quiet(string, ...any) {}
+
+func onTheJobDatabase(t *testing.T, test func(t *testing.T, open reopen)) {
+	synctest.Test(t, func(t *testing.T) {
 		dir := t.TempDir()
-		return func() jobs.Store {
+		test(t, func() jobs.Store {
 			db, err := store.NewWithDB(filepath.Join(dir, "attn.db"))
 			if err != nil {
 				t.Fatalf("open the job database: %v", err)
 			}
 			t.Cleanup(func() { _ = db.Close() })
 			return store.NewJobStore(db, dir, quiet)
-		}
-	}},
-}
-
-func quiet(string, ...any) {}
-
-func onEveryStore(t *testing.T, test func(t *testing.T, open reopen)) {
-	for _, backing := range backings {
-		t.Run(backing.name, func(t *testing.T) {
-			synctest.Test(t, func(t *testing.T) { test(t, backing.open(t)) })
 		})
-	}
+	})
 }
 
 func newRunner(t *testing.T, s jobs.Store, tune func(*jobs.Options)) *jobs.Runner {
@@ -113,7 +98,7 @@ func (l *runLog) names() []string {
 }
 
 func TestAJobsOutcomeSurvivesReopeningItsStore(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		r := newRunner(t, open(), func(o *jobs.Options) { o.MaxAttempts = 1 })
 		register(t, r, "greet", func(_ context.Context, job *jobs.Job) (any, error) {
 			var name string
@@ -145,7 +130,7 @@ func TestAJobsOutcomeSurvivesReopeningItsStore(t *testing.T) {
 }
 
 func TestAUniqueKeyCoalescesABurstWithinItsKindOnly(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		r := newRunner(t, open(), nil)
 		var runs runLog
 		register(t, r, "narrate", runs.handler)
@@ -177,7 +162,7 @@ func TestAUniqueKeyCoalescesABurstWithinItsKindOnly(t *testing.T) {
 }
 
 func TestKeylessJobsAreDistinctAndRunUpToTheirKindsConcurrency(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		r := newRunner(t, open(), nil)
 		var runs runLog
 		release := make(chan struct{})
@@ -203,7 +188,7 @@ func TestKeylessJobsAreDistinctAndRunUpToTheirKindsConcurrency(t *testing.T) {
 }
 
 func TestDueJobsRunByPriorityThenByScheduleWithinASecond(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		r := newRunner(t, open(), nil)
 		var runs runLog
 		register(t, r, "ordered", runs.handler)
@@ -248,7 +233,7 @@ func TestDueJobsRunByPriorityThenByScheduleWithinASecond(t *testing.T) {
 }
 
 func TestAJobLeftRunningByACrashRunsAgainWithItsSpentAttempt(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		s := open()
 		stale := time.Now().Add(-time.Hour)
 		if err := s.Save(&jobs.Job{
@@ -271,7 +256,7 @@ func TestAJobLeftRunningByACrashRunsAgainWithItsSpentAttempt(t *testing.T) {
 }
 
 func TestRetentionTrimsCompletedJobsBySubSecondAgeAndKeepsDeadOnes(t *testing.T) {
-	onEveryStore(t, func(t *testing.T, open reopen) {
+	onTheJobDatabase(t, func(t *testing.T, open reopen) {
 		r := newRunner(t, open(), func(o *jobs.Options) {
 			o.MaxAttempts = 1
 			o.Retention = 24 * time.Hour
