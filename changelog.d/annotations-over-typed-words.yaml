@@ -1,0 +1,3 @@
+kind: fixed
+area: annotations
+change: Annotations sent to an agent after you had started typing in its composer no longer leave the session looking busy, so later annotations and inbox doorbells reach it instead of being skipped as waiting on approval.

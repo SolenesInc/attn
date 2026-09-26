@@ -9,7 +9,11 @@ import (
 	"unicode/utf8"
 )
 
-const bracketedPasteOn = "\x1b[?2004h"
+const (
+	bracketedPasteOn    = "\x1b[?2004h"
+	bracketedPasteStart = "\x1b[200~"
+	bracketedPasteEnd   = "\x1b[201~"
+)
 
 type composer struct {
 	prompt string
@@ -17,9 +21,10 @@ type composer struct {
 }
 
 type terminal struct {
-	style composer
-	mu    sync.Mutex
-	line  []rune
+	style   composer
+	mu      sync.Mutex
+	line    []rune
+	pasting bool
 }
 
 func openTerminal(style composer) (*terminal, error) {
@@ -88,7 +93,16 @@ func (t *terminal) consume(input []byte, submit func(string)) []byte {
 			if size == 0 {
 				return input
 			}
+			switch string(input[:size]) {
+			case bracketedPasteStart:
+				t.pasting = true
+			case bracketedPasteEnd:
+				t.pasting = false
+			}
 			input = input[size:]
+		case t.pasting && (input[0] == '\r' || input[0] == '\n'):
+			t.insert("\n")
+			input = input[1:]
 		case input[0] == '\r' || input[0] == '\n':
 			if prompt := t.take(); strings.TrimSpace(prompt) != "" {
 				submit(prompt)
