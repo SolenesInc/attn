@@ -348,4 +348,20 @@ func TestTheGardenCommandsPrintWhatAgentsActOn(t *testing.T) {
 		}
 		requireFailure(t, s.Attn("seed", "review", "keep", "r-missing", "--json", "s-7k3f9m"), "seed review keep: ", "no Garden review r-missing exists")
 	})
+
+	t.Run("review show lists what each seed offers", func(t *testing.T) {
+		register(t, s, "drifter", "drifter")
+		seed := plant(t, s, "Drifted work")
+		seedAs(t, s, "drifter", "tend", seed.ID)
+		if err := s.Client().Unregister("drifter"); err != nil {
+			t.Fatal(err)
+		}
+		var started protocol.SeedReviewResult
+		s.Attn("seed", "review", "start", "--json").JSON(t, &started)
+		if started.Review == nil {
+			t.Fatalf("review start --json = %+v", started)
+		}
+		requireLines(t, "review show", seedAs(t, s, "", "review", "show", started.Review.Run.ID),
+			"\n"+seed.ID+"  Drifted work\n", "\nactions\tkeep_growing, park, harvest, wither\n")
+	})
 }
