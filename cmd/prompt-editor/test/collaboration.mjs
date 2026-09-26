@@ -130,7 +130,7 @@ try {
     await expect(second.locator("#file-state")).toContainText("Shared draft");
     const forkID = new URL(second.url()).searchParams.get("draft");
     assert.notEqual(forkID, draftID);
-    assert.equal(cli("draft", "get", forkID).files[source].text, "Keep this concurrent maintainer edit.\n");
+    await expect.poll(() => cli("draft", "get", forkID).files[source].text).toBe("Keep this concurrent maintainer edit.\n");
     assert.equal(cli("draft", "get", draftID).files[source].text, "Keep this concurrent agent edit.\n");
     await page.locator("#share-review").click();
     await expect(page.locator("#draft-state")).toContainText("snapshot of revision");
