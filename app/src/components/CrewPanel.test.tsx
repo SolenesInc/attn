@@ -11,8 +11,8 @@ import {
   type DaemonSession,
 } from '../test/daemonFixtures';
 import { gesture, renderApp } from '../test/renderApp';
-import type { CommandMessage, CommandName } from '../test/protocol';
-import type { Reply, ScriptedDaemon } from '../test/scriptedDaemon';
+import type { CommandMessage } from '../test/protocol';
+import { type Answer, answerInTurn, HOLD, type Reply, type ScriptedDaemon } from '../test/scriptedDaemon';
 
 function member(id: string, revision: number, values: Partial<CrewMember> = {}): CrewMember {
   return {
@@ -26,8 +26,6 @@ function member(id: string, revision: number, values: Partial<CrewMember> = {}):
   };
 }
 
-const HOLD = 'hold';
-type Answer = Reply | typeof HOLD;
 
 const saved = (values: Partial<Extract<Reply, { event: 'crew_set_result' }>> = {}): Reply => ({ event: 'crew_set_result', success: true, conflict: false, ...values });
 const restarted = (values: Partial<Extract<Reply, { event: 'crew_restart_result' }>> = {}): Reply => ({ event: 'crew_restart_result', success: true, conflict: false, ...values });
@@ -74,14 +72,6 @@ const defaults: Record<CrewCommand, Answer[]> = {
   delegation_models: [astra],
 };
 
-function answerInTurn(daemon: ScriptedDaemon, cmd: CommandName, answers: Answer[]) {
-  let turn = 0;
-  daemon.on(cmd, () => {
-    const answer = answers[Math.min(turn++, answers.length - 1)];
-    return answer === HOLD ? undefined : answer;
-  });
-}
-
 const panel = () => within(screen.getByTestId('crew-panel'));
 const isPanelOpen = () => screen.getByTestId('crew-panel').hasAttribute('open');
 
@@ -103,7 +93,7 @@ async function renderPanel({
     initialState: { crew: members, seeds, sessions: everySession, workspaces: everySession.map((session) => agentWorkspace(session.id)) },
   });
   for (const [cmd, answers] of Object.entries({ ...defaults, ...script })) {
-    answerInTurn(daemon, cmd as CrewCommand, answers);
+    answerInTurn(daemon, cmd as CrewCommand, answers, { repeatLast: true });
   }
   const openCrew = () => gesture(daemon, () => fireEvent.click(screen.getByTestId('manage-crew')));
   if (isOpen) await openCrew();
