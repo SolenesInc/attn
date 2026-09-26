@@ -106,7 +106,8 @@ agent to launch booting, before it paints its resting title or reads input,
 until the returned function runs. For behavior on a timer, write the test as
 `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under
 `synctest`, and move the clock with `w.advance(d)`. Bubbled worlds cannot run
-agents.
+agents or watch folders, so a world's notebook at `<w.Dir>/notebook` exists only
+once a test outside a bubble creates it.
 
 ### Stack
 

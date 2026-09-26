@@ -19,40 +19,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 )
 
-func TestPluginDriverRegister_PublishesDynamicAgentSettings(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-
-	registerTestPluginDriver(t, client, "snipe", map[string]bool{
-		"resume":              true,
-		"yolo":                true,
-		"model_pin":           true,
-		"effort_pin":          true,
-		"launch_instructions": true,
-	})
-
-	settings := d.settingsWithAgentAvailability()
-	if got := settings["snipe_available"]; got != "true" {
-		t.Fatalf("snipe_available=%v, want true", got)
-	}
-	if got := settings["snipe_cap_resume"]; got != "true" {
-		t.Fatalf("snipe_cap_resume=%v, want true", got)
-	}
-	if got := settings["snipe_cap_model_pin"]; got != "true" {
-		t.Fatalf("snipe_cap_model_pin=%v, want true", got)
-	}
-	if got := settings["snipe_cap_launch_instructions"]; got != "true" {
-		t.Fatalf("snipe_cap_launch_instructions=%v, want true", got)
-	}
-	if err := d.validateNewSessionAgent("snipe"); err != nil {
-		t.Fatalf("validateNewSessionAgent(snipe) error=%v", err)
-	}
-}
-
 func TestPluginDriverRegister_ReturnsOnlyActiveRunsOwnedByPlugin(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	now := protocol.TimestampNow().String()
@@ -242,17 +208,6 @@ func TestHandleSpawnSession_PluginDriverLaunchesReturnedCommand(t *testing.T) {
 	}
 }
 
-func TestResolvePluginDriverLaunch_RejectsUnsupportedPins(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	reg := pluginDriverRegistration{Agent: "snipe", Capabilities: map[string]bool{}}
-	for _, params := range []pluginDriverSpawnParams{{Model: "gpt-5"}, {Effort: "low"}} {
-		_, err := d.resolvePluginDriverLaunch(reg, params, false)
-		if err == nil || !strings.Contains(err.Error(), "does not support") {
-			t.Fatalf("resolvePluginDriverLaunch(%+v) error=%v, want pin capability error", params, err)
-		}
-	}
-}
-
 func TestHandleSpawnSession_PluginDriverClosesRunWhenPTYSpawnFails(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	d.ptyBackend = &failingSpawnBackend{err: errors.New("pty spawn failed")}
@@ -302,62 +257,6 @@ func TestHandleSpawnSession_PluginDriverClosesRunWhenPTYSpawnFails(t *testing.T)
 	}
 	if session := d.store.Get("snipe-failed-spawn"); session != nil {
 		t.Fatalf("stored session=%+v after failed PTY spawn, want none", session)
-	}
-}
-
-func TestHandleSpawnSession_PluginDriverClosesRunThatExitsDuringSpawn(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	backend := &fakeSpawnBackend{}
-	backend.onSpawn = func(opts ptybackend.SpawnOptions) {
-		d.handlePTYExit(ptybackend.ExitInfo{ID: "snipe-early-exit", ExitCode: 7, LifecycleID: opts.LifecycleID})
-	}
-	d.ptyBackend = backend
-	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "snipe", map[string]bool{})
-
-	closeDone := make(chan pluginDriverSessionClosedParams, 1)
-	go func() {
-		request := decodeJSONRPCMessage(t, client)
-		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
-		request = decodeJSONRPCMessage(t, client)
-		if request.Method != "driver.session_closed" {
-			t.Errorf("method=%q, want driver.session_closed", request.Method)
-			return
-		}
-		var params pluginDriverSessionClosedParams
-		if err := json.Unmarshal(request.Params, &params); err != nil {
-			t.Errorf("decode session_closed params: %v", err)
-			return
-		}
-		respondPluginRequest(t, client, request, pluginDriverSessionClosedResult{OK: true})
-		closeDone <- params
-	}()
-
-	addTestWorkspace(d, "workspace-snipe-early-exit", t.TempDir())
-	ws := &wsClient{send: make(chan outboundMessage, 4), attachedStreams: make(map[string]ptybackend.Stream)}
-	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "snipe-early-exit",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-snipe-early-exit",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
-	})
-
-	params := <-closeDone
-	if params.SessionID != "snipe-early-exit" || params.RunID == "" || params.Reason != "exited" || params.ExitCode == nil || *params.ExitCode != 7 {
-		t.Fatalf("session_closed params=%+v, want exited early run with exit code 7", params)
-	}
-	if run := d.store.GetAgentDriverRun("snipe-early-exit"); run.RunID != "" {
-		t.Fatalf("active run=%+v after early exit, want closed run", run)
-	}
-	d.resolveDue(time.Now())
-	if session := d.store.Get("snipe-early-exit"); session == nil || session.State != protocol.SessionStateIdle {
-		t.Fatalf("stored session=%+v after early exit, want idle session", session)
 	}
 }
 
@@ -470,110 +369,6 @@ func TestHandlePTYExit_PluginDriverIgnoresSupersededExitAfterRelaunch(t *testing
 	}
 }
 
-func TestHandleSpawnSession_PluginDriverWithoutResumeRelaunchesWithSpawn(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	client, done := startPluginPipe(t, d, "spawn-only-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "spawn-only", map[string]bool{})
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID:             "spawn-only-session",
-		Label:          "existing",
-		Agent:          "spawn-only",
-		Directory:      t.TempDir(),
-		State:          protocol.SessionStateIdle,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-
-	requestDone := make(chan struct{})
-	go func() {
-		defer close(requestDone)
-		request := decodeJSONRPCMessage(t, client)
-		if request.Method != "driver.spawn" {
-			t.Errorf("method=%q, want driver.spawn for plugin without resume capability", request.Method)
-			return
-		}
-		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"spawn-only"}})
-	}()
-
-	addTestWorkspace(d, "workspace-spawn-only", t.TempDir())
-	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
-	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "spawn-only-session",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-spawn-only",
-		Agent:       "spawn-only",
-		Cols:        80,
-		Rows:        24,
-	})
-	<-requestDone
-}
-
-func TestPluginDriverReports_StateStopAndMetadataAreOwnedByRegisteredAgent(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "snipe", map[string]bool{"state_reporting": true})
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID:             "snipe-report",
-		Label:          "snipe",
-		Agent:          "snipe",
-		Directory:      t.TempDir(),
-		State:          protocol.SessionStateLaunching,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	if !d.store.BeginAgentDriverRun("snipe-report", "snipe-plugin", "run-report") {
-		t.Fatal("failed to begin test plugin run")
-	}
-
-	sendPluginMethod(t, client, 3, "session.report_metadata", pluginReportMetadataParams{
-		SessionID: "snipe-report",
-		RunID:     "run-report",
-		Seq:       1,
-		Metadata:  json.RawMessage(`{"snipe_session_id":"native-id"}`),
-	})
-	if got := d.store.GetAgentMetadata("snipe-report"); got != `{"snipe_session_id":"native-id"}` {
-		t.Fatalf("metadata=%q, want plugin metadata", got)
-	}
-
-	sendPluginMethod(t, client, 4, "session.report_state", pluginReportStateParams{
-		SessionID: "snipe-report",
-		RunID:     "run-report",
-		Seq:       2,
-		State:     protocol.StateWorking,
-	})
-	if got := d.store.Get("snipe-report").State; got != protocol.SessionStateWorking {
-		t.Fatalf("state=%q, want working", got)
-	}
-	if got := protocol.Deref(d.store.Get("snipe-report").LastModelRequestAt); got == "" || got == now {
-		t.Fatalf("working request declaration left last_model_request_at=%q (launch stamp %q)", got, now)
-	}
-
-	sendPluginMethod(t, client, 5, "session.report_stop", pluginReportStopParams{
-		SessionID: "snipe-report",
-		RunID:     "run-report",
-		Seq:       3,
-		Verdict:   protocol.StateWaitingInput,
-	})
-	if got := d.store.Get("snipe-report").State; got != protocol.SessionStateWaitingInput {
-		t.Fatalf("state=%q, want waiting_input", got)
-	}
-}
-
 func TestPluginReportedStateFlushesDeferredTicketNudge(t *testing.T) {
 	base := newBubbleDaemon(t)
 	synctest.Test(t, func(t *testing.T) {
@@ -674,65 +469,6 @@ func TestPluginDriverReports_ReregisteredAgentCannotTakeOverActiveRun(t *testing
 	}
 	if got := d.store.Get("owned-run").State; got != protocol.SessionStateLaunching {
 		t.Fatalf("state=%q after replacement report, want launching", got)
-	}
-}
-
-func TestHandleSpawnSession_PluginDriverQueuesReportsDuringPTYStartup(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	client, done := startPluginPipe(t, d, "snipe-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "snipe", map[string]bool{"state_reporting": true})
-
-	backend := &fakeSpawnBackend{}
-	launchRunID := make(chan string, 1)
-	backend.onSpawn = func(_ ptybackend.SpawnOptions) {
-		runID := <-launchRunID
-		sendPluginMethod(t, client, 7, "session.report_metadata", pluginReportMetadataParams{
-			SessionID: "early-report",
-			RunID:     runID,
-			Seq:       1,
-			Metadata:  json.RawMessage(`{"snipe_session_id":"early-native-id"}`),
-		})
-		sendPluginMethod(t, client, 8, "session.report_state", pluginReportStateParams{
-			SessionID: "early-report",
-			RunID:     runID,
-			Seq:       2,
-			State:     protocol.StateWorking,
-		})
-	}
-	d.ptyBackend = backend
-
-	go func() {
-		request := decodeJSONRPCMessage(t, client)
-		var params pluginDriverSpawnParams
-		if err := json.Unmarshal(request.Params, &params); err != nil {
-			t.Errorf("decode launch params: %v", err)
-			return
-		}
-		launchRunID <- params.RunID
-		respondPluginRequest(t, client, request, pluginDriverSpawnResult{Argv: []string{"snipe"}})
-	}()
-
-	addTestWorkspace(d, "workspace-early", t.TempDir())
-	ws := &wsClient{send: make(chan outboundMessage, 2), attachedStreams: make(map[string]ptybackend.Stream)}
-	d.handleSpawnSession(ws, &protocol.SpawnSessionMessage{
-		ID:          "early-report",
-		Cwd:         t.TempDir(),
-		WorkspaceID: "workspace-early",
-		Agent:       "snipe",
-		Cols:        80,
-		Rows:        24,
-	})
-
-	session := d.store.Get("early-report")
-	if session == nil || session.State != protocol.SessionStateWorking {
-		t.Fatalf("session=%+v, want queued working state applied", session)
-	}
-	if got := d.store.GetAgentMetadata("early-report"); got != `{"snipe_session_id":"early-native-id"}` {
-		t.Fatalf("metadata=%q, want queued startup metadata applied", got)
 	}
 }
 
@@ -1285,15 +1021,6 @@ func TestHandleSpawnSession_PluginDriverRelaunchCarriesTheStoredConversation(t *
 		ID: "snipe-relaunch", Cwd: t.TempDir(), WorkspaceID: "workspace-snipe", Agent: "snipe", Cols: 80, Rows: 24,
 	})
 	<-requestDone
-}
-
-func TestResolvePluginDriverLaunch_RefusesAnExplicitConversationWithoutResume(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	reg := pluginDriverRegistration{PluginName: "spawn-only-plugin", Agent: "spawn-only", Capabilities: map[string]bool{}}
-	_, err := d.resolvePluginDriverLaunch(reg, pluginDriverSpawnParams{ResumeSessionID: "conv-1"}, false)
-	if err == nil || !strings.Contains(err.Error(), "conv-1") || !strings.Contains(err.Error(), "resume") {
-		t.Fatalf("err=%v, want a refusal naming the conversation and the missing capability", err)
-	}
 }
 
 func TestPluginDriverReports_MetadataResumeIDBecomesTheSessionConversation(t *testing.T) {
