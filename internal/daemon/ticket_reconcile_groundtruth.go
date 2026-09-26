@@ -201,8 +201,8 @@ func (d *Daemon) reconcileGroundTruth(ctx context.Context, verdict *ticketReconc
 		}
 	}
 
-	fetch := d.ticketReconcilePRFetch
-	if fetch == nil && d.githubAvailable() {
+	var fetch prStateFetcher
+	if d.githubAvailable() {
 		if client, ok := d.ghRegistry.Get(host); ok {
 			fetch = client.FetchPRState
 		}
