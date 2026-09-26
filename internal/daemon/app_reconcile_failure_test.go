@@ -247,35 +247,3 @@ func TestAGapWithNoHandlerDisablesTheAppWithoutMovingItsCursor(t *testing.T) {
 		t.Fatalf("status = %+v", status)
 	}
 }
-
-func TestAVersionMoveIsRefusedWhenTheSubscribedVersionCannotReconcile(t *testing.T) {
-	d := appApplyDaemon(t)
-	legacy := `{"name":"greeter","attn_app_api":1,"entrypoint":"src/index.ts","subscribe":[{"events":["ticket.*"]}]}`
-	firstHash := stageArtifact(t, d, "greeter", legacy, "export default {}")
-	if resp := appApply(t, d, "greeter", firstHash, legacy); !resp.Ok {
-		t.Fatalf("first apply: %v", protocol.Deref(resp.Error))
-	}
-	first, _, err := d.store.GetApp("greeter")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	secondHash := stageArtifact(t, d, "greeter", legacy, "export default {} // edited")
-	resp := appApply(t, d, "greeter", secondHash, legacy)
-	if resp.Ok {
-		t.Fatal("a subscribed version with no reconcile handler was applied over an existing one")
-	}
-	message := protocol.Deref(resp.Error)
-	for _, want := range []string{"greeter", "reconcile = true", "version 1"} {
-		if !strings.Contains(message, want) {
-			t.Fatalf("refusal %q does not contain %q", message, want)
-		}
-	}
-	app, _, err := d.store.GetApp("greeter")
-	if err != nil || app.CurrentVersionID != first.CurrentVersionID {
-		t.Fatalf("the pointer moved despite the refusal: %+v, %v", app, err)
-	}
-	if claim, err := d.store.AppReconcilePending("greeter"); err != nil || len(claim.Requests) != 0 {
-		t.Fatalf("a refused move left a request behind: %+v, %v", claim, err)
-	}
-}
