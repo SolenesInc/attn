@@ -156,8 +156,9 @@ export function useAppController({
   const {
     wantsAttention,
     waitingLocalSessions,
-    handleSettleActiveTurn,
-    handleSnoozeActiveSession,
+    handleSettleShortcut,
+    handleSnoozeShortcut,
+    queueModeEnabled,
   } = attentionQueue;
 
   const navigation = useAppNavigation({
@@ -241,6 +242,8 @@ export function useAppController({
     toggleDockPanel,
     openDockPanel,
     toggleSidebarCollapse,
+    sidebarCollapsed,
+    toggleAgentList,
     workflowRunPanelOpen,
     gardenHoldsWindow,
     toggleGardenFrame,
@@ -559,8 +562,8 @@ export function useAppController({
     onToggleGridMode: toggleGridMode,
     onJumpToWaiting: handleJumpToWaiting,
     onNextRun: handleNextRun,
-    onSettleTurn: handleSettleActiveTurn,
-    onSnoozeTurn: handleSnoozeActiveSession,
+    onSettleTurn: handleSettleShortcut,
+    onSnoozeTurn: handleSnoozeShortcut,
     onCancelCountdown: handleCancelCountdown,
     onSwitchToDesktopSlot: (slot) => {
       setView('session');
@@ -575,6 +578,7 @@ export function useAppController({
     onHistoryForward: () => navigateAgentHistoryForward(view !== 'session'),
     onSelectOrchestrator: handleSelectOrchestrator,
     onToggleSidebar: toggleSidebarCollapse,
+    onShowAgentList: queueModeEnabled && !sidebarCollapsed ? toggleAgentList : () => handleOpenPalette('agents'),
     onRefreshPRs: handleRefreshPRs,
     onToggleAttentionPanel: () => toggleDockPanel('attention'),
     onOpenSettings: useCallback(() => {
@@ -685,6 +689,7 @@ export function useAppController({
         seedForSession,
         attentionCount,
         hasCriticalNotification,
+        handleOpenPalette,
       },
       appAppearance,
       appPanels,

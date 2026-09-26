@@ -39,6 +39,14 @@ export function useSidebarState({
   onOpenCrewMemberDetails,
   onSettleTurn,
   onWalkRuns,
+  onJumpToWaiting,
+  profileName,
+  onSwitchProfile,
+  onOpenCommands,
+  commandsBadge,
+  agentListOpen = false,
+  onToggleAgentList,
+  onOpenOverview,
   onOpenSnooze,
   onWakeTurn,
   onScreenSessionIds,
@@ -82,7 +90,8 @@ export function useSidebarState({
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
       : isAttentionSessionState(session.state);
 
-  const [snoozedExpanded, setSnoozedExpanded] = useState(false);
+  const [agentFilter, setAgentFilter] = useState('');
+  if (!agentListOpen && agentFilter) setAgentFilter('');
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(
     () => new Set(),
   );
@@ -191,32 +200,13 @@ export function useSidebarState({
     ),
   });
 
-  // The chief holds its anchored slot whatever its workspace is, so a workspace
-  // that survives in the tree must not draw it a second time.
-  const withoutChiefRow = (workspace: SidebarWorkspace): SidebarWorkspace => {
-    if (!queue || !workspace.sessions.some((session) => session.chiefOfStaff)) {
-      return workspace;
-    }
-    return {
-      ...workspace,
-      sessions: workspace.sessions.filter((session) => !session.chiefOfStaff),
-      children: workspace.children.filter(
-        (child) => child.kind === 'tile' || !child.session.chiefOfStaff,
-      ),
-    };
-  };
-
   const isWorkspaceVisible = (workspace: SidebarWorkspace) =>
     !isSessionless(workspace) ||
     workspace.hasUnresolvedAgentPanes ||
     showSessionless;
-  // Queue mode renders every ordinary agent as a flat row in a band, so drawing
-  // its workspace group too would show the same agent twice.
-  const isTreeWorkspace = (workspace: SidebarWorkspace) =>
-    !queue || isSessionless(workspace);
   const visibleWorkspaces = workspaces.flatMap((candidate) => {
-    const workspace = withoutChiefRow(withoutAutomationRows(candidate));
-    return isWorkspaceVisible(workspace) && isTreeWorkspace(workspace) ? [workspace] : [];
+    const workspace = withoutAutomationRows(candidate);
+    return isWorkspaceVisible(workspace) ? [workspace] : [];
   });
   const canAcceptLeafDrag = (workspace: SidebarWorkspace) =>
     Boolean(
@@ -263,6 +253,7 @@ export function useSidebarState({
   });
 
   return {
+    workspaces,
     selectedId,
     selectedWorkspaceId,
     selectedTile,
@@ -285,6 +276,16 @@ export function useSidebarState({
     onOpenCrewMemberDetails,
     onSettleTurn,
     onWalkRuns,
+    onJumpToWaiting,
+    profileName,
+    onSwitchProfile,
+    onOpenCommands,
+    commandsBadge,
+    agentListOpen,
+    onToggleAgentList,
+    agentFilter,
+    setAgentFilter,
+    onOpenOverview,
     onOpenSnooze,
     onWakeTurn,
     onScreenSessionIds,
@@ -302,6 +303,7 @@ export function useSidebarState({
     workspaceSelectionStyle,
     onWorkspaceSelectionStyleChange,
     leafDrag,
+    dragHoverWorkspaceId,
     onWorkspaceDragEnter,
     onWorkspaceDragLeave,
     onWorkspaceDragDrop,
@@ -320,8 +322,6 @@ export function useSidebarState({
     homeActive,
     onToggleCollapse,
     sessionWantsAttention,
-    snoozedExpanded,
-    setSnoozedExpanded,
     expandedAutomationGroups,
     displayMode,
     setDisplayMode,

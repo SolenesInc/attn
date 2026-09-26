@@ -210,6 +210,7 @@ export function SidebarSessionRow({
         .trim()
         .replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
+      data-session-id={session.id}
       data-state={session.state}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >

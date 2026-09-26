@@ -1,5 +1,6 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useCallback, useMemo, useState } from 'react';
+import { focusedQueueRowSessionId } from '../components/QueueSidebar';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { isAttentionSessionState, type UISessionState } from '../types/sessionState';
@@ -106,24 +107,52 @@ export function useAttentionQueue({
     [],
   );
 
+  const openSnoozeForSession = useCallback(
+    (sessionId: string) => {
+      const session = enrichedLocalSessions.find((s) => s.id === sessionId);
+      if (!session || !sessionParticipatesInQueue(session, crewQueueEnabled)) return;
+      const row = document.querySelector<HTMLElement>(`.queue-row[data-session-id="${sessionId}"]`);
+      const rect = row?.getBoundingClientRect();
+      setSnoozeMenu({
+        session: { id: session.id, label: session.label },
+        anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
+      });
+    },
+    [enrichedLocalSessions, crewQueueEnabled],
+  );
+
   const handleSnoozeActiveSession = useMemo(
     () =>
-      queueModeEnabled && activeSessionQueueEligible
+      queueModeEnabled && activeSessionQueueEligible && activeSessionId
+        ? () => openSnoozeForSession(activeSessionId)
+        : undefined,
+    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, openSnoozeForSession],
+  );
+
+  const handleSettleShortcut = useMemo(
+    () =>
+      queueModeEnabled || handleSettleActiveTurn
         ? () => {
-            if (!activeSessionId) return;
-            const session = enrichedLocalSessions.find((s) => s.id === activeSessionId);
-            if (!session) return;
-            const row = document.querySelector<HTMLElement>(
-              `[data-testid$="-${activeSessionId}"].queue-row`,
-            );
-            const rect = row?.getBoundingClientRect();
-            setSnoozeMenu({
-              session: { id: session.id, label: session.label },
-              anchor: rect ? { top: rect.bottom + 4, left: rect.left } : { top: 72, left: 72 },
-            });
+            const focusedRow = focusedQueueRowSessionId();
+            if (!focusedRow) {
+              handleSettleActiveTurn?.();
+            } else if (enrichedLocalSessions.find((session) => session.id === focusedRow)?.turnOwed) {
+              sendSettleTurn(focusedRow);
+            }
           }
         : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, enrichedLocalSessions],
+    [queueModeEnabled, handleSettleActiveTurn, enrichedLocalSessions, sendSettleTurn],
+  );
+
+  const handleSnoozeShortcut = useMemo(
+    () =>
+      queueModeEnabled
+        ? () => {
+            const target = focusedQueueRowSessionId() ?? (activeSessionQueueEligible ? activeSessionId : null);
+            if (target) openSnoozeForSession(target);
+          }
+        : undefined,
+    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, openSnoozeForSession],
   );
 
   return {
@@ -140,6 +169,8 @@ export function useAttentionQueue({
     setSnoozeMenu,
     openSnoozeMenu,
     handleSnoozeActiveSession,
+    handleSettleShortcut,
+    handleSnoozeShortcut,
     handleToggleQueueMode,
     handleToggleCrewQueue,
   };

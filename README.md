@@ -166,6 +166,7 @@ to the workspace you're in.
 | Cmd+F | Find in terminal |
 | Cmd+K | Agent palette (crew, agents, tiles, runs) |
 | Cmd+Shift+K | Command palette (or type `>` in the agent palette) |
+| Cmd+Shift+A | All agents: the list in the queue sidebar, the agent palette elsewhere |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
 | Cmd+\` | Utility terminal |
 | Cmd+R | Refresh PRs |

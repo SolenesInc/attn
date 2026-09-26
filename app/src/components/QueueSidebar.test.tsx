@@ -1,11 +1,12 @@
-import { StrictMode } from 'react';
+import { StrictMode, useState, type ComponentProps } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
+import { focusedQueueRowSessionId } from './QueueSidebar';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
 import { WAKE_ARM_TIMEOUT_MS } from './CrewWake';
 import { buildQueueBands, formatTurnAge } from '../utils/queueBands';
-import { desktopGroups, groupIndexes } from '../test/desktops';
+import { desktopGroups } from '../test/desktops';
 
 interface TestSession {
   id: string;
@@ -37,21 +38,20 @@ const baseProps = {
   onToggleCollapse: () => {},
 };
 
+const desktops = [
+  { id: 'ws-a', title: 'alpha' },
+  { id: 'ws-b', title: 'beta' },
+];
+
 function sidebarData(sessions: TestSession[]) {
-  const workspaces = desktopGroups(
-    [
-      { id: 'ws-a', title: 'alpha' },
-      { id: 'ws-b', title: 'beta' },
-    ],
-    sessions,
-  );
-  return { workspaces, visualIndexByWorkspaceId: groupIndexes(workspaces) };
+  const workspaces = desktopGroups(desktops, sessions);
+  return { workspaces, visualIndexByWorkspaceId: new Map(desktops.map((desktop, index) => [desktop.id, index])) };
 }
 
 function renderSidebar(
   sessions: TestSession[],
   queueMode: boolean,
-  overrides = {},
+  overrides: Partial<ComponentProps<typeof Sidebar>> = {},
 ) {
   const data = sidebarData(sessions);
   return render(
@@ -64,6 +64,21 @@ function renderSidebar(
   );
 }
 
+function ListToggling(props: ComponentProps<typeof Sidebar>) {
+  const [open, setOpen] = useState(Boolean(props.agentListOpen));
+  return <Sidebar {...props} agentListOpen={open} onToggleAgentList={() => setOpen((value) => !value)} />;
+}
+
+function renderWithList(sessions: TestSession[], overrides: Partial<ComponentProps<typeof Sidebar>> = {}) {
+  const data = sidebarData(sessions);
+  return render(<ListToggling {...baseProps} {...data} {...overrides} queue={buildQueueBands(data.workspaces)} />);
+}
+
+function queueRowIds(container: HTMLElement) {
+  return Array.from(container.querySelectorAll('[data-testid="sidebar-queue"] .queue-row'))
+    .map((row) => row.getAttribute('data-testid'));
+}
+
 const sessions: TestSession[] = [
   { id: 'chief', label: 'chief', state: 'idle', workspaceId: 'ws-a', chiefOfStaff: true },
   { id: 'newer', label: 'newer', state: 'waiting_input', workspaceId: 'ws-a', turnOwed: true, turnOpenedAt: '2026-07-26T11:00:00Z' },
@@ -71,7 +86,122 @@ const sessions: TestSession[] = [
   { id: 'settled', label: 'settled', state: 'waiting_input', workspaceId: 'ws-b' },
 ];
 
-describe('the queue arrangement', () => {
+function owed(id: string, hour: number, workspaceId = 'ws-a'): TestSession {
+  return {
+    id,
+    label: id,
+    state: 'waiting_input',
+    workspaceId,
+    turnOwed: true,
+    turnOpenedAt: `2026-07-26T${String(hour).padStart(2, '0')}:00:00Z`,
+  };
+}
+
+describe('the queue sidebar', () => {
+  it('replaces the desktop tree at its own narrower width', () => {
+    const { container } = renderSidebar(sessions, true);
+    expect(screen.getByTestId('queue-sidebar')).toHaveClass('sidebar', 'queue-sidebar');
+    expect(container.querySelectorAll('.session-list [data-testid^="sidebar-session-"]')).toHaveLength(0);
+  });
+
+  it('leaves the tree alone while the arrangement is off, satellites included', () => {
+    const tagged: TestSession[] = [
+      ...sessions,
+      { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
+    ];
+    renderSidebar(tagged, false);
+
+    expect(screen.queryByTestId('sidebar-queue')).toBeNull();
+    for (const id of ['chief', 'newer', 'older', 'settled', 'shell']) {
+      expect(screen.getByTestId(`sidebar-session-${id}`)).toBeTruthy();
+    }
+  });
+
+  it('anchors the chief above the owed turns, oldest first, and keeps the rest behind the list', () => {
+    const { container } = renderSidebar(sessions, true);
+    expect(queueRowIds(container)).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer']);
+    expect(screen.getByTestId('queue-waiting-card')).toHaveAttribute('data-waiting', '2');
+    expect(screen.getByTestId('queue-waiting-head')).toHaveTextContent('2 waiting');
+  });
+
+  it('leads with three turns and counts the rest until the list opens', () => {
+    const many = [owed('t1', 1), owed('t2', 2), owed('t3', 3), owed('t4', 4), owed('t5', 5)];
+    const closed = renderSidebar(many, true);
+    expect(queueRowIds(closed.container)).toEqual(['queue-turn-t1', 'queue-turn-t2', 'queue-turn-t3']);
+    expect(screen.getByTestId('queue-waiting-more')).toHaveTextContent('+2 more waiting');
+    closed.unmount();
+
+    const open = renderSidebar(many, true, { agentListOpen: true });
+    expect(queueRowIds(open.container)).toEqual(
+      ['queue-turn-t1', 'queue-turn-t2', 'queue-turn-t3', 'queue-turn-t4', 'queue-turn-t5'],
+    );
+    expect(screen.queryByTestId('queue-waiting-more')).toBeNull();
+  });
+
+  it('opens the oldest turn from the waiting head, and says so when nothing is owed', () => {
+    const onJumpToWaiting = vi.fn();
+    const { unmount } = renderSidebar(sessions, true, { onJumpToWaiting });
+    fireEvent.click(screen.getByTestId('queue-waiting-head'));
+    expect(onJumpToWaiting).toHaveBeenCalledOnce();
+    unmount();
+
+    renderSidebar([sessions[0], sessions[3]], true, { onJumpToWaiting });
+    expect(screen.getByTestId('queue-empty')).toHaveTextContent('Nothing owed');
+    expect(screen.getByTestId('queue-waiting-head')).toBeDisabled();
+  });
+
+  it('counts every agent in the profile on the list toggle', () => {
+    const unplaced: TestSession = { id: 'loose', label: 'loose', state: 'idle', workspaceId: 'nowhere' };
+    const later: TestSession = {
+      id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a',
+      turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
+    };
+    renderSidebar([...sessions, unplaced, later], true, { crew: [{ id: 'alder' }] });
+
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveTextContent('All agents 7');
+    expect(screen.getByTestId('queue-agents-toggle')).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.getByTestId('queue-agents-counts')).toHaveTextContent('2 working1 snoozed1 unplaced');
+  });
+
+  it('lists the working and snoozed agents under the waiting turns once opened', () => {
+    const later: TestSession = {
+      id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a',
+      turnSnoozedUntil: new Date(Date.now() + 3600_000).toISOString(),
+    };
+    const { container } = renderSidebar([...sessions, later], true, { agentListOpen: true });
+
+    expect(queueRowIds(container)).toEqual([
+      'queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled', 'queue-snoozed-later',
+    ]);
+    expect(screen.getByTestId('queue-snoozed-header')).toHaveTextContent('Snoozed1');
+  });
+
+  it('narrows the opened list by the filter, never the lead turns', () => {
+    const { container } = renderSidebar(
+      [...sessions, { id: 'other', label: 'Other thing', state: 'idle', workspaceId: 'ws-a' }],
+      true,
+      { agentListOpen: true },
+    );
+    fireEvent.change(screen.getByTestId('queue-agent-filter'), { target: { value: 'oth' } });
+
+    expect(queueRowIds(container)).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-other']);
+  });
+
+  it('marks each row with the desktop slot it lives on', () => {
+    renderSidebar(
+      [...sessions, { id: 'loose', label: 'loose', state: 'idle', workspaceId: 'nowhere' }],
+      true,
+      { agentListOpen: true },
+    );
+    const where = (id: string) => screen.getByTestId(id).querySelector('.queue-row-where');
+
+    expect(where('queue-turn-older')).toHaveTextContent('2');
+    expect(where('queue-turn-older')).toHaveAttribute('title', 'beta');
+    expect(where('queue-turn-newer')).toHaveTextContent('1');
+    expect(where('queue-settled-loose')).toHaveTextContent('—');
+    expect(where('queue-settled-loose')).toHaveClass('is-unplaced');
+  });
+
   it('offers the delegation chain without repeating the dispatcher below the title', () => {
     const onSelectSession = vi.fn();
     const linked: TestSession[] = [
@@ -85,7 +215,7 @@ describe('the queue arrangement', () => {
         dispatcher_member: 'alder',
       },
     ];
-    renderSidebar(linked, true, { onSelectSession });
+    renderSidebar(linked, true, { onSelectSession, agentListOpen: true });
 
     const child = screen.getByTestId('queue-settled-child');
     expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
@@ -105,7 +235,7 @@ describe('the queue arrangement', () => {
       dispatcher_session_id: 'ended',
       dispatcher_member: 'alder',
     }];
-    renderSidebar(linked, true);
+    renderSidebar(linked, true, { agentListOpen: true });
 
     const child = screen.getByTestId('queue-settled-child');
     expect(within(child).queryByTestId('sidebar-dispatcher')).toBeNull();
@@ -120,61 +250,21 @@ describe('the queue arrangement', () => {
       { id: 'leaf', label: 'leaf', state: 'idle', workspaceId: 'ws-b', dispatcher_session_id: 'middle' },
       { id: 'grandchild', label: 'grandchild', state: 'idle', workspaceId: 'ws-b', dispatcher_session_id: 'leaf' },
     ];
-    renderSidebar(chain, true, { selectedId: 'middle' });
+    renderSidebar(chain, true, { selectedId: 'middle', agentListOpen: true });
     const root = screen.getByTestId('queue-settled-root');
     const middle = screen.getByTestId('queue-settled-middle');
     const leaf = screen.getByTestId('queue-settled-leaf');
     const grandchild = screen.getByTestId('queue-settled-grandchild');
 
     expect(middle).toHaveClass('selected');
-    expect(root).not.toHaveClass('kin-up');
-    expect(leaf).not.toHaveClass('kin-down');
-
     fireEvent.pointerEnter(middle);
     expect(root).not.toHaveClass('kin-up');
     expect(leaf).not.toHaveClass('kin-down');
     expect(middle).not.toHaveClass('kin-up', 'kin-down');
     expect(grandchild).not.toHaveClass('kin-down');
-
     fireEvent.pointerLeave(middle);
     expect(root).not.toHaveClass('kin-up');
     expect(leaf).not.toHaveClass('kin-down');
-  });
-
-  it('renders nothing extra while the arrangement is off', () => {
-    renderSidebar(sessions, false);
-    expect(screen.queryByTestId('sidebar-queue')).toBeNull();
-  });
-
-  it('leaves the tree alone while the arrangement is off, satellites included', () => {
-    const tagged: TestSession[] = [
-      ...sessions,
-      { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
-    ];
-    renderSidebar(tagged, false);
-
-    for (const id of ['chief', 'newer', 'older', 'settled', 'shell']) {
-      expect(screen.getByTestId(`sidebar-session-${id}`)).toBeTruthy();
-    }
-  });
-
-  it('lists owed turns oldest first, then the settled rest, with the chief anchored above both', () => {
-    const { container } = renderSidebar(sessions, true);
-
-    const rows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(rows).toEqual(['queue-chief-chief', 'queue-turn-older', 'queue-turn-newer', 'queue-settled-settled']);
-  });
-
-  it('draws each agent exactly once — the bands replace the tree, they do not sit on top of it', () => {
-    const { container } = renderSidebar(sessions, true);
-
-    const tree = Array.from(container.querySelectorAll('.session-list [data-testid^="sidebar-session-"]'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(tree).toEqual([]);
-    expect(container.querySelectorAll(
-      '[data-testid="queue-turn-older"], [data-testid="sidebar-session-older"]',
-    )).toHaveLength(1);
   });
 
   it('shows the live state of a queued agent, because being queued no longer means stopped', () => {
@@ -182,24 +272,15 @@ describe('the queue arrangement', () => {
     expect(screen.getByTestId('queue-turn-older').getAttribute('data-state')).toBe('working');
   });
 
-  it('hands the agent over on click', () => {
-    const onSelectSession = vi.fn();
-    renderSidebar(sessions, true, { onSelectSession });
-
-    fireEvent.click(screen.getByTestId('queue-select-older'));
-    expect(onSelectSession).toHaveBeenCalledWith('older');
-  });
-
-  it('hands the agent over from the keyboard, so the queue is not mouse-only', () => {
+  it('hands the agent over on click and from the keyboard', () => {
     const onSelectSession = vi.fn();
     renderSidebar(sessions, true, { onSelectSession });
 
     const open = screen.getByTestId('queue-select-older');
     expect(open.tagName).toBe('BUTTON');
     expect(open.getAttribute('aria-label')).toBe('Open older');
-
-    open.focus();
-    expect(document.activeElement).toBe(open);
+    fireEvent.click(open);
+    expect(onSelectSession).toHaveBeenCalledWith('older');
   });
 
   it('settles a row without selecting it', () => {
@@ -218,35 +299,25 @@ describe('the queue arrangement', () => {
       { id: 'shell', label: 'shell', state: 'idle', workspaceId: 'ws-b', parentSessionId: 'older' },
       { id: 'orphan', label: 'orphan', state: 'idle', workspaceId: 'ws-b' },
     ];
-    const { container } = renderSidebar(withShell, true);
+    const { container } = renderSidebar(withShell, true, { agentListOpen: true });
 
-    const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(bandRows).not.toContain('queue-settled-shell');
-    expect(bandRows).toContain('queue-settled-orphan');
+    const rows = queueRowIds(container);
+    expect(rows).not.toContain('queue-settled-shell');
+    expect(rows).toContain('queue-settled-orphan');
   });
 
   it('keeps the per-session menu reachable from every band', () => {
-    renderSidebar(sessions, true);
+    renderSidebar(sessions, true, { agentListOpen: true });
     for (const id of ['chief', 'older', 'settled']) {
       expect(screen.getByTestId(`session-actions-${id}`)).toBeTruthy();
     }
   });
 
-  it('offers no settle affordance on a settled row, which has nothing to discharge', () => {
-    renderSidebar(sessions, true);
-    expect(screen.getByTestId('queue-settled-settled')).toBeTruthy();
+  it('offers settle only where a turn is owed', () => {
+    renderSidebar(sessions, true, { agentListOpen: true, onSettleTurn: vi.fn() });
+    expect(screen.getByTestId('queue-settle-older')).toBeTruthy();
     expect(screen.queryByTestId('queue-settle-settled')).toBeNull();
-  });
-
-  it('offers no settle affordance on the chief, which never queues', () => {
-    renderSidebar(sessions, true);
     expect(screen.queryByTestId('queue-settle-chief')).toBeNull();
-  });
-
-  it('says so when nothing is owed', () => {
-    renderSidebar([sessions[0], sessions[3]], true);
-    expect(screen.getByTestId('queue-empty')).toBeInTheDocument();
   });
 
   it('follows turn_owed rather than state for the collapsed rail badge', () => {
@@ -269,46 +340,177 @@ describe('the queue arrangement', () => {
   });
 });
 
+describe('the queue sidebar header', () => {
+  it('names the profile with its waiting count and switches profile', () => {
+    const onSwitchProfile = vi.fn();
+    renderSidebar(sessions, true, { profileName: 'Work', onSwitchProfile });
+    const pill = screen.getByTestId('queue-profile-pill');
+    expect(pill).toHaveTextContent('Work2');
+    fireEvent.click(pill);
+    expect(onSwitchProfile).toHaveBeenCalledOnce();
+  });
+
+  it('reaches a new agent and the commands, badged with what needs a look', () => {
+    const onNewSession = vi.fn();
+    const onOpenCommands = vi.fn();
+    renderSidebar(sessions, true, { onNewSession, onOpenCommands, commandsBadge: 12 });
+
+    fireEvent.click(screen.getByTestId('queue-new-agent'));
+    expect(onNewSession).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('queue-commands')).toHaveTextContent('9+');
+    fireEvent.click(screen.getByTestId('queue-commands'));
+    expect(onOpenCommands).toHaveBeenCalledOnce();
+  });
+});
+
+describe('the desktop strip', () => {
+  it('puts every slotted desktop on a chip, dotted where a turn waits', () => {
+    const onSelectWorkspace = vi.fn();
+    renderSidebar(sessions, true, { onSelectWorkspace, selectedWorkspaceId: 'ws-b' });
+
+    const beta = screen.getByTestId('queue-desktop-chip-2');
+    expect(beta).toHaveClass('is-current');
+    expect(beta).toHaveAttribute('data-waiting', 'true');
+    expect(beta.getAttribute('title')).toMatch(/^beta \(/);
+    expect(screen.getByTestId('queue-desktop-current')).toHaveTextContent('beta');
+    fireEvent.click(screen.getByTestId('queue-desktop-chip-1'));
+    expect(onSelectWorkspace).toHaveBeenCalledWith('ws-a');
+  });
+
+  it('gathers desktops without a shortcut behind the overview', () => {
+    const onOpenOverview = vi.fn();
+    const data = sidebarData(sessions);
+    render(
+      <Sidebar
+        {...baseProps}
+        {...data}
+        visualIndexByWorkspaceId={new Map([['ws-a', 0]])}
+        selectedWorkspaceId="ws-b"
+        onOpenOverview={onOpenOverview}
+        queue={buildQueueBands(data.workspaces)}
+      />,
+    );
+
+    expect(screen.queryByTestId('queue-desktop-chip-2')).toBeNull();
+    const extras = screen.getByTestId('queue-desktop-extras');
+    expect(extras).toHaveTextContent('+1');
+    expect(extras).toHaveClass('is-current');
+    expect(extras.querySelector('.queue-desktop-chip-waiting')).toBeTruthy();
+    expect(screen.getByTestId('queue-desktop-current')).toHaveTextContent('betano shortcut');
+
+    fireEvent.click(extras);
+    fireEvent.click(screen.getByTestId('queue-desktop-overview'));
+    expect(onOpenOverview).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes a dragged pane onto another desktop chip', () => {
+    const onWorkspaceDragEnter = vi.fn();
+    const onWorkspaceDragDrop = vi.fn();
+    renderSidebar(sessions, true, {
+      leafDrag: { sourceWorkspaceId: 'ws-a' },
+      dragHoverWorkspaceId: 'ws-b',
+      onWorkspaceDragEnter,
+      onWorkspaceDragDrop,
+    });
+
+    const source = screen.getByTestId('queue-desktop-chip-1');
+    const target = screen.getByTestId('queue-desktop-chip-2');
+    expect(source).toHaveClass('is-drop-disabled');
+    expect(target).toHaveClass('is-drop-entering');
+
+    fireEvent.pointerEnter(source);
+    fireEvent.pointerUp(source);
+    expect(onWorkspaceDragEnter).not.toHaveBeenCalled();
+    expect(onWorkspaceDragDrop).not.toHaveBeenCalled();
+
+    fireEvent.pointerEnter(target);
+    fireEvent.pointerUp(target);
+    expect(onWorkspaceDragEnter).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+    expect(onWorkspaceDragDrop).toHaveBeenCalledWith(expect.objectContaining({ id: 'ws-b' }));
+  });
+});
+
+describe('walking the queue sidebar from the keyboard', () => {
+  const focusedTestId = () => document.activeElement?.getAttribute('data-testid');
+
+  it('walks every row with the arrows and wraps at both ends', () => {
+    renderWithList(sessions, { agentListOpen: true });
+    const filter = screen.getByTestId('queue-agent-filter');
+    expect(document.activeElement).toBe(filter);
+
+    const walk = (key: string) => fireEvent.keyDown(document.activeElement!, { key });
+    walk('ArrowDown');
+    expect(focusedTestId()).toBe('queue-select-chief');
+    walk('ArrowDown');
+    walk('ArrowDown');
+    walk('ArrowDown');
+    expect(focusedTestId()).toBe('queue-select-settled');
+    walk('ArrowDown');
+    expect(focusedTestId()).toBe('queue-select-chief');
+    walk('ArrowUp');
+    expect(focusedTestId()).toBe('queue-select-settled');
+    expect(focusedQueueRowSessionId()).toBe('settled');
+  });
+
+  it('types into the filter from any row while the list is open', () => {
+    renderWithList(sessions, { agentListOpen: true });
+    screen.getByTestId('queue-select-older').focus();
+
+    fireEvent.keyDown(document.activeElement!, { key: 's' });
+    expect(document.activeElement).toBe(screen.getByTestId('queue-agent-filter'));
+    expect(screen.getByTestId('queue-agent-filter')).toHaveValue('s');
+  });
+
+  it('steps back one layer per Escape: filter, list, then the selected agent', () => {
+    const onSelectSession = vi.fn();
+    renderWithList(sessions, { agentListOpen: true, selectedId: 'newer', onSelectSession });
+    fireEvent.change(screen.getByTestId('queue-agent-filter'), { target: { value: 'set' } });
+
+    const escape = () => fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
+    escape();
+    expect(screen.getByTestId('queue-agent-filter')).toHaveValue('');
+    escape();
+    expect(screen.queryByTestId('queue-agent-list')).toBeNull();
+    expect(focusedTestId()).toBe('queue-agents-toggle');
+    expect(onSelectSession).not.toHaveBeenCalled();
+    escape();
+    expect(onSelectSession).toHaveBeenCalledWith('newer');
+  });
+
+  it('forgets the filter when the list closes', () => {
+    renderWithList(sessions, { agentListOpen: true });
+    fireEvent.change(screen.getByTestId('queue-agent-filter'), { target: { value: 'set' } });
+    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
+    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
+    expect(screen.getByTestId('queue-agent-filter')).toHaveValue('');
+  });
+
+  it('leaves chords to the shortcut layer', () => {
+    renderWithList(sessions, { agentListOpen: true });
+    screen.getByTestId('queue-select-older').focus();
+    fireEvent.keyDown(document.activeElement!, { key: 'e', metaKey: true, shiftKey: true });
+    expect(screen.getByTestId('queue-agent-filter')).toHaveValue('');
+    expect(focusedQueueRowSessionId()).toBe('older');
+  });
+
+  it('names no row when focus is elsewhere', () => {
+    renderSidebar(sessions, true);
+    expect(focusedQueueRowSessionId()).toBeNull();
+  });
+});
+
 describe('snoozing from the sidebar', () => {
-  // A real clock, because buildQueueBands compares the deadline against now.
   const inAnHour = () => new Date(Date.now() + 3600_000).toISOString();
 
-  it('offers snooze on an owed turn and on a settled row alike', () => {
+  it('offers snooze on an owed turn and on a working row alike, never on the chief', () => {
     const onOpenSnooze = vi.fn();
-    renderSidebar(sessions, true, { onOpenSnooze });
+    renderSidebar(sessions, true, { onOpenSnooze, agentListOpen: true });
 
     fireEvent.click(screen.getByTestId('queue-snooze-older'));
-    expect(onOpenSnooze).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 'older' }),
-      expect.anything(),
-    );
-
+    expect(onOpenSnooze).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'older' }), expect.anything());
     fireEvent.click(screen.getByTestId('queue-snooze-settled'));
-    expect(onOpenSnooze).toHaveBeenLastCalledWith(
-      expect.objectContaining({ id: 'settled' }),
-      expect.anything(),
-    );
-  });
-
-  it('does not offer snooze on the chief, which never queues', () => {
-    renderSidebar(sessions, true, { onOpenSnooze: vi.fn() });
+    expect(onOpenSnooze).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'settled' }), expect.anything());
     expect(screen.queryByTestId('queue-snooze-chief')).toBeNull();
-  });
-
-  it('takes a deferred agent out of the bands into its own collapsed section', () => {
-    const deferred: TestSession[] = [
-      ...sessions,
-      { id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a', turnSnoozedUntil: inAnHour() },
-    ];
-    const { container } = renderSidebar(deferred, true, { onWakeTurn: vi.fn() });
-
-    const bandRows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(bandRows).not.toContain('queue-settled-later');
-    expect(bandRows).not.toContain('queue-turn-later');
-
-    expect(screen.getByTestId('snoozed-section-header').textContent).toContain('Snoozed (1)');
-    expect(screen.queryByTestId('queue-snoozed-later')).toBeNull();
   });
 
   it('shows when each deferred agent comes back, and wakes it without selecting it', () => {
@@ -317,9 +519,8 @@ describe('snoozing from the sidebar', () => {
     const deferred: TestSession[] = [
       { id: 'later', label: 'later', state: 'idle', workspaceId: 'ws-a', turnSnoozedUntil: inAnHour() },
     ];
-    renderSidebar(deferred, true, { onWakeTurn, onSelectSession });
+    renderSidebar(deferred, true, { onWakeTurn, onSelectSession, agentListOpen: true });
 
-    fireEvent.click(screen.getByTestId('snoozed-section-header'));
     const row = screen.getByTestId('queue-snoozed-later');
     expect(row.querySelector('.queue-row-wake-at')?.textContent).toBeTruthy();
     expect(screen.queryByTestId('queue-settle-later')).toBeNull();
@@ -329,9 +530,9 @@ describe('snoozing from the sidebar', () => {
     expect(onSelectSession).not.toHaveBeenCalled();
   });
 
-  it('draws no section at all while nothing is deferred', () => {
-    renderSidebar(sessions, true, { onWakeTurn: vi.fn() });
-    expect(screen.queryByTestId('sidebar-snoozed')).toBeNull();
+  it('draws no snoozed band while nothing is deferred', () => {
+    renderSidebar(sessions, true, { onWakeTurn: vi.fn(), agentListOpen: true });
+    expect(screen.queryByTestId('queue-snoozed-header')).toBeNull();
   });
 });
 
@@ -362,18 +563,15 @@ describe('the crew in the sidebar', () => {
     return renderSidebar([...sessions, ...crewSessions], true, { crew, ...overrides });
   }
 
-  it('draws every member, awake or asleep, in the crew band', () => {
+  it('anchors every member, awake or asleep, beside the chief', () => {
     const { container } = renderCrew([
       { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel' },
     ]);
 
-    const rows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(rows.filter((id) => id?.startsWith('queue-crew-')))
+    const block = container.querySelector('[data-testid="queue-crew-block"]') as HTMLElement;
+    expect(queueRowIds(block.parentElement!).filter((id) => id?.startsWith('queue-crew-')))
       .toEqual(['queue-crew-alder', 'queue-crew-keel', 'queue-crew-trellis']);
-    const headers = Array.from(container.querySelectorAll('.queue-bands > *'))
-      .map((node) => node.textContent);
-    expect(headers.some((text) => text?.startsWith('Crew'))).toBe(true);
+    expect(within(block).getByTestId('queue-chief-chief')).toBeInTheDocument();
 
     expect(screen.getByTestId('queue-crew-keel').getAttribute('data-crew-state')).toBe('awake');
     expect(screen.getByTestId('queue-crew-alder').getAttribute('data-crew-state')).toBe('asleep');
@@ -401,12 +599,10 @@ describe('the crew in the sidebar', () => {
       { id: 'sess-keel', label: 'keel of the day', state: 'working', workspaceId: 'ws-a', crewMember: 'keel', turnOwed: true, turnOpenedAt: '2026-07-26T08:00:00Z' },
     ]);
 
-    const rows = Array.from(container.querySelectorAll('.queue-bands .queue-row'))
-      .map((row) => row.getAttribute('data-testid'));
-    expect(rows.filter((id) => id?.includes('keel'))).toEqual(['queue-crew-keel']);
+    expect(queueRowIds(container).filter((id) => id?.includes('keel'))).toEqual(['queue-crew-keel']);
   });
 
-  it('moves an opted-in awake member into the queue and keeps sleeping members in the crew band', () => {
+  it('adds an opted-in member owing a turn to the waiting turns and keeps its crew row', () => {
     const crewSession: TestSession = {
       id: 'sess-keel',
       label: 'keel of the day',
@@ -427,7 +623,7 @@ describe('the crew in the sidebar', () => {
     );
 
     expect(screen.getByTestId('queue-turn-sess-keel')).toBeInTheDocument();
-    expect(screen.queryByTestId('queue-crew-keel')).toBeNull();
+    expect(screen.getByTestId('queue-crew-keel')).toHaveAttribute('data-crew-state', 'awake');
     expect(screen.getByTestId('queue-crew-alder')).toHaveAttribute('data-crew-state', 'asleep');
   });
 

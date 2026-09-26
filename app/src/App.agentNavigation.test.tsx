@@ -11,6 +11,8 @@ const mockUseDaemonStore = vi.fn();
 const mockUseDaemonSocket = vi.fn();
 const mockUseKeyboardShortcuts = vi.fn();
 const mockUseUiAutomationBridge = vi.fn();
+const mockSidebarProps = vi.fn();
+const mockSendSettleTurn = vi.fn();
 
 const { mockSetActiveSession } = vi.hoisted(() => ({
   mockSetActiveSession: vi.fn(),
@@ -39,7 +41,10 @@ vi.mock('./components/Sidebar', async () => {
     PRsIcon: () => null,
     NotebookIcon: () => null,
     MarkdownIcon: () => null,
-    Sidebar: () => <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />,
+    Sidebar: (props: unknown) => {
+      mockSidebarProps(props);
+      return <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />;
+    },
   };
 });
 
@@ -221,6 +226,7 @@ describe('agent navigation', () => {
       warnings: [],
       clearWarnings: fn,
       sendSetTerminalTheme: fn,
+      sendSettleTurn: mockSendSettleTurn,
     });
   });
 
@@ -347,6 +353,86 @@ describe('agent navigation', () => {
     broadcast();
 
     expect(useSessionStore.getState().activeSessionId).toBe('s1');
+  });
+
+  describe('acting on the queue sidebar row that holds focus', () => {
+    function focusQueueRow(sessionId: string) {
+      const sidebar = document.createElement('div');
+      sidebar.className = 'queue-sidebar';
+      sidebar.innerHTML = `<div class="queue-row" data-session-id="${sessionId}"><button class="queue-row-select"></button></div>`;
+      document.body.append(sidebar);
+      sidebar.querySelector('button')!.focus();
+      return () => sidebar.remove();
+    }
+
+    function activeOnS2() {
+      render(<App />);
+      broadcast();
+      act(() => { mockSetActiveSession('s2'); });
+      broadcast();
+    }
+
+    it('settles the focused row rather than the active agent', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+        expect(mockSendSettleTurn.mock.calls).toEqual([['s1']]);
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('settles nothing when the focused row owes no turn', () => {
+      turnOwed.s2 = true;
+      turnOwed.s1 = false;
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+        expect(mockSendSettleTurn).not.toHaveBeenCalled();
+      } finally {
+        unfocus();
+      }
+    });
+
+    it('settles the active agent when no row holds focus', () => {
+      turnOwed.s2 = true;
+      activeOnS2();
+      act(() => { shortcutHandlers<{ onSettleTurn?: () => void }>().onSettleTurn?.(); });
+      expect(mockSendSettleTurn.mock.calls).toEqual([['s2']]);
+    });
+
+    it('snoozes the focused row rather than the active agent', () => {
+      activeOnS2();
+      const unfocus = focusQueueRow('s1');
+      try {
+        act(() => { shortcutHandlers<{ onSnoozeTurn?: () => void }>().onSnoozeTurn?.(); });
+        expect(screen.getByRole('menu', { name: 'Snooze s1' })).toBeInTheDocument();
+      } finally {
+        unfocus();
+      }
+    });
+  });
+
+  it('toggles the agent list in the open queue sidebar, and opens the palette on agents otherwise', () => {
+    render(<App />);
+    broadcast();
+    const listOpen = () => (mockSidebarProps.mock.lastCall![0] as { agentListOpen: boolean }).agentListOpen;
+    const showAgentList = () => act(() => { shortcutHandlers<{ onShowAgentList: () => void }>().onShowAgentList(); });
+
+    expect(listOpen()).toBe(false);
+    showAgentList();
+    expect(listOpen()).toBe(true);
+    showAgentList();
+    expect(listOpen()).toBe(false);
+    expect(screen.queryByTestId('palette-agent-s1')).toBeNull();
+
+    act(() => { socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'false' }); });
+    showAgentList();
+    expect(listOpen()).toBe(false);
+    expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
   });
 
   it('resumes history from dashboard and grid, then traverses normally in the session view', () => {

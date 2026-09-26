@@ -51,6 +51,9 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setSidebarState((state) => ({ ...state, collapsed: !state.collapsed }));
   }, []);
 
+  const [agentListOpen, setAgentListOpen] = useState(false);
+  const toggleAgentList = useCallback(() => setAgentListOpen((open) => !open), []);
+
   const openDockPanels = dockState.openPanels;
   const dockPanelStack = dockState.stack;
   const workflowRunPanelOpen = openDockPanels.workflowRun;
@@ -120,6 +123,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     sidebarCollapsed,
     setSidebarCollapsed,
     toggleSidebarCollapse,
+    agentListOpen,
+    toggleAgentList,
     dockPanelStack,
     workflowRunPanelOpen,
     attentionPanelOpen,

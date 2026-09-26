@@ -2241,8 +2241,8 @@ export function useUiAutomationBridge({
           };
         };
         const chiefRow = band?.querySelector('[data-testid^="queue-chief-"]');
-        const snoozedSection = document.querySelector('[data-testid="sidebar-snoozed"]');
-        const snoozedHeader = snoozedSection?.querySelector('[data-testid="snoozed-section-header"]');
+        const agentListToggle = band?.querySelector('[data-testid="queue-agents-toggle"]');
+        const snoozedHeader = band?.querySelector('[data-testid="queue-snoozed-header"]');
         const automationGroups = Array.from(document.querySelectorAll('[data-automation-id]'));
         return {
           present: Boolean(band),
@@ -2257,11 +2257,15 @@ export function useUiAutomationBridge({
               member: row.getAttribute('data-crew-member') || '',
               state: row.getAttribute('data-crew-state') || '',
             })),
+          agentList: {
+            present: Boolean(agentListToggle),
+            expanded: agentListToggle?.getAttribute('aria-expanded') === 'true',
+          },
           snoozed: {
-            present: Boolean(snoozedSection),
-            header: snoozedHeader?.textContent?.trim() || '',
-            expanded: snoozedHeader?.getAttribute('aria-expanded') === 'true',
-            rows: Array.from(snoozedSection?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
+            present: Boolean(snoozedHeader),
+            count: Number(snoozedHeader?.querySelector('.queue-band-count')?.textContent || 0),
+            rows: Array.from(band?.querySelectorAll('[data-testid^="queue-snoozed-"]') || [])
+              .filter((row) => row !== snoozedHeader)
               .map((row) => readRow(row, 'queue-snoozed-')),
           },
           automations: automationGroups.map((group) => ({

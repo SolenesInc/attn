@@ -60,7 +60,13 @@ function resolveAttnBin() {
 }
 
 async function queueState(client) {
-  return client.request('queue_get_state');
+  const queue = await client.request('queue_get_state');
+  if (!queue.agentList?.present || queue.agentList.expanded) return queue;
+  await client.request('dom_click', { selector: '[data-testid="queue-agents-toggle"]' });
+  return pollFor(async () => {
+    const current = await client.request('queue_get_state');
+    return current.agentList.expanded ? current : null;
+  }, 'the agent list to open', 10_000);
 }
 
 function turnIds(queue) {
@@ -780,23 +786,10 @@ async function main() {
         !settledIds(queue).includes(alpha.sessionId),
         `a deferred agent is not in Settled either: ${JSON.stringify(settledIds(queue))}`,
       );
-      runner.assert(queue.snoozed.present, 'the Snoozed section is drawn once something is deferred');
-      runner.assert(
-        queue.snoozed.header.includes('(1)'),
-        `the section counts what is in it: ${queue.snoozed.header}`,
-      );
-      runner.assert(
-        !queue.snoozed.expanded && queue.snoozed.rows.length === 0,
-        'the section ships collapsed — a snooze surfaces itself when it wakes',
-      );
-
-      await client.request('dom_click', { selector: '[data-testid="snoozed-section-header"]' });
-      const expanded = await pollFor(async () => {
-        const current = await queueState(client);
-        return current.snoozed.expanded ? current : null;
-      }, 'the Snoozed section to expand', 10_000);
-      const row = expanded.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
-      runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(expanded))}`);
+      runner.assert(queue.snoozed.present, 'the Snoozed band is drawn once something is deferred');
+      runner.assert(queue.snoozed.count === 1, `the band counts what is in it: ${JSON.stringify(queue.snoozed)}`);
+      const row = queue.snoozed.rows.find((entry) => entry.id === alpha.sessionId);
+      runner.assert(row, `alpha is the deferred row: ${JSON.stringify(snoozedIds(queue))}`);
       runner.assert(row.wake, `the row says when it comes back: ${JSON.stringify(row)}`);
       runner.log('deferred row', row);
 
@@ -899,7 +892,7 @@ async function main() {
         60_000,
       );
       runner.assert(
-        snoozedIds(queue).includes(alpha.sessionId) || queue.snoozed.header.includes('(1)'),
+        snoozedIds(queue).includes(alpha.sessionId),
         `alpha is still parked after the restart: ${JSON.stringify(queue.snoozed)}`,
       );
       runner.assert(

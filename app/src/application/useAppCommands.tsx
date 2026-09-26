@@ -12,14 +12,18 @@ import { useSessionStore } from '../store/sessions';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
   isAutoSettleEnabled,
+  isCrewQueueEnabled,
   isQueueModeEnabled,
 } from '../utils/queueBands';
+import { areSidebarHarnessLogosEnabled } from '../utils/sidebarHarnessLogos';
 import {
+  useAppAppearanceContext,
   useAppDiagnosticsContext,
   useAppInputs,
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
+  useCrewPanelContext,
   useDesktopNavigationContext,
   useDesktopTilesContext,
   useNavigationContext,
@@ -53,7 +57,11 @@ export function useAppCommands(): PaletteCommand[] {
     setUsagePopoverRequest,
   } = useAppPanelsContext();
   const { settings } = useAppInputs();
+  const { handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
+  const { handleOpenCrew } = useCrewPanelContext();
+  const { toggleGridMode } = useNavigationContext();
   const {
+    handleToggleCrewQueue,
     handleToggleQueueMode,
     activeGroupForCommands,
     activeSessionForCommands,
@@ -366,10 +374,45 @@ export function useAppCommands(): PaletteCommand[] {
         title: isQueueModeEnabled(settings)
           ? 'Turn off the agent queue'
           : 'Turn on the agent queue',
-        description: 'Show the turns you owe above the workspace tree',
+        description: 'Swap the desktop tree for the queue sidebar: the turns you owe, your crew and your runs',
         keywords: ['queue', 'turn', 'settle', 'attention', 'sidebar'],
         icon: <AttentionActionIcon />,
         run: handleToggleQueueMode,
+      },
+      {
+        id: 'toggle-crew-queue',
+        title: isCrewQueueEnabled(settings) ? 'Take the crew out of the queue' : 'Put the crew in the queue',
+        description: 'Whether a crew member owing a turn also waits in the queue',
+        keywords: ['crew', 'queue', 'turn', 'member', 'sidebar'],
+        icon: <AttentionActionIcon />,
+        run: handleToggleCrewQueue,
+      },
+      {
+        id: 'manage-crew',
+        title: 'Manage crew',
+        description: 'Wake, charter and hand off to crew members',
+        keywords: ['crew', 'member', 'charter', 'wake', 'sleep'],
+        icon: <ContextActionIcon />,
+        run: () => handleOpenCrew(undefined, document.body),
+      },
+      {
+        id: 'toggle-harness-logos',
+        title: areSidebarHarnessLogosEnabled(settings)
+          ? 'Hide harness logos in the sidebar'
+          : 'Show harness logos in the sidebar',
+        description: 'The Claude, Codex, Copilot or Pi mark beside each agent',
+        keywords: ['harness', 'logo', 'icon', 'sidebar', 'claude', 'codex'],
+        icon: <ContextActionIcon />,
+        run: handleToggleSidebarHarnessLogos,
+      },
+      {
+        id: 'toggle-grid-view',
+        title: 'Toggle grid view',
+        description: 'Every agent on screen at once',
+        keywords: ['grid', 'view', 'tiles', 'all'],
+        icon: <ContextActionIcon />,
+        shortcut: [shortcutTokens('view.toggleGrid')],
+        run: toggleGridMode,
       },
       {
         id: 'toggle-auto-settle',
@@ -420,6 +463,10 @@ export function useAppCommands(): PaletteCommand[] {
       gardenMode,
       settings,
       handleToggleQueueMode,
+      handleToggleCrewQueue,
+      handleOpenCrew,
+      handleToggleSidebarHarnessLogos,
+      toggleGridMode,
       sendSetSetting,
       handleCreateDiagnosticReport,
     ],

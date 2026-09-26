@@ -10,7 +10,7 @@ import { type TileContentState } from '../types/workspace';
 import { type QueueBands as QueueBandsModel } from '../utils/queueBands';
 import type { WorkspaceSelectionStyle } from '../utils/workspaceSelectionStyle';
 import type { WorkspaceWithSessions } from '../utils/workspaceViewModels';
-import { type CrewMemberView } from './QueueBands';
+import { type CrewMemberView } from './QueueRows';
 import type { GridLayout } from './grid/gridLayout';
 
 export interface LocalSession {
@@ -33,6 +33,7 @@ export interface LocalSession {
   state_reason?: string;
   turnOwed?: boolean;
   turnOpenedAt?: string;
+  turnSnoozedUntil?: string;
   crewMember?: string;
   dispatcher_session_id?: string;
   dispatcher_member?: string;
@@ -74,6 +75,14 @@ export interface SidebarProps {
   onOpenCrewMemberDetails?: (member: string, returnFocus: HTMLElement) => void;
   onSettleTurn?: (id: string) => void;
   onWalkRuns?: () => void;
+  onJumpToWaiting?: () => void;
+  profileName?: string;
+  onSwitchProfile?: () => void;
+  onOpenCommands?: () => void;
+  commandsBadge?: number;
+  agentListOpen?: boolean;
+  onToggleAgentList?: () => void;
+  onOpenOverview?: () => void;
   onOpenSnooze?: (session: { id: string; label: string }, event: ReactMouseEvent) => void;
   onWakeTurn?: (id: string) => void;
   /** The auto-settle countdown lives on the tile, so the sidebar draws it only

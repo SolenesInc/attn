@@ -12,6 +12,7 @@ import {
   useAppGridContext,
   useAppInputs,
   useAppPanelsContext,
+  useAppShell,
   useAttentionQueueContext,
   useChiefOfStaffContext,
   useCrewPanelContext,
@@ -38,6 +39,7 @@ export function AppSidebar() {
     handleReloadTile,
     goToDashboard,
     handleNextRun,
+    handleJumpToWaiting,
     view,
   } = useNavigationContext();
   const desktops = useProfilesStore((state) => state.desktops);
@@ -57,13 +59,19 @@ export function AppSidebar() {
     sendWakeTurn,
     sendTriggerNudge,
   } = useDaemonApi();
-  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse } = useAppPanelsContext();
+  const { sidebarCollapsed, openNotificationsPanel, toggleSidebarCollapse, agentListOpen, toggleAgentList } =
+    useAppPanelsContext();
+  const { setProfileSwitcherOpen, setDesktopOverviewOpen } = useDesktopNavigationContext();
+  const { handleOpenPalette, attentionCount } = useAppShell();
   const { keybindings, handleToggleSidebarHarnessLogos } = useAppAppearanceContext();
-  const { criticalNotifications, settings } = useAppInputs();
+  const { criticalNotifications, settings, notificationsUnread } = useAppInputs();
   const { gridLayout, handleSelectGridLayout } = useAppGridContext();
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
   const allCrew = useDaemonStore((state) => state.crew);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const profileName = useProfilesStore(
+    (state) => state.profiles.find((profile) => profile.id === state.selectedProfileId)?.name,
+  );
   const crew = useMemo(
     () => allCrew.filter((member) => member.profile_id === selectedProfileId),
     [allCrew, selectedProfileId],
@@ -147,6 +155,14 @@ export function AppSidebar() {
       queue={queueBands}
       onSettleTurn={sendSettleTurn}
       onWalkRuns={handleNextRun}
+      onJumpToWaiting={handleJumpToWaiting}
+      profileName={profileName}
+      onSwitchProfile={() => setProfileSwitcherOpen(true)}
+      onOpenCommands={() => handleOpenPalette('commands')}
+      commandsBadge={notificationsUnread + attentionCount}
+      agentListOpen={agentListOpen}
+      onToggleAgentList={toggleAgentList}
+      onOpenOverview={() => setDesktopOverviewOpen(true)}
       onOpenSnooze={openSnoozeMenu}
       onWakeTurn={sendWakeTurn}
       onScreenSessionIds={onScreenSessionIds}
