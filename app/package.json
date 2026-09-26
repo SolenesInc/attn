@@ -50,6 +50,7 @@
     "real-app:scenario-linux-shortcuts": "node scripts/real-app-harness/scenario-linux-shortcuts.mjs",
     "real-app:scenario-workspace-switching": "node scripts/real-app-harness/scenario-workspace-switching.mjs",
     "real-app:scenario-desktop-switching": "node scripts/real-app-harness/scenario-desktop-switching.mjs",
+    "real-app:scenario-desktop-migration": "node scripts/real-app-harness/scenario-desktop-migration.mjs",
     "real-app:scenario-workspace-close-one-session-keeps-selection": "node scripts/real-app-harness/scenario-workspace-close-one-session-keeps-selection.mjs",
     "real-app:scenario-close-pane-nonblocking": "node scripts/real-app-harness/scenario-close-pane-nonblocking.mjs",
     "real-app:scenario-agent-close": "node scripts/real-app-harness/scenario-agent-close.mjs",

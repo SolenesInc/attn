@@ -42,6 +42,7 @@
 - Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
+- Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.
 - Focus mode: one workspace pane or tile occupies the shell until the user returns to the split.
 
 ## Garden and crew

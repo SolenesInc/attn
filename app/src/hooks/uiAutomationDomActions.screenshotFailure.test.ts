@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { toSvg } from 'html-to-image';
-import { describeScreenshotFailure, isScreenshotNode } from './useUiAutomationBridge';
+import { describeScreenshotFailure, isScreenshotNode } from './uiAutomationDomActions';
 
 vi.mock('html-to-image', () => ({ toPng: vi.fn(), toSvg: vi.fn() }));
 vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));

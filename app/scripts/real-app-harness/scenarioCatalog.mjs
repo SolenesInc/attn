@@ -28,6 +28,12 @@ export const scenarioCatalog = [
     command: ['pnpm', 'run', 'real-app:scenario-desktop-switching'],
   },
   {
+    id: 'desktop-migration',
+    runnerId: 'DESKTOP-MIGRATION',
+    label: 'Workspace migration picker: keyboard, native pointer drop, second client, restart, reopen, narrow window, finish',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-migration'],
+  },
+  {
     id: 'workspace-switching',
     runnerId: 'WORKSPACE-SWITCHING',
     label: 'Workspace switching',

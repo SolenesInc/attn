@@ -1,0 +1,3 @@
+kind: added
+area: app
+change: After the upgrade, attn opens a one-time screen that asks you to confirm where each old workspace goes before anything else loads. Keep each one on its desktop, keep it as an extra desktop, or merge it into another desktop by dragging, with the keyboard (K, 1–9, M) or through the one-time suggestion; ⌘Z undoes. Every attn window edits the same saved draft, quitting resumes where you left off, and either window can finish.
