@@ -73,6 +73,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 		}
 	}
 	s.Start()
+	app := s.App()
 
 	notes, specs := s.Path("notes"), s.Path("specs")
 	for _, dir := range []string{notes, specs} {
@@ -112,7 +113,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Trellis is already awake in session "+day[:8]+" — nothing was launched.")
 
 	trellis.Exit(0)
-	testworld.AwaitSession(s.App(), day, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+	testworld.AwaitSession(app, day, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
 	requireStdout(t, s.Attn("crew", "wake", "trellis"), "Previous session "+day[:8]+" had exited; its binding was released.\n", "Trellis is awake in session ")
 	next := protocol.Deref(crewRoster(t, s)["trellis"].BindingSession)
 	if next == day || next == "" {
@@ -132,7 +133,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	} else {
 		codex.Exit(0)
 	}
-	testworld.AwaitSession(s.App(), woken.SessionID, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
+	testworld.AwaitSession(app, woken.SessionID, func(x protocol.Session) bool { return protocol.Deref(x.StateReason) == "process_exited" })
 
 	restarts := make([]protocol.CrewRestartResult, 2)
 	for i := range restarts {
@@ -168,7 +169,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	keel := s.Launched(successor)
 	keel.Prompted()
 	keel.Reply("Read the charter. <!-- attn:state=idle -->")
-	testworld.AwaitSession(s.App(), successor, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, successor, func(x protocol.Session) bool { return x.State == protocol.SessionStateIdle })
 	requireStdout(t, s.Attn("crew", "sleep", "keel"), "Asked Keel in session "+successor[:8]+" to write its handoff and file it with `attn handoff --sleep`.")
 
 	unknown := s.Attn("crew", "restart", "nobody")
