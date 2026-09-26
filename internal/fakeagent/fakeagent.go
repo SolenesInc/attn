@@ -73,6 +73,11 @@ type textParams struct {
 	Text string `json:"text"`
 }
 
+type promptedResult struct {
+	Text           string `json:"text"`
+	ConversationID string `json:"conversation_id"`
+}
+
 type exitParams struct {
 	Code int `json:"code"`
 }
@@ -158,8 +163,9 @@ type conversation interface {
 }
 
 type promptSubmission struct {
-	text string
-	err  error
+	text         string
+	conversation string
+	err          error
 }
 
 type agent struct {
@@ -210,15 +216,16 @@ func serve(cfg config, style composer, conv conversation) int {
 func (a *agent) submit(prompt string) {
 	a.turn.Lock()
 	err := a.conv.submit(prompt)
+	conversation := a.conv.launch().ConversationID
 	a.turn.Unlock()
-	a.prompts <- promptSubmission{text: prompt, err: err}
+	a.prompts <- promptSubmission{text: prompt, conversation: conversation, err: err}
 }
 
 func (a *agent) handle(_ *rpcPeer, method string, params json.RawMessage) (any, error) {
 	switch method {
 	case methodPrompted:
 		submitted := <-a.prompts
-		return textParams{Text: submitted.text}, submitted.err
+		return promptedResult{Text: submitted.text, ConversationID: submitted.conversation}, submitted.err
 	case methodReply, methodReplyLate:
 		var p textParams
 		if err := json.Unmarshal(params, &p); err != nil {

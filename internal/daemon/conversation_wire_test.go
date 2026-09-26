@@ -30,14 +30,19 @@ func TestARespawnResumesTheConversationClaudeStartedWithClear(t *testing.T) {
 	first.Reply("Added. <!-- attn:state=idle -->")
 	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
 
+	launched := first.ConversationID
 	app.TypeLine(session, "/clear")
 	if got := first.Prompted(); got != "/clear" {
 		t.Fatalf("claude received %q", got)
 	}
+	cleared := first.ConversationID
+	if cleared == launched {
+		t.Fatalf("/clear kept claude in conversation %s", launched)
+	}
 
 	resumed := respawn(w, app, fakeagent.Claude, session, cwd)
-	if !resumed.Resumed || resumed.ConversationID == first.ConversationID {
-		t.Fatalf("respawn ran claude %q; want it to resume the conversation /clear started, not %s", resumed.Argv, first.ConversationID)
+	if !resumed.Resumed || resumed.ConversationID != cleared {
+		t.Fatalf("respawn ran claude %q; want it to resume %s, the conversation /clear started", resumed.Argv, cleared)
 	}
 }
 

@@ -86,7 +86,8 @@ with a new daemon over the same data. `w.App()` connects as the app and
 test spawns sessions, as in `newWorld(t, fakeagent.Claude, ...)`: `w.Spawn`
 starts one and `w.Launched` returns the `fakeagent.Run` for its agent. The test
 plays the model behind that agent.
-`Prompted` returns the prompt the agent received, `Reply` ends the turn with
+`Prompted` returns the prompt the agent received and moves `ConversationID` to
+the conversation the agent is in, which `/clear` replaces; `Reply` ends the turn with
 text that carries the `<!-- attn:state=... -->` marker, `ReplyAfterStop` writes
 that reply only after the Stop hook, and `Exit` quits with an exit code. Each
 call returns once the daemon holds the evidence, so the next line can await
