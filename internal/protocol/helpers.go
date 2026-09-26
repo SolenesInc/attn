@@ -36,7 +36,7 @@ func NewTimestamp(t time.Time) Timestamp {
 	if t.IsZero() {
 		return ""
 	}
-	return Timestamp(t.Format(time.RFC3339Nano))
+	return Timestamp(t.UTC().Format(time.RFC3339Nano))
 }
 
 func TimestampNow() Timestamp {

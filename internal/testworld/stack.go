@@ -59,8 +59,6 @@ func NewStack(t *testing.T, opts ...StackOption) *Stack {
 	}
 	s.DialUnix = func() (net.Conn, error) { return net.Dial("unix", s.Socket) }
 	s.Vars = append(s.Vars,
-		"ATTN_HARNESS_DATA_DIR="+s.Dir,
-		"ATTN_HARNESS_NOTEBOOK_ROOT="+filepath.Join(s.Dir, "notebook"),
 		"ATTN_WS_PORT="+port,
 		"ATTN_PTY_SKIP_STARTUP_PROBE=1",
 		"ATTN_MOCK_GH_URL=http://127.0.0.1:1",
