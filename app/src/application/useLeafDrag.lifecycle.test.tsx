@@ -25,6 +25,7 @@ function setup() {
   };
   const handleSelectDesktop = vi.fn();
   const showError = vi.fn();
+  const currentDesktopIdRef = { current: 'd1' as string | null };
   const wrapper = ({ children }: { children: ReactNode }) => (
     <StrictMode>
       <DaemonApiProvider api={createMockDaemonApi(api)}>{children}</DaemonApiProvider>
@@ -33,14 +34,14 @@ function setup() {
   const rendered = renderHook(
     () =>
       useLeafDrag({
-        currentDesktopIdRef: { current: 'd1' },
+        currentDesktopIdRef,
         getDesktopLeafDropSnapshot: () => null,
         handleSelectDesktop,
         showError,
       }),
     { wrapper },
   );
-  return { ...rendered, api, handleSelectDesktop, showError };
+  return { ...rendered, api, handleSelectDesktop, showError, currentDesktopIdRef };
 }
 
 describe('leaf drag lifecycle', () => {
@@ -140,6 +141,31 @@ describe('dropping a leaf on a sidebar desktop', () => {
       expect.objectContaining({ targetDesktopId: 'd-new', expectedTargetRevision: 1, expectedSourceRevision: 4 }),
     );
     expect(api.sendDesktopSetCurrent).toHaveBeenCalledWith(TEST_PROFILE_ID, 'd-new');
+  });
+
+  it('moves within the desktop a surface drop lands on', async () => {
+    const { result, api } = setup();
+    act(() => result.current.handleLeafDragStart('pane-s2'));
+
+    await act(async () => result.current.handleSurfaceLeafDrop('d1', 'pane-s2', 'pane-s1', 'top', 0.5));
+
+    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith({
+      sourceDesktopId: 'd1', targetDesktopId: 'd1', leafId: 'pane-s2', anchorId: 'pane-s1', edge: 'top',
+      leafShare: 0.5, expectedSourceRevision: 4, expectedTargetRevision: 4,
+    });
+  });
+
+  it('moves across desktops when hovering switched to another desktop before the surface drop', async () => {
+    const { result, api, currentDesktopIdRef } = setup();
+    act(() => result.current.handleLeafDragStart('pane-s2'));
+    currentDesktopIdRef.current = 'd2';
+
+    await act(async () => result.current.handleSurfaceLeafDrop('d1', 'pane-s2', 'pane-s3', 'right', 0.4));
+
+    expect(api.sendDesktopMoveLeaf).toHaveBeenCalledWith({
+      sourceDesktopId: 'd1', targetDesktopId: 'd2', leafId: 'pane-s2', anchorId: 'pane-s3', edge: 'right',
+      leafShare: 0.4, expectedSourceRevision: 4, expectedTargetRevision: 9,
+    });
   });
 
   it('names a failed move', async () => {

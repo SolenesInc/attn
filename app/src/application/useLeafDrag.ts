@@ -156,6 +156,33 @@ export function useLeafDrag({
     [sendDesktopMoveLeaf],
   );
 
+  const handleSurfaceLeafDrop = useCallback(
+    (
+      sourceDesktopId: string,
+      leafId: string,
+      anchorId: string | undefined,
+      edge: 'left' | 'right' | 'top' | 'bottom',
+      leafShare: number | undefined,
+    ) => {
+      const targetDesktopId = currentDesktopIdRef.current ?? sourceDesktopId;
+      void withFreshDesktopRevisions([...new Set([sourceDesktopId, targetDesktopId])], (revisionOf) =>
+        sendDesktopMoveLeaf({
+          sourceDesktopId,
+          targetDesktopId,
+          leafId,
+          anchorId,
+          edge,
+          leafShare,
+          expectedSourceRevision: revisionOf(sourceDesktopId),
+          expectedTargetRevision: revisionOf(targetDesktopId),
+        }),
+      ).catch((error) => {
+        showError(`Could not move that pane: ${failureMessage(error)}`);
+      });
+    },
+    [currentDesktopIdRef, sendDesktopMoveLeaf, showError],
+  );
+
   const handleDesktopDragDrop = useCallback(
     (desktop: { id: string }) => {
       const drag = leafDesktopDragRef.current;
@@ -199,6 +226,7 @@ export function useLeafDrag({
     handleLeafDragGhostMove,
     handleLeafDragPreview,
     handleLeafDragEnd,
+    handleSurfaceLeafDrop,
     handleDesktopDragEnter,
     handleDesktopDragLeave,
     handleDesktopDragDrop,

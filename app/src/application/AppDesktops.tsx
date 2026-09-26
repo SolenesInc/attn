@@ -70,7 +70,6 @@ export function AppDesktops() {
     sendDesktopSetActivePane,
     sendDesktopSetSplitRatio,
     sendDesktopUpdateTile,
-    sendDesktopMoveLeaf,
     desktopTileContents,
   } = useDaemonApi();
   const { createSplitSession } = useSessionLaunchContext();
@@ -78,6 +77,7 @@ export function AppDesktops() {
   const {
     getActiveLeafDropSnapshot,
     handleLeafDragStart,
+    handleSurfaceLeafDrop,
     handleLeafDragGhostMove,
     handleLeafDragPreview,
     handleLeafDragEnd,
@@ -209,20 +209,7 @@ export function AppDesktops() {
               }),
             )
           }
-          onMoveLeaf={(leafId, anchorId, edge, ratio) => {
-            void withFreshDesktopRevisions([desktop.id], (revisionOf) =>
-              sendDesktopMoveLeaf({
-                sourceDesktopId: desktop.id,
-                targetDesktopId: desktop.id,
-                leafId,
-                anchorId,
-                edge,
-                leafShare: ratio,
-                expectedSourceRevision: revisionOf(desktop.id),
-                expectedTargetRevision: revisionOf(desktop.id),
-              }),
-            ).catch((error) => showError(`Could not move that pane: ${failureMessage(error)}`));
-          }}
+          onMoveLeaf={(leafId, anchorId, edge, ratio) => handleSurfaceLeafDrop(desktop.id, leafId, anchorId, edge, ratio)}
           getActiveLeafDropSnapshot={getActiveLeafDropSnapshot}
           onLeafDragStart={handleLeafDragStart}
           onLeafDragGhostMove={handleLeafDragGhostMove}
