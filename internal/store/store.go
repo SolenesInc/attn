@@ -598,31 +598,6 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	return count > 0
 }
 
-func (s *Store) RemoveSessionsInDirectory(directory string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		for id, session := range s.sessions {
-			if session.Directory == directory {
-				delete(s.sessions, id)
-			}
-		}
-		return
-	}
-
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM "+table+
-			" WHERE session_id IN (SELECT id FROM sessions WHERE directory = ?)", directory); err != nil {
-			log.Printf("[store] RemoveSessionsInDirectory: failed to drop %s for directory %s: %v", table, directory, err)
-		}
-	}
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE directory = ?`, directory)
-	if err != nil {
-		log.Printf("[store] RemoveSessionsInDirectory: failed for directory %s: %v", directory, err)
-	}
-}
-
 func (s *Store) UpdateState(id, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
