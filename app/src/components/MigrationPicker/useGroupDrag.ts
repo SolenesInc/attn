@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { Box, DropEdge } from './migrationDraft';
+import { useLatest } from './useLatest';
 
 const DRAG_ACTIVATION_PX = 4;
 
@@ -37,8 +38,7 @@ export function useGroupDrag({ resolveTarget, onDrop }: Options) {
   const [drag, setDrag] = useState<GroupDragView | null>(null);
   const gestureRef = useRef<Gesture | null>(null);
   const suppressClickRef = useRef(false);
-  const optionsRef = useRef({ resolveTarget, onDrop });
-  optionsRef.current = { resolveTarget, onDrop };
+  const optionsRef = useLatest({ resolveTarget, onDrop });
 
   const cancel = useCallback(() => {
     const gesture = gestureRef.current;
@@ -108,7 +108,7 @@ export function useGroupDrag({ resolveTarget, onDrop }: Options) {
       document.removeEventListener('keydown', onKey, true);
       window.removeEventListener('blur', cancel);
     };
-  }, [cancel]);
+  }, [cancel, optionsRef]);
 
   const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;

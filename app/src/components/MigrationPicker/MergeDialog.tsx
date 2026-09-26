@@ -46,7 +46,7 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
     confirmRef.current?.focus();
   }, []);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const onKeyDown = (event: KeyboardEvent<HTMLDialogElement>) => {
     const tag = (event.target as HTMLElement).tagName;
     if (tag === 'INPUT' || tag === 'SELECT') return;
     const next = EDGE_KEYS[event.key];
@@ -58,9 +58,9 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
 
   return (
     <div className="mp-scrim">
-      <div
+      <dialog
+        open
         className="mp-dialog"
-        role="dialog"
         aria-modal="true"
         aria-labelledby="mp-merge-title"
         onKeyDown={onKeyDown}
@@ -105,17 +105,18 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
           <div className="mp-join-preview">
             <DraftPreview tree={preview} groupById={groupById} highlightId={movingId} />
           </div>
-          <label className="mp-join-ratio">
-            <span>Merged workspace share</span>
+          <div className="mp-join-ratio">
+            <label htmlFor="mp-merge-share">Merged workspace share</label>
             <input
+              id="mp-merge-share"
               type="range"
               min={1}
               max={99}
               value={percent}
               onChange={(event) => setPercent(Number(event.target.value))}
             />
-            <output>{percent}%</output>
-          </label>
+            <output htmlFor="mp-merge-share">{percent}%</output>
+          </div>
           <p className="mp-join-hint">
             The outline marks the workspace you’re merging. Arrow keys choose a side; Enter merges it. Dividers stay adjustable after migration.
           </p>
@@ -131,7 +132,7 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
             </button>
           </div>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

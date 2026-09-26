@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useDaemonApi } from '../../contexts/DaemonApiContext';
 import { useMigrationAutomationBridge } from '../../hooks/useMigrationAutomationBridge';
 import { useProfilesStore } from '../../store/profiles';
 import { MigrationPhase } from '../../types/generated';
@@ -27,7 +28,16 @@ function MigrationDone({ profileName, onContinue }: { profileName: string; onCon
   );
 }
 
+function Connecting({ connectionError }: { connectionError: string | null }) {
+  return (
+    <main className="mp-shell">
+      <div className="mp-loading" role="status">{connectionError ?? 'Connecting to the attn daemon…'}</div>
+    </main>
+  );
+}
+
 export function MigrationGate({ children }: { children: ReactNode }) {
+  const { hasReceivedInitialState, connectionError } = useDaemonApi();
   const phase = useProfilesStore((state) => state.migrationPhase);
   const profileName = useProfilesStore((state) => {
     const id = state.migration?.profile_id;
@@ -38,6 +48,9 @@ export function MigrationGate({ children }: { children: ReactNode }) {
   const [continued, setContinued] = useState(false);
   if (placing && !sawPlacement) setSawPlacement(true);
 
+  if (phase === null && !hasReceivedInitialState) {
+    return <MigrationScreen><Connecting connectionError={connectionError} /></MigrationScreen>;
+  }
   if (placing) return <MigrationScreen><MigrationPicker /></MigrationScreen>;
   if (sawPlacement && !continued) {
     return (

@@ -20,7 +20,7 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
 
   return (
     <div className="mp-scrim">
-      <div className="mp-dialog" role="dialog" aria-modal="true" aria-labelledby="mp-move-title">
+      <dialog open className="mp-dialog" aria-modal="true" aria-labelledby="mp-move-title">
         <div className="mp-dialog-top">
           <div>
             <div className="mp-eyebrow">Move</div>
@@ -48,7 +48,7 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
             ))}
           </div>
         </div>
-      </div>
+      </dialog>
     </div>
   );
 }

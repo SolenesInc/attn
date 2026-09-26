@@ -121,7 +121,7 @@
         "recordedAt": "2026-09-26",
         "seconds": 34.3,
         "runnerClass": "local macOS",
-        "note": "Green run of every step except the native pointer drop, which deadlocks the in-app macOS injector on this screen; the Linux xdotool drop adds a few seconds. Remeasure on Linux CI."
+        "note": "Local macOS run of every step but the native pointer drop, kept only until the first green Linux CI run of this scenario replaces it."
       }
     }
   },

@@ -32,6 +32,9 @@ export const scenarioCatalog = [
     runnerId: 'DESKTOP-MIGRATION',
     label: 'Workspace migration picker: keyboard, native pointer drop, second client, restart, reopen, narrow window, finish',
     command: ['pnpm', 'run', 'real-app:scenario-desktop-migration'],
+    skipOn: {
+      darwin: 'the in-app macOS input injector deadlocks here: AppKit holds its mouse-down window-drag check open for the up event the injector sends only after that call returns; the Linux run drops through xdotool',
+    },
   },
   {
     id: 'workspace-switching',

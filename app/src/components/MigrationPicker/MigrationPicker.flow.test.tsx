@@ -275,6 +275,23 @@ describe('MigrationPicker', () => {
 });
 
 describe('MigrationGate', () => {
+  it('keeps the shell unmounted until the daemon reports a phase, and shows why it waits', () => {
+    resetMigrationStore(null);
+    const daemon = fakeMigrationDaemon(migrationState());
+    const view = renderGate(daemon, { connectionError: 'Version mismatch: daemon v1, app v2.' });
+    expect(screen.getByRole('status')).toHaveTextContent('Version mismatch: daemon v1, app v2.');
+    expect(screen.queryByTestId('normal-shell')).not.toBeInTheDocument();
+
+    view.rerender(
+      <DaemonApiProvider api={daemon.daemonApi({ hasReceivedInitialState: true })}>
+        <MigrationGate>
+          <div data-testid="normal-shell">shell</div>
+        </MigrationGate>
+      </DaemonApiProvider>,
+    );
+    expect(screen.getByTestId('normal-shell')).toBeInTheDocument();
+  });
+
   it('mounts the normal shell directly when the migration was already complete', () => {
     resetMigrationStore(MigrationPhase.Complete);
     renderGate(fakeMigrationDaemon(migrationState()));

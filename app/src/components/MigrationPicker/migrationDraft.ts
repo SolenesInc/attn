@@ -196,3 +196,11 @@ export function summarize(view: GroupView): string {
   if (view.tiles === 0) return agents;
   return `${agents} · ${view.tiles} tile${view.tiles === 1 ? '' : 's'}`;
 }
+
+export function allDraftDesktops(view: DraftView): DraftDesktopView[] {
+  return [...view.slots, ...view.extras];
+}
+
+export function findDraftDesktop(view: DraftView, key: string): DraftDesktopView | undefined {
+  return allDraftDesktops(view).find((entry) => entry.desktop.key === key);
+}

@@ -8,7 +8,7 @@ import { DaemonObserver } from './daemonObserver.mjs';
 import { ensureFreshWorld } from './freshWorld.mjs';
 import { dataDirForInstance, instanceCliEnv, instanceForAppPath } from './harnessInstance.mjs';
 import { captureScreenshotData, setFrontWindowBounds } from './nativeWindowCapture.mjs';
-import { appDaemonInTree, appPlatform, createWindowDriver } from './platform.mjs';
+import { appDaemonInTree, createWindowDriver } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -18,7 +18,6 @@ const LEGACY_WORKSPACES = [
 ];
 const PAIRED = new Set([1, 5, 9]);
 const LAST_SCHEMA_BEFORE_CONVERSION = 152;
-const ACCEL = appPlatform.os === 'darwin' ? { command: true } : { control: true };
 
 function parseArgs(argv) {
   const args = [...argv];
@@ -190,7 +189,7 @@ async function main() {
       await driver.pressKey('k');
       await waitForDraft((migration) => group(migration, 'mig-ws-1')?.confirmed, 'Daemon lifecycle kept with K');
       await driver.pressKey('1');
-      await client.request('dom_wait', { selector: '[role="dialog"]', textIncludes: 'Merge attn zero', timeoutMs: 10_000 });
+      await client.request('dom_wait', { selector: 'dialog.mp-dialog', textIncludes: 'Merge attn zero', timeoutMs: 10_000 });
       await driver.pressKey('ArrowDown');
       await driver.pressKey('Enter');
       const merged = await waitForDraft(
@@ -238,15 +237,15 @@ async function main() {
       );
       const tree = draftDesktop(dropped.migration, 4);
       runner.assert(tree.direction === 'vertical', `The drop did not split beside: ${JSON.stringify(tree)}`);
-      runner.assert(
-        !dropped.migration.desktops.some((desktop) => !desktop.shortcut_slot && planGroups(desktop.tree_json ? JSON.parse(desktop.tree_json) : null).includes('mig-ws-11')),
-        'The emptied extra desktop stayed in the draft',
-      );
+      const extraGroups = new Set(dropped.migration.desktops
+        .filter((desktop) => !desktop.shortcut_slot)
+        .flatMap((desktop) => planGroups(desktop.tree_json ? JSON.parse(desktop.tree_json) : null)));
+      runner.assert(!extraGroups.has('mig-ws-11'), 'The emptied extra desktop stayed in the draft');
       await screenshot('03-pointer-drop.png');
     });
 
     await runner.step('undo_reverts_the_drop', async () => {
-      await driver.pressKey('z', ACCEL);
+      await driver.pressKey('z', { command: true });
       await waitForDraft(
         (migration) => planGroups(draftDesktop(migration, 4)).join(',') === 'mig-ws-4' && !group(migration, 'mig-ws-11')?.confirmed,
         'the drop undone',
