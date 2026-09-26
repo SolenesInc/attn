@@ -152,9 +152,10 @@ vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
 vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
 vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
 vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
+const { mockShowError } = vi.hoisted(() => ({ mockShowError: vi.fn() }));
 vi.mock('./components/ErrorToast', () => ({
   ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
+  useErrorToast: () => ({ message: null, showError: mockShowError, clearError: vi.fn() }),
 }));
 vi.mock('./hooks/useKeyboardShortcuts', () => ({ useKeyboardShortcuts: vi.fn() }));
 vi.mock('./hooks/useUIScale', () => ({
@@ -564,6 +565,8 @@ describe('desktop surface', () => {
     });
     await waitFor(() => expect(useSessionStore.getState().pendingSelection).toBeNull());
     expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(1);
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(mockShowError).toHaveBeenCalledWith(expect.stringContaining('desktop is gone'));
 
     act(() => {
       useSessionStore.getState().selectAgent('s4');
@@ -571,6 +574,20 @@ describe('desktop surface', () => {
 
     await waitFor(() => expect(desktopCommands.sendDesktopPlaceSession).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(useSessionStore.getState().activeSessionId).toBe('s4'));
+  });
+
+  it('puts the active agent back on the shown desktop when switching to its desktop is refused', async () => {
+    desktopCommands.sendDesktopSetCurrent.mockRejectedValueOnce(new Error('profile is closed'));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s3');
+    });
+
+    await waitFor(() => expect(mockShowError).toHaveBeenCalledWith(expect.stringContaining('profile is closed')));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(isActive('d1')).toBe(true);
   });
 
   it('keeps a selection whose command lost a revision race, for the newer arrangement to retry', async () => {

@@ -69,20 +69,18 @@ function mirrorShownTile(shown: Shown) {
 
 function abandonSelection(sessionId: string) {
   const sessions = useSessionStore.getState();
-  if (sessions.pendingSelection?.sessionId === sessionId) {
-    sessions.cancelPendingSelection();
-    return;
-  }
-  if (sessions.activeSessionId !== sessionId) return;
+  if (sessions.pendingSelection?.sessionId !== sessionId && sessions.activeSessionId !== sessionId) return;
+  if (sessions.pendingSelection) sessions.cancelPendingSelection();
   const state = useProfilesStore.getState();
   const shown = shownOf(state);
-  const shownAgent = agentToShow(state, shown, null);
+  const current = useSessionStore.getState().activeSessionId;
+  const shownAgent = agentToShow(state, shown, shown.tileId ? current : null);
   if (shown.tileId) {
-    useSessionStore.setState({ activeSessionId: shownAgent });
+    if (shownAgent !== current) useSessionStore.setState({ activeSessionId: shownAgent });
     mirrorShownTile(shown);
     return;
   }
-  sessions.setActiveSession(shownAgent);
+  if (shownAgent !== current) useSessionStore.getState().setActiveSession(shownAgent);
 }
 
 type Command =
