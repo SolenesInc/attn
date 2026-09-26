@@ -430,6 +430,56 @@ func TestTheSweepRemovesAWorktreeThroughItsDeleteProviderAndItsBranchWithIt(t *t
 	}
 }
 
+func TestTheSweepKeepsAProviderDeletedWorktreeGitCouldNotForgetSoADeleteCanFinishIt(t *testing.T) {
+	t.Setenv("ATTN_WORKTREE_SWEEP_IDLE_DAYS", "0")
+	w := newWorld(t)
+	app, cli := w.App(), w.Client()
+	repo := newRepo(t, "shop")
+	pluginWorktreeOrigin(t, repo)
+	provider := connectPlugin(t, w, "unprunable-delete-provider", "worktree.delete")
+	path := createWorktree(t, app, repo, "feat-unprunable")
+	config := filepath.Join(repo, ".git", "config")
+	healthyConfig, err := os.ReadFile(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	refreshWorktrees(t, cli)
+	id := provider.expect("worktree.delete", nil)
+	if err := os.RemoveAll(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(config, append(slices.Clone(healthyConfig), "[unterminated\n"...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	provider.answer(id, pluginWorktreeAnswer{Status: "handled"})
+	swept := testworld.Await(app, protocol.EventWorktreeSwept, func(e protocol.WebSocketEvent) bool {
+		return e.SweepEntry != nil && e.SweepEntry.Path == path
+	}).SweepEntry
+	if swept.Action != "failed" {
+		t.Errorf("the sweep recorded %s (%s), want it failed while Git cannot prune the registration", swept.Action, protocol.Deref(swept.Reason))
+	}
+	if _, listed := pluginWorktreeListedOn(app, repo, path); !listed {
+		t.Fatal("the daemon dropped a worktree whose Git registration was never pruned, so nothing can finish its removal")
+	}
+
+	if err := os.WriteFile(config, healthyConfig, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	app.Send(protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: path})
+	provider.answer(provider.expect("worktree.delete", nil), pluginWorktreeAnswer{Status: "handled"})
+	deleted := testworld.Await(app, protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool { return r.Path == path })
+	if !deleted.Success {
+		t.Fatalf("deleting the kept worktree answered %+v (%s), want success", deleted, protocol.Deref(deleted.Error))
+	}
+	if out, err := exec.Command("git", "-C", repo, "worktree", "list", "--porcelain").Output(); err != nil || strings.Contains(string(out), path) {
+		t.Errorf("git still registers %s after the delete (%v): %s", path, err, out)
+	}
+	if pluginWorktreeBranchExists(repo, "feat-unprunable") {
+		t.Error("the delete left the branch feat-unprunable behind")
+	}
+}
+
 func TestAnInstalledWorktreeProviderRunsAndComesBackAfterItExits(t *testing.T) {
 	self, err := os.Executable()
 	if err != nil {
