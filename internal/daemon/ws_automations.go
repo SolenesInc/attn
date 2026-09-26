@@ -18,7 +18,7 @@ func (d *Daemon) handleAutomationRunsGetWS(client *wsClient, msg *protocol.Autom
 
 func (d *Daemon) handleAutomationSetEnabledWS(client *wsClient, msg *protocol.AutomationSetEnabledMessage) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), d.wsAutomationMutationTimeoutDuration())
+		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationSetEnabled(ctx, msg)
 		d.sendToClient(client, result)
@@ -27,7 +27,7 @@ func (d *Daemon) handleAutomationSetEnabledWS(client *wsClient, msg *protocol.Au
 
 func (d *Daemon) handleAutomationDeleteWS(client *wsClient, msg *protocol.AutomationDeleteMessage) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), d.wsAutomationMutationTimeoutDuration())
+		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationDelete(ctx, msg)
 		d.sendToClient(client, result)
@@ -36,7 +36,7 @@ func (d *Daemon) handleAutomationDeleteWS(client *wsClient, msg *protocol.Automa
 
 func (d *Daemon) handleAutomationCleanupWS(client *wsClient, msg *protocol.AutomationCleanupMessage) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), d.wsAutomationMutationTimeoutDuration())
+		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationCleanup(ctx, msg)
 		d.sendToClient(client, result)
@@ -52,7 +52,7 @@ func (d *Daemon) handleAutomationRunWS(client *wsClient, msg *protocol.Automatio
 
 func (d *Daemon) handleAutomationApplyWS(client *wsClient, msg *protocol.AutomationApplyMessage) {
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), d.wsAutomationMutationTimeoutDuration())
+		ctx, cancel := context.WithTimeout(context.Background(), wsAutomationMutationTimeout)
 		defer cancel()
 		result := d.actionAutomationApply(ctx, msg)
 		d.sendToClient(client, result)

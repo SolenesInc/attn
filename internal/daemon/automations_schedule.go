@@ -12,7 +12,7 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-var scheduleDueInstantCap = 1_000_000
+const scheduleDueInstantCap = 1_000_000
 
 const scheduleSkipGrace = 5 * time.Minute
 

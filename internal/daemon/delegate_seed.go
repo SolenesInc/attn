@@ -12,17 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 )
 
-func (d *Daemon) bindDelegationAssignment(operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, cwd, agent string, fromChief, createSeed bool) (string, error) {
-	observed := d.observeGardenDispatchExecution(sessionID, cwd, agent)
-	var bound string
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var err error
-		bound, err = d.bindDelegationAssignmentProtected(protection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID, observed, fromChief, createSeed)
-		return err
-	})
-	return bound, err
-}
-
 func (d *Daemon) bindDelegationAssignmentProtected(_ foregroundCleanupProtection, operationID, sessionID, plannerSessionID, parentSeedID, brief, name, seedID string, observed garden.Dispatch, fromChief, createSeed bool) (string, error) {
 	if err := d.requireHome(garden.Surface); err != nil {
 		return "", err
@@ -219,16 +208,6 @@ func (d *Daemon) bindDelegatedSeedProtected(protection foregroundCleanupProtecti
 	return seedID, nil
 }
 
-func (d *Daemon) plantDelegatedSeed(sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
-	var seed garden.Seed
-	err := d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		var plantErr error
-		seed, plantErr = d.plantDelegatedSeedProtected(protection, sessionID, plannerSessionID, brief, name)
-		return plantErr
-	})
-	return seed, err
-}
-
 func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, brief, name string) (garden.Seed, error) {
 	title := strings.TrimSpace(name)
 	if title == "" {
@@ -263,12 +242,6 @@ func (d *Daemon) plantDelegatedSeedProtected(protection foregroundCleanupProtect
 	seed.LastExecutionID = sessionID
 	seed, _, err = d.mintAndPlantProtected(protection, *schema, seed)
 	return seed, err
-}
-
-func (d *Daemon) tendDispatchedSeed(sessionID, plannerSessionID, seedID string) error {
-	return d.worktreeMaintenance.ProtectFromAutomaticCleanup(context.Background(), func(protection foregroundCleanupProtection) error {
-		return d.tendDispatchedSeedProtected(protection, sessionID, plannerSessionID, seedID)
-	})
 }
 
 func (d *Daemon) tendDispatchedSeedProtected(protection foregroundCleanupProtection, sessionID, plannerSessionID, seedID string) error {

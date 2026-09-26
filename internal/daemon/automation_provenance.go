@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/victorarias/attn/internal/automation"
-	"github.com/victorarias/attn/internal/prompts"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
@@ -107,15 +106,4 @@ func automationReviewNames(req automation.WorkRequest) (workspace, session, seed
 		session += " · " + model
 	}
 	return workspace, session, "Review " + session, true
-}
-
-func automationTargetBlock(definitionName, inputPath string, input automation.PullRequestInput) string {
-	return prompts.RenderText("automation", "target", prompts.Values{
-		"definition": fmt.Sprintf("%q", definitionName),
-		"repository": input.RepositoryIdentity(),
-		"number":     fmt.Sprint(input.Number),
-		"url":        input.URL,
-		"head_sha":   input.HeadSHA,
-		"input_path": inputPath,
-	})
 }
