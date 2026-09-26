@@ -228,7 +228,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     set((state) => ({
       view: 'session', followNextTurn: false, pendingSelection: null, focusRequest: null,
-      selectedTile: null,
       sessions: [...state.sessions, session],
       activeSessionId: id,
       agentHistory: recordAgentVisit(state.agentHistory, id),

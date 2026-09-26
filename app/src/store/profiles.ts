@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { useShallow } from 'zustand/react/shallow';
 import type { Desktop, MigrationPhase, Profile } from '../types/generated';
 import { persistSelectedProfileId } from '../utils/selectedProfile';
 
@@ -13,6 +14,19 @@ export interface ProfilesState {
   enterScope: (profiles: Profile[] | undefined, selectedProfileId: string | undefined, desktops: Desktop[] | undefined) => void;
   profilesChanged: (profiles: Profile[]) => void;
   arrangementArrived: (profile: Profile, desktops: Desktop[]) => void;
+}
+
+export interface TileSelection {
+  desktopId: string;
+  tileId: string;
+}
+
+export function selectedTile(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): TileSelection | null {
+  const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
+  const leafId = desktop?.active_pane_id;
+  if (!desktop || !leafId) return null;
+  if (desktop.panes.some((pane) => pane.pane_id === leafId && pane.session_id)) return null;
+  return { desktopId: desktop.id, tileId: leafId };
 }
 
 type Arrangement = Pick<ProfilesState, 'selectedProfileId' | 'currentDesktopId' | 'desktops' | 'previousDesktopId'>;
@@ -59,3 +73,7 @@ export const useProfilesStore = create<ProfilesState>((set) => ({
 
   arrangementArrived: (profile, desktops) => set((state) => arrangementOf(state, profile, desktops)),
 }));
+
+export function useSelectedTile(): TileSelection | null {
+  return useProfilesStore(useShallow(selectedTile));
+}

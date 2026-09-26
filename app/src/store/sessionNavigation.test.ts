@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
+import { useProfilesStore } from './profiles';
 import { useSessionStore, type DaemonSessionSnapshot } from './sessions';
 import { LayoutPaneKind, LayoutPaneStatus, type Desktop } from '../types/generated';
 
@@ -33,6 +34,16 @@ const desktop = (id: string): Desktop => ({
     },
   ],
 });
+function focusTile() {
+  const notes: Desktop = {
+    ...desktop('notes'),
+    tree_json: JSON.stringify({ type: 'tile', tile_id: 'note', tile_kind: 'markdown', tile_params: '/tmp/note.md' }),
+    active_pane_id: 'note',
+    panes: [],
+  };
+  useProfilesStore.setState({ desktops: [notes], currentDesktopId: notes.id });
+  state().setView('session');
+}
 const arrange = (ids: string[]) => state().syncFromArrangement('profile', ids.map(desktop));
 function load(ids = ['a', 'b']) {
   arrange(ids);
@@ -40,7 +51,10 @@ function load(ids = ['a', 'b']) {
   state().syncNavigationSettings({ queue_mode_enabled: 'true' });
 }
 
-beforeEach(() => useSessionStore.setState(useSessionStore.getInitialState(), true));
+beforeEach(() => {
+  useSessionStore.setState(useSessionStore.getInitialState(), true);
+  useProfilesStore.setState(useProfilesStore.getInitialState(), true);
+});
 
 describe('session navigation at daemon ingestion', () => {
   it('advances a closed turn with the view, pane and history already consistent in the only notification', () => {
@@ -55,6 +69,14 @@ describe('session navigation at daemon ingestion', () => {
     state().syncFromDaemonSessions([snapshot('a'), snapshot('b', true)]);
     unsubscribe();
     expect(observed).toEqual(['b:session:pane-b:a,b']);
+  });
+
+  it('does not advance past a closed turn while a tile holds the focus', () => {
+    load();
+    state().selectAgent('a');
+    useProfilesStore.setState({ desktops: [{ ...desktop('a'), active_pane_id: 'note' }], currentDesktopId: 'desktop-a' });
+    state().syncFromDaemonSessions([snapshot('a'), snapshot('b', true)]);
+    expect(state()).toMatchObject({ activeSessionId: 'a', view: 'session' });
   });
 
   it('waits at Home after the queue empties and selects the oldest new turn', () => {
@@ -93,7 +115,7 @@ describe('session navigation at daemon ingestion', () => {
         state().setView('grid');
         state().setView('dashboard');
       }
-      if (action === 'tile') state().setSelectedTile({ desktopId: 'notes', tileId: 'note' });
+      if (action === 'tile') focusTile();
       if (action === 'history') state().navigateAgentHistory('back', true);
       const selected = state().activeSessionId;
       state().syncFromDaemonSessions([snapshot('a'), snapshot('b', true)]);
@@ -124,7 +146,7 @@ describe('session navigation at daemon ingestion', () => {
     expect(state().selectAgent('c')).toBe(false);
     if (action === 'home') state().goToDashboard();
     if (action === 'grid') state().setView('grid');
-    if (action === 'tile') state().setSelectedTile({ desktopId: 'notes', tileId: 'note' });
+    if (action === 'tile') focusTile();
     if (action === 'session') state().selectAgent('a');
     if (action === 'pane') state().selectAgentPane('a', 'pane-a');
     if (action === 'back' || action === 'forward') state().navigateAgentHistory(action);

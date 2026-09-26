@@ -1,4 +1,5 @@
 import type { SessionStore } from './sessions';
+import { selectedTile, useProfilesStore } from './profiles';
 import type { AgentHistoryDirection } from '../navigation/agentHistory';
 import {
   activateSession,
@@ -11,7 +12,6 @@ import {
   selectAgent,
   type AppView,
   type StateUpdate,
-  type TileSelection,
 } from '../navigation/sessionNavigation';
 import { getAgentExecutableSettings } from '../utils/agentAvailability';
 
@@ -28,7 +28,6 @@ export interface SessionNavigationActions {
   setFollowNextTurn: (follow: StateUpdate<boolean>) => void;
   goToDashboard: () => void;
   goHomeAwaitingNextTurn: () => void;
-  setSelectedTile: (tile: StateUpdate<TileSelection | null>) => void;
   requestTerminalFocus: () => void;
   syncNavigationSettings: (settings: Record<string, string>) => void;
 }
@@ -37,18 +36,13 @@ type SetState = (
   update: Partial<SessionStore> | ((state: SessionStore) => Partial<SessionStore>),
 ) => void;
 
+const tileSelected = () => selectedTile(useProfilesStore.getState()) !== null;
+
 export function reconcileSessionNavigation(
   state: SessionStore,
   update: Partial<SessionStore>,
 ): Partial<SessionStore> {
   const next = { ...state, ...update };
-  if (next.activeSessionId !== state.activeSessionId && next.activeSessionId) {
-    next.focusRequest = null;
-    if (!next.selectedTile) {
-      next.view = 'session';
-      next.followNextTurn = false;
-    }
-  }
   next.navigationQueue = navigationQueue(
     next.navigationSessions,
     next.navigationProfileId,
@@ -58,7 +52,7 @@ export function reconcileSessionNavigation(
   const pending = reconcilePendingSelection(next, next.sessions);
   const advanced = state.pendingSelection
     ? pending
-    : advanceQueue(pending, next.sessions, state.navigationQueue, next.navigationQueue);
+    : advanceQueue(pending, next.sessions, state.navigationQueue, next.navigationQueue, tileSelected());
   return { ...next, ...advanced };
 }
 
@@ -84,17 +78,10 @@ export function createSessionNavigationActions(
       set((state) => {
         const followNextTurn = typeof update === 'function' ? update(state.followNextTurn) : update;
         const next = { ...state, followNextTurn, pendingSelection: null };
-        return advanceQueue(next, state.sessions, state.navigationQueue, state.navigationQueue);
+        return advanceQueue(next, state.sessions, state.navigationQueue, state.navigationQueue, tileSelected());
       }),
     goToDashboard: () => set((state) => enterHome(state, false)),
     goHomeAwaitingNextTurn: () => set((state) => enterHome(state, true)),
-    setSelectedTile: (update) =>
-      set((state) => ({
-        selectedTile: typeof update === 'function' ? update(state.selectedTile) : update,
-        pendingSelection: null,
-        focusRequest: null,
-        followNextTurn: false,
-      })),
     requestTerminalFocus: () =>
       set((state) => ({
         utilityFocusRequestToken: state.utilityFocusRequestToken + 1,

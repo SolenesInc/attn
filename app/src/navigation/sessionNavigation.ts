@@ -20,16 +20,11 @@ import { buildDesktopViewModels } from '../utils/workspaceViewModels';
 
 export type AppView = 'dashboard' | 'session' | 'grid';
 export type StateUpdate<T> = T | ((previous: T) => T);
-export interface TileSelection {
-  desktopId: string;
-  tileId: string;
-}
 export interface SessionNavigationState {
   activeSessionId: string | null;
   agentHistory: AgentHistoryState;
   view: AppView;
   followNextTurn: boolean;
-  selectedTile: TileSelection | null;
   pendingSelection: { sessionId: string; seen: boolean } | null;
   focusRequest: { sessionId: string; paneId: string } | null;
   utilityFocusRequestToken: number;
@@ -41,7 +36,6 @@ export function initialSessionNavigation(): SessionNavigationState {
     agentHistory: createAgentHistory(),
     view: 'dashboard',
     followNextTurn: false,
-    selectedTile: null,
     pendingSelection: null,
     focusRequest: null,
     utilityFocusRequestToken: 0,
@@ -59,7 +53,6 @@ export function activateSession(
     focusRequest: null,
     view: id ? 'session' : state.view,
     followNextTurn: id ? false : state.followNextTurn,
-    selectedTile: id ? null : state.selectedTile,
     agentHistory:
       id && id !== state.activeSessionId
         ? recordAgentVisit(state.agentHistory, id)
@@ -99,7 +92,6 @@ export function enterHome(
     ...activateSession(state, null),
     view: 'dashboard',
     followNextTurn,
-    selectedTile: null,
   };
 }
 
@@ -188,14 +180,14 @@ export function advanceQueue(
   sessions: Session[],
   previous: QueueBands<QueueBandSession> | null,
   next: QueueBands<QueueBandSession> | null,
+  tileSelected: boolean,
 ): SessionNavigationState {
   if (!next || state.pendingSelection) return state;
   if (state.view === 'dashboard' && state.followNextTurn) {
     const target = headOfQueue(next);
     return target ? selectAgent(state, sessions, target.session.id) : state;
   }
-  if (state.view !== 'session' || state.selectedTile)
-    return state;
+  if (state.view !== 'session' || tileSelected) return state;
   const advance = advanceAfterTurnClosed(previous?.turns ?? [], next, state.activeSessionId);
   if (!advance) return state;
   return advance.to === 'session'

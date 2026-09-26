@@ -182,8 +182,7 @@ export function AppDesktops() {
             )
           }
           onFocusPane={(paneId) => {
-            const tileSelectedHere = useSessionStore.getState().selectedTile?.desktopId === desktop.id;
-            if (paneId === desktop.active_pane_id && !tileSelectedHere) return undefined;
+            if (paneId === desktop.active_pane_id) return undefined;
             return sendDesktopSetActivePane(desktop.id, paneId).catch((error) => {
               showError(`Could not focus that pane: ${failureMessage(error)}`);
               throw error;
