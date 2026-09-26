@@ -17,8 +17,8 @@ import (
 
 func TestASeedOwnsTheDirectVisibleFilesCopiedIntoItsFolder(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 	worktree := filepath.Join(t.TempDir(), "worktree")
 	source := seedArtifactsWrite(t, worktree, "cover image.bin", []byte{0, 1, 2, 0xff})
@@ -79,8 +79,8 @@ func TestASeedOwnsTheDirectVisibleFilesCopiedIntoItsFolder(t *testing.T) {
 
 func TestMovingAGitTrackedFileIntoASeedIsRefusedBeforeAnythingIsStored(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 	repo := newRepo(t, "repo")
 	commitFile(t, repo, "tracked.bin", "tracked")
@@ -106,8 +106,8 @@ func TestMovingAGitTrackedFileIntoASeedIsRefusedBeforeAnythingIsStored(t *testin
 
 func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 	folder := filepath.Join(root, "seeds", seed)
 	real := seedArtifactsWrite(t, t.TempDir(), "real.bin", []byte("real"))
@@ -162,8 +162,8 @@ func TestSeedArtifactTransfersNeverClobberOrFollowLinks(t *testing.T) {
 
 func TestBringingALegacyAttachmentIntoASeedDropsItsReferenceOnlyOnSuccess(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 
 	brought := seedArtifactsWrite(t, t.TempDir(), "legacy.md", []byte("legacy"))
@@ -187,7 +187,7 @@ func TestBringingALegacyAttachmentIntoASeedDropsItsReferenceOnlyOnSuccess(t *tes
 func TestASeedFolderServesOnlyTypedSafeFilesToItsDocument(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 	seedArtifactsTransfer(t, cli, seed, "copy", seedArtifactsWrite(t, t.TempDir(), "cover art.png", []byte("png")), "", "")
 	folder := filepath.Join(root, "seeds", seed)
@@ -213,8 +213,8 @@ func TestASeedFolderServesOnlyTypedSafeFilesToItsDocument(t *testing.T) {
 
 func TestEditsMadeDirectlyInASeedFolderReachTheGarden(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
 	seed := plantSeedAs(t, cli, "", "Durable files")
 	seedArtifactsTransfer(t, cli, seed, "copy", seedArtifactsWrite(t, t.TempDir(), "kept.bin", []byte("kept")), "", "")
 	folder := filepath.Join(root, "seeds", seed)
@@ -248,8 +248,8 @@ func TestEditsMadeDirectlyInASeedFolderReachTheGarden(t *testing.T) {
 
 func TestTheDaemonStartsAndServesBesideAnUnreadableSeedFolder(t *testing.T) {
 	w := newWorld(t)
-	app, cli := w.App(), w.Client()
-	root := seedArtifactsNotebook(t, app)
+	cli := w.Client()
+	root := seedArtifactsNotebook(t, w)
 	unreadable := plantSeedAs(t, cli, "", "Unreadable durable files")
 	healthy := plantSeedAs(t, cli, "", "Healthy durable files")
 	seedArtifactsTransfer(t, cli, healthy, "copy", seedArtifactsWrite(t, t.TempDir(), "kept.bin", []byte("kept")), "", "")
@@ -262,16 +262,6 @@ func TestTheDaemonStartsAndServesBesideAnUnreadableSeedFolder(t *testing.T) {
 		t.Errorf("after the restart the app sees %d seeds, want both", len(seeds))
 	}
 	seedArtifactsListed(t, w.Client(), healthy, "after the restart", "kept.bin")
-}
-
-func seedArtifactsNotebook(t *testing.T, app *testworld.Peer) string {
-	t.Helper()
-	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
-	setSetting(t, app, "notebook.root", root)
-	return root
 }
 
 func seedArtifactsWrite(t *testing.T, dir, name string, content []byte) string {
@@ -328,4 +318,13 @@ func seedArtifactsTarget(app *testworld.Peer, seedID, target, purpose string) pr
 	return testworld.Request(app, protocol.SeedArtifactTargetMessage{
 		Cmd: protocol.CmdSeedArtifactTarget, RequestID: requestID, SeedID: seedID, RelativeTarget: target, Purpose: purpose,
 	}, protocol.EventSeedArtifactTargetResult, func(r protocol.SeedArtifactTargetResultMessage) bool { return r.RequestID == requestID })
+}
+
+func seedArtifactsNotebook(t *testing.T, w *world) string {
+	t.Helper()
+	root := filepath.Join(w.Dir, "notebook")
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }

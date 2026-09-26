@@ -1,7 +1,6 @@
 package daemon_test
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -11,7 +10,6 @@ import (
 func TestSendingASeedToTheChiefHandsItOverUnlessItChanged(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		app, cli := w.App(), w.Client()
-		setSetting(t, app, "notebook.root", filepath.Join(t.TempDir(), "notebook"))
 		registerSessions(t, w, cli, "chief", "sender", "observer")
 		if made := setChiefOfStaff(app, "chief", true); !made.Success {
 			t.Fatalf("making chief the Chief: %s", protocol.Deref(made.Error))

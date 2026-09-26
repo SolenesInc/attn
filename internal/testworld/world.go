@@ -34,11 +34,15 @@ type World struct {
 
 func Prepare(t testing.TB, wrapper string, harnesses ...fakeagent.Harness) *World {
 	t.Helper()
-	dir, err := os.MkdirTemp("/tmp", "attn-w-")
+	created, err := os.MkdirTemp("/tmp", "attn-w-")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(created) })
+	dir, err := filepath.EvalSymlinks(created)
+	if err != nil {
+		t.Fatal(err)
+	}
 	production, err := config.CanonicalRuntimePath(config.DataDirForInstance(""))
 	if err != nil {
 		t.Fatal(err)
