@@ -16,14 +16,17 @@ export function Toast({ toast, onDone }: ToastProps) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    if (toast) {
-      setVisible(true);
-      const timer = setTimeout(() => {
-        setVisible(false);
-        setTimeout(onDone, 200);
-      }, toast.durationMs);
-      return () => clearTimeout(timer);
-    }
+    if (!toast) return;
+    setVisible(true);
+    let doneTimer: ReturnType<typeof setTimeout> | undefined;
+    const hideTimer = setTimeout(() => {
+      setVisible(false);
+      doneTimer = setTimeout(onDone, 200);
+    }, toast.durationMs);
+    return () => {
+      clearTimeout(hideTimer);
+      clearTimeout(doneTimer);
+    };
   }, [toast, onDone]);
 
   if (!toast) return null;

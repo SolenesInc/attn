@@ -31,4 +31,22 @@ describe('Toast', () => {
     });
     expect(onDone).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps a toast that arrives while the previous one fades out', () => {
+    vi.useFakeTimers();
+    const onDone = vi.fn();
+    const { rerender } = render(
+      <Toast toast={{ message: 'first', tone: 'notice', durationMs: 1_000 }} onDone={onDone} />,
+    );
+    act(() => {
+      vi.advanceTimersByTime(1_100);
+    });
+    rerender(<Toast toast={{ message: 'second', tone: 'notice', durationMs: 1_000 }} onDone={onDone} />);
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    expect(onDone).not.toHaveBeenCalled();
+    expect(screen.getByRole('status')).toHaveTextContent('second');
+  });
 });

@@ -410,6 +410,12 @@ describe('Sidebar', () => {
 
     fireEvent.click(header);
     expect(header).toHaveAttribute('aria-expanded', 'false');
+
+    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" />);
+    expect(header).toHaveAttribute('aria-expanded', 'false');
+
+    rerender(<Sidebar {...baseProps} {...data} selectedId="run-a" selectionRequest={{ sessionId: 'run-a' }} />);
+    expect(header).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('shows waiting badge in collapsed sidebar', () => {

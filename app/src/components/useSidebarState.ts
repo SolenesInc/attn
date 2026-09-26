@@ -17,6 +17,7 @@ export function useSidebarState({
   workspaces,
   visualIndexByWorkspaceId,
   selectedId,
+  selectionRequest = null,
   selectedWorkspaceId,
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
@@ -148,9 +149,12 @@ export function useSidebarState({
   };
 
   const automationGroups = useMemo(() => automationRunGroups(workspaces, Date.now()), [workspaces]);
-  const [lastSeenSelectedId, setLastSeenSelectedId] = useState<string | null>(null);
-  if (selectedId !== lastSeenSelectedId) {
-    setLastSeenSelectedId(selectedId);
+  const [seenSelection, setSeenSelection] = useState<{
+    id: string | null;
+    request: SidebarProps['selectionRequest'];
+  }>({ id: null, request: null });
+  if (selectedId !== seenSelection.id || (selectionRequest && selectionRequest !== seenSelection.request)) {
+    setSeenSelection({ id: selectedId, request: selectionRequest ?? seenSelection.request });
     const selectedRunGroup = automationGroups.find((group) => group.runs.some((run) => run.id === selectedId));
     if (selectedRunGroup && !expandedAutomationGroups.has(selectedRunGroup.id)) {
       setExpandedAutomationGroups(new Set(expandedAutomationGroups).add(selectedRunGroup.id));
