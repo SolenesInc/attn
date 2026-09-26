@@ -60,7 +60,7 @@ export function QueueBar() {
         <strong>{profileName ?? 'Profile'}</strong>
         <span className="queue-bar-chevron" aria-hidden="true">▾</span>
       </button>
-      <div className="queue-bar-peek-anchor" data-testid="queue-bar-waiting" {...peekHandlers('waiting')}>
+      <div className="queue-bar-peek-anchor queue-bar-waiting-anchor" data-testid="queue-bar-waiting" {...peekHandlers('waiting')}>
         <WaitingPill />
         {shown === 'waiting' && <WaitingPeek onPicked={() => setPeek(null)} />}
       </div>
@@ -248,7 +248,7 @@ function RunsPeek({ onPicked }: { onPicked: () => void }) {
         {automationGroups.map((group) => (
           <div key={group.id} data-testid={`queue-bar-runs-group-${group.id}`}>
             <div className="queue-bar-peek-group">
-              <span>{group.name}</span>
+              <span className="queue-bar-peek-group-name" title={group.name}>{group.name}</span>
               <span className="queue-bar-peek-group-count">
                 {group.needingYou.length > 0 && `${group.needingYou.length} need you · `}
                 {group.runs.length} run{group.runs.length === 1 ? '' : 's'}
