@@ -285,6 +285,7 @@ export function useWorkspaceController(
   );
   const effectiveZoomedPaneId = zoomActive && leafIdSet.has(activeLeafId) ? activeLeafId : null;
 
+  const hasLayout = workspace.layoutTree != null;
   const layoutPlan = useMemo(() => {
     if (!workspace.layoutTree) {
       return null;
@@ -349,7 +350,7 @@ export function useWorkspaceController(
     });
     observer.observe(container);
     return () => observer.disconnect();
-  }, [workspaceId, effectivePaneId]);
+  }, [workspaceId, effectivePaneId, hasLayout]);
 
   const clearRatioOverride = useCallback((splitId: string, expectedRatio?: number) => {
     setPendingRatioOverrides((prev) => {

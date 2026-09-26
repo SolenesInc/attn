@@ -280,6 +280,38 @@ describe('SessionTerminalWorkspace attention ring', () => {
     expect(container.querySelector('[data-pane-id="document"]')).not.toHaveAttribute('data-pane-suspended');
   });
 
+  it('measures the surface once leaves arrive on a desktop that mounted empty', async () => {
+    const props = {
+      workspaceId: 'workspace-attention',
+      workspaceSessions: [
+        { id: 'session-a', label: 'Alpha', agent: 'shell' as const, cwd: '/tmp' },
+        { id: 'session-b', label: 'Beta', agent: 'shell' as const, cwd: '/tmp' },
+      ],
+      activePaneId: 'agent-a',
+      fontSize: 13,
+      enabled: true,
+      isActiveSession: true,
+      eventRouter: createPaneRuntimeEventRouterController(),
+      onSplitPane: vi.fn(),
+      onClosePane: vi.fn(),
+      onFocusPane: vi.fn(),
+      onNavigateOutOfSession: vi.fn(),
+      onUndockTile: vi.fn(),
+      tileContents: {
+        [tileContentKey('workspace-attention', 'document')]: { path: '/tmp/review.md', content: '# Review me' },
+      },
+      onRequestTileContent: vi.fn(),
+    };
+    const { rerender } = render(
+      <SessionTerminalWorkspace {...props} activePaneId="" workspace={{ agents: [], layoutTree: null }} />,
+      { wrapper: Wrapper },
+    );
+
+    rerender(<SessionTerminalWorkspace {...props} workspace={crowdedWorkspace()} />);
+
+    expect(await screen.findByRole('button', { name: 'Expand Beta' })).toBeInTheDocument();
+  });
+
   it('expands a clicked sliver and folds the least-recently-focused leaf, not the previous one', async () => {
     const onFocusPane = vi.fn();
     const { container } = render(
