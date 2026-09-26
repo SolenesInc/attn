@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sync"
 	"testing"
 	"time"
 
@@ -40,14 +39,6 @@ func addIdleNotebookSession(d *Daemon, id string, state protocol.SessionState) {
 		Directory: "/tmp/" + id, WorkspaceID: "workspace-" + id,
 		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
-}
-
-func recordingBackend(inputs *[]string, mu *sync.Mutex) *fakeSpawnBackend {
-	return &fakeSpawnBackend{onInput: func(_ string, data []byte) {
-		mu.Lock()
-		*inputs = append(*inputs, string(data))
-		mu.Unlock()
-	}}
 }
 
 func TestNotebookRootFollowsTheSettingAndFallsBackToTheDefault(t *testing.T) {
