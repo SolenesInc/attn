@@ -394,7 +394,6 @@ func (m *sessionInputModule) forgetSession(sessionID string) {
 		delete(m.lanes, sessionID)
 	}
 	m.mu.Unlock()
-	m.daemon.recordPlacedInputOwed(sessionID, false)
 }
 
 func (m *sessionInputModule) fenceSession(sessionID string) {

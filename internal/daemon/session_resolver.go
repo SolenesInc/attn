@@ -21,6 +21,10 @@ func (r *sessionResolver) soon(sessionID string) {
 	r.mu.Lock()
 	r.due[sessionID] = time.Time{}
 	r.mu.Unlock()
+	r.rearm()
+}
+
+func (r *sessionResolver) rearm() {
 	select {
 	case r.wake <- struct{}{}:
 	default:
@@ -49,6 +53,13 @@ func (r *sessionResolver) after(sessionID string, at time.Time) {
 	if _, pending := r.due[sessionID]; !pending {
 		r.due[sessionID] = at
 	}
+}
+
+func (r *sessionResolver) forget(sessionID string) {
+	r.mu.Lock()
+	delete(r.due, sessionID)
+	r.mu.Unlock()
+	r.rearm()
 }
 
 func (r *sessionResolver) next() (time.Time, bool) {

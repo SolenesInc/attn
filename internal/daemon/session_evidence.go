@@ -414,6 +414,7 @@ func (d *Daemon) recordProcessEvidence(sessionID string, exited bool) {
 			Claim:      sessionstate.ClaimExited,
 			ObservedAt: at,
 		}
+		e.PlacedInputOwed = false
 	})
 }
 

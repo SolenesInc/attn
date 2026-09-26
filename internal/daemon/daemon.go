@@ -2031,6 +2031,7 @@ func (d *Daemon) forgetSessionRuntime(sessionID string) {
 func (d *Daemon) forgetSessionTrace(sessionID string) {
 	d.forgetStateTrace(sessionID)
 	d.evidenceTable().forget(sessionID)
+	d.sessionResolver().forget(sessionID)
 	d.stateReasons().forget(sessionID)
 	d.dwellGate().clear(sessionID)
 }
