@@ -48,7 +48,7 @@ func TestAPresentationGrowsRoundsOnlyForTheSessionThatOpenedIt(t *testing.T) {
 	}
 }
 
-func TestAReviewRoundIsSubmittedOnceAndFeedbackReportsItsOutcome(t *testing.T) {
+func TestAReviewRoundRefusesBadCommentsAndFeedbackReportsItsOutcome(t *testing.T) {
 	w := newWorld(t)
 	app, cli := w.App(), w.Client()
 	repo := newRepo(t, "shop")
