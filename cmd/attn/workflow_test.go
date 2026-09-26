@@ -307,3 +307,13 @@ return a;`
 		t.Fatalf("final result_json = %v", last.ResultJson)
 	}
 }
+
+func TestWorkflowResultAndListCarryTheRunPhase(t *testing.T) {
+	run := protocol.WorkflowRun{RunID: "wf-1", Status: protocol.WorkflowRunStatusCompleted, ScriptPath: "a.js", Phase: protocol.Ptr("review")}
+	if out := buildWorkflowResultOutput(&run); out.Phase != "review" {
+		t.Fatalf("workflow result phase = %q, want review", out.Phase)
+	}
+	if entries := buildWorkflowListEntries([]protocol.WorkflowRun{run}); len(entries) != 1 || entries[0].Phase != "review" {
+		t.Fatalf("workflow list entries = %+v, want the run's phase", entries)
+	}
+}
