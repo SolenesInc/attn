@@ -43,6 +43,17 @@ func requireStdout(t *testing.T, got testworld.Result, want ...string) {
 	requireLines(t, "stdout", got.Stdout, want...)
 }
 
+func writeCharter(t *testing.T, s *testworld.Stack, name string) {
+	t.Helper()
+	home := filepath.Join(s.Dir, "crew", name)
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, "CHARTER.md"), []byte("# "+name+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t, testworld.WithAgents(fakeagent.Claude, fakeagent.Codex))
@@ -64,13 +75,7 @@ func TestCrewMembersWakeSleepAndKeepTheirLaunchSettings(t *testing.T) {
 	requireStdout(t, s.Attn("crew", "list"), "No crew members are registered", "<name>/CHARTER.md")
 	s.Stop()
 	for _, name := range []string{"keel", "trellis"} {
-		home := filepath.Join(s.Dir, "crew", name)
-		if err := os.MkdirAll(home, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(filepath.Join(home, "CHARTER.md"), []byte("# "+name+"\n"), 0o644); err != nil {
-			t.Fatal(err)
-		}
+		writeCharter(t, s, name)
 	}
 	s.Start()
 	app := s.App()

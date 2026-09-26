@@ -22,6 +22,7 @@ type Invocation struct {
 	Stdin   string
 	Env     []string
 	Binary  string
+	Dir     string
 }
 
 type Result struct {
@@ -59,7 +60,7 @@ func (s *Stack) Launch(inv Invocation) *Running {
 	s.T.Helper()
 	r := &Running{t: s.T, args: inv.Args, grew: make(chan struct{}), done: make(chan struct{})}
 	cmd := s.command(context.Background(), inv)
-	cmd.Stderr = stderrWriter{r}
+	cmd.Stdout, cmd.Stderr = runningStream{r, &r.stdout}, runningStream{r, &r.stderr}
 	if err := cmd.Start(); err != nil {
 		s.T.Fatalf("start attn %q: %v", inv.Args, err)
 	}
@@ -92,6 +93,7 @@ func (s *Stack) command(ctx context.Context, inv Invocation) *exec.Cmd {
 	}
 	cmd := exec.CommandContext(ctx, binary, inv.Args...)
 	cmd.WaitDelay = fakeagent.HangGuard
+	cmd.Dir = inv.Dir
 	cmd.Env = s.env()
 	if inv.Session != "" {
 		cmd.Env = append(cmd.Env, "ATTN_SESSION_ID="+inv.Session, "ATTN_INSIDE_APP=1")
@@ -123,43 +125,68 @@ type Running struct {
 	mu      sync.Mutex
 	grew    chan struct{}
 	done    chan struct{}
+	stdout  bytes.Buffer
 	stderr  bytes.Buffer
 	code    int
 }
 
-type stderrWriter struct{ r *Running }
+type runningStream struct {
+	r   *Running
+	buf *bytes.Buffer
+}
 
-func (w stderrWriter) Write(p []byte) (int, error) {
+func (w runningStream) Write(p []byte) (int, error) {
 	w.r.mu.Lock()
 	defer w.r.mu.Unlock()
-	w.r.stderr.Write(p)
+	w.buf.Write(p)
 	close(w.r.grew)
 	w.r.grew = make(chan struct{})
 	return len(p), nil
 }
 
+func (r *Running) AwaitStdout(text string) {
+	r.t.Helper()
+	r.await("stdout", &r.stdout, text, 1)
+}
+
 func (r *Running) AwaitStderr(text string) {
+	r.t.Helper()
+	r.await("stderr", &r.stderr, text, 1)
+}
+
+func (r *Running) AwaitStderrCount(text string, count int) {
+	r.t.Helper()
+	r.await("stderr", &r.stderr, text, count)
+}
+
+func (r *Running) Output() (stdout, stderr string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.stdout.String(), r.stderr.String()
+}
+
+func (r *Running) await(stream string, buf *bytes.Buffer, text string, count int) {
 	r.t.Helper()
 	deadline := time.After(fakeagent.HangGuard)
 	for {
 		r.mu.Lock()
-		seen, grew := r.stderr.String(), r.grew
+		seen, grew := buf.String(), r.grew
 		r.mu.Unlock()
-		if strings.Contains(seen, text) {
+		if strings.Count(seen, text) >= count {
 			return
 		}
 		select {
 		case <-grew:
 		case <-r.done:
 			r.mu.Lock()
-			seen = r.stderr.String()
+			seen = buf.String()
 			r.mu.Unlock()
-			if !strings.Contains(seen, text) {
-				r.t.Fatalf("attn %q exited %d without writing %q to stderr:\n%s", r.args, r.code, text, seen)
+			if strings.Count(seen, text) < count {
+				r.t.Fatalf("attn %q exited %d without writing %q %d times to %s:\n%s", r.args, r.code, text, count, stream, seen)
 			}
 			return
 		case <-deadline:
-			r.t.Fatalf("attn %q wrote no %q to stderr within %s:\n%s", r.args, text, fakeagent.HangGuard, seen)
+			r.t.Fatalf("attn %q did not write %q %d times to %s within %s:\n%s", r.args, text, count, stream, fakeagent.HangGuard, seen)
 		}
 	}
 }
