@@ -853,6 +853,29 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
+  it('settles nothing and starts the run walk at the first run while the grid holds the surface', async () => {
+    const docs = { run_id: 'r', definition_id: 'docs', definition_name: 'nightly docs', trigger_type: 'schedule' };
+    const owedRun = (id: string, openedAt: string) => ({
+      id, label: id, directory: '/tmp/repo', state: 'waiting_input', profile_id: TEST_PROFILE_ID,
+      automation: docs, turn_owed: true, turn_opened_at: openedAt,
+    });
+    mockUseDaemonStore.mockReturnValue({
+      ...mockUseDaemonStore(),
+      daemonSessions: [owedRun('s1', '2026-09-26T09:00:00Z'), owedRun('s2', '2026-09-26T10:00:00Z')],
+    });
+    render(<App />);
+    const shortcuts = () => vi.mocked(useKeyboardShortcuts).mock.lastCall![0];
+    expect(shortcuts().onSettleTurn).toBeDefined();
+
+    act(() => shortcuts().onToggleGridMode!());
+    await waitFor(() => expect(useSessionStore.getState().view).toBe('grid'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+
+    expect(shortcuts().onSettleTurn).toBeUndefined();
+    act(() => shortcuts().onNextRun());
+    expect(mockShowNotice).toHaveBeenLastCalledWith(expect.stringContaining('run 1 of 2 needing you'));
+  });
+
   describe('with a tile holding the daemon focus', () => {
     const selectedTileAttr = () => screen.getByTestId('sidebar').getAttribute('data-selected-tile');
 
