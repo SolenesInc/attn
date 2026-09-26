@@ -33,7 +33,6 @@ describe('useAppSessions Notebook chief status', () => {
       daemonEndpoints: [],
       sessions: [localSession('home-chief', 'working'), localSession('work-chief', 'idle')],
       daemonSessions,
-      daemonWorkspaces: [],
       connect: vi.fn(async () => undefined),
     }));
 

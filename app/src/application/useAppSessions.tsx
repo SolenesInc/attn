@@ -11,7 +11,6 @@ interface Options {
   daemonEndpoints: AppContentProps['daemonEndpoints'];
   sessions: ReturnType<typeof useSessionStore.getState>['sessions'];
   daemonSessions: AppContentProps['daemonSessions'];
-  daemonWorkspaces: AppContentProps['daemonWorkspaces'];
   connect: ReturnType<typeof useSessionStore.getState>['connect'];
 }
 export function useAppSessions({
@@ -19,7 +18,6 @@ export function useAppSessions({
   daemonEndpoints,
   sessions,
   daemonSessions,
-  daemonWorkspaces,
   connect,
 }: Options) {
   const endpointById = useMemo(
