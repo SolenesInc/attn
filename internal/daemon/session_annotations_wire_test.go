@@ -39,8 +39,8 @@ func TestSessionAnnotationDraftsKeepTheNewestGenerationAndStayClearedAfterAClear
 		t.Errorf("the other session's draft = %+v, want it untouched by the first session's save", other)
 	}
 
-	if stale := saveSessionAnnotations(app, reviewed, 3, nil, "the older note"); stale.Success || !protocol.Deref(stale.Stale) {
-		t.Errorf("a save at generation 3 after 4 = %+v, want it refused as stale", stale)
+	if stale := saveSessionAnnotations(app, reviewed, 3, nil, "the older note"); stale.Success || !protocol.Deref(stale.Stale) || stale.Error != nil {
+		t.Errorf("a save at generation 3 after 4 = %+v, want it refused as stale without an error", stale)
 	}
 	if got := getSessionAnnotations(app, reviewed); !reflect.DeepEqual(got.Annotations, marks) || protocol.Deref(got.Note) != "Split this into two PRs." {
 		t.Errorf("draft after the stale save = %+v, want the newer marks and note untouched", got)

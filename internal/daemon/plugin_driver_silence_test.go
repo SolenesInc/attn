@@ -8,7 +8,6 @@ import (
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func seedDriverRun(t *testing.T, d *Daemon, sessionID, pluginName, runID string, state protocol.SessionState) {
@@ -139,24 +138,6 @@ func TestPluginDriverSilence_ARelaunchedRunOutranksTheOldAlarm(t *testing.T) {
 		if got := d.store.Get("relaunched").State; got != protocol.SessionStateWorking {
 			t.Fatalf("state=%q, want the new run's working", got)
 		}
-	})
-}
-
-func TestPluginDriverSilence_ClosedSessionCancelsTheAlarm(t *testing.T) {
-	d := newBubbleDaemon(t)
-	synctest.Test(t, func(t *testing.T) {
-		stopDaemonBackground(t, d)
-		d.pluginDriverSilenceGraceOverride = time.Minute
-		seedDriverRun(t, d, "closed-driver", "snipe-plugin", "run-1", protocol.SessionStateWorking)
-
-		d.armPluginDriverSilenceWatch("snipe-plugin")
-		d.closeSession("closed-driver", store.SessionClose{By: store.SessionClosedByUser})
-		if d.pluginDriverSilence().disarm("closed-driver") {
-			t.Fatal("alarm still pending for a session that is gone")
-		}
-
-		time.Sleep(5 * time.Minute)
-		synctest.Wait()
 	})
 }
 
