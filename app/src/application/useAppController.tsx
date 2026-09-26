@@ -293,7 +293,6 @@ export function useAppController({
     onReopened,
   });
   const {
-    pendingSessionClose,
     handleCloseSession,
     handleClosePane,
     handleCloseCurrentSessionShortcut,
@@ -343,7 +342,6 @@ export function useAppController({
     chiefTransferOpen: Boolean(chiefTransferTarget),
     contextCapOpen: Boolean(contextCapPromptSession),
     appViewParamsOpen: Boolean(appViewParamsPrompt),
-    sessionCloseOpen: Boolean(pendingSessionClose),
     sessionCreationOpen: Boolean(sessionCreationJob),
     prLauncherOpen: Boolean(openPRLauncherJob),
     diagnosticCaptureOpen: Boolean(diagnosticCapture),

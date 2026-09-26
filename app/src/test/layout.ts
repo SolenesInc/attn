@@ -74,3 +74,27 @@ export function layOutBlocksAcrossSizedAncestors(windowWidth: number) {
     for (const spy of spies) spy.mockRestore();
   });
 }
+
+export function fakeRects(rect: (element: HTMLElement) => DOMRect | null) {
+  const spy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+    return rect(this) ?? new DOMRect(0, 0, 0, 0);
+  });
+  onTestFinished(() => spy.mockRestore());
+}
+
+type TerminalSize = { clientWidth: number; clientHeight: number };
+
+export function sizeTerminals(size: (terminal: HTMLElement) => TerminalSize) {
+  for (const axis of ['clientWidth', 'clientHeight'] as const) {
+    const native = Object.getOwnPropertyDescriptor(HTMLElement.prototype, axis)!;
+    Object.defineProperty(HTMLElement.prototype, axis, {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.classList.contains('terminal-container') ? size(this)[axis] : native.get!.call(this);
+      },
+    });
+    onTestFinished(() => {
+      Object.defineProperty(HTMLElement.prototype, axis, native);
+    });
+  }
+}
