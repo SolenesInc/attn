@@ -11,6 +11,7 @@ interface KeyboardShortcutsConfig {
   onGoToDashboard: () => void;
   onToggleGridMode?: () => void;
   onJumpToWaiting: () => void;
+  onNextRun: () => void;
   /** Undefined while the queue arrangement is off; the keystroke is then unbound. */
   onSettleTurn?: () => void;
   onSnoozeTurn?: () => void;
@@ -51,6 +52,7 @@ export function useKeyboardShortcuts({
   onGoToDashboard,
   onToggleGridMode,
   onJumpToWaiting,
+  onNextRun,
   onSettleTurn,
   onSnoozeTurn,
   onCancelCountdown,
@@ -95,6 +97,7 @@ export function useKeyboardShortcuts({
   useShortcut('profile.switch', onSwitchProfile, enabled);
   useShortcut('view.toggleGrid', onToggleGridMode ?? (() => {}), enabled && !!onToggleGridMode);
   useShortcut('session.jumpToWaiting', onJumpToWaiting, enabled);
+  useShortcut('session.nextRun', onNextRun, enabled);
   useShortcut('session.settle', onSettleTurn ?? (() => {}), enabled && !!onSettleTurn);
   useShortcut('session.snooze', onSnoozeTurn ?? (() => {}), enabled && !!onSnoozeTurn);
   // Delivered by a native menu item, not the page's keydown listener: AppKit eats

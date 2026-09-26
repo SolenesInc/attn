@@ -80,15 +80,18 @@ export function useAttentionQueue({
 
   const waitingLocalSessions = unmutedEnrichedSessions.filter(wantsAttention);
 
+  const activeRunOwesTurn = Boolean(
+    activeSessionForCommands?.automation && activeSessionForCommands.turnOwed,
+  );
   const handleSettleActiveTurn = useMemo(
     () =>
-      queueModeEnabled && activeSessionQueueEligible
+      (queueModeEnabled && activeSessionQueueEligible) || activeRunOwesTurn
         ? () => {
             if (!activeSessionId) return;
             sendSettleTurn(activeSessionId);
           }
         : undefined,
-    [queueModeEnabled, activeSessionQueueEligible, activeSessionId, sendSettleTurn],
+    [queueModeEnabled, activeSessionQueueEligible, activeRunOwesTurn, activeSessionId, sendSettleTurn],
   );
 
   const [snoozeMenu, setSnoozeMenu] = useState<{

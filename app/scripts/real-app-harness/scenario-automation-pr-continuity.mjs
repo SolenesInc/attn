@@ -364,17 +364,16 @@ async function main() {
     });
     await runner.step('assert_visible_provenance', async () => {
       await client.request('select_session', { sessionId: sessionID });
-      const groupHeader = `[data-testid="sidebar-automation-header-${definitionID}"]`;
+      const openGroupHeader = `[data-testid="sidebar-automation-${definitionID}"][data-runs="1"] [data-testid="sidebar-automation-header-${definitionID}"][aria-expanded="true"]`;
       const header = await poll(
-        () => client.request('dom_text', { selector: groupHeader }).catch(() => null),
-        'the automation group header in the sidebar',
+        () => client.request('dom_text', { selector: openGroupHeader }).catch(() => null),
+        'the selected reviewer\'s automation group, open in the sidebar with one run',
       );
       runner.assert(
-        header.text.includes('Slice 4 packaged continuity proof') && header.text.includes('1 agent'),
-        'the sidebar groups the reviewer under its automation, named and counted',
+        header.text.includes('Slice 4 packaged continuity proof'),
+        'the sidebar groups the reviewer under its automation, named and counted, and opens it on selection',
         header,
       );
-      await client.request('dom_click', { selector: groupHeader });
       let lastUi = null;
       const sessionUi = await poll(async () => {
         lastUi = await client.request('get_session_ui_state', { sessionId: sessionID });

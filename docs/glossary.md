@@ -14,6 +14,7 @@
 - Auto-settle: closes a turn after the user's response and a period of uninterrupted agent work.
 - Standing dismissal: suppresses the next auto-settle during the agent's current stretch of work.
 - Queue: agents ordered by attention owed.
+- Automation run: an agent an automation started. Runs stay out of the queue; the runs owing a turn form a batch the user walks with Cmd+Shift+J.
 - Satellite: a shell pane attached to an agent.
 - Orphan: a satellite without a live parent.
 - Sliver: a pane or tile folded into a thin strip to make room.
@@ -39,7 +40,7 @@
 - Profile: the user's named grouping of agents, crew, automation definitions and the desktops that arrange them. It belongs to the daemon. Every agent belongs to one profile. Renaming keeps its identity.
 - Desktop: one arrangement of panes and tiles inside a profile. A profile always has at least one, and up to nine hold a shortcut slot.
 - Pane: an agent's place on a desktop. An agent has at most one pane.
-- Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue surfaces them and opening one places it.
+- Unplaced agent: an agent of a profile with no pane. Crew wakes, automation runs and reopened sessions start unplaced; the queue (or, for runs, the automations section) surfaces them and opening one places it.
 - Current desktop: the desktop a profile shows. Every client on that profile shares it.
 - Active pane: the pane or tile a desktop has selected. Every client shares it. With a tile selected, no agent is current; opens and placements land beside that tile.
 - Workspace migration: the one-time screen after the upgrade to profiles. Each old workspace arrives as an imported group already on a desktop; the user keeps it there, keeps it as an extra desktop, or merges it into another desktop before the app loads. The draft is daemon state shared by every client, and either client can finish it.

@@ -186,6 +186,7 @@ export function SidebarSessionRow({
   onClickCapture,
   onPointerDown,
   onOpenActions,
+  onSettle,
   onTriggerNudge,
   showSettling,
   delegates,
@@ -198,6 +199,7 @@ export function SidebarSessionRow({
   onClickCapture?: (event: ReactMouseEvent) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onOpenActions: (event: ReactMouseEvent) => void;
+  onSettle?: () => void;
   onTriggerNudge?: () => void;
   showSettling: boolean;
   delegates: readonly LocalSession[];
@@ -229,6 +231,21 @@ export function SidebarSessionRow({
       <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       <SidebarSessionBadges session={session} />
       <div className="session-actions">
+        {onSettle && (
+          <button
+            type="button"
+            className="session-action-btn session-settle-btn"
+            data-testid={`session-settle-${session.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSettle();
+            }}
+            title={`Settle this run (${formatShortcut('session.settle')})`}
+            aria-label={`Settle ${session.label}`}
+          >
+            ✓
+          </button>
+        )}
         <button
           className="session-action-btn session-more-btn"
           data-testid={`session-actions-${session.id}`}
