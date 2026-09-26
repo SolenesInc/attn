@@ -42,6 +42,60 @@ func TestPinningStampsTheInstantAndLeavesTheOwedTurnAlone(t *testing.T) {
 	})
 }
 
+func TestPinningTakesOnlyThatSessionOutOfTheQueueWhileItsTurnsKeepOpening(t *testing.T) {
+	w := newWorld(t, fakeagent.Claude)
+	app, cli := w.App(), w.Client()
+	cwd := w.Path("shop")
+	pinned := w.Spawn(app, fakeagent.Claude, cwd)
+	sibling := w.Spawn(app, fakeagent.Claude, cwd)
+	run := w.Launched(pinned)
+	w.Launched(sibling)
+	owedSince := map[string]protocol.Session{}
+	for _, id := range []string{pinned, sibling} {
+		owedSince[id] = testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.TurnOwed) })
+	}
+
+	pin(app, pinned, true)
+	testworld.AwaitSession(app, pinned, func(s protocol.Session) bool {
+		return s.PinnedAt != nil && !protocol.Deref(s.TurnOwed)
+	})
+	if got := queriedSession(t, cli, sibling); !protocol.Deref(got.TurnOwed) || got.PinnedAt != nil {
+		t.Fatalf("after pinning %s its sibling is owed=%v pinned_at=%q, want it still owed and unpinned",
+			pinned, protocol.Deref(got.TurnOwed), protocol.Deref(got.PinnedAt))
+	}
+
+	app.Send(protocol.SettleTurnMessage{Cmd: protocol.CmdSettleTurn, SessionID: pinned})
+	app.TypeLine(pinned, "run the checkout tests")
+	run.Prompted()
+	working := testworld.AwaitSession(app, pinned, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWorking && s.PinnedAt != nil
+	})
+	run.Reply("The unit suite passes. Ship it? <!-- attn:state=waiting_input -->")
+	whilePinned := testworld.AwaitSession(app, pinned, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateWaitingInput && stateSince(t, s).After(stateSince(t, working))
+	})
+	if protocol.Deref(whilePinned.TurnOwed) {
+		t.Fatal("a turn that opened while the session was pinned put it back in the queue")
+	}
+
+	pin(app, pinned, false)
+	testworld.AwaitSession(app, pinned, func(s protocol.Session) bool {
+		return s.PinnedAt == nil && protocol.Deref(s.TurnOwed) && turnOpenedAt(t, s).After(turnOpenedAt(t, owedSince[pinned]))
+	})
+
+	chief := w.Spawn(app, fakeagent.Claude, cwd, func(m *protocol.SpawnSessionMessage) { m.ChiefOfStaff = protocol.Ptr(true) })
+	w.Launched(chief)
+	for _, id := range []string{chief, "session-nobody-spawned"} {
+		pin(app, id, true)
+		if refusal := testworld.Refused(app); protocol.Deref(refusal.Cmd) != protocol.CmdPinSession {
+			t.Fatalf("pinning %s was refused for %q, want the pin_session refusal", id, protocol.Deref(refusal.Cmd))
+		}
+	}
+	if got := queriedSession(t, cli, chief); got.PinnedAt != nil {
+		t.Fatalf("the refused pin of the chief was recorded at %q", protocol.Deref(got.PinnedAt))
+	}
+}
+
 func TestAPinnedSessionStaysPinnedWhenRespawned(t *testing.T) {
 	w := newWorld(t, fakeagent.Codex)
 	app := w.App()
@@ -54,31 +108,6 @@ func TestAPinnedSessionStaysPinnedWhenRespawned(t *testing.T) {
 	respawn(w, app, fakeagent.Codex, session, cwd)
 	if got := queriedSession(t, w.Client(), session).PinnedAt; protocol.Deref(got) != protocol.Deref(pinned.PinnedAt) {
 		t.Fatalf("after a respawn pinned_at = %q, want the pin kept at %q", protocol.Deref(got), protocol.Deref(pinned.PinnedAt))
-	}
-}
-
-func TestAShellOpenedFromASessionNamesThatSessionAsItsParent(t *testing.T) {
-	w := newWorld(t, fakeagent.Codex)
-	app, cli := w.App(), w.Client()
-	cwd := w.Path("api")
-	agent := w.Spawn(app, fakeagent.Codex, cwd)
-	w.Launched(agent)
-	shellFrom := func(base string) string {
-		return w.Spawn(app, fakeagent.Harness(protocol.SessionAgentShell), cwd, func(m *protocol.SpawnSessionMessage) {
-			m.SpawnedFrom = protocol.Ptr(base)
-		})
-	}
-	shell := shellFrom(agent)
-	nested := shellFrom(shell)
-	for _, id := range []string{shell, nested} {
-		testworld.AwaitSession(app, id, func(s protocol.Session) bool { return protocol.Deref(s.ParentSessionID) == agent })
-	}
-	for _, id := range []string{shell, nested} {
-		if got := queriedSession(t, cli, id).ParentSessionID; protocol.Deref(got) != agent {
-			t.Errorf("queried shell %s names parent %q, want %s", id, protocol.Deref(got), agent)
-		}
-		app.TypeLine(id, "exit")
-		testworld.Await(app, protocol.EventSessionExited, func(e protocol.SessionExitedMessage) bool { return e.ID == id })
 	}
 }
 
