@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
-import { useEscapeStack } from '../../hooks/useEscapeStack';
 import { DraftPreview } from './DraftPreview';
+import { ModalDialog } from './ModalDialog';
 import { planGroupIds, planJoin, type DraftDesktopView, type DropEdge, type GroupView, type PlanNode } from './migrationDraft';
 
 const EDGES: Array<[DropEdge, string]> = [
@@ -41,7 +41,6 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
   const movingId = moving.group.group_id;
   const preview = planJoin(remaining, movingId, anchorGroupId, edge, percent / 100);
 
-  useEscapeStack(onCancel, true);
   useEffect(() => {
     confirmRef.current?.focus();
   }, []);
@@ -57,14 +56,7 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
   };
 
   return (
-    <div className="mp-scrim">
-      <dialog
-        open
-        className="mp-dialog"
-        aria-modal="true"
-        aria-labelledby="mp-merge-title"
-        onKeyDown={onKeyDown}
-      >
+    <ModalDialog labelledBy="mp-merge-title" onCancel={onCancel} onKeyDown={onKeyDown}>
         <div className="mp-dialog-top">
           <div>
             <div className="mp-eyebrow">{target.label} · add a split</div>
@@ -132,7 +124,6 @@ export function MergeDialog({ moving, target, remaining, groupById, draftChanged
             </button>
           </div>
         </div>
-      </dialog>
-    </div>
+    </ModalDialog>
   );
 }

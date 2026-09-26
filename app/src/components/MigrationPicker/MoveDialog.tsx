@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useEscapeStack } from '../../hooks/useEscapeStack';
+import { ModalDialog } from './ModalDialog';
 import type { DraftDesktopView, GroupView } from './migrationDraft';
 
 interface MoveDialogProps {
@@ -13,14 +13,12 @@ interface MoveDialogProps {
 
 export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, onCancel }: MoveDialogProps) {
   const listRef = useRef<HTMLDivElement>(null);
-  useEscapeStack(onCancel, true);
   useEffect(() => {
     listRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   }, []);
 
   return (
-    <div className="mp-scrim">
-      <dialog open className="mp-dialog" aria-modal="true" aria-labelledby="mp-move-title">
+    <ModalDialog labelledBy="mp-move-title" onCancel={onCancel}>
         <div className="mp-dialog-top">
           <div>
             <div className="mp-eyebrow">Move</div>
@@ -48,7 +46,6 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
             ))}
           </div>
         </div>
-      </dialog>
-    </div>
+    </ModalDialog>
   );
 }

@@ -225,6 +225,23 @@ describe('MigrationPicker', () => {
     expect(screen.queryByText('Side project', { selector: '.mp-source-name' })).not.toBeInTheDocument();
   });
 
+  it('orders drafts by revision within a connection and takes a new connection’s draft whatever its revision', async () => {
+    const user = userEvent.setup();
+    const initial = migrationState({ revision: 9 });
+    const daemon = fakeMigrationDaemon(initial);
+    renderGate(daemon);
+    await startPlacing(user);
+
+    act(() => daemon.broadcast({ ...confirm(initial, ['g1']), revision: 8 }));
+    expect(sourceRow('Daemon lifecycle')).not.toHaveClass('confirmed');
+
+    act(() => {
+      useProfilesStore.getState().connectionReportedMigrationPhase(MigrationPhase.PlacementRequired);
+      daemon.broadcast({ ...confirm(initial, ['g1']), revision: 2 });
+    });
+    await waitFor(() => expect(sourceRow('Daemon lifecycle')).toHaveClass('confirmed'));
+  });
+
   it('moves a group with a pointer drag onto the nearest edge of another group', async () => {
     const user = userEvent.setup();
     const initial = migrationState();

@@ -1402,7 +1402,7 @@ export function useDaemonSocket({
             callbacksRef.current.onAppsUpdate?.(data.apps || []);
             callbacksRef.current.onCrewUpdate?.(data.crew || []);
             useProfilesStore.getState().enterScope(data.profiles, data.selected_profile_id, data.desktops);
-            useProfilesStore.getState().migrationPhaseChanged(data.migration_phase ?? null);
+            useProfilesStore.getState().connectionReportedMigrationPhase(data.migration_phase ?? null);
             const nextWorkspaces = data.workspaces || [];
             workspacesRef.current = nextWorkspaces;
             callbacksRef.current.onWorkspacesUpdate(nextWorkspaces);

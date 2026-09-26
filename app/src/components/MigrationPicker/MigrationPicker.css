@@ -9,7 +9,7 @@
 }
 
 .mp-shell *,
-.mp-scrim * {
+.mp-dialog * {
   box-sizing: border-box;
 }
 
@@ -28,13 +28,13 @@
 .mp-shell h2,
 .mp-shell h3,
 .mp-shell p,
-.mp-scrim h2,
-.mp-scrim p {
+.mp-dialog h2,
+.mp-dialog p {
   margin: 0;
 }
 
 .mp-shell kbd,
-.mp-scrim kbd {
+.mp-dialog kbd {
   display: inline-block;
   min-width: 19px;
   padding: 1px 4px;
@@ -97,9 +97,9 @@
 
 .mp-shell button:focus-visible,
 .mp-shell [role='button']:focus-visible,
-.mp-scrim button:focus-visible,
-.mp-scrim select:focus-visible,
-.mp-scrim input:focus-visible {
+.mp-dialog button:focus-visible,
+.mp-dialog select:focus-visible,
+.mp-dialog input:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
@@ -829,19 +829,11 @@
   pointer-events: none;
 }
 
-.mp-scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.mp-dialog::backdrop {
   background: var(--color-bg-overlay);
 }
 
 .mp-dialog {
-  position: static;
-  margin: 0;
   padding: 0;
   width: min(620px, calc(100vw - 32px));
   max-height: calc(100vh - 36px);
