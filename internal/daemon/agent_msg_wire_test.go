@@ -20,7 +20,7 @@ func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T
 	app, cli := w.App(), w.Client()
 	recipient, agent := mailIdleAgent(w, app, "shop")
 	sender := spawnPanes(w, app, w.Path("sender"))[0].session
-	idleSince := queriedSession(t, cli, recipient).StateSince
+	idle := queriedSession(t, cli, recipient)
 
 	for _, body := range []string{"the migration landed", "the rollback is ready"} {
 		sent := sendAgentMessage(t, cli, sender, recipient, body)
@@ -34,9 +34,9 @@ func TestMailRingsAnIdleAgentWithTheInboxDoorbellAgainAfterEachRead(t *testing.T
 			t.Fatalf("the agent read %q from its inbox, want %q", got, body)
 		}
 		agent.Reply("Read it. <!-- attn:state=idle -->")
-		idleSince = testworld.AwaitSession(app, recipient, func(s protocol.Session) bool {
-			return s.State == protocol.SessionStateIdle && s.StateSince != idleSince
-		}).StateSince
+		idle = testworld.AwaitSession(app, recipient, func(s protocol.Session) bool {
+			return s.State == protocol.SessionStateIdle && stateSince(t, s).After(stateSince(t, idle))
+		})
 	}
 }
 
@@ -323,7 +323,10 @@ func mailIdleAgent(w *world, app *testworld.Peer, dir string) (string, *fakeagen
 	agent := w.Launched(session)
 	app.TypeLine(session, "wait for the others")
 	agent.Prompted()
+	working := testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 	agent.Reply("Waiting. <!-- attn:state=idle -->")
-	testworld.AwaitSession(app, session, func(s protocol.Session) bool { return s.State == protocol.SessionStateIdle })
+	testworld.AwaitSession(app, session, func(s protocol.Session) bool {
+		return s.State == protocol.SessionStateIdle && stateSince(w.T, s).After(stateSince(w.T, working))
+	})
 	return session, agent
 }
