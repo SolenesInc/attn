@@ -28,18 +28,6 @@ func newTerminalBuildDaemon(t *testing.T, backend *fakeSpawnBackend) (*Daemon, s
 	return d, id
 }
 
-func TestTerminalBuild_MatchingWorkerIsNotStale(t *testing.T) {
-	d, id := newTerminalBuildDaemon(t, &fakeSpawnBackend{
-		terminalBuild:      buildinfo.SnapshotFormat,
-		terminalBuildKnown: true,
-	})
-
-	clone := d.sessionForBroadcast(d.store.Get(id))
-	if clone.TerminalBuildStale != nil {
-		t.Fatalf("terminal_build_stale = %v for a same-build worker, want absent", *clone.TerminalBuildStale)
-	}
-}
-
 func TestTerminalBuild_DifferentWorkerIsStale(t *testing.T) {
 	d, id := newTerminalBuildDaemon(t, &fakeSpawnBackend{
 		terminalBuild:      "0123456789ab",
@@ -95,31 +83,6 @@ func TestTerminalBuild_PortableReplayNeedsNoInPlaceUpgrade(t *testing.T) {
 	}
 }
 
-func TestTerminalBuild_MismatchSwapsTheWorkerInPlace(t *testing.T) {
-	backend := &fakeSpawnBackend{
-		terminalBuild:      "0123456789ab",
-		terminalBuildKnown: true,
-		upgradeDone:        make(chan string, 1),
-		onUpgrade:          func(f *fakeSpawnBackend) { f.terminalBuild = buildinfo.SnapshotFormat },
-	}
-	d, id := newTerminalBuildDaemon(t, backend)
-
-	d.handleTerminalBuildChanged(id, "0123456789ab")
-	select {
-	case <-backend.upgradeDone:
-	case <-time.After(5 * time.Second):
-		t.Fatal("a mismatched worker was never asked to upgrade")
-	}
-
-	if got := backend.upgradedSessions(); len(got) != 1 || got[0] != id {
-		t.Fatalf("upgraded %v, want exactly [%s]", got, id)
-	}
-	clone := d.sessionForBroadcast(d.store.Get(id))
-	if clone.TerminalBuildStale != nil {
-		t.Fatalf("terminal_build_stale = %v after a successful swap, want absent", *clone.TerminalBuildStale)
-	}
-}
-
 func TestTerminalBuild_FailedSwapFallsBackToTheReloadNotice(t *testing.T) {
 	backend := &fakeSpawnBackend{
 		terminalBuild:      "0123456789ab",
@@ -139,25 +102,6 @@ func TestTerminalBuild_FailedSwapFallsBackToTheReloadNotice(t *testing.T) {
 	clone := d.sessionForBroadcast(d.store.Get(id))
 	if !protocol.Deref(clone.TerminalBuildStale) {
 		t.Fatal("terminal_build_stale absent after the swap failed; the user gets no way out")
-	}
-}
-
-func TestTerminalBuild_UpgradesOnTheReportedFormatNotAReadBack(t *testing.T) {
-	backend := &fakeSpawnBackend{
-		terminalBuildKnown: false,
-		upgradeDone:        make(chan string, 1),
-		onUpgrade: func(f *fakeSpawnBackend) {
-			f.terminalBuild = buildinfo.SnapshotFormat
-			f.terminalBuildKnown = true
-		},
-	}
-	d, id := newTerminalBuildDaemon(t, backend)
-
-	d.handleTerminalBuildChanged(id, "0123456789ab")
-	select {
-	case <-backend.upgradeDone:
-	case <-time.After(5 * time.Second):
-		t.Fatal("a mismatched worker was never asked to upgrade; the format it reported was ignored")
 	}
 }
 

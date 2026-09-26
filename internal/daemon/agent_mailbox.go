@@ -234,9 +234,6 @@ func (d *Daemon) drainAgentMailboxAfterStateChange(sessionID, state string) {
 		!d.hasQueuedAgentMailboxItems(sessionID) {
 		return
 	}
-	if d.agentMailboxDrainScheduledHook != nil {
-		d.agentMailboxDrainScheduledHook(sessionID)
-	}
 	go d.drainQueuedAgentMailboxItems(sessionID)
 }
 

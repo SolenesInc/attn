@@ -35,6 +35,8 @@ type Kit struct {
 	nextBoot chan struct{}
 	fakes    []*fake
 	failures []string
+
+	headlessTasks int
 }
 
 type fake struct {
@@ -214,6 +216,10 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 			return err
 		}
 		k.fail(fmt.Sprintf("%s (argv %q)", unexpected.Reason, unexpected.Argv))
+	case methodHeadless:
+		k.mu.Lock()
+		k.headlessTasks++
+		k.mu.Unlock()
 	case methodExiting:
 		var exit exitParams
 		if err := json.Unmarshal(params, &exit); err != nil {
