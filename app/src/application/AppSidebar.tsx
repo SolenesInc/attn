@@ -36,6 +36,7 @@ export function AppSidebar() {
     handleCloseTile,
     handleReloadTile,
     goToDashboard,
+    handleNextRun,
     view,
   } = useNavigationContext();
   const desktops = useProfilesStore((state) => state.desktops);
@@ -133,6 +134,7 @@ export function AppSidebar() {
       onSessionDragEnd={handleLeafDragEnd}
       queue={queueBands}
       onSettleTurn={sendSettleTurn}
+      onWalkRuns={handleNextRun}
       onOpenSnooze={openSnoozeMenu}
       onWakeTurn={sendWakeTurn}
       onScreenSessionIds={onScreenSessionIds}

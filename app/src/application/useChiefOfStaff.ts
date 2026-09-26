@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from 'react';
-import { useErrorToast } from '../components/ErrorToast';
+import { useToast } from '../components/Toast';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useProfilesStore } from '../store/profiles';
 import { AppContentProps } from './appSupport';
@@ -7,7 +7,7 @@ import { AppContentProps } from './appSupport';
 interface Options {
   enrichedLocalSessions: ReadonlyArray<{ id: string; label: string; chiefOfStaff?: boolean }>;
   daemonSessions: AppContentProps['daemonSessions'];
-  showError: ReturnType<typeof useErrorToast>['showError'];
+  showError: ReturnType<typeof useToast>['showError'];
 }
 export function useChiefOfStaff({ enrichedLocalSessions, daemonSessions, showError }: Options) {
   const { sendSetChiefOfStaff } = useDaemonApi();

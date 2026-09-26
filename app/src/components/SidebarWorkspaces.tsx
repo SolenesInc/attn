@@ -5,6 +5,8 @@ import { type UISessionState } from '../types/sessionState';
 import { tileContentKey } from '../types/workspace';
 import './Sidebar.css';
 import { useSidebarContext } from './SidebarContext';
+import { formatShortcut } from '../shortcuts/formatShortcut';
+import { runCount, runsNeedingYouCount } from '../utils/automationRuns';
 import { isSessionless, workspaceShortcut } from './sidebarModel';
 import { SidebarSessionRow, TileSidebarRow } from './SidebarRows';
 import { StateIndicator } from './StateIndicator';
@@ -132,16 +134,46 @@ export function SidebarWorkspaceList() {
 }
 
 export function SidebarAutomationGroups() {
-  const { expandedAutomationGroups, automationGroups, toggleAutomationGroup } = useSidebarContext();
+  const { expandedAutomationGroups, automationGroups, toggleAutomationGroup, onSettleTurn, onWalkRuns } =
+    useSidebarContext();
+  if (automationGroups.length === 0) return null;
+  const runs = runCount(automationGroups);
+  const needingYou = runsNeedingYouCount(automationGroups);
   return (
-    <>
+    <section
+      className="automation-runs"
+      data-testid="sidebar-automation-runs"
+      data-runs={runs}
+      data-needing={needingYou}
+      title="Automation runs never join the queue"
+    >
+      <div className="automation-runs-header">
+        Automations
+        <span className="automation-runs-count">{plural(runs, 'run')}</span>
+      </div>
+      {needingYou > 0 && (
+        <button
+          type="button"
+          className="automation-runs-batch"
+          data-testid="sidebar-runs-needing-you"
+          title="Open the next run needing you; press again for the one after"
+          onClick={onWalkRuns}
+        >
+          {plural(needingYou, 'run')} {needingYou === 1 ? 'needs' : 'need'} you
+          <kbd>{formatShortcut('session.nextRun')}</kbd>
+        </button>
+      )}
       {automationGroups.map((group) => {
         const expanded = expandedAutomationGroups.has(group.id);
+        const asking = group.needingYou.length;
+        const needingYouIds = new Set(group.needingYou.map((run) => run.id));
         return (
           <div
             className="automation-session-group"
             data-testid={`sidebar-automation-${group.id}`}
             data-automation-id={group.id}
+            data-runs={group.runs.length}
+            data-needing={asking}
             key={group.id}
           >
             <button
@@ -149,26 +181,41 @@ export function SidebarAutomationGroups() {
               className="automation-session-header"
               data-testid={`sidebar-automation-header-${group.id}`}
               aria-expanded={expanded}
+              title={[
+                group.name,
+                plural(group.runs.length, 'run'),
+                ...(asking ? [`${asking} stopped with a question`] : []),
+                'runs stay out of the queue',
+              ].join(' · ')}
               onClick={() => toggleAutomationGroup(group.id)}
             >
               <span className={`automation-session-chevron ${expanded ? 'expanded' : ''}`}>▸</span>
               <span className="automation-session-name">{group.name}</span>
-              <span className="automation-session-count">
-                {group.sessions.length} {group.sessions.length === 1 ? 'agent' : 'agents'}
-              </span>
+              {asking > 0 && <span className="automation-session-asking">{asking}</span>}
+              <span className="automation-session-count">{group.runs.length}</span>
             </button>
             {expanded && (
               <div className="automation-session-list">
-                {group.sessions.map((session) => (
-                  <WorkspaceSessionRow key={session.id} session={session} />
+                {group.runs.map((run) => (
+                  <WorkspaceSessionRow
+                    key={run.id}
+                    session={run}
+                    onSettle={
+                      onSettleTurn && needingYouIds.has(run.id) ? () => onSettleTurn(run.id) : undefined
+                    }
+                  />
                 ))}
               </div>
             )}
           </div>
         );
       })}
-    </>
+    </section>
   );
+}
+
+function plural(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
 }
 
 function WorkspaceDropGroup({

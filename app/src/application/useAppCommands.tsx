@@ -68,7 +68,7 @@ export function useAppCommands(): PaletteCommand[] {
   const desktops = useProfilesStore((state) => state.desktops);
   const profiles = useProfilesStore((state) => state.profiles);
   const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
-  const { goToDashboard, handleSelectDesktop, handleJumpToWaiting } = useNavigationContext();
+  const { goToDashboard, handleSelectDesktop, handleJumpToWaiting, handleNextRun } = useNavigationContext();
   const { desktopNavigation, setDesktopOverviewOpen, setProfileSwitcherOpen } = useDesktopNavigationContext();
   const { handleNewSession } = useSessionLaunchContext();
   const { handleSettleActiveTurn } = useAttentionQueueContext();
@@ -105,6 +105,15 @@ export function useAppCommands(): PaletteCommand[] {
         icon: <AttentionActionIcon />,
         shortcut: keys('session.jumpToWaiting'),
         run: handleJumpToWaiting,
+      },
+      {
+        id: 'next-run-needing-you',
+        title: 'Next run needing you',
+        description: 'Open the next automation run that stopped with a question',
+        keywords: ['automation', 'run', 'batch', 'waiting', 'next'],
+        icon: <AttentionActionIcon />,
+        shortcut: keys('session.nextRun'),
+        run: handleNextRun,
       },
       ...(handleSettleActiveTurn
         ? [{
@@ -235,6 +244,7 @@ export function useAppCommands(): PaletteCommand[] {
     desktops,
     goToDashboard,
     handleJumpToWaiting,
+    handleNextRun,
     handleNewSession,
     handleSelectDesktop,
     handleSettleActiveTurn,

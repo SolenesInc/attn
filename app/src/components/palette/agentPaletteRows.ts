@@ -4,11 +4,10 @@ import { headOfQueue, type QueueBandSession, type QueueBands } from '../../utils
 import { crewDisplayName } from '../../utils/crewName';
 import { isSnoozed } from '../../utils/snoozeDurations';
 import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
-import { groupAutomationSessions } from '../sidebarModel';
+import { automationRunGroups, type AutomationRunSession } from '../../utils/automationRuns';
 
-export interface PaletteSession extends QueueBandSession {
+export interface PaletteSession extends Omit<QueueBandSession, 'automation'>, AutomationRunSession {
   state: UISessionState;
-  automation?: { definition_id: string; definition_name: string };
 }
 
 export type AgentPaletteRow<S extends PaletteSession> =
@@ -34,10 +33,6 @@ export function agentStatus(session: PaletteSession, now: number): AgentStatus {
   if (session.turnOwed) return session.state === 'pending_approval' ? 'approval' : 'waiting';
   if (session.state === 'working' || session.state === 'launching') return 'working';
   return 'idle';
-}
-
-export function runNeedsYou(session: PaletteSession, now: number): boolean {
-  return Boolean(session.turnOwed) && !isSnoozed(session.turnSnoozedUntil, now);
 }
 
 export function isSelectableRow<S extends PaletteSession>(row: AgentPaletteRow<S>): boolean {
@@ -101,16 +96,16 @@ export function agentPaletteRows<S extends PaletteSession>(
   }
 
   const runs: AgentPaletteRow<S>[] = [];
-  for (const group of groupAutomationSessions(workspaces)) {
+  for (const group of automationRunGroups(workspaces, now)) {
     const byName = matches(terms, group.name);
-    const shown = byName ? group.sessions : group.sessions.filter((session) => matches(terms, session.label));
+    const shown = byName ? group.runs : group.runs.filter((session) => matches(terms, session.label));
     if (shown.length === 0) continue;
     runs.push({
       kind: 'runs',
       key: `runs:${group.id}`,
       name: group.name,
-      runs: group.sessions.length,
-      needYou: group.sessions.filter((session) => runNeedsYou(session, now)).length,
+      runs: group.runs.length,
+      needYou: group.needingYou.length,
     });
     for (const session of shown) runs.push(...agentRow(session, false));
   }

@@ -5,7 +5,8 @@ import { type TileContentState } from '../types/workspace';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
 import { UNPLACED_GROUP_ID } from '../utils/workspaceViewModels';
-import { groupAutomationSessions, isSessionless } from './sidebarModel';
+import { automationRunGroups } from '../utils/automationRuns';
+import { isSessionless } from './sidebarModel';
 import type { DockItem, LocalSession, SidebarProps, SidebarWorkspace } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
 
@@ -36,6 +37,7 @@ export function useSidebarState({
   onManageCrew,
   onOpenCrewMemberDetails,
   onSettleTurn,
+  onWalkRuns,
   onOpenSnooze,
   onWakeTurn,
   onScreenSessionIds,
@@ -139,10 +141,15 @@ export function useSidebarState({
     });
   };
 
-  const automationGroups = useMemo(
-    () => groupAutomationSessions(workspaces),
-    [workspaces],
-  );
+  const automationGroups = useMemo(() => automationRunGroups(workspaces, Date.now()), [workspaces]);
+  const [lastSeenSelectedId, setLastSeenSelectedId] = useState<string | null>(null);
+  if (selectedId !== lastSeenSelectedId) {
+    setLastSeenSelectedId(selectedId);
+    const selectedRunGroup = automationGroups.find((group) => group.runs.some((run) => run.id === selectedId));
+    if (selectedRunGroup && !expandedAutomationGroups.has(selectedRunGroup.id)) {
+      setExpandedAutomationGroups(new Set(expandedAutomationGroups).add(selectedRunGroup.id));
+    }
+  }
   const allSessions = useMemo(() => {
     const byId = new Map<string, LocalSession>();
     for (const workspace of workspaces) {
@@ -266,6 +273,7 @@ export function useSidebarState({
     onManageCrew,
     onOpenCrewMemberDetails,
     onSettleTurn,
+    onWalkRuns,
     onOpenSnooze,
     onWakeTurn,
     onScreenSessionIds,

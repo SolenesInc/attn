@@ -7,7 +7,9 @@ import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { orderedDesktops } from '../utils/desktops';
+import { automationRunGroups, nextRunNeedingYou, runCount } from '../utils/automationRuns';
 import { oldestWantedTurn } from '../utils/queueBands';
+import { formatShortcut } from '../shortcuts/formatShortcut';
 import { probeUiAfterSwitch } from '../utils/uiDiagnosticsLog';
 import {
   persistWorkspaceSelectionStyle,
@@ -25,6 +27,7 @@ interface Options {
   unmutedEnrichedSessions: ReturnType<typeof useAppSessions>['unmutedEnrichedSessions'];
   attentionQueue: ReturnType<typeof useAttentionQueue>;
   showError: (message: string) => void;
+  showNotice: (message: string) => void;
 }
 export function useAppNavigation({
   activeSessionId,
@@ -33,6 +36,7 @@ export function useAppNavigation({
   unmutedEnrichedSessions,
   attentionQueue,
   showError,
+  showNotice,
 }: Options) {
   const {
     view,
@@ -73,6 +77,26 @@ export function useAppNavigation({
       handleSelectSession(waiting.id);
     }
   }, [unmutedEnrichedSessions, handleSelectSession, wantsAttention]);
+
+  const handleNextRun = useCallback(() => {
+    const groups = automationRunGroups(desktopViews, Date.now());
+    const step = nextRunNeedingYou(groups, activeSessionId);
+    if (!step) {
+      const total = runCount(groups);
+      const { profiles, selectedProfileId } = useProfilesStore.getState();
+      const profileName = profiles.find((profile) => profile.id === selectedProfileId)?.name ?? 'this profile';
+      showNotice(
+        total === 0
+          ? `No automation runs in ${profileName}`
+          : `No run needs you · ${total} ${total === 1 ? 'run' : 'runs'} on file`,
+      );
+      return;
+    }
+    handleSelectSession(step.run.id);
+    showNotice(
+      `${step.group.name} · run ${step.position} of ${step.total} needing you · ${formatShortcut('session.settle')} settles, ${formatShortcut('session.nextRun')} moves on`,
+    );
+  }, [desktopViews, activeSessionId, handleSelectSession, showNotice]);
 
   const toggleGridMode = useCallback(() => {
     setView((prev) => (prev === 'grid' ? (activeSessionId ? 'session' : 'dashboard') : 'grid'));
@@ -173,6 +197,7 @@ export function useAppNavigation({
 
   return {
     handleJumpToWaiting,
+    handleNextRun,
     view,
     setView,
     followNextTurn,

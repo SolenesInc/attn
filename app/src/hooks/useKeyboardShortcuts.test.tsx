@@ -20,6 +20,7 @@ function options(enabled = true) {
     onOpenPalette: vi.fn(),
     onGoToDashboard: vi.fn(),
     onJumpToWaiting: vi.fn(),
+    onNextRun: vi.fn(),
     onSwitchToDesktopSlot: vi.fn(),
     onSendToDesktopSlot: vi.fn(),
     onOpenDesktopOverview: vi.fn(),
