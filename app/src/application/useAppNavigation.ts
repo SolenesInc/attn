@@ -2,9 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { controlBrowserHost } from '../browser/host';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAgentNavigation } from '../hooks/useAgentNavigation';
-import { resyncShownTile } from '../hooks/useDesktopSelectionBridge';
 import { withFreshDesktopRevisions } from '../hooks/desktopRevisions';
-import { useProfilesStore } from '../store/profiles';
+import { useProfilesStore, useSelectedTile } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import { dispatcherOf } from '../utils/delegationLinks';
 import { orderedDesktops } from '../utils/desktops';
@@ -40,8 +39,6 @@ export function useAppNavigation({
     setView,
     followNextTurn,
     setFollowNextTurn,
-    selectedTile,
-    setSelectedTile,
     utilityFocusRequestToken,
     requestTerminalFocus,
     goToDashboard,
@@ -50,6 +47,8 @@ export function useAppNavigation({
   const { sendDesktopSetCurrent, sendDesktopSetActivePane, sendDesktopRemoveLeaf } = useDaemonApi();
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const desktops = useProfilesStore((state) => state.desktops);
+  const shownTile = useSelectedTile();
+  const selectedTile = view === 'dashboard' ? null : shownTile;
   const currentDesktopIdRef = useRef<string | null>(currentDesktopId);
   useEffect(() => {
     currentDesktopIdRef.current = currentDesktopId;
@@ -115,17 +114,15 @@ export function useAppNavigation({
       const { selectedProfileId, desktops } = useProfilesStore.getState();
       if (!selectedProfileId || !desktops.some((desktop) => desktop.id === desktopId)) return;
       setView('session');
-      setSelectedTile({ desktopId, tileId });
       void sendDesktopSetActivePane(desktopId, tileId)
         .then(() => {
           if (desktopId !== currentDesktopIdRef.current) return sendDesktopSetCurrent(selectedProfileId, desktopId);
         })
         .catch((error) => {
-          resyncShownTile();
           showError(`Could not focus that tile: ${error instanceof Error ? error.message : String(error)}`);
         });
     },
-    [sendDesktopSetActivePane, sendDesktopSetCurrent, setSelectedTile, setView, showError],
+    [sendDesktopSetActivePane, sendDesktopSetCurrent, setView, showError],
   );
 
   const handleCloseTile = useCallback(

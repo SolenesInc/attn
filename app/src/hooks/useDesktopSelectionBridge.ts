@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { useProfilesStore, type ProfilesState } from '../store/profiles';
+import { selectedTile, useProfilesStore, type ProfilesState } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { Desktop } from '../types/generated';
 import { desktopPaneOfAgent } from '../utils/desktops';
@@ -17,8 +17,7 @@ function shownOf(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): S
   const desktop = state.desktops.find((entry) => entry.id === state.currentDesktopId);
   const paneId = desktop?.active_pane_id ?? '';
   const sessionId = desktop?.panes.find((pane) => pane.pane_id === paneId)?.session_id ?? null;
-  const tileId = paneId && !sessionId ? paneId : null;
-  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId };
+  return { desktopId: state.currentDesktopId, paneId, sessionId, tileId: selectedTile(state)?.tileId ?? null };
 }
 
 function agentToShow(
@@ -38,13 +37,9 @@ function agentToShow(
 function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>) {
   const sessions = useSessionStore.getState();
   const shown = shownOf(state);
-  if (sessions.view !== 'session' || !sessions.selectedTile || !shown.tileId) return;
+  if (sessions.view !== 'session' || !shown.tileId) return;
   const context = agentToShow(state, shown, sessions.activeSessionId);
   if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
-}
-
-export function resyncShownTile() {
-  mirrorShownTile(shownOf(useProfilesStore.getState()));
 }
 
 function arrivedInPendingProfile(
@@ -58,26 +53,16 @@ function arrivedInPendingProfile(
   return pendingProfileId === state.selectedProfileId;
 }
 
-function mirrorShownTile(shown: Shown) {
-  const current = useSessionStore.getState().selectedTile;
-  if (current?.desktopId === shown.desktopId && current.tileId === shown.tileId) return;
-  if (!current && !shown.tileId) return;
-  useSessionStore.setState({
-    selectedTile: shown.desktopId && shown.tileId ? { desktopId: shown.desktopId, tileId: shown.tileId } : null,
-  });
-}
-
 function abandonSelection(sessionId: string) {
   const sessions = useSessionStore.getState();
   if (sessions.pendingSelection?.sessionId !== sessionId && sessions.activeSessionId !== sessionId) return;
-  if (sessions.pendingSelection) sessions.cancelPendingSelection();
+  sessions.cancelPendingSelection();
   const state = useProfilesStore.getState();
   const shown = shownOf(state);
-  const current = useSessionStore.getState().activeSessionId;
+  const current = sessions.activeSessionId;
   const shownAgent = agentToShow(state, shown, shown.tileId ? current : null);
   if (shown.tileId) {
     if (shownAgent !== current) useSessionStore.setState({ activeSessionId: shownAgent });
-    mirrorShownTile(shown);
     return;
   }
   if (shownAgent !== current) useSessionStore.getState().setActiveSession(shownAgent);
@@ -135,8 +120,10 @@ export function useDesktopSelectionBridge(
   const view = useSessionStore((state) => state.view);
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
   const pendingSessionId = useSessionStore((state) => state.pendingSelection?.sessionId ?? null);
-  const tileSelected = useSessionStore((state) => state.selectedTile !== null);
-  const intentSessionId = pendingSessionId ?? (view === 'session' && !tileSelected ? activeSessionId : null);
+  const requestedSessionId = useSessionStore((state) => state.focusRequest?.sessionId ?? null);
+  const tileSelected = useProfilesStore((state) => selectedTile(state) !== null);
+  const shownIntent = tileSelected ? requestedSessionId : activeSessionId;
+  const intentSessionId = pendingSessionId ?? (view === 'session' ? shownIntent : null);
   const intentProfileId = useSessionStore(
     (state) => state.sessions.find((session) => session.id === intentSessionId)?.profileId ?? null,
   );
@@ -149,12 +136,7 @@ export function useDesktopSelectionBridge(
   }, [reportFailure]);
 
   useEffect(() => {
-    mirrorShownTile(shownOf(useProfilesStore.getState()));
-  }, []);
-
-  useEffect(() => {
-    const { pendingSelection, selectedTile } = useSessionStore.getState();
-    if (!intentSessionId || intentProfileId === null || (!pendingSelection && selectedTile)) {
+    if (!intentSessionId || intentProfileId === null) {
       sentKey.current = null;
       return;
     }
@@ -205,11 +187,9 @@ export function useDesktopSelectionBridge(
     const state = useProfilesStore.getState();
     const shown = shownOf(state);
     if (shown.tileId) {
-      mirrorShownTile(shown);
       keepTileContext(state);
       return;
     }
-    if (tileSelected) return;
     const sessionId = agentToShow(state, shown, null);
     if (sessionId) useSessionStore.getState().setActiveSession(sessionId);
   }, [view, activeSessionId, pendingSessionId, tileSelected, currentDesktopId]);
@@ -232,12 +212,12 @@ export function useDesktopSelectionBridge(
         if (arrivedInPendingProfile(state, previous, sessions)) return;
         if (sessions.view === 'session') {
           const sessionId = agentToShow(state, shown, sessions.activeSessionId);
-          if (sessionId !== sessions.activeSessionId || sessions.pendingSelection) {
+          const overridesRequest = shown.tileId !== null && sessions.focusRequest !== null;
+          if (sessionId !== sessions.activeSessionId || sessions.pendingSelection || overridesRequest) {
             sessions.setActiveSession(sessionId);
           }
           if (shown.sessionId) focusRef.current(shown.sessionId, shown.paneId);
         }
-        mirrorShownTile(shown);
       }),
     [],
   );

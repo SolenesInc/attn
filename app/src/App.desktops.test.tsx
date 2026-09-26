@@ -499,6 +499,39 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('s5');
   });
 
+  it('finishes a selection in another profile whose current desktop shows a tile', async () => {
+    const OTHER = 'profile-other';
+    useSessionStore.setState((state) => ({
+      sessions: [...state.sessions, { ...session('s5'), profileId: OTHER }, { ...session('s6'), profileId: OTHER }],
+    }));
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+    desktopCommands.sendDesktopSetCurrent.mockImplementation(() => new Promise(() => {}));
+    const other = { id: OTHER, name: 'Other', current_desktop_id: 'e1', revision: 1 };
+    const tileOn = (desktop: Desktop) => ({ ...withNotesTile(desktop), active_pane_id: 'tile-notes' });
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s5');
+    });
+    act(() => {
+      useProfilesStore.getState().profilesChanged([other]);
+      useProfilesStore.getState().arrangementArrived(other, [
+        { ...tileOn(agentDesktop('e1', 1, ['s6'])), profile_id: OTHER },
+        { ...agentDesktop('e2', 2, ['s5']), profile_id: OTHER },
+      ]);
+    });
+
+    await waitFor(() => expect(desktopCommands.sendDesktopSetCurrent).toHaveBeenCalledWith(OTHER, 'e2'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s5');
+
+    act(() => {
+      useProfilesStore.getState().arrangementArrived({ ...other, current_desktop_id: 'e2' }, useProfilesStore.getState().desktops);
+    });
+
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe(''));
+    expect(useSessionStore.getState().activeSessionId).toBe('s5');
+  });
+
   describe('when the agent behind a focused tile closes', () => {
     const tileFocused = (desktop: Desktop) => ({ ...withNotesTile(desktop), active_pane_id: 'tile-notes' });
     const dropFromD1 = (remaining: string[]) =>
@@ -684,17 +717,98 @@ describe('desktop surface', () => {
     expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
   });
 
-  it('sends pane focus even to the daemon-active pane while a tile selection is still in flight', async () => {
+  describe('with a tile holding the daemon focus', () => {
+    const selectedTileAttr = () => screen.getByTestId('sidebar').getAttribute('data-selected-tile');
+
+    beforeEach(() => {
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...withNotesTile(desktop), active_pane_id: 'tile-notes' } : desktop,
+        ),
+        'd1',
+      );
+    });
+
+    async function renderOnTile() {
+      render(<App />);
+      await waitFor(() => expect(selectedTileAttr()).toBe('d1:tile-notes'));
+    }
+
+    it('moves focus to the tile\'s own context agent when the user selects it', async () => {
+      await renderOnTile();
+      expect(useSessionStore.getState().activeSessionId).toBe('s1');
+
+      act(() => {
+        useSessionStore.getState().selectAgent('s1');
+      });
+
+      expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s1');
+      await waitFor(() => expect(selectedTileAttr()).toBe(''));
+      expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    });
+
+    it('moves focus to another agent on the same desktop when the user selects it', async () => {
+      await renderOnTile();
+
+      act(() => {
+        useSessionStore.getState().selectAgent('s2');
+      });
+
+      expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s2');
+      await waitFor(() => expect(selectedTileAttr()).toBe(''));
+      expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    });
+
+    it('sends pane focus when the user clicks an agent pane', async () => {
+      await renderOnTile();
+
+      await userEvent.click(screen.getByTestId('focus-pane-s1'));
+
+      expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s1');
+      await waitFor(() => expect(selectedTileAttr()).toBe(''));
+    });
+
+    it('drops the tile when the user switches to a desktop without one', async () => {
+      await renderOnTile();
+
+      await userEvent.click(screen.getByTestId('select-d3'));
+
+      await waitFor(() => expect(isActive('d3')).toBe(true));
+      expect(selectedTileAttr()).toBe('');
+      expect(useSessionStore.getState().activeSessionId).toBe('s3');
+    });
+
+    it('shows the other desktop\'s tile when the user switches to a tile-only desktop', async () => {
+      await renderOnTile();
+
+      await userEvent.click(screen.getByTestId('select-d2'));
+
+      await waitFor(() => expect(selectedTileAttr()).toBe('d2:tile-readme'));
+      expect(useSessionStore.getState().activeSessionId).toBeNull();
+      expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
+    });
+  });
+
+  it('lets a tile another window focuses win over the agent the user selected before', async () => {
     arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
-    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(() => new Promise(() => {}));
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
+    act(() => {
+      useSessionStore.getState().selectAgent('s1');
+    });
 
-    await userEvent.click(screen.getByTestId('select-notes-tile'));
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
-    await userEvent.click(screen.getByTestId('focus-pane-s1'));
+    act(() => {
+      arrangeDesktops(
+        useProfilesStore.getState().desktops.map((desktop) =>
+          desktop.id === 'd1' ? { ...desktop, active_pane_id: 'tile-notes', revision: desktop.revision + 1 } : desktop,
+        ),
+        'd1',
+      );
+    });
 
-    expect(desktopCommands.sendDesktopSetActivePane).toHaveBeenLastCalledWith('d1', 'pane-s1');
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
+    expect(desktopCommands.sendDesktopSetActivePane).not.toHaveBeenCalled();
+    expect(useSessionStore.getState().activeSessionId).toBe('s1');
   });
 
   it('puts the sidebar back on the shown focus when the daemon refuses a tile selection', async () => {
@@ -723,15 +837,31 @@ describe('desktop surface', () => {
 
   it('keeps a tile the user picks from Home while the daemon applies it', async () => {
     arrangeDesktops(useProfilesStore.getState().desktops.map((desktop) => (desktop.id === 'd1' ? withNotesTile(desktop) : desktop)), 'd1');
-    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(() => new Promise(() => {}));
+    let applyFocus = () => {};
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      (desktopId: string, paneId: string) =>
+        new Promise((resolve) => {
+          applyFocus = () => {
+            arrangeDesktops(
+              useProfilesStore.getState().desktops.map((desktop) =>
+                desktop.id === desktopId ? { ...desktop, active_pane_id: paneId, revision: desktop.revision + 1 } : desktop,
+              ),
+              'd1',
+            );
+            resolve({ event: 'profile_action_result', request_id: 'test', action: 'desktop_set_active_pane', success: true });
+          };
+        }),
+    );
     render(<App />);
     await screen.findByTestId(desktopTestId('d1'));
     act(() => useSessionStore.getState().goToDashboard());
 
     await userEvent.click(screen.getByTestId('select-notes-tile'));
+    await act(async () => applyFocus());
 
-    expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes');
+    await waitFor(() => expect(screen.getByTestId('sidebar').getAttribute('data-selected-tile')).toBe('d1:tile-notes'));
     expect(desktopCommands.sendDesktopSetActivePane.mock.calls).toEqual([['d1', 'tile-notes']]);
+    expect(useSessionStore.getState().view).toBe('session');
   });
 
   it('offers the focused agent\'s directory as the workspace root only when it runs on this machine', async () => {
