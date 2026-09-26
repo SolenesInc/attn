@@ -12,8 +12,8 @@ func TestAnUnreadSeedBellSaysTheSeedWasUnblocked(t *testing.T) {
 	inBubble(t, func(t *testing.T, w *world) {
 		cli := w.Client()
 		registerSessions(t, w, cli, "watcher", "worker")
-		release := plantSeed(t, cli, "worker", "Ship the release")
-		build := plantSeed(t, cli, "worker", "Fix the build")
+		release := plantSeedAs(t, cli, "worker", "Ship the release")
+		build := plantSeedAs(t, cli, "worker", "Fix the build")
 		if _, err := cli.SeedLink(build, "blocks", release, false); err != nil {
 			t.Fatalf("the build blocks the release: %v", err)
 		}
@@ -39,7 +39,7 @@ func TestAnUnreadSeedBellSaysTheSeedWasUnblocked(t *testing.T) {
 	})
 }
 
-func plantSeed(t *testing.T, cli *client.Client, sessionID, title string) string {
+func plantSeedAs(t *testing.T, cli *client.Client, sessionID, title string) string {
 	t.Helper()
 	planted, err := cli.SeedPlant(sessionID, title, "", "", "", "")
 	if err != nil {
