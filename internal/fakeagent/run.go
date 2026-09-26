@@ -2,6 +2,7 @@ package fakeagent
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -13,6 +14,8 @@ type Run struct {
 	Resumed        bool
 	Argv           []string
 	Env            []string
+	AutoMode       json.RawMessage
+	Yolo           bool
 	t              testing.TB
 	fake           *fake
 }

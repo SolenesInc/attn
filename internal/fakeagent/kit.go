@@ -202,6 +202,8 @@ func (k *Kit) handle(f *fake, method string, params json.RawMessage) error {
 				Resumed:        f.Resumed,
 				Argv:           f.Argv,
 				Env:            f.Env,
+				AutoMode:       f.AutoMode,
+				Yolo:           f.Yolo,
 				t:              k.t,
 				fake:           f,
 			}
