@@ -38,6 +38,21 @@ func (r *Run) ReplyAfterStop(text string) {
 	r.call(methodReplyLate, textParams{Text: text}, nil)
 }
 
+func (r *Run) Stream(text string) {
+	r.t.Helper()
+	r.call(methodStream, textParams{Text: text}, nil)
+}
+
+func (r *Run) Subagent(text string) {
+	r.t.Helper()
+	r.call(methodSubagent, textParams{Text: text}, nil)
+}
+
+func (r *Run) DeleteSubagentTranscripts() {
+	r.t.Helper()
+	r.call(methodDropSubs, textParams{}, nil)
+}
+
 func (r *Run) Exit(code int) {
 	r.t.Helper()
 	if err := r.fake.peer.notify(methodExit, exitParams{Code: code}); err != nil {
