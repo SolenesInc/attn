@@ -194,17 +194,12 @@ and 1.9 s of tree walking on macOS/APFS.
 
 ## Verifying it before trusting it
 
-`internal/daemon/worktree_sweep_receipt_test.go` runs the shipped gates read-only
-against real repositories and prints what the sweep would do:
-
-```
-ATTN_SWEEP_RECEIPT_REPOS=/path/a,/path/b go test ./internal/daemon \
-  -run TestWorktreeSweepReceipt -v
-```
-
-It never prunes, never writes an object, and never opens a database. Run it
-before changing a gate, and check the diff in the verdicts rather than trusting
-the reasoning.
+Before changing a gate, run a non-production instance with the sweep off
+(`worktree_sweep_enabled=false`) against real repositories, run
+`attn worktree refresh`, and compare what `attn worktree list` says of each
+row before and after the change. With the sweep off every row is still decided
+and an eligible row says so, but nothing is removed. Check the diff in the
+verdicts rather than trusting the reasoning.
 
 The receipt taken before this shipped: 29 candidates across two repositories, 29
 confirmed merged — 26 by byte-identical tree or ancestry on the integration
