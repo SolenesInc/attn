@@ -63,10 +63,6 @@ export function Palette<T>({
   }, []);
 
   useEffect(() => {
-    setSelectedKey(null);
-  }, [query]);
-
-  useEffect(() => {
     if (activeIndex < 0) return;
     listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: 'nearest' });
   }, [activeIndex]);
@@ -119,7 +115,10 @@ export function Palette<T>({
             type="text"
             placeholder={placeholder}
             value={query}
-            onChange={(event) => onQueryChange(event.target.value)}
+            onChange={(event) => {
+              setSelectedKey(null);
+              onQueryChange(event.target.value);
+            }}
             onKeyDown={handleKeyDown}
             role="combobox"
             aria-label={ariaLabel}
