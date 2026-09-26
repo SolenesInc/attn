@@ -651,6 +651,20 @@ describe('App terminal runtime', () => {
     expect(daemon.sentOf('pty_input').map(({ data }) => data)).toEqual(['\x1bOA']);
   });
 
+  it('finds text in a snapshot adopted while find is open', async () => {
+    const { daemon, connection } = await reattachAfterReconnect('before\r\n');
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Terminal input' }), { key: 'f', metaKey: true });
+    fireEvent.change(screen.getByTestId('ghostty-find-input'), { target: { value: 'STYLED' } });
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(screen.getByTestId('ghostty-find-count')).toHaveTextContent('0/0');
+
+    connection.emit(snapshotReply('s1'));
+    await daemon.idle();
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+
+    expect(screen.getByTestId('ghostty-find-count')).toHaveTextContent('1/1');
+  });
+
   it.each([
     ['an empty snapshot', snapshotOf(new Uint8Array())],
     ['a snapshot from another build', snapshotOf(NATIVE_SNAPSHOT, 'deadbeef1234')],

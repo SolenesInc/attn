@@ -1496,6 +1496,15 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
       });
     }, []);
 
+    const scheduleFindRescan = useCallback(() => {
+      if (!findOpenRef.current || !findQueryRef.current) return;
+      if (findRescanTimerRef.current) clearTimeout(findRescanTimerRef.current);
+      findRescanTimerRef.current = setTimeout(() => {
+        findRescanTimerRef.current = null;
+        runFindScanRef.current?.();
+      }, 300);
+    }, []);
+
     const write = useCallback((
       data: string | Uint8Array,
       options?: {
@@ -1566,13 +1575,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         );
         hoverGenerationRef.current += 1;
         annotationsRef.current?.noteWrite();
-        if (findOpenRef.current && findQueryRef.current) {
-          if (findRescanTimerRef.current) clearTimeout(findRescanTimerRef.current);
-          findRescanTimerRef.current = setTimeout(() => {
-            findRescanTimerRef.current = null;
-            runFindScanRef.current?.();
-          }, 300);
-        }
+        scheduleFindRescan();
         if (viewportOffsetRef.current === 0) {
           wheelRemainderRowsRef.current = 0;
         }
@@ -1613,7 +1616,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           scheduleSynchronizedOutputRenderFallback();
         }
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, lineAtVisibleRow, scheduleCoalescedRefit, scheduleFindRescan, scheduleSynchronizedOutputRenderFallback, selectionLineAtBufferRow]);
 
     const restoreSnapshot = useCallback((snapshot: Uint8Array) => {
       return enqueueOperation('restoreSnapshot', () => {
@@ -1653,6 +1656,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
         wheelRemainderRowsRef.current = 0;
         hoverGenerationRef.current += 1;
         annotationsRef.current?.noteWrite();
+        scheduleFindRescan();
         flushSynchronizedOutputRender();
         requestAnimationFrame(() => {
           void enqueueOperation('restoreSnapshotHistory', () => {
@@ -1684,7 +1688,7 @@ export const GhosttyTerminal = forwardRef<GhosttyTerminalHandle, GhosttyTerminal
           });
         });
       });
-    }, [enqueueOperation, flushSynchronizedOutputRender]);
+    }, [enqueueOperation, flushSynchronizedOutputRender, scheduleFindRescan]);
 
     const seedBlocks = useCallback((blocks: SeededBlock[]) => {
       return enqueueOperation('seedBlocks', () => {
