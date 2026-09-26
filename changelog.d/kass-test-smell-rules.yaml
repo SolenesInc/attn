@@ -1,0 +1,3 @@
+kind: internal
+area: tests
+change: Add kass rules that flag test smells (sleeping instead of waiting on a signal, mock-only assertions, compiler-guaranteed checks, tests that cannot fail) for agents working on attn.
