@@ -13,7 +13,6 @@ import { useSidebarContext } from './SidebarContext';
 import { useDesktopChipDrop } from './useDesktopChipDrop';
 import { CollapseIcon, HomeIcon, PlusIcon } from './SidebarIcons';
 import { SidebarAutomationGroups } from './SidebarWorkspaces';
-import type { SidebarWorkspace } from './sidebarTypes';
 
 const LEAD_TURNS = 3;
 const WALK_ROW_SELECTOR = '.queue-row-select, .sidebar-row-select';

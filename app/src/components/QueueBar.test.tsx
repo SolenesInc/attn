@@ -2,6 +2,7 @@ import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
+import { useSessionStore } from '../store/sessions';
 import type { AutomationProvenance } from '../types/generated';
 import { buildQueueBands } from '../utils/queueBands';
 import { desktopGroups, type TestDesktopGroup } from '../test/desktops';
@@ -282,9 +283,10 @@ describe('the runs chip', () => {
     expect(onWalkRuns).toHaveBeenCalledOnce();
   });
 
-  it('peeks every run by definition and tags the one the walk opens next', () => {
+  it('peeks every run by definition and tags the one the walk opens next from the agent on screen', () => {
     const onSelectSession = vi.fn();
-    renderBar(runs, { onSelectSession, selectedId: 'n1' });
+    useSessionStore.setState({ view: 'session', activeSessionId: 'n1' });
+    renderBar(runs, { onSelectSession, selectedId: null });
     hover('queue-bar-runs');
 
     const peek = screen.getByTestId('queue-bar-runs-peek');

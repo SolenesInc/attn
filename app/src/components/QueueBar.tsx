@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
+import { useAgentOnScreen } from '../hooks/useDesktopSelectionBridge';
 import { TURN_AGE_TICK_MS, useNow } from '../hooks/useNow';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import { tileContentKey, type TileLeaf } from '../types/workspace';
@@ -238,10 +239,11 @@ function RunsChip({
 }
 
 function RunsPeek({ onPicked }: { onPicked: () => void }) {
-  const { automationGroups, selectedId, onSelectSession } = useSidebarContext();
+  const { automationGroups, onSelectSession } = useSidebarContext();
+  const agentOnScreenId = useAgentOnScreen();
   const now = useNow(TURN_AGE_TICK_MS);
   const slotOf = useSlotOf();
-  const next = nextRunNeedingYou(automationGroups, selectedId)?.run.id;
+  const next = nextRunNeedingYou(automationGroups, agentOnScreenId)?.run.id;
   return (
     <div className="queue-bar-peek is-right" data-testid="queue-bar-runs-peek">
       <div className="queue-bar-peek-panel">
