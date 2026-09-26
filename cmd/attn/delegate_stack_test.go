@@ -162,10 +162,11 @@ func TestDelegateStartsTheRequestItsFlagsDescribeAndRefusesRetiredOnes(t *testin
 			if result.Agent != "claude" || result.Model != "" || result.Effort != tc.effort {
 				t.Errorf("delegate printed %+v, want claude on its default model at effort %q", result, tc.effort)
 			}
-			argv := s.Launched(result.SessionID).Argv
-			if slices.Contains(argv, "--model") || pinned(argv, "--effort") != tc.effort || slices.Contains(argv, "--effort") != (tc.effort != "") {
+			run := s.Launched(result.SessionID)
+			if argv := run.Argv; slices.Contains(argv, "--model") || pinned(argv, "--effort") != tc.effort || slices.Contains(argv, "--effort") != (tc.effort != "") {
 				t.Errorf("the delegated claude ran %q, want no model pin and effort %q", argv, tc.effort)
 			}
+			run.Exit(0)
 		})
 	}
 }
