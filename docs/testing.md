@@ -87,14 +87,13 @@ test spawns sessions, as in `newWorld(t, fakeagent.Claude, ...)`: `w.Spawn`
 starts one and `w.Launched` returns the `fakeagent.Run` for its agent. The test
 plays the model behind that agent.
 `Prompted` returns the prompt the agent received and moves `ConversationID` to
-the conversation the agent is in, which `/clear` replaces; `Reply` ends the turn with
-text that carries the `<!-- attn:state=... -->` marker, `ReplyAfterStop` writes
-that reply only after the Stop hook, and `Exit` quits with an exit code.
-`w.HoldBoot(id)` keeps the agent spawned for session `id` booting, before
-it paints its resting title or reads input, until the returned function runs.
-Each
-call returns once the daemon holds the evidence, so the next line can await
-the resulting event. For behavior on a timer, write the test as
+the conversation the agent is in, which `/clear` replaces; `Reply` ends the
+turn with text that carries the `<!-- attn:state=... -->` marker,
+`ReplyAfterStop` writes that reply only after the Stop hook, and `Exit` quits
+with an exit code. Each call returns once the daemon holds the evidence, so the
+next line can await the resulting event. `w.HoldBoot(id)` keeps the agent
+spawned for session `id` booting, before it paints its resting title or reads
+input, until the returned function runs. For behavior on a timer, write the test as
 `inBubble(t, func(t *testing.T, w *world) {...})`, which runs the world under
 `synctest`, and move the clock with `w.advance(d)`. Bubbled worlds cannot run
 agents.
