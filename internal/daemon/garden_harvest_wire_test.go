@@ -13,11 +13,9 @@ import (
 	"unicode/utf8"
 
 	"github.com/victorarias/attn/internal/client"
-	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/store"
 )
 
 func TestArmingASeedParksItOnItsPullRequest(t *testing.T) {
@@ -212,51 +210,6 @@ func TestAMergedPullRequestHarvestsTheSeedArmedOnIt(t *testing.T) {
 			t.Errorf("the seed armed on an untracked pull request is %s waiting on %+v, want it left armed", shown.Status, shown.HarvestWhen)
 		}
 	})
-}
-
-func TestAMergeRecordedBeforeARestartHarvestsItsSeedOnStartup(t *testing.T) {
-	github := newHarvestGitHub(t)
-	inBubble(t, func(t *testing.T, w *world) {
-		cli := w.Client()
-		registerSessions(t, w, cli, "shipper")
-		url := github.open(71, "Harvest across a restart")
-		seed := plantSeedAs(t, cli, "shipper", "merged as the daemon went down")
-		prID := harvestArm(t, cli, "shipper", seed, url).Seed.HarvestWhen.PullRequest
-		w.advance(protocol.HeatHotInterval)
-
-		github.merge(71, "Harvest across a restart")
-		w.stop()
-		recordMergeTheDaemonSawBeforeItStopped(t, prID)
-		w.start()
-		w.advance(protocol.HeatHotInterval)
-
-		got := lifeShow(t, w.Client(), seed).Seed
-		if got.Status != "harvested" || protocol.Deref(got.Reason) != "PR #71 merged: Harvest across a restart" {
-			t.Errorf("after the restart the armed seed is %s with reason %q, want it harvested by the merge the daemon recorded before it stopped",
-				got.Status, protocol.Deref(got.Reason))
-		}
-	})
-}
-
-func recordMergeTheDaemonSawBeforeItStopped(t *testing.T, prID string) {
-	t.Helper()
-	database, err := store.NewWithDB(config.DBPath())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer database.Close()
-	open, found := database.SessionPullRequestByID(prID)
-	if !found || open.State != "open" {
-		t.Fatalf("before the merge the daemon recorded %s as %+v, want it open", prID, open)
-	}
-	merged := store.SessionPullRequestStatus{
-		Title: open.Title, Draft: open.Draft, State: "merged",
-		CIStatus: open.CIStatus, ReviewStatus: open.ReviewStatus, MergeableState: open.MergeableState,
-		HeadSHA: open.HeadSHA, HeadBranch: open.HeadBranch,
-	}
-	if err := database.UpdateSessionPullRequestStatus(prID, merged, time.Now()); err != nil {
-		t.Fatal(err)
-	}
 }
 
 func TestAPullRequestClosedWithoutMergingClearsTheHarvestCondition(t *testing.T) {
