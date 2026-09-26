@@ -70,7 +70,9 @@ func TestAgentPeekShowsASessionWithoutInterruptingIt(t *testing.T) {
 		t.Fatal(err)
 	}
 	claude.Reply("working on it\nsecond line <!-- attn:state=waiting_input -->")
-	testworld.AwaitSession(app, builder, func(x protocol.Session) bool { return protocol.Deref(x.TurnOwed) })
+	testworld.AwaitSession(app, builder, func(x protocol.Session) bool {
+		return x.State == protocol.SessionStateWaitingInput && protocol.Deref(x.TurnOwed)
+	})
 
 	peek := s.Attn("agent", "peek", builder[:8])
 	requireLines(t, "peek", peek.Stdout,
