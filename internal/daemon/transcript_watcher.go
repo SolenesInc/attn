@@ -483,6 +483,9 @@ func (d *Daemon) runTranscriptWatcher(w *transcriptWatcher) {
 					continue
 				}
 			}
+			if transcriptPath == "" && sessionState == protocol.SessionStateLaunching {
+				continue
+			}
 			if transcriptPath == "" && !fallbackAttempted {
 				fallbackAttempted = true
 				transcriptPath = d.discoverTranscriptForWatcher(w)

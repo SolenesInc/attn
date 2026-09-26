@@ -1,0 +1,4 @@
+kind: fixed
+area: dashboard
+change: A pull request you visited or approved is marked as having new changes again once it gets new commits, comments, or a settled CI result.
+symptom: The dashboard never flagged new changes, so approved pull requests with new pushes stayed out of the attention list.

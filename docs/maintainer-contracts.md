@@ -11,7 +11,7 @@
 - Per-test isolation may use `t.Setenv("ATTN_DATA_DIR", t.TempDir())`.
 - Use `synctest.Test` for elapsed-time or never-happens assertions; no sleeps/polls.
 - Use `pgregory.net/rapid` for invariants over large inputs; commit failure seeds.
-- Use `newToxiProxy(t, upstream)` for network failures a fake cannot express.
+- Express network failures by wrapping the client's `net.Conn` inside a `synctest` bubble.
 
 ## Protocol
 

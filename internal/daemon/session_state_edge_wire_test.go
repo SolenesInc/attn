@@ -244,7 +244,7 @@ func guardedClaudeAtWork(t *testing.T, app *testworld.Peer, cli *client.Client, 
 	testworld.AwaitSession(app, "s1", func(s protocol.Session) bool { return s.State == protocol.SessionStateWorking })
 }
 
-func stateSince(t *testing.T, s protocol.Session) time.Time {
+func stateSince(t testing.TB, s protocol.Session) time.Time {
 	t.Helper()
 	since, err := time.Parse(time.RFC3339Nano, s.StateSince)
 	if err != nil {
