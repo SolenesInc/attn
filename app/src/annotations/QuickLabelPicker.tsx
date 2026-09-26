@@ -11,6 +11,7 @@ import {
 import { createPortal } from 'react-dom';
 import { useEscapeStack } from '../hooks/useEscapeStack';
 import { LABEL_COLOR_MAP, type QuickLabel } from './quickLabels';
+import { placeQuickLabelPicker, QUICK_LABEL_PICKER_WIDTH } from './quickLabelPlacement';
 import './QuickLabelPicker.css';
 
 interface FloatingQuickLabelPickerProps {
@@ -36,10 +37,6 @@ interface ChipQuickLabelPickerProps {
 
 type QuickLabelPickerProps = FloatingQuickLabelPickerProps | ChipQuickLabelPickerProps;
 
-const PICKER_WIDTH = 192;
-const GAP = 6;
-const VIEWPORT_PADDING = 12;
-
 function addDeferredPointerDownListener(listener: (event: PointerEvent) => void): () => void {
   const timer = window.setTimeout(() => {
     document.addEventListener('pointerdown', listener, true);
@@ -48,28 +45,6 @@ function addDeferredPointerDownListener(listener: (event: PointerEvent) => void)
     window.clearTimeout(timer);
     document.removeEventListener('pointerdown', listener, true);
   };
-}
-
-export function placeQuickLabelPicker(
-  anchor: Pick<DOMRect, 'top' | 'bottom' | 'right'>,
-  cursorHint: { x: number } | null | undefined,
-  height: number,
-  viewport: { width: number; height: number },
-): { top: number; left: number } {
-  const below = anchor.bottom + GAP;
-  const above = anchor.top - GAP - height;
-  const lowestTop = viewport.height - VIEWPORT_PADDING - height;
-  let top = below;
-  if (height > 0 && below > lowestTop) {
-    top = above >= VIEWPORT_PADDING ? above : Math.max(VIEWPORT_PADDING, lowestTop);
-  }
-
-  let left = cursorHint ? cursorHint.x - 28 : anchor.right - PICKER_WIDTH / 2;
-  left = Math.max(
-    VIEWPORT_PADDING,
-    Math.min(left, viewport.width - PICKER_WIDTH - VIEWPORT_PADDING),
-  );
-  return { top, left };
 }
 
 function FloatingQuickLabelPicker({
@@ -155,7 +130,7 @@ function FloatingQuickLabelPicker({
     <div
       ref={ref}
       className={className}
-      style={{ top: position.top, left: position.left, width: PICKER_WIDTH }}
+      style={{ top: position.top, left: position.left, width: QUICK_LABEL_PICKER_WIDTH }}
       onMouseDown={(event) => event.stopPropagation()}
     >
       {indexedGroups.map((group, groupIndex) => (

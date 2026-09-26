@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { placeQuickLabelPicker } from './QuickLabelPicker';
+import { placeQuickLabelPicker } from './quickLabelPlacement';
 
 const VIEWPORT = { width: 1024, height: 768 };
 const MID_SCREEN = { top: 100, bottom: 120, right: 230 };
