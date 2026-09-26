@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { DelegationChainProvider, DelegationChainTrigger, type ChainSession, type DelegationChainHandle } from '../../src/components/DelegationChain';
-import { openPalette, switchPalette, UnifiedPalette, type PaletteState } from '../../src/components/palette/UnifiedPalette';
+import { openPalette, switchPalette, type PaletteState } from '../../src/components/palette/paletteState';
+import { UnifiedPalette } from '../../src/components/palette/UnifiedPalette';
 import FocusTrap from 'focus-trap-react';
 import type { AgentPaletteInput, PaletteSession } from '../../src/components/palette/agentPaletteRows';
 import { useEscapeStack } from '../../src/hooks/useEscapeStack';

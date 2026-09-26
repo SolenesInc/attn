@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import type { PaletteMode } from '../components/palette/UnifiedPalette';
+import type { PaletteMode } from '../components/palette/paletteState';
 import { useShortcut } from '../shortcuts/useShortcut';
 import { isAccelKeyPressed, isMacLikePlatform } from '../shortcuts/platform';
 

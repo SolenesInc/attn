@@ -1,4 +1,4 @@
-import type { PaletteState } from '../components/palette/UnifiedPalette';
+import type { PaletteState } from '../components/palette/paletteState';
 import { useCallback, useRef, useState } from 'react';
 import { type DelegationChainHandle } from '../components/DelegationChain';
 import { useDockSlotRect } from '../components/GardenFrame';

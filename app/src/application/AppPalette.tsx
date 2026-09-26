@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { UnifiedPalette, type PaletteState } from '../components/palette/UnifiedPalette';
+import type { PaletteState } from '../components/palette/paletteState';
+import { UnifiedPalette } from '../components/palette/UnifiedPalette';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { useDaemonStore } from '../store/daemonSessions';

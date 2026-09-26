@@ -6,7 +6,8 @@ import { buildQueueBands } from '../../utils/queueBands';
 import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
 import type { PaletteSession } from './agentPaletteRows';
 import type { PaletteCommand } from './paletteCommands';
-import { switchPalette, UnifiedPalette, type PaletteMode, type PaletteState } from './UnifiedPalette';
+import { switchPalette, type PaletteMode, type PaletteState } from './paletteState';
+import { UnifiedPalette } from './UnifiedPalette';
 
 const NOW = Date.parse('2026-09-26T12:00:00Z');
 

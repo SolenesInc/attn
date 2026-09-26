@@ -35,7 +35,7 @@ import { useWorkflowPanel } from './useWorkflowPanel';
 import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
-import { openPalette, switchPalette, type PaletteMode } from '../components/palette/UnifiedPalette';
+import { openPalette, switchPalette, type PaletteMode } from '../components/palette/paletteState';
 
 export function useAppController({
   daemonSessions,
