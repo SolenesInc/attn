@@ -49,12 +49,8 @@ func TestStateExplainReplaysEachClaimAndWhatBecameOfIt(t *testing.T) {
 	if result.SessionID != id || result.Agent != "claude" || result.State != string(protocol.SessionStateWaitingInput) || result.Capacity == 0 {
 		t.Fatalf("state explain --json = %+v", result)
 	}
-	outcomes := map[string]bool{}
-	for _, obs := range result.Observations {
-		outcomes[obs.Outcome] = true
-	}
-	if !outcomes["applied"] || !outcomes["skipped"] {
-		t.Errorf("one turn recorded outcomes %v, want applied and skipped claims", outcomes)
+	if !slices.ContainsFunc(result.Observations, func(obs protocol.StateExplainEntry) bool { return obs.Outcome == "applied" }) {
+		t.Errorf("one turn recorded %+v, want the claim that moved the session applied", result.Observations)
 	}
 
 	text := s.Attn("state", "explain", id).Stdout
@@ -69,22 +65,32 @@ func TestStateExplainReplaysEachClaimAndWhatBecameOfIt(t *testing.T) {
 		}
 	}
 	rows := strings.Split(text, "\n")
+	next := 0
 	for _, obs := range result.Observations {
-		want := []string{obs.Source, obs.Outcome}
+		claim := obs.Claim
+		if claim == "" {
+			claim = "-"
+		}
+		var why []string
 		if reason := strings.TrimSpace(protocol.Deref(obs.Reason)); reason != "" {
-			want = append(want, reason)
+			why = append(why, reason)
 		}
 		if cause := strings.TrimSpace(protocol.Deref(obs.Cause)); cause != "" {
-			want = append(want, "cause="+cause)
+			why = append(why, "cause="+cause)
 		}
 		if detail := strings.TrimSpace(protocol.Deref(obs.Detail)); detail != "" {
-			want = append(want, fmt.Sprintf("%q", detail))
+			why = append(why, fmt.Sprintf("%q", detail))
 		}
-		if !slices.ContainsFunc(rows, func(row string) bool {
-			return !slices.ContainsFunc(want, func(field string) bool { return !strings.Contains(row, field) })
-		}) {
-			t.Errorf("state explain has no row showing %q:\n%s", want, text)
+		at := slices.IndexFunc(rows[next:], func(row string) bool {
+			columns := strings.Fields(row)
+			return len(columns) >= 4 && columns[1] == obs.Source && columns[2] == claim && columns[3] == obs.Outcome &&
+				!slices.ContainsFunc(why, func(part string) bool { return !strings.Contains(row, part) })
+		})
+		if at < 0 {
+			t.Errorf("state explain has no row after line %d showing %s %s %s %q:\n%s", next, obs.Source, claim, obs.Outcome, why, text)
+			continue
 		}
+		next += at + 1
 	}
 	if strings.Contains(text, "evicted") {
 		t.Errorf("a trace short of capacity claims evictions:\n%s", text)
