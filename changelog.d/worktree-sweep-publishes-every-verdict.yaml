@@ -1,0 +1,4 @@
+kind: fixed
+area: worktrees
+change: The worktrees list shows at once when the sweep leaves a worktree undecided or eligible with the sweep off.
+symptom: A worktree whose repository could not be refreshed, or that became eligible while the sweep was off, kept showing its previous verdict until the list was reopened.
