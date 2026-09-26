@@ -15,7 +15,7 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
   const settingsModalRef = useRef<SettingsModalHandle>(null);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [shortcutEditorOpen, setShortcutEditorOpen] = useState(false);
-  const [actionMenuOpen, setActionMenuOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState<string | null>(null);
   const delegationChainRef = useRef<DelegationChainHandle>(null);
   const [seedPopoverRequest, setSeedPopoverRequest] = useState<{
     sessionId: string;
@@ -92,8 +92,8 @@ export function useAppPanels({ agentSurfaceCount }: Options) {
     setShortcutsOpen,
     shortcutEditorOpen,
     setShortcutEditorOpen,
-    actionMenuOpen,
-    setActionMenuOpen,
+    paletteQuery,
+    setPaletteQuery,
     delegationChainRef,
     seedPopoverRequest,
     setSeedPopoverRequest,

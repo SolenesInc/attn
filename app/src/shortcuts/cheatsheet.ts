@@ -97,7 +97,8 @@ export function buildCheatsheet(): CheatsheetCategory[] {
     {
       title: 'App',
       rows: [
-        { label: 'Action menu', combos: [fromId('ui.actionMenu')] },
+        { label: 'Agent palette', combos: [fromId('ui.actionMenu')] },
+        { label: 'Command palette', combos: [fromId('ui.commandPalette')] },
         { label: 'Settings', combos: [fromId('ui.openSettings')] },
         {
           label: 'Font size up / down / reset',

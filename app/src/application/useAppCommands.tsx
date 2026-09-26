@@ -1,9 +1,13 @@
 import { useMemo } from 'react';
-import { type ActionMenuItem } from '../components/ActionMenu';
+import type { PaletteCommand } from '../components/palette/paletteCommands';
+import { EditorIcon, NotebookIcon, WorkflowIcon } from '../components/Sidebar';
 import { SessionRoleIcon } from '../components/DelegationChain';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { shortcutTokens } from '../shortcuts/formatShortcut';
 import { useDaemonStore } from '../store/daemonSessions';
+import { useProfilesStore } from '../store/profiles';
+import { desktopLabel, orderedDesktops } from '../utils/desktops';
+import type { ShortcutId } from '../shortcuts/registry';
 import { useSessionStore } from '../store/sessions';
 import {
   AUTO_SETTLE_ENABLED_SETTING,
@@ -16,16 +20,23 @@ import {
   useAppPanelsContext,
   useAppShell,
   useAttentionQueueContext,
+  useDesktopNavigationContext,
   useDesktopTilesContext,
+  useNavigationContext,
+  useSessionLaunchContext,
 } from './AppContexts';
 import {
   AttentionActionIcon,
+  AutomationsIcon,
   BoardActionIcon,
   ContextActionIcon,
   GardenIcon,
   KeyboardActionIcon,
+  NotificationsBellIcon,
 } from './AppIcons';
-export function useAppActionItems() {
+import { useOpenInEditor } from './useOpenInEditor';
+
+export function useAppCommands(): PaletteCommand[] {
   const apps = useDaemonStore((state) => state.apps);
   const seeds = useDaemonStore((state) => state.seeds);
   const { setAppViewParamsPrompt, dockAppViewTile, setMarkdownOpenerOpen, handleOpenNotebookTile } =
@@ -54,8 +65,196 @@ export function useAppActionItems() {
     useDaemonApi();
   const { handleCreateDiagnosticReport } = useAppDiagnosticsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const appViewMenuItems = useMemo<ActionMenuItem[]>(() => {
-    const items: ActionMenuItem[] = [];
+  const desktops = useProfilesStore((state) => state.desktops);
+  const profiles = useProfilesStore((state) => state.profiles);
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const { goToDashboard, handleSelectDesktop, handleJumpToWaiting } = useNavigationContext();
+  const { desktopNavigation, setDesktopOverviewOpen, setProfileSwitcherOpen } = useDesktopNavigationContext();
+  const { handleNewSession } = useSessionLaunchContext();
+  const { handleSettleActiveTurn } = useAttentionQueueContext();
+  const {
+    sidebarCollapsed,
+    toggleSidebarCollapse,
+    setShortcutsOpen,
+    setSettingsOpen,
+    toggleDockPanel,
+    workflowRunPanelOpen,
+    automationsPanelOpen,
+    notificationsPanelOpen,
+    toggleNotificationsPanel,
+    openNotebookBrowser,
+  } = useAppPanelsContext();
+  const { openActiveSessionInEditor } = useOpenInEditor();
+  const navigationCommands = useMemo<PaletteCommand[]>(() => {
+    const keys = (id: ShortcutId) => [shortcutTokens(id)];
+    const commands: PaletteCommand[] = [
+      {
+        id: 'new-agent',
+        title: 'New agent',
+        description: 'Start an agent beside the active pane',
+        keywords: ['session', 'spawn', 'launch', 'create'],
+        icon: <ContextActionIcon />,
+        shortcut: keys('session.new'),
+        run: () => handleNewSession('vertical'),
+      },
+      {
+        id: 'jump-to-waiting',
+        title: 'Jump to the oldest turn',
+        description: 'Open the agent that has waited longest for you',
+        keywords: ['queue', 'waiting', 'turn', 'next'],
+        icon: <AttentionActionIcon />,
+        shortcut: keys('session.jumpToWaiting'),
+        run: handleJumpToWaiting,
+      },
+      ...(handleSettleActiveTurn
+        ? [{
+            id: 'settle-active-session',
+            title: 'Settle this agent',
+            description: 'Close the turn it owes you',
+            keywords: ['settle', 'done', 'queue', 'turn'],
+            icon: <AttentionActionIcon />,
+            shortcut: keys('session.settle'),
+            run: handleSettleActiveTurn,
+          }]
+        : []),
+      {
+        id: 'home',
+        title: 'Home',
+        keywords: ['dashboard', 'overview'],
+        icon: <ContextActionIcon />,
+        shortcut: keys('session.goToDashboard'),
+        run: goToDashboard,
+      },
+      {
+        id: 'desktop-overview',
+        title: 'Desktop overview',
+        description: 'Every desktop, with shortcuts and sending panes',
+        keywords: ['desktops', 'workspaces'],
+        icon: <BoardActionIcon />,
+        shortcut: keys('desktop.overview'),
+        run: () => setDesktopOverviewOpen(true),
+      },
+      {
+        id: 'new-desktop',
+        title: 'New desktop',
+        keywords: ['desktop', 'create', 'workspace'],
+        icon: <BoardActionIcon />,
+        run: desktopNavigation.createDesktop,
+      },
+      ...orderedDesktops(desktops).map((desktop) => ({
+        id: `desktop-${desktop.id}`,
+        title: `Go to ${desktopLabel(desktop, desktops)}`,
+        keywords: ['desktop', 'switch'],
+        icon: <BoardActionIcon />,
+        shortcut: desktop.shortcut_slot ? keys(`desktop.select${desktop.shortcut_slot}` as ShortcutId) : undefined,
+        run: () => handleSelectDesktop(desktop.id),
+      })),
+      {
+        id: 'switch-profile',
+        title: 'Switch profile',
+        keywords: ['profile', 'setup'],
+        icon: <ContextActionIcon />,
+        shortcut: keys('profile.switch'),
+        run: () => setProfileSwitcherOpen(true),
+      },
+      ...profiles
+        .filter((profile) => profile.id !== selectedProfileId)
+        .map((profile) => ({
+          id: `profile-${profile.id}`,
+          title: `Switch to ${profile.name}`,
+          keywords: ['profile', 'setup'],
+          icon: <ContextActionIcon />,
+          run: () => desktopNavigation.selectProfile(profile.id),
+        })),
+      {
+        id: 'toggle-sidebar',
+        title: sidebarCollapsed ? 'Show the sidebar' : 'Hide the sidebar',
+        keywords: ['sidebar', 'collapse', 'expand', 'rail'],
+        icon: <ContextActionIcon />,
+        shortcut: keys('session.toggleSidebar'),
+        run: toggleSidebarCollapse,
+      },
+      {
+        id: 'open-in-editor',
+        title: 'Open in editor',
+        description: 'The active agent\u2019s folder in your editor',
+        keywords: ['editor', 'zed', 'code', 'folder'],
+        icon: <EditorIcon />,
+        run: openActiveSessionInEditor,
+      },
+      {
+        id: 'workflow-runs',
+        title: workflowRunPanelOpen ? 'Hide workflow runs' : 'Show workflow runs',
+        keywords: ['workflow', 'runs', 'agents', 'panel'],
+        icon: <WorkflowIcon />,
+        run: () => toggleDockPanel('workflowRun'),
+      },
+      {
+        id: 'notebook',
+        title: 'Open the notebook',
+        keywords: ['notebook', 'journal', 'knowledge', 'fullscreen'],
+        icon: <NotebookIcon />,
+        shortcut: keys('notebook.openFullscreen'),
+        run: openNotebookBrowser,
+      },
+      {
+        id: 'notifications',
+        title: notificationsPanelOpen ? 'Hide notifications' : 'Show notifications',
+        keywords: ['notifications', 'alerts', 'bell'],
+        icon: <NotificationsBellIcon />,
+        run: toggleNotificationsPanel,
+      },
+      {
+        id: 'automations',
+        title: automationsPanelOpen ? 'Hide automations' : 'Show automations',
+        keywords: ['automations', 'schedule', 'runs', 'panel'],
+        icon: <AutomationsIcon />,
+        run: () => toggleDockPanel('automations'),
+      },
+      {
+        id: 'keyboard-shortcuts',
+        title: 'Keyboard shortcuts',
+        keywords: ['shortcuts', 'keys', 'cheatsheet', 'help'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('ui.showShortcuts'),
+        run: () => setShortcutsOpen(true),
+      },
+      {
+        id: 'settings',
+        title: 'Settings',
+        keywords: ['settings', 'preferences'],
+        icon: <KeyboardActionIcon />,
+        shortcut: keys('ui.openSettings'),
+        run: () => setSettingsOpen(true),
+      },
+    ];
+    return commands;
+  }, [
+    automationsPanelOpen,
+    desktopNavigation,
+    desktops,
+    goToDashboard,
+    handleJumpToWaiting,
+    handleNewSession,
+    handleSelectDesktop,
+    handleSettleActiveTurn,
+    notificationsPanelOpen,
+    openActiveSessionInEditor,
+    openNotebookBrowser,
+    profiles,
+    selectedProfileId,
+    setDesktopOverviewOpen,
+    setProfileSwitcherOpen,
+    setSettingsOpen,
+    setShortcutsOpen,
+    sidebarCollapsed,
+    toggleDockPanel,
+    toggleNotificationsPanel,
+    toggleSidebarCollapse,
+    workflowRunPanelOpen,
+  ]);
+  const appViewMenuItems = useMemo<PaletteCommand[]>(() => {
+    const items: PaletteCommand[] = [];
     for (const app of apps ?? []) {
       if (!app.enabled) continue;
       for (const view of app.views ?? []) {
@@ -84,7 +283,7 @@ export function useAppActionItems() {
     return items;
   }, [apps, dockAppViewTile, setAppViewParamsPrompt]);
 
-  const actionMenuItems = useMemo<ActionMenuItem[]>(
+  const actionMenuItems = useMemo<PaletteCommand[]>(
     () => [
       {
         id: 'open-markdown-file',
@@ -208,11 +407,11 @@ export function useAppActionItems() {
     ],
   );
 
-  const actionMenuItemsWithWorkspaceActions = useMemo<ActionMenuItem[]>(() => {
+  const actionMenuItemsWithWorkspaceActions = useMemo<PaletteCommand[]>(() => {
     const workspace = activeGroupForCommands;
     if (!workspace) return [...actionMenuItems, ...appViewMenuItems];
     const activeSession = activeSessionForCommands;
-    const delegationItems: ActionMenuItem[] = activeSession
+    const delegationItems: PaletteCommand[] = activeSession
       ? [
           {
             id: 'show-delegation-chain',
@@ -225,7 +424,7 @@ export function useAppActionItems() {
           },
         ]
       : [];
-    const sessionSeedItems: ActionMenuItem[] =
+    const sessionSeedItems: PaletteCommand[] =
       activeSession &&
       (activeSession.seedId || seeds.some((seed) => seed.tender_session === activeSession.id))
         ? [
@@ -243,7 +442,7 @@ export function useAppActionItems() {
             },
           ]
         : [];
-    const sessionUsageItems: ActionMenuItem[] =
+    const sessionUsageItems: PaletteCommand[] =
       activeSession?.usage &&
       !activeSession.usage.measurement_incomplete &&
       activeSession.usage.total_tokens > 0
@@ -262,7 +461,7 @@ export function useAppActionItems() {
             },
           ]
         : [];
-    const sessionCapItems: ActionMenuItem[] =
+    const sessionCapItems: PaletteCommand[] =
       activeSession && ['claude', 'codex'].includes((activeSession.agent ?? '').toLowerCase())
         ? [
             {
@@ -317,7 +516,7 @@ export function useAppActionItems() {
   const activeSessionSnoozedUntil = activeSessionQueueEligible
     ? activeSessionForCommands?.turnSnoozedUntil
     : undefined;
-  const actionMenuItemsWithQueueActions = useMemo<ActionMenuItem[]>(() => {
+  const actionMenuItemsWithQueueActions = useMemo<PaletteCommand[]>(() => {
     if (!queueModeEnabled || !activeSessionId || !activeSessionQueueEligible) {
       return actionMenuItemsWithWorkspaceActions;
     }
@@ -353,5 +552,8 @@ export function useAppActionItems() {
     sendWakeTurn,
   ]);
 
-  return actionMenuItemsWithQueueActions;
+  return useMemo(
+    () => [...navigationCommands, ...actionMenuItemsWithQueueActions],
+    [navigationCommands, actionMenuItemsWithQueueActions],
+  );
 }

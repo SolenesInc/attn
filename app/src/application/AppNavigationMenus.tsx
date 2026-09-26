@@ -2,7 +2,7 @@ import { openPath } from '@tauri-apps/plugin-opener';
 import { SnoozeMenu } from '../components/SnoozeMenu';
 import { MarkdownOpener } from '../components/palette/MarkdownOpener';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
-import { AppActionMenu } from './AppActionMenu';
+import { AppPalette } from './AppPalette';
 import {
   useAttentionQueueContext,
   useDesktopTilesContext,
@@ -63,7 +63,7 @@ export function AppNavigationMenus() {
           onClose={() => setSnoozeMenu(null)}
         />
       )}
-      <AppActionMenu />
+      <AppPalette />
     </>
   );
 }

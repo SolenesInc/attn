@@ -112,7 +112,7 @@ test.describe('Session State Changes', () => {
 
     await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
 
-    await page.keyboard.press('Meta+k');
+    await page.keyboard.press('Meta+Shift+k');
     await page.getByText('Open attention drawer').click();
 
     await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();

@@ -158,14 +158,14 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+k');
-      await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
+      await page.keyboard.press('Meta+Shift+k');
+      await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
       await page.getByText('Customize keyboard shortcuts').click();
       const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
       await expect(editor).toBeVisible();
 
-      // Rebind "Action menu" to a chord: ⌘E then A. ⌘E is otherwise unbound, so it can act as an exclusive leader.
-      const row = editor.locator('.shortcut-editor-row', { hasText: 'Action menu' });
+      // Rebind "Agent palette" to a chord: ⌘E then A. ⌘E is otherwise unbound, so it can act as an exclusive leader.
+      const row = editor.locator('.shortcut-editor-row', { hasText: 'Agent palette' });
       await row.getByLabel('Record a chord').click();
       await page.keyboard.press('Meta+e');
       await expect(row).toContainText('then');
@@ -179,7 +179,7 @@ test.describe('Keyboard Shortcuts', () => {
       await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
 
       await page.keyboard.press('a');
-      await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Agents' })).toBeVisible();
       await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
     });
 
@@ -188,12 +188,12 @@ test.describe('Keyboard Shortcuts', () => {
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
-      await page.keyboard.press('Meta+k');
+      await page.keyboard.press('Meta+Shift+k');
       await page.getByText('Customize keyboard shortcuts').click();
       const editor = page.getByRole('dialog', { name: 'Customize Shortcuts' });
       await expect(editor).toBeVisible();
 
-      const row = editor.locator('.shortcut-editor-row', { hasText: 'Action menu' });
+      const row = editor.locator('.shortcut-editor-row', { hasText: 'Agent palette' });
       await row.getByLabel('Record a chord').click();
       await page.keyboard.press('Meta+e');
       await page.keyboard.press('a');
@@ -203,20 +203,31 @@ test.describe('Keyboard Shortcuts', () => {
       await page.keyboard.press('Meta+e');
       await expect(page.getByTestId('chord-leader-hud')).toBeVisible();
       await expect(page.getByTestId('chord-leader-hud')).not.toBeVisible();
-      await expect(page.getByRole('dialog', { name: 'Action menu' })).not.toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Agents' })).not.toBeVisible();
     });
   });
 
-  test.describe('Action Menu', () => {
-    test('⌘K opens the action menu and preserves attention drawer access', async ({ page, daemon }) => {
+  test.describe('Palette', () => {
+    test('⌘K opens agents, > switches to commands, ⌘⇧K toggles commands and keeps attention drawer access', async ({ page, daemon }) => {
       await daemon.start();
       await page.goto('/');
       await page.waitForSelector('.dashboard');
 
       await page.keyboard.press('Meta+k');
-      await expect(page.getByRole('dialog', { name: 'Action menu' })).toBeVisible();
+      const input = page.getByRole('dialog', { name: 'Agents' }).getByRole('combobox');
+      await expect(input).toBeFocused();
+      await page.keyboard.type('>');
+      await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
       await expect(page.getByText('Open attention drawer')).toBeVisible();
+      await page.keyboard.press('Backspace');
+      await expect(page.getByRole('dialog', { name: 'Agents' })).toBeVisible();
 
+      await page.keyboard.press('Meta+Shift+k');
+      await expect(page.getByRole('dialog', { name: 'Commands' })).toBeVisible();
+      await page.keyboard.press('Meta+Shift+k');
+      await expect(page.getByRole('dialog', { name: 'Commands' })).toHaveCount(0);
+
+      await page.keyboard.press('Meta+Shift+k');
       await page.keyboard.press('Meta+n');
       await expect(page.locator('.location-picker-overlay')).not.toBeVisible();
 

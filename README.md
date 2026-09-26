@@ -164,7 +164,8 @@ to the workspace you're in.
 | Cmd+Up / Down | Jump between sessions |
 | Cmd+G | Grid view |
 | Cmd+F | Find in terminal |
-| Cmd+K | Action menu |
+| Cmd+K | Agent palette (agents, desktops, tiles, runs) |
+| Cmd+Shift+K | Command palette (or type `>` in the agent palette) |
 | Cmd+Shift+P | Attention drawer (who needs me?) |
 | Cmd+\` | Utility terminal |
 | Cmd+R | Refresh PRs |
