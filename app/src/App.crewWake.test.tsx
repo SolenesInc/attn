@@ -1,20 +1,10 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
-import type { EventMessage } from './test/protocol';
+import { agentWorkspace, crewMember, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
-type CrewMember = EventMessage<'crew_updated'>['members'][number];
-
-const keel: CrewMember = {
-  id: 'keel',
-  charter_path: '/homes/keel/CHARTER.md',
-  home_dir: '/homes/keel',
-  awareness_dirs: [],
-  resolved_agent: 'claude',
-  revision: 1,
-};
+const keel = crewMember('keel');
 
 function renderCrewQueue(keelDay: Partial<DaemonSession>) {
   return renderApp({

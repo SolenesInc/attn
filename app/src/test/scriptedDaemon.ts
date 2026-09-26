@@ -241,9 +241,13 @@ export class ScriptedDaemon {
     else queueMicrotask(deliver);
   }
 
+  unexpected(reason: string) {
+    this.violations.push(reason);
+  }
+
   verify() {
     if (this.violations.length > 0) {
-      throw new Error(`the app broke the daemon handshake: ${this.violations.join('; ')}`);
+      throw new Error(`the app broke the daemon's script: ${this.violations.join('; ')}`);
     }
   }
 
@@ -261,6 +265,27 @@ export class ScriptedDaemon {
     this.settled.add(connection);
     for (const resolve of this.connectionWaiters.splice(0)) resolve(connection);
   }
+}
+
+export const HOLD = 'hold';
+export type Answer = Reply | typeof HOLD;
+
+export function answerInTurn<C extends CommandName>(
+  daemon: ScriptedDaemon,
+  cmd: C,
+  answers: Answer[],
+  { repeatLast = false }: { repeatLast?: boolean } = {},
+) {
+  let turn = 0;
+  daemon.on(cmd, () => {
+    turn += 1;
+    if (turn > answers.length && !repeatLast) {
+      daemon.unexpected(`${cmd} was sent ${turn} times, but the test scripted ${answers.length} answers`);
+      return undefined;
+    }
+    const answer = answers[Math.min(turn, answers.length) - 1];
+    return answer === HOLD ? undefined : answer;
+  });
 }
 
 export function installScriptedDaemon(options: ScriptedDaemonOptions = {}): ScriptedDaemon {

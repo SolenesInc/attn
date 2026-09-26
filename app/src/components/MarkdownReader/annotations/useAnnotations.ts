@@ -14,15 +14,15 @@ import {
   registerMarkdownAnnotationsAutomationHandle,
   type MarkdownAnnotationsAutomationState,
 } from './annotationsAutomation';
-import { evaluateSelection, type PendingSelection, type SelectionLike } from './selection';
+import { evaluateSelection, type PendingSelection } from './selection';
 import { getMarkdownAnnotationsTransport, type MarkdownAnnotationsTransport } from './transport';
 import { annotationFromWire, annotationToWire, type Annotation } from './types';
 import type { QuickLabel } from './quickLabels';
 import type { MarkdownDocumentSource } from '../documentSource';
 
-export const ANNOTATION_SAVE_DEBOUNCE_MS = 500;
-export const ANNOTATION_HYDRATE_RETRY_MS = 2000;
-export const ANNOTATION_SAVE_RETRY_MS = 5000;
+const ANNOTATION_SAVE_DEBOUNCE_MS = 500;
+const ANNOTATION_HYDRATE_RETRY_MS = 2000;
+const ANNOTATION_SAVE_RETRY_MS = 5000;
 
 const PENDING_PAINT_ID = 'md-pending-selection';
 const FOCUS_PAINT_ID = 'md-focus-glow';
@@ -45,7 +45,7 @@ export interface UseAnnotationsApi {
   selectedId: string | null;
   pending: PendingSelection | null;
 
-  handleSelectionChange(selection: SelectionLike | null): PendingSelection | null;
+  handleSelectionChange(selection: Selection | null): PendingSelection | null;
   beginBlockSelection(blockId: string): PendingSelection | null;
   clearPendingSelection(): void;
 
@@ -518,7 +518,7 @@ export function useAnnotations({
   );
 
   const handleSelectionChange = useCallback(
-    (selection: SelectionLike | null): PendingSelection | null => {
+    (selection: Selection | null): PendingSelection | null => {
       const root = rootRef.current;
       if (!root) {
         return null;
