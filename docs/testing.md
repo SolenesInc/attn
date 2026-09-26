@@ -172,6 +172,10 @@ returns `testworld.Main(m)`.
   prepares a data directory for the built `attn` binary.
 - `s.Start()` runs `attn daemon` and returns once it signals ready. `s.Stop()`
   ends it. A `Start` after `Stop` restarts over the same data.
+- For a promise about a crash mid-operation, `s.StartCrashingAt(point)` runs
+  a daemon that kills itself with SIGKILL at a crash point named in the
+  daemon (`ATTN_CRASH_AT`). `s.AwaitCrash()` returns once it has, and a later
+  `Start` recovers from the state the real daemon left behind.
 - The world helpers from daemon wire tests work here too.
 - `s.Attn(args...)` runs a CLI command to completion. `s.Run` takes an
   `Invocation` when the command needs stdin, a session, extra env, or another
