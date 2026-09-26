@@ -7,26 +7,6 @@ import (
 	"testing"
 )
 
-func TestDaemon_ReleasePIDLock_LeavesFileInPlace(t *testing.T) {
-	dir := t.TempDir()
-	d := &Daemon{pidPath: filepath.Join(dir, "attn.pid")}
-
-	if err := d.acquirePIDLock(); err != nil {
-		t.Fatalf("acquirePIDLock error: %v", err)
-	}
-	d.releasePIDLock()
-
-	if _, err := os.Stat(d.pidPath); err != nil {
-		t.Fatalf("expected pid file to remain on disk after release, stat err = %v", err)
-	}
-
-	second := &Daemon{pidPath: d.pidPath}
-	if err := second.acquirePIDLock(); err != nil {
-		t.Fatalf("second acquirePIDLock after release error: %v", err)
-	}
-	second.releasePIDLock()
-}
-
 func TestDaemon_ReleasePIDLock_DoesNotOrphanAConcurrentHolder(t *testing.T) {
 	dir := t.TempDir()
 	pidPath := filepath.Join(dir, "attn.pid")

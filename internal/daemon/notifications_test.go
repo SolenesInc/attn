@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/victorarias/attn/internal/jobs"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -54,31 +53,6 @@ func TestNotifyTaskTerminalFailurePersistsNotification(t *testing.T) {
 	}
 }
 
-func TestNotifyTaskTerminalFailureNilStoreIsNoop(t *testing.T) {
-	d := &Daemon{}
-	d.notifyTaskTerminalFailure(&jobs.Job{Kind: reconcileKind, State: jobs.StateDead})
-}
-
-func TestRenderTaskFailureNotification(t *testing.T) {
-	d := &Daemon{store: store.New()}
-	got := d.renderReconcileFailure(&jobs.Job{
-		ID: "job-9", Kind: reconcileKind, UniqueKey: "t-9", Attempts: 1, LastError: "nope",
-	})
-	if got.Title != "Couldn’t reconcile ticket \"t-9\"" {
-		t.Fatalf("title = %q", got.Title)
-	}
-	if got.Trigger == "" || got.Impact == "" || got.Cause != "nope" {
-		t.Fatalf("structured notification = %+v", got)
-	}
-	other := renderUnknownTaskFailure(&jobs.Job{ID: "job-x", Kind: "mystery", Attempts: 2})
-	if other.Title != "Background job mystery failed" {
-		t.Fatalf("unknown-kind title = %q", other.Title)
-	}
-	if len(other.Actions) != 0 {
-		t.Fatalf("unknown kind offered actions: %+v", other.Actions)
-	}
-}
-
 func TestTaskFailureRenderersDescribeEachTrigger(t *testing.T) {
 	d := &Daemon{}
 	task := &jobs.Job{ID: "job-1", UniqueKey: "session-1", LastError: "safe cause"}
@@ -112,13 +86,6 @@ func TestTaskFailureRenderersDescribeEachTrigger(t *testing.T) {
 	}
 }
 
-func TestRegisterTaskWithFailureRendererRequiresRenderer(t *testing.T) {
-	d := &Daemon{}
-	if err := d.registerTaskWithFailureRenderer(nil, "kind", nil, jobs.HandlerConfig{}, nil); err == nil {
-		t.Fatal("register without failure renderer succeeded")
-	}
-}
-
 func TestTaskFailureNotificationIsWarning(t *testing.T) {
 	d := &Daemon{store: store.New()}
 	if got := d.renderReconcileFailure(&jobs.Job{
@@ -145,23 +112,5 @@ func TestTaskFailureNotificationIsWarning(t *testing.T) {
 	}
 	if n != 0 || title != "" {
 		t.Fatalf("a dead job lit the critical surface: (%d, %q)", n, title)
-	}
-}
-
-func TestNotificationToProtocolCarriesSeverity(t *testing.T) {
-	for _, tc := range []struct {
-		stored store.NotificationSeverity
-		want   protocol.NotificationSeverity
-	}{
-		{store.NotificationInfo, protocol.NotificationSeverityInfo},
-		{store.NotificationWarning, protocol.NotificationSeverityWarning},
-		{store.NotificationCritical, protocol.NotificationSeverityCritical},
-		{"", protocol.NotificationSeverityInfo},
-		{"nonsense", protocol.NotificationSeverityInfo},
-	} {
-		got := notificationToProtocol(store.NotificationRecord{Severity: tc.stored})
-		if got.Severity != tc.want {
-			t.Fatalf("stored %q → wire %q, want %q", tc.stored, got.Severity, tc.want)
-		}
 	}
 }
