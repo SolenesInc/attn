@@ -35,7 +35,7 @@ import { useWorkflowPanel } from './useWorkflowPanel';
 import { useDesktopResidency } from './useDesktopResidency';
 import { useLeafDrag } from './useLeafDrag';
 import { useDesktopTiles } from './useDesktopTiles';
-import { COMMAND_PREFIX, type PaletteMode } from '../components/palette/UnifiedPalette';
+import { openPalette, switchPalette, type PaletteMode } from '../components/palette/UnifiedPalette';
 
 export function useAppController({
   daemonSessions,
@@ -228,8 +228,8 @@ export function useAppController({
     setShortcutsOpen,
     shortcutEditorOpen,
     setShortcutEditorOpen,
-    paletteQuery,
-    setPaletteQuery,
+    palette,
+    setPalette,
     delegationChainRef,
     sessionsOpen,
     setSessionsOpen,
@@ -322,7 +322,7 @@ export function useAppController({
     settingsOpen,
     shortcutsOpen,
     shortcutEditorOpen,
-    paletteOpen: paletteQuery !== null,
+    paletteOpen: palette !== null,
     sessionsOpen,
     notebookOpen,
     crewPanelOpen: crewPanel.open,
@@ -371,13 +371,8 @@ export function useAppController({
   );
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
-    if (paletteQuery !== null) {
-      const showingCommands = paletteQuery.startsWith(COMMAND_PREFIX);
-      if (showingCommands === (mode === 'commands')) {
-        setPaletteQuery(null);
-      } else {
-        setPaletteQuery(showingCommands ? paletteQuery.slice(COMMAND_PREFIX.length) : `${COMMAND_PREFIX}${paletteQuery}`);
-      }
+    if (palette !== null) {
+      setPalette(switchPalette(palette, mode));
       return;
     }
     if (paletteBlocked) {
@@ -401,12 +396,12 @@ export function useAppController({
       },
     };
     delegationChainRef.current?.prepareCommand();
-    setPaletteQuery(mode === 'commands' ? COMMAND_PREFIX : '');
+    setPalette(openPalette(mode));
   }, [
-    paletteQuery,
+    palette,
     paletteBlocked,
     paletteOriginRef,
-    setPaletteQuery,
+    setPalette,
     delegationChainRef,
     activeSessionId,
     sessions,

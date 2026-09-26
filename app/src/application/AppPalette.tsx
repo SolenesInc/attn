@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react';
-import { UnifiedPalette } from '../components/palette/UnifiedPalette';
+import { UnifiedPalette, type PaletteState } from '../components/palette/UnifiedPalette';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useAppViewTitleResolver } from '../hooks/useAppViewTitle';
 import { useDaemonStore } from '../store/daemonSessions';
@@ -16,18 +16,18 @@ import {
 import { useAppCommands } from './useAppCommands';
 
 export function AppPalette() {
-  const { paletteQuery, setPaletteQuery } = useAppPanelsContext();
-  if (paletteQuery === null) return null;
-  return <OpenPalette query={paletteQuery} onQueryChange={setPaletteQuery} onClose={() => setPaletteQuery(null)} />;
+  const { palette, setPalette } = useAppPanelsContext();
+  if (palette === null) return null;
+  return <OpenPalette state={palette} onStateChange={setPalette} onClose={() => setPalette(null)} />;
 }
 
 function OpenPalette({
-  query,
-  onQueryChange,
+  state,
+  onStateChange,
   onClose,
 }: {
-  query: string;
-  onQueryChange: (query: string) => void;
+  state: PaletteState;
+  onStateChange: (state: PaletteState) => void;
   onClose: () => void;
 }) {
   const { desktopViews, handleSelectSession, handleSelectTile } = useNavigationContext();
@@ -58,8 +58,8 @@ function OpenPalette({
 
   return (
     <UnifiedPalette
-      query={query}
-      onQueryChange={onQueryChange}
+      state={state}
+      onStateChange={onStateChange}
       onClose={onClose}
       agents={agents}
       desktops={desktops}

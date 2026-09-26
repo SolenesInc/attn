@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { setShortcutOverrides } from '../../shortcuts/resolver';
 import { buildQueueBands } from '../../utils/queueBands';
 import type { WorkspaceWithSessions } from '../../utils/workspaceViewModels';
 import type { PaletteSession } from './agentPaletteRows';
 import type { PaletteCommand } from './paletteCommands';
-import { UnifiedPalette } from './UnifiedPalette';
+import { switchPalette, UnifiedPalette, type PaletteMode, type PaletteState } from './UnifiedPalette';
 
 const NOW = Date.parse('2026-09-26T12:00:00Z');
 
@@ -47,13 +47,19 @@ function renderPalette({
     onSettle: vi.fn(),
     onSnooze: vi.fn(),
   };
+  let switchTo: (mode: PaletteMode) => void = () => {};
   function Harness({ current }: { current: PaletteSession[] }) {
-    const [query, setQuery] = useState(initialQuery);
+    const [state, setState] = useState<PaletteState>({ mode: 'search', query: initialQuery });
+    switchTo = (mode) => {
+      const next = switchPalette(state, mode);
+      if (next) setState(next);
+      else handlers.onClose();
+    };
     const views = workspaces(current);
     return (
       <UnifiedPalette
-        query={query}
-        onQueryChange={setQuery}
+        state={state}
+        onStateChange={setState}
         agents={{
           bands: buildQueueBands(views, { now: NOW }),
           crewRoster: [],
@@ -74,6 +80,7 @@ function renderPalette({
     ...handlers,
     input,
     highlighted,
+    switchTo: (mode: PaletteMode) => act(() => switchTo(mode)),
     rerender: (next: PaletteSession[]) => view.rerender(<Harness current={next} />),
   };
 }
@@ -112,6 +119,24 @@ describe('UnifiedPalette keyboard flow', () => {
     fireEvent.keyDown(palette.input(), { key: 's', metaKey: true, shiftKey: true });
     fireEvent.keyDown(palette.input(), { key: 'Enter' });
     expect(palette.onSnooze).toHaveBeenCalledWith(expect.objectContaining({ id: 'owed' }), expect.any(Date));
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
+    expect(palette.onClose).not.toHaveBeenCalled();
+  });
+
+  it('leaves the snooze choices for whichever mode the palette shortcuts ask for', () => {
+    const palette = renderPalette();
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 's', metaKey: true, shiftKey: true });
+    expect(screen.getByRole('dialog', { name: 'Snooze owed' })).toBeInTheDocument();
+
+    palette.switchTo('commands');
+    expect(screen.getByRole('dialog', { name: 'Commands' })).toBeInTheDocument();
+
+    palette.switchTo('agents');
+    fireEvent.keyDown(palette.input(), { key: 'ArrowDown' });
+    fireEvent.keyDown(palette.input(), { key: 's', metaKey: true, shiftKey: true });
+    expect(screen.getByRole('dialog', { name: 'Snooze owed' })).toBeInTheDocument();
+    palette.switchTo('agents');
     expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
     expect(palette.onClose).not.toHaveBeenCalled();
   });

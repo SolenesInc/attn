@@ -26,14 +26,29 @@ export const COMMAND_PREFIX = '>';
 
 export type PaletteMode = 'agents' | 'commands';
 
+export type PaletteState =
+  | { mode: 'search'; query: string }
+  | { mode: 'snooze'; sessionId: string; openedAt: Date; query: string };
+
+export function openPalette(mode: PaletteMode): PaletteState {
+  return { mode: 'search', query: mode === 'commands' ? COMMAND_PREFIX : '' };
+}
+
+export function switchPalette(state: PaletteState, mode: PaletteMode): PaletteState | null {
+  const showingCommands = state.query.startsWith(COMMAND_PREFIX);
+  if (state.mode === 'search' && showingCommands === (mode === 'commands')) return null;
+  const text = showingCommands ? state.query.slice(COMMAND_PREFIX.length) : state.query;
+  return { mode: 'search', query: mode === 'commands' ? `${COMMAND_PREFIX}${text}` : text };
+}
+
 type Item<S extends PaletteSession> =
   | { mode: 'agents'; row: AgentPaletteRow<S> }
   | { mode: 'commands'; command: PaletteCommand }
   | { mode: 'snooze'; choice: SnoozeChoice };
 
 interface UnifiedPaletteProps<S extends PaletteSession> {
-  query: string;
-  onQueryChange: (query: string) => void;
+  state: PaletteState;
+  onStateChange: (state: PaletteState) => void;
   onClose: () => void;
   agents: AgentPaletteInput<S>;
   desktops: readonly Desktop[];
@@ -66,11 +81,11 @@ function isSelectable<S extends PaletteSession>(item: Item<S>): boolean {
 }
 
 function usePaletteItems<S extends PaletteSession>(
-  query: string,
+  state: PaletteState,
   agents: AgentPaletteInput<S>,
   commands: readonly PaletteCommand[],
-  snoozing: Snoozing<S> | null,
 ) {
+  const { query } = state;
   const commandMode = query.startsWith(COMMAND_PREFIX);
   const allAgentRows = useMemo(() => agentPaletteRows(agents, ''), [agents]);
   const agentRows = useMemo(
@@ -81,10 +96,14 @@ function usePaletteItems<S extends PaletteSession>(
     () => (commandMode ? filterCommands(commands, query.slice(COMMAND_PREFIX.length)) : []),
     [commandMode, commands, query],
   );
+  const snoozedRow = state.mode === 'snooze'
+    ? allAgentRows.find((row) => row.kind === 'agent' && row.session.id === state.sessionId)
+    : undefined;
 
-  if (snoozing) {
+  if (state.mode === 'snooze' && snoozedRow?.kind === 'agent') {
     return {
       mode: 'snooze' as const,
+      snoozing: { session: snoozedRow.session, openedAt: state.openedAt },
       items: SNOOZE_CHOICES.map((choice): Item<S> => ({ mode: 'snooze', choice })),
       count: null,
     };
@@ -92,18 +111,18 @@ function usePaletteItems<S extends PaletteSession>(
   if (commandMode) {
     return {
       mode: 'commands' as const,
+      snoozing: null,
       items: matchingCommands.map((command): Item<S> => ({ mode: 'commands', command })),
       count: `${matchingCommands.length} of ${commands.length}`,
     };
   }
   return {
     mode: 'agents' as const,
+    snoozing: null,
     items: agentRows.map((row): Item<S> => ({ mode: 'agents', row })),
     count: `${selectableCount(agentRows)} of ${selectableCount(allAgentRows)}`,
   };
 }
-
-type Snoozing<S extends PaletteSession> = { session: S; openedAt: Date };
 
 function AgentRowView<S extends PaletteSession>({
   row,
@@ -227,8 +246,8 @@ function PaletteFooter({ mode }: { mode: 'agents' | 'commands' | 'snooze' }) {
 }
 
 export function UnifiedPalette<S extends PaletteSession>({
-  query,
-  onQueryChange,
+  state,
+  onStateChange,
   onClose,
   agents,
   desktops,
@@ -239,13 +258,12 @@ export function UnifiedPalette<S extends PaletteSession>({
   onSettle,
   onSnooze,
 }: UnifiedPaletteProps<S>) {
-  const [snoozing, setSnoozing] = useState<Snoozing<S> | null>(null);
   const [agentKeyAfterSnooze, setAgentKeyAfterSnooze] = useState<string | null>(null);
+  const { mode, snoozing, items, count } = usePaletteItems(state, agents, commands);
   const leaveSnooze = (session: S) => {
     setAgentKeyAfterSnooze(`agent:${session.id}`);
-    setSnoozing(null);
+    onStateChange({ mode: 'search', query: state.query });
   };
-  const { mode, items, count } = usePaletteItems(query, agents, commands, snoozing);
 
   const desktopOfSession = useMemo(() => {
     const byId = new Map<string, string>();
@@ -289,7 +307,9 @@ export function UnifiedPalette<S extends PaletteSession>({
     }
     if (pressed(event, 'session.snooze')) {
       event.preventDefault();
-      if (agent && !agent.chiefOfStaff) setSnoozing({ session: agent, openedAt: new Date() });
+      if (agent && !agent.chiefOfStaff) {
+        onStateChange({ mode: 'snooze', sessionId: agent.id, openedAt: new Date(), query: state.query });
+      }
       return true;
     }
     return false;
@@ -321,8 +341,8 @@ export function UnifiedPalette<S extends PaletteSession>({
           variant="unified-palette"
           ariaLabel={snoozing ? `Snooze ${snoozing.session.label}` : mode === 'commands' ? 'Commands' : 'Agents'}
           placeholder={snoozing ? `Snooze ${snoozing.session.label}` : 'Jump to an agent or tile · type > for commands'}
-          query={snoozing ? '' : query}
-          onQueryChange={snoozing ? () => {} : onQueryChange}
+          query={snoozing ? '' : state.query}
+          onQueryChange={(query) => onStateChange({ mode: 'search', query })}
           items={items}
           itemKey={itemKey}
           renderItem={renderItem}
