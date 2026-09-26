@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/testworld"
@@ -78,6 +79,36 @@ func TestAWorktreeWhoseDirectoryVanishedLeavesTheListAndItsPlaceCanBeReused(t *t
 	}
 	if surface, err := cli.WorktreeList(repo, 0); err != nil || len(surface.Worktrees) != 0 {
 		t.Errorf("the worktree surface after the directories vanished = %+v, %v; want neither", surface, err)
+	}
+
+	branches := testworld.Request(app, protocol.ListBranchesMessage{Cmd: protocol.CmdListBranches, MainRepo: repo},
+		protocol.EventBranchesResult, func(protocol.BranchesResultMessage) bool { return true })
+	offered := map[string]protocol.Branch{}
+	for _, branch := range branches.Branches {
+		offered[branch.Name] = branch
+	}
+	stale, ok := offered["feat-vanished"]
+	if !branches.Success || !ok || len(protocol.Deref(stale.CommitHash)) != 7 || protocol.Deref(stale.IsCurrent) {
+		t.Errorf("list_branches = %+v (%s); want feat-vanished offered with its short commit, not current", branches.Branches, protocol.Deref(branches.Error))
+	}
+	if _, err := time.Parse(time.RFC3339, protocol.Deref(stale.CommitTime)); ok && err != nil {
+		t.Errorf("feat-vanished's commit time %q is not RFC 3339: %v", protocol.Deref(stale.CommitTime), err)
+	}
+	if _, listed := offered["main"]; listed {
+		t.Errorf("list_branches offers main, which is checked out in the repository: %+v", branches.Branches)
+	}
+	defaultBranch := func() string {
+		t.Helper()
+		answer := testworld.Request(app, protocol.GetDefaultBranchMessage{Cmd: protocol.CmdGetDefaultBranch, Repo: repo},
+			protocol.EventGetDefaultBranchResult, func(protocol.GetDefaultBranchResultMessage) bool { return true })
+		return answer.Branch
+	}
+	if got := defaultBranch(); got != "main" {
+		t.Errorf("default branch = %q, want main", got)
+	}
+	runGit(t, repo, "config", "attn.baseBranch", "next")
+	if got := defaultBranch(); got != "next" {
+		t.Errorf("default branch with attn.baseBranch set = %q, want next", got)
 	}
 
 	result := testworld.Request(app, protocol.CreateWorktreeFromBranchMessage{

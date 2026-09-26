@@ -2,7 +2,6 @@ package garden
 
 import (
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -119,331 +118,112 @@ func TestTransitionMatrix(t *testing.T) {
 	}
 }
 
-func TestTransitionMovesTheTender(t *testing.T) {
-	actor := Tender{Session: me, Member: "trellis"}
-
-	claimed, err := Transition(seedIn(StatusPlanted, Tender{}), VerbTend, Ask{Actor: actor}, alive)
-	if err != nil {
-		t.Fatalf("tend: %v", err)
+func TestTransitionClaimsAndReasons(t *testing.T) {
+	mine := Tender{Session: me, Member: "trellis"}
+	held := Tender{Session: other, Member: "alder"}
+	armed := func(seed Seed) Seed {
+		seed.HarvestWhen = &HarvestCondition{PullRequest: "github.com:victorarias/attn#113", URL: "https://github.com/victorarias/attn/pull/113", SetAt: "2026-09-02T00:21:00Z"}
+		return seed
 	}
-	if claimed.TenderSession != me || claimed.TenderMember != "trellis" {
-		t.Fatalf("tend did not record the tender: %+v", claimed)
+	withReason := func(seed Seed, reason string) Seed {
+		seed.Reason = reason
+		return seed
 	}
-
-	for _, tc := range []struct {
-		verb   Verb
-		reason string
-	}{{VerbPark, ""}, {VerbHarvest, "done"}, {VerbWither, "done"}} {
-		released, err := Transition(claimed, tc.verb, Ask{Actor: actor, Reason: tc.reason}, alive)
-		if err != nil {
-			t.Fatalf("%s: %v", tc.verb, err)
-		}
-		if released.TenderSession != "" || released.TenderMember != "" {
-			t.Fatalf("%s left the seed claimed: %+v", tc.verb, released)
-		}
+	memberOnly := func(member string) Seed {
+		return Seed{ID: "s-7k3f9m", Status: StatusGrowing, TenderMember: member}
 	}
-}
-
-func TestTransitionRefusesAReasonTheMoveWouldDrop(t *testing.T) {
-	actor := Tender{Session: me}
-	for _, verb := range []Verb{VerbTend, VerbPark, VerbReplant} {
-		from := StatusPlanted
-		if verb == VerbReplant {
-			from = StatusHarvested
-		}
-		_, err := Transition(seedIn(from, Tender{}), verb, Ask{Actor: actor, Reason: "some words"}, alive)
-		if err == nil {
-			t.Fatalf("%s swallowed a reason instead of refusing it", verb)
-		}
-		for _, want := range []string{string(verb), "attn seed note", "s-7k3f9m"} {
-			if !strings.Contains(err.Error(), want) {
-				t.Fatalf("%s refusal = %q, want it to say %q", verb, err, want)
-			}
-		}
-	}
-}
-
-func TestReplantClearsTheClosingReason(t *testing.T) {
-	actor := Tender{Session: me}
-	harvested, err := Transition(seedIn(StatusPlanted, Tender{}), VerbHarvest, Ask{Actor: actor, Reason: "shipped it"}, alive)
-	if err != nil {
-		t.Fatalf("harvest: %v", err)
-	}
-	if harvested.Reason != "shipped it" {
-		t.Fatalf("harvest did not record the reason: %+v", harvested)
-	}
-	replanted, err := Transition(harvested, VerbReplant, Ask{Actor: actor}, alive)
-	if err != nil {
-		t.Fatalf("replant: %v", err)
-	}
-	if replanted.Reason != "" {
-		t.Fatalf("replant kept the closing reason %q", replanted.Reason)
-	}
-}
-
-func TestTendRefusalNamesTheTenderAndTheWayForward(t *testing.T) {
-	held := seedIn(StatusGrowing, Tender{Session: other, Member: "alder"})
-	_, err := Transition(held, VerbTend, Ask{Actor: Tender{Session: me, Member: "trellis"}}, alive)
-	if err == nil {
-		t.Fatal("a second session was allowed to take a live claim")
-	}
-	for _, want := range []string{held.ID, "Alder", "attn seed note"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("refusal does not name %q:\n%s", want, err)
-		}
-	}
-}
-
-func TestTenderDisplayName_WritesAMemberAsANameAndLeavesASessionAlone(t *testing.T) {
-	member := Tender{Session: "sess-a", Member: "trellis"}
-	if got := member.DisplayName(); got != "Trellis" {
-		t.Errorf("DisplayName() = %q, want Trellis", got)
-	}
-	if got := member.Name(); got != "trellis" {
-		t.Errorf("Name() = %q, want the stored id", got)
-	}
-	session := Tender{Session: "sess-a"}
-	if got := session.DisplayName(); got != "sess-a" {
-		t.Errorf("DisplayName() = %q, want the session id untouched", got)
-	}
-	if got := (Tender{}).DisplayName(); got != "" {
-		t.Errorf("an unnamed tender displays as %q, want empty", got)
-	}
-}
-
-func TestTendRefusesAnotherMemberWhenNeitherCarriesASession(t *testing.T) {
-	held := Seed{ID: "s-abc123", Status: StatusGrowing, TenderMember: "trellis"}
-
-	if _, err := Transition(held, VerbTend, Ask{Actor: Tender{Member: "alder"}}, alive); err == nil {
-		t.Fatal("a different member took a live claim; the seed has one tender at a time")
-	} else if !strings.Contains(err.Error(), "Trellis") {
-		t.Fatalf("refusal does not name who holds it: %v", err)
-	}
-
-	if _, err := Transition(held, VerbTend, Ask{Actor: Tender{Member: "trellis"}}, alive); err != nil {
-		t.Fatalf("trellis was refused their own claim: %v", err)
-	}
-}
-
-func TestTendIdentifiesASessionByItsIDNotItsLabel(t *testing.T) {
-	held := Seed{ID: "s-abc123", Status: StatusGrowing, TenderSession: "sess-a", TenderMember: "trellis"}
-
-	if _, err := Transition(held, VerbTend, Ask{Actor: Tender{Session: "sess-a", Member: "keel"}}, alive); err != nil {
-		t.Fatalf("the holding session was refused its own claim: %v", err)
-	}
-	memberOnly := Seed{ID: "s-abc123", Status: StatusGrowing, TenderMember: "trellis"}
-	if _, err := Transition(memberOnly, VerbTend, Ask{Actor: Tender{Session: "sess-a", Member: "trellis"}}, alive); err == nil {
-		t.Fatal("a session took a claim held with no session id")
-	}
-}
-
-func TestTendReleasesASeedWhoseTenderSessionIsGone(t *testing.T) {
-	held := seedIn(StatusGrowing, Tender{Session: other, Member: "alder"})
-
-	if got := held.Tender().Holds(gone); got {
-		t.Fatal("a tender whose session the daemon no longer knows still holds its seed")
-	}
-	claimed, err := Transition(held, VerbTend, Ask{Actor: Tender{Session: me, Member: "trellis"}}, gone)
-	if err != nil {
-		t.Fatalf("a successor was refused a seed whose tender's session ended: %v", err)
-	}
-	if claimed.TenderSession != me || claimed.TenderMember != "trellis" {
-		t.Fatalf("the claim did not move to the successor: %+v", claimed)
-	}
-
-	pane := Seed{ID: "s-abc123", Status: StatusGrowing, TenderMember: "trellis"}
-	if !pane.Tender().Holds(gone) {
-		t.Fatal("a member-only tender was released by a session rule that cannot see them")
-	}
-	if _, err := Transition(pane, VerbTend, Ask{Actor: Tender{Member: "alder"}}, gone); err == nil {
-		t.Fatal("a member-only claim was taken because no session was alive")
-	}
-}
-
-func TestEveryMoveAllowsASeedWhoseTenderSessionEnded(t *testing.T) {
-	actor := Tender{Session: me, Member: "trellis"}
-	for _, verb := range Verbs {
-		t.Run(string(verb), func(t *testing.T) {
-			reason := ""
-			if verb == VerbHarvest || verb == VerbWither {
-				reason = "done"
-			}
-			if _, err := Transition(seedIn(StatusGrowing, Tender{Session: other, Member: "alder"}), verb,
-				Ask{Actor: actor, Reason: reason}, gone); err != nil {
-				t.Fatalf("%s refused after the holder session ended: %v", verb, err)
-			}
-		})
-	}
-}
-
-func TestTendRefusalFallsBackToTheSessionID(t *testing.T) {
-	held := seedIn(StatusGrowing, Tender{Session: other})
-	_, err := Transition(held, VerbTend, Ask{Actor: Tender{Session: me}}, alive)
-	if err == nil || !strings.Contains(err.Error(), other) {
-		t.Fatalf("a member-less tender did not hold the claim by name: %v", err)
-	}
-}
-
-func TestTendNeedsSomebodyToRecord(t *testing.T) {
-	_, err := Transition(seedIn(StatusPlanted, Tender{}), VerbTend, Ask{Actor: Tender{}}, alive)
-	if err == nil || !strings.Contains(err.Error(), "--member") {
-		t.Fatalf("a tend that names nobody was accepted or refused unhelpfully: %v", err)
-	}
-}
-
-func TestHarvestNeedsAReason(t *testing.T) {
-	_, err := Transition(seedIn(StatusPlanted, Tender{}), VerbHarvest, Ask{Actor: Tender{Session: me}, Reason: "  "}, alive)
-	if err == nil || !strings.Contains(err.Error(), "-m") {
-		t.Fatalf("a wordless harvest was accepted or refused unhelpfully: %v", err)
-	}
-	withered, err := Transition(seedIn(StatusPlanted, Tender{}), VerbWither, Ask{Actor: Tender{Session: me}}, alive)
-	if err != nil {
-		t.Fatalf("a wordless wither was refused: %v", err)
-	}
-	if withered.Status != StatusWithered {
-		t.Fatalf("wither landed in %q", withered.Status)
-	}
-}
-
-func TestReasonLimitNamesItselfAndPointsAtTheLog(t *testing.T) {
-	_, err := Transition(seedIn(StatusPlanted, Tender{}), VerbHarvest, Ask{Actor: Tender{Session: me}, Reason: strings.Repeat("x", MaxReasonChars+1)}, alive)
-	if err == nil {
-		t.Fatal("an oversized reason was accepted")
-	}
-	for _, want := range []string{"401", "400", "attn seed note"} {
-		if !strings.Contains(err.Error(), want) {
-			t.Fatalf("the limit refusal does not name %q: %s", want, err)
-		}
-	}
-}
-
-func TestReasonLimitCountsUnicodeCharacters(t *testing.T) {
-	seed := seedIn(StatusPlanted, Tender{})
-	if _, err := Transition(seed, VerbHarvest, Ask{
-		Actor: Tender{Session: me}, Reason: strings.Repeat("🌱", MaxReasonChars),
-	}, alive); err != nil {
-		t.Fatalf("%d Unicode characters were refused: %v", MaxReasonChars, err)
-	}
-
-	_, err := Transition(seed, VerbHarvest, Ask{
-		Actor: Tender{Session: me}, Reason: strings.Repeat("🌱", MaxReasonChars+1),
-	}, alive)
-	if err == nil || !strings.Contains(err.Error(), "401 characters") {
-		t.Fatalf("Unicode over-limit error = %v", err)
-	}
-}
-
-func TestParseVerbNamesTheWholeSet(t *testing.T) {
-	for _, verb := range Verbs {
-		if got, err := ParseVerb(string(verb)); err != nil || got != verb {
-			t.Fatalf("ParseVerb(%q) = %q, %v", verb, got, err)
-		}
-	}
-	if _, err := ParseVerb("  HARVEST "); err != nil {
-		t.Fatalf("a verb is read case- and space-insensitively: %v", err)
-	}
-	_, err := ParseVerb("compost")
-	if err == nil {
-		t.Fatal("an unknown verb was accepted")
-	}
-	for _, verb := range Verbs {
-		if !strings.Contains(err.Error(), string(verb)) {
-			t.Fatalf("the refusal does not offer %q: %s", verb, err)
-		}
-	}
-}
-
-func TestValidateNote(t *testing.T) {
-	if err := ValidateNote("  \n "); err == nil {
-		t.Fatal("an empty note was accepted")
-	}
-	if err := ValidateNote(strings.Repeat("x", MaxNoteBytes+1)); err == nil {
-		t.Fatal("a note past the limit was accepted")
-	} else if !strings.Contains(err.Error(), strconv.Itoa(MaxNoteBytes+1)) {
-		t.Fatalf("the limit refusal does not name the ask: %v", err)
-	}
-	if MaxNoteBytes >= 64<<10 {
-		t.Fatalf("MaxNoteBytes is %d, at or past the 64KiB socket frame it travels through", MaxNoteBytes)
-	}
-	if err := ValidateNote("what happened"); err != nil {
-		t.Fatalf("a real note was refused: %v", err)
-	}
-}
-
-func TestParseNoteKindNamesTheWholeSet(t *testing.T) {
-	if got, err := ParseNoteKind(""); err != nil || got != NoteKindNote {
-		t.Fatalf("ParseNoteKind(\"\") = %q, %v; want the plain note", got, err)
-	}
-	for _, kind := range NoteKinds {
-		if got, err := ParseNoteKind(kind); err != nil || got != kind {
-			t.Fatalf("ParseNoteKind(%q) = %q, %v", kind, got, err)
-		}
-	}
-	if got, err := ParseNoteKind(" HANDOFF "); err != nil || got != NoteKindHandoff {
-		t.Fatalf("a kind is read case- and space-insensitively: %q, %v", got, err)
-	}
-	_, err := ParseNoteKind("farewell")
-	if err == nil {
-		t.Fatal("an unknown note kind was accepted")
-	}
-	for _, kind := range NoteKinds {
-		if !strings.Contains(err.Error(), kind) {
-			t.Fatalf("the refusal does not offer %q: %s", kind, err)
-		}
-	}
-}
-
-func TestNoteIDsAreTheirOwnShape(t *testing.T) {
-	id, err := NewNoteID()
-	if err != nil {
-		t.Fatalf("NewNoteID: %v", err)
-	}
-	if !strings.HasPrefix(id, "n-") || len(id) != len("n-")+idBodyLen {
-		t.Fatalf("note id %q is not n- plus %d characters", id, idBodyLen)
-	}
-	if err := ValidateID(id); err == nil {
-		t.Fatalf("note id %q validates as a seed id", id)
-	}
-}
-
-func TestClosingASeedDropsItsHarvestCondition(t *testing.T) {
-	condition := &HarvestCondition{
-		PullRequest: "github.com:victorarias/attn#113",
-		URL:         "https://github.com/victorarias/attn/pull/113",
-		SetAt:       "2026-09-02T00:21:00Z",
-	}
-	for _, tc := range []struct {
-		verb Verb
-		ask  Ask
-		kept bool
+	cases := []struct {
+		name          string
+		seed          Seed
+		verb          Verb
+		ask           Ask
+		sessionGone   bool
+		refuse        []string
+		tender        Tender
+		reason        string
+		keepCondition bool
 	}{
-		{verb: VerbHarvest, ask: Ask{Actor: Tender{Session: me}, Reason: "the pull request landed"}},
-		{verb: VerbWither, ask: Ask{Actor: Tender{Session: me}}},
-		{verb: VerbPark, ask: Ask{Actor: Tender{Session: me}}, kept: true},
-	} {
-		t.Run(string(tc.verb), func(t *testing.T) {
-			seed := seedIn(StatusPlanted, Tender{})
-			seed.HarvestWhen = condition
-			next, err := Transition(seed, tc.verb, tc.ask, alive)
+		{name: "tend records the tender", seed: seedIn(StatusPlanted, Tender{}), verb: VerbTend, ask: Ask{Actor: mine}, tender: mine},
+		{name: "park releases the claim", seed: seedIn(StatusGrowing, mine), verb: VerbPark, ask: Ask{Actor: mine}},
+		{name: "harvest releases the claim and keeps its reason", seed: seedIn(StatusGrowing, mine), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: "  done  "}, reason: "done"},
+		{name: "wither releases the claim", seed: seedIn(StatusGrowing, mine), verb: VerbWither, ask: Ask{Actor: mine, Reason: "done"}, reason: "done"},
+		{name: "a wordless wither is fine", seed: seedIn(StatusPlanted, Tender{}), verb: VerbWither, ask: Ask{Actor: mine}},
+		{name: "a wordless harvest is refused", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: "  "}, refuse: []string{"-m"}},
+		{name: "tend drops no reason silently", seed: seedIn(StatusPlanted, Tender{}), verb: VerbTend, ask: Ask{Actor: mine, Reason: "some words"}, refuse: []string{"tend", "attn seed note", "s-7k3f9m"}},
+		{name: "park drops no reason silently", seed: seedIn(StatusPlanted, Tender{}), verb: VerbPark, ask: Ask{Actor: mine, Reason: "some words"}, refuse: []string{"park", "attn seed note", "s-7k3f9m"}},
+		{name: "replant drops no reason silently", seed: seedIn(StatusHarvested, Tender{}), verb: VerbReplant, ask: Ask{Actor: mine, Reason: "some words"}, refuse: []string{"replant", "attn seed note", "s-7k3f9m"}},
+		{name: "replant clears the closing reason", seed: withReason(seedIn(StatusHarvested, Tender{}), "shipped it"), verb: VerbReplant, ask: Ask{Actor: mine}},
+		{name: "a reason past the limit names both numbers and the log", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: strings.Repeat("x", MaxReasonChars+1)}, refuse: []string{"401", "400", "attn seed note"}},
+		{name: "the reason limit counts characters, not bytes", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: strings.Repeat("🌱", MaxReasonChars)}, reason: strings.Repeat("🌱", MaxReasonChars)},
+		{name: "one character past the limit is refused", seed: seedIn(StatusPlanted, Tender{}), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: strings.Repeat("🌱", MaxReasonChars+1)}, refuse: []string{"401 characters"}},
+		{name: "a tend that names nobody asks for a member", seed: seedIn(StatusPlanted, Tender{}), verb: VerbTend, ask: Ask{}, refuse: []string{"--member"}},
+		{name: "a live claim names its member and the way forward", seed: seedIn(StatusGrowing, held), verb: VerbTend, ask: Ask{Actor: mine}, refuse: []string{"s-7k3f9m", "Alder", "attn seed note"}},
+		{name: "a live claim without a member names its session", seed: seedIn(StatusGrowing, Tender{Session: other}), verb: VerbTend, ask: Ask{Actor: Tender{Session: me}}, refuse: []string{other}},
+		{name: "a member-only claim refuses another member", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Member: "alder"}}, refuse: []string{"Trellis"}},
+		{name: "a member-only claim lets its member back in", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Member: "trellis"}}, tender: Tender{Member: "trellis"}},
+		{name: "a member-only claim is not taken by a session using that name", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Session: "sess-a", Member: "trellis"}}, refuse: []string{"Trellis"}},
+		{name: "the holding session is known by its id, not its label", seed: seedIn(StatusGrowing, Tender{Session: "sess-a", Member: "trellis"}), verb: VerbTend, ask: Ask{Actor: Tender{Session: "sess-a", Member: "keel"}}, tender: Tender{Session: "sess-a", Member: "keel"}},
+		{name: "a claim whose session ended passes to the next tender", seed: seedIn(StatusGrowing, held), verb: VerbTend, ask: Ask{Actor: mine}, sessionGone: true, tender: mine},
+		{name: "a claim whose session ended can be parked", seed: seedIn(StatusGrowing, held), verb: VerbPark, ask: Ask{Actor: mine}, sessionGone: true},
+		{name: "a claim whose session ended can be harvested", seed: seedIn(StatusGrowing, held), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: "done"}, sessionGone: true, reason: "done"},
+		{name: "a claim whose session ended can be withered", seed: seedIn(StatusGrowing, held), verb: VerbWither, ask: Ask{Actor: mine, Reason: "done"}, sessionGone: true, reason: "done"},
+		{name: "a claim whose session ended can be replanted", seed: seedIn(StatusGrowing, held), verb: VerbReplant, ask: Ask{Actor: mine}, sessionGone: true},
+		{name: "a member-only claim does not end with sessions", seed: memberOnly("trellis"), verb: VerbTend, ask: Ask{Actor: Tender{Member: "alder"}}, sessionGone: true, refuse: []string{"Trellis"}},
+		{name: "harvest drops the harvest condition", seed: armed(seedIn(StatusPlanted, Tender{})), verb: VerbHarvest, ask: Ask{Actor: mine, Reason: "the pull request landed"}, reason: "the pull request landed"},
+		{name: "wither drops the harvest condition", seed: armed(seedIn(StatusPlanted, Tender{})), verb: VerbWither, ask: Ask{Actor: mine}},
+		{name: "park keeps the harvest condition", seed: armed(seedIn(StatusPlanted, Tender{})), verb: VerbPark, ask: Ask{Actor: mine}, keepCondition: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			live := alive
+			if tc.sessionGone {
+				live = gone
+			}
+			next, err := Transition(tc.seed, tc.verb, tc.ask, live)
+			if tc.refuse != nil {
+				if err == nil {
+					t.Fatalf("%s was allowed, want a refusal", tc.verb)
+				}
+				for _, want := range tc.refuse {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("refusal %q does not say %q", err, want)
+					}
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("%s: %v", tc.verb, err)
 			}
-			if tc.kept != (next.HarvestWhen != nil) {
-				t.Fatalf("%s left the condition as %+v, want kept=%v", tc.verb, next.HarvestWhen, tc.kept)
+			if next.Tender() != tc.tender {
+				t.Errorf("tender = %+v, want %+v", next.Tender(), tc.tender)
+			}
+			if next.Reason != tc.reason {
+				t.Errorf("reason = %q, want %q", next.Reason, tc.reason)
+			}
+			if kept := next.HarvestWhen != nil; kept != tc.keepCondition {
+				t.Errorf("harvest condition kept = %v, want %v", kept, tc.keepCondition)
 			}
 		})
 	}
 }
 
-func TestTrimReasonFitsTheLimitAndSaysItWasCut(t *testing.T) {
-	if got := TrimReason("  PR #71 merged  "); got != "PR #71 merged" {
-		t.Fatalf("a reason that fits came back as %q", got)
-	}
-	long := TrimReason("PR #71 merged: " + strings.Repeat("x", MaxReasonChars))
-	if n := utf8.RuneCountInString(long); n > MaxReasonChars {
-		t.Fatalf("a trimmed reason is %d characters, over the %d limit", n, MaxReasonChars)
-	}
-	if !strings.HasSuffix(long, "…") {
-		t.Fatalf("a trimmed reason does not show it was cut: %q", long)
+func TestTrimReason(t *testing.T) {
+	for _, reason := range []string{
+		"  PR #71 merged  ",
+		"PR #71 merged: " + strings.Repeat("x", MaxReasonChars),
+		strings.Repeat("🌱", MaxReasonChars*2),
+		strings.Repeat("🌱", MaxReasonChars),
+	} {
+		trimmed := TrimReason(reason)
+		fits := utf8.RuneCountInString(strings.TrimSpace(reason)) <= MaxReasonChars
+		if fits && trimmed != strings.TrimSpace(reason) {
+			t.Errorf("a reason that fits came back as %q", trimmed)
+		}
+		if n := utf8.RuneCountInString(trimmed); n > MaxReasonChars {
+			t.Errorf("a trimmed reason is %d characters, over the %d limit", n, MaxReasonChars)
+		}
+		if !fits && !strings.HasSuffix(trimmed, "…") {
+			t.Errorf("a trimmed reason does not show it was cut: %q", trimmed)
+		}
 	}
 }

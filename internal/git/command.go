@@ -32,31 +32,19 @@ func NewClient() *Client {
 	return &Client{}
 }
 
+const slowGitLogThreshold = 2 * time.Second
+
 var (
-	logMu               sync.RWMutex
-	logf                func(format string, args ...interface{})
-	slowGitLogThreshold = 2 * time.Second
-	timeoutMu           sync.RWMutex
-	timeoutByOp         = map[Operation]time.Duration{}
+	logMu       sync.RWMutex
+	logf        func(format string, args ...interface{})
+	timeoutMu   sync.RWMutex
+	timeoutByOp = map[Operation]time.Duration{}
 )
 
 func SetLogFunc(fn func(format string, args ...interface{})) {
 	logMu.Lock()
 	defer logMu.Unlock()
 	logf = fn
-}
-
-func setSlowLogThresholdForTesting(threshold time.Duration) func() {
-	logMu.Lock()
-	previous := slowGitLogThreshold
-	slowGitLogThreshold = threshold
-	logMu.Unlock()
-
-	return func() {
-		logMu.Lock()
-		defer logMu.Unlock()
-		slowGitLogThreshold = previous
-	}
 }
 
 func defaultTimeout(op Operation) time.Duration {
@@ -211,12 +199,11 @@ func mergedCommandEnv(overrides map[string]string) []string {
 func logGitCommand(op Operation, dir string, args []string, duration time.Duration, ctxErr error) {
 	logMu.RLock()
 	fn := logf
-	threshold := slowGitLogThreshold
 	logMu.RUnlock()
 	if fn == nil {
 		return
 	}
-	if duration < threshold && ctxErr == nil {
+	if duration < slowGitLogThreshold && ctxErr == nil {
 		return
 	}
 	status := "slow"

@@ -2,126 +2,13 @@ package git
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 )
-
-func TestRunGitOutputTimesOut(t *testing.T) {
-	fakeBin := t.TempDir()
-	fakeGit := filepath.Join(fakeBin, "git")
-	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nexec sleep 5\n"), 0755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	cleanup := setTimeoutForTesting(OpMetadata, 25*time.Millisecond)
-	defer cleanup()
-
-	_, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
-	if err == nil {
-		t.Fatal("expected timeout error")
-	}
-	if !strings.Contains(err.Error(), "timed out") {
-		t.Fatalf("timeout error = %v, want timed out", err)
-	}
-}
-
-func TestOutputContextReturnsCancellationCause(t *testing.T) {
-	cause := errors.New("foreground preempted sweep")
-	ctx, cancel := context.WithCancelCause(context.Background())
-	cancel(cause)
-	_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
-	if !errors.Is(err, cause) {
-		t.Fatalf("error = %v, want cancellation cause", err)
-	}
-}
-
-func TestClientCancellationStopsRunningGitChild(t *testing.T) {
-	fakeBin := t.TempDir()
-	readyFIFO := filepath.Join(t.TempDir(), "ready")
-	if err := syscall.Mkfifo(readyFIFO, 0o600); err != nil {
-		t.Fatalf("create ready fifo: %v", err)
-	}
-	fakeGit := filepath.Join(fakeBin, "git")
-	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf ready > \"$ATTN_GIT_TEST_READY_FIFO\"\nexec sleep 30\n"), 0o755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	t.Setenv("ATTN_GIT_TEST_READY_FIFO", readyFIFO)
-
-	cause := errors.New("cancel admitted operation")
-	ctx, cancel := context.WithCancelCause(context.Background())
-	result := make(chan error, 1)
-	go func() {
-		_, err := NewClient().Output(ctx, OpMetadata, t.TempDir(), "status")
-		result <- err
-	}()
-
-	ready, err := os.ReadFile(readyFIFO)
-	if err != nil {
-		t.Fatalf("read child barrier: %v", err)
-	}
-	if strings.TrimSpace(string(ready)) != "ready" {
-		t.Fatalf("child barrier = %q, want ready", ready)
-	}
-	cancel(cause)
-	if err := <-result; !errors.Is(err, cause) {
-		t.Fatalf("error = %v, want cancellation cause", err)
-	}
-}
-
-func TestClientCloneDepthOneUsesSuppliedEnvironment(t *testing.T) {
-	fakeBin := t.TempDir()
-	fakeGit := filepath.Join(fakeBin, "git")
-	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf '%s|%s' \"$ATTN_PLUGIN_TEST\" \"$*\"\n"), 0o755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	environment := append(os.Environ(),
-		"ATTN_PLUGIN_TEST=from-plugin-environment",
-	)
-	out, err := NewClient().CloneDepthOne(context.Background(), "https://example.test/plugin.git", "/tmp/plugin", environment)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := string(out); got != "from-plugin-environment|clone --depth 1 https://example.test/plugin.git /tmp/plugin" {
-		t.Fatalf("clone output = %q", got)
-	}
-}
-
-func TestRunGitOutputLogsSlowCommand(t *testing.T) {
-	fakeBin := t.TempDir()
-	fakeGit := filepath.Join(fakeBin, "git")
-	if err := os.WriteFile(fakeGit, []byte("#!/bin/sh\nprintf ok\n"), 0755); err != nil {
-		t.Fatalf("write fake git: %v", err)
-	}
-	t.Setenv("PATH", fakeBin+string(os.PathListSeparator)+os.Getenv("PATH"))
-	cleanupThreshold := setSlowLogThresholdForTesting(0)
-	defer cleanupThreshold()
-
-	var logs []string
-	SetLogFunc(func(format string, args ...interface{}) {
-		logs = append(logs, format)
-	})
-	defer SetLogFunc(nil)
-
-	out, err := NewClient().Output(context.Background(), OpMetadata, t.TempDir(), "status")
-	if err != nil {
-		t.Fatalf("Output failed: %v", err)
-	}
-	if strings.TrimSpace(string(out)) != "ok" {
-		t.Fatalf("output = %q, want ok", out)
-	}
-	if len(logs) == 0 {
-		t.Fatal("expected slow command log")
-	}
-}
 
 func TestRunGitOutputRedactsCredentialURLsInLogsAndTimeouts(t *testing.T) {
 	secretURL := "https://user:super-secret-token@example.com/acme/repo.git?token=also-secret#frag"

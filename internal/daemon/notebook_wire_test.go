@@ -1,6 +1,7 @@
 package daemon_test
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -126,6 +127,7 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
 	root := fsNotebookRoot(t, w)
+	fsWriteFile(t, filepath.Join(root, "gone.md"), []byte(notebookNote("about to go")))
 	notebookAskList(app, "")
 
 	notebookAskWrite(app, "own.md", notebookNote("attn wrote this"), "")
@@ -137,14 +139,28 @@ func TestNotebookReportsExternalEditsButNotItsOwnWrites(t *testing.T) {
 	notebookAskWrite(app, "race.md", notebookNote("attn wrote this"), "")
 	fsWriteFile(t, filepath.Join(root, "race.md"), []byte(notebookNote("external overwrote it")))
 
+	ignored := []string{".attn/locks.md", "notes.txt", ".hidden.md", "knowledge/foo.md.tmp.123.456"}
+	for _, rel := range ignored {
+		fsWriteFile(t, filepath.Join(root, rel), []byte("x"))
+	}
+	fsWriteFile(t, filepath.Join(root, "knowledge", "areas", "new.md"), []byte(notebookNote("in a new folder")))
+	if err := os.Remove(filepath.Join(root, "gone.md")); err != nil {
+		t.Fatal(err)
+	}
+
 	heard := map[string]bool{}
-	for !heard["ext.md"] || !heard["doc.md"] || !heard["race.md"] {
+	for !heard["ext.md"] || !heard["doc.md"] || !heard["race.md"] || !heard["knowledge/areas/new.md"] || !heard["gone.md"] {
 		external := testworld.Await(app, protocol.EventNotebookChanged, func(m protocol.NotebookChangedMessage) bool { return m.Origin == "external" })
 		for _, path := range external.Paths {
 			heard[path] = true
 		}
 		if heard["own.md"] {
 			t.Fatalf("attn's own write was reported as external: %v", external.Paths)
+		}
+		for _, rel := range ignored {
+			if heard[rel] {
+				t.Fatalf("%s is not a note but was reported as one: %v", rel, external.Paths)
+			}
 		}
 	}
 }

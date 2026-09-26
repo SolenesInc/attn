@@ -439,8 +439,15 @@ func TestAutoModePolicyFieldsAndTheGuardianAreSetIndependently(t *testing.T) {
 	if refused := set(protocol.AutoModePolicySetMessage{ApprovalPolicy: protocol.Ptr("yolo")}); refused.Success || !strings.Contains(protocol.Deref(refused.Error), automode.PolicyOnRequest) {
 		t.Errorf("an unknown policy = %+v, want a refusal naming the choices", refused)
 	}
-	if refused := set(protocol.AutoModePolicySetMessage{Guardian: &protocol.GuardianSelection{Provider: protocol.Ptr("broken")}}); refused.Success {
-		t.Error("a guardian without a model was accepted")
+	for name, broken := range map[string]protocol.GuardianSelection{
+		"a provider without a model": {Provider: protocol.Ptr("broken")},
+		"a model without a provider": {Model: protocol.Ptr("review/model")},
+		"an effort nobody offers":    {Effort: protocol.Ptr("unknown")},
+		"a provider holding a space": {Provider: protocol.Ptr("p q"), Model: protocol.Ptr("m")},
+	} {
+		if refused := set(protocol.AutoModePolicySetMessage{Guardian: &broken}); refused.Success {
+			t.Errorf("a guardian with %s was accepted", name)
+		}
 	}
 	if cfg := set(protocol.AutoModePolicySetMessage{AllowLocalBinding: protocol.Ptr(true)}).Config; !cfg.Network.AllowLocalBinding || cfg.ApprovalPolicy != automode.PolicyNever {
 		t.Errorf("local binding %t with policy %q, want local binding on and the policy it was not told about held", cfg.Network.AllowLocalBinding, cfg.ApprovalPolicy)
