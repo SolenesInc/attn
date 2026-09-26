@@ -212,10 +212,11 @@ function CrewPanelSurface({
   const loadCharter = charterAutosave.load;
   const loadHandoffs = handoffs.load;
   useEffect(() => {
-    if (!isOpen || !selectedMemberId) return;
-    if (tab === 'charter') void loadCharter(selectedMemberId);
-    if (tab === 'handoffs') loadHandoffs(selectedMemberId);
-  }, [isOpen, loadCharter, loadHandoffs, selectedMemberId, tab]);
+    if (isOpen && selectedMemberId && tab === 'charter') void loadCharter(selectedMemberId);
+  }, [isOpen, loadCharter, selectedMemberId, tab]);
+  useEffect(() => {
+    if (isOpen && selectedMemberId && tab === 'handoffs') loadHandoffs(selectedMemberId);
+  }, [isOpen, loadHandoffs, selectedMemberId, tab]);
 
   const visibleMembers = useMemo(() => {
     const query = filter.trim().toLowerCase();

@@ -5,6 +5,8 @@ export type DaemonWorkspace = EventMessage<'workspace_state_changed'>['workspace
 export type DaemonPane = EventMessage<'workspace_layout_updated'>['workspace_layout']['panes'][number];
 export type DaemonSeed = EventMessage<'garden_seeds_updated'>['seeds'][number];
 export type DaemonSeedDocument = NonNullable<EventMessage<'seed_document_get_result'>['document']>;
+export type DaemonCrewMember = EventMessage<'crew_updated'>['members'][number];
+export type DaemonPR = NonNullable<EventMessage<'prs_updated'>['prs']>[number];
 
 export interface DaemonTile {
   tile_id: string;
@@ -121,4 +123,40 @@ export function daemonSeed(id: string, overrides: Partial<DaemonSeed> = {}): Dae
 
 export function seedDocument(seed: DaemonSeed, overrides: Partial<DaemonSeedDocument> = {}): DaemonSeedDocument {
   return { seed, artifacts: [], references: [], children: [], notes: [], notes_total: 0, tender_holds: false, ...overrides };
+}
+
+export function crewMember(id: string, overrides: Partial<DaemonCrewMember> = {}): DaemonCrewMember {
+  return {
+    id,
+    revision: 1,
+    charter_path: `/crew/${id}/CHARTER.md`,
+    home_dir: `/crew/${id}`,
+    awareness_dirs: [],
+    resolved_agent: overrides.agent || 'claude',
+    ...overrides,
+  };
+}
+
+export function daemonPR(id: string, overrides: Partial<DaemonPR> = {}): DaemonPR {
+  const number = overrides.number ?? 1;
+  const repo = overrides.repo ?? 'victorarias/attn';
+  return {
+    id,
+    host: 'github.com',
+    repo,
+    number,
+    title: `PR ${id}`,
+    url: `https://github.com/${repo}/pull/${number}`,
+    author: 'someone',
+    role: 'reviewer',
+    state: 'waiting',
+    reason: 'review_needed',
+    last_updated: '2026-08-05T10:00:00Z',
+    last_polled: '2026-08-05T10:00:00Z',
+    muted: false,
+    details_fetched: true,
+    approved_by_me: false,
+    has_new_changes: false,
+    ...overrides,
+  };
 }
