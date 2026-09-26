@@ -9,6 +9,8 @@ import (
 
 const stampResolution = time.Microsecond
 
+const darwinZombieState = 5
+
 func processStartTime(pid int) (string, error) {
 	proc, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
 	if err != nil {
@@ -19,4 +21,9 @@ func processStartTime(pid int) (string, error) {
 		return "", fmt.Errorf("pid %d reports no start time", pid)
 	}
 	return fmt.Sprintf("%d.%06d", start.Sec, start.Usec), nil
+}
+
+func isZombie(pid int) bool {
+	proc, err := unix.SysctlKinfoProc("kern.proc.pid", pid)
+	return err == nil && proc.Proc.P_stat == darwinZombieState
 }

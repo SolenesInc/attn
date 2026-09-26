@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/pty"
-	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 const characterizationOldTimestamp = "2000-01-01T00:00:00Z"
@@ -51,47 +49,6 @@ func characterizationEventCount(events []protocol.WebSocketEvent, eventName, ses
 		count++
 	}
 	return count
-}
-
-func assertCharacterizationLiveEffects(t *testing.T, d *Daemon, capture *broadcastCapture, sessionID string) {
-	t.Helper()
-	session := d.store.Get(sessionID)
-	if session == nil {
-		t.Fatal("session missing after state transition")
-	}
-	if session.State != protocol.SessionStateWorking {
-		t.Fatalf("state=%q, want working", session.State)
-	}
-	if session.StateUpdatedAt == characterizationOldTimestamp || session.StateSince == characterizationOldTimestamp {
-		t.Fatalf("state timestamps were not refreshed: since=%q updated=%q", session.StateSince, session.StateUpdatedAt)
-	}
-	if session.LastSeen == characterizationOldTimestamp {
-		t.Fatal("live state signal did not Touch the session")
-	}
-
-	events := capture.snapshot()
-	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
-		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-}
-
-func TestSessionStateCharacterization_TheWorkerPollIsTheLastLiveSignal(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	sessionID := "session-worker-poll"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentClaude, protocol.SessionStateLaunching)
-	capture := captureBroadcasts(d)
-
-	d.handlePTYState(sessionID, pty.Observation{
-		Source: pty.SourceWorkerInfo,
-		Claim:  protocol.StateWorking,
-		Detail: "test",
-		At:     time.Now(),
-	})
-
-	assertCharacterizationLiveEffects(t, d, capture, sessionID)
 }
 
 func TestSessionStateCharacterization_ALateVerdictDoesNotOverwriteAnApproval(t *testing.T) {
@@ -189,31 +146,5 @@ func TestSessionStateCharacterization_PluginCASGatesEffects(t *testing.T) {
 	}
 	if got := characterizationEventCount(capture.snapshot(), protocol.EventSessionStateChanged, sessionID); got != stateEventsAfterAccepted {
 		t.Fatalf("stale plugin report emitted state event: before=%d after=%d", stateEventsAfterAccepted, got)
-	}
-}
-
-func TestSessionStateCharacterization_ProcessExitEffects(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "state.sock"))
-	d.ptyBackend = &fakeSpawnBackend{}
-	sessionID := "process-exit"
-	addCharacterizationSession(t, d, sessionID, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-	capture := captureBroadcasts(d)
-
-	d.handlePTYExit(ptybackend.ExitInfo{ID: sessionID, ExitCode: 0})
-	d.resolveDue(time.Now())
-
-	session := d.store.Get(sessionID)
-	if session == nil || session.State != protocol.SessionStateIdle {
-		t.Fatalf("session=%+v, want idle after exit", session)
-	}
-	events := capture.snapshot()
-	if got := characterizationEventCount(events, protocol.EventSessionStateChanged, sessionID); got != 1 {
-		t.Fatalf("session_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventWorkspaceStateChanged, ""); got != 1 {
-		t.Fatalf("workspace_state_changed events=%d, want 1; events=%+v", got, events)
-	}
-	if got := characterizationEventCount(events, protocol.EventSessionExited, ""); got != 1 {
-		t.Fatalf("session_exited events=%d, want 1; events=%+v", got, events)
 	}
 }

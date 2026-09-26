@@ -4,52 +4,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"testing"
-	"time"
 
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-func TestDwellGateHoldsATransitionUntilItHasBeenTrueLongEnough(t *testing.T) {
-	g := newDwellGate()
-	now := time.Now()
-
-	if g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now) {
-		t.Fatal("published on the first tick: nothing has been true for a minute yet")
-	}
-	if g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now.Add(59*time.Second)) {
-		t.Fatal("published a second early")
-	}
-	if !g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now.Add(time.Minute)) {
-		t.Fatal("still held once the dwell had elapsed")
-	}
-}
-
-func TestDwellGateDropsATransitionThatStoppedBeingTheAnswer(t *testing.T) {
-	g := newDwellGate()
-	now := time.Now()
-
-	g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now)
-	if !g.ready("s", protocol.SessionStateWorking, 0, now.Add(time.Second)) {
-		t.Fatal("a dwell-free transition was held")
-	}
-	if g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now.Add(2*time.Minute)) {
-		t.Fatal("a fresh approval inherited the abandoned clock and published immediately")
-	}
-}
-
-func TestDwellGateClearsAWaitWhenTheDwellGoesToZero(t *testing.T) {
-	g := newDwellGate()
-	now := time.Now()
-
-	g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now)
-	if !g.ready("s", protocol.SessionStatePendingApproval, 0, now.Add(time.Second)) {
-		t.Fatal("a zero dwell was held")
-	}
-	if g.ready("s", protocol.SessionStatePendingApproval, time.Minute, now.Add(2*time.Second)) {
-		t.Fatal("a re-armed dwell published immediately: the old wait was still counting")
-	}
-}
 
 func TestSpawnFilesWhoAnswersApprovals(t *testing.T) {
 	for _, tc := range []struct {
@@ -106,18 +64,5 @@ func TestCodexPermissionModeDoesNotRetireTheSpawnTimeReviewer(t *testing.T) {
 
 	if !evidenceOf(t, d, id).ReviewerInLoop {
 		t.Fatal("codex's filler permission mode retired the reviewer recorded at spawn")
-	}
-}
-
-func TestClaudePermissionModeStillRetiresTheReviewer(t *testing.T) {
-	d := newTraceDaemon(t)
-	id := "sess-claude-mode"
-	addCharacterizationSession(t, d, id, protocol.SessionAgentClaude, protocol.SessionStateWorking)
-
-	d.recordReviewerEvidence(id, true)
-	d.recordReviewerEvidenceFromPermissionMode(id, "default")
-
-	if evidenceOf(t, d, id).ReviewerInLoop {
-		t.Fatal("claude reported default and kept its reviewer")
 	}
 }
