@@ -71,6 +71,11 @@ func reapEntry(entry RegistryEntry, registryPath string) ReapResult {
 		res.Err = err
 	}
 
+	if !ProcessAlive(entry.WorkerPID) {
+		res.Outcome = ReapAlreadyGone
+		res.Err = nil
+		return res
+	}
 	if !processHasArg(entry.WorkerPID, registryPath) {
 		res.Outcome = ReapUnidentified
 		return res
