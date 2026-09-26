@@ -708,6 +708,32 @@ describe('Sidebar', () => {
     expect(screen.queryByTestId('workspace-reorder-seam-0')).not.toBeInTheDocument();
   });
 
+  it('answers the next header click after Escape cancels a header drag released elsewhere', () => {
+    const sidebarData = buildSidebarData([
+      { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },
+      { id: 'b1', label: 'B1', state: 'idle', cwd: '/repo/b' },
+    ]);
+    const onSelectWorkspace = vi.fn();
+    render(
+      <Sidebar {...baseProps} {...sidebarData} onSelectWorkspace={onSelectWorkspace} onWorkspaceReorder={vi.fn()} />,
+    );
+    const headerOf = (cwd: string) =>
+      screen
+        .getByTestId(`sidebar-workspace-workspace-${cwd}`)
+        .querySelector('.workspace-group-header > .sidebar-row-select') as HTMLElement;
+
+    fireEvent.pointerDown(headerOf('/repo/a'), { button: 0, pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerMove(window, { pointerId: 1, clientX: 10, clientY: 80 });
+    fireEvent.keyDown(window, { key: 'Escape' });
+    fireEvent.pointerUp(window, { pointerId: 1, clientX: 400, clientY: 400 });
+
+    fireEvent.pointerDown(headerOf('/repo/b'), { button: 0, pointerId: 2, clientX: 10, clientY: 40 });
+    fireEvent.pointerUp(window, { pointerId: 2, clientX: 10, clientY: 40 });
+    fireEvent.click(headerOf('/repo/b'));
+
+    expect(onSelectWorkspace).toHaveBeenCalledTimes(1);
+  });
+
   it('cancels the preceding pointer gesture when another header is pressed', () => {
     const sidebarData = buildSidebarData([
       { id: 'a1', label: 'A1', state: 'idle', cwd: '/repo/a' },

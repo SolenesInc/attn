@@ -122,6 +122,7 @@ export function useSidebarDrag({
 
   const handleHeaderPointerDown = useCallback(
     (workspace: SidebarWorkspace, event: ReactPointerEvent<HTMLButtonElement>) => {
+      suppressNextHeaderClickRef.current = false;
       if (event.button !== 0 || !onWorkspaceReorder) {
         return;
       }
