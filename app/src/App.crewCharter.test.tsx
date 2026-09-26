@@ -52,7 +52,7 @@ async function answer(daemon: ScriptedDaemon, command: CommandMessage<'crew_char
 
 describe('App crew charter', () => {
   it('saves after a typing pause against the acknowledged version, and at once when the user leaves the field', async () => {
-    const daemon = await openCharter();
+    const daemon = await openCharter({ saves: [HOLD, HOLD] });
     await type(daemon, '# Two\n');
     expect(status()).toHaveTextContent('Waiting to save');
 
@@ -73,7 +73,7 @@ describe('App crew charter', () => {
   });
 
   it('sends an edit made while a save was out once it is acknowledged, and says Saved only after the last', async () => {
-    const daemon = await openCharter();
+    const daemon = await openCharter({ saves: [HOLD, HOLD] });
     await type(daemon, 'B');
     await leaveField(daemon);
     await type(daemon, 'C');
@@ -90,7 +90,7 @@ describe('App crew charter', () => {
   });
 
   it('writes again after a save whose answer was lost, even once the text is back to what was saved', async () => {
-    const daemon = await openCharter({ reads: [charter('A', 'a')] });
+    const daemon = await openCharter({ reads: [charter('A', 'a')], saves: [HOLD, HOLD] });
     await type(daemon, 'B');
     await leaveField(daemon);
 
@@ -125,7 +125,10 @@ describe('App crew charter', () => {
   });
 
   it('retries a save that failed for want of a connection once it reconnects, but leaves other failures to the user', async () => {
-    const daemon = await openCharter({ reads: [charter('old', 'old')], saves: [refused('disk is read-only')] });
+    const daemon = await openCharter({
+      reads: [charter('old', 'old'), charter('old', 'old'), charter('old', 'old')],
+      saves: [refused('disk is read-only')],
+    });
     daemon.disconnect();
     await daemon.idle();
     await type(daemon, 'offline edit');
@@ -178,5 +181,6 @@ describe('App crew charter', () => {
     await daemon.idle();
 
     expect(editor()).toHaveValue('changed on disk');
+    expect(daemon.sentOf('crew_charter_get')).toHaveLength(2);
   });
 });
