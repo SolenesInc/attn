@@ -1,14 +1,11 @@
 package daemon
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/store"
 )
 
@@ -151,48 +148,6 @@ func TestNonAppPinNotificationOffersTheBusWayOut(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("body is missing %q:\n%s", want, body)
 		}
-	}
-}
-
-func TestPinAlarmIntervalTracksTheTripwire(t *testing.T) {
-	for _, tc := range []struct {
-		age  time.Duration
-		want time.Duration
-	}{
-		{bus.DefaultPinAlarmAge, 15 * time.Minute},
-		{4 * time.Hour, time.Hour},
-		{2 * time.Minute, time.Minute},
-		{10 * time.Second, time.Minute},
-	} {
-		if got := busPinAlarmInterval(tc.age); got != tc.want {
-			t.Errorf("interval for a %s tripwire = %s, want %s", tc.age, got, tc.want)
-		}
-	}
-}
-
-func TestTheDaemonResolvesTheTripwireOnce(t *testing.T) {
-	t.Setenv(bus.PinAlarmAgeEnv, "90s")
-	logPath := filepath.Join(t.TempDir(), "daemon.log")
-	logger, err := logging.New(logPath)
-	if err != nil {
-		t.Fatalf("new test logger: %v", err)
-	}
-	defer logger.Close()
-	d := &Daemon{logger: logger}
-
-	first := d.busPinAlarmAge()
-	if first != 90*time.Second {
-		t.Fatalf("tripwire = %s, want the 90s the environment asked for", first)
-	}
-	if got := d.busPinAlarmAge(); got != first {
-		t.Errorf("second read = %s, want the same %s the bus was built with", got, first)
-	}
-	written, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read the daemon log: %v", err)
-	}
-	if got := strings.Count(string(written), "retention-pin alarm set to"); got != 1 {
-		t.Errorf("the tripwire was announced %d times, want once:\n%s", got, written)
 	}
 }
 

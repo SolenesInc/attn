@@ -10,9 +10,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/ptyhost"
-	"github.com/victorarias/attn/internal/ptyworker"
 )
 
 func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
@@ -103,7 +103,7 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 				t.Fatalf("cleanup accepted invalid %s: %s", field, out.String())
 			}
 			for pid := range pids {
-				if !ptyworker.ProcessAlive(pid) {
+				if !procreap.ProcessAlive(pid) {
 					t.Fatalf("identity mismatch stopped host %d", pid)
 				}
 			}
@@ -114,12 +114,12 @@ func TestInstanceCleanStopsSharedHostGenerationsAndChildren(t *testing.T) {
 		t.Fatalf("clean instance: %v\n%s", err, out.String())
 	}
 	for _, pid := range children {
-		if ptyworker.ProcessAlive(pid) {
+		if procreap.ProcessAlive(pid) {
 			t.Errorf("child %d survived instance cleanup", pid)
 		}
 	}
 	for pid := range pids {
-		if ptyworker.ProcessAlive(pid) {
+		if procreap.ProcessAlive(pid) {
 			t.Errorf("host %d survived instance cleanup", pid)
 		}
 	}

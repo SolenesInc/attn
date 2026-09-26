@@ -16,7 +16,7 @@ interface Entry<Draft, Ack> extends AutosaveEdit<Draft, Ack> {
   retryOnReconnect: boolean;
 }
 
-export type AutosaveResult<Ack> = { ack: Ack } | { conflict: Ack } | { error: string; ack?: Ack };
+type AutosaveResult<Ack> = { ack: Ack } | { conflict: Ack } | { error: string; ack?: Ack };
 
 export interface AutosaveSpec<Draft, Ack> {
   send(member: string, draft: Draft, acknowledged: Ack): Promise<AutosaveResult<Ack>>;

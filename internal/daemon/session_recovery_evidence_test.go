@@ -12,7 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/toolhome"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type recoveryHome struct {
@@ -85,146 +84,6 @@ func deadWorkerBackend() *fakeWorkerReconcileBackend {
 	return &fakeWorkerReconcileBackend{liveIDs: nil, info: map[string]ptybackend.SessionInfo{}}
 }
 
-func saveTwoPaneLayout(workspaceID, firstSessionID, secondSessionID string) workspacelayout.WorkspaceLayout {
-	pane := func(sessionID string) workspacelayout.Pane {
-		return workspacelayout.Pane{
-			PaneID:    "pane-" + sessionID,
-			RuntimeID: sessionID,
-			SessionID: sessionID,
-			Kind:      workspacelayout.PaneKindAgent,
-			Title:     workspacelayout.DefaultPaneTitle,
-		}
-	}
-	return workspacelayout.WorkspaceLayout{
-		WorkspaceID:  workspaceID,
-		ActivePaneID: "pane-" + firstSessionID,
-		Layout: workspacelayout.Node{
-			Type:      "split",
-			SplitID:   "split-" + workspaceID,
-			Direction: workspacelayout.DirectionVertical,
-			Ratio:     workspacelayout.DefaultSplitRatio,
-			Children: []workspacelayout.Node{
-				{Type: "pane", PaneID: "pane-" + firstSessionID},
-				{Type: "pane", PaneID: "pane-" + secondSessionID},
-			},
-		},
-		Panes: []workspacelayout.Pane{pane(firstSessionID), pane(secondSessionID)},
-	}
-}
-
-func TestRecoveryKeepsAnyResumableSessionWhateverItWasDoing(t *testing.T) {
-	home := newRecoveryHome(t)
-	states := []protocol.SessionState{
-		protocol.SessionStateIdle,
-		protocol.SessionStateWorking,
-		protocol.SessionStateWaitingInput,
-		protocol.SessionStatePendingApproval,
-	}
-	for _, state := range states {
-		for _, agent := range []protocol.SessionAgent{protocol.SessionAgentCodex, protocol.SessionAgentClaude} {
-			t.Run(string(agent)+"/"+string(state), func(t *testing.T) {
-				d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-				id := "crashed-" + string(agent) + "-" + string(state)
-				resumeID := "native-" + id
-				addStaleSession(t, d, id, agent, state)
-				if agent == protocol.SessionAgentCodex {
-					home.resumableCodex(t, resumeID)
-				} else {
-					home.resumableClaude(t, resumeID)
-				}
-				giveRestorationEvidence(t, d, id, resumeID)
-				d.ptyBackend = deadWorkerBackend()
-
-				report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-				if report.MarkedRecoverable != 1 {
-					t.Fatalf("marked_recoverable = %d, want 1", report.MarkedRecoverable)
-				}
-				session := d.store.Get(id)
-				if session == nil {
-					t.Fatal("a resumable session was deleted by startup recovery")
-				}
-				if session.State != protocol.SessionStateRecoverable {
-					t.Fatalf("state = %q, want recoverable", session.State)
-				}
-			})
-		}
-	}
-}
-
-func TestRecoveryReapsWhatItCannotBringBack(t *testing.T) {
-	cases := []struct {
-		name  string
-		setup func(t *testing.T, d *Daemon, home recoveryHome, id string)
-	}{
-		{
-			name: "resume target never existed",
-			setup: func(t *testing.T, d *Daemon, _ recoveryHome, id string) {
-				giveRestorationEvidence(t, d, id, "native-"+id)
-			},
-		},
-		{
-			name: "resume target is gone from disk",
-			setup: func(t *testing.T, d *Daemon, home recoveryHome, id string) {
-				home.resumableCodex(t, "native-"+id)
-				giveRestorationEvidence(t, d, id, "native-"+id)
-				if err := os.RemoveAll(home.codexSessions); err != nil {
-					t.Fatalf("remove rollouts: %v", err)
-				}
-			},
-		},
-		{
-			name: "no launch intent to relaunch from",
-			setup: func(t *testing.T, d *Daemon, home recoveryHome, id string) {
-				home.resumableCodex(t, "native-"+id)
-				d.store.SetResumeSessionID(id, "native-"+id)
-			},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			home := newRecoveryHome(t)
-			d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-			id := "unrecoverable"
-			addStaleSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-			tc.setup(t, d, home, id)
-			d.ptyBackend = deadWorkerBackend()
-
-			report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-			if report.Reaped != 1 {
-				t.Fatalf("reaped = %d, want 1", report.Reaped)
-			}
-			if session := d.store.Get(id); session != nil {
-				t.Fatalf("session = %+v, want reaped: there is nothing to bring it back to", session)
-			}
-		})
-	}
-}
-
-func TestRecoveryRedecidesSessionsAlreadyParkedAsRecoverable(t *testing.T) {
-	home := newRecoveryHome(t)
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addStaleSession(t, d, "still-there", protocol.SessionAgentCodex, protocol.SessionStateRecoverable)
-	addStaleSession(t, d, "target-pruned", protocol.SessionAgentCodex, protocol.SessionStateRecoverable)
-	home.resumableCodex(t, "native-still-there")
-	giveRestorationEvidence(t, d, "still-there", "native-still-there")
-	giveRestorationEvidence(t, d, "target-pruned", "native-target-pruned")
-	d.ptyBackend = deadWorkerBackend()
-
-	report := d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-	if session := d.store.Get("still-there"); session == nil || session.State != protocol.SessionStateRecoverable {
-		t.Fatalf("still-there = %+v, want left recoverable", session)
-	}
-	if report.MarkedRecoverable != 0 {
-		t.Fatalf("marked_recoverable = %d, want 0 for a session already parked there", report.MarkedRecoverable)
-	}
-	if session := d.store.Get("target-pruned"); session != nil {
-		t.Fatalf("target-pruned = %+v, want reaped once its rollout was gone", session)
-	}
-}
-
 func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
 	home := newRecoveryHome(t)
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
@@ -234,25 +93,10 @@ func TestRecoveryDoesNotResurrectAnIntentionalClose(t *testing.T) {
 	d.store.MarkSessionIntentionalClose("closed-on-purpose", time.Now())
 	d.ptyBackend = deadWorkerBackend()
 
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if session := d.store.Get("closed-on-purpose"); session != nil {
 		t.Fatalf("session = %+v, want gone: the user already dismissed it", session)
-	}
-}
-
-func TestRecoveryKeepsShellPanes(t *testing.T) {
-	newRecoveryHome(t)
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addStaleSession(t, d, "utility-shell", protocol.SessionAgentShell, protocol.SessionStateIdle)
-	giveLaunchIntent(t, d, "utility-shell")
-	d.ptyBackend = deadWorkerBackend()
-
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-	session := d.store.Get("utility-shell")
-	if session == nil || session.State != protocol.SessionStateRecoverable {
-		t.Fatalf("session = %+v, want recoverable", session)
 	}
 }
 
@@ -284,49 +128,12 @@ func TestRecoveryJudgesPluginSessionsOnTheirPersistedHandle(t *testing.T) {
 	}
 
 	d.ptyBackend = deadWorkerBackend()
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
+	d.reconcileSessionsWithWorkerBackend(context.Background(), true, d.storedSessionIDs(), time.Time{})
 
 	if session := d.store.Get("plugin-with-handle"); session == nil || session.State != protocol.SessionStateRecoverable {
 		t.Fatalf("plugin-with-handle = %+v, want recoverable", session)
 	}
 	if session := d.store.Get("plugin-capability-only"); session != nil {
 		t.Fatalf("plugin-capability-only = %+v, want reaped: nothing names the conversation", session)
-	}
-}
-
-func TestRecoveryKeepsThePaneOfARecoverableSession(t *testing.T) {
-	home := newRecoveryHome(t)
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	workspaceID := "ws-crash"
-	d.handleRegisterWorkspace(nil, &protocol.RegisterWorkspaceMessage{
-		Cmd: protocol.CmdRegisterWorkspace, ID: workspaceID, Title: "crash", Directory: "/tmp/crash",
-	})
-	for _, id := range []string{"pane-keeps", "pane-goes"} {
-		addStaleSession(t, d, id, protocol.SessionAgentCodex, protocol.SessionStateWorking)
-		d.associateSessionWithWorkspace(id, workspaceID)
-	}
-	home.resumableCodex(t, "native-pane-keeps")
-	giveRestorationEvidence(t, d, "pane-keeps", "native-pane-keeps")
-	giveRestorationEvidence(t, d, "pane-goes", "native-pane-goes")
-	if err := d.store.SaveWorkspaceLayout(saveTwoPaneLayout(workspaceID, "pane-keeps", "pane-goes")); err != nil {
-		t.Fatalf("SaveWorkspaceLayout: %v", err)
-	}
-
-	d.ptyBackend = deadWorkerBackend()
-	d.reconcileSessionsWithWorkerBackend(context.Background(), true, time.Time{})
-
-	layout := d.store.GetWorkspaceLayout(workspaceID)
-	if layout == nil {
-		t.Fatal("workspace layout was removed with the reaped session")
-	}
-	sessions := map[string]bool{}
-	for _, pane := range layout.Panes {
-		sessions[pane.SessionID] = true
-	}
-	if !sessions["pane-keeps"] {
-		t.Fatalf("recoverable session lost its pane; layout panes = %+v", layout.Panes)
-	}
-	if sessions["pane-goes"] {
-		t.Fatalf("reaped session kept its pane; layout panes = %+v", layout.Panes)
 	}
 }

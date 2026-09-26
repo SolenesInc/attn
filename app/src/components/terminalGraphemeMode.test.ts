@@ -1,96 +1,47 @@
-import { describe, it, expect } from 'vitest';
-import {
-  GRAPHEME_CLUSTERING_MODE,
-  enableGraphemeClustering,
-  ensureGraphemeClustering,
-  writeReassertingClustering,
-  type GraphemeModeTerminal,
-} from './terminalGraphemeMode';
+import { describe, expect, it } from 'vitest';
+import { writeReassertingClustering } from './terminalGraphemeMode';
 
-const ENABLE_2027 = new TextEncoder().encode('\x1b[?2027h');
-const RIS = new TextEncoder().encode('\x1bc');
-const FAMILY = new TextEncoder().encode('\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}');
+const RIS = '\x1bc';
+const ENABLE_CLUSTERING = '\x1b[?2027h';
+const FAMILY = '\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}';
+const encode = (text: string) => new TextEncoder().encode(text);
 
-// A terminal that records every write (copied, since writes are buffer views).
-function recordingTerminal(modeOn = true): GraphemeModeTerminal & { writes: number[][] } {
-  const writes: number[][] = [];
-  return {
-    writes,
-    getMode: (mode: number) => (mode === GRAPHEME_CLUSTERING_MODE ? modeOn : false),
-    write: (data: Uint8Array) => writes.push(Array.from(data)),
-  };
+function chunkings(length: number): number[][] {
+  const cuts: number[][] = [[], Array.from({ length: length - 1 }, (_, i) => i + 1)];
+  for (let a = 1; a < length; a += 1) {
+    cuts.push([a]);
+    for (let b = a + 1; b < length; b += 1) cuts.push([a, b]);
+  }
+  return cuts;
 }
 
-const bytes = (a: Uint8Array) => Array.from(a);
-const concat = (...arrs: Uint8Array[]) => {
-  const out: number[] = [];
-  for (const a of arrs) out.push(...a);
-  return Uint8Array.from(out);
-};
-
-describe('enableGraphemeClustering', () => {
-  it('writes DECSET 2027 unconditionally', () => {
-    const term = recordingTerminal(true);
-    enableGraphemeClustering(term);
-    expect(term.writes).toEqual([bytes(ENABLE_2027)]);
-  });
-});
-
-describe('ensureGraphemeClustering', () => {
-  it('re-enables and reports it when the mode was reset off', () => {
-    const term = recordingTerminal(false);
-    expect(ensureGraphemeClustering(term)).toBe(true);
-    expect(term.writes).toEqual([bytes(ENABLE_2027)]);
-  });
-
-  it('is a no-op when grapheme clustering is already on', () => {
-    const term = recordingTerminal(true);
-    expect(ensureGraphemeClustering(term)).toBe(false);
-    expect(term.writes).toHaveLength(0);
-  });
-});
+function writeInChunks(stream: Uint8Array, cuts: number[]): number[] {
+  const written: number[] = [];
+  const terminal = { getMode: () => true, write: (data: Uint8Array) => written.push(...data) };
+  let trailingEsc = false;
+  for (const [from, to] of [0, ...cuts].map((at, i, all) => [at, all[i + 1] ?? stream.length])) {
+    trailingEsc = writeReassertingClustering(terminal, stream.subarray(from, to), trailingEsc);
+  }
+  return written;
+}
 
 describe('writeReassertingClustering', () => {
-  it('passes plain output straight through with no extra writes', () => {
-    const term = recordingTerminal();
-    const carry = writeReassertingClustering(term, FAMILY, false);
-    expect(term.writes).toEqual([bytes(FAMILY)]);
-    expect(carry).toBe(false);
-  });
+  it.each([
+    ['plain output', `hello ${FAMILY}`],
+    ['a reset before an emoji', `${RIS}${FAMILY}`],
+    ['several resets', `${RIS}${FAMILY}${RIS}${FAMILY}`],
+    ['a reset at the very end', `A${RIS}`],
+    ['back-to-back resets', `${RIS}${RIS}x`],
+    ['an escape before a reset', `\x1b${RIS}${FAMILY}`],
+    ['a CSI that is not a reset', `\x1b[mA\x1b[31m${FAMILY}`],
+    ['a lone escape then a c elsewhere', `\x1b[1mc\x1b7c${FAMILY}`],
+    ['a trailing escape', `${FAMILY}\x1b`],
+  ])('re-enables clustering after every reset in %s, however the output is chunked', (_name, text) => {
+    const stream = encode(text);
+    const expected = Array.from(encode(text.split(RIS).join(RIS + ENABLE_CLUSTERING)));
 
-  it('re-enables clustering between a RIS and emoji in the same chunk', () => {
-    const term = recordingTerminal();
-    const carry = writeReassertingClustering(term, concat(RIS, FAMILY), false);
-    expect(term.writes).toEqual([bytes(RIS), bytes(ENABLE_2027), bytes(FAMILY)]);
-    expect(carry).toBe(false);
-  });
-
-  it('handles several RIS in one chunk, re-enabling after each', () => {
-    const term = recordingTerminal();
-    writeReassertingClustering(term, concat(RIS, FAMILY, RIS, FAMILY), false);
-    expect(term.writes.flat()).toEqual(bytes(concat(RIS, ENABLE_2027, FAMILY, RIS, ENABLE_2027, FAMILY)));
-    // Exactly one re-enable per reset (0x3f is the '?' of ESC[?2027h).
-    const enables = term.writes.filter((w) => w.length === ENABLE_2027.length && w[2] === 0x3f);
-    expect(enables).toHaveLength(2);
-  });
-
-  it('reports a lone trailing ESC and completes a boundary-straddling RIS next call', () => {
-    const term = recordingTerminal();
-    const carry = writeReassertingClustering(term, Uint8Array.from([0x41, 0x1b]), false);
-    expect(carry).toBe(true);
-    term.writes.length = 0;
-    const carry2 = writeReassertingClustering(term, concat(Uint8Array.from([0x63]), FAMILY), carry);
-    expect(term.writes).toEqual([[0x63], bytes(ENABLE_2027), bytes(FAMILY)]);
-    expect(carry2).toBe(false);
-  });
-
-  it('does not treat a trailing ESC that begins a non-RIS sequence as a reset', () => {
-    const term = recordingTerminal();
-    const carry = writeReassertingClustering(term, Uint8Array.from([0x1b]), false);
-    expect(carry).toBe(true);
-    term.writes.length = 0;
-    const carry2 = writeReassertingClustering(term, Uint8Array.from([0x5b, 0x6d]), carry);
-    expect(term.writes).toEqual([[0x5b, 0x6d]]);
-    expect(carry2).toBe(false);
+    for (const cuts of chunkings(stream.length)) {
+      expect(writeInChunks(stream, cuts), `cut at ${cuts.join(',')}`).toEqual(expected);
+    }
   });
 });

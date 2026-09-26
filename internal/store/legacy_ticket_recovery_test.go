@@ -160,135 +160,6 @@ func TestReadLegacyTicketSnapshotRejectsFutureAndInconsistentSchemas(t *testing.
 	}
 }
 
-func TestRestoreLegacyTicketIsCreateOnlyAndIdempotent(t *testing.T) {
-	s := New()
-	defer s.Close()
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	run, _, err := s.BeginLegacyTicketRecovery(LegacyTicketRecoveryVersion, nil, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	candidate := LegacyTicketCandidate{
-		Ticket: Ticket{
-			ID: "recover-me", Title: "Recovered", Description: "body", Status: TicketStatusFailed,
-			Assignee: "old-session", Cwd: "/repo", LastAgentID: "claude", ProjectID: "p",
-			CreatedAt: now.Add(-48 * time.Hour), UpdatedAt: now.Add(-24 * time.Hour),
-			ClosedAt: timePtr(now.Add(-24 * time.Hour)), ArchivedAt: timePtr(now.Add(-23 * time.Hour)),
-		},
-		ResumeSessionID: "native-id",
-		Activity:        []TicketActivity{{Kind: TicketActivityComment, Author: "agent", Comment: "receipt", CreatedAt: now.Add(-25 * time.Hour)}},
-		Attachments:     []TicketAttachment{{Filename: "proof.md", Path: "/proof.md", Note: "proof", CreatedAt: now.Add(-25 * time.Hour)}},
-	}
-	candidate.Fingerprint = legacyTicketCandidateFingerprint(candidate)
-	item := LegacyTicketRecoveryItem{Fingerprint: candidate.Fingerprint, RunVersion: run.Version, SourceKind: "database", SourceKey: "/snapshot", TicketID: candidate.Ticket.ID, CreatedAt: run.RecoveryAt}
-	if got, err := s.RestoreLegacyTicket(candidate, item); err != nil || got != "recovered" {
-		t.Fatalf("first restore = %q, %v", got, err)
-	}
-	first, err := s.GetTicket(candidate.Ticket.ID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(first.Activity) != 1 || len(first.Attachments) != 1 || first.Title != "Recovered" {
-		t.Fatalf("restored ticket = %#v", first)
-	}
-	if got, err := s.RestoreLegacyTicket(candidate, item); err != nil || got != "recovered" {
-		t.Fatalf("second restore = %q, %v", got, err)
-	}
-	second, _ := s.GetTicket(candidate.Ticket.ID)
-	if !reflect.DeepEqual(first, second) {
-		t.Fatalf("idempotent restore changed ticket:\nfirst=%#v\nsecond=%#v", first, second)
-	}
-
-	live, err := s.CreateTicket(Ticket{ID: "live-wins", Title: "Live", Description: "current"}, "you", now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	liveCandidate := candidate
-	liveCandidate.Ticket.ID = live.ID
-	liveCandidate.Ticket.Title = "Backup must not win"
-	liveCandidate.Fingerprint = legacyTicketCandidateFingerprint(liveCandidate)
-	liveItem := item
-	liveItem.Fingerprint, liveItem.TicketID = liveCandidate.Fingerprint, live.ID
-	if got, err := s.RestoreLegacyTicket(liveCandidate, liveItem); err != nil || got != "live_won" {
-		t.Fatalf("live collision = %q, %v", got, err)
-	}
-	after, _ := s.GetTicket(live.ID)
-	if after.Title != "Live" || after.Description != "current" || after.Status != TicketStatusTodo {
-		t.Fatalf("live row was overwritten: %#v", after)
-	}
-}
-
-func TestRestoreLegacyTicketAttachmentIsAdditiveAndCreateOnly(t *testing.T) {
-	s := New()
-	defer s.Close()
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	if _, err := s.CreateTicket(Ticket{ID: "ticket-1", Title: "Ticket", Description: "original", Status: TicketStatusDone}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	before, err := s.GetTicket("ticket-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	row := TicketAttachment{
-		TicketID: "ticket-1", Filename: "proof.md", Path: "/notebook/tickets/ticket-1/proof.md",
-		Note: "Recovered from the legacy Notebook; SHA-256 abc", CreatedAt: now.Add(-time.Hour),
-	}
-	item := LegacyTicketRecoveryItem{
-		Fingerprint: "notebook-one", RunVersion: LegacyTicketRecoveryVersion,
-		SourceKind: "notebook", SourceKey: row.Path, TicketID: row.TicketID, CreatedAt: now,
-	}
-	if got, err := s.RestoreLegacyTicketAttachment(row, item); err != nil || got != "recovered" {
-		t.Fatalf("restore = %q, %v", got, err)
-	}
-	if got, err := s.RestoreLegacyTicketAttachment(row, item); err != nil || got != "recovered" {
-		t.Fatalf("rerun = %q, %v", got, err)
-	}
-	conflict := row
-	conflict.Note = "different metadata must not win"
-	conflictItem := item
-	conflictItem.Fingerprint = "notebook-two"
-	if got, err := s.RestoreLegacyTicketAttachment(conflict, conflictItem); err != nil || got != "live_won" {
-		t.Fatalf("conflict = %q, %v", got, err)
-	}
-	after, err := s.GetTicket("ticket-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if before.Title != after.Title || before.Description != after.Description || before.Status != after.Status ||
-		!before.CreatedAt.Equal(after.CreatedAt) || !before.UpdatedAt.Equal(after.UpdatedAt) ||
-		!reflect.DeepEqual(before.Activity, after.Activity) || len(after.Attachments) != 1 || after.Attachments[0].Note != row.Note {
-		t.Fatalf("attachment recovery rewrote ticket data:\nbefore=%#v\nafter=%#v", before, after)
-	}
-}
-
-func TestLegacyTicketRecoveryRunFreezesInventoryAndWarnsOnce(t *testing.T) {
-	s := New()
-	defer s.Close()
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	inventory := []LegacyTicketRecoverySource{{Path: "/b.db", Family: "routine", Size: 2, ModTimeNS: 2, SHA256: "bb"}, {Path: "/a.db", Family: "premigration", Size: 1, ModTimeNS: 1, SHA256: "aa"}}
-	run, created, err := s.BeginLegacyTicketRecovery(LegacyTicketRecoveryVersion, inventory, now)
-	if err != nil || !created || run.State != LegacyTicketRecoveryRunning {
-		t.Fatalf("begin = %#v created=%v err=%v", run, created, err)
-	}
-	again, created, err := s.BeginLegacyTicketRecovery(LegacyTicketRecoveryVersion, nil, now.Add(time.Hour))
-	if err != nil || created || again.InventoryJSON != run.InventoryJSON || again.RecoveryAt != run.RecoveryAt {
-		t.Fatalf("second begin = %#v created=%v err=%v", again, created, err)
-	}
-	warning := &NotificationRecord{Kind: "legacy", Severity: NotificationWarning, Title: "warning", Body: "body", SourceKind: "legacy", SourceID: "v1"}
-	id, err := s.FinishLegacyTicketRecovery(run.Version, LegacyTicketRecoveryWarned, map[string]int{"recovered": 1}, "", warning, now.Add(time.Hour))
-	if err != nil || id != "legacy-ticket-recovery-v2" {
-		t.Fatalf("finish id=%q err=%v", id, err)
-	}
-	id2, err := s.FinishLegacyTicketRecovery(run.Version, LegacyTicketRecoveryWarned, nil, "different", warning, now.Add(2*time.Hour))
-	if err != nil || id2 != id {
-		t.Fatalf("second finish id=%q err=%v", id2, err)
-	}
-	notifications, err := s.ListNotifications()
-	if err != nil || len(notifications) != 1 || notifications[0].ID != id {
-		t.Fatalf("notifications=%#v err=%v", notifications, err)
-	}
-}
-
 func legacyTicketSeedTestStore(t *testing.T) (*Store, docstore.CollectionSchema, docstore.CollectionSchema, docstore.CollectionSchema) {
 	t.Helper()
 	s := New()
@@ -332,184 +203,184 @@ func ticketSeedHandover(t *testing.T, seedSchema, noteSchema, dispatchSchema doc
 	}
 }
 
-func TestEnsureTicketSeedHandoverCreatesOnceAndKeepsTheOriginalLink(t *testing.T) {
-	s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-	handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-first", "n-first")
-
-	created, err := s.EnsureTicketSeedHandover(handover)
-	if err != nil || created.Result != "created" || created.SeedID != "s-first" || len(created.Seqs) != 2 {
-		t.Fatalf("create = %#v, %v", created, err)
-	}
-	events, err := s.BusEventsSince(0, 10)
-	if err != nil || len(events) != 2 ||
-		events[0].Subject != "core/garden/seeds/s-first" || events[1].Subject != "core/garden/notes/n-first" {
-		t.Fatalf("document facts = %#v, %v", events, err)
-	}
-	seedBefore, found, err := s.GetDocument(seeds, "s-first")
-	if err != nil || !found {
-		t.Fatalf("seed after create: found=%v err=%v", found, err)
-	}
-	if _, found, err := s.GetDocument(notes, "n-first"); err != nil || !found {
-		t.Fatalf("note after create: found=%v err=%v", found, err)
-	}
-	link, err := s.TicketSeedLink("ticket-1")
-	if err != nil || link == nil || link.SeedID != "s-first" || link.OriginalTicketStatus != TicketStatusDone {
-		t.Fatalf("link = %#v, %v", link, err)
-	}
-
-	again := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-second", "n-second")
-	again.SeedDescription = "new data must not win"
-	adopted, err := s.EnsureTicketSeedHandover(again)
-	if err != nil || adopted.Result != "adopted_link" || adopted.SeedID != "s-first" {
-		t.Fatalf("rerun = %#v, %v", adopted, err)
-	}
-	seedAfter, _, err := s.GetDocument(seeds, "s-first")
-	if err != nil || !reflect.DeepEqual(seedBefore, seedAfter) {
-		t.Fatalf("rerun changed the linked seed:\nbefore=%#v\nafter=%#v err=%v", seedBefore, seedAfter, err)
-	}
-	if _, found, err := s.GetDocument(seeds, "s-second"); err != nil || found {
-		t.Fatalf("rerun created replacement seed: found=%v err=%v", found, err)
-	}
-	afterEvents, err := s.BusEventsSince(0, 10)
-	if err != nil || len(afterEvents) != len(events) {
-		t.Fatalf("rerun document facts = %#v, %v", afterEvents, err)
-	}
+type ticketSeedGarden struct {
+	store                    *Store
+	seeds, notes, dispatches docstore.CollectionSchema
+	existing                 []ticketSeedDocument
 }
 
-func TestEnsureTicketSeedHandoverAdoptsOnlyExactMachineLineage(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		lineage  func(t *testing.T, s *Store, seeds, notes, dispatches docstore.CollectionSchema)
-		sessions []string
-	}{
-		{
-			name: "cutover note",
-			lineage: func(t *testing.T, s *Store, seeds, notes, _ docstore.CollectionSchema) {
-				putLegacySeedDocument(t, s, seeds, "s-existing", "Different existing title", "untouched")
-				body, err := (garden.Note{ID: "n-lineage", Seed: "s-existing", Kind: garden.NoteKindNote,
-					Body: "converted from backlog ticket `ticket-1` at the garden cutover; machine receipt"}).Encode()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := s.PutDocument(notes, "n-lineage", body, time.Now(), nil); err != nil {
-					t.Fatal(err)
-				}
-			},
-		},
-		{
-			name: "dispatch relationship",
-			lineage: func(t *testing.T, s *Store, seeds, _ docstore.CollectionSchema, dispatches docstore.CollectionSchema) {
-				putLegacySeedDocument(t, s, seeds, "s-existing", "Different existing title", "untouched")
-				body, err := (garden.Dispatch{SessionID: "session-1", Crown: "s-existing"}).Encode()
-				if err != nil {
-					t.Fatal(err)
-				}
-				if _, err := s.PutDocument(dispatches, "session-1", body, time.Now(), nil); err != nil {
-					t.Fatal(err)
-				}
-			},
-			sessions: []string{"session-1"},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-			tc.lineage(t, s, seeds, notes, dispatches)
-			before, _, err := s.GetDocument(seeds, "s-existing")
-			if err != nil {
-				t.Fatal(err)
-			}
-			handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-			handover.SessionIDs = tc.sessions
-			got, err := s.EnsureTicketSeedHandover(handover)
-			if err != nil || got.Result != "adopted_lineage" || got.SeedID != "s-existing" {
-				t.Fatalf("adopt = %#v, %v", got, err)
-			}
-			after, _, err := s.GetDocument(seeds, "s-existing")
-			if err != nil || !reflect.DeepEqual(before, after) {
-				t.Fatalf("adoption changed existing seed:\nbefore=%#v\nafter=%#v err=%v", before, after, err)
-			}
-			if _, found, err := s.GetDocument(seeds, "s-proposed"); err != nil || found {
-				t.Fatalf("adoption also created a seed: found=%v err=%v", found, err)
-			}
-		})
-	}
+type ticketSeedDocument struct {
+	schema docstore.CollectionSchema
+	id     string
 }
 
-func TestEnsureTicketSeedHandoverLeavesAmbiguityUntouched(t *testing.T) {
-	t.Run("several lineage receipts", func(t *testing.T) {
-		s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-		for _, id := range []string{"s-one", "s-two"} {
-			putLegacySeedDocument(t, s, seeds, id, id, "existing")
-			body, err := (garden.Note{ID: "n-" + id, Seed: id, Kind: garden.NoteKindNote,
-				Body: "replanted from ticket `ticket-1`, exact machine receipt"}).Encode()
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := s.PutDocument(notes, "n-"+id, body, time.Now(), nil); err != nil {
-				t.Fatal(err)
-			}
-		}
-		handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-		got, err := s.EnsureTicketSeedHandover(handover)
-		if err != nil || got.Result != "ambiguous_lineage" || got.SeedID != "" {
-			t.Fatalf("ambiguity = %#v, %v", got, err)
-		}
-		assertNoLegacySeedCreation(t, s, seeds, "ticket-1", "s-proposed")
-	})
-
-	t.Run("same title and body without lineage", func(t *testing.T) {
-		s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-		putLegacySeedDocument(t, s, seeds, "s-manual", "Recovered work", "the original brief")
-		handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
-		got, err := s.EnsureTicketSeedHandover(handover)
-		if err != nil || got.Result != "ambiguous_content" || got.SeedID != "" {
-			t.Fatalf("content ambiguity = %#v, %v", got, err)
-		}
-		assertNoLegacySeedCreation(t, s, seeds, "ticket-1", "s-proposed")
-	})
-}
-
-func TestEnsureTicketSeedHandoverRollsBackEveryWriteOnAConflict(t *testing.T) {
-	s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
-	existing := []byte(`{"id":"n-conflict","seed":"s-other","kind":"note","body":"keep me","author_session":"","author_member":""}`)
-	if _, err := s.PutDocument(notes, "n-conflict", existing, time.Now(), nil); err != nil {
+func (g *ticketSeedGarden) put(t *testing.T, schema docstore.CollectionSchema, id string, body []byte) {
+	t.Helper()
+	if _, err := g.store.PutDocument(schema, id, body, time.Now(), nil); err != nil {
 		t.Fatal(err)
 	}
-	handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-conflict")
-	if _, err := s.EnsureTicketSeedHandover(handover); err == nil || !docstore.IsConflict(err) {
-		t.Fatalf("conflicting note error = %v", err)
-	}
-	assertNoLegacySeedCreation(t, s, seeds, "ticket-1", "s-proposed")
-	doc, found, err := s.GetDocument(notes, "n-conflict")
-	if err != nil || !found || string(doc.Body) != string(existing) {
-		t.Fatalf("rollback changed existing note: %#v found=%v err=%v", doc, found, err)
-	}
-	if events, err := s.BusEventsSince(0, 10); err != nil || len(events) != 0 {
-		t.Fatalf("rolled-back document facts = %#v, %v", events, err)
-	}
+	g.existing = append(g.existing, ticketSeedDocument{schema, id})
 }
 
-func putLegacySeedDocument(t *testing.T, s *Store, schema docstore.CollectionSchema, id, title, body string) {
+func (g *ticketSeedGarden) seed(t *testing.T, id, title, body string) {
 	t.Helper()
 	encoded, err := (garden.Seed{ID: id, Title: title, Body: body, Status: garden.StatusHarvested,
 		StepSlug: garden.StepSlug(title), Edges: []garden.Edge{}, Vars: []garden.Var{}}).Encode()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.PutDocument(schema, id, encoded, time.Now(), nil); err != nil {
+	g.put(t, g.seeds, id, encoded)
+}
+
+func (g *ticketSeedGarden) note(t *testing.T, id, seedID, body string) {
+	t.Helper()
+	encoded, err := (garden.Note{ID: id, Seed: seedID, Kind: garden.NoteKindNote, Body: body}).Encode()
+	if err != nil {
 		t.Fatal(err)
 	}
+	g.put(t, g.notes, id, encoded)
 }
 
-func assertNoLegacySeedCreation(t *testing.T, s *Store, seeds docstore.CollectionSchema, ticketID, proposedSeedID string) {
-	t.Helper()
-	if _, found, err := s.GetDocument(seeds, proposedSeedID); err != nil || found {
-		t.Fatalf("proposed seed exists: found=%v err=%v", found, err)
-	}
-	link, err := s.TicketSeedLink(ticketID)
-	if err != nil || link != nil {
-		t.Fatalf("ambiguous recovery link = %#v, %v", link, err)
+func TestEnsureTicketSeedHandoverDecidesOnceOverThePriorGarden(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		prior    func(t *testing.T, g *ticketSeedGarden)
+		sessions []string
+		result   string
+		seedID   string
+		conflict bool
+	}{
+		{name: "empty garden", result: "created", seedID: "s-proposed"},
+		{
+			name: "earlier handover of the same ticket",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				earlier := ticketSeedHandover(t, g.seeds, g.notes, g.dispatches, "ticket-1", "s-first", "n-first")
+				if got, err := g.store.EnsureTicketSeedHandover(earlier); err != nil || got.Result != "created" {
+					t.Fatalf("earlier handover = %#v, %v", got, err)
+				}
+				g.existing = append(g.existing, ticketSeedDocument{g.seeds, "s-first"}, ticketSeedDocument{g.notes, "n-first"})
+			},
+			result: "adopted_link", seedID: "s-first",
+		},
+		{
+			name: "cutover note naming the ticket",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				g.seed(t, "s-existing", "Different existing title", "untouched")
+				g.note(t, "n-lineage", "s-existing", "converted from backlog ticket `ticket-1` at the garden cutover; machine receipt")
+			},
+			result: "adopted_lineage", seedID: "s-existing",
+		},
+		{
+			name: "dispatch of one of the ticket's sessions",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				g.seed(t, "s-existing", "Different existing title", "untouched")
+				body, err := (garden.Dispatch{SessionID: "session-1", Crown: "s-existing"}).Encode()
+				if err != nil {
+					t.Fatal(err)
+				}
+				g.put(t, g.dispatches, "session-1", body)
+			},
+			sessions: []string{"session-1"},
+			result:   "adopted_lineage", seedID: "s-existing",
+		},
+		{
+			name: "several lineage receipts",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				for _, id := range []string{"s-one", "s-two"} {
+					g.seed(t, id, id, "existing")
+					g.note(t, "n-"+id, id, "replanted from ticket `ticket-1`, exact machine receipt")
+				}
+			},
+			result: "ambiguous_lineage",
+		},
+		{
+			name: "same title and body without lineage",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				g.seed(t, "s-manual", "Recovered work", "the original brief")
+			},
+			result: "ambiguous_content",
+		},
+		{
+			name: "a different note already holds the proposed note id",
+			prior: func(t *testing.T, g *ticketSeedGarden) {
+				g.put(t, g.notes, "n-proposed", []byte(`{"id":"n-proposed","seed":"s-other","kind":"note","body":"keep me","author_session":"","author_member":""}`))
+			},
+			conflict: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, seeds, notes, dispatches := legacyTicketSeedTestStore(t)
+			g := &ticketSeedGarden{store: s, seeds: seeds, notes: notes, dispatches: dispatches}
+			if tc.prior != nil {
+				tc.prior(t, g)
+			}
+			before := make([]*docstore.Document, len(g.existing))
+			for i, doc := range g.existing {
+				stored, _, err := s.GetDocument(doc.schema, doc.id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				before[i] = stored
+			}
+			factsBefore, err := s.BusEventsSince(0, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			handover := ticketSeedHandover(t, seeds, notes, dispatches, "ticket-1", "s-proposed", "n-proposed")
+			handover.SessionIDs = tc.sessions
+			got, err := s.EnsureTicketSeedHandover(handover)
+			switch {
+			case tc.conflict:
+				if err == nil || !docstore.IsConflict(err) {
+					t.Fatalf("handover = %#v, %v; want a conflict", got, err)
+				}
+			case err != nil || got.Result != tc.result || got.SeedID != tc.seedID:
+				t.Fatalf("handover = %#v, %v; want %s of %q", got, err, tc.result, tc.seedID)
+			}
+
+			for i, doc := range g.existing {
+				after, found, err := s.GetDocument(doc.schema, doc.id)
+				if err != nil || !found || !reflect.DeepEqual(before[i], after) {
+					t.Errorf("existing %s changed:\nbefore=%#v\nafter=%#v found=%v err=%v", doc.id, before[i], after, found, err)
+				}
+			}
+			facts, err := s.BusEventsSince(0, 100)
+			if err != nil {
+				t.Fatal(err)
+			}
+			newFacts := facts[len(factsBefore):]
+			link, linkErr := s.TicketSeedLink("ticket-1")
+			if linkErr != nil {
+				t.Fatal(linkErr)
+			}
+			_, proposedExists, err := s.GetDocument(seeds, "s-proposed")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.result == "created" {
+				if len(newFacts) != 2 || newFacts[0].Subject != "core/garden/seeds/s-proposed" || newFacts[1].Subject != "core/garden/notes/n-proposed" {
+					t.Errorf("created with facts %#v, want the seed and its note", newFacts)
+				}
+				if _, found, err := s.GetDocument(notes, "n-proposed"); err != nil || !found {
+					t.Errorf("the provenance note was not written: found=%v err=%v", found, err)
+				}
+			} else {
+				if len(newFacts) != 0 || proposedExists {
+					t.Errorf("a %s handover wrote facts %#v and created the proposed seed: %v", tc.name, newFacts, proposedExists)
+				}
+			}
+			switch tc.result {
+			case "created", "adopted_link":
+				if link == nil || link.SeedID != tc.seedID || link.OriginalTicketStatus != TicketStatusDone {
+					t.Errorf("link = %#v, want ticket-1 tied to %s with its original status", link, tc.seedID)
+				}
+			case "ambiguous_lineage", "ambiguous_content", "":
+				if link != nil {
+					t.Errorf("link = %#v, want none", link)
+				}
+			}
+		})
 	}
 }
-
-func timePtr(value time.Time) *time.Time { return &value }

@@ -22,6 +22,7 @@ func DefaultSocketPath() string {
 
 type Client struct {
 	socketPath string
+	dial       func() (net.Conn, error)
 }
 
 type automationResult struct {
@@ -30,9 +31,9 @@ type automationResult struct {
 }
 
 func (c *Client) sendAutomation(msg any, out any) error {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.connect()
 	if err != nil {
-		return explainConnectError(c.socketPath, err)
+		return err
 	}
 	defer conn.Close()
 	if err := json.NewEncoder(conn).Encode(msg); err != nil {
@@ -135,13 +136,27 @@ func New(socketPath string) *Client {
 	if socketPath == "" {
 		socketPath = DefaultSocketPath()
 	}
-	return &Client{socketPath: socketPath}
+	return NewWithDial(socketPath, func() (net.Conn, error) {
+		return net.Dial("unix", socketPath)
+	})
+}
+
+func NewWithDial(socketPath string, dial func() (net.Conn, error)) *Client {
+	return &Client{socketPath: socketPath, dial: dial}
+}
+
+func (c *Client) connect() (net.Conn, error) {
+	conn, err := c.dial()
+	if err != nil {
+		return nil, explainConnectError(c.socketPath, err)
+	}
+	return conn, nil
 }
 
 func (c *Client) send(msg interface{}) (*protocol.Response, error) {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.connect()
 	if err != nil {
-		return nil, explainConnectError(c.socketPath, err)
+		return nil, err
 	}
 	defer conn.Close()
 
@@ -1165,7 +1180,7 @@ func (c *Client) FetchPRDetails(id string) ([]protocol.PR, error) {
 }
 
 func (c *Client) IsRunning() bool {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.dial()
 	if err != nil {
 		return false
 	}
@@ -1174,9 +1189,9 @@ func (c *Client) IsRunning() bool {
 }
 
 func (c *Client) sendWorkflow(msg interface{}) (*protocol.WorkflowActionResultMessage, error) {
-	conn, err := net.Dial("unix", c.socketPath)
+	conn, err := c.connect()
 	if err != nil {
-		return nil, explainConnectError(c.socketPath, err)
+		return nil, err
 	}
 	defer conn.Close()
 

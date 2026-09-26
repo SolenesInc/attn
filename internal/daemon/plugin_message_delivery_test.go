@@ -12,16 +12,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestValidatePluginDriverCapabilities_AcceptsMessageDelivery(t *testing.T) {
-	capabilities, err := validatePluginDriverCapabilities(map[string]bool{"message_delivery": true})
-	if err != nil {
-		t.Fatalf("validatePluginDriverCapabilities error=%v, want nil", err)
-	}
-	if !capabilities["message_delivery"] {
-		t.Fatalf("capabilities=%+v, want message_delivery true", capabilities)
-	}
-}
-
 func TestSessionInput_DeliversViaPluginAndWaitsForTakenReceipt(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	backend := &fakeSpawnBackend{}
@@ -304,48 +294,6 @@ func TestPluginClassifyStop_RejectsEmptyAssistantText(t *testing.T) {
 	})
 	if response.Error == nil {
 		t.Fatal("attn.classify_stop with blank assistant_text succeeded, want validation error")
-	}
-}
-
-func TestPluginClassifyStop_HappyPathReturnsClassifierVerdict(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.classifier = NewFakeClassifier(protocol.StateWaitingInput)
-	client, done := startPluginPipe(t, d, "pi-plugin", nil)
-	defer func() {
-		_ = client.Close()
-		<-done
-	}()
-	registerTestPluginDriver(t, client, "pi", map[string]bool{"message_delivery": true})
-
-	now := protocol.TimestampNow().String()
-	d.store.Add(&protocol.Session{
-		ID:             "pi-classify-happy",
-		Label:          "pi",
-		Agent:          "pi",
-		Directory:      t.TempDir(),
-		State:          protocol.SessionStateWorking,
-		StateSince:     now,
-		StateUpdatedAt: now,
-		LastSeen:       now,
-	})
-	if !d.store.BeginAgentDriverRun("pi-classify-happy", "pi-plugin", "run-happy") {
-		t.Fatal("failed to begin plugin run")
-	}
-
-	response := sendPluginMethodResponse(t, client, 32, "attn.classify_stop", pluginClassifyStopParams{
-		SessionID:     "pi-classify-happy",
-		RunID:         "run-happy",
-		AssistantText: "Should I proceed with the migration?",
-	})
-	if response.Error != nil {
-		t.Fatalf("attn.classify_stop error=%#v, want nil", response.Error)
-	}
-	var result pluginClassifyStopResult
-	if err := json.Unmarshal(response.Result, &result); err != nil {
-		t.Fatalf("decode classify_stop result: %v", err)
-	}
-	if result.Verdict != protocol.StateWaitingInput {
-		t.Fatalf("verdict=%q, want waiting_input", result.Verdict)
 	}
 }
 

@@ -44,12 +44,21 @@ func sessionListPresetWindow(name string, now time.Time) (string, string, error)
 	if !known {
 		return "", "", fmt.Errorf("--last %q is not a preset; pass one of: %s", name, sessionListPresetNames())
 	}
-	midnight := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
-	since := midnight.AddDate(0, 0, -back)
+	since := localDayStart(now, back)
 	if name == "yesterday" {
-		return since.Format(time.RFC3339), midnight.Format(time.RFC3339), nil
+		return since.Format(time.RFC3339), localDayStart(now, 0).Format(time.RFC3339), nil
 	}
 	return since.Format(time.RFC3339), "", nil
+}
+
+func localDayStart(now time.Time, daysBack int) time.Time {
+	day := time.Date(now.Year(), now.Month(), now.Day()-daysBack, 12, 0, 0, 0, time.UTC)
+	start := time.Date(day.Year(), day.Month(), day.Day(), 0, 0, 0, 0, now.Location())
+	if start.Day() != day.Day() {
+		_, dayBegins := start.ZoneBounds()
+		return dayBegins
+	}
+	return start
 }
 
 func sessionListInstant(flagName, raw string, now time.Time) (string, error) {

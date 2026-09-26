@@ -1,7 +1,7 @@
 import { useLayoutEffect, useState, type RefObject } from 'react';
 
-export const RAIL_FOLD_BELOW = 900;
-export const TREE_FOLD_BELOW = 620;
+const RAIL_FOLD_BELOW = 900;
+const TREE_FOLD_BELOW = 620;
 
 export interface TileAutoFold {
   treeAutoFold: boolean;
@@ -9,7 +9,7 @@ export interface TileAutoFold {
 }
 
 // A non-positive width means not measured yet: fold nothing, so a tile never flashes collapsed.
-export function foldsForWidth(width: number): TileAutoFold {
+function foldsForWidth(width: number): TileAutoFold {
   if (width <= 0) return { treeAutoFold: false, railAutoFold: false };
   return {
     railAutoFold: width < RAIL_FOLD_BELOW,

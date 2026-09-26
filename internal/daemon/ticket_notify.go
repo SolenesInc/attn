@@ -206,9 +206,6 @@ func (d *Daemon) notifyUnreadTicketSessionLocked(sessionID string, now time.Time
 		if deadline.IsZero() {
 			return
 		}
-		if d.ticketRebuildBeforeArmHook != nil {
-			d.ticketRebuildBeforeArmHook(sessionID, deadline)
-		}
 		if d.debugLogging {
 			d.logf("ticket delivery: observer=%s session=%s class=%s pending=%d deadline=%s channel=countdown outcome=armed", d.ticketAttentionKey(sessionID), sessionID, map[bool]string{true: "immediate", false: "bundled"}[immediate], len(pending), deadline.Format(time.RFC3339))
 		}

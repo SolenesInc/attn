@@ -119,16 +119,6 @@ export class TerminalBlockStore {
     return this.completed.length > 0;
   }
 
-  blockAt(bufferRow: number): TerminalBlock | null {
-    for (let i = this.completed.length - 1; i >= 0; i -= 1) {
-      const block = this.completed[i];
-      if (bufferRow >= block.promptRow && block.endRow !== undefined && bufferRow < block.endRow) {
-        return block;
-      }
-    }
-    return null;
-  }
-
   blockAtAnchored(bufferRow: number, access: BlockRowAccess): TerminalBlock | null {
     for (let i = this.completed.length - 1; i >= 0; i -= 1) {
       const block = this.completed[i];
@@ -234,7 +224,7 @@ export interface BlockViewportSpan {
   spansViewport: boolean;
 }
 
-export function blockViewportSpan(
+function blockViewportSpan(
   block: TerminalBlock,
   firstViewportBufferRow: number,
   viewportRows: number,

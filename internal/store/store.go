@@ -307,18 +307,23 @@ func (s *Store) Get(id string) *protocol.Session {
 	defer s.mu.RUnlock()
 
 	if s.db == nil {
-		return cloneSession(s.sessions[id])
+		session := cloneSession(s.sessions[id])
+		if session != nil {
+			applyTurnStamps(session, s.turnStamps[id])
+		}
+		return session
 	}
 
 	var session protocol.Session
 	var todosJSON string
 	var stateSince, stateUpdatedAt, lastSeen string
+	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 	var isWorktree int
 	var contextWindowCap int
 	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
@@ -341,10 +346,18 @@ func (s *Store) Get(id string) *protocol.Session {
 		&activityAt,
 		&todosJSON,
 		&lastSeen,
+		&turnOpenedAt,
+		&turnSettledAt,
+		&turnSnoozedUntil,
 	)
 	if err != nil {
 		return nil
 	}
+	applyTurnStamps(&session, TurnStamps{
+		OpenedAt:     parseTurnStamp(turnOpenedAt),
+		SettledAt:    parseTurnStamp(turnSettledAt),
+		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+	})
 
 	if pinnedAt.Valid && pinnedAt.String != "" {
 		session.PinnedAt = protocol.Ptr(pinnedAt.String)
@@ -463,7 +476,9 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			if stateFilter != "" && string(session.State) != stateFilter {
 				continue
 			}
-			result = append(result, cloneSession(session))
+			clone := cloneSession(session)
+			applyTurnStamps(clone, s.turnStamps[clone.ID])
+			result = append(result, clone)
 		}
 		sort.Slice(result, func(i, j int) bool {
 			if result[i].Label == result[j].Label {
@@ -479,11 +494,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen
+			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, todos, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -496,6 +511,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var session protocol.Session
 		var todosJSON string
 		var stateSince, stateUpdatedAt, lastSeen string
+		var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 		var isWorktree int
 		var contextWindowCap int
 		var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
@@ -522,10 +538,18 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&activityAt,
 			&todosJSON,
 			&lastSeen,
+			&turnOpenedAt,
+			&turnSettledAt,
+			&turnSnoozedUntil,
 		)
 		if err != nil {
 			continue
 		}
+		applyTurnStamps(&session, TurnStamps{
+			OpenedAt:     parseTurnStamp(turnOpenedAt),
+			SettledAt:    parseTurnStamp(turnSettledAt),
+			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
+		})
 
 		if pinnedAt.Valid && pinnedAt.String != "" {
 			session.PinnedAt = protocol.Ptr(pinnedAt.String)
@@ -598,48 +622,25 @@ func (s *Store) HasSessionInDirectory(directory string) bool {
 	return count > 0
 }
 
-func (s *Store) RemoveSessionsInDirectory(directory string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		for id, session := range s.sessions {
-			if session.Directory == directory {
-				delete(s.sessions, id)
-			}
-		}
-		return
-	}
-
-	for _, table := range sessionOwnedTables {
-		if _, err := s.db.Exec("DELETE FROM "+table+
-			" WHERE session_id IN (SELECT id FROM sessions WHERE directory = ?)", directory); err != nil {
-			log.Printf("[store] RemoveSessionsInDirectory: failed to drop %s for directory %s: %v", table, directory, err)
-		}
-	}
-	_, err := s.db.Exec(`DELETE FROM sessions WHERE directory = ?`, directory)
-	if err != nil {
-		log.Printf("[store] RemoveSessionsInDirectory: failed for directory %s: %v", directory, err)
-	}
-}
-
 func (s *Store) UpdateState(id, state string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.updateStateLocked(id, state, time.Now())
+}
 
+func (s *Store) updateStateLocked(id, state string, at time.Time) bool {
+	now := string(protocol.NewTimestamp(at))
 	if s.db == nil {
 		session := s.sessions[id]
 		if session == nil {
 			return false
 		}
-		now := time.Now().Format(time.RFC3339Nano)
 		session.State = protocol.SessionState(state)
 		session.StateSince = now
 		session.StateUpdatedAt = now
 		return true
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
 	result, err := s.db.Exec(`UPDATE sessions SET state = ?, state_since = ?, state_updated_at = ? WHERE id = ? AND closed_at = ''`,
 		state, now, now, id)
 	if err != nil {
@@ -763,12 +764,12 @@ func (s *Store) Touch(id string) {
 
 	if s.db == nil {
 		if session := s.sessions[id]; session != nil {
-			session.LastSeen = time.Now().Format(time.RFC3339Nano)
+			session.LastSeen = string(protocol.TimestampNow())
 		}
 		return
 	}
 
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.TimestampNow())
 	_, err := s.db.Exec("UPDATE sessions SET last_seen = ? WHERE id = ? AND closed_at = ''", now, id)
 	if err != nil {
 		log.Printf("[store] Touch: failed for session %s: %v", id, err)
@@ -1351,12 +1352,15 @@ func (s *Store) EndAgentDriverRun(id string) AgentDriverReportCursor {
 func (s *Store) ApplyAgentDriverState(id, runID string, seq uint64, state string, requestStartedAt time.Time) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	return s.applyAgentDriverStateLocked(id, runID, seq, state, requestStartedAt, time.Now())
+}
 
+func (s *Store) applyAgentDriverStateLocked(id, runID string, seq uint64, state string, requestStartedAt, at time.Time) bool {
 	runID = strings.TrimSpace(runID)
 	if runID == "" || seq == 0 {
 		return false
 	}
-	now := time.Now().Format(time.RFC3339Nano)
+	now := string(protocol.NewTimestamp(at))
 	if s.db == nil {
 		session := s.sessions[id]
 		cursor := s.agentDriverRuns[id]
@@ -1510,34 +1514,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 		}
 	}
 
-	interactions := make(map[string]struct {
-		lastSeenSHA          string
-		lastSeenCommentCount int
-		lastSeenCIStatus     string
-	})
-	interRows, err := s.db.Query(`SELECT pr_id, last_seen_sha, last_seen_comment_count, last_seen_ci_status FROM pr_interactions`)
-	if err == nil {
-		defer interRows.Close()
-		for interRows.Next() {
-			var prID string
-			var lastSHA, lastCIStatus sql.NullString
-			var lastComments sql.NullInt64
-			if err := interRows.Scan(&prID, &lastSHA, &lastComments, &lastCIStatus); err != nil {
-				log.Printf("[store] SetPRs: failed to scan pr_interactions: %v", err)
-				continue
-			}
-			interactions[prID] = struct {
-				lastSeenSHA          string
-				lastSeenCommentCount int
-				lastSeenCIStatus     string
-			}{
-				lastSeenSHA:          lastSHA.String,
-				lastSeenCommentCount: int(lastComments.Int64),
-				lastSeenCIStatus:     lastCIStatus.String,
-			}
-		}
-	}
-
 	s.execLog("DELETE FROM prs")
 
 	for _, pr := range prs {
@@ -1565,22 +1541,6 @@ func (s *Store) SetPRs(prs []*protocol.PR) {
 			if pr.HeatState == nil || *pr.HeatState == protocol.HeatStateCold {
 				pr.HeatState = ex.HeatState
 				pr.LastHeatActivityAt = ex.LastHeatActivityAt
-			}
-		}
-
-		if inter, ok := interactions[pr.ID]; ok {
-			headSHA := protocol.Deref(pr.HeadSHA)
-			if headSHA != "" && inter.lastSeenSHA != "" && headSHA != inter.lastSeenSHA {
-				pr.HasNewChanges = true
-			}
-			if protocol.Deref(pr.CommentCount) > inter.lastSeenCommentCount {
-				pr.HasNewChanges = true
-			}
-			ciStatus := protocol.Deref(pr.CIStatus)
-			if (pr.Role == protocol.PRRoleAuthor || pr.ApprovedByMe) && ciStatus != "" {
-				if inter.lastSeenCIStatus == "pending" && (ciStatus == "success" || ciStatus == "failure") {
-					pr.HasNewChanges = true
-				}
 			}
 		}
 
@@ -1663,12 +1623,60 @@ func (s *Store) ListPRs(stateFilter string) []*protocol.PR {
 			result = append(result, pr)
 		}
 	}
+	rows.Close()
+
+	seen := s.prsLastSeenByUser()
+	for _, pr := range result {
+		if last, ok := seen[pr.ID]; ok {
+			pr.HasNewChanges = last.differsFrom(pr)
+		}
+	}
 
 	sort.Slice(result, func(i, j int) bool {
 		return result[i].ID < result[j].ID
 	})
 
 	return result
+}
+
+type prLastSeen struct {
+	sha          string
+	commentCount int
+	ciStatus     string
+}
+
+func (s *Store) prsLastSeenByUser() map[string]prLastSeen {
+	seen := make(map[string]prLastSeen)
+	rows, err := s.db.Query(`SELECT pr_id, last_seen_sha, last_seen_comment_count, last_seen_ci_status FROM pr_interactions`)
+	if err != nil {
+		log.Printf("[store] ListPRs: failed to read pr_interactions: %v", err)
+		return seen
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var prID string
+		var sha, ciStatus sql.NullString
+		var commentCount sql.NullInt64
+		if err := rows.Scan(&prID, &sha, &commentCount, &ciStatus); err != nil {
+			log.Printf("[store] ListPRs: failed to scan pr_interactions: %v", err)
+			continue
+		}
+		seen[prID] = prLastSeen{sha: sha.String, commentCount: int(commentCount.Int64), ciStatus: ciStatus.String}
+	}
+	return seen
+}
+
+func (last prLastSeen) differsFrom(pr *protocol.PR) bool {
+	headSHA := protocol.Deref(pr.HeadSHA)
+	if headSHA != "" && last.sha != "" && headSHA != last.sha {
+		return true
+	}
+	if protocol.Deref(pr.CommentCount) > last.commentCount {
+		return true
+	}
+	ciStatus := protocol.Deref(pr.CIStatus)
+	ciSettled := ciStatus == "success" || ciStatus == "failure"
+	return (pr.Role == protocol.PRRoleAuthor || pr.ApprovedByMe) && last.ciStatus == "pending" && ciSettled
 }
 
 func (s *Store) ToggleMutePR(id string) {

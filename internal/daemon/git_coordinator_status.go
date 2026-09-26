@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,17 +20,11 @@ const (
 )
 
 type gitStatusOptions struct {
-	mode         gitStatusMode
-	fullTimeout  time.Duration
-	includeStats bool
+	mode        gitStatusMode
+	fullTimeout time.Duration
 }
 
 var runGitStatusCommandForDaemon = runGitStatusCommand
-
-type diffStats struct {
-	Additions int
-	Deletions int
-}
 
 func parseGitStatusPorcelain(output string, _ string) (staged, unstaged, untracked []protocol.GitFileChange) {
 	entries := strings.Split(output, "\x00")
@@ -94,35 +87,11 @@ func statusCodeToString(code byte) string {
 	}
 }
 
-func parseGitDiffNumstat(output string) map[string]diffStats {
-	result := make(map[string]diffStats)
-	lines := strings.Split(output, "\n")
-
-	for _, line := range lines {
-		parts := strings.Split(line, "\t")
-		if len(parts) != 3 {
-			continue
-		}
-
-		additions, _ := strconv.ParseInt(parts[0], 10, 64)
-		deletions, _ := strconv.ParseInt(parts[1], 10, 64)
-		path := parts[2]
-
-		result[path] = diffStats{
-			Additions: int(additions),
-			Deletions: int(deletions),
-		}
-	}
-
-	return result
-}
-
 func getGitStatusForSubscription(ctx context.Context, executor gitExecutor, dir string, mode gitStatusMode) (*protocol.GitStatusUpdateMessage, error) {
 	return gitValue(ctx, executor, gitTask{Kind: gitTaskStatus, Lane: gitInteractive}, func(runCtx context.Context, client *attngit.Client) (*protocol.GitStatusUpdateMessage, error) {
 		return getGitStatusWithOptionsAdmitted(runCtx, client, dir, gitStatusOptions{
-			mode:         mode,
-			fullTimeout:  gitStatusFullBudget,
-			includeStats: false,
+			mode:        mode,
+			fullTimeout: gitStatusFullBudget,
 		})
 	})
 }
@@ -164,30 +133,6 @@ func getGitStatusWithOptionsAdmitted(ctx context.Context, client *attngit.Client
 	}
 
 	staged, unstaged, untracked := parseGitStatusPorcelain(string(statusOutput), dir)
-
-	if opts.includeStats && len(unstaged) > 0 {
-		numstatOutput, _ := client.Output(ctx, attngit.OpDiff, dir, "diff", "--numstat")
-		stats := parseGitDiffNumstat(string(numstatOutput))
-
-		for i := range unstaged {
-			if s, ok := stats[unstaged[i].Path]; ok {
-				unstaged[i].Additions = protocol.Ptr(s.Additions)
-				unstaged[i].Deletions = protocol.Ptr(s.Deletions)
-			}
-		}
-	}
-
-	if opts.includeStats && len(staged) > 0 {
-		numstatOutput, _ := client.Output(ctx, attngit.OpDiff, dir, "diff", "--numstat", "--cached")
-		stats := parseGitDiffNumstat(string(numstatOutput))
-
-		for i := range staged {
-			if s, ok := stats[staged[i].Path]; ok {
-				staged[i].Additions = protocol.Ptr(s.Additions)
-				staged[i].Deletions = protocol.Ptr(s.Deletions)
-			}
-		}
-	}
 
 	return &protocol.GitStatusUpdateMessage{
 		Event:         protocol.EventGitStatusUpdate,

@@ -1,0 +1,3 @@
+kind: fixed
+area: notebook
+change: A change on disk refreshes only the notebook tiles showing that folder, instead of making every notebook tile list its tree and index again.

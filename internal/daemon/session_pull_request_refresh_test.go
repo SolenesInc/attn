@@ -3,17 +3,13 @@ package daemon
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/victorarias/attn/internal/bus"
-	"github.com/victorarias/attn/internal/garden"
 	"github.com/victorarias/attn/internal/github"
 	"github.com/victorarias/attn/internal/jobs"
-	"github.com/victorarias/attn/internal/logging"
 	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/prreadiness"
 	"github.com/victorarias/attn/internal/store"
@@ -117,97 +113,6 @@ func storedPullRequest(t *testing.T, d *Daemon, sessionID string) store.SessionP
 		t.Fatalf("records = %+v, want exactly one", records)
 	}
 	return records[0]
-}
-
-func TestSessionPullRequestRefreshLeavesTheGardenIdleWithoutOpenPullRequests(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	d.ensureGardenCollections()
-	schema, err := d.seedsCollection()
-	if err != nil {
-		t.Fatalf("seeds collection: %v", err)
-	}
-	if _, err := d.store.PutDocument(*schema, "s-broken", []byte("[]"), time.Now(), nil); err != nil {
-		t.Fatalf("put unreadable seed: %v", err)
-	}
-	logPath := filepath.Join(t.TempDir(), "daemon.log")
-	logger, err := logging.New(logPath)
-	if err != nil {
-		t.Fatalf("new logger: %v", err)
-	}
-	t.Cleanup(func() { _ = logger.Close() })
-	d.logger = logger
-
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
-		t.Fatalf("refresh = (%d fetched, %d changed), want no work", fetched, changed)
-	}
-	logBody, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read daemon log: %v", err)
-	}
-	if strings.Contains(string(logBody), "unreadable body") {
-		t.Fatalf("idle refresh read the Garden: %s", logBody)
-	}
-}
-
-func TestSessionPullRequestRefreshDoesNotDecodeGardenForInactiveUnarmedPullRequest(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	d.ensureGardenCollections()
-	schema, err := d.seedsCollection()
-	if err != nil {
-		t.Fatalf("seeds collection: %v", err)
-	}
-	if _, err := d.store.PutDocument(*schema, "s-broken", []byte("[]"), time.Now(), nil); err != nil {
-		t.Fatalf("put unreadable seed: %v", err)
-	}
-	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
-	if closed, err := d.store.CloseSession("s1", store.SessionClose{}, time.Now()); err != nil || !closed {
-		t.Fatalf("close session = %t, %v", closed, err)
-	}
-	host := &fakePRHost{snapshot: openSnapshot("Unarmed", "clean", "sha-1"), review: "none"}
-	serveHost(d, "github.com", host)
-	logPath := filepath.Join(t.TempDir(), "daemon.log")
-	logger, err := logging.New(logPath)
-	if err != nil {
-		t.Fatalf("new logger: %v", err)
-	}
-	t.Cleanup(func() { _ = logger.Close() })
-	d.logger = logger
-
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 0 || changed != 0 {
-		t.Fatalf("refresh = (%d fetched, %d changed), want no work", fetched, changed)
-	}
-	if host.snapshots != 0 {
-		t.Fatalf("snapshot calls = %d, want the inactive unarmed PR left alone", host.snapshots)
-	}
-	logBody, err := os.ReadFile(logPath)
-	if err != nil {
-		t.Fatalf("read daemon log: %v", err)
-	}
-	if strings.Contains(string(logBody), "unreadable body") {
-		t.Fatalf("inactive unarmed refresh decoded the Garden: %s", logBody)
-	}
-}
-
-func TestSessionPullRequestRefreshFallsBackToActiveSessionsWhenGardenLookupFails(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	registerSessionForPRTest(t, d, "s2")
-	recordPRForRefresh(t, d, "s1", "https://github.com/victorarias/attn/pull/71")
-	recordPRForRefresh(t, d, "s2", "https://github.com/victorarias/attn/pull/72")
-	if closed, err := d.store.CloseSession("s2", store.SessionClose{}, time.Now()); err != nil || !closed {
-		t.Fatalf("close session = %t, %v", closed, err)
-	}
-	if _, err := d.store.DeleteDocumentCollection(garden.Namespace, garden.CollectionSeeds); err != nil {
-		t.Fatalf("remove Garden collection: %v", err)
-	}
-	host := &fakePRHost{snapshot: openSnapshot("Active only", "clean", "sha-1"), review: "none"}
-	serveHost(d, "github.com", host)
-
-	if fetched, changed := d.refreshSessionPullRequests(time.Now()); fetched != 1 || changed != 1 {
-		t.Fatalf("refresh = (%d fetched, %d changed), want only the active session", fetched, changed)
-	}
-	if host.snapshots != 1 {
-		t.Fatalf("snapshot calls = %d, want only the active session's PR", host.snapshots)
-	}
 }
 
 func TestSessionPullRequestRefreshTracksGitHub(t *testing.T) {
@@ -557,44 +462,6 @@ func watchPRForRefresh(t *testing.T, d *Daemon, sessionID string, mode prreadine
 	}
 }
 
-func TestWatchedPullRequestSharesOneObservationAcrossConsumerModes(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	registerSessionForPRTest(t, d, "s2")
-	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
-	watchPRForRefresh(t, d, "s2", prreadiness.ModeFormalReview, "victor")
-	observation := readinessObservation()
-	observation.ReviewOpinions = []prreadiness.ReviewOpinion{{Actor: "victor", State: "APPROVED"}}
-	observation.ReviewDecision = "REVIEW_REQUIRED"
-	host := &fakePRHost{readiness: observation}
-	serveHost(d, "github.com", host)
-
-	if fetched, _ := d.refreshSessionPullRequests(time.Date(2026, 9, 21, 11, 0, 0, 0, time.UTC)); fetched != 1 {
-		t.Fatalf("fetched = %d, want one shared acquisition", fetched)
-	}
-	if host.readinessCalls != 1 || host.feedbackCalls != 1 || host.snapshots != 0 || host.reviews != 0 {
-		t.Fatalf("calls = readiness:%d feedback:%d snapshots:%d reviews:%d", host.readinessCalls, host.feedbackCalls, host.snapshots, host.reviews)
-	}
-	for _, test := range []struct {
-		session string
-		mode    protocol.PullRequestWatchMode
-	}{
-		{"s1", protocol.PullRequestWatchModeGreen},
-		{"s2", protocol.PullRequestWatchModeFormalReview},
-	} {
-		entry := onlySessionPullRequest(t, d, test.session)
-		if !protocol.Deref(entry.Watching) || protocol.Deref(entry.WatchMode) != test.mode || protocol.Deref(entry.ReadinessState) != prreadiness.StateReady {
-			t.Errorf("%s projection = %+v", test.session, entry)
-		}
-		if protocol.Deref(entry.MergeableState) != "clean" || protocol.Deref(entry.ReviewStatus) != "pending" {
-			t.Errorf("%s normalized status = merge:%v review:%v", test.session, entry.MergeableState, entry.ReviewStatus)
-		}
-		deliveries, err := d.store.UnreadAgentMailboxDeliveries(test.session)
-		if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "ready") {
-			t.Errorf("%s mailbox = %+v, %v", test.session, deliveries, err)
-		}
-	}
-}
-
 func TestCodexWatchSchedulesAndHonorsItsSettlingDeadline(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	now := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
@@ -665,19 +532,6 @@ func TestWatchedPullRequestOutageCoalescesAndRecoveryIsSilent(t *testing.T) {
 	}
 }
 
-func TestFeedbackFailureDoesNotInvalidateReadyState(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
-	host := &fakePRHost{readiness: readinessObservation(), feedbackErr: fmt.Errorf("review threads unavailable")}
-	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Date(2026, 9, 21, 14, 0, 0, 0, time.UTC))
-
-	entry := onlySessionPullRequest(t, d, "s1")
-	if protocol.Deref(entry.ReadinessState) != prreadiness.StateReady || protocol.Deref(entry.WatchHealth) != "delayed" || !strings.Contains(protocol.Deref(entry.WatchError), "feedback") {
-		t.Fatalf("projection = %+v", entry)
-	}
-}
-
 func TestUnchangedWatchedPullRequestPollDoesNotBroadcast(t *testing.T) {
 	d := newPRDaemonForTest(t, "s1")
 	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
@@ -691,28 +545,5 @@ func TestUnchangedWatchedPullRequestPollDoesNotBroadcast(t *testing.T) {
 	d.refreshSessionPullRequestsContext(context.Background(), base.Add(time.Second), prID)
 	if afterSecond := len(docFacts(t, d, FactSessionPullRequestChanged)); afterSecond != afterFirst {
 		t.Fatalf("unchanged poll published %d additional facts", afterSecond-afterFirst)
-	}
-}
-
-func TestTerminalObservationNotifiesThenStopsTheWatch(t *testing.T) {
-	d := newPRDaemonForTest(t, "s1")
-	watchPRForRefresh(t, d, "s1", prreadiness.ModeGreen, "")
-	observation := readinessObservation()
-	observation.State = "closed"
-	observation.Merged = true
-	host := &fakePRHost{readiness: observation}
-	serveHost(d, "github.com", host)
-	d.refreshSessionPullRequests(time.Date(2026, 9, 21, 15, 0, 0, 0, time.UTC))
-
-	entry := onlySessionPullRequest(t, d, "s1")
-	if protocol.Deref(entry.Watching) || entry.State != "merged" || protocol.Deref(entry.ReadinessState) != prreadiness.StateMerged {
-		t.Fatalf("terminal projection = %+v", entry)
-	}
-	if _, ok := d.store.PullRequestWatch("s1", "github.com:victorarias/attn#71"); ok {
-		t.Fatal("terminal watch still exists")
-	}
-	deliveries, err := d.store.UnreadAgentMailboxDeliveries("s1")
-	if err != nil || len(deliveries) != 1 || !strings.Contains(deliveries[0].Item.Prompt, "merged") {
-		t.Fatalf("terminal mailbox = %+v, %v", deliveries, err)
 	}
 }

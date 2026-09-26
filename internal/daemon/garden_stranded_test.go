@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -12,9 +11,29 @@ import (
 	agentdriver "github.com/victorarias/attn/internal/agent"
 
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/protocol"
 	"github.com/victorarias/attn/internal/store"
 )
+
+func seedBacklogTicket(t *testing.T, d *Daemon, id, title, description string, status store.TicketStatus, assignee string) {
+	t.Helper()
+	if _, err := d.createTicketWithUniqueSlug(store.Ticket{
+		Title:       title,
+		Description: description,
+		Status:      status,
+		Assignee:    assignee,
+	}, id, "chief", store.TicketRoleChiefOfStaff, nil, time.Now()); err != nil {
+		t.Fatalf("seed ticket %s: %v", id, err)
+	}
+}
+
+func gardenSeeds(t *testing.T, d *Daemon) []garden.Seed {
+	t.Helper()
+	read, err := d.readGarden()
+	if err != nil {
+		t.Fatalf("read garden: %v", err)
+	}
+	return read.seeds
+}
 
 func seedStrandedTicket(t *testing.T, d *Daemon, id, title, description string, status store.TicketStatus, assignee string) {
 	t.Helper()
@@ -35,86 +54,6 @@ func seedByTitle(t *testing.T, d *Daemon, title string) garden.Seed {
 	return garden.Seed{}
 }
 
-func TestStrandedCrashedTicketBecomesAClosedSeedWithoutChangingTheTicket(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
-	before, err := d.store.GetTicket("wire-the-thing")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	d.replantStrandedTickets()
-
-	seed := seedByTitle(t, d, "Wire the thing")
-	if seed.Body != "the whole brief" {
-		t.Fatalf("replanted seed lost the brief: %+v", seed)
-	}
-	if seed.Status != garden.StatusWithered {
-		t.Fatalf("replanted seed status = %q, want withered", seed.Status)
-	}
-	if seed.TenderSession != "" {
-		t.Fatalf("replanted seed tender=%q, want an unheld closed seed", seed.TenderSession)
-	}
-	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 0 {
-		t.Fatalf("ready = %v, want none", ids)
-	}
-
-	notes, _, err := d.readNotes(seed.ID, 10)
-	if err != nil {
-		t.Fatalf("read notes: %v", err)
-	}
-	if len(notes) != 1 || !strings.Contains(notes[0].Body, "wire-the-thing") || !strings.Contains(notes[0].Body, "sess-dead") {
-		t.Fatalf("replanted seed does not say where it came from: %+v", notes)
-	}
-
-	ticket, err := d.store.GetTicket("wire-the-thing")
-	if err != nil || ticket == nil {
-		t.Fatalf("GetTicket: %v %v", ticket, err)
-	}
-	if !reflect.DeepEqual(before, ticket) {
-		t.Fatalf("recovery changed the legacy ticket:\nbefore=%#v\nafter=%#v", before, ticket)
-	}
-}
-
-func TestReplantedClosedSeedDoesNotBecomeActiveWhenItsSessionRevives(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
-
-	d.replantStrandedTickets()
-	seed := seedByTitle(t, d, "Wire the thing")
-
-	now := string(protocol.TimestampNow())
-	d.store.Add(&protocol.Session{
-		ID: "sess-dead", Label: "back",
-		State: "idle", StateSince: now, StateUpdatedAt: now, LastSeen: now,
-	})
-
-	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 0 {
-		t.Fatalf("ready = %v, want none — %s stays closed", ids, seed.ID)
-	}
-}
-
-func TestStrandedFailedTicketBecomesAWitheredSeed(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedStrandedTicket(t, d, "gave-up", "Gave up", "could not do it", store.TicketStatusFailed, "sess-dead")
-
-	d.replantStrandedTickets()
-
-	seed := seedByTitle(t, d, "Gave up")
-	if seed.Status != garden.StatusWithered {
-		t.Fatalf("failed ticket landed as %q, want withered", seed.Status)
-	}
-	if !strings.Contains(seed.Reason, "gave-up") {
-		t.Fatalf("withered seed reason = %q, want the ticket it came from", seed.Reason)
-	}
-	if seed.TenderSession != "" {
-		t.Fatalf("withered seed is held by %q; a decided outcome holds nobody", seed.TenderSession)
-	}
-	if ids := readyIDs(ready(t, d, protocol.SeedReadyMessage{All: protocol.Ptr(true)})); len(ids) != 0 {
-		t.Fatalf("ready = %v, want none", ids)
-	}
-}
-
 func TestReplantedSeedCarriesTheReconcileVerdict(t *testing.T) {
 	d := newGardenDaemon(t)
 	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
@@ -132,34 +71,6 @@ func TestReplantedSeedCarriesTheReconcileVerdict(t *testing.T) {
 	}
 	if len(notes) != 1 || !strings.Contains(notes[0].Body, "the branch is pushed, the PR is not opened") {
 		t.Fatalf("replanted seed dropped the verdict that explains it: %+v", notes)
-	}
-}
-
-func TestStrandedReplantIsIdempotent(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedStrandedTicket(t, d, "wire-the-thing", "Wire the thing", "the whole brief", store.TicketStatusCrashed, "sess-dead")
-
-	d.replantStrandedTickets()
-	d.replantStrandedTickets()
-
-	if seeds := gardenSeeds(t, d); len(seeds) != 1 {
-		t.Fatalf("seeds after two passes = %d, want 1: %+v", len(seeds), seeds)
-	}
-	link, err := d.store.TicketSeedLink("wire-the-thing")
-	if err != nil || link == nil {
-		t.Fatalf("legacy link = %#v, %v", link, err)
-	}
-}
-
-func TestStrandedAutomationLookingUserTicketIsRecovered(t *testing.T) {
-	d := newGardenDaemon(t)
-	seedStrandedTicket(t, d, "auto-abcdef1234567890", "Looks automated", "but has no Automation provenance", store.TicketStatusFailed, "sess-dead")
-
-	d.replantStrandedTickets()
-
-	seed := seedByTitle(t, d, "Looks automated")
-	if seed.Status != garden.StatusWithered {
-		t.Fatalf("seed status = %q, want withered", seed.Status)
 	}
 }
 

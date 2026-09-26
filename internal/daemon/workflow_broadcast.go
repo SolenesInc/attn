@@ -61,9 +61,6 @@ func (d *Daemon) projectWorkflowRunUpdated(ev bus.Event) {
 		Event: protocol.EventWorkflowRunUpdated,
 		Run:   *run,
 	}
-	if d.workflowBroadcastHook != nil {
-		d.workflowBroadcastHook(msg)
-	}
 	if d.wsHub != nil {
 		d.wsHub.BroadcastValue(msg)
 	}

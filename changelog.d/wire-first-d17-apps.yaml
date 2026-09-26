@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Wire tests guard app apply, rollback, runtime, reconcile, UI and management promises in place of in-package daemon tests.

@@ -16,7 +16,7 @@ export interface SeedMarkdownDocumentSource {
 export type MarkdownDocumentSource = FileMarkdownDocumentSource | SeedMarkdownDocumentSource;
 
 /** Stable document identity for a file as seen from one owning workspace. */
-export function markdownFileDocumentUri(workspaceId: string, path: string): string {
+function markdownFileDocumentUri(workspaceId: string, path: string): string {
   return `attn://file/${encodeURIComponent(workspaceId)}/${encodeURIComponent(path)}`;
 }
 

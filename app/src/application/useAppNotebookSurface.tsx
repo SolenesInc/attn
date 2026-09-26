@@ -43,7 +43,6 @@ export function useAppNotebookSurface({
       backlinksNotebook: sendNotebookBacklinks,
       sendToChief: sendNotebookToChief,
       listFiles: () => sendFsIndex(root).then(fsIndexToNotebookEntries),
-      changeSignal: fsChangeSignals[fsChangeSignalKey(root || '', effectiveNotebookRoot)] || 0,
     }),
     [
       sendFsList,
@@ -54,14 +53,18 @@ export function useAppNotebookSurface({
       sendNotebookBacklinks,
       sendNotebookToChief,
       sendFsIndex,
-      fsChangeSignals,
-      effectiveNotebookRoot,
     ],
+  );
+
+  const changeSignalFor = useCallback(
+    (root?: string) => fsChangeSignals[fsChangeSignalKey(root || '', effectiveNotebookRoot)] || 0,
+    [fsChangeSignals, effectiveNotebookRoot],
   );
 
   const notebookSurfaceContextValue = useMemo(
     () => ({
       makeDaemon: makeNotebookSurfaceDaemon,
+      changeSignalFor,
       effectiveNotebookRoot,
       sendFsWatch,
       sendFsUnwatch,
@@ -69,6 +72,7 @@ export function useAppNotebookSurface({
     }),
     [
       makeNotebookSurfaceDaemon,
+      changeSignalFor,
       effectiveNotebookRoot,
       sendFsWatch,
       sendFsUnwatch,

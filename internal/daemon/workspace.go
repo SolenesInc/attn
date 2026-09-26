@@ -648,18 +648,7 @@ func (d *Daemon) dissociateSessionFromWorkspace(sessionID string) {
 	if workspaceID == "" {
 		return
 	}
-	if remaining == 0 {
-		snap, _ := d.workspaces.snapshot(workspaceID)
-		if snap.Pinned || d.workspaceHasSessionlessContent(workspaceID) {
-			d.recomputeWorkspaceStatus(workspaceID)
-			d.publishFact(FactWorkspaceSessionDissociated, workspaceID, nil)
-			return
-		}
-		snapshot, removed := d.workspaces.unregister(workspaceID)
-		if !removed {
-			return
-		}
-		d.tearDownRemovedWorkspace(snapshot)
+	if remaining == 0 && d.unregisterUnoccupiedWorkspace(workspaceID) {
 		return
 	}
 	d.recomputeWorkspaceStatus(workspaceID)

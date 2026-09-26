@@ -192,23 +192,6 @@ func TestATurningLoopChargesTheAppWhoseHandlerHung(t *testing.T) {
 	}
 }
 
-func TestTheLivenessPingIsBoundedIndependently(t *testing.T) {
-	if appRuntimePingWait <= 0 {
-		t.Fatal("the liveness ping must be bounded")
-	}
-	if appRuntimePingWait >= appDispatchTimeout {
-		t.Fatalf("ping wait %v is not comfortably inside the dispatch timeout %v", appRuntimePingWait, appDispatchTimeout)
-	}
-	d := &Daemon{}
-	if got := d.appPingBudget(); got != appRuntimePingWait {
-		t.Fatalf("appPingBudget() = %v, want the shipped %v", got, appRuntimePingWait)
-	}
-	d.appPingWait = 5 * time.Millisecond
-	if got := d.appPingBudget(); got != 5*time.Millisecond {
-		t.Fatalf("appPingBudget() = %v, want the override", got)
-	}
-}
-
 func TestAWedgedDispatchEndsTheRuntimeGenerationAndTheSupervisorReplacesIt(t *testing.T) {
 	d := newAppDaemon(t)
 	d.appDispatchWait = 300 * time.Millisecond

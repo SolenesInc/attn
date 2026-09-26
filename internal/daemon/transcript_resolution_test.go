@@ -30,41 +30,6 @@ func writeCodexInteractiveRollout(t *testing.T, codexHome, nativeID, cwd string,
 	return path
 }
 
-func TestResolveTranscriptPathForSession_PrefersPersistedExactPath(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cwd := "/repo/project"
-	now := time.Now()
-
-	own := writeCodexInteractiveRollout(t, codexHome, "native-own", cwd, now.Add(-time.Minute))
-	newerNeighbor := writeCodexInteractiveRollout(t, codexHome, "native-neighbor", cwd, now.Add(-5*time.Second))
-
-	d.store.Add(&protocol.Session{
-		ID:        "sess",
-		Label:     "sess",
-		Agent:     protocol.SessionAgentCodex,
-		Directory: cwd,
-	})
-	if changed, err := d.store.TransitionSessionConversation("sess", "native-own", own); err != nil || !changed {
-		t.Fatalf("seed binding: changed=%v err=%v", changed, err)
-	}
-	lookups := 0
-	d.transcriptResumeLookup = func(protocol.SessionAgent, string) string {
-		lookups++
-		return newerNeighbor
-	}
-
-	got := d.resolveTranscriptPathForSession(d.store.Get("sess"), "")
-	if got != own {
-		t.Fatalf("resolveTranscriptPathForSession() = %q, want own rollout %q (newer neighbor=%q)", got, own, newerNeighbor)
-	}
-	if lookups != 0 {
-		t.Fatalf("resolution performed %d fallback lookups", lookups)
-	}
-}
-
 func TestResolveStopTranscriptPath_RejectsAReportedSameCWDNeighbor(t *testing.T) {
 	codexHome := t.TempDir()
 	t.Setenv("CODEX_HOME", codexHome)
@@ -105,29 +70,6 @@ func TestResolveStopTranscriptPath_RejectsAReportedNeighborWhenBoundPathIsMissin
 
 	if got := d.resolveStopTranscriptPath(d.store.Get("sess"), neighbor); got != "" {
 		t.Fatalf("stop resolved to neighbor %q when bound transcript %q is missing", got, missing)
-	}
-}
-
-func TestResolveTranscriptPathForSession_RejectsCWDGuessWithoutNativeID(t *testing.T) {
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	cwd := "/repo/project"
-	now := time.Now()
-
-	neighbor := writeCodexInteractiveRollout(t, codexHome, "native-only", cwd, now.Add(-time.Minute))
-
-	d.store.Add(&protocol.Session{
-		ID:        "sess",
-		Label:     "sess",
-		Agent:     protocol.SessionAgentCodex,
-		Directory: cwd,
-	})
-
-	got := d.resolveTranscriptPathForSession(d.store.Get("sess"), "")
-	if got != "" {
-		t.Fatalf("resolveTranscriptPathForSession() = %q, want no exact path (neighbor=%q)", got, neighbor)
 	}
 }
 

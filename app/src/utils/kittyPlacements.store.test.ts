@@ -64,7 +64,12 @@ function placement(overrides: Partial<PlacementElement> = {}): PlacementElement 
   };
 }
 
-describe('KittyPlacementStore against the real terminal model', () => {
+type Call =
+  | ['write', string]
+  | ['apply', number, PlacementElement[]]
+  | ['seed', PlacementElement[]];
+
+describe('KittyPlacementStore', () => {
   let ghostty: Ghostty;
 
   beforeAll(async () => {
@@ -73,143 +78,41 @@ describe('KittyPlacementStore against the real terminal model', () => {
 
   function scrolledTerminal(): GhosttyTerminal {
     const term = ghostty.createTerminal(40, 10, { scrollbackLimit: 10000 });
-    const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\r\n');
-    term.write(new TextEncoder().encode(lines));
+    term.write(new TextEncoder().encode(Array.from({ length: 40 }, (_, i) => `line ${i}`).join('\r\n')));
     term.update();
+    expect(term.getScrollbackLength()).toBe(30);
     return term;
   }
 
-  it('anchors a placement to the buffer row the worker put it on', () => {
-    const term = scrolledTerminal();
-    expect(term.getScrollbackLength()).toBeGreaterThan(0);
-    const store = new KittyPlacementStore();
-
-    store.apply(1, [placement({ viewport_row: 3 })], term.getScrollbackLength());
-
-    const [placed] = store.placements();
-    expect(textAtBufferRow(term, placed.bufferRow)).toBe(rowText(term.getLine(3)));
-  });
-
-  it('anchors a placement that scrolled off the top into the scrollback', () => {
-    const term = scrolledTerminal();
-    const history = term.getScrollbackLength();
-    const store = new KittyPlacementStore();
-
-    // viewport_visible is advisory: a negative row that reports itself invisible
-    // still anchors into history, and scrolling up must reveal it.
-    store.apply(1, [placement({ viewport_row: -5, viewport_visible: false })], history);
-
-    const [placed] = store.placements();
-    expect(placed.bufferRow).toBe(history - 5);
-    expect(textAtBufferRow(term, placed.bufferRow)).toBe(rowText(term.getScrollbackLine(history - 5)));
-  });
-
-  it('culls a placement mapped above the history the client still holds', () => {
-    const term = scrolledTerminal();
-    const history = term.getScrollbackLength();
-    const store = new KittyPlacementStore();
-
-    store.apply(1, [
-      placement({ placement_id: 1, viewport_row: -history - 1 }),
-      placement({ placement_id: 2, viewport_row: -history }),
-    ], history);
-
-    expect(store.placements().map((p) => p.placementId)).toEqual([2]);
-    expect(store.placements()[0].bufferRow).toBe(0);
-  });
-
-  it('re-maps the same description against the scrollback of the moment', () => {
+  it.each<[string, Call[], boolean[], [number, string][]]>([
+    ['anchors a placement to the row the worker put it on', [['apply', 1, [placement({ viewport_row: 3 })]]], [true], [[1, 'line 33']]],
+    ['anchors a placement that scrolled off the top into the scrollback, even when reported invisible', [['apply', 1, [placement({ viewport_row: -5, viewport_visible: false })]]], [true], [[1, 'line 25']]],
+    ['culls a placement above the history the client still holds', [['apply', 1, [placement({ placement_id: 1, viewport_row: -31 }), placement({ placement_id: 2, viewport_row: -30 })]]], [true], [[2, 'line 0']]],
+    ['re-maps a description against the scrollback of the moment', [['apply', 1, [placement({ viewport_row: 2 })]], ['write', '\r\nmore\r\nmore\r\nmore'], ['apply', 2, [placement({ viewport_row: 2 })]]], [true, true], [[1, 'line 35']]],
+    ['rejects a set older than the one applied', [['apply', 5, [placement({ placement_id: 1 })]], ['apply', 4, [placement({ placement_id: 2 })]]], [true, false], [[1, 'line 30']]],
+    ['accepts a set at the same seq, as a resize re-describes', [['apply', 5, [placement({ viewport_row: 0 })]], ['apply', 5, [placement({ viewport_row: 4 })]]], [true, true], [[1, 'line 34']]],
+    ['replaces the set wholesale rather than merging', [['apply', 1, [placement({ placement_id: 1 }), placement({ placement_id: 2, viewport_row: 1 })]], ['apply', 2, [placement({ placement_id: 3, viewport_row: 2 })]]], [true, true], [[3, 'line 32']]],
+    ['clears on the empty set', [['apply', 1, [placement()]], ['apply', 2, []]], [true, true], []],
+    ['skips a virtual placement, which the program draws itself', [['apply', 1, [placement({ placement_id: 1, virtual: true }), placement({ placement_id: 2 })]]], [true], [[2, 'line 30']]],
+    ['orders by z, then placement id', [['apply', 1, [placement({ placement_id: 9, z: 5 }), placement({ placement_id: 3, z: -1, viewport_row: 1 }), placement({ placement_id: 1, z: 5, viewport_row: 2 })]]], [true], [[3, 'line 31'], [1, 'line 32'], [9, 'line 30']]],
+    ['drops what a restore does not carry, and accepts any seq after it', [['apply', 7, [placement()]], ['seed', []], ['apply', 1, [placement({ viewport_row: 1 })]]], [true, true], [[1, 'line 31']]],
+    ['takes a restore snapshot as the whole truth', [['apply', 7, [placement({ placement_id: 1 })]], ['seed', [placement({ placement_id: 2, viewport_row: 1 })]]], [true], [[2, 'line 31']]],
+  ])('%s', (_name, calls, accepted, placed) => {
     const term = scrolledTerminal();
     const store = new KittyPlacementStore();
-    store.apply(1, [placement({ viewport_row: 2 })], term.getScrollbackLength());
-    const before = store.placements()[0].bufferRow;
+    const results: boolean[] = [];
+    for (const call of calls) {
+      if (call[0] === 'write') {
+        term.write(new TextEncoder().encode(call[1]));
+        term.update();
+      } else if (call[0] === 'apply') {
+        results.push(store.apply(call[1], call[2], term.getScrollbackLength()));
+      } else {
+        store.seed(call[1], term.getScrollbackLength());
+      }
+    }
 
-    term.write(new TextEncoder().encode('\r\nmore\r\nmore\r\nmore'));
-    term.update();
-    store.apply(2, [placement({ viewport_row: 2 })], term.getScrollbackLength());
-
-    expect(store.placements()[0].bufferRow).toBe(before + 3);
-    expect(textAtBufferRow(term, store.placements()[0].bufferRow)).toBe(rowText(term.getLine(2)));
-  });
-});
-
-describe('KittyPlacementStore apply rules', () => {
-  it('rejects a set older than the one already applied', () => {
-    const store = new KittyPlacementStore();
-    store.apply(5, [placement({ placement_id: 1 })], 0);
-
-    expect(store.apply(4, [placement({ placement_id: 2 })], 0)).toBe(false);
-    expect(store.placements().map((p) => p.placementId)).toEqual([1]);
-    expect(store.lastAppliedSeq()).toBe(5);
-  });
-
-  it('accepts a set at the same seq, which is what a resize re-describes at', () => {
-    const store = new KittyPlacementStore();
-    store.apply(5, [placement({ placement_id: 1, viewport_row: 0 })], 0);
-
-    expect(store.apply(5, [placement({ placement_id: 1, viewport_row: 4 })], 0)).toBe(true);
-    expect(store.placements()[0].bufferRow).toBe(4);
-  });
-
-  it('replaces the set wholesale rather than merging', () => {
-    const store = new KittyPlacementStore();
-    store.apply(1, [
-      placement({ placement_id: 1, image_id: 1 }),
-      placement({ placement_id: 2, image_id: 2 }),
-    ], 0);
-
-    store.apply(2, [placement({ placement_id: 3, image_id: 3 })], 0);
-
-    expect(store.placements().map((p) => p.imageId)).toEqual([3]);
-  });
-
-  it('clears on the empty set, which is how a program says the image is gone', () => {
-    const store = new KittyPlacementStore();
-    store.apply(1, [placement()], 0);
-
-    store.apply(2, [], 0);
-
-    expect(store.placements()).toHaveLength(0);
-  });
-
-  it('skips a virtual placement, which the program draws itself', () => {
-    const store = new KittyPlacementStore();
-    store.apply(1, [
-      placement({ placement_id: 1, virtual: true }),
-      placement({ placement_id: 2 }),
-    ], 0);
-
-    expect(store.placements().map((p) => p.placementId)).toEqual([2]);
-  });
-
-  it('orders the set by z, then by placement id', () => {
-    const store = new KittyPlacementStore();
-    store.apply(1, [
-      placement({ placement_id: 9, z: 5 }),
-      placement({ placement_id: 3, z: -1 }),
-      placement({ placement_id: 1, z: 5 }),
-    ], 0);
-
-    expect(store.placements().map((p) => p.placementId)).toEqual([3, 1, 9]);
-  });
-
-  it('drops what a restore does not carry, so no image outlives a reattach', () => {
-    const store = new KittyPlacementStore();
-    store.apply(7, [placement()], 0);
-
-    store.seed([], 0);
-
-    expect(store.placements()).toHaveLength(0);
-    expect(store.apply(1, [placement()], 0)).toBe(true);
-  });
-
-  it('takes the restore snapshot as the whole truth', () => {
-    const store = new KittyPlacementStore();
-    store.apply(7, [placement({ placement_id: 1 })], 0);
-
-    store.seed([placement({ placement_id: 2, viewport_row: 1 })], 12);
-
-    expect(store.placements().map((p) => p.placementId)).toEqual([2]);
-    expect(store.placements()[0].bufferRow).toBe(13);
+    expect(results).toEqual(accepted);
+    expect(store.placements().map((p) => [p.placementId, textAtBufferRow(term, p.bufferRow)])).toEqual(placed);
   });
 });

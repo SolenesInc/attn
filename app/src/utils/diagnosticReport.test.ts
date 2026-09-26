@@ -1,11 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import type { DaemonSupportSnapshot } from '../hooks/useDaemonSocket';
 import type { FrontendInputTraceSnapshot } from './supportInputTrace';
 import {
   correlateNativeAndFrontendInput,
   createDiagnosticReport,
   deriveInputJourneys,
-  beginDiagnosticCapture,
   sanitizeSupportDiagnostics,
   type NativeInputSnapshot,
   type PendingDiagnosticCapture,
@@ -148,34 +147,6 @@ describe('diagnostic report evidence', () => {
     ]);
   });
 
-  it('requests the home daemon and each distinct session endpoint', async () => {
-    const sendSupportSnapshot = vi.fn(async () => daemon([]));
-    const capture = beginDiagnosticCapture({
-      context: {
-        capturedAtUnixMs: 1, view: 'sessions', activeSessionId: null, activePaneId: null,
-        activeElement: 'terminal', documentFocused: true, visibility: 'visible',
-        window: { width: 800, height: 600, devicePixelRatio: 2 },
-      },
-      panes: [
-        { paneId: 'pane-local', runtimeId: 'runtime-local', sessionId: 'local', title: 'Local', sessionLabel: 'Local', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
-        { paneId: 'pane-remote', runtimeId: 'runtime-remote', sessionId: 'remote-1a', title: 'Remote', sessionLabel: 'Remote', workspaceId: 'w', workspaceLabel: 'Workspace', available: true },
-      ],
-      workspaces: [], settings: {}, sendSupportSnapshot,
-      sessions: [
-        { id: 'local', label: 'Local', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'local', active: false },
-        { id: 'remote-1a', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
-        { id: 'remote-1b', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-1', active: false },
-        { id: 'remote-2', label: 'Remote', state: 'idle', agent: 'codex', cwd: '~', workspaceId: 'w', endpoint: 'remote', endpointId: 'endpoint-2', active: false },
-      ],
-    });
-    await capture.daemons;
-
-    expect(sendSupportSnapshot.mock.calls).toEqual([
-      [undefined, ['runtime-local']],
-      ['endpoint-1', ['runtime-remote']],
-      ['endpoint-2', []],
-    ]);
-  });
 });
 
 function pendingCapture(): PendingDiagnosticCapture {
@@ -200,59 +171,7 @@ function pendingCapture(): PendingDiagnosticCapture {
   };
 }
 
-describe('diagnostic report pane consent', () => {
-  it('creates a partial report when evidence collectors do not finish', async () => {
-    vi.useFakeTimers();
-    try {
-      const capture = pendingCapture();
-      capture.daemons = new Promise(() => {});
-      capture.nativeInput = new Promise(() => {});
-      capture.historicalInput = new Promise(() => {});
-
-      const reportPromise = createDiagnosticReport(capture, [], () => ({ text: '', available: true }));
-      await vi.advanceTimersByTimeAsync(3_000);
-      const report = await reportPromise;
-
-      expect(report.daemons).toEqual([]);
-      expect(report.omissions).toEqual(expect.arrayContaining([
-        { section: 'daemons', reason: 'snapshots_unavailable' },
-        { section: 'daemons:local', reason: 'snapshot_unavailable' },
-        { section: 'nativeInput', reason: 'unsupported_or_unavailable' },
-        { section: 'historicalInput', reason: 'no_persisted_samples' },
-      ]));
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it('reads no terminal content by default', async () => {
-    const readPane = vi.fn(() => ({ text: 'PRIVATE_OUTPUT', available: true }));
-    const report = await createDiagnosticReport(pendingCapture(), [], readPane);
-
-    expect(readPane).not.toHaveBeenCalled();
-    expect(report.paneContent).toEqual([]);
-    expect(JSON.stringify(report)).not.toContain('PRIVATE_OUTPUT');
-  });
-
-  it('includes only selected output, strips controls, and marks unavailable panes', async () => {
-    const report = await createDiagnosticReport(pendingCapture(), ['pane-1', 'pane-2'], (paneId) => (
-      paneId === 'pane-1'
-        ? { text: 'visible\u001b[31m\r\nPRIVATE_OUTPUT', available: true }
-        : { text: '', available: false }
-    ));
-
-    expect(report.paneContent).toEqual([
-      expect.objectContaining({ paneId: 'pane-1', text: 'visible[31m\nPRIVATE_OUTPUT', available: true }),
-      { paneId: 'pane-2', runtimeId: 'runtime-2', available: false },
-    ]);
-    expect(report.omissions).toEqual(expect.arrayContaining([
-      { section: 'paneContent:pane-2', reason: 'pane_not_mounted' },
-    ]));
-    expect(report.consent).toEqual(expect.objectContaining({
-      paneContent: 'selected_panes', selectedPaneIds: ['pane-1', 'pane-2'],
-    }));
-  });
-
+describe('diagnostic report size bounds', () => {
   it('bounds selected output by UTF-8 bytes and records the truncation receipt', async () => {
     const report = await createDiagnosticReport(pendingCapture(), ['pane-1'], () => ({
       text: `discarded${'😀'.repeat(20_000)}`,

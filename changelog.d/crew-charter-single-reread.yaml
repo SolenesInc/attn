@@ -1,0 +1,3 @@
+kind: fixed
+area: crew
+change: Reconnecting while a crew member's charter is open reads the charter once, not twice.

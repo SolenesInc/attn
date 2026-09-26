@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Daemon wire tests now guard Garden advisor, artifact, backlog, handoff, bell, plot, review, search, stranded-seed, subscription and ticket-mirror promises, replacing in-package tests that drove handlers and store state directly.

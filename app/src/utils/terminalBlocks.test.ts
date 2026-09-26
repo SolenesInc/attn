@@ -1,423 +1,155 @@
 import { describe, expect, it } from 'vitest';
+import type { Osc133Marker } from './terminalOsc133';
 import {
-  blockViewportSpan,
   blockViewportSpanAnchored,
   extractBlock,
   reanchorDelta,
+  RESIZE_REANCHOR_SCAN_ROWS,
   TerminalBlockStore,
   type BlockRowAccess,
+  type BlockViewportSpan,
+  type SeededBlock,
 } from './terminalBlocks';
 
+type Recorded = [command: string, promptRow: number, outputStartRow: number, endRow: number];
+
 function access(rows: string[]): BlockRowAccess {
-  return {
-    totalRows: () => rows.length,
-    rowText: (row) => rows[row] ?? '',
-  };
+  return { totalRows: () => rows.length, rowText: (row) => rows[row] ?? '' };
 }
 
-function completedBlock(rows: string[]) {
+function record(rows: string[], blocks: Recorded[]): TerminalBlockStore {
   const store = new TerminalBlockStore();
-  const rowTextAt = (row: number) => rows[row] ?? '';
-  store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 }, rowTextAt);
-  store.applyMarker({ kind: 'input-start' }, { row: 0, col: 8 }, rowTextAt);
-  store.applyMarker({ kind: 'pre-exec', cmdline: 'echo hello' }, { row: 1, col: 0 }, rowTextAt);
-  store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 3, col: 0 }, rowTextAt);
+  const rowText = (row: number) => rows[row] ?? '';
+  for (const [command, promptRow, outputStartRow, endRow] of blocks) {
+    store.applyMarker({ kind: 'prompt-start' }, { row: promptRow, col: 0 }, rowText);
+    store.applyMarker({ kind: 'input-start' }, { row: promptRow, col: 0 }, rowText);
+    store.applyMarker({ kind: 'pre-exec', cmdline: command }, { row: outputStartRow, col: 0 }, rowText);
+    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: endRow, col: 0 }, rowText);
+  }
   return store;
 }
 
-const ROWS = ['prompt> echo hello', 'hello', 'world  ', '', 'prompt> '];
+function lines(count: number, prefix: string): string[] {
+  return Array.from({ length: count }, (_, i) => `${prefix}-${String(i).padStart(4, '0')}`);
+}
 
-describe('TerminalBlockStore', () => {
-  it('completes a block across the marker lifecycle', () => {
-    const store = completedBlock(ROWS);
-    expect(store.blocks()).toHaveLength(1);
-    const block = store.blocks()[0];
-    expect(block.command).toBe('echo hello');
-    expect(block.exitCode).toBe(0);
-    expect(block.promptRow).toBe(0);
-    expect(block.outputStartRow).toBe(1);
-    expect(block.endRow).toBe(3);
-    expect(block.anchorText).toBe('prompt> echo hello');
-  });
+const ECHO = ['prompt> echo hello', 'hello', 'world  ', '', 'prompt> '];
+const ECHO_BLOCK: Recorded = ['echo hello', 0, 1, 3];
+const LONG_PROMPT = ['prompt> seq 1 200; echo RESIZE_TOKEN_LONG_ENOUGH_TO_EXCEED_NARROW_WIDTH', 'output line'];
+const TWO = ['prompt> a', 'out-a', 'prompt> b', 'out-b'];
+const TWO_BLOCKS: Recorded[] = [['a', 0, 1, 2], ['b', 2, 3, 4]];
 
-  it('hit-tests rows to the containing block', () => {
-    const store = completedBlock(ROWS);
-    const block = store.blocks()[0];
-    expect(store.blockAt(0)).toBe(block);
-    expect(store.blockAt(2)).toBe(block);
-    expect(store.blockAt(3)).toBeNull();
-  });
+describe('finding a recorded block in the live buffer', () => {
+  it.each<[string, string[], Recorded, string[], number | undefined, number | null]>([
+    ['the buffer is unchanged', ECHO, ECHO_BLOCK, ECHO, undefined, 0],
+    ['output was added above it', ECHO, ECHO_BLOCK, ['noise-a', 'noise-b', ...ECHO], undefined, 2],
+    ['rows were trimmed above it', ['older', ...ECHO], ['echo hello', 1, 2, 4], ECHO, undefined, -1],
+    ['its text is gone', ECHO, ECHO_BLOCK, lines(200, 'unrelated'), undefined, null],
+    ['it moved past the scan window', ['prompt> make', 'building'], ['make', 0, 1, 2], [...lines(200, 'older'), 'prompt> make', 'building'], undefined, null],
+    ['it moved within the resize scan window', ['prompt> make', 'building'], ['make', 0, 1, 2], [...lines(200, 'older'), 'prompt> make', 'building'], RESIZE_REANCHOR_SCAN_ROWS, 200],
+    ['a narrower pane clips its row', LONG_PROMPT, ['seq', 0, 1, 2], LONG_PROMPT.map((line) => line.slice(0, 30)), undefined, 0],
+    ['a tiny pane leaves too little text to tell', ['prompt> unique-command-here', 'out'], ['unique', 0, 1, 2], ['pro', 'out'], undefined, null],
+  ])('when %s', (_name, recorded, block, now, window, delta) => {
+    const [recordedBlock] = record(recorded, [block]).blocks();
 
-  it('ignores a command-end without a pre-exec (bare Enter at the prompt)', () => {
-    const store = new TerminalBlockStore();
-    store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 });
-    store.applyMarker({ kind: 'input-start' }, { row: 0, col: 8 });
-    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 1, col: 0 });
-    expect(store.blocks()).toHaveLength(0);
-  });
-
-  it('does not merge two commands when a command-end is lost but the next prompt-start survives', () => {
-    const store = new TerminalBlockStore();
-    store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 });
-    store.applyMarker({ kind: 'pre-exec', cmdline: 'make install' }, { row: 1, col: 0 });
-    store.applyMarker({ kind: 'prompt-start' }, { row: 40, col: 0 });
-    store.applyMarker({ kind: 'pre-exec', cmdline: 'echo 1' }, { row: 41, col: 0 });
-    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 43, col: 0 });
-
-    const blocks = store.blocks();
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0].command).toBe('make install');
-    expect(blocks[0].promptRow).toBe(0);
-    expect(blocks[0].endRow).toBe(40);
-    expect(blocks[1].command).toBe('echo 1');
-    expect(blocks[1].promptRow).toBe(40);
-    expect(blocks[1].endRow).toBe(43);
-  });
-
-  it('does not merge when both the command-end AND the next prompt-start are lost', () => {
-    const store = new TerminalBlockStore();
-    store.applyMarker({ kind: 'prompt-start' }, { row: 0, col: 0 });
-    store.applyMarker({ kind: 'pre-exec', cmdline: 'make install' }, { row: 1, col: 0 });
-    store.applyMarker({ kind: 'input-start' }, { row: 41, col: 2 });
-    store.applyMarker({ kind: 'pre-exec', cmdline: 'echo 1' }, { row: 42, col: 0 });
-    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 44, col: 0 });
-
-    const blocks = store.blocks();
-    expect(blocks).toHaveLength(2);
-    expect(blocks[0].command).toBe('make install');
-    expect(blocks[0].promptRow).toBe(0);
-    expect(blocks[0].endRow).toBe(41);
-    expect(blocks[1].command).toBe('echo 1');
-    expect(blocks[1].promptRow).toBe(41);
-    expect(blocks[1].endRow).toBe(44);
-  });
-
-  it('caps stored blocks and keeps the newest', () => {
-    const store = new TerminalBlockStore();
-    for (let i = 0; i < 250; i += 1) {
-      const base = i * 3;
-      store.applyMarker({ kind: 'prompt-start' }, { row: base, col: 0 });
-      store.applyMarker({ kind: 'pre-exec', cmdline: `cmd-${i}` }, { row: base + 1, col: 0 });
-      store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: base + 2, col: 0 });
-    }
-    expect(store.blocks()).toHaveLength(200);
-    expect(store.blocks()[0].command).toBe('cmd-50');
-    expect(store.blocks()[199].command).toBe('cmd-249');
-  });
-});
-
-describe('blockViewportSpan', () => {
-  const block = (promptRow: number, endRow: number) => ({
-    id: 1, promptRow, endRow, command: 'x', anchorRow: promptRow, anchorText: '',
-  });
-
-  it('maps a fully visible block to viewport rows', () => {
-    expect(blockViewportSpan(block(3, 8), 0, 24)).toEqual({
-      startRow: 3, endRow: 7, visible: true, spansViewport: false,
-    });
-  });
-
-  it('reports an over-tall block as spanning the viewport (the make-in-a-small-pane case)', () => {
-    expect(blockViewportSpan(block(3, 207), 183, 27)).toEqual({
-      startRow: -180, endRow: 23, visible: true, spansViewport: false,
-    });
-    expect(blockViewportSpan(block(3, 207), 100, 27)).toEqual({
-      startRow: -97, endRow: 106, visible: true, spansViewport: true,
-    });
-  });
-
-  it('reports a scrolled-away block as not visible', () => {
-    expect(blockViewportSpan(block(3, 8), 50, 24)?.visible).toBe(false);
-  });
-
-  it('returns null for an incomplete block', () => {
-    expect(blockViewportSpan({ id: 1, promptRow: 3, command: 'x', anchorRow: 3, anchorText: '' }, 0, 24)).toBeNull();
+    expect(reanchorDelta(recordedBlock, access(now), window)).toBe(delta);
   });
 });
 
 describe('extractBlock', () => {
-  it('extracts command and trailing-trimmed output rows', () => {
-    const store = completedBlock(ROWS);
-    expect(extractBlock(store.blocks()[0], access(ROWS))).toEqual({
-      command: 'echo hello',
-      output: 'hello\nworld',
-    });
-  });
+  it.each<[string, string[], string[], { command: string; output: string } | null]>([
+    ['takes the command and its output without trailing blanks', ECHO, ECHO, { command: 'echo hello', output: 'hello\nworld' }],
+    ['follows the block when the buffer shifted', ECHO, ['noise-a', 'noise-b', ...ECHO], { command: 'echo hello', output: 'hello\nworld' }],
+    ['refuses when the block’s text is gone', ECHO, lines(200, 'unrelated'), null],
+  ])('%s', (_name, recorded, now, extracted) => {
+    const [block] = record(recorded, [ECHO_BLOCK]).blocks();
 
-  it('re-anchors when the buffer shifted under the block', () => {
-    const store = completedBlock(ROWS);
-    const shifted = ['noise-a', 'noise-b', ...ROWS];
-    const block = store.blocks()[0];
-    expect(reanchorDelta(block, access(shifted))).toBe(2);
-    expect(extractBlock(block, access(shifted))).toEqual({
-      command: 'echo hello',
-      output: 'hello\nworld',
-    });
-  });
-
-  it('refuses extraction when the anchor is gone', () => {
-    const store = completedBlock(ROWS);
-    const replaced = Array.from({ length: 200 }, (_, i) => `unrelated-${i}`);
-    expect(extractBlock(store.blocks()[0], access(replaced))).toBeNull();
-  });
-});
-
-function blockAt(
-  store: TerminalBlockStore,
-  cmd: string,
-  promptRow: number,
-  outputStartRow: number,
-  endRow: number,
-  rowText: (row: number) => string,
-) {
-  store.applyMarker({ kind: 'prompt-start' }, { row: promptRow, col: 0 }, rowText);
-  store.applyMarker({ kind: 'input-start' }, { row: promptRow, col: 0 }, rowText);
-  store.applyMarker({ kind: 'pre-exec', cmdline: cmd }, { row: outputStartRow, col: 0 }, rowText);
-  store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: endRow, col: 0 }, rowText);
-}
-
-describe('reanchorDelta scan window', () => {
-  it('finds an anchor moved 200 rows with the wide resize window but not the default window', () => {
-    const store = new TerminalBlockStore();
-    const baseRows = ['prompt> make', 'building'];
-    blockAt(store, 'make', 0, 1, 2, (row) => baseRows[row] ?? '');
-    const block = store.blocks()[0];
-    const moved = [
-      ...Array.from({ length: 200 }, (_, i) => `older-${i}`),
-      'prompt> make',
-      'building',
-    ];
-    expect(reanchorDelta(block, access(moved), 512)).toBe(200);
-    expect(reanchorDelta(block, access(moved))).toBeNull();
+    expect(extractBlock(block, access(now))).toEqual(extracted);
   });
 });
 
 describe('TerminalBlockStore.reanchorOnResize', () => {
-  it('remaps every block by a uniform height-only shift and keeps them', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a', 'prompt> b', 'out-b'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    blockAt(store, 'b', 2, 3, 4, (row) => liveRows[row] ?? '');
-    const shifted = ['x', 'y', ...liveRows];
-    expect(store.reanchorOnResize(access(shifted))).toBe('ok');
-    const [a, b] = store.blocks();
-    expect(a.promptRow).toBe(2);
-    expect(a.outputStartRow).toBe(3);
-    expect(a.endRow).toBe(4);
-    expect(a.anchorRow).toBe(2);
-    expect(b.promptRow).toBe(4);
-    expect(b.endRow).toBe(6);
-  });
+  it.each<[string, string[], Recorded[], string[], 'ok' | 'all-stale', Recorded[]]>([
+    ['keeps blocks in place when rows did not move', TWO, TWO_BLOCKS, TWO, 'ok', TWO_BLOCKS],
+    ['shifts every block by a height-only change', TWO, TWO_BLOCKS, ['x', 'y', ...TWO], 'ok', [['a', 2, 3, 4], ['b', 4, 5, 6]]],
+    ['drops a block whose text is gone and keeps the survivor', ['prompt> keep', 'out-keep', 'prompt> gone', 'out-gone'], [['keep', 0, 1, 2], ['gone', 2, 3, 4]], ['prompt> keep', 'out-keep'], 'ok', [['keep', 0, 1, 2]]],
+    ['reports all-stale when every block is gone', TWO, TWO_BLOCKS, lines(50, 'unrelated'), 'all-stale', []],
+    ['remaps a large height shift instead of dropping', ['prompt> tall', 'out'], [['tall', 0, 1, 2]], [...lines(200, 's'), 'prompt> tall', 'out'], 'ok', [['tall', 200, 201, 202]]],
+    ['matches rows clipped by a narrower pane', LONG_PROMPT, [['seq', 0, 1, 2]], LONG_PROMPT.map((line) => line.slice(0, 30)), 'ok', [['seq', 0, 1, 2]]],
+    ['refuses a tiny overlap that would match almost anything', ['prompt> unique-command-here', 'out'], [['unique', 0, 1, 2]], ['pro', 'out'], 'all-stale', []],
+  ])('%s', (_name, recorded, blocks, now, result, after) => {
+    const store = record(recorded, blocks);
 
-  it('drops a block whose anchor is gone but keeps the survivor', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> keep', 'out-keep', 'prompt> gone', 'out-gone'];
-    blockAt(store, 'keep', 0, 1, 2, (row) => liveRows[row] ?? '');
-    blockAt(store, 'gone', 2, 3, 4, (row) => liveRows[row] ?? '');
-    const after = ['prompt> keep', 'out-keep'];
-    expect(store.reanchorOnResize(access(after))).toBe('ok');
-    expect(store.blocks()).toHaveLength(1);
-    expect(store.blocks()[0].command).toBe('keep');
-    expect(store.blocks()[0].promptRow).toBe(0);
-  });
-
-  it('empties the store and reports all-stale when every anchor is gone', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a', 'prompt> b', 'out-b'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    blockAt(store, 'b', 2, 3, 4, (row) => liveRows[row] ?? '');
-    const wiped = Array.from({ length: 50 }, (_, i) => `unrelated-${i}`);
-    expect(store.reanchorOnResize(access(wiped))).toBe('all-stale');
-    expect(store.blocks()).toHaveLength(0);
-  });
-
-  it('is a no-op confirmation when the no-reflow path kept rows stable (delta 0)', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a', 'prompt> b', 'out-b'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    blockAt(store, 'b', 2, 3, 4, (row) => liveRows[row] ?? '');
-    expect(store.reanchorOnResize(access(liveRows))).toBe('ok');
-    const [a, b] = store.blocks();
-    expect(a.promptRow).toBe(0);
-    expect(b.promptRow).toBe(2);
-  });
-
-  it('uses the wide window so a large height shift remaps instead of dropping', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> tall', 'out'];
-    blockAt(store, 'tall', 0, 1, 2, (row) => liveRows[row] ?? '');
-    const shifted = [...Array.from({ length: 200 }, (_, i) => `s-${i}`), 'prompt> tall', 'out'];
-    expect(store.reanchorOnResize(access(shifted))).toBe('ok');
-    expect(store.blocks()[0].promptRow).toBe(200);
-    expect(store.blocks()[0].endRow).toBe(202);
-  });
-
-  it('matches anchors whose rows are clipped to a narrower width (width-tolerant prefix)', () => {
-    // rowText() returns at most the current pane width, so a full-width anchor can only be compared on the overlapping prefix.
-    const store = new TerminalBlockStore();
-    const wide = [
-      'prompt> seq 1 200; echo RESIZE_TOKEN_LONG_ENOUGH_TO_EXCEED_NARROW_WIDTH',
-      'output line',
-    ];
-    blockAt(store, 'seq', 0, 1, 2, (row) => wide[row] ?? '');
-    const clipped = wide.map((line) => line.slice(0, 30));
-    expect(store.reanchorOnResize(access(clipped))).toBe('ok');
-    expect(store.blocks()).toHaveLength(1);
-    expect(store.blocks()[0].promptRow).toBe(0);
-  });
-
-  it('refuses tiny anchor overlaps that would match almost anything', () => {
-    const store = new TerminalBlockStore();
-    const rows = ['prompt> unique-command-here', 'out'];
-    blockAt(store, 'unique', 0, 1, 2, (row) => rows[row] ?? '');
-    const tiny = ['pro', 'out'.slice(0, 3)];
-    expect(store.reanchorOnResize(access(tiny))).toBe('all-stale');
-    expect(store.blocks()).toHaveLength(0);
-  });
-
-  it('rebuilds in the new coordinate space after a clear (coherence)', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> old', 'out'];
-    blockAt(store, 'old', 0, 1, 2, (row) => liveRows[row] ?? '');
-    store.clear();
-    expect(store.blocks()).toHaveLength(0);
-    const fresh = ['noise', 'noise', 'prompt> new', 'out-new'];
-    blockAt(store, 'new', 2, 3, 4, (row) => fresh[row] ?? '');
-    expect(store.blocks()).toHaveLength(1);
-    expect(store.blocks()[0].promptRow).toBe(2);
-    expect(store.blocks()[0].command).toBe('new');
+    expect(store.reanchorOnResize(access(now))).toBe(result);
+    expect(store.blocks().map((b) => [b.command, b.promptRow, b.outputStartRow, b.endRow])).toEqual(after);
+    expect(store.blocks().map((b) => b.anchorRow)).toEqual(after.map(([, promptRow]) => promptRow));
   });
 });
 
 describe('TerminalBlockStore.blockAtAnchored', () => {
-  it('finds the containing block after a +N shift', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a', 'tail'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    const shifted = ['x', 'y', 'prompt> a', 'out-a', 'tail'];
-    expect(store.blockAtAnchored(2, access(shifted))?.command).toBe('a');
-    expect(store.blockAtAnchored(3, access(shifted))?.command).toBe('a');
-    expect(store.blockAtAnchored(0, access(shifted))).toBeNull();
-  });
+  it.each<[string, string[], string[], number, string | null]>([
+    ['the prompt row of a block', ECHO, ECHO, 0, 'echo hello'],
+    ['an output row of a block', ECHO, ECHO, 2, 'echo hello'],
+    ['the row after a block ends', ECHO, ECHO, 3, null],
+    ['the prompt row after a shift', ECHO, ['x', 'y', ...ECHO], 2, 'echo hello'],
+    ['a row above a shifted block', ECHO, ['x', 'y', ...ECHO], 0, null],
+    ['any row once the block’s text is gone', ECHO, lines(50, 'unrelated'), 1, null],
+  ])('finds the block at %s', (_name, recorded, now, row, command) => {
+    const store = record(recorded, [ECHO_BLOCK]);
 
-  it('returns null when the anchor is gone', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    const wiped = Array.from({ length: 50 }, (_, i) => `unrelated-${i}`);
-    expect(store.blockAtAnchored(0, access(wiped))).toBeNull();
-    expect(store.blockAtAnchored(1, access(wiped))).toBeNull();
+    expect(store.blockAtAnchored(row, access(now))?.command ?? null).toBe(command);
   });
 });
 
 describe('blockViewportSpanAnchored', () => {
-  it('returns the correctly-shifted span after a buffer shift', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> a', 'out-a'];
-    blockAt(store, 'a', 0, 1, 2, (row) => liveRows[row] ?? '');
-    const block = store.blocks()[0];
-    const shifted = ['x', 'y', 'prompt> a', 'out-a'];
-    expect(blockViewportSpanAnchored(block, access(shifted), 2, 24)).toEqual({
-      startRow: 0, endRow: 1, visible: true, spansViewport: false,
-    });
-  });
+  const BUFFER = lines(400, 'row');
 
-  it('returns null (not a wrong box) when the anchor is gone — the "completely off" regression', () => {
-    const store = new TerminalBlockStore();
-    const liveRows = ['prompt> make', 'building'];
-    blockAt(store, 'make', 0, 3, 720, (row) => liveRows[row] ?? '');
-    const block = store.blocks()[0];
-    expect(block.endRow).toBe(720);
-    const reflowed = Array.from({ length: 394 }, (_, i) => `reflowed-${i}`);
-    expect(blockViewportSpanAnchored(block, access(reflowed), 341, 53)).toBeNull();
+  it.each<[string, string[], Recorded, string[], number, number, BlockViewportSpan | null]>([
+    ['a fully visible block', BUFFER, ['x', 3, 4, 8], BUFFER, 0, 24, { startRow: 3, endRow: 7, visible: true, spansViewport: false }],
+    ['a tall block whose end is in view', BUFFER, ['make', 3, 4, 207], BUFFER, 183, 27, { startRow: -180, endRow: 23, visible: true, spansViewport: false }],
+    ['a tall block covering the viewport', BUFFER, ['make', 3, 4, 207], BUFFER, 100, 27, { startRow: -97, endRow: 106, visible: true, spansViewport: true }],
+    ['a block scrolled out of view', BUFFER, ['x', 3, 4, 8], BUFFER, 50, 24, { startRow: -47, endRow: -43, visible: false, spansViewport: false }],
+    ['a block after the buffer shifted', ['prompt> a', 'out-a'], ['a', 0, 1, 2], ['x', 'y', 'prompt> a', 'out-a'], 2, 24, { startRow: 0, endRow: 1, visible: true, spansViewport: false }],
+    ['a block whose text a reflow replaced, rather than a wrong box', ['prompt> make', 'building'], ['make', 0, 3, 720], lines(394, 'reflowed'), 341, 53, null],
+  ])('%s', (_name, recorded, block, now, firstViewportRow, viewportRows, span) => {
+    const [recordedBlock] = record(recorded, [block]).blocks();
+
+    expect(blockViewportSpanAnchored(recordedBlock, access(now), firstViewportRow, viewportRows)).toEqual(span);
   });
 });
 
 describe('TerminalBlockStore.seed', () => {
   const RESTORED = ['prompt> make test', 'building', 'ok', '', 'prompt> ls', 'a  b'];
-  const rowTextAt = (row: number) => RESTORED[row] ?? '';
+  const rowText = (row: number) => RESTORED[row] ?? '';
+  const MAKE: SeededBlock = { id: 5, pending: false, promptRow: 0, inputRow: 0, inputCol: 8, outputStartRow: 1, endRow: 3, command: 'make test', exitCode: 0 };
 
-  it('lands completed blocks at their rows with anchorText from the restored buffer', () => {
-    const store = new TerminalBlockStore();
-    store.seed(
-      [{ id: 5, pending: false, promptRow: 0, inputRow: 0, inputCol: 8, outputStartRow: 1, endRow: 3, command: 'make test', exitCode: 0 }],
-      rowTextAt,
-    );
-    const blocks = store.blocks();
-    expect(blocks).toHaveLength(1);
-    const block = blocks[0];
-    expect(block.id).toBe(5);
-    expect(block.promptRow).toBe(0);
-    expect(block.outputStartRow).toBe(1);
-    expect(block.endRow).toBe(3);
-    expect(block.command).toBe('make test');
-    expect(block.exitCode).toBe(0);
-    expect(block.anchorRow).toBe(0);
-    expect(block.anchorText).toBe('prompt> make test');
-    expect(block.inputStart).toEqual({ row: 0, col: 8 });
+  const END: Osc133Marker = { kind: 'command-end', exitCode: 0 };
+
+  it.each<[string, Recorded[], SeededBlock[], [Osc133Marker, number][], object[]]>([
+    ['lands a completed block where the restored buffer holds it', [], [MAKE], [], [
+      { id: 5, command: 'make test', promptRow: 0, outputStartRow: 1, endRow: 3, exitCode: 0, anchorText: 'prompt> make test', inputStart: { row: 0, col: 8 } },
+    ]],
+    ['re-arms a pending block for the next live command-end', [], [{ id: 9, pending: true, promptRow: 4, inputRow: 4, inputCol: 8, outputStartRow: 5, command: 'ls' }], [[END, 6]], [
+      { id: 9, command: 'ls', promptRow: 4, outputStartRow: 5, endRow: 6 },
+    ]],
+    ['numbers live blocks above every seeded id', [], [
+      { id: 3, pending: false, promptRow: 0, inputRow: 0, outputStartRow: 1, endRow: 2, command: 'a', exitCode: 0 },
+      { id: 7, pending: false, promptRow: 2, inputRow: 2, outputStartRow: 3, endRow: 4, command: 'b', exitCode: 0 },
+    ], [[{ kind: 'prompt-start' }, 4], [{ kind: 'pre-exec', cmdline: 'c' }, 5], [END, 6]], [{ id: 3 }, { id: 7 }, { id: 8, command: 'c' }]],
+    ['replaces what the store held, since a restore is authoritative', [ECHO_BLOCK], [{ ...MAKE, id: 2, command: 'seeded' }], [], [{ id: 2, command: 'seeded' }]],
+    ['drops a completed block without output rows', [], [{ id: 1, pending: false, promptRow: 0, inputRow: 0, command: 'no-output' }], [], []],
+  ])('%s', (_name, before, seeded, live, after) => {
+    const store = record(ECHO, before);
+    store.seed(seeded, rowText);
+    for (const [marker, row] of live) store.applyMarker(marker, { row, col: 0 }, rowText);
+
+    expect(store.blocks()).toMatchObject(after);
   });
 
-  it('seeded completed blocks extract their output against the restored buffer', () => {
+  it('extracts a seeded block’s output from the restored buffer', () => {
     const store = new TerminalBlockStore();
-    store.seed(
-      [{ id: 1, pending: false, promptRow: 0, inputRow: 0, outputStartRow: 1, endRow: 3, command: 'make test', exitCode: 0 }],
-      rowTextAt,
-    );
-    expect(extractBlock(store.blocks()[0], access(RESTORED))).toEqual({
-      command: 'make test',
-      output: 'building\nok',
-    });
-  });
+    store.seed([MAKE], rowText);
 
-  it('re-arms a pending block so the next live command-end completes it', () => {
-    const store = new TerminalBlockStore();
-    store.seed(
-      [{ id: 9, pending: true, promptRow: 4, inputRow: 4, inputCol: 8, outputStartRow: 5, command: 'ls' }],
-      rowTextAt,
-    );
-    expect(store.blocks()).toHaveLength(0);
-    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 6, col: 0 }, rowTextAt);
-    const blocks = store.blocks();
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0].id).toBe(9);
-    expect(blocks[0].command).toBe('ls');
-    expect(blocks[0].endRow).toBe(6);
-  });
-
-  it('continues the id counter above the max seeded id so live blocks never collide', () => {
-    const store = new TerminalBlockStore();
-    store.seed(
-      [
-        { id: 3, pending: false, promptRow: 0, inputRow: 0, outputStartRow: 1, endRow: 2, command: 'a', exitCode: 0 },
-        { id: 7, pending: false, promptRow: 2, inputRow: 2, outputStartRow: 3, endRow: 4, command: 'b', exitCode: 0 },
-      ],
-      rowTextAt,
-    );
-    store.applyMarker({ kind: 'prompt-start' }, { row: 4, col: 0 }, rowTextAt);
-    store.applyMarker({ kind: 'pre-exec', cmdline: 'c' }, { row: 5, col: 0 }, rowTextAt);
-    store.applyMarker({ kind: 'command-end', exitCode: 0 }, { row: 6, col: 0 }, rowTextAt);
-    const live = store.blocks().find((b) => b.command === 'c');
-    expect(live?.id).toBe(8);
-  });
-
-  it('replaces existing state — a restore is authoritative', () => {
-    const store = completedBlock(ROWS);
-    expect(store.blocks()).toHaveLength(1);
-    store.seed(
-      [{ id: 2, pending: false, promptRow: 0, inputRow: 0, outputStartRow: 1, endRow: 2, command: 'seeded', exitCode: 0 }],
-      rowTextAt,
-    );
-    const blocks = store.blocks();
-    expect(blocks).toHaveLength(1);
-    expect(blocks[0].command).toBe('seeded');
-  });
-
-  it('drops a completed block missing output/end rows rather than storing a bad row', () => {
-    const store = new TerminalBlockStore();
-    store.seed(
-      [{ id: 1, pending: false, promptRow: 0, inputRow: 0, command: 'no-output' }],
-      rowTextAt,
-    );
-    expect(store.blocks()).toHaveLength(0);
+    expect(extractBlock(store.blocks()[0], access(RESTORED))).toEqual({ command: 'make test', output: 'building\nok' });
   });
 });

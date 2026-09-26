@@ -146,7 +146,7 @@ function DelegationChainPopover({ open, sessions, controller, onSelectSession }:
         {tree.earlierDispatcher && <div className="delegation-chain-earlier">↑ {tree.earlierDispatcher} · unavailable</div>}
         <ul aria-label="Agents in delegation chain">
           {tree.rows.map(({ session, depth }) => (
-            <li key={session.id} style={{ '--chain-depth': depth } as CSSProperties}>
+            <li key={session.id} aria-level={depth + 1} style={{ '--chain-depth': depth } as CSSProperties}>
               <button
                 type="button"
                 data-chain-session={session.id}

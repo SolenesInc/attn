@@ -325,6 +325,10 @@ type TranscriptFinder interface {
 	BootstrapBytes() int64
 }
 
+type LaunchTranscriptFinder interface {
+	FindLaunchTranscript(cwd string, launchedAt time.Time, claimed func(nativeID string) bool) string
+}
+
 type TranscriptUsageSourceProvider interface {
 	NewTranscriptUsageSourceResolver(rootPath string) transcript.UsageSourceResolver
 }
@@ -406,6 +410,14 @@ func GetTranscriptFinder(d Driver) (TranscriptFinder, bool) {
 	}
 	tf, ok := d.(TranscriptFinder)
 	return tf, ok
+}
+
+func GetLaunchTranscriptFinder(d Driver) (LaunchTranscriptFinder, bool) {
+	if d == nil || !EffectiveCapabilities(d).HasTranscript {
+		return nil, false
+	}
+	finder, ok := d.(LaunchTranscriptFinder)
+	return finder, ok
 }
 
 func GetTranscriptUsageSourceProvider(d Driver) (TranscriptUsageSourceProvider, bool) {

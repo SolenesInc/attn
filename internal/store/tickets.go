@@ -104,13 +104,12 @@ type TicketListFilter struct {
 }
 
 var (
-	ErrTicketIDTaken                 = errors.New("ticket id already in use")
-	ErrTicketNotFound                = errors.New("ticket not found")
-	ErrInvalidTicketID               = errors.New("invalid ticket id")
-	ErrInvalidTicketStatus           = errors.New("invalid ticket status")
-	ErrTicketTitleRequired           = errors.New("ticket title required")
-	ErrTicketNotClosed               = errors.New("ticket is not closed")
-	ErrTicketAdoptionConfirmRequired = errors.New("ticket has a non-orphan assignee")
+	ErrTicketIDTaken       = errors.New("ticket id already in use")
+	ErrTicketNotFound      = errors.New("ticket not found")
+	ErrInvalidTicketID     = errors.New("invalid ticket id")
+	ErrInvalidTicketStatus = errors.New("invalid ticket status")
+	ErrTicketTitleRequired = errors.New("ticket title required")
+	ErrTicketNotClosed     = errors.New("ticket is not closed")
 )
 
 var ticketIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)
@@ -623,107 +622,6 @@ func (s *Store) AssignTicket(id, assignee, author string, now time.Time) error {
 		return err
 	}
 	return tx.Commit()
-}
-
-func ValidateTicketDelegationAdoption(ticket *Ticket, sessionID string, confirm bool) error {
-	if ticket == nil {
-		return ErrTicketNotFound
-	}
-	if strings.TrimSpace(ticket.Description) == "" {
-		return errors.New("ticket description is empty; add a description before delegating it")
-	}
-	if ticket.Assignee != "" && ticket.Assignee != sessionID && ticket.ReconciledAt == nil && !confirm {
-		return fmt.Errorf("%w: %s; pass --confirm to take it over", ErrTicketAdoptionConfirmRequired, ticket.Assignee)
-	}
-	return nil
-}
-
-func (s *Store) AdoptTicketForDelegation(id, sessionID, cwd, lastAgentID, author, ownerRole string, subscribers []string, confirm bool, now time.Time) (*Ticket, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	if s.db == nil {
-		return nil, nil
-	}
-	tx, err := s.db.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback()
-
-	current, err := scanTicket(tx.QueryRow(ticketSelect+` WHERE id = ?`, id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %q", ErrTicketNotFound, id)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if err := ValidateTicketDelegationAdoption(current, sessionID, confirm); err != nil {
-		return nil, err
-	}
-
-	previousAssignee := current.Assignee
-	if _, err := tx.Exec(`
-		UPDATE tickets SET assignee = ?, cwd = ?, last_agent_id = ?, reconciled_at = '', updated_at = ? WHERE id = ?
-	`, sessionID, cwd, lastAgentID, formatTicketTime(now), id); err != nil {
-		return nil, err
-	}
-	if previousAssignee != sessionID {
-		if _, _, err := appendTicketEventTx(tx, TicketEvent{
-			TicketID: id, Kind: TicketEventAssigned, Author: author, AuthorRole: ownerRole, Detail: sessionID,
-		}, now); err != nil {
-			return nil, err
-		}
-	}
-	if current.Status != TicketStatusWorking {
-		if _, err := setTicketStatusTx(tx, id, TicketStatusWorking, author, ownerRole, "", now); err != nil {
-			return nil, err
-		}
-	}
-
-	if ownerRole != "" {
-		if _, err := tx.Exec(`
-			INSERT INTO ticket_role_owners (role, ticket_id, created_at)
-			VALUES (?, ?, ?) ON CONFLICT(role, ticket_id) DO NOTHING
-		`, ownerRole, id, formatTicketTime(now)); err != nil {
-			return nil, err
-		}
-	}
-	if previousAssignee != "" && previousAssignee != sessionID {
-		subscribers = append(subscribers, previousAssignee)
-	}
-	for _, identity := range subscribers {
-		identity = strings.TrimSpace(identity)
-		if identity == "" {
-			continue
-		}
-		if _, err := tx.Exec(`
-			INSERT INTO ticket_subscriptions (identity, ticket_id, created_at)
-			VALUES (?, ?, ?) ON CONFLICT(identity, ticket_id) DO NOTHING
-		`, identity, id, formatTicketTime(now)); err != nil {
-			return nil, err
-		}
-	}
-	var latestSeq int64
-	if err := tx.QueryRow(`SELECT COALESCE(MAX(seq), 0) FROM ticket_events WHERE ticket_id = ?`, id).Scan(&latestSeq); err != nil {
-		return nil, err
-	}
-	if err := setTicketCursorTx(tx, sessionID, id, latestSeq, now); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	current.Assignee = sessionID
-	current.Cwd = cwd
-	current.LastAgentID = lastAgentID
-	current.Status = TicketStatusWorking
-	current.ClosedAt = nil
-	current.ArchivedAt = nil
-	current.ReconciledAt = nil
-	current.UpdatedAt = now
-	current.LatestEventSeq = latestSeq
-	return current, nil
 }
 
 func (s *Store) SetTicketSession(id, cwd, lastAgentID string, now time.Time) error {

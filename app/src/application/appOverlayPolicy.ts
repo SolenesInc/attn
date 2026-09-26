@@ -12,7 +12,6 @@ interface Overlays {
   chiefTransferOpen: boolean;
   contextCapOpen: boolean;
   appViewParamsOpen: boolean;
-  sessionCloseOpen: boolean;
   sessionCreationOpen: boolean;
   prLauncherOpen: boolean;
   diagnosticCaptureOpen: boolean;
@@ -24,7 +23,6 @@ export function appOverlayPolicy(overlays: Overlays) {
     overlays.chiefTransferOpen,
     overlays.contextCapOpen,
     overlays.appViewParamsOpen,
-    overlays.sessionCloseOpen,
     overlays.sessionCreationOpen,
     overlays.prLauncherOpen,
     overlays.diagnosticCaptureOpen,

@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Run daemon wire tests against a production daemon with scripted fake Claude, Codex, Copilot, and Pi agents, optionally under a fake clock.

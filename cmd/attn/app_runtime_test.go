@@ -7,19 +7,6 @@ import (
 	"github.com/victorarias/attn/internal/protocol"
 )
 
-func TestRuntimeRestartRefusesAnAppNameAndExplainsWhy(t *testing.T) {
-	err := appRuntimeRestartTakesNoName("greeter")
-	if err == nil {
-		t.Fatal("naming an app was accepted")
-	}
-	msg := err.Error()
-	for _, want := range []string{`"greeter"`, "one shared runtime", "attn app disable greeter"} {
-		if !strings.Contains(msg, want) {
-			t.Fatalf("the refusal does not contain %q: %s", want, msg)
-		}
-	}
-}
-
 func TestRuntimeCellDistinguishesNeverStartedFromParked(t *testing.T) {
 	got := appRuntimeCell(nil)
 	if !strings.Contains(got, "not started") {
@@ -103,20 +90,5 @@ func TestInvocationRenderingKeepsSubscriptionIdentity(t *testing.T) {
 	}
 	if got := devInvocationLine(inv); !strings.Contains(got, "in 4ms") || !strings.Contains(got, "ticket.updated tk-7") {
 		t.Fatalf("dev line = %q", got)
-	}
-}
-
-func TestReconcileStatusRenderingNamesUnsupportedAndOwedStates(t *testing.T) {
-	unsupported := appReconcileStatusCell(protocol.AppReconcileStatus{State: "unsupported"})
-	if !strings.Contains(unsupported, "unsupported") || !strings.Contains(unsupported, "declares and implements reconcile") {
-		t.Fatalf("unsupported status = %q", unsupported)
-	}
-	reason := protocol.AppReconcileReasonInfo{
-		Causes: []string{"version_changed"}, Version: 4, ThroughSeq: 18,
-		PreviousVersions: []int{3},
-	}
-	owed := appReconcileStatusCell(protocol.AppReconcileStatus{State: "owed", Reason: &reason})
-	if owed != "owed through seq 18 (version_changed)" {
-		t.Fatalf("owed status = %q", owed)
 	}
 }

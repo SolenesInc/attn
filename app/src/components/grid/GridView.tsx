@@ -330,7 +330,7 @@ export function GridView({
   };
 
   return (
-    <div className="grid-view" onMouseMove={updateRemoveTarget} onMouseLeave={clearRemoveTarget}>
+    <div className="grid-view" role="region" aria-label="Session grid" onMouseMove={updateRemoveTarget} onMouseLeave={clearRemoveTarget}>
       <div className="grid-view-stage" ref={stageRef} onClick={onStageClick} />
       {tiles.length === 0 && (
         <div className="grid-view-empty">No active sessions</div>

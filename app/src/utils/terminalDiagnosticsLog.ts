@@ -65,7 +65,7 @@ const LIFECYCLE_KINDS = new Set<DiagKind>([
   'model_fault',
 ]);
 
-export interface RenderProbe {
+interface RenderProbe {
   cols: number;
   rows: number;
   modelPrintable: number;

@@ -438,38 +438,6 @@ func TestActivityScanTreatsASpendlessPassAsHavingLooked(t *testing.T) {
 	}
 }
 
-func TestActivityTranscriptPathIsRememberedUntilItMoves(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
-	session := d.store.Get("session-1")
-
-	transcriptPath := discoverableTranscript(t, d, "session-1", "session-1", "first")
-	if got := d.sessionActivityTranscript(session); got != transcriptPath {
-		t.Fatalf("resolved %q, want %q", got, transcriptPath)
-	}
-
-	t.Setenv(toolhome.EnvVar, t.TempDir())
-	if got := d.sessionActivityTranscript(session); got != transcriptPath {
-		t.Errorf("resolved %q after the tool home moved, want the remembered %q", got, transcriptPath)
-	}
-
-	d.store.SetResumeSessionID("session-1", "resume-2")
-	if got := d.sessionActivityTranscript(session); got != "" {
-		t.Errorf("resolved %q after the session resumed, want a fresh resolve (which finds nothing here)", got)
-	}
-
-	restored := discoverableTranscript(t, d, "session-1", "resume-2", "first")
-	if got := d.sessionActivityTranscript(session); got != restored {
-		t.Fatalf("resolved %q, want %q", got, restored)
-	}
-	if err := os.Remove(restored); err != nil {
-		t.Fatal(err)
-	}
-	if got := d.sessionActivityTranscript(session); got != "" {
-		t.Errorf("resolved %q after the transcript was removed, want a fresh resolve", got)
-	}
-}
-
 func TestActivityExecutorWritesNothingAfterTheFeatureIsTurnedOff(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	addActivitySession(t, d, "session-1", protocol.SessionStateWorking)
@@ -581,24 +549,6 @@ func TestOpeningATurnRefreshesTheActivityLineImmediately(t *testing.T) {
 	}
 }
 
-func TestSessionGeneratesActivity(t *testing.T) {
-	agentSession := &protocol.Session{ID: "s1", Agent: protocol.SessionAgentClaude}
-	if !sessionGeneratesActivity(agentSession) {
-		t.Error("a plain agent session does not generate activity")
-	}
-	satellite := &protocol.Session{ID: "s2", Agent: protocol.SessionAgentClaude, ParentSessionID: protocol.Ptr("s1")}
-	if sessionGeneratesActivity(satellite) {
-		t.Error("a satellite shell generates activity; it has no transcript of its own")
-	}
-	remote := &protocol.Session{ID: "s3", Agent: protocol.SessionAgentClaude, EndpointID: protocol.Ptr("remote-1")}
-	if sessionGeneratesActivity(remote) {
-		t.Error("a remote session generates activity; its transcript lives on another daemon")
-	}
-	if sessionGeneratesActivity(nil) {
-		t.Error("a nil session generates activity")
-	}
-}
-
 func enqueueActivity(t *testing.T, d *Daemon, sessionID, transcriptPath string) {
 	t.Helper()
 	if _, err := d.jobQueue.Enqueue(sessionActivityKind, jobs.EnqueueOptions{
@@ -696,19 +646,6 @@ func TestActivityStatusReportsTheTierAndEveryLine(t *testing.T) {
 	}
 	if len(status.Sessions) != 1 || protocol.Deref(status.Sessions[0].Activity) != "running the frontend test suite" {
 		t.Fatalf("sessions = %+v", status.Sessions)
-	}
-}
-
-func TestActivityStatusNamesAnUnfinishedSetup(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.store.SetSetting(SettingActivityEnabled, "true")
-
-	resp := socketRoundTrip(t, d, protocol.ActivityStatusMessage{Cmd: protocol.CmdActivityStatus})
-	if resp.ActivityStatusResult == nil || resp.ActivityStatusResult.Error == nil {
-		t.Fatalf("no error reported for an enabled feature with no agent: %+v", resp.ActivityStatusResult)
-	}
-	if !strings.Contains(*resp.ActivityStatusResult.Error, "agent") {
-		t.Errorf("error = %q, want it to name the missing agent", *resp.ActivityStatusResult.Error)
 	}
 }
 

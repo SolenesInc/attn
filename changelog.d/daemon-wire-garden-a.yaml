@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Daemon wire tests now guard Garden continuation, dependency edges, seed event bells, harvest-on-merge and ripple promises, replacing in-package tests that reached into daemon internals.

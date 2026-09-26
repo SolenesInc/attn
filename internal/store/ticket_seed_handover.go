@@ -170,6 +170,35 @@ func (s *Store) TicketSeedLink(ticketID string) (*TicketSeedLink, error) {
 	return &link, nil
 }
 
+type TicketSeedAttachment struct {
+	TicketID string
+	SeedID   string
+	Path     string
+}
+
+func (s *Store) TicketSeedAttachments() ([]TicketSeedAttachment, error) {
+	if s == nil || s.db == nil {
+		return nil, fmt.Errorf("store: no database")
+	}
+	rows, err := s.db.Query(`SELECT link.ticket_id, link.seed_id, attachment.path
+		FROM legacy_ticket_seed_links AS link
+		JOIN ticket_attachments AS attachment ON attachment.ticket_id = link.ticket_id
+		ORDER BY link.ticket_id, attachment.id`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []TicketSeedAttachment
+	for rows.Next() {
+		var attachment TicketSeedAttachment
+		if err := rows.Scan(&attachment.TicketID, &attachment.SeedID, &attachment.Path); err != nil {
+			return nil, err
+		}
+		out = append(out, attachment)
+	}
+	return out, rows.Err()
+}
+
 func insertTicketSeedLink(tx *sql.Tx, handover TicketSeedHandover, seedID string) error {
 	_, err := tx.Exec(`INSERT INTO legacy_ticket_seed_links
 		(ticket_id,seed_id,source_kind,evidence_fingerprint,original_terminal_state,created_at)

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"syscall"
 	"testing"
@@ -96,234 +95,6 @@ func makeRecoveryHome(t *testing.T, dataRoot string) {
 	}
 }
 
-func TestLegacyTicketRecoveryInventoryStartsOnlyAfterThePIDLock(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	t.Setenv("ATTN_PTY_BACKEND", "embedded")
-	dataRoot := shortTempDir(t)
-	makeRecoveryHome(t, dataRoot)
-	target, err := store.NewWithDB(filepath.Join(dataRoot, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = target.Close() })
-
-	socketPath := filepath.Join(dataRoot, "attn.sock")
-	d := NewForTesting(socketPath)
-	_ = d.store.Close()
-	d.store = target
-	holder := &Daemon{pidPath: d.pidPath}
-	if err := holder.acquirePIDLock(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(holder.releasePIDLock)
-
-	err = d.Start()
-	if err == nil || !strings.Contains(err.Error(), "daemon already running") {
-		t.Fatalf("Start() error = %v, want PID-lock refusal", err)
-	}
-	run, err := target.GetLegacyTicketRecoveryRun(store.LegacyTicketRecoveryVersion)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if run != nil {
-		t.Fatalf("PID-lock loser froze recovery inventory: %#v", run)
-	}
-}
-
-func TestLegacyTicketRecoveryInventoriesBothOwnedBackupRoots(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	dataRoot := t.TempDir()
-	dbRoot := t.TempDir()
-	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer target.Close()
-	makeRecoveryHome(t, dataRoot)
-
-	routine := createClosedTicketBackup(t, filepath.Join(dataRoot, "backups"), "routine-ticket", "Routine", time.Now().Add(-2*time.Hour))
-	premigrationDir := filepath.Join(dbRoot, "backups")
-	premigrationSource := createClosedTicketBackup(t, t.TempDir(), "premigration-ticket", "Premigration", time.Now().Add(-time.Hour))
-	premigration := filepath.Join(premigrationDir, "attn-premigration-60-20260101-000000.db")
-	if err := os.MkdirAll(premigrationDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	bytes, err := os.ReadFile(premigrationSource)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(premigration, bytes, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(routine, filepath.Join(dataRoot, "backups", "attn-20260101-000000.db")); err != nil {
-		t.Fatal(err)
-	}
-
-	d := &Daemon{store: target, dataRoot: dataRoot}
-	wait, err := d.prepareLegacyTicketRecovery()
-	if err != nil || !wait {
-		t.Fatalf("prepare wait=%v err=%v", wait, err)
-	}
-	sources, err := target.ListLegacyTicketRecoverySources(store.LegacyTicketRecoveryVersion)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(sources) != 2 {
-		t.Fatalf("sources = %#v", sources)
-	}
-	if sources[0].Path != filepath.Clean(routine) && sources[1].Path != filepath.Clean(routine) {
-		t.Fatalf("routine source not inventoried: %#v", sources)
-	}
-	if sources[0].Path != filepath.Clean(premigration) && sources[1].Path != filepath.Clean(premigration) {
-		t.Fatalf("premigration source not inventoried: %#v", sources)
-	}
-}
-
-func TestLegacyTicketRecoveryRestoresNewestWithoutChangingSourcesOrLiveRows(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	dataRoot := t.TempDir()
-	dbRoot := t.TempDir()
-	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer target.Close()
-	makeRecoveryHome(t, dataRoot)
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	if _, err := target.CreateTicket(store.Ticket{ID: "live-wins", Title: "Live", Description: "current"}, "you", now); err != nil {
-		t.Fatal(err)
-	}
-	routineDir := filepath.Join(dataRoot, "backups")
-	old := createClosedTicketBackup(t, routineDir, "recover-me", "Older", now.Add(-2*time.Hour))
-	newSource := createClosedTicketBackup(t, t.TempDir(), "recover-me", "Newer", now.Add(-time.Hour))
-	preDir := filepath.Join(dbRoot, "backups")
-	if err := os.MkdirAll(preDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	newer := filepath.Join(preDir, "attn-premigration-60-20260102-000000.db")
-	contents, err := os.ReadFile(newSource)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(newer, contents, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	liveBackup := createClosedTicketBackup(t, t.TempDir(), "live-wins", "Backup", now.Add(time.Hour))
-	liveBackupPath := filepath.Join(preDir, "attn-premigration-60-20260103-000000.db")
-	liveContents, _ := os.ReadFile(liveBackup)
-	if err := os.WriteFile(liveBackupPath, liveContents, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryFinishOnce.Do(func() {})
-	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
-		t.Fatalf("prepare wait=%v err=%v", wait, err)
-	}
-	beforeOld, err := readLegacySnapshotIdentity(old)
-	if err != nil {
-		t.Fatal(err)
-	}
-	beforeNew, err := readLegacySnapshotIdentity(newer)
-	if err != nil {
-		t.Fatal(err)
-	}
-	job := &jobs.Job{Attempts: 1, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}}
-	resultAny, err := d.legacyTicketRecoveryHandler(context.Background(), job)
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := resultAny.(legacyTicketRecoveryResult)
-	if result.Counts.Recovered != 1 || result.Counts.LiveWon != 1 || len(result.Warnings) != 0 {
-		t.Fatalf("result = %#v", result)
-	}
-	recovered, err := target.GetTicket("recover-me")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if recovered == nil || recovered.Title != "Newer" || len(recovered.Activity) != 1 || len(recovered.Attachments) != 1 {
-		t.Fatalf("recovered = %#v", recovered)
-	}
-	live, _ := target.GetTicket("live-wins")
-	if live.Title != "Live" || live.Description != "current" || live.Status != store.TicketStatusTodo {
-		t.Fatalf("live row changed: %#v", live)
-	}
-	afterOld, _ := readLegacySnapshotIdentity(old)
-	afterNew, _ := readLegacySnapshotIdentity(newer)
-	if !legacySnapshotIdentityMatches(beforeOld, afterOld) || !legacySnapshotIdentityMatches(beforeNew, afterNew) {
-		t.Fatal("source identity changed during recovery")
-	}
-	if _, err := d.legacyTicketRecoveryHandler(context.Background(), job); err != nil {
-		t.Fatal(err)
-	}
-	again, _ := target.GetTicket("recover-me")
-	if len(again.Activity) != 1 || len(again.Attachments) != 1 {
-		t.Fatalf("rerun duplicated children: %#v", again)
-	}
-}
-
-func TestLegacyTicketRecoveryRestoresTranscriptOnlyArchiveAndConversation(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	dataRoot := t.TempDir()
-	dbRoot := t.TempDir()
-	target, err := store.NewWithDB(filepath.Join(dbRoot, "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer target.Close()
-	makeRecoveryHome(t, dataRoot)
-	codexHome := t.TempDir()
-	t.Setenv("CODEX_HOME", codexHome)
-	createCodexLegacyTranscript(t, codexHome, dataRoot, "native-one", "transcript-only", "completed", "done")
-
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryFinishOnce.Do(func() {})
-	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
-		t.Fatalf("prepare wait=%v err=%v", wait, err)
-	}
-	resultAny, err := d.legacyTicketRecoveryHandler(context.Background(), &jobs.Job{Attempts: 1, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	result := resultAny.(legacyTicketRecoveryResult)
-	if result.Counts.TranscriptRecovered != 1 || result.Counts.Recovered != 1 || len(result.Warnings) != 0 {
-		t.Fatalf("result = %#v", result)
-	}
-	ticket, err := target.GetTicket("transcript-only")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if ticket == nil || ticket.Status != store.TicketStatusDone || ticket.ArchivedAt == nil || ticket.Description != "Please recover this prompt." {
-		t.Fatalf("ticket = %#v", ticket)
-	}
-	if ticket.Cwd != "/work/transcript-only" || ticket.LastAgentID != "codex" || len(ticket.Activity) != 1 || len(ticket.Attachments) != 1 {
-		t.Fatalf("ticket archive fields = %#v", ticket)
-	}
-	conversation := ticket.Attachments[0].Path
-	info, err := os.Lstat(conversation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 || !info.Mode().IsRegular() {
-		t.Fatalf("conversation mode = %v", info.Mode())
-	}
-	content, err := os.ReadFile(conversation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(content), "Please recover this prompt.") || !strings.Contains(string(content), "Recovered answer.") || strings.Contains(string(content), "private reasoning") || strings.Contains(string(content), "ticket transcript-only") {
-		t.Fatalf("conversation = %s", content)
-	}
-
-	if _, err := d.legacyTicketRecoveryHandler(context.Background(), &jobs.Job{Attempts: 2, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}}); err != nil {
-		t.Fatal(err)
-	}
-	again, _ := target.GetTicket("transcript-only")
-	if len(again.Activity) != 1 || len(again.Attachments) != 1 {
-		t.Fatalf("rerun duplicated transcript children: %#v", again)
-	}
-}
-
 func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *testing.T) {
 	t.Setenv("ATTN_INSTANCE", "")
 	dataRoot := t.TempDir()
@@ -392,105 +163,6 @@ func TestLegacyTicketRecoveryRejectsTranscriptReplacedWithSameSizeAndModTime(t *
 		if ticket, getErr := target.GetTicket(ticketID); getErr != nil || ticket != nil {
 			t.Fatalf("ticket %s = %#v, err=%v", ticketID, ticket, getErr)
 		}
-	}
-}
-
-func TestLegacyTicketRecoveryMapsEveryUserTerminalStateWithoutChangingTickets(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "")
-	dataRoot := t.TempDir()
-	target, err := store.NewWithDB(filepath.Join(t.TempDir(), "attn.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer target.Close()
-	makeRecoveryHome(t, dataRoot)
-	now := time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)
-	wantStates := map[string]string{
-		"done-ticket":           garden.StatusHarvested,
-		"failed-ticket":         garden.StatusWithered,
-		"crashed-ticket":        garden.StatusWithered,
-		"auto-abcdef1234567890": garden.StatusWithered,
-	}
-	for id, status := range map[string]store.TicketStatus{
-		"done-ticket":           store.TicketStatusDone,
-		"failed-ticket":         store.TicketStatusFailed,
-		"crashed-ticket":        store.TicketStatusCrashed,
-		"auto-abcdef1234567890": store.TicketStatusFailed,
-	} {
-		if _, err := target.CreateTicket(store.Ticket{ID: id, Title: "Title " + id, Description: "body", Status: status}, "you", now); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := target.EnsureAutomationTicket(store.Ticket{
-		ID: "automation-ticket", Title: "Automation", Description: "scheduled work",
-		Status: store.TicketStatusDone, AutomationRunID: "run-1",
-	}, "automation:schedule", store.TicketRoleChiefOfStaff, now); err != nil {
-		t.Fatal(err)
-	}
-	before := make(map[string]*store.Ticket, len(wantStates))
-	for id := range wantStates {
-		before[id], err = target.GetTicket(id)
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	d := &Daemon{store: target, dataRoot: dataRoot, done: make(chan struct{})}
-	d.legacyTicketRecoveryFinishOnce.Do(func() {})
-	if wait, err := d.prepareLegacyTicketRecovery(); err != nil || !wait {
-		t.Fatalf("prepare wait=%v err=%v", wait, err)
-	}
-	if _, err := d.legacyTicketRecoveryHandler(context.Background(), &jobs.Job{Attempts: 1, MaxAttempts: 3, CommitGuard: &jobs.CommitGuard{}}); err != nil {
-		t.Fatal(err)
-	}
-
-	for id, want := range wantStates {
-		seed := recoveredSeedForTicket(t, target, id)
-		if seed.Status != want || seed.Reason != "recovered from legacy ticket "+id {
-			t.Fatalf("seed for %s = %#v, want state %s", id, seed, want)
-		}
-		after, err := target.GetTicket(id)
-		if err != nil || !reflect.DeepEqual(before[id], after) {
-			t.Fatalf("mapping changed ticket %s:\nbefore=%#v\nafter=%#v err=%v", id, before[id], after, err)
-		}
-	}
-	link, err := target.TicketSeedLink("automation-ticket")
-	if err != nil || link != nil {
-		t.Fatalf("Automation ticket recovery link = %#v, %v", link, err)
-	}
-}
-
-func recoveredSeedForTicket(t *testing.T, s *store.Store, ticketID string) garden.Seed {
-	t.Helper()
-	link, err := s.TicketSeedLink(ticketID)
-	if err != nil || link == nil {
-		t.Fatalf("link for %s = %#v, %v", ticketID, link, err)
-	}
-	schema, ok, err := s.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
-	if err != nil || !ok {
-		t.Fatalf("seed collection: ok=%v err=%v", ok, err)
-	}
-	doc, found, err := s.GetDocument(*schema, link.SeedID)
-	if err != nil || !found {
-		t.Fatalf("seed %s: found=%v err=%v", link.SeedID, found, err)
-	}
-	seed, err := garden.Decode(doc.Body)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return seed
-}
-
-func TestLegacyTicketRecoveryFenceSkipsNamedInstancesBeforeInventory(t *testing.T) {
-	t.Setenv("ATTN_INSTANCE", "dev")
-	d := &Daemon{store: store.New(), dataRoot: filepath.Join(t.TempDir(), "missing")}
-	defer d.store.Close()
-	wait, err := d.prepareLegacyTicketRecovery()
-	if err != nil || wait {
-		t.Fatalf("named instance prepare wait=%v err=%v", wait, err)
-	}
-	if _, err := os.Stat(d.dataRoot); !os.IsNotExist(err) {
-		t.Fatalf("named instance touched data root: %v", err)
 	}
 }
 
@@ -626,4 +298,25 @@ func TestLegacyTicketRecoveryResumesCommittedItemsAfterCrash(t *testing.T) {
 	if run.State != store.LegacyTicketRecoverySucceeded {
 		t.Fatalf("resumed run = %#v", run)
 	}
+}
+
+func recoveredSeedForTicket(t *testing.T, s *store.Store, ticketID string) garden.Seed {
+	t.Helper()
+	link, err := s.TicketSeedLink(ticketID)
+	if err != nil || link == nil {
+		t.Fatalf("link for %s = %#v, %v", ticketID, link, err)
+	}
+	schema, ok, err := s.DocumentCollection(garden.Namespace, garden.CollectionSeeds)
+	if err != nil || !ok {
+		t.Fatalf("seed collection: ok=%v err=%v", ok, err)
+	}
+	doc, found, err := s.GetDocument(*schema, link.SeedID)
+	if err != nil || !found {
+		t.Fatalf("seed %s: found=%v err=%v", link.SeedID, found, err)
+	}
+	seed, err := garden.Decode(doc.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return seed
 }

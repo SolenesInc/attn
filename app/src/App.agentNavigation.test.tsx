@@ -1,395 +1,216 @@
-import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
-import App from './App';
-import { useSessionStore } from './store/sessions';
-import { WHATS_NEW_ID, WHATS_NEW_STORAGE_KEY } from './hooks/useWhatsNew';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { onOpenUrl } from '@tauri-apps/plugin-deep-link';
+import { describe, expect, it, vi } from 'vitest';
+import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { renderApp } from './test/renderApp';
+import type { ScriptedDaemon } from './test/scriptedDaemon';
 
+const S1_TURN_OPENED = '2026-08-03T09:00:00Z';
+const S2_TURN_OPENED = '2026-08-03T10:00:00Z';
 
-const mockUseDaemonStore = vi.fn();
-const mockUseDaemonSocket = vi.fn();
-const mockUseKeyboardShortcuts = vi.fn();
-const mockUseUiAutomationBridge = vi.fn();
-
-const { mockSetActiveSession } = vi.hoisted(() => ({
-  mockSetActiveSession: vi.fn(),
-}));
-
-let turnOwed: Record<string, boolean>;
-let sessionIds: string[];
-
-vi.mock('@tauri-apps/plugin-deep-link', () => ({
-  onOpenUrl: vi.fn(async () => () => {}),
-  getCurrent: vi.fn(async () => []),
-}));
-vi.mock('@tauri-apps/plugin-opener', () => ({ openUrl: vi.fn(async () => {}) }));
-
-vi.mock('./components/GhosttyTerminal', async () => {
-  const React = await import('react');
-  return { GhosttyTerminal: React.forwardRef(function MockTerminal() { return null; }) };
-});
-
-vi.mock('./components/Sidebar', async () => {
-  const { DelegationChainTrigger } = await import('./components/DelegationChain');
-  return {
-    EditorIcon: () => null,
-    WorkflowIcon: () => null,
-    DiffIcon: () => null,
-    PRsIcon: () => null,
-    NotebookIcon: () => null,
-    MarkdownIcon: () => null,
-    Sidebar: () => <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />,
-  };
-});
-
-vi.mock('./components/Dashboard', () => ({ Dashboard: () => null }));
-vi.mock('./components/grid/GridView', () => ({ GridView: () => null }));
-vi.mock('./components/AttentionDrawer', () => ({ AttentionDrawer: () => null }));
-vi.mock('./components/LocationPicker', () => ({ LocationPicker: () => null }));
-vi.mock('./components/UndoToast', () => ({ UndoToast: () => null }));
-vi.mock('./components/SessionTerminalWorkspace', () => ({ SessionTerminalWorkspace: () => null }));
-vi.mock('./components/ErrorToast', () => ({
-  ErrorToast: () => null,
-  useErrorToast: () => ({ message: null, showError: vi.fn(), clearError: vi.fn() }),
-}));
-vi.mock('./hooks/useKeyboardShortcuts', () => ({
-  useKeyboardShortcuts: (args: unknown) => mockUseKeyboardShortcuts(args),
-}));
-vi.mock('./hooks/useUiAutomationBridge', () => ({
-  useUiAutomationBridge: (args: unknown) => mockUseUiAutomationBridge(args),
-}));
-vi.mock('./hooks/useUIScale', () => ({
-  useUIScale: () => ({ scale: 1, increaseScale: vi.fn(), decreaseScale: vi.fn(), resetScale: vi.fn() }),
-}));
-vi.mock('./hooks/useOpenPR', () => ({ useOpenPR: () => vi.fn() }));
-vi.mock('./hooks/usePRsNeedingAttention', () => ({ usePRsNeedingAttention: () => ({ needsAttention: [] }) }));
-vi.mock('./store/daemonSessions', async () => {
-  const { selectorStoreMock } = await import('./test/mocks/selectorStore');
-  return { useDaemonStore: selectorStoreMock(() => mockUseDaemonStore()) };
-});
-vi.mock('./hooks/useDaemonSocket', () => ({
-  useDaemonSocket: (args: unknown) => mockUseDaemonSocket(args),
-}));
-vi.mock('./pty/bridge', async () => {
-  const actual = await vi.importActual<typeof import('./pty/bridge')>('./pty/bridge');
-  return { ...actual, ptySpawn: vi.fn(async () => {}) };
-});
-
-type SocketArgs = {
-  onSessionsUpdate?: (sessions: unknown[]) => void;
-  onWorkspacesUpdate?: (workspaces: unknown[]) => void;
-  onSettingsUpdate?: (settings: Record<string, string>) => void;
-};
-
-function socketArgs(): SocketArgs {
-  const calls = mockUseDaemonSocket.mock.calls;
-  return calls[calls.length - 1]?.[0] as SocketArgs;
-}
-
-/** The shortcut handlers App registered on its last render. */
-function shortcutHandlers<T>(): T {
-  const calls = mockUseKeyboardShortcuts.mock.calls;
-  return calls[calls.length - 1]?.[0] as T;
-}
-
-function selectSession(): (id: string) => void {
-  return mockUseUiAutomationBridge.mock.lastCall![0].selectSession;
-}
-
-function workspacePayload() {
-  return sessionIds.map((id) => ({
-    id: `workspace-${id}`,
-    title: id,
-    directory: `/tmp/${id}`,
-    status: 'active',
-    layout: {
-      active_pane_id: `pane-${id}`,
-      layout_json: JSON.stringify({ type: 'pane', pane_id: `pane-${id}` }),
-      panes: [{
-        workspace_id: `workspace-${id}`,
-        pane_id: `pane-${id}`,
-        kind: 'agent',
-        runtime_id: id,
-        session_id: id,
-        title: id,
-      }],
-    },
-  }));
-}
-
-function broadcast() {
-  act(() => {
-    socketArgs().onSettingsUpdate?.({ queue_mode_enabled: 'true' });
-    socketArgs().onWorkspacesUpdate?.(workspacePayload());
-    socketArgs().onSessionsUpdate?.(mockUseDaemonStore().daemonSessions);
+function agent(id: 's1' | 's2', overrides: Partial<DaemonSession> = {}): DaemonSession {
+  return daemonSession(id, {
+    turn_opened_at: id === 's1' ? S1_TURN_OPENED : S2_TURN_OPENED,
+    ...overrides,
   });
 }
 
-function selections(): string[] {
-  return useSessionStore.getState().agentHistory.entries;
+async function renderQueue({
+  owed = [] as string[],
+  laidOut = ['s1', 's2'],
+  s1 = {} as Partial<DaemonSession>,
+} = {}) {
+  return renderApp({
+    initialState: {
+      sessions: [
+        agent('s1', { turn_owed: owed.includes('s1'), ...s1 }),
+        agent('s2', { turn_owed: owed.includes('s2') }),
+      ],
+      workspaces: laidOut.map(agentWorkspace),
+      settings: { queue_mode_enabled: 'true' },
+    },
+  });
 }
 
-/** Selecting the last owed agent and settling it: home, with the wait armed. */
-function workTheQueueDownToHome() {
-  render(<App />);
-  broadcast();
+function press(key: string, modifiers: { shift?: boolean } = {}) {
+  fireEvent.keyDown(window, { key, metaKey: true, shiftKey: modifiers.shift ?? false });
+}
 
-  act(() => { mockSetActiveSession('s1'); });
-  broadcast();
-  expect(useSessionStore.getState().activeSessionId).toBe('s1');
+const keys = {
+  home: () => press('H', { shift: true }),
+  back: () => press('['),
+  forward: () => press(']'),
+  grid: () => press('g'),
+  sidebar: () => press('B', { shift: true }),
+  settings: () => press(','),
+  shortcuts: () => press('/'),
+  sessions: () => press('L', { shift: true }),
+};
 
-  turnOwed.s1 = false;
-  broadcast();
-  expect(useSessionStore.getState().activeSessionId).toBeNull();
+function open(label: string) {
+  fireEvent.click(screen.getByRole('button', { name: `Open ${label}` }));
+}
+
+function selectedAgent(): string | null {
+  return document.querySelector('.session-item.selected .session-label')?.textContent ?? null;
+}
+
+function isHome(): boolean {
+  return screen.getByTestId('sidebar-home').getAttribute('aria-current') === 'page';
+}
+
+function isGrid(): boolean {
+  return screen.queryByRole('region', { name: 'Session grid' }) !== null;
+}
+
+function setTurn(daemon: ScriptedDaemon, id: 's1' | 's2', owed: boolean) {
+  daemon.emit({ event: 'session_state_changed', session: agent(id, { turn_owed: owed }) });
+}
+
+function layOut(daemon: ScriptedDaemon, id: string) {
+  daemon.emit({ event: 'workspace_state_changed', workspace: agentWorkspace(id) });
+}
+
+function deepLinkTo(id: string) {
+  act(() => vi.mocked(onOpenUrl).mock.lastCall![0]([`attn://spawn?cwd=%2Ftmp%2F${id}`]));
+}
+
+function selectionsOf(daemon: ScriptedDaemon, workspaceId: string) {
+  return daemon.sent.filter(
+    (command) => command.cmd === 'workspace_selected' && command.workspace_id === workspaceId,
+  );
+}
+
+async function workTheQueueDownToHome() {
+  const rendered = await renderQueue({ owed: ['s1'] });
+  open('s1');
+  expect(selectedAgent()).toBe('s1');
+
+  setTurn(rendered.daemon, 's1', false);
+  expect(isHome()).toBe(true);
+  return rendered;
 }
 
 describe('agent navigation', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    useSessionStore.setState(useSessionStore.getInitialState(), true);
-    localStorage.clear();
-    localStorage.setItem(WHATS_NEW_STORAGE_KEY, WHATS_NEW_ID);
-    turnOwed = { s1: true, s2: false };
-    sessionIds = ['s1', 's2'];
+  it('selects a deferred session when its pane becomes available', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
 
-    mockSetActiveSession.mockImplementation((id: string | null) => useSessionStore.getState().setActiveSession(id));
+    deepLinkTo('s2');
+    expect(isHome()).toBe(true);
 
-    useSessionStore.setState({
-      sessions: sessionIds.map((id) => ({
-        id,
-        label: id,
-        state: 'working',
-        cwd: `/tmp/${id}`,
-        workspaceId: `workspace-${id}`,
-        agent: 'claude',
-        transcriptMatched: true,
-        daemonActivePaneId: `pane-${id}`,
-        workspace: {
-          agents: [{ id: `pane-${id}`, runtimeId: id, sessionId: id, title: id }],
-          layoutTree: { type: 'pane', paneId: `pane-${id}` },
-        },
-      })),
-      activeSessionId: null,
-      connect: vi.fn(async () => {}),
-      connected: true,
-      launcherConfig: { executables: {} },
-      createSession: vi.fn(async () => 's1'),
-      closeSession: vi.fn(),
-      takeSessionSpawnArgs: vi.fn(() => null),
-      reloadSession: vi.fn(async () => {}),
-    });
+    layOut(daemon, 's2');
 
-    mockUseDaemonStore.mockImplementation(() => ({
-      daemonSessions: sessionIds.map((id) => ({
-        id,
-        label: id,
-        directory: `/tmp/${id}`,
-        workspace_id: `workspace-${id}`,
-        agent: 'claude',
-        state: 'working',
-        turn_owed: turnOwed[id],
-        turn_opened_at: id === 's1' ? '2026-08-03T09:00:00Z' : '2026-08-03T10:00:00Z',
-      })),
-      crew: [],
-      setDaemonSessions: vi.fn(),
-      prs: [], setPRs: vi.fn(),
-      repoStates: [], setRepoStates: vi.fn(),
-      authorStates: [], setAuthorStates: vi.fn(),
-      seeds: [], setSeeds: vi.fn(),
-    }));
-
-    const fn = vi.fn();
-    mockUseDaemonSocket.mockReturnValue({
-      sendPRAction: fn, sendMutePR: fn, sendMuteRepo: fn, sendMuteAuthor: fn, sendPRVisited: fn,
-      sendRefreshPRs: vi.fn(async () => ({ success: true })),
-      sendUnregisterSession: vi.fn(async () => {}),
-      sendRegisterWorkspace: fn,
-      sendUnregisterWorkspace: vi.fn(async () => {}),
-      sendMuteWorkspace: vi.fn(async () => ({ success: true })),
-      sendSetSetting: fn,
-      sendSetClientPresence: fn,
-      sendCreateWorktree: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendDeleteWorktree: vi.fn(async () => ({ success: true })),
-      sendGetRecentLocations: vi.fn(async () => ({ success: true, locations: [] })),
-      sendCreateWorktreeFromBranch: vi.fn(async () => ({ success: true, path: '/tmp/new' })),
-      sendFetchRemotes: vi.fn(async () => ({ success: true })),
-      sendFetchPRDetails: vi.fn(async () => ({ success: true })),
-      sendEnsureRepo: vi.fn(async () => ({ success: true, path: '/tmp/repo' })),
-      sendSubscribeGitStatus: fn, sendUnsubscribeGitStatus: fn,
-      sendSessionSelected: fn, sendWorkspaceSelected: fn,
-      sendSessionList: vi.fn(async () => ({ entries: [], omitted: 0 })),
-      subscribeSessionLedger: vi.fn(() => () => {}),
-      sendWorkspaceClosePane: vi.fn(async () => ({ success: true })),
-      sendWorkspaceAddSessionPane: vi.fn(async () => ({ success: true })),
-      requestTileContent: fn,
-      sendGetFileDiff: vi.fn(async () => ({ success: true, original: '', modified: '' })),
-      getRepoInfo: vi.fn(async () => ({ success: true, is_git_repo: true, branch: 'main' })),
-      listWorkflowRuns: vi.fn(async () => ({ success: true, runs: [] })),
-      getPresentations: vi.fn(async () => []),
-      connectionError: null,
-      isConnected: true,
-      connectionGeneration: 1,
-      hasReceivedInitialState: true,
-      sendNotificationList: vi.fn(async () => ({ notifications: [], unreadCount: 0, critical: { count: 0, title: '' } })),
-      sendNotificationMarkRead: vi.fn(async () => 0),
-      rateLimit: null,
-      warnings: [],
-      clearWarnings: fn,
-      sendSetTerminalTheme: fn,
-    });
+    expect(selectedAgent()).toBe('s2');
   });
 
-  it('keeps a newer selection when an old callback queues a now-ready session', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    const beforeCreation = selectSession();
+  it('keeps a newer selection when a deferred one becomes ready', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
 
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
-    act(() => { beforeCreation('s2'); });
-    act(() => { selectSession()('s1'); });
+    deepLinkTo('s2');
+    open('s1');
+    layOut(daemon, 's2');
 
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
+    expect(selectedAgent()).toBe('s1');
   });
 
-  it.each(['onGoToDashboard', 'onHistoryBack', 'onToggleSidebar'] as const)('dismisses the chain when %s changes navigation', (shortcut) => {
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().selectAgent('s1');
-    const app = render(<App />);
-    broadcast();
-    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
+  it('does not leave home when an older deferred selection becomes ready', async () => {
+    const { daemon } = await renderQueue({ laidOut: ['s1'] });
+
+    deepLinkTo('s2');
+    keys.home();
+    layOut(daemon, 's2');
+
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
+  });
+
+  it.each([
+    ['going home', keys.home],
+    ['going back', keys.back],
+    ['toggling the sidebar', keys.sidebar],
+    ['opening settings', keys.settings],
+    ['opening the shortcuts', keys.shortcuts],
+    ['opening the sessions list', keys.sessions],
+  ])('dismisses the delegation chain when %s', async (_, shortcut) => {
+    await renderQueue({ s1: { delegation_role: { name: 'Builder' } } });
+    open('s2');
+    open('s1');
+    fireEvent.click(within(screen.getByTestId('sidebar-queue')).getByTestId('delegation-chain-trigger-s1'));
     expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
-    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
-    app.rerender(<App />);
+
+    shortcut();
+
     expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
   });
 
-  it.each(['onOpenSettings', 'onShowShortcuts', 'onOpenSessions'] as const)('dismisses the chain when %s opens another surface', (shortcut) => {
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().selectAgent('s1');
-    render(<App />);
-    broadcast();
-    fireEvent.click(screen.getByTestId('delegation-chain-trigger-s1'));
-    expect(screen.getByRole('dialog', { name: 'Delegation chain' })).toBeInTheDocument();
-    act(() => { shortcutHandlers<Record<typeof shortcut, () => void>>()[shortcut](); });
-    expect(screen.queryByRole('dialog', { name: 'Delegation chain' })).toBeNull();
+  it('takes the user to the next turn that opens after the queue ran dry', async () => {
+    const { daemon } = await workTheQueueDownToHome();
+
+    setTurn(daemon, 's2', true);
+
+    expect(selectedAgent()).toBe('s2');
   });
 
-  it('selects a deferred session when its pane becomes available', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    act(() => { selectSession()('s2'); });
+  it('leaves the user alone at a home they walked to', async () => {
+    const { daemon } = await renderQueue({ owed: ['s1'] });
+    open('s1');
+    keys.home();
+    expect(isHome()).toBe(true);
 
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
+    setTurn(daemon, 's2', true);
 
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
   });
 
-  it('does not leave home when an older deferred selection becomes ready', () => {
-    sessionIds = ['s1'];
-    useSessionStore.setState({ sessions: useSessionStore.getState().sessions.filter(s => s.id === 's1') });
-    const app = render(<App />);
-    broadcast();
-    const beforeCreation = selectSession();
-    sessionIds = ['s1', 's2'];
-    broadcast();
-    app.rerender(<App />);
-    act(() => { beforeCreation('s2'); });
+  it('ends the wait when the user leaves home, however they come back', async () => {
+    const { daemon } = await workTheQueueDownToHome();
+    keys.grid();
+    keys.grid();
+    expect(isHome()).toBe(true);
 
-    act(() => { shortcutHandlers<{ onGoToDashboard: () => void }>().onGoToDashboard(); });
-    broadcast();
+    setTurn(daemon, 's2', true);
 
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
+    expect(isHome()).toBe(true);
+    expect(selectionsOf(daemon, 'workspace-s2')).toEqual([]);
   });
 
-  it('takes the user to the next turn that opens after the queue ran dry', () => {
-    workTheQueueDownToHome();
+  it('hands over the oldest owed turn when several opened while home waited', async () => {
+    const { daemon } = await workTheQueueDownToHome();
 
-    turnOwed.s2 = true;
-    broadcast();
+    daemon.emit({
+      event: 'sessions_updated',
+      sessions: [agent('s1', { turn_owed: true }), agent('s2', { turn_owed: true })],
+    });
 
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(selectedAgent()).toBe('s1');
   });
 
-  it('leaves the user alone at a home they walked to', () => {
-    render(<App />);
-    broadcast();
-    act(() => { mockSetActiveSession('s1'); });
-    broadcast();
+  it('resumes history from home and grid, then traverses normally in the session view', async () => {
+    await renderQueue();
+    open('s1');
+    open('s2');
+    keys.home();
 
-    const shortcuts = shortcutHandlers<{ onGoToDashboard: () => void }>();
-    act(() => { shortcuts.onGoToDashboard(); });
-    broadcast();
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
+    keys.back();
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(false);
 
-    const before = selections().length;
-    turnOwed.s2 = true;
-    broadcast();
+    keys.grid();
+    keys.forward();
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(true);
 
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-    expect(selections()).toHaveLength(before);
-  });
+    keys.back();
+    expect(selectedAgent()).toBe('s2');
+    expect(isGrid()).toBe(false);
 
-  it('ends the wait when the user leaves home, however they come back', () => {
-    workTheQueueDownToHome();
+    keys.back();
+    expect(selectedAgent()).toBe('s1');
 
-    const shortcuts = shortcutHandlers<{ onToggleGridMode?: () => void }>();
-    act(() => { shortcuts.onToggleGridMode?.(); });
-    broadcast();
-    act(() => { shortcuts.onToggleGridMode?.(); });
-    broadcast();
-
-    const before = selections().length;
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBeNull();
-    expect(selections()).toHaveLength(before);
-  });
-
-  it('hands over the oldest owed turn when several opened while home waited', () => {
-    workTheQueueDownToHome();
-
-    turnOwed.s1 = true;
-    turnOwed.s2 = true;
-    broadcast();
-
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-  });
-
-  it('resumes history from dashboard and grid, then traverses normally in the session view', () => {
-    useSessionStore.getState().selectAgent('s1');
-    useSessionStore.getState().selectAgent('s2');
-    useSessionStore.getState().goToDashboard();
-    render(<App />);
-
-    let shortcuts = shortcutHandlers<{
-      onHistoryBack: () => void;
-      onHistoryForward: () => void;
-      onToggleGridMode: () => void;
-    }>();
-    act(() => { shortcuts.onHistoryBack(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-    expect(useSessionStore.getState().agentHistory.cursor).toBe(1);
-
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onToggleGridMode(); });
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onHistoryForward(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s2');
-    expect(useSessionStore.getState().view).toBe('grid');
-    act(() => { shortcutHandlers<{ onHistoryBack: () => void }>().onHistoryBack(); });
-    expect(useSessionStore.getState().view).toBe('session');
-
-    shortcuts = shortcutHandlers();
-    act(() => { shortcuts.onHistoryBack(); });
-    expect(useSessionStore.getState().activeSessionId).toBe('s1');
-    expect(useSessionStore.getState().agentHistory.entries).toEqual(['s1', 's2']);
+    keys.forward();
+    expect(selectedAgent()).toBe('s2');
+    keys.forward();
+    expect(selectedAgent()).toBe('s2');
   });
 });

@@ -1151,7 +1151,7 @@ export function LocationPicker({
                 placeholder={selectedTarget.placeholder}
               />
               {currentDir && (
-                <div className="picker-breadcrumb" data-testid="location-picker-breadcrumb">
+                <div className="picker-breadcrumb">
                   <span className="picker-breadcrumb-label">Browsing:</span>
                   <span className="picker-breadcrumb-path" data-testid="location-picker-breadcrumb-path">{currentDir}</span>
                 </div>
@@ -1165,14 +1165,17 @@ export function LocationPicker({
               )}
             </div>
 
-            <div className="picker-results">
+            <div className="picker-results" role="listbox" aria-label="Locations">
               {visibleRecent.length > 0 && (
-                <div className="picker-section">
+                <div className="picker-section" role="group" aria-label="Recent">
                   <div className="picker-section-title">RECENT</div>
                   {visibleRecent.map((loc, index) => (
                     <div
                       key={loc.path}
                       className={`picker-item ${index === highlightedIndex ? 'selected' : ''}`}
+                      role="option"
+                      tabIndex={-1}
+                      aria-selected={index === highlightedIndex}
                       data-testid={`location-picker-item-${index}`}
                       data-index={index}
                       data-kind="recent"
@@ -1191,7 +1194,7 @@ export function LocationPicker({
               )}
 
               {fsSuggestions.length > 0 && (
-                <div className="picker-section">
+                <div className="picker-section" role="group" aria-label="Directories">
                   <div className="picker-section-title">DIRECTORIES</div>
                   {fsSuggestions.map((item, index) => {
                     const globalIndex = visibleRecent.length + index;
@@ -1199,6 +1202,9 @@ export function LocationPicker({
                       <div
                         key={item.path}
                         className={`picker-item ${globalIndex === highlightedIndex ? 'selected' : ''}`}
+                        role="option"
+                        tabIndex={-1}
+                        aria-selected={globalIndex === highlightedIndex}
                         data-testid={`location-picker-item-${globalIndex}`}
                         data-index={globalIndex}
                         data-kind="directory"

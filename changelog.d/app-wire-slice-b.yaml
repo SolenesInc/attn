@@ -1,0 +1,3 @@
+kind: internal
+area: testing
+change: Guard Garden, crew, delegation, dashboard and notification promises through App wire tests against the scripted daemon, replacing component and hook tests that mocked the daemon.

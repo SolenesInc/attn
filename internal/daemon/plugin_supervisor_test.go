@@ -3,7 +3,6 @@ package daemon
 import (
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -14,88 +13,6 @@ import (
 	"github.com/victorarias/attn/internal/store"
 	"github.com/victorarias/attn/internal/supervise"
 )
-
-func TestExecPluginProcessLauncherRunsExecutableWithoutBun(t *testing.T) {
-	root := t.TempDir()
-	marker := filepath.Join(root, "started")
-	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	script := "#!/bin/sh\nprintf '%s' \"$PLUGIN_MARKER_VALUE\" > \"$PLUGIN_MARKER_PATH\"\n"
-	if err := os.WriteFile(filepath.Join(root, "bin", "provider"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write provider: %v", err)
-	}
-	manifestData := []byte("name = \"provider\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n")
-	if err := os.WriteFile(filepath.Join(root, pluginManifestName), manifestData, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	manifest, err := loadPluginManifest(filepath.Join(root, pluginManifestName))
-	if err != nil {
-		t.Fatalf("load manifest: %v", err)
-	}
-	handle, err := (execPluginProcessLauncher{}).Start(manifest, []string{"PLUGIN_MARKER_PATH=" + marker, "PLUGIN_MARKER_VALUE=direct"}, nil)
-	if err != nil {
-		t.Fatalf("Start: %v", err)
-	}
-	if exit := handle.Wait(); exit.Error != "" || exit.Signal != "" || exit.ExitCode == nil || *exit.ExitCode != 0 {
-		t.Fatalf("exit=%+v", exit)
-	}
-	data, err := os.ReadFile(marker)
-	if err != nil {
-		t.Fatalf("read marker: %v", err)
-	}
-	if string(data) != "direct" {
-		t.Fatalf("marker=%q, want direct", data)
-	}
-}
-
-func TestSupervisedPluginWritesStdoutAndStderrToItsLogFile(t *testing.T) {
-	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, "bin"), 0o755); err != nil {
-		t.Fatalf("mkdir bin: %v", err)
-	}
-	script := "#!/bin/sh\necho plugin-said-hello\necho plugin-complained >&2\n"
-	if err := os.WriteFile(filepath.Join(root, "bin", "provider"), []byte(script), 0o755); err != nil {
-		t.Fatalf("write provider: %v", err)
-	}
-	manifestData := []byte("name = \"noisy\"\nversion = \"0.1.0\"\nattn_api_version = 6\n\n[plugin]\nkind = \"executable\"\npath = \"bin/provider\"\n")
-	if err := os.WriteFile(filepath.Join(root, pluginManifestName), manifestData, 0o644); err != nil {
-		t.Fatalf("write manifest: %v", err)
-	}
-	manifest, err := loadPluginManifest(filepath.Join(root, pluginManifestName))
-	if err != nil {
-		t.Fatalf("load manifest: %v", err)
-	}
-
-	logDir := filepath.Join(t.TempDir(), "plugin-log")
-	supervisor := newPluginSupervisor(execPluginProcessLauncher{}, nil, nil, supervise.Options{LogDir: logDir})
-	t.Cleanup(supervisor.Shutdown)
-	if err := supervisor.Ensure(manifest); err != nil {
-		t.Fatalf("Ensure: %v", err)
-	}
-
-	logPath := filepath.Join(logDir, "noisy.log")
-	var captured string
-	waitForSupervisor(t, func() bool {
-		data, err := os.ReadFile(logPath)
-		if err != nil {
-			return false
-		}
-		captured = string(data)
-		return strings.Contains(captured, "plugin-said-hello") && strings.Contains(captured, "plugin-complained")
-	})
-	if !strings.Contains(captured, "starting noisy generation 1") {
-		t.Fatalf("log missing the start marker:\n%s", captured)
-	}
-}
-
-func TestPluginLogDirSitsOutsideThePluginDiscoveryDirectory(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "attn.sock")
-	logDir := pluginLogDirForSocket(socket)
-	if within, err := filepath.Rel(pluginDirForSocket(socket), logDir); err == nil && !strings.HasPrefix(within, "..") {
-		t.Fatalf("log dir %s is inside the plugin discovery dir; manifests are scanned there", logDir)
-	}
-}
 
 func TestParkedPluginRaisesADurableNotification(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "daemon.sock"))

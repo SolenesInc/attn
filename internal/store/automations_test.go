@@ -14,85 +14,6 @@ func markAutomationRunDeliveredForTest(s *Store, id, resolved string, now time.T
 	return err
 }
 
-func TestAutomationDeliveryAndWorkReadyEventCommitAndRetryTogether(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 9, 12, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("delivery-event", "Delivery event", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, created, err := s.ClaimManualAutomationRun(
-		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
-		AutomationRunReservation{RunID: "run-event", OccurrenceID: "occ-event", SeedID: "s-ready", SessionID: "sess-ready", WorkspaceID: "workspace-ready", PaneID: "pane-ready"},
-	)
-	if err != nil || !created {
-		t.Fatalf("claim created=%v err=%v", created, err)
-	}
-	event := BusEvent{Name: "garden.seed.work.ready", Subject: run.SeedID, Payload: `{"automation_run_id":"run-event"}`}
-	if _, err := s.db.Exec(`CREATE TRIGGER refuse_work_ready BEFORE INSERT ON bus_events
-		WHEN NEW.name = 'garden.seed.work.ready'
-		BEGIN SELECT RAISE(ABORT, 'work ready append failed'); END`); err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(time.Minute)); err == nil {
-		t.Fatal("delivery survived a failed work.ready append")
-	}
-	afterFailure, err := s.GetAutomationRun(run.ID)
-	if err != nil || afterFailure.State != AutomationRunStatePending {
-		t.Fatalf("run after failed append = %#v err=%v", afterFailure, err)
-	}
-	if _, err := s.db.Exec(`DROP TRIGGER refuse_work_ready`); err != nil {
-		t.Fatal(err)
-	}
-	seq, inserted, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(2*time.Minute))
-	if err != nil || !inserted || seq == 0 {
-		t.Fatalf("successful delivery seq=%d inserted=%v err=%v", seq, inserted, err)
-	}
-	replaySeq, inserted, err := s.MarkAutomationRunDeliveredWithEvent(run.ID, `{}`, event, now.Add(3*time.Minute))
-	if err != nil || inserted || replaySeq != seq {
-		t.Fatalf("delivery retry seq=%d inserted=%v err=%v; want existing %d", replaySeq, inserted, err, seq)
-	}
-	events := factsOnLog(t, s)
-	var workReady int
-	for _, stored := range events {
-		if stored.Name == event.Name && stored.Subject == event.Subject {
-			workReady++
-		}
-	}
-	if workReady != 1 {
-		t.Fatalf("work.ready event count = %d, want 1", workReady)
-	}
-}
-
-func TestDeleteAutomationRunPrunesItsEventSources(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 9, 13, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("delete-event-source", "Delete event source", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	run, created, err := s.ClaimManualAutomationRun(
-		def.ID, "request", "", `{}`, def.Revision, `{}`, now,
-		AutomationRunReservation{RunID: "run-delete-source", OccurrenceID: "occ-delete-source", SeedID: "s-delete-source", SessionID: "sess-delete-source", WorkspaceID: "workspace-delete-source", PaneID: "pane-delete-source"},
-	)
-	if err != nil || !created {
-		t.Fatalf("claim created=%v err=%v", created, err)
-	}
-	if err := markAutomationRunDeliveredForTest(s, run.ID, `{}`, now.Add(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.DeleteAutomationRun(run.ID); err != nil {
-		t.Fatal(err)
-	}
-	var sources int
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM garden_seed_event_sources WHERE source_kind='automation_run' AND source_id=?`, run.ID).Scan(&sources); err != nil {
-		t.Fatal(err)
-	}
-	if sources != 0 {
-		t.Fatalf("automation event sources after run deletion = %d, want 0", sources)
-	}
-}
-
 func baselineGitHubReviewAutomation(t *testing.T, s *Store, definitionID, host string, at time.Time) {
 	t.Helper()
 	if candidates, err := s.ReconcileAutomationReviewRequests(definitionID, host, nil, at); err != nil || len(candidates) != 0 {
@@ -279,28 +200,6 @@ func TestScheduledAutomationClaimIsIdempotent(t *testing.T) {
 	}
 }
 
-func TestScheduledAutomationClaimRejectsStaleRevision(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now); err != nil {
-		t.Fatal(err)
-	}
-	ids := AutomationRunReservation{RunID: "run-1", OccurrenceID: "occ-1", SeedID: "ticket-1", SessionID: "session-1", WorkspaceID: "workspace-1", PaneID: "pane-1"}
-	if _, _, err := s.ClaimScheduledAutomationRun(def.ID, "scheduled:2026-07-20T03:00:00Z", "", def.Revision, `{}`, `{}`, now, ids); err == nil {
-		t.Fatal("expected stale revision claim to be rejected")
-	}
-	if occurrence, err := s.GetAutomationOccurrence("occ-1"); err != nil || occurrence != nil {
-		t.Fatalf("rejected claim left an occurrence: %#v err=%v", occurrence, err)
-	}
-	if run, err := s.GetAutomationRun("run-1"); err != nil || run != nil {
-		t.Fatalf("rejected claim persisted a run: %#v err=%v", run, err)
-	}
-}
-
 func TestScheduledAutomationClaimRejectsDisabledDefinition(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
@@ -424,25 +323,6 @@ func TestAutomationContinuityBindingLifecycleReleaseThenReclaim(t *testing.T) {
 	}
 	if releasedStatus != AutomationBindingStatusReleased || releasedReason != AutomationBindingReleasedTicketSwept {
 		t.Fatalf("original binding row = status=%s reason=%s, want released/%s", releasedStatus, releasedReason, AutomationBindingReleasedTicketSwept)
-	}
-}
-
-func TestAutomationContinuityBindingUniqueActiveIndexRejectsSecondActiveRow(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 20, 3, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	nowRaw := formatTicketTime(now)
-	if _, err := s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		"binding-1", def.ID, "singleton", "ticket-1", "session-1", "workspace-1", "pane-1", AutomationBindingStatusActive, nowRaw, nowRaw); err != nil {
-		t.Fatal(err)
-	}
-	_, err = s.db.Exec(`INSERT INTO automation_continuity_bindings(id,definition_id,continuity_key,ticket_id,session_id,workspace_id,pane_id,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-		"binding-2", def.ID, "singleton", "ticket-2", "session-2", "workspace-2", "pane-2", AutomationBindingStatusActive, nowRaw, nowRaw)
-	if err == nil {
-		t.Fatal("expected a second active binding row for the same (definition, continuity_key) to be rejected")
 	}
 }
 
@@ -1037,43 +917,6 @@ func TestGitHubReviewCursorOrdersObservationsWithinOneSecond(t *testing.T) {
 	}
 }
 
-func TestSetAutomationEnabledFlipsStateAndIsIdempotent(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("daily-check", "Daily check", `{}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	got, changed, err := s.SetAutomationEnabled(def.ID, true, now.Add(time.Minute))
-	if err != nil || changed || got == nil || !got.Enabled {
-		t.Fatalf("no-op enable: def=%#v changed=%v err=%v", got, changed, err)
-	}
-	if !got.UpdatedAt.Equal(def.UpdatedAt) {
-		t.Fatalf("no-op enable touched updated_at: got %v, want %v", got.UpdatedAt, def.UpdatedAt)
-	}
-
-	disabled, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(2*time.Minute))
-	if err != nil || !changed || disabled == nil || disabled.Enabled {
-		t.Fatalf("disable: def=%#v changed=%v err=%v", disabled, changed, err)
-	}
-
-	againNoOp, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(3*time.Minute))
-	if err != nil || changed || againNoOp == nil || againNoOp.Enabled {
-		t.Fatalf("no-op disable: def=%#v changed=%v err=%v", againNoOp, changed, err)
-	}
-
-	reenabled, changed, err := s.SetAutomationEnabled(def.ID, true, now.Add(4*time.Minute))
-	if err != nil || !changed || reenabled == nil || !reenabled.Enabled {
-		t.Fatalf("re-enable: def=%#v changed=%v err=%v", reenabled, changed, err)
-	}
-
-	missing, changed, err := s.SetAutomationEnabled("does-not-exist", true, now)
-	if err != nil || changed || missing != nil {
-		t.Fatalf("unknown id: def=%#v changed=%v err=%v", missing, changed, err)
-	}
-}
-
 func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) {
 	s := New()
 	now := time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC)
@@ -1110,57 +953,6 @@ func TestSetAutomationEnabledReenableBaselinesCurrentReviewDemand(t *testing.T) 
 	}
 	if _, _, err := s.ClaimGitHubReviewAutomationRun(def.ID, subject, 2, def.Revision, `{}`, `{}`, now.Add(3*time.Minute), AutomationRunReservation{RunID: "suppressed"}); err == nil {
 		t.Fatal("direct claim accepted a baselined cycle")
-	}
-}
-
-func TestSetAutomationEnabledNeverTouchesSpecOrRevision(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
-	const spec = `{"id":"nightly-sweep"}`
-	def, err := s.UpsertAutomationDefinition("nightly-sweep", "Nightly sweep", spec, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	startRevision := def.Revision
-
-	disabled, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(time.Minute))
-	if err != nil || !changed || disabled == nil || disabled.Enabled {
-		t.Fatalf("disable: def=%#v changed=%v err=%v", disabled, changed, err)
-	}
-	if disabled.Revision != startRevision {
-		t.Fatalf("disable bumped revision: got %d, want unchanged %d", disabled.Revision, startRevision)
-	}
-	if disabled.SpecJSON != spec {
-		t.Fatalf("disable touched spec_json: got %q, want unchanged %q", disabled.SpecJSON, spec)
-	}
-
-	noop, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(2*time.Minute))
-	if err != nil || changed || noop == nil {
-		t.Fatalf("no-op disable: def=%#v changed=%v err=%v", noop, changed, err)
-	}
-	if noop.Revision != disabled.Revision {
-		t.Fatalf("no-op bumped revision: got %d, want %d", noop.Revision, disabled.Revision)
-	}
-}
-
-func TestSetAutomationEnabledDegradesGracefullyOnCorruptSpecJSON(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 20, 9, 0, 0, 0, time.UTC)
-	const corruptJSON = `not-json`
-	def, err := s.UpsertAutomationDefinition("corrupt-spec", "Corrupt spec", corruptJSON, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	disabled, changed, err := s.SetAutomationEnabled(def.ID, false, now.Add(time.Minute))
-	if err != nil || !changed || disabled == nil || disabled.Enabled {
-		t.Fatalf("disable must still succeed on a corrupt spec: def=%#v changed=%v err=%v", disabled, changed, err)
-	}
-	if disabled.Revision != def.Revision {
-		t.Fatalf("disable bumped revision: got %d, want unchanged %d", disabled.Revision, def.Revision)
-	}
-	if disabled.SpecJSON != corruptJSON {
-		t.Fatalf("corrupt spec_json was touched instead of left alone: %s", disabled.SpecJSON)
 	}
 }
 
@@ -1215,37 +1007,6 @@ func TestListPrunableAutomationRunsStillPrunesNonContinuityRuns(t *testing.T) {
 	}
 	if len(prunable) != 1 || prunable[0].ID != run.ID {
 		t.Fatalf("expected the non-continuity run to remain prunable, got %#v", prunable)
-	}
-}
-
-func TestUpsertAutomationDefinitionBumpsRevisionOnSpecJSONChangeOnly(t *testing.T) {
-	s := New()
-	now := time.Date(2026, 7, 20, 12, 0, 0, 0, time.UTC)
-	def, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if def.Revision != 1 {
-		t.Fatalf("initial revision = %d, want 1", def.Revision)
-	}
-
-	noop, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly"}`, now.Add(time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if noop.Revision != def.Revision {
-		t.Fatalf("no-op reapply revision = %d, want unchanged %d", noop.Revision, def.Revision)
-	}
-	if !noop.Enabled {
-		t.Fatalf("no-op reapply disturbed enabled: %#v", noop)
-	}
-
-	edited, err := s.UpsertAutomationDefinition("nightly", "Nightly", `{"id":"nightly","edited":true}`, now.Add(2*time.Minute))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if edited.Revision != def.Revision+1 {
-		t.Fatalf("spec_json edit revision = %d, want %d", edited.Revision, def.Revision+1)
 	}
 }
 

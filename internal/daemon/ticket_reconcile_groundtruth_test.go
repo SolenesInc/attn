@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -221,226 +222,72 @@ func TestReconcileGroundTruthAnnotatesMergedPR(t *testing.T) {
 	}
 }
 
-func TestReconcileGroundTruthSilentWhenPROpen(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-
-	repoDir := t.TempDir()
-	runGitDaemon(t, repoDir, "init")
-	runGitDaemon(t, repoDir, "remote", "add", "origin", "git@github.com:victorarias/attn.git")
-
-	ticketID := "gt-ticket-open"
-	if _, err := d.store.CreateTicket(store.Ticket{
-		ID:       ticketID,
-		Title:    "Ship the fix",
-		Assignee: "sess-dead",
-		Status:   store.TicketStatusInReview,
-		Cwd:      repoDir,
-	}, "chief", time.Now()); err != nil {
-		t.Fatalf("CreateTicket: %v", err)
+func TestGroundTruthUntrackedLines(t *testing.T) {
+	annotated := func(state string, merged bool, title string) prStateFetcher {
+		return func(string, int) (string, bool, string, error) { return state, merged, title, nil }
 	}
-
-	d.store.AddPR(groundTruthTestPR(462, "waiting", "Fix the offset bug"))
-
-	transcript := filepath.Join(t.TempDir(), "session.jsonl")
-	if err := os.WriteFile(transcript, []byte("{}\n"), 0o600); err != nil {
-		t.Fatalf("write transcript: %v", err)
-	}
-
-	d.ticketReconcileExec = func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error) {
-		return agentdriver.HeadlessTaskResult{
-			StructuredOutput: []byte(`{"assessment":"partial","confidence":"medium","whats_left":"merge PR #462 pending","evidence":"still waiting"}`),
-		}, nil
-	}
-
-	if _, err := d.reconcileJobHandler(context.Background(), reconcileTask(ticketReconcileInputs{
-		TicketID:       ticketID,
-		Title:          "Ship the fix",
-		Brief:          "Land the fix.",
-		StatusAtClaim:  store.TicketStatusInReview,
-		SessionID:      "sess-dead",
-		Agent:          "codex",
-		TranscriptPath: transcript,
-		CloseContext:   "found orphaned by the periodic sweep",
-	})); err != nil {
-		t.Fatalf("reconcileJobHandler: %v", err)
-	}
-
-	comments := reconcileComments(t, d, ticketID)
-	if len(comments) != 1 {
-		t.Fatalf("reconcile comments = %d, want 1", len(comments))
-	}
-	if strings.Contains(comments[0], "Ground-truth check") {
-		t.Fatalf("unexpected ground-truth annotation for still-tracked PR, comment:\n%s", comments[0])
-	}
-}
-
-func runGroundTruthReconcile(t *testing.T, d *Daemon, ticketID, whatsLeft string) string {
-	t.Helper()
-
-	repoDir := t.TempDir()
-	runGitDaemon(t, repoDir, "init")
-	runGitDaemon(t, repoDir, "remote", "add", "origin", "git@github.com:victorarias/attn.git")
-
-	if _, err := d.store.CreateTicket(store.Ticket{
-		ID:       ticketID,
-		Title:    "Ship the fix",
-		Assignee: "sess-dead",
-		Status:   store.TicketStatusInReview,
-		Cwd:      repoDir,
-	}, "chief", time.Now()); err != nil {
-		t.Fatalf("CreateTicket: %v", err)
-	}
-
-	transcript := filepath.Join(t.TempDir(), "session.jsonl")
-	if err := os.WriteFile(transcript, []byte("{}\n"), 0o600); err != nil {
-		t.Fatalf("write transcript: %v", err)
-	}
-
-	verdict := `{"assessment":"partial","confidence":"medium","whats_left":` +
-		strconv.Quote(whatsLeft) + `,"evidence":"from the transcript"}`
-	d.ticketReconcileExec = func(ctx context.Context, in ticketReconcileInputs) (agentdriver.HeadlessTaskResult, error) {
-		return agentdriver.HeadlessTaskResult{StructuredOutput: []byte(verdict)}, nil
-	}
-
-	if _, err := d.reconcileJobHandler(context.Background(), reconcileTask(ticketReconcileInputs{
-		TicketID:       ticketID,
-		Title:          "Ship the fix",
-		Brief:          "Land the fix.",
-		StatusAtClaim:  store.TicketStatusInReview,
-		SessionID:      "sess-dead",
-		Agent:          "codex",
-		TranscriptPath: transcript,
-		CloseContext:   "found orphaned by the periodic sweep",
-	})); err != nil {
-		t.Fatalf("reconcileJobHandler: %v", err)
-	}
-
-	comments := reconcileComments(t, d, ticketID)
-	if len(comments) != 1 {
-		t.Fatalf("reconcile comments = %d, want 1", len(comments))
-	}
-	return comments[0]
-}
-
-func TestReconcileGroundTruthLooksUpUntrackedMergedRef(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-
-	var gotRepo string
-	var gotNumber int
-	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
-		gotRepo, gotNumber = repo, number
-		return "closed", true, "Fix the offset bug", nil
-	}
-
-	comment := runGroundTruthReconcile(t, d, "gt-untracked-merged", "merge PR #462 pending")
-	if !strings.Contains(comment, "Ground-truth check: PR #462 is merged") ||
-		!strings.Contains(comment, "Fix the offset bug") {
-		t.Fatalf("missing merged annotation, comment:\n%s", comment)
-	}
-	if gotRepo != "victorarias/attn" || gotNumber != 462 {
-		t.Fatalf("fetcher called with (%q, %d), want (victorarias/attn, 462)", gotRepo, gotNumber)
-	}
-}
-
-func TestReconcileGroundTruthLooksUpUntrackedClosedRef(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
-		return "closed", false, "Abandoned approach", nil
-	}
-
-	comment := runGroundTruthReconcile(t, d, "gt-untracked-closed", "close out #470")
-	if !strings.Contains(comment, "Ground-truth check: PR #470 is closed") {
-		t.Fatalf("missing closed annotation, comment:\n%s", comment)
-	}
-}
-
-func TestReconcileGroundTruthUntrackedFetchErrorSilent(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
-		return "", false, "", errors.New("boom")
-	}
-
-	comment := runGroundTruthReconcile(t, d, "gt-untracked-err", "merge PR #462 pending")
-	if strings.Contains(comment, "Ground-truth check") {
-		t.Fatalf("unexpected annotation on fetch error, comment:\n%s", comment)
-	}
-}
-
-func TestReconcileGroundTruthUntrackedOpenSilent(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-	d.ticketReconcilePRFetch = func(repo string, number int) (string, bool, string, error) {
-		return "open", false, "Still cooking", nil
-	}
-
-	comment := runGroundTruthReconcile(t, d, "gt-untracked-open", "merge PR #462 pending")
-	if strings.Contains(comment, "Ground-truth check") {
-		t.Fatalf("unexpected annotation for open PR, comment:\n%s", comment)
-	}
-}
-
-func TestReconcileGroundTruthUntrackedNoClientSilent(t *testing.T) {
-	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
-
-	comment := runGroundTruthReconcile(t, d, "gt-untracked-noclient", "merge PR #462 pending")
-	if strings.Contains(comment, "Ground-truth check") {
-		t.Fatalf("unexpected annotation without a GitHub client, comment:\n%s", comment)
-	}
-}
-
-func TestGroundTruthUntrackedLinesCapsLookups(t *testing.T) {
-	calls := 0
-	fetch := func(repo string, number int) (string, bool, string, error) {
-		calls++
-		return "closed", true, "t", nil
-	}
-
-	refs := []int{1, 2, 3, 4, 5, 6}
-	lines, caps := groundTruthUntrackedLines(context.Background(), refs, nil, "victorarias/attn", fetch)
-	if calls != groundTruthMaxLookups {
-		t.Fatalf("fetch calls = %d, want %d (cap)", calls, groundTruthMaxLookups)
-	}
-	if len(lines) != groundTruthMaxLookups {
-		t.Fatalf("lines = %d, want %d", len(lines), groundTruthMaxLookups)
-	}
-	if !caps.lookupCap {
-		t.Fatalf("caps.lookupCap = false, want true after hitting the lookup cap")
-	}
-}
-
-func TestGroundTruthUntrackedLinesSkipsTrackedRefs(t *testing.T) {
-	calls := 0
-	fetch := func(repo string, number int) (string, bool, string, error) {
-		calls++
-		return "closed", true, "t", nil
-	}
-
-	lines, _ := groundTruthUntrackedLines(context.Background(), []int{1, 2, 3},
-		map[int]bool{1: true, 2: true}, "victorarias/attn", fetch)
-	if calls != 1 {
-		t.Fatalf("fetch calls = %d, want 1 (only the untracked ref)", calls)
-	}
-	if len(lines) != 1 || !strings.Contains(lines[0], "PR #3") {
-		t.Fatalf("lines = %v, want one line for PR #3", lines)
-	}
-}
-
-func TestGroundTruthUntrackedLinesRespectsContext(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
+	cancelled, cancel := context.WithCancel(context.Background())
 	cancel()
-
-	calls := 0
-	fetch := func(repo string, number int) (string, bool, string, error) {
-		calls++
-		return "closed", true, "t", nil
+	cases := []struct {
+		name        string
+		ctx         context.Context
+		refs        []int
+		tracked     map[int]bool
+		fetch       prStateFetcher
+		wantLines   []string
+		wantLookups []int
+		wantCaps    groundTruthCaps
+	}{
+		{
+			name: "merged", refs: []int{462}, fetch: annotated("closed", true, "Fix the offset bug"),
+			wantLines: []string{groundTruthLine(462, "merged", "Fix the offset bug")}, wantLookups: []int{462},
+		},
+		{
+			name: "closed", refs: []int{470}, fetch: annotated("closed", false, "Abandoned approach"),
+			wantLines: []string{groundTruthLine(470, "closed", "Abandoned approach")}, wantLookups: []int{470},
+		},
+		{name: "open stays silent", refs: []int{462}, fetch: annotated("open", false, "Still cooking"), wantLookups: []int{462}},
+		{
+			name: "a failed lookup stays silent", refs: []int{462},
+			fetch:       func(string, int) (string, bool, string, error) { return "", false, "", errors.New("boom") },
+			wantLookups: []int{462},
+		},
+		{name: "no GitHub client", refs: []int{462}},
+		{
+			name: "tracked refs are not looked up", refs: []int{1, 2, 3}, tracked: map[int]bool{1: true, 2: true},
+			fetch: annotated("closed", true, "t"), wantLines: []string{groundTruthLine(3, "merged", "t")}, wantLookups: []int{3},
+		},
+		{
+			name: "lookups are capped", refs: []int{1, 2, 3, 4, 5, 6}, fetch: annotated("closed", true, "t"),
+			wantLines:   []string{groundTruthLine(1, "merged", "t"), groundTruthLine(2, "merged", "t"), groundTruthLine(3, "merged", "t")},
+			wantLookups: []int{1, 2, 3}, wantCaps: groundTruthCaps{lookupCap: true},
+		},
+		{
+			name: "a cancelled context stops before looking up", ctx: cancelled, refs: []int{1, 2},
+			fetch: annotated("closed", true, "t"), wantCaps: groundTruthCaps{timeout: true},
+		},
 	}
-	lines, caps := groundTruthUntrackedLines(ctx, []int{1, 2}, nil, "victorarias/attn", fetch)
-	if len(lines) != 0 {
-		t.Fatalf("lines = %v, want none under cancelled ctx", lines)
-	}
-	if calls != 0 {
-		t.Fatalf("fetch calls = %d, want 0 under cancelled ctx", calls)
-	}
-	if !caps.timeout {
-		t.Fatalf("caps.timeout = false, want true under cancelled ctx")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := tc.ctx
+			if ctx == nil {
+				ctx = context.Background()
+			}
+			var lookups []int
+			var fetch prStateFetcher
+			if tc.fetch != nil {
+				fetch = func(repo string, number int) (string, bool, string, error) {
+					if repo != "victorarias/attn" {
+						t.Errorf("looked up %d in %q, want victorarias/attn", number, repo)
+					}
+					lookups = append(lookups, number)
+					return tc.fetch(repo, number)
+				}
+			}
+			lines, caps := groundTruthUntrackedLines(ctx, tc.refs, tc.tracked, "victorarias/attn", fetch)
+			if !slices.Equal(lines, tc.wantLines) || !slices.Equal(lookups, tc.wantLookups) || caps != tc.wantCaps {
+				t.Errorf("lines %q after looking up %v with caps %+v, want %q after %v with %+v", lines, lookups, caps, tc.wantLines, tc.wantLookups, tc.wantCaps)
+			}
+		})
 	}
 }

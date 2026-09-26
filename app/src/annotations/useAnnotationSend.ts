@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { useShortcut } from '../shortcuts/useShortcut';
 import type { ShortcutId } from '../shortcuts/registry';
 
-export type AnnotationSendResult =
+type AnnotationSendResult =
   | { kind: 'sent' }
   | { kind: 'skipped' }
   | { kind: 'warning'; message: string }

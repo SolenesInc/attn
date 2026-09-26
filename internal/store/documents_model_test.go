@@ -206,6 +206,20 @@ func naiveBind(t *testing.T, schema docstore.CollectionSchema, f docstore.Filter
 	return nil
 }
 
+func remainingPast(matching, everything []string, q docstore.Query) []string {
+	q.Limit = len(matching) + 1
+	return naivePage(matching, everything, q)
+}
+
+func (w *modelWorld) count(q docstore.Query) int {
+	w.t.Helper()
+	counted, found, err := w.s.CountQuery(q)
+	if err != nil || !found {
+		w.t.Fatalf("count %s: found=%v err=%v", describeQuery(q), found, err)
+	}
+	return counted.Count
+}
+
 func naivePage(matching, everything []string, q docstore.Query) []string {
 	out := matching
 	if q.After != "" {
@@ -442,6 +456,8 @@ type answer struct {
 	unindexed []string
 	matching  []string
 	order     []string
+	counted   int
+	remaining int
 }
 
 func (w *modelWorld) dumbOrders(q docstore.Query, cache map[string][]string) (matching, everything []string) {
@@ -478,6 +494,8 @@ func (w *modelWorld) ask(q docstore.Query, cache map[string][]string) answer {
 		unindexed: unindexed,
 		matching:  matching,
 		order:     everything,
+		counted:   w.count(q),
+		remaining: len(remainingPast(matching, everything, q)),
 	}
 }
 
@@ -490,6 +508,9 @@ func (w *modelWorld) check(context string, q docstore.Query, a answer) {
 	if !sameIDs(a.real, a.unindexed) {
 		w.t.Fatalf("%s\nquery     %s\nindexed   %v\nscanned   %v\nthe index disagrees with the column it indexes",
 			context, describeQuery(q), a.real, a.unindexed)
+	}
+	if a.counted != a.remaining {
+		w.t.Fatalf("%s\nquery   %s\ncounted %d, but %d match past the cursor", context, describeQuery(q), a.counted, a.remaining)
 	}
 }
 
@@ -764,6 +785,9 @@ func (w *modelWorld) checkFullPagination(context string, rng *rand.Rand, ids []s
 		got, err := w.realIDs(step)
 		if err != nil {
 			w.t.Fatalf("%s: paging %s: %v", context, describeQuery(step), err)
+		}
+		if counted, left := w.count(step), len(full)-len(walked); counted != left {
+			w.t.Fatalf("%s: counting %s gave %d, but %d of the whole answer are left", context, describeQuery(step), counted, left)
 		}
 		if len(got) == 0 {
 			break

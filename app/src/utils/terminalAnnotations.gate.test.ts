@@ -29,7 +29,6 @@ const ANCHOR = 'visual line without inserting a real';
 class FakeGrid implements MessageRowAccess {
   rows: string[];
   colCount: number;
-  reads = 0;
 
   constructor(rows: string[], cols = 62) {
     this.rows = rows;
@@ -45,7 +44,6 @@ class FakeGrid implements MessageRowAccess {
   }
 
   rowText(bufferRow: number): string {
-    this.reads += 1;
     return this.rows[bufferRow] ?? '';
   }
 
@@ -54,340 +52,112 @@ class FakeGrid implements MessageRowAccess {
   }
 }
 
-function storeWithAnchor(markdown = MESSAGE, phrase = ANCHOR) {
+const CHROME = '› Use /skills to list available skills';
+const AT_62 = render(MESSAGE, 62);
+const PADDING = Array.from({ length: 400 }, (_, i) => `build output line ${i}`);
+const screen = (rows: string[], cols = 62) => ({ rows, cols });
+
+function markedStore(layers: number) {
   const store = new TerminalAnnotationStore();
-  store.setMessages([{ key: 'turn-1', markdown }]);
-  const start = markdown.indexOf(phrase);
-  expect(start).toBeGreaterThanOrEqual(0);
-  const annotation = store.add('turn-1', start, start + phrase.length, 'clarify-this', 'why this?');
-  expect(annotation).not.toBeNull();
-  return { store, annotation: annotation! };
+  store.setMessages([{ key: 'turn-1', markdown: MESSAGE }]);
+  const start = MESSAGE.indexOf(ANCHOR);
+  const ids = Array.from({ length: layers }, (_, layer) => store.add('turn-1', start, start + ANCHOR.length, 'clarify-this', `layer ${layer}`)!.id);
+  return { store, top: ids[ids.length - 1] };
 }
 
-describe('projection', () => {
-  it('paints the rows currently showing the anchored text', () => {
-    const { store, annotation } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
+describe('projecting a mark onto the terminal', () => {
+  it.each([
+    { shown: 'the rows showing the text', screens: [screen(AT_62)], layers: 1, painted: 'all' },
+    { shown: 'the rows after a width reflow', screens: [screen(AT_62), screen(render(MESSAGE, 34), 34)], layers: 1, painted: 'all' },
+    { shown: 'rows scrolled deep into the buffer', screens: [screen([...PADDING, ...AT_62, ...PADDING])], layers: 1, painted: 'all' },
+    { shown: 'rows the viewport clipped short', screens: [screen(AT_62.slice(1))], layers: 1, painted: 'part' },
+    { shown: 'rows the TUI has since overwritten', screens: [screen(AT_62), screen(AT_62.map(() => CHROME))], layers: 1, painted: 'none' },
+    { shown: 'two marks on the same text', screens: [screen(AT_62)], layers: 2, painted: 'all' },
+  ] as const)('paints $painted of the text on $shown, and resolves a click to the top mark', ({ screens, layers, painted }) => {
+    const { store, top } = markedStore(layers);
+    const grid = new FakeGrid([...screens[0].rows], screens[0].cols);
+    let washes = store.project(grid);
+    const firstCell = washes[washes.length - 1]?.rows[0];
+    for (const next of screens.slice(1)) {
+      if (next.cols !== grid.colCount) store.noteGeometryChange();
+      grid.rows = [...next.rows];
+      grid.colCount = next.cols;
+      washes = store.project(grid);
+    }
 
-    const washes = store.project(grid);
-
-    expect(washes).toHaveLength(1);
-    expect(washes[0].annotationId).toBe(annotation.id);
-    const painted = washes[0].rows
-      .map((range) => grid.rowTextRange(range.row, range.startCol, range.endCol))
-      .join(' ');
-    expect(painted.replace(/\s+/g, ' ').trim()).toBe(ANCHOR);
-  });
-
-  it('re-derives onto the new rows after a width reflow', () => {
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    const before = store.project(grid)[0];
-
-    grid.rows = render(MESSAGE, 34);
-    grid.colCount = 34;
-    store.noteGeometryChange();
-    const after = store.project(grid)[0];
-
-    expect(after).toBeDefined();
-    expect(after.rows.map((r) => r.row)).not.toEqual(before.rows.map((r) => r.row));
-    const painted = after.rows
-      .map((range) => grid.rowTextRange(range.row, range.startCol, range.endCol))
-      .join(' ');
-    expect(painted.replace(/\s+/g, ' ').trim()).toBe(ANCHOR);
-  });
-
-  it('keeps the anchor valid while it is scrolled deep into the buffer', () => {
-    const { store } = storeWithAnchor();
-    const padding = Array.from({ length: 400 }, (_, i) => `build output line ${i}`);
-    const message = render(MESSAGE, 62);
-    const grid = new FakeGrid([...padding, ...message, ...padding]);
-
-    const washes = store.project(grid);
-
-    expect(washes).toHaveLength(1);
-    const expectedFirst = 400 + message.findIndex((row) => row.includes('visual'));
-    expect(washes[0].rows[0].row).toBe(expectedFirst);
+    if (painted === 'none') {
+      expect(washes).toEqual([]);
+      expect(store.annotationAt(grid, firstCell.row, firstCell.startCol)).toBeNull();
+      return;
+    }
+    const wash = washes[washes.length - 1];
+    const text = wash.rows.map((range) => grid.rowTextRange(range.row, range.startCol, range.endCol)).join(' ').replace(/\s+/g, ' ').trim();
+    if (painted === 'all') expect(text).toBe(ANCHOR);
+    else expect(ANCHOR).toContain(text);
+    const [cell] = wash.rows;
+    expect([
+      store.annotationAt(grid, cell.row, cell.startCol),
+      store.annotationAt(grid, cell.row, cell.endCol - 1),
+      store.annotationAt(grid, cell.row, cell.startCol - 1),
+      store.annotationAt(grid, cell.row, cell.endCol),
+    ]).toEqual([top, top, null, null]);
   });
 });
 
-describe('the containment gate', () => {
-  it('refuses to paint when the rows no longer hold the anchored text', () => {
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    expect(store.project(grid)).toHaveLength(1);
+const OLDER = 'The older answer mentions a retry wrapper around the call.';
+const LINKED = 'Evidence: [source](/Users/tester/src/services-pilot/a/b/Source.java:19). The conclusion after the source remains annotatable.';
+const VISUAL = AT_62.findIndex((row) => row.includes('visual'));
 
-    grid.rows = grid.rows.map(() => '› Use /skills to list available skills');
-
-    expect(store.project(grid)).toHaveLength(0);
-  });
-
-  it('is what refuses, not the invalidation — the mapping still resolves rows', () => {
-    // Without this, the test above passes for the wrong reason: the aligner
-    // resolving nothing rather than the gate rejecting what it found.
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    const resolved = store.project(grid)[0].rows.map((r) => r.row);
-
-    grid.rows = grid.rows.map(() => '› Use /skills to list available skills');
-    const rowsUnderTheWash = resolved
-      .map((row) => grid.rowText(row))
-      .join(' ');
-
-    expect(rowsUnderTheWash).toContain('/skills');
-  });
-
-  it('still paints a wash the viewport has clipped short', () => {
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62).slice(1));
-
-    const washes = store.project(grid);
-
-    expect(washes).toHaveLength(1);
-    const painted = washes[0].rows
-      .map((range) => grid.rowTextRange(range.row, range.startCol, range.endCol))
-      .join(' ');
-    expect(ANCHOR).toContain(painted.replace(/\s+/g, ' ').trim());
-  });
-});
-
-describe('annotationAt', () => {
-  it('resolves the annotation covering a cell, and nothing beside it', () => {
-    const { store, annotation } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    const wash = store.project(grid)[0].rows[0];
-
-    expect(store.annotationAt(grid, wash.row, wash.startCol)).toBe(annotation.id);
-    expect(store.annotationAt(grid, wash.row, wash.endCol - 1)).toBe(annotation.id);
-    expect(store.annotationAt(grid, wash.row, wash.startCol - 1)).toBeNull();
-    expect(store.annotationAt(grid, wash.row, wash.endCol)).toBeNull();
-    expect(store.annotationAt(grid, wash.row + 20, wash.startCol)).toBeNull();
-  });
-
-  it('does not offer a wash the gate refused', () => {
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    const wash = store.project(grid)[0].rows[0];
-
-    grid.rows = grid.rows.map(() => '› Use /skills to list available skills');
-
-    expect(store.project(grid)).toHaveLength(0);
-    expect(store.annotationAt(grid, wash.row, wash.startCol)).toBeNull();
-  });
-
-  it('gives an overlap to the annotation drawn on top', () => {
-    const { store, annotation } = storeWithAnchor();
-    const start = MESSAGE.indexOf(ANCHOR);
-    const later = store.add('turn-1', start, start + ANCHOR.length, 'test-label', '');
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    const wash = store.project(grid)[0].rows[0];
-
-    expect(later!.id).not.toBe(annotation.id);
-    expect(store.annotationAt(grid, wash.row, wash.startCol)).toBe(later!.id);
-  });
-});
-
-describe('the search window', () => {
-  it('stops reading the whole buffer once the message has been located', () => {
-    const { store } = storeWithAnchor();
-    const padding = Array.from({ length: 400 }, (_, i) => `build output line ${i}`);
-    const grid = new FakeGrid([...padding, ...render(MESSAGE, 62), ...padding]);
-
-    store.project(grid);
-    const firstPass = grid.reads;
-    grid.reads = 0;
-    store.noteWrite();
-    store.project(grid);
-
-    expect(firstPass).toBe(grid.totalRows());
-    expect(grid.reads).toBeLessThan(firstPass / 2);
-  });
-
-  it('goes back to the whole buffer after a geometry change', () => {
-    const { store } = storeWithAnchor();
-    const padding = Array.from({ length: 400 }, (_, i) => `build output line ${i}`);
-    const grid = new FakeGrid([...padding, ...render(MESSAGE, 62), ...padding]);
-    store.project(grid);
-
-    grid.rows = [...padding, ...render(MESSAGE, 34), ...padding];
-    grid.colCount = 34;
-    store.noteGeometryChange();
-    grid.reads = 0;
-    store.project(grid);
-
-    expect(grid.reads).toBe(grid.totalRows());
-  });
-});
-
-describe('the annotatable window', () => {
-  it('does not disturb annotations when the same turns come back', () => {
-    const { store } = storeWithAnchor();
-
-    expect(store.setMessages([{ key: 'turn-1', markdown: MESSAGE }])).toBe(false);
-    expect(store.list()).toHaveLength(1);
-  });
-
-  it('keeps annotations on a past turn when a new turn arrives', () => {
-    const { store } = storeWithAnchor();
-
-    expect(store.setMessages([
-      { key: 'turn-1', markdown: MESSAGE },
-      { key: 'turn-2', markdown: 'Something the agent said next.' },
-    ])).toBe(true);
-
-    expect(store.list()).toHaveLength(1);
-    expect(store.list()[0].messageKey).toBe('turn-1');
-  });
-
-  it('still paints a past turn once a newer one is on the grid below it', () => {
-    const { store } = storeWithAnchor();
-    const next = 'Something the agent said next.';
-    store.setMessages([
-      { key: 'turn-1', markdown: MESSAGE },
-      { key: 'turn-2', markdown: next },
-    ]);
-    const grid = new FakeGrid([...render(MESSAGE, 62), '', ...render(next, 62)]);
-
-    expect(store.project(grid)).toHaveLength(1);
-  });
-
-  it('keeps an annotation whose message fell out of the window, unpainted', () => {
-    const { store } = storeWithAnchor();
-    const next = 'Something the agent said next.';
-    store.setMessages([{ key: 'turn-2', markdown: next }]);
-    const grid = new FakeGrid(render(next, 62));
-
-    expect(store.list()).toHaveLength(1);
-    expect(store.project(grid)).toHaveLength(0);
-  });
-
-  it('keeps the annotations when the terminal is reset, dropping only alignments', () => {
-    const { store } = storeWithAnchor();
-    const grid = new FakeGrid(render(MESSAGE, 62));
-    expect(store.project(grid)).toHaveLength(1);
-
-    store.reset();
-
-    expect(store.list()).toHaveLength(1);
-    expect(store.project(grid)).toHaveLength(1);
-  });
-
-  it('refuses an annotation whose offsets fall outside the message', () => {
+describe('anchoring a drag over the terminal', () => {
+  it.each([
+    {
+      drag: 'agent prose across two rows',
+      messages: [MESSAGE],
+      rows: AT_62,
+      from: [VISUAL, 'visual'], to: [VISUAL + 1, 'real'],
+      anchor: { messageKey: 'turn-1', quote: ANCHOR },
+    },
+    {
+      drag: 'the TUI’s own chrome',
+      messages: [MESSAGE],
+      rows: [CHROME, ...AT_62],
+      from: [0, '›'], to: [0, 'available skills'],
+      anchor: null,
+    },
+    {
+      drag: 'an older turn above the latest',
+      messages: [OLDER, MESSAGE],
+      rows: [...render(OLDER, 62), '', ...AT_62],
+      from: [0, 'retry'], to: [0, 'retry wrapper'],
+      anchor: { messageKey: 'turn-1', quote: 'retry wrapper' },
+    },
+    {
+      drag: 'prose after a link rendered as a shortened path',
+      messages: [LINKED],
+      rows: ['• Evidence: a/b/Source.java:19.', '  The conclusion after the source remains annotatable.'],
+      from: [1, 'conclusion'], to: [1, 'conclusion after the source'],
+      anchor: { messageKey: 'turn-1', quote: 'conclusion after the source' },
+    },
+    {
+      drag: 'the user’s prompt echoing prose after a shortened path',
+      messages: [LINKED],
+      rows: ['• Evidence: a/b/Source.java:19.', '› conclusion after the source please'],
+      from: [1, 'conclusion'], to: [1, 'conclusion after the source'],
+      anchor: null,
+    },
+  ] as const)('anchors a drag over $drag', ({ messages, rows, from, to, anchor }) => {
+    const turns = messages.map((markdown, index) => ({ key: `turn-${index + 1}`, markdown }));
     const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown: MESSAGE }]);
+    store.setMessages(turns);
 
-    expect(store.add('turn-1', -1, 5)).toBeNull();
-    expect(store.add('turn-1', 5, MESSAGE.length + 1)).toBeNull();
-    expect(store.add('turn-1', 9, 9)).toBeNull();
-  });
-
-  it('refuses an annotation on a message it does not know', () => {
-    const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown: MESSAGE }]);
-
-    expect(store.add('turn-9', 0, 5)).toBeNull();
-  });
-
-  it('gives every annotation its own id', () => {
-    const { store } = storeWithAnchor();
-    const second = store.add('turn-1', 0, 6, 'test-label', '');
-
-    expect(second!.id).not.toBe(store.list()[0].id);
-  });
-});
-
-describe('anchorForSelection', () => {
-  it('turns a drag over the grid into an anchor on the agent’s markdown', () => {
-    const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown: MESSAGE }]);
-    const rows = render(MESSAGE, 62);
-    const grid = new FakeGrid(rows);
-    const targetRow = rows.findIndex((row) => row.includes('visual'));
-
-    const anchor = store.anchorForSelection(grid, {
-      startRow: targetRow,
-      startCol: rows[targetRow].indexOf('visual'),
-      endRow: targetRow + 1,
-      endCol: rows[targetRow + 1].indexOf('real') + 'real'.length,
+    const result = store.anchorForSelection(new FakeGrid([...rows]), {
+      startRow: from[0],
+      startCol: rows[from[0]].indexOf(from[1]),
+      endRow: to[0],
+      endCol: rows[to[0]].indexOf(to[1]) + to[1].length,
     });
 
-    expect(anchor).not.toBeNull();
-    expect(anchor!.messageKey).toBe('turn-1');
-    expect(anchor!.quote).toBe(ANCHOR);
-    expect(MESSAGE.slice(anchor!.start, anchor!.end)).toBe(ANCHOR);
-  });
-
-  it('refuses a drag over the TUI’s own chrome', () => {
-    const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown: MESSAGE }]);
-    const grid = new FakeGrid(['› Use /skills to list available skills', ...render(MESSAGE, 62)]);
-
-    expect(store.anchorForSelection(grid, { startRow: 0, startCol: 0, endRow: 0, endCol: 40 })).toBeNull();
-  });
-
-  it('resolves a drag to whichever turn it landed on', () => {
-    const store = new TerminalAnnotationStore();
-    const older = 'The older answer mentions a retry wrapper around the call.';
-    store.setMessages([
-      { key: 'turn-1', markdown: older },
-      { key: 'turn-2', markdown: MESSAGE },
-    ]);
-    const olderRows = render(older, 62);
-    const rows = [...olderRows, '', ...render(MESSAGE, 62)];
-    const grid = new FakeGrid(rows);
-    const targetRow = olderRows.findIndex((row) => row.includes('retry'));
-
-    const anchor = store.anchorForSelection(grid, {
-      startRow: targetRow,
-      startCol: olderRows[targetRow].indexOf('retry'),
-      endRow: targetRow,
-      endCol: olderRows[targetRow].indexOf('retry') + 'retry wrapper'.length,
-    });
-
-    expect(anchor).not.toBeNull();
-    expect(anchor!.messageKey).toBe('turn-1');
-    expect(older.slice(anchor!.start, anchor!.end)).toContain('retry wrapper');
-  });
-
-  it('accepts agent prose after a Markdown link was rendered as a shortened path', () => {
-    const markdown = 'Evidence: [source](/Users/tester/src/services-pilot/a/b/Source.java:19). '
-      + 'The conclusion after the source remains annotatable.';
-    const rows = [
-      '• Evidence: a/b/Source.java:19.',
-      '  The conclusion after the source remains annotatable.',
-    ];
-    const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown }]);
-    const grid = new FakeGrid(rows);
-    const startCol = rows[1].indexOf('conclusion');
-
-    const anchor = store.anchorForSelection(grid, {
-      startRow: 1,
-      startCol,
-      endRow: 1,
-      endCol: startCol + 'conclusion after the source'.length,
-    });
-
-    expect(anchor).not.toBeNull();
-    expect(anchor!.quote).toBe('conclusion after the source');
-  });
-
-  it('keeps the containment gate on reverse selection after sparse alignment', () => {
-    const markdown = 'Evidence: [source](/Users/tester/src/services-pilot/a/b/Source.java:19). '
-      + 'The conclusion after the source remains annotatable.';
-    const store = new TerminalAnnotationStore();
-    store.setMessages([{ key: 'turn-1', markdown }]);
-    const grid = new FakeGrid([
-      '• Evidence: a/b/Source.java:19.',
-      '› conclusion after the source please',
-    ]);
-    const startCol = grid.rows[1].indexOf('conclusion');
-
-    expect(store.anchorForSelection(grid, {
-      startRow: 1,
-      startCol,
-      endRow: 1,
-      endCol: startCol + 'conclusion after the source'.length,
-    })).toBeNull();
+    expect(result && { messageKey: result.messageKey, quote: result.quote }).toEqual(anchor);
+    if (result) expect(turns.find((turn) => turn.key === result.messageKey)!.markdown.slice(result.start, result.end)).toBe(result.quote);
   });
 });

@@ -135,7 +135,6 @@ export function useAppGardenActions({
       if (review) return resume;
       return resume.catch((error) => {
         showError(error instanceof Error ? error.message : 'Failed to resume the agent');
-        throw error;
       });
     },
     [sendSeedResume, handleSelectSession, showError],
