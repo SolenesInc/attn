@@ -513,14 +513,22 @@ jobs:
           path: ~/.cache/ms-playwright
           key: ${{ runner.os }}-${{ runner.arch }}-playwright-${{ steps.playwright-version.outputs.version }}
 
+      # `install --with-deps` hung past 25 minutes on 2026-09-26 without saying
+      # whether apt or the download stalled; bounded steps name the one that does.
+      - name: Bound apt network waits
+        run: |
+          printf '%s\n' 'Acquire::Retries "3";' 'Acquire::http::Timeout "30";' 'Acquire::https::Timeout "30";' \
+            | sudo tee /etc/apt/apt.conf.d/80-ci-timeouts
+
       # The suite only runs chromium (no projects configured), so skip the
-      # firefox/webkit downloads. On a cache hit only the OS packages are needed.
+      # firefox/webkit downloads.
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: pnpm exec playwright install --with-deps chromium
+        timeout-minutes: 10
+        run: pnpm exec playwright install chromium
 
       - name: Install Playwright OS deps
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        timeout-minutes: 10
         run: pnpm exec playwright install-deps chromium
 
       - name: E2E
