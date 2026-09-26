@@ -92,8 +92,6 @@
 - Nap: replaces the current day using its handoff.
 - Heartbeat: refreshes a crew member's working context.
 
-See [delegation preferences](delegation-preferences.md) for role settings.
-
 ## Knowledge
 
 - Notebook: an instance's collection of Markdown documents.
@@ -135,5 +133,3 @@ See [delegation preferences](delegation-preferences.md) for role settings.
 - Kept reason: why the sweep left a worktree alone.
 - Keep pin: the user's instruction to preserve a worktree.
 - Sweep log: a record of worktree removals and their reasons.
-
-See [worktree sweep](worktree-sweep.md) for cleanup rules.
