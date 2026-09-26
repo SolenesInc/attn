@@ -17,7 +17,7 @@ function options(enabled = true) {
   return {
     onNewSession: vi.fn(),
     onCloseSession: vi.fn(),
-    onToggleActionMenu: vi.fn(),
+    onOpenPalette: vi.fn(),
     onGoToDashboard: vi.fn(),
     onJumpToWaiting: vi.fn(),
     onSwitchToDesktopSlot: vi.fn(),

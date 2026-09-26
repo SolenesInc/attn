@@ -59,7 +59,12 @@ export function AppSidebar() {
   const { criticalNotifications, settings } = useAppInputs();
   const { gridLayout, handleSelectGridLayout } = useAppGridContext();
   const { handleChangeChiefOfStaff } = useChiefOfStaffContext();
-  const crew = useDaemonStore((state) => state.crew);
+  const allCrew = useDaemonStore((state) => state.crew);
+  const selectedProfileId = useProfilesStore((state) => state.selectedProfileId);
+  const crew = useMemo(
+    () => allCrew.filter((member) => member.profile_id === selectedProfileId),
+    [allCrew, selectedProfileId],
+  );
   const { handleWakeCrewMember, handleSleepCrewMember } = useAppGardenActionsContext();
   const { handleOpenCrew } = useCrewPanelContext();
   const {

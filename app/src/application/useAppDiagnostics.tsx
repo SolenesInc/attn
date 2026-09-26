@@ -37,7 +37,7 @@ export function useAppDiagnostics({
     capture: PendingDiagnosticCapture;
     affectedPaneId: string | null;
   } | null>(null);
-  const actionMenuOriginRef = useRef<DiagnosticCaptureContext | null>(null);
+  const paletteOriginRef = useRef<DiagnosticCaptureContext | null>(null);
 
   const diagnosticPanes = useCallback((): DiagnosticPaneDescriptor[] => {
     const sessionById = new Map(sessions.map((session) => [session.id, session]));
@@ -63,7 +63,7 @@ export function useAppDiagnostics({
     const fallbackPaneId = fallbackSession
       ? getActivePaneIdForSession(fallbackSession) || null
       : null;
-    const context = actionMenuOriginRef.current ?? {
+    const context = paletteOriginRef.current ?? {
       capturedAtUnixMs: Date.now(),
       view,
       activeSessionId,
@@ -146,7 +146,7 @@ export function useAppDiagnostics({
   return {
     diagnosticCapture,
     handleCreateDiagnosticReport,
-    actionMenuOriginRef,
+    paletteOriginRef,
     diagnosticReportSaved,
     handleSaveDiagnosticReport,
     setDiagnosticCapture,
