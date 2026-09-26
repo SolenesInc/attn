@@ -900,6 +900,50 @@ describe('desktop surface', () => {
     expect(useSessionStore.getState().activeSessionId).toBe('s1');
   });
 
+  it('keeps the last of two selections that both reach the daemon before either confirms', async () => {
+    const confirmations: Array<() => void> = [];
+    const ok = (action: string) => ({ event: 'profile_action_result', request_id: 'test', action, success: true });
+    desktopCommands.sendDesktopSetCurrent.mockImplementationOnce(
+      (_profileId: string, desktopId: string) =>
+        new Promise((resolve) => {
+          confirmations.push(() => {
+            resolve(ok('desktop_set_current'));
+            arrangeDesktops(useProfilesStore.getState().desktops, desktopId);
+          });
+        }),
+    );
+    desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(
+      (desktopId: string, paneId: string) =>
+        new Promise((resolve) => {
+          confirmations.push(() => {
+            resolve(ok('desktop_set_active_pane'));
+            const state = useProfilesStore.getState();
+            arrangeDesktops(
+              state.desktops.map((desktop) =>
+                desktop.id === desktopId ? { ...desktop, active_pane_id: paneId, revision: desktop.revision + 1 } : desktop,
+              ),
+              state.currentDesktopId ?? '',
+            );
+          });
+        }),
+    );
+    render(<App />);
+    await screen.findByTestId(desktopTestId('d1'));
+
+    act(() => {
+      useSessionStore.getState().selectAgent('s3');
+    });
+    act(() => {
+      useSessionStore.getState().selectAgent('s2');
+    });
+    expect(confirmations).toHaveLength(2);
+    for (const confirm of confirmations) await act(async () => confirm());
+
+    await waitFor(() => expect(useProfilesStore.getState().currentDesktopId).toBe('d1'));
+    expect(useSessionStore.getState().activeSessionId).toBe('s2');
+    expect(useProfilesStore.getState().desktops.find((desktop) => desktop.id === 'd1')?.active_pane_id).toBe('pane-s2');
+  });
+
   it('lets another window show the agent this window asked for before it moved elsewhere', async () => {
     let answer = () => {};
     desktopCommands.sendDesktopSetActivePane.mockImplementationOnce(

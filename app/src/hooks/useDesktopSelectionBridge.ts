@@ -98,8 +98,12 @@ function commandApplied(state: Pick<ProfilesState, 'desktops' | 'currentDesktopI
   }
 }
 
-function supersededSince(sent: SentCommand, state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>): boolean {
-  return sent.sessionId !== intentSessionOf(useSessionStore.getState(), selectedTile(state) !== null);
+function confirmsOnlySupersededCommands(
+  confirmed: SentCommand[],
+  state: Pick<ProfilesState, 'desktops' | 'currentDesktopId'>,
+): boolean {
+  const intent = intentSessionOf(useSessionStore.getState(), selectedTile(state) !== null);
+  return confirmed.length > 0 && confirmed.every((sent) => sent.sessionId !== intent);
 }
 
 function nextCommand(intentSessionId: string, intentProfileId: string): Command | null {
@@ -156,7 +160,7 @@ export function useDesktopSelectionBridge(
   const desktops = useProfilesStore((state) => state.desktops);
   const currentDesktopId = useProfilesStore((state) => state.currentDesktopId);
   const sentKey = useRef<string | null>(null);
-  const awaited = useRef<SentCommand | null>(null);
+  const inFlight = useRef<SentCommand[]>([]);
   const reportFailureRef = useRef(reportFailure);
   useEffect(() => {
     reportFailureRef.current = reportFailure;
@@ -174,10 +178,11 @@ export function useDesktopSelectionBridge(
     }
     if (command.key === sentKey.current) return;
     sentKey.current = command.key;
-    awaited.current = { command, sessionId: intentSessionId };
+    const sent = { command, sessionId: intentSessionId };
+    inFlight.current = [...inFlight.current, sent];
     const release = (error: unknown) => {
       if (sentKey.current === command.key) sentKey.current = null;
-      if (awaited.current?.command === command) awaited.current = null;
+      inFlight.current = inFlight.current.filter((entry) => entry !== sent);
       if (isStaleRevision(error)) return;
       abandonSelection(intentSessionId);
       reportFailureRef.current(`Could not show that agent: ${error instanceof Error ? error.message : String(error)}`);
@@ -231,10 +236,9 @@ export function useDesktopSelectionBridge(
   useEffect(
     () =>
       useProfilesStore.subscribe((state, previous) => {
-        const sent = awaited.current;
-        const confirmed = sent !== null && commandApplied(state, sent.command);
-        if (confirmed) awaited.current = null;
-        const superseded = confirmed && supersededSince(sent, state);
+        const confirmed = inFlight.current.filter((sent) => commandApplied(state, sent.command));
+        inFlight.current = inFlight.current.filter((sent) => !confirmed.includes(sent));
+        const superseded = confirmsOnlySupersededCommands(confirmed, state);
         const shown = shownOf(state);
         const before = shownOf(previous);
         if (shown.desktopId === before.desktopId && shown.paneId === before.paneId) {
@@ -243,7 +247,7 @@ export function useDesktopSelectionBridge(
         }
         const sessions = useSessionStore.getState();
         if (superseded || arrivedInPendingProfile(state, previous, sessions)) return;
-        awaited.current = null;
+        if (confirmed.length === 0) inFlight.current = [];
         if (sessions.view === 'session') {
           const sessionId = agentToShow(state, shown, sessions.activeSessionId);
           const overridesRequest = shown.tileId !== null && sessions.focusRequest !== null;
