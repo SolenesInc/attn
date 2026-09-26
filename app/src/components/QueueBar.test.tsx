@@ -1,11 +1,12 @@
 import type { ComponentProps } from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
+import { useProfilesStore } from '../store/profiles';
 import { useSessionStore } from '../store/sessions';
 import type { AutomationProvenance } from '../types/generated';
 import { buildQueueBands } from '../utils/queueBands';
-import { desktopGroups, type TestDesktopGroup } from '../test/desktops';
+import { agentDesktop, arrangeDesktops, desktopGroups, type TestDesktopGroup } from '../test/desktops';
 
 interface TestSession {
   id: string;
@@ -285,7 +286,9 @@ describe('the runs chip', () => {
 
   it('peeks every run by definition and tags the one the walk opens next from the agent on screen', () => {
     const onSelectSession = vi.fn();
+    arrangeDesktops([agentDesktop('d1', 1, ['n1'])]);
     useSessionStore.setState({ view: 'session', activeSessionId: 'n1' });
+    onTestFinished(() => useProfilesStore.setState(useProfilesStore.getInitialState(), true));
     renderBar(runs, { onSelectSession, selectedId: null });
     hover('queue-bar-runs');
 
