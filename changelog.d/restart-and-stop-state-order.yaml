@@ -1,0 +1,4 @@
+kind: fixed
+area: sessions
+change: After a daemon restart the app sees each agent's recovered state, and a judged stop clears its auto-settle countdown before the app hears about it.
+symptom: An agent that went idle while the daemon was down could come back as waiting for approval, and a stop being judged briefly showed a stale countdown.
