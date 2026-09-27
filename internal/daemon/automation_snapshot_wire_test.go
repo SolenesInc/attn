@@ -26,7 +26,9 @@ func TestAHeldRunStartsAfterARestartOnTheDefinitionAsItWasWhenItFellDue(t *testi
 	runGit(t, r.clone, "fetch", upstream, "main")
 	r.w.restart()
 	r.app, r.cli = r.w.App(), r.w.Client()
-	r.awaitRuns("manual-review", func(runs []protocol.AutomationRunSummary) bool { return automationRunState(runs, held[0].ID) == "delivered" })
+	r.awaitRuns("manual-review", func(runs []protocol.AutomationRunSummary) bool {
+		return automationRunState(runs, held[0].ID) == "delivered"
+	})
 
 	prompt := r.w.Launched(protocol.Deref(held[0].SessionID)).Prompted()
 	if !strings.Contains(prompt, "Review this pull request.") || strings.Contains(prompt, "for security") {
