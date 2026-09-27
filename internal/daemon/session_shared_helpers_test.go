@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"os"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -21,4 +23,32 @@ func waitForResolvedState(t *testing.T, d *Daemon, sessionID string, want protoc
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("session %s state = %s, want %s", sessionID, last, want)
+}
+
+func writeLine(t *testing.T, path, line string) {
+	t.Helper()
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatalf("open transcript: %v", err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(line + "\n"); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+}
+
+func requireTranscriptDiscovery(t *testing.T, d *Daemon, sessionID string) {
+	t.Helper()
+	advancePolls(2)
+	d.watchersMu.Lock()
+	watcher := d.transcriptWatch[sessionID]
+	d.watchersMu.Unlock()
+	if watcher == nil || watcher.snapshot().Status != protocol.SessionMessageWindowStatusReady {
+		t.Fatal("watcher never discovered the transcript")
+	}
+}
+
+func advancePolls(n int) {
+	time.Sleep(time.Duration(n) * transcriptPollInterval)
+	synctest.Wait()
 }

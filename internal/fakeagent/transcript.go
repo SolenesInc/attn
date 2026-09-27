@@ -48,3 +48,13 @@ func (tr *ClaudeTranscript) Answer(text string) {
 		tr.t.Fatal(err)
 	}
 }
+
+func (tr *ClaudeTranscript) Halt() {
+	tr.t.Helper()
+	if err := tr.writer.record("user", map[string]any{
+		"role":    "user",
+		"content": []map[string]any{{"type": "text", "text": "[Request interrupted by user]"}},
+	}, map[string]any{"interruptedMessageId": claudeMessageID()}); err != nil {
+		tr.t.Fatal(err)
+	}
+}
