@@ -197,6 +197,7 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
   const panelRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const panel = panelRef.current!;
+    const bar = panel.closest<HTMLElement>('.queue-bar')!;
     const shiftIntoViewport = () => {
       panel.style.transform = '';
       const rect = panel.getBoundingClientRect();
@@ -206,8 +207,9 @@ function QueueBarPeek({ testId, alignRight = false, children }: { testId: string
       panel.style.transform = x || y ? `translate(${x}px, ${y}px)` : '';
     };
     shiftIntoViewport();
-    window.addEventListener('resize', shiftIntoViewport);
-    return () => window.removeEventListener('resize', shiftIntoViewport);
+    const barLayout = new ResizeObserver(shiftIntoViewport);
+    for (const item of [bar, ...bar.children, panel]) barLayout.observe(item);
+    return () => barLayout.disconnect();
   }, []);
   return (
     <div className={`queue-bar-peek${alignRight ? ' is-right' : ''}`} data-testid={testId}>

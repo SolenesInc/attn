@@ -88,3 +88,22 @@ test('an open peek shifts back on screen when the window narrows under it', asyn
     return box.x + box.width;
   }).toBeLessThanOrEqual(800);
 });
+
+test('an open peek shifts back on screen when the UI scale grows under it', async ({ page }) => {
+  await page.setViewportSize({ width: 800, height: 600 });
+  await page.goto('/test-harness/?component=QueueBar&oneDesktop');
+  await page.waitForFunction(() => window.__HARNESS__?.ready === true);
+
+  await page.getByTestId('queue-bar-waiting').hover();
+  const panel = page.locator('[data-testid=queue-bar-waiting-peek] .queue-bar-peek-panel');
+  const before = (await panel.boundingBox())!;
+  await page.mouse.move(before.x + before.width / 2, before.y + 20);
+
+  await page.evaluate(() => document.documentElement.style.setProperty('--ui-scale', '1.6'));
+  await expect(panel).toBeVisible();
+  await expect.poll(async () => (await page.getByTestId('queue-bar-waiting').boundingBox())!.x).toBeGreaterThan(before.x);
+  await expect.poll(async () => {
+    const box = (await panel.boundingBox())!;
+    return box.x + box.width;
+  }).toBeLessThanOrEqual(800);
+});
