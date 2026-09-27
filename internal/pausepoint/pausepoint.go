@@ -18,6 +18,7 @@ const (
 const (
 	PtyAttachSnapshot  = "pty-attach-snapshot"
 	PtyOutputSequenced = "pty-output-sequenced"
+	PtyOutputHeld      = "pty-output-held"
 )
 
 type armed struct {
