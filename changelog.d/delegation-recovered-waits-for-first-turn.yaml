@@ -1,0 +1,4 @@
+kind: fixed
+area: delegation
+change: A delegation resumed after a daemon restart now waits for its agent's first turn when the agent's terminal survived the restart.
+symptom: The delegation was reported ready while the agent was still starting, so an agent that then exited was never reported as failed.
