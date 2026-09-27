@@ -112,7 +112,7 @@ test('agent pane stays painted after opening a shell split', async ({ page, daem
   const modelText = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_TEXT?.(sid) ?? '', agentId);
   console.log('model contains NEW line 0:', modelText.includes('NEW line 0'));
 
-  await terminal.screenshot({ path: 'test-results/split-blank-agent.png' }).catch(() => {});
+  await terminal.screenshot({ path: 'test-results/split-paint-agent.png' }).catch(() => {});
 
   expect(modelText).toContain('NEW line 0');
   expect(draw, 'expected at least one agent draw after the split redraw').toBeTruthy();
@@ -221,7 +221,7 @@ test('agent stays painted when split races a chunked redraw', async ({ page, dae
   dumpTail('CHUNKED RACE', trace);
   const draw = lastRealDraw(trace);
   console.log('last real draw:', JSON.stringify(draw));
-  await terminal.screenshot({ path: 'test-results/split-blank-race.png' }).catch(() => {});
+  await terminal.screenshot({ path: 'test-results/split-paint-race.png' }).catch(() => {});
   const finalSize = await page.evaluate((sid) => window.__TEST_GET_SESSION_PANE_SIZE?.(sid) ?? null, agentId);
   expect(draw, 'expected at least one agent draw after the split redraw').toBeTruthy();
   expect(draw!.quads ?? 0, `agent drew ${draw?.quads} quads, model had ${draw?.modelPrintable}`).toBeGreaterThan(50);
@@ -259,7 +259,7 @@ test('agent stays painted when split lands while scrolled up', async ({ page, da
   dumpTail('SCROLLED-UP SPLIT', trace);
   const draw = lastRealDraw(trace);
   console.log('last real draw:', JSON.stringify(draw));
-  await terminal.screenshot({ path: 'test-results/split-blank-scrolled.png' }).catch(() => {});
+  await terminal.screenshot({ path: 'test-results/split-paint-scrolled.png' }).catch(() => {});
   console.log('offset on last draw:', draw?.offset, 'force:', draw?.force, 'quads:', draw?.quads);
 });
 

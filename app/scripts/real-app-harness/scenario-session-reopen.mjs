@@ -9,13 +9,13 @@ import {
   launchFreshAppAndConnect,
   parseCommonArgs,
   printCommonHelp,
-  queryDaemonDb,
 } from './common.mjs';
 import { DaemonObserver } from './daemonObserver.mjs';
 import { assertFreshWorldTargetSafe } from './freshWorld.mjs';
 import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
+import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { sleep } from './scenarioAssertions.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
@@ -69,19 +69,6 @@ async function showUntilDecided(daemonBinary, instance, sessionId, timeoutMs) {
   throw new Error(`The verdict for ${sessionId} never stopped checking:\n${shown}`);
 }
 
-// The verdict can only offer a plain reopen once the agent has bound a
-// conversation; codex reports its rollout through the session-start hook.
-async function waitForBoundConversation(dbPath, sessionId, timeoutMs) {
-  const deadline = Date.now() + timeoutMs;
-  let resumeId = '';
-  while (Date.now() < deadline) {
-    resumeId = queryDaemonDb(dbPath, `SELECT resume_session_id FROM sessions WHERE id = '${sessionId}' LIMIT 1;`);
-    if (resumeId) return resumeId;
-    await sleep(200);
-  }
-  throw new Error(`Session ${sessionId} never bound a conversation in ${timeoutMs}ms; last value=${JSON.stringify(resumeId)}`);
-}
-
 async function waitForSessionGone(client, observer, sessionId, timeoutMs) {
   await observer.waitFor(() => !observer.sessionsById.has(sessionId), `session ${sessionId} unregistered`, timeoutMs);
   const deadline = Date.now() + timeoutMs;
@@ -117,7 +104,6 @@ async function main() {
   assertFreshWorldTargetSafe({ instance, appPath: options.appPath });
   const daemonBinary = appDaemonInTree(options.appPath);
   const dataDir = dataDirForInstance(instance);
-  const dbPath = path.join(dataDir, 'attn.db');
   const runner = createScenarioRunner(options, {
     scenarioId: 'SESSION-REOPEN',
     tier: 'tier1-local-shell',
@@ -162,6 +148,7 @@ async function main() {
         label: `session-reopen-${runner.runId}`,
         agent: 'codex',
         sessionWaitMs: 30_000,
+        promptReadyFn: ensureCodexInitialPanePromptReady,
       });
       const registered = await observer.waitFor(
         () => {
@@ -175,8 +162,7 @@ async function main() {
         mainRepo: registered.main_repo,
         repo,
       });
-      const resumeId = await waitForBoundConversation(dbPath, sessionId, 60_000);
-      runner.writeJson('worktree-session.json', { ...registered, resumeId });
+      runner.writeJson('worktree-session.json', registered);
     });
 
     await runner.step('close_the_session', async () => {

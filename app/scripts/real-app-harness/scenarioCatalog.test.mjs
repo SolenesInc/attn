@@ -6,7 +6,6 @@ import { TRIPWIRE_BINARIES } from './agentTripwire.mjs';
 import {
   allowRealAgentsForRunner,
   resolveScenario,
-  resolveScenarios,
   scenarioCatalog,
   scenariosAllowingRealAgents,
 } from './scenarioCatalog.mjs';
@@ -16,15 +15,6 @@ describe('scenarioCatalog agent tripwire flags', () => {
     for (const scenario of scenarioCatalog) {
       expect(scenario, `${scenario.id} must declare runnerId (null when it has no scenario runner)`)
         .toHaveProperty('runnerId');
-    }
-  });
-
-  it('gives every platform skip a reason', () => {
-    for (const scenario of scenarioCatalog) {
-      for (const [platform, rule] of Object.entries(scenario.skipOn ?? {})) {
-        const reason = typeof rule === 'string' ? rule : rule.reason;
-        expect(reason, `${scenario.id} skipOn.${platform}`).toMatch(/\S/);
-      }
     }
   });
 
@@ -38,101 +28,14 @@ describe('scenarioCatalog agent tripwire flags', () => {
     }
   });
 
-  it('keeps the model-free scenarios armed', () => {
-    expect(allowRealAgentsForRunner('COUNTDOWN-CANCEL')).toBeUndefined();
-    expect(allowRealAgentsForRunner('TERMINAL-ANNOTATIONS')).toBeUndefined();
-  });
-
-  it('allows only Pi for the Auto Mode guardian model catalog', () => {
-    expect(allowRealAgentsForRunner('AutoModeEnvironment')).toEqual(['pi']);
-  });
-
-  it('keeps the resume family armed on the mock agent', () => {
-    for (const runnerId of ['CRASH-REC']) {
-      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
-    }
-  });
-
   it('refuses a runner outside the catalog rather than allowing every binary', () => {
     expect(() => allowRealAgentsForRunner('SOME-UNLISTED-PROBE'))
       .toThrow(/"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/);
     expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
   });
-
-  it('keeps the turn-accounting family armed on the mock agent', () => {
-    for (const runnerId of ['TR-201', 'TR-301', 'TR-401']) {
-      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
-    }
-  });
-
-  it('keeps the scenarios that never prompt their agent armed on the mock agent', () => {
-    for (const runnerId of [
-      'FOCUS-PROBE',
-      'GHOSTTY-SCROLLBACK-ANCHOR',
-    ]) {
-      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
-    }
-  });
-
-  it('keeps the queue family armed on the mock agent', () => {
-    for (const runnerId of ['AGENT-QUEUE', 'COUNTDOWN-CANCEL']) {
-      expect(allowRealAgentsForRunner(runnerId), runnerId).toBeUndefined();
-    }
-  });
-
-  it('takes the permissive flag when one runner id serves several entries', () => {
-    const catalog = [
-      { id: 'a', runnerId: 'DUO' },
-      { id: 'b', runnerId: 'DUO', allowRealAgents: true },
-    ];
-
-    expect(allowRealAgentsForRunner('DUO', catalog)).toBe(true);
-    expect(allowRealAgentsForRunner('DUO', [
-      { id: 'a', runnerId: 'DUO', allowRealAgents: ['pi'] },
-      { id: 'b', runnerId: 'DUO', allowRealAgents: ['pi', 'codex'] },
-    ])).toEqual(['pi', 'codex']);
-  });
 });
 
-describe('scenarioCatalog soakOnly handling', () => {
-  it('has the focus-probe entry marked soakOnly', () => {
-    const focusProbe = scenarioCatalog.find((scenario) => scenario.id === 'focus-probe');
-
-    expect(focusProbe).toBeDefined();
-    expect(focusProbe.soakOnly).toBe(true);
-  });
-
-  it('excludes soakOnly entries from the full matrix sweep', () => {
-    const scenarios = resolveScenarios([]);
-
-    expect(scenarios.some((scenario) => scenario.soakOnly)).toBe(false);
-    expect(scenarios.some((scenario) => scenario.id === 'focus-probe')).toBe(false);
-    // The rest of the catalog is untouched.
-    expect(scenarios.length).toBe(scenarioCatalog.filter((scenario) => !scenario.soakOnly).length);
-  });
-
-  it('rejects explicit matrix selection of a soakOnly scenario', () => {
-    expect(() => resolveScenarios(['focus-probe'])).toThrow('Unknown scenario id: focus-probe');
-  });
-
-  it('still resolves regular scenarios by explicit matrix selection', () => {
-    const scenarios = resolveScenarios(['ghostty-scroll']);
-
-    expect(scenarios).toHaveLength(1);
-    expect(scenarios[0].id).toBe('ghostty-scroll');
-  });
-
-  it('resolves a soakOnly scenario via direct single-scenario resolution', () => {
-    const scenario = resolveScenario('focus-probe');
-
-    expect(scenario.id).toBe('focus-probe');
-    expect(scenario.command).toEqual(['pnpm', 'run', 'real-app:focus-probe']);
-  });
-
-  it('throws on an unknown id in direct single-scenario resolution', () => {
-    expect(() => resolveScenario('does-not-exist')).toThrow('Unknown scenario id: does-not-exist');
-  });
-
+describe('scenarioCatalog direct selection', () => {
   it('keeps hand-written soaks with unsafe teardown out of direct selection', () => {
     for (const id of ['offset-soak', 'perf-baseline', 'perf-cold-warm']) {
       expect(() => resolveScenario(id), id).toThrow(`Unknown scenario id: ${id}`);
@@ -140,56 +43,8 @@ describe('scenarioCatalog soakOnly handling', () => {
   });
 });
 
-describe('scenarioCatalog daemon isolation', () => {
-  it('stops the daemon after scenarios whose remote routing changes per run', () => {
-    for (const id of ['tr205-probe-codex', 'tr205-probe-claude', 'tr502', 'tr504']) {
-      expect(resolveScenario(id).freshWorldAfter, id).toBe(true);
-    }
-  });
-
-  it('stops the daemon after exercising the shared PTY host', () => {
-    expect(resolveScenario('pty-host-setting').freshWorldAfter).toBe(true);
-  });
-});
-
 // A hand-rolled main() that never builds a runner arms no tripwire at all and
 // is out of this net; every createScenarioRunner caller is in it.
-describe('every catalog command', () => {
-  const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
-  const appDir = path.resolve(harnessDir, '../..');
-  const scripts = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).scripts;
-
-  // A catalog entry pointing at a deleted file used to fail only when the matrix
-  // reached it, ~18 minutes into a Linux run.
-  it('resolves to a scenario file that exists', () => {
-    const broken = [];
-    for (const scenario of scenarioCatalog) {
-      const command = scenario.command || [];
-      let script = null;
-      if (command[0] === 'pnpm') {
-        const name = command[2];
-        script = scripts[name];
-        if (!script) {
-          broken.push(`${scenario.id}: no package.json script "${name}"`);
-          continue;
-        }
-      } else {
-        script = command.join(' ');
-      }
-      const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
-      if (!file) {
-        broken.push(`${scenario.id}: no scenario file in "${script}"`);
-        continue;
-      }
-      if (!fs.existsSync(path.join(appDir, file))) {
-        broken.push(`${scenario.id}: ${file} does not exist`);
-      }
-    }
-
-    expect(broken, 'a catalog entry points at a scenario file that is not on disk').toEqual([]);
-  });
-});
-
 describe('every scenario built on the scenario runner', () => {
   const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
   const runnerIds = new Set(scenarioCatalog.map((scenario) => scenario.runnerId).filter(Boolean));

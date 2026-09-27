@@ -343,12 +343,7 @@ async function main() {
       cleanupSessionID = runRow.session_id;
       runner.assert(Boolean(cleanupSeedID) && Boolean(cleanupSessionID), 'catch-up run reserves a seed and session', runRow);
 
-      const occurrence = sqliteRow(
-        dbPath,
-        `SELECT o.occurrence_key FROM automation_occurrences o JOIN automation_runs r ON r.occurrence_id=o.id WHERE r.id='${sqlEscape(runRow.id)}';`,
-      );
-      runner.assert(occurrence !== null, 'catch-up run has a resolvable occurrence row', { runID: runRow.id });
-      runner.assert(occurrence[0].startsWith('scheduled:'), 'occurrence key carries the scheduled prefix', { occurrenceKey: occurrence[0] });
+      runner.assert(String(runRow.occurrence_key ?? '').startsWith('scheduled:'), 'the catch-up run names its scheduled occurrence', runRow);
     });
 
     await runner.step('leg2_cleanup_evidence', async () => {

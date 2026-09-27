@@ -87,6 +87,22 @@ describe('App session provenance', () => {
     expect(header().queryByText(/attn#74/)).toBeNull();
   });
 
+  it.each<[string, SessionPullRequest[], string, string]>([
+    ['the newest of several open pull requests', [pr({ number: 71, created_at: '2026-08-30T10:00:00Z' }), pr({ number: 74, created_at: '2026-08-30T12:00:00Z' })], 'attn#74', 'open'],
+    ['a draft over a newer merged one, as a draft', [pr({ number: 71, state: 'merged', created_at: '2026-08-30T13:00:00Z' }), pr({ number: 74, state: 'draft' })], 'attn#74', 'draft'],
+    ['conflicts before failing checks or requested changes', [pr({ mergeable_state: 'dirty', ci_status: 'failure', review_status: 'changes_requested' })], 'attn#71', 'conflicts'],
+    ['failing checks before requested changes', [pr({ ci_status: 'failure', review_status: 'changes_requested' })], 'attn#71', 'checks failed'],
+    ['requested changes while checks still run', [pr({ ci_status: 'pending', review_status: 'changes_requested' })], 'attn#71', 'changes requested'],
+    ['ready to merge once approved with a clean merge', [pr({ review_status: 'approved', mergeable_state: 'clean' })], 'attn#71', 'ready to merge'],
+    ['only approved while the merge is still blocked', [pr({ review_status: 'approved', mergeable_state: 'blocked' })], 'attn#71', 'approved'],
+    ['merged regardless of the checks that ran on it', [pr({ state: 'merged', ci_status: 'failure' })], 'attn#71', 'merged'],
+  ])('summarises %s', async (_, pullRequests, shown, status) => {
+    await openSession({ pull_requests: pullRequests });
+
+    expect(header().getByRole('button', { name: `Pull request ${shown} details` })).toBeInTheDocument();
+    expect(header().getByText(status)).toBeInTheDocument();
+  });
+
   it('keeps a merged pull request when no open one is left', async () => {
     await openSession({ pull_requests: [pr({ state: 'merged' })] });
     expect(header().getByText('merged')).toBeInTheDocument();
@@ -126,12 +142,20 @@ describe('App session provenance', () => {
       expect(card.queryByText('waiting for GitHub')).toBeNull();
     });
 
-    it('lists every pull request of the session, newest first, and opens one from its title', async () => {
-      const daemon = await openSession({ pull_requests: [second, pr({ number: 74, created_at: '2026-08-30T14:00:00Z' })] });
+    it('lists every pull request of the session, open then merged then closed, newest first within each, and opens one from its title', async () => {
+      const daemon = await openSession({
+        pull_requests: [
+          pr({ number: 60, state: 'closed', created_at: '2026-08-30T15:00:00Z' }),
+          second,
+          pr({ number: 72, created_at: '2026-08-30T10:00:00Z' }),
+          pr({ number: 74, created_at: '2026-08-30T14:00:00Z' }),
+          pr({ number: 69, state: 'merged', created_at: '2026-08-30T11:00:00Z' }),
+        ],
+      });
       const card = await openPopover(daemon);
 
       const list = within(card.getByRole('list', { name: 'Pull requests from this session' }));
-      expect(list.getAllByRole('button').map((item) => item.textContent?.match(/#\d+/)?.[0])).toEqual(['#74', '#68']);
+      expect(list.getAllByRole('button').map((item) => item.textContent?.match(/#\d+/)?.[0])).toEqual(['#74', '#72', '#69', '#68', '#60']);
 
       fireEvent.click(card.getByTitle('Open attn#74 on GitHub'));
       expect(openUrl).toHaveBeenCalledWith('https://github.com/victorarias/attn/pull/74');

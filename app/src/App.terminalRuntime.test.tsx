@@ -9,6 +9,7 @@ import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspa
 import { fakeRects, sizeTerminals } from './test/layout';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
+import type { AttachBlock } from './types/generated';
 import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
 import { WORKSPACE_RESIZE_COALESCE_MS } from './utils/ghosttyResize';
 import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
@@ -79,8 +80,66 @@ function snapshotOf(bytes: Uint8Array = NATIVE_SNAPSHOT, format: string | null =
   };
 }
 
-function snapshotReply(id: string, snapshot = snapshotOf()) {
+function snapshotReply(id: string, snapshot: ReturnType<typeof snapshotOf> & { blocks?: AttachBlock[] } = snapshotOf()) {
   return { event: 'attach_result' as const, id, success: true, cols: 40, rows: 6, last_seq: 10, running: true, snapshot };
+}
+
+const OSC_133 = '\x1b]133;';
+const BLOCK_STREAM = `${OSC_133}A\x07prompt> ${OSC_133}B\x07echo hello\r\n${OSC_133}C;cmdline_url=echo%20hello\x07hello\r\nworld\r\n${OSC_133}D;0\x07${OSC_133}A\x07prompt> `;
+
+const FAMILY = '\u{1F468}\u200D\u{1F469}\u200D\u{1F467}\u200D\u{1F466}';
+
+function utf8Base64(text: string) {
+  return btoa(Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join(''));
+}
+
+function kittyPlacement(imageId: number, generation: number) {
+  return {
+    image_id: imageId,
+    image_generation: generation,
+    placement_id: 1,
+    z: 0,
+    viewport_row: 0,
+    viewport_col: 0,
+    viewport_visible: true,
+    virtual: false,
+    grid_cols: 2,
+    grid_rows: 1,
+    pixel_width: 2,
+    pixel_height: 1,
+    source_x: 0,
+    source_y: 0,
+    source_width: 2,
+    source_height: 1,
+  };
+}
+
+async function openKittyImages(sessionId: string) {
+  const view = await openAttachedTerminals({ sessions: [daemonSession(sessionId, { state: 'idle' })], workspaces: [agentWorkspace(sessionId)] });
+  let seq = 0;
+  const place = async (...placements: ReturnType<typeof kittyPlacement>[]) => {
+    seq += 1;
+    view.daemon.emit({ event: 'kitty_placements', id: sessionId, seq, placements });
+    await view.daemon.idle();
+  };
+  return { ...view, place };
+}
+
+const TERMINAL_CELL_HEIGHT = 21;
+
+function rowCenter(row: number) {
+  return (row + 0.5) * TERMINAL_CELL_HEIGHT;
+}
+
+async function copyBlockAt(sessionId: string, clientY: number, item: 'Copy command' | 'Copy output') {
+  const copied = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue();
+  const canvas = document.querySelector(`[data-pane-id="pane-${sessionId}"] canvas`)!;
+  fireEvent.contextMenu(canvas, { clientX: 10, clientY });
+  const menuItem = screen.getByRole('menuitem', { name: new RegExp(`^${item}`) });
+  if ((menuItem as HTMLButtonElement).disabled) return null;
+  fireEvent.click(menuItem);
+  await act(() => Promise.resolve());
+  return copied.mock.calls.slice(-1)[0]?.[0] ?? null;
 }
 
 function visibleText(sessionId: string) {
@@ -567,6 +626,21 @@ describe('App terminal runtime', () => {
     expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 100, rows: 4, xpixel: 800, ypixel: 84 }]);
   });
 
+  it('follows a narrow pane as it widens, while it is still too narrow to be usable', async () => {
+    const resize = resizableTerminals(120, 540);
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 15, rows: 25, running: true, last_seq: 0 }));
+    open('s1');
+    await daemon.idle();
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 15, rows: 25 });
+    await daemon.idle();
+
+    await resize(160, 540);
+    await daemon.idle();
+
+    expect(resizesAfterAttach(daemon)).toEqual([{ cmd: 'pty_resize', id: 's1', cols: 20, rows: 25, xpixel: 160, ypixel: 525 }]);
+  });
+
   it('restores a snapshot at its own grid, then fits the PTY to the shown pane', async () => {
     layOutTerminals(800, 600);
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
@@ -682,6 +756,77 @@ describe('App terminal runtime', () => {
     await daemon.idle();
 
     expect(visibleText('s1')).toBe('before\nqueued\nafter');
+  });
+
+  it.each([
+    ['inside one chunk', [`\x1bc0123456789\r${FAMILY}X`]],
+    ['split across chunks', ['\x1b', `c0123456789\r${FAMILY}X`]],
+  ])('keeps an emoji family in one cell after the program resets the terminal %s', async (_, chunks) => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+    });
+
+    for (const [index, chunk] of chunks.entries()) {
+      daemon.emit({ event: 'pty_output', id: 's1', seq: index + 1, data: utf8Base64(chunk) });
+      await daemon.idle();
+    }
+
+    expect(visibleText('s1')).toBe(`${FAMILY}X3456789`);
+  });
+
+  it('asks the daemon once for a placed image’s pixels, and again only for a new generation', async () => {
+    const { daemon, place } = await openKittyImages('k1');
+
+    await place(kittyPlacement(7, 10));
+    await place(kittyPlacement(7, 10));
+    daemon.emit({ event: 'kitty_image_result', id: 'k1', image_id: 7, success: true, generation: 10, width: 2, height: 1, format: 'rgb', data_b64: btoa('\x01\x02\x03\x04\x05\x06') });
+    await daemon.idle();
+    await place(kittyPlacement(7, 10));
+    expect(daemon.sentOf('get_kitty_image')).toEqual([{ cmd: 'get_kitty_image', id: 'k1', image_id: 7 }]);
+
+    await place(kittyPlacement(7, 11));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(2);
+  });
+
+  it('stops asking for an image the daemon cannot serve until the program sends it again', async () => {
+    const { daemon, place } = await openKittyImages('k2');
+
+    await place(kittyPlacement(7, 10));
+    await place(kittyPlacement(7, 11));
+    daemon.emit({ event: 'kitty_image_result', id: 'k2', image_id: 7, success: false, error: 'kitty image 7: not found' });
+    await daemon.idle();
+    await place(kittyPlacement(7, 10), kittyPlacement(7, 11));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(1);
+
+    await place(kittyPlacement(7, 12));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(2);
+  });
+
+  it('copies a command block the daemon’s snapshot restored', async () => {
+    fakeRects((element) => (element.tagName === 'CANVAS' ? new DOMRect(0, 0, 800, 600) : null));
+    const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
+    const blocks = [{ id: 4, pending: false, prompt_row: 29, input_row: 29, input_col: 0, output_start_row: 30, end_row: 32, command: 'tail rows', exit_code: 0 }];
+    daemon.on('attach_session', ({ id }) => snapshotReply(id, { ...snapshotOf(), blocks }));
+    open('s1');
+    await daemon.idle();
+
+    expect(await copyBlockAt('s1', rowCenter(1), 'Copy output')).toBe('row-1200 tail\nSTYLED');
+    expect(await copyBlockAt('s1', rowCenter(1), 'Copy command')).toBe('tail rows');
+  });
+
+  it('keeps a command block copyable after the terminal gets shorter', async () => {
+    const { daemon } = await openAttachedTerminals({
+      sessions: [daemonSession('s1', { state: 'idle' })],
+      workspaces: [agentWorkspace('s1')],
+      output: { s1: `${'filler\r\n'.repeat(20)}${BLOCK_STREAM}` },
+    });
+
+    daemon.emit({ event: 'pty_resized', id: 's1', cols: 80, rows: 12 });
+    await daemon.idle();
+    const rows = visibleText('s1')!.split('\n');
+
+    expect(await copyBlockAt('s1', rowCenter(rows.indexOf('hello')), 'Copy output')).toBe('hello\nworld');
   });
 
   it('paints replayed output once', async () => {

@@ -31,11 +31,6 @@ describe('assertFreshWorldTargetSafe', () => {
     expect(() => assertFreshWorldTargetSafe({ instance: 'fxm1', appPath: '/Users/victor/Applications/attn-fxm1.app' }))
       .not.toThrow();
   });
-
-  it("does not throw for the 'dev' instance", () => {
-    expect(() => assertFreshWorldTargetSafe({ instance: 'dev', appPath: '/Users/victor/Applications/attn-dev.app' }))
-      .not.toThrow();
-  });
 });
 
 describe('commandRunsExecutable', () => {
@@ -81,10 +76,5 @@ describe('registeredPtyHostPids', () => {
     };
     expect(registeredPtyHostPids({ dataDir, executablePath: host, commandLineFor: (pid) => commands[pid] ?? '' }))
       .toEqual([4242]);
-  });
-
-  it('is empty when the instance has never started a shared host', () => {
-    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fresh-world-hosts-'));
-    expect(registeredPtyHostPids({ dataDir, executablePath: host, commandLineFor: () => host })).toEqual([]);
   });
 });

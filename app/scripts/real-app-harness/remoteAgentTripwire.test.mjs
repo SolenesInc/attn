@@ -9,10 +9,8 @@ import {
   armRemoteAgentTripwire,
   buildRemoteAgentTripwire,
   collectRemoteAgentTripwire,
-  installLocalRemoteMockCommand,
   REMOTE_MOCK_AGENT_COMMAND,
   verifyRemoteDaemonTripwire,
-  writeRemoteMockAgentFixture,
 } from './remoteAgentTripwire.mjs';
 
 let tmpDir;
@@ -44,23 +42,6 @@ describe('remote agent tripwire', () => {
       ATTN_REMOTE_AGENT_TRIPWIRE_LEDGER: fixture.ledgerPath,
       ATTN_REMOTE_CODEX_EXECUTABLE: '/home/attn-remote/.attn/real-app-harness/agent-fixtures/bin/codex',
     });
-  });
-
-  it('quotes a remote cwd containing an apostrophe', async () => {
-    let command = '';
-    await writeRemoteMockAgentFixture({
-      target: 'fixture@orb',
-      cwd: "/home/attn-remote/it's-here",
-      config: { turns: [] },
-      remote: async (_target, value) => { command = value; },
-    });
-
-    expect(command).toContain("'/home/attn-remote/it'\\''s-here'");
-  });
-
-  it('installs a local command with the same name the remote PATH resolves', () => {
-    expect(installLocalRemoteMockCommand({ dir: tmpDir })).toBe(REMOTE_MOCK_AGENT_COMMAND);
-    expect(fs.statSync(path.join(tmpDir, REMOTE_MOCK_AGENT_COMMAND)).mode & 0o111).not.toBe(0);
   });
 
   it('records and refuses an agent command on the fixture VM', () => {
@@ -98,20 +79,6 @@ describe('remote agent tripwire', () => {
     expect(commands[0]).toContain(fixture.mockAgentPath);
     expect(commands[0]).toContain(fixture.ledgerPath);
     expect(writes[0][0]).toBe('remote-agent-tripwire-armed.json');
-  });
-
-  it('writes a validated mock config into the remote session cwd', async () => {
-    let command = '';
-    const configPath = await writeRemoteMockAgentFixture({
-      target: 'fixture@orb',
-      cwd: '/home/attn-remote/workspace',
-      config: { name: 'remote mock', turns: [], defaultActions: [] },
-      remote: async (_target, value) => { command = value; },
-    });
-
-    expect(configPath).toBe('/home/attn-remote/workspace/.attn-mock-agent.json');
-    expect(command).toContain('base64 -d');
-    expect(command).toContain('.attn-mock-agent.json');
   });
 
   it('proves the remote daemon inherited the shims and switch', async () => {

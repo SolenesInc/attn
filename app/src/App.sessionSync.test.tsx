@@ -1,10 +1,12 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace } from './test/daemonFixtures';
-import { renderApp } from './test/renderApp';
+import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspace } from './test/daemonFixtures';
+import { gesture, renderApp } from './test/renderApp';
 
 const renderedPaneSessions = () =>
   Array.from(document.querySelectorAll('[data-pane-session-id]')).map((pane) => pane.getAttribute('data-pane-session-id'));
+
+const selectedSession = () => document.querySelector('.session-item.selected .session-label')?.textContent ?? null;
 
 describe('App session and workspace sync', () => {
   it('lists shell sessions next to agents, as the daemon reports them', async () => {
@@ -84,5 +86,48 @@ describe('App session and workspace sync', () => {
     daemon.emit({ event: 'workspace_unregistered', workspace: withoutLayout });
     daemon.emit(reopenedLayout);
     expect(renderedPaneSessions()).toEqual([]);
+  });
+
+  it('moves to the session left in the workspace when the open one closes', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('elsewhere'), daemonSession('root', { workspace_id: 'ws' }), daemonSession('split', { workspace_id: 'ws' })],
+        workspaces: [agentWorkspace('elsewhere'), splitWorkspace('ws', ['root', 'split'])],
+      },
+    });
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Open split' })));
+    expect(selectedSession()).toBe('split');
+
+    daemon.emit({ event: 'session_unregistered', session: daemonSession('split', { workspace_id: 'ws' }) });
+    daemon.emit({ event: 'workspace_layout_updated', workspace_layout: splitWorkspace('ws', ['root']).layout! });
+    await daemon.idle();
+
+    expect(selectedSession()).toBe('root');
+  });
+
+  it('moves to the session the user was on before when a whole workspace closes', async () => {
+    const sessions = ['first', 'second', 'closing'].map((id) => daemonSession(id));
+    const { daemon } = await renderApp({ initialState: { sessions, workspaces: sessions.map(({ id }) => agentWorkspace(id)) } });
+    for (const id of ['second', 'first', 'closing']) {
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: `Open ${id}` })));
+    }
+
+    daemon.emit({ event: 'session_unregistered', session: sessions[2] });
+    daemon.emit({ event: 'workspace_unregistered', workspace: agentWorkspace('closing') });
+    await daemon.idle();
+
+    expect(selectedSession()).toBe('first');
+  });
+
+  it.each([
+    ['keeps a session still launching into its pane', 'launching' as const, true],
+    ['drops a session that already ran', 'idle' as const, false],
+  ])('%s when a daemon snapshot omits it', async (_, state, kept) => {
+    const spawning = daemonWorkspace('ws', { root: { type: 'pane', pane_id: 'pane-booting' }, panes: [{ ...agentPane('booting', 'ws'), status: 'spawning' }] });
+    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('booting', { workspace_id: 'ws', state })], workspaces: [spawning] } });
+
+    await gesture(daemon, () => daemon.emit({ event: 'sessions_updated', sessions: [] }));
+
+    expect(screen.queryByRole('button', { name: 'Open booting' }) !== null).toBe(kept);
   });
 });
