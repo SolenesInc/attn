@@ -1,4 +1,4 @@
-import { test, expect } from './fixtures';
+import { test, expect, waitForMockPtyBanner } from './fixtures';
 
 type WorkspaceSessionFixture = {
   id: string;
@@ -117,6 +117,37 @@ test.describe('Workspace Sessions', () => {
     await expect(page.locator('.sidebar')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-main"]')).toBeVisible();
     await expect(workspace.locator('[data-pane-id="pane-focus-peer"]')).toBeVisible();
+  });
+
+  test('frees a hidden workspace terminal\'s drawing buffer and repaints it unchanged on return', async ({ page, daemon }) => {
+    await daemon.start();
+    await page.goto('/');
+    await page.waitForSelector('.dashboard');
+    await injectWorkspace(page, daemon, 'workspace-gpu', [
+      { id: 'gpu-agent', label: 'gpu-agent', paneId: 'pane-gpu-agent', cwd: '/tmp/workspace-gpu' },
+    ]);
+    await injectWorkspace(page, daemon, 'workspace-other', [
+      { id: 'other-agent', label: 'other-agent', paneId: 'pane-other-agent', cwd: '/tmp/workspace-other' },
+    ]);
+    await page.getByTestId('session-gpu-agent').click();
+    await waitForMockPtyBanner(page, 'gpu-agent');
+    await page.evaluate(() => window.__TEST_EMIT_PTY_DATA?.('gpu-agent', '\x1b[?25l\x1b[41mpainted before hiding\x1b[0m\r\nsecond row'));
+    await expect
+      .poll(() => page.evaluate(() => window.__TEST_GET_SESSION_PANE_TEXT?.('gpu-agent') ?? ''))
+      .toContain('second row');
+    const canvas = page.locator('[data-pane-id="pane-gpu-agent"] canvas').first();
+    const before = await canvas.screenshot();
+    const shown = await canvas.evaluate((element: HTMLCanvasElement) => [element.width, element.height]);
+    expect(shown[0]).toBeGreaterThan(1);
+
+    await page.getByTestId('sidebar-session-other-agent').getByRole('button', { name: 'Open other-agent' }).click();
+    await expect(canvas).toHaveJSProperty('width', 1);
+    await expect(canvas).toHaveJSProperty('height', 1);
+
+    await page.getByTestId('sidebar-session-gpu-agent').getByRole('button', { name: 'Open gpu-agent' }).click();
+    await expect(canvas).toHaveJSProperty('width', shown[0]);
+    await expect(canvas).toHaveJSProperty('height', shown[1]);
+    expect((await canvas.screenshot()).equals(before)).toBe(true);
   });
 
   test('sidebar selection, row actions, and settings have independent keyboard targets', async ({ page, daemon }) => {

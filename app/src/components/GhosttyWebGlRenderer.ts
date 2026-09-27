@@ -53,7 +53,7 @@ interface OverlaySpan {
   kind: 'background' | 'underline';
 }
 
-export function visibleOutlineEdges(
+function visibleOutlineEdges(
   startRow: number,
   endRow: number,
   rows: number,
@@ -143,7 +143,7 @@ export interface WebGlRenderSample {
   printableSkippedZeroWidth: number;
 }
 
-export function graphemeAtViewportCell(
+function graphemeAtViewportCell(
   terminal: Pick<GhosttyTerminal, 'getScrollbackLength' | 'getScrollbackGraphemeString' | 'getGraphemeString'>,
   row: number,
   col: number,
@@ -161,7 +161,7 @@ export function graphemeAtViewportCell(
 export const INITIAL_ATLAS_SIZE = 1024;
 export const MAX_ATLAS_SIZE = 2048;
 
-export function nextAtlasSize(current: number, max: number = MAX_ATLAS_SIZE): number {
+function nextAtlasSize(current: number, max: number = MAX_ATLAS_SIZE): number {
   return Math.min(current * 2, max);
 }
 const BLOCK_ELEMENT_RECTS: Readonly<Record<number, readonly BlockRect[]>> = {
