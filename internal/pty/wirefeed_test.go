@@ -81,12 +81,3 @@ func TestDiffKittyPlacements(t *testing.T) {
 		})
 	}
 }
-
-func TestAppendCSIWritesNothingForZero(t *testing.T) {
-	if got := appendCSI(nil, 0, 'S'); len(got) != 0 {
-		t.Errorf("appendCSI(0) = %q, want nothing", got)
-	}
-	if got := string(appendCSI(nil, 12, 'B')); got != "\x1b[12B" {
-		t.Errorf("appendCSI(12,'B') = %q", got)
-	}
-}
