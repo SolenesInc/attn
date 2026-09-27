@@ -114,7 +114,6 @@ type fakeSpawnBackend struct {
 	onSnapshot         func()
 	terminalBuild      string
 	terminalBuildKnown bool
-	upgradeErr         error
 	onUpgrade          func(*fakeSpawnBackend)
 	upgraded           []string
 	upgradeDone        chan string
@@ -126,8 +125,7 @@ type fakeSpawnBackend struct {
 func (b *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) error {
 	b.mu.Lock()
 	b.upgraded = append(b.upgraded, sessionID)
-	err := b.upgradeErr
-	if err == nil && b.onUpgrade != nil {
+	if b.onUpgrade != nil {
 		b.onUpgrade(b)
 	}
 	done := b.upgradeDone
@@ -143,7 +141,7 @@ func (b *fakeSpawnBackend) UpgradeWorker(_ context.Context, sessionID string) er
 	if done != nil {
 		done <- sessionID
 	}
-	return err
+	return nil
 }
 
 func (b *fakeSpawnBackend) SessionTerminalBuild(string) (string, bool) {
