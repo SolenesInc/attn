@@ -89,6 +89,38 @@ function utf8Base64(text: string) {
   return btoa(Array.from(new TextEncoder().encode(text), (byte) => String.fromCharCode(byte)).join(''));
 }
 
+function kittyPlacement(imageId: number, generation: number) {
+  return {
+    image_id: imageId,
+    image_generation: generation,
+    placement_id: 1,
+    z: 0,
+    viewport_row: 0,
+    viewport_col: 0,
+    viewport_visible: true,
+    virtual: false,
+    grid_cols: 2,
+    grid_rows: 1,
+    pixel_width: 2,
+    pixel_height: 1,
+    source_x: 0,
+    source_y: 0,
+    source_width: 2,
+    source_height: 1,
+  };
+}
+
+async function openKittyImages(sessionId: string) {
+  const view = await openAttachedTerminals({ sessions: [daemonSession(sessionId, { state: 'idle' })], workspaces: [agentWorkspace(sessionId)] });
+  let seq = 0;
+  const place = async (...placements: ReturnType<typeof kittyPlacement>[]) => {
+    seq += 1;
+    view.daemon.emit({ event: 'kitty_placements', id: sessionId, seq, placements });
+    await view.daemon.idle();
+  };
+  return { ...view, place };
+}
+
 function visibleText(sessionId: string) {
   return window.__TEST_GET_SESSION_PANE_VISIBLE_TEXT?.(sessionId).trim();
 }
@@ -705,6 +737,34 @@ describe('App terminal runtime', () => {
     }
 
     expect(visibleText('s1')).toBe(`${FAMILY}X3456789`);
+  });
+
+  it('asks the daemon once for a placed image’s pixels, and again only for a new generation', async () => {
+    const { daemon, place } = await openKittyImages('k1');
+
+    await place(kittyPlacement(7, 10));
+    await place(kittyPlacement(7, 10));
+    daemon.emit({ event: 'kitty_image_result', id: 'k1', image_id: 7, success: true, generation: 10, width: 2, height: 1, format: 'rgb', data_b64: btoa('\x01\x02\x03\x04\x05\x06') });
+    await daemon.idle();
+    await place(kittyPlacement(7, 10));
+    expect(daemon.sentOf('get_kitty_image')).toEqual([{ cmd: 'get_kitty_image', id: 'k1', image_id: 7 }]);
+
+    await place(kittyPlacement(7, 11));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(2);
+  });
+
+  it('stops asking for an image the daemon cannot serve until the program sends it again', async () => {
+    const { daemon, place } = await openKittyImages('k2');
+
+    await place(kittyPlacement(7, 10));
+    await place(kittyPlacement(7, 11));
+    daemon.emit({ event: 'kitty_image_result', id: 'k2', image_id: 7, success: false, error: 'kitty image 7: not found' });
+    await daemon.idle();
+    await place(kittyPlacement(7, 10), kittyPlacement(7, 11));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(1);
+
+    await place(kittyPlacement(7, 12));
+    expect(daemon.sentOf('get_kitty_image')).toHaveLength(2);
   });
 
   it('paints replayed output once', async () => {
