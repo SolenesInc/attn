@@ -1,5 +1,5 @@
-import { fireEvent, screen, within } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, screen, within } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { chosenRow, destinationMemory, HOME, launchedAt, openPicker, pathInput, press, repoInfo, submitPath } from './test/locations';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -189,6 +189,39 @@ describe('App new session', () => {
 
       expect(daemon.sentOf('create_worktree').map(({ branch }) => branch)).toEqual(['mine']);
       expect(screen.getByRole('alert')).toHaveTextContent(error);
+      expect(launchedAt(daemon)).toEqual([]);
+    });
+
+    it('tucks a slow worktree setup into a corner without taking focus, and reopens it there when it fails', async () => {
+      const { daemon } = await openChooser();
+      daemon.on('create_worktree', () => undefined);
+      fireEvent.change(createInput(), { target: { value: 'slow' } });
+      await inChooser(daemon, 'Enter');
+      const setup = () => screen.getByRole('dialog', { name: 'Creating worktree' });
+      const tucked = () => screen.getByRole('button', { name: /^Session setup/ });
+      expect(setup()).toHaveTextContent('slow');
+      const focused = document.activeElement;
+
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+
+      expect(setup().closest('.session-progress-prompt')).toHaveClass('surface-hidden');
+      expect(tucked()).toHaveTextContent('Creating worktree');
+      expect(document.activeElement).toBe(focused);
+
+      const [create] = daemon.sentOf('create_worktree');
+      await gesture(daemon, () => daemon.replyTo(create, { event: 'create_worktree_result', success: false, error: 'fatal: invalid reference: origin/main' }));
+      const failed = screen.getByRole('button', { name: /^Create failed/ });
+      expect(failed).toHaveTextContent('slow failed');
+
+      fireEvent.click(failed);
+      await act(() => vi.advanceTimersByTimeAsync(400));
+      const problem = screen.getByRole('dialog', { name: 'Session was not created' });
+      expect(problem.closest('.session-progress-prompt')).not.toHaveClass('surface-hidden');
+      expect(within(problem).getByRole('alert')).toHaveTextContent('fatal: invalid reference: origin/main');
+
+      fireEvent.click(within(problem).getByRole('button', { name: 'Dismiss' }));
+
+      expect(screen.queryByRole('dialog', { name: 'Session was not created' })).toBeNull();
       expect(launchedAt(daemon)).toEqual([]);
     });
 
