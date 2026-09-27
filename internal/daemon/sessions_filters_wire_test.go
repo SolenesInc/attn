@@ -13,7 +13,7 @@ const sessionsFiltersKey = "sessions.filters"
 func TestTheSessionsFiltersAreKeptExactlyAsSentAndRefusedWhenMalformed(t *testing.T) {
 	w := newWorld(t)
 	app := w.App()
-	saved := `{"scope":"closed","range":"custom","customFrom":"2026-08-01","customTo":"2026-08-31","workspaceId":"ws-1","repository":"/Users/victor/projects/attn"}`
+	saved := `{"scope":"closed","range":"custom","customFrom":"2026-08-01","customTo":"2026-08-31","profileId":"profile-1","repository":"/Users/victor/projects/attn"}`
 	setSetting(t, app, sessionsFiltersKey, saved)
 
 	w.restart()
@@ -23,9 +23,9 @@ func TestTheSessionsFiltersAreKeptExactlyAsSentAndRefusedWhenMalformed(t *testin
 	}
 
 	for name, value := range map[string]string{
-		"unknown scope":    `{"scope":"archived","range":"any","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unknown range":    `{"scope":"all","range":"last-week","customFrom":"","customTo":"","workspaceId":"","repository":""}`,
-		"unparsed date":    `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","workspaceId":"","repository":""}`,
+		"unknown scope":    `{"scope":"archived","range":"any","customFrom":"","customTo":"","profileId":"","repository":""}`,
+		"unknown range":    `{"scope":"all","range":"last-week","customFrom":"","customTo":"","profileId":"","repository":""}`,
+		"unparsed date":    `{"scope":"all","range":"custom","customFrom":"yesterday","customTo":"","profileId":"","repository":""}`,
 		"unknown field":    `{"scope":"all","range":"any","selectedId":"s1"}`,
 		"not an object":    `["closed"]`,
 		"a second object":  `{"scope":"all","range":"any"} {"scope":"closed","range":"any"}`,

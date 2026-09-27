@@ -33,7 +33,6 @@ type resolvedDelegationLaunch struct {
 	Review             *protocol.SeedReviewActionContext
 
 	Brief                 *string
-	Placement             *string
 	Worktree              *protocol.DelegateWorktreeRequest
 	Plot                  *string
 	Handover              *protocol.SeedHandoverRequest
@@ -155,7 +154,6 @@ func (d *Daemon) resolveDelegateRuntimeWithHandoverSnapshot(
 		return nil, err
 	}
 	runtime := resolveLaunchInput(msg)
-	runtime.Placement = protocol.Ptr(delegationPlacementNew)
 	runtime.Brief = nil
 	runtime.Plot = nil
 	runtime.Handover = nil

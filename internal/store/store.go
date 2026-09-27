@@ -16,7 +16,6 @@ import (
 	"github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/launchcontract"
 	"github.com/victorarias/attn/internal/protocol"
-	"github.com/victorarias/attn/internal/workspacelayout"
 )
 
 type Store struct {
@@ -26,7 +25,6 @@ type Store struct {
 
 	durable bool
 
-	externalProcesses      map[string]*protocol.ExternalProcess
 	sessions               map[string]*protocol.Session
 	turnStamps             map[string]TurnStamps
 	activityCursors        map[string]string
@@ -36,8 +34,6 @@ type Store struct {
 	teardownIntents        map[string]SessionTeardownIntent
 	sessionCloses          map[string]sessionCloseMark
 	agentMetadata          map[string]string
-	instanceRoles          map[string]string
-	workspaces             map[string]workspacelayout.WorkspaceLayout
 	recentLocations        map[string]*protocol.RecentLocation
 	settings               map[string]string
 	writes                 *tableWrites
@@ -85,7 +81,7 @@ type LaunchIntent struct {
 }
 
 func New() *Store {
-	db, writes, err := openDB(":memory:")
+	db, writes, _, err := openUpgradedDB(":memory:")
 	if err != nil {
 		return newMapBackedStore()
 	}
@@ -113,8 +109,6 @@ func newMapBackedStore() *Store {
 		sessionCloses:   make(map[string]sessionCloseMark),
 		sessionCosts:    make(map[string]SessionCostState),
 		agentMetadata:   make(map[string]string),
-		instanceRoles:   make(map[string]string),
-		workspaces:      make(map[string]workspacelayout.WorkspaceLayout),
 		recentLocations: make(map[string]*protocol.RecentLocation),
 	}
 }
@@ -136,9 +130,6 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 	}
 	if session.MainRepo != nil {
 		cloned.MainRepo = protocol.Ptr(protocol.Deref(session.MainRepo))
-	}
-	if session.PinnedAt != nil {
-		cloned.PinnedAt = protocol.Ptr(protocol.Deref(session.PinnedAt))
 	}
 	if session.ContextWindowCap != nil {
 		cloned.ContextWindowCap = protocol.Ptr(protocol.Deref(session.ContextWindowCap))
@@ -168,7 +159,21 @@ func cloneSession(session *protocol.Session) *protocol.Session {
 }
 
 func NewWithDB(dbPath string) (*Store, error) {
-	db, writes, err := openDB(dbPath)
+	store, _, err := Open(dbPath)
+	return store, err
+}
+
+func Open(dbPath string) (*Store, SchemaUpgrade, error) {
+	db, writes, upgrade, err := openUpgradedDB(dbPath)
+	if err != nil {
+		return nil, upgrade, err
+	}
+	store, err := newDBStore(db, writes, dbPath, true)
+	return store, upgrade, err
+}
+
+func OpenCurrent(dbPath string) (*Store, error) {
+	db, writes, err := openCurrentDB(dbPath)
 	if err != nil {
 		return nil, err
 	}
@@ -205,22 +210,16 @@ func (s *Store) Add(session *protocol.Session) {
 func (s *Store) AddChecked(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.addCheckedLocked(session, false, nil)
+	return s.addCheckedLocked(session, false)
 }
 
 func (s *Store) AddCheckedUnlessTeardown(session *protocol.Session) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.addCheckedLocked(session, true, nil)
+	return s.addCheckedLocked(session, true)
 }
 
-func (s *Store) AddRegisteredSession(session *protocol.Session, process *protocol.ExternalProcess) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.addCheckedLocked(session, true, process)
-}
-
-func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool, process *protocol.ExternalProcess) error {
+func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool) error {
 	if s.db == nil {
 		if _, closing := s.teardownIntents[session.ID]; rejectTeardown && closing {
 			return fmt.Errorf("session %s is closing", session.ID)
@@ -236,11 +235,11 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 			stored.LastModelRequestAt = protocol.Ptr(stored.StateUpdatedAt)
 		}
 		if existing := s.sessions[session.ID]; existing != nil {
+			if existing.ProfileID != "" {
+				stored.ProfileID = existing.ProfileID
+			}
 			if existing.LastModelRequestAt != nil {
 				stored.LastModelRequestAt = protocol.Ptr(protocol.Deref(existing.LastModelRequestAt))
-			}
-			if existing.PinnedAt != nil {
-				stored.PinnedAt = protocol.Ptr(protocol.Deref(existing.PinnedAt))
 			}
 			if existing.ContextWindowCap != nil {
 				stored.ContextWindowCap = protocol.Ptr(protocol.Deref(existing.ContextWindowCap))
@@ -249,13 +248,6 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 				stored.Activity = protocol.Ptr(protocol.Deref(existing.Activity))
 				stored.ActivityAt = protocol.Ptr(protocol.Deref(existing.ActivityAt))
 			}
-		}
-		if process != nil && (s.sessions[session.ID] == nil || s.externalProcesses[session.ID] != nil) {
-			if s.externalProcesses == nil {
-				s.externalProcesses = make(map[string]*protocol.ExternalProcess)
-			}
-			copy := *process
-			s.externalProcesses[session.ID] = &copy
 		}
 		s.sessions[session.ID] = stored
 		return nil
@@ -273,6 +265,9 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 	if s.sessionClosedLocked(session.ID) {
 		return fmt.Errorf("add session %s: %w", session.ID, ErrSessionClosed)
 	}
+	if err := s.refuseJoiningDeletedProfileLocked(session); err != nil {
+		return fmt.Errorf("add session %s: %w", session.ID, err)
+	}
 
 	normalizedAgent := strings.TrimSpace(strings.ToLower(string(session.Agent)))
 	if normalizedAgent == "" {
@@ -283,24 +278,16 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 	if lastModelRequestAt == "" {
 		lastModelRequestAt = session.StateUpdatedAt
 	}
-	processJSON := ""
-	if process != nil {
-		encoded, err := json.Marshal(process)
-		if err != nil {
-			return err
-		}
-		processJSON = string(encoded)
-	}
 	_, err := s.db.Exec(`
 		INSERT INTO sessions
-		(id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen, external_process)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, parent_session_id, last_seen)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			label = excluded.label,
 			agent = excluded.agent,
 			directory = excluded.directory,
 			endpoint_id = excluded.endpoint_id,
-			workspace_id = excluded.workspace_id,
+			profile_id = CASE WHEN sessions.profile_id = '' THEN excluded.profile_id ELSE sessions.profile_id END,
 			branch = excluded.branch,
 			is_worktree = excluded.is_worktree,
 			main_repo = excluded.main_repo,
@@ -313,16 +300,13 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 				ELSE sessions.last_model_request_at
 			END,
 			parent_session_id = excluded.parent_session_id,
-			last_seen = excluded.last_seen,
-			external_process = CASE
-				WHEN sessions.external_process != '' AND excluded.external_process != '' THEN excluded.external_process
-				ELSE sessions.external_process END`,
+			last_seen = excluded.last_seen`,
 		session.ID,
 		session.Label,
 		session.Agent,
 		session.Directory,
 		protocol.Deref(session.EndpointID),
-		session.WorkspaceID,
+		session.ProfileID,
 		protocol.Deref(session.Branch),
 		boolToInt(protocol.Deref(session.IsWorktree)),
 		protocol.Deref(session.MainRepo),
@@ -333,12 +317,27 @@ func (s *Store) addCheckedLocked(session *protocol.Session, rejectTeardown bool,
 		lastModelRequestAt,
 		protocol.Deref(session.ParentSessionID),
 		session.LastSeen,
-		processJSON,
 	)
 	if err != nil {
 		return fmt.Errorf("insert session %s: %w", session.ID, err)
 	}
 	return nil
+}
+
+func (s *Store) refuseJoiningDeletedProfileLocked(session *protocol.Session) error {
+	if session.ProfileID == "" {
+		return nil
+	}
+	var current string
+	err := s.db.QueryRow(`SELECT profile_id FROM sessions WHERE id = ?`, session.ID).Scan(&current)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if current != "" {
+		return nil
+	}
+	_, err = loadLiveProfile(s.db, session.ProfileID)
+	return err
 }
 
 func (s *Store) Get(id string) *protocol.Session {
@@ -365,17 +364,17 @@ func (s *Store) Get(id string) *protocol.Session {
 	var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 	var isWorktree int
 	var contextWindowCap int
-	var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+	var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 	err := s.db.QueryRow(`
-		SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+		SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 		FROM sessions WHERE id = ? AND closed_at = ''`, id).Scan(
 		&session.ID,
 		&session.Label,
 		&session.Agent,
 		&session.Directory,
 		&endpointID,
-		&workspaceID,
+		&session.ProfileID,
 		&branch,
 		&isWorktree,
 		&mainRepo,
@@ -384,7 +383,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		&stateSince,
 		&stateUpdatedAt,
 		&lastModelRequestAt,
-		&pinnedAt,
 		&contextWindowCap,
 		&parentSessionID,
 		&activity,
@@ -403,9 +401,6 @@ func (s *Store) Get(id string) *protocol.Session {
 		SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 	})
 
-	if pinnedAt.Valid && pinnedAt.String != "" {
-		session.PinnedAt = protocol.Ptr(pinnedAt.String)
-	}
 	if contextWindowCap > 0 {
 		session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 	}
@@ -416,9 +411,6 @@ func (s *Store) Get(id string) *protocol.Session {
 
 	if endpointID.Valid && endpointID.String != "" {
 		session.EndpointID = protocol.Ptr(endpointID.String)
-	}
-	if workspaceID.Valid && workspaceID.String != "" {
-		session.WorkspaceID = workspaceID.String
 	}
 	if branch.Valid && branch.String != "" {
 		session.Branch = protocol.Ptr(branch.String)
@@ -456,7 +448,6 @@ func (s *Store) Remove(id string) {
 
 	if s.db == nil {
 		delete(s.sessions, id)
-		delete(s.externalProcesses, id)
 		delete(s.sessionCloses, id)
 		delete(s.turnStamps, id)
 		delete(s.agentDriverRuns, id)
@@ -467,6 +458,7 @@ func (s *Store) Remove(id string) {
 	delete(s.touchedAt, id)
 	s.forgetSessionCost(id)
 
+	s.unplaceSessionsLocked("Remove", "session_id = ?", id)
 	_, err := s.db.Exec("DELETE FROM sessions WHERE id = ?", id)
 	if err != nil {
 		log.Printf("[store] Remove: failed for session %s: %v", id, err)
@@ -512,11 +504,11 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 	if stateFilter == "" {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE closed_at = '' ORDER BY label, id`)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT id, label, agent, directory, endpoint_id, workspace_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, pinned_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
+			SELECT id, label, agent, directory, endpoint_id, profile_id, branch, is_worktree, main_repo, repository, state, state_since, state_updated_at, last_model_request_at, context_window_cap, parent_session_id, activity, activity_at, last_seen, turn_opened_at, turn_settled_at, turn_snoozed_until
 			FROM sessions WHERE state = ? AND closed_at = '' ORDER BY label, id`, stateFilter)
 	}
 	if err != nil {
@@ -531,7 +523,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 		var turnOpenedAt, turnSettledAt, turnSnoozedUntil string
 		var isWorktree int
 		var contextWindowCap int
-		var endpointID, workspaceID, branch, mainRepo, repository, pinnedAt, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
+		var endpointID, branch, mainRepo, repository, parentSessionID, activity, activityAt, lastModelRequestAt sql.NullString
 
 		err := rows.Scan(
 			&session.ID,
@@ -539,7 +531,7 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&session.Agent,
 			&session.Directory,
 			&endpointID,
-			&workspaceID,
+			&session.ProfileID,
 			&branch,
 			&isWorktree,
 			&mainRepo,
@@ -548,7 +540,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			&stateSince,
 			&stateUpdatedAt,
 			&lastModelRequestAt,
-			&pinnedAt,
 			&contextWindowCap,
 			&parentSessionID,
 			&activity,
@@ -567,9 +558,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 			SnoozedUntil: parseTurnStamp(turnSnoozedUntil),
 		})
 
-		if pinnedAt.Valid && pinnedAt.String != "" {
-			session.PinnedAt = protocol.Ptr(pinnedAt.String)
-		}
 		if contextWindowCap > 0 {
 			session.ContextWindowCap = protocol.Ptr(contextWindowCap)
 		}
@@ -580,9 +568,6 @@ func (s *Store) List(stateFilter string) []*protocol.Session {
 
 		if endpointID.Valid && endpointID.String != "" {
 			session.EndpointID = protocol.Ptr(endpointID.String)
-		}
-		if workspaceID.Valid && workspaceID.String != "" {
-			session.WorkspaceID = workspaceID.String
 		}
 		if branch.Valid && branch.String != "" {
 			session.Branch = protocol.Ptr(branch.String)
@@ -2141,81 +2126,6 @@ func readSettings(db *sql.DB) (map[string]string, error) {
 		settings[key] = value.String
 	}
 	return settings, rows.Err()
-}
-
-func (s *Store) GetInstanceRole(role string) string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	role = strings.TrimSpace(role)
-	if role == "" {
-		return ""
-	}
-	if s.db == nil {
-		return strings.TrimSpace(s.instanceRoles[role])
-	}
-
-	var sessionID string
-	if err := s.db.QueryRow(
-		"SELECT session_id FROM instance_roles WHERE role = ?",
-		role,
-	).Scan(&sessionID); err != nil {
-		return ""
-	}
-	return strings.TrimSpace(sessionID)
-}
-
-func (s *Store) SetInstanceRole(role, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	role = strings.TrimSpace(role)
-	sessionID = strings.TrimSpace(sessionID)
-	if role == "" {
-		return fmt.Errorf("role cannot be empty")
-	}
-	if sessionID == "" {
-		return fmt.Errorf("session id cannot be empty")
-	}
-	if s.db == nil {
-		if s.instanceRoles == nil {
-			s.instanceRoles = make(map[string]string)
-		}
-		s.instanceRoles[role] = sessionID
-		return nil
-	}
-
-	_, err := s.db.Exec(`
-		INSERT INTO instance_roles (role, session_id) VALUES (?, ?)
-		ON CONFLICT(role) DO UPDATE SET session_id = excluded.session_id`,
-		role,
-		sessionID,
-	)
-	return err
-}
-
-func (s *Store) ClearInstanceRole(role, sessionID string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	role = strings.TrimSpace(role)
-	sessionID = strings.TrimSpace(sessionID)
-	if role == "" {
-		return fmt.Errorf("role cannot be empty")
-	}
-	if s.db == nil {
-		if strings.TrimSpace(s.instanceRoles[role]) == sessionID {
-			delete(s.instanceRoles, role)
-		}
-		return nil
-	}
-
-	_, err := s.db.Exec(
-		"DELETE FROM instance_roles WHERE role = ? AND session_id = ?",
-		role,
-		sessionID,
-	)
-	return err
 }
 
 func resolveRecentLocationPath(path string) string {

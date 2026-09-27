@@ -96,7 +96,7 @@ func (d *Daemon) handleAgentInboxBatch(conn net.Conn, recipientSessionID string,
 			item.SenderSessionID = protocol.Ptr(delivery.Peer.SenderSessionID)
 			label := shortSessionID(delivery.Peer.SenderSessionID)
 			if sender := d.store.Get(delivery.Peer.SenderSessionID); sender != nil {
-				label = d.sessionOriginName(sender)
+				label = sessionDisplayName(sender)
 			}
 			item.SenderLabel = protocol.Ptr(label)
 		}
@@ -162,7 +162,7 @@ func (d *Daemon) replyPeerMessageError(conn net.Conn, err error) {
 func (d *Daemon) peerMessageResult(record inbox.PeerRecord) *protocol.AgentPeerMessage {
 	senderLabel := shortSessionID(record.Message.SenderSessionID)
 	if sender := d.store.Get(record.Message.SenderSessionID); sender != nil {
-		senderLabel = d.sessionOriginName(sender)
+		senderLabel = sessionDisplayName(sender)
 	}
 	target := record.ReadBy
 	if target == "" {

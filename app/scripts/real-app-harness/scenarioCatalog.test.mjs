@@ -33,9 +33,11 @@ describe('scenarioCatalog agent tripwire flags', () => {
       .toThrow(/"SOME-UNLISTED-PROBE" has no scenarioCatalog\.mjs entry[\s\S]*allowRealAgents/);
     expect(() => allowRealAgentsForRunner(undefined)).toThrow(/no scenarioCatalog\.mjs entry/);
   });
+
 });
 
 describe('scenarioCatalog direct selection', () => {
+
   it('keeps hand-written soaks with unsafe teardown out of direct selection', () => {
     for (const id of ['offset-soak', 'perf-baseline', 'perf-cold-warm']) {
       expect(() => resolveScenario(id), id).toThrow(`Unknown scenario id: ${id}`);
@@ -45,6 +47,40 @@ describe('scenarioCatalog direct selection', () => {
 
 // A hand-rolled main() that never builds a runner arms no tripwire at all and
 // is out of this net; every createScenarioRunner caller is in it.
+describe('every catalog command', () => {
+  const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
+  const appDir = path.resolve(harnessDir, '../..');
+  const scripts = JSON.parse(fs.readFileSync(path.join(appDir, 'package.json'), 'utf8')).scripts;
+
+  // A catalog entry pointing at a deleted file used to fail only when the matrix
+  // reached it, ~18 minutes into a Linux run.
+  function scenarioFileOf(scenario) {
+    const command = scenario.command || [];
+    let script = command.join(' ');
+    if (command[0] === 'pnpm') {
+      script = scripts[command[2]];
+      if (!script) {
+        return { broken: `no package.json script "${command[2]}"` };
+      }
+    }
+    const file = /(scripts\/real-app-harness\/[\w.-]+\.mjs)/.exec(script)?.[1];
+    return file ? { file } : { broken: `no scenario file in "${script}"` };
+  }
+
+  it('runs under the runner id the catalog names', () => {
+    const mismatched = [];
+    for (const scenario of scenarioCatalog.filter((entry) => entry.runnerId)) {
+      const { file } = scenarioFileOf(scenario);
+      const declared = file && /scenarioId: '([^']+)'/.exec(fs.readFileSync(path.join(appDir, file), 'utf8'))?.[1];
+      if (declared && declared !== scenario.runnerId) {
+        mismatched.push(`${scenario.id}: catalog ${scenario.runnerId}, ${file} ${declared}`);
+      }
+    }
+
+    expect(mismatched, 'receipts and the real-agent policy follow the runner id').toEqual([]);
+  });
+});
+
 describe('every scenario built on the scenario runner', () => {
   const harnessDir = path.dirname(url.fileURLToPath(import.meta.url));
   const runnerIds = new Set(scenarioCatalog.map((scenario) => scenario.runnerId).filter(Boolean));

@@ -25,8 +25,7 @@ const (
 	FactSessionChiefRoleChanged       = "session.chief_role.changed"
 	FactSessionReconciled             = "session.reconciled"
 	FactSessionPTYExited              = "session.pty.exited"
-	FactSessionWorkspaceChanged       = "session.workspace.changed"
-	FactSessionPinChanged             = "session.pin.changed"
+	FactSessionProfileChanged         = "session.profile.changed"
 	FactSessionCapChanged             = "session.cap.changed"
 	FactSessionActivityChanged        = "session.activity.changed"
 	FactSessionCostChanged            = "session.cost.changed"
@@ -38,18 +37,11 @@ const (
 
 	FactEndpointSessionsChanged = "endpoint.sessions.changed"
 
-	FactWorkspaceRegistered         = "workspace.registered"
-	FactWorkspaceReregistered       = "workspace.reregistered"
-	FactWorkspaceRenamed            = "workspace.renamed"
-	FactWorkspaceStatusChanged      = "workspace.status.changed"
-	FactWorkspaceMuteChanged        = "workspace.mute.changed"
-	FactWorkspacePinChanged         = "workspace.pin.changed"
-	FactWorkspaceRankChanged        = "workspace.rank.changed"
-	FactWorkspaceSessionAssociated  = "workspace.session.associated"
-	FactWorkspaceSessionDissociated = "workspace.session.dissociated"
-	FactWorkspaceUnregistered       = "workspace.unregistered"
-	FactWorkspaceLayoutChanged      = "workspace.layout.changed"
-	FactWorkspaceLayoutRepublished  = "workspace.layout.republished"
+	FactProfileCreated            = "profile.created"
+	FactProfileRenamed            = "profile.renamed"
+	FactProfileDeleted            = "profile.deleted"
+	FactProfileArrangementChanged = "profile.arrangement.changed"
+	FactProfileMigrationChanged   = "profile.migration.changed"
 
 	FactPRAppeared       = "pr.appeared"
 	FactPRUpdated        = "pr.updated"
@@ -156,7 +148,7 @@ func buildWireProjections() []projection {
 			},
 		},
 		{
-			filter: bus.Filter{FactSessionPinChanged, FactSessionCapChanged, FactSessionModelRequestStarted},
+			filter: bus.Filter{FactSessionCapChanged, FactSessionModelRequestStarted},
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionStateChanged(ev.Subject) },
 		},
 		{
@@ -226,37 +218,16 @@ func buildWireProjections() []projection {
 			apply: func(d *Daemon, _ bus.Event) { d.projectSessionsUpdated() },
 		},
 		{
-			filter: bus.Filter{FactWorkspaceRegistered},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectWorkspaceEvent(protocol.EventWorkspaceRegistered, ev.Subject)
-			},
+			filter: bus.Filter{FactProfileCreated, FactProfileRenamed, FactProfileDeleted, FactProfileArrangementChanged},
+			apply:  func(d *Daemon, _ bus.Event) { d.projectProfilesChanged() },
 		},
 		{
-			filter: bus.Filter{
-				FactWorkspaceReregistered,
-				FactWorkspaceRenamed,
-				FactWorkspaceStatusChanged,
-				FactWorkspaceMuteChanged,
-				FactWorkspacePinChanged,
-				FactWorkspaceRankChanged,
-				FactWorkspaceSessionAssociated,
-				FactWorkspaceSessionDissociated,
-			},
-			apply: func(d *Daemon, ev bus.Event) {
-				d.projectWorkspaceEvent(protocol.EventWorkspaceStateChanged, ev.Subject)
-			},
+			filter: bus.Filter{FactProfileArrangementChanged},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectProfileArrangementChanged(ev) },
 		},
 		{
-			filter: bus.Filter{FactWorkspaceUnregistered},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceUnregistered(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceLayoutChanged},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutChanged(ev) },
-		},
-		{
-			filter: bus.Filter{FactWorkspaceLayoutRepublished},
-			apply:  func(d *Daemon, ev bus.Event) { d.projectWorkspaceLayoutRepublished(ev.Subject) },
+			filter: bus.Filter{FactProfileMigrationChanged, FactProfileArrangementChanged, FactSessionClosed, FactSessionUnregistered},
+			apply:  func(d *Daemon, ev bus.Event) { d.projectMigrationChanged(ev) },
 		},
 		{
 			filter: bus.Filter{factConversationKeptChanged},
@@ -295,7 +266,7 @@ func buildWireProjections() []projection {
 			apply:  func(d *Daemon, ev bus.Event) { d.projectSessionPTYExited(ev) },
 		},
 		{
-			filter: bus.Filter{FactSessionWorkspaceChanged},
+			filter: bus.Filter{FactSessionProfileChanged},
 			apply: func(d *Daemon, ev bus.Event) {
 				d.projectSessionEvent(protocol.EventSessionStateChanged, ev.Subject)
 			},

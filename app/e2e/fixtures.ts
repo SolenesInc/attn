@@ -363,7 +363,6 @@ async function injectTestSession(
     agent?: 'codex' | 'claude' | 'shell';
     state: string;
     directory?: string;
-    workspace_id?: string;
     is_worktree?: boolean;
     branch?: string;
     main_repo?: string;
@@ -379,7 +378,6 @@ async function injectTestSession(
           agent: session.agent || 'codex',
           directory: session.directory || '/tmp/test',
           state: session.state,
-          ...(session.workspace_id ? { workspace_id: session.workspace_id } : {}),
           state_since: new Date().toISOString(),
           last_seen: new Date().toISOString(),
           muted: false,
@@ -529,7 +527,6 @@ type DaemonFixture = {
     agent?: 'codex' | 'claude' | 'shell';
     state: string;
     directory?: string;
-    workspace_id?: string;
     is_worktree?: boolean;
     branch?: string;
     main_repo?: string;

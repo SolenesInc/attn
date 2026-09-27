@@ -36,15 +36,3 @@ func procStatFields(pid int) ([]string, error) {
 	}
 	return strings.Fields(rest[i+1:]), nil
 }
-
-func processIdentityToken(pid int) (string, error) {
-	start, err := processStartTime(pid)
-	if err != nil {
-		return "", err
-	}
-	boot, err := os.ReadFile("/proc/sys/kernel/random/boot_id")
-	if err != nil {
-		return "", fmt.Errorf("read boot identity: %w", err)
-	}
-	return strings.TrimSpace(string(boot)) + ":" + start, nil
-}

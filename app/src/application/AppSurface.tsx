@@ -3,7 +3,7 @@ import { BannerStack } from '../components/BannerStack';
 import { ChordLeaderHud } from '../components/ChordLeaderHud';
 import { DelegationChainProvider } from '../components/DelegationChain';
 import { DiagnosticReportPrompt } from '../components/DiagnosticReportPrompt';
-import { ErrorToast } from '../components/ErrorToast';
+import { Toast } from '../components/Toast';
 import { OpenPRLauncherProgress } from '../components/OpenPRLauncherProgress';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { DaemonProvider } from '../contexts/DaemonContext';
@@ -18,10 +18,9 @@ import {
   useAppPanelsContext,
   useAppSessionsContext,
   useAppShell,
+  useAttentionQueueContext,
   useNavigationContext,
   usePRLauncherContext,
-  useWorkspaceTilesContext,
-  useAttentionQueueContext,
 } from './AppContexts';
 import { AppDashboard } from './AppDashboard';
 import { AppDock } from './AppDock';
@@ -32,7 +31,8 @@ import { AppNavigationMenus } from './AppNavigationMenus';
 import { AppPreferences } from './AppPreferences';
 import { AppSessionPrompts } from './AppSessionPrompts';
 import { AppSidebar } from './AppSidebar';
-import { AppWorkspaces } from './AppWorkspaces';
+import { AppDesktopNavigation } from './AppDesktopNavigation';
+import { AppDesktops } from './AppDesktops';
 import { handleAppPointerDownCapture } from './appSupport';
 export function AppSurface() {
   const {
@@ -52,14 +52,13 @@ export function AppSurface() {
     onDismissLatestRelease,
   } = useAppInputs();
   const { notebookSurfaceContextValue } = useAppNotebookSurfaceContext();
-  const { blockingOverlayOpen, appShellRef } = useAppShell();
-  const { errorMessage, errorDurationMs, clearError } = useAppErrorsContext();
+  const { snoozeMenu } = useAttentionQueueContext();
+  const { windowCovered, appShellRef, agentFocused } = useAppShell();
+  const { toast, clearToast } = useAppErrorsContext();
   const { delegationChainRef } = useAppPanelsContext();
   const { requestTerminalFocus, handleSelectSession, view } = useNavigationContext();
   const { delegationSessions } = useAppSessionsContext();
   const activeSessionId = useSessionStore((state) => state.activeSessionId);
-  const { markdownOpenerOpen } = useWorkspaceTilesContext();
-  const { snoozeMenu } = useAttentionQueueContext();
   const { openPRLauncherJob } = usePRLauncherContext();
   const {
     diagnosticReportSaved,
@@ -83,10 +82,10 @@ export function AppSurface() {
             sessions={delegationSessions}
             onSelectSession={handleSelectSession}
             navigationKey={`${view}:${activeSessionId ?? ''}`}
-            blocked={blockingOverlayOpen || markdownOpenerOpen || Boolean(snoozeMenu)}
+            blocked={windowCovered || Boolean(snoozeMenu)}
           >
             <div
-              className="app"
+              className={`app${agentFocused ? ' is-agent-focused' : ''}${view === 'grid' ? ' is-grid' : ''}`}
               ref={appShellRef}
               tabIndex={-1}
               style={{ outline: 'none' }}
@@ -121,7 +120,7 @@ export function AppSurface() {
                   {/* Always rendered, to keep terminals alive. */}
                   <div className={`view-container ${view === 'session' ? 'visible' : 'hidden'}`}>
                     <div className="terminal-pane">
-                      <AppWorkspaces />
+                      <AppDesktops />
                     </div>
                     <AppDock />
                   </div>
@@ -134,7 +133,7 @@ export function AppSurface() {
               {/* Yield library focus traps before session prompts take focus in layout effects. */}
               <AppLibrarySurfaces />
               <AppSessionPrompts />
-              <ErrorToast message={errorMessage} durationMs={errorDurationMs} onDone={clearError} />
+              <Toast toast={toast} onDone={clearToast} />
               {diagnosticReportSaved.saved('saved') && (
                 <div className="input-diagnostics-copied" role="status">
                   Diagnostic report saved
@@ -142,6 +141,7 @@ export function AppSurface() {
               )}
               <ChordLeaderHud />
               <AppNavigationMenus />
+              <AppDesktopNavigation />
               {diagnosticCapture && (
                 <DiagnosticReportPrompt
                   capture={diagnosticCapture.capture}

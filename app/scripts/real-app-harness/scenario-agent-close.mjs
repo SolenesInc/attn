@@ -14,7 +14,7 @@ import { currentHarnessInstance, instanceCliEnv } from './harnessInstance.mjs';
 import { appDaemonInTree, delay } from './platform.mjs';
 import { createScenarioRunner } from './scenarioRunner.mjs';
 import {
-  waitForFirstWorkspacePane,
+  waitForFirstDesktopPane,
   waitForPaneAttached,
   waitForPaneShellReady,
   waitForPaneVisible,
@@ -80,7 +80,7 @@ async function openPane(client, observer, runner, label) {
   const sessionId = await createSessionAndWaitForInitialPane({
     client, observer, cwd, label, agent: 'shell',
   });
-  const pane = await waitForFirstWorkspacePane(client, sessionId, `pane for ${label}`, 20_000);
+  const pane = await waitForFirstDesktopPane(client, sessionId, `pane for ${label}`, 20_000);
   return { sessionId, paneId: pane.paneId, cwd };
 }
 
@@ -150,7 +150,7 @@ async function main() {
         spawned = [...observer.sessionsById.keys()].find((id) => !known.has(id)) ?? null;
         return Boolean(spawned);
       }, 'the delegated session exists', 60_000);
-      await waitForFirstWorkspacePane(client, spawned, 'the delegate’s pane', 20_000);
+      await waitForFirstDesktopPane(client, spawned, 'the delegate’s pane', 20_000);
       // The spawn takes the screen; a close typed into a pane still running never runs.
       await client.request('select_session', { sessionId: dispatcher.sessionId });
       await waitForPaneShellReady(client, dispatcher.sessionId, dispatcher.paneId);

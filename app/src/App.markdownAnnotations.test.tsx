@@ -68,7 +68,6 @@ interface DocumentOptions {
   annotations?: WireAnnotation[];
   generation?: number;
   tiles?: string[];
-  workspaceId?: string;
   path?: string;
   getReply?: 'answer' | 'hold' | 'fail';
 }
@@ -78,14 +77,12 @@ async function openDocument({
   annotations = [],
   generation = 5,
   tiles = ['tile-a'],
-  workspaceId = 'ws',
   path = `/tmp/doc-${++documentCount}.md`,
   getReply = 'answer',
 }: DocumentOptions = {}) {
   const view = await openMarkdownTiles(content, {
     path,
     tileIds: tiles,
-    workspace: { id: workspaceId },
     session: { state: 'idle' },
     script: (daemon) => {
       daemon.on('markdown_annotations_get', ({ document_uri, source_kind }) => (
@@ -205,15 +202,15 @@ describe('App markdown annotations', () => {
     const { daemon } = await openMarkdownTiles('# Doc\n\nBody.', { path: '/tmp/doc.md', tileIds: ['tile-a', 'tile-b'] });
 
     expect(daemon.sentOf('markdown_annotations_get')).toEqual([
-      expect.objectContaining({ document_uri: 'attn://file/ws/%2Ftmp%2Fdoc.md', source_kind: 'file' }),
+      expect.objectContaining({ document_uri: 'attn://file/%2Ftmp%2Fdoc.md', source_kind: 'file' }),
     ]);
   });
 
-  it('escapes the workspace and path in a file’s document identity', async () => {
-    const { daemon } = await openDocument({ workspaceId: 'remote/ws:1', path: '/tmp/a plan.md' });
+  it('escapes the path in a file’s document identity', async () => {
+    const { daemon } = await openDocument({ path: '/tmp/a plan.md' });
 
     expect(daemon.sentOf('markdown_annotations_get')).toEqual([
-      expect.objectContaining({ document_uri: 'attn://file/remote%2Fws%3A1/%2Ftmp%2Fa%20plan.md', workspace_id: 'remote/ws:1', path: '/tmp/a plan.md' }),
+      expect.objectContaining({ document_uri: 'attn://file/%2Ftmp%2Fa%20plan.md', path: '/tmp/a plan.md' }),
     ]);
   });
 });
@@ -290,7 +287,7 @@ describe('App markdown annotations selection', () => {
     { selection: 'a collapsed selection', pick: (reader: HTMLElement) => [textPoint(reader, 'target'), textPoint(reader, 'target')] },
     { selection: 'only whitespace', pick: (reader: HTMLElement) => [textPoint(reader, ' target'), { ...textPoint(reader, ' target'), offset: textPoint(reader, ' target').offset + 1 }] },
     { selection: 'a selection ending on the copy button', pick: (reader: HTMLElement) => [textPoint(reader, 'const'), { node: reader.querySelector('button[title="Copy code"]')!, offset: 0 }] },
-    { selection: 'a selection ending outside the reader', pick: (reader: HTMLElement) => [textPoint(reader, 'target'), textPoint(reader.closest('.workspace-dock-tile')!.querySelector('.workspace-dock-tile-title')!, 'Plan', 'end')] },
+    { selection: 'a selection ending outside the reader', pick: (reader: HTMLElement) => [textPoint(reader, 'target'), textPoint(reader.closest('.desktop-dock-tile')!.querySelector('.desktop-dock-tile-title')!, 'Plan', 'end')] },
   ])('offers nothing for $selection', async ({ pick }) => {
     const { daemon, reader } = await openDocument();
     const [start, end] = pick(reader());

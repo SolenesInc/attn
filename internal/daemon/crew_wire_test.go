@@ -70,7 +70,7 @@ func crewRosterMember(t *testing.T, cli *client.Client, id string) protocol.Crew
 
 func wakeCrew(t *testing.T, cli *client.Client, member, agent string) *protocol.CrewWakeResult {
 	t.Helper()
-	woken, err := cli.CrewWake(member, agent)
+	woken, err := cli.CrewWake(member, agent, "")
 	if err != nil {
 		t.Fatalf("wake %s: %v", member, err)
 	}
@@ -126,19 +126,13 @@ func TestWakingAMemberStartsOneDayWhereItWorksAndBindsItOnTheRoster(t *testing.T
 	setCrew(t, cli, "trellis", protocol.CrewSetMessage{Cwd: protocol.Ptr(workDir)})
 
 	woken := wakeCrew(t, cli, "Trellis", "")
-	if woken.Member != "trellis" || woken.AlreadyAwake || woken.WorkspaceID != "workspace-crew-trellis" {
-		t.Fatalf("wake = %+v, want a fresh trellis day in workspace-crew-trellis", woken)
+	if woken.Member != "trellis" || woken.AlreadyAwake || woken.ProfileID != app.SelectedProfile() {
+		t.Fatalf("wake = %+v, want a fresh trellis day in the member's profile %s", woken, app.SelectedProfile())
 	}
 	w.Launched(woken.SessionID)
 	session := testworld.AwaitSession(app, woken.SessionID, func(s protocol.Session) bool { return protocol.Deref(s.CrewMember) == "trellis" })
-	if session.Directory != workDir || session.Label != "Trellis" || session.WorkspaceID != woken.WorkspaceID {
-		t.Errorf("day = dir %q label %q workspace %q, want %q, Trellis, %q", session.Directory, session.Label, session.WorkspaceID, workDir, woken.WorkspaceID)
-	}
-	workspace := testworld.Await(app, protocol.EventWorkspaceRegistered, func(e protocol.WebSocketEvent) bool {
-		return e.Workspace != nil && e.Workspace.ID == woken.WorkspaceID
-	})
-	if workspace.Workspace.Title != "Trellis" {
-		t.Errorf("workspace title = %q, want Trellis", workspace.Workspace.Title)
+	if session.Directory != workDir || session.Label != "Trellis" || session.ProfileID != woken.ProfileID {
+		t.Errorf("day = dir %q label %q profile %q, want %q, Trellis, %q", session.Directory, session.Label, session.ProfileID, workDir, woken.ProfileID)
 	}
 	testworld.Await(app, protocol.EventCrewUpdated, func(e protocol.CrewUpdatedMessage) bool {
 		return slices.ContainsFunc(e.Members, func(m protocol.CrewMember) bool {
@@ -253,7 +247,7 @@ func TestConcurrentWakesOfOneMemberShareOneDay(t *testing.T) {
 	failures := make(chan error, 2)
 	for range 2 {
 		go func() {
-			woken, err := w.Client().CrewWake("keel", "")
+			woken, err := w.Client().CrewWake("keel", "", "")
 			if err != nil {
 				failures <- err
 				return
@@ -283,7 +277,7 @@ func TestCrewWakeAndSetRefusalsNameWhatToDo(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
 
-	_, err := cli.CrewWake("nobody", "")
+	_, err := cli.CrewWake("nobody", "", "")
 	crewErrorContains(t, err, "attn crew list")
 
 	moved := w.Path("moved")
@@ -294,7 +288,7 @@ func TestCrewWakeAndSetRefusalsNameWhatToDo(t *testing.T) {
 	if err := os.RemoveAll(moved); err != nil {
 		t.Fatal(err)
 	}
-	_, err = cli.CrewWake("alder", "")
+	_, err = cli.CrewWake("alder", "", "")
 	crewErrorContains(t, err, "Alder launches in", moved, "attn crew set alder --cwd")
 	if binding := crewRosterMember(t, cli, "alder").BindingSession; binding != nil {
 		t.Errorf("a refused wake left alder bound to %s", *binding)
@@ -432,7 +426,7 @@ func TestRegisteringAsAMemberBindsOneLiveSessionPerMember(t *testing.T) {
 	w := newCrewWorld(t)
 	cli := w.Client()
 	register := func(session, member string) error {
-		return cli.RegisterAsMember(session, session, w.Path(session), "", member)
+		return w.InjectCrewSession(session, session, w.Path(session), member)
 	}
 	bindings := func() map[string]string {
 		out := map[string]string{}
@@ -514,7 +508,7 @@ func TestADaemonOnACopiedDatabaseFencesAnotherInstancesCrew(t *testing.T) {
 	foreignHomes := filepath.Join(source.Dir, crew.HomesDirName)
 	_, err = cli.CrewList()
 	crewErrorContains(t, err, foreignHomes, "attn.db copied from another instance")
-	crewErrorContains(t, cli.RegisterAsMember("sess-copied", "sess-copied", copied.Path("sess-copied"), "", "trellis"), foreignHomes)
+	crewErrorContains(t, copied.InjectCrewSession("sess-copied", "sess-copied", copied.Path("sess-copied"), "trellis"), foreignHomes)
 	if _, err := cli.List(""); err != nil {
 		t.Fatalf("the daemon stopped serving sessions over a fenced crew: %v", err)
 	}
@@ -528,7 +522,7 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 		if session == "sess-keel" {
 			member = "keel"
 		}
-		if err := cli.RegisterAsMember(session, session, w.Path(session), "", member); err != nil {
+		if err := w.InjectCrewSession(session, session, w.Path(session), member); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -573,7 +567,7 @@ func TestSeedTendersResolveToTheMemberTheyName(t *testing.T) {
 func TestAWokenMemberIsPrimedWithItsCharterLettersAndGarden(t *testing.T) {
 	w := newCrewWorld(t, fakeagent.Claude)
 	cli := w.Client()
-	if err := cli.Register("planter", "planter", w.Path("planter")); err != nil {
+	if err := w.InjectSession("planter", "planter", w.Path("planter"), protocol.SessionAgentClaude); err != nil {
 		t.Fatal(err)
 	}
 	plant := func(title, partOf string) string {
@@ -736,7 +730,7 @@ func TestCrewEditsFromTheAppAreRevisionChecked(t *testing.T) {
 		for key, value := range map[string]string{"crew.wake_limit": "0", "crew.away_seconds": "60", "crew.heartbeat_enabled": "false", "crew.autosleep_enabled": "false"} {
 			setSetting(t, app, key, value)
 		}
-		if err := cli.RegisterAsMember("alder-day", "alder-day", w.Path("alder-day"), "", "alder"); err != nil {
+		if err := w.InjectCrewSession("alder-day", "alder-day", w.Path("alder-day"), "alder"); err != nil {
 			t.Fatal(err)
 		}
 		app.Send(protocol.SetClientPresenceMessage{Cmd: protocol.CmdSetClientPresence, Visible: true, IdleSeconds: protocol.Ptr(0.0)})

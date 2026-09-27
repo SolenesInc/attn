@@ -1,0 +1,3 @@
+kind: fixed
+area: app
+change: Selecting an agent while the previous selection is still reaching the daemon now shows the agent you picked last.

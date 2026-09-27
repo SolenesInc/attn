@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/victorarias/attn/internal/config"
 	"github.com/victorarias/attn/internal/garden"
-	"github.com/victorarias/attn/internal/procreap"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -128,8 +127,8 @@ func (c *Client) AutomationCleanup(id string) (*protocol.AutomationCleanupResult
 }
 
 type ListResult struct {
-	Sessions   []protocol.Session   `json:"sessions"`
-	Workspaces []protocol.Workspace `json:"workspaces"`
+	Sessions []protocol.Session `json:"sessions"`
+	Profiles []protocol.Profile `json:"profiles"`
 }
 
 func New(socketPath string) *Client {
@@ -194,42 +193,6 @@ func ErrorCode(err error) string {
 		return daemonErr.Code
 	}
 	return ""
-}
-
-func (c *Client) Register(id, label, dir string) error {
-	return c.RegisterWithAgent(id, label, dir, "")
-}
-
-func (c *Client) RegisterWithAgent(id, label, dir, agent string) error {
-	return c.register(id, label, dir, agent, "", nil)
-}
-
-func (c *Client) RegisterAsMember(id, label, dir, agent, member string) error {
-	token, err := procreap.StartToken(os.Getpid())
-	if err != nil {
-		return fmt.Errorf("identify external wrapper: %w", err)
-	}
-	return c.register(id, label, dir, agent, member, &protocol.ExternalProcess{Pid: os.Getpid(), StartToken: token})
-}
-
-func (c *Client) register(id, label, dir, agent, member string, process *protocol.ExternalProcess) error {
-	msg := protocol.RegisterMessage{
-		Cmd:             protocol.CmdRegister,
-		ExternalProcess: process,
-		ID:              id,
-		Label:           protocol.Ptr(label),
-		Dir:             dir,
-		WorkspaceID:     "workspace-" + id,
-	}
-	if agent != "" {
-		normalized := protocol.NormalizeSessionAgentString(agent, string(protocol.SessionAgentCodex))
-		msg.Agent = protocol.Ptr(normalized)
-	}
-	if member != "" {
-		msg.Member = protocol.Ptr(member)
-	}
-	_, err := c.send(msg)
-	return err
 }
 
 func (c *Client) Unregister(id string) error {
@@ -336,15 +299,15 @@ func (c *Client) SessionInstructions(targetSessionID, question string) (*protoco
 }
 
 type SessionListOptions struct {
-	Closed      bool
-	All         bool
-	Limit       int
-	Before      string
-	WorkspaceID string
-	Repository  string
-	Since       string
-	Until       string
-	Reopen      bool
+	Closed     bool
+	All        bool
+	Limit      int
+	Before     string
+	ProfileID  string
+	Repository string
+	Since      string
+	Until      string
+	Reopen     bool
 }
 
 func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResult, error) {
@@ -361,8 +324,8 @@ func (c *Client) SessionList(opts SessionListOptions) (*protocol.SessionListResu
 	if before := strings.TrimSpace(opts.Before); before != "" {
 		msg.Before = protocol.Ptr(before)
 	}
-	if workspace := strings.TrimSpace(opts.WorkspaceID); workspace != "" {
-		msg.WorkspaceID = protocol.Ptr(workspace)
+	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
+		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	if repository := strings.TrimSpace(opts.Repository); repository != "" {
 		msg.Repository = protocol.Ptr(repository)
@@ -413,6 +376,7 @@ type SessionReopenOptions struct {
 	SessionID string
 	Action    string
 	Directory string
+	ProfileID string
 }
 
 func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReopenResult, error) {
@@ -425,6 +389,9 @@ func (c *Client) SessionReopen(opts SessionReopenOptions) (*protocol.SessionReop
 	}
 	if directory := strings.TrimSpace(opts.Directory); directory != "" {
 		msg.Directory = protocol.Ptr(directory)
+	}
+	if profileID := strings.TrimSpace(opts.ProfileID); profileID != "" {
+		msg.ProfileID = protocol.Ptr(profileID)
 	}
 	resp, err := c.send(msg)
 	if err != nil {
@@ -805,13 +772,13 @@ func (c *Client) List(filter string) (*ListResult, error) {
 	if sessions == nil {
 		sessions = []protocol.Session{}
 	}
-	workspaces := resp.Workspaces
-	if workspaces == nil {
-		workspaces = []protocol.Workspace{}
+	profiles := resp.Profiles
+	if profiles == nil {
+		profiles = []protocol.Profile{}
 	}
 	return &ListResult{
-		Sessions:   sessions,
-		Workspaces: workspaces,
+		Sessions: sessions,
+		Profiles: profiles,
 	}, nil
 }
 
@@ -819,15 +786,6 @@ func (c *Client) Heartbeat(id string) error {
 	msg := protocol.HeartbeatMessage{
 		Cmd: protocol.CmdHeartbeat,
 		ID:  id,
-	}
-	_, err := c.send(msg)
-	return err
-}
-
-func (c *Client) ToggleWorkspaceMute(workspaceID string) error {
-	msg := protocol.MuteWorkspaceMessage{
-		Cmd:         protocol.CmdMuteWorkspace,
-		WorkspaceID: workspaceID,
 	}
 	_, err := c.send(msg)
 	return err

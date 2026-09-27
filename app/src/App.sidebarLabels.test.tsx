@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { renderApp } from './test/renderApp';
 
 const LONG = 'judge yielded stops so background waits stay green';
@@ -28,7 +28,7 @@ async function renderSidebar() {
   await renderApp({
     initialState: {
       sessions: [daemonSession('long', { label: LONG }), daemonSession('short', { label: 'attn' })],
-      workspaces: [agentWorkspace('long'), agentWorkspace('short')],
+      desktops: [soloDesktop('long'), soloDesktop('short')],
     },
   });
 }

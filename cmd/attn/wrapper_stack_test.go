@@ -33,11 +33,6 @@ func TestInsideASessionAttnReportsPresenceAndRefusesWhatItCannotLaunch(t *testin
 		args []string
 		want string
 	}{
-		{args: []string{"--model", "foo"}, want: `unknown flag "--model"`},
-		{args: []string{"--"}, want: `unknown flag "--"`},
-		{args: []string{"-s"}, want: "flag -s needs a value"},
-		{args: []string{"--member"}, want: "flag --member needs a value"},
-		{args: []string{"--yolo", "random"}, want: `unknown flag "random"`},
 		{args: []string{"random"}, want: `unknown command "random"`},
 	} {
 		t.Run(strings.Join(tc.args, " "), func(t *testing.T) {

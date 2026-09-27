@@ -22,29 +22,29 @@ function highlights(): Highlight[] {
   return [
   {
     flagged: true,
-    title: `${formatShortcut('session.new')} opens a session inside this workspace`,
-    body: `This is the big change. ${formatShortcut('session.new')} used to open a separate session with its own row in the sidebar. Now it adds a session to the workspace you’re already in. Want a new sidebar row instead? Press ${formatShortcut('session.newWorkspace')} to start a new workspace.`,
-    combos: [shortcutTokens('session.new'), shortcutTokens('session.newWorkspace')],
+    title: 'Agents live on desktops',
+    body: `A desktop is an arrangement of agents and tiles. ${formatShortcut('desktop.select1')} to ${formatShortcut('desktop.select9')} switch desktops; pressing the digit of the desktop you are on takes you back to the one before.`,
+    combos: [[...modifierTokens('desktop.select1'), '1–9']],
   },
   {
-    title: 'The sidebar lists workspaces',
-    body: 'Each row in the sidebar is now a workspace — a group of related sessions and terminals — instead of a single session.',
+    title: 'Send the focused pane elsewhere',
+    body: 'Move the pane you are in to another desktop without leaving the keyboard.',
+    combos: [[...modifierTokens('desktop.send1'), '1–9']],
+  },
+  {
+    title: 'See every desktop at once',
+    body: 'The overview lists every desktop, including extras past nine. Switch, send the focused pane, delete an empty desktop or give an extra a shortcut from there.',
+    combos: [shortcutTokens('desktop.overview')],
+  },
+  {
+    title: 'Profiles group everything',
+    body: 'A profile holds its own agents, crew, automations and desktops, and remembers the desktop you were on. Switch profiles without closing anything.',
+    combos: [shortcutTokens('profile.switch')],
+  },
+  {
+    title: 'Every window agrees',
+    body: 'The current desktop and the focused pane belong to the daemon, so every window on the same profile shows the same thing.',
     combos: [],
-  },
-  {
-    title: 'Several sessions in one workspace',
-    body: 'A workspace can hold more than one session or terminal at once. Add another next to the current one, or split it sideways.',
-    combos: [shortcutTokens('session.newHorizontal')],
-  },
-  {
-    title: 'Shells live here too',
-    body: 'Open a plain terminal the same way you open an agent — pick it from the new-session dialog and it sits in the workspace like anything else.',
-    combos: [shortcutTokens('session.new')],
-  },
-  {
-    title: 'Move between panes',
-    body: 'Use the arrow keys to move focus around the panes. Keep going past an edge and you land in the next workspace.',
-    combos: [[...modifierTokens('terminal.focusLeft'), '←↑→↓']],
   },
   ];
 }
@@ -71,7 +71,7 @@ export function WhatsNewModal({ isOpen, onClose, onViewShortcuts }: WhatsNewModa
         >
           <div className="whats-new-header">
             <div className="whats-new-eyebrow">What's new</div>
-            <h2 id="whats-new-title">attn is organized around workspaces</h2>
+            <h2 id="whats-new-title">attn is organized around desktops</h2>
             <button
               className="whats-new-close"
               onClick={onClose}

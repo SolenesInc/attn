@@ -1,6 +1,6 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
@@ -26,7 +26,7 @@ async function renderKeybindings({ platform, config, withSession = false }: Laun
   const view = await renderApp({
     initialState: {
       settings,
-      ...(withSession ? { sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] } : {}),
+      ...(withSession ? { sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] } : {}),
     },
   });
   serveSettings(view.daemon, settings);
@@ -84,10 +84,10 @@ describe('App shortcut editor', () => {
   it('lists every category with the current bindings, and protects the required ones', async () => {
     const { editor } = await renderEditor();
 
-    expect(within(editor).getByRole('heading', { name: 'Workspaces & Sessions' })).toBeInTheDocument();
+    expect(within(editor).getByRole('heading', { name: 'Desktops & Sessions' })).toBeInTheDocument();
     expect(within(editor).getByRole('heading', { name: 'Panes & Terminals' })).toBeInTheDocument();
-    expect(row('New session in this workspace')).toHaveTextContent('⌘N');
-    for (const label of ['Previous workspace', 'Next workspace', 'Back through agent history', 'Forward through agent history']) {
+    expect(row('New session on this desktop')).toHaveTextContent('⌘N');
+    for (const label of ['Previous desktop', 'Next desktop', 'Back through agent history', 'Forward through agent history']) {
       expect(within(row(label)).getByTitle('Unbind')).toBeInTheDocument();
     }
     expect(within(row('Settings')).getByText('Required')).toBeInTheDocument();
@@ -96,9 +96,9 @@ describe('App shortcut editor', () => {
 
   it('shows Linux defaults on Linux, and resetting there removes the override', async () => {
     const { daemon } = await renderEditor({ platform: LINUX, config: { overrides: { 'session.new': { key: 'm', meta: true, shift: true } } } });
-    expect(row('New session in this workspace')).toHaveTextContent('CtrlShiftM');
+    expect(row('New session on this desktop')).toHaveTextContent('CtrlShiftM');
 
-    await gesture(daemon, () => fireEvent.click(within(row('New session in this workspace')).getByTitle('Reset to Ctrl+Shift+N')));
+    await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByTitle('Reset to Ctrl+Shift+N')));
 
     expect(saved(daemon).overrides).toEqual({});
   });
@@ -106,15 +106,15 @@ describe('App shortcut editor', () => {
   it('marks a rebound shortcut as customized and offers a reset to its default', async () => {
     await renderEditor({ config: { overrides: { 'session.new': { key: 'm', meta: true } } } });
 
-    expect(within(row('New session in this workspace')).getByText('Customized')).toBeInTheDocument();
-    expect(within(row('New session in this workspace')).getByTitle('Reset to ⌘N')).toBeInTheDocument();
+    expect(within(row('New session on this desktop')).getByText('Customized')).toBeInTheDocument();
+    expect(within(row('New session on this desktop')).getByTitle('Reset to ⌘N')).toBeInTheDocument();
   });
 
   it('badges the shortcuts that need an open terminal, customized or not', async () => {
     await renderEditor({ config: { overrides: { 'terminal.find': { key: 'y', meta: true } } } });
 
     expect(within(row('Focus active pane')).getByText('Needs terminal')).toBeInTheDocument();
-    expect(within(row('New session in this workspace')).queryByText('Needs terminal')).toBeNull();
+    expect(within(row('New session on this desktop')).queryByText('Needs terminal')).toBeNull();
     expect(within(row('Collapse utility terminal')).queryByText('Needs terminal')).toBeNull();
     expect(within(row('Find in terminal')).getByText('Customized')).toBeInTheDocument();
     expect(within(row('Find in terminal')).getByText('Needs terminal')).toBeInTheDocument();
@@ -123,9 +123,9 @@ describe('App shortcut editor', () => {
   it('unbinds a shortcut, which frees its keys for another action', async () => {
     const { daemon } = await renderEditor();
 
-    await gesture(daemon, () => fireEvent.click(within(row('New session in this workspace')).getByTitle('Unbind')));
+    await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByTitle('Unbind')));
     expect(saved(daemon).overrides['session.new']).toBeNull();
-    expect(row('New session in this workspace')).toHaveTextContent('Unassigned');
+    expect(row('New session on this desktop')).toHaveTextContent('Unassigned');
 
     await record(daemon, 'Focus active pane', { key: 'n', code: 'KeyN', metaKey: true });
     expect(screen.queryByRole('button', { name: 'Reassign' })).toBeNull();
@@ -134,21 +134,21 @@ describe('App shortcut editor', () => {
 
   it.each([
     ['a shortcut on the same keys', { key: 'p', code: 'KeyP', metaKey: true, shiftKey: true }, 'PRs drawer'],
-    ['a shortcut on the same physical key', { key: '&', code: 'Digit1', metaKey: true }, 'Jump to workspace 1'],
+    ['a shortcut on the same physical key', { key: '&', code: 'Digit1', metaKey: true }, 'Switch to desktop 1'],
   ])('asks before taking the keys of %s', async (_, keys, holder) => {
     const { daemon } = await renderEditor();
 
-    await record(daemon, 'New session in this workspace', keys);
+    await record(daemon, 'New session on this desktop', keys);
 
-    expect(row('New session in this workspace')).toHaveTextContent(`is “${holder}”.`);
+    expect(row('New session on this desktop')).toHaveTextContent(`is “${holder}”.`);
     expect(keybindingWrites(daemon)).toEqual([]);
   });
 
   it('reassigns claimed keys, unbinding their previous holder', async () => {
     const { daemon } = await renderEditor();
 
-    await record(daemon, 'New session in this workspace', { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
-    expect(row('New session in this workspace')).toHaveTextContent('Split pane sideways');
+    await record(daemon, 'New session on this desktop', { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
+    expect(row('New session on this desktop')).toHaveTextContent('Split pane sideways');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reassign' })));
 
     expect(saved(daemon).overrides).toEqual({
@@ -162,8 +162,8 @@ describe('App shortcut editor', () => {
       config: { overrides: { 'session.new': { key: 'j', meta: true }, 'terminal.splitHorizontal': { key: 'n', meta: true } } },
     });
 
-    await gesture(daemon, () => fireEvent.click(within(row('New session in this workspace')).getByTitle('Reset to ⌘N')));
-    expect(row('New session in this workspace')).toHaveTextContent('Split pane sideways');
+    await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByTitle('Reset to ⌘N')));
+    expect(row('New session on this desktop')).toHaveTextContent('Split pane sideways');
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Reassign' })));
 
     expect(saved(daemon).overrides).toEqual({ 'terminal.splitHorizontal': null });
@@ -201,21 +201,21 @@ describe('App shortcut editor', () => {
   it('rebinds a shortcut to the combo pressed while recording, and the new combo runs it', async () => {
     const { daemon } = await renderEditor();
 
-    await record(daemon, 'Action menu', { key: 'm', code: 'KeyM', metaKey: true });
-    expect(within(row('Action menu')).getByTitle('Click to rebind')).toHaveTextContent('⌘M');
+    await record(daemon, 'Agent palette', { key: 'm', code: 'KeyM', metaKey: true });
+    expect(within(row('Agent palette')).getByTitle('Click to rebind')).toHaveTextContent('⌘M');
     expect(saved(daemon).overrides['ui.actionMenu']).toEqual({ key: 'm', meta: true });
     await closeEditor(daemon);
 
     await gesture(daemon, () => fireEvent.keyDown(window, { key: 'm', code: 'KeyM', metaKey: true }));
-    expect(screen.getByRole('dialog', { name: 'Action menu' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Agents' })).toBeInTheDocument();
   });
 
   it('stops recording on Escape and keeps the previous binding', async () => {
     const { daemon } = await renderEditor();
 
-    await record(daemon, 'Action menu', { key: 'Escape', code: 'Escape' });
+    await record(daemon, 'Agent palette', { key: 'Escape', code: 'Escape' });
 
-    expect(within(row('Action menu')).getByTitle('Click to rebind')).toHaveTextContent('⌘K');
+    expect(within(row('Agent palette')).getByTitle('Click to rebind')).toHaveTextContent('⌘K');
     expect(keybindingWrites(daemon)).toEqual([]);
   });
 
@@ -251,7 +251,7 @@ describe('App shortcut editor', () => {
   it('saves a chord whose leader is the row’s own default keys', async () => {
     const { daemon } = await renderEditor();
 
-    await recordChord(daemon, 'Action menu', { key: 'k', code: 'KeyK', metaKey: true }, { key: 'd', code: 'KeyD' });
+    await recordChord(daemon, 'Agent palette', { key: 'k', code: 'KeyK', metaKey: true }, { key: 'd', code: 'KeyD' });
 
     expect(saved(daemon).overrides['ui.actionMenu']).toEqual({ leader: { key: 'k', meta: true }, then: { key: 'd' } });
   });
@@ -261,16 +261,16 @@ describe('App shortcut editor', () => {
 
     await recordChord(daemon, 'Zoom active pane', { key: 'g', code: 'KeyG', metaKey: true }, { key: 'x', code: 'KeyX' });
 
-    expect(row('Zoom active pane')).toHaveTextContent('is “Toggle grid view”.');
+    expect(row('Zoom active pane')).toHaveTextContent('is “Desktop overview”.');
   });
 
   it('pins, reorders and removes dock shortcuts, and the sidebar dock follows', async () => {
     const { daemon } = await renderEditor({ withSession: true, config: { dock: { collapsed: false, items: ['terminal.toggleZoom', 'dock.attention'] } } });
     const dock = () => Array.from(document.querySelectorAll('.sidebar-dock-items .shortcut-hint'), (item) => item.getAttribute('title') ?? item.textContent);
 
-    await gesture(daemon, () => fireEvent.click(within(row('New session in this workspace')).getByLabelText('Add to dock')));
+    await gesture(daemon, () => fireEvent.click(within(row('New session on this desktop')).getByLabelText('Add to dock')));
     expect(saved(daemon).dock.items).toEqual(['terminal.toggleZoom', 'dock.attention', 'session.new']);
-    expect(within(row('New session in this workspace')).getByLabelText('Remove from dock')).toBeInTheDocument();
+    expect(within(row('New session on this desktop')).getByLabelText('Remove from dock')).toBeInTheDocument();
 
     await gesture(daemon, () => fireEvent.click(screen.getByLabelText('Move Zoom active pane down')));
     expect(saved(daemon).dock.items).toEqual(['dock.attention', 'terminal.toggleZoom', 'session.new']);
@@ -290,8 +290,8 @@ describe('App shortcut editor', () => {
   });
 
   it.each([
-    ['a label', 'focus active', ['Focus active pane'], ['New session in this workspace']],
-    ['the displayed keys', '⌘⇧n', ['New session, split sideways'], ['New session in this workspace']],
+    ['a label', 'focus active', ['Focus active pane'], ['New session on this desktop']],
+    ['the displayed keys', '⌘⇧n', ['New session, split sideways'], ['New session on this desktop']],
   ])('filters by %s and hides the dock while filtering', async (_, query, shown, hidden) => {
     await renderEditor();
 
@@ -314,7 +314,7 @@ describe('App shortcut editor', () => {
   it('never records keys typed into the filter, nor keeps a pending reassign', async () => {
     const { daemon } = await renderEditor();
 
-    await record(daemon, 'New session in this workspace', { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
+    await record(daemon, 'New session on this desktop', { key: 'd', code: 'KeyD', metaKey: true, shiftKey: true });
     fireEvent.change(filter(), { target: { value: 'new session' } });
     expect(screen.queryByRole('button', { name: 'Reassign' })).toBeNull();
 
@@ -331,15 +331,15 @@ describe('App shortcut editor', () => {
 
   it('reopens with no filter and nothing recording', async () => {
     const { daemon } = await renderEditor();
-    fireEvent.change(filter(), { target: { value: 'action' } });
-    fireEvent.click(within(row('Action menu')).getByLabelText('Record a chord'));
+    fireEvent.change(filter(), { target: { value: 'palette' } });
+    fireEvent.click(within(row('Agent palette')).getByLabelText('Record a chord'));
     fireEvent.keyDown(window, { key: 'k', code: 'KeyK', metaKey: true });
 
     await closeEditor(daemon);
     await openEditor(daemon);
 
     expect(filter().value).toBe('');
-    expect(within(row('Action menu')).getByLabelText('Record a chord')).toBeInTheDocument();
+    expect(within(row('Agent palette')).getByLabelText('Record a chord')).toBeInTheDocument();
   });
 
   it.each([

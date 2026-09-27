@@ -204,7 +204,7 @@ func TestClaudeLeavingAutoModeSurfacesApprovalsWithoutTheDwell(t *testing.T) {
 
 func sessionStateEvidenceAtWork(t *testing.T, w *world, app *testworld.Peer, cli *client.Client) protocol.Session {
 	t.Helper()
-	if err := cli.Register("s1", "s1", w.Path("s1")); err != nil {
+	if err := w.InjectSession("s1", "s1", w.Path("s1"), protocol.SessionAgentClaude); err != nil {
 		t.Fatalf("register: %v", err)
 	}
 	if err := cli.UpdateState("s1", protocol.StateWorking); err != nil {

@@ -82,15 +82,15 @@ func (d *Daemon) automationProvenanceFromRecord(kind, id string, record *store.A
 	return provenance
 }
 
-func automationReviewNames(req automation.WorkRequest) (workspace, session, seedTitle string, ok bool) {
+func automationReviewNames(req automation.WorkRequest) (pullRequest, session, seedTitle string, ok bool) {
 	input, err := automation.ParsePullRequestInput(req.Context)
 	if err != nil {
 		return "", "", "", false
 	}
-	workspace = fmt.Sprintf("%s#%d", input.Repository, input.Number)
-	session = workspace
+	pullRequest = fmt.Sprintf("%s#%d", input.Repository, input.Number)
+	session = pullRequest
 	if model := strings.TrimSpace(req.Launch.Model); model != "" {
 		session += " · " + model
 	}
-	return workspace, session, "Review " + session, true
+	return pullRequest, session, "Review " + session, true
 }

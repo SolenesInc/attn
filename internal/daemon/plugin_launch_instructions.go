@@ -16,11 +16,11 @@ const (
 type pluginLaunchInstructions struct {
 	Kind         string `json:"kind"`
 	Content      string `json:"content"`
-	WorkspaceID  string `json:"workspace_id,omitempty"`
+	ProfileID    string `json:"profile_id,omitempty"`
 	NotebookRoot string `json:"notebook_root,omitempty"`
 }
 
-func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
+func (d *Daemon) preparePluginLaunchInstructions(sessionID, profileID string, isChief, selfReportPullRequests bool) (*pluginLaunchInstructions, error) {
 	gardenHome := d.requireHome(garden.Surface) == nil
 	if isChief {
 		root, _, err := d.ensureNotebookScaffold()
@@ -38,7 +38,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 				Crew:                   d.crewPrimeForLaunch(sessionID),
 				SelfReportPullRequests: selfReportPullRequests,
 			}.Instructions(),
-			WorkspaceID:  workspaceID,
+			ProfileID:    profileID,
 			NotebookRoot: root,
 		}, nil
 	}
@@ -51,7 +51,7 @@ func (d *Daemon) preparePluginLaunchInstructions(sessionID, workspaceID string, 
 			Crew:                   d.crewPrimeForLaunch(sessionID),
 			SelfReportPullRequests: selfReportPullRequests,
 		}.Instructions(),
-		WorkspaceID: workspaceID,
+		ProfileID: profileID,
 	}, nil
 }
 

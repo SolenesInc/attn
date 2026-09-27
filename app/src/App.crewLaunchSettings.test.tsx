@@ -1,6 +1,6 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, crewMember, type DaemonCrewMember as CrewMember, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, crewMember, type DaemonCrewMember as CrewMember, daemonSession } from './test/daemonFixtures';
 import type { CommandMessage } from './test/protocol';
 import { gesture, renderApp } from './test/renderApp';
 import { type Answer, answerInTurn, HOLD, type Reply, type ScriptedDaemon } from './test/scriptedDaemon';
@@ -22,7 +22,7 @@ const conflicted = (current: CrewMember): Reply => ({ event: 'crew_set_result', 
 
 async function openLaunchSettings(members: CrewMember[], saves: Answer[]) {
   const { daemon } = await renderApp({
-    initialState: { crew: members, sessions: [daemonSession('s1')], workspaces: [agentWorkspace('s1')] },
+    initialState: { crew: members, sessions: [daemonSession('s1')], desktops: [soloDesktop('s1')] },
   });
   answerInTurn(daemon, 'crew_set', saves);
   daemon.on('delegation_preferences_get', () => ({

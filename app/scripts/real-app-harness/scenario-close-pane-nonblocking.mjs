@@ -17,7 +17,7 @@ import { currentHarnessInstance, dataDirForInstance, instanceCliEnv } from './ha
 import { writeMockAgentFixture } from './mockAgent.mjs';
 import { appDaemonInTree } from './platform.mjs';
 import { ensureCodexInitialPanePromptReady } from './scenarioAgents.mjs';
-import { waitForFirstWorkspacePane, waitForPaneVisible } from './scenarioAssertions.mjs';
+import { waitForFirstDesktopPane, waitForPaneVisible } from './scenarioAssertions.mjs';
 import { closeScenarioSessions, createScenarioRunner } from './scenarioRunner.mjs';
 import { UiAutomationClient } from './uiAutomationClient.mjs';
 
@@ -140,7 +140,7 @@ async function main() {
       cleanupSessionId = sessionId;
       await client.request('select_session', { sessionId });
       await ensureCodexInitialPanePromptReady(client, sessionId, 45_000);
-      pane = await waitForFirstWorkspacePane(client, sessionId, 'stubborn mock agent pane', 20_000);
+      pane = await waitForFirstDesktopPane(client, sessionId, 'stubborn mock agent pane', 20_000);
       await waitForPaneVisible(client, sessionId, pane.paneId, 20_000);
     });
 

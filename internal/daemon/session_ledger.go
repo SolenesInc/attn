@@ -27,12 +27,12 @@ func ledgerQuery(msg *protocol.SessionListMessage, wantFacets bool) (store.Sessi
 
 	before := strings.TrimSpace(protocol.Deref(msg.Before))
 	query := store.SessionLedgerQuery{
-		Scope:       scope,
-		Limit:       protocol.Deref(msg.Limit),
-		Before:      before,
-		WorkspaceID: strings.TrimSpace(protocol.Deref(msg.WorkspaceID)),
-		Repository:  strings.TrimSpace(protocol.Deref(msg.Repository)),
-		Facets:      wantFacets && before == "",
+		Scope:      scope,
+		Limit:      protocol.Deref(msg.Limit),
+		Before:     before,
+		ProfileID:  strings.TrimSpace(protocol.Deref(msg.ProfileID)),
+		Repository: strings.TrimSpace(protocol.Deref(msg.Repository)),
+		Facets:     wantFacets && before == "",
 	}
 
 	since, err := ledgerInstantArg("since", protocol.Deref(msg.Since))
@@ -175,7 +175,10 @@ func (d *Daemon) sendSessionReopenWSResult(client *wsClient, msg *protocol.Sessi
 		Event:     protocol.EventSessionReopenResult,
 		RequestID: protocol.Deref(msg.RequestID),
 	}
-	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory))
+	outcome, err := d.reopenSession(msg.SessionID, action, protocol.Deref(msg.Directory), profileDestination{
+		requested:           protocol.Deref(msg.ProfileID),
+		whenRecordedDeleted: client.selectedProfile(),
+	})
 	var refused *reopenRefusedError
 	if errors.As(err, &refused) {
 		reply.Reopen = refused.verdict.toProtocol()

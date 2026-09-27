@@ -3,9 +3,10 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"testing"
+
 	"github.com/victorarias/attn/internal/prompttest"
 	"github.com/victorarias/attn/internal/protocol"
-	"testing"
 )
 
 func TestLegacyPromptCompatibility(t *testing.T) {

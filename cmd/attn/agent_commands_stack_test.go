@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -26,7 +27,7 @@ func connectBrowserHost(t *testing.T, s *testworld.Stack) *testworld.Peer {
 		Cmd:              protocol.CmdClientHello,
 		ClientKind:       "tauri-app",
 		Version:          "protocol-" + protocol.ProtocolVersion,
-		Capabilities:     []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityBinaryPtyOutput, protocol.CapabilityBrowserHost},
+		Capabilities:     []string{protocol.CapabilityBinaryPtyOutput, protocol.CapabilityBrowserHost},
 		ClientToken:      protocol.Ptr(strings.TrimSpace(string(token))),
 		BrowserHostToken: protocol.Ptr(browserHostToken),
 	}, http.Header{"Origin": []string{"tauri://localhost"}})
@@ -132,22 +133,21 @@ func TestTheCommandsAnAgentRunsFromItsSessionActOnThatSession(t *testing.T) {
 		}
 
 		for _, tc := range []struct {
-			args      []string
-			workspace string
-			tile      string
+			args []string
+			tile string
 		}{
-			{args: []string{readme}, workspace: "workspace-shop", tile: readme},
-			{args: []string{"--session", other, readme}, workspace: "workspace-blog", tile: readme},
-			{args: []string{relativeNotes, "--session=" + other}, workspace: "workspace-blog", tile: notes},
-			{args: []string{planted.Seed.ID, "--session", other}, workspace: "workspace-blog", tile: planted.Seed.ID},
+			{args: []string{readme}, tile: readme},
+			{args: []string{"--session", other, readme}, tile: readme},
+			{args: []string{relativeNotes, "--session=" + other}, tile: notes},
+			{args: []string{planted.Seed.ID, "--session", other}, tile: planted.Seed.ID},
 		} {
 			got := s.Run(testworld.Invocation{Args: append([]string{"open"}, tc.args...), Session: session})
 			if got.Code != 0 || !strings.HasPrefix(got.Stdout, "opened ") {
 				t.Errorf("attn open %q exited %d: %s%s", tc.args, got.Code, got.Stdout, got.Stderr)
 				continue
 			}
-			testworld.Await(app, protocol.EventWorkspaceLayoutUpdated, func(m protocol.WorkspaceLayoutUpdatedMessage) bool {
-				return m.WorkspaceLayout.WorkspaceID == tc.workspace && strings.Contains(m.WorkspaceLayout.LayoutJson, tc.tile)
+			testworld.Await(app, protocol.EventProfileArrangementChanged, func(m protocol.ProfileArrangementChangedMessage) bool {
+				return slices.ContainsFunc(m.Desktops, func(d protocol.Desktop) bool { return strings.Contains(d.TreeJson, tc.tile) })
 			})
 		}
 

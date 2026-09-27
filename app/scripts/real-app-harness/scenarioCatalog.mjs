@@ -1,3 +1,5 @@
+const REMOTE_ENDPOINTS_OFF = 'remote endpoints are off in this release, so the app cannot reach a remote daemon';
+
 export const scenarioCatalog = [
   {
     id: 'snooze-keyboard',
@@ -15,10 +17,10 @@ export const scenarioCatalog = [
     timeoutMs: 240_000,
   },
   {
-    id: 'workspace-creation-shortcuts',
-    runnerId: 'WORKSPACE-CREATION-SHORTCUTS',
-    label: 'Workspace creation shortcuts',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-creation-shortcuts'],
+    id: 'session-creation-shortcuts',
+    runnerId: 'SESSION-CREATION-SHORTCUTS',
+    label: 'Session creation shortcuts',
+    command: ['pnpm', 'run', 'real-app:scenario-session-creation-shortcuts'],
   },
   {
     id: 'linux-shortcuts',
@@ -28,16 +30,31 @@ export const scenarioCatalog = [
     soakOnly: true,
   },
   {
-    id: 'workspace-switching',
-    runnerId: 'WORKSPACE-SWITCHING',
-    label: 'Workspace switching',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-switching'],
+    id: 'desktop-switching',
+    runnerId: 'DESKTOP-SWITCHING',
+    label: 'Desktop switch, send, bounce, overview and a second client',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-switching'],
   },
   {
-    id: 'workspace-close-one-session-keeps-selection',
-    runnerId: 'WORKSPACE-CLOSE-ONE-SESSION-KEEPS-SELECTION',
-    label: 'Workspace close one session keeps selection',
-    command: ['pnpm', 'run', 'real-app:scenario-workspace-close-one-session-keeps-selection'],
+    id: 'desktop-migration',
+    runnerId: 'DESKTOP-MIGRATION',
+    label: 'Workspace migration picker: keyboard, native pointer drop, second client, restart, reopen, narrow window, finish',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-migration'],
+    skipOn: {
+      darwin: 'the in-app macOS input injector deadlocks here: AppKit holds its mouse-down window-drag check open for the up event the injector sends only after that call returns; the Linux run drops through xdotool',
+    },
+  },
+  {
+    id: 'desktop-splits',
+    runnerId: 'DESKTOP-SPLITS',
+    label: 'Splits, closing a split and focus mode across two desktops',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-splits'],
+  },
+  {
+    id: 'desktop-close-one-session-keeps-selection',
+    runnerId: 'DESKTOP-CLOSE-ONE-SESSION-KEEPS-SELECTION',
+    label: 'Closing one session on a desktop keeps the selection',
+    command: ['pnpm', 'run', 'real-app:scenario-desktop-close-one-session-keeps-selection'],
   },
   {
     id: 'close-pane-nonblocking',
@@ -72,16 +89,22 @@ export const scenarioCatalog = [
     freshWorldAfter: true,
   },
   {
+    id: 'profile-lifecycle',
+    runnerId: 'PROFILE-LIFECYCLE',
+    label: 'Profiles are created, renamed and deleted from the switcher, and the ledger moves and reopens agents between them',
+    command: ['pnpm', 'run', 'real-app:scenario-profile-lifecycle'],
+  },
+  {
     id: 'sessions-surface',
     runnerId: 'SESSIONS-SURFACE',
     label: 'The Sessions surface lists, filters, remembers its filters, and updates live and closed sessions',
     command: ['pnpm', 'run', 'real-app:scenario-sessions-surface'],
   },
   {
-    id: 'tile-only-workspace-select',
-    runnerId: 'TILE-ONLY-WORKSPACE-SELECT',
-    label: 'Tile-only workspace select + render',
-    command: ['pnpm', 'run', 'real-app:scenario-tile-only-workspace-select'],
+    id: 'tile-only-desktop-select',
+    runnerId: 'TILE-ONLY-DESKTOP-SELECT',
+    label: 'Tile-only desktop select + render',
+    command: ['pnpm', 'run', 'real-app:scenario-tile-only-desktop-select'],
   },
   {
     id: 'markdown-opener',
@@ -259,7 +282,7 @@ export const scenarioCatalog = [
   {
     id: 'session-usage',
     runnerId: 'SESSION-USAGE',
-    label: 'Session usage combines native subagents, keeps partial costs, and opens from the Action menu',
+    label: 'Session usage combines native subagents, keeps partial costs, and opens from the command palette',
     command: ['pnpm', 'run', 'real-app:scenario-session-usage'],
   },
   {
@@ -271,7 +294,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-codex',
-    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (codex vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:codex'],
@@ -279,7 +302,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr205-probe-claude',
-    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
     runnerId: 'TR-205',
     label: 'TR-205 remote probe (claude vocabulary)',
     command: ['pnpm', 'run', 'real-app:scenario-tr205', '--', '--remote-agent', 'probe:claude'],
@@ -287,7 +310,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr502',
-    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
     runnerId: 'TR-502',
     label: 'TR-502 remote relaunch splits',
     command: ['pnpm', 'run', 'real-app:scenario-tr502'],
@@ -295,7 +318,7 @@ export const scenarioCatalog = [
   },
   {
     id: 'tr504',
-    skipOn: { linux: { reason: 'needs a provisioned SSH machine; set ATTN_HARNESS_REMOTE_SSH_TARGET to its target to run it', unlessEnv: 'ATTN_HARNESS_REMOTE_SSH_TARGET' } },
+    skipOn: { darwin: REMOTE_ENDPOINTS_OFF, linux: REMOTE_ENDPOINTS_OFF },
     runnerId: 'TR-504',
     label: 'TR-504 remote cleanup',
     command: ['pnpm', 'run', 'real-app:scenario-tr504'],

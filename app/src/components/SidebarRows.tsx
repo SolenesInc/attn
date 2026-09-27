@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { formatShortcut } from '../shortcuts/formatShortcut';
 import type { SessionPullRequest } from '../types/generated';
-import { type TileContentState, type TileLeaf } from '../types/workspace';
+import { type TileContentState, type TileLeaf } from '../types/desktop';
 import { describeSessionPullRequest, pickSessionPullRequest } from '../utils/sessionPullRequest';
 import { deriveTileTitle } from '../utils/tilePresentation';
 import { ChiefOfStaffBadge } from './ChiefOfStaffBadge';
@@ -59,20 +59,18 @@ export function SidebarSessionIdentity({
 }
 
 export function TileSidebarRow({
-  workspaceId,
+  desktopId,
   tile,
   content,
   selected,
-  muted = false,
   onSelect,
   onClose,
   onReload,
 }: {
-  workspaceId: string;
+  desktopId: string;
   tile: TileLeaf;
   content?: TileContentState;
   selected: boolean;
-  muted?: boolean;
   onSelect: () => void;
   onClose: () => void;
   onReload: () => void;
@@ -80,8 +78,8 @@ export function TileSidebarRow({
   const title = deriveTileTitle(tile, content);
   return (
     <div
-      className={`session-item workspace-tile-item grouped ${selected ? 'selected' : ''} ${muted ? 'muted-session' : ''}`.trim()}
-      data-testid={`sidebar-tile-${workspaceId}-${tile.tileId}`}
+      className={`session-item desktop-tile-item grouped ${selected ? 'selected' : ''}`.trim()}
+      data-testid={`sidebar-tile-${desktopId}-${tile.tileId}`}
       data-tile-kind={tile.tileKind}
     >
       <button
@@ -91,38 +89,38 @@ export function TileSidebarRow({
         onClick={onSelect}
       />
       <span
-        className={`workspace-tile-indicator workspace-tile-indicator--${tile.tileKind}`}
+        className={`desktop-tile-indicator desktop-tile-indicator--${tile.tileKind}`}
         aria-hidden="true"
       />
       <span className="session-label">{title}</span>
-      {!muted && (
-        <div className="session-actions">
-          {tile.tileKind === 'browser' && (
-            <button
-              className="session-action-btn reload-session-btn"
-              onClick={(event) => {
-                event.stopPropagation();
-                onReload();
-              }}
-              title="Reload browser"
-              aria-label={`Reload ${title}`}
-            >
-              ↻
-            </button>
-          )}
+      <div className="session-actions">
+        {tile.tileKind === 'browser' && (
           <button
-            className="session-action-btn close-session-btn"
+            className="session-action-btn reload-session-btn"
+            data-testid={`reload-tile-${desktopId}-${tile.tileId}`}
             onClick={(event) => {
               event.stopPropagation();
-              onClose();
+              onReload();
             }}
-            title="Close tile"
-            aria-label={`Close ${title}`}
+            title="Reload browser"
+            aria-label={`Reload ${title}`}
           >
-            ×
+            ↻
           </button>
-        </div>
-      )}
+        )}
+        <button
+          className="session-action-btn close-session-btn"
+          data-testid={`close-tile-${desktopId}-${tile.tileId}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onClose();
+          }}
+          title="Close tile"
+          aria-label={`Close ${title}`}
+        >
+          ×
+        </button>
+      </div>
     </div>
   );
 }
@@ -169,6 +167,7 @@ export function SidebarSessionRow({
   onClickCapture,
   onPointerDown,
   onOpenActions,
+  onSettle,
   showSettling,
   delegates,
 }: {
@@ -180,6 +179,7 @@ export function SidebarSessionRow({
   onClickCapture?: (event: ReactMouseEvent) => void;
   onPointerDown?: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   onOpenActions: (event: ReactMouseEvent) => void;
+  onSettle?: () => void;
   showSettling: boolean;
   delegates: readonly LocalSession[];
 }) {
@@ -189,6 +189,7 @@ export function SidebarSessionRow({
         .trim()
         .replace(/\s+/g, ' ')}
       data-testid={`sidebar-session-${session.id}`}
+      data-session-id={session.id}
       data-state={session.state}
       title={session.state === 'recoverable' ? 'Session will be recovered when opened' : undefined}
     >
@@ -210,6 +211,21 @@ export function SidebarSessionRow({
       <DelegationChainTrigger session={session} hasDelegates={delegates.length > 0} />
       <SidebarSessionBadges session={session} />
       <div className="session-actions">
+        {onSettle && (
+          <button
+            type="button"
+            className="session-action-btn session-settle-btn"
+            data-testid={`session-settle-${session.id}`}
+            onClick={(event) => {
+              event.stopPropagation();
+              onSettle();
+            }}
+            title={`Settle this run (${formatShortcut('session.settle')})`}
+            aria-label={`Settle ${session.label}`}
+          >
+            ✓
+          </button>
+        )}
         <button
           className="session-action-btn session-more-btn"
           data-testid={`session-actions-${session.id}`}

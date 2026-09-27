@@ -49,6 +49,7 @@ func addStaleSession(t *testing.T, d *Daemon, id string, agent protocol.SessionA
 		Label:          id,
 		Agent:          agent,
 		Directory:      "/tmp/" + id,
+		ProfileID:      defaultProfileID(t, d.store),
 		State:          state,
 		StateSince:     now,
 		StateUpdatedAt: now,

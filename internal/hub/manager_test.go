@@ -114,274 +114,6 @@ func TestManagerRemoteSessionsUpsertAndClear(t *testing.T) {
 	}
 }
 
-func TestManagerRemoteWorkspacesTrackAndClear(t *testing.T) {
-	endpointStore := store.New()
-	first, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint(first) error = %v", err)
-	}
-	second, err := endpointStore.AddEndpoint("dev-box", "dev", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint(second) error = %v", err)
-	}
-
-	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
-
-	if changed, count := manager.upsertRemoteSession(first.ID, protocol.Session{ID: "sess-a", Directory: "/srv/repo"}); !changed || count != 1 {
-		t.Fatalf("upsertRemoteSession(first) = (%v, %d), want (true, 1)", changed, count)
-	}
-	if changed, count := manager.upsertRemoteSession(second.ID, protocol.Session{ID: "sess-b", Directory: "/srv/repo"}); !changed || count != 1 {
-		t.Fatalf("upsertRemoteSession(second) = (%v, %d), want (true, 1)", changed, count)
-	}
-
-	if changed := manager.replaceRemoteWorkspaces(first.ID, []protocol.Workspace{{
-		ID:        "ws-a",
-		Title:     "GPU review",
-		Directory: "/srv/repo",
-		Status:    protocol.WorkspaceStatusWorking,
-		Layout: &protocol.WorkspaceLayout{
-			WorkspaceID:  "ws-a",
-			ActivePaneID: "pane-session",
-			LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-			Panes: []protocol.WorkspaceLayoutPane{{
-				PaneID:    "pane-session",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
-				Title:     "Agent",
-				RuntimeID: protocol.Ptr("sess-a"),
-				SessionID: protocol.Ptr("sess-a"),
-			}, {
-				PaneID:    "agent-2",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
-				Title:     "Agent 2",
-				RuntimeID: protocol.Ptr("sess-b"),
-				SessionID: protocol.Ptr("sess-b"),
-			}},
-		},
-	}}); !changed {
-		t.Fatal("replaceRemoteWorkspaces(first) reported no change")
-	}
-	if changed := manager.replaceRemoteWorkspaces(second.ID, []protocol.Workspace{{
-		ID:        "ws-b",
-		Title:     "DEV fix",
-		Directory: "/srv/repo",
-		Status:    protocol.WorkspaceStatusIdle,
-		Layout: &protocol.WorkspaceLayout{
-			WorkspaceID:  "ws-b",
-			ActivePaneID: "pane-session",
-			LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-			Panes: []protocol.WorkspaceLayoutPane{{
-				PaneID:    "pane-session",
-				Kind:      protocol.WorkspaceLayoutPaneKindAgent,
-				Title:     "Agent",
-				RuntimeID: protocol.Ptr("sess-b"),
-				SessionID: protocol.Ptr("sess-b"),
-			}},
-		}},
-	}); !changed {
-		t.Fatal("replaceRemoteWorkspaces(second) reported no change")
-	}
-
-	got := manager.RemoteWorkspaces()
-	if len(got) != 2 {
-		t.Fatalf("RemoteWorkspaces() len = %d, want 2", len(got))
-	}
-	if got[0].ID != "ws-a" || got[1].ID != "ws-b" {
-		t.Fatalf("RemoteWorkspaces() ids = %q, %q, want ws-a, ws-b", got[0].ID, got[1].ID)
-	}
-	if got[0].EndpointID == nil || *got[0].EndpointID != first.ID {
-		t.Fatalf("RemoteWorkspaces()[0].EndpointID = %v, want %q", got[0].EndpointID, first.ID)
-	}
-	if got[1].EndpointID == nil || *got[1].EndpointID != second.ID {
-		t.Fatalf("RemoteWorkspaces()[1].EndpointID = %v, want %q", got[1].EndpointID, second.ID)
-	}
-
-	if endpointID, ok := manager.EndpointIDForSession("missing"); ok || endpointID != "" {
-		t.Fatalf("EndpointIDForSession(missing) = (%q, %v), want ('', false)", endpointID, ok)
-	}
-
-	_, _ = manager.upsertRemoteSession(first.ID, protocol.Session{ID: "sess-a", Directory: "/srv/repo", State: protocol.SessionStateWorking})
-	if endpointID, ok := manager.EndpointIDForSession("sess-a"); !ok || endpointID != first.ID {
-		t.Fatalf("EndpointIDForSession(sess-a) = (%q, %v), want (%q, true)", endpointID, ok, first.ID)
-	}
-	if endpointID, ok := manager.EndpointIDForWorkspace("ws-a"); !ok || endpointID != first.ID {
-		t.Fatalf("EndpointIDForWorkspace(ws-a) = (%q, %v), want (%q, true)", endpointID, ok, first.ID)
-	}
-	workspace := manager.RemoteWorkspace("ws-a")
-	if workspace == nil || workspace.Layout == nil || workspace.Layout.WorkspaceID != "ws-a" {
-		t.Fatalf("RemoteWorkspace(ws-a) = %+v", workspace)
-	}
-	workspace.Layout.Panes[0].Title = "mutated copy"
-	if fresh := manager.RemoteWorkspace("ws-a"); fresh == nil || fresh.Layout.Panes[0].Title == "mutated copy" {
-		t.Fatal("RemoteWorkspace returned shared layout state")
-	}
-	if endpointID, ok := manager.EndpointIDForPTYTarget("sess-a"); !ok || endpointID != first.ID {
-		t.Fatalf("EndpointIDForPTYTarget(sess-a) = (%q, %v), want (%q, true)", endpointID, ok, first.ID)
-	}
-
-	if changed := manager.clearRemoteWorkspaceLayouts(first.ID); !changed {
-		t.Fatal("clearRemoteWorkspaceLayouts(first) reported no change")
-	}
-	got = manager.RemoteWorkspaces()
-	if len(got) != 1 || got[0].ID != "ws-b" {
-		t.Fatalf("RemoteWorkspaces() after clear = %+v, want only ws-b", got)
-	}
-}
-
-func TestManagerStampsEndpointIDOnIngest(t *testing.T) {
-	endpointStore := store.New()
-	first, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint(first) error = %v", err)
-	}
-
-	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
-
-	workspace := protocol.Workspace{
-		ID:         "ws-a",
-		Title:      "GPU review",
-		Directory:  "/srv/repo",
-		Status:     protocol.WorkspaceStatusWorking,
-		EndpointID: protocol.Ptr("bogus-spoofed-id"),
-	}
-
-	if changed := manager.replaceRemoteWorkspaces(first.ID, []protocol.Workspace{workspace}); !changed {
-		t.Fatal("replaceRemoteWorkspaces reported no change on first ingest")
-	}
-	got := manager.RemoteWorkspace("ws-a")
-	if got == nil || got.EndpointID == nil || *got.EndpointID != first.ID {
-		t.Fatalf("RemoteWorkspace(ws-a).EndpointID = %v, want %q (bogus pre-set value must be overwritten)", got, first.ID)
-	}
-
-	if changed := manager.replaceRemoteWorkspaces(first.ID, []protocol.Workspace{workspace}); changed {
-		t.Fatal("replaceRemoteWorkspaces reported a change re-ingesting an identical workspace")
-	}
-
-	if changed := manager.upsertRemoteWorkspace(first.ID, protocol.Workspace{
-		ID:         "ws-c",
-		Title:      "Upserted",
-		Directory:  "/srv/repo2",
-		Status:     protocol.WorkspaceStatusIdle,
-		EndpointID: protocol.Ptr("also-bogus"),
-	}); !changed {
-		t.Fatal("upsertRemoteWorkspace reported no change")
-	}
-	upserted := manager.RemoteWorkspace("ws-c")
-	if upserted == nil || upserted.EndpointID == nil || *upserted.EndpointID != first.ID {
-		t.Fatalf("RemoteWorkspace(ws-c).EndpointID = %v, want %q (bogus pre-set value must be overwritten)", upserted, first.ID)
-	}
-}
-
-func TestManagerWorkspaceMetadataUpdatePreservesLayout(t *testing.T) {
-	endpointStore := store.New()
-	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint() error = %v", err)
-	}
-
-	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
-	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{ID: "ws-1", Directory: "/srv/repo"}); !changed {
-		t.Fatal("upsertRemoteWorkspace() reported no change")
-	}
-	if changed := manager.upsertRemoteWorkspaceLayout(record.ID, protocol.WorkspaceLayout{
-		WorkspaceID:  "ws-1",
-		ActivePaneID: "pane-session",
-		LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-	}); !changed {
-		t.Fatal("upsertRemoteWorkspaceLayout() reported no change")
-	}
-	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{
-		ID:        "ws-1",
-		Title:     "Updated title",
-		Directory: "/srv/repo",
-		Status:    protocol.WorkspaceStatusWorking,
-	}); !changed {
-		t.Fatal("upsertRemoteWorkspace() metadata update reported no change")
-	}
-
-	got := manager.RemoteWorkspace("ws-1")
-	if got == nil || got.Layout == nil || got.Layout.ActivePaneID != "pane-session" {
-		t.Fatalf("RemoteWorkspace(ws-1) = %+v, want preserved layout", got)
-	}
-	if got.Title != "Updated title" || got.Status != protocol.WorkspaceStatusWorking {
-		t.Fatalf("RemoteWorkspace(ws-1) metadata = (%q, %q), want updated", got.Title, got.Status)
-	}
-}
-
-func TestManagerIgnoresLayoutUpdatesForRemovedRemoteWorkspaces(t *testing.T) {
-	endpointStore := store.New()
-	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint() error = %v", err)
-	}
-
-	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
-	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{ID: "ws-1", Directory: "/srv/repo"}); !changed {
-		t.Fatal("upsertRemoteWorkspace() reported no change")
-	}
-	if changed := manager.upsertRemoteWorkspaceLayout(record.ID, protocol.WorkspaceLayout{
-		WorkspaceID:  "ws-1",
-		ActivePaneID: "pane-session",
-		LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-	}); !changed {
-		t.Fatal("upsertRemoteWorkspaceLayout() reported no change")
-	}
-
-	if changed := manager.removeRemoteWorkspace(record.ID, "ws-1"); !changed {
-		t.Fatal("removeRemoteWorkspace() reported no change")
-	}
-	if changed := manager.upsertRemoteWorkspaceLayout(record.ID, protocol.WorkspaceLayout{
-		WorkspaceID:  "ws-1",
-		ActivePaneID: "pane-session",
-		LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-	}); changed {
-		t.Fatal("upsertRemoteWorkspaceLayout() should ignore removed workspace")
-	}
-	if got := manager.RemoteWorkspaces(); len(got) != 0 {
-		t.Fatalf("RemoteWorkspaces() = %+v, want empty after stale workspace update", got)
-	}
-}
-
-func TestManagerForgetSessionLeavesRemoteWorkspaceUntilWorkspaceEvent(t *testing.T) {
-	endpointStore := store.New()
-	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
-	if err != nil {
-		t.Fatalf("AddEndpoint() error = %v", err)
-	}
-
-	manager := NewManager(endpointStore, nil, nil, nil, nil, nil)
-	if changed, count := manager.upsertRemoteSession(record.ID, protocol.Session{ID: "sess-1", Directory: "/srv/repo"}); !changed || count != 1 {
-		t.Fatalf("upsertRemoteSession() = (%v, %d), want (true, 1)", changed, count)
-	}
-	if changed := manager.upsertRemoteWorkspace(record.ID, protocol.Workspace{ID: "ws-1", Directory: "/srv/repo"}); !changed {
-		t.Fatal("upsertRemoteWorkspace() reported no change")
-	}
-	if changed := manager.upsertRemoteWorkspaceLayout(record.ID, protocol.WorkspaceLayout{
-		WorkspaceID:  "ws-1",
-		ActivePaneID: "pane-session",
-		LayoutJson:   `{"type":"pane","paneId":"pane-session"}`,
-	}); !changed {
-		t.Fatal("upsertRemoteWorkspaceLayout() reported no change")
-	}
-
-	session := manager.RemoteSession("sess-1")
-	if session == nil || session.ID != "sess-1" {
-		t.Fatalf("RemoteSession(sess-1) = %+v, want session", session)
-	}
-
-	if changed := manager.ForgetSession("sess-1"); !changed {
-		t.Fatal("ForgetSession() reported no change")
-	}
-	if got := manager.RemoteSession("sess-1"); got != nil {
-		t.Fatalf("RemoteSession(sess-1) after forget = %+v, want nil", got)
-	}
-	if got := manager.RemoteWorkspaces(); len(got) != 1 || got[0].ID != "ws-1" {
-		t.Fatalf("RemoteWorkspaces() after forget = %+v, want retained workspace", got)
-	}
-	if endpointID, ok := manager.EndpointIDForSession("sess-1"); ok || endpointID != "" {
-		t.Fatalf("EndpointIDForSession(sess-1) after forget = (%q, %v), want ('', false)", endpointID, ok)
-	}
-}
-
 func TestManagerPendingSessionRouteReservesSpawnEndpoint(t *testing.T) {
 	endpointStore := store.New()
 	record, err := endpointStore.AddEndpoint("gpu-box", "gpu", "")
@@ -630,7 +362,6 @@ func TestForwardsRawEventIncludesPickerResults(t *testing.T) {
 		protocol.EventRecentLocationsResult,
 		protocol.EventBrowseDirectoryResult,
 		protocol.EventInspectPathResult,
-		protocol.EventWorkspaceTileContent,
 		protocol.EventMarkdownAnnotationsGetResult,
 		protocol.EventMarkdownAnnotationsSaveResult,
 		protocol.EventMarkdownAnnotationsClearResult,
@@ -700,7 +431,7 @@ func TestSendClientHelloDeclaresExactlyTheRelaysCapabilities(t *testing.T) {
 		if want := "protocol-" + protocol.ProtocolVersion; hello.Version != want {
 			t.Errorf("version = %q, want %q", hello.Version, want)
 		}
-		want := []string{protocol.CapabilityWorkspaceSessions, protocol.CapabilityKittyImages}
+		want := []string{protocol.CapabilityKittyImages}
 		if !slices.Equal(hello.Capabilities, want) {
 			t.Errorf("capabilities = %v, want exactly %v", hello.Capabilities, want)
 		}
@@ -797,8 +528,8 @@ func TestManagerForwardBrowserControlReturnsOwningEndpointResult(t *testing.T) {
 			t.Errorf("Unmarshal() error = %v", err)
 			return
 		}
-		if protocol.Deref(request.WorkspaceID) != "remote-workspace" {
-			t.Errorf("workspace_id = %q, want remote-workspace", protocol.Deref(request.WorkspaceID))
+		if protocol.Deref(request.SessionID) != "remote-session" {
+			t.Errorf("session_id = %q, want remote-session", protocol.Deref(request.SessionID))
 		}
 		response, err := json.Marshal(protocol.BrowserControlResponseMessage{
 			Event:     protocol.EventBrowserControlResponse,
@@ -831,10 +562,10 @@ func TestManagerForwardBrowserControlReturnsOwningEndpointResult(t *testing.T) {
 	}()
 
 	data, err := manager.ForwardBrowserControl(ctx, "endpoint-1", protocol.BrowserControlMessage{
-		Cmd:         protocol.CmdBrowserControl,
-		Action:      "get_title",
-		RequestID:   protocol.Ptr("request-1"),
-		WorkspaceID: protocol.Ptr("remote-workspace"),
+		Cmd:       protocol.CmdBrowserControl,
+		Action:    "get_title",
+		RequestID: protocol.Ptr("request-1"),
+		SessionID: protocol.Ptr("remote-session"),
 	})
 	if err != nil {
 		t.Fatalf("ForwardBrowserControl() error = %v", err)

@@ -1,0 +1,3 @@
+kind: changed
+area: daemon
+change: Documents, seeds and the browser that an agent opens dock beside that agent on its desktop, and `attn open`, `attn seed open` and `attn browser` without a session act for the focused agent of the most recently used profile. An agent that appears by itself, such as a delegated child or a handoff successor, lands beside its parent without taking your focus.

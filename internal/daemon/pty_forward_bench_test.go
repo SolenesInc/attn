@@ -13,10 +13,9 @@ var sink outboundMessage
 func benchEncodePtyOutput(b *testing.B, chunk []byte, legacyClient bool) {
 	client := &wsClient{}
 	if legacyClient {
-		client.setIdentity("test", "v", []string{protocol.CapabilityWorkspaceSessions})
+		client.setIdentity("test", "v", nil)
 	} else {
 		client.setIdentity("test", "v", []string{
-			protocol.CapabilityWorkspaceSessions,
 			protocol.CapabilityBinaryPtyOutput,
 		})
 	}

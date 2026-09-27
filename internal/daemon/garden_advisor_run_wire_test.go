@@ -24,7 +24,7 @@ func TestTheGardenAdvisorAdvisesAndDraftsWithTheReviewsFrozenRecipeFromBoundedEv
 		t.Fatal(err)
 	}
 	w.Launched(predecessor.SessionID)
-	closePane(app, seedResumePane(t, w, protocol.Deref(predecessor.WorkspaceID), predecessor.SessionID))
+	closePane(app, sessionPane{session: predecessor.SessionID})
 	worktreeRoot := filepath.Dir(predecessor.Directory)
 	if deleted := testworld.Request(app, protocol.DeleteWorktreeMessage{Cmd: protocol.CmdDeleteWorktree, Path: worktreeRoot, Force: protocol.Ptr(true)},
 		protocol.EventDeleteWorktreeResult, func(r protocol.DeleteWorktreeResultMessage) bool { return r.Path == worktreeRoot }); !deleted.Success {

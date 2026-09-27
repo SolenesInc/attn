@@ -1,7 +1,7 @@
 import { act, fireEvent, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderApp } from './test/renderApp';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop } from './test/daemonFixtures';
 
 const WORKER_NOT_LISTENING = 'dial unix /Users/test/.attn/workers/d-test/sock/s1.sock: connect: no such file or directory';
 
@@ -9,7 +9,7 @@ async function renderSessions() {
   return renderApp({
     initialState: {
       sessions: [daemonSession('s1'), daemonSession('s2')],
-      workspaces: [agentWorkspace('s1'), agentWorkspace('s2')],
+      desktops: [soloDesktop('s1'), soloDesktop('s2')],
     },
   });
 }
@@ -59,13 +59,13 @@ describe('App pane attach', () => {
     );
     const { daemon } = await renderApp({
       initialState: {
-        sessions: [daemonSession('s1', { workspace_id: 'ws' })],
-        workspaces: [daemonWorkspace('ws', { root, panes })],
+        sessions: [daemonSession('s1')],
+        desktops: [daemonDesktop('ws', { root, panes })],
       },
     });
     fireEvent.click(screen.getByRole('button', { name: 'Open s1' }));
     await daemon.idle();
-    const notice = (sessionId: string) => document.querySelector(`[data-pane-id="pane-${sessionId}"] .workspace-pane-body`)?.textContent;
+    const notice = (sessionId: string) => document.querySelector(`[data-pane-id="pane-${sessionId}"] .desktop-pane-body`)?.textContent;
 
     expect(notice('refused')).toBe('spawn refused');
     expect(notice('bare-failure')).toBe('Session failed to start');
@@ -73,7 +73,7 @@ describe('App pane attach', () => {
     expect(notice('late')).toBe('Waiting for copilot...');
     expect(document.querySelector('[data-pane-id="pane-refused"] [aria-label^="Rename session"]')).toBeNull();
 
-    daemon.emit({ event: 'session_registered', session: daemonSession('late', { workspace_id: 'ws' }) });
+    daemon.emit({ event: 'session_registered', session: daemonSession('late') });
     await daemon.idle();
 
     expect(notice('late')).not.toContain('Waiting');

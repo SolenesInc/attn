@@ -73,12 +73,12 @@ func trimBus(t *testing.T, s *testworld.Stack) string {
 func TestTheBusCommandsReportAndTrimTheLogTheDaemonWrote(t *testing.T) {
 	t.Parallel()
 	s := testworld.NewStack(t)
-	if empty := readBusLog(t, s); empty.Rows != 0 || len(empty.Producers) != 0 {
-		t.Fatalf("bus status over a fresh database = %+v, want an empty log", empty)
+	if before := s.Attn("bus", "status"); before.Code == 0 || !strings.Contains(before.Stderr, "attn.db") {
+		t.Fatalf("bus status before any daemon created the database exited %d: %s%s, want a refusal naming it", before.Code, before.Stdout, before.Stderr)
 	}
-	assertBusTable(t, busTable(s), []string{"log: seq ", "no registered consumers"}, nil)
 
 	s.Start()
+	assertBusTable(t, busTable(s), []string{"log: seq "}, []string{"ERROR", "WARN"})
 	if r := s.Attn("bus", "disable", "garden-seed-bells"); r.Code != 0 {
 		t.Fatalf("attn bus disable garden-seed-bells exited %d: %s", r.Code, r.Stderr)
 	}

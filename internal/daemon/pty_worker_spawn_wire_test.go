@@ -18,7 +18,7 @@ func TestASpawnWhoseWorkerDiesBeforeReadyIsRefusedPromptlyAndLeavesNothing(t *te
 	t.Setenv("ATTN_PTY_WORKER_BINARY", dying)
 	w := newWorld(t)
 	app := w.App()
-	refused := refuseSpawnLikeTheApp(w, app, workspaceShell, w.Path("shop"))
+	refused := refuseSpawnLikeTheApp(w, app, shellHarness, w.Path("shop"))
 	if !strings.Contains(protocol.Deref(refused.Error), "worker exited before ready") {
 		t.Errorf("the spawn was refused with %q, want it to say the worker exited before ready", protocol.Deref(refused.Error))
 	}

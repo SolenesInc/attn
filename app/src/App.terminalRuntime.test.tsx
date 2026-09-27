@@ -5,20 +5,20 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { LOCAL_SNAPSHOT_FORMAT } from './pty/attachPlanning';
 import { openAttachedTerminals } from './test/appFixtures';
-import { agentPane, agentWorkspace, daemonSession, daemonWorkspace, splitWorkspace, type DaemonSession } from './test/daemonFixtures';
+import { agentPane, soloDesktop, daemonSession, daemonDesktop, defaultProfile, splitDesktop, type DaemonSession } from './test/daemonFixtures';
 import { fakeRects, sizeTerminals } from './test/layout';
+import { serveLaunches } from './test/locations';
 import { pressShortcut, renderApp } from './test/renderApp';
 import type { CommandMessage } from './test/protocol';
 import type { AttachBlock } from './types/generated';
 import { initialState, type ScriptedDaemon } from './test/scriptedDaemon';
-import { WORKSPACE_RESIZE_COALESCE_MS } from './utils/ghosttyResize';
-import { WARM_WORKSPACE_LIMIT_STORAGE_KEY } from './utils/terminalVirtualization';
+import { DESKTOP_RESIZE_COALESCE_MS } from './utils/ghosttyResize';
 
 const NATIVE_SNAPSHOT: Uint8Array = readFileSync('src/ghostty/testdata/native-snapshot.bin');
 
 function renderSessions(...sessions: DaemonSession[]) {
   return renderApp({
-    initialState: { sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)) },
+    initialState: { sessions, desktops: sessions.map((session) => soloDesktop(session.id)) },
   });
 }
 
@@ -66,7 +66,7 @@ function resizableTerminals(width: number, height: number) {
     pane.clientWidth = nextWidth;
     pane.clientHeight = nextHeight;
     observe();
-    await act(() => vi.advanceTimersByTimeAsync(WORKSPACE_RESIZE_COALESCE_MS));
+    await act(() => vi.advanceTimersByTimeAsync(DESKTOP_RESIZE_COALESCE_MS));
   };
 }
 
@@ -115,7 +115,7 @@ function kittyPlacement(imageId: number, generation: number) {
 }
 
 async function openKittyImages(sessionId: string) {
-  const view = await openAttachedTerminals({ sessions: [daemonSession(sessionId, { state: 'idle' })], workspaces: [agentWorkspace(sessionId)] });
+  const view = await openAttachedTerminals({ sessions: [daemonSession(sessionId, { state: 'idle' })], desktops: [soloDesktop(sessionId)] });
   let seq = 0;
   const place = async (...placements: ReturnType<typeof kittyPlacement>[]) => {
     seq += 1;
@@ -167,8 +167,8 @@ const RESTORED_SCREEN = [
 async function openSplit(script: (daemon: ScriptedDaemon) => void = () => {}) {
   const view = await renderApp({
     initialState: {
-      sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws' })],
-      workspaces: [splitWorkspace('ws', ['s1', 's2'])],
+      sessions: [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })],
+      desktops: [splitDesktop('ws', ['s1', 's2'])],
     },
   });
   script(view.daemon);
@@ -180,7 +180,7 @@ async function openSplit(script: (daemon: ScriptedDaemon) => void = () => {}) {
 async function reattachAfterReconnect(output: string) {
   const view = await openAttachedTerminals({
     sessions: [daemonSession('s1', { state: 'idle' })],
-    workspaces: [agentWorkspace('s1')],
+    desktops: [soloDesktop('s1')],
     output: { s1: output },
   });
   view.daemon.on('attach_session', () => undefined);
@@ -328,27 +328,23 @@ describe('App terminal runtime', () => {
   });
 
   it('drops an attach answered after the user left, and attaches afresh on return', async () => {
-    localStorage.setItem(WARM_WORKSPACE_LIMIT_STORAGE_KEY, '0');
-    onTestFinished(() => localStorage.removeItem(WARM_WORKSPACE_LIMIT_STORAGE_KEY));
-    const sessions = [daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' })];
+    const sessions = ['s1', 's2', 's3'].map((id) => daemonSession(id, { state: 'idle' }));
     const { daemon } = await renderSessions(...sessions);
-    open('s1');
-    await daemon.idle();
-    open('s2');
-    await daemon.idle();
+    for (const id of ['s1', 's2', 's3']) {
+      open(id);
+      await daemon.idle();
+    }
 
     daemon.emit({ event: 'attach_result', id: 's1', success: true, cols: 80, rows: 24, last_seq: 0, running: true });
     daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('stale-output') });
-    daemon.emit(initialState({ sessions, workspaces: sessions.map((session) => agentWorkspace(session.id)) }));
+    daemon.emit(initialState({ sessions, desktops: sessions.map((session) => soloDesktop(session.id)) }));
     await daemon.idle();
     open('s1');
     await daemon.idle();
 
-    expect(daemon.sent.filter((command) => command.cmd === 'attach_session' || command.cmd === 'detach_session')).toEqual([
+    expect(daemon.sent.filter((command) => (command.cmd === 'attach_session' || command.cmd === 'detach_session') && command.id === 's1')).toEqual([
       { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
       { cmd: 'detach_session', id: 's1' },
-      { cmd: 'attach_session', id: 's2', attach_policy: 'same_app_remount' },
-      { cmd: 'detach_session', id: 's2' },
       { cmd: 'attach_session', id: 's1', attach_policy: 'same_app_remount' },
     ]);
 
@@ -371,7 +367,7 @@ describe('App terminal runtime', () => {
     expect(visibleText('s1')).not.toContain('only-in-s2');
   });
 
-  it('answers a terminal query once while a session moves to another workspace, and keeps rendering it there', async () => {
+  it('answers a terminal query once while a session moves to another desktop, and keeps rendering it there', async () => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }), daemonSession('s2', { state: 'idle' }));
     daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true, last_seq: 0 }));
     open('s1');
@@ -379,13 +375,12 @@ describe('App terminal runtime', () => {
     open('s2');
     await daemon.idle();
 
-    daemon.emit({
-      event: 'workspace_layout_updated',
-      workspace_layout: splitWorkspace('workspace-s2', ['s2', 's1']).layout!,
-    });
+    daemon.arrange((desktops) => desktops
+      .filter((desktop) => desktop.id !== 'desktop-s1')
+      .map((desktop) => (desktop.id === 'desktop-s2' ? splitDesktop('desktop-s2', ['s2', 's1'], { revision: desktop.revision + 1 }) : desktop)));
     daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('\x1b[5n') });
     await daemon.idle();
-    daemon.emit({ event: 'session_state_changed', session: daemonSession('s1', { state: 'idle', workspace_id: 'workspace-s2' }) });
+    daemon.emit({ event: 'session_state_changed', session: daemonSession('s1', { state: 'idle' }) });
     await daemon.idle();
     daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('after-the-move\x1b[5n') });
     await daemon.idle();
@@ -397,28 +392,9 @@ describe('App terminal runtime', () => {
     expect(visibleText('s1')).toContain('after-the-move');
   });
 
-  it('spawns a split shell in its workspace and leaves attaching it to its pane', async () => {
+  it('spawns a split shell on its desktop and leaves attaching it to its pane', async () => {
     const { daemon } = await renderSessions(daemonSession('s1', { state: 'idle' }));
-    daemon.on('workspace_layout_add_session_pane', ({ workspace_id, pane_id, session_id }) => [
-      { event: 'workspace_layout_action_result', action: 'workspace_layout_add_session_pane', workspace_id, pane_id, success: true },
-      {
-        event: 'workspace_layout_updated',
-        workspace_layout: daemonWorkspace(workspace_id, {
-          root: {
-            type: 'split',
-            split_id: 'split-shell',
-            direction: 'vertical',
-            ratio: 0.5,
-            children: [{ type: 'pane', pane_id: 'pane-s1' }, { type: 'pane', pane_id }],
-          },
-          panes: [agentPane('s1', workspace_id), { ...agentPane(session_id!, workspace_id), pane_id: pane_id! }],
-        }).layout!,
-      },
-    ]);
-    daemon.on('spawn_session', ({ id }) => [
-      { event: 'spawn_result', id, success: true },
-      { event: 'session_registered', session: daemonSession(id, { agent: 'shell', workspace_id: 'workspace-s1', state: 'idle' }) },
-    ]);
+    serveLaunches(daemon);
     open('s1');
     await daemon.idle();
 
@@ -426,7 +402,7 @@ describe('App terminal runtime', () => {
     await daemon.idle();
 
     const [spawn] = daemon.sentOf('spawn_session');
-    expect(spawn).toMatchObject({ cwd: '/tmp/s1', workspace_id: 'workspace-s1', agent: 'shell', spawned_from: 's1' });
+    expect(spawn).toMatchObject({ cwd: '/tmp/s1', agent: 'shell', spawned_from: 's1' });
     expect(daemon.sent.filter((command) =>
       (command.cmd === 'attach_session' || command.cmd === 'pty_resize') && command.id === spawn.id,
     )).toEqual([{ cmd: 'attach_session', id: spawn.id, attach_policy: 'same_app_remount' }]);
@@ -472,7 +448,8 @@ describe('App terminal runtime', () => {
 
     reconnected.emit(initialState({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
+      profiles: [defaultProfile('desktop-s1')],
     }));
     await moveOverTerminal();
     expect(reconnected.sent.filter((command) => command.cmd === 'terminal_pointer_activity')).toEqual([
@@ -496,7 +473,7 @@ describe('App terminal runtime', () => {
     daemon.emit({
       event: 'browser_control_request',
       request_id: 'browser-request-1',
-      workspace_id: 'workspace-1',
+      desktop_id: 'desktop-1',
       tile_id: 'tile-browser',
       action: 'type',
       selector: '#query',
@@ -510,7 +487,7 @@ describe('App terminal runtime', () => {
       data: '{"title":"Fixture"}',
     });
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_control', {
-      label: 'browser-workspace-1-tile-browser',
+      label: 'browser-desktop-1-tile-browser',
       action: 'type',
       selector: '#query',
       text: 'browser text',
@@ -528,7 +505,7 @@ describe('App terminal runtime', () => {
     daemon.emit({
       event: 'browser_control_request',
       request_id: 'browser-request-1',
-      workspace_id: 'workspace-1',
+      desktop_id: 'desktop-1',
       tile_id: 'tile-browser',
       action: 'evaluate',
     });
@@ -545,7 +522,7 @@ describe('App terminal runtime', () => {
     vi.mocked(isTauri).mockReturnValue(true);
     let hostRect = new DOMRect(10, 20, 300, 400);
     fakeRects((element) => (element.classList.contains('browser-tile-host') ? hostRect : null));
-    const workspace = daemonWorkspace('ws', {
+    const workspace = daemonDesktop('ws', {
       root: {
         type: 'split',
         split_id: 'split-a',
@@ -557,9 +534,9 @@ describe('App terminal runtime', () => {
         ],
       },
       panes: [agentPane('s1', 'ws')],
-    }, { title: 'ws' });
+    }, { name: 'ws' });
     const { daemon } = await renderApp({
-      initialState: { sessions: [daemonSession('s1', { workspace_id: 'ws', state: 'idle' })], workspaces: [workspace] },
+      initialState: { sessions: [daemonSession('s1', { state: 'idle' })], desktops: [workspace] },
     });
     open('s1');
     await daemon.idle();
@@ -567,7 +544,7 @@ describe('App terminal runtime', () => {
     expect(vi.mocked(invoke)).toHaveBeenCalledWith('browser_host_mount', {
       label: 'browser-ws-tile-browser',
       url: 'https://example.com/',
-      geometry: { x: 10, y: 20, width: 300, height: 400, visible: false },
+      geometry: { x: 10, y: 20, width: 300, height: 400, visible: true },
     });
     expect(vi.mocked(invoke)).toHaveBeenLastCalledWith('browser_host_update', {
       label: 'browser-ws-tile-browser',
@@ -587,7 +564,7 @@ describe('App terminal runtime', () => {
   it('answers terminal queries the daemon leaves to the app, and not the ones the daemon answers', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
     });
 
     daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('\x1b[6n\x1b[5n') });
@@ -764,7 +741,7 @@ describe('App terminal runtime', () => {
   ])('keeps an emoji family in one cell after the program resets the terminal %s', async (_, chunks) => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
     });
 
     for (const [index, chunk] of chunks.entries()) {
@@ -818,7 +795,7 @@ describe('App terminal runtime', () => {
   it('keeps a command block copyable after the terminal gets shorter', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
       output: { s1: `${'filler\r\n'.repeat(20)}${BLOCK_STREAM}` },
     });
 
@@ -832,7 +809,7 @@ describe('App terminal runtime', () => {
   it('paints replayed output once', async () => {
     const { daemon } = await openAttachedTerminals({
       sessions: [daemonSession('s1', { state: 'idle' })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
       output: { s1: 'one\r\n' },
     });
 
@@ -910,36 +887,5 @@ describe('App terminal runtime', () => {
       { cmd: 'attach_session', id: 's1', attach_policy: 'revive', cols: 80, rows: 24 },
       { cmd: 'detach_session', id: 's1' },
     ]);
-  });
-
-  it('keeps a session attached while another workspace still shows it, and detaches once the last view goes', async () => {
-    const own = splitWorkspace('ws-a', ['s1']);
-    const shared = splitWorkspace('ws-b', ['s2', 's1']);
-    const { daemon } = await renderApp({
-      initialState: {
-        sessions: [daemonSession('s1', { state: 'idle', workspace_id: 'ws-a' }), daemonSession('s2', { state: 'idle', workspace_id: 'ws-b' })],
-        workspaces: [own, shared],
-      },
-    });
-    daemon.on('attach_session', ({ id }) => ({ event: 'attach_result', id, success: true, cols: 80, rows: 24, running: true }));
-    open('s1');
-    await daemon.idle();
-    open('s2');
-    await daemon.idle();
-    expect(document.querySelectorAll('[data-pane-id="pane-s1"]')).toHaveLength(2);
-
-    daemon.emit({ event: 'pty_output', id: 's1', seq: 1, data: btoa('\x1b[5n') });
-    await daemon.idle();
-    expect(daemon.sentOf('pty_input').filter(({ id }) => id === 's1')).toEqual([{ cmd: 'pty_input', id: 's1', data: '\x1b[0n', source: 'response' }]);
-
-    daemon.emit({ event: 'workspace_unregistered', workspace: shared });
-    daemon.emit({ event: 'pty_output', id: 's1', seq: 2, data: btoa('still here') });
-    await daemon.idle();
-    expect(daemon.sentOf('detach_session').filter(({ id }) => id === 's1')).toEqual([]);
-    expect(visibleText('s1')).toBe('still here');
-
-    daemon.emit({ event: 'workspace_unregistered', workspace: own });
-    await daemon.idle();
-    expect(daemon.sentOf('detach_session').filter(({ id }) => id === 's1')).toEqual([{ cmd: 'detach_session', id: 's1' }]);
   });
 });

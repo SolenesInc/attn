@@ -51,8 +51,8 @@ commands:
         record <daemon-id> as this daemon's home. A daemon that is its own home
         enrolls; one already enrolled to that same home is unchanged; one
         enrolled to a different home refuses, because re-homing is a decision,
-        never a silent overwrite. A home runs this over ssh when it syncs a
-        remote, so you rarely type it.
+        never a silent overwrite. This release runs home daemons only, so an
+        enrolled daemon refuses to start until you run leave.
 
   leave [--json]
         make this daemon its own home again. This is the way out of enrollment,

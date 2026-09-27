@@ -102,8 +102,8 @@ async function main() {
       client, observer, cwd: runner.sessionDir, label, agent: 'shell', waitForInitialPaneVisible: false,
     });
     await client.request('select_session', { sessionId });
-    const workspace = await client.request('get_workspace', { sessionId });
-    const pane = workspace?.panes?.[0];
+    const desktop = await client.request('get_desktop', { sessionId });
+    const pane = desktop?.panes?.[0];
     runner.assert(Boolean(pane?.paneId && pane?.runtimeId), 'created shell has a live pane');
     const shell = { ...pane, sessionId, shared, label };
     shells.push(shell);

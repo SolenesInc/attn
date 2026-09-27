@@ -3,7 +3,7 @@ import type { GhosttyTerminal } from '../ghostty';
 const DEC_WRAPAROUND_MODE = 7;
 const DISABLE_WRAPAROUND = '\x1b[?7l';
 const ENABLE_WRAPAROUND = '\x1b[?7h';
-export const WORKSPACE_RESIZE_COALESCE_MS = 250;
+export const DESKTOP_RESIZE_COALESCE_MS = 250;
 
 export interface TerminalDimensions {
   cols: number;
@@ -17,7 +17,7 @@ export interface ResizeCoalescer {
 
 export function createResizeCoalescer(
   apply: (dimensions: TerminalDimensions) => void,
-  intervalMs = WORKSPACE_RESIZE_COALESCE_MS,
+  intervalMs = DESKTOP_RESIZE_COALESCE_MS,
 ): ResizeCoalescer {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: TerminalDimensions | null = null;

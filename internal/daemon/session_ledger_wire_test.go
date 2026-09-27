@@ -93,11 +93,14 @@ func TestTheLedgerFiltersByWorkspaceAndRepositoryAndCountsEveryChoice(t *testing
 	if got := sortedLedgerIDs(byRepository); !slices.Equal(got, want) {
 		t.Errorf("repository %s = %v, want both sessions in it %v", attn, got, want)
 	}
-	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{WorkspaceID: attnTwo.workspace})); !slices.Equal(got, []string{attnTwo.session}) {
-		t.Errorf("%s = %v, want its one session %s", attnTwo.workspace, got, attnTwo.session)
+	profile := app.SelectedProfile()
+	all := []string{attnOne.session, attnTwo.session, elsewhere.session}
+	slices.Sort(all)
+	if got := sortedLedgerIDs(ledger(t, cli, client.SessionListOptions{ProfileID: profile})); !slices.Equal(got, all) {
+		t.Errorf("profile %s = %v, want every session in it %v", profile, got, all)
 	}
-	if got := ledgerIDs(ledger(t, cli, client.SessionListOptions{WorkspaceID: elsewhere.workspace, Repository: attn})); len(got) != 0 {
-		t.Errorf("%s in repository %s = %v, want nothing matching both", elsewhere.workspace, attn, got)
+	if got := sortedLedgerIDs(ledger(t, cli, client.SessionListOptions{ProfileID: profile, Repository: attn})); !slices.Equal(got, want) {
+		t.Errorf("profile %s in repository %s = %v, want the sessions matching both %v", profile, attn, got, want)
 	}
 
 	requestID := "facets"
@@ -108,8 +111,8 @@ func TestTheLedgerFiltersByWorkspaceAndRepositoryAndCountsEveryChoice(t *testing
 		t.Fatalf("faceted list = %+v, want a page with its facets", faceted)
 	}
 	facets := faceted.Result.Facets
-	if got := facetCounts(facets.Workspaces); !maps.Equal(got, map[string]int{attnOne.workspace: 1, attnTwo.workspace: 1, elsewhere.workspace: 1}) {
-		t.Errorf("workspace facets = %v, want every workspace the repository filter hides too", got)
+	if len(facets.Profiles) != 1 || facets.Profiles[0].ProfileID != profile || facets.Profiles[0].Count != 3 {
+		t.Errorf("profile facets = %+v, want the one profile counted with the sessions the repository filter hides too", facets.Profiles)
 	}
 	if got := facetCounts(facets.Repositories); !maps.Equal(got, map[string]int{attn: 2, other: 1}) {
 		t.Errorf("repository facets = %v, want every repository the filter hides too", got)
@@ -117,18 +120,18 @@ func TestTheLedgerFiltersByWorkspaceAndRepositoryAndCountsEveryChoice(t *testing
 }
 
 type sessionPane struct {
-	session, workspace, pane string
+	session, desktop, pane string
 }
 
 func spawnPanes(w *world, app *testworld.Peer, dirs ...string) []sessionPane {
 	app.T.Helper()
 	panes := make([]sessionPane, 0, len(dirs))
 	for _, dir := range dirs {
-		spawned, workspace, pane := w.RequestSpawn(app, fakeagent.Claude, dir)
+		spawned, desktop, pane := w.RequestSpawn(app, fakeagent.Claude, dir)
 		if !spawned.Success {
 			app.T.Fatalf("spawn in %s: %s", dir, protocol.Deref(spawned.Error))
 		}
-		panes = append(panes, sessionPane{session: spawned.ID, workspace: workspace, pane: pane})
+		panes = append(panes, sessionPane{session: spawned.ID, desktop: desktop, pane: pane})
 	}
 	for _, p := range panes {
 		w.Launched(p.session)
@@ -139,12 +142,7 @@ func spawnPanes(w *world, app *testworld.Peer, dirs ...string) []sessionPane {
 
 func closePane(app *testworld.Peer, p sessionPane) {
 	app.T.Helper()
-	closed := testworld.Request(app, protocol.WorkspaceLayoutClosePaneMessage{
-		Cmd: protocol.CmdWorkspaceLayoutClosePane, WorkspaceID: p.workspace, PaneID: p.pane,
-	}, protocol.EventWorkspaceLayoutActionResult, func(r protocol.WorkspaceLayoutActionResultMessage) bool {
-		return r.Action == protocol.CmdWorkspaceLayoutClosePane && protocol.Deref(r.PaneID) == p.pane
-	})
-	if !closed.Success {
+	if closed := closeFromApp(app, p.session); !closed.Accepted {
 		app.T.Fatalf("close the pane of %s: %s", p.session, protocol.Deref(closed.Error))
 	}
 }

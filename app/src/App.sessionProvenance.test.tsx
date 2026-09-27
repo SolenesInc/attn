@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from '@testing-library/react';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { describe, expect, it, vi } from 'vitest';
-import { agentWorkspace, daemonSession, type DaemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession, type DaemonSession } from './test/daemonFixtures';
 import { gesture, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -38,7 +38,7 @@ function pr(overrides: Partial<SessionPullRequest> = {}): SessionPullRequest {
 
 async function openSession(session: Partial<DaemonSession>) {
   const view = await renderApp({
-    initialState: { sessions: [daemonSession('s1', session)], workspaces: [agentWorkspace('s1')] },
+    initialState: { sessions: [daemonSession('s1', session)], desktops: [soloDesktop('s1')] },
   });
   await gesture(view.daemon, () => fireEvent.click(screen.getByTestId('session-s1')));
   return view.daemon;
@@ -54,7 +54,7 @@ async function openPopover(daemon: ScriptedDaemon, target = /Pull request attn#\
 
 describe('App session provenance', () => {
   it('opens the pull request an automation run is about from Home', async () => {
-    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('review-1', { automation: reviewRun })], workspaces: [agentWorkspace('review-1')] } });
+    const { daemon } = await renderApp({ initialState: { sessions: [daemonSession('review-1', { automation: reviewRun })], desktops: [soloDesktop('review-1')] } });
     const row = within(screen.getByTestId('session-review-1'));
     expect(row.getByText('Automation')).toBeInTheDocument();
     expect(row.getByText('GPT Sol medium')).toBeInTheDocument();

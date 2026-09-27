@@ -1,26 +1,28 @@
 import type { MouseEvent as ReactMouseEvent } from 'react';
 import { useMemo, useState } from 'react';
 import { isAttentionSessionState } from '../types/sessionState';
-import { type TileContentState } from '../types/workspace';
+import { type TileContentState } from '../types/desktop';
 import { delegatesByDispatcher } from '../utils/delegationLinks';
 import { sessionParticipatesInQueue } from '../utils/queueBands';
-import { groupAutomationSessions, isSessionless } from './sidebarModel';
-import type { DockItem, LocalSession, SidebarProps, SidebarWorkspace } from './sidebarTypes';
+import { UNPLACED_GROUP_ID } from '../utils/desktopViewModels';
+import { automationRunGroups } from '../utils/automationRuns';
+import { isSessionless } from './sidebarModel';
+import type { DockItem, LocalSession, SidebarProps, SidebarDesktop } from './sidebarTypes';
 import { useSidebarDrag } from './useSidebarDrag';
 
 const EMPTY_DOCK_ITEMS: DockItem[] = [];
-const EMPTY_WORKSPACES: SidebarWorkspace[] = [];
 const EMPTY_TILE_CONTENTS: Record<string, TileContentState> = {};
 
 export function useSidebarState({
-  workspaces,
-  visualOrder,
-  visualIndexByWorkspaceId,
+  desktops,
+  visualIndexByDesktopId,
   selectedId,
-  selectedWorkspaceId,
+  selectionRequest = null,
+  selectedDesktopId,
   selectedTile = null,
   tileContents = EMPTY_TILE_CONTENTS,
   collapsed,
+  surface,
   instance = '',
   headerActions,
   criticalNotifications,
@@ -37,17 +39,22 @@ export function useSidebarState({
   onManageCrew,
   onOpenCrewMemberDetails,
   onSettleTurn,
+  onWalkRuns,
+  onJumpToWaiting,
+  profileName,
+  onSwitchProfile,
+  onOpenCommands,
+  onOpenAgents,
+  peeksSilenced = false,
+  commandsBadge,
+  agentListOpen = false,
+  onToggleAgentList,
+  onOpenOverview,
   onOpenSnooze,
   onWakeTurn,
   onScreenSessionIds,
-  mutedWorkspaces = EMPTY_WORKSPACES,
-  mutedExpanded: mutedExpandedProp,
-  onMutedExpandedChange,
-  onMuteWorkspace,
-  onPinWorkspace,
-  onPinSession,
   onRenameSession,
-  onRenameWorkspace,
+  onRenameDesktop,
   onChangeChiefOfStaff,
   showSessionless = false,
   onToggleShowSessionless,
@@ -57,19 +64,19 @@ export function useSidebarState({
   onToggleCrewQueue,
   harnessLogosEnabled = true,
   onToggleHarnessLogos,
-  workspaceSelectionStyle = 'rail',
-  onWorkspaceSelectionStyleChange,
+  desktopSelectionStyle = 'rail',
+  onDesktopSelectionStyleChange,
   leafDrag = null,
-  dragHoverWorkspaceId = null,
-  onWorkspaceDragEnter,
-  onWorkspaceDragLeave,
-  onWorkspaceDragDrop,
-  onNewWorkspaceDrop,
+  dragHoverDesktopId = null,
+  onDesktopDragEnter,
+  onDesktopDragLeave,
+  onDesktopDragDrop,
+  onNewDesktopDrop,
   onSessionDragStart,
   onSessionDragEnd,
-  onWorkspaceReorder,
+  onDesktopReorder,
   onSelectSession,
-  onSelectWorkspace,
+  onSelectDesktop,
   onSelectTile,
   onCloseTile,
   onReloadTile,
@@ -85,16 +92,17 @@ export function useSidebarState({
       ? sessionParticipatesInQueue(session, crewQueueEnabled) && Boolean(session.turnOwed)
       : isAttentionSessionState(session.state);
 
-  const [mutedExpandedLocal, setMutedExpandedLocal] = useState(false);
-  const [snoozedExpanded, setSnoozedExpanded] = useState(false);
+  const [agentFilter, setAgentFilter] = useState('');
+  if (!agentListOpen && agentFilter) setAgentFilter('');
   const [expandedAutomationGroups, setExpandedAutomationGroups] = useState<Set<string>>(
     () => new Set(),
   );
   const [displayMode, setDisplayMode] = useState<'open' | 'tight' | 'boxed'>('boxed');
   const [renameTarget, setRenameTarget] = useState<{
-    kind: 'session' | 'workspace';
+    kind: 'session' | 'desktop';
     id: string;
     name: string;
+    defaultName?: string;
     anchor: { top: number; left: number };
   } | null>(null);
   const [sessionActionsTarget, setSessionActionsTarget] = useState<{
@@ -110,16 +118,28 @@ export function useSidebarState({
     trigger: HTMLElement;
     anchor: { top: number; left: number };
   } | null>(null);
+  const [popoverSurface, setPopoverSurface] = useState(surface);
+  if (surface !== popoverSurface) {
+    setPopoverSurface(surface);
+    setRenameTarget(null);
+    setSessionActionsTarget(null);
+    setCrewActionsTarget(null);
+  }
 
-  const openRename = (
-    kind: 'session' | 'workspace',
-    id: string,
-    name: string,
+  const openDesktopRename = (
+    desktopId: string,
+    desktop: { name: string; defaultLabel: string },
     event: ReactMouseEvent,
   ) => {
     event.stopPropagation();
     const rect = event.currentTarget.getBoundingClientRect();
-    setRenameTarget({ kind, id, name, anchor: { top: rect.bottom + 4, left: rect.left } });
+    setRenameTarget({
+      kind: 'desktop',
+      id: desktopId,
+      name: desktop.name,
+      defaultName: desktop.defaultLabel,
+      anchor: { top: rect.bottom + 4, left: rect.left },
+    });
   };
   const openSessionActions = (
     session: { id: string; label: string; chiefOfStaff?: boolean; crewMember?: string },
@@ -145,23 +165,26 @@ export function useSidebarState({
       anchor: { top: rect.bottom + 4, left: rect.right - 190 },
     });
   };
-  const mutedExpanded = mutedExpandedProp ?? mutedExpandedLocal;
-  const setMutedExpanded = (v: boolean) => {
-    setMutedExpandedLocal(v);
-    onMutedExpandedChange?.(v);
-  };
 
-  const automationGroups = useMemo(
-    () => groupAutomationSessions([...workspaces, ...mutedWorkspaces]),
-    [workspaces, mutedWorkspaces],
-  );
+  const automationGroups = useMemo(() => automationRunGroups(desktops, Date.now()), [desktops]);
+  const [seenSelection, setSeenSelection] = useState<{
+    id: string | null;
+    request: SidebarProps['selectionRequest'];
+  }>({ id: null, request: null });
+  if (selectedId !== seenSelection.id || (selectionRequest && selectionRequest !== seenSelection.request)) {
+    setSeenSelection({ id: selectedId, request: selectionRequest ?? seenSelection.request });
+    const selectedRunGroup = automationGroups.find((group) => group.runs.some((run) => run.id === selectedId));
+    if (selectedRunGroup && !expandedAutomationGroups.has(selectedRunGroup.id)) {
+      setExpandedAutomationGroups(new Set(expandedAutomationGroups).add(selectedRunGroup.id));
+    }
+  }
   const allSessions = useMemo(() => {
     const byId = new Map<string, LocalSession>();
-    for (const workspace of [...workspaces, ...mutedWorkspaces]) {
-      for (const session of workspace.sessions) byId.set(session.id, session);
+    for (const desktopView of desktops) {
+      for (const session of desktopView.sessions) byId.set(session.id, session);
     }
     return [...byId.values()];
-  }, [workspaces, mutedWorkspaces]);
+  }, [desktops]);
   const delegates = useMemo(() => delegatesByDispatcher(allSessions), [allSessions]);
   const rowDelegation = (session: LocalSession) => ({
     delegates: delegates.get(session.id) ?? [],
@@ -178,78 +201,52 @@ export function useSidebarState({
     });
   };
 
-  const withoutAutomationRows = (workspace: SidebarWorkspace): SidebarWorkspace => ({
-    ...workspace,
-    sessions: workspace.sessions.filter((session) => !session.automation),
-    children: workspace.children.filter(
+  const withoutAutomationRows = (desktopView: SidebarDesktop): SidebarDesktop => ({
+    ...desktopView,
+    sessions: desktopView.sessions.filter((session) => !session.automation),
+    children: desktopView.children.filter(
       (child) => child.kind === 'tile' || !child.session.automation,
     ),
   });
 
-  // The chief holds its anchored slot whatever its workspace is, so a workspace
-  // that survives in the tree must not draw it a second time.
-  const withoutChiefRow = (workspace: SidebarWorkspace): SidebarWorkspace => {
-    if (!queue || !workspace.sessions.some((session) => session.chiefOfStaff)) {
-      return workspace;
-    }
-    return {
-      ...workspace,
-      sessions: workspace.sessions.filter((session) => !session.chiefOfStaff),
-      children: workspace.children.filter(
-        (child) => child.kind === 'tile' || !child.session.chiefOfStaff,
-      ),
-    };
-  };
-
-  const isWorkspaceVisible = (workspace: SidebarWorkspace) =>
-    workspace.pinned ||
-    !isSessionless(workspace) ||
-    workspace.hasUnresolvedAgentPanes ||
+  const isDesktopVisible = (desktopView: SidebarDesktop) =>
+    !isSessionless(desktopView) ||
+    desktopView.hasUnresolvedAgentPanes ||
     showSessionless;
-  // Queue mode renders every ordinary agent as a flat row in a band, so drawing
-  // its workspace group too would show the same agent twice.
-  const isTreeWorkspace = (workspace: SidebarWorkspace) =>
-    !queue || workspace.pinned || isSessionless(workspace);
-  const visibleWorkspaces = workspaces.flatMap((candidate) => {
-    const workspace = withoutChiefRow(withoutAutomationRows(candidate));
-    return isWorkspaceVisible(workspace) && isTreeWorkspace(workspace) ? [workspace] : [];
+  const visibleDesktops = desktops.flatMap((candidate) => {
+    const desktopView = withoutAutomationRows(candidate);
+    return isDesktopVisible(desktopView) ? [desktopView] : [];
   });
-  const visibleMutedWorkspaces = mutedWorkspaces
-    .map((workspace) => withoutChiefRow(withoutAutomationRows(workspace)))
-    .filter((workspace) => workspace.children.length > 0 || workspace.hasUnresolvedAgentPanes);
-  const visibleVisualOrder = visualOrder.filter(isWorkspaceVisible);
-  const visibleVisualIndexByWorkspaceId = new Map(
-    visibleVisualOrder.map((workspace, index) => [workspace.id, index]),
-  );
-
-  const canAcceptLeafDrag = (workspace: SidebarWorkspace) =>
+  const canAcceptLeafDrag = (desktopView: SidebarDesktop) =>
     Boolean(
       leafDrag &&
-        workspace.id !== leafDrag.sourceWorkspaceId &&
-        (workspace.endpointId || '') === (leafDrag.endpointId || ''),
+        desktopView.id !== leafDrag.sourceDesktopId &&
+        desktopView.id !== UNPLACED_GROUP_ID &&
+        (desktopView.endpointId || '') === (leafDrag.endpointId || ''),
     );
 
-  const workspaceDragClass = (workspace: SidebarWorkspace) => {
+  const desktopDragClass = (desktopView: SidebarDesktop) => {
     if (!leafDrag) {
       return '';
     }
-    if (!canAcceptLeafDrag(workspace)) {
-      return ' workspace-group--drag-disabled';
+    if (!canAcceptLeafDrag(desktopView)) {
+      return ' desktop-group--drag-disabled';
     }
-    if (dragHoverWorkspaceId === workspace.id) {
-      return ' workspace-group--drag-entering';
+    if (dragHoverDesktopId === desktopView.id) {
+      return ' desktop-group--drag-entering';
     }
-    return ' workspace-group--drag-target';
+    return ' desktop-group--drag-target';
   };
-  const visualIndexOfWorkspace = (id: string) =>
-    visibleVisualIndexByWorkspaceId.get(id) ?? visualIndexByWorkspaceId.get(id) ?? -1;
+  const visibleVisualOrder = desktops.filter(isDesktopVisible);
+  const reorderParticipants = visibleDesktops.filter((desktopView) => desktopView.desktop);
+  const visualIndexOfDesktop = (id: string) => visualIndexByDesktopId.get(id) ?? -1;
 
-  const [newWorkspaceDropActive, setNewWorkspaceDropActive] = useState(false);
+  const [newDesktopDropActive, setNewDesktopDropActive] = useState(false);
   const {
     reorderDrag,
     sessionDragGhost,
     draggingSessionId,
-    reorderSeamIndexByWorkspaceId,
+    reorderSeamIndexByDesktopId,
     reorderTrailingSeamIndex,
     lastReorderParticipantId,
     renderReorderSeam,
@@ -258,15 +255,16 @@ export function useSidebarState({
     handleSessionPointerDown,
     handleSessionClickCapture,
   } = useSidebarDrag({
-    visibleVisualOrder,
-    onWorkspaceReorder,
+    reorderParticipants,
+    onDesktopReorder,
     onSessionDragStart,
     onSessionDragEnd,
   });
 
   return {
+    desktops,
     selectedId,
-    selectedWorkspaceId,
+    selectedDesktopId,
     selectedTile,
     tileContents,
     collapsed,
@@ -286,14 +284,24 @@ export function useSidebarState({
     onManageCrew,
     onOpenCrewMemberDetails,
     onSettleTurn,
+    onWalkRuns,
+    onJumpToWaiting,
+    profileName,
+    onSwitchProfile,
+    onOpenCommands,
+    onOpenAgents,
+    peeksSilenced,
+    commandsBadge,
+    agentListOpen,
+    onToggleAgentList,
+    agentFilter,
+    setAgentFilter,
+    onOpenOverview,
     onOpenSnooze,
     onWakeTurn,
     onScreenSessionIds,
-    onMuteWorkspace,
-    onPinWorkspace,
-    onPinSession,
     onRenameSession,
-    onRenameWorkspace,
+    onRenameDesktop,
     onChangeChiefOfStaff,
     showSessionless,
     onToggleShowSessionless,
@@ -303,16 +311,17 @@ export function useSidebarState({
     onToggleCrewQueue,
     harnessLogosEnabled,
     onToggleHarnessLogos,
-    workspaceSelectionStyle,
-    onWorkspaceSelectionStyleChange,
+    desktopSelectionStyle,
+    onDesktopSelectionStyleChange,
     leafDrag,
-    onWorkspaceDragEnter,
-    onWorkspaceDragLeave,
-    onWorkspaceDragDrop,
-    onNewWorkspaceDrop,
+    dragHoverDesktopId,
+    onDesktopDragEnter,
+    onDesktopDragLeave,
+    onDesktopDragDrop,
+    onNewDesktopDrop,
     onSessionDragStart,
     onSelectSession,
-    onSelectWorkspace,
+    onSelectDesktop,
     onSelectTile,
     onCloseTile,
     onReloadTile,
@@ -323,8 +332,6 @@ export function useSidebarState({
     homeActive,
     onToggleCollapse,
     sessionWantsAttention,
-    snoozedExpanded,
-    setSnoozedExpanded,
     expandedAutomationGroups,
     displayMode,
     setDisplayMode,
@@ -334,28 +341,25 @@ export function useSidebarState({
     setSessionActionsTarget,
     crewActionsTarget,
     setCrewActionsTarget,
-    openRename,
+    openDesktopRename,
     openSessionActions,
     openCrewMemberActions,
-    mutedExpanded,
-    setMutedExpanded,
     automationGroups,
     allSessions,
     delegates,
     rowDelegation,
     toggleAutomationGroup,
-    visibleWorkspaces,
-    visibleMutedWorkspaces,
+    visibleDesktops,
     visibleVisualOrder,
     canAcceptLeafDrag,
-    workspaceDragClass,
-    visualIndexOfWorkspace,
-    newWorkspaceDropActive,
-    setNewWorkspaceDropActive,
+    desktopDragClass,
+    visualIndexOfDesktop,
+    newDesktopDropActive,
+    setNewDesktopDropActive,
     reorderDrag,
     sessionDragGhost,
     draggingSessionId,
-    reorderSeamIndexByWorkspaceId,
+    reorderSeamIndexByDesktopId,
     reorderTrailingSeamIndex,
     lastReorderParticipantId,
     renderReorderSeam,

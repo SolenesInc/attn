@@ -1,7 +1,7 @@
 import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
-import { agentWorkspace, daemonSession } from './test/daemonFixtures';
+import { soloDesktop, daemonSession } from './test/daemonFixtures';
 import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
@@ -9,12 +9,12 @@ async function openContextCap(contextWindowCap?: number) {
   const { daemon } = await renderApp({
     initialState: {
       sessions: [daemonSession('s1', { label: 'trellis', state: 'idle', context_window_cap: contextWindowCap })],
-      workspaces: [agentWorkspace('s1')],
+      desktops: [soloDesktop('s1')],
     },
   });
   await openSession(daemon, 'trellis');
   const search = await openActionMenu(daemon);
-  fireEvent.change(search, { target: { value: 'context window' } });
+  fireEvent.change(search, { target: { value: '>context window' } });
   await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
   return daemon;
 }
@@ -27,9 +27,9 @@ async function saveCap(daemon: ScriptedDaemon, value: string) {
 }
 
 function listedActions() {
-  return within(screen.getByRole('dialog', { name: 'Action menu' }))
+  return within(screen.getByRole('dialog', { name: 'Commands' }))
     .getAllByRole('option')
-    .map((option) => option.querySelector('strong')?.textContent);
+    .map((option) => option.querySelector('.unified-palette-name')?.firstChild?.textContent);
 }
 
 describe('App action menu', () => {
@@ -37,13 +37,13 @@ describe('App action menu', () => {
     const { daemon } = await renderApp();
     const search = await openActionMenu(daemon);
 
-    fireEvent.change(search, { target: { value: 'countdown' } });
+    fireEvent.change(search, { target: { value: '>countdown' } });
     expect(listedActions()).toEqual(['Turn on auto-settle']);
 
     fireEvent.keyDown(search, { key: 'Enter' });
     await daemon.idle();
 
-    expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
     expect(daemon.sentOf('set_setting')).toEqual([{ cmd: 'set_setting', key: 'auto_settle_enabled', value: 'true' }]);
   });
 
@@ -51,8 +51,8 @@ describe('App action menu', () => {
     const { daemon } = await renderApp();
     const search = await openActionMenu(daemon);
 
-    fireEvent.change(search, { target: { value: 'queue' } });
-    expect(listedActions()).toEqual(['Turn on the agent queue', 'Turn on auto-settle']);
+    fireEvent.change(search, { target: { value: '>turn on' } });
+    expect(listedActions()).toEqual(['Turn on the agent queue', 'Turn on auto-settle', 'Jump to the oldest turn']);
 
     fireEvent.keyDown(search, { key: 'ArrowDown' });
     fireEvent.keyDown(search, { key: 'Enter' });
@@ -63,11 +63,11 @@ describe('App action menu', () => {
 
   it('leaves focus where an action put it, and gives it back to the terminal when dismissed', async () => {
     const { daemon } = await renderApp({
-      initialState: { sessions: [daemonSession('s1', { state: 'idle' })], workspaces: [agentWorkspace('s1')] },
+      initialState: { sessions: [daemonSession('s1', { state: 'idle' })], desktops: [soloDesktop('s1')] },
     });
     await openSession(daemon, 's1');
     const search = await openActionMenu(daemon);
-    fireEvent.change(search, { target: { value: 'customize shortcuts' } });
+    fireEvent.change(search, { target: { value: '>customize shortcuts' } });
     fireEvent.keyDown(search, { key: 'Enter' });
     await act(() => vi.advanceTimersToNextFrame());
     await daemon.idle();
@@ -107,7 +107,7 @@ describe('App action menu', () => {
       expect(capPrompt()).toBeNull();
 
       const search = await openActionMenu(daemon);
-      fireEvent.change(search, { target: { value: 'context window' } });
+      fireEvent.change(search, { target: { value: '>context window' } });
       await gesture(daemon, () => fireEvent.keyDown(search, { key: 'Enter' }));
       await saveCap(daemon, '1.5');
 
@@ -130,7 +130,7 @@ describe('App action menu', () => {
     const { daemon } = await renderApp({
       initialState: {
         sessions: [daemonSession('s1', { state: 'working' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('s3', { state: 'idle' })],
-        workspaces: ['s1', 's2', 's3'].map(agentWorkspace),
+        desktops: ['s1', 's2', 's3'].map((id) => soloDesktop(id)),
       },
     });
     const drawer = screen.getByText('Needs Attention').closest('aside')!;
@@ -141,10 +141,10 @@ describe('App action menu', () => {
     await daemon.idle();
     expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
 
-    fireEvent.click(screen.getByText('Open attention drawer'));
+    fireEvent.mouseDown(screen.getByText('Open attention drawer'));
     await daemon.idle();
 
-    expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Commands' })).toBeNull();
     expect(drawer).toHaveAttribute('aria-hidden', 'false');
     expect([...drawer.querySelectorAll('[data-testid^="attention-session-"]')].map((item) => item.getAttribute('data-testid'))).toEqual(['attention-session-s2']);
   });
