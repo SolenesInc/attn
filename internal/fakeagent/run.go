@@ -63,6 +63,7 @@ type Denial struct {
 	Action string `json:"action"`
 	Reason string `json:"reason"`
 	Rule   string `json:"rule"`
+	At     string `json:"at,omitempty"`
 }
 
 func (r *Run) Deny(denial Denial) {
