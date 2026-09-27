@@ -1,9 +1,9 @@
-import { act, fireEvent, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openSession } from './test/appFixtures';
 import { daemonSession, splitWorkspace } from './test/daemonFixtures';
 import { fakeRects, sizeTerminals } from './test/layout';
-import { pressShortcut } from './test/renderApp';
+import { gesture, pressShortcut } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 import { laidOutWorkspace, pane, renderWorkspace, split } from './test/workspaces';
 
@@ -185,5 +185,112 @@ describe('App workspace panes', () => {
     expect(document.querySelector('[data-pane-id="oldest"]')).toHaveAttribute('data-pane-suspended', 'true');
     const finalCols = Math.floor((parseFloat(paneEl('s1').style.width) * PANES_WIDTH) / 100 / CELL_WIDTH);
     expect(daemon.sentOf('pty_resize').slice(before)).toEqual([expect.objectContaining({ id: 's1', cols: finalCols })]);
+  });
+
+  describe('attention ring', () => {
+    const doc = (id: string, name = id) => ({ type: 'tile', tile_id: id, tile_kind: 'markdown', tile_params: `/tmp/${name}.md` });
+    const beside = (id: string, left: unknown, right: unknown, ratio = 0.5) => split(id, 'vertical', [left, right], ratio);
+    const crowded = () => beside('outer', beside('document-split', pane('s1'), doc('document', 'review'), 0.68), pane('s2'));
+    const surfaceOf = () => document.querySelector<HTMLElement>('.session-terminal-workspace[data-workspace-id="ws"]')!;
+    const slivers = () => screen.queryAllByRole('button', { name: /^Expand / }).map((button) => button.getAttribute('aria-label'));
+
+    async function ring(width: number, root: unknown, sessionIds: string[]) {
+      fakeRects((element) => (element.classList.contains('session-terminal-panes') ? new DOMRect(0, 0, width, 700) : null));
+      const view = await renderWorkspace(root, sessionIds);
+      await openSession(view.daemon, 's1');
+      const layOut = async (next: unknown) => {
+        view.daemon.emit({ event: 'workspace_layout_updated', workspace_layout: laidOutWorkspace(next, sessionIds).layout! });
+        await settleLayout(view.daemon);
+      };
+      const show = async (tileId: string, name: string) => {
+        view.daemon.emit({ event: 'workspace_tile_content', workspace_id: 'ws', tile_id: tileId, tile_kind: 'markdown', path: `/tmp/${name}.md`, content: `# ${name}` });
+        await view.daemon.idle();
+      };
+      return { ...view, layOut, show };
+    }
+
+    it('folds the agent into a sliver to make room for a document docked beside it in a narrow workspace', async () => {
+      const { layOut } = await ring(560, pane('s1'), ['s1']);
+
+      await layOut(beside('opened', pane('s1'), doc('document', 'review'), 0.68));
+
+      expect(slivers()).toEqual(['Expand s1']);
+      expect(surfaceOf()).toHaveAttribute('data-active-leaf-id', 'document');
+    });
+
+    it('folds the oldest documents first as more are docked', async () => {
+      const { daemon, layOut } = await ring(1816, pane('s1'), ['s1']);
+      const opened = ['oldest', 'older', 'newer', 'newest'];
+      for (const [index, id] of opened.entries()) {
+        await layOut(opened.slice(0, index + 1).reduce<unknown>((left, next) => beside(`split-${next}`, left, doc(next), 0.68), pane('s1')));
+        if (id !== 'newest') {
+          fireEvent.mouseDown(paneEl('s1'));
+          await settleLayout(daemon);
+        }
+      }
+
+      expect(slivers()).toEqual(['Expand oldest.md', 'Expand older.md']);
+    });
+
+    it('expands a clicked sliver and folds the leaf focused longest ago, not the one just left', async () => {
+      const { daemon, show } = await ring(1100, crowded(), ['s1', 's2']);
+      await show('document', 'review');
+      expect(slivers()).toEqual(['Expand s2']);
+      fireEvent.mouseDown(document.querySelector<HTMLElement>('[data-pane-id="document"]')!);
+      await settleLayout(daemon);
+      fireEvent.mouseDown(paneEl('s1'));
+      await settleLayout(daemon);
+
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand s2' })));
+      await settleLayout(daemon);
+
+      expect(slivers()).toEqual(['Expand review.md']);
+      expect(surfaceOf()).toHaveAttribute('data-active-leaf-id', 'pane-s2');
+    });
+
+    it('folds a pane dragged below its minimum width and unfolds it when dragged back', async () => {
+      const { daemon, show } = await ring(1100, crowded(), ['s1', 's2']);
+      await show('document', 'review');
+      await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Expand s2' })));
+      await settleLayout(daemon);
+      const divider = document.querySelector<HTMLElement>('.workspace-split-divider[data-split-grab][data-split-id="outer"]')!;
+
+      fireEvent.pointerDown(divider, { button: 0, pointerId: 1, clientX: 500, clientY: 350 });
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 300, clientY: 350 });
+      await act(() => vi.advanceTimersToNextFrame());
+      expect(slivers()).toEqual(['Expand s1', 'Expand review.md']);
+
+      fireEvent.pointerMove(window, { pointerId: 1, clientX: 520, clientY: 350 });
+      await act(() => vi.advanceTimersToNextFrame());
+      fireEvent.pointerUp(window, { pointerId: 1, clientX: 520, clientY: 350 });
+      await settleLayout(daemon);
+
+      expect(slivers()).toEqual(['Expand review.md']);
+    });
+
+    it('focuses documents as a tabbed review deck that Escape unwinds one layer at a time', async () => {
+      const root = beside('outer', beside('document-split', pane('s1'), doc('document', 'review'), 0.68), beside('second-split', pane('s2'), doc('second-document', 'second')));
+      const { daemon, show } = await ring(2000, root, ['s1', 's2']);
+      await show('document', 'review');
+      await show('second-document', 'second');
+      const tab = (name: string) => screen.getByRole('tab', { name });
+      const escape = () => gesture(daemon, () => fireEvent.keyDown(window, { key: 'Escape' }));
+
+      await gesture(daemon, () => fireEvent.click(within(document.querySelector<HTMLElement>('[data-pane-id="document"]')!).getByRole('button', { name: 'Focus document' })));
+      expect(surfaceOf()).toHaveClass('focus-mode');
+      expect(tab('review.md')).toHaveAttribute('aria-selected', 'true');
+
+      await gesture(daemon, () => fireEvent.click(tab('second.md')));
+      expect(tab('second.md')).toHaveAttribute('aria-selected', 'true');
+      await gesture(daemon, () => fireEvent.click(within(document.querySelector<HTMLElement>('[data-pane-id="second-document"]')!).getByRole('button', { name: 'Notes 0' })));
+      expect(screen.getByRole('dialog', { name: 'Review notes' })).toBeInTheDocument();
+
+      await escape();
+      expect(screen.queryByRole('dialog', { name: 'Review notes' })).toBeNull();
+      expect(surfaceOf()).toHaveClass('focus-mode');
+
+      await escape();
+      expect(surfaceOf()).not.toHaveClass('focus-mode');
+    });
   });
 });
