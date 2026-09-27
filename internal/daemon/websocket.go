@@ -494,18 +494,21 @@ func (h *wsHub) sendToMatchingClients(message outboundMessage, match func(*wsCli
 	defer h.mu.Unlock()
 	for client := range h.clients {
 		if match == nil || match(client) {
-			h.deliver(client, message)
+			if _, evicted := h.deliver(client, message); evicted {
+				delete(h.clients, client)
+			}
 		}
 	}
 }
 
-func (h *wsHub) deliver(client *wsClient, message outboundMessage) bool {
+func (h *wsHub) deliver(client *wsClient, message outboundMessage) (queued, evicted bool) {
 	queued, full := client.offer(message)
-	if full && client.conn != nil {
-		h.logf("WebSocket client stopped draining its %d queued messages, disconnecting", len(client.send))
-		h.evict(client, slowClientCloseReason)
+	if !full || client.conn == nil {
+		return queued, false
 	}
-	return queued
+	h.logf("WebSocket client stopped draining its %d queued messages, disconnecting", len(client.send))
+	h.evict(client, slowClientCloseReason)
+	return false, true
 }
 
 func (h *wsHub) ForEachClient(fn func(*wsClient)) {
@@ -793,7 +796,13 @@ func (d *Daemon) sendOutbound(client *wsClient, message outboundMessage) bool {
 		queued, _ := client.offer(message)
 		return queued
 	}
-	return d.wsHub.deliver(client, message)
+	queued, evicted := d.wsHub.deliver(client, message)
+	if evicted {
+		d.wsHub.mu.Lock()
+		delete(d.wsHub.clients, client)
+		d.wsHub.mu.Unlock()
+	}
+	return queued
 }
 
 func (d *Daemon) sendStream(client *wsClient, message outboundMessage) bool {
