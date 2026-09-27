@@ -25,6 +25,7 @@ const baseProps = {
   selectedId: null,
   selectedWorkspaceId: null,
   collapsed: true,
+  surface: 'queue-collapsed' as const,
   headerActions: [],
   onSelectSession: () => {},
   onSelectWorkspace: () => {},

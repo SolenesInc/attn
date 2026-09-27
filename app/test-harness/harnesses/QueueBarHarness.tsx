@@ -72,6 +72,7 @@ export function QueueBarHarness({ onReady, setTriggerRerender }: HarnessProps) {
       <div className="app-frame">
         <Sidebar
           collapsed
+          surface="queue-collapsed"
           selectedId={null}
           selectedWorkspaceId={desktopIds[0]}
           headerActions={[]}
