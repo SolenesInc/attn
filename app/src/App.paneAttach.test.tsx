@@ -53,8 +53,10 @@ describe('App pane attach', () => {
       { ...agentPane('booting', 'ws'), title: 'codex', status: 'spawning' as const },
       { ...agentPane('late', 'ws'), title: 'copilot' },
     ];
-    const leaves = panes.map(({ pane_id }) => ({ type: 'pane', pane_id }));
-    const root = leaves.reduce((left, right, index) => ({ type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, right] }));
+    const root = panes.slice(1).reduce<unknown>(
+      (left, { pane_id }, index) => ({ type: 'split', split_id: `split-${index}`, direction: 'vertical', ratio: 0.5, children: [left, { type: 'pane', pane_id }] }),
+      { type: 'pane', pane_id: panes[0].pane_id },
+    );
     const { daemon } = await renderApp({
       initialState: {
         sessions: [daemonSession('s1', { workspace_id: 'ws' })],
