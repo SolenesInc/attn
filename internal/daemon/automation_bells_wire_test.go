@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/victorarias/attn/internal/fakeagent"
 	"github.com/victorarias/attn/internal/protocol"
 )
 
@@ -35,17 +36,28 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 		t.Errorf("the first run rang its own reviewer with %q", bells)
 	}
 
-	registerSessions(t, r.w, r.cli, "observer")
-	gardenNudgeWatch(t, r.cli, "observer", seed, false)
+	observer := r.w.Spawn(r.app, fakeagent.Claude, r.w.Path("observer"))
+	watcher := r.w.Launched(observer)
+	gardenNudgeWatch(t, r.cli, observer, seed, false)
 	gardenNudgeMove(t, r.cli, reviewer, seed, "park")
-	if _, err := r.cli.SeedShow("observer", seed); err != nil {
+	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("the parked seed prompted its watcher with %q, want an inbox doorbell", prompt)
+	}
+	if _, err := r.cli.SeedShow(observer, seed); err != nil {
 		t.Fatal(err)
 	}
-	automationInbox(t, r, "observer")
+	if bells := automationInbox(t, r, observer); len(bells) != 0 {
+		t.Errorf("after showing the parked seed the observer's inbox holds %q", bells)
+	}
+	watcher.Reply("Read the seed. <!-- attn:state=idle -->")
 	r.rerequest(42)
 	continued := r.awaitNewRun("review", "delivered", first)
-	automationOneBell(t, r, "observer", "observer", seed, "work.ready", "after the thread was taken up again")
+	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("the continued work prompted its watcher with %q, want an inbox doorbell", prompt)
+	}
+	automationOneBell(t, r, "observer", observer, seed, "work.ready", "after the thread was taken up again")
 	automationOneBell(t, r, "reviewer", reviewer, seed, "work.ready", "after the thread was taken up again")
+	watcher.Reply("Read the continued work. <!-- attn:state=idle -->")
 
 	upstream := newRepo(t, "upstream")
 	later := commitFile(t, upstream, "later.go", "package later\n")
@@ -59,6 +71,10 @@ func TestAnAutomationThreadRingsOnlyWhenContinuedWorkIsReadyOrWithdrawn(t *testi
 	r.awaitRuns("review", func(runs []protocol.AutomationRunSummary) bool {
 		return automationRunState(runs, held.ID) == "cancelled"
 	})
+	if prompt := watcher.Prompted(); !strings.Contains(prompt, inboxDoorbell) {
+		t.Fatalf("the withdrawn work prompted its watcher with %q, want an inbox doorbell", prompt)
+	}
+	automationOneBell(t, r, "observer", observer, seed, "note.added", "after its held continuation was withdrawn")
 	automationOneBell(t, r, "reviewer", reviewer, seed, "note.added", "after its held continuation was withdrawn")
 	if _, err := r.cli.SeedShow(reviewer, seed); err != nil {
 		t.Fatal(err)
