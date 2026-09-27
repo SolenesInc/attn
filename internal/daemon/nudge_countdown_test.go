@@ -29,7 +29,6 @@ func fireNudgeNow(t *testing.T, d *Daemon, sessionID string) {
 	d.nudgeCountdownFire(sessionID, timer)
 }
 
-
 func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 	d := NewForTesting(filepath.Join(t.TempDir(), "test.sock"))
 	sessionID := "doorbell-state-fence"
@@ -90,7 +89,3 @@ func TestSessionInputWriteDoesNotInterleaveWithPendingApproval(t *testing.T) {
 		t.Fatalf("session-input submit = %q, want a lone Enter", got)
 	}
 }
-
-
-
-

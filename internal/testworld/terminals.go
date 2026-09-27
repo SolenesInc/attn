@@ -8,8 +8,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/pty"
+	"github.com/victorarias/attn/internal/ptybackend"
 )
 
 const (

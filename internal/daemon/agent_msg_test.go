@@ -79,6 +79,3 @@ func TestHandleAgentMsgFailedWakeLeavesNoUndeliverableMessage(t *testing.T) {
 		t.Fatalf("failed wake left keel bound to %q", *binding)
 	}
 }
-
-
-

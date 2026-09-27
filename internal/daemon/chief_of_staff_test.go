@@ -116,5 +116,3 @@ func TestTypeDoorbellDoesNotSubmitInputRacingTheGap(t *testing.T) {
 		t.Fatalf("keystroke started at %v, after the Enter at %v — the race never happened", typedAt, writtenAt[1])
 	}
 }
-
-

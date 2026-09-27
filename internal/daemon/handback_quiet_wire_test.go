@@ -64,4 +64,3 @@ func TestANotebookEntryForAChiefHeldByTheUsersTypingLandsOnceTheyAreQuiet(t *tes
 		}
 	})
 }
-

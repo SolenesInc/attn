@@ -37,11 +37,6 @@ func enqueueMaintenanceDoorbellItem(t *testing.T, d *Daemon, id, body string, at
 	return delivery
 }
 
-
-
-
-
-
 func TestAgentMailboxReadDuringDeliveryRearmsForAConcurrentItem(t *testing.T) {
 	d, doorbell := newAgentMailboxDoorbellDaemon(t, protocol.SessionStateIdle)
 	d.agentMailboxCooldownOverride = time.Second
@@ -96,8 +91,3 @@ func TestAgentMailboxReadDuringDeliveryRearmsForAConcurrentItem(t *testing.T) {
 		}
 	})
 }
-
-
-
-
-
