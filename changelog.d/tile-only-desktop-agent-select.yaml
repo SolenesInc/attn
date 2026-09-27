@@ -1,0 +1,3 @@
+kind: fixed
+area: desktops
+change: Selecting an agent after viewing a tile-only desktop reliably returns to its desktop.

@@ -38,6 +38,7 @@ function keepTileContext(state: Pick<ProfilesState, 'desktops' | 'currentDesktop
   const sessions = useSessionStore.getState();
   const shown = shownOf(state);
   if (sessions.view !== 'session' || !shown.tileId) return;
+  if (sessions.pendingSelection || sessions.focusRequest) return;
   const context = agentToShow(state, shown, sessions.activeSessionId);
   if (context !== sessions.activeSessionId) useSessionStore.setState({ activeSessionId: context });
 }
@@ -246,16 +247,17 @@ export function useDesktopSelectionBridge(
   ]);
 
   useEffect(() => {
-    if (view !== 'session' || activeSessionId || pendingSessionId) return;
+    if (view !== 'session') return;
     const state = useProfilesStore.getState();
     const shown = shownOf(state);
     if (shown.tileId) {
       keepTileContext(state);
       return;
     }
+    if (activeSessionId || pendingSessionId) return;
     const sessionId = agentToShow(state, shown, null);
     if (sessionId) useSessionStore.getState().setActiveSession(sessionId);
-  }, [view, activeSessionId, pendingSessionId, tileSelected, currentDesktopId]);
+  }, [view, activeSessionId, pendingSessionId, intentSessionId, tileSelected, currentDesktopId]);
 
   const focusRef = useRef(focusSessionPane);
   useEffect(() => {
