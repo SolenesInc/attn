@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -10,13 +9,6 @@ import (
 	attngit "github.com/victorarias/attn/internal/git"
 	"github.com/victorarias/attn/internal/protocol"
 )
-
-var errStaleReopenGeneration = errors.New("stale reopen generation")
-
-type reopenKey struct {
-	SessionID string
-	ClosedAt  string
-}
 
 type reopenBranchKey struct {
 	Repository string
@@ -54,35 +46,6 @@ func (d *Daemon) resolveReopen(
 		return sessionReopenVerdict{}, err
 	}
 	return verdict, nil
-}
-
-func (d *Daemon) resolveClosedReopen(
-	ctx context.Context,
-	key reopenKey,
-	gitView reopenGit,
-) (sessionReopenVerdict, error) {
-	entry := d.store.SessionLedgerEntry(strings.TrimSpace(key.SessionID))
-	if !reopenGenerationMatches(entry, key) {
-		return sessionReopenVerdict{}, staleReopenGenerationError(key)
-	}
-	verdict, err := d.resolveReopen(ctx, *entry, gitView)
-	if err != nil {
-		return sessionReopenVerdict{}, err
-	}
-	if !reopenGenerationMatches(d.store.SessionLedgerEntry(key.SessionID), key) {
-		return sessionReopenVerdict{}, staleReopenGenerationError(key)
-	}
-	return verdict, nil
-}
-
-func reopenGenerationMatches(entry *protocol.SessionLedgerEntry, key reopenKey) bool {
-	return entry != nil && entry.ID == key.SessionID &&
-		strings.TrimSpace(protocol.Deref(entry.ClosedAt)) == strings.TrimSpace(key.ClosedAt) &&
-		strings.TrimSpace(key.ClosedAt) != ""
-}
-
-func staleReopenGenerationError(key reopenKey) error {
-	return fmt.Errorf("%w for session %s closed at %s", errStaleReopenGeneration, key.SessionID, key.ClosedAt)
 }
 
 type scheduledReopenGit struct {
