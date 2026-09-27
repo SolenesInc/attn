@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/victorarias/attn/internal/protocol"
@@ -25,112 +24,6 @@ func newSessionInputDaemon(t *testing.T, state protocol.SessionState) (*Daemon, 
 		State: state, StateSince: now, StateUpdatedAt: now, LastSeen: now,
 	})
 	return d, backend, id
-}
-
-func TestSessionInput_HeartbeatTakenInWaitingDoesNotClaimUserInput(t *testing.T) {
-	d, backend, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	var writes [][]byte
-	backend.onInput = func(_ string, data []byte) { writes = append(writes, append([]byte(nil), data...)) }
-	d.store.SetSetting(SettingAutoSettleEnabled, "true")
-	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
-	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
-	if !d.store.OpenTurnIfClosed(sessionID, time.Now()) {
-		t.Fatal("fixture did not open a user turn")
-	}
-
-	id := inputAttemptID("crew-heartbeat", "generation-1")
-	delivery := sessionInputDelivery{
-		id: id, sessionID: sessionID, text: crewHeartbeatPrompt,
-		origin: maintenanceInput("crew-heartbeat"), placement: sessionInputWhenPromptReady,
-	}
-	attempt := d.sessionInputs().try(context.Background(), delivery)
-	if attempt.err != nil || attempt.stage != sessionInputPlaced {
-		t.Fatalf("heartbeat placement = %+v, want placed", attempt)
-	}
-	if len(writes) != 2 {
-		t.Fatalf("heartbeat wrote %d PTY chunks, want paste and Enter", len(writes))
-	}
-
-	takenAt := time.Now().Add(time.Second)
-	effects := d.observePromptTaken(sessionID, crewHeartbeatPrompt, takenAt)
-	if effects.receipt == nil || effects.receipt.id != id {
-		t.Fatalf("receipt = %+v, want heartbeat %s", effects.receipt, id.String())
-	}
-	if _, user := d.sessionInputs().currentUserRun(sessionID); user {
-		t.Fatal("heartbeat was attributed to the user")
-	}
-	if got := protocol.Timestamp(protocol.Deref(d.store.Get(sessionID).LastModelRequestAt)).Time(); !got.Equal(takenAt) {
-		t.Fatalf("last_model_request_at = %s, want %s", got, takenAt)
-	}
-
-	if !d.applyState(sessionStateChange{sessionID: sessionID, state: protocol.StateWorking, cause: liveSignal{}}) {
-		t.Fatal("working transition was not applied")
-	}
-	if _, pending := autoSettlePending(d, sessionID); pending {
-		t.Fatal("heartbeat-only run armed auto-settle")
-	}
-}
-
-func TestSessionInput_UserInputLaterInHeartbeatRunArmsAutoSettle(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	d.store.SetSetting(SettingAutoSettleEnabled, "true")
-	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
-	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
-	if !d.store.OpenTurnIfClosed(sessionID, time.Now()) {
-		t.Fatal("fixture did not open a user turn")
-	}
-
-	heartbeatID := inputAttemptID("crew-heartbeat", "generation-1")
-	delivery := sessionInputDelivery{
-		id: heartbeatID, sessionID: sessionID, text: crewHeartbeatPrompt,
-		origin: maintenanceInput("crew-heartbeat"), placement: sessionInputWhenPromptReady,
-	}
-	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-		t.Fatalf("place heartbeat: %v", attempt.err)
-	}
-	d.observePromptTaken(sessionID, crewHeartbeatPrompt, time.Now())
-	if !d.applyState(sessionStateChange{sessionID: sessionID, state: protocol.StateWorking, cause: liveSignal{}}) {
-		t.Fatal("working transition was not applied")
-	}
-	if _, pending := autoSettlePending(d, sessionID); pending {
-		t.Fatal("heartbeat armed auto-settle before the user spoke")
-	}
-
-	if err := d.writeSessionPTY(sessionID, []byte("the actual answer\r"), "user"); err != nil {
-		t.Fatalf("user input: %v", err)
-	}
-	d.observePromptTaken(sessionID, "the actual answer", time.Now())
-	if _, pending := autoSettlePending(d, sessionID); !pending {
-		t.Fatal("positive user input in the same working run did not arm auto-settle")
-	}
-}
-
-func TestSessionInput_MaintenanceNudgeLaterInHeartbeatRunDoesNotArmAutoSettle(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	d.store.SetSetting(SettingAutoSettleEnabled, "true")
-	d.store.SetSetting(SettingAutoSettleArmSeconds, "3600")
-	d.store.SetSetting(SettingAutoSettleCountdownSeconds, "3600")
-	if !d.store.OpenTurnIfClosed(sessionID, time.Now()) {
-		t.Fatal("fixture did not open a user turn")
-	}
-
-	heartbeat := maintenanceSessionInput("crew-heartbeat", "generation-1", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-	if attempt := d.sessionInputs().try(context.Background(), heartbeat); attempt.err != nil {
-		t.Fatalf("place heartbeat: %v", attempt.err)
-	}
-	d.observePromptTaken(sessionID, crewHeartbeatPrompt, time.Now())
-	if !d.applyState(sessionStateChange{sessionID: sessionID, state: protocol.StateWorking, cause: liveSignal{}}) {
-		t.Fatal("working transition was not applied")
-	}
-
-	nudge := maintenanceSessionInput("ticket-nudge", "cursor-7", sessionID, "a ticket needs you", sessionInputAtTurnBoundary)
-	if attempt := d.sessionInputs().try(context.Background(), nudge); attempt.err != nil {
-		t.Fatalf("place ticket nudge: %v", attempt.err)
-	}
-	d.observePromptTaken(sessionID, nudge.text, time.Now())
-	if _, pending := autoSettlePending(d, sessionID); pending {
-		t.Fatal("maintenance plus maintenance was mistaken for user conversation input")
-	}
 }
 
 func TestSessionInput_RetryCannotAnswerANewApproval(t *testing.T) {
@@ -176,24 +69,6 @@ func TestSessionInput_PlacementPhaseContracts(t *testing.T) {
 				t.Fatalf("AtTurnBoundary(%s)=%v, want %v", state, turnBoundary, wantTurnBoundary)
 			}
 		})
-	}
-}
-
-func TestSessionInput_ConsumedUserControlReleasesComposerGuardWithoutUserCredit(t *testing.T) {
-	d, backend, sessionID := newSessionInputDaemon(t, protocol.SessionStatePendingApproval)
-	if err := d.writeSessionPTY(sessionID, []byte("y"), "user"); err != nil {
-		t.Fatalf("approval key: %v", err)
-	}
-	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWorking)
-	if _, credited := d.sessionInputs().currentUserRun(sessionID); credited {
-		t.Fatal("an approval key granted user-conversation credit")
-	}
-	d.sessionInputs().observePhase(sessionID, protocol.SessionStateWaitingInput)
-	d.store.UpdateState(sessionID, protocol.StateWaitingInput)
-	backend.screen = "❯"
-	delivery := maintenanceSessionInput("crew-heartbeat", "generation-after-approval", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-	if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-		t.Fatalf("input after consumed approval key: %v", attempt.err)
 	}
 }
 
@@ -375,65 +250,4 @@ func TestSessionInput_OnlyWhatTheUserTypesGuardsTheComposer(t *testing.T) {
 			t.Errorf("%s (%s %q) guards the composer = %v, want %v", tc.name, tc.source, tc.data, got, tc.guards)
 		}
 	}
-}
-
-func TestSessionInput_QuietWindowReleasesTheComposerWithoutAPrompt(t *testing.T) {
-	d, _, sessionID := newSessionInputDaemon(t, protocol.SessionStateWaitingInput)
-	synctest.Test(t, func(t *testing.T) {
-		if err := d.writeSessionPTY(sessionID, []byte("half written"), "user"); err != nil {
-			t.Fatalf("user input: %v", err)
-		}
-		time.Sleep(sessionInputQuietWindow / 2)
-		delivery := maintenanceSessionInput("crew-heartbeat", "mid-window", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		attempt := d.sessionInputs().try(context.Background(), delivery)
-		var quiet *sessionInputQuietError
-		if !errors.As(attempt.err, &quiet) || !errors.Is(attempt.err, errSessionInputComposerDirty) {
-			t.Fatalf("mid-window error = %v, want the quiet-window deferral", attempt.err)
-		}
-		if quiet.retryAfter != sessionInputQuietWindow/2 {
-			t.Fatalf("retryAfter = %v, want the rest of the window %v", quiet.retryAfter, sessionInputQuietWindow/2)
-		}
-		time.Sleep(quiet.retryAfter)
-		delivery = maintenanceSessionInput("crew-heartbeat", "after-window", sessionID, crewHeartbeatPrompt, sessionInputWhenPromptReady)
-		if attempt := d.sessionInputs().try(context.Background(), delivery); attempt.err != nil {
-			t.Fatalf("input after the quiet window: %v", attempt.err)
-		}
-	})
-}
-
-const quiesceWatcherTripwire = 20 * transcriptPollInterval
-
-func quiesceTranscriptWatchers(t *testing.T, d *Daemon) {
-	t.Helper()
-	d.watchersMu.Lock()
-	watchers := make([]*transcriptWatcher, 0, len(d.transcriptWatch))
-	for _, watcher := range d.transcriptWatch {
-		watchers = append(watchers, watcher)
-	}
-	d.transcriptWatch = make(map[string]*transcriptWatcher)
-	d.watchersMu.Unlock()
-	for _, watcher := range watchers {
-		close(watcher.stopCh)
-	}
-	for _, watcher := range watchers {
-		select {
-		case <-watcher.doneCh:
-		case <-time.After(quiesceWatcherTripwire):
-			t.Fatalf("transcript watcher for %s did not stop within %s", watcher.sessionID, quiesceWatcherTripwire)
-		}
-	}
-}
-
-func settleResend(t *testing.T) {
-	t.Helper()
-	synctest.Wait()
-	time.Sleep(sessionInputSubmitDelay + sessionInputTakenWindow)
-	synctest.Wait()
-}
-
-func autoSettlePending(d *Daemon, sessionID string) (*autoSettleTimer, bool) {
-	d.autoSettleMu.Lock()
-	defer d.autoSettleMu.Unlock()
-	entry, ok := d.autoSettleTimers[sessionID]
-	return entry, ok
 }

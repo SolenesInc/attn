@@ -12,6 +12,7 @@ import (
 
 	"github.com/victorarias/attn/internal/daemon"
 	"github.com/victorarias/attn/internal/fakeagent"
+	"github.com/victorarias/attn/internal/ptybackend"
 	"github.com/victorarias/attn/internal/testworld"
 )
 
@@ -21,6 +22,7 @@ type world struct {
 	unix    net.Listener
 	ws      net.Listener
 	daemon  *daemon.WireDaemon
+	terms   *testworld.Terminals
 }
 
 func newWorld(t *testing.T, agents ...fakeagent.Harness) *world {
@@ -59,7 +61,11 @@ func prepareWorld(t *testing.T, agents ...fakeagent.Harness) *testworld.World {
 func (w *world) start() {
 	w.T.Helper()
 	w.listen()
-	started, err := daemon.StartWireDaemon(w.Socket, w.unix, w.ws)
+	var terminals ptybackend.Backend
+	if w.terms != nil {
+		terminals = w.terms
+	}
+	started, err := daemon.StartWireDaemonWithTerminals(w.Socket, w.unix, w.ws, terminals)
 	if err != nil {
 		w.T.Fatalf("start daemon: %v", err)
 	}
