@@ -19,6 +19,7 @@ describe('App migration picker', () => {
       script: (scripted) => scripted.on('migration_get', () => ({ event: 'migration_result', action: 'migration_get', success: true, state })),
     });
     await daemon.idle();
+    expect(daemon.sentOf('migration_get')).toEqual([expect.objectContaining({ cmd: 'migration_get' })]);
     screen.getByText('Your workspaces are already desktops. Confirm where each one goes before you continue.');
 
     await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Confirm desktops →' })));
@@ -31,5 +32,6 @@ describe('App migration picker', () => {
     const dialog = screen.getByRole('dialog', { name: 'Move exo · Chief (2) to…' });
     expect(within(dialog).getByRole('button', { name: /Desktop 1\b.*exo · Chief$/ })).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /Desktop 2\b.*exo · Delete X tweet history$/ })).toBeInTheDocument();
+    expect(daemon.sentOf('migration_get')).toHaveLength(1);
   });
 });
