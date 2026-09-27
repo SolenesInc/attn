@@ -194,7 +194,6 @@ type sessionInputLane struct {
 	userGeneration uint64
 	userSubmit     bool
 	heldEnter      bool
-	heldText       string
 	phase          protocol.SessionState
 	stopped        bool
 	running        sync.WaitGroup
@@ -454,7 +453,6 @@ func (m *sessionInputModule) holdEnterLocked(lane *sessionInputLane, sessionID s
 
 func (m *sessionInputModule) dropHeldEnterLocked(lane *sessionInputLane) {
 	lane.heldEnter = false
-	lane.heldText = ""
 	if entry := lane.retries[sessionInputHeldEnterKey]; entry != nil {
 		entry.timer.Stop()
 		delete(lane.retries, sessionInputHeldEnterKey)
@@ -469,21 +467,23 @@ func (m *sessionInputModule) pressHeldEnter(sessionID string) {
 		return
 	}
 	ctx := m.daemon.lifetime()
-	if _, blocked := m.promptInTheWayLocked(ctx, sessionID, lane.heldText); blocked {
+	if _, blocked := m.promptInTheWayLocked(ctx, sessionID); blocked {
+		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
+		return
+	}
+	if err := m.daemon.ptyBackend.Input(ctx, sessionID, []byte("\r")); err != nil {
+		m.daemon.logf("session input held Enter failed session=%s: %v", sessionID, err)
 		m.holdEnterLocked(lane, sessionID, sessionInputComposerRetry)
 		return
 	}
 	m.dropHeldEnterLocked(lane)
-	if err := m.daemon.ptyBackend.Input(ctx, sessionID, []byte("\r")); err != nil {
-		m.daemon.logf("session input held Enter failed session=%s: %v", sessionID, err)
-	}
 }
 
-func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID, pasted string) (sessionInputReason, bool) {
+func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID string) (sessionInputReason, bool) {
 	if state := m.daemon.store.Get(sessionID); state != nil && state.State == protocol.SessionStatePendingApproval {
 		return sessionInputReasonApproval, true
 	}
-	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted)
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	switch {
 	case !known:
 		return sessionInputReasonScreenUnavailable, true
@@ -493,8 +493,8 @@ func (m *sessionInputModule) promptInTheWayLocked(ctx context.Context, sessionID
 	return sessionInputReasonNone, false
 }
 
-func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID, pasted string) bool {
-	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, pasted)
+func (m *sessionInputModule) promptShowingLocked(ctx context.Context, sessionID string) bool {
+	_, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	return !known || selector
 }
 
@@ -693,9 +693,8 @@ func (m *sessionInputModule) try(ctx context.Context, delivery sessionInputDeliv
 	}
 	pausepoint.At(pausepoint.SessionInputPasteGap)
 	time.Sleep(sessionInputSubmitDelay)
-	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID, delivery.text); blocked {
+	if reason, blocked := m.promptInTheWayLocked(ctx, delivery.sessionID); blocked {
 		m.daemon.logf("session input holding Enter session=%s: a prompt appeared after the paste", delivery.sessionID)
-		lane.heldText = delivery.text
 		m.holdEnterLocked(lane, delivery.sessionID, sessionInputComposerRetry)
 		return sessionInputAttempt{id: delivery.id, stage: sessionInputPlaced, route: sessionInputRoutePTY, reason: reason, wait: attempt.wait}
 	}
@@ -761,7 +760,7 @@ func (m *sessionInputModule) ptySafetyLocked(ctx context.Context, sessionID stri
 			return sessionInputReasonUserComposerDirty, &sessionInputQuietError{retryAfter: remaining}
 		}
 	}
-	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID, "")
+	line, known, selector := m.daemon.sessionInputScreen(ctx, sessionID)
 	if !known {
 		return sessionInputReasonScreenUnavailable, errSessionInputScreenUnavailable
 	}
@@ -788,7 +787,7 @@ func (m *sessionInputModule) writePTY(ctx context.Context, sessionID string, dat
 		}
 	}
 	if m.daemon.noteUserInput(sessionID, source, data) {
-		if lane.heldEnter && !m.promptShowingLocked(ctx, sessionID, lane.heldText) {
+		if lane.heldEnter && !m.promptShowingLocked(ctx, sessionID) {
 			m.dropHeldEnterLocked(lane)
 		}
 		lane.userGeneration++

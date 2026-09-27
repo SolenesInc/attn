@@ -5,7 +5,6 @@ import (
 	"regexp"
 	"strings"
 	"time"
-	"unicode"
 
 	"github.com/victorarias/attn/internal/ptybackend"
 )
@@ -18,7 +17,7 @@ const (
 
 var doorbellSelectorFooter = regexp.MustCompile(`(?i)\bto select\b|\besc to cancel\b`)
 
-func screenShowsSelector(text, pasted string) (string, bool) {
+func screenShowsSelector(text string) (string, bool) {
 	lines := make([]string, 0, doorbellScreenTailLines)
 	for _, line := range strings.Split(text, "\n") {
 		if trimmed := strings.TrimSpace(line); trimmed != "" {
@@ -28,33 +27,15 @@ func screenShowsSelector(text, pasted string) (string, bool) {
 	if len(lines) > doorbellScreenTailLines {
 		lines = lines[len(lines)-doorbellScreenTailLines:]
 	}
-	quoted := 0
 	for _, line := range lines {
-		if !doorbellSelectorFooter.MatchString(line) && partOfPaste(line, pasted) {
-			quoted = len(doorbellSelectorFooter.FindAllStringIndex(pasted, -1))
-			break
+		if doorbellSelectorFooter.MatchString(line) {
+			return line, true
 		}
-	}
-	for _, line := range lines {
-		matches := len(doorbellSelectorFooter.FindAllStringIndex(line, -1))
-		if matches == 0 {
-			continue
-		}
-		if matches <= quoted && partOfPaste(line, pasted) {
-			quoted -= matches
-			continue
-		}
-		return line, true
 	}
 	return "", false
 }
 
-func partOfPaste(line, pasted string) bool {
-	text := strings.TrimLeftFunc(line, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
-	return text != "" && strings.Contains(strings.Join(strings.Fields(pasted), " "), strings.Join(strings.Fields(text), " "))
-}
-
-func (d *Daemon) sessionInputScreen(parent context.Context, sessionID, pasted string) (line string, known, selector bool) {
+func (d *Daemon) sessionInputScreen(parent context.Context, sessionID string) (line string, known, selector bool) {
 	if d.ptyBackend == nil {
 		return "", false, false
 	}
@@ -68,6 +49,6 @@ func (d *Daemon) sessionInputScreen(parent context.Context, sessionID, pasted st
 	if err != nil || snapshot.Screen == nil || !snapshot.Screen.HasText {
 		return "", false, false
 	}
-	line, selector = screenShowsSelector(snapshot.Screen.Text, pasted)
+	line, selector = screenShowsSelector(snapshot.Screen.Text)
 	return line, true, selector
 }
