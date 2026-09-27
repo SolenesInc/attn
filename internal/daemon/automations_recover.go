@@ -2,7 +2,6 @@ package daemon
 
 import (
 	"context"
-	"errors"
 
 	"github.com/victorarias/attn/internal/store"
 )
@@ -27,7 +26,7 @@ func (d *Daemon) recoverAutomations() {
 		if err == nil && run.State == store.AutomationRunStatePending {
 			err = d.deliverAutomationRun(context.Background(), run)
 			if err != nil {
-				err = d.handleAutomationRecoveryError(run, err)
+				_, err = d.handleAutomationDeliveryError(run, err)
 			}
 		}
 		d.automationMu.Unlock()
@@ -35,13 +34,6 @@ func (d *Daemon) recoverAutomations() {
 			d.logf("automation recovery run %s: %v", runs[i].ID, err)
 		}
 	}
-}
-func (d *Daemon) handleAutomationRecoveryError(run *store.AutomationRun, deliveryErr error) error {
-	if errors.Is(deliveryErr, errAutomationReviewWithdrawn) {
-		return d.cancelWithdrawnAutomationRun(run)
-	}
-	_, err := d.handleAutomationDeliveryError(run, deliveryErr)
-	return err
 }
 func recoverAutomationsAfterGitHubReady(ready <-chan struct{}, recover func()) {
 	<-ready

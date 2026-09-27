@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/victorarias/attn/internal/automation"
@@ -16,8 +15,6 @@ import (
 )
 
 const automationReviewWithdrawnMessage = "GitHub review request withdrawn before delivery"
-
-var errAutomationReviewWithdrawn = errors.New(automationReviewWithdrawnMessage)
 
 func (d *Daemon) automationRunPullRequest(ctx context.Context, definitionID, requestID, rawURL string) (*store.AutomationRun, error) {
 	if strings.TrimSpace(requestID) == "" {
@@ -230,46 +227,43 @@ func (d *Daemon) reconcileAutomationReviewRequests(definitionID, host string, su
 func (d *Daemon) reconcileAutomationReviewRequestHeads(definitionID, host string, observations []store.AutomationReviewRequestObservation, observedAt time.Time) ([]store.AutomationReviewRequestCandidate, error) {
 	d.automationMu.Lock()
 	defer d.automationMu.Unlock()
-	if err := d.cancelWithdrawnAutomationRuns(definitionID, host); err != nil {
+	if err := d.settleWithdrawnAutomationRuns(definitionID, host); err != nil {
 		return nil, err
 	}
 	candidates, err := d.store.ReconcileAutomationReviewRequestHeads(definitionID, host, observations, observedAt)
 	if err != nil {
 		return nil, err
 	}
-	if err := d.cancelWithdrawnAutomationRuns(definitionID, host); err != nil {
+	if err := d.settleWithdrawnAutomationRuns(definitionID, host); err != nil {
 		return nil, err
 	}
 	return candidates, nil
 }
-func (d *Daemon) cancelWithdrawnAutomationRuns(definitionID, host string) error {
+func (d *Daemon) settleWithdrawnAutomationRuns(definitionID, host string) error {
 	withdrawn, err := d.store.ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host)
 	if err != nil {
 		return err
 	}
 	var cancelErr error
 	for i := range withdrawn {
-		if err := d.cancelWithdrawnAutomationRun(&withdrawn[i]); err != nil {
+		if err := d.settleWithdrawnAutomationRun(&withdrawn[i]); err != nil {
 			cancelErr = errors.Join(cancelErr, err)
 		}
 	}
 	return cancelErr
 }
-func (d *Daemon) cancelWithdrawnAutomationRun(run *store.AutomationRun) error {
-	if run == nil {
-		return nil
-	}
+func (d *Daemon) settleWithdrawnAutomationRun(run *store.AutomationRun) error {
 	continuation, err := d.automationRunIsContinuation(run)
 	if err != nil {
 		return err
 	}
-	if !continuation {
-		if d.hasAutomationSession(run.SessionID) {
-			if err := d.terminateSessionChecked(run.SessionID, syscall.SIGTERM); err != nil {
-				return fmt.Errorf("stop withdrawn automation reviewer: %w", err)
+	if !continuation && run.State == store.AutomationRunStatePending && d.hasAutomationSession(run.SessionID) {
+		if deliverErr := d.deliverObservedAutomationRun(run); deliverErr != nil {
+			if _, err := d.handleAutomationDeliveryError(run, deliverErr); err != nil {
+				d.logf("automation deliver started reviewer %s: %v", run.ID, err)
 			}
-			d.closeSession(run.SessionID, store.SessionClose{By: store.SessionClosedByUser, Reason: "review withdrawn"})
 		}
+		return nil
 	}
 	if run.State == store.AutomationRunStateCancelled && run.CancelReason == store.AutomationCancelReasonReviewWithdrawn {
 		return d.recordAutomationRunSeedOutcome(run, automationFailureComment(run, automationReviewWithdrawnMessage))

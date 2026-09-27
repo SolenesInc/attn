@@ -732,15 +732,6 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 	var cursorRaw string
 	baselining := false
 	err = tx.QueryRow(`SELECT observed_at FROM automation_provider_cursors WHERE definition_id=? AND provider='github_review_requested' AND scope=?`, definitionID, host).Scan(&cursorRaw)
-	if err == nil {
-		cursorAt, parseErr := docstore.ParseTime(cursorRaw)
-		if parseErr != nil {
-			return nil, fmt.Errorf("parse automation provider cursor: %w", parseErr)
-		}
-		if observedAt.Before(cursorAt) {
-			return nil, nil
-		}
-	}
 	if err == sql.ErrNoRows {
 		baselining = true
 	} else if err != nil {
@@ -831,39 +822,13 @@ func (s *Store) ReconcileAutomationReviewRequestHeads(definitionID, host string,
 			candidates = append(candidates, AutomationReviewRequestCandidate{SubjectKey: edge.subjectKey, HeadSHA: headSHA, Cycle: edge.cycle})
 		}
 	}
-	if _, err := tx.Exec(`INSERT INTO automation_provider_cursors(definition_id,provider,scope,observed_at) VALUES(?,'github_review_requested',?,?) ON CONFLICT(definition_id,provider,scope) DO UPDATE SET observed_at=excluded.observed_at WHERE excluded.observed_at >= automation_provider_cursors.observed_at`, definitionID, host, observedRaw); err != nil {
+	if _, err := tx.Exec(`INSERT INTO automation_provider_cursors(definition_id,provider,scope,observed_at) VALUES(?,'github_review_requested',?,?) ON CONFLICT(definition_id,provider,scope) DO UPDATE SET observed_at=excluded.observed_at`, definitionID, host, observedRaw); err != nil {
 		return nil, err
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return candidates, nil
-}
-
-func (s *Store) GitHubReviewAutomationRunStillRequested(runID string) (bool, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	if s.db == nil {
-		return false, errors.New("automation persistence unavailable")
-	}
-	var occurrenceKey, subjectKey string
-	var active, cycle int
-	err := s.db.QueryRow(`
-		SELECT o.occurrence_key,o.subject_key,e.active,e.cycle
-		FROM automation_runs r
-		JOIN automation_occurrences o ON o.id=r.occurrence_id
-		JOIN automation_review_request_edges e
-		  ON e.definition_id=r.definition_id AND e.subject_key=o.subject_key
-		WHERE r.id=? AND o.provider='github'
-	`, runID).Scan(&occurrenceKey, &subjectKey, &active, &cycle)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	base := githubReviewOccurrenceBase(subjectKey, cycle)
-	return active == 1 && (occurrenceKey == base || strings.HasPrefix(occurrenceKey, base+":")), nil
 }
 
 func (s *Store) ListWithdrawnGitHubReviewUndeliveredRuns(definitionID, host string) ([]AutomationRun, error) {
