@@ -215,32 +215,7 @@ func (d *Daemon) bindSeedHandoverProtected(
 			return nil, err
 		}
 		if conflict.Collection == garden.CollectionSeeds {
-			if attempt == attempts {
-				return nil, fmt.Errorf("seed %s changed under all %d Handover attempts: %w", conflict.ID, attempts, err)
-			}
-			latest, latestDoc, readErr := d.readSeed(seed.ID)
-			if readErr != nil {
-				return nil, readErr
-			}
-			if garden.Closed(latest.Status) || latest.TenderSession != request.ExpectedTenderSession || latest.TenderMember != request.ExpectedTenderMember {
-				return nil, fmt.Errorf("%s ownership or state changed while preparing handover; read it before retrying", seed.ID)
-			}
-			seed = latest
-			unclaimed = latest
-			unclaimed.TenderSession, unclaimed.TenderMember = "", ""
-			next, err = garden.Transition(unclaimed, garden.VerbTend, garden.Ask{Actor: garden.Tender{Session: sessionID}}, func(string) bool { return false })
-			if err != nil {
-				return nil, err
-			}
-			next.LastExecutionID = sessionID
-			seedBody, err = next.Encode()
-			if err != nil {
-				return nil, err
-			}
-			seedExpected = latestDoc.Rev
-			seedCommit.Write.Body = seedBody
-			seedCommit.Write.Expected = &seedExpected
-			continue
+			return nil, fmt.Errorf("%s changed while the new worker was starting; refresh it before handing it over", seed.ID)
 		}
 		if conflict.Collection != garden.CollectionDispatches {
 			return nil, err
