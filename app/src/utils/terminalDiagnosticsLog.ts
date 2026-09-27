@@ -122,7 +122,7 @@ declare global {
     __ATTN_TERMINAL_DIAG_FILES?: { lifecycle: string; incidents: string };
     __ATTN_TERMINAL_DIAG_ENABLE?: (enabled: boolean) => void;
     __ATTN_TERMINAL_GEOMETRY?: () => TerminalGeometrySnapshot[];
-    // Back-compat alias used by the split-blank e2e repro spec.
+    // Back-compat alias used by e2e/split-paint.spec.ts.
     __ATTN_RENDER_TRACE?: unknown[];
     __ATTN_RENDER_TRACE_ON?: boolean;
   }

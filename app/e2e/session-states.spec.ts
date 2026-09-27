@@ -36,51 +36,6 @@ async function createSession(
 
 test.describe('Session State Changes', () => {
 
-  test('displays sessions grouped by state on dashboard', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-
-    await page.waitForSelector('.dashboard');
-
-    // A unique cwd per session is what lets the daemon track them independently.
-    await createSession(page, daemon, { id: 's1', label: 'Working Task', state: 'working', cwd: '/tmp/test/s1' });
-    await createSession(page, daemon, { id: 's2', label: 'Needs Input', state: 'waiting_input', cwd: '/tmp/test/s2' });
-    await createSession(page, daemon, { id: 's3', label: 'Finished', state: 'idle', cwd: '/tmp/test/s3' });
-
-    await expect(page.locator('[data-testid="session-group-working"]')).toBeVisible();
-    await expect(page.locator('[data-testid="session-group-waiting"]')).toBeVisible();
-    await expect(page.locator('[data-testid="session-group-idle"]')).toBeVisible();
-
-    await expect(page.locator('[data-testid="session-s1"][data-state="working"]')).toBeVisible();
-    await expect(page.locator('[data-testid="session-s2"][data-state="waiting_input"]')).toBeVisible();
-    await expect(page.locator('[data-testid="session-s3"][data-state="idle"]')).toBeVisible();
-  });
-
-  test('mock PTY output appears when opening a session', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-
-    await createSession(page, daemon, { id: 's1', label: 'Terminal Session', state: 'working', cwd: '/tmp/test/s1' });
-    await page.locator('[data-testid="session-s1"]').click();
-
-    const activeTerminal = page.locator('.view-container.visible .terminal-wrapper.active');
-    await expect(activeTerminal).toBeVisible();
-
-    await page.waitForFunction(() => {
-      const events = (window as any).__TEST_PTY_EVENTS as Array<{ event: string; data?: string }> | undefined;
-      if (!events || events.length === 0) return false;
-      return events.some((evt) => {
-        if (evt.event !== 'data' || !evt.data) return false;
-        try {
-          return atob(evt.data).includes('attn mock pty');
-        } catch {
-          return false;
-        }
-      });
-    }, null, { timeout: 15000 });
-  });
-
   test('state indicator colors match design spec', async ({ page, daemon }) => {
     await daemon.start();
     await page.goto('/');
@@ -100,26 +55,4 @@ test.describe('Session State Changes', () => {
     await expect(waitingDot).toHaveCSS('background-color', 'rgb(245, 158, 11)'); // #f59e0b yellow
     await expect(idleDot).toHaveCSS('background-color', 'rgb(107, 114, 128)');   // #6b7280 grey
   });
-
-  test('attention drawer shows only waiting_input sessions', async ({ page, daemon }) => {
-    await daemon.start();
-    await page.goto('/');
-    await page.waitForSelector('.dashboard');
-
-    await createSession(page, daemon, { id: 's1', label: 'Working', state: 'working', cwd: '/tmp/test/s1' });
-    await createSession(page, daemon, { id: 's2', label: 'Waiting', state: 'waiting_input', cwd: '/tmp/test/s2' });
-    await createSession(page, daemon, { id: 's3', label: 'Idle', state: 'idle', cwd: '/tmp/test/s3' });
-
-    await expect(page.locator('[data-testid="session-s1"]')).toBeVisible();
-
-    await page.keyboard.press('Meta+k');
-    await page.getByText('Open attention drawer').click();
-
-    await expect(page.locator('.side-panel-shell.is-open .attention-drawer .attention-drawer-panel')).toBeVisible();
-
-    await expect(page.locator('[data-testid="attention-session-s2"]')).toBeVisible();
-    await expect(page.locator('[data-testid="attention-session-s1"]')).not.toBeVisible();
-    await expect(page.locator('[data-testid="attention-session-s3"]')).not.toBeVisible();
-  });
-
 });

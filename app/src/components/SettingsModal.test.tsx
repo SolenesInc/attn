@@ -52,6 +52,14 @@ describe('SettingsModal', () => {
     expect(settingsModal()).toBeNull();
   });
 
+  it('closes when the user clicks outside it', async () => {
+    const { daemon } = await renderSettings();
+
+    await gesture(daemon, () => fireEvent.click(screen.getByRole('button', { name: 'Dismiss settings' })));
+
+    expect(settingsModal()).toBeNull();
+  });
+
   it('replaces the GitHub hosts list with the daemon reason while polling is off', async () => {
     await renderSettings({ github_polling_off_reason: 'GitHub polling is off for instance dev. Start its daemon with ATTN_GITHUB_POLLING=on.' });
 

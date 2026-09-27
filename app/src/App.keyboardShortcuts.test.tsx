@@ -1,5 +1,5 @@
-import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { act, fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { openAttachedTerminals } from './test/appFixtures';
 import { agentWorkspace, daemonSession, splitWorkspace, workspaceWithTiles, type DaemonSession, type DaemonWorkspace } from './test/daemonFixtures';
 import { stubNavigatorPlatform } from './test/platformStub';
@@ -162,6 +162,19 @@ describe('App keyboard shortcuts', () => {
       expect(zoomedPane()).toBe('pane-s1');
       expect(chordHud()).toBeNull();
       expect(ptyInput(daemon)).toEqual([]);
+    });
+
+    it('lets a leader lapse when no follow key arrives, so the next key reaches the terminal', async () => {
+      const { daemon, terminal, press } = await openWorkspace({ settings: ZOOM_CHORD });
+
+      await press(terminal(), { key: 'y', metaKey: true });
+      expect(chordHud()).not.toBeNull();
+      await act(() => vi.advanceTimersByTimeAsync(1000));
+      expect(chordHud()).toBeNull();
+      await press(terminal(), { key: 'z', code: 'KeyZ' });
+
+      expect(zoomedPane()).toBeNull();
+      expect(ptyInput(daemon)).toEqual(['z']);
     });
 
     it.each([

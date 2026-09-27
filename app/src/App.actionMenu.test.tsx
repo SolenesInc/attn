@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { openActionMenu, openSession } from './test/appFixtures';
 import { agentWorkspace, daemonSession } from './test/daemonFixtures';
-import { gesture, renderApp } from './test/renderApp';
+import { gesture, pressShortcut, renderApp } from './test/renderApp';
 import type { ScriptedDaemon } from './test/scriptedDaemon';
 
 async function openContextCap(contextWindowCap?: number) {
@@ -124,5 +124,28 @@ describe('App action menu', () => {
 
       expect(within(capPrompt()!).getByText(refusal)).toBeInTheDocument();
     });
+  });
+
+  it('holds app shortcuts while open, and opens the attention drawer on the sessions waiting for the user', async () => {
+    const { daemon } = await renderApp({
+      initialState: {
+        sessions: [daemonSession('s1', { state: 'working' }), daemonSession('s2', { state: 'waiting_input' }), daemonSession('s3', { state: 'idle' })],
+        workspaces: ['s1', 's2', 's3'].map(agentWorkspace),
+      },
+    });
+    const drawer = screen.getByText('Needs Attention').closest('aside')!;
+    await openActionMenu(daemon);
+    expect(drawer).toHaveAttribute('aria-hidden', 'true');
+
+    pressShortcut('session.new');
+    await daemon.idle();
+    expect(screen.queryByTestId('location-picker-overlay')).toBeNull();
+
+    fireEvent.click(screen.getByText('Open attention drawer'));
+    await daemon.idle();
+
+    expect(screen.queryByRole('dialog', { name: 'Action menu' })).toBeNull();
+    expect(drawer).toHaveAttribute('aria-hidden', 'false');
+    expect([...drawer.querySelectorAll('[data-testid^="attention-session-"]')].map((item) => item.getAttribute('data-testid'))).toEqual(['attention-session-s2']);
   });
 });

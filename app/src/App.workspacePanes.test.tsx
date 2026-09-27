@@ -87,13 +87,22 @@ describe('App workspace panes', () => {
     ]);
   });
 
-  it('gives a pane’s terminal the keyboard as soon as the pointer presses it', async () => {
+  it('gives a pane’s terminal the keyboard and the sidebar selection as soon as the pointer presses it', async () => {
     const { daemon } = await renderWorkspace(SIDE_BY_SIDE, ['s1', 's2']);
     await openSession(daemon, 's1');
 
     fireEvent.mouseDown(paneEl('s2'));
+    await daemon.idle();
 
     expect(terminalInput('s2')).toHaveFocus();
+    expect(document.querySelector('[data-testid="sidebar-session-s2"]')).toHaveClass('selected');
+    expect(document.querySelector('[data-testid="sidebar-session-s1"]')).not.toHaveClass('selected');
+
+    pressShortcut('terminal.focusLeft');
+    await daemon.idle();
+
+    expect(terminalInput('s1')).toHaveFocus();
+    expect(document.querySelector('[data-testid="sidebar-session-s1"]')).toHaveClass('selected');
   });
 
   it('moves between panes of nested splits, and on to the next session past the edge', async () => {
@@ -111,6 +120,23 @@ describe('App workspace panes', () => {
     pressShortcut('terminal.focusRight');
     await daemon.idle();
     expect(daemon.sentOf('workspace_selected').slice(-1)[0]).toEqual({ cmd: 'workspace_selected', workspace_id: 'workspace-s4' });
+  });
+
+  it('opens a workspace at its first session when the user jumps to it by number', async () => {
+    const { daemon } = await renderWorkspace(SIDE_BY_SIDE, ['s1', 's2'], ['s3']);
+    await openSession(daemon, 's2');
+    expect(surface()).toHaveAttribute('data-active-leaf-id', 'pane-s2');
+
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1', metaKey: true });
+    await daemon.idle();
+    fireEvent.keyDown(window, { key: '2', code: 'Digit2', metaKey: true });
+    await daemon.idle();
+
+    expect(daemon.sentOf('workspace_selected').slice(-2)).toEqual([
+      { cmd: 'workspace_selected', workspace_id: 'workspace-s3' },
+      { cmd: 'workspace_selected', workspace_id: 'ws' },
+    ]);
+    expect(surface()).toHaveAttribute('data-active-leaf-id', 'pane-s1');
   });
 
   it('arms zoom on a lone pane and applies it once a split exists, then follows the active pane', async () => {
