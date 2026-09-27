@@ -1,5 +1,5 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useDaemonApi } from '../contexts/DaemonApiContext';
 import { useClientPresence } from '../hooks/useClientPresence';
 import { type DockPanelId } from '../hooks/useDockPanels';
@@ -387,6 +387,16 @@ export function useAppController({
   const agentFocused = (surface.kind === 'agent' || surface.kind === 'tile') && currentDesktopAgentFocused;
   const sidebarVisible = !sidebarCollapsed && surface.kind !== 'grid' && !agentFocused;
   const queueSidebarShown = queueModeEnabled && sidebarVisible;
+  const sidebarWasVisible = useRef(sidebarVisible);
+  useLayoutEffect(() => {
+    const hidden = sidebarWasVisible.current && !sidebarVisible;
+    sidebarWasVisible.current = sidebarVisible;
+    if (!hidden) return;
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || focused.closest('.sidebar')) {
+      useSessionStore.getState().requestTerminalFocus();
+    }
+  }, [sidebarVisible]);
 
   const handleOpenPalette = useCallback((mode: PaletteMode) => {
     if (palette !== null) {

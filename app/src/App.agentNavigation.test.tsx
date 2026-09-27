@@ -45,7 +45,11 @@ vi.mock('./components/Sidebar', async () => {
     MarkdownIcon: () => null,
     Sidebar: (props: unknown) => {
       mockSidebarProps(props);
-      return <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />;
+      return (
+        <div className="sidebar">
+          <DelegationChainTrigger session={{ id: 's1', label: 's1', delegation_role: { name: 'Builder' } }} />
+        </div>
+      );
     },
   };
 });
@@ -510,6 +514,25 @@ describe('agent navigation', () => {
     showAgentList();
     expect(listOpen()).toBe(false);
     expect(screen.getByTestId('palette-agent-s1')).toBeInTheDocument();
+  });
+
+  it('hands focus to the terminal when the sidebar hides with focus inside it', () => {
+    const { container } = render(<App />);
+    broadcast();
+    act(() => { mockSetActiveSession('s1'); });
+    const focusRequests = () => useSessionStore.getState().utilityFocusRequestToken;
+    const inSidebar = () => container.querySelector<HTMLElement>('.sidebar button')!;
+
+    inSidebar().focus();
+    let before = focusRequests();
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, paneIdOf('s1')); });
+    expect(focusRequests()).toBe(before + 1);
+
+    act(() => { useDesktopFocus.getState().setFocusedLeaf(useProfilesStore.getState().currentDesktopId!, null); });
+    inSidebar().focus();
+    before = focusRequests();
+    act(() => { shortcutHandlers<{ onToggleSidebar: () => void }>().onToggleSidebar(); });
+    expect(focusRequests()).toBe(before + 1);
   });
 
   it('hides the sidebar while an agent is focused and opens the palette on agents instead', () => {

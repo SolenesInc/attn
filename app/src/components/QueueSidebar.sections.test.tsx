@@ -2,7 +2,6 @@ import { StrictMode, type ComponentProps } from 'react';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { Sidebar } from './Sidebar';
-import { useSessionStore } from '../store/sessions';
 import { useAgentList } from './useAgentList';
 import { focusedQueueRow } from './focusedQueueRow';
 import { BuiltinDelegationRole, type SessionDelegationRole } from '../types/generated';
@@ -532,21 +531,6 @@ describe('walking the queue sidebar from the keyboard', () => {
     fireEvent.click(screen.getByTestId('shortcut'));
     expect(screen.queryByTestId('queue-agent-list')).toBeNull();
     expect(focusedTestId()).toBe('terminal-b');
-  });
-
-  it('asks for the terminal when the sidebar collapses with focus inside it', () => {
-    const data = sidebarData(sessions);
-    function Collapsible({ collapsed }: { collapsed: boolean }) {
-      const { agentListOpen, toggleAgentList } = useAgentList();
-      return <Sidebar {...baseProps} {...data} collapsed={collapsed} queue={buildQueueBands(data.workspaces)} agentListOpen={agentListOpen} onToggleAgentList={toggleAgentList} />;
-    }
-    const { rerender } = render(<Collapsible collapsed={false} />);
-    fireEvent.click(screen.getByTestId('queue-agents-toggle'));
-    expect(focusedTestId()).toBe('queue-agent-filter');
-    const before = useSessionStore.getState().utilityFocusRequestToken;
-
-    rerender(<Collapsible collapsed />);
-    expect(useSessionStore.getState().utilityFocusRequestToken).toBe(before + 1);
   });
 
   it('leaves focus alone when the sidebar comes back with the list still open', () => {
