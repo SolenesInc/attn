@@ -2,7 +2,7 @@ import { keyCombo } from '../../shortcuts/formatShortcut';
 import { slotShortcut } from '../../utils/desktops';
 import { DraftPreview } from './DraftPreview';
 import { dropOverlayStyle } from './dropTarget';
-import { plural, summarize, type DraftDesktopView, type DraftView, type GroupView } from './migrationDraft';
+import { emptyLabel, plural, summarize, type DraftDesktopView, type DraftView, type GroupView } from './migrationDraft';
 import type { GroupDragView } from './useGroupDrag';
 
 export interface BoardState {
@@ -83,7 +83,7 @@ function DesktopCard({ desktop, board, onActivate, onKeep }: DesktopCardProps) {
       tabIndex={0}
       className={desktopClasses(desktop, board)}
       data-migration-desktop={desktop.desktop.key}
-      aria-label={`${desktop.label}${desktop.tree ? `, ${titles.join(', ')}` : ', empty'}`}
+      aria-label={`${desktop.label}, ${desktop.tree ? titles.join(', ') : emptyLabel(desktop).toLowerCase()}`}
       onClick={() => onActivate(desktop)}
       onKeyDown={(event) => {
         if ((event.key === 'Enter' || event.key === ' ') && event.target === event.currentTarget) {
@@ -109,7 +109,7 @@ function DesktopCard({ desktop, board, onActivate, onKeep }: DesktopCardProps) {
         />
       </div>
       <div className="mp-deskfoot">
-        <span className="mp-names">{desktop.tree ? titles.join(' · ') : 'Stays empty'}</span>
+        <span className="mp-names">{desktop.tree ? titles.join(' · ') : emptyLabel(desktop)}</span>
         <DesktopFoot desktop={desktop} board={board} onKeep={onKeep} />
       </div>
     </div>
@@ -246,6 +246,7 @@ export function DestinationPanel({ board, profileName, suggestionAvailable, onSu
       )}
       <div className="mp-dest-tip">
         <strong>Drop at an edge to choose a split.</strong> Drag groups between desktops. Splits inside each group stay together.
+        {' '}A desktop you empty stays as an empty desktop; a free slot gets one only when something lands there.
       </div>
     </section>
   );

@@ -295,6 +295,22 @@ describe('MigrationPicker', () => {
     expect(within(dialog).getByRole('button', { name: /Desktop 2.*exo · Delete X tweet history/ })).toBeInTheDocument();
   });
 
+  it('tells an emptied desktop, which stays, from a free slot, which gets no desktop', async () => {
+    const user = userEvent.setup();
+    const initial = migrationState({
+      desktops: slotsWith(
+        { 1: ['d1', { direction: 'vertical', ratio: 0.5, children: [{ group: 'g1' }, { group: 'g2' }] }], 2: ['d2', null] },
+        [['d3', { group: 'g3' }]],
+      ),
+    });
+    renderGate(fakeMigrationDaemon(initial));
+    await startPlacing(user);
+
+    expect(screen.getByRole('button', { name: 'Desktop 2, stays empty' })).toHaveTextContent('Stays empty');
+    expect(screen.getByRole('button', { name: 'Desktop 3, free slot' })).toHaveTextContent('Free slot');
+    expect(screen.getByText('A desktop you empty stays as an empty desktop; a free slot gets one only when something lands there.', { exact: false })).toBeInTheDocument();
+  });
+
   it('shows the importing group’s agents and their launch state', async () => {
     const user = userEvent.setup();
     const initial = migrationState({

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { ModalDialog } from './ModalDialog';
-import type { DraftDesktopView, GroupView } from './migrationDraft';
+import { emptyLabel, type DraftDesktopView, type GroupView } from './migrationDraft';
 
 interface MoveDialogProps {
   moving: GroupView;
@@ -40,7 +40,7 @@ export function MoveDialog({ moving, desktops, currentKey, groupById, onPick, on
                 {desktop.desktop.shortcut_slot ? <kbd>{desktop.desktop.shortcut_slot}</kbd> : null}
                 {desktop.label}
                 <span className="mp-move-names">
-                  {desktop.groupIds.map((id) => groupById.get(id)?.name ?? id).join(', ') || 'empty'}
+                  {desktop.groupIds.map((id) => groupById.get(id)?.name ?? id).join(', ') || emptyLabel(desktop)}
                 </span>
               </button>
             ))}
